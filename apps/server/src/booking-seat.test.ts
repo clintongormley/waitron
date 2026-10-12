@@ -1,5 +1,5 @@
 import { createZone } from "./testing/service-zone.js";
-import { randomUUID } from "node:crypto";
+
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -15,12 +15,7 @@ import {
   startManagementSession,
 } from "@waitron/identity";
 import { BOOKINGS_PERMISSIONS, BOOKINGS_ROUTES } from "@waitron/bookings";
-import {
-  jobOrigin,
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-} from "@waitron/shared";
+import { jobOrigin, locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import { writeClearingWorkflow } from "@waitron/venue-service";
 import type { ModuleRouteContext } from "@waitron/module";
@@ -73,7 +68,6 @@ async function setupVenue(): Promise<Venue> {
   const nodeId = await seedNode(db, brandLocationId(locationId));
   const tillCfg: TillConfig = {
     nodeId: brandNodeId(nodeId),
-    seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],

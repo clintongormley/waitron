@@ -599,7 +599,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
             bytes: Buffer.from(
               [
                 "WAITRON_TILL_NODE_ID=c0000000-0000-4000-8000-000000000008",
-                "WAITRON_TILL_SERIES_ID=c0000000-0000-4000-8000-000000000004",
+
                 "WAITRON_TILL_LOCATION_ID=c0000000-0000-4000-8000-000000000002",
                 "",
               ].join("\n"),
@@ -940,7 +940,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
               bytes: Buffer.from(
                 [
                   "WAITRON_TILL_NODE_ID=c0000000-0000-4000-8000-000000000008",
-                  "WAITRON_TILL_SERIES_ID=c0000000-0000-4000-8000-000000000004",
+
                   "WAITRON_TILL_LOCATION_ID=c0000000-0000-4000-8000-000000000002",
                   "",
                 ].join("\n"),

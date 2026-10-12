@@ -38,7 +38,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   rawCentsToDecimal,
-  seriesId as brandSeriesId,
 } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
@@ -159,7 +158,6 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
   return {
     nodeId: brandNodeId(venue.nodeId),
     // planVenue emits the standard series first, then the rectificative one.
-    seriesId: brandSeriesId(venue.seriesIds[0]!),
     locationId: brandLocationId(venue.locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],

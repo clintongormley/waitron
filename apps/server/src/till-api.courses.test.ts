@@ -13,11 +13,7 @@ import {
   createCategory,
   createProduct,
 } from "@waitron/catalogue";
-import {
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-} from "@waitron/shared";
+import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { Logger, LogLevel } from "./logger.js";
 import { createCourse, setProductCourse } from "./kitchen.js";
@@ -119,7 +115,6 @@ function collect(
 function makeCfg(locationId: string, nodeId: string): TillConfig {
   return {
     nodeId: brandNodeId(nodeId),
-    seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),
     locale: "es-ES",
     invoiceLocales: ["es-ES"],

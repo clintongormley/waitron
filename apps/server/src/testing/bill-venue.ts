@@ -67,6 +67,7 @@ const MENU: { name: string; customer: string; kitchen: string; price: string }[]
 ];
 
 export interface BillVenue {
+  seriesId: ReturnType<typeof brandSeriesId>;
   db: Database;
   backend: FiscalBackend;
   clock: TrustedClock;
@@ -143,7 +144,6 @@ export async function provisionBillVenue(db: Database): Promise<BillVenue> {
   );
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(provisioned.nodeId),
-    seriesId: brandSeriesId(provisioned.seriesIds[0]!),
     locationId: brandLocationId(provisioned.locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
@@ -276,6 +276,7 @@ export async function provisionBillVenue(db: Database): Promise<BillVenue> {
     backend,
     clock,
     cfg,
+    seriesId: brandSeriesId(provisioned.seriesIds[0]!),
     card,
     pool,
     app: mount(true),

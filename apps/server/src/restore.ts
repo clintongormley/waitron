@@ -37,7 +37,7 @@ import { SIDE_FILE_SUFFIXES, VENUE_FILE } from "@waitron/store";
 import { litestreamMetaDir } from "@waitron/stream/litestream.js";
 import { orderedMigrationSets, type ProvisionedNode, type WaitronModule } from "@waitron/module";
 import { codeOf } from "@waitron/server-kit";
-import { formatEnvFile, parseEnvFile } from "./env-file.js";
+import { parseEnvFile } from "./env-file.js";
 import { writeFileAtomic } from "./fs-atomic.js";
 import { isUnset } from "./env-value.js";
 import { errnoOf } from "./errno.js";
@@ -63,11 +63,7 @@ const TRADING_ENV_ENTRY = `${SECRETS_PREFIX}trading.env`;
 const TRADING_ENV_FILE = "trading.env";
 /** Retains only the last replaced identity, overwriting any prior copy; boot reads only `trading.env`. */
 const REPLACED_SUFFIX = ".replaced";
-const IDENTITY_KEYS = [
-  "WAITRON_TILL_NODE_ID",
-  "WAITRON_TILL_LOCATION_ID",
-  "WAITRON_TILL_SERIES_ID",
-] as const;
+const IDENTITY_KEYS = ["WAITRON_TILL_NODE_ID", "WAITRON_TILL_LOCATION_ID"] as const;
 /** The folder inside the state folder that the restore command, the staged restore and boot pass as `stagingDir`. */
 export const RESTORE_STAGING_DIR = "restore-staging";
 /** Where the incoming database sits while it is still incoming — same directory, so the rename is atomic. */
@@ -252,22 +248,17 @@ async function placeValidated(validated: ValidatedArtifact, deps: PlacementDeps)
   // Completeness is a validation precondition; this pure read recovers the already-checked ids.
   const identity = readArtifactIdentity(validated.secretEntries);
   const opened = await (deps.openDb ?? openVenue)(deps.venueDir);
-  let seriesId: string;
   try {
-    ({ seriesId } = await runRestoreHooks({
+    await runRestoreHooks({
       db: opened.db,
       modules: deps.modules,
       node: identity.node,
       log,
-    }));
+    });
   } finally {
     await opened.close();
   }
-  const entries =
-    seriesId === identity.seriesId
-      ? validated.secretEntries
-      : rewriteTradingEnv(validated.secretEntries, seriesId);
-  await restoreSecrets({ entries, stateDir: deps.stateDir, log });
+  await restoreSecrets({ entries: validated.secretEntries, stateDir: deps.stateDir, log });
 }
 
 /**
@@ -583,7 +574,6 @@ export async function setAsideExistingIdentity(stateDir: string, log: Logger): P
  */
 export function readArtifactIdentity(secretEntries: readonly ArchiveEntry[]): {
   node: ProvisionedNode;
-  seriesId: string;
 } {
   const entry = secretEntries.find((e) => e.name === TRADING_ENV_ENTRY);
   if (entry === undefined) {
@@ -598,29 +588,7 @@ export function readArtifactIdentity(secretEntries: readonly ArchiveEntry[]): {
       locationId: brandLocationId(env.WAITRON_TILL_LOCATION_ID!),
       nodeId: brandNodeId(env.WAITRON_TILL_NODE_ID!),
     },
-    seriesId: env.WAITRON_TILL_SERIES_ID!,
   };
-}
-
-/** The secret entries with `trading.env`'s `WAITRON_TILL_SERIES_ID` replaced; every other key and the
- * key order preserved (`parseEnvFile` skips comments and blank lines). */
-export function rewriteTradingEnv(
-  entries: readonly ArchiveEntry[],
-  seriesId: string,
-): ArchiveEntry[] {
-  return entries.map((e) =>
-    e.name === TRADING_ENV_ENTRY
-      ? {
-          name: e.name,
-          bytes: Buffer.from(
-            formatEnvFile({
-              ...parseEnvFile(Buffer.from(e.bytes).toString("utf8")),
-              WAITRON_TILL_SERIES_ID: seriesId,
-            }),
-          ),
-        }
-      : e,
-  );
 }
 
 function wrapHookError(module: string, err: unknown): unknown {
@@ -633,7 +601,7 @@ function wrapHookError(module: string, err: unknown): unknown {
  * list order → at most one module may return `series` → if one did, retire the node's live series and
  * open the returned ones → on EVERY path require one live standard and one live full series —
  * zero or two of either aborts the transaction. Returns the standard series id
- * (the env is pointed at it) and the hooks' reports.
+ * and the hooks' reports.
  */
 export async function runRestoreHooks(args: {
   db: Database;

@@ -40,9 +40,10 @@ import { freePort, freePorts } from "./testing/free-ports.js";
 // The suite keeps its own handle open beside the server's and writes through it only before
 // `startServer`, so the two never want the write lock at once.
 
+const SEEDED_SERIES_ID = "44444444-4444-4444-8444-444444444444";
 const TILL_ENV = {
   WAITRON_TILL_NODE_ID: "33333333-3333-4333-8333-333333333333",
-  WAITRON_TILL_SERIES_ID: "44444444-4444-4444-8444-444444444444",
+
   WAITRON_TILL_LOCATION_ID: "55555555-5555-4555-8555-555555555555",
 };
 const PEER_NODE = "66666666-6666-4666-8666-666666666666";
@@ -113,7 +114,7 @@ async function seed(db: Database): Promise<void> {
   await db
     .insert(invoiceSeries)
     .values({
-      id: TILL_ENV.WAITRON_TILL_SERIES_ID,
+      id: SEEDED_SERIES_ID,
       nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
       code: "A",
     })

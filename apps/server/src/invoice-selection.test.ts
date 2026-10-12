@@ -57,10 +57,10 @@ async function bill(full = false) {
       .returning();
     return {
       id: order!.id,
+      seriesId: seriesId(standard!.id),
       fullSeriesId: fullSeries!.id,
       cfg: {
         nodeId: nodeId(node!.id),
-        seriesId: seriesId(standard!.id),
         simplifiedInvoiceLimit: decimal("3000.00"),
       },
     };
@@ -74,7 +74,7 @@ describe("stored bill invoice selection", () => {
       await tx
         .update(invoiceSeries)
         .set({ retiredAt: new Date() })
-        .where(eq(invoiceSeries.id, order.cfg.seriesId));
+        .where(eq(invoiceSeries.id, order.seriesId));
       const [fresh] = await tx
         .insert(invoiceSeries)
         .values({
@@ -87,7 +87,7 @@ describe("stored bill invoice selection", () => {
       return { result, freshId: fresh!.id };
     });
     expect(selected.result.sale.seriesId).toBe(selected.freshId);
-    expect(selected.result.sale.seriesId).not.toBe(order.cfg.seriesId);
+    expect(selected.result.sale.seriesId).not.toBe(order.seriesId);
   });
 
   it("refuses F2 when the cached series is retired and no standard series is live", async () => {
@@ -96,7 +96,7 @@ describe("stored bill invoice selection", () => {
       tx
         .update(invoiceSeries)
         .set({ retiredAt: new Date() })
-        .where(eq(invoiceSeries.id, order.cfg.seriesId)),
+        .where(eq(invoiceSeries.id, order.seriesId)),
     );
     await expect(
       withTransaction(suite.db, (tx) =>
@@ -135,7 +135,7 @@ describe("stored bill invoice selection", () => {
         invoiceType: "F2",
         recipient: undefined,
         sale: {
-          seriesId: order.cfg.seriesId,
+          seriesId: order.seriesId,
           counterparty: null,
           recipientAddress: null,
         },
@@ -196,7 +196,7 @@ describe("stored bill invoice selection", () => {
       ),
     );
     expect(selected.sale.counterparty).toBeNull();
-    expect(selected.sale.seriesId).toBe(order.cfg.seriesId);
+    expect(selected.sale.seriesId).toBe(order.seriesId);
   });
 
   it.each(["missing", "retired", "wrong-node"])(

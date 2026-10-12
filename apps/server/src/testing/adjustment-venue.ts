@@ -233,6 +233,7 @@ export const REASONS = {
 } satisfies Record<string, AdjustmentReasonInput>;
 
 export interface AdjustmentVenue {
+  seriesId: ReturnType<typeof brandSeriesId>;
   db: Database;
   backend: FiscalBackend;
   clock: TrustedClock;
@@ -308,7 +309,6 @@ export async function provisionAdjustmentVenue(db: Database): Promise<Adjustment
   );
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(provisioned.nodeId),
-    seriesId: brandSeriesId(provisioned.seriesIds[0]!),
     locationId: brandLocationId(provisioned.locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
@@ -437,6 +437,7 @@ export async function provisionAdjustmentVenue(db: Database): Promise<Adjustment
     backend,
     clock,
     cfg,
+    seriesId: brandSeriesId(provisioned.seriesIds[0]!),
     venueLocale: LOCALE,
     tables: seeded.tables,
     item: (name) => seeded.tables.offerFor(seeded.productIds.get(name)!),

@@ -34,7 +34,6 @@ import {
   AppError,
   locationId as brandLocationId,
   nodeId as brandNodeId,
-  seriesId as brandSeriesId,
   jobOrigin,
 } from "@waitron/shared";
 import type { OriginConfig } from "./till-config.js";
@@ -85,7 +84,6 @@ async function setupVenue(opts: { timeZone?: string } = {}): Promise<OriginConfi
   return {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(nodeId),
-    seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
@@ -375,7 +373,6 @@ async function setupTabVenue(): Promise<{
   const cfg: OriginConfig = {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(nodeId),
-    seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],

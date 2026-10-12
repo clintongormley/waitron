@@ -98,7 +98,6 @@ const RING = loadKeyRing({
 });
 
 const MIRROR_LOCATION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
-const MIRROR_DESIGNATED_SERIES_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"; // the promote must replace it
 const MIRROR_ORIGIN_NODE_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 const MIRROR_NUMERO_INSTALACION = 7;
 
@@ -337,7 +336,7 @@ function mirrorEnv(
     ...KEY_ENV,
     ...TICK_ENV,
     WAITRON_TILL_NODE_ID: nodeId,
-    WAITRON_TILL_SERIES_ID: MIRROR_DESIGNATED_SERIES_ID,
+
     WAITRON_TILL_LOCATION_ID: MIRROR_LOCATION_ID,
     WAITRON_VENUE_DIR: dir,
     WAITRON_HTTP_PORT: String(port),
@@ -420,8 +419,8 @@ describe("promote endpoint e2e — the whole arc over HTTP", () => {
       expect(killSpy).toHaveBeenCalledWith(process.pid, "SIGTERM");
 
       const persisted = parseEnvFile(readFileSync(join(stateDir, "trading.env"), "utf8"));
-      expect(persisted.WAITRON_TILL_SERIES_ID).toBe(seed.standardSeriesId);
-      expect(persisted.WAITRON_TILL_SERIES_ID).not.toBe(MIRROR_DESIGNATED_SERIES_ID);
+      expect(persisted).not.toHaveProperty("WAITRON_TILL_SERIES_ID");
+      expect(await readStandardSeriesId(db.main, seed.nodeId)).toBe(seed.standardSeriesId);
 
       // `trading.env` names no venue directory, so it is supplied here.
       await mirror.close();
@@ -431,7 +430,7 @@ describe("promote endpoint e2e — the whole arc over HTTP", () => {
         ...KEY_ENV,
         ...TICK_ENV,
         WAITRON_TILL_NODE_ID: persisted.WAITRON_TILL_NODE_ID!,
-        WAITRON_TILL_SERIES_ID: persisted.WAITRON_TILL_SERIES_ID!,
+
         WAITRON_TILL_LOCATION_ID: persisted.WAITRON_TILL_LOCATION_ID!,
         WAITRON_VENUE_DIR: venueDir.main,
         WAITRON_HTTP_PORT: String(primaryPort),

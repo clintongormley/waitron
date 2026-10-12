@@ -18,11 +18,7 @@ import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/mig
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { getCountryPack } from "@waitron/country-packs";
 import { parseModuleConfig } from "@waitron/module";
-import {
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-} from "@waitron/shared";
+import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import { ALL_MODULES } from "../src/modules.js";
 import { venueModuleConfig } from "../src/provision.js";
 import { writeModuleConfig } from "../src/module-config.js";
@@ -82,7 +78,6 @@ export interface DevEnv {
   WAITRON_CREDENTIALS_KEY: string;
   WAITRON_CREDENTIALS_KEY_VERSION: string;
   WAITRON_TILL_NODE_ID: string;
-  WAITRON_TILL_SERIES_ID: string;
   WAITRON_TILL_LOCATION_ID: string;
   WAITRON_TILL_LOCALE: string;
 }
@@ -95,7 +90,6 @@ const ENV_KEYS: readonly (keyof DevEnv)[] = [
   "WAITRON_CREDENTIALS_KEY",
   "WAITRON_CREDENTIALS_KEY_VERSION",
   "WAITRON_TILL_NODE_ID",
-  "WAITRON_TILL_SERIES_ID",
   "WAITRON_TILL_LOCATION_ID",
   "WAITRON_TILL_LOCALE",
 ];
@@ -153,7 +147,6 @@ export function buildDevEnv(input: {
     WAITRON_CREDENTIALS_KEY: credentialsKey,
     WAITRON_CREDENTIALS_KEY_VERSION: "1",
     WAITRON_TILL_NODE_ID: ids.nodeId,
-    WAITRON_TILL_SERIES_ID: ids.seriesId,
     WAITRON_TILL_LOCATION_ID: ids.locationId,
     WAITRON_TILL_LOCALE: SEED_INVOICE_LOCALE[seedLocale],
   };
@@ -278,7 +271,6 @@ async function seedDemoDevices(
 ): Promise<void> {
   const cfg: TillConfig = {
     nodeId: brandNodeId(ids.nodeId),
-    seriesId: brandSeriesId(ids.seriesId),
     locationId: brandLocationId(ids.locationId),
     locale: SEED_INVOICE_LOCALE[seedLocale],
     invoiceLocales: [SEED_INVOICE_LOCALE[seedLocale]],

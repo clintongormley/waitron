@@ -261,9 +261,7 @@ export interface StartedServer {
   promoteLocalSecondaryToPrimary?: (attestation: FenceAttestation) => Promise<PromotionResult>;
   /**
    * Promote a read-only mirror to the venue's primary in-process, then restart into `mode=primary`.
-   * `trading.env` is rewritten with the mirror's own reserved series BEFORE the point of no return
-   * (owner decision 2026-09-04, see `promote.ts` `MirrorPromoteDeps.persistTradingEnv`). Present only
-   * in mirror mode. Refuses without a fence attestation (`promotion.fence_not_attested`).
+   * Present only in mirror mode. Refuses without a fence attestation (`promotion.fence_not_attested`).
    */
   promoteMirrorToPrimary?: (attestation: FenceAttestation) => Promise<MirrorPromotionResult>;
   /**
@@ -1990,14 +1988,9 @@ async function bootServer(
     const result = await promoteMirrorToPrimary(
       {
         ...promoteDeps,
-        // The promoted primary numbers under its OWN reserved series, not the primary's inert
-        // `till.seriesId` that adopt wrote. Called BEFORE the point of no return, so a process crash
-        // can never leave the box primary on the primary's series (the power-loss residual is on
-        // `MirrorPromoteDeps.persistTradingEnv`).
-        persistTradingEnv: async (seriesId) => {
+        persistTradingEnv: async () => {
           const next: TradingConfig = {
             nodeId: till.nodeId,
-            seriesId,
             locationId: till.locationId,
             environment: config.environment,
             accountKey: accountKey.toString("base64"),

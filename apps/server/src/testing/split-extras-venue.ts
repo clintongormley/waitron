@@ -13,11 +13,7 @@ import {
   writeProductModifiers,
 } from "@waitron/catalogue";
 import type { ExtraSelection, OptionSelection } from "@waitron/shared";
-import {
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-} from "@waitron/shared";
+import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import type { DeviceRequestConfig, OriginConfig, TillConfig } from "../till-config.js";
 import { deviceRequestCfg } from "./session-device.js";
 import { createStation } from "../kitchen.js";
@@ -66,7 +62,6 @@ export async function setupVenue(): Promise<Venue> {
   });
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(nodeId),
-    seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],

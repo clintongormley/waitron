@@ -5,11 +5,7 @@ import { deviceProfiles, withTransaction, type Database, type Transaction } from
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { hashPassword, hashPin, loginWithPin, persons } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
-import {
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-} from "@waitron/shared";
+import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import {
   createDepartment,
   deleteMenuPeriod,
@@ -89,7 +85,6 @@ export async function provisionSignedInTill<S extends TillSeed>(
   );
   const cfg: TillConfig = {
     nodeId: brandNodeId(venue.nodeId),
-    seriesId: brandSeriesId(venue.seriesIds[0]!),
     locationId: brandLocationId(venue.locationId),
     locale: SIGNED_IN_TILL_LOCALE,
     invoiceLocales: [SIGNED_IN_TILL_LOCALE],

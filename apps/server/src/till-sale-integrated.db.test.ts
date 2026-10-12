@@ -138,7 +138,6 @@ function nextNif(): string {
 function tillConfigFromVenue(venue: VenueResult): TillConfig {
   return {
     nodeId: brandNodeId(venue.nodeId),
-    seriesId: brandSeriesId(venue.seriesIds[0]!),
     locationId: brandLocationId(venue.locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
@@ -151,6 +150,7 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
 type OfferedProduct = AvailableProduct & { menuItemId: string; zoneId: string };
 
 interface SeededVenue {
+  seriesId: ReturnType<typeof brandSeriesId>;
   cfg: DeviceRequestConfig;
   cafe: OfferedProduct;
 }
@@ -215,6 +215,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
   const cafe = available.find((p) => p.name === "Café")!;
   return {
     cfg,
+    seriesId: brandSeriesId(venue.seriesIds[0]!),
     cafe: { ...cafe, menuItemId: offers.offerFor(cafe.id), zoneId: offers.zoneId },
   };
 }
@@ -939,7 +940,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
   });
 
   it("reads the active series after a card capture that overlaps a series switch", async () => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, cafe, seriesId } = await setupVenue();
     const { deps } = integratedDeps(cfg, suite.db);
     const provider = deps.provider;
     let activeId: string | undefined;
@@ -953,7 +954,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
           await tx
             .update(invoiceSeries)
             .set({ retiredAt: new Date() })
-            .where(eq(invoiceSeries.id, cfg.seriesId));
+            .where(eq(invoiceSeries.id, seriesId));
           return tx
             .insert(invoiceSeries)
             .values({
@@ -988,13 +989,13 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
   });
 
   it("issues on a newly active series and replays that invoice after a later switch", async () => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, cafe, seriesId } = await setupVenue();
     const id = randomUUID();
     const [fresh] = await withTransaction(suite.db, async (tx) => {
       await tx
         .update(invoiceSeries)
         .set({ retiredAt: new Date() })
-        .where(eq(invoiceSeries.id, cfg.seriesId));
+        .where(eq(invoiceSeries.id, seriesId));
       return tx
         .insert(invoiceSeries)
         .values({

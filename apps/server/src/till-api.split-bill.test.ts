@@ -26,12 +26,7 @@ import {
   createCategory,
   createProduct,
 } from "@waitron/catalogue";
-import {
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-  jobOrigin,
-} from "@waitron/shared";
+import { locationId as brandLocationId, nodeId as brandNodeId, jobOrigin } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { deploymentEnvironment } from "./config.js";
@@ -119,7 +114,6 @@ function makeCfg(locationId: string, nodeId: string): OriginConfig {
   return {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(nodeId),
-    seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),
     locale: "es-ES",
     invoiceLocales: ["es-ES"],

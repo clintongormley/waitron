@@ -126,7 +126,6 @@ async function setup(bluetooth = false) {
   const sale = await issue();
   const [location] = await suite.db.select().from(locations);
   const [node] = await suite.db.select().from(nodes);
-  const [series] = await suite.db.select().from(invoiceSeries);
   const secret = "synthetic-agent-secret";
   const [agent] = await suite.db
     .insert(printAgents)
@@ -176,7 +175,6 @@ async function setup(bluetooth = false) {
       cfg: {
         locationId: locationId(location!.id),
         nodeId: nodeId(node!.id),
-        seriesId: seriesId(series!.id),
         locale: "es-ES",
         invoiceLocales: ["es-ES"],
         tipsEnabled: false,

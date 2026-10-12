@@ -1893,7 +1893,6 @@ it("leaves out a print agent's node, so the importing venue does not show it as 
     locationId: string;
   }): TillConfig => ({
     nodeId: nodeId(venue.nodeId),
-    seriesId: seriesId(venue.seriesIds[0]!),
     locationId: locationId(venue.locationId),
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
@@ -4519,7 +4518,6 @@ describe("named days in a configuration transfer", () => {
         tx,
         {
           nodeId: nodeId(source.nodeId),
-          seriesId: seriesId(source.seriesIds[0]!),
           locationId: cfg.locationId,
           locale: "es-ES",
           invoiceLocales: ["es-ES"],
@@ -5691,7 +5689,6 @@ it("round-trips deleted kitchen configuration and preserves archived products an
   const cfg: TillConfig = {
     locationId: locationId(source.locationId),
     nodeId: nodeId(source.nodeId),
-    seriesId: seriesId(randomUUID()),
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
     tipsEnabled: false,
@@ -5829,7 +5826,6 @@ it("round-trips a deleted service hierarchy while remapping only its live namesa
   const cfg: TillConfig = {
     locationId: locationId(source.locationId),
     nodeId: nodeId(source.nodeId),
-    seriesId: seriesId(source.seriesIds[0]!),
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
     tipsEnabled: false,

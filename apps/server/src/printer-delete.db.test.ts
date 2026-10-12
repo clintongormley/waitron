@@ -587,7 +587,6 @@ describe("the printer delete impact", () => {
     const [series] = await suite.db.select().from(invoiceSeries);
     const tillCfg: TillConfig = {
       nodeId: brandNodeId(series!.nodeId),
-      seriesId: seriesId(series!.id),
       locationId: brandLocationId(v.cfg.locationId),
       locale: "es-ES",
       invoiceLocales: ["es-ES"],

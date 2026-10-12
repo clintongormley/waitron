@@ -21,11 +21,7 @@ import {
   setRoutingCell,
   zoneSalePolicies,
 } from "@waitron/venue-service";
-import {
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-} from "@waitron/shared";
+import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import type { CountryDemoIdentity } from "@waitron/country";
 import { saveZonePlan } from "../../src/floor-plan.js";
 import type { TillConfig } from "../../src/till-config.js";
@@ -43,7 +39,6 @@ export interface SeedFloorInput {
 function toTableCfg(locationId: string, locale: SeedLocale): TillConfig {
   return {
     nodeId: brandNodeId(randomUUID()),
-    seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),
     locale: SEED_INVOICE_LOCALE[locale],
     invoiceLocales: [SEED_INVOICE_LOCALE[locale]],

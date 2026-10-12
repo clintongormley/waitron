@@ -87,7 +87,7 @@ export function checkedInvoiceRecipient(
 export async function selectOrderInvoice(
   tx: Transaction,
   backend: Pick<FiscalBackend, "recipientNameMaxLength">,
-  cfg: Pick<TillConfig, "nodeId" | "seriesId" | "simplifiedInvoiceLimit">,
+  cfg: Pick<TillConfig, "nodeId" | "simplifiedInvoiceLimit">,
   orderId: string,
   total: Decimal,
 ): Promise<{

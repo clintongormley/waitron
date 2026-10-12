@@ -17,7 +17,7 @@ import {
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { locationId as brandLocationId, seriesId as brandSeriesId } from "@waitron/shared";
+import { locationId as brandLocationId } from "@waitron/shared";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -106,7 +106,6 @@ beforeAll(async () => {
 
   cfg = {
     nodeId,
-    seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],

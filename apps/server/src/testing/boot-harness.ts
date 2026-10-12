@@ -26,7 +26,7 @@ import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/mig
 // reads at startup.
 export const TILL_ENV = {
   WAITRON_TILL_NODE_ID: "33333333-3333-4333-8333-333333333333",
-  WAITRON_TILL_SERIES_ID: "44444444-4444-4444-8444-444444444444",
+
   WAITRON_TILL_LOCATION_ID: "55555555-5555-4555-8555-555555555555",
 };
 // Resolves the fiscal slot to Veri*Factu: `ALL_MODULES` holds two fiscal-slot members, so the

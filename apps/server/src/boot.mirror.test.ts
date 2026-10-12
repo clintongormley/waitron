@@ -43,9 +43,10 @@ const venueDir = {} as Record<VenueName, string>;
 const stores = {} as Record<VenueName, VenueDatabase>;
 const db = {} as Record<VenueName, Database>;
 
+const SEEDED_SERIES_ID = "44444444-4444-4444-8444-444444444444";
 const TILL_ENV = {
   WAITRON_TILL_NODE_ID: "33333333-3333-4333-8333-333333333333",
-  WAITRON_TILL_SERIES_ID: "44444444-4444-4444-8444-444444444444",
+
   WAITRON_TILL_LOCATION_ID: "55555555-5555-4555-8555-555555555555",
 };
 
@@ -104,7 +105,7 @@ async function seedIdentity(admin: Database): Promise<void> {
   await admin
     .insert(invoiceSeries)
     .values({
-      id: TILL_ENV.WAITRON_TILL_SERIES_ID,
+      id: SEEDED_SERIES_ID,
       nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
       code: "A",
     })
@@ -248,7 +249,7 @@ describe("mirror-mode boot (node_roles.mode = 'mirror')", () => {
       ids: {
         locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
         nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
-        seriesId: TILL_ENV.WAITRON_TILL_SERIES_ID,
+        seriesId: SEEDED_SERIES_ID,
       },
       reuseExistingParents: true,
       envio: true,

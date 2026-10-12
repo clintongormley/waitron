@@ -1313,11 +1313,7 @@ describe("startServer, against a migrated venue directory", () => {
 
           // Parsed, not substring-matched, so a missing key really fails.
           const trading = parseEnvLines(await readFile(join(stateDir, "trading.env"), "utf8"));
-          for (const key of [
-            "WAITRON_TILL_NODE_ID",
-            "WAITRON_TILL_SERIES_ID",
-            "WAITRON_TILL_LOCATION_ID",
-          ]) {
+          for (const key of ["WAITRON_TILL_NODE_ID", "WAITRON_TILL_LOCATION_ID"]) {
             expect(trading[key]).toBeTruthy();
           }
           expect(trading.WAITRON_ENV).toBe("preproduction");

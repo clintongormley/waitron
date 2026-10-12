@@ -12,12 +12,7 @@ import type { Database, Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import {
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-  jobOrigin,
-} from "@waitron/shared";
+import { locationId as brandLocationId, nodeId as brandNodeId, jobOrigin } from "@waitron/shared";
 import type { OriginConfig, TillConfig } from "./till-config.js";
 import { setTableStatus } from "./tables.js";
 import { createTable } from "./testing/live-table.js";
@@ -62,7 +57,6 @@ async function setupVenue(): Promise<Seeded> {
   const cfg: OriginConfig = {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(nodeId),
-    seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],

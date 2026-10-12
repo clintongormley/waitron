@@ -144,7 +144,6 @@ export async function adoptFromPrimary(
     locationId: designated.locationId,
     // The mirror runs under its OWN id, not the primary's.
     nodeId: standby.nodeId,
-    seriesId: designated.seriesId,
     environment: bundle.environment,
     accountKey: bundle.accountKey,
   });

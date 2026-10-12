@@ -27,11 +27,7 @@ import {
   createCategory,
   createProduct,
 } from "@waitron/catalogue";
-import {
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-} from "@waitron/shared";
+import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
@@ -69,7 +65,6 @@ const suite = useVenueDb({
     ana = { id: person!.id };
     cfg = {
       nodeId: brandNodeId(nodeId),
-      seriesId: brandSeriesId(randomUUID()),
       locationId: brandLocationId(loc!.id),
       locale: "es-ES",
       invoiceLocales: ["es-ES"],

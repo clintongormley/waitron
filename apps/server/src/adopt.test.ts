@@ -145,9 +145,9 @@ describe("adoptFromPrimary (mirror adopt)", () => {
 
     // The venue's ids, but the mirror's OWN node id.
     expect(persistedTrading).toHaveLength(1);
+    expect(persistedTrading[0]).not.toHaveProperty("seriesId");
     expect(persistedTrading[0]).toMatchObject({
       locationId: DESIGNATED.locationId,
-      seriesId: DESIGNATED.seriesId,
       nodeId: capturedStandby!.nodeId,
       environment: "preproduction",
     });

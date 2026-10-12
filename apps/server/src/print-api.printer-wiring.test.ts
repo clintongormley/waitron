@@ -25,11 +25,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, persons, startManagementSession } from "@waitron/identity";
 import { enqueuePrintJob, MAX_DELIVERY_ATTEMPTS, PRINTER_DELETED } from "@waitron/printing";
-import {
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-} from "@waitron/shared";
+import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import { mountPrintApi } from "./print-api.js";
 import { acceptPrintAgentJoinRequest } from "./join-requests.js";
 import { createPairingMode } from "./pairing-mode.js";
@@ -112,7 +108,6 @@ const venueNodeId = brandNodeId(randomUUID());
 function cfgOf(tenant: Tenant): TillConfig {
   return {
     nodeId: venueNodeId,
-    seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(tenant.locationId),
     locale: "es-ES",
     invoiceLocales: ["es-ES"],

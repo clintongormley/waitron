@@ -856,7 +856,7 @@ describe("all retained sale rows lock venue clocks", () => {
       const base = {
         source: "demo_seed" as const,
         deviceId: null,
-        seriesId: venue.cfg.seriesId,
+        seriesId: venue.seriesId,
         nodeId: kind === "other_node" ? otherNode : venue.cfg.nodeId,
         invoiceNumber: 1,
         issuedAt: "2026-10-06T12:00:00.000Z",

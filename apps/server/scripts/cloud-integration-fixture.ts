@@ -102,7 +102,6 @@ if (savedEnv !== undefined) {
     boxSecrets = parseEnvFile(await readFile(join(root, "secrets.env"), "utf8"));
     await writeTradingEnv(root, {
       nodeId: result.nodeId,
-      seriesId: result.seriesIds[0]!,
       locationId: result.locationId,
       environment: "preproduction",
       developmentMode: true,
@@ -124,7 +123,6 @@ if (savedEnv !== undefined) {
     WAITRON_CREDENTIALS_KEY_VERSION: boxSecrets.WAITRON_CREDENTIALS_KEY_VERSION,
     WAITRON_TILL_LOCATION_ID: result.locationId,
     WAITRON_TILL_NODE_ID: result.nodeId,
-    WAITRON_TILL_SERIES_ID: result.seriesIds[0],
     WAITRON_CLOUD_ORIGIN: process.env.CLOUD_TEST_ORIGIN,
     WAITRON_DASHBOARD_APP_DIR: resolve(import.meta.dirname, "../../dashboard/dist"),
   };

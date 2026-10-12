@@ -1,5 +1,10 @@
 # Full invoices at the till (A231)
 
+**2026-10-12, W41s-5:** the server now reads the live standard or full series inside issuance.
+Startup and saved trading identity carry node and location, without a cached standard-series id.
+The references below to the boot series setting describe the earlier implementation.
+
+
 > **2026-10-10, later product decision:** the owner removed the separate email consent step
 > on 2026-10-09. The email consent-tracking proposal below is historical; follow
 > [the single core rewrite](../../backlog/printers.md#remove-the-consent-step-from-emailed-receipts).

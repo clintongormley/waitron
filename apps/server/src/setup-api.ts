@@ -737,7 +737,6 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       if (!setupPhaseReached(operation, "publishing")) {
         await persistTrading({
           nodeId: result.nodeId,
-          seriesId: result.seriesIds[0],
           locationId: result.locationId,
           environment,
           ...(deps.devMode === true ? { developmentMode: true } : {}),

@@ -26,6 +26,7 @@ import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed
 const LOCALE = "es-ES";
 
 export interface Venue {
+  seriesId: ReturnType<typeof brandSeriesId>;
   /** Orders a test opens directly come from the dashboard, so no device is seeded for them. */
   cfg: OriginConfig;
   /** The location's provisioned default kitchen station — where `placeOrder` fires items, and the
@@ -44,7 +45,6 @@ function tillConfigFromVenue(venue: VenueResult): OriginConfig {
   return {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(venue.nodeId),
-    seriesId: brandSeriesId(venue.seriesIds[0]!),
     locationId: brandLocationId(venue.locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
@@ -147,6 +147,7 @@ export async function setupVenue(db: Database): Promise<Venue> {
 
   return {
     cfg,
+    seriesId: brandSeriesId(venue.seriesIds[0]!),
     defaultStationId: rows[0]!.id,
     cafeId: seeded.cafeId,
     aguaId: seeded.aguaId,

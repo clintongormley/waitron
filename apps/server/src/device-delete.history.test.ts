@@ -103,7 +103,7 @@ async function seedDeleted() {
     recordSale(tx, backend, {
       origin: deviceOrigin(barTill),
       nodeId: venue.cfg.nodeId,
-      seriesId: venue.cfg.seriesId,
+      seriesId: venue.seriesId,
       locale: "es-ES",
       invoiceLocales: ["es-ES"],
       total: "1.00",

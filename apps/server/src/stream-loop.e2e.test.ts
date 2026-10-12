@@ -23,6 +23,7 @@ import {
   nodeSealedState,
   nodes,
   openVenueDatabase,
+  readStandardSeriesId,
   stampDeployment,
   withTransaction,
 } from "@waitron/db";
@@ -356,7 +357,7 @@ describe("the stream loop: stream, rebuild from the bucket, sell under a fresh c
         join(dirsA.state, "trading.env"),
         formatEnvFile({
           WAITRON_TILL_NODE_ID: a.nodeId,
-          WAITRON_TILL_SERIES_ID: a.seriesId,
+
           WAITRON_TILL_LOCATION_ID: a.locationId,
           WAITRON_ENV: "preproduction",
         }),
@@ -480,7 +481,7 @@ describe("the stream loop: stream, rebuild from the bucket, sell under a fresh c
       expect(code, said.join("\n")).toBe(0);
       const tradingB = parseEnvFile(await readFile(join(dirsB.state, "trading.env"), "utf8"));
       expect(tradingB.WAITRON_TILL_NODE_ID).toBe(a.nodeId);
-      expect(tradingB.WAITRON_TILL_SERIES_ID).not.toBe(a.seriesId);
+      expect(tradingB).not.toHaveProperty("WAITRON_TILL_SERIES_ID");
 
       // 7. B's first start: a membership document one term higher, a generation of its own, and the
       //    pointer moved — still verifiable with the key the owner's kit carries.
@@ -525,7 +526,10 @@ describe("the stream loop: stream, rebuild from the bucket, sell under a fresh c
       // Task 2b's refresh runs after Task 9a's re-issue in the same start, so the row B sealed carries
       // B's leaf, not A's.
       const sealedB = await openVenueDatabase(dirsB.venue);
+      let seriesB: string;
       try {
+        seriesB = await readStandardSeriesId(sealedB.venue, a.nodeId);
+        expect(seriesB).not.toBe(a.seriesId);
         const [row] = await sealedB.venue
           .select({ sealed: nodeSealedState.sealed })
           .from(nodeSealedState)
@@ -544,7 +548,7 @@ describe("the stream loop: stream, rebuild from the bucket, sell under a fresh c
       const saleB = await recordOneSale(
         {
           nodeId: tradingB.WAITRON_TILL_NODE_ID!,
-          seriesId: tradingB.WAITRON_TILL_SERIES_ID!,
+          seriesId: seriesB,
           description: "Agua",
           baseAmount: "2.00",
           vatRate: "10.00",
@@ -562,7 +566,7 @@ describe("the stream loop: stream, rebuild from the bucket, sell under a fresh c
       //     healthy sale.
       const idsB = {
         nodeId: tradingB.WAITRON_TILL_NODE_ID!,
-        seriesId: tradingB.WAITRON_TILL_SERIES_ID!,
+        seriesId: seriesB,
       };
       const timedSale = async (i: number): Promise<{ ms: number; saleId: string }> => {
         const started = performance.now();

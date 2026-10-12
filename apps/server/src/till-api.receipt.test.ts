@@ -146,7 +146,6 @@ function nextNif(): string {
 function tillConfigFromVenue(venue: VenueResult): TillConfig {
   return {
     nodeId: brandNodeId(venue.nodeId),
-    seriesId: brandSeriesId(venue.seriesIds[0]!),
     locationId: brandLocationId(venue.locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],

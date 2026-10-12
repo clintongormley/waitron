@@ -31,11 +31,7 @@ import {
   type PrinterTarget,
 } from "@waitron/print-agent";
 import { fakeHost } from "@waitron/print-agent/testing/fake-host.js";
-import {
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-} from "@waitron/shared";
+import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import { mountPrintApi } from "./print-api.js";
 import { mountJoinApi } from "./join-api.js";
@@ -83,7 +79,6 @@ const suite = useVenueDb({
     // Knock and accept must share this one cfg: every join-request statement filters by node.
     cfg = {
       nodeId: brandNodeId(randomUUID()),
-      seriesId: brandSeriesId(randomUUID()),
       locationId: brandLocationId(locationId),
       locale: "es-ES",
       invoiceLocales: ["es-ES"],

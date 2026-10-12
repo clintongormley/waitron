@@ -84,7 +84,6 @@ function nextNif(): string {
 function tillConfigFromVenue(venue: VenueResult): TillConfig {
   return {
     nodeId: brandNodeId(venue.nodeId),
-    seriesId: brandSeriesId(venue.seriesIds[0]!),
     locationId: brandLocationId(venue.locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
@@ -94,6 +93,7 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
 }
 
 let cfg: DeviceRequestConfig;
+let seriesId: ReturnType<typeof brandSeriesId>;
 let menuItemId: string;
 let zoneId: string;
 
@@ -143,6 +143,7 @@ beforeAll(async () => {
     { db: suite.db, modules: ALL_MODULES },
   );
 
+  seriesId = brandSeriesId(venue.seriesIds[0]!);
   cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue));
   ({ menuItemId, zoneId } = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
@@ -185,7 +186,7 @@ async function seedSale(
   const { saleId } = await recordSale(tx, backend, {
     origin: cfg.origin,
     nodeId: cfg.nodeId,
-    seriesId: cfg.seriesId,
+    seriesId,
     workingOrderId: brandWorkingOrderId(workingOrderId),
     locale: cfg.locale,
     invoiceLocales: cfg.invoiceLocales,
@@ -341,7 +342,7 @@ describe("readTenderBlock", () => {
       const { saleId } = await recordSale(tx, backend, {
         origin: cfg.origin,
         nodeId: cfg.nodeId,
-        seriesId: cfg.seriesId,
+        seriesId,
         workingOrderId: brandWorkingOrderId(workingOrderId),
         locale: cfg.locale,
         invoiceLocales: cfg.invoiceLocales,

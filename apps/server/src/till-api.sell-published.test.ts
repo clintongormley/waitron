@@ -115,6 +115,7 @@ function nextNif(): string {
 }
 
 interface Lunch {
+  seriesId: ReturnType<typeof brandSeriesId>;
   cfg: TillConfig;
   zoneId: string;
   menuId: string;
@@ -175,7 +176,6 @@ async function setupLunch(): Promise<Lunch> {
   );
   const cfg: TillConfig = {
     nodeId: brandNodeId(venue.nodeId),
-    seriesId: brandSeriesId(venue.seriesIds[0]!),
     locationId: brandLocationId(venue.locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
@@ -284,6 +284,7 @@ async function setupLunch(): Promise<Lunch> {
   );
   return {
     cfg,
+    seriesId: brandSeriesId(venue.seriesIds[0]!),
     app,
     cookie: `${SESSION_COOKIE}=${session.token}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`,
     sessionCookie: `${SESSION_COOKIE}=${session.token}`,
@@ -526,7 +527,7 @@ describe("a basket that spans a scheduled activation", () => {
     const [freshSale] = await suite.db
       .select({ workingOrderId: sales.workingOrderId })
       .from(sales)
-      .where(and(eq(sales.seriesId, v.cfg.seriesId), eq(sales.total, 350)));
+      .where(and(eq(sales.seriesId, v.seriesId), eq(sales.total, 350)));
     expect(
       await lineVersions(eq(workingOrderLines.workingOrderId, freshSale!.workingOrderId!)),
     ).toEqual([{ menuVersionId: v2, gross: 350 }]);
@@ -539,7 +540,7 @@ describe("a basket that spans a scheduled activation", () => {
       .select({ menuVersionId: saleLines.menuVersionId })
       .from(saleLines)
       .innerJoin(sales, eq(sales.id, saleLines.saleId))
-      .where(and(eq(sales.seriesId, v.cfg.seriesId), eq(sales.total, 300)));
+      .where(and(eq(sales.seriesId, v.seriesId), eq(sales.total, 300)));
     expect(earlySale!.menuVersionId).toBe(v1);
     const state = await send(v, "GET", `/api/menu-state?zoneId=${v.zoneId}`);
     expect(

@@ -35,12 +35,7 @@ import {
   writeProductModifiers,
 } from "@waitron/catalogue";
 import { persons } from "@waitron/identity";
-import {
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-  jobOrigin,
-} from "@waitron/shared";
+import { locationId as brandLocationId, nodeId as brandNodeId, jobOrigin } from "@waitron/shared";
 import type { OptionSelection } from "@waitron/shared";
 import type { OriginConfig } from "./till-config.js";
 import { createCourse } from "./kitchen.js";
@@ -115,7 +110,6 @@ async function setupVenue(): Promise<Venue> {
   const cfg: OriginConfig = {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(nodeId),
-    seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],

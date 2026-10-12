@@ -28,7 +28,6 @@ import {
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
-  seriesId as brandSeriesId,
   thousandthsToDecimal,
 } from "@waitron/shared";
 import type { DeviceRequestConfig, OriginConfig, TillConfig } from "./till-config.js";
@@ -102,7 +101,6 @@ async function setupVenue(): Promise<Seeded> {
   const nodeId = await seedNode(db, brandLocationId(locationId));
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(nodeId),
-    seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],

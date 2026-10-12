@@ -82,7 +82,6 @@ async function setupVenue(): Promise<{ designated: AdoptResult; adminPersonId: s
   const designated: AdoptResult = {
     locationId: venue.locationId,
     nodeId: venue.nodeId,
-    seriesId: venue.seriesIds[0]!,
   };
   const adminPersonId = await withTransaction(db, (tx) => {
     const rows = tx.all<{ id: string }>(sql`select id from persons where role = 'admin'`);

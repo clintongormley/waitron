@@ -62,7 +62,6 @@ import {
   decimal,
   locationId as brandLocationId,
   nodeId as brandNodeId,
-  seriesId as brandSeriesId,
   thousandthsToDecimal,
   deviceOrigin,
   jobOrigin,
@@ -219,7 +218,6 @@ async function provision(db: typeof suite.db): Promise<Venue> {
   const cfg: OriginConfig = {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(provisioned.nodeId),
-    seriesId: brandSeriesId(provisioned.seriesIds[0]!),
     locationId: brandLocationId(provisioned.locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],

@@ -18,12 +18,7 @@ import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { assignCatalogueToLocation, createCatalogue, createProduct } from "@waitron/catalogue";
 import { createPrinter, deactivatePrinter } from "@waitron/printing";
 import type { PrintConfig } from "@waitron/printing";
-import {
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-  jobOrigin,
-} from "@waitron/shared";
+import { locationId as brandLocationId, nodeId as brandNodeId, jobOrigin } from "@waitron/shared";
 import type { OriginConfig, TillConfig } from "./till-config.js";
 import { createStation } from "./kitchen.js";
 import { createOpenOrder } from "./working-order.js";
@@ -102,7 +97,6 @@ describe("print-on-fire concurrency — the write queue around the mapping read"
     const cfg: OriginConfig = {
       origin: jobOrigin("dashboard"),
       nodeId: brandNodeId(nodeId),
-      seriesId: brandSeriesId(randomUUID()),
       locationId: brandLocationId(locationId),
       locale: LOCALE,
       invoiceLocales: [LOCALE],
