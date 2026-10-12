@@ -86,7 +86,9 @@ export { diningTables } from "./schema/dining-tables.js";
 export {
   floorPlanShape,
   floorPlans,
+  floorPlanTableParts,
   floorPlanTables,
+  floorResetTableParts,
   floorResetTables,
   floorTodayJoinTables,
   floorTodayJoins,
