@@ -298,6 +298,48 @@ describe("Find a bill", () => {
     expect(el.shadowRoot!.querySelector("[data-bill]")).not.toBeNull();
   });
 
+  it("tells the app each time a bill is chosen or left, so the app can drop its error", async () => {
+    const el = await mount();
+    const changes = vi.fn();
+    el.addEventListener("find-bill-selection", changes);
+    await type(el, "bill-search", "12");
+    await click(el, "[data-search]");
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-bill]")).not.toBeNull());
+    expect(changes).not.toHaveBeenCalled();
+    await click(el, "[data-bill]");
+    expect(changes).toHaveBeenCalledTimes(1);
+    await click(el, "[slot=cancel]");
+    expect(el.shadowRoot!.querySelector("[data-collect]")).toBeNull();
+    expect(changes).toHaveBeenCalledTimes(2);
+    await click(el, "[data-bill]");
+    expect(changes).toHaveBeenCalledTimes(3);
+  });
+
+  it.each([
+    [
+      "en",
+      "This would take the order over €3,010.00, the most this till accepts without a full invoice naming the customer, which it cannot issue. Take something off the order.",
+    ],
+    [
+      "es",
+      "El pedido pasaría de 3010,00 €, el máximo que admite esta caja sin una factura completa a nombre del cliente, y no puede emitirla. Quita algo del pedido.",
+    ],
+  ])("words an over-limit refusal naming the limit in %s", async (locale, sentence) => {
+    setLocale(locale);
+    const el = await mount();
+    await type(el, "bill-search", "A/12");
+    await click(el, "[data-search]");
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-bill]")).not.toBeNull());
+    await click(el, "[data-bill]");
+    el.error = { overLimit: "3010.00" };
+    await el.updateComplete;
+    const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
+    await actions.updateComplete;
+    expect(
+      actions.shadowRoot!.querySelector("[data-error]")!.textContent!.trim().replace(/\s/g, " "),
+    ).toBe(sentence);
+  });
+
   it("keeps the search field readable at phone width", async () => {
     await page.viewport(390, 844);
     try {

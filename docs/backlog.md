@@ -1657,10 +1657,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   table (`apps/dashboard/src/api/live-queries.ts:75-92`), so a sign-in or sign-out while the
   dialog is open does not by itself update its count; the delete itself recomputes. Left open by A435 step 4.
 
-- **The till's find-bill pay shows the generic sale error for an over-limit refusal**: the
-  find-bill dialog (`apps/till/src/widgets/find-bill-dialog.ts`) takes its error as a plain
-  string key, so it cannot carry the amount the collect and table-bill paths now show. Left open by A230 (`@waitron/verifactu` 0.2.1, #1099).
-
 - **Split-off checks may reach the same path as a held-order edit that changes sent lines** — found
   by #623 while pruning comments. Nothing tests two `openTab` calls racing on one table or
   concurrent rounds landing on consecutive line numbers (the sequential versions are in

@@ -21,7 +21,15 @@ import {
   tillProviderForReader,
   toScale,
 } from "@waitron/shared";
-import { carriedText, countText, currentLocale, named, setLocale, t } from "./i18n/t.js";
+import {
+  carriedText,
+  countText,
+  currentLocale,
+  named,
+  overLimitText,
+  setLocale,
+  t,
+} from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
 import { diag } from "./diagnostics.js";
@@ -905,10 +913,7 @@ function errorText(error: CounterError, menus: readonly TillZoneMenu[]): string 
         ></span
       >`;
   }
-  if ("overLimit" in error)
-    return t("sale.over_simplified_limit").replace("{amount}", () =>
-      formatMoney(error.overLimit, currentLocale()),
-    );
+  if ("overLimit" in error) return overLimitText(error.overLimit);
   if ("billPayments" in error)
     return [
       t("table.bill_to_pay").replace("{amount}", () =>
@@ -2015,7 +2020,7 @@ export class TillApp extends LitElement {
   @state() private findingBill = false;
   @state() private findBillBusy = false;
   #invoiceRecoveryVisit = 0;
-  @state() private findBillError?: StringKey;
+  @state() private findBillError?: StringKey | { overLimit: string };
   /** The waiting orders whose hand over is out, each pressed once until it answers. */
   #handingOver = new Set<string>();
   /** Each Pay pressed on a waiting order; only the latest one's answer may load the basket. */
@@ -4045,7 +4050,7 @@ export class TillApp extends LitElement {
             ? "take_payment.not_permitted"
             : isPaymentInFlight(error)
               ? "sale.payment_in_flight"
-              : "sale.error";
+              : (overLimitOf(error) ?? "sale.error");
     } finally {
       this.submitting = false;
       this.findBillBusy = false;
@@ -9436,6 +9441,9 @@ export class TillApp extends LitElement {
         }}
         @find-invoice-open=${(event: Event) => void this.#onFindInvoiceOpen(event)}
         @find-bill-pay=${(event: Event) => void this.#onFindBillPay(event)}
+        @find-bill-selection=${() => {
+          this.findBillError = undefined;
+        }}
         @find-bill-close=${() => {
           this.#invoiceRecoveryVisit++;
           this.findBillBusy = false;

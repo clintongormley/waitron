@@ -10225,6 +10225,141 @@ describe("till-app", () => {
       expect(el.shadowRoot!.querySelector("till-find-bill-dialog")).toBe(dialog);
     });
 
+    async function findBillPayRefused(refusal: unknown) {
+      const { el } = await mountApp({ collectOrder: vi.fn().mockRejectedValue(refusal) });
+      await toCounter(el);
+      el.shadowRoot!.querySelector<HTMLElement>("till-tab-shell")!
+        .shadowRoot!.querySelector<HTMLElement>(".find-bill")!
+        .click();
+      await el.updateComplete;
+      const dialog = el.shadowRoot!.querySelector("till-find-bill-dialog")!;
+      dialog.dispatchEvent(
+        new CustomEvent("find-bill-pay", {
+          detail: {
+            workingOrderId: "wo-debt",
+            tender: { method: "cash", amount: "3010.01" },
+            invoiced: true,
+          },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await flush(el);
+      await dialog.updateComplete;
+      const actions = dialog.shadowRoot!.querySelector("wt-form-actions")!;
+      await actions.updateComplete;
+      expect(el.shadowRoot!.querySelector("till-find-bill-dialog")).toBe(dialog);
+      return actions
+        .shadowRoot!.querySelector("[data-error]")
+        ?.textContent?.trim()
+        .replace(/\s/g, " ");
+    }
+
+    it("tells the operator a Find a bill collection is over the simplified-invoice limit, naming the limit", async () => {
+      expect(
+        await findBillPayRefused({
+          code: "sale.total_exceeds_simplified_limit",
+          total: "3010.01",
+          limit: "3010.00",
+          status: 409,
+        }),
+      ).toBe(
+        "El pedido pasaría de 3010,00 €, el máximo que admite esta caja sin una factura completa a nombre del cliente, y no puede emitirla. Quita algo del pedido.",
+      );
+    });
+
+    it("keeps the generic sale error for a Find a bill over-limit refusal naming no limit", async () => {
+      expect(
+        await findBillPayRefused({ code: "sale.total_exceeds_simplified_limit", status: 409 }),
+      ).toBe(t("sale.error"));
+    });
+
+    describe("a refused Find a bill Pay is not shown for a bill left behind", () => {
+      const bill = (workingOrderId: string, orderNumber: number) => ({
+        workingOrderId,
+        orderNumber,
+        label: null,
+        partyName: null,
+        tables: [],
+        invoiceNumber: null,
+        openedAt: "2026-10-01T18:00:00.000Z",
+        departedAt: null,
+        status: "waiting_for_payment",
+        stillOwed: "3010.01",
+      });
+
+      async function refusedThenBack() {
+        const { el } = await mountApp({
+          lookUpBills: vi.fn(async (q: string) => ({
+            bills: q === "12" ? [bill("wo-12", 12)] : [bill("wo-13", 13)],
+          })),
+          collectOrder: vi.fn().mockRejectedValue({
+            code: "sale.total_exceeds_simplified_limit",
+            limit: "3010.00",
+            status: 409,
+          }),
+        });
+        await toCounter(el);
+        el.shadowRoot!.querySelector<HTMLElement>("till-tab-shell")!
+          .shadowRoot!.querySelector<HTMLElement>(".find-bill")!
+          .click();
+        await el.updateComplete;
+        const dialog = el.shadowRoot!.querySelector("till-find-bill-dialog")!;
+        await dialog.updateComplete;
+        const search = async (query: string) => {
+          const field = dialog.shadowRoot!.querySelector<WtInput>("[name=bill-search]")!;
+          await field.updateComplete;
+          const input = field.shadowRoot!.querySelector<HTMLInputElement>("input")!;
+          await userEvent.fill(page.elementLocator(input), query);
+          await dialog.updateComplete;
+          dialog.shadowRoot!.querySelector<HTMLElement>("[data-search]")!.click();
+          await expect
+            .poll(() => dialog.shadowRoot!.querySelector("[data-bill]")?.textContent)
+            .toContain(query);
+        };
+        const shownError = async () => {
+          await flush(el);
+          await dialog.updateComplete;
+          const actions = dialog.shadowRoot!.querySelector("wt-form-actions")!;
+          await actions.updateComplete;
+          return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+        };
+        const selectFound = async () => {
+          dialog.shadowRoot!.querySelector<HTMLElement>("[data-bill]")!.click();
+          await dialog.updateComplete;
+        };
+        await search("12");
+        await selectFound();
+        dialog.shadowRoot!.querySelector<HTMLElement>("[data-collect]")!.click();
+        expect(await shownError()).toContain("3010,00");
+        dialog
+          .shadowRoot!.querySelector("wt-form-actions")!
+          .querySelector<HTMLElement>("[slot=cancel]")!
+          .click();
+        await dialog.updateComplete;
+        expect(dialog.shadowRoot!.querySelector("[data-collect]")).toBeNull();
+        return { search, selectFound, shownError };
+      }
+
+      it("shows no error once Back returns to the search", async () => {
+        const { shownError } = await refusedThenBack();
+        expect(await shownError()).toBe("");
+      });
+
+      it("shows no error on another bill found by a new search", async () => {
+        const { search, selectFound, shownError } = await refusedThenBack();
+        await search("13");
+        await selectFound();
+        expect(await shownError()).toBe("");
+      });
+
+      it("shows no error on the same bill selected again", async () => {
+        const { selectFound, shownError } = await refusedThenBack();
+        await selectFound();
+        expect(await shownError()).toBe("");
+      });
+    });
+
     it("a failed collect keeps the counter (collect stage) and the basket, showing a non-fatal error", async () => {
       const { el } = await mountApp({
         zonePolicy: { serviceMode: "ticket_then_pay" },

@@ -24,11 +24,13 @@ const api = { lookUpBills: async () => ({ bills: [debt] }) } as unknown as TillA
 class CollectionLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
   closes = 0;
+  selections = 0;
   submitted: FindBillPayDetail[] = [];
   override render() {
     return html`<till-find-bill-dialog
         .api=${api}
         @find-bill-close=${() => this.closes++}
+        @find-bill-selection=${() => this.selections++}
         @find-bill-pay=${(event: CustomEvent<FindBillPayDetail>) => this.submitted.push(event.detail)}
       ></till-find-bill-dialog
       >${this.leave.render({ heading: t("unsaved.heading"), message: t("unsaved.message"), keepLabel: t("unsaved.keep"), discardLabel: t("unsaved.discard") })}`;
@@ -91,6 +93,7 @@ for (const route of ["Back", "Escape"]) {
     await expect.poll(() => q.open).toBe(false);
     expect(input.value).toBe("40.00");
     expect((input.getRootNode() as ShadowRoot).activeElement).toBe(input);
+    if (route === "Back") expect(app.selections).toBe(1);
     if (route === "Back") click(form, "[slot=cancel]");
     else await userEvent.keyboard("{Escape}");
     await question(app);
@@ -98,6 +101,7 @@ for (const route of ["Back", "Escape"]) {
     if (route === "Back") {
       await expect.poll(() => form.shadowRoot!.querySelector("[data-bill]")).not.toBeNull();
       expect(app.closes).toBe(0);
+      expect(app.selections).toBe(2);
     } else await expect.poll(() => app.closes).toBe(1);
     expect(app.submitted).toEqual([]);
     expect(unload()).toBe(false);

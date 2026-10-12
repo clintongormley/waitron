@@ -1,4 +1,4 @@
-import { FALLBACK_LOCALE } from "@waitron/shared";
+import { FALLBACK_LOCALE, formatMoney } from "@waitron/shared";
 import { catalogues, en, type StringKey } from "./strings.js";
 
 // Module-level on purpose: the till shows one locale at a time. till-app switches it at boot, so this
@@ -38,6 +38,10 @@ export function countText(n: number, many: StringKey, one: StringKey): string {
  * them. */
 export function named(name: string, withName: string, unnamed: string): string {
   return name === "" ? unnamed : withName.replace("{name}", () => name);
+}
+
+export function overLimitText(limit: string): string {
+  return t("sale.over_simplified_limit").replace("{amount}", () => formatMoney(limit, locale));
 }
 
 /** A sentence about `item` and the device carrying it: `withPerson` naming who is signed in there,
