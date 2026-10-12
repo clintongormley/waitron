@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
+import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { deviceProfiles, withTransaction, type Database, type Transaction } from "@waitron/db";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
-import type { TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin, loginWithPin, persons } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import {
@@ -10,10 +10,17 @@ import {
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
 } from "@waitron/shared";
-import { setProfileServiceAccess } from "@waitron/venue-service";
+import {
+  createDepartment,
+  deleteMenuPeriod,
+  menuPeriods,
+  replaceMenuWeek,
+  setProfileServiceAccess,
+} from "@waitron/venue-service";
 import { deploymentEnvironment } from "../config.js";
 import { DEVICE_COOKIE } from "../device-session.js";
 import { ALL_MODULES } from "../modules.js";
+import { systemClock } from "../till-backend.js";
 import { mountTillApi } from "../till-api.js";
 import type { TillConfig } from "../till-config.js";
 import { SESSION_COOKIE } from "../till-session.js";
@@ -33,26 +40,6 @@ export interface SignedInTill {
   app: Hono;
   cookie: string;
   personId: string;
-}
-
-/** Reads `Date` each time, so a suite's faked system time is the till's time. */
-function trustedClock(): TrustedClock {
-  return {
-    now: () => {
-      const instant = new Date();
-      return {
-        instant,
-        offsetMinutes: -instant.getTimezoneOffset(),
-        confident: true,
-        confidence: "anchored",
-        anchorAgeSeconds: 0,
-      };
-    },
-    anchor: () => {
-      throw new Error("signed-in-till: anchor() is not used");
-    },
-    currentAnchor: () => null,
-  };
 }
 
 /**
@@ -139,7 +126,7 @@ export async function provisionSignedInTill<S extends TillSeed>(
   const session = await withTransaction(db, (tx) =>
     loginWithPin(tx, { deviceId: device.deviceId, personId: seeded.personId, pin: "5555" }),
   );
-  const clock = trustedClock();
+  const clock = systemClock();
   const backend = new VerifactuBackend({
     clock,
     db,
@@ -159,6 +146,30 @@ export async function provisionSignedInTill<S extends TillSeed>(
     cookie: `${SESSION_COOKIE}=${session.token}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`,
     ...seeded,
   };
+}
+
+/** A counter department with no periods and an empty week, for a seed that paints its own. */
+export async function createBareDepartment(
+  tx: Transaction,
+  cfg: TillConfig,
+  name: string,
+  at: Date,
+): Promise<string> {
+  const departmentId = (await createDepartment(tx, cfg, { name, orderStart: "counter" })).id;
+  const initialPeriods = await tx
+    .select({ id: menuPeriods.id })
+    .from(menuPeriods)
+    .where(eq(menuPeriods.departmentId, departmentId));
+  await replaceMenuWeek(
+    tx,
+    cfg,
+    departmentId,
+    [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, slots: [] })),
+    at,
+    0,
+  );
+  for (const period of initialPeriods) await deleteMenuPeriod(tx, cfg, period.id);
+  return departmentId;
 }
 
 /** One request to the till's app with its session and device cookies; the body parsed as JSON. */

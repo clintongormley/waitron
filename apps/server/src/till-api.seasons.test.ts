@@ -6,17 +6,18 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { addProductToMenu, createCatalogue, createProduct } from "@waitron/catalogue";
 import {
-  createDepartment,
   createServiceZone,
-  deleteMenuPeriod,
-  menuPeriods,
   replaceMenuWeek,
   saveMenuPeriod,
   seasons,
 } from "@waitron/venue-service";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
-import { provisionSignedInTill, sendAsTill } from "./testing/signed-in-till.js";
+import {
+  createBareDepartment,
+  provisionSignedInTill,
+  sendAsTill,
+} from "./testing/signed-in-till.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -42,22 +43,7 @@ async function seasonVenue() {
     taxId: nextNif(),
     dayCutover: "06:00",
     seed: async (tx, cfg) => {
-      const restaurant = (
-        await createDepartment(tx, cfg, { name: "Restaurant", orderStart: "counter" })
-      ).id;
-      const initialPeriods = await tx
-        .select({ id: menuPeriods.id })
-        .from(menuPeriods)
-        .where(eq(menuPeriods.departmentId, restaurant));
-      await replaceMenuWeek(
-        tx,
-        cfg,
-        restaurant,
-        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, slots: [] })),
-        SUNDAY_00_15,
-        0,
-      );
-      for (const period of initialPeriods) await deleteMenuPeriod(tx, cfg, period.id);
+      const restaurant = await createBareDepartment(tx, cfg, "Restaurant", SUNDAY_00_15);
       const sala = (await createServiceZone(tx, cfg, { name: "Sala", departmentId: restaurant }))
         .id;
       const dish = async (menuName: string, name: string) => {
@@ -110,12 +96,9 @@ async function seasonVenue() {
 }
 type Venue = Awaited<ReturnType<typeof seasonVenue>>;
 
-const send = (v: Venue, method: string, path: string, body?: object) =>
-  sendAsTill(v, method, path, body);
-
 const park = async (v: Venue, dish: { itemId: string; versionId: string }) => {
   const id = randomUUID();
-  const answer = await send(v, "POST", "/api/working-orders", {
+  const answer = await sendAsTill(v, "POST", "/api/working-orders", {
     id,
     zoneId: v.sala,
     lines: [{ menuItemId: dish.itemId, quantity: "1", menuVersionId: dish.versionId }],
@@ -151,7 +134,7 @@ describe("the till sells the business day's season", () => {
 
   it("names Dinner in the menu state", async () => {
     const v = await seasonVenue();
-    const answer = await send(v, "GET", `/api/menu-state?zoneId=${v.sala}`);
+    const answer = await sendAsTill(v, "GET", `/api/menu-state?zoneId=${v.sala}`);
     expect(answer.status).toBe(200);
     expect(answer.body).toMatchObject({
       defaultMenuId: v.cena.menuId,
