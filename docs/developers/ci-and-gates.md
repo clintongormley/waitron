@@ -321,10 +321,10 @@ Where each failure arrives differs, which is the part a session gets wrong:
 | package | what runs it | when a drop below 90 is seen |
 | --- | --- | --- |
 | `shared` | `mutation-shared` in `.github/workflows/ci.yml` | a pull request whose resolved scope contains the package; on `main` the scope is `global`, so always |
-| `ui-core` | the `mutation` matrix in `.github/workflows/mutation.yml` | the weekly Monday run only — a branch that thins a UI test goes green and reddens on Monday |
-| `ui` | the sharded `mutation-ui` matrix plus `mutation-ui-aggregate`, both in `.github/workflows/mutation.yml` | the weekly Monday run only, on the merged score of the thirty shards — a single shard's own slice is never gated, and a LOCAL `pnpm --filter @waitron/ui mutation` prints a score and gates nothing |
+| `ui-core` | the `mutation` matrix in `.github/workflows/mutation.yml` | the nightly run, or one dispatched by hand — a branch that thins a UI test goes green and reddens the next night |
+| `ui` | the sharded `mutation-ui` matrix plus `mutation-ui-aggregate`, both in `.github/workflows/mutation.yml` | the nightly run, or one dispatched by hand, on the merged score of the thirty shards — a single shard's own slice is never gated, and a LOCAL `pnpm --filter @waitron/ui mutation` prints a score and gates nothing |
 | `fiscal` | nothing in CI | only a local `pnpm --filter @waitron/fiscal mutation` |
-| `db` | the sharded `mutation-db` matrix plus `mutation-db-aggregate`, both in `.github/workflows/mutation.yml` | the weekly Monday run only, on the merged score of the ten shards — a single shard's own slice is never gated, and a LOCAL `pnpm --filter @waitron/db mutation` prints a score and gates nothing |
+| `db` | the sharded `mutation-db` matrix plus `mutation-db-aggregate`, both in `.github/workflows/mutation.yml` | the nightly run, or one dispatched by hand, on the merged score of the ten shards — a single shard's own slice is never gated, and a LOCAL `pnpm --filter @waitron/db mutation` prints a score and gates nothing |
 
 Four hedges worth carrying. `packages/fiscal`'s `mutate` list names two source files, so its floor
 is not a package-wide one. Neither is `packages/db`'s, for a smaller reason: one file is out of its
@@ -353,6 +353,23 @@ unchanged, it was not run at all (that run counted 396 tests, the package's 449 
 with a suite that imports a mutated file and reads its package's `src` as text could read Stryker's
 instrumented copies the same way — `packages/fiscal/src/no-hardcoded-margin.test.ts` imports `./clock.js`, which fiscal's
 `mutate` list names, and reads `./*.ts` as raw text. Only `packages/shared` was checked.
+
+### Mutation testing runs nightly at 05:00 UTC
+
+Nightly rather than Mondays only (owner, 2026-10-12). A run is 43 jobs (ui's 30 shards, db's 10,
+ui-core, and the two aggregates), and the account ran at most 20 jobs at once from 6 to 12 October
+(every job of every workflow run in that range that held a runner, read from
+`gh api repos/clintongormley/waitron/actions/runs/<id>/jobs`; one instant read 21). So while a run lasts, other workflows' jobs queue behind it. On dispatch run `38256003987`
+(2026-10-12, 13:29 to 14:09 UTC) 18 of its jobs ran at once, and the 58 jobs other workflows created
+during it waited a median of 330 s to start (90th percentile 737 s, longest 777 s, in pull-request
+run `38257189737`). With no mutation run going, the 69 jobs created from 14:10 to 14:50 waited a
+median of 3 s (longest 188 s), and the 33 from 12:20 to 13:00 a median of 3 s (longest 131 s).
+
+The hour is chosen for that. Over 6 to 11 October the account sat at 20 running jobs for 2.2% of
+the 05:00 UTC hour, the least of any hour, against 24.2% at 11:00 and 23.6% at 19:00; its jobs
+started a median of 3 s after creation (90th percentile 77 s). 03:00 was about as quiet
+(2.5%) but holds image-nightly; stripe-sandbox runs at 04:00 and CodeQL at 01:37. The 2026-10-12
+scheduled run was created at 05:11.
 
 ### Reading `packages/db`'s score by hand
 
@@ -449,7 +466,7 @@ reads 94.69 and fails, two (232 of 244) reads 95.08 and passes. So this package 
 uncovered branches of slack, and a change that adds a few unreached `??` or `?.` to `src/` here can
 redden the job on its own.
 
-**The mutation half, which is invisible until a Monday.** `packages/db/stryker.config.json` mutates
+**The mutation half, which is invisible until the nightly run.** `packages/db/stryker.config.json` mutates
 `src/**/*.ts` minus `*.test.ts` and minus `src/english-only.ts`, so the moved code enters the
 mutation subject set too. On that branch `packages/db/src/testing/schema-conformance.ts` became the
 largest mutation-eligible file in the package, about half as long again as

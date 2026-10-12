@@ -1010,8 +1010,12 @@ describe("the test shards", () => {
     );
   });
 
-  it("keeps weekly mutation checks for both UI packages", () => {
+  it("runs mutation checks for ui, ui-core and db every night and by hand", () => {
     const workflow = readFileSync(join(repoRoot, ".github/workflows/mutation.yml"), "utf8");
+    expect(workflowTriggers(workflow).sort()).toEqual(["schedule", "workflow_dispatch"]);
+    const crons = [...workflow.matchAll(/^ {4}- cron: "([^"]*)"/gm)].map((match) => match[1]);
+    expect(crons.length, "no cron line in mutation.yml").toBeGreaterThan(0);
+    for (const cron of crons) expect(cron, "a cron that skips a day").toMatch(/^\d+ \d+ \* \* \*$/);
     // One job's text: from its `  <id>:` line to the next line at that indent (a job or its comment).
     const section = (id) => {
       const start = workflow.indexOf(`\n  ${id}:\n`);
@@ -1042,6 +1046,11 @@ describe("the test shards", () => {
     expect(aggregate).toContain("needs: mutation-ui");
     expect(aggregate).toContain("if: always()");
     expect(aggregate).toContain("pattern: mutation-report-ui-shard-*");
+
+    const db = section("mutation-db");
+    expect(db).toMatch(/shard: \[1(, \d+)*\]/);
+    expect(lines(db)).toContain('pnpm --filter @waitron/db exec stryker run --mutate "$FILES"');
+    expect(section("mutation-db-aggregate")).toContain("needs: mutation-db");
   });
 
   it("isolates Bookings from the light bins", () => {

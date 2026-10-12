@@ -1,10 +1,10 @@
 name: Mutation testing
 
-# Mutation testing runs the real-Chromium (ui, ui-core) or database-backed (db) suite once per
-# surviving mutant, so it does not belong gating merges the way ci.yml's coverage jobs do: it
-# doesn't tell you "did I break something," it tells you "how good are my tests," which is a
-# slower-moving signal worth reviewing periodically rather than blocking merges on. Scheduled
-# weekly, plus on-demand via workflow_dispatch so it can be run against a specific branch (e.g. from
+# Mutation testing reruns, for each mutant, the tests that cover it — in real Chromium (ui, ui-core)
+# or against a database on disk (db) — so it does not belong gating merges the way ci.yml's coverage
+# jobs do: it doesn't tell you "did I break something," it tells you "how good are my tests," which
+# is a slower-moving signal worth reviewing periodically rather than blocking merges on. Scheduled
+# nightly, plus on-demand via workflow_dispatch so it can be run against a specific branch (e.g. from
 # a PR) without waiting for the schedule.
 #
 # packages/ui is SHARDED like packages/db, because one job stopped fitting. Job wall times from
@@ -14,7 +14,8 @@ name: Mutation testing
 
 on:
   schedule:
-    - cron: "0 5 * * 1" # Monday 05:00 UTC
+    # Why 05:00 UTC: docs/developers/ci-and-gates.md, "Mutation testing runs nightly at 05:00 UTC".
+    - cron: "0 5 * * *"
   workflow_dispatch:
 
 permissions:
@@ -201,8 +202,8 @@ jobs:
   # 2026-10-12, orders, tenants, daily-closes and incidents each share a shard with 13 or 14 others.
   #
   # Each shard re-pays the ~7min dry run: Stryker maps per-test coverage over the WHOLE suite before
-  # it mutates anything, and that map cannot be shared across independent jobs. Cheap for a weekly,
-  # non-gating job. `fail-fast: false` so one shard's failure does not cancel the rest.
+  # it mutates anything, and that map cannot be shared across independent jobs. `fail-fast: false`
+  # so one shard's failure does not cancel the rest.
   #
   # No thresholds.break is configured HERE, and that is on purpose: a break in
   # packages/db/stryker.config.json would gate each SHARD's own slice, so a shard holding the

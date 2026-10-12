@@ -240,10 +240,12 @@ decisions across and re-baseline, or change the sentence to say what it is.
 
 **Left behind by gating `packages/db`'s mutation score (#472, 2026-09-20).** **The gate never runs
 on a pull request, so thinning a `packages/db` test merges green.** `.github/workflows/mutation.yml`
-fires on a weekly schedule and on `workflow_dispatch` only, and `mutation-db-aggregate` lives in it,
-so a change that removes an assertion the score depended on reddens the following Monday. The ten db
-shards took about 50 minutes of wall clock, which is why nobody has put them on the merge path.
-Either accept the weekly lag and say so where a reader meets the gate, or find a cheaper
+fires nightly and on `workflow_dispatch` only, and `mutation-db-aggregate` lives in it, so a change
+that removes an assertion the score depended on reddens the next night. The ten db shards run side
+by side, 2.9 to 12.2 minutes each on run `38241392066`, but a pull request that started them would
+hold ten of the account's 20 job slots
+([ci-and-gates.md](../developers/ci-and-gates.md#mutation-testing-runs-nightly-at-0500-utc)).
+Either accept the overnight lag and say so where a reader meets the gate, or find a cheaper
 per-pull-request signal.
 
 ## `packages/ui/src/vitest-park-pointer.ts` is mutated and has no tests

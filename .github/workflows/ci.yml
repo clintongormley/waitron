@@ -1786,14 +1786,9 @@ jobs:
 
   # packages/shared is pure functions over strings and BigInt: no browser, no database, no
   # async. That makes it the cheapest mutation target in the repo, so its break: 90 is checked on a
-  # pull request whose resolved scope contains it (the paragraph below), rather than only on a weekly
-  # run the way packages/ui's identical threshold is. Contrast packages/db, where every suite opens
-  # a real venue database on disk, which puts it on the same weekly footing as packages/ui — the
-  # engine behind that cost was PGlite and is now SQLite, and the cost has NOT been re-measured
-  # since the switch, so treat the footing as inherited rather than as a current measurement. Its
-  # bar of 90 is not
-  # in its own stryker config at all, because its run is split into ten shards; it is checked once on
-  # the merged score, by the mutation-db-aggregate job in mutation.yml.
+  # pull request whose resolved scope contains it (the paragraph below), rather than only in
+  # mutation.yml's nightly run, which checks ui-core's bar and, on each package's merged shard
+  # score, ui's and db's (mutation-ui-aggregate, mutation-db-aggregate).
   #
   # It gated every pull request until this gate was added; it now gates the ones whose resolved
   # scope contains packages/shared, by the same scope-membership mechanism as the scoped test shards

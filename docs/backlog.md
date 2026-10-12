@@ -4657,8 +4657,8 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   [Detail](backlog/ci.md#the-pglite-throughput-bench-no-longer-matches-the-shape-it-says-it-matches)
 
 - **The gate never runs on a pull request, so thinning a `packages/db` test merges green** — left
-  behind by gating `packages/db`'s mutation score (#472, 2026-09-20). Either accept the weekly lag
-  and say so where a reader meets the gate, or find a cheaper per-pull-request signal.
+  behind by gating `packages/db`'s mutation score (#472, 2026-09-20). Either accept the overnight
+  lag and say so where a reader meets the gate, or find a cheaper per-pull-request signal.
   [Detail](backlog/ci.md#the-gate-never-runs-on-a-pull-request-so-thinning-a-packagesdb-test-merges-green)
 
 - **`packages/db`'s static mutants are not in its mutation score** — OPEN, left by A539.

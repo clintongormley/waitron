@@ -104,7 +104,7 @@ More: [ci-and-gates.md](docs/developers/ci-and-gates.md).
 
 **A mutation floor of 90 breaks the run in every mutation-tested package — `ui`, `ui-core`,
 `shared`, `fiscal` and `db`** (the owner's 90-everywhere decision of 2026-09-19). WHERE it bites
-differs — on a pull request, only in the weekly run, or only locally — and neither `fiscal`'s nor
+differs — on a pull request, only in the nightly run, or only locally — and neither `fiscal`'s nor
 `db`'s floor is package-wide. Guard: `scripts/mutation-break-thresholds.test.mjs`, weaker than its
 name — it reads the workflow as TEXT for db's and ui's bars. Which package bites where:
 [ci-and-gates.md](docs/developers/ci-and-gates.md).
