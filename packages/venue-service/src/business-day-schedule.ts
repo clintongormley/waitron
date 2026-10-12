@@ -271,25 +271,43 @@ export async function businessDayClockConflicts(
     .from(menuDayTimetables)
     .innerJoin(departments, eq(departments.id, menuDayTimetables.departmentId))
     .where(eq(departments.locationId, cfg.locationId));
+  const oneOffYears = new Set(
+    calendar.flatMap((day) =>
+      day.repeatOn === null && day.date >= effectiveBusinessDay
+        ? [Number(day.date.slice(0, 4))]
+        : [],
+    ),
+  );
+  const yearsFrom = new Map<number, number[]>();
   const walkedYears = (date: string): number[] => {
     const firstYear = Math.max(Number(date.slice(0, 4)), Number(effectiveBusinessDay.slice(0, 4)));
-    const years = new Set(
-      Array.from({ length: Math.min(400, 10000 - firstYear) }, (_, i) => firstYear + i),
-    );
-    for (const day of calendar)
-      if (day.repeatOn === null && day.date >= effectiveBusinessDay)
-        years.add(Number(day.date.slice(0, 4)));
-    return [...years];
+    let years = yearsFrom.get(firstYear);
+    if (years === undefined) {
+      const walked = new Set(
+        Array.from({ length: Math.min(400, 10000 - firstYear) }, (_, i) => firstYear + i),
+      );
+      for (const year of oneOffYears) walked.add(year);
+      years = [...walked];
+      yearsFrom.set(firstYear, years);
+    }
+    return years;
   };
-  const annualDates = (date: string, repeatOn: string): string[] =>
-    walkedYears(date).flatMap((year) => {
-      const occurrence = `${String(year).padStart(4, "0")}-${repeatOn}`;
-      return occurrence >= date &&
-        occurrence >= addDays(effectiveBusinessDay, -1) &&
-        new Date(`${occurrence}T00:00:00Z`).toISOString().slice(0, 10) === occurrence
-        ? [occurrence]
-        : [];
-    });
+  const annualDatesOf = new Map<string, string[]>();
+  const annualDates = (date: string, repeatOn: string): string[] => {
+    const key = `${date}|${repeatOn}`;
+    const found =
+      annualDatesOf.get(key) ??
+      walkedYears(date).flatMap((year) => {
+        const occurrence = `${String(year).padStart(4, "0")}-${repeatOn}`;
+        return occurrence >= date &&
+          occurrence >= addDays(effectiveBusinessDay, -1) &&
+          new Date(`${occurrence}T00:00:00Z`).toISOString().slice(0, 10) === occurrence
+          ? [occurrence]
+          : [];
+      });
+    annualDatesOf.set(key, found);
+    return found;
+  };
   const namedOccurrences = calendar.flatMap((day) =>
     day.repeatOn === null ? [day.date] : annualDates(day.date, day.repeatOn),
   );
@@ -381,6 +399,14 @@ export async function businessDayClockConflicts(
     }
     return cutover;
   };
+  const departmentPaintOn = new Map<string, PaintRange[]>();
+  for (const row of specialPlacements) {
+    if (row.zoneId !== undefined) continue;
+    const key = `${row.departmentId}|${row.specialDayDateId}`;
+    const paint = departmentPaintOn.get(key) ?? [];
+    paint.push({ periodId: row.periodId ?? null, startsAt: row.startsAt, endsAt: row.endsAt });
+    departmentPaintOn.set(key, paint);
+  }
   const layered = new Map<string, ClosedRange[]>();
   const dayRanges = new Map<string, ClosedRange[]>();
   const onDate = (departmentId: string, date: string): ClosedRange[] => {
@@ -404,18 +430,7 @@ export async function businessDayClockConflicts(
         startsAt: row.startsAt,
         endsAt: row.endsAt,
       }));
-      const paint: PaintRange[] = specialPlacements
-        .filter(
-          (row) =>
-            row.departmentId === departmentId &&
-            row.zoneId === undefined &&
-            row.specialDayDateId === special.dateId,
-        )
-        .map((row) => ({
-          periodId: row.periodId ?? null,
-          startsAt: row.startsAt,
-          endsAt: row.endsAt,
-        }));
+      const paint = departmentPaintOn.get(`${departmentId}|${special.dateId}`) ?? [];
       const day = layerPaint(season, paint, cutover);
       layered.set(key, day);
       return day;
