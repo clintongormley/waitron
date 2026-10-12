@@ -11,7 +11,7 @@ import "./department-settings.js";
 import "./venue-departments-shell.js";
 import "./zone-edit-dialog.js";
 import "./opening-hours-screen.js";
-import { realWeekModel, namedWeekModel } from "../testing/real-week-model.js";
+import { namedWeekModel } from "../testing/real-week-model.js";
 import { everyDateSpecial } from "../testing/special-day-fixture.js";
 
 const originalUrl = location.href;
@@ -413,61 +413,6 @@ it.each(["keep", "discard"] as const)(
     expect(app.leave.coordinator.isDirty([day])).toBe(true);
   },
 );
-async function realDate(write?: () => Promise<unknown>) {
-  vi.useFakeTimers({ toFake: ["Date"] });
-  vi.setSystemTime(new Date("2026-10-12T12:00:00Z"));
-  const result = await hours("week", realWeekModel(), write);
-  history.replaceState(null, "", "/manage/opening-hours/view/week/department/d1?week=2026-10-12");
-  window.dispatchEvent(new PopStateEvent("popstate"));
-  await result.screen.updateComplete;
-  const owner = result.screen.shadowRoot!.querySelector("opening-hours-week")!;
-  await owner.updateComplete;
-  const grid = owner.shadowRoot!.querySelector("service-grid")!;
-  await grid.updateComplete;
-  emit(grid, "grid-block-change", { columnKey: "2", index: 0, startsAt: "12:00", endsAt: "17:00" });
-  await owner.updateComplete;
-  expect(app.leave.coordinator.isDirty()).toBe(true);
-  return { ...result, owner };
-}
-it.each(["keep", "discard"] as const)(
-  "department deletion cancels real-date %s without letting the retained date owner reopen",
-  async (decision) => {
-    const { screen, model, replace, owner } = await realDate();
-    const outcome = app.leave.coordinator.request({
-      scopes: "all",
-      reason: "navigation",
-      proceed: () => {},
-    });
-    await app.updateComplete;
-    const question = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
-    await question.updateComplete;
-    expect(question.open).toBe(true);
-    const stale = question.shadowRoot!.querySelector<HTMLElement>(`[data-choice=${decision}]`)!;
-    await replace({ ...model, departments: [] });
-    stale.click();
-    expect(await outcome).toBe("stale");
-    expect(owner.isConnected).toBe(false);
-    expect(screen.shadowRoot!.querySelector("opening-hours-week")).toBeNull();
-    expect(app.leave.coordinator.isDirty()).toBe(false);
-  },
-);
-it("a departed real-date save's refusal cannot revive its removed parent editor", async () => {
-  let refuse!: (reason: unknown) => void;
-  const { screen, model, replace, owner, writes } = await realDate(
-    () =>
-      new Promise((_done, reject) => {
-        refuse = reject;
-      }),
-  );
-  owner.shadowRoot!.querySelector<HTMLElement>("[data-test=save-date][data-day='2']")!.click();
-  await expect.poll(() => writes.length).toBe(1);
-  await replace({ ...model, departments: [] });
-  refuse({ code: "menu_timetable.invalid", params: { field: "slots.0.endsAt" } });
-  await new Promise((done) => setTimeout(done, 0));
-  expect(owner.isConnected).toBe(false);
-  expect(screen.shadowRoot!.querySelector("opening-hours-week")).toBeNull();
-  expect(app.leave.coordinator.isDirty()).toBe(false);
-});
 it("a late period save cannot revive the removed department's retained dialog", async () => {
   let finish!: () => void;
   const { screen, model, replace, writes } = await hours(

@@ -17,15 +17,11 @@ it("sends the editor's retained revision on every time-affecting request", async
   await api.updatePeriod("period", { endOffsetMinutes: 15 }, 7);
   await api.saveWeek("dept", "season", [], 7);
   await api.saveZoneWeek("zone", "season", [], 7);
-  await api.saveZoneDate("day", "zone", [], 7);
-  await api.saveDateMenus("day", "dept", [], 7);
   expect(bodies).toEqual([
     { name: "Lunch", colour: "blue", menuId: "m", staffMenuIds: [], expectedClockRevision: 7 },
     { endOffsetMinutes: 15, expectedClockRevision: 7 },
     { days: [], seasonId: "season", expectedClockRevision: 7 },
     { days: [], seasonId: "season", expectedClockRevision: 7 },
-    { ranges: [], expectedClockRevision: 7 },
-    { slots: [], expectedClockRevision: 7 },
   ]);
 });
 it("sends the retained calendar revision on save and removal", async () => {

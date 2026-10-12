@@ -41,13 +41,8 @@ describe.each(["en", "es"] as const)("Real weeks %s", (locale) => {
       const department = screen.shadowRoot!.querySelector("opening-hours-week")!;
       await department.updateComplete;
       await expect
-        .poll(
-          () =>
-            department.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
-              "[data-test=own-date]",
-            )!.disabled,
-        )
-        .toBe(false);
+        .poll(() => department.shadowRoot!.querySelectorAll("[data-test=day-link]").length)
+        .toBe(7);
       await expectNoA11yViolations(host);
       await page.screenshot({
         path: `../__screenshots__/task22-${locale}-${theme}-${width}-department.png`,

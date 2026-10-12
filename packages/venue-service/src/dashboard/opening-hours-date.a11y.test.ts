@@ -12,7 +12,7 @@ afterEach(() => {
   setLocale("en");
 });
 describe.each(["light", "dark"] as const)("Opening special date (%s)", (theme) => {
-  test.each(["date", "following", "closed", "viewer", "refused", "empty"])("%s", async (state) => {
+  test.each(["viewer", "empty"])("%s", async (state) => {
     setLocale("en");
     vi.setSystemTime(new Date("2026-10-12T12:00:00Z"));
     history.replaceState(null, "", "/manage/opening-hours?week=2026-10-12");
@@ -29,20 +29,7 @@ describe.each(["light", "dark"] as const)("Opening special date (%s)", (theme) =
       seasons: [{ id: "autumn", name: "Autumn", startsOn: "09-01" }],
       currentSeasonId: "autumn",
       dayCutover: "06:00",
-      namedDays:
-        state === "empty"
-          ? []
-          : [
-              {
-                id: "s1",
-                date: "2026-10-12",
-                name: "Holiday",
-                kind: "working_day" as const,
-                repeats: false,
-                ownHours: true,
-                closeWholeVenue: false,
-              },
-            ],
+      namedDays: [],
       menus: [],
       departments: [
         {
@@ -69,24 +56,11 @@ describe.each(["light", "dark"] as const)("Opening special date (%s)", (theme) =
               ],
             },
           ],
-          dates:
-            state === "following"
-              ? []
-              : [
-                  {
-                    specialDateId: "s1",
-                    slots: [{ periodId: "p1", startsAt: "12:00", endsAt: "16:00" }],
-                  },
-                ],
+          dates: [],
         },
       ],
     };
-    screen.api = new OpeningHoursApi(
-      withOpeningStations((async (_url, method) => {
-        if (method === "GET") return model;
-        throw { code: "menu_timetable.invalid", params: { field: "slots.0.endsAt" } };
-      }) as DashboardRequest),
-    );
+    screen.api = new OpeningHoursApi(withOpeningStations((async () => model) as DashboardRequest));
     wrapper.appendChild(screen);
     await expect.poll(() => screen.shadowRoot?.querySelector("opening-hours-week")).not.toBeNull();
     await screen.updateComplete;
@@ -94,25 +68,7 @@ describe.each(["light", "dark"] as const)("Opening special date (%s)", (theme) =
       screen.shadowRoot!.querySelector<HTMLElementTagNameMap["opening-hours-week"]>(
         "opening-hours-week",
       );
-    if (week) {
-      await week.updateComplete;
-      if (state === "closed") {
-        week.shadowRoot!.querySelector<HTMLElement>("[data-test=close-date]")!.click();
-        await week.updateComplete;
-      }
-      if (state === "refused") {
-        week.shadowRoot!.querySelector("service-grid")!.dispatchEvent(
-          new CustomEvent("grid-block-change", {
-            detail: { columnKey: "1", index: 0, startsAt: "12:00", endsAt: "17:00" },
-          }),
-        );
-        await week.updateComplete;
-        week.shadowRoot!.querySelector<HTMLElement>("[data-test=save-date][data-day='1']")!.click();
-        await expect
-          .poll(() => week.shadowRoot!.querySelector("[data-day-error='1']"))
-          .not.toBeNull();
-      }
-    }
+    await week?.updateComplete;
     await expectNoA11yViolations(host);
   });
 });

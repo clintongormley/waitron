@@ -6,6 +6,8 @@ import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { applyTokens, NavigationGuard, type WtDataTable } from "@waitron/ui";
 import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
+import type { SpecialDaysModel } from "../holiday-types.js";
+import type { SpecialDayDetail } from "../special-days.js";
 import { OpeningHoursApi } from "./opening-hours-client.js";
 import type { PeriodEditor } from "./period-editor.js";
 
@@ -1248,20 +1250,36 @@ it("still offers All departments when no department is available", async () => {
   expect(el.shadowRoot!.textContent).toContain("No departments");
 });
 
-it("passes the chosen named day to All departments", async () => {
+it("passes the week's calendar and its special days to All departments", async () => {
   history.replaceState(null, "", "/manage/opening-hours/view/week/department/all");
   const data = pickerModel();
-  const special = {
+  const detail: SpecialDayDetail = {
     id: "named",
-    date: "2026-10-12",
     name: "Own Monday",
-    kind: "working_day" as const,
-    repeats: false,
-    ownHours: true,
-    closeWholeVenue: false,
+    repeatsYearly: false,
+    dates: [{ date: "2026-10-12", closedAllDay: false }],
+    paint: [],
+    zonePaint: [],
   };
-  const el = await mount((async () =>
-    structuredClone({ ...data, namedDays: [special] })) as DashboardRequest);
+  const { namedWeekModel } = await import("../testing/real-week-model.js");
+  const calendar: SpecialDaysModel = {
+    ...namedWeekModel(),
+    days: [
+      {
+        date: "2026-10-12",
+        specialDay: { id: "named", name: "Own Monday" },
+        holidays: [],
+        tone: "special_day",
+        closed: false,
+      },
+    ],
+  };
+  const el = await mount((async (path: string) =>
+    path.includes("/named-days?")
+      ? calendar
+      : path.endsWith("/special-days/named")
+        ? structuredClone(detail)
+        : structuredClone(data)) as DashboardRequest);
   vi.setSystemTime(new Date("2026-10-12T12:00:00Z"));
   el.shadowRoot!.querySelector("[name=realWeek]")!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { checked: true }, bubbles: true, composed: true }),
@@ -1270,7 +1288,8 @@ it("passes the chosen named day to All departments", async () => {
   const all = el.shadowRoot!.querySelector("opening-hours-all")!;
   await all.updateComplete;
   expect(all.weekStart).toBe("2026-10-12");
-  expect(all.namedDays).toEqual([special]);
+  await expect.poll(() => all.specials.get("named")).toEqual(detail);
+  expect(all.calendar).toEqual(calendar);
   expect(all.shadowRoot!.querySelector("service-grid")!.columns).toHaveLength(14);
 });
 

@@ -4,7 +4,9 @@ import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { applyTokens } from "@waitron/ui";
 import { OpeningHoursApi } from "./opening-hours-client.js";
 import "./opening-hours-screen.js";
-import { addDays, weekdayOf } from "../hours-rules.js";
+import type { SpecialDaysModel } from "../holiday-types.js";
+import type { SpecialDayDetail } from "../special-days.js";
+import { namedWeekModel } from "../testing/real-week-model.js";
 
 let screen: HTMLElementTagNameMap["dashboard-opening-hours-screen"];
 const originalUrl = location.href;
@@ -28,29 +30,16 @@ async function mount(
   write: (path: string, method: string, body: unknown) => Promise<unknown> = async () => {},
 ) {
   vi.setSystemTime(new Date("2026-10-12T12:00:00Z"));
-  history.replaceState(
-    null,
-    "",
-    `/manage/opening-hours?week=${addDays(date, -((weekdayOf(date) + 6) % 7))}`,
-  );
+  history.replaceState(null, "", `/manage/opening-hours/view/day/date/${date}`);
   const model = {
+    businessDayClock: { timeZone, dayCutover: "06:00", cutoverChanges: [] },
     dayCutover: "06:00",
     timeZone,
     clockReadable,
     seasons: [{ id: "autumn", name: "Autumn", startsOn: "09-01" }],
     currentSeasonId: "autumn",
     menus: [{ id: "m1", name: "Night menu", active: true, includes: [] }],
-    namedDays: [
-      {
-        id: "s1",
-        date,
-        name: "Clock change",
-        kind: "working_day" as const,
-        repeats: false,
-        ownHours: true,
-        closeWholeVenue: false,
-      },
-    ],
+    namedDays: [],
     departments: [
       {
         id: "d1",
@@ -69,28 +58,54 @@ async function mount(
           },
         ],
         seasonWeeks: [{ seasonId: "autumn", week: [] }],
-        dates: [{ specialDateId: "s1", slots: [] }],
+        dates: [],
+      },
+    ],
+  };
+  const detail: SpecialDayDetail = {
+    id: "s1",
+    name: "Clock change",
+    repeatsYearly: false,
+    dates: [{ date, closedAllDay: false }],
+    paint: [],
+    zonePaint: [],
+  };
+  const calendar: SpecialDaysModel = {
+    ...namedWeekModel(),
+    days: [
+      {
+        date,
+        specialDay: { id: "s1", name: "Clock change" },
+        holidays: [],
+        tone: "special_day",
+        closed: false,
       },
     ],
   };
   screen = document.createElement("dashboard-opening-hours-screen");
   screen.api = new OpeningHoursApi(
     withOpeningStations((async (path, method, body) =>
-      method === "GET" ? model : write(path, method, body)) as DashboardRequest),
+      method !== "GET"
+        ? write(path, method, body)
+        : path.includes("/named-days?")
+          ? calendar
+          : path.endsWith("/special-days/s1")
+            ? structuredClone(detail)
+            : model) as DashboardRequest),
   );
   applyTokens(screen);
   document.body.append(screen);
-  await expect.poll(() => screen.shadowRoot?.querySelector("opening-hours-week")).not.toBeNull();
+  await expect.poll(() => screen.shadowRoot?.querySelector("opening-hours-day")).not.toBeNull();
   await screen.updateComplete;
   const week =
-    screen.shadowRoot!.querySelector<HTMLElementTagNameMap["opening-hours-week"]>(
-      "opening-hours-week",
+    screen.shadowRoot!.querySelector<HTMLElementTagNameMap["opening-hours-day"]>(
+      "opening-hours-day",
     )!;
-  await week.updateComplete;
+  await expect.poll(() => week.shadowRoot!.querySelector("[data-test=save-day]")).not.toBeNull();
   const grid =
     week.shadowRoot!.querySelector<HTMLElementTagNameMap["service-grid"]>("service-grid")!;
   emit(grid, "grid-range-select", {
-    columnKey: String(weekdayOf(date)),
+    columnKey: "d1",
     startsAt: "01:00",
     endsAt: "02:30",
   });
@@ -104,7 +119,7 @@ async function mount(
     week,
     range,
     grid,
-    column: () => grid.columns.find((c) => c.key === String(weekdayOf(date)))!,
+    column: () => grid.columns.find((c) => c.key === "d1")!,
   };
 }
 for (const locale of ["en", "es"] as const) {
@@ -124,13 +139,24 @@ for (const locale of ["en", "es"] as const) {
     range.shadowRoot!.querySelector<HTMLElement>("[data-test=save-range]")!.click();
     await week.updateComplete;
     expect(writes).toEqual([]);
-    week.shadowRoot!.querySelector<HTMLElement>("[data-test=save-date]")!.click();
+    week.shadowRoot!.querySelector<HTMLElement>("[data-test=save-day]")!.click();
     await expect.poll(() => writes.length).toBe(1);
     expect(writes).toEqual([
       [
-        "/management-api/venue-service/special-dates/s1/menu-timetables/d1",
+        "/management-api/venue-service/special-days/s1",
         "PUT",
-        { slots: [{ periodId: "p1", startsAt: "01:00", endsAt: "02:30" }] },
+        {
+          name: "Clock change",
+          repeatsYearly: false,
+          dates: [{ date: "2026-10-24", closedAllDay: false }],
+          paint: [
+            {
+              departmentId: "d1",
+              date: "2026-10-24",
+              ranges: [{ periodId: "p1", startsAt: "01:00", endsAt: "02:30" }],
+            },
+          ],
+        },
       ],
     ]);
   });
@@ -148,20 +174,22 @@ for (const [date, zone, readable] of [
 it("explains a skipped-clock refusal beside the date and keeps the submitted range retryable", async () => {
   const { range, week, column } = await mount("2027-03-27", undefined, undefined, async () => {
     throw {
-      code: "menu_timetable.invalid",
-      params: { field: "slots.0.endsAt", reason: "clock_skips" },
+      code: "special_day.invalid",
+      params: { field: "paint.0.ranges.0.endsAt", reason: "clock_skips", date: "2027-03-27" },
     };
   });
   range.shadowRoot!.querySelector<HTMLElement>("[data-test=save-range]")!.click();
   await week.updateComplete;
-  week.shadowRoot!.querySelector<HTMLElement>("[data-test=save-date]")!.click();
-  await expect.poll(() => week.shadowRoot!.querySelector("[data-day-error]")).not.toBeNull();
-  expect(week.shadowRoot!.querySelector("[data-day-error]")!.textContent).toContain(
+  week.shadowRoot!.querySelector<HTMLElement>("[data-test=save-day]")!.click();
+  await expect
+    .poll(() => week.shadowRoot!.querySelector("[data-department-error=d1]"))
+    .not.toBeNull();
+  expect(week.shadowRoot!.querySelector("[data-department-error=d1]")!.textContent).toContain(
     "The clock skips this time on this date.",
   );
   expect(column().slots).toEqual([{ periodId: "p1", startsAt: "01:00", endsAt: "02:30" }]);
   expect(
-    week.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save-date]")!
+    week.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save-day]")!
       .disabled,
   ).toBe(false);
 });

@@ -36,7 +36,6 @@ describe("OpeningHoursApi", () => {
     expect(await api.updatePeriod("p/1", input, 0)).toBeUndefined();
     await api.deletePeriod("p/1");
     await api.saveWeek("d/1", "s-1", [{ weekday: 1, slots: [slot] }], 0);
-    await api.saveDateMenus("s/1", "d/1", [slot], 0);
     expect(request.mock.calls).toEqual([
       [`${base}/departments/d%2F1/menu-periods`, "POST", { ...input, expectedClockRevision: 0 }],
       [`${base}/menu-periods/p%2F1`, "PATCH", { ...input, expectedClockRevision: 0 }],
@@ -45,11 +44,6 @@ describe("OpeningHoursApi", () => {
         `${base}/departments/d%2F1/menu-week`,
         "PUT",
         { expectedClockRevision: 0, seasonId: "s-1", days: [{ weekday: 1, slots: [slot] }] },
-      ],
-      [
-        `${base}/special-dates/s%2F1/menu-timetables/d%2F1`,
-        "PUT",
-        { expectedClockRevision: 0, slots: [slot] },
       ],
     ]);
   });
@@ -180,14 +174,8 @@ it("encodes zone closing-time writes and preserves their bodies", async () => {
   const ranges = [{ startsAt: "23:00", endsAt: "06:00" }];
   const days = [{ weekday: 1, ranges }];
   await api.saveZoneWeek("z/1", "s-1", days, 0);
-  await api.saveZoneDate("s/1", "z/1", ranges, 0);
   expect(request.mock.calls).toEqual([
     [`${base}/zones/z%2F1/closed-week`, "PUT", { expectedClockRevision: 0, seasonId: "s-1", days }],
-    [
-      `${base}/special-dates/s%2F1/zone-closed-times/z%2F1`,
-      "PUT",
-      { expectedClockRevision: 0, ranges },
-    ],
   ]);
 });
 
