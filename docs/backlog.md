@@ -4829,13 +4829,6 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   every run** (ignored by git, but in the source tree), the shape A281 fixed for the kitchen screen.
   Predates A348 (`git blame`: W95, 2026-10-06). Left open by A346 + A348 (#1408).
 
-- **Update the root null-exception rule after W54 — OPEN (owner rule-file maintenance).**
-  `CLAUDE.md` §3 still names only `maxPicks` and `guestCount` as fields where explicit null is a
-  value. An item's `maxQuantity` is now another; `packages/catalogue/src/extra-contract.test.ts`
-  pins both its absent default and explicit null. Lane D RUNNER §7 bars this campaign from editing
-  the rule file.
-  [Detail](backlog/ci.md#update-the-root-null-exception-rule-after-w54)
-
 - **drizzle-kit 0.31.11 left out `ON DELETE` when it generated an `ALTER TABLE … ADD … REFERENCES`
   on this engine, while its snapshot kept it**, and no guard compares a key's delete rule with the
   migrated database. Observed once by an implementer (five store tests failed with a foreign-key

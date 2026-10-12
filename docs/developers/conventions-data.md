@@ -2464,10 +2464,11 @@ than dropped with it: `refuses an explicit null where a default is only taken on
 both `packages/catalogue/src/extra-contract.test.ts` and
 `packages/catalogue/src/option-contract.test.ts`. Neither is a test that merely passes — each was
 proven by mutating the code it covers, widening `bool`/`flag`'s `value === undefined` to
-`value == null` (and, in the extras file, the two `=== undefined ?` defaults beside it) and watching
-exactly that case go red while the rest of the file stayed green.
+`value == null` (and, in the extras file, `minPicks`'s `=== undefined ?` default beside it) and
+watching exactly that case go red while the rest of the file stayed green. That extras mutation, of
+`bool` and `minPicks` only, was run again on 2026-10-12: that case failed and the other 53 passed.
 
-**Two fields are deliberately outside the rule**, and a reader who takes the rule as universal will
+**Some fields are deliberately outside the rule**, and a reader who takes the rule as universal will
 get them wrong. An extras list's `maxPicks` accepts an explicit null, because there null is the VALUE
 — it means uncapped — rather than a missing field (`row.maxPicks == null ? null : …`,
 `packages/catalogue/src/extra-contract.ts`). That is pinned by its own case, `keeps an explicit null
@@ -2475,6 +2476,22 @@ maxPicks, because there null is the value`. The seat-a-table
 route's `guestCount` also accepts an explicit null as a value meaning no count; the absent field means
 the same thing (`requireGuestCount`, `apps/server/src/till-api.ts`). Its route case `seats without a
 guest count, absent or null` pins both inputs.
+
+An extras item's `maxQuantity` keeps an explicit null as no cap on that item, while an absent field
+defaults to one (`parseExtraListInput`, `packages/catalogue/src/extra-contract.ts`); the case
+`defaults an absent item maximum to one and preserves an explicit null` pins both. The setup
+request's `taxpayerDomicile` reads an explicit null the same as an absent field, as no registered
+business address, which a demo sends (`parseVenue`, `apps/server/src/setup-api.ts`); the case
+`provisions a demo whose taxpayer domicile is %s, as no address`, run for absent and for null, pins
+both. Prepare and Live refuse it absent, null, empty or blank, pinned by
+`refuses %s with a taxpayer domicile that is %s before provisioning`. Measured 2026-10-12: widening
+`maxQuantity`'s `=== undefined` to `== null` failed the first case (received `1` for the null item),
+and replacing `asNullableString` with `asString` for `taxpayerDomicile` failed the null case of the
+second, each with the rest of its filtered run green.
+
+These four are examples, not a complete list. An extras item's `price`, where null prices the extra
+from the product's unit price times its portion (`extraPrice` and `priceForExtraPortion`,
+`packages/catalogue/src/extra-contract.ts`), is another.
 
 ## A missing unique target now fails at WRITE time, not at migrate time
 

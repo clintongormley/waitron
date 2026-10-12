@@ -379,8 +379,9 @@ called weaker than its name, the topic file lists what it does not see.
 ### Data, modules and migrations — [conventions-data.md](docs/developers/conventions-data.md)
 
 - **Default optional request fields only when absent, and check enum types before comparing values.**
-  Explicit null and coerced arrays passed modifier validation. An extras list's `maxPicks` null and
-  the seat-a-table route's `guestCount` null are deliberately outside the rule.
+  Explicit null and coerced arrays passed modifier validation. A field whose null is itself a value
+  is deliberately outside the rule — an extras list's `maxPicks`, an extras item's `maxQuantity`,
+  the seat-a-table route's `guestCount` and the setup request's `taxpayerDomicile` among them.
 - **Error codes name the DOMAIN CONCEPT, never the throwing package** — `series.not_found`, not
   `db.series_not_found`. **Before a venue is live, a code may be renamed or deleted freely; once one
   is live, either is a migration** (owner decision 2026-09-26). Either way it is one change in which
