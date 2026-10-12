@@ -694,10 +694,27 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   the NUL; closing it needs a migration. Found by #609 (`packages/media`), not fixable in a
   comments-only change.
 
-- **`mergeAllergenMaps` (`src/derivation.ts`) can list a source twice and order sources differently
-  from run to run** — found by #603 while pruning comments. The comment now says so; the code is
-  unchanged.
-  [Detail](backlog/catalogue.md#mergeallergenmaps-srcderivationts-can-list-a-source-twice-and-order-sources-differently-from-run-to-run)
+- **`writeItems` and `writeLabels` each keep a refusal after their insert that looks unreachable
+  now** — OPEN (found by #603). Read only, not run: `writeItems` (`packages/catalogue/src/extras.ts`)
+  and `writeLabels` (`src/options.ts`); duplicate and foreign ids are refused earlier and one write
+  runs at a time.
+
+- **`MAX_MODIFIER_INTEGER` and the extras contract's `whole` bound have no stated reason on this
+  engine** — OPEN (found by #603). Read only, not run: both were PostgreSQL's integer maximum.
+  [Detail](backlog/catalogue.md#max_modifier_integer-and-the-extras-contracts-whole-bound-have-no-stated-reason-on-this-engine)
+
+- **`assertRefsExist` still reads lists in sorted key order** — OPEN (found by #603). Read only, not
+  run: that order (`packages/catalogue/src/product-modifiers.ts`) served PostgreSQL's lock ordering
+  only.
+
+- **Four configuration-transfer cases pin an insert order the importer's `pragma defer_foreign_keys`
+  may make unnecessary for foreign keys** — OPEN (found by #603). Read only, not run: in
+  `packages/catalogue`'s `options.test.ts`, `product-modifiers.test.ts`, `extras.test.ts` and
+  `extra-projection.test.ts`; whether to keep pinning it is the owner's call.
+
+- **Test titles in `packages/catalogue` a comments-only change cannot touch** — OPEN (found by
+  #603). Four titles, in `dietary.test.ts`, `product-modifiers.test.ts` and `migrations.test.ts`.
+  [Detail](backlog/catalogue.md#test-titles-in-packagescatalogue-a-comments-only-change-cannot-touch)
 
 - **The media library still reads every matching image for search and name sorting, inside the venue
   write lock** — OPEN (found 2026-09-23, task F1's review wave). The route (`GET /management-api/images`)
@@ -4460,6 +4477,11 @@ the tree. What remains, largest first:
   package test job prints each file's start and end and, every 60 s, the files still running
   (`scripts/vitest-file-progress.mjs`); that run was cancelled, not timed out, after 3m26s with no
   output.
+
+- **A catalogue test fails now and then; read, not measured, as two products created in the same
+  millisecond (found by A521).** Next: make the test independent of the tie (or give the two
+  products different times).
+  [Detail](backlog/ci.md#a-catalogue-test-fails-now-and-then-read-not-measured-as-two-products-created-in-the-same-millisecond-found-by-a521)
 
 _Formerly B9, and the old Track C's development-stack and house-rules items; part of A9._ Detail: [backlog/ci.md](backlog/ci.md).
 
