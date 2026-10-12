@@ -909,9 +909,9 @@ since the SQLite switch (#489, 2026-09-23), because its earlier shards ran a dif
 | licence.yml        | licence-integrity                 | 0.2                            | 5     |
 | licence.yml        | dco                               | 0.3                            | 5     |
 | mutation.yml       | mutation (matrix ui-core)         | 5.3 (2026-10-05)               | 15    |
-| mutation.yml       | mutation-ui (matrix shards)       | 17 (run 38241392066, slowest of 30) | 30    |
+| mutation.yml       | mutation-ui (matrix shards)       | 17 (run 38241392066, slowest of 30) | 35    |
 | mutation.yml       | mutation-ui-aggregate             | under 1 (run 38241392066)      | 5     |
-| mutation.yml       | mutation-db (matrix shards)       | 8.8 (since the SQLite switch); 12.2 (run 38241392066) | 20    |
+| mutation.yml       | mutation-db (matrix shards)       | 8.8 (since the SQLite switch); 12.2 (run 38241392066) | 25    |
 | mutation.yml       | mutation-db-aggregate             | 0.3                            | 5     |
 | stripe-sandbox.yml | stripe-sandbox                    | 0.7                            | 5     |
 | codeql.yml         | analyze (matrix of four languages) | 24.0 (javascript-typescript)  | 50    |
@@ -924,12 +924,12 @@ ui-core's figure is run `37267389722` (5m18s; its other two weekly runs, `363803
 `38206876422`, took 2m06s and 4m56s).
 `mutation-ui`'s and `mutation-ui-aggregate`'s figures are dispatch run `38241392066` on
 `c3a6857fa`, with 30 ui shards: the slowest shard (9, `wt-data-table.ts:1029-1285`) took 17 minutes
-and the aggregate under 1. Its 30-minute limit is below what the doubling rule gives for 17 (35). On
+and the aggregate under 1, so its limit is 35 by the doubling rule. On
 the previous run, `38233718266`, with 20 ui shards, `wt-combobox.ts` and `wt-dialog.ts` each reached
 the 30-minute limit alone. Until A539 split it, ui ran inside the `mutation` matrix at a 185-minute
 limit, which run `38206876422` reached and was cancelled at. `mutation-db`'s 8.8 is from runs `36380351019` and `37267389722`, the two weekly runs since the
 SQLite switch; on run `38241392066` its shards took 2.9 to 12.2 minutes (shard 10 longest, 732 s),
-and 12.2 doubled is 25, above the 20-minute limit.
+so its limit is 25 by the doubling rule.
 
 codeql.yml's figure is from GitHub's default setup, before A488 replaced it: the 55 successful
 `main` runs from 2026-10-10 09:16 to 2026-10-11 10:33 UTC, where the `javascript-typescript` job
