@@ -548,14 +548,12 @@ export interface BusinessDayClockConflict {
   departmentName?: string;
   zoneName?: string;
   periodName?: string;
-  specialDateName?: string;
   startsAt?: string;
   endsAt?: string;
   zoneId?: string;
   weekday?: number;
   seasonId?: string;
   seasonName?: string;
-  specialDateId?: string;
   specialDayId?: string;
   specialDayName?: string;
   date?: string;

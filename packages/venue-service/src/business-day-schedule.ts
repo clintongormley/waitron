@@ -11,10 +11,8 @@ import {
 } from "@waitron/shared";
 import type { BusinessDayClockConflict } from "@waitron/module";
 import type { VenueScope } from "./operations.js";
-import { menuDayTimetables, menuPeriods, menuSlots } from "./schema/menus.js";
+import { menuPeriods } from "./schema/menus.js";
 import { departments, zoneServicePolicies } from "./schema/service.js";
-import { specialDates } from "./schema/hours.js";
-import { zoneClosedTimes } from "./schema/zone-closed-times.js";
 import {
   departmentDayRanges,
   departmentDays,
@@ -44,11 +42,9 @@ interface Placement {
   departmentName: string;
   zoneName?: string;
   periodName?: string;
-  specialDateName: string | null;
   zoneId?: string;
   weekday: number | null;
   seasonId: string | null;
-  specialDateId: string | null;
   specialDayId: string | null;
   specialDayName: string | null;
   specialDayDateId: string | null;
@@ -67,29 +63,6 @@ export async function businessDayClockConflicts(
   candidate: BusinessDayClock,
   effectiveBusinessDay: string,
 ): Promise<{ conflicts: BusinessDayClockConflict[]; conflictCount: number }> {
-  const named = await tx
-    .select({
-      departmentId: menuSlots.departmentId,
-      departmentName: departments.name,
-      periodName: menuPeriods.name,
-      specialDateName: specialDates.name,
-      specialDateId: menuDayTimetables.specialDateId,
-      date: specialDates.date,
-      repeatOn: specialDates.repeatOn,
-      periodId: menuSlots.periodId,
-      startsAt: menuSlots.startsAt,
-      endsAt: menuSlots.endsAt,
-      offset: menuPeriods.endOffsetMinutes,
-    })
-    .from(menuSlots)
-    .innerJoin(menuDayTimetables, eq(menuDayTimetables.id, menuSlots.timetableId))
-    .innerJoin(menuPeriods, eq(menuPeriods.id, menuSlots.periodId))
-    .innerJoin(departments, eq(departments.id, menuSlots.departmentId))
-    .leftJoin(specialDates, eq(specialDates.id, menuDayTimetables.specialDateId))
-    .where(
-      and(eq(departments.locationId, cfg.locationId), isNotNull(menuDayTimetables.specialDateId)),
-    )
-    .orderBy(asc(menuSlots.id));
   const seasonPeriods = await tx
     .select({
       departmentId: departmentDays.departmentId,
@@ -108,31 +81,6 @@ export async function businessDayClockConflicts(
     .innerJoin(departments, eq(departments.id, departmentDays.departmentId))
     .where(and(eq(departments.locationId, cfg.locationId), isNotNull(departmentDays.seasonId)))
     .orderBy(asc(departmentDayRanges.id));
-  const namedClosures = await tx
-    .select({
-      departmentId: zoneServicePolicies.departmentId,
-      departmentName: departments.name,
-      zoneName: floorZones.name,
-      specialDateName: specialDates.name,
-      zoneId: zoneClosedTimes.zoneId,
-      specialDateId: zoneClosedTimes.specialDateId,
-      date: specialDates.date,
-      repeatOn: specialDates.repeatOn,
-      startsAt: zoneClosedTimes.startsAt,
-      endsAt: zoneClosedTimes.endsAt,
-    })
-    .from(zoneClosedTimes)
-    .innerJoin(zoneServicePolicies, eq(zoneServicePolicies.zoneId, zoneClosedTimes.zoneId))
-    .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
-    .innerJoin(floorZones, eq(floorZones.id, zoneClosedTimes.zoneId))
-    .leftJoin(specialDates, eq(specialDates.id, zoneClosedTimes.specialDateId))
-    .where(
-      and(
-        eq(zoneServicePolicies.locationId, cfg.locationId),
-        isNotNull(zoneClosedTimes.specialDateId),
-      ),
-    )
-    .orderBy(asc(zoneClosedTimes.id));
   const seasonClosures = await tx
     .select({
       departmentId: zoneServicePolicies.departmentId,
@@ -233,8 +181,6 @@ export async function businessDayClockConflicts(
         departmentName: row.departmentName,
         ...(row.zoneId === null ? {} : { zoneId: row.zoneId, zoneName: row.zoneName! }),
         ...(row.periodId === null ? {} : { periodId: row.periodId, periodName: row.periodName! }),
-        specialDateName: null,
-        specialDateId: null,
         specialDayId: day.specialDayId,
         specialDayName: day.name,
         specialDayDateId: day.dateId,
@@ -260,74 +206,22 @@ export async function businessDayClockConflicts(
   const nextSeason = (seasonId: string) =>
     seasonList[((seasonById.get(seasonId)?.index ?? -1) + 1) % seasonList.length]!.id;
   const noSpecialDay = { specialDayId: null, specialDayName: null, specialDayDateId: null };
-  const undated = {
-    specialDateName: null,
-    specialDateId: null,
-    date: null,
-    repeatOn: null,
-    ...noSpecialDay,
-  };
-  const periods: Placement[] = [
-    ...named.map((row) => ({ ...row, weekday: null, seasonId: null, ...noSpecialDay })),
-    ...seasonPeriods.map((row) => ({ ...row, ...undated })),
-  ];
-  const closures: Omit<Placement, "offset">[] = [
-    ...namedClosures.map((row) => ({ ...row, weekday: null, seasonId: null, ...noSpecialDay })),
-    ...seasonClosures.map((row) => ({ ...row, ...undated })),
-  ];
-  const calendar = await tx
-    .select()
-    .from(specialDates)
-    .where(eq(specialDates.locationId, cfg.locationId))
-    .orderBy(asc(specialDates.date), asc(specialDates.id));
-  const timetables = await tx
-    .select({
-      departmentId: menuDayTimetables.departmentId,
-      specialDateId: menuDayTimetables.specialDateId,
-    })
-    .from(menuDayTimetables)
-    .innerJoin(departments, eq(departments.id, menuDayTimetables.departmentId))
-    .where(eq(departments.locationId, cfg.locationId));
-  const oneOffYears = new Set(
-    calendar.flatMap((day) =>
-      day.repeatOn === null && day.date >= effectiveBusinessDay
-        ? [Number(day.date.slice(0, 4))]
-        : [],
-    ),
-  );
+  const undated = { date: null, repeatOn: null, ...noSpecialDay };
+  const periods: Placement[] = seasonPeriods.map((row) => ({ ...row, ...undated }));
+  const closures: Omit<Placement, "offset">[] = seasonClosures.map((row) => ({
+    ...row,
+    ...undated,
+  }));
   const yearsFrom = new Map<number, number[]>();
   const walkedYears = (date: string): number[] => {
     const firstYear = Math.max(Number(date.slice(0, 4)), Number(effectiveBusinessDay.slice(0, 4)));
     let years = yearsFrom.get(firstYear);
     if (years === undefined) {
-      const walked = new Set(
-        Array.from({ length: Math.min(400, 10000 - firstYear) }, (_, i) => firstYear + i),
-      );
-      for (const year of oneOffYears) walked.add(year);
-      years = [...walked];
+      years = Array.from({ length: Math.min(400, 10000 - firstYear) }, (_, i) => firstYear + i);
       yearsFrom.set(firstYear, years);
     }
     return years;
   };
-  const annualDatesOf = new Map<string, string[]>();
-  const annualDates = (date: string, repeatOn: string): string[] => {
-    const key = `${date}|${repeatOn}`;
-    const found =
-      annualDatesOf.get(key) ??
-      walkedYears(date).flatMap((year) => {
-        const occurrence = `${String(year).padStart(4, "0")}-${repeatOn}`;
-        return occurrence >= date &&
-          occurrence >= addDays(effectiveBusinessDay, -1) &&
-          new Date(`${occurrence}T00:00:00Z`).toISOString().slice(0, 10) === occurrence
-          ? [occurrence]
-          : [];
-      });
-    annualDatesOf.set(key, found);
-    return found;
-  };
-  const namedOccurrences = calendar.flatMap((day) =>
-    day.repeatOn === null ? [day.date] : annualDates(day.date, day.repeatOn),
-  );
   const fromDay = addDays(effectiveBusinessDay, -1);
   const specialDatesOf = new Map(
     specialDayList.map((day) => [
@@ -356,25 +250,21 @@ export async function businessDayClockConflicts(
     // A season's position in the venue's order leads its key, so the sorted groups list seasons by `startsOn`.
     const season = `${String(seasonById.get(placement.seasonId)?.index ?? -1).padStart(4, "0")}:${placement.seasonId}`;
     const day =
-      placement.specialDateId ??
-      (placement.specialDayDateId === null
+      placement.specialDayDateId === null
         ? `${season}:${placement.weekday}`
-        : `special:${placement.specialDayDateId}`);
+        : `special:${placement.specialDayDateId}`;
     const key = `${placement.departmentId}/${placement.zoneId ?? ""}/${day}`;
     groups.set(key, [...(groups.get(key) ?? []), placement]);
   }
   const conflicts: BusinessDayClockConflict[] = [];
   const allPeriods = [...groups.values()].flat().filter((p) => p.periodId !== undefined);
   const periodsOn = new Map<string, Placement[]>();
-  for (const row of allPeriods)
-    for (const key of [
-      `${row.departmentId}|season:${row.seasonId}|${row.weekday}`,
-      `${row.departmentId}|named:${row.specialDateId}`,
-    ])
-      periodsOn.set(key, [...(periodsOn.get(key) ?? []), row]);
+  for (const row of allPeriods) {
+    const key = `${row.departmentId}|season:${row.seasonId}|${row.weekday}`;
+    periodsOn.set(key, [...(periodsOn.get(key) ?? []), row]);
+  }
   const seasonPeriodsOn = (departmentId: string, seasonId: string | null, weekday: number) =>
     seasonId === null ? [] : (periodsOn.get(`${departmentId}|season:${seasonId}|${weekday}`) ?? []);
-  const ownTimetables = new Set(timetables.map((t) => `${t.departmentId}|${t.specialDateId}`));
   // Each lookup indexes a whole year at a time; the first row in read order wins a date, as `find` would.
   const yearIndex = <T>(
     rows: readonly T[],
@@ -395,13 +285,6 @@ export async function businessDayClockConflicts(
     };
   };
   const specialOn = yearIndex(specialDayList, (day, year) => [specialDateIn(day, year, holidays)]);
-  const namedOn = yearIndex(calendar, (day, year) => {
-    const repeat = `${String(year).padStart(4, "0")}-${day.repeatOn}`;
-    return [
-      Number(day.date.slice(0, 4)) === year ? day.date : null,
-      day.repeatOn !== null && day.date <= repeat ? repeat : null,
-    ];
-  });
   // `cutoverForBusinessDay` validates the clock and the day on every call; here the clock is validated once.
   let validated = false;
   const oldCutoverOn = (date: string) => {
@@ -450,14 +333,10 @@ export async function businessDayClockConflicts(
       layered.set(key, day);
       return day;
     }
-    const named = namedOn(date);
-    if (named?.closeWholeVenue) return [];
-    if (named?.ownHours && ownTimetables.has(`${departmentId}|${named.id}`))
-      return periodsOn.get(`${departmentId}|named:${named.id}`) ?? [];
     return seasonPeriodsOn(departmentId, seasonOf(date), weekdayOf(date));
   };
   const overridesAfter = new Map<string, string[]>();
-  for (const date of [...namedOccurrences, ...specialOccurrences]) {
+  for (const date of specialOccurrences) {
     const dayBefore = addDays(date, -1);
     const key = `${seasonOf(dayBefore)}|${weekdayOf(dayBefore)}`;
     const dates = overridesAfter.get(key) ?? [];
@@ -465,15 +344,10 @@ export async function businessDayClockConflicts(
     overridesAfter.set(key, dates);
   }
   const nextPlacements = (p: Placement): ClosedRange[] => {
-    if (p.date !== null) {
-      const dates =
-        p.specialDayDateId !== null
-          ? specialDatesOf.get(p.specialDayDateId)!
-          : p.repeatOn === null
-            ? [p.date]
-            : annualDates(p.date, p.repeatOn);
-      return dates.flatMap((date) => onDate(p.departmentId, addDays(date, 1)));
-    }
+    if (p.specialDayDateId !== null)
+      return specialDatesOf
+        .get(p.specialDayDateId)!
+        .flatMap((date) => onDate(p.departmentId, addDays(date, 1)));
     // A season's last day is followed by the next season's first.
     const following = new Set([p.seasonId, nextSeason(p.seasonId!)]);
     const normal = [...following].flatMap((seasonId) =>
@@ -487,7 +361,7 @@ export async function businessDayClockConflicts(
   // The earliest start among a placement's next days, per changeover; placements of one day share it.
   const earliest = new Map<string, number>();
   const earliestTomorrow = (p: Placement, cutover: string): number => {
-    const key = `${p.departmentId}|${p.specialDayDateId ?? p.specialDateId ?? `${p.seasonId}:${p.weekday}`}|${p.date}|${p.repeatOn}|${cutover}`;
+    const key = `${p.departmentId}|${p.specialDayDateId ?? `${p.seasonId}:${p.weekday}`}|${p.date}|${p.repeatOn}|${cutover}`;
     const found =
       earliest.get(key) ??
       nextPlacements(p).reduce(
@@ -576,14 +450,12 @@ export async function businessDayClockConflicts(
           departmentName: p.departmentName,
           ...(p.zoneName === undefined ? {} : { zoneName: p.zoneName }),
           ...(p.periodName === undefined ? {} : { periodName: p.periodName }),
-          ...(p.specialDateName === null ? {} : { specialDateName: p.specialDateName }),
           startsAt,
           endsAt,
           ...(p.zoneId === undefined ? {} : { zoneId: p.zoneId }),
           ...(p.weekday === null ? {} : { weekday: p.weekday }),
           ...(p.seasonId === null ? {} : { seasonId: p.seasonId }),
           ...(seasonName === undefined ? {} : { seasonName }),
-          ...(p.specialDateId === null ? {} : { specialDateId: p.specialDateId }),
           ...(p.specialDayId === null
             ? {}
             : { specialDayId: p.specialDayId, specialDayName: p.specialDayName! }),

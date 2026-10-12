@@ -145,17 +145,23 @@ async function fixture(
     await tx
       .insert(seasons)
       .values({ id: seasonId, locationId: loc, name: "Winter", startsOn: "12-01" });
-    const specialDateId = options.date === undefined ? undefined : randomUUID();
-    if (specialDateId !== undefined)
-      await tx.insert(specialDates).values({
-        id: specialDateId,
+    const specialDayId = options.date === undefined ? undefined : randomUUID();
+    const specialDayDateId = randomUUID();
+    if (specialDayId !== undefined) {
+      await tx.insert(specialDays).values({
+        id: specialDayId,
+        locationId: loc,
+        name: "Named day",
+        repeatsYearly: options.annual ?? false,
+      });
+      await tx.insert(specialDayDates).values({
+        id: specialDayDateId,
+        specialDayId,
         locationId: loc,
         date: options.date!,
-        name: "Named day",
-        repeatOn: options.annual ? options.date!.slice(5) : null,
-        ownHours: true,
-        closeWholeVenue: options.closed ?? false,
+        closedAllDay: options.closed ?? false,
       });
+    }
     let zoneId: string | undefined;
     if (options.zone) {
       zoneId = randomUUID();
@@ -163,17 +169,18 @@ async function fixture(
         .insert(floorZones)
         .values({ id: zoneId, locationId: loc, name: "Zone", active: !options.disabled });
       await tx.insert(zoneServicePolicies).values({ zoneId, locationId: loc, departmentId });
-      if (ranges.length && specialDateId)
-        await tx.insert(zoneClosedTimes).values(
+      if (ranges.length && specialDayId) {
+        const dayId = randomUUID();
+        await tx.insert(zoneDays).values({ id: dayId, zoneId, specialDayDateId });
+        await tx.insert(zoneDayRanges).values(
           ranges.map((r) => ({
-            zoneId: zoneId!,
-            weekday: null,
-            specialDateId,
+            dayId,
+            kind: "closed" as const,
             startsAt: `${r.startsAt}:00`,
             endsAt: `${r.endsAt}:00`,
           })),
         );
-      else if (ranges.length) {
+      } else if (ranges.length) {
         const dayId = randomUUID();
         await tx.insert(zoneDays).values({ id: dayId, zoneId, seasonId, weekday: 3 });
         await tx.insert(zoneDayRanges).values(
@@ -184,18 +191,13 @@ async function fixture(
           })),
         );
       }
-    } else if (specialDateId) {
-      const timetableId = randomUUID();
-      await tx.insert(menuDayTimetables).values({
-        id: timetableId,
-        departmentId,
-        weekday: null,
-        specialDateId,
-      });
+    } else if (specialDayId) {
+      const dayId = randomUUID();
+      await tx.insert(departmentDays).values({ id: dayId, departmentId, specialDayDateId });
       if (ranges.length)
-        await tx.insert(menuSlots).values(
+        await tx.insert(departmentDayRanges).values(
           ranges.map((r) => ({
-            timetableId,
+            dayId,
             departmentId,
             periodId,
             startsAt: `${r.startsAt}:00`,
@@ -205,7 +207,7 @@ async function fixture(
     } else {
       await seasonDay(tx, { departmentId, seasonId, weekday: 3, periodId, ranges });
     }
-    return { cfg: { locationId: loc }, departmentId, periodId, seasonId, specialDateId, zoneId };
+    return { cfg: { locationId: loc }, departmentId, periodId, seasonId, specialDayId, zoneId };
   });
 }
 const range = (startsAt: string, endsAt: string) => ({ startsAt, endsAt });
@@ -237,6 +239,49 @@ async function seasonDay(
         endsAt: `${r.endsAt}:00`,
       })),
     );
+}
+/** Raw special-day rows painting one department, bypassing the special-day writer's checks. */
+async function paintedDay(
+  tx: Transaction,
+  v: { cfg: { locationId: ReturnType<typeof locationId> }; departmentId: string },
+  day: {
+    name: string;
+    date: string;
+    repeatsYearly?: boolean;
+    closedAllDay?: boolean;
+    ranges: { periodId: string | null; startsAt: string; endsAt: string }[];
+  },
+) {
+  const specialDayId = randomUUID(),
+    dateId = randomUUID(),
+    dayId = randomUUID();
+  await tx.insert(specialDays).values({
+    id: specialDayId,
+    locationId: v.cfg.locationId,
+    name: day.name,
+    repeatsYearly: day.repeatsYearly ?? false,
+  });
+  await tx.insert(specialDayDates).values({
+    id: dateId,
+    specialDayId,
+    locationId: v.cfg.locationId,
+    date: day.date,
+    closedAllDay: day.closedAllDay ?? false,
+  });
+  await tx
+    .insert(departmentDays)
+    .values({ id: dayId, departmentId: v.departmentId, specialDayDateId: dateId });
+  if (day.ranges.length > 0)
+    await tx.insert(departmentDayRanges).values(
+      day.ranges.map((r) => ({
+        dayId,
+        departmentId: v.departmentId,
+        periodId: r.periodId,
+        startsAt: `${r.startsAt}:00`,
+        endsAt: `${r.endsAt}:00`,
+      })),
+    );
+  return specialDayId;
 }
 /** The fixture's venue with its hours written through the public week writers on one weekday,
  *  for the cases that read the sale path. */
@@ -581,14 +626,14 @@ describe("schedule authoring retains date-specific starts", () => {
     ).rejects.toMatchObject({ code: "zone_closed_time.invalid" });
   });
   it("accepts a one-off menu day under its own 07:00 start", async () => {
-    const v = await fixture([], { date: "2026-12-25" });
+    const v = await fixture([]);
     await activated(v);
     await expect(
       paintDate(v, "menu", "2026-12-25", [range("07:00", "07:00")], after, 1),
     ).resolves.toBeUndefined();
   });
   it("accepts a one-off zone day under its own 07:00 start", async () => {
-    const v = await fixture([], { zone: true, date: "2026-12-25" });
+    const v = await fixture([], { zone: true });
     await activated(v);
     await expect(
       paintDate(v, "zone", "2026-12-25", [range("07:00", "07:00")], after, 1),
@@ -626,14 +671,14 @@ describe("dated calendar authoring after activation", () => {
     });
   }
   it("allows a one-off all-day range with a negative offset under its own start", async () => {
-    const v = await fixture([], { date: "2026-12-25", offset: -1 });
+    const v = await fixture([], { offset: -1 });
     await activated(v);
     await expect(
       paintDate(v, "menu", "2026-12-25", [range("07:00", "07:00")], after, 1),
     ).resolves.toBeUndefined();
   });
   it("accepts a skipped final boundary at the reporting boundary instant", async () => {
-    const v = await fixture([], { date: "2026-03-28" });
+    const v = await fixture([]);
     await withTransaction(suite.db, (tx) =>
       tx
         .update(locations)
@@ -654,12 +699,7 @@ describe("dated calendar authoring after activation", () => {
 });
 
 describe("clock compatibility resolves neighboring named-day substitutions", () => {
-  async function neighbor(
-    ownHours: boolean,
-    closeWholeVenue: boolean,
-    ranges: { startsAt: string; endsAt: string }[],
-    annual = false,
-  ) {
+  async function neighbor(emptyOverride: boolean, closedAllDay: boolean) {
     const v = await fixture([range("22:00", "04:30")], { offset: 180, date: E });
     await withTransaction(suite.db, async (tx) => {
       await seasonDay(tx, {
@@ -669,32 +709,12 @@ describe("clock compatibility resolves neighboring named-day substitutions", () 
         periodId: v.periodId,
         ranges: [range("07:15", "09:00")],
       });
-      const id = randomUUID();
-      await tx.insert(specialDates).values({
-        id,
-        locationId: v.cfg.locationId,
-        date: annual ? "2025-11-06" : "2026-11-05",
-        repeatOn: annual ? "11-06" : null,
+      await paintedDay(tx, v, {
         name: "Neighbor",
-        ownHours,
-        closeWholeVenue,
+        date: "2026-11-05",
+        closedAllDay,
+        ranges: emptyOverride ? [{ periodId: null, startsAt: "07:15", endsAt: "09:00" }] : [],
       });
-      if (ownHours) {
-        const timetableId = randomUUID();
-        await tx
-          .insert(menuDayTimetables)
-          .values({ id: timetableId, departmentId: v.departmentId, specialDateId: id });
-        if (ranges.length)
-          await tx.insert(menuSlots).values(
-            ranges.map((r) => ({
-              timetableId,
-              departmentId: v.departmentId,
-              periodId: v.periodId,
-              startsAt: `${r.startsAt}:00`,
-              endsAt: `${r.endsAt}:00`,
-            })),
-          );
-      }
     });
     return v;
   }
@@ -702,32 +722,18 @@ describe("clock compatibility resolves neighboring named-day substitutions", () 
     [true, false],
     [false, true],
   ])("honors an empty override or closed neighbor (%s,%s)", async (ownHours, closed) => {
-    await expect(check(await neighbor(ownHours, closed, []), "07:00")).resolves.toBeUndefined();
+    await expect(check(await neighbor(ownHours, closed), "07:00")).resolves.toBeUndefined();
   });
   it("includes the next occurrence of an annual override beside a normal week", async () => {
     const v = await fixture([range("22:00", "04:30")], { offset: 180 });
-    await withTransaction(suite.db, async (tx) => {
-      const id = randomUUID(),
-        timetableId = randomUUID();
-      await tx.insert(specialDates).values({
-        id,
-        locationId: v.cfg.locationId,
-        date: "2025-11-05",
-        repeatOn: "11-05",
+    await withTransaction(suite.db, (tx) =>
+      paintedDay(tx, v, {
         name: "Annual neighbor",
-        ownHours: true,
-      });
-      await tx
-        .insert(menuDayTimetables)
-        .values({ id: timetableId, departmentId: v.departmentId, specialDateId: id });
-      await tx.insert(menuSlots).values({
-        timetableId,
-        departmentId: v.departmentId,
-        periodId: v.periodId,
-        startsAt: "07:15:00",
-        endsAt: "09:00:00",
-      });
-    });
+        date: "2025-11-05",
+        repeatsYearly: true,
+        ranges: [{ periodId: v.periodId, startsAt: "07:15", endsAt: "09:00" }],
+      }),
+    );
     await expect(check(v, "07:00")).rejects.toMatchObject({
       code: "venue.business_day_hours_conflict",
       params: { conflicts: [expect.objectContaining({ reason: "sending_cutoff", weekday: 3 })] },
@@ -1161,28 +1167,14 @@ describe("clock compatibility reads each day's neighbours from its own season", 
   it("ignores a named day whose day before is another season's weekday", async () => {
     const v = await fixture([range("22:00", "04:30")], { offset: 180 });
     await twoSeasons(v);
-    await withTransaction(suite.db, async (tx) => {
-      const id = randomUUID(),
-        timetableId = randomUUID();
-      // 2026-11-04, the Wednesday before, is in Summer; the painted Wednesday is Winter's.
-      await tx.insert(specialDates).values({
-        id,
-        locationId: v.cfg.locationId,
-        date: "2026-11-05",
+    // 2026-11-04, the Wednesday before, is in Summer; the painted Wednesday is Winter's.
+    await withTransaction(suite.db, (tx) =>
+      paintedDay(tx, v, {
         name: "Summer neighbour",
-        ownHours: true,
-      });
-      await tx
-        .insert(menuDayTimetables)
-        .values({ id: timetableId, departmentId: v.departmentId, specialDateId: id });
-      await tx.insert(menuSlots).values({
-        timetableId,
-        departmentId: v.departmentId,
-        periodId: v.periodId,
-        startsAt: "07:15:00",
-        endsAt: "09:00:00",
-      });
-    });
+        date: "2026-11-05",
+        ranges: [{ periodId: v.periodId, startsAt: "07:15", endsAt: "09:00" }],
+      }),
+    );
     await expect(check(v, "07:00")).resolves.toBeUndefined();
   });
   it("follows a named day with the next day's own season week", async () => {
@@ -1364,6 +1356,62 @@ describe("clock compatibility reads special-day paint", () => {
     await specialDay(v, "2026-11-20", [{ periodId: null, startsAt: "07:15", endsAt: "09:00" }]);
     await expect(check(v, "07:00")).resolves.toBeUndefined();
   });
+
+  it("reads a date's paint from its special day alone, never from a named day's rows on it", async () => {
+    const v = await fixture([]);
+    const specialDayId = await specialDay(v, "2026-11-20", [
+      { periodId: v.periodId, startsAt: "22:00", endsAt: "04:30" },
+    ]);
+    await withTransaction(suite.db, async (tx) => {
+      const id = randomUUID(),
+        timetableId = randomUUID();
+      await tx.insert(specialDates).values({
+        id,
+        locationId: v.cfg.locationId,
+        date: "2026-11-20",
+        name: "Named day",
+        ownHours: true,
+      });
+      await tx
+        .insert(menuDayTimetables)
+        .values({ id: timetableId, departmentId: v.departmentId, specialDateId: id });
+      await tx.insert(menuSlots).values({
+        timetableId,
+        departmentId: v.departmentId,
+        periodId: v.periodId,
+        startsAt: "05:00:00",
+        endsAt: "05:00:00",
+      });
+    });
+    const result = await conflicts(v, "03:00");
+    expect(result.conflicts).toEqual([expect.objectContaining({ specialDayId, reason: "range" })]);
+    for (const conflict of result.conflicts) expect(conflict).not.toHaveProperty("specialDateId");
+  });
+
+  it("reads none of the named-day tables", async () => {
+    const v = await fixture([], { zone: true });
+    await specialDay(v, "2026-11-20", [
+      { periodId: v.periodId, startsAt: "22:00", endsAt: "04:30" },
+    ]);
+    const statements = await withTransaction(suite.db, async (tx) => {
+      const session = (
+        tx as unknown as { session: { prepareQuery: (...args: never[]) => unknown } }
+      ).session;
+      const prepared = vi.spyOn(session, "prepareQuery");
+      try {
+        await businessDayClockConflicts(tx, v.cfg, before, candidate("03:00"), E);
+        return prepared.mock.calls.map(([query]) => (query as unknown as { sql: string }).sql);
+      } finally {
+        prepared.mockRestore();
+      }
+    });
+    expect(
+      statements.filter((text) =>
+        /"(menu_day_timetables|zone_closed_times|special_dates)"/.test(text),
+      ),
+    ).toEqual([]);
+    expect(statements.filter((text) => text.includes('"special_day_dates"'))).not.toEqual([]);
+  });
 });
 
 /** Four seasons, three departments and `count` yearly named days and yearly special days, with
@@ -1426,22 +1474,26 @@ async function busyCalendar(count: number, run = 0) {
     const date = (month: number, day: number) =>
       `2026-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
     for (let i = 0; i < count; i++) {
-      const namedId = fixed(4, i);
-      await tx.insert(specialDates).values({
-        id: namedId,
+      const namedId = fixed(4, i),
+        namedDateId = fixed(8, i),
+        namedDayId = fixed(9, i);
+      await tx
+        .insert(specialDays)
+        .values({ id: namedId, locationId: loc, name: `Named ${i}`, repeatsYearly: true });
+      await tx.insert(specialDayDates).values({
+        id: namedDateId,
+        specialDayId: namedId,
         locationId: loc,
         date: date((i % 12) + 1, 2 + (i % 14)),
-        name: `Named ${i}`,
-        repeatOn: date((i % 12) + 1, 2 + (i % 14)).slice(5),
-        ownHours: true,
-        closeWholeVenue: i % 5 === 4,
+        closedAllDay: i % 5 === 4,
       });
-      const timetableId = randomUUID();
-      await tx
-        .insert(menuDayTimetables)
-        .values({ id: timetableId, departmentId: departmentsMade[0]!.id, specialDateId: namedId });
-      await tx.insert(menuSlots).values({
-        timetableId,
+      await tx.insert(departmentDays).values({
+        id: namedDayId,
+        departmentId: departmentsMade[0]!.id,
+        specialDayDateId: namedDateId,
+      });
+      await tx.insert(departmentDayRanges).values({
+        dayId: namedDayId,
         departmentId: departmentsMade[0]!.id,
         periodId: departmentsMade[0]!.lunch,
         startsAt: "05:15:00",

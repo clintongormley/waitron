@@ -119,8 +119,6 @@ export interface BusinessDayStartPreview {
     weekday?: number;
     seasonId?: string;
     seasonName?: string;
-    specialDateId?: string;
-    specialDateName?: string;
     specialDayId?: string;
     specialDayName?: string;
     date?: string;
