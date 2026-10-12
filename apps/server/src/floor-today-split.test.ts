@@ -292,6 +292,15 @@ describe("splitting parts off a joined table", () => {
       }),
     ],
     [
+      "Long table itself as a part",
+      nothing,
+      (z) => ({ tableId: t(z, "long"), partIds: [t(z, "long")], seats: 6 }),
+      (z) => ({
+        code: "joined_table.part_invalid",
+        params: { tableId: t(z, "long"), field: "partIds" },
+      }),
+    ],
+    [
       "every part still joined",
       nothing,
       (z) => ({

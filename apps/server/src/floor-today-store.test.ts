@@ -24,8 +24,14 @@ import type { TableRemoval } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { zoneSalePolicies, zoneServicePolicies } from "@waitron/venue-service";
 import { readZonePlan, saveZonePlan, type ZonePlanSave } from "./floor-plan.js";
-import { catchUpZone, ensureToday, resetZone, todayBusinessDay } from "./floor-today-store.js";
-import { splitFreeMerge, writeMerge } from "./floor-today-merges.js";
+import {
+  catchUpZone,
+  ensureToday,
+  moveToday,
+  resetZone,
+  todayBusinessDay,
+} from "./floor-today-store.js";
+import { writeMerge } from "./floor-today-merges.js";
 import { splitJoinedTable } from "./floor-today-split.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { finishTable } from "./parties.js";
@@ -1352,10 +1358,8 @@ describe("a reset over a joined table split today", () => {
     expect(await splitRowsOf(table.long!)).toEqual([]);
   });
 
-  it("a reset while a part split off is in a merge moves nothing in the group", async () => {
-    const { zoneId, table } = await longTable();
-    await split(table.long!, [table.c5!], 6);
-    await inTx(v, (tx) =>
+  const mergeC5WithBar = (table: Record<string, string>) =>
+    inTx(v, (tx) =>
       writeMerge(tx, v.cfg, {
         movingId: table.c5!,
         targetId: table.bar!,
@@ -1364,9 +1368,34 @@ describe("a reset over a joined table split today", () => {
         free: true,
       }),
     );
+
+  it("a reset ends a guestless merge holding a part split off and puts the joined table back whole", async () => {
+    const { zoneId, table } = await longTable();
+    await split(table.long!, [table.c5!], 6);
+    await mergeC5WithBar(table);
+    await inTx(v, (tx) => moveToday(tx, v.cfg, table.bar!, { x: 50, y: 30 }));
+
+    await reset(zoneId);
+    await catchUp(zoneId);
+
+    expect(await mergeOf(v, table.c5!)).toBeNull();
+    expect(await mergeOf(v, table.bar!)).toBeNull();
+    expect(await todayRow(table.long!)).toMatchObject(WHOLE);
+    expect(await todayRow(table.bar!)).toMatchObject({ x: 40, y: 0 });
+    expect(await todayRow(table.c5!)).toMatchObject({ x: null, takenOff: false });
+    expect(await splitRowsOf(table.long!)).toEqual([]);
+    expect(await pendingRows(zoneId)).toEqual([]);
+  });
+
+  it("a reset while a part split off is merged with a table guests sit at moves nothing in the group", async () => {
+    const { zoneId, table } = await longTable();
+    await split(table.long!, [table.c5!], 6);
+    await mergeC5WithBar(table);
+    const { partyId } = await seat(v, table.bar!);
     const before = {
       long: await todayRow(table.long!),
       c5: await todayRow(table.c5!),
+      bar: await todayRow(table.bar!),
       merge: await mergeOf(v, table.c5!),
     };
 
@@ -1374,13 +1403,72 @@ describe("a reset over a joined table split today", () => {
 
     expect(await todayRow(table.long!)).toEqual(before.long);
     expect(await todayRow(table.c5!)).toEqual(before.c5);
+    expect(await todayRow(table.bar!)).toEqual(before.bar);
     expect(await mergeOf(v, table.c5!)).toEqual(before.merge);
     expect(await splitRowsOf(table.long!)).toEqual([table.c5!]);
 
-    await inTx(v, (tx) => splitFreeMerge(tx, v.cfg, table.c5!));
+    await finish(partyId);
     await catchUp(zoneId);
 
+    expect(await mergeOf(v, table.c5!)).toBeNull();
     expect(await todayRow(table.long!)).toMatchObject(WHOLE);
+    expect(await todayRow(table.bar!)).toMatchObject({ x: 40, y: 0 });
     expect(await splitRowsOf(table.long!)).toEqual([]);
+  });
+
+  it("a reset holds back a second split joined table whose part is merged with a waiting group's part", async () => {
+    const { zoneId, table } = await plannedZone(
+      v,
+      [
+        { key: "c3", label: "Counter 3", seats: 2, place: null },
+        { key: "c4", label: "Counter 4", seats: 2, place: null },
+        { key: "c5", label: "Counter 5", seats: 2, place: null },
+        {
+          key: "long",
+          label: "Long table",
+          seats: 6,
+          place: { x: 10, y: 20, width: 6, height: 2 },
+          partKeys: ["c3", "c4", "c5"],
+        },
+        { key: "w1", label: "Window 1", seats: 2, place: null },
+        { key: "w2", label: "Window 2", seats: 2, place: null },
+        { key: "w3", label: "Window 3", seats: 2, place: null },
+        {
+          key: "window",
+          label: "Window table",
+          seats: 6,
+          place: { x: 60, y: 20, width: 6, height: 2 },
+          partKeys: ["w1", "w2", "w3"],
+        },
+      ],
+      NOW,
+    );
+    await split(table.long!, [table.c5!], 4);
+    await split(table.window!, [table.w3!], 4);
+    await inTx(v, (tx) =>
+      writeMerge(tx, v.cfg, {
+        movingId: table.w3!,
+        targetId: table.c5!,
+        side: "right",
+        seats: 4,
+        free: true,
+      }),
+    );
+    const { partyId } = await seat(v, table.long!);
+    const windowBefore = await todayRow(table.window!);
+
+    await reset(zoneId);
+
+    expect(await splitRowsOf(table.window!)).toEqual([table.w3!]);
+    expect(await todayRow(table.window!)).toEqual(windowBefore);
+    expect(await mergeOf(v, table.w3!)).not.toBeNull();
+
+    await finish(partyId);
+    await catchUp(zoneId);
+
+    expect(await mergeOf(v, table.w3!)).toBeNull();
+    expect(await splitRowsOf(table.long!)).toEqual([]);
+    expect(await splitRowsOf(table.window!)).toEqual([]);
+    expect(await todayRow(table.window!)).toMatchObject({ x: 60, width: 6, seats: 6 });
   });
 });

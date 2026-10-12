@@ -294,9 +294,7 @@ async function catchUpPass(
   const waiting = new Set([...held, ...refused]);
   const merges = await mergesOf(tx, ids);
   const merged = new Set(merges.map((m) => m.tableId));
-  const splitBusy = busySplitGroups(inZone, (id) => waiting.has(id) || merged.has(id));
-  // A free table merged with a waiting group member waits too: applying it would end the merge and move that member.
-  const mergedWithHeld = mergedWith(merges, new Set([...waiting, ...splitBusy]));
+  const { mergedWithHeld, splitBusy } = waitingTogether(inZone, merges, waiting);
   const removing = new Set(targets.filter((target) => target.remove).map((t) => t.tableId));
   const tied = await tablesTied(
     tx,
@@ -452,6 +450,25 @@ function mergesOf(
     .select({ joinId: floorTodayJoinTables.joinId, tableId: floorTodayJoinTables.tableId })
     .from(floorTodayJoinTables)
     .where(inArray(floorTodayJoinTables.tableId, [...zoneTableIds]));
+}
+
+/**
+ * Grows `waiting` until it is closed under both ties: a merge with a waiting table waits whole, and
+ * so does a split group with a waiting member. Applying any table of either would move a waiting one.
+ */
+function waitingTogether(
+  tables: readonly { id: string; splitOffFrom: string | null }[],
+  merges: readonly { joinId: string; tableId: string }[],
+  waiting: ReadonlySet<string>,
+): { mergedWithHeld: Set<string>; splitBusy: Set<string> } {
+  let all = new Set(waiting);
+  for (;;) {
+    const mergedWithHeld = mergedWith(merges, all);
+    const splitBusy = busySplitGroups(tables, (id) => all.has(id) || mergedWithHeld.has(id));
+    const grown = new Set([...all, ...mergedWithHeld, ...splitBusy]);
+    if (grown.size === all.size) return { mergedWithHeld, splitBusy };
+    all = grown;
+  }
 }
 
 /** The tables in a merge with any of `tables`, those included. */
