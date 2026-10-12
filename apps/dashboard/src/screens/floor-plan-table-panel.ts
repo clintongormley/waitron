@@ -47,7 +47,6 @@ export class FloorPlanTablePanel extends LitElement {
     css`
       :host {
         display: block;
-        container-type: inline-size;
         margin-bottom: var(--wt-space-4);
       }
       .fields {
@@ -60,12 +59,6 @@ export class FloorPlanTablePanel extends LitElement {
         flex-wrap: wrap;
         align-items: flex-start;
         gap: var(--wt-space-3);
-      }
-      @container (width < 300px) {
-        .pair {
-          flex-direction: column;
-          align-items: flex-start;
-        }
       }
       .shape {
         display: flex;

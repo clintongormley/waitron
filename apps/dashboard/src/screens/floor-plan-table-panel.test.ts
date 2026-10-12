@@ -127,18 +127,27 @@ it("names the shape pair by a visible caption, with no tooltip", async () => {
   expect(shapeGroup(el)!.querySelector(".icon-tooltip")).toBeNull();
 });
 
-it("puts Shape under Seats on a narrow panel", async () => {
+it("puts Shape under Seats only on a panel too narrow for both", async () => {
   const el = await open();
-  el.style.width = "280px";
+  el.style.width = "180px";
   await el.updateComplete;
   const seats = field(el, "seats")!.getBoundingClientRect();
   const shape = shapeGroup(el)!.getBoundingClientRect();
   expect(shape.top).toBeGreaterThanOrEqual(seats.bottom);
-  el.style.width = "400px";
-  await el.updateComplete;
-  const wide = shapeGroup(el)!.getBoundingClientRect();
-  expect(wide.top).toBeLessThan(field(el, "seats")!.getBoundingClientRect().bottom);
 });
+
+for (const locale of ["en-GB", "es-ES"]) {
+  it(`puts Shape beside Seats in the editor's widest side column (${locale})`, async () => {
+    setLocale(locale);
+    const el = await open();
+    el.style.width = "288px";
+    await el.updateComplete;
+    const seats = field(el, "seats")!.getBoundingClientRect();
+    const block = shapeGroup(el)!.parentElement!.getBoundingClientRect();
+    expect(Math.abs(block.top - seats.top)).toBeLessThanOrEqual(0.5);
+    expect(block.left).toBeGreaterThanOrEqual(seats.right);
+  });
+}
 
 it("typing a name sends one merged change", async () => {
   const el = await open();
