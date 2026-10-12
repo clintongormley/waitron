@@ -22,6 +22,7 @@ import type { FacturaParams, LineaParams, Operacion } from "./errors.js";
 import {
   openAcceptedWithErrorsCase,
   openFilingCase,
+  recordsBefore,
   type FilingCaseCause,
 } from "./filing-cases.js";
 import { decodeRegistroRow, fromRegistroRow, toAeatDate } from "./registro-row.js";
@@ -660,9 +661,8 @@ async function claimBatch(
  * was claimed before, which includes an envío whose submit failed in transport; it may have
  * reached AEAT, so it is sent again rather than held, or its outcome there would stay unknown.
  * `secuencia` is unique per node (`registros_tenant_node_secuencia_uq`), not per chain, so
- * "immediately before" is the highest positions below this row's on its chain. A chain's rows are
- * all on its node (`appendToChain`, ./chain.ts), and naming the node lets
- * `registros_node_secuencia_idx` serve that walk.
+ * "immediately before" is the highest positions below this row's on its chain, set-aside records
+ * skipped (`recordsBefore`, ./filing-cases.ts).
  *
  * A held row gets no incident and no case of its own: `heldRecords` (./filing-cases.ts) lists each
  * held record beside the case that holds it. A `halted` ack is written per held id, because this
@@ -678,56 +678,52 @@ async function haltOpenChainClaims(
   result: CommittedCounts,
 ): Promise<DueRow[]> {
   if (claimed.length === 0) return claimed;
-  const ids = claimed.map((row) => row.id);
-  const flagged = await tx.execute<{ id: string; set_aside: number }>(sql`
-    select id, set_aside from (
-      select r.id, ${cancelsRefusedOriginal("r")} as set_aside,
-        (exists (
-          select 1 from envios held_envio
-          join registros_facturacion held on held.id = held_envio.registro_id
-          where held.sif_id = r.sif_id and held.secuencia < r.secuencia
-            and held_envio.estado = 'detenido'
-        ) or (exists (
-          select 1 from envios own where own.registro_id = r.id and own.intentos = 1
-        ) and ${sameCodeRunBefore("r")})) as held
-      from registros_facturacion r
-      where r.id in ${ids}
-    ) where set_aside or held
+  // Set aside first, whatever else applies: the run rule below must already read these as
+  // `retenido`, or one claimed beside a later row would break the run that holds it.
+  const setAsideFound = await tx.execute<{ id: string }>(sql`
+    select r.id from registros_facturacion r
+    where r.id in ${claimed.map((row) => row.id)} and ${cancelsRefusedOriginal("r")}
   `);
-  if (flagged.rows.length === 0) return claimed;
-  const setAsideIds = new Set(
-    flagged.rows.filter((row) => row.set_aside === 1).map((row) => row.id),
-  );
-  const blockedIds = new Set(flagged.rows.map((row) => row.id));
+  const setAsideIds = new Set(setAsideFound.rows.map((row) => row.id));
+  for (const row of claimed) {
+    if (!setAsideIds.has(row.id)) continue;
+    await setAside(tx, row, now, result);
+    result.recordsHalted += 1;
+  }
+  const rest = claimed.filter((row) => !setAsideIds.has(row.id));
+  if (rest.length === 0) return rest;
+  const blocked = await tx.execute<{ id: string }>(sql`
+    select r.id from registros_facturacion r
+    where r.id in ${rest.map((row) => row.id)}
+      and (exists (
+        select 1 from envios held_envio
+        join registros_facturacion held on held.id = held_envio.registro_id
+        where held.sif_id = r.sif_id and held.secuencia < r.secuencia
+          and held_envio.estado = 'detenido'
+      ) or (exists (
+        select 1 from envios own where own.registro_id = r.id and own.intentos = 1
+      ) and ${sameCodeRunBefore("r")}))
+  `);
+  if (blocked.rows.length === 0) return rest;
+  const blockedIds = new Set(blocked.rows.map((row) => row.id));
 
-  // `claimed` is in `claimBatch`'s chain order, so a chain is held from its first held row on. A
-  // cancellation of a refused original is set aside whatever else applies: it is never sent, and
-  // it holds nothing behind it.
+  // `claimed` is in `claimBatch`'s chain order, so a chain is held from its first held row on.
   const heldChains = new Set<string>();
   const kept: DueRow[] = [];
   const haltedIds: string[] = [];
-  const setAsideRows: DueRow[] = [];
-  for (const row of claimed) {
-    if (setAsideIds.has(row.id)) {
-      setAsideRows.push(row);
-    } else if (blockedIds.has(row.id) || heldChains.has(row.sif_id)) {
+  for (const row of rest) {
+    if (blockedIds.has(row.id) || heldChains.has(row.sif_id)) {
       heldChains.add(row.sif_id);
       haltedIds.push(row.id);
     } else {
       kept.push(row);
     }
   }
-  if (haltedIds.length > 0) {
-    await tx.execute(sql`
-      update envios set estado = 'detenido', incidencia = true where registro_id in ${haltedIds}
-    `);
-    for (const id of haltedIds) await writeAck(tx, id, now);
-    result.recordsHalted += haltedIds.length;
-  }
-  for (const row of setAsideRows) {
-    await setAside(tx, row, now, result);
-    result.recordsHalted += 1;
-  }
+  await tx.execute(sql`
+    update envios set estado = 'detenido', incidencia = true where registro_id in ${haltedIds}
+  `);
+  for (const id of haltedIds) await writeAck(tx, id, now);
+  result.recordsHalted += haltedIds.length;
   return kept;
 }
 
@@ -788,22 +784,18 @@ async function setAsideHeldCancellations(
 }
 
 /**
- * True when the `SAME_CODE_REFUSAL_LIMIT` records immediately before `record` on its chain are all
- * `rechazado` with one and the same code: the run rule, for the alias `record` names in the
- * enclosing query.
+ * True when the `SAME_CODE_REFUSAL_LIMIT` records immediately before `record` on its chain,
+ * set-aside records skipped (`recordsBefore`), are all `rechazado` with one and the same code: the
+ * run rule, for the alias `record` names in the enclosing query.
  */
 function sameCodeRunBefore(record: "r" | "d" | "p"): SQL {
-  const alias = sql.raw(record);
   return sql`(
     select count(run.codigo_error) = ${SAME_CODE_REFUSAL_LIMIT}
       and count(distinct run.codigo_error) = 1
       and sum(run.estado = 'rechazado') = ${SAME_CODE_REFUSAL_LIMIT}
     from (
       select preceding_envio.estado, preceding_envio.codigo_error
-      from registros_facturacion preceding
-      left join envios preceding_envio on preceding_envio.registro_id = preceding.id
-      where preceding.node_id = ${alias}.node_id and preceding.sif_id = ${alias}.sif_id
-        and preceding.secuencia < ${alias}.secuencia
+      ${recordsBefore(record)}
       order by preceding.secuencia desc
       limit ${SAME_CODE_REFUSAL_LIMIT}
     ) run
@@ -812,16 +804,15 @@ function sameCodeRunBefore(record: "r" | "d" | "p"): SQL {
 
 /**
  * Each chain's earliest `detenido` record `d`, with its envío `de`, the record immediately before
- * it `p` and that record's envío `p_envio`, where `d` has no case of its own.
+ * it `p`, set-aside records skipped (`recordsBefore`), and that record's envío `p_envio`, where `d`
+ * has no case of its own.
  */
 const HELD_HEADS = sql`
   from envios de
   join registros_facturacion d on d.id = de.registro_id
   join registros_facturacion p on p.id = (
-    select previous.id from registros_facturacion previous
-    where previous.node_id = d.node_id and previous.sif_id = d.sif_id
-      and previous.secuencia < d.secuencia
-    order by previous.secuencia desc
+    select preceding.id ${recordsBefore("d")}
+    order by preceding.secuencia desc
     limit 1
   )
   join envios p_envio on p_envio.registro_id = p.id
@@ -927,16 +918,15 @@ async function claimProbes(
 
 /**
  * The held heads the records before them on their chain no longer hold: the ones before the head
- * are not a same-code run, and the record before it is either settled with a same-code run before
- * THAT record, or a set-aside cancellation, which holds nothing.
+ * are not a same-code run, and the record before it is settled with a same-code run before THAT
+ * record. A set-aside record is skipped on both walks, so it never releases a chain.
  */
 function releasableHeads(): SQL {
   return sql`
     select d.id, d.node_id, d.sif_id, d.secuencia
     ${HELD_HEADS}
-      and ((p_envio.estado in ('aceptado', 'aceptado_con_errores', 'rechazado')
-          and ${sameCodeRunBefore("p")})
-        or p_envio.estado = 'retenido')
+      and p_envio.estado in ('aceptado', 'aceptado_con_errores', 'rechazado')
+      and ${sameCodeRunBefore("p")}
       and not ${sameCodeRunBefore("d")}
   `;
 }

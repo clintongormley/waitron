@@ -15,7 +15,7 @@ import {
 } from "../test/drain-fixtures.js";
 import { staticResolver } from "../test/write-path-fixtures.js";
 import { DEFAULT_SKIP_RETRY_MS, drain, resetInFlightClaims, type DrainDeps } from "./drain.js";
-import { listFilingCases, openFilingCase } from "./filing-cases.js";
+import { heldRecords, listFilingCases, openFilingCase } from "./filing-cases.js";
 import { fiscalSubmissionSource } from "./submission-alerts.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -747,6 +747,83 @@ describe("drain — a chain stopped by the same-code brake sends its first held 
 
       await drain(deps(wire.client), at(3 * HOUR));
       expect(wire.sent).toHaveLength(2);
+    });
+
+    it("a cancellation held behind a probe refused with the run's code is set aside, and the record after it stays held until a later probe is accepted", async () => {
+      const aeat = fakeAeat();
+      const { seeded, held, heldKeys } = await brakeHold(aeat, 1);
+      const [first] = held;
+      const cancellation = await appendCancellation(suite.db, seeded, first!, 5);
+      const later = await appendPendingAlta(suite.db, seeded, 6);
+      await drain(deps(aeat.client()), at(MINUTE));
+      expect(await estados([cancellation, later.registroId])).toEqual(["detenido", "detenido"]);
+      aeat.reject(heldKeys[0]!, RUN_CODE, `Rechazo ${RUN_CODE}`);
+      const wire = recording(aeat.client());
+
+      const refused = await drain(deps(wire.client), at(HOUR));
+
+      expect(wire.sent).toEqual([[first]]);
+      expect(await estados([first!, cancellation, later.registroId])).toEqual([
+        "rechazado",
+        "retenido",
+        "detenido",
+      ]);
+      expect(
+        (await cases()).filter((c) => c.registroId === cancellation).map((c) => c.cause),
+      ).toEqual(["fiscal.anulacion_retenida"]);
+      expect(refused.nextDueAt).toEqual(at(2 * HOUR));
+      expect(await refusalAlerts(at(HOUR))).toEqual([
+        {
+          key: `fiscal.refusals_repeated:${seeded.sifId}`,
+          params: { codigo: String(RUN_CODE), count: 4 },
+        },
+      ]);
+      expect(
+        (await withTransaction(suite.db, (tx) => heldRecords(tx))).map((h) => [
+          h.registroId,
+          h.caseId,
+        ]),
+      ).toEqual([[later.registroId, (await cases()).find((c) => c.registroId === first)!.id]]);
+
+      await drain(deps(wire.client), at(HOUR + 59 * MINUTE));
+      expect(wire.sent).toEqual([[first]]);
+
+      await drain(deps(wire.client), at(2 * HOUR));
+      expect(wire.sent).toEqual([[first], [later.registroId]]);
+      expect(await envioOf(later.registroId)).toMatchObject({ estado: "aceptado" });
+    });
+
+    it("a cancellation set aside after a run neither breaks it nor stops it holding the next sale", async () => {
+      const aeat = fakeAeat();
+      const seeded = await seedPendingEnvios(suite.db, { count: 3 });
+      for (const key of seeded.facturaKeys) aeat.reject(key, RUN_CODE, "Rechazo");
+      await drain(deps(aeat.client()), T0);
+      const cancellation = await appendCancellation(suite.db, seeded, seeded.registroIds[0]!, 4);
+      await drain(deps(aeat.client()), T);
+      expect(await envioOf(cancellation)).toMatchObject({ estado: "retenido" });
+      const sale = await appendPendingAlta(suite.db, seeded, 5);
+      const wire = recording(aeat.client());
+
+      const pass = await drain(deps(wire.client), at(MINUTE));
+
+      expect(wire.sent).toEqual([]);
+      expect(await envioOf(sale.registroId)).toMatchObject({ estado: "detenido" });
+      expect(pass.nextDueAt).toEqual(at(HOUR + MINUTE));
+    });
+
+    it("a cancellation set aside in the same claim as the next sale does not break the run that holds the sale", async () => {
+      const aeat = fakeAeat();
+      const seeded = await seedPendingEnvios(suite.db, { count: 3 });
+      for (const key of seeded.facturaKeys) aeat.reject(key, RUN_CODE, "Rechazo");
+      await drain(deps(aeat.client()), T0);
+      const cancellation = await appendCancellation(suite.db, seeded, seeded.registroIds[0]!, 4);
+      const sale = await appendPendingAlta(suite.db, seeded, 5);
+      const wire = recording(aeat.client());
+
+      await drain(deps(wire.client), T);
+
+      expect(wire.sent).toEqual([]);
+      expect(await estados([cancellation, sale.registroId])).toEqual(["retenido", "detenido"]);
     });
 
     it("keeps a healthy chain sending beside a stopped one", async () => {

@@ -404,7 +404,8 @@ number series automatically and keep selling instead (needs Tasks 4 and 7). A ca
 original AEAT refused is now set aside on its own (envío state `retenido`, migration
 `0005_envio_retenido`) with an `error` incident and a filing case, both `fiscal.anulacion_retenida`,
 and holds nothing behind it; one already held behind its original is set aside in the transaction
-that records the original's refusal.
+that records the original's refusal. The three-refusal brake does not see a set-aside record: it
+neither breaks a run of refusals nor counts towards one.
 A record accepted with errors opens a filing case unless AEAT exempts the code (2004, 2009); a
 re-sent one AEAT answers as a duplicate (3000), and one the reconciliation sweep corrects
 (`reconcile`, no production caller yet), are judged by

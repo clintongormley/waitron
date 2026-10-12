@@ -1,4 +1,4 @@
-import { and, count, eq, min, notExists, sql } from "drizzle-orm";
+import { and, count, eq, min, notExists, sql, type SQL } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
@@ -21,6 +21,25 @@ export interface FilingCaseReport extends FilingCase {
   estado: string | null;
   status: "open" | "resolved";
   events: FilingCaseEvent[];
+}
+
+/**
+ * The FROM and WHERE of a walk over the records before `record` on its chain, as `preceding` with
+ * its envío `preceding_envio`, leaving out set-aside (`retenido`) records: one is never sent, so
+ * it neither breaks nor lengthens a run of refusals, and is never the record before a held one. A
+ * caller adds its own conditions, order and limit. A chain's records are all on its node
+ * (`appendToChain`, ./chain.ts), and naming the node lets `registros_node_secuencia_idx` serve
+ * the walk.
+ */
+export function recordsBefore(record: "r" | "d" | "p" | "h" | "held" | "runs"): SQL {
+  const alias = sql.raw(record);
+  return sql`
+    from registros_facturacion preceding
+    left join envios preceding_envio on preceding_envio.registro_id = preceding.id
+    where preceding.node_id = ${alias}.node_id and preceding.sif_id = ${alias}.sif_id
+      and preceding.secuencia < ${alias}.secuencia
+      and preceding_envio.estado is not 'retenido'
+  `;
 }
 
 export interface HeldRecord {
@@ -219,8 +238,9 @@ export async function openFilingCasesSummary(
  * `rechazado` is set aside with a case of its own (`./drain.ts`), so it is not listed. Any
  * other held record names the case of the nearest earlier `detenido` record on its chain
  * (`sif_id`): that record's own case, or, when it has none, the case it names in turn. With no
- * earlier `detenido` record, it names the case of the record immediately before it when that one
- * is `rechazado`, the last refusal of the run that held it, and otherwise none. Mirrors the hold
+ * earlier `detenido` record, it names the case of the record immediately before it, set-aside
+ * records skipped (`recordsBefore`), when that one is `rechazado`: the last refusal of the run
+ * that held it. Otherwise it names none. Mirrors the hold
  * rule in `./drain.ts`'s `haltOpenChainClaims`: the two change together.
  */
 export async function heldRecords(tx: Transaction): Promise<HeldRecord[]> {
@@ -238,12 +258,11 @@ export async function heldRecords(tx: Transaction): Promise<HeldRecord[]> {
         as identity,
       c.id as case_id,
       case when e.estado = 'detenido' and c.id is null then (
-        select case when preceding_envio.estado = 'rechazado' then preceding_case.id end
-        from registros_facturacion preceding
-        left join envios preceding_envio on preceding_envio.registro_id = preceding.id
-        left join filing_cases preceding_case on preceding_case.registro_id = preceding.id
-        where preceding.node_id = r.node_id and preceding.sif_id = r.sif_id
-          and preceding.secuencia < r.secuencia
+        select case when preceding_envio.estado = 'rechazado' then (
+          select preceding_case.id from filing_cases preceding_case
+          where preceding_case.registro_id = preceding.id
+        ) end
+        ${recordsBefore("r")}
         order by preceding.secuencia desc
         limit 1
       ) end as refused_before_case_id
