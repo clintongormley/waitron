@@ -790,6 +790,22 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   from a live version shows "Preview*", as the Menus list's Changes column already does. Whether a
   never-published menu should show one too is the owner's call. Left open by A335 (#1457).
 
+- **A547 — Preview tab: "Publish later" sits to the left of "Publish now", and "Scheduled versions"
+  shows only when something is scheduled** (owner, 2026-10-12). Today "Publish now" is on its own
+  line, then a "Scheduled versions" heading, the "Publish later" button and a table that says "No
+  versions are scheduled." ([before](backlog/mockups/a547-preview-tab-before.png)). Wanted: the two
+  buttons on one line, Publish later first; the heading and table drawn only while at least one
+  version is queued. The two buttons live in different widgets: Publish now in
+  `apps/dashboard/src/widgets/menu-preview.ts` (`#renderPublish`), Publish later with the heading,
+  table and schedule dialog in `apps/dashboard/src/widgets/menu-publications.ts`, which the menus
+  screen slots into the preview's changes pane — so putting them side by side needs a choice of
+  which widget draws the row; the implementer picks one and says why. Points to settle in the
+  change: each button still shows on its own when the other does not (Publish later hides on a
+  clash or when the draft matches the newest live or queued version; Publish now hides when the
+  draft matches live); a failed read of the schedule still shows its message and Retry rather than
+  hiding; and closing the schedule dialog or cancelling the last queued version currently sends
+  focus to the "Scheduled versions" heading, which may no longer be there.
+
 - **Not checked: the Price overrides tab on the running dev stack** — a real save and the re-read
   after it, and Undo against the real server (the look in Chromium used mounted widgets only). Left
   open by W89 (#1239).
