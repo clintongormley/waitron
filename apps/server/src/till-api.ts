@@ -492,6 +492,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "table.inactive": 409,
   "table.not_on_today_plan": 409,
   "table.taken_off": 409,
+  "table.in_joined_table": 409,
   "table.fixed": 409,
   "table.merged": 409,
   "table.delivery_pending": 409,

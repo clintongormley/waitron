@@ -10,6 +10,7 @@ import type { Transaction } from "@waitron/db";
 import { AppError, freeSide, touchingPlace, type JoinPlace, type JoinSide } from "@waitron/shared";
 import {
   refuseHeld,
+  refuseStillJoined,
   refuseUnfree,
   refuseUnmovable,
   todayOf,
@@ -162,6 +163,7 @@ export async function writeMerge(
   const target = await todayOf(tx, cfg, args.targetId);
   const { zoneId } = target;
   refuseUnmovable(moving, target);
+  await refuseStillJoined(tx, [moving.tableId, target.tableId]);
   if (moving.merge !== null) throw new AppError("table.merged", { tableId: moving.tableId });
   if (args.free) await refuseUnfree(tx, [moving.tableId, target.tableId]);
   if (zoneId !== moving.zoneId) {

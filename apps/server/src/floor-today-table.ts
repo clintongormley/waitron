@@ -1,5 +1,11 @@
 import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
-import { diningTables, floorZones, floorTodayJoinTables, floorTodayTables } from "@waitron/db";
+import {
+  diningTables,
+  floorZones,
+  floorTodayJoinTables,
+  floorTodayTables,
+  stillJoinedPart,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { holdersOf } from "./parties.js";
@@ -79,6 +85,20 @@ export async function refuseUnfree(tx: Transaction, tableIds: readonly string[])
   const needing = new Set(rows.map((row) => row.id));
   const first = tableIds.find((tableId) => needing.has(tableId));
   if (first !== undefined) throw new AppError("table.needs_clearing", { tableId: first });
+}
+
+/** Any of the tables still a part of a joined table, the first in the caller's order named. */
+export async function refuseStillJoined(
+  tx: Transaction,
+  tableIds: readonly string[],
+): Promise<void> {
+  const rows = await tx
+    .select({ id: diningTables.id })
+    .from(diningTables)
+    .where(and(inArray(diningTables.id, [...tableIds]), stillJoinedPart(diningTables.id)));
+  const joined = new Set(rows.map((row) => row.id));
+  const first = tableIds.find((tableId) => joined.has(tableId));
+  if (first !== undefined) throw new AppError("table.in_joined_table", { tableId: first });
 }
 
 /** Any of the tables taken off today, the first in the caller's order named; a table with no today's row never is. Reads by id alone. */
