@@ -134,7 +134,7 @@ it("blocks previous-day navigation at today's business day even for a dispatched
     "12 Oct 2026",
   );
 });
-it("stages a closed range and saves the weekday while preserving other weekdays", async () => {
+it("stages a closed range and saves it as the date's closed zone paint", async () => {
   const writes: unknown[][] = [];
   const day = await mount(async (...args) => {
     writes.push(args);
@@ -147,30 +147,25 @@ it("stages a closed range and saves the weekday while preserving other weekdays"
   await expect.poll(() => writes.length).toBe(1);
   expect(writes).toEqual([
     [
-      "/management-api/venue-service/zones/z1/closed-week",
+      "/management-api/venue-service/special-days/day-2026-10-12",
       "PUT",
       {
-        expectedClockRevision: 0,
-        seasonId: "autumn",
-        days: [
-          { weekday: 0, ranges: [{ startsAt: "23:00", endsAt: "06:00" }] },
+        name: "Special 2026-10-12",
+        repeatsYearly: false,
+        dates: [{ date: "2026-10-12", closedAllDay: false }],
+        zonePaint: [
           {
-            weekday: 1,
-            ranges: [
-              { startsAt: "13:00", endsAt: "14:00" },
-              { startsAt: "23:00", endsAt: "06:00" },
-            ],
+            zoneId: "z1",
+            date: "2026-10-12",
+            ranges: [{ kind: "closed", startsAt: "13:00", endsAt: "14:00" }],
           },
-          ...[2, 3, 4, 5, 6].map((weekday) => ({
-            weekday,
-            ranges: [{ startsAt: "23:00", endsAt: "06:00" }],
-          })),
         ],
+        expectedClockRevision: 0,
       },
     ],
   ]);
 });
-it("saves a Terrace edit on Monday 2 Dec 2030 as Winter's closed week, not the current Autumn's", async () => {
+it("saves a Terrace edit on Monday 2 Dec 2030 against Winter's closed week, not the current Autumn's", async () => {
   vi.setSystemTime(new Date("2030-12-02T12:00:00Z"));
   const winter = Array.from({ length: 7 }, (_, weekday) => ({
     weekday,
@@ -202,32 +197,95 @@ it("saves a Terrace edit on Monday 2 Dec 2030 as Winter's closed week, not the c
   await expect.poll(() => writes.length).toBe(1);
   expect(writes).toEqual([
     [
-      "/management-api/venue-service/zones/z1/closed-week",
+      "/management-api/venue-service/special-days/day-2030-12-02",
       "PUT",
       {
+        name: "Special 2030-12-02",
+        repeatsYearly: false,
+        dates: [{ date: "2030-12-02", closedAllDay: false }],
+        zonePaint: [
+          {
+            zoneId: "z1",
+            date: "2030-12-02",
+            ranges: [{ kind: "closed", startsAt: "13:00", endsAt: "14:00" }],
+          },
+        ],
         expectedClockRevision: 0,
-        seasonId: "winter",
-        days: winter.map((row) =>
-          row.weekday === 1
-            ? {
-                weekday: 1,
-                ranges: [{ startsAt: "13:00", endsAt: "14:00" }, ...row.ranges],
-              }
-            : row,
-        ),
       },
     ],
   ]);
 });
-it("saves department and zone changes to the named occurrence and retains completed writes on a zone refusal", async () => {
+/** "Anniversary" on Tuesday 13 Oct 2026: Restaurant's Lunch moved to 12:00–16:00 and the Terrace
+ *  closed from 22:00, where the season has Lunch 10:00–14:00 and the Terrace closed from 23:00. */
+function anniversary(): SpecialDayDetail {
+  return {
+    id: "anniversary",
+    name: "Anniversary",
+    repeatsYearly: false,
+    dates: [{ date: "2026-10-13", closedAllDay: false }],
+    paint: [
+      {
+        departmentId: "d1",
+        date: "2026-10-13",
+        ranges: [
+          { periodId: null, startsAt: "10:00", endsAt: "12:00" },
+          { periodId: "p1", startsAt: "14:00", endsAt: "16:00" },
+        ],
+      },
+    ],
+    zonePaint: [
+      {
+        zoneId: "z1",
+        date: "2026-10-13",
+        ranges: [{ kind: "closed", startsAt: "22:00", endsAt: "23:00" }],
+      },
+    ],
+  };
+}
+const anniversaryBody = (paint: boolean) => ({
+  name: "Anniversary",
+  repeatsYearly: false,
+  dates: [{ date: "2026-10-13", closedAllDay: false }],
+  ...(paint
+    ? {
+        paint: [
+          {
+            departmentId: "d1",
+            date: "2026-10-13",
+            ranges: [
+              { periodId: null, startsAt: "10:00", endsAt: "12:00" },
+              { periodId: "p1", startsAt: "14:00", endsAt: "17:00" },
+            ],
+          },
+        ],
+      }
+    : {}),
+  zonePaint: [
+    {
+      zoneId: "z1",
+      date: "2026-10-13",
+      ranges: [
+        { kind: "closed", startsAt: "13:00", endsAt: "14:00" },
+        { kind: "closed", startsAt: "22:00", endsAt: "23:00" },
+      ],
+    },
+  ],
+  expectedClockRevision: 0,
+});
+it("saves department and zone changes to the special date in one write and resends both after a zone refusal", async () => {
   vi.setSystemTime(new Date("2026-10-13T12:00:00Z"));
   const writes: unknown[][] = [];
   let fail = true;
-  const day = await mount(async (...args) => {
-    writes.push(args);
-    if (args[0].includes("zone-closed-times") && fail)
-      throw { code: "zone_closed_time.invalid", params: { field: "ranges.0.endsAt" } };
-  });
+  const day = await mount(
+    async (...args) => {
+      writes.push(args);
+      if (fail)
+        throw { code: "special_day.invalid", params: { field: "zonePaint.0.ranges.0.endsAt" } };
+    },
+    fixture(),
+    undefined,
+    anniversary(),
+  );
   emit(grid(day), "grid-block-change", {
     columnKey: "d1",
     index: 0,
@@ -247,24 +305,13 @@ it("saves department and zone changes to the named occurrence and retains comple
   await expect.poll(() => save(day).variant).toBe("secondary");
   expect(save(day).disabled).toBe(true);
   expect(day.shadowRoot!.querySelector("[data-zone-error]")).toBeNull();
-  expect(writes).toEqual([
-    [
-      "/management-api/venue-service/special-dates/annual%2Fday/menu-timetables/d1",
+  expect(writes).toEqual(
+    [0, 1].map(() => [
+      "/management-api/venue-service/special-days/anniversary",
       "PUT",
-      { expectedClockRevision: 0, slots: [{ periodId: "p1", startsAt: "12:00", endsAt: "17:00" }] },
-    ],
-    ...[0, 1].map(() => [
-      "/management-api/venue-service/special-dates/annual%2Fday/zone-closed-times/z1",
-      "PUT",
-      {
-        expectedClockRevision: 0,
-        ranges: [
-          { startsAt: "13:00", endsAt: "14:00" },
-          { startsAt: "22:00", endsAt: "06:00" },
-        ],
-      },
+      anniversaryBody(true),
     ]),
-  ]);
+  );
 });
 it("shows Closed and refuses all grid actions on a whole-venue closure", async () => {
   vi.setSystemTime(new Date("2026-10-15T12:00:00Z"));
@@ -345,20 +392,34 @@ it("edits and deletes only the closed block, leaving the department unchanged an
   expect(grid(day).columns[1]!.closed).toEqual([]);
   expect(grid(day).columns[0]!.slots).toEqual(parentSlots);
 });
-it("keeps a zone-only draft and its original weekday target through a changed background model and reconnect", async () => {
+it("keeps a zone-only draft and its original special day through a changed background model, calendar and reconnect", async () => {
   const writes: unknown[][] = [];
-  const day = await mount(async (...args) => {
-    writes.push(args);
-  });
+  let reads = 0;
+  const other: SpecialDayDetail = {
+    id: "other",
+    name: "Other",
+    repeatsYearly: false,
+    dates: [{ date: "2026-10-12", closedAllDay: false }],
+    paint: [],
+    zonePaint: [],
+  };
+  const day = await mount(
+    async (...args) => {
+      writes.push(args);
+    },
+    fixture(),
+    async (path) =>
+      reads++ === 0 ? (everyDateSpecial(path) as SpecialDaysModel) : calendarOf(other, path),
+    other,
+  );
   editZone(day);
   await day.updateComplete;
   const parent = day.parentNode!;
   day.remove();
-  day.model = {
-    ...fixture(),
-    namedDays: [{ ...fixture().namedDays[0]!, date: "2026-10-12", ownHours: true }],
-  };
+  day.model = fixture();
   parent.appendChild(day);
+  await expect.poll(() => reads).toBe(2);
+  await new Promise((done) => setTimeout(done, 20));
   await day.updateComplete;
   expect(grid(day).columns[1]!.closed).toEqual([
     { startsAt: "13:00", endsAt: "14:00" },
@@ -367,7 +428,7 @@ it("keeps a zone-only draft and its original weekday target through a changed ba
   expect(save(day).disabled).toBe(false);
   save(day).click();
   await expect.poll(() => writes.length).toBe(1);
-  expect(writes[0]![0]).toBe("/management-api/venue-service/zones/z1/closed-week");
+  expect(writes[0]![0]).toBe("/management-api/venue-service/special-days/day-2026-10-12");
 });
 it("ignores zone edits and forged Save while a range dialog or read-only screen blocks actions", async () => {
   const writes: unknown[][] = [];
@@ -454,59 +515,77 @@ it("waits for the shown date's calendar facts and prefills a public holiday's na
     editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!.value,
   ).toBe("National feast");
 });
-it("keeps the own-hours action blocked after a failed calendar read and recovers without clearing a save refusal", async () => {
+it("keeps the special-day action blocked after a failed calendar read and recovers", async () => {
   let fail = true;
-  const day = await mount(
-    async () => {
-      throw { code: "zone_closed_time.invalid", params: { field: "days.1.ranges" } };
-    },
-    fixture(),
-    async () => {
-      if (fail) throw new Error("offline");
-      return namedWeekModel();
-    },
-  );
+  const day = await mount(undefined, fixture(), async () => {
+    if (fail) throw new Error("offline");
+    return namedWeekModel();
+  });
   await expect
     .poll(() => day.shadowRoot!.textContent)
     .toContain("Opening hours could not be loaded");
   const own =
     day.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=own-date]")!;
   expect(own.disabled).toBe(true);
+  fail = false;
+  screen.api.specialDays.rereadWatches();
+  await expect.poll(() => own.disabled).toBe(false);
+});
+it("keeps a save refusal through a failed calendar read and its recovery", async () => {
+  let fail = false;
+  const day = await mount(
+    async () => {
+      throw { code: "special_day.invalid", params: { field: "zonePaint.0.ranges" } };
+    },
+    fixture(),
+    async (path) => {
+      if (fail) throw new Error("offline");
+      return everyDateSpecial(path) as SpecialDaysModel;
+    },
+  );
   editZone(day);
   await day.updateComplete;
   save(day).click();
   await expect.poll(() => day.shadowRoot!.querySelector("[data-zone-error=z1]")).not.toBeNull();
+  fail = true;
+  screen.api.specialDays.rereadWatches();
+  await expect
+    .poll(() => day.shadowRoot!.textContent)
+    .toContain("Opening hours could not be loaded");
+  expect(day.shadowRoot!.querySelector("[data-zone-error=z1]")).not.toBeNull();
   fail = false;
   screen.api.specialDays.rereadWatches();
-  await expect.poll(() => own.disabled).toBe(false);
+  await expect
+    .poll(() => day.shadowRoot!.textContent)
+    .not.toContain("Opening hours could not be loaded");
   expect(day.shadowRoot!.querySelector("[data-zone-error=z1]")).not.toBeNull();
 });
 
-it("keeps the opened department, zone and named-day facts when the same source objects change while dirty", async () => {
+it("keeps the opened department, zone and special-day facts when the same source objects change while dirty", async () => {
   vi.setSystemTime(new Date("2026-10-13T12:00:00Z"));
   const writes: unknown[][] = [];
-  const day = await mount(async (...args) => {
-    writes.push(args);
-  });
+  const detail = anniversary();
+  const day = await mount(
+    async (...args) => {
+      writes.push(args);
+    },
+    fixture(),
+    undefined,
+    detail,
+  );
   editZone(day);
   await day.updateComplete;
   Object.assign(day.model.departments[0]!, { zones: [], name: "Replacement" });
-  Object.assign(day.model.namedDays[0]!, { ownHours: false });
+  Object.assign(detail, { name: "Replacement", dates: [] });
   day.requestUpdate();
   await day.updateComplete;
   expect(grid(day).columns.map((column) => column.label)).toEqual(["Restaurant", "Terrace"]);
   save(day).click();
   await expect.poll(() => writes.length).toBe(1);
   expect(writes[0]).toEqual([
-    "/management-api/venue-service/special-dates/annual%2Fday/zone-closed-times/z1",
+    "/management-api/venue-service/special-days/anniversary",
     "PUT",
-    {
-      expectedClockRevision: 0,
-      ranges: [
-        { startsAt: "13:00", endsAt: "14:00" },
-        { startsAt: "22:00", endsAt: "06:00" },
-      ],
-    },
+    anniversaryBody(false),
   ]);
 });
 
@@ -520,13 +599,12 @@ function twoZones() {
     })),
   };
 }
-it("commits a successful zone before a later zone refusal and retries only the remaining zone", async () => {
-  const writes: string[] = [];
+it("shows a later zone's refusal beside that zone only and resends both zones in one write", async () => {
+  const writes: unknown[][] = [];
   let fail = true;
-  const day = await mount(async (path) => {
-    writes.push(path);
-    if (path.includes("z2") && fail)
-      throw { code: "zone_closed_time.invalid", params: { field: "days.1.ranges.0" } };
+  const day = await mount(async (...args) => {
+    writes.push(args);
+    if (fail) throw { code: "special_day.invalid", params: { field: "zonePaint.1.ranges.0" } };
   }, twoZones());
   editZone(day);
   emit(grid(day), "grid-range-select", {
@@ -537,18 +615,31 @@ it("commits a successful zone before a later zone refusal and retries only the r
   await day.updateComplete;
   save(day).click();
   await expect.poll(() => day.shadowRoot!.querySelector("[data-zone-error=z2]")).not.toBeNull();
+  expect(day.shadowRoot!.querySelector("[data-zone-error=z1]")).toBeNull();
   expect(save(day).variant).toBe("primary");
   fail = false;
   save(day).click();
   await expect.poll(() => save(day).variant).toBe("secondary");
-  expect(writes).toEqual([
-    "/management-api/venue-service/zones/z1/closed-week",
-    "/management-api/venue-service/zones/z2/closed-week",
-    "/management-api/venue-service/zones/z2/closed-week",
-  ]);
+  expect(writes).toEqual(
+    [0, 1].map(() => [
+      "/management-api/venue-service/special-days/day-2026-10-12",
+      "PUT",
+      {
+        name: "Special 2026-10-12",
+        repeatsYearly: false,
+        dates: [{ date: "2026-10-12", closedAllDay: false }],
+        zonePaint: ["z1", "z2"].map((zoneId) => ({
+          zoneId,
+          date: "2026-10-12",
+          ranges: [{ kind: "closed", startsAt: "13:00", endsAt: "14:00" }],
+        })),
+        expectedClockRevision: 0,
+      },
+    ]),
+  );
 });
 it.each(["success", "refusal"])(
-  "ignores a zone save's late %s after reconnect and does not continue with the next zone",
+  "ignores a save's late %s after reconnect and keeps its draft to save again",
   async (outcome) => {
     let done!: () => void, refuse!: (error: unknown) => void;
     const writes: string[] = [];
@@ -574,10 +665,10 @@ it.each(["success", "refusal"])(
     parent.appendChild(day);
     await day.updateComplete;
     if (outcome === "success") done();
-    else refuse({ code: "zone_closed_time.invalid", params: { field: "days.1.ranges" } });
+    else refuse({ code: "special_day.invalid", params: { field: "zonePaint.0.ranges" } });
     await expect.poll(() => save(day).disabled).toBe(false);
     expect(save(day).variant).toBe("primary");
-    expect(writes).toEqual(["/management-api/venue-service/zones/z1/closed-week"]);
+    expect(writes).toEqual(["/management-api/venue-service/special-days/day-2026-10-12"]);
     expect(day.shadowRoot!.querySelector("[data-zone-error]")).toBeNull();
     expect(grid(day).columns[1]!.closed).toEqual([
       { startsAt: "13:00", endsAt: "14:00" },

@@ -12,6 +12,7 @@ import "./venue-departments-shell.js";
 import "./zone-edit-dialog.js";
 import "./opening-hours-screen.js";
 import { realWeekModel, namedWeekModel } from "../testing/real-week-model.js";
+import { everyDateSpecial } from "../testing/special-day-fixture.js";
 
 const originalUrl = location.href;
 class App extends LitElement {
@@ -173,7 +174,11 @@ async function hours(
   const writes: unknown[][] = [];
   const api = new OpeningHoursApi(
     withOpeningStations((async (path, method, body) => {
-      if (method === "GET") return path.includes("/named-days?") ? namedWeekModel() : model;
+      if (method === "GET")
+        return (
+          (view === "day" && everyDateSpecial(path)) ||
+          (path.includes("/named-days?") ? namedWeekModel() : model)
+        );
       writes.push([path, method, body]);
       return write();
     }) as DashboardRequest),
@@ -191,6 +196,12 @@ async function hours(
   }
   return { screen, writes, model, replace };
 }
+const DAY_WRITE = "/management-api/venue-service/special-days/day-2026-10-12";
+/** A write's path and the departments its paint names. */
+const painted = ([path, , body]: unknown[]) => [
+  path,
+  (body as { paint: { departmentId: string }[] }).paint.map((entry) => entry.departmentId),
+];
 it.each(["department", "period"])(
   "remote %s deletion retires the dirty retained menu-period editor",
   async (kind) => {
@@ -512,9 +523,7 @@ it.each(["success", "refusal"] as const)(
       day.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save-day]")!;
     save.click();
     await expect.poll(() => pending.length).toBe(1);
-    expect(writes.map(([path]) => path)).toEqual([
-      "/management-api/venue-service/departments/d1/menu-week",
-    ]);
+    expect(writes.map(painted)).toEqual([[DAY_WRITE, ["d1", "d2"]]]);
     await replace({ ...model, departments: model.departments.slice(1) });
     await day.updateComplete;
     expect(screen.shadowRoot!.querySelector("opening-hours-day")).toBe(day);
@@ -529,17 +538,17 @@ it.each(["success", "refusal"] as const)(
     if (result === "success") pending[0]!.resolve();
     else
       pending[0]!.reject({
-        code: "menu_timetable.invalid",
-        params: { field: "days.1.slots.0.endsAt" },
+        code: "special_day.invalid",
+        params: { field: "paint.0.ranges.0.endsAt" },
       });
     await new Promise((done) => setTimeout(done, 0));
     await day.updateComplete;
     expect(save.disabled).toBe(true);
     save.click();
     await day.updateComplete;
-    expect(writes.map(([path]) => path)).toEqual([
-      "/management-api/venue-service/departments/d1/menu-week",
-      "/management-api/venue-service/departments/d2/menu-week",
+    expect(writes.map(painted)).toEqual([
+      [DAY_WRITE, ["d1", "d2"]],
+      [DAY_WRITE, ["d2"]],
     ]);
     pending[1]!.resolve();
     await new Promise((done) => setTimeout(done, 0));
@@ -554,10 +563,10 @@ it.each(["success", "refusal"] as const)(
     expect(save.disabled).toBe(false);
     save.click();
     await expect.poll(() => pending.length).toBe(3);
-    expect(writes.map(([path]) => path)).toEqual([
-      "/management-api/venue-service/departments/d1/menu-week",
-      "/management-api/venue-service/departments/d2/menu-week",
-      "/management-api/venue-service/departments/d2/menu-week",
+    expect(writes.map(painted)).toEqual([
+      [DAY_WRITE, ["d1", "d2"]],
+      [DAY_WRITE, ["d2"]],
+      [DAY_WRITE, ["d2"]],
     ]);
     pending[2]!.resolve();
     await new Promise((done) => setTimeout(done, 0));
@@ -601,9 +610,9 @@ it("a reconnected day owner can save its retained draft after an old pending wri
   expect(save.disabled).toBe(true);
   save.click();
   await day.updateComplete;
-  expect(writes.map(([path]) => path)).toEqual([
-    "/management-api/venue-service/departments/d1/menu-week",
-    "/management-api/venue-service/departments/d1/menu-week",
+  expect(writes.map(painted)).toEqual([
+    [DAY_WRITE, ["d1"]],
+    [DAY_WRITE, ["d1"]],
   ]);
   pending[1]!();
   await new Promise((done) => setTimeout(done, 0));
