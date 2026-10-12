@@ -1,3 +1,4 @@
+// Probe, never merged (A527): this line only makes CI select @waitron/venue-service.
 import { expect, it } from "vitest";
 import type { SpecialDateInput } from "./hours-types.js";
 import { parseSpecialDateInput } from "./hours-rules.js";
