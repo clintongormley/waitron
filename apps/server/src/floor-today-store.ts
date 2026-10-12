@@ -258,8 +258,10 @@ async function catchUpPass(
       id: diningTables.id,
       label: diningTables.label,
       zoneId: diningTables.zoneId,
+      splitOffFrom: floorTodaySplitParts.joinedTableId,
     })
     .from(diningTables)
+    .leftJoin(floorTodaySplitParts, eq(floorTodaySplitParts.partTableId, diningTables.id))
     .where(eq(diningTables.locationId, cfg.locationId));
   const inZone = venueTables.filter((table) => table.zoneId === zoneId);
   const takenElsewhere = new Set(
@@ -290,7 +292,11 @@ async function catchUpPass(
     ).keys(),
   );
   const waiting = new Set([...held, ...refused]);
-  const { merged, mergedWithHeld } = await mergesOf(tx, ids, waiting);
+  const merges = await mergesOf(tx, ids);
+  const merged = new Set(merges.map((m) => m.tableId));
+  const splitBusy = busySplitGroups(inZone, (id) => waiting.has(id) || merged.has(id));
+  // A free table merged with a waiting group member waits too: applying it would end the merge and move that member.
+  const mergedWithHeld = mergedWith(merges, new Set([...waiting, ...splitBusy]));
   const removing = new Set(targets.filter((target) => target.remove).map((t) => t.tableId));
   const tied = await tablesTied(
     tx,
@@ -304,6 +310,7 @@ async function catchUpPass(
     tied: held.has(table.id) || tied.has(table.id),
     hasToday: withToday.has(table.id),
     mergedWithHeld: mergedWithHeld.has(table.id),
+    splitWithBusy: splitBusy.has(table.id),
   }));
 
   const plan = planReset({ targets, live, takenElsewhere });
@@ -361,6 +368,12 @@ async function catchUpPass(
   for (const target of plan.seed) {
     await tx.insert(floorTodayTables).values({ tableId: target.tableId!, ...todayColumns(target) });
   }
+  const putBack = [...placedNow].map((target) => target.tableId!);
+  if (putBack.length > 0) {
+    await tx
+      .delete(floorTodaySplitParts)
+      .where(inArray(floorTodaySplitParts.joinedTableId, putBack));
+  }
 
   const stillPending = new Set(plan.pending);
   let changed = false;
@@ -417,21 +430,37 @@ async function setLabel(tx: Transaction, tableId: string, label: string): Promis
   await tx.update(diningTables).set({ label }).where(eq(diningTables.id, tableId));
 }
 
-/** The zone's tables in a today's merge, and those in one with any of `tables`, those included. */
-async function mergesOf(
+/** Every member of each split group, a joined table and the parts split off it, of which some member is `busy`. */
+function busySplitGroups(
+  tables: readonly { id: string; splitOffFrom: string | null }[],
+  busy: (tableId: string) => boolean,
+): Set<string> {
+  const groups = new Map<string, string[]>();
+  for (const { id, splitOffFrom } of tables) {
+    if (splitOffFrom === null) continue;
+    groups.set(splitOffFrom, [...(groups.get(splitOffFrom) ?? [splitOffFrom]), id]);
+  }
+  return new Set([...groups.values()].filter((group) => group.some(busy)).flat());
+}
+
+/** The members of the today's merges taking in any of the zone's tables. */
+function mergesOf(
   tx: Transaction,
   zoneTableIds: readonly string[],
-  tables: ReadonlySet<string>,
-): Promise<{ merged: Set<string>; mergedWithHeld: Set<string> }> {
-  const members = await tx
+): Promise<{ joinId: string; tableId: string }[]> {
+  return tx
     .select({ joinId: floorTodayJoinTables.joinId, tableId: floorTodayJoinTables.tableId })
     .from(floorTodayJoinTables)
     .where(inArray(floorTodayJoinTables.tableId, [...zoneTableIds]));
+}
+
+/** The tables in a merge with any of `tables`, those included. */
+function mergedWith(
+  members: readonly { joinId: string; tableId: string }[],
+  tables: ReadonlySet<string>,
+): Set<string> {
   const joins = new Set(members.filter((m) => tables.has(m.tableId)).map((m) => m.joinId));
-  return {
-    merged: new Set(members.map((m) => m.tableId)),
-    mergedWithHeld: new Set(members.filter((m) => joins.has(m.joinId)).map((m) => m.tableId)),
-  };
+  return new Set(members.filter((m) => joins.has(m.joinId)).map((m) => m.tableId));
 }
 
 /** For each zone with a master plan: resetZone when its today's plan is for an earlier business day (or it has none), else catchUpZone when it has pending rows; one query finds those zones. */

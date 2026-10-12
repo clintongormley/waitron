@@ -828,6 +828,7 @@ const FLOOR_ROWS = [
   "floor_today_zones",
   "floor_today_joins",
   "floor_today_join_tables",
+  "floor_today_split_parts",
 ] as const;
 const HISTORY_ROWS = [
   "sales",

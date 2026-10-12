@@ -19,6 +19,7 @@ const l = (id: string, label: string, over: Partial<LiveTable> = {}): LiveTable 
   tied: false,
   hasToday: true,
   mergedWithHeld: false,
+  splitWithBusy: false,
   ...over,
 });
 const none = new Set<string>();
@@ -40,6 +41,17 @@ describe("planReset", () => {
     });
     expect(plan.apply).toEqual([]);
     expect(plan.pending.map((x) => x.tableId)).toEqual(["a", "b"]);
+    expect(plan.seed).toEqual([]);
+  });
+
+  it("keeps a table whose split group is busy waiting, as a table merged with a held one waits", () => {
+    const plan = planReset({
+      targets: [t("a", "T1"), t("b", "T2")],
+      live: [l("a", "T1", { splitWithBusy: true }), l("b", "T2")],
+      takenElsewhere: none,
+    });
+    expect(plan.apply).toEqual([{ target: t("b", "T2"), label: "T2" }]);
+    expect(plan.pending).toEqual([t("a", "T1")]);
     expect(plan.seed).toEqual([]);
   });
 
