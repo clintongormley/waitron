@@ -21,7 +21,7 @@ import {
 } from "./menu-timetable.js";
 import { localTimeOccurrences } from "./hours-occurrences.js";
 import { periodExtensions } from "./schema/period-extensions.js";
-import { specialDates } from "./schema/hours.js";
+import { specialDayDates, specialDays } from "./schema/seasons.js";
 import { VENUE_SERVICE } from "./service.js";
 import * as keep from "./keep-open.js";
 import { zoneExtensions } from "./schema/zone-extensions.js";
@@ -264,12 +264,13 @@ describe("keeping a period open today", () => {
     });
     await run(async (tx) => {
       await keepPeriodOpen(tx, f.cfg, f.zoneId, { periodId: f.lunch, until: "16:00" }, at("13:50"));
-      await tx.insert(specialDates).values({
-        ...f.cfg,
-        date: "2026-10-09",
-        name: "Closed",
-        closeWholeVenue: true,
-      });
+      const [day] = await tx
+        .insert(specialDays)
+        .values({ ...f.cfg, name: "Closed" })
+        .returning({ id: specialDays.id });
+      await tx
+        .insert(specialDayDates)
+        .values({ ...f.cfg, specialDayId: day!.id, date: "2026-10-09", closedAllDay: true });
     });
     expect(await run((tx) => readKeepOpen(tx, f.cfg, f.zoneId, at("14:20")))).toEqual({
       period: null,

@@ -14,7 +14,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId } from "@waitron/shared";
 import { readHolidayFacts } from "./holidays.js";
-import { saveSpecialDate } from "./hours.js";
+import { saveSpecialDay } from "./special-days.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import type { VenueScope } from "./operations.js";
 import { routingModel } from "./routing-store.js";
@@ -201,14 +201,13 @@ describe("station times", () => {
 
 const SAVED_AT = new Date("2026-10-01T10:00:00Z");
 
-async function saveDate(tx: Transaction, cfg: VenueScope, date: string, closeWholeVenue = false) {
-  return saveSpecialDate(
+async function saveDate(tx: Transaction, cfg: VenueScope, date: string, closedAllDay = false) {
+  return saveSpecialDay(
     tx,
     cfg,
     null,
-    { date, name: `Special ${date}`, closeWholeVenue },
+    { name: `Special ${date}`, repeatsYearly: false, dates: [{ date, closedAllDay }] },
     SAVED_AT,
-    undefined,
     0,
   );
 }
@@ -221,9 +220,9 @@ async function statusAt(tx: Transaction, cfg: VenueScope, id: string, instant: D
 
 const openState = { open: true, why: "open" };
 
-describe("station status on named dates and calendar boundaries", () => {
+describe("station status on special dates and calendar boundaries", () => {
   // Madrid is two hours ahead of UTC until 25 October 2026, one hour after it.
-  it("keeps a station open across midnight and named dates", async () => {
+  it("keeps a station open across midnight and special dates", async () => {
     await db.transaction(async (tx) => {
       const f = await fixture(tx);
       const tuesdayHalfPastMidnight = "2026-10-05T22:30:00Z";
@@ -261,7 +260,7 @@ describe("station status on named dates and calendar boundaries", () => {
     });
   });
 
-  it("keeps stations open throughout ordinary and named dates", async () => {
+  it("keeps stations open throughout ordinary and special dates", async () => {
     await db.transaction(async (tx) => {
       const f = await fixture(tx);
       await saveDate(tx, f.cfg, "2026-10-08");
@@ -342,7 +341,7 @@ describe("station status on named dates and calendar boundaries", () => {
     });
   });
 
-  it("makes an open station the default on a named date", async () => {
+  it("makes an open station the default on a special date", async () => {
     await db.transaction(async (tx) => {
       const f = await fixture(tx);
       await saveDate(tx, f.cfg, "2026-10-06");
@@ -498,7 +497,7 @@ describe("station times on a public holiday", () => {
     });
   });
 
-  it("a saved named holiday does not close a prep station", async () => {
+  it("a special day on a public holiday does not close a prep station", async () => {
     await db.transaction(async (tx) => {
       const f = await sevilleVenue(tx);
       await saveDate(tx, f.cfg, HOLIDAY);

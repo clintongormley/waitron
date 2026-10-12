@@ -36,7 +36,7 @@ describe("wall-minute end offsets", () => {
     expect(
       findSeasonEndOffsetClash(
         seasons,
-        [{ date: "2026-10-13", closeWholeVenue: false, slots: [early] }],
+        [{ date: "2026-10-13", closeWholeVenue: false, slots: null, paint: [early] }],
         offsets,
         "06:00",
       ),
@@ -44,7 +44,7 @@ describe("wall-minute end offsets", () => {
     expect(
       findSeasonEndOffsetClash(
         seasons,
-        [{ date: "2026-10-13", closeWholeVenue: true, slots: [early] }],
+        [{ date: "2026-10-13", closeWholeVenue: true, slots: null, paint: [early] }],
         offsets,
         "06:00",
       ),
@@ -52,19 +52,26 @@ describe("wall-minute end offsets", () => {
     expect(
       findSeasonEndOffsetClash(
         seasons,
-        [{ date: "2026-10-13", closeWholeVenue: false, slots: [] }],
+        [
+          {
+            date: "2026-10-13",
+            closeWholeVenue: false,
+            slots: null,
+            paint: [{ periodId: null, startsAt: "09:00", endsAt: "12:00" }],
+          },
+        ],
         offsets,
         "06:00",
       ),
     ).toBeNull();
   });
-  it("reads an explicitly empty named next day as closed, not as its season's day", () => {
+  it("reads a next day painted Closed as closed, not as its season's day", () => {
     const late = { periodId: "late", startsAt: "21:00", endsAt: "06:00" };
     const week: ServiceRange[][] = Array.from({ length: 7 }, () => []);
     week[2] = [{ periodId: "early", startsAt: "07:00", endsAt: "09:00" }];
     const seasons = [{ seasonId: "year", startsOn: "01-01", week }];
     const offsets = new Map([["late", 120]]);
-    const monday = { date: "2026-10-12", closeWholeVenue: false, slots: [late] };
+    const monday = { date: "2026-10-12", closeWholeVenue: false, slots: null, paint: [late] };
     expect(findSeasonEndOffsetClash(seasons, [], offsets, "06:00")).toBeNull();
     expect(findSeasonEndOffsetClash(seasons, [monday], offsets, "06:00")).toEqual({
       periodId: "late",
@@ -74,7 +81,15 @@ describe("wall-minute end offsets", () => {
     expect(
       findSeasonEndOffsetClash(
         seasons,
-        [monday, { date: "2026-10-13", closeWholeVenue: false, slots: [] }],
+        [
+          monday,
+          {
+            date: "2026-10-13",
+            closeWholeVenue: false,
+            slots: null,
+            paint: [{ periodId: null, startsAt: "07:00", endsAt: "09:00" }],
+          },
+        ],
         offsets,
         "06:00",
       ),
@@ -91,10 +106,10 @@ it("checks annual neighbors beyond their saved and following years", () => {
       [
         {
           date: "2026-11-06",
-          repeatOn: "11-06",
-          ownHours: true,
+          occursIn: (year: number) => (year >= 2026 ? `${year}-11-06` : null),
           closeWholeVenue: false,
-          slots: [{ periodId: "early", startsAt: "07:15", endsAt: "09:00" }],
+          slots: null,
+          paint: [{ periodId: "early", startsAt: "07:15", endsAt: "09:00" }],
         },
       ],
       new Map([["late", 180]]),
@@ -173,7 +188,7 @@ describe("end offsets across seasons", () => {
     tuesday[2] = [breakfast];
     winter!.week = tuesday;
     const named = (date: string) => [
-      { date, closeWholeVenue: false, ownHours: true, slots: [dinner] },
+      { date, closeWholeVenue: false, slots: null, paint: [dinner] },
     ];
     // 2026-11-30, a Monday, is Autumn's last day; the Tuesday after it is Winter's.
     expect(
@@ -194,7 +209,12 @@ describe("end offsets around special days", () => {
   ) => ({
     date,
     closeWholeVenue: false,
-    repeatOn: repeats ? date.slice(5) : null,
+    ...(repeats
+      ? {
+          occursIn: (year: number) =>
+            year >= Number(date.slice(0, 4)) ? `${year}${date.slice(4)}` : null,
+        }
+      : {}),
     slots: null,
     paint,
     specialDayId: "sd-1",

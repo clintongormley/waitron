@@ -22,6 +22,8 @@ import { listZoneOffers, menuState } from "./operations.js";
 import { VENUE_SERVICE } from "./service.js";
 import { replaceZoneClosedWeek, saveZoneClosedDate } from "./zone-closed-times.js";
 import { ensureDefaultSeasons } from "./seasons.js";
+import type { ZonePaint } from "./day-paint.js";
+import { saveSpecialDay } from "./special-days.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
@@ -71,6 +73,31 @@ async function named(v: Awaited<ReturnType<typeof venue>>, ownHours: boolean) {
       { date: "2030-12-25", name: "Christmas", ownHours, closeWholeVenue: false, cells: [] },
       at,
       undefined,
+      0,
+    ),
+  );
+}
+async function specialDay(
+  v: Awaited<ReturnType<typeof venue>>,
+  date: string,
+  options: {
+    repeatsYearly?: boolean;
+    closedAllDay?: boolean;
+    zonePaint?: { zoneId: string; ranges: ZonePaint[] }[];
+  } = {},
+) {
+  return tx((db) =>
+    saveSpecialDay(
+      db,
+      v.cfg,
+      null,
+      {
+        name: `Special ${date}`,
+        repeatsYearly: options.repeatsYearly ?? false,
+        dates: [{ date, closedAllDay: options.closedAllDay ?? false }],
+        zonePaint: (options.zonePaint ?? []).map((entry) => ({ ...entry, date })),
+      },
+      at,
       0,
     ),
   );
@@ -275,50 +302,20 @@ describe("zones closed at an instant", () => {
   it("uses dated closures instead of the week, including an empty zone override", async () => {
     const v = await venue();
     await tx((db) => replaceZoneClosedWeek(db, v.cfg, v.terrace, week(mondayNight), 0));
-    const day = await tx((db) =>
-      saveSpecialDate(
-        db,
-        v.cfg,
-        null,
-        {
-          date: "2030-10-07",
-          name: "Own Monday",
-          ownHours: true,
-          closeWholeVenue: false,
-          cells: [],
-        },
-        at,
-        VENUE_SERVICE_CALENDAR_PARTICIPANTS,
-        0,
-      ),
-    );
-    await tx((db) => saveZoneClosedDate(db, v.cfg, day.id, v.terrace, [], 0));
-    await tx((db) => saveZoneClosedDate(db, v.cfg, day.id, v.bar, mondayNight, 0));
+    await specialDay(v, "2030-10-07", {
+      zonePaint: [
+        { zoneId: v.terrace, ranges: [{ kind: "open", startsAt: "23:30", endsAt: "06:00" }] },
+        { zoneId: v.bar, ranges: [{ kind: "closed", startsAt: "23:30", endsAt: "06:00" }] },
+      ],
+    });
     expect([
       ...(await tx((db) => closures.closedZoneIdsAt(db, v.cfg, new Date("2030-10-08T00:00:00Z")))),
     ]).toEqual([v.bar]);
   });
-  it("keeps the week's closures on a repeating day without own hours", async () => {
+  it("keeps the week's closures on a repeating special day that paints nothing", async () => {
     const v = await venue();
     await tx((db) => replaceZoneClosedWeek(db, v.cfg, v.terrace, week(mondayNight), 0));
-    await tx((db) =>
-      saveSpecialDate(
-        db,
-        v.cfg,
-        null,
-        {
-          date: "2030-10-07",
-          name: "Annual Monday",
-          repeats: true,
-          ownHours: false,
-          closeWholeVenue: false,
-          cells: [],
-        },
-        at,
-        undefined,
-        0,
-      ),
-    );
+    await specialDay(v, "2030-10-07", { repeatsYearly: true });
     expect([
       ...(await tx((db) => closures.closedZoneIdsAt(db, v.cfg, new Date("2041-10-07T21:45:00Z")))),
     ]).toEqual([v.terrace]);
@@ -360,23 +357,7 @@ describe("zones closed at an instant", () => {
   it("whole-venue closure and an unreadable clock leave zone-only state open", async () => {
     const v = await venue();
     await tx((db) => replaceZoneClosedWeek(db, v.cfg, v.terrace, week(mondayNight), 0));
-    await tx((db) =>
-      saveSpecialDate(
-        db,
-        v.cfg,
-        null,
-        {
-          date: "2030-10-07",
-          name: "Closed",
-          ownHours: false,
-          closeWholeVenue: true,
-          cells: [],
-        },
-        at,
-        undefined,
-        0,
-      ),
-    );
+    await specialDay(v, "2030-10-07", { closedAllDay: true });
     const instant = new Date("2030-10-07T21:45:00Z");
     expect([...(await tx((db) => closures.closedZoneIdsAt(db, v.cfg, instant)))]).toEqual([]);
     await tx((db) =>

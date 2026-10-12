@@ -54,6 +54,8 @@ import {
 import type { MenuSlot, MenuWeekDay } from "./menu-timetable-types.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { readSeasons } from "./seasons.js";
+import type { PaintRange } from "./day-paint.js";
+import { saveSpecialDay } from "./special-days.js";
 import { replaceZoneClosedWeek } from "./zone-closed-times.js";
 import {
   configureZone,
@@ -886,6 +888,27 @@ const turnOffOwnHours = (v: { cfg: VenueScope }, id: string) =>
   });
 const dateMenus = (v: Venue, specialDateId: string, slots: MenuSlot[], at = AT) =>
   scoped((tx) => saveSpecialDateMenus(tx, v.cfg, specialDateId, v.restaurant, slots, at, 0));
+/** Saves a special day on `date`, painting the restaurant's day with `paint` (none clears it). */
+const saveDay = (
+  v: Venue,
+  date: string,
+  options: { id?: string; closedAllDay?: boolean; paint?: PaintRange[] } = {},
+) =>
+  scoped((tx) =>
+    saveSpecialDay(
+      tx,
+      v.cfg,
+      options.id ?? null,
+      {
+        name: `Special ${date}`,
+        repeatsYearly: false,
+        dates: [{ date, closedAllDay: options.closedAllDay ?? false }],
+        paint: [{ departmentId: v.restaurant, date, ranges: options.paint ?? [] }],
+      },
+      AT,
+      0,
+    ),
+  );
 
 const invalid = (field: string, extra: Record<string, string> = {}) => ({
   code: "menu_timetable.invalid",
@@ -3359,7 +3382,7 @@ describe("department service periods", () => {
       );
       await updateMenuPeriod(tx, v.cfg, v.night, { endOffsetMinutes: 15 }, 0);
     });
-    await makeDate(v, SATURDAY, { closeWholeVenue: true });
+    await saveDay(v, SATURDAY, { closedAllDay: true });
     expect(await read(v, SATURDAY, "06:14")).toMatchObject({
       open: false,
       orderableMenuIds: [],
@@ -3556,18 +3579,12 @@ describe("department service periods", () => {
 
   it("replaces the business day's week with special-date ranges, including its next morning", async () => {
     const v = await serviceVenue();
-    const date = await makeDate(v, FRIDAY);
-    await scoped((tx) =>
-      saveSpecialDateMenus(
-        tx,
-        v.cfg,
-        date.id,
-        v.restaurant,
-        [slot(v.lunch, "13:00", "03:00")],
-        AT,
-        0,
-      ),
-    );
+    await saveDay(v, FRIDAY, {
+      paint: [
+        { periodId: null, startsAt: "06:00", endsAt: "13:00" },
+        slot(v.lunch, "13:00", "03:00"),
+      ],
+    });
     expect(await read(v, FRIDAY, "12:30")).toMatchObject({
       open: false,
       orderableMenuIds: [],
@@ -3589,44 +3606,39 @@ describe("department service periods", () => {
 
   it("distinguishes an empty special-date row from following the normal week", async () => {
     const v = await serviceVenue();
-    const date = await makeDate(v, FRIDAY);
+    const date = await saveDay(v, FRIDAY);
     expect(await read(v, FRIDAY, "13:00")).toMatchObject({ open: true, periodId: v.lunch });
-    await scoped((tx) => saveSpecialDateMenus(tx, v.cfg, date.id, v.restaurant, [], AT, 0));
+    await saveDay(v, FRIDAY, {
+      id: date.id,
+      paint: [{ periodId: null, startsAt: "06:00", endsAt: "06:00" }],
+    });
     expect(await read(v, FRIDAY, "13:00")).toMatchObject({
       open: false,
       orderableMenuIds: [],
       sendableMenuIds: [],
       endedMenuIds: [],
     });
-    await turnOffOwnHours(v, date.id);
+    await saveDay(v, FRIDAY, { id: date.id });
     expect(await read(v, FRIDAY, "13:00")).toMatchObject({ open: true, periodId: v.lunch });
   });
 
   it("a whole-venue closure overrides both special-date ranges and the week", async () => {
     const v = await serviceVenue();
-    const date = await makeDate(v, FRIDAY);
-    await scoped((tx) =>
-      saveSpecialDateMenus(
-        tx,
-        v.cfg,
-        date.id,
-        v.restaurant,
-        [slot(v.lunch, "12:00", "16:00")],
-        AT,
-        0,
-      ),
-    );
-    await db
-      .update(specialDates)
-      .set({ closeWholeVenue: true })
-      .where(eq(specialDates.id, date.id));
+    const date = await saveDay(v, FRIDAY, {
+      closedAllDay: true,
+      paint: [
+        { periodId: null, startsAt: "06:00", endsAt: "12:00" },
+        slot(v.lunch, "12:00", "16:00"),
+        { periodId: null, startsAt: "16:00", endsAt: "06:00" },
+      ],
+    });
     expect(await read(v, FRIDAY, "13:00")).toMatchObject({
       open: false,
       orderableMenuIds: [],
       sendableMenuIds: [],
       endedMenuIds: [],
     });
-    await turnOffOwnHours(v, date.id);
+    await saveDay(v, FRIDAY, { id: date.id, closedAllDay: true });
     expect(await read(v, FRIDAY, "13:00")).toMatchObject({ open: false, orderableMenuIds: [] });
     expect((await read(v, SATURDAY, "06:10")).endedMenuIds).toEqual([]);
   });
@@ -3837,11 +3849,9 @@ describe("period end-offset placement bounds", () => {
         0,
       ),
     );
-    const past = await makeDate(v, "2026-01-01");
-    await dateMenus(v, past.id, [
-      slot(v.periods.mediodia, "12:00", "14:00"),
-      slot(v.periods.noches, "14:15", "18:00"),
-    ]);
+    const past = await saveDay(v, "2026-01-01", {
+      paint: [slot(v.periods.mediodia, "12:00", "14:00"), slot(v.periods.noches, "14:15", "18:00")],
+    });
     await scoped((tx) =>
       updateMenuPeriod(tx, v.cfg, v.periods.mediodia, { endOffsetMinutes: 14 }, 0),
     );
@@ -3851,7 +3861,7 @@ describe("period end-offset placement bounds", () => {
       code: "menu_period.invalid",
       params: { field: "endOffsetMinutes", reason: "placement", date: "2026-01-01" },
     });
-    await turnOffOwnHours(v, past.id);
+    await saveDay(v, "2026-01-01", { id: past.id });
     await scoped((tx) =>
       replaceMenuWeek(
         tx,

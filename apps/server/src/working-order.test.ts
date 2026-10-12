@@ -98,7 +98,6 @@ import {
   departments,
   readHolidayFacts,
   replaceMenuWeek,
-  saveSpecialDate,
   setStationToday,
 } from "@waitron/venue-service";
 import { VENUE_SERVICE } from "./modules.js";
@@ -4074,22 +4073,13 @@ describe("a sale on a Spanish public holiday", () => {
     expect(await tickets(holiday.fired)).toEqual(await tickets(ordinary.fired));
 
     const before = await Promise.all([recorded(holiday.parked), recorded(holiday.fired)]);
-    await withTransaction(db, (tx) =>
-      saveSpecialDate(
-        tx,
-        cfg,
-        null,
-        {
-          date: HOLIDAY,
-          name: "Upstairs closed",
-          closeWholeVenue: false,
-          cells: [],
-        },
-        new Date(`${ORDINARY}T10:00:00Z`),
-        undefined,
-        0,
-      ),
-    );
+    const [specialDay, specialDate] = [randomUUID(), randomUUID()];
+    await withTransaction(db, async (tx) => {
+      await tx.execute(sql`insert into special_days (id, location_id, name, repeats_yearly)
+        values (${specialDay}, ${cfg.locationId}, 'Upstairs closed', 0)`);
+      await tx.execute(sql`insert into special_day_dates (id, special_day_id, location_id, date, closed_all_day)
+        values (${specialDate}, ${specialDay}, ${cfg.locationId}, ${HOLIDAY}, 0)`);
+    });
     await withTransaction(db, (tx) =>
       setStationToday(
         tx,
