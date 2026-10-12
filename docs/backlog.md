@@ -1834,8 +1834,16 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   [Detail](backlog/till.md#a474--todays-floor-changes-on-the-till-follow-ups)
 
 - **A503. Joined tables replace saved joins (owner, 2026-10-11).** A table made of other tables
-  is set up in the editor and starts the day as one table; the till can split it.
+  is set up in the editor and starts the day as one table; the till can split it. Part 1 (#1598)
+  removed saved joins; joined tables, the till's Split and Join again remain, and Split waits on the
+  owner's answer to where a part's size comes from (design, "Owner question").
   [Detail](backlog/till.md#a503-joined-tables-replace-saved-joins)
+
+- **A545. Deleting a zone: two of its deletes are not what any test checks (2026-10-12).**
+  `clear` in `apps/server/src/floor-delete.ts` deletes today's merges, but `removeLiveTables`
+  (`apps/server/src/table-removal.ts:93`) has already removed them through `leaveMerges`; with
+  those two deletes taken out, `floor-delete.test.ts` still passed 7 of 7 (A503 part 1, Task 2b).
+  Next: delete them, or add a case that reaches them.
 
 - **A504. Floor plans published for a future date, and one per service period (owner,
   2026-10-11).** Like menus, a layout could go live on a chosen date, and a zone could have
@@ -4493,6 +4501,12 @@ the tree. What remains, largest first:
   open by SQLite slice 1 (#490 and the preparation tasks).
 
 ### CI, tests and developer tooling
+
+- **A544. `scripts/step-watch.test.mjs` failed once under the pre-push root suite (2026-10-12).**
+  The case "reports the phase a synchronous call holds the thread in…" failed in one push of
+  A503 part 1 (#1598), which did not touch the file (last changed in #807); it passed 3 of 3 alone
+  and in the next push's 5,915-test run. Next: run it under load until it fails, read what it
+  waited on, and fix it at the cause.
 
 - **Venue-service browser startup remains unexplained (#1557).** CI run `38170156450`
   attempt 1 timed out before any browser test started; attempt 2 passed on the same commit. A527
