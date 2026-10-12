@@ -9,7 +9,7 @@ import { ALL_MODULES } from "./modules.js";
 import {
   RESTORE_STAGING_DIR,
   restoreFromArtifact,
-  validateEntries,
+  validateDatabaseEntries,
   type EntryValidationDeps,
   type RestoreDeps,
 } from "./restore.js";
@@ -40,7 +40,6 @@ export interface ArchiveRestoreRequest {
 /** A rebuild from the bucket: the downloaded database and the unlocked secrets row's entries. */
 export interface StreamRestoreRequest {
   kind: "stream";
-  /** Moved, not copied, into the state folder, so it must be on the same filesystem. */
   databasePath: string;
   entries: ArchiveEntry[];
   environment: DeploymentEnvironment;
@@ -109,8 +108,9 @@ export async function stageStreamRestore(
         environment: deps.environment,
       },
       async (request) => {
-        const validated = await validateEntries(
-          [...request.entries, { name: "db.dump", bytes: await readFile(request.databasePath) }],
+        const validated = await validateDatabaseEntries(
+          request.entries,
+          request.databasePath,
           deps,
         );
         await validated.discard();
@@ -194,11 +194,13 @@ export async function runStagedRestore(
   };
   let run: () => Promise<void>;
   if (marker.kind === "stream") {
-    const [databaseBytes, packed] = await Promise.all([
-      readFile(join(deps.stateDir, STREAM_DB)),
-      readFile(join(deps.stateDir, STREAM_ENTRIES)),
-    ]);
-    run = () => restoreStream({ ...common, databaseBytes, entries: unpackArchive(packed) });
+    const packed = await readFile(join(deps.stateDir, STREAM_ENTRIES));
+    run = () =>
+      restoreStream({
+        ...common,
+        databasePath: join(deps.stateDir, STREAM_DB),
+        entries: unpackArchive(packed),
+      });
   } else {
     const [artifact, recoveryKey] = await Promise.all([
       readFile(join(deps.stateDir, ARTIFACT)),

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { eq, sql } from "drizzle-orm";
 import { loadKeyRing } from "@waitron/credentials";
@@ -24,7 +24,7 @@ import type { ArchiveEntry } from "./backup-archive.js";
 import { parseEnvFile } from "./env-file.js";
 import type { Logger } from "./logger.js";
 import {
-  validateEntries,
+  validateDatabaseEntries,
   writeValidated,
   type PlacementDeps,
   type ValidatedArtifact,
@@ -48,10 +48,7 @@ export function confirmsVenue(venue: RestoredVenue, confirmedTaxId: string | nul
   return venue.taxId !== "" && confirmedTaxId === venue.taxId;
 }
 
-/**
- * Scratch folders are made fresh per run, inside the state folder so a later move stays on one
- * filesystem; a fixed name would let two runs remove each other's copy.
- */
+/** A fresh folder keeps concurrent preparations from removing each other's copy. */
 const SCRATCH = "stream-restore-";
 const UNREADABLE = "the file could not be opened or read as a database";
 
@@ -335,18 +332,15 @@ export async function prepareStreamRestore(deps: PrepareStreamDeps): Promise<Pre
 }
 
 export interface WriteStreamArgs extends PlacementDeps {
-  databaseBytes: Uint8Array;
+  databasePath: string;
   entries: ArchiveEntry[];
 }
 
 /** The archive restore's own validation and write, over the restored database and the unlocked
  * row's entries, with the first-start marker naming the stream. */
 export async function writeStreamRestore(args: WriteStreamArgs): Promise<void> {
-  const { databaseBytes, entries, ...deps } = args;
-  const validated = await validateEntries(
-    [...entries, { name: "db.dump", bytes: databaseBytes }],
-    deps,
-  );
+  const { databasePath, entries, ...deps } = args;
+  const validated = await validateDatabaseEntries(entries, databasePath, deps);
   try {
     await writeValidated(validated, { ...deps, rebuildSource: "stream" });
   } finally {
@@ -371,7 +365,7 @@ export async function restoreFromStream(
     }
     await writeStreamRestore({
       ...deps,
-      databaseBytes: await readFile(prepared.databasePath),
+      databasePath: prepared.databasePath,
       entries: prepared.entries,
     });
   } finally {

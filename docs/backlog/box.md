@@ -329,11 +329,10 @@ Open:
 **Task 9b** (#642, `waitron-restore restore --from-bucket`, `apps/server/src/restore-stream.ts`).
 Open:
 
-- Bucket CLI, setup validation and staged boot still read the downloaded database whole.
-  Scheduled archive creation still buffers the database, the packed archive and the ciphertext.
-  File placement and owned validation scratch are the first part of A516; the remaining work
-  carries paths through the bucket callers and streams local archive creation and restoration
-  without changing WBA1/WBK1. The managed Cloud and setup upload limits remain separate.
+- Scheduled archive creation still buffers the database, the packed archive and the ciphertext.
+  A516 carries file paths through placement, bucket CLI, setup validation and staged boot.
+  The remaining work streams local archive creation and restoration without changing WBA1/WBK1.
+  The managed Cloud and setup upload limits remain separate.
 
 ## Litestream at trace logging deadlocked sales for five seconds
 

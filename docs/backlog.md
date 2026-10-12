@@ -4138,9 +4138,8 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   (#630, the first start after a restore).
   [Detail](backlog/box.md#when-the-key-rename-and-the-put-back-both-fail-the-new-certificate-is-left-beside-the-old-key)
 
-- **A copy over 2 GiB cannot be restored**: `restoreFromStream` reads the downloaded file whole, and
-  Node refuses a file that size (`ERR_FS_FILE_TOO_LARGE`). The remaining work carries paths
-  through the bucket callers and streams scheduled local archives. Left open by SQLite slice 2
+- **A copy over 2 GiB cannot be restored**: A516 carries file paths through the bucket callers;
+  the remaining work streams scheduled local archives and their restoration. Left open by SQLite slice 2
   Task 9b (#642,
   `waitron-restore restore --from-bucket`).
   [Detail](backlog/box.md#a-copy-over-2-gib-cannot-be-restored)

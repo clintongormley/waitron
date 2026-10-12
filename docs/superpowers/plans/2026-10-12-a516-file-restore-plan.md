@@ -78,20 +78,32 @@ whole-file reads or archive pipeline. The branch stays unpublished until Tasks 2
 **Interfaces:** `WriteStreamArgs.databasePath:string` replaces `databaseBytes`; `writeStreamRestore(args:WriteStreamArgs):Promise<void>` uses Task 1's borrowed validation.
 `PreparedStream.discard` and staged-request cleanup remain the original file owners.
 
-- [ ] Add failing cases for all three whole-file reads: real SQLite fixture with targeted DB
+- [x] Add failing cases for all three whole-file reads: real SQLite fixture with targeted DB
   `readFile` interception that throws, allowing small marker/entries/secrets reads. Drive the
   actual CLI restore, `stageStreamRestore`, and default `runStagedRestore`/placement, not only fakes.
   Assert rows/secrets/marker source, confirmation refusals and input/scratch cleanup.
-- [ ] Run `test -- src/restore-stream.test.ts src/restore-request.test.ts src/restore-command.test.ts`;
+- [x] Run `test -- src/restore-stream.test.ts src/restore-request.test.ts src/restore-command.test.ts`;
   confirm failure at the existing DB reads, not an invalid SQLite fixture or missing binary.
-- [ ] Pass paths in `restoreFromStream`, setup validation and staged entry. Unpack only the small
+- [x] Pass paths in `restoreFromStream`, setup validation and staged entry. Unpack only the small
   stream entries; leave the staged DB untouched until `writeValidated` has acquired the venue lock.
   Preserve marker-last behavior and existing staged lock-busy/non-lock failure assertions.
-- [ ] Add sparse >2 GiB staged-file forwarding test alongside the real SQLite call-chain tests.
+- [x] Add sparse >2 GiB staged-file forwarding test alongside the real SQLite call-chain tests.
   Check forwarding/size without migrating a sparse dummy. Adapt shape assertions, retaining refusals.
-- [ ] Rerun the same three suites and `typecheck`; verify no DB whole reads remain in these paths.
+- [x] Rerun the same three suites and `typecheck`; verify no DB whole reads remain in these paths.
   Correct the scratch “same filesystem” comment, since state/venue separation now uses EXDEV.
-- [ ] Sign off the complete Task 2 commit. Keep this branch unpublished.
+- [x] Sign off the complete Task 2 commit. Keep this branch unpublished.
+
+### Task 2 qualification, 2026-10-12
+
+The three database-wide read interception cases failed at the CLI, setup and staged-boot reads
+before implementation, then passed with path forwarding. The three selected restore suites passed
+159 tests, including a real CLI wrapper, default staged placement/migrations/hooks, a real busy-lock
+refusal followed by retry, and sparse 2147487744-byte forwarding with bounded edge reads. In an
+independent installed clone, reintroducing those reads failed two CLI cases, one setup case and one
+staged case; restoring the candidate passed all 159. Server types, changed-file lint/format and
+unedited fiscal golden/immutability tests (20 tests) passed. These results do not establish archive
+streaming, real S3/Litestream throughput or integrity/crypto over a valid 2 GiB SQLite database.
+Tasks 3–4 remain; the branch stays unpublished.
 
 ## Task 3: compatible file archive codecs with bounded memory
 
