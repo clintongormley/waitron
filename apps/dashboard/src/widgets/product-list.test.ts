@@ -492,6 +492,116 @@ describe("product-list", () => {
       "/manage/prep-stations/view/routing",
     );
   });
+  describe("a click on a Made at cell's blank space beside its short link", () => {
+    /** The cell's padding corner, and the padding past the link's end on its line. */
+    function blankPoints(root: ShadowRoot, cell: HTMLElement) {
+      const box = cell.getBoundingClientRect();
+      const anchor = cell.querySelector<HTMLElement>('[part~="maker-link"]')!;
+      const link = anchor.getBoundingClientRect();
+      expect(link.right).toBeLessThan(box.right - 4);
+      const points = [
+        { x: 2, y: 2 },
+        { x: (link.right + box.right) / 2 - box.x, y: link.top + link.height / 2 - box.y },
+      ];
+      for (const position of points) {
+        const hit = root.elementFromPoint(box.x + position.x, box.y + position.y);
+        expect(anchor.contains(hit), JSON.stringify(position)).toBe(false);
+      }
+      return points;
+    }
+    /** Records a click the link receives, and stops it leaving the test page. */
+    function linkClicks(cell: HTMLElement): () => number {
+      let count = 0;
+      cell.querySelector("a")!.addEventListener("click", (event) => {
+        event.preventDefault();
+        count += 1;
+      });
+      return () => count;
+    }
+
+    it("does not open the product editor, while the link still takes its own click", async () => {
+      setLocale("en");
+      const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+        products: [product({ id: "lager" })],
+        madeAt: {
+          lager: {
+            stationId: "bar",
+            stationName: "Bar",
+            noPreparation: false,
+            noReplacement: false,
+            unavailableStationId: null,
+            variesByZone: false,
+          },
+        },
+      });
+      const root = await tableRoot(el);
+      const edits = vi.fn();
+      el.addEventListener("edit-product", edits);
+      const cell = cellUnder(root, "lager", "Made at");
+      const clicks = linkClicks(cell);
+      for (const position of blankPoints(root, cell)) {
+        // Forced, so a row activator lying over the point takes the click rather than stalling it.
+        await userEvent.click(cell, { position, force: true });
+        await el.updateComplete;
+      }
+      expect(edits).not.toHaveBeenCalled();
+      expect(clicks()).toBe(0);
+      await userEvent.click(cell.querySelector("a")!);
+      expect(clicks()).toBe(1);
+      expect(edits).not.toHaveBeenCalled();
+      // The control: the Price cell beside it still opens the editor.
+      await userEvent.click(cellUnder(root, "lager", "Price"), {
+        position: { x: 2, y: 2 },
+        force: true,
+      });
+      expect(edits).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not open or close the category, while the link still takes its own click", async () => {
+      setLocale("en");
+      const { table, root } = await mountTree({
+        folderMadeAt: new Map<string, FolderMadeAt>([
+          [
+            "d",
+            { maker: { kind: "station", stationName: "Bar" }, source: null, someElsewhere: false },
+          ],
+        ]),
+      });
+      const row = root.querySelector('tr[data-row-key="folder:d"]')!;
+      const expanded = row.getAttribute("aria-expanded");
+      const cell = cellUnder(root, "folder:d", "Made at");
+      const clicks = linkClicks(cell);
+      for (const position of blankPoints(root, cell)) {
+        await userEvent.click(cell, { position, force: true });
+        await table.updateComplete;
+        expect(row.getAttribute("aria-expanded"), JSON.stringify(position)).toBe(expanded);
+      }
+      expect(clicks()).toBe(0);
+      await userEvent.click(cell.querySelector("a")!);
+      await table.updateComplete;
+      expect(clicks()).toBe(1);
+      expect(row.getAttribute("aria-expanded")).toBe(expanded);
+      // The control: the Price cell beside it still opens or closes the category.
+      await userEvent.click(cellUnder(root, "folder:d", "Price"), {
+        position: { x: 2, y: 2 },
+        force: true,
+      });
+      await table.updateComplete;
+      expect(row.getAttribute("aria-expanded")).not.toBe(expanded);
+    });
+  });
+
+  it("shows a unit name holding placeholder and replacement-pattern text as it is", async () => {
+    const odd: Unit = { id: "odd", name: { es: "{from} $& $1" }, abbreviation: {}, precision: 0 };
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [product({ id: "bun", unitId: "odd", unit: odd })],
+      unitLanguage: "es",
+    });
+    const unit = cellUnder(await tableRoot(el), "bun", t("product.price"))
+      .querySelector('[data-test="price-unit"]')!
+      .textContent!.trim();
+    expect(unit).toBe("/ {from} $& $1");
+  });
   it("renders one shared-table row per product", async () => {
     const products = [product({ id: "a" }), product({ id: "b" }), product({ id: "c" })];
     const { el } = await mountWidget<ProductList>("dashboard-product-list", { products });

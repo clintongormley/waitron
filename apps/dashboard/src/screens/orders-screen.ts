@@ -18,7 +18,7 @@ import {
   type OrderStatusFilter,
 } from "../api/client.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { dashboardPath } from "../navigation.js";
 import {
@@ -32,8 +32,6 @@ import "../widgets/order-detail-dialog.js";
 import "../widgets/order-reprint-dialog.js";
 
 const money = (value: string) => formatMoney(value, currentLocale());
-const fill = (template: string, key: string, value: string) =>
-  template.replace(`{${key}}`, () => value);
 const FIELD_OF: Record<string, { control: string; message: StringKey }> = {
   status: { control: "status", message: "orders.refused.status" },
   from: { control: "from", message: "orders.refused.date" },
@@ -202,7 +200,7 @@ export class OrdersScreen extends LitElement {
         cell: (row) =>
           row.orderNumber === null
             ? (row.label ?? "")
-            : fill(t("orders.order_number"), "number", String(row.orderNumber)),
+            : fill("orders.order_number", { number: String(row.orderNumber) }),
       },
       {
         key: "table",
@@ -222,7 +220,7 @@ export class OrdersScreen extends LitElement {
         label: t("orders.col.status"),
         choosable: "shown",
         cell: (row) =>
-          html`${t(`orders.status.${row.status}`)}${row.credited ? html`<span part="mark">${t(row.credited === "in_full" ? "orders.credited_in_full" : "orders.credited_in_part")}</span>` : nothing}${row.departedAt && (row.status === "paid" || row.status === "cancelled") ? html`<span part="mark">${fill(t("orders.left_on"), "date", new Intl.DateTimeFormat(currentLocale(), { dateStyle: "medium" }).format(new Date(row.departedAt)))}</span>` : nothing}`,
+          html`${t(`orders.status.${row.status}`)}${row.credited ? html`<span part="mark">${t(row.credited === "in_full" ? "orders.credited_in_full" : "orders.credited_in_part")}</span>` : nothing}${row.departedAt && (row.status === "paid" || row.status === "cancelled") ? html`<span part="mark">${fill("orders.left_on", { date: new Intl.DateTimeFormat(currentLocale(), { dateStyle: "medium" }).format(new Date(row.departedAt)) })}</span>` : nothing}`,
       },
       { key: "total", label: t("orders.col.total"), cell: (row) => money(row.total) },
       {

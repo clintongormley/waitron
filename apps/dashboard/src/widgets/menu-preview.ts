@@ -26,7 +26,7 @@ import { localizedName } from "../i18n/localized.js";
 import { PATH_SEPARATOR } from "./category-form.js";
 import { placeName } from "./price-source.js";
 import { leftToBrowser } from "../navigation.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 
 /** How the host's last publish ended, for the panel to say. */
@@ -108,11 +108,6 @@ const SOURCES: Record<MenuChange["source"], StringKey> = {
   shared_product: "menu_preview.source_shared_product",
   included_menu: "menu_preview.source_included_menu",
 };
-
-/** Fills `{key}` placeholders; each value is inserted once, never re-read as a placeholder. */
-function fill(key: StringKey, values: Record<string, string>): string {
-  return t(key).replace(/\{(\w+)\}/g, (whole, name: string) => values[name] ?? whole);
-}
 
 /** A menu's publication state in words, for the menus list and the editor: what it is, and the live
  * version and its publication time beside it. */

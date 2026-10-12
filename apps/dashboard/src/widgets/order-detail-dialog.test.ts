@@ -358,3 +358,21 @@ for (const locale of ["en-GB", "es-ES"]) {
     }
   }
 }
+
+it("shows a name holding another placeholder or a replacement pattern as it is", async () => {
+  setLocale("en-GB");
+  const api = {
+    getOrder: vi.fn().mockResolvedValue({
+      ...detail,
+      party: { ...detail.party!, openedBy: "{closed} $& $1" },
+    }),
+    liveData: new LiveData(),
+  } as unknown as DashboardApi;
+  const { el } = await mountWidget<OrderDetailDialog>("dashboard-order-detail-dialog", {
+    api,
+    orderId: "bill-1",
+    mayReprint: () => true,
+  });
+  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Soup"));
+  expect(el.shadowRoot!.textContent).toMatch(/by \{closed\} \$& \$1; closed \S/);
+});

@@ -19,7 +19,7 @@ import type {
 import type { ModifierListChoice } from "./product-editor-model.js";
 import { categoryPath, categoryRefusalErrors, categoryWithDescendants } from "./category-form.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
-import { t } from "../i18n/t.js";
+import { fill, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { conjunctionList } from "../i18n/list.js";
 import "@waitron/ui/src/components/wt-modal.js";
@@ -879,7 +879,7 @@ export class CatalogueBrowser extends LitElement {
           : renamed?.name;
     return name === undefined
       ? t("folders.new_color_heading")
-      : t("folders.color_heading").replace("{name}", name);
+      : fill("folders.color_heading", { name });
   }
   /** Done removes itself, so focus goes back to the mode's toggle rather than to the page. */
   async #leaveSelection(): Promise<void> {

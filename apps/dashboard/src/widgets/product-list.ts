@@ -15,7 +15,7 @@ import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
-import { t, currentLocale } from "../i18n/t.js";
+import { fill, t, currentLocale } from "../i18n/t.js";
 import { countOf } from "./count-text.js";
 import {
   allergenState,
@@ -25,7 +25,7 @@ import {
 } from "../i18n/domain.js";
 import { categoryPath, categoryWithDescendants } from "./category-form.js";
 import { categoryColorSource, isStoredColor } from "@waitron/catalogue/src/color-inheritance.js";
-import { fillPlaceholders, productMedia, productMediaStyles } from "./product-media.js";
+import { productMedia, productMediaStyles } from "./product-media.js";
 import { swatchChip, swatchPartStyles } from "./swatch-styles.js";
 import {
   holdPageCursor,
@@ -1019,7 +1019,7 @@ export class ProductList extends LitElement {
     const name =
       resolveContentText(product.unit.abbreviation, language, language) ||
       resolveContentText(product.unit.name, language, language);
-    return t("product.price_per").replace("{unit}", name);
+    return fill("product.price_per", { unit: name });
   }
 
   #folderMadeAt(id: string) {
@@ -1033,10 +1033,9 @@ export class ProductList extends LitElement {
       maker.kind === "no_preparation"
         ? t("product.no_preparation")
         : maker.kind === "no_replacement"
-          ? t("product.no_replacement").replace(
-              "{name}",
-              () => maker.stationName ?? t("product.nowhere"),
-            )
+          ? fill("product.no_replacement", {
+              name: maker.stationName ?? t("product.nowhere"),
+            })
           : maker.kind === "station"
             ? maker.stationName
             : t("product.nowhere");
@@ -1046,10 +1045,9 @@ export class ProductList extends LitElement {
         : source.kind === "own"
           ? t("folders.made_at_own")
           : source.kind === "inherited"
-            ? t("folders.made_at_inherited").replace(
-                "{name}",
-                () => source.name ?? t("editor.missing_choice"),
-              )
+            ? fill("folders.made_at_inherited", {
+                name: source.name ?? t("editor.missing_choice"),
+              })
             : t("folders.made_at_default"),
       made.someElsewhere ? t("folders.made_at_some_elsewhere") : "",
     ]
@@ -1132,6 +1130,7 @@ export class ProductList extends LitElement {
         key: "made-at",
         choosable: "shown",
         label: t("product.made_at"),
+        activatesRow: false,
         cell: (row) => {
           if (row.variant) return nothing;
           const id = row.product.id;
@@ -1141,10 +1140,9 @@ export class ProductList extends LitElement {
           const name = maker.noPreparation
             ? t("product.no_preparation")
             : maker.noReplacement
-              ? t("product.no_replacement").replace(
-                  "{name}",
-                  maker.stationName ?? t("product.nowhere"),
-                )
+              ? fill("product.no_replacement", {
+                  name: maker.stationName ?? t("product.nowhere"),
+                })
               : (maker.stationName ?? t("product.nowhere"));
           return html`<a part="maker-link" href="/manage/prep-stations/view/routing"
             >${name}${maker.variesByZone ? html` · ${t("product.varies_by_zone")}` : nothing}</a
@@ -1395,6 +1393,7 @@ export class ProductList extends LitElement {
       align: column.align,
       choosable: column.choosable,
       pinned: column.pinned,
+      activatesRow: column.activatesRow,
       cell: (row, context) => {
         if (row.kind === "product") return column.cell(row, context);
         if (row.kind === "draft")
@@ -1565,8 +1564,8 @@ export class ProductList extends LitElement {
         data-test=${`color-${key}`}
         aria-label=${
           inherited
-            ? fillPlaceholders(t("folders.edit_color_inherited"), { name, from: inheritedFrom })
-            : fillPlaceholders(t("folders.edit_color"), { name })
+            ? fill("folders.edit_color_inherited", { name, from: inheritedFrom })
+            : fill("folders.edit_color", { name })
         }
         @click=${(clicked: Event) => {
           clicked.stopPropagation();

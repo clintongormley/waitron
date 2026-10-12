@@ -85,10 +85,8 @@ Status column, and on a phone the Name column, hold the Unpublished changes link
 `activatesRow: false`, so a click beside the link opens the menu; the design system records this as
 a deviation from its `activatesRow` rule, and whether it stays is the owner's call. The contrast of
 that link, and of the product list's maker link, on a highlighted row is fixed (A306, #1336). The product
-list's "Made at" column (`apps/dashboard/src/widgets/product-list.ts`) also does not set `activatesRow:
-false`, so, judging by the code (not run), a click beside a short station name opens the product
-editor, which the `activatesRow` rule in `docs/developers/design-system.md` forbids. Both predate
-this branch (5b725d672, ca89633f1) and are left for an item of their own.
+list's "Made at" column (`apps/dashboard/src/widgets/product-list.ts`) now sets `activatesRow: false`
+for product and category rows (A520).
 
 ## A menu's Structure tab is one tree (W88, #1209): not checked
 

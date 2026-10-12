@@ -735,12 +735,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   it stays is the owner's call. Left open by W87 (#1191).
   [Detail](backlog/catalogue.md#menus-list-changes-column-and-top-aligned-rows-w87-1191-left-open)
 
-- **The product list's "Made at" column (`apps/dashboard/src/widgets/product-list.ts`) also does not
-  set `activatesRow: false`**, so, judging by the code (not run), a click beside a short station
-  name opens the product editor, which the `activatesRow` rule in `docs/developers/design-system.md`
-  forbids. Left open by W87 (#1191), for an item of its own.
-  [Detail](backlog/catalogue.md#menus-list-changes-column-and-top-aligned-rows-w87-1191-left-open)
-
 - **A menu's Structure tab is one tree (W88, #1209): not checked** — in Spanish at 390 px the Type
   column scrolls partly under the pinned Actions column, which is the table's own sideways scroll;
   the heading's height with "Checking…" or "Could not be checked" was not measured against the other
@@ -887,11 +881,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   category there only when typed with " › "**; one category's name alone still finds it. Those
   pickers are the shared `wt-combobox`, which was left unchanged. Left open by W82 (#1210, the Move
   dialog's destination categories; W82b, W82c).
-
-- **A category's Made at link is the same `maker-link` as a product's, so the missing `activatesRow:
-  false` recorded under W87 applies to category rows too** (there a click beside the link opens or
-  closes the category; judged from the code, not run; its contrast is fixed with the product's by
-  A306, through the same style rule, not measured on a category row). Left open by W86 (#1203).
 
 - **A person who may not read routing sees "Kitchen routing unavailable" on every category**,
   because a refused read counts as a failed one. Left open by W86 (#1203, a category's Made at).
@@ -3684,12 +3673,15 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   only `--wt-color-primary` or `--wt-color-danger` gets Waitron's default blue or red on a hovered
   primary or danger `wt-button`.
 
-- **Three labels already on `main` fill `{…}` placeholders one after another, so a name holding
-  `{from}`-style text or `$&` can garble them** — left open by A423 (#1443): the colour chooser's
-  heading (`apps/dashboard/src/widgets/catalogue-browser.ts`), the order detail dialog's `fill`,
-  and the "price per" unit text in `product-list.ts` — #1443 fixed its own two with
-  `fillPlaceholders` (`apps/dashboard/src/widgets/product-media.ts`), and four screens keep a
-  private `fill` of the same kind that could share it.
+- **Many dashboard labels still put a name into a translated string with `.replace("{name}", …)`,
+  so a name holding `$&` (or, where two placeholders are filled one after another, another
+  placeholder's `{…}` text) can garble them** — left open by A520, which moved the colour chooser,
+  the order detail dialog, the product list's Made at and price-per text and four private helpers to
+  `fill` (`apps/dashboard/src/i18n/t.ts`). Sites remain in, among others, `menu-structure-table.ts`,
+  `menu-prices-table.ts`, `add-to-menus.ts`, `devices-screen.ts`, `printers-screen.ts`,
+  `modifiers-screen.ts` and `menus-screen.ts`; a string replacement whose value is a number is
+  safe. `apps/dashboard/src/widgets/price-source.ts` keeps a private one-pass fill because it is
+  handed its `t`.
 
 - **One earlier Spanish dark-theme 390 px demo probe reached its 12-second deadline before the
   bottom** — left open by A334 (#1416, held reorder drags scroll at the list edge): a later

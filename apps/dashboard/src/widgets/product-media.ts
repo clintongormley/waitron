@@ -1,11 +1,6 @@
 import { css, html, nothing } from "lit";
 import { isStoredColor } from "@waitron/catalogue/src/color-inheritance.js";
-import { t } from "../i18n/t.js";
-
-/** Fills each `{key}` that `values` names, in one pass, so text put in for one placeholder is
- * never read as another and a `$` in it is never read as a replacement pattern. */
-export const fillPlaceholders = (template: string, values: Record<string, string>) =>
-  template.replace(/\{(\w+)\}/g, (whole, key: string) => values[key] ?? whole);
+import { fill } from "../i18n/t.js";
 
 export const productMediaStyles = css`
   wt-data-table::part(product-media) {
@@ -82,8 +77,8 @@ export function productMedia(options: {
     href=${`/manage/catalogue/product/${encodeURIComponent(productId)}?field=image`}
     aria-label=${
       inheritedFrom === undefined
-        ? fillPlaceholders(t("product.edit_named"), { name })
-        : fillPlaceholders(t("product.edit_named_inherited"), { name, from: inheritedFrom })
+        ? fill("product.edit_named", { name })
+        : fill("product.edit_named_inherited", { name, from: inheritedFrom })
     }
     aria-disabled=${busy ? "true" : nothing}
     @click=${(event: MouseEvent) => {

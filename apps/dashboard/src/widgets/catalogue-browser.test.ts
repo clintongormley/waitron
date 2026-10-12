@@ -1278,6 +1278,15 @@ it.each([
     expect(getComputedStyle(await rowChip(el, "d")).backgroundColor).toBe("rgb(37, 107, 177)");
   },
 );
+it("names a category holding placeholder and replacement-pattern text in its colour chooser's heading as it is", async () => {
+  setLocale("en-GB");
+  const el = await mountBrowser({
+    categories: [folder("d", "{from} $& $1", null), ...CATEGORIES.slice(1)],
+  });
+  await menuAction(el, "color-d");
+  const form = await colorChooser(el);
+  expect(form.shadowRoot!.querySelector("wt-modal")!.heading).toBe("Colour of {from} $& $1");
+});
 it("sends a null colour when No colour is chosen from a row's square", async () => {
   const el = await mountBrowser({
     categories: [{ ...folder("d", "Drinks", null), color: "#b12525" }, ...CATEGORIES.slice(1)],
