@@ -490,6 +490,7 @@ const CANDIDATES: Record<string, readonly Value[]> = {
   "special_dates.date": ["2026-01-01", "2026-01-02"],
   "local_holidays.date": ["2026-01-01", "2026-01-02"],
   "special_day_dates.date": ["2026-01-01", "2026-01-02"],
+  // Its CHECK wants a bare `MM-DD` that is not `02-29`.
   "seasons.starts_on": ["03-01", "06-01"],
 };
 

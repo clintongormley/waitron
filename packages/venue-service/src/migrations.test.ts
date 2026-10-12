@@ -1272,7 +1272,23 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     await db.execute(sql`insert into department_day_ranges
         (id, day_id, department_id, period_id, starts_at, ends_at)
       values (${randomUUID()}, ${weekDayId}, ${v.departmentId}, ${periodId}, '12:00:00', '16:00:00')`);
+    await db.execute(sql`insert into zone_service_policies (location_id, zone_id, department_id)
+      values (${v.locationId}, ${v.zoneId}, ${v.departmentId})`);
+    const zoneDayId = randomUUID();
+    await db.execute(sql`insert into zone_days (id, zone_id, season_id, weekday)
+      values (${zoneDayId}, ${v.zoneId}, ${seasonId}, 6)`);
+    await db.execute(sql`insert into zone_day_ranges (id, day_id, starts_at, ends_at)
+      values (${randomUUID()}, ${zoneDayId}, '15:00:00', '17:00:00')`);
+    expect(
+      (await db.execute(sql`select id from zone_day_ranges where day_id = ${zoneDayId}`)).rows,
+    ).toHaveLength(1);
     await db.execute(sql`delete from seasons where id = ${seasonId}`);
+    expect((await db.execute(sql`select id from zone_days where id = ${zoneDayId}`)).rows).toEqual(
+      [],
+    );
+    expect(
+      (await db.execute(sql`select id from zone_day_ranges where day_id = ${zoneDayId}`)).rows,
+    ).toEqual([]);
     expect(
       (await db.execute(sql`select id from department_days where id = ${weekDayId}`)).rows,
     ).toEqual([]);
