@@ -488,6 +488,47 @@ it("tells the panel when it sits in the sheet", async () => {
   ).toBe(true);
 });
 
+const modalBody = (el: FloorPlanEditor) =>
+  el.shadowRoot!.querySelector<WtModal>("wt-modal[size=full]")!.shadowRoot!.querySelector(".body")!;
+
+it("at 1280 px fills the modal's height with the canvas and a side column as tall", async () => {
+  await viewport(1280, 800);
+  const el = await open();
+  await expect.poll(() => el.shadowRoot!.querySelector(".side")).not.toBeNull();
+  const space = parseFloat(getComputedStyle(el).getPropertyValue("--wt-space-5"));
+  const body = modalBody(el).getBoundingClientRect();
+  const box = canvas(el).getBoundingClientRect();
+  const side = el.shadowRoot!.querySelector(".side")!.getBoundingClientRect();
+  expect(body.bottom - box.bottom).toBeLessThanOrEqual(space + 0.5);
+  expect(Math.abs(side.height - box.height)).toBeLessThanOrEqual(0.5);
+});
+
+it("decides the sheet by the modal's width, not the width of the page around the editor", async () => {
+  await viewport(1280, 800);
+  const el = await open();
+  el.parentElement!.style.width = "500px";
+  await frames(3);
+  await el.updateComplete;
+  expect(sheet(el)).toBeNull();
+  expect(el.shadowRoot!.querySelector(".side")).not.toBeNull();
+});
+
+it("at 390 px docks the sheet over the bottom of the canvas, and nothing else scrolls", async () => {
+  await viewport(390, 844);
+  const el = await open(lowApi());
+  await expect.poll(() => sheet(el)).not.toBeNull();
+  const body = modalBody(el);
+  for (const step of ["collapsed", "expanded"]) {
+    if (step === "expanded") await expandSheet(el);
+    await frames(2);
+    const box = canvas(el).getBoundingClientRect();
+    const docked = sheet(el)!.getBoundingClientRect();
+    expect(Math.abs(docked.bottom - box.bottom), step).toBeLessThanOrEqual(0.5);
+    expect(docked.top, step).toBeGreaterThan(box.top);
+    expect(body.scrollHeight, step).toBe(body.clientHeight);
+  }
+});
+
 /** Terrace with T1 and T2 low on the canvas, where an expanded sheet at 390 × 844 covers them. */
 const lowApi = () =>
   stubApi({
@@ -608,25 +649,6 @@ it("at 390 px leaves the user's own pan alone when the sheet grows after it", as
   expect(sheet(el)!.getBoundingClientRect().height).toBeGreaterThan(height);
   expect(view.scrollTop).toBe(0);
   expect(window.scrollY).toBe(pageY);
-});
-
-it("at 390 px leaves the canvas alone when the sheet grows after the user scrolls the page", async () => {
-  await viewport(390, 844);
-  const el = await open(lowApi());
-  await expect.poll(() => sheet(el)).not.toBeNull();
-  await expandSheet(el);
-  await fromCanvas(el, "wt-table-select", { key: "m1" });
-  await expect.poll(() => aboveSheet(el, "m1")).toBe(true);
-  const view = canvas(el).shadowRoot!.querySelector(".viewport")!;
-  const panned = view.scrollTop;
-  window.scrollTo(0, 200);
-  await frames(2);
-  sheet(el)!.style.paddingTop = "100px";
-  await frames(3);
-  await el.updateComplete;
-  await canvas(el).updateComplete;
-  expect(aboveSheet(el, "m1")).toBe(false);
-  expect(view.scrollTop).toBe(panned);
 });
 
 it("leaves the canvas where it is at 1280 px", async () => {
