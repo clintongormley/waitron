@@ -7706,7 +7706,6 @@ describe("mounted public department pages", () => {
             active,
             zones: [],
             periods: [],
-            week: [],
             dates: [],
           })),
         } as never;

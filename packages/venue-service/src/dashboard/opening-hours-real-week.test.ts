@@ -507,3 +507,16 @@ it("in the real week from Monday 25 Nov 2030, the All view shows Autumn's Monday
     autumnThenWinterSunday(["14", "15"]),
   );
 });
+it.each([
+  ["department", "/manage/opening-hours/view/week/department/d1", "opening-hours-week"],
+  ["zone", "/manage/opening-hours/view/week/department/d1/zone/z1", "opening-hours-zone-week"],
+])("shows a manager the %s week's Save only in the standard week", async (_, path, tag) => {
+  const saveIn = async (address: string) => {
+    const grid = await mountAt(address, tag);
+    const save = (grid.getRootNode() as ShadowRoot).querySelector("[data-test=save-week]");
+    screen.remove();
+    return save;
+  };
+  expect(await saveIn(path)).not.toBeNull();
+  expect(await saveIn(`${path}?week=2030-11-25`)).toBeNull();
+});

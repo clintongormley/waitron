@@ -1230,7 +1230,7 @@ export async function readOpeningHoursModel(
     departments: departmentRows.map((department) => {
       const days = timetables.filter((row) => row.departmentId === department.id);
       const stored = seasonWeeks.get(department.id);
-      const weeks = seasonWeekList(seasonList, stored, currentSeasonId);
+      const weeks = seasonWeekList(seasonList, stored);
       const shape = (week: ServiceRange[][]) => week.map((slots, weekday) => ({ weekday, slots }));
       return {
         ...department,
@@ -1261,7 +1261,7 @@ export async function readOpeningHoursModel(
             ),
             routingUses: routingUses.get(id) ?? [],
           })),
-        seasonWeeks: weeks.seasonWeeks.map((entry) => ({
+        seasonWeeks: weeks.map((entry) => ({
           seasonId: entry.seasonId,
           week: shape(entry.week),
         })),

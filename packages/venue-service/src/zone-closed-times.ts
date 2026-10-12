@@ -17,6 +17,7 @@ import {
   joinTouching,
   readZoneSeasonWeeks,
   seasonWeekList,
+  shownSeasonWeek,
   seasonsHolding,
   targetSeasons,
   writeZoneSeasonWeeks,
@@ -202,7 +203,8 @@ export async function readZoneClosedTimes(
       .sort((a, b) => rangeSpan(a, cutover).start - rangeSpan(b, cutover).start);
   return zones.map((zone) => {
     const own = rows.filter((row) => row.zoneId === zone.id);
-    const { seasonWeeks, week } = seasonWeekList(seasonList, stored.get(zone.id), currentSeasonId);
+    const seasonWeeks = seasonWeekList(seasonList, stored.get(zone.id));
+    const week = shownSeasonWeek(seasonWeeks, currentSeasonId);
     return {
       ...zone,
       seasonWeeks: seasonWeeks.map((entry) => ({
