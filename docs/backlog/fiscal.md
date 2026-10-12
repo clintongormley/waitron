@@ -478,6 +478,15 @@ AEAT's answer breaks a run: when the record right after a run was sent and its a
 or missing, the records added after it are sent with its retry, and a later record is held only
 once the refusals immediately before it make a run of three. The ongoing alert
 `fiscal.refusals_repeated` names the code and the length of the run. Nothing releases the hold yet.
+**Update, 2026-10-12 (W41s-1b preparation):** [Verifactu PR #140](https://github.com/waitron-io/verifactu/pull/140)
+prepares conflict-successor and held-cancellation-successor probes. Its current-head CI and
+Documentation runs passed at `65b38d707d74ea31dd3dd608c6142529533bb84d`; no live AEAT request
+has run. The library PR awaits owner review before merge because the live workflow runs only
+on `main`. [The handoff](../compliance/aeat-successor-probe-handoff.md) lists the two commands
+and the evidence to retain. The held cancellation stays unsent in its probe, matching the
+current drain; the successor links to that cancellation's hash. Existing holds remain in place
+until actual service evidence and the dependent task's gates support a change.
+
 **Update, 2026-10-12 (W41s-3d):** PR
 [#1309](https://github.com/clintongormley/waitron/pull/1309) adds an hourly retry of the first
 eligible brake-held record. An accept or a different-code refusal can release the remaining

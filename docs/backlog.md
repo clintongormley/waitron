@@ -302,7 +302,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 - **Still open after W41s-3 (#1289)** — no probe has yet shown what AEAT does with a record sent
   after a 3000 conflict or after a held cancellation; the owner chose (2026-10-06) to keep holding
-  there, and the live probe of those two cases is queued as W41s-1b. A refusal that would refuse
+  there. W41s-1b’s probes are prepared on [Verifactu PR #140](https://github.com/waitron-io/verifactu/pull/140),
+  awaiting owner review before live execution. No AEAT result has been recorded. A refusal that would refuse
   every later record (one about the taxpayer's identity, say) opens one case per record until the
   brake below stops the chain; one reply can still open up to 1,000 cases first
   (`MAX_REGISTROS_POR_ENVIO`). [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04)
