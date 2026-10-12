@@ -647,14 +647,6 @@ export class DashboardApp extends LitElement {
         .layout {
           overflow: clip;
         }
-        /* Reaches over index.html's body padding to give the floor plan editor's header room on a
-           phone (one row at 390 px). The 4px stays inside .main, which clips: a focus ring needs it. */
-        .shell.edge {
-          margin-inline: calc(-1 * var(--wt-space-5));
-        }
-        .shell.edge .body {
-          padding-inline: var(--wt-space-1);
-        }
         .alert-toast {
           inset-inline: var(--wt-space-2);
           max-width: none;
@@ -1380,7 +1372,7 @@ export class DashboardApp extends LitElement {
     return html`
       ${this.leaveConfirmation()}
       <div
-        class=${classMap({ shell: true, edge: this.screen === "floor-plan" })}
+        class="shell"
         @focusin=${(e: FocusEvent) => this.#onShellFocusIn(e)}
         @keydown=${(e: KeyboardEvent) => this.#onLayoutKeydown(e)}
         @wt-locale-selected=${(e: CustomEvent<{ code: string }>) => void this.#onLocaleSelected(e)}
@@ -1444,7 +1436,7 @@ export class DashboardApp extends LitElement {
             <!-- keyed on the active locale: a switch changes the key, so Lit discards and rebuilds the
                  screen subtree, repainting every child in the new language (screens hold no controller). -->
             <div
-              class=${classMap({ body: true, fill: this.screen === "catalogue" || this.screen === "floor-plan" })}
+              class=${classMap({ body: true, fill: this.screen === "catalogue" })}
               @wt-edit-product=${this.#onEditProduct}
             >
               ${

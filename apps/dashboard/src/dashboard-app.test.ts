@@ -4582,6 +4582,28 @@ describe("the floor plan editor inside the real page", () => {
     return { ...mounted, editor };
   };
 
+  const dialogBox = (editor: HTMLElement) =>
+    editor
+      .shadowRoot!.querySelector("wt-modal")!
+      .shadowRoot!.querySelector("dialog")!
+      .getBoundingClientRect();
+
+  it("covers the banner and the sidebar with the editor", async () => {
+    const { el, editor, unmount } = await openEditor("en-GB", 1280);
+    try {
+      for (const selector of ["[data-test=brand-banner]", ".sidebar"]) {
+        const box = el.shadowRoot!.querySelector(selector)!.getBoundingClientRect();
+        await expect
+          .poll(() =>
+            el.shadowRoot!.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2),
+          )
+          .toBe(editor);
+      }
+    } finally {
+      await unmount();
+    }
+  });
+
   const headerTops = (editor: HTMLElement) =>
     ["[data-action=close]", "[data-action=undo]", "[data-action=redo]", "[data-action=save]"].map(
       (selector) =>
@@ -4594,9 +4616,9 @@ describe("the floor plan editor inside the real page", () => {
     ["es-ES", "the system font", ""],
     ["es-ES", "a wider font", 'Verdana, "DejaVu Sans"'],
   ])(
-    "keeps Close, Undo, Redo and Save on one row at 390 px, 4 px inside the main column's clipping edge (%s, %s)",
+    "keeps Close, Undo, Redo and Save on one row at 390 px, in a modal 4 px from the window's edges (%s, %s)",
     async (locale, _name, font) => {
-      const { el, editor, unmount } = await openEditor(locale, 390);
+      const { editor, unmount } = await openEditor(locale, 390);
       try {
         await expect.poll(() => editor.shadowRoot!.querySelector("wt-sheet")).not.toBeNull();
         if (font !== "") {
@@ -4604,10 +4626,7 @@ describe("the floor plan editor inside the real page", () => {
           await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
         }
         expect(new Set(headerTops(editor)).size).toBe(1);
-        const main = el.shadowRoot!.querySelector(".main")!.getBoundingClientRect();
-        expect(main.left).toBe(0);
-        expect(main.right).toBe(window.innerWidth);
-        const box = editor.getBoundingClientRect();
+        const box = dialogBox(editor);
         expect(box.left).toBe(4);
         expect(box.right).toBe(window.innerWidth - 4);
         expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
@@ -4617,13 +4636,14 @@ describe("the floor plan editor inside the real page", () => {
     },
   );
 
-  it("keeps the page's usual inset around the editor at desktop width", async () => {
+  it("covers the window less 24 px at desktop width", async () => {
     const { el, editor, unmount } = await openEditor("en-GB", 1280);
     try {
-      const main = el.shadowRoot!.querySelector(".main")!.getBoundingClientRect();
-      const box = editor.getBoundingClientRect();
-      expect(box.left).toBe(main.left + 16);
-      expect(box.right).toBe(main.right - 16);
+      const box = dialogBox(editor);
+      expect(box.left).toBe(24);
+      expect(box.right).toBe(window.innerWidth - 24);
+      expect(box.top).toBe(24);
+      expect(box.bottom).toBe(window.innerHeight - 24);
       expect(window.innerWidth - el.getBoundingClientRect().right).toBe(24);
     } finally {
       await unmount();

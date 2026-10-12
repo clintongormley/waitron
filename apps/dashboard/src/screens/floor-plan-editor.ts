@@ -19,6 +19,7 @@ import {
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-floor-plan-canvas.js";
+import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-sheet.js";
 import "./floor-plan-add-join.js";
 import "./floor-plan-add-tables.js";
@@ -340,6 +341,11 @@ export class FloorPlanEditor extends LitElement {
   #flagged = false;
   readonly #userScrolls = (): void => {
     this.#revealing = false;
+  };
+  /** Escape takes Close's path, which the shell guards; the modal stays until the route changes. */
+  readonly #leave = async (): Promise<boolean> => {
+    this.renderRoot.querySelector<HTMLElement>("a.close")?.click();
+    return false;
   };
 
   constructor() {
@@ -1011,70 +1017,77 @@ export class FloorPlanEditor extends LitElement {
     const history = this.#history;
     return html`
       <div class="width-probe"></div>
-      <header class=${this.narrow ? "narrow" : ""}>
-        <h1>${this.zoneName ?? t("floor_plan_editor.title")}</h1>
-        <wt-form-actions .error=${this.message === null ? "" : this.message.text()}>
-          <a slot="cancel" class="close" data-action="close" href=${closeHref(this.back)}
-            >${t("action.close")}</a
-          >
-          ${
-            this.outOfDate && !this.saving
-              ? html`<wt-button
-                  slot="secondary"
-                  data-action="load-newer"
-                  variant="secondary"
-                  @click=${this.#loadNewer}
-                  >${t("floor_plan_editor.reload")}</wt-button
-                >`
-              : nothing
-          }
-          <wt-button
-            slot="secondary"
-            data-action="undo"
-            variant="secondary"
-            ?disabled=${!history?.canUndo}
-            @click=${() => this.#step(history?.undo())}
-            >${t("floor_plan_editor.undo")}</wt-button
-          >
-          <wt-button
-            slot="secondary"
-            data-action="redo"
-            variant="secondary"
-            ?disabled=${!history?.canRedo}
-            @click=${() => this.#step(history?.redo())}
-            >${t("floor_plan_editor.redo")}</wt-button
-          >
-          <wt-button
-            data-action="save"
-            variant=${save.variant}
-            ?disabled=${
-              save.unchanged ||
-              this.saving ||
-              this.loadingNewer ||
-              this.mark?.from === "check" ||
-              this.typedMarks.length > 0
+      <wt-modal
+        size="full"
+        .open=${true}
+        .beforeClose=${this.#leave}
+        aria-label=${this.zoneName ?? t("floor_plan_editor.title")}
+      >
+        <header class=${this.narrow ? "narrow" : ""}>
+          <h1>${this.zoneName ?? t("floor_plan_editor.title")}</h1>
+          <wt-form-actions .error=${this.message === null ? "" : this.message.text()}>
+            <a slot="cancel" class="close" data-action="close" href=${closeHref(this.back)}
+              >${t("action.close")}</a
+            >
+            ${
+              this.outOfDate && !this.saving
+                ? html`<wt-button
+                    slot="secondary"
+                    data-action="load-newer"
+                    variant="secondary"
+                    @click=${this.#loadNewer}
+                    >${t("floor_plan_editor.reload")}</wt-button
+                  >`
+                : nothing
             }
-            @click=${this.#save}
-            >${t("action.save")}</wt-button
-          >
-        </wt-form-actions>
-      </header>
-      ${
-        this.plan === null
-          ? nothing
-          : html`<p class="note" data-note>
-              ${t(this.revision === 0 ? "floor_plan_editor.first_note" : "floor_plan_editor.note")}
-            </p>`
-      }
-      ${
-        this.loadError !== null
-          ? html`<p class="load-error" role="alert" data-load-error>
-              ${codeMessage(this.loadError)}
-            </p>`
-          : this.draft === null
+            <wt-button
+              slot="secondary"
+              data-action="undo"
+              variant="secondary"
+              ?disabled=${!history?.canUndo}
+              @click=${() => this.#step(history?.undo())}
+              >${t("floor_plan_editor.undo")}</wt-button
+            >
+            <wt-button
+              slot="secondary"
+              data-action="redo"
+              variant="secondary"
+              ?disabled=${!history?.canRedo}
+              @click=${() => this.#step(history?.redo())}
+              >${t("floor_plan_editor.redo")}</wt-button
+            >
+            <wt-button
+              data-action="save"
+              variant=${save.variant}
+              ?disabled=${
+                save.unchanged ||
+                this.saving ||
+                this.loadingNewer ||
+                this.mark?.from === "check" ||
+                this.typedMarks.length > 0
+              }
+              @click=${this.#save}
+              >${t("action.save")}</wt-button
+            >
+          </wt-form-actions>
+        </header>
+        ${
+          this.plan === null
             ? nothing
-            : this.#body(this.draft)
-      }
+            : html`<p class="note" data-note>
+                ${t(this.revision === 0 ? "floor_plan_editor.first_note" : "floor_plan_editor.note")}
+              </p>`
+        }
+        ${
+          this.loadError !== null
+            ? html`<p class="load-error" role="alert" data-load-error>
+                ${codeMessage(this.loadError)}
+              </p>`
+            : this.draft === null
+              ? nothing
+              : this.#body(this.draft)
+        }
+      </wt-modal>
     `;
   }
 }

@@ -155,6 +155,29 @@ it("Discard on Close leaves and writes nothing", async () => {
   expect(api.saveFloorPlan).not.toHaveBeenCalled();
 });
 
+it("Escape on an untouched editor leaves without asking", async () => {
+  const { app } = await mount();
+  await expect.poll(() => editor(app).shadowRoot!.querySelector("wt-modal")?.open).toBe(true);
+  await userEvent.keyboard("{Escape}");
+  await expect.poll(() => location.pathname).toBe("/manage/overview");
+  expect(question(app).open).toBe(false);
+});
+
+it("Escape asks after a move: Keep stays with the move, Discard leaves", async () => {
+  const { app } = await mount();
+  const el = editor(app);
+  await expect.poll(() => el.shadowRoot!.querySelector("wt-modal")?.open).toBe(true);
+  await move(el);
+  await userEvent.keyboard("{Escape}");
+  await choose(app, "keep");
+  expect(location.pathname).toBe("/manage/floor-plan/zone/z1");
+  expect(placed(el, "m1").x).toBe(5);
+  el.shadowRoot!.querySelector<HTMLElement>("[data-action=close]")!.focus();
+  await userEvent.keyboard("{Escape}");
+  await choose(app, "discard");
+  await expect.poll(() => location.pathname).toBe("/manage/overview");
+});
+
 it("undoing every change closes without asking", async () => {
   const { app } = await mount();
   const el = editor(app);

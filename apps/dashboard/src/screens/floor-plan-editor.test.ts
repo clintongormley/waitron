@@ -112,6 +112,34 @@ it("heads a zone the zone list lacks as Floor plan", async () => {
   expect(heading(el)).toBe("Floor plan");
 });
 
+it("draws the editor in an open full-window modal named after the zone", async () => {
+  const el = await open();
+  const modal = el.shadowRoot!.querySelector<WtModal>("wt-modal[size=full]")!;
+  expect(modal).not.toBeNull();
+  expect(modal.open).toBe(true);
+  expect(modal.getAttribute("aria-label")).toBe("Terrace");
+  for (const part of ["header", "wt-floor-plan-canvas", ".side"])
+    expect(modal.contains(el.shadowRoot!.querySelector(part))).toBe(true);
+});
+
+it("names the modal Floor plan for a zone the zone list lacks", async () => {
+  const el = await open(stubApi({ listZones: vi.fn().mockResolvedValue([]) }));
+  const modal = el.shadowRoot!.querySelector<WtModal>("wt-modal[size=full]")!;
+  expect(modal.getAttribute("aria-label")).toBe("Floor plan");
+});
+
+it("keeps a load failure and its Close inside the modal", async () => {
+  const el = await open(
+    stubApi({
+      getFloorPlan: vi.fn().mockRejectedValue({ code: "zone.not_found" }),
+    }),
+  );
+  const modal = el.shadowRoot!.querySelector<WtModal>("wt-modal[size=full]")!;
+  expect(modal.open).toBe(true);
+  expect(modal.contains(el.shadowRoot!.querySelector("[data-load-error]"))).toBe(true);
+  expect(modal.contains(el.shadowRoot!.querySelector("[data-action=close]"))).toBe(true);
+});
+
 it("draws placed tables and leaves unplaced ones off the canvas", async () => {
   const el = await open();
   expect(canvas(el).tables.map((t) => t.key)).toEqual(["m1"]);
