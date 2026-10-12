@@ -8,9 +8,11 @@ import {
   GRID_SQUARE_PX,
   type PlanPlacement,
   type PlanRect,
+  type PlanSide,
   bounds,
   clampToGrid,
   gridExtent,
+  resizeFrom,
   rotatedRect,
   showsName,
   snapToSquare,
@@ -55,6 +57,24 @@ export interface TableRotate {
   rotation: number;
 }
 
+export interface TableResize {
+  key: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+const SIDES: readonly PlanSide[] = ["top", "right", "bottom", "left"];
+
+/** Each side's outward direction on an unturned table. */
+const OUTWARDS: Record<PlanSide, { x: number; y: number }> = {
+  top: { x: 0, y: -1 },
+  right: { x: 1, y: 0 },
+  bottom: { x: 0, y: 1 },
+  left: { x: -1, y: 0 },
+};
+
 const DEFAULT_COPY: FloorPlanCanvasCopy = {
   label: "Floor plan",
   fixed: "Fixed",
@@ -70,6 +90,10 @@ function nearest(start: number, end: number, from: number, to: number): number {
   return 0;
 }
 
+function sameBox(a: PlanPlacement, b: PlanPlacement): boolean {
+  return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
+}
+
 /** Degrees clockwise from straight up, round the centre. */
 function angleAround(centreX: number, centreY: number, clientX: number, clientY: number): number {
   return (Math.atan2(clientX - centreX, centreY - clientY) * 180) / Math.PI;
@@ -83,7 +107,9 @@ const ARROWS: Record<string, { dx: number; dy: number }> = {
 };
 
 interface Drag {
-  kind: "move" | "rotate";
+  kind: "move" | "rotate" | "resize";
+  /** For a resize: the side whose dot was pressed. */
+  side: PlanSide;
   table: PlanCanvasTable;
   pointerId: number;
   startX: number;
@@ -199,6 +225,68 @@ export class WtFloorPlanCanvas extends LitElement {
 
       .rotate-handle:focus-visible {
         outline: var(--wt-focus-ring);
+      }
+
+      .resize-handle {
+        position: absolute;
+        width: var(--wt-space-5);
+        height: var(--wt-space-5);
+        margin: calc(var(--wt-space-5) / -2) 0 0 calc(var(--wt-space-5) / -2);
+        border-radius: var(--wt-radius-full);
+        touch-action: none;
+        pointer-events: auto;
+      }
+
+      .resize-handle::before {
+        content: "";
+        position: absolute;
+        top: calc((var(--wt-space-5) - var(--wt-space-3)) / 2);
+        left: calc((var(--wt-space-5) - var(--wt-space-3)) / 2);
+        width: var(--wt-space-3);
+        height: var(--wt-space-3);
+        border: calc(var(--wt-space-1) / 2) solid var(--wt-color-primary);
+        border-radius: var(--wt-radius-full);
+        background: var(--wt-color-surface);
+      }
+
+      .resize-handle[data-dragging]::before {
+        background: var(--wt-color-primary);
+      }
+
+      .resize-handle[data-side="top"] {
+        top: 0;
+        left: 50%;
+        cursor: ns-resize;
+      }
+
+      .resize-handle[data-side="right"] {
+        top: 50%;
+        left: 100%;
+        cursor: ew-resize;
+      }
+
+      .resize-handle[data-side="bottom"] {
+        top: 100%;
+        left: 50%;
+        cursor: ns-resize;
+      }
+
+      .resize-handle[data-side="left"] {
+        top: 50%;
+        left: 0;
+        cursor: ew-resize;
+      }
+
+      .size-badge {
+        position: absolute;
+        padding: var(--wt-space-1) var(--wt-space-2);
+        border-radius: var(--wt-radius-sm);
+        background: var(--wt-color-text);
+        color: var(--wt-color-bg);
+        font-size: var(--wt-font-size-sm);
+        text-wrap: nowrap;
+        transform: translateX(-50%);
+        pointer-events: none;
       }
     `,
   ];
@@ -386,7 +474,12 @@ export class WtFloorPlanCanvas extends LitElement {
         ${t.fixed ? html`<span class="fixed-marker" part="fixed-marker"></span>` : nothing}
       </button>
       ${t.refused === undefined ? nothing : this.#renderReason(t, p)}
-      ${t.key === this.selected ? this.#renderHandle(t, p, copy) : nothing}
+      ${t.key === this.selected ? this.#renderHandles(t, p, copy) : nothing}
+      ${
+        this.#drag?.kind === "resize" && this.#drag.table.key === t.key
+          ? this.#renderBadge(p)
+          : nothing
+      }
     `;
   }
 
@@ -419,8 +512,9 @@ export class WtFloorPlanCanvas extends LitElement {
     >`;
   }
 
-  /** The frame has the table's box and turn, so the handle turns with the table's corner. */
-  #renderHandle(t: PlanCanvasTable, p: PlanPlacement, copy: FloorPlanCanvasCopy): TemplateResult {
+  /** The frame has the table's box and turn, so the arrow and the dots turn with the table. */
+  #renderHandles(t: PlanCanvasTable, p: PlanPlacement, copy: FloorPlanCanvasCopy): TemplateResult {
+    const dragged = this.#drag?.kind === "resize" ? this.#drag.side : null;
     return html`<div class="frame" style=${this.#frameStyle(p)}>
       <button
         type="button"
@@ -433,7 +527,31 @@ export class WtFloorPlanCanvas extends LitElement {
       >
         <wt-icon name="floor-plan-rotate" size="lg"></wt-icon>
       </button>
+      ${SIDES.map(
+        (side) =>
+          html`<div
+            class="resize-handle"
+            part="resize-handle"
+            data-side=${side}
+            aria-hidden="true"
+            ?data-dragging=${side === dragged}
+            @click=${(e: Event) => e.stopPropagation()}
+            @pointerdown=${(e: PointerEvent) => this.#onPointerDown(e, t, "resize", side)}
+          ></div>`,
+      )}
     </div>`;
+  }
+
+  /** Under the drawn box, where the reason goes; `updated` moves a reason below it. */
+  #renderBadge(p: PlanPlacement): TemplateResult {
+    const box = this.#drawnBox(p);
+    const style = styleMap({
+      left: px(box.x + box.width / 2),
+      top: `calc(${px(box.y + box.height)} + var(--wt-space-5) / 2 + var(--wt-space-1))`,
+    });
+    return html`<span class="size-badge" part="size-badge" aria-hidden="true" style=${style}
+      >${p.width} × ${p.height}</span
+    >`;
   }
 
   /** `p`'s turned box in squares from the drawn grid's corner. */
@@ -453,7 +571,14 @@ export class WtFloorPlanCanvas extends LitElement {
     const reasons = this.renderRoot.querySelectorAll<HTMLElement>(".refused-reason");
     if (reasons.length === 0) return;
     const grid = this.renderRoot.querySelector<HTMLElement>(".grid")!.clientWidth;
+    const badge = this.renderRoot.querySelector<HTMLElement>(".size-badge");
+    const badged = this.#drag?.kind === "resize" ? this.#drag.table.key : null;
     for (const reason of reasons) {
+      // The badge is drawn where the reason would be, and its height is known only once drawn.
+      reason.style.translate =
+        badge !== null && reason.dataset.key === badged
+          ? `0 calc(${badge.offsetHeight}px + var(--wt-space-1))`
+          : "";
       const width = reason.getBoundingClientRect().width;
       const centred = Number(reason.dataset.centre) - width / 2;
       reason.style.left = `${Math.min(Math.max(centred, 0), Math.max(grid - width, 0))}px`;
@@ -509,7 +634,12 @@ export class WtFloorPlanCanvas extends LitElement {
     this.#rotate(t.key, snapRotation(t.placement.rotation + step));
   }
 
-  #onPointerDown(e: PointerEvent, t: PlanCanvasTable, kind: Drag["kind"]): void {
+  #onPointerDown(
+    e: PointerEvent,
+    t: PlanCanvasTable,
+    kind: Drag["kind"],
+    side: PlanSide = "right",
+  ): void {
     // Replacing a live drag's owner would leave the first pointer's pointerup unmatched.
     if (this.#drag !== null || e.button !== 0) return;
     // Cancelling the press also cancels the focus it would give, so give it back by hand.
@@ -521,6 +651,7 @@ export class WtFloorPlanCanvas extends LitElement {
     const centreY = grid.top + (this.#origin.y + p.y + p.height / 2) * GRID_SQUARE_PX;
     this.#drag = {
       kind,
+      side,
       table: t,
       pointerId: e.pointerId,
       startX: e.clientX,
@@ -532,6 +663,8 @@ export class WtFloorPlanCanvas extends LitElement {
     window.addEventListener("pointermove", this.#onPointerMove);
     window.addEventListener("pointerup", this.#onPointerUp);
     window.addEventListener("pointercancel", this.#onPointerCancel);
+    // The badge and the dragged dot show from the press.
+    if (kind === "resize") this.requestUpdate();
   }
 
   // The window listeners below are attached only while `#drag` is set.
@@ -548,6 +681,18 @@ export class WtFloorPlanCanvas extends LitElement {
       }
       return;
     }
+    if (drag.kind === "resize") {
+      const out = OUTWARDS[drag.side];
+      const radians = (p.rotation * Math.PI) / 180;
+      const [cos, sin] = [Math.cos(radians), Math.sin(radians)];
+      // The pointer's movement along the side's outward direction, turned with the table.
+      const along =
+        (e.clientX - drag.startX) * (out.x * cos - out.y * sin) +
+        (e.clientY - drag.startY) * (out.x * sin + out.y * cos);
+      const next = resizeFrom(p, drag.side, snapToSquare(along));
+      if (!sameBox(next, now)) this.draft = { key: drag.table.key, placement: next };
+      return;
+    }
     const turn = angleAround(drag.centreX, drag.centreY, e.clientX, e.clientY) - drag.startAngle;
     const rotation = snapRotation(p.rotation + turn);
     if (rotation !== now.rotation) {
@@ -562,7 +707,8 @@ export class WtFloorPlanCanvas extends LitElement {
     const to = this.draft?.placement ?? from;
     const turned = drag.kind === "rotate" && to.rotation !== from.rotation;
     const moved = drag.kind === "move" && (to.x !== from.x || to.y !== from.y);
-    const drop = turned || moved ? this.draft : null;
+    const resized = drag.kind === "resize" && !sameBox(to, from);
+    const drop = turned || moved || resized ? this.draft : null;
     this.#endDrag(drop);
     // A release away from where the press began sends its click to the grid, which would clear
     // the selection. That click comes in the same task as this pointerup. A tap's click goes to
@@ -571,6 +717,8 @@ export class WtFloorPlanCanvas extends LitElement {
     setTimeout(() => (this.#ignoreGridClick = false));
     if (turned) this.#rotate(drag.table.key, to.rotation);
     if (moved) this.#move(drag.table.key, to.x, to.y);
+    if (resized)
+      this.#resize({ key: drag.table.key, x: to.x, y: to.y, width: to.width, height: to.height });
   };
 
   readonly #onPointerCancel = (e: PointerEvent): void => {
@@ -580,6 +728,7 @@ export class WtFloorPlanCanvas extends LitElement {
   #endDrag(drop: Draft | null = null): void {
     if (this.#drag !== null) {
       this.#hold = { before: this.#layout(null), after: this.#layout(drop), visible: this.visible };
+      if (this.#drag.kind === "resize") this.requestUpdate();
     }
     this.#drag = null;
     this.draft = null;
@@ -591,6 +740,12 @@ export class WtFloorPlanCanvas extends LitElement {
   #move(key: string, x: number, y: number): void {
     const detail: TableMove = { key, x, y };
     this.dispatchEvent(new CustomEvent("wt-table-move", { detail, bubbles: true, composed: true }));
+  }
+
+  #resize(detail: TableResize): void {
+    this.dispatchEvent(
+      new CustomEvent("wt-table-resize", { detail, bubbles: true, composed: true }),
+    );
   }
 
   #rotate(key: string, rotation: number): void {

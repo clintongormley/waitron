@@ -47,6 +47,7 @@ export type {
   FloorPlanCanvasCopy,
   PlanCanvasTable,
   TableMove,
+  TableResize,
   TableRotate,
   TableSelect,
 } from "./components/wt-floor-plan-canvas.js";

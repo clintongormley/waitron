@@ -60,6 +60,35 @@ export function rotatedRect(p: PlanPlacement): PlanRect {
   return { x: centreX - width / 2, y: centreY - height / 2, width, height };
 }
 
+export type PlanSide = "top" | "right" | "bottom" | "left";
+
+const SIZE_MIN = 1;
+const SIZE_MAX = 99;
+
+/**
+ * `p` with its own `side` moved `squares` outwards (inwards when negative), keeping the opposite
+ * side's midpoint where it is drawn, to the nearest square when the table is turned by other than
+ * a right angle. The size stays 1–99 and the place on the grid.
+ */
+export function resizeFrom(p: PlanPlacement, side: PlanSide, squares: number): PlanPlacement {
+  const across = side === "left" || side === "right" ? "width" : "height";
+  const size = Math.min(SIZE_MAX, Math.max(SIZE_MIN, p[across] + squares));
+  const width = across === "width" ? size : p.width;
+  const height = across === "height" ? size : p.height;
+  // The centre moves half the growth along the table's own axis towards the moved side.
+  const half = ((size - p[across]) / 2) * (side === "left" || side === "top" ? -1 : 1);
+  const radians = (p.rotation * Math.PI) / 180;
+  const [cos, sin] = [Math.cos(radians), Math.sin(radians)];
+  const [dx, dy] = across === "width" ? [half * cos, half * sin] : [-half * sin, half * cos];
+  return {
+    ...p,
+    x: clampToGrid(p.x + p.width / 2 + dx - width / 2),
+    y: clampToGrid(p.y + p.height / 2 + dy - height / 2),
+    width,
+    height,
+  };
+}
+
 export function bounds(placements: readonly PlanPlacement[]): PlanRect | null {
   if (placements.length === 0) return null;
   let left = Infinity;

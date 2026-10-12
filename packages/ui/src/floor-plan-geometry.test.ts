@@ -10,6 +10,7 @@ import {
   firstFreeSpot,
   fitScale,
   gridExtent,
+  resizeFrom,
   rotatedRect,
   showsName,
   snapToSquare,
@@ -215,5 +216,56 @@ describe("floor plan geometry", () => {
     const names = automaticNames("T", existing, 2);
     expect(names).toEqual(["T 9007199254740993", "T 9007199254740994"]);
     expect(new Set([...existing, ...names]).size).toBe(3);
+  });
+
+  describe("resizeFrom", () => {
+    /** Where `side`'s midpoint is drawn, in squares, with the table turned round its centre. */
+    function midpoint(p: PlanPlacement, side: "top" | "right" | "bottom" | "left") {
+      const a = (p.rotation * Math.PI) / 180;
+      const [u, v] = {
+        top: [0, -p.height / 2],
+        right: [p.width / 2, 0],
+        bottom: [0, p.height / 2],
+        left: [-p.width / 2, 0],
+      }[side];
+      return {
+        x: p.x + p.width / 2 + u * Math.cos(a) - v * Math.sin(a),
+        y: p.y + p.height / 2 + u * Math.sin(a) + v * Math.cos(a),
+      };
+    }
+
+    it("moves the dragged side and keeps the opposite one", () => {
+      const p = table(10, 10, 8, 4);
+      expect(resizeFrom(p, "right", 2)).toEqual({ ...p, x: 10, width: 10 });
+      expect(resizeFrom(p, "left", 2)).toEqual({ ...p, x: 8, width: 10 });
+      expect(resizeFrom(p, "top", 1)).toEqual({ ...p, y: 9, height: 5 });
+      expect(resizeFrom(p, "bottom", -1)).toEqual({ ...p, y: 10, height: 3 });
+    });
+
+    it.each([90, 30, 225])("keeps the opposite side's midpoint on screen at %i°", (rotation) => {
+      const p = table(10, 10, 8, 4, rotation);
+      for (const [side, opposite, grows] of [
+        ["right", "left", "width"],
+        ["left", "right", "width"],
+        ["bottom", "top", "height"],
+        ["top", "bottom", "height"],
+      ] as const) {
+        const q = resizeFrom(p, side, 2);
+        expect(q[grows]).toBe(p[grows] + 2);
+        expect(q.rotation).toBe(rotation);
+        const before = midpoint(p, opposite);
+        const after = midpoint(q, opposite);
+        expect(Math.abs(after.x - before.x)).toBeLessThanOrEqual(0.5);
+        expect(Math.abs(after.y - before.y)).toBeLessThanOrEqual(0.5);
+      }
+    });
+
+    it("holds the size to 1–99 squares and the place to x and y of 0 or more", () => {
+      expect(resizeFrom(table(10, 10, 8, 4), "right", -20).width).toBe(1);
+      expect(resizeFrom(table(10, 10, 8, 4), "bottom", 200).height).toBe(99);
+      expect(resizeFrom(table(10, 10, 98, 4), "left", 5)).toMatchObject({ x: 9, width: 99 });
+      expect(resizeFrom(table(1, 1, 8, 4), "left", 5)).toMatchObject({ x: 0, width: 13 });
+      expect(resizeFrom(table(1, 1, 8, 4), "top", 5)).toMatchObject({ y: 0, height: 9 });
+    });
   });
 });

@@ -1,10 +1,11 @@
 import { afterEach, expect, it, onTestFinished, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
-import type { PlanPlacement } from "../floor-plan-geometry.js";
+import { type PlanPlacement, resizeFrom } from "../floor-plan-geometry.js";
 import type {
   PlanCanvasTable,
   TableMove,
+  TableResize,
   TableRotate,
   TableSelect,
   WtFloorPlanCanvas,
@@ -357,6 +358,26 @@ it("paints from tokens", async () => {
   expect(getComputedStyle(button(el, "t2")).borderTopColor).toBe("rgb(7, 8, 9)");
   expect(getComputedStyle(button(el, "t1")).borderTopColor).toBe("rgb(4, 5, 6)");
   expect(getComputedStyle(part(el, "grid")).backgroundImage).toContain("rgb(7, 8, 9)");
+});
+
+it("paints the side dots, the size badge and the turn arrow from tokens", async () => {
+  const el = await canvas([table("t1", "T1", { x: 10, y: 10 })], { selected: "t1" });
+  host.style.setProperty("--wt-color-primary", "rgb(4, 5, 6)");
+  host.style.setProperty("--wt-color-surface", "rgb(10, 11, 12)");
+  host.style.setProperty("--wt-color-text", "rgb(13, 14, 15)");
+  host.style.setProperty("--wt-color-bg", "rgb(16, 17, 18)");
+  const drawn = getComputedStyle(dot(el, "top"), "::before");
+  expect(drawn.borderTopColor).toBe("rgb(4, 5, 6)");
+  expect(drawn.backgroundColor).toBe("rgb(10, 11, 12)");
+  expect(getComputedStyle(handles(el)[0]!).color).toBe("rgb(13, 14, 15)");
+  const at = dragDot(el, "right", 24, 0);
+  await el.updateComplete;
+  expect(getComputedStyle(dot(el, "right"), "::before").backgroundColor).toBe("rgb(4, 5, 6)");
+  expect(getComputedStyle(dot(el, "top"), "::before").backgroundColor).toBe("rgb(10, 11, 12)");
+  const badge = getComputedStyle(part(el, "size-badge"));
+  expect(badge.backgroundColor).toBe("rgb(13, 14, 15)");
+  expect(badge.color).toBe("rgb(16, 17, 18)");
+  pointer(window, "pointercancel", 1, at.x, at.y);
 });
 
 it("names the group from its copy", async () => {
@@ -802,10 +823,10 @@ it("a real drag of a table released over empty grid keeps the selection", async 
   const seen = moves(el);
   const selections = selects(el);
   // The pointer moves about 15 px left and the table one square (12 px), so the release lands on
-  // the grid just left of the table.
+  // the grid just left of the table. Pressed clear of the side dots.
   await userEvent.dragAndDrop(button(el, "t1"), part(el, "grid"), {
-    sourcePosition: { x: 1, y: 40 },
-    targetPosition: { x: 82, y: 148 },
+    sourcePosition: { x: 1, y: 10 },
+    targetPosition: { x: 82, y: 118 },
   });
   expect(seen).toEqual([{ key: "t1", x: 1, y: 3 }]);
   expect(selections).toEqual([]);
@@ -826,16 +847,17 @@ it("a real drag of the handle that turns nothing keeps the selection", async () 
 });
 
 it("a real drag of a table that moves nothing keeps the selection", async () => {
-  const el = await canvas([table("t1", "T1", { x: 2, y: 3, width: 2, height: 2 })], {
+  const el = await canvas([table("t1", "T1", { x: 2, y: 3, width: 2, height: 4 })], {
     selected: "t1",
   });
   await settled(el);
   const seen = moves(el);
   const selections = selects(el);
-  // About 5 px right, under half a square, ending past the table's right edge (120 px).
+  // About 5 px right, under half a square, ending past the table's right edge (120 px). Pressed
+  // between the right and bottom dots' round hit areas.
   await userEvent.dragAndDrop(button(el, "t1"), part(el, "grid"), {
-    sourcePosition: { x: 20, y: 12 },
-    targetPosition: { x: 122, y: 120 },
+    sourcePosition: { x: 22, y: 38 },
+    targetPosition: { x: 123, y: 146 },
   });
   expect(seen).toEqual([]);
   expect(selections).toEqual([]);
@@ -973,6 +995,229 @@ it("other keys on the handle do nothing", async () => {
   expect(prevented).toEqual([false, false]);
 });
 
+const dots = (el: WtFloorPlanCanvas) =>
+  el.shadowRoot!.querySelectorAll<HTMLElement>('[part~="resize-handle"]');
+
+const dot = (el: WtFloorPlanCanvas, side: string) =>
+  el.shadowRoot!.querySelector<HTMLElement>(`[part~="resize-handle"][data-side="${side}"]`)!;
+
+const badgeOf = (el: WtFloorPlanCanvas) =>
+  el.shadowRoot!.querySelector<HTMLElement>('[part~="size-badge"]');
+
+function resizes(target: EventTarget): CustomEvent<TableResize>[] {
+  const seen: CustomEvent<TableResize>[] = [];
+  target.addEventListener("wt-table-resize", (e) => seen.push(e as CustomEvent<TableResize>));
+  return seen;
+}
+
+/** Presses `side`'s dot at its centre and moves the same pointer by (dx, dy) px, without releasing it. */
+function dragDot(el: WtFloorPlanCanvas, side: string, dx: number, dy: number, pointerId = 1) {
+  const { x, y } = centreOf(dot(el, side));
+  pointer(dot(el, side), "pointerdown", pointerId, x, y);
+  pointer(window, "pointermove", pointerId, x + dx, y + dy);
+  return { x: x + dx, y: y + dy };
+}
+
+/** `(u, v)` px from `key`'s centre along its own right and down, turned with it. */
+function turnedPoint(el: WtFloorPlanCanvas, key: string, rotation: number, u: number, v: number) {
+  const c = centreOf(button(el, key));
+  const a = (rotation * Math.PI) / 180;
+  return { x: c.x + u * Math.cos(a) - v * Math.sin(a), y: c.y + u * Math.sin(a) + v * Math.cos(a) };
+}
+
+const resized = (p: PlanPlacement) => ({ x: p.x, y: p.y, width: p.width, height: p.height });
+
+it("draws four side dots in the turn arrow's frame on the selected table only, out of the tab order and hidden from assistive technology", async () => {
+  const el = await canvas([table("t1", "T1", { x: 10, y: 10 }), table("t2", "T2", { x: 30 })], {
+    selected: "t1",
+  });
+  const found = [...dots(el)];
+  expect(found.map((d) => d.dataset.side)).toEqual(["top", "right", "bottom", "left"]);
+  for (const d of found) {
+    expect(d.getAttribute("aria-hidden")).toBe("true");
+    expect(d.hasAttribute("tabindex")).toBe(false);
+    expect(d.parentElement).toBe(handles(el)[0]!.parentElement);
+  }
+  el.selected = null;
+  await el.updateComplete;
+  expect(dots(el)).toHaveLength(0);
+  el.selected = "t2";
+  await el.updateComplete;
+  expect(dots(el)).toHaveLength(4);
+  const t2 = button(el, "t2").getBoundingClientRect();
+  expect(centreOf(dot(el, "top"))).toEqual({ x: t2.left + t2.width / 2, y: t2.top });
+});
+
+it.each([0, 30])("centres each side dot on its side's midpoint turned %i°", async (rotation) => {
+  const el = await canvas([table("t1", "T1", { x: 10, y: 10, width: 8, height: 4, rotation })], {
+    selected: "t1",
+  });
+  const want = {
+    top: turnedPoint(el, "t1", rotation, 0, -24),
+    right: turnedPoint(el, "t1", rotation, 48, 0),
+    bottom: turnedPoint(el, "t1", rotation, 0, 24),
+    left: turnedPoint(el, "t1", rotation, -48, 0),
+  };
+  for (const [side, at] of Object.entries(want)) {
+    const c = centreOf(dot(el, side));
+    expect(Math.abs(c.x - at.x)).toBeLessThanOrEqual(1);
+    expect(Math.abs(c.y - at.y)).toBeLessThanOrEqual(1);
+  }
+});
+
+it("draws each side dot a hit area of --wt-space-5 round a dot --wt-space-3 across", async () => {
+  const el = await canvas([table("t1", "T1", { x: 10, y: 10 })], { selected: "t1" });
+  host.style.setProperty("--wt-space-5", "30px");
+  host.style.setProperty("--wt-space-3", "10px");
+  const area = dot(el, "left").getBoundingClientRect();
+  expect(area.width).toBe(30);
+  expect(area.height).toBe(30);
+  const drawn = getComputedStyle(dot(el, "left"), "::before");
+  expect(drawn.width).toBe("10px");
+  expect(drawn.height).toBe("10px");
+});
+
+it("dragging the right dot sends one resize at release, from resizeFrom", async () => {
+  const p = place({ x: 10, y: 10, width: 8, height: 4 });
+  const el = await canvas([{ key: "t1", label: "T1", fixed: false, placement: p }], {
+    selected: "t1",
+  });
+  const seen = resizes(el);
+  const moved = moves(el);
+  const at = dragDot(el, "right", 24, 5);
+  await el.updateComplete;
+  expect(button(el, "t1").getBoundingClientRect().width).toBe(120);
+  expect(seen).toEqual([]);
+  await release(el, at);
+  expect(seen.map((e) => e.detail)).toEqual([{ key: "t1", x: 10, y: 10, width: 10, height: 4 }]);
+  expect(seen[0]!.detail).toEqual({ key: "t1", ...resized(resizeFrom(p, "right", 2)) });
+  expect(seen[0]!.bubbles).toBe(true);
+  expect(seen[0]!.composed).toBe(true);
+  expect(moved).toEqual([]);
+});
+
+it("a turned table's dot resizes along the table's own side, not the screen's", async () => {
+  const p = place({ x: 10, y: 10, width: 8, height: 4, rotation: 90 });
+  const el = await canvas([{ key: "t1", label: "T1", fixed: false, placement: p }], {
+    selected: "t1",
+  });
+  const seen = resizes(el);
+  await release(el, dragDot(el, "right", 24, 0));
+  expect(seen).toEqual([]);
+  await release(el, dragDot(el, "right", 0, 24));
+  expect(seen.map((e) => e.detail)).toEqual([{ key: "t1", ...resized(resizeFrom(p, "right", 2)) }]);
+  await release(el, dragDot(el, "top", 30, 0));
+  expect(seen.at(-1)!.detail).toEqual({ key: "t1", ...resized(resizeFrom(p, "top", 3)) });
+});
+
+it("shows the size badge under the table, past its bottom dot, while a dot is dragged", async () => {
+  const el = await canvas([table("t1", "T1", { x: 10, y: 10, width: 8, height: 4 })], {
+    selected: "t1",
+  });
+  expect(badgeOf(el)).toBeNull();
+  const at = dragDot(el, "right", 24, 0);
+  await el.updateComplete;
+  const badge = badgeOf(el)!;
+  expect(badge.textContent!.trim()).toBe("10 × 4");
+  expect(badge.getAttribute("aria-hidden")).toBe("true");
+  const box = button(el, "t1").getBoundingClientRect();
+  expect(Math.abs(centreOf(badge).x - (box.left + box.width / 2))).toBeLessThanOrEqual(1);
+  expect(badge.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+    dot(el, "bottom").getBoundingClientRect().bottom,
+  );
+  expect(dot(el, "right").hasAttribute("data-dragging")).toBe(true);
+  expect([...dots(el)].filter((d) => d.hasAttribute("data-dragging"))).toHaveLength(1);
+  await release(el, at);
+  expect(badgeOf(el)).toBeNull();
+  expect([...dots(el)].filter((d) => d.hasAttribute("data-dragging"))).toHaveLength(0);
+});
+
+it("draws a refused table's reason below the size badge while a dot is dragged", async () => {
+  const el = await canvas([refusedTable("t1", "T1", "Booked at 21:00", { x: 10, y: 10 })], {
+    selected: "t1",
+  });
+  await settled(el);
+  const before = reasonOf(el, "t1")!.getBoundingClientRect().top;
+  const at = dragDot(el, "bottom", 0, 24);
+  await el.updateComplete;
+  const badge = badgeOf(el)!.getBoundingClientRect();
+  expect(badge.top).toBeGreaterThanOrEqual(dot(el, "bottom").getBoundingClientRect().bottom);
+  expect(reasonOf(el, "t1")!.getBoundingClientRect().top).toBeGreaterThanOrEqual(badge.bottom);
+  pointer(window, "pointercancel", 1, at.x, at.y);
+  await el.updateComplete;
+  expect(reasonOf(el, "t1")!.getBoundingClientRect().top).toBe(before);
+});
+
+it("writes a selected refused table's reason below every side dot at every turn", async () => {
+  const el = await canvas([], { selected: "t1" });
+  for (const [width, height] of [
+    [8, 4],
+    [8, 1],
+    [1, 8],
+  ] as const) {
+    for (let rotation = 0; rotation < 360; rotation += 15) {
+      el.tables = [refusedTable("t1", "T1", "Booked", { x: 10, y: 10, width, height, rotation })];
+      await el.updateComplete;
+      const top = reasonOf(el, "t1")!.getBoundingClientRect().top;
+      for (const d of dots(el)) {
+        expect(top, `${width}×${height} at ${rotation}°, ${d.dataset.side}`).toBeGreaterThanOrEqual(
+          d.getBoundingClientRect().bottom,
+        );
+      }
+    }
+  }
+});
+
+it("a dot drag that ends where it began sends nothing", async () => {
+  const el = await canvas([table("t1", "T1", { x: 10, y: 10 })], { selected: "t1" });
+  const seen = resizes(el);
+  const at = dragDot(el, "right", 5, 5);
+  await el.updateComplete;
+  expect(badgeOf(el)!.textContent!.trim()).toBe("8 × 8");
+  expect(dot(el, "right").hasAttribute("data-dragging")).toBe(true);
+  await release(el, at);
+  expect(seen).toEqual([]);
+  expect(badgeOf(el)).toBeNull();
+  expect(dot(el, "right").hasAttribute("data-dragging")).toBe(false);
+});
+
+it("a pointer cancel puts the size back and sends nothing", async () => {
+  const el = await canvas([table("t1", "T1", { x: 10, y: 10, width: 8, height: 4 })], {
+    selected: "t1",
+  });
+  const seen = resizes(el);
+  const at = dragDot(el, "left", -24, 0);
+  await el.updateComplete;
+  expect(button(el, "t1").getBoundingClientRect().width).toBe(120);
+  pointer(window, "pointercancel", 1, at.x, at.y);
+  await el.updateComplete;
+  expect(button(el, "t1").getBoundingClientRect().width).toBe(96);
+  expect(offset(el, "t1")).toEqual({ left: 192, top: 192 });
+  expect(badgeOf(el)).toBeNull();
+  pointer(window, "pointerup", 1, at.x, at.y);
+  expect(seen).toEqual([]);
+});
+
+it("a second pointer cannot take over a dot drag, nor a dot a table drag", async () => {
+  const el = await canvas([table("t1", "T1", { x: 10, y: 10 }), table("t2", "T2", { x: 30 })], {
+    selected: "t1",
+  });
+  const seen = resizes(el);
+  const moved = moves(el);
+  const first = dragDot(el, "right", 24, 0, 1);
+  const second = dragBy(el, "t2", 60, 60, 2);
+  await release(el, second, 2);
+  expect(moved).toEqual([]);
+  await release(el, first, 1);
+  expect(seen.map((e) => e.detail)).toEqual([{ key: "t1", x: 10, y: 10, width: 10, height: 8 }]);
+  const table1 = dragBy(el, "t2", 24, 0, 1);
+  const dotDrag = dragDot(el, "bottom", 0, 24, 2);
+  await release(el, dotDrag, 2);
+  expect(seen).toHaveLength(1);
+  await release(el, table1, 1);
+  expect(moved).toEqual([{ key: "t2", x: 32, y: 0 }]);
+});
+
 it("each event bubbles out of a shadow root", async () => {
   const el = await canvas(
     [table("t1", "T1", { x: 10, y: 10 })],
@@ -985,13 +1230,19 @@ it("each event bubbles out of a shadow root", async () => {
   document.addEventListener("wt-table-rotate", (e) => turned.push(e as CustomEvent), {
     once: true,
   });
+  const sized: CustomEvent[] = [];
+  document.addEventListener("wt-table-resize", (e) => sized.push(e as CustomEvent), {
+    once: true,
+  });
   button(el, "t1").focus();
   await userEvent.keyboard("{ArrowRight}");
   handles(el)[0]!.focus();
   await userEvent.keyboard("{ArrowRight}");
+  await release(el, dragDot(el, "bottom", 0, 12));
   expect(moved.map((e) => e.detail)).toEqual([{ key: "t1", x: 11, y: 10 }]);
   expect(turned.map((e) => e.detail)).toEqual([{ key: "t1", rotation: 15 }]);
-  for (const e of [...moved, ...turned]) {
+  expect(sized.map((e) => e.detail)).toEqual([{ key: "t1", x: 10, y: 10, width: 8, height: 9 }]);
+  for (const e of [...moved, ...turned, ...sized]) {
     expect(e.bubbles).toBe(true);
     expect(e.composed).toBe(true);
   }
@@ -1507,6 +1758,9 @@ it("draws the turn arrow of a selected table at the grid's corner inside the gri
   const el = await canvas([table("t1", "T1", { width: 1, height: 1 })], { selected: "t1" });
   await settled(el);
   expectInside(handles(el)[0]!.getBoundingClientRect(), part(el, "grid").getBoundingClientRect());
+  for (const d of dots(el)) {
+    expectInside(d.getBoundingClientRect(), part(el, "grid").getBoundingClientRect());
+  }
   el.reveal("t1");
   expectInside(handles(el)[0]!.getBoundingClientRect(), viewportOf(el).getBoundingClientRect());
 });
@@ -1520,6 +1774,9 @@ it("keeps the turn arrow inside the grid while its table is dragged into the top
   const handle = handles(el)[0]!.getBoundingClientRect();
   expectInside(handle, part(el, "grid").getBoundingClientRect());
   expectInside(handle, viewportOf(el).getBoundingClientRect());
+  for (const d of dots(el)) {
+    expectInside(d.getBoundingClientRect(), part(el, "grid").getBoundingClientRect());
+  }
   pointer(window, "pointercancel", 1, at.x, at.y);
 });
 
@@ -1569,5 +1826,8 @@ it.each(Array.from({ length: 24 }, (_, i) => i * 15))(
     });
     await settled(el);
     expectInside(handles(el)[0]!.getBoundingClientRect(), part(el, "grid").getBoundingClientRect());
+    for (const d of dots(el)) {
+      expectInside(d.getBoundingClientRect(), part(el, "grid").getBoundingClientRect());
+    }
   },
 );
