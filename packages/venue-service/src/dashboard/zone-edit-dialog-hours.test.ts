@@ -87,7 +87,7 @@ it("keeps the unnamed sentence when the venue has no seasons", async () => {
   await mount(hours);
   await expect.poll(summary).toBe("Open whenever the department is");
 });
-it("groups the Terrace's closing times by identical normal-week ranges", async () => {
+it("groups the Terrace's closing times in the shown season by identical ranges", async () => {
   await mount(model());
   await expect
     .poll(summary)
@@ -101,7 +101,7 @@ it("groups the Terrace's closing times by identical normal-week ranges", async (
       Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy();
 });
-it("says the zone follows its department when its normal week has no closed ranges, ignoring named days", async () => {
+it("says the zone follows its department when the shown season's week has no closed ranges, ignoring named days", async () => {
   const hours = model();
   const zone = hours.departments[0]!.zones[0]!;
   zone.seasonWeeks[0]!.week = [];

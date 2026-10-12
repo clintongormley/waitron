@@ -1,6 +1,7 @@
 import { nothing } from "lit";
 import { currentLocale } from "@waitron/dashboard-kit";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
+import { format } from "./hours-view.js";
 import { seasonWeek } from "./season-choice.js";
 import { t } from "./strings.js";
 export function zoneClosedWeek(
@@ -18,10 +19,7 @@ export function zoneClosedWeek(
     unnamed: Parameters<typeof t>[0],
     seasonal: Parameters<typeof t>[0],
     values: Record<string, string> = {},
-  ) =>
-    t(season ? seasonal : unnamed).replace(/\{(\w+)\}/g, (field, key: string) =>
-      key === "season" ? season!.name : (values[key] ?? field),
-    );
+  ) => format(season ? seasonal : unnamed, { ...values, season: season?.name ?? "" });
   const groups = new Map<
     string,
     { ranges: readonly { startsAt: string; endsAt: string }[]; days: number[] }
