@@ -19,6 +19,7 @@ import type { Logger } from "@waitron/server-kit";
 import {
   saveDepartmentSettings,
   saveZoneServiceSettings,
+  saveZoneSettings,
   type DepartmentSettingsInput,
   type ZoneServiceSettingsInput,
   configureZone,
@@ -159,6 +160,31 @@ function requireSalePolicyField(field: string, value: unknown, zone: boolean) {
 function onlyKeys(body: object, allowed: readonly string[]): void {
   const extra = Object.keys(body).find((key) => !allowed.includes(key));
   if (extra !== undefined) throw new AppError("management.request_invalid", { field: extra });
+}
+
+function zoneSettingsBody(body: Record<string, unknown>): ZoneServiceSettingsInput {
+  return {
+    orderStart: requireSalePolicyField(
+      "orderStart",
+      body.orderStart,
+      true,
+    ) as ZoneServiceSettingsInput["orderStart"],
+    paidWhen: requireSalePolicyField(
+      "paidWhen",
+      body.paidWhen,
+      true,
+    ) as ZoneServiceSettingsInput["paidWhen"],
+    collectionNumber: requireSalePolicyField(
+      "collectionNumber",
+      body.collectionNumber,
+      true,
+    ) as ZoneServiceSettingsInput["collectionNumber"],
+    receiptPrintMode: requireSalePolicyField(
+      "receiptPrintMode",
+      body.receiptPrintMode,
+      true,
+    ) as ZoneServiceSettingsInput["receiptPrintMode"],
+  };
 }
 
 function requireTransferSettings(value: unknown) {
@@ -668,34 +694,35 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       }),
     );
 
+    app.put("/management-api/venue-service/zones/:zoneId/settings", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const zoneId = requireUuidParam(c.req.param("zoneId"), "ServiceZoneId");
+        const body = await readJsonBody<Record<string, unknown>>(c);
+        onlyKeys(body, ["name", "orderStart", "paidWhen", "collectionNumber", "receiptPrintMode"]);
+        const name = requireName(body.name, "name");
+        const policy = zoneSettingsBody(body);
+        await gated(sessionId, async (tx) => {
+          const zone = (await listServiceZones(tx, ctx.cfg)).find((zone) => zone.id === zoneId);
+          if (zone === undefined) throw new AppError("service_zone.not_found", { zoneId });
+          if (zone.name !== name)
+            await authorizeManager(tx, {
+              managementSessionId: sessionId,
+              permission: "venue.configure",
+            });
+          await saveZoneSettings(tx, ctx.cfg, zoneId, { name, ...policy });
+        });
+        return c.body(null, 204);
+      }),
+    );
+
     app.put("/management-api/venue-service/zones/:zoneId/service-settings", (c) =>
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const zoneId = requireUuidParam(c.req.param("zoneId"), "ServiceZoneId");
         const body = await readJsonBody<Record<string, unknown>>(c);
         onlyKeys(body, ["orderStart", "paidWhen", "collectionNumber", "receiptPrintMode"]);
-        const input: ZoneServiceSettingsInput = {
-          orderStart: requireSalePolicyField(
-            "orderStart",
-            body.orderStart,
-            true,
-          ) as ZoneServiceSettingsInput["orderStart"],
-          paidWhen: requireSalePolicyField(
-            "paidWhen",
-            body.paidWhen,
-            true,
-          ) as ZoneServiceSettingsInput["paidWhen"],
-          collectionNumber: requireSalePolicyField(
-            "collectionNumber",
-            body.collectionNumber,
-            true,
-          ) as ZoneServiceSettingsInput["collectionNumber"],
-          receiptPrintMode: requireSalePolicyField(
-            "receiptPrintMode",
-            body.receiptPrintMode,
-            true,
-          ) as ZoneServiceSettingsInput["receiptPrintMode"],
-        };
+        const input = zoneSettingsBody(body);
         await gated(sessionId, (tx) => saveZoneServiceSettings(tx, ctx.cfg, zoneId, input));
         return c.body(null, 204);
       }),

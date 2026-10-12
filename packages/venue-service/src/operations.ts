@@ -749,6 +749,31 @@ export async function saveDepartmentSettings(
 
 export type ZoneServiceSettingsInput = ZonePolicyField;
 
+export type ZoneEditInput = ZoneServiceSettingsInput & { name: string };
+
+export async function saveZoneSettings(
+  tx: Transaction,
+  cfg: VenueScope,
+  zoneId: string,
+  input: ZoneEditInput,
+): Promise<void> {
+  if (!(await listServiceZones(tx, cfg)).some((zone) => zone.id === zoneId))
+    throw new AppError("service_zone.not_found", { zoneId });
+  try {
+    await tx.update(floorZones).set({ name: input.name }).where(eq(floorZones.id, zoneId));
+  } catch (error) {
+    if (
+      refusalOn(error, UNIQUE_VIOLATION, {
+        table: "floor_zones",
+        columns: ["location_id", "name"],
+      })
+    )
+      throw new AppError("zone.name_taken", { name: input.name });
+    throw error;
+  }
+  await saveZoneServiceSettings(tx, cfg, zoneId, input);
+}
+
 export async function saveZoneServiceSettings(
   tx: Transaction,
   cfg: VenueScope,

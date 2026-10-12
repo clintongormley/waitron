@@ -630,3 +630,34 @@ it("does not offer reversible hierarchy removal or retired impact requests", () 
   ])
     expect(api).not.toHaveProperty(name);
 });
+
+it("saves a zone editor with its name and raw nullable overrides in one request", async () => {
+  const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(undefined, 204));
+  const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
+  await api.saveZoneSettings("z1", {
+    name: "Garden",
+    orderStart: null,
+    paidWhen: "prepay",
+    collectionNumber: null,
+    receiptPrintMode: "on_request",
+  });
+  expect(
+    fetchImpl.mock.calls.map(([path, init]) => [
+      path,
+      init.method,
+      JSON.parse(init.body as string),
+    ]),
+  ).toEqual([
+    [
+      "/management-api/venue-service/zones/z1/settings",
+      "PUT",
+      {
+        name: "Garden",
+        orderStart: null,
+        paidWhen: "prepay",
+        collectionNumber: null,
+        receiptPrintMode: "on_request",
+      },
+    ],
+  ]);
+});

@@ -3556,3 +3556,166 @@ describe("permanent department delete contracts", () => {
     }
   });
 });
+
+describe("atomic zone editor save", () => {
+  const edited = { name: "Garden", ...zoneSettings };
+  const path = (id: string) => `/management-api/venue-service/zones/${id}/settings`;
+
+  it("saves the name and every override together, preserving raw inheritance", async () => {
+    const fx = await settingsFixture();
+    for (const input of [
+      edited,
+      {
+        name: "Garden",
+        orderStart: null,
+        paidWhen: null,
+        collectionNumber: null,
+        receiptPrintMode: null,
+      },
+    ]) {
+      expect((await send(fx.app, "PUT", path(fx.zoneId), fx.managerCookie, input)).status).toBe(
+        204,
+      );
+      expect(
+        (
+          await db
+            .select({ name: floorZones.name })
+            .from(floorZones)
+            .where(eq(floorZones.id, fx.zoneId))
+        )[0],
+      ).toEqual({ name: "Garden" });
+      expect(
+        (await db.select().from(zoneSalePolicies).where(eq(zoneSalePolicies.zoneId, fx.zoneId)))[0],
+      ).toEqual({
+        zoneId: fx.zoneId,
+        orderStart: input.orderStart,
+        paidWhen: input.paidWhen,
+        collectionNumber: input.collectionNumber,
+        receiptPrintMode: input.receiptPrintMode,
+      });
+    }
+  });
+
+  it("a duplicate name refuses without changing name or policy", async () => {
+    const fx = await settingsFixture();
+    await db.insert(floorZones).values({ locationId: fx.locationId, name: "Garden" });
+    const before = await rawSettingsSnapshot();
+    const response = await send(fx.app, "PUT", path(fx.zoneId), fx.managerCookie, edited);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error: { code: "zone.name_taken", params: { name: "Garden" } },
+    });
+    expect(await rawSettingsSnapshot()).toEqual(before);
+  });
+
+  it.each([
+    ["name", null],
+    ["name", " "],
+    ["orderStart", "table_tab"],
+    ["paidWhen", ["prepay"]],
+    ["collectionNumber", false],
+    ["receiptPrintMode", "never"],
+    ["unexpected", true],
+  ])("invalid %s refuses without changing name or policy (%j)", async (field, value) => {
+    const fx = await settingsFixture();
+    const before = await rawSettingsSnapshot();
+    const response = await send(fx.app, "PUT", path(fx.zoneId), fx.managerCookie, {
+      ...edited,
+      [field]: value,
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field } },
+    });
+    expect(await rawSettingsSnapshot()).toEqual(before);
+  });
+
+  it.each(["deleted", "other location", "unassigned", "unknown"])(
+    "refuses a %s zone without writes",
+    async (kind) => {
+      const fx = await settingsFixture();
+      let id = fx.zoneId;
+      if (kind === "deleted")
+        await db.update(floorZones).set({ active: false }).where(eq(floorZones.id, id));
+      if (kind === "other location") {
+        const other = await settingsFixture();
+        id = other.zoneId;
+      }
+      if (kind === "unassigned") {
+        const [zone] = await db
+          .insert(floorZones)
+          .values({ locationId: fx.locationId, name: "Unassigned" })
+          .returning({ id: floorZones.id });
+        id = zone!.id;
+      }
+      if (kind === "unknown") id = randomUUID();
+      const before = await rawSettingsSnapshot();
+      const response = await send(fx.app, "PUT", path(id), fx.managerCookie, edited);
+      expect(response.status).toBe(404);
+      expect(await response.json()).toMatchObject({ error: { code: "service_zone.not_found" } });
+      expect(await rawSettingsSnapshot()).toEqual(before);
+    },
+  );
+
+  it("requires service authority and a separate rename permission", async () => {
+    const fx = await settingsFixture();
+    const before = await rawSettingsSnapshot();
+    for (const [cookie, status, code] of [
+      [undefined, 401, "management_session.required"],
+      [fx.staffCookie, 403, "authorization.not_permitted"],
+    ] as const) {
+      const response = await send(fx.app, "PUT", path(fx.zoneId), cookie, edited);
+      expect(response.status).toBe(status);
+      expect(await response.json()).toMatchObject({ error: { code } });
+    }
+    expect(await rawSettingsSnapshot()).toEqual(before);
+    // Grant only the module permission to exercise the independent rename boundary.
+    registerModulePermissions([{ permission: "venue_service.manage", grantedFrom: "supervisor" }]);
+    try {
+      const response = await send(fx.app, "PUT", path(fx.zoneId), fx.supervisorCookie, edited);
+      expect(response.status).toBe(403);
+      expect(await response.json()).toMatchObject({
+        error: { code: "authorization.not_permitted", params: { permission: "venue.configure" } },
+      });
+      expect(await rawSettingsSnapshot()).toEqual(before);
+      expect(
+        (
+          await send(fx.app, "PUT", path(fx.zoneId), fx.supervisorCookie, {
+            ...edited,
+            name: "Terrace",
+          })
+        ).status,
+      ).toBe(204);
+      expect(
+        (await db.select().from(zoneSalePolicies).where(eq(zoneSalePolicies.zoneId, fx.zoneId)))[0],
+      ).toEqual({ zoneId: fx.zoneId, ...zoneSettings });
+      expect(
+        (
+          await db
+            .select({ name: floorZones.name })
+            .from(floorZones)
+            .where(eq(floorZones.id, fx.zoneId))
+        )[0],
+      ).toEqual({ name: "Terrace" });
+    } finally {
+      registerModulePermissions(VENUE_SERVICE_PERMISSIONS);
+    }
+  });
+  it("a refused policy write rolls back the earlier name write", async () => {
+    const fx = await settingsFixture();
+    const before = await rawSettingsSnapshot();
+    await db.execute(sql`
+      create trigger refuse_editor_policy before insert on zone_sale_policies
+      when new.zone_id in (select id from floor_zones where name = 'Garden')
+      begin select raise(abort, 'policy refused'); end
+    `);
+    try {
+      const response = await send(fx.app, "PUT", path(fx.zoneId), fx.managerCookie, edited);
+      expect(response.status).toBe(500);
+      expect(await response.json()).toEqual({ error: { code: "server.internal" } });
+      expect(await rawSettingsSnapshot()).toEqual(before);
+    } finally {
+      await db.execute(sql`drop trigger refuse_editor_policy`);
+    }
+  });
+});

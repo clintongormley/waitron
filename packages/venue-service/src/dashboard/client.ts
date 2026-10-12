@@ -45,6 +45,7 @@ export interface DepartmentSettingsInput extends Omit<DepartmentSalePolicy, "dep
   transfers?: { receivingProfileId: string | null; destinationDepartmentIds: string[] };
 }
 export type ZoneServiceSettingsInput = Omit<ZoneSalePolicy, "zoneId" | "effective">;
+export type ZoneEditInput = ZoneServiceSettingsInput & { name: string };
 
 export type VenueReadinessIssue =
   | { code: "venue.default_station_missing" }
@@ -270,6 +271,10 @@ export class VenueServiceApi {
       "PUT",
       input,
     );
+  }
+
+  saveZoneSettings(zoneId: string, input: ZoneEditInput): Promise<void> {
+    return this.request(`/management-api/venue-service/zones/${zoneId}/settings`, "PUT", input);
   }
 
   saveZoneServiceSettings(zoneId: string, input: ZoneServiceSettingsInput): Promise<void> {
