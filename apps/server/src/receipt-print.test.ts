@@ -253,7 +253,27 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<{
     };
   });
   const each = available.find((p) => p.pricingUnit === "each")!;
+  const [{ departmentId }] = await suite.db
+    .select({ departmentId: zoneServicePolicies.departmentId })
+    .from(zoneServicePolicies)
+    .where(eq(zoneServicePolicies.zoneId, offers.zoneId));
+  await storeDepartmentReceipt(departmentId!, {});
   return { cfg, each: { ...each, menuItemId: offers.offerFor(each.id) }, zoneId: offers.zoneId };
+}
+
+async function storeDepartmentReceipt(
+  departmentId: string,
+  decoration: Record<string, unknown>,
+  logoRasters: ReceiptLogoRasters | null = null,
+) {
+  const receipt = { operationDescription: "Venta en establecimiento", ...decoration };
+  await suite.db
+    .insert(departmentReceipts)
+    .values({ departmentId, receipt, logoRasters })
+    .onConflictDoUpdate({
+      target: departmentReceipts.departmentId,
+      set: { receipt, logoRasters },
+    });
 }
 
 /**
@@ -2020,6 +2040,11 @@ describe("a party's receipt names the party and its tables (spec §8)", () => {
   /** The receipt a party at Mesa 4 and 5 is printed when it pays, named `name` when one is given. */
   async function receiptOfJoinedParty(name?: string): Promise<string> {
     const v = await setupPartyVenue(suite.db);
+    const [{ departmentId }] = await suite.db
+      .select({ departmentId: zoneServicePolicies.departmentId })
+      .from(zoneServicePolicies)
+      .where(eq(zoneServicePolicies.zoneId, v.tables.zoneId));
+    await storeDepartmentReceipt(departmentId!, { operationDescription: "Restaurante" });
     await configureReceipt(v.cfg, { mode: "auto", printerId: await makePrinter(v.cfg) });
     const mesa4 = await v.table("Mesa 4");
     const mesa5 = await v.table("Mesa 5");
@@ -2102,7 +2127,8 @@ describe("the receipt's top block: logo, address, phone and email", () => {
             receipt: { phone: "910999999", footerMessage: "Global decoration", printAddress: true },
           },
         });
-      const { logoRasters, ...authored } = receipt;
+      const { logoRasters, ...decoration } = receipt;
+      const authored = { operationDescription: "Venta en establecimiento", ...decoration };
       const rows = await tx.select({ id: departments.id }).from(departments);
       for (const row of rows)
         await tx
@@ -2210,7 +2236,6 @@ describe("the receipt's top block: logo, address, phone and email", () => {
     expect(topBlock(payload!)).toContain("Calle Mayor 1");
   });
 
-  // A configuration import copies the stored trim without checking it.
   it.each([
     ["a number for the slogan", { headerSubtitle: 5 }],
     ["a number for the phone", { phone: 5 }],
@@ -2458,12 +2483,9 @@ describe("automatic F1 receipt delivery enrollment", () => {
         },
       });
       const [department] = await suite.db.select().from(departments);
-      await suite.db.insert(departmentReceipts).values({
-        departmentId: department!.id,
-        receipt: {
-          headerSubtitle: { "es-ES": "Default department text" },
-          email: "default@example.test",
-        },
+      await storeDepartmentReceipt(department!.id, {
+        headerSubtitle: { "es-ES": "Default department text" },
+        email: "default@example.test",
       });
       if (kind === "null")
         await suite.db.insert(saleReceiptHeaders).values({
@@ -2870,9 +2892,7 @@ describe("department receipt presentation on thermal jobs", () => {
       await suite.db
         .update(tenantReceipts)
         .set({ receipt: { logo: `${"a".repeat(64)}.png`, logoRasters: venuePair } });
-      await suite.db
-        .insert(departmentReceipts)
-        .values({ departmentId, receipt: { logo: `${"b".repeat(64)}.png` }, logoRasters: ownPair });
+      await storeDepartmentReceipt(departmentId, { logo: `${"b".repeat(64)}.png` }, ownPair);
       const ticket = await sell();
       const saleId = await onlySaleId(cfg);
       await suite.db
@@ -2902,12 +2922,9 @@ describe("department receipt presentation on thermal jobs", () => {
     await suite.db
       .update(tenantReceipts)
       .set({ receipt: { logo: `${"a".repeat(64)}.png`, logoRasters: pair } });
-    await suite.db.insert(departmentReceipts).values({
-      departmentId,
-      receipt: {
-        logo: `${"b".repeat(64)}.png`,
-        headerSubtitle: { "es-ES": "Retained own text" },
-      },
+    await storeDepartmentReceipt(departmentId, {
+      logo: `${"b".repeat(64)}.png`,
+      headerSubtitle: { "es-ES": "Retained own text" },
     });
     await suite.db.execute(
       sql`update department_receipts set logo_rasters = ${JSON.stringify({ "58mm": { widthDots: 999999, heightDots: 1, data: "bad" }, "80mm": { widthDots: 8, heightDots: 1, data: "bad" } })} where department_id = ${departmentId}`,
@@ -2944,17 +2961,27 @@ describe("department receipt presentation on thermal jobs", () => {
     "omits a failed %s optional read with bounded diagnostic and surviving fields",
     async (source) => {
       const { cfg, departmentId, sell, documents } = await setupReceipt();
-      await suite.db.insert(departmentReceipts).values({
-        departmentId,
-        receipt: { headerSubtitle: { "es-ES": "Own subtitle" }, email: "own@example.test" },
+      await storeDepartmentReceipt(departmentId, {
+        headerSubtitle: { "es-ES": "Own subtitle" },
+        email: "own@example.test",
       });
       const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+      let mandatoryRead: MockInstance | undefined;
       if (source === "venue")
         await suite.db.execute(sql`alter table tenant_receipts rename to test_hidden_receipts`);
-      else
-        await suite.db.execute(
-          sql`alter table department_receipts rename to test_hidden_department_receipts`,
-        );
+      else {
+        const read = VENUE_SERVICE.readDepartmentReceipt;
+        mandatoryRead = vi
+          .spyOn(VENUE_SERVICE, "readDepartmentReceipt")
+          .mockImplementationOnce(async (tx, scope, id) => {
+            const receipt = await read(tx, scope, id);
+            expect(receipt.operationDescription).toBe("Venta en establecimiento");
+            await tx.execute(
+              sql`alter table department_receipts rename to test_hidden_department_receipts`,
+            );
+            return receipt;
+          });
+      }
       try {
         const ticket = await sell();
         expect(ticket.total).toBe("1.50");
@@ -2983,6 +3010,7 @@ describe("department receipt presentation on thermal jobs", () => {
           source === "venue" ? { headerSubtitle: "Own subtitle", email: "own@example.test" } : {},
         );
       } finally {
+        mandatoryRead?.mockRestore();
         if (source === "venue")
           await suite.db.execute(sql`alter table test_hidden_receipts rename to tenant_receipts`);
         else
@@ -3038,9 +3066,8 @@ describe("department receipt presentation on thermal jobs", () => {
 
   it("refreshes a cash replay's text and address without another drawer or fiscal record", async () => {
     const { cfg, departmentId, sell } = await setupReceipt();
-    await suite.db.insert(departmentReceipts).values({
-      departmentId,
-      receipt: { headerSubtitle: { "es-ES": "Original subtitle" } },
+    await storeDepartmentReceipt(departmentId, {
+      headerSubtitle: { "es-ES": "Original subtitle" },
     });
     const first = await sell();
     expect(first.receiptTrim).toEqual({
@@ -3093,17 +3120,17 @@ describe("department receipt presentation on thermal jobs", () => {
 
   it("uses two recorded departments on one printer without inheriting venue contact", async () => {
     const { cfg, departmentId, zoneId, sell, documents } = await setupReceipt();
-    await suite.db.insert(departmentReceipts).values({
-      departmentId,
-      receipt: { headerSubtitle: { "es-ES": "First subtitle" }, phone: "911111111" },
+    await storeDepartmentReceipt(departmentId, {
+      headerSubtitle: { "es-ES": "First subtitle" },
+      phone: "911111111",
     });
     await sell();
     const other = await withTransaction(suite.db, (tx) =>
       createDepartment(tx, cfg, { name: "Second", tradingName: "Second brand" }),
     );
-    await suite.db.insert(departmentReceipts).values({
-      departmentId: other.id,
-      receipt: { headerSubtitle: { "es-ES": "Second subtitle" }, email: "second@example.test" },
+    await storeDepartmentReceipt(other.id, {
+      headerSubtitle: { "es-ES": "Second subtitle" },
+      email: "second@example.test",
     });
     await suite.db
       .update(zoneServicePolicies)
@@ -3126,9 +3153,7 @@ describe("department receipt presentation on thermal jobs", () => {
 
   it("reprints a disabled recorded department with live text and recorded trading name", async () => {
     const { cfg, departmentId, sell, documents } = await setupReceipt();
-    await suite.db
-      .insert(departmentReceipts)
-      .values({ departmentId, receipt: { headerSubtitle: { "es-ES": "Before edit" } } });
+    await storeDepartmentReceipt(departmentId, { headerSubtitle: { "es-ES": "Before edit" } });
     const ticket = await sell();
     const id = await onlySaleId(cfg);
     await suite.db
@@ -3166,12 +3191,9 @@ describe("department receipt presentation on thermal jobs", () => {
     "retains the printed %s department text after the current receipt language changes",
     async (printed) => {
       const { cfg, departmentId, sell, documents } = await setupReceipt();
-      await suite.db.insert(departmentReceipts).values({
-        departmentId,
-        receipt: {
-          headerSubtitle: { [printed]: "Printed subtitle", "es-ES": "Current subtitle" },
-          footerMessage: { [printed]: "Printed footer", "es-ES": "Current footer" },
-        },
+      await storeDepartmentReceipt(departmentId, {
+        headerSubtitle: { [printed]: "Printed subtitle", "es-ES": "Current subtitle" },
+        footerMessage: { [printed]: "Printed footer", "es-ES": "Current footer" },
       });
       const ticket = await sell();
       const id = await onlySaleId(cfg);
@@ -3197,12 +3219,9 @@ describe("department receipt presentation on thermal jobs", () => {
     "resolves $printed against current $current without a third-language candidate",
     async ({ printed, current, subtitle, footer }) => {
       const { cfg, departmentId, sell, documents } = await setupReceipt();
-      await suite.db.insert(departmentReceipts).values({
-        departmentId,
-        receipt: {
-          headerSubtitle: { "ca-ES": "Catalan subtitle", "es-ES": "Spanish subtitle" },
-          footerMessage: { "es-ES": "Spanish footer", "gl-ES": "Galician footer" },
-        },
+      await storeDepartmentReceipt(departmentId, {
+        headerSubtitle: { "ca-ES": "Catalan subtitle", "es-ES": "Spanish subtitle" },
+        footerMessage: { "es-ES": "Spanish footer", "gl-ES": "Galician footer" },
       });
       const ticket = await sell();
       const id = await onlySaleId(cfg);
