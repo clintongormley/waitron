@@ -1,19 +1,12 @@
-// The scheduled backup worker. Each tick copies the venue database to a staging file, packs it with
-// the manifest, module non-DB state and state secrets into one archive, encrypts that ONCE under the
-// recovery key, puts the same ciphertext to every destination, and prunes each destination.
-//
-// A failing tick is logged and the loop goes on, and a destination that throws does not cost the
-// others their copy. A destination that HANGS stalls the tick: `backend.put` is handed no signal,
-// so an abort cannot interrupt it.
-
-import { chmod, mkdir, readFile, rm } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { Database } from "@waitron/db";
 import { recordBackupOutcome, type BackupOutcomeHolder } from "./alert-sources.js";
 import type { WaitronModule } from "@waitron/module";
 import { assembleArchiveEntries, collectStateParts } from "./archive-entries.js";
-import { encryptArtifactAsync } from "./artifact-cipher.js";
-import { packArchive } from "./backup-archive.js";
+import { encryptArtifactFile } from "./artifact-cipher-file.js";
+import { ArchiveReadBudget } from "./archive-read-budget.js";
+import { packArchiveStream, type ArchiveInputEntry } from "./backup-archive-file.js";
 import { buildManifest, type BackupManifest } from "./backup-manifest.js";
 import type { BackupSchedule } from "./backup-config.js";
 import { MAX_SLEEP_MS, nextFireMs, type ScheduleClock } from "./backup-schedule.js";
@@ -87,6 +80,8 @@ export async function runOnce(
   const dumpName = dumpFileName(stamp);
   const staged = join(deps.stagingDir, dumpName);
   let dumped = false;
+  let encryptedDir: string | undefined;
+  const budget = new ArchiveReadBudget();
   try {
     // Collected before the copy, so a broken state folder fails the tick without copying the
     // whole database.
@@ -97,21 +92,32 @@ export async function runOnce(
         environment: deps.environment,
         now: stamp,
       }),
-      collectStateParts({
-        stateDir: deps.stateDir,
-        modules: deps.modules,
-        resolvers: deps.resolvers,
-      }),
+      collectStateParts(
+        {
+          stateDir: deps.stateDir,
+          modules: deps.modules,
+          resolvers: deps.resolvers,
+        },
+        budget,
+      ),
     ]);
 
-    await mkdir(deps.stagingDir, { recursive: true });
+    budget.addEntry("manifest.json", Buffer.byteLength(JSON.stringify(manifest)));
+    budget.addEntry("db.dump", 0);
+    await mkdir(deps.stagingDir, { recursive: true, mode: 0o700 });
     await deps.archive(staged);
     dumped = true;
     // The whole venue database in plaintext, created under the process umask.
     await chmod(staged, 0o600);
-    const dumpBytes = await readFile(staged);
-    const entries = assembleArchiveEntries(manifest, dumpBytes, parts);
-    const ciphertext = await encryptArtifactAsync(packArchive(entries), deps.recoveryKey);
+    const metadata = assembleArchiveEntries(manifest, null, parts);
+    const entries: ArchiveInputEntry[] = [
+      { kind: "bytes", entry: metadata[0] },
+      { kind: "file", name: "db.dump", path: staged },
+      ...metadata.slice(1).map((entry) => ({ kind: "bytes" as const, entry })),
+    ];
+    encryptedDir = await mkdtemp(join(deps.stagingDir, "backup-encrypt-"));
+    const ciphertext = join(encryptedDir, "artifact");
+    await encryptArtifactFile(packArchiveStream(entries), ciphertext, deps.recoveryKey);
     const key = backupArchiveKey(stamp);
     let anyStored = false;
     await Promise.allSettled(
@@ -119,7 +125,7 @@ export async function runOnce(
         // Separate from the whole try: a prune fault must not record a stored archive as failed.
         let stored = false;
         try {
-          await backend.put(key, ciphertext);
+          await backend.putFile(key, ciphertext);
           stored = true;
           anyStored = true;
           if (deps.outcomes)
@@ -140,6 +146,7 @@ export async function runOnce(
     );
     if (anyStored) deps.onStored?.();
   } finally {
+    if (encryptedDir) await rm(encryptedDir, { recursive: true, force: true });
     if (dumped) await rm(staged, { force: true });
   }
 }

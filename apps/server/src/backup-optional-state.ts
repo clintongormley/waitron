@@ -1,3 +1,4 @@
+import { readArchiveStateFile, type ArchiveReadBudget } from "./archive-read-budget.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -12,11 +13,16 @@ export const OPTIONAL_BACKUP_STATE = ["backup.env", "modules.json"] as const;
 export async function collectOptionalStateFiles(
   stateDir: string,
   names: readonly string[],
+  budget?: ArchiveReadBudget,
 ): Promise<Record<string, string>> {
   const out: Record<string, string> = {};
   for (const name of names) {
     try {
-      out[name] = await readFile(join(stateDir, name), "utf8");
+      out[name] = budget
+        ? (await readArchiveStateFile(join(stateDir, name), budget, `secrets/${name}`)).toString(
+            "utf8",
+          )
+        : await readFile(join(stateDir, name), "utf8");
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
     }

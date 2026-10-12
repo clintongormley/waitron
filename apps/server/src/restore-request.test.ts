@@ -121,9 +121,7 @@ describe("staged restore requests", () => {
     expect(onManagedCloudRestored).not.toHaveBeenCalled();
     expect(restore).toHaveBeenCalledWith(
       expect.objectContaining({
-        // A Buffer, not a bare Uint8Array: `runStagedRestore` hands `restore` exactly what
-        // `readFile` returned, and deep equality here distinguishes the subclass.
-        artifact: Buffer.from([4, 5]),
+        artifactPath: join(stateDir, "restore-request.artifact"),
         recoveryKey: "recovery",
         environment: "preproduction",
         venueDir: "/var/lib/waitron/venue",

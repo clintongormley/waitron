@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { open, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { AppError, hasCode } from "@waitron/shared";
 import {
@@ -15,7 +15,7 @@ import { deploymentEnvironment, resolveConfigDir, type DeploymentEnvironment } f
 import { isUnset } from "./env-value.js";
 import { createLogger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
-import { RESTORE_STAGING_DIR, restoreFromArtifact, type RestoreDeps } from "./restore.js";
+import { RESTORE_STAGING_DIR, restoreFromArtifactFile, type RestoreFileDeps } from "./restore.js";
 import { confirmsVenue, refuseIfArchiveSourceLive, restoreFromStream } from "./restore-stream.js";
 import "./errors.js";
 
@@ -26,7 +26,7 @@ interface CommandDeps {
   argv: string[];
   env: Env;
   out: (line: string) => void;
-  restore?: (args: RestoreDeps) => Promise<void>;
+  restore?: (args: RestoreFileDeps) => Promise<void>;
   restoreStream?: RestoreStream;
   /** Opens the bucket; every call on what it returns is bounded. Default {@link createS3ObjectStore}. */
   openStore?: (bucket: BucketConfig) => ObjectStore;
@@ -73,9 +73,13 @@ export async function runRestore(deps: CommandDeps): Promise<number> {
     return 1;
   }
 
-  let artifact: Uint8Array;
   try {
-    artifact = await readFile(artifactPath);
+    const file = await open(artifactPath, "r");
+    try {
+      if (!(await file.stat()).isFile()) throw new Error("not a file");
+    } finally {
+      await file.close();
+    }
   } catch {
     deps.out(`cannot read artifact file: ${artifactPath}`);
     return 1;
@@ -83,9 +87,9 @@ export async function runRestore(deps: CommandDeps): Promise<number> {
 
   const target = resolveRestoreTarget(deps);
   if (typeof target === "number") return target;
-  const restoreDeps: RestoreDeps = {
+  const restoreDeps: RestoreFileDeps = {
     ...target,
-    artifact,
+    artifactPath,
     recoveryKey,
     checkSourceLive: (validated) =>
       refuseIfArchiveSourceLive({
@@ -97,7 +101,7 @@ export async function runRestore(deps: CommandDeps): Promise<number> {
       }),
   };
 
-  const restore = deps.restore ?? restoreFromArtifact;
+  const restore = deps.restore ?? restoreFromArtifactFile;
   deps.out(
     "cold restore: use only when no peer (mirror or local secondary) survived — a survivor holds more history and is promoted, not overwritten",
   );
@@ -153,7 +157,7 @@ function parseArgs(argv: readonly string[]): ParsedArgs | null {
 }
 
 type RestoreTarget = Pick<
-  RestoreDeps,
+  RestoreFileDeps,
   "stateDir" | "venueDir" | "stagingDir" | "migrationsRoot" | "modules" | "environment" | "log"
 >;
 

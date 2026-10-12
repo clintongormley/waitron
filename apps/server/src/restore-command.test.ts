@@ -14,7 +14,7 @@ import { type ArchiveEntry, packArchive } from "./backup-archive.js";
 import type { BackupManifest } from "./backup-manifest.js";
 import { DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT } from "./boot.js";
 import { ALL_MODULES } from "./modules.js";
-import type { RestoreDeps, ValidatedArtifact } from "./restore.js";
+import type { RestoreFileDeps, ValidatedArtifact } from "./restore.js";
 import { runRestore } from "./restore-command.js";
 import { STREAM_PURPOSE, streamSettingsPayload } from "./stream-host.js";
 import type { restoreFromStream, RestoredVenue } from "./restore-stream.js";
@@ -69,7 +69,7 @@ describe("waitron-restore restore", () => {
     const dir = mkdtempSync(join(tmpdir(), "restore-command-empty-venue-"));
     const artifactPath = await makeArtifact(dir);
     const stateDir = join(dir, "state");
-    let received: RestoreDeps | undefined;
+    let received: RestoreFileDeps | undefined;
     const code = await runRestore({
       argv: ["restore", artifactPath],
       env: {
@@ -90,7 +90,7 @@ describe("waitron-restore restore", () => {
   it("resolves an OVERRIDDEN venue directory to an absolute path", async () => {
     const dir = mkdtempSync(join(tmpdir(), "restore-command-venue-override-"));
     const artifactPath = await makeArtifact(dir);
-    let received: RestoreDeps | undefined;
+    let received: RestoreFileDeps | undefined;
     const code = await runRestore({
       argv: ["restore", artifactPath],
       env: {
@@ -124,7 +124,7 @@ describe("waitron-restore restore", () => {
   it("reads the artifact, resolves default dirs/environment/modules, calls the injected orchestrator, and returns 0", async () => {
     const dir = mkdtempSync(join(tmpdir(), "restore-command-happy-"));
     const artifactPath = await makeArtifact(dir);
-    let received: RestoreDeps | undefined;
+    let received: RestoreFileDeps | undefined;
     const out: string[] = [];
     const code = await runRestore({
       argv: ["restore", artifactPath],
@@ -146,7 +146,9 @@ describe("waitron-restore restore", () => {
     expect(received?.migrationsRoot).toBe(DEFAULT_MIGRATIONS_ROOT);
     expect(received?.modules).toBe(ALL_MODULES);
     expect(received?.environment).toBe("preproduction");
-    expect(Buffer.from(received!.artifact).toString("utf8")).toBe(
+    expect(received!.artifactPath).toBe(artifactPath);
+    const { readFile } = await import("node:fs/promises");
+    expect(await readFile(received!.artifactPath, "utf8")).toBe(
       "not a real artifact, never decrypted in this suite",
     );
     expect(out).toEqual([
@@ -205,7 +207,7 @@ describe("waitron-restore restore", () => {
     const dir = mkdtempSync(join(tmpdir(), "restore-command-overrides-"));
     const artifactPath = await makeArtifact(dir);
     const stateDir = join(dir, "state");
-    let received: RestoreDeps | undefined;
+    let received: RestoreFileDeps | undefined;
     const code = await runRestore({
       argv: ["restore", artifactPath],
       env: {
@@ -858,7 +860,7 @@ describe("waitron-restore restore <artifact>, the old server's bucket", () => {
       ],
     } as unknown as ValidatedArtifact;
     const opened: unknown[] = [];
-    let check: RestoreDeps["checkSourceLive"];
+    let check: RestoreFileDeps["checkSourceLive"];
     await runRestore({
       argv: ["restore", await makeArtifact(dir)],
       env: { WAITRON_STATE_DIR: dir, WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY },
@@ -904,7 +906,7 @@ describe("waitron-restore restore <artifact> and the old server", () => {
         ],
       } as unknown as ValidatedArtifact;
       await writeFile(unreadable.databasePath, "not a database");
-      let check: RestoreDeps["checkSourceLive"];
+      let check: RestoreFileDeps["checkSourceLive"];
       await runRestore({
         argv: ["restore", artifactPath, ...flags],
         env: { WAITRON_STATE_DIR: dir, WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY },

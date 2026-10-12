@@ -1,5 +1,5 @@
 // Every case injects the archive step, which the supervisor binds to the venue store's `archiveTo`.
-import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -59,6 +59,12 @@ class FakeBackend implements StorageBackend {
   async put(key: string, bytes: Uint8Array) {
     if (this.failPut) throw new Error("boom");
     this.objects.set(key, Buffer.from(bytes));
+  }
+  async putFile(key: string, path: string) {
+    await this.put(key, await readFile(path));
+  }
+  async getFile(key: string, path: string) {
+    await writeFile(path, await this.get(key));
   }
   async get(key: string) {
     return this.objects.get(key)!;
@@ -270,6 +276,12 @@ describe("runOnce (fan-out)", () => {
       async put() {
         throw enospc;
       },
+      async putFile(key, path) {
+        await this.put(key, await readFile(path));
+      },
+      async getFile(key, path) {
+        await writeFile(path, await this.get(key));
+      },
       async get() {
         return Buffer.alloc(0);
       },
@@ -318,6 +330,12 @@ describe("runOnce (fan-out)", () => {
       id: "probe",
       async put() {
         observedMode = (await stat(staged)).mode & 0o777;
+      },
+      async putFile(key, path) {
+        await this.put(key, await readFile(path));
+      },
+      async getFile(key, path) {
+        await writeFile(path, await this.get(key));
       },
       async get() {
         return Buffer.alloc(0);

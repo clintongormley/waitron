@@ -324,16 +324,6 @@ Open:
   first start. Publishing the pair through one atomic switch (for example a directory swapped by a
   single rename) would remove this case.
 
-## A copy over 2 GiB cannot be restored
-
-**Task 9b** (#642, `waitron-restore restore --from-bucket`, `apps/server/src/restore-stream.ts`).
-Open:
-
-- Scheduled archive creation still buffers the database, the packed archive and the ciphertext.
-  A516 carries file paths through placement, bucket CLI, setup validation and staged boot.
-  The remaining work streams local archive creation and restoration without changing WBA1/WBK1.
-  The managed Cloud and setup upload limits remain separate.
-
 ## Litestream at trace logging deadlocked sales for five seconds
 
 **A130, A133 and A135 — a sale can wait behind Litestream's own checkpoint (DONE: A130 #868, A133 #889,

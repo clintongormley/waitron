@@ -2491,3 +2491,32 @@ mover. Both cases failed before their fixes; deleting either order in a disposab
 its respective case again. Commands: `pnpm --filter @waitron/server exec vitest run
 src/till-api.station-move.test.ts -t attribution` and the same command with
 `src/station-move.test.ts -t 'latest mover when splitting'`.
+
+
+## Local backup and restore pass database files
+
+A database-sized buffer makes Node's file-read limit a restore limit. Pass the closed staging file
+instead: bucket CLI, setup staging and boot use `databasePath`; archive CLI and boot use
+`restoreFromArtifactFile`. Validation returns one owned database file with `discard`, which callers
+await after placement or refusal. The source-liveness check opens that same file. Borrowed bucket
+validation leaves disposal to its prepared download or staged request.
+
+Scheduled local capture streams WBA1 framing into WBK1 encryption once and passes the completed
+ciphertext file to each destination's `putFile`. Local storage copies inside a private directory,
+sets mode 0600, then renames the completed file to its key; `getFile` uses the same copy boundary.
+File decryption completes GCM authentication before parsing the archive, because the unverified
+plaintext must never reach placement. Metadata reads share limits of 4096 entries, 4096 UTF-8 name
+bytes and 16 MiB total; database chunks are 64 KiB and `db.dump` has no metadata size cap.
+
+The real SQLite roundtrip in `apps/server/src/restore-artifact-file.test.ts` captures through the
+scheduled sweep, stores and retrieves through the local file backend, then runs default placement,
+migrations and hooks and checks rows and secrets. Its CLI and boot cases forbid whole-artifact
+reads; a held SQLite lock retains the staged archive for a successful retry. The companion sweep
+and collection suites check identical destination ciphertext, failure isolation, modes, cleanup
+and growing metadata files. Run `pnpm --filter @waitron/server exec vitest run
+src/restore-artifact-file.test.ts src/backup-sweep-file.test.ts src/archive-read-budget.test.ts
+src/local-fs-backend.test.ts`.
+
+Sparse 2147487744-byte placement and codec tests check size, offsets and edge bytes. They do not
+measure integrity checks or cryptographic throughput over a valid SQLite database that large.
+Managed Cloud's 512 MiB and setup upload's 256 MiB limits remain separate from this local file path.

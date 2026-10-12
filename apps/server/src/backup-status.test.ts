@@ -10,6 +10,8 @@ import type { StorageBackend, StoredObject } from "./storage-backend.js";
 const backend = (id: string, newestMtimeMs: number | null): StorageBackend => ({
   id,
   put: async () => {},
+  putFile: async () => {},
+  getFile: async () => {},
   get: async () => Buffer.alloc(0),
   delete: async () => {},
   list: async (): Promise<StoredObject[]> =>

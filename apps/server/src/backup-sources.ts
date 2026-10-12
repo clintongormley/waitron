@@ -1,3 +1,4 @@
+import { readArchiveStateFile, type ArchiveReadBudget } from "./archive-read-budget.js";
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { AppError } from "@waitron/shared";
@@ -19,6 +20,7 @@ const CONCURRENCY = 64;
 export async function collectModuleNonDbState(
   modules: readonly WaitronModule[],
   resolvers: Record<string, string>,
+  budget?: ArchiveReadBudget,
 ): Promise<ArchiveEntry[]> {
   const entries: ArchiveEntry[] = [];
   for (const mod of modules) {
@@ -46,6 +48,14 @@ export async function collectModuleNonDbState(
         .filter((d) => d.isFile())
         .map((d) => d.name)
         .sort();
+      if (budget) {
+        for (const name of names)
+          entries.push({
+            name: `${ref.source}/${name}`,
+            bytes: await readArchiveStateFile(join(dir, name), budget, `${ref.source}/${name}`),
+          });
+        continue;
+      }
       for (let i = 0; i < names.length; i += CONCURRENCY) {
         const chunk = names.slice(i, i + CONCURRENCY);
         const blobs = await Promise.all(chunk.map((name) => readFile(join(dir, name))));

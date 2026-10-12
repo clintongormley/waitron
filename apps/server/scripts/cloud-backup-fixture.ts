@@ -74,6 +74,12 @@ if (request.command === "capture") {
           async put(_key, bytes) {
             artifact = bytes;
           },
+          async putFile(_key, path) {
+            artifact = await readFile(path);
+          },
+          async getFile() {
+            throw new Error("Capture does not read from its destination");
+          },
           async get() {
             throw new Error("Capture does not read from its destination");
           },

@@ -43,6 +43,8 @@ import { isUnset } from "./env-value.js";
 import { errnoOf } from "./errno.js";
 import { type ArchiveEntry, unpackArchive } from "./backup-archive.js";
 import { decryptArtifact } from "./artifact-cipher.js";
+import { decryptArtifactFile } from "./artifact-cipher-file.js";
+import { unpackArchiveFile } from "./backup-archive-file.js";
 import type { BackupManifest } from "./backup-manifest.js";
 import type { DeploymentEnvironment } from "./config.js";
 import type { Logger } from "./logger.js";
@@ -316,7 +318,10 @@ async function lockRestoreTarget(directory: string): Promise<VenueLock> {
  * restore, migrate, run the module hooks in one transaction and write the artifact's secrets last.
  */
 export async function restoreFromArtifact(deps: RestoreDeps): Promise<void> {
-  const validated = await validateArtifact(deps);
+  return restoreOwned(await validateArtifact(deps), deps);
+}
+
+async function restoreOwned(validated: ValidatedArtifact, deps: PlacementDeps): Promise<void> {
   try {
     if (!deps.skipSecrets) await deps.checkSourceLive?.(validated);
     await writeValidated(
@@ -691,4 +696,31 @@ export async function runRestoreHooks(args: {
 async function openVenue(directory: string): Promise<{ db: Database; close(): Promise<void> }> {
   const store = await openVenueDatabase(directory);
   return { db: store.venue, close: () => store.close() };
+}
+
+export type RestoreFileDeps = Omit<RestoreDeps, "artifact"> & { readonly artifactPath: string };
+export type ValidationFileDeps = Omit<ValidationDeps, "artifact"> & {
+  readonly artifactPath: string;
+};
+export async function validateArtifactFile(deps: ValidationFileDeps): Promise<ValidatedArtifact> {
+  await mkdir(deps.stagingDir, { recursive: true, mode: 0o700 });
+  const scratch = await mkdtemp(join(deps.stagingDir, "archive-validate-"));
+  const discard = () => rm(scratch, { recursive: true, force: true });
+  const plaintext = join(scratch, "plaintext");
+  try {
+    await decryptArtifactFile(deps.artifactPath, plaintext, deps.recoveryKey);
+    const inputs = await unpackArchiveFile(plaintext, scratch);
+    await rm(plaintext);
+    const entries = inputs.map((input) =>
+      input.kind === "bytes" ? input.entry : { name: input.name, bytes: new Uint8Array() },
+    );
+    const { manifest, secretEntries } = await validateEntryMetadata(entries, deps);
+    return { manifest, secretEntries, databasePath: join(scratch, VENUE_FILE), discard };
+  } catch (error) {
+    await discard();
+    throw error;
+  }
+}
+export async function restoreFromArtifactFile(deps: RestoreFileDeps): Promise<void> {
+  return restoreOwned(await validateArtifactFile(deps), deps);
 }
