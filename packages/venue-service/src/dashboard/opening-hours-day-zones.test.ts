@@ -5,6 +5,12 @@ import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { OpeningHoursApi } from "./opening-hours-client.js";
 import type { SpecialDaysModel } from "../holiday-types.js";
 import { realWeekModel, namedWeekModel } from "../testing/real-week-model.js";
+import {
+  PARTY_DATE,
+  everyDateSpecial,
+  paintDayRequest,
+  type Recorded,
+} from "../testing/special-day-fixture.js";
 import "./opening-hours-screen.js";
 let screen: HTMLElementTagNameMap["dashboard-opening-hours-screen"];
 const original = location.href;
@@ -50,17 +56,19 @@ function fixture() {
 async function mount(
   write: (path: string, method: string, body: unknown) => Promise<unknown> = async () => {},
   model = fixture(),
-  named: () => Promise<SpecialDaysModel> = async () => namedWeekModel(),
+  named?: () => Promise<SpecialDaysModel>,
 ) {
   screen = document.createElement("dashboard-opening-hours-screen");
   screen.api = new OpeningHoursApi(
     withOpeningStations((async (path, method, body) =>
       method === "GET"
         ? path.includes("named-days?")
-          ? named()
-          : path.endsWith("/special-days")
-            ? []
-            : structuredClone(model)
+          ? (named?.() ?? everyDateSpecial(path))
+          : /\/special-days\/day-/.test(path)
+            ? everyDateSpecial(path)
+            : path.endsWith("/special-days")
+              ? []
+              : structuredClone(model)
         : write(path, method, body)) as DashboardRequest),
   );
   applyTokens(screen);
@@ -565,4 +573,71 @@ it("reads a zone's season weeks once per reseed, not once per weekday", async ()
   ]);
   expect(reads).toBeGreaterThan(0);
   expect(reads).toBeLessThan(7);
+});
+
+async function mountPaint(request: DashboardRequest) {
+  vi.setSystemTime(new Date("2026-10-13T12:00:00Z"));
+  screen = document.createElement("dashboard-opening-hours-screen");
+  screen.api = new OpeningHoursApi(request);
+  applyTokens(screen);
+  document.body.append(screen);
+  await expect.poll(() => screen.shadowRoot?.querySelector("opening-hours-day")).not.toBeNull();
+  const day = screen.shadowRoot!.querySelector("opening-hours-day")!;
+  await expect.poll(() => save(day)?.disabled).toBe(true);
+  return day;
+}
+const shortenTerrace = (day: HTMLElementTagNameMap["opening-hours-day"]) =>
+  emit(grid(day), "grid-block-change", {
+    columnKey: "zone:terrace",
+    index: 0,
+    startsAt: "23:00",
+    endsAt: "23:30",
+  });
+
+it("on a special date saves the Terrace's later closing as open zone paint and no department paint", async () => {
+  const writes: Recorded[] = [];
+  const day = await mountPaint(paintDayRequest(writes));
+  shortenTerrace(day);
+  await day.updateComplete;
+  save(day).click();
+  await expect.poll(() => writes.length).toBe(1);
+  expect(writes).toEqual([
+    {
+      path: "/management-api/venue-service/special-days/party",
+      method: "PUT",
+      body: {
+        name: "Party",
+        repeatsYearly: false,
+        dates: [{ date: PARTY_DATE, closedAllDay: false }],
+        zonePaint: [
+          {
+            zoneId: "terrace",
+            date: PARTY_DATE,
+            ranges: [{ kind: "open", startsAt: "22:00", endsAt: "23:00" }],
+          },
+        ],
+        expectedClockRevision: 4,
+      },
+    },
+  ]);
+});
+
+it("shows a refusal naming a zone's date beside that zone only", async () => {
+  const writes: Recorded[] = [];
+  const day = await mountPaint(
+    paintDayRequest(writes, async () => {
+      throw {
+        code: "special_day.invalid",
+        params: { field: "zonePaint.0.date" },
+      };
+    }),
+  );
+  shortenTerrace(day);
+  await day.updateComplete;
+  save(day).click();
+  await expect
+    .poll(() => day.shadowRoot!.querySelector("[data-zone-error=terrace]"))
+    .not.toBeNull();
+  expect(day.shadowRoot!.querySelector("[data-department-error]")).toBeNull();
+  expect(save(day).disabled).toBe(false);
 });

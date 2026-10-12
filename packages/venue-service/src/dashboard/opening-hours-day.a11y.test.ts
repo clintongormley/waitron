@@ -1,3 +1,4 @@
+import { everyDateSpecial } from "../testing/special-day-fixture.js";
 import { withOpeningStations } from "../testing/opening-hours-stations-request.js";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
@@ -33,9 +34,11 @@ describe.each(["light", "dark"] as const)("Opening Day (%s)", (theme) => {
     const screen = document.createElement("dashboard-opening-hours-screen");
     screen.readOnly = state === "viewer";
     screen.api = new OpeningHoursApi(
-      withOpeningStations((async (_, method) => {
+      withOpeningStations((async (path, method) => {
         if (method !== "GET")
-          throw { code: "menu_timetable.invalid", params: { field: "days.1.slots" } };
+          throw { code: "special_day.invalid", params: { field: "paint.0.ranges" } };
+        const special = everyDateSpecial(path);
+        if (special) return special;
         return {
           businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
           clockRevision: 0,

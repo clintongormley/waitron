@@ -1,3 +1,4 @@
+import { everyDateSpecial } from "../testing/special-day-fixture.js";
 import { withOpeningStations } from "../testing/opening-hours-stations-request.js";
 import { LitElement, html } from "lit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -19,6 +20,8 @@ class DayLeaveApp extends LitElement {
         return;
       }
       if (this.failRead) throw new Error("offline");
+      const special = everyDateSpecial(path);
+      if (special) return special;
       return {
         businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
         clockRevision: 0,
