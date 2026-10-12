@@ -239,8 +239,7 @@ function integratedDeps(
   return { deps: { db: app, backend, clock, provider, readerRef: "reader_1" }, client };
 }
 
-/** A provider that runs `onCollect` (to simulate a concurrent settle) then returns a canned result —
- * for the finalize-time backstop tests, where the point is the DB state at P3, not the reader. */
+/** A provider that runs `onCollect`, then returns a canned result. */
 function cannedProvider(
   onCollect: () => Promise<void>,
   state: PaymentResultState,

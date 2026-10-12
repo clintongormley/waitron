@@ -74,7 +74,6 @@ function collect(id: string, tender: { method: "cash" | "card"; amount: string }
   return send(venue.app, venue.cookie2, "POST", `/api/working-orders/${id}/collect`, { tender });
 }
 
-/** Everything a payment could write, across the venue, so a refusal can be shown to write none. */
 function snapshot() {
   return venue.db.all(sql`
     select
