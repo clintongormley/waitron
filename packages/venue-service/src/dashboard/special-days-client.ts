@@ -1,7 +1,7 @@
 import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
 import type { SpecialDaysModel } from "../holiday-types.js";
 import type { LocalDate } from "../hours-types.js";
-import type { SpecialDayDetail } from "../special-days.js";
+import type { SpecialDayDetail, SpecialDaySummary } from "../special-days.js";
 import type { SpecialDayFacts } from "./special-day-dialog.js";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
 import { ModelWatches } from "./model-watch.js";
@@ -37,6 +37,9 @@ export class SpecialDaysApi {
       failed,
       recovered,
     );
+  }
+  listSpecialDays(): Promise<SpecialDaySummary[]> {
+    return this.request<SpecialDaySummary[]>(`${BASE}/special-days`, "GET");
   }
   readSpecialDay(id: string): Promise<SpecialDayDetail> {
     return this.request<SpecialDayDetail>(`${BASE}/special-days/${encodeURIComponent(id)}`, "GET");

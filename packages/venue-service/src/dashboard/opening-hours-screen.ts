@@ -51,6 +51,8 @@ type OpenSpecialDay = Omit<SpecialDayAction, "specialDay"> & {
   clockRevision: number;
   /** The stored special day holding the date, read when the action opened. */
   detail?: SpecialDayDetail;
+  /** The venue's special days, read when the action opened on a public holiday. */
+  existing?: { id: string; name: string; latest?: string }[];
 };
 type Deletion = { period: Period };
 
@@ -140,7 +142,9 @@ export class OpeningHoursScreen extends LitElement {
   private followUrl() {
     if (this.url.read("dashboard") !== "opening-hours") return;
     const view = this.url.read("view");
-    this.view = view === "periods" || view === "day" || view === "calendar" ? view : "week";
+    const shown = view === "periods" || view === "day" || view === "calendar" ? view : "week";
+    if (shown !== this.view) this.specialReadError = "";
+    this.view = shown;
     this.departmentId = this.url.read("department") ?? "";
     this.zoneId = this.url.read("zone") ?? "";
     this.requestedSeason = this.url.read("season") ?? "";
@@ -607,15 +611,25 @@ export class OpeningHoursScreen extends LitElement {
     };
     this.namedDeleteError = "";
     this.specialReadError = "";
-    if (!specialDay) {
+    const onHoliday = action.holidays.some((holiday) => holiday.date === action.date);
+    if (!specialDay && !onHoliday) {
       this.namedAction = action;
       return;
     }
     const generation = this.generation;
     this.busy = true;
-    let stored: SpecialDayDetail;
+    let opened: OpenSpecialDay;
     try {
-      stored = await this.api.specialDays.readSpecialDay(specialDay.id);
+      opened = specialDay
+        ? { ...action, detail: await this.api.specialDays.readSpecialDay(specialDay.id) }
+        : {
+            ...action,
+            existing: (await this.api.specialDays.listSpecialDays()).map((day) => ({
+              id: day.id,
+              name: day.name,
+              latest: day.dates.at(-1)?.date,
+            })),
+          };
     } catch {
       if (this.isConnected && generation === this.generation)
         this.specialReadError = t("opening.load_error");
@@ -624,7 +638,7 @@ export class OpeningHoursScreen extends LitElement {
       if (generation === this.generation) this.busy = false;
     }
     if (!this.isConnected || generation !== this.generation || this.namedAction) return;
-    this.namedAction = { ...action, detail: stored };
+    this.namedAction = opened;
   }
   private closeNamedDay(action: OpenSpecialDay) {
     if (!this.isConnected || this.namedAction !== action || this.busy) return;
@@ -782,7 +796,7 @@ export class OpeningHoursScreen extends LitElement {
         .open=${true}
         .specialDay=${action.detail}
         .date=${action.date}
-        .holidays=${action.holidays}
+        .holidays=${[...action.holidays, ...(action.visibleHolidays ?? [])]}
         .existing=${action.existing ?? []}
         .busy=${this.busy}
         @special-day-save=${this.saveNamedDay}

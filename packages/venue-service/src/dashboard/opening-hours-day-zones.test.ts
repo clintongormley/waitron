@@ -58,7 +58,9 @@ async function mount(
       method === "GET"
         ? path.includes("named-days?")
           ? named()
-          : structuredClone(model)
+          : path.endsWith("/special-days")
+            ? []
+            : structuredClone(model)
         : write(path, method, body)) as DashboardRequest),
   );
   applyTokens(screen);
@@ -366,6 +368,7 @@ it("waits for the shown date's calendar facts and prefills a public holiday's na
           answer = resolve;
         });
       }
+      if (path.endsWith("/special-days")) return [];
       return fixture();
     }) as DashboardRequest),
   );

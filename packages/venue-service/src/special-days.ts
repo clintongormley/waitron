@@ -378,8 +378,21 @@ export interface SpecialDayInput {
   zonePaint?: readonly { zoneId: string; date: LocalDate; ranges: readonly ZonePaint[] }[];
 }
 
-export interface SpecialDayDetail extends Omit<SpecialDayInput, "paint" | "zonePaint"> {
+/** A stored date; `holidayName` is the public holiday it was saved on, absent on an ordinary date. */
+export interface StoredSpecialDayDate {
+  date: LocalDate;
+  closedAllDay: boolean;
+  holidayName?: string;
+}
+
+export interface SpecialDaySummary {
   id: string;
+  name: string;
+  repeatsYearly: boolean;
+  dates: StoredSpecialDayDate[];
+}
+
+export interface SpecialDayDetail extends SpecialDaySummary {
   paint: { departmentId: string; date: LocalDate; ranges: PaintRange[] }[];
   zonePaint: { zoneId: string; date: LocalDate; ranges: ZonePaint[] }[];
 }
@@ -751,6 +764,51 @@ async function checkScheduleAfterWrite(
     });
 }
 
+const storedDate = (row: {
+  date: LocalDate;
+  closedAllDay: boolean;
+  holidayName: string | null;
+}): StoredSpecialDayDate => ({
+  date: row.date,
+  closedAllDay: row.closedAllDay,
+  ...(row.holidayName === null ? {} : { holidayName: row.holidayName }),
+});
+
+/** Every special day of the venue with its dates, by name then id; no paint. */
+export async function listSpecialDays(
+  tx: Transaction,
+  cfg: VenueScope,
+): Promise<SpecialDaySummary[]> {
+  const days = await tx
+    .select({
+      id: specialDays.id,
+      name: specialDays.name,
+      repeatsYearly: specialDays.repeatsYearly,
+    })
+    .from(specialDays)
+    .where(eq(specialDays.locationId, cfg.locationId))
+    .orderBy(asc(specialDays.name), asc(specialDays.id));
+  if (days.length === 0) return [];
+  const dates = await tx
+    .select({
+      specialDayId: specialDayDates.specialDayId,
+      date: specialDayDates.date,
+      closedAllDay: specialDayDates.closedAllDay,
+      holidayName: specialDayDates.holidayName,
+    })
+    .from(specialDayDates)
+    .where(
+      inArray(
+        specialDayDates.specialDayId,
+        days.map((day) => day.id),
+      ),
+    )
+    .orderBy(asc(specialDayDates.date));
+  const byDay = new Map(days.map((day) => [day.id, [] as StoredSpecialDayDate[]]));
+  for (const row of dates) byDay.get(row.specialDayId)!.push(storedDate(row));
+  return days.map((day) => ({ ...day, dates: byDay.get(day.id)! }));
+}
+
 export async function readSpecialDay(
   tx: Transaction,
   cfg: VenueScope,
@@ -762,6 +820,7 @@ export async function readSpecialDay(
       id: specialDayDates.id,
       date: specialDayDates.date,
       closedAllDay: specialDayDates.closedAllDay,
+      holidayName: specialDayDates.holidayName,
     })
     .from(specialDayDates)
     .where(eq(specialDayDates.specialDayId, id))
@@ -771,7 +830,7 @@ export async function readSpecialDay(
     id: day.id,
     name: day.name,
     repeatsYearly: day.repeatsYearly,
-    dates: dates.map((row) => ({ date: row.date, closedAllDay: row.closedAllDay })),
+    dates: dates.map(storedDate),
     paint: [],
     zonePaint: [],
   };

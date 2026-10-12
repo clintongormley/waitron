@@ -54,7 +54,9 @@ async function mount(
       method === "GET"
         ? path.includes("named-days?")
           ? named()
-          : structuredClone(data)
+          : path.endsWith("/special-days")
+            ? []
+            : structuredClone(data)
         : write(path, method, body)) as DashboardRequest),
   );
   applyTokens(screen);

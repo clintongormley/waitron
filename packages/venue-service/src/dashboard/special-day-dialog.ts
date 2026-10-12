@@ -13,7 +13,6 @@ import {
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-input.js";
-import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -112,7 +111,12 @@ export class SpecialDayDialog extends LitElement {
   /** The public holidays the host knows of, for the pre-fill and the holiday-name note. */
   @property({ attribute: false }) holidays: readonly HolidayFact[] = [];
   /** Special days the host knows of, for the "Add to <name>" offer. */
-  @property({ attribute: false }) existing: readonly { id: string; name: string }[] = [];
+  /** Special days the host knows of, for the "Add to <name>" offer; `latest` is a day's last date. */
+  @property({ attribute: false }) existing: readonly {
+    id: string;
+    name: string;
+    latest?: LocalDate;
+  }[] = [];
   @property({ attribute: false }) refusal?: { code: string; params?: Record<string, unknown> };
   @state() private draft: SpecialDayFacts = { name: "", repeatsYearly: false, dates: [] };
   @state() private attempted = false;
@@ -127,6 +131,8 @@ export class SpecialDayDialog extends LitElement {
   private dayId?: string;
   private baseline?: SpecialDayFacts;
   private savableAtOpen = false;
+  /** The public holiday each stored date was saved on. */
+  private storedHolidays = new Set<LocalDate>();
   private generation = {};
   private submittedGeneration?: object;
 
@@ -163,13 +169,18 @@ export class SpecialDayDialog extends LitElement {
         ? {
             name: this.specialDay.name,
             repeatsYearly: this.specialDay.repeatsYearly,
-            dates: byDate(this.specialDay.dates.map((entry) => ({ ...entry }))),
+            dates: byDate(
+              this.specialDay.dates.map(({ date, closedAllDay }) => ({ date, closedAllDay })),
+            ),
           }
         : {
             name: holiday,
             repeatsYearly: false,
             dates: isLocalDate(this.date) ? [{ date: this.date, closedAllDay: false }] : [],
           };
+      this.storedHolidays = new Set(
+        (this.specialDay?.dates ?? []).flatMap((entry) => (entry.holidayName ? [entry.date] : [])),
+      );
       this.savableAtOpen = !this.specialDay && holiday !== "";
       this.offered = holiday !== "" && this.existing.some((day) => day.name === holiday);
       this.baseline = copy(this.draft);
@@ -220,6 +231,11 @@ export class SpecialDayDialog extends LitElement {
           name: String(params.name ?? ""),
           date: formatDate(params.date as LocalDate),
         });
+      if (this.refusal?.params?.reason === "overlap") {
+        const index = Number(String(params.field).split(".")[1]);
+        const date = this.draft.dates[index]?.date;
+        if (date) return format("special.date_meets", { date: formatDate(date) });
+      }
       return t("special.field_refused");
     }
     return this.attempted ? (this.ownErrors[field] ?? "") : "";
@@ -300,11 +316,36 @@ export class SpecialDayDialog extends LitElement {
     const outcome = await this.leave.request({ scopes: [this.scope.id], reason, proceed() {} });
     return this.isConnected && generation === this.generation && outcome === "proceeded";
   };
+  /** The same-named special day with the latest date; on a tie, the lowest id. */
+  private offerMatch() {
+    const name = this.draft.name;
+    return this.existing
+      .filter((day) => day.name === name)
+      .sort((a, b) =>
+        (a.latest ?? "") !== (b.latest ?? "")
+          ? (a.latest ?? "") < (b.latest ?? "")
+            ? 1
+            : -1
+          : a.id < b.id
+            ? -1
+            : 1,
+      )[0]!;
+  }
   private offer(current: () => boolean) {
     const name = this.draft.name;
-    const match = this.existing.find((day) => day.name === name)!;
+    const match = this.offerMatch();
+    const params = this.refusal?.params ?? {};
+    const refused = !this.refusal
+      ? ""
+      : this.refusal.code === "special_day.date_taken" && isLocalDate(params.date)
+        ? format("special.date_taken", {
+            name: String(params.name ?? ""),
+            date: formatDate(params.date as LocalDate),
+          })
+        : t("prep.save_error");
     return html`<div class="form">
       <p>${format("special.offer", { name })}</p>
+      ${refused ? html`<p class="error" role="alert" data-error="offer">${refused}</p>` : nothing}
       <div class="offer">
         <wt-button
           data-test="add-to"
@@ -407,6 +448,7 @@ export class SpecialDayDialog extends LitElement {
                 name="addTo"
                 type="date"
                 label=${t("special.to")}
+                hint=${t("special.to_hint")}
                 .value=${this.addTo}
                 .error=${this.addErrors.to ?? ""}
                 ?disabled=${this.busy}
@@ -448,7 +490,9 @@ export class SpecialDayDialog extends LitElement {
     const current = () =>
       this.isConnected && this.open && !this.busy && generation === this.generation;
     const holidayDates = new Set(this.holidays.map((holiday) => holiday.date));
-    const onHoliday = this.draft.dates.some((entry) => holidayDates.has(entry.date));
+    const onHoliday = this.draft.dates.some(
+      (entry) => holidayDates.has(entry.date) || this.storedHolidays.has(entry.date),
+    );
     const leap =
       this.draft.repeatsYearly && this.draft.dates.some((entry) => entry.date.endsWith("-02-29"));
     const repeatError = this.error("repeatsYearly");
@@ -494,26 +538,22 @@ export class SpecialDayDialog extends LitElement {
                 ></wt-input>
                 ${this.datesField(current)}
                 <div>
-                  <wt-combobox
-                    name="repeatsYearly"
+                  <wt-switch
+                    name="repeats"
                     label=${t("special.every_year")}
-                    search="never"
-                    .value=${this.draft.repeatsYearly ? "yes" : "no"}
-                    .error=${repeatError}
-                    .options=${[
-                      { value: "no", label: t("special.no") },
-                      { value: "yes", label: t("special.yes") },
-                    ]}
+                    .checked=${this.draft.repeatsYearly}
+                    .description=${repeatError}
                     ?disabled=${this.busy}
-                    @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                    @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
                       event.stopPropagation();
                       if (current())
                         this.update_(
-                          { ...this.draft, repeatsYearly: event.detail.value === "yes" },
+                          { ...this.draft, repeatsYearly: event.detail.checked },
                           "repeatsYearly",
                         );
                     }}
-                  ></wt-combobox>
+                  ></wt-switch>
+                  ${repeatError ? html`<p class="error" role="alert" data-error="repeats">${repeatError}</p>` : nothing}
                   ${onHoliday ? html`<p class="note" data-test="holiday-note">${t("special.holiday_note")}</p>` : nothing}
                   ${leap ? html`<p class="note">${t("special.leap")}</p>` : nothing}
                 </div>

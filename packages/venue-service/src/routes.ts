@@ -78,7 +78,12 @@ import {
 import "./errors.js";
 import { replaceZoneClosedWeek, saveZoneClosedDate } from "./zone-closed-times.js";
 import { parseEndOffsetMinutes } from "./period-end-offset.js";
-import { deleteSpecialDay, readSpecialDay, saveSpecialDay } from "./special-days.js";
+import {
+  deleteSpecialDay,
+  listSpecialDays,
+  readSpecialDay,
+  saveSpecialDay,
+} from "./special-days.js";
 
 const STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.required": 401,
@@ -505,6 +510,13 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       "zonePaint",
       "expectedClockRevision",
     ] as const;
+
+    app.get("/management-api/venue-service/special-days", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        return c.json(await viewed(sessionId, (tx) => listSpecialDays(tx, ctx.cfg)));
+      }),
+    );
 
     app.get("/management-api/venue-service/special-days/:id", (c) =>
       run(c, log, async () => {

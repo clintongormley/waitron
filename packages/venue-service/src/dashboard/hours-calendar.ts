@@ -27,8 +27,8 @@ export interface SpecialDayAction {
   /** Absent when the sender does not know; the host then looks the date up itself. */
   specialDay?: SpecialDayRef | null;
   holidays: readonly HolidayFact[];
-  /** Special days the sender has read, for the dialog's "Add to <name>" offer. */
-  existing?: readonly SpecialDayRef[];
+  /** Every public holiday the sender shows, for the dialog's note on dates added there. */
+  visibleHolidays?: readonly HolidayFact[];
   returnTo: () => HTMLElement | null;
 }
 
@@ -546,13 +546,6 @@ export class HoursCalendar extends LitElement {
     if (!date) return html`<p>${t("hours.calendar.pick")}</p>`;
     const entry = model.days.find((day) => day.date === date);
     const day = entry?.specialDay ?? null;
-    const existing = [
-      ...new Map(
-        model.days.flatMap((other) =>
-          other.specialDay ? [[other.specialDay.id, other.specialDay] as const] : [],
-        ),
-      ).values(),
-    ];
     const action = (kind: SpecialDayAction["kind"], test: string, label: Key) =>
       html`<wt-button
         variant="secondary"
@@ -568,7 +561,7 @@ export class HoursCalendar extends LitElement {
                 date,
                 specialDay: day ? { ...day } : null,
                 holidays: structuredClone(entry?.holidays ?? []),
-                existing: structuredClone(existing),
+                visibleHolidays: structuredClone(model.days.flatMap((other) => other.holidays)),
                 returnTo: () => (trigger.isConnected ? trigger : this.#dayButton(date)),
               },
               bubbles: true,

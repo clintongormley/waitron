@@ -30,7 +30,7 @@ import {
   specialDayDates,
   specialDays,
 } from "./schema/seasons.js";
-import { saveSpecialDay, specialDaysOn } from "./special-days.js";
+import { listSpecialDays, readSpecialDay, saveSpecialDay, specialDaysOn } from "./special-days.js";
 
 /** Calls to the invented calendar's `read`, so a test can count the holiday-list reads. */
 const reads = vi.hoisted(() => ({ count: 0 }));
@@ -186,6 +186,25 @@ describe("a special-day date records the public holiday it was saved on", () => 
     ).toEqual([
       { date: "2026-04-03", holidayName: "Viernes Santo" },
       { date: "2026-04-04", holidayName: null },
+    ]);
+  });
+});
+
+describe("reading a special day gives each date's stored holiday name", () => {
+  it("names the holiday on a holiday date and leaves an ordinary date without one, in one read and the list", async () => {
+    const v = await venue();
+    const day = await save(v, {
+      name: "Semana Santa",
+      repeatsYearly: false,
+      dates: dates(["2026-04-03", "2026-04-04"]),
+    });
+    const expected = [
+      { date: "2026-04-03", closedAllDay: false, holidayName: "Viernes Santo" },
+      { date: "2026-04-04", closedAllDay: false },
+    ];
+    expect((await scoped((tx) => readSpecialDay(tx, v.cfg, day.id))).dates).toEqual(expected);
+    expect(await scoped((tx) => listSpecialDays(tx, v.cfg))).toEqual([
+      { id: day.id, name: "Semana Santa", repeatsYearly: false, dates: expected },
     ]);
   });
 });

@@ -256,3 +256,15 @@ it("a Calendar reread leaves a station-only observer's snapshot alone", async ()
     station.unsubscribe();
   }
 });
+it("lists the venue's special days with one GET", async () => {
+  const requests: unknown[][] = [];
+  const list = [{ id: "a", name: "Navidad", repeatsYearly: false, dates: facts.dates }];
+  const api = new clients.SpecialDaysApi((async (path, method, body, options) => {
+    requests.push([path, method, body, options]);
+    return list;
+  }) as DashboardRequest);
+  expect(await api.listSpecialDays()).toEqual(list);
+  expect(requests).toEqual([
+    ["/management-api/venue-service/special-days", "GET", undefined, undefined],
+  ]);
+});
