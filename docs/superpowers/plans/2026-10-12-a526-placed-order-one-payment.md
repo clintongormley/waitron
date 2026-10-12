@@ -580,13 +580,16 @@ fresh counter zone as the cancel suite's "placed order with no invoice" cases do
   and Task 1's case 3 too; restore.
 
 - [ ] **Step 6: Commit.** "A second card payment of a placed order is refused while the first is in
-  flight (A526)", with the failing run and the deletion runs in the body. (The C126 "two cards" case
-  and `till-sale-integrated.db.test.ts` ~1519 now fail; Task 2b handles them. If the task must end
-  green, do Task 2b's Steps 4–5 here instead and say so.)
+  flight (A526)", with the failing run and the deletion runs in the body. Before committing, do
+  Task 2b's Steps 4–5 here (the rewrite of `till-sale-integrated.db.test.ts` ~1519 and the deletion
+  of the C126 "two cards" case in `cancel-invoiced-order.test.ts` ~1494), so this task ends green;
+  run the Task 2b Step 6 command and read the `Tests` count. Name both test changes in the body.
 
 ---
 
-## Task 2b: Pin the hold inside P1; the plain hold entry; the two cases that pinned two payments
+## Task 2b: Pin the hold inside P1; the plain hold entry
+
+(Steps 4–5 are done in Task 2a Step 6, so every task commits green; they stay here as the text Task 2a follows.)
 
 **Files:**
 - Modify: `apps/server/src/placed-order-one-payment.test.ts`, `apps/server/src/till-sale.ts`
@@ -666,6 +669,10 @@ fresh counter zone as the cancel suite's "placed order with no invoice" cases do
   `db: Database`. After `await refusePaymentInFlight(tx, [...openIds]);` (~101), for each owing bill
   whose `status` is `placed`, in turn: `await refusePlacedPaymentInFlight(deps.db, tx,
   bill.workingOrderId);` (import it from `./till-sale.js`, which this file already imports from).
+  Then fix the doc comment's refusal list (`unpaid-departure.ts` ~52–57, "Refused, writing nothing:
+  …"): it already omits the open bill's `order.payment_in_flight`; add `order.payment_in_flight` for
+  an open or a presented bill whose card payment is in flight, or delete the list if it cannot be
+  kept whole (prefer deleting).
 - [ ] **Step 4: Run the file.** All cases pass, the existing ones included.
 - [ ] **Step 5: Prove it by deletion.** Remove the new loop: cases 1–2 fail; restore.
 - [ ] **Step 6: Check the till shows it.** Read `#onDepartureRefused` (`apps/till/src/till-app.ts`
