@@ -228,6 +228,16 @@ current register state. Bundle, adoption and promotion integration remain open. 
 still authenticate the administrator, isolate the old box, rule out parallel recovery and check
 outside consumption before atomic activation. All three invoice purposes stay separate.
 
+**2026-10-12, internal host authority:** a new server helper checks the actual administrator
+password, authenticator and permission before issuing authority for one module/action/event/source/
+target. Its authentication transaction ends before the operation callback. New internal fiscal
+wrappers require that authority and recheck it after awaited reads, before writes or replay.
+The synthetic integration case combines real authentication, dormant activation and the existing
+role/membership transaction; a refused membership write rolls those rows back together. The
+wrappers are not in the fiscal public barrel and no boot or HTTP entry point uses them yet.
+They authenticate an operator, not an outside register. Initial setup, CLI recovery and break-glass
+adapters, outside continuity, text SIF/counter retirement and all host replacements remain open.
+
 **2026-10-12, Task 5:** invoice issuance reads the live series inside its transaction.
 Startup, development seeds, mirror bundles and saved trading identity carry node and location
 without a cached invoice-series id. Restore still checks live standard and full series before

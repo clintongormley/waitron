@@ -347,6 +347,30 @@ SIF text typing, counter retirement and every setup/seed/restore/bundle/adoption
 consumer remain coupled work; current-main rebase and final schema regeneration still remain.
 Task 4 is incomplete and has no publication candidate.
 
+**2026-10-12 authenticated-host checkpoint:** `@waitron/module` now carries an in-process operator
+authority bound to a module, action, event, source and target. The trusted host must authenticate
+before issuance; the carrier performs no login and proves no outside-register fact. Its authority
+expires when its operation callback settles, including on refusal. The internal server helper
+checks the actual manager password before opening its authentication transaction, checks the
+authenticator and permission there, ends the temporary login session, then issues authority to
+the operation callback. Its database cases cover changed account status and permission during
+the check, malformed credentials and scope mutation.
+
+The internal fiscal wrappers require the issued authority, match its operator and scope, and
+recheck it after awaited reads before a new activation's writes or a replay return. A plain
+`reauthentication` object no longer suffices for these wrappers. A synthetic integration case
+uses the real authentication helper, signed retained reservation and separate consumption with
+the existing `commitMirrorPromotionTx` in one host transaction; a refused membership write leaves
+the fiscal, reservation, role and membership rows unchanged. These are internal qualification
+paths, not a boot or HTTP promotion test, and their supplied outside-register confirmations do
+not establish independent continuity.
+
+The wrappers remain outside the fiscal public barrel, and existing setup, restore, reservation,
+adoption and promotion entry points remain unchanged. Initial setup, CLI recovery and break-glass
+adapters still need their own authenticated host context. The coupled text SIF/counter retirement,
+all entry-point replacements, current-main schema regeneration and final populated upgrade remain
+open. Do not publish this intermediate tree; Task 4 is incomplete.
+
 ## Task 5: select active series inside issuance transactions
 
 **Modify:** `apps/server/src/till-config.ts`, `trading-config.ts`, `till-sale.ts`,

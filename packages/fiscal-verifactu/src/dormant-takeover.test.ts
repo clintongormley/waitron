@@ -4,6 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import { deployment, invoiceSeries, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId } from "@waitron/shared";
+import { withOperationAuthority } from "@waitron/module";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenants, TENANT_A, TENANT_B } from "../test/fixtures.js";
 import { registerSif } from "./registro-sif.js";
@@ -200,6 +201,68 @@ beforeEach(async () => {
 });
 
 describe("a retained dormant reservation consumed for a separate takeover", () => {
+  const binding = {
+    module: "fiscal-verifactu",
+    action: "promote",
+    eventId: approval.eventId,
+    sourceId: approval.sourceId,
+    targetNodeId: target.nodeId,
+  };
+  async function authenticated(token: unknown, expected = context) {
+    return withTransaction(suite.db, (tx) =>
+      activation.activateAuthenticatedDormantAllocation(
+        tx,
+        target,
+        join.eventId,
+        consumed(),
+        approval,
+        expected,
+        token,
+      ),
+    );
+  }
+
+  it("requires scoped host authority for the retained standby's takeover", async () => {
+    await expect(
+      withOperationAuthority(binding, approval.operatorId, (token) =>
+        authenticated(token, { ...context, reauthentication: null }),
+      ),
+    ).resolves.toMatchObject({ activationEventId: "takeover-1", series: candidate.series });
+    expect((await rows("registro_sif")).find((row) => row.node_id === target.nodeId)).toMatchObject(
+      {
+        numero_instalacion: "P000042",
+        revocado_en: null,
+      },
+    );
+  });
+
+  it.each(["plain", "cloned", "operator", "join", "reservation"])(
+    "rejects %s authority for a takeover without changing fiscal or reservation rows",
+    async (kind) => {
+      const before = await activeRows();
+      const retained = await rows("fiscal_reservations");
+      const scope = {
+        ...binding,
+        ...(kind === "join" ? { eventId: join.eventId } : {}),
+        ...(kind === "reservation" ? { action: "reserve" } : {}),
+      };
+      const attempt =
+        kind === "plain"
+          ? authenticated({ ...binding, operatorId: approval.operatorId })
+          : withOperationAuthority(
+              scope,
+              kind === "operator" ? "other-admin" : approval.operatorId,
+              (token) => authenticated(kind === "cloned" ? structuredClone(token) : token),
+            );
+      await expect(attempt).rejects.toMatchObject({
+        code: "sif.allocation_invalid",
+        params: { reason: "reauthentication_required" },
+      });
+      expect(await activeRows()).toEqual(before);
+      expect(await rows("fiscal_reservations")).toEqual(retained);
+    },
+  );
+
   it("activates the exact spare identity and all three purposes without changing the primary or reservation", async () => {
     const primarySif = await suite.db
       .select()

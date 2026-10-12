@@ -11,7 +11,7 @@ import {
   readTenant,
   type Transaction,
 } from "@waitron/db";
-import type { ProvisionedNode } from "@waitron/module";
+import { readOperationAuthority, type ProvisionedNode } from "@waitron/module";
 import {
   validateAllocationEnvelope,
   validateAllocationReplay,
@@ -134,6 +134,70 @@ export async function activateAllocation(
   return activate(tx, node, allocation, approval, context);
 }
 
+export async function activateAuthenticatedAllocation(
+  tx: Transaction,
+  node: ProvisionedNode,
+  allocation: unknown,
+  approval: unknown,
+  context: AllocationContext,
+  authority: unknown,
+  action: string,
+): Promise<ActivationResult> {
+  const authorised = authenticatedContext(context, authority, action);
+  return activate(tx, node, allocation, approval, authorised.context, undefined, authorised.check);
+}
+
+function authenticatedContext(context: AllocationContext, authority: unknown, action: string) {
+  const binding = {
+    module: "fiscal-verifactu",
+    action,
+    eventId: context.eventId,
+    sourceId: context.sourceId,
+    targetNodeId: context.targetNodeId,
+  };
+  const operatorId = context.operatorId;
+  const mode = context.mode;
+  const authorise = (): void => {
+    const verified = readOperationAuthority(authority, binding);
+    if (
+      verified?.operatorId !== operatorId ||
+      (mode === "initial-setup"
+        ? action !== "setup"
+        : !["restore", "re-register", "promote"].includes(action))
+    )
+      throw new AppError("sif.allocation_invalid", { reason: "reauthentication_required" });
+  };
+  authorise();
+  return {
+    context: {
+      ...context,
+      reauthentication: { operatorId, eventId: binding.eventId },
+    },
+    check: authorise,
+  };
+}
+
+export async function activateAuthenticatedDormantAllocation(
+  tx: Transaction,
+  node: ProvisionedNode,
+  reservationEventId: string,
+  allocation: unknown,
+  approval: unknown,
+  context: AllocationContext,
+  authority: unknown,
+): Promise<ActivationResult> {
+  const authorised = authenticatedContext(context, authority, "promote");
+  return activateDormant(
+    tx,
+    node,
+    reservationEventId,
+    allocation,
+    approval,
+    authorised.context,
+    authorised.check,
+  );
+}
+
 export async function activateDormantAllocation(
   tx: Transaction,
   node: ProvisionedNode,
@@ -141,6 +205,18 @@ export async function activateDormantAllocation(
   allocation: unknown,
   approval: unknown,
   context: AllocationContext,
+): Promise<ActivationResult> {
+  return activateDormant(tx, node, reservationEventId, allocation, approval, context);
+}
+
+async function activateDormant(
+  tx: Transaction,
+  node: ProvisionedNode,
+  reservationEventId: string,
+  allocation: unknown,
+  approval: unknown,
+  context: AllocationContext,
+  authorise?: () => void,
 ): Promise<ActivationResult> {
   const refuse = (reason: string): never => {
     throw new AppError("sif.allocation_invalid", { reason });
@@ -216,7 +292,7 @@ export async function activateDormantAllocation(
       return refuse("standby_already_active");
   }
   // Historical join signatures do not establish current outside consumption.
-  return activate(tx, node, allocation, approval, context, retained.bases);
+  return activate(tx, node, allocation, approval, context, retained.bases, authorise);
 }
 
 async function activate(
@@ -226,6 +302,7 @@ async function activate(
   approval: unknown,
   context: AllocationContext,
   dormantBases?: SeriesBases,
+  authorise?: () => void,
 ): Promise<ActivationResult> {
   const refuse = (reason: string): never => {
     throw new AppError("sif.allocation_invalid", { reason });
@@ -289,6 +366,7 @@ async function activate(
       !isDeepStrictEqual(live, prior.result.series)
     )
       return refuse("activation_superseded");
+    authorise?.();
     return prior.result;
   }
   const validated = await validateForActivation(
@@ -301,6 +379,7 @@ async function activate(
   );
   if (!validated.ok) return refuse(validated.reason);
   const bases = dormantBases ?? (await liveSeriesBases(tx, node));
+  authorise?.();
   const retiredAt = now();
   const sifId = newId();
   await tx

@@ -32,7 +32,8 @@ import type {
   FiscalAllocation,
   RecoveryApproval,
 } from "./allocation-envelope.js";
-import type { ProvisionedNode } from "@waitron/module";
+import { withOperationAuthority, type ProvisionedNode } from "@waitron/module";
+import * as activation from "./allocation.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const node: ProvisionedNode = {
@@ -151,6 +152,219 @@ beforeEach(async () => {
   await seedTenants(suite.db);
   await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
   await suite.db.insert(invoiceSeries).values(bases.map((b) => ({ ...b, nodeId: node.nodeId })));
+});
+
+describe("allocation activation with host-issued operator authority", () => {
+  const binding = {
+    module: "fiscal-verifactu",
+    action: "restore",
+    eventId: approval.eventId,
+    sourceId: approval.sourceId,
+    targetNodeId: node.nodeId,
+  };
+  async function authenticated(
+    token: unknown,
+    expected = context,
+    action = "restore",
+    input = allocation,
+    permission = approval,
+  ) {
+    return withTransaction(suite.db, (tx) =>
+      activation.activateAuthenticatedAllocation(
+        tx,
+        node,
+        input,
+        permission,
+        expected,
+        token,
+        action,
+      ),
+    );
+  }
+
+  it("activates after an event-bound verified operator, independently of a plain reauthentication claim", async () => {
+    await expect(
+      withOperationAuthority(binding, approval.operatorId, (token) =>
+        authenticated(token, { ...context, reauthentication: null }),
+      ),
+    ).resolves.toMatchObject({ activationEventId: "event-42" });
+    expect(
+      (await suite.db.execute(sql`select installation_identity from fiscal_allocations`)).rows,
+    ).toEqual([{ installation_identity: "P000042" }]);
+  });
+
+  it.each([
+    "plain",
+    "cloned",
+    "revoked",
+    "operator",
+    "module",
+    "action",
+    "event",
+    "source",
+    "target",
+  ])("refuses %s authority before changing the active identity or series", async (kind) => {
+    const before = await suite.db.select().from(invoiceSeries);
+    const scope = {
+      ...binding,
+      ...(kind === "module" ? { module: "other" } : {}),
+      ...(kind === "action" ? { action: "reserve" } : {}),
+      ...(kind === "event" ? { eventId: "other" } : {}),
+      ...(kind === "source" ? { sourceId: "other" } : {}),
+      ...(kind === "target" ? { targetNodeId: "other" } : {}),
+    };
+    const operator = kind === "operator" ? "other-admin" : approval.operatorId;
+    const attempt =
+      kind === "plain"
+        ? authenticated({ ...scope, operatorId: operator })
+        : kind === "revoked"
+          ? withOperationAuthority(scope, operator, async (token) => token).then(authenticated)
+          : withOperationAuthority(scope, operator, (token) =>
+              authenticated(kind === "cloned" ? structuredClone(token) : token),
+            );
+    await expect(attempt).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "reauthentication_required" },
+    });
+    expect(await suite.db.select().from(invoiceSeries)).toEqual(before);
+    expect((await suite.db.execute(sql`select count(*) as n from registro_sif`)).rows).toEqual([
+      { n: 0 },
+    ]);
+    expect(
+      (await suite.db.execute(sql`select count(*) as n from fiscal_allocations`)).rows,
+    ).toEqual([{ n: 0 }]);
+  });
+
+  it("refuses even authentic reservation authority being used as activation authority", async () => {
+    await expect(
+      withOperationAuthority({ ...binding, action: "reserve" }, approval.operatorId, (token) =>
+        authenticated(token, context, "reserve"),
+      ),
+    ).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "reauthentication_required" },
+    });
+  });
+
+  it("accepts setup authority only for an initial setup with independently consumed initial allocation", async () => {
+    const permission = { ...approval, oldMachineOffline: false, oldMachineAbsent: true };
+    const initial = signed(
+      {
+        ...candidate,
+        source: "initial-paper",
+        installationIdentity: "S000042",
+        series: [
+          { code: "A-S000042", purpose: "standard" },
+          { code: "R-S000042", purpose: "rectificative" },
+        ],
+      },
+      permission,
+    );
+    await expect(
+      withOperationAuthority({ ...binding, action: "setup" }, approval.operatorId, (token) =>
+        authenticated(
+          token,
+          { ...context, mode: "initial-setup", reauthentication: null },
+          "setup",
+          initial,
+          permission,
+        ),
+      ),
+    ).resolves.toMatchObject({ activationEventId: "event-42" });
+  });
+
+  it.each(["setup for recovery", "recovery for setup"])(
+    "refuses %s even when its authority is authentic",
+    async (kind) => {
+      const action = kind === "setup for recovery" ? "setup" : "restore";
+      const expected =
+        kind === "setup for recovery" ? context : { ...context, mode: "initial-setup" as const };
+      await expect(
+        withOperationAuthority({ ...binding, action }, approval.operatorId, (token) =>
+          authenticated(token, expected, action),
+        ),
+      ).rejects.toMatchObject({
+        code: "sif.allocation_invalid",
+        params: { reason: "reauthentication_required" },
+      });
+    },
+  );
+
+  it.each(["fresh", "replay"])(
+    "requires authority to remain valid after a paused %s read",
+    async (kind) => {
+      if (kind === "replay")
+        await withOperationAuthority(binding, approval.operatorId, authenticated);
+      const before = await suite.db.execute(sql`select * from registro_sif`);
+      const beforeSeries = await suite.db.select().from(invoiceSeries);
+      const beforeAudit = await suite.db.execute(sql`select * from fiscal_allocations`);
+      await withTransaction(suite.db, async (tx) => {
+        let readSeen!: () => void;
+        const paused = new Promise<void>((resolve) => {
+          readSeen = resolve;
+        });
+        let resume!: () => void;
+        const resumed = new Promise<void>((resolve) => {
+          resume = resolve;
+        });
+        const select = tx.select.bind(tx);
+        const spy = vi
+          .spyOn(tx, "select")
+          .mockImplementation((...args: Parameters<typeof tx.select>) => {
+            const query = select(...args);
+            const from = query.from.bind(query);
+            vi.spyOn(query, "from").mockImplementation(
+              (table: Parameters<typeof query.from>[0]) => {
+                const result = from(table);
+                if (table === nodes) {
+                  const where = result.where.bind(result);
+                  vi.spyOn(result, "where").mockImplementation(
+                    (...args: Parameters<typeof result.where>) => {
+                      const rows = where(...args);
+                      const then = rows.then.bind(rows);
+                      vi.spyOn(rows, "then").mockImplementation((async (resolve, reject) => {
+                        readSeen();
+                        await resumed;
+                        return then(resolve, reject);
+                      }) as typeof rows.then);
+                      return rows;
+                    },
+                  );
+                }
+                return result;
+              },
+            );
+            return query;
+          });
+        let pending!: ReturnType<typeof activation.activateAuthenticatedAllocation>;
+        try {
+          await withOperationAuthority(binding, approval.operatorId, async (token) => {
+            pending = activation.activateAuthenticatedAllocation(
+              tx,
+              node,
+              allocation,
+              approval,
+              { ...context, priorActivation: kind === "replay" ? "committed" : "none" },
+              token,
+              "restore",
+            );
+            await paused;
+          });
+          resume();
+          await expect(pending).rejects.toMatchObject({
+            code: "sif.allocation_invalid",
+            params: { reason: "reauthentication_required" },
+          });
+        } finally {
+          resume();
+          spy.mockRestore();
+        }
+      });
+      expect(await suite.db.execute(sql`select * from registro_sif`)).toEqual(before);
+      expect(await suite.db.select().from(invoiceSeries)).toEqual(beforeSeries);
+      expect(await suite.db.execute(sql`select * from fiscal_allocations`)).toEqual(beforeAudit);
+    },
+  );
 });
 
 describe("allocation activation checks inside the venue transaction", () => {
