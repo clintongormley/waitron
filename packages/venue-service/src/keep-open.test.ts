@@ -27,6 +27,7 @@ import * as keep from "./keep-open.js";
 import { zoneExtensions } from "./schema/zone-extensions.js";
 import { closedZoneIdsAt, replaceZoneClosedWeek } from "./zone-closed-times.js";
 import { keepPeriodOpen, readKeepOpen } from "./keep-open.js";
+import { readSeasons } from "./seasons.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
@@ -132,6 +133,39 @@ describe("keeping a period open today", () => {
     expect(
       (await run((tx) => readKeepOpen(tx, f.cfg, f.zoneId, at("14:20")))).period,
     ).toMatchObject({ id: f.lunch, endsAt: "15:00", extendedUntil: "15:00", running: true });
+  });
+  it("keeps Lunch open on a season day", async () => {
+    const f = await fixture();
+    const autumn = (await run((tx) => readSeasons(tx, f.cfg))).find(
+      (season) => season.name === "Autumn",
+    )!.id;
+    await run((tx) =>
+      replaceMenuWeek(
+        tx,
+        f.cfg,
+        f.departmentId,
+        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+          weekday,
+          slots: [{ periodId: f.lunch, startsAt: "12:00", endsAt: "15:00" }],
+        })),
+        at("12:00"),
+        0,
+        { seasonId: autumn },
+      ),
+    );
+    await run((tx) =>
+      keepPeriodOpen(tx, f.cfg, f.zoneId, { periodId: f.lunch, until: "15:30" }, at("14:50")),
+    );
+    expect(await rows(f)).toEqual([
+      expect.objectContaining({
+        businessDay: "2026-10-09",
+        startsAt: "15:00:00",
+        endsAt: "15:30:00",
+      }),
+    ]);
+    expect(
+      (await run((tx) => readKeepOpen(tx, f.cfg, f.zoneId, at("15:10")))).period,
+    ).toMatchObject({ id: f.lunch, endsAt: "15:30", extendedUntil: "15:30", running: true });
   });
   it("offers future quarter hours through the changeover and describes the next period", async () => {
     const f = await fixture({ afternoon: true });

@@ -15,6 +15,7 @@ import * as closures from "./zone-closed-times.js";
 import { listZoneOffers, menuState } from "./operations.js";
 import { VENUE_SERVICE } from "./service.js";
 import { replaceZoneClosedWeek, saveZoneClosedDate } from "./zone-closed-times.js";
+import { ensureDefaultSeasons } from "./seasons.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
@@ -280,6 +281,23 @@ describe("zones closed at an instant", () => {
     expect([
       ...(await tx((db) => closures.closedZoneIdsAt(db, v.cfg, new Date("2041-10-07T21:45:00Z")))),
     ]).toEqual([v.terrace]);
+  });
+  it("closes a zone by the season of the business day", async () => {
+    const v = await venue();
+    const seasons = await tx((db) => ensureDefaultSeasons(db, v.cfg));
+    const winter = seasons.find((season) => season.name === "Winter")!.id;
+    const friday = [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+      weekday,
+      ranges: weekday === 5 ? [{ startsAt: "22:00", endsAt: "23:30" }] : [],
+    }));
+    await tx((db) =>
+      replaceZoneClosedWeek(db, v.cfg, v.terrace, friday, 0, at, { seasonId: winter }),
+    );
+    const closedAt = (instant: string) =>
+      tx((db) => closures.closedZoneIdsAt(db, v.cfg, new Date(instant)));
+    // 22:30 in Madrid on Friday 29 November (Autumn) and Friday 6 December 2030 (Winter).
+    expect([...(await closedAt("2030-11-29T21:30:00Z"))]).toEqual([]);
+    expect([...(await closedAt("2030-12-06T21:30:00Z"))]).toEqual([v.terrace]);
   });
   it("scopes the batch to this location and the selected zones", async () => {
     const v = await venue(),

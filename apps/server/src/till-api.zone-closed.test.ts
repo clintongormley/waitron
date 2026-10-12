@@ -17,8 +17,8 @@ import {
   orderServiceContexts,
   menuPeriods,
   replaceMenuWeek,
+  replaceZoneClosedWeek,
   zoneServicePolicies,
-  zoneClosedTimes,
 } from "@waitron/venue-service";
 import { createTable } from "./testing/live-table.js";
 import { provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
@@ -57,13 +57,16 @@ async function venue() {
       new Date(),
       0,
     );
-    await tx.insert(zoneClosedTimes).values(
+    await replaceZoneClosedWeek(
+      tx,
+      v.cfg,
+      v.zoneId,
       [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
-        zoneId: v.zoneId,
         weekday,
-        startsAt: "23:30:00",
-        endsAt: "06:00:00",
+        ranges: [{ startsAt: "23:30", endsAt: "06:00" }],
       })),
+      0,
+      new Date(),
     );
   });
   return v;

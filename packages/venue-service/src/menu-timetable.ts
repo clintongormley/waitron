@@ -11,7 +11,7 @@ import { readLocationClock } from "@waitron/reporting";
 import { AppError, createLabelComparator, type BusinessDayClock } from "@waitron/shared";
 
 import { isReadableClock, venueLocalMoment } from "./hours-clock.js";
-import { addDays, weekdayOf } from "./hours-rules.js";
+import { addDays } from "./hours-rules.js";
 import {
   clockTimeSkippedInDay,
   parseServiceDay,
@@ -38,13 +38,13 @@ import type {
 } from "./menu-timetable-types.js";
 import { assertDepartment, resolveZoneContext, storedTime, type VenueScope } from "./operations.js";
 import { specialDates } from "./schema/hours.js";
-import { namedDaysOn } from "./named-days.js";
 import { nextOccurrence } from "./named-day-rules.js";
 import { menuDayTimetables, menuPeriods, menuPeriodStaffMenus, menuSlots } from "./schema/menus.js";
 import { departments } from "./schema/service.js";
 import { routingCellPeriods, routingCells } from "./schema/routing.js";
 import { periodExtensions } from "./schema/period-extensions.js";
 import { readZoneClosedTimes } from "./zone-closed-times.js";
+import { resolveDepartmentDays } from "./day-resolver.js";
 import {
   joinTouching,
   readDepartmentSeasonWeeks,
@@ -345,55 +345,13 @@ export async function departmentDay(
     .orderBy(asc(menuPeriodStaffMenus.displayOrder), asc(menuPeriodStaffMenus.menuId));
   if (moment === null) return { periods, staff, ranges: [], previousRanges: [], extension: null };
   const yesterday = addDays(moment.businessDay, -1);
-  const named = await namedDaysOn(tx, cfg, [yesterday, moment.businessDay]);
-  const dates = [...named.values()];
-  const timetables = await tx
-    .select({
-      id: menuDayTimetables.id,
-      weekday: menuDayTimetables.weekday,
-      specialDateId: menuDayTimetables.specialDateId,
-    })
-    .from(menuDayTimetables)
-    .where(
-      and(
-        eq(menuDayTimetables.departmentId, departmentId),
-        or(
-          inArray(menuDayTimetables.weekday, [weekdayOf(yesterday), moment.weekday]),
-          dates.length === 0
-            ? undefined
-            : inArray(
-                menuDayTimetables.specialDateId,
-                dates.map((date) => date.id),
-              ),
-        ),
-      ),
-    );
-  const timetableOn = (date: string) => {
-    const special = named.get(date);
-    if (special?.closeWholeVenue) return undefined;
-    return (
-      (!special?.ownHours
-        ? undefined
-        : timetables.find((entry) => entry.specialDateId === special.id)) ??
-      timetables.find((entry) => entry.weekday === weekdayOf(date))
-    );
-  };
-  const today = timetableOn(moment.businessDay);
-  const previous = timetableOn(yesterday);
-  const slots = await slotsByTimetable(
+  const days = await resolveDepartmentDays(
     tx,
-    [today?.id, previous?.id].filter((id): id is string => id !== undefined),
+    cfg,
+    departmentId,
+    [yesterday, moment.businessDay],
+    clock,
   );
-  const rangesOn = (id: string | undefined, date: string): ServiceRange[] =>
-    id === undefined
-      ? []
-      : (slots.get(id) ?? [])
-          .slice()
-          .sort(
-            (a, b) =>
-              rangeSpan(a, serviceDayContext(clock, date).dayCutover).start -
-              rangeSpan(b, serviceDayContext(clock, date).dayCutover).start,
-          );
   const [row] = await tx
     .select({
       periodId: periodExtensions.periodId,
@@ -418,8 +376,8 @@ export async function departmentDay(
   return {
     periods,
     staff,
-    ranges: rangesOn(today?.id, moment.businessDay),
-    previousRanges: rangesOn(previous?.id, yesterday),
+    ranges: days.get(moment.businessDay)!.ranges,
+    previousRanges: days.get(yesterday)!.ranges,
     extension,
   };
 }
