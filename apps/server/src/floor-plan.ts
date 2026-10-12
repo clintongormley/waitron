@@ -1,8 +1,6 @@
 import { and, asc, eq, inArray, ne } from "drizzle-orm";
 import {
   diningTables,
-  floorPlanJoins,
-  floorPlanJoinTables,
   floorPlans,
   floorPlanTables,
   floorResetTables,
@@ -28,19 +26,12 @@ export interface PlanTable {
   placement: Placement | null;
 }
 
-export interface PlanJoin {
-  id: string;
-  seats: number;
-  tableIds: string[];
-}
-
 export interface ZonePlan {
   zoneId: string;
   /** 0 when the zone has no master plan. */
   revision: number;
   savedAt: string | null;
   tables: PlanTable[];
-  joins: PlanJoin[];
 }
 
 export interface ZonePlanSave {
@@ -54,7 +45,6 @@ export interface ZonePlanSave {
     fixed: boolean;
     placement: Placement | null;
   }[];
-  joins: { seats: number; tableKeys: string[] }[];
 }
 
 export async function requireZone(tx: Transaction, cfg: TillConfig, zoneId: string): Promise<void> {
@@ -105,7 +95,6 @@ export async function readZonePlan(
   await requireZone(tx, cfg, zoneId);
   const plan = await planOf(tx, zoneId);
   const tables: PlanTable[] = [];
-  const joins: PlanJoin[] = [];
   if (plan !== undefined) {
     const masters = await mastersOf(tx, plan.id);
     const followers = await followersOf(
@@ -122,30 +111,12 @@ export async function readZonePlan(
         placement: placementOf(master),
       });
     }
-    const joinRows = await tx
-      .select({ id: floorPlanJoins.id, seats: floorPlanJoins.seats })
-      .from(floorPlanJoins)
-      .where(eq(floorPlanJoins.planId, plan.id))
-      .orderBy(asc(floorPlanJoins.id));
-    const membersOf = new Map(joinRows.map((join) => [join.id, [] as string[]]));
-    if (joinRows.length > 0) {
-      const members = await tx
-        .select({ joinId: floorPlanJoinTables.joinId, tableId: floorPlanJoinTables.planTableId })
-        .from(floorPlanJoinTables)
-        .where(inArray(floorPlanJoinTables.joinId, [...membersOf.keys()]))
-        .orderBy(asc(floorPlanJoinTables.planTableId));
-      for (const member of members) membersOf.get(member.joinId)!.push(member.tableId);
-    }
-    for (const join of joinRows) {
-      joins.push({ id: join.id, seats: join.seats, tableIds: membersOf.get(join.id)! });
-    }
   }
   return {
     zoneId,
     revision: plan?.revision ?? 0,
     savedAt: plan?.savedAt ?? null,
     tables,
-    joins,
   };
 }
 
@@ -191,22 +162,6 @@ function checkEntries(input: ZonePlanSave): void {
       if (ids.has(ref)) throw invalid(`${at}.id`);
       ids.add(ref);
     }
-  });
-  const sets = new Set<string>();
-  input.joins.forEach((join, index) => {
-    const at = `joins.${index}`;
-    const members = new Set(join.tableKeys);
-    if (
-      members.size < 2 ||
-      members.size !== join.tableKeys.length ||
-      join.tableKeys.some((key) => !keys.has(key))
-    ) {
-      throw invalid(`${at}.tableKeys`);
-    }
-    const set = JSON.stringify([...members].sort());
-    if (sets.has(set)) throw invalid(`${at}.tableKeys`);
-    sets.add(set);
-    if (!Number.isInteger(join.seats) || join.seats < 1) throw invalid(`${at}.seats`);
   });
 }
 
@@ -318,17 +273,6 @@ export async function saveZonePlan(
   }
   const planId = plan!.id;
 
-  // A member row points at a master table, so the joins go before any master table can.
-  const joins = await tx
-    .select({ id: floorPlanJoins.id })
-    .from(floorPlanJoins)
-    .where(eq(floorPlanJoins.planId, planId));
-  const joinIds = joins.map((j) => j.id);
-  if (joinIds.length > 0) {
-    await tx.delete(floorPlanJoinTables).where(inArray(floorPlanJoinTables.joinId, joinIds));
-    await tx.delete(floorPlanJoins).where(inArray(floorPlanJoins.id, joinIds));
-  }
-
   const kept = new Set(tables.flatMap((t) => (t.id === undefined ? [] : [t.id])));
   const deleted = masters.filter((m) => !kept.has(m.id)).map((m) => m.id);
   if (deleted.length > 0) {
@@ -372,18 +316,6 @@ export async function saveZonePlan(
     const current = masterOf.get(table.id)!;
     if ((Object.keys(next) as (keyof typeof next)[]).every((k) => current[k] === next[k])) continue;
     await tx.update(floorPlanTables).set(next).where(eq(floorPlanTables.id, table.id));
-  }
-
-  if (input.joins.length > 0) {
-    const joinRows = input.joins.map((join) => ({ id: newId(), planId, seats: join.seats }));
-    await tx.insert(floorPlanJoins).values(joinRows);
-    await tx
-      .insert(floorPlanJoinTables)
-      .values(
-        input.joins.flatMap((join, i) =>
-          join.tableKeys.map((key) => ({ joinId: joinRows[i]!.id, planTableId: ids.get(key)! })),
-        ),
-      );
   }
 
   const revision = plan!.revision + 1;

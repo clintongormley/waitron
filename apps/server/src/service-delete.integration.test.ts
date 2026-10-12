@@ -11,8 +11,6 @@ import {
   deviceProfiles,
   diningTables,
   floorPlanTables,
-  floorPlanJoins,
-  floorPlanJoinTables,
   floorResetTables,
   floorTodayTables,
   tableInService,
@@ -308,7 +306,7 @@ describe("real module floor deletion", () => {
         venue.cfg,
         enabledTableRemovals(ALL_MODULES),
         f.zoneId,
-        { revision: 0, tables: [], joins: [] },
+        { revision: 0, tables: [] },
         NOW,
       );
     });
@@ -598,7 +596,6 @@ describe("mounted authenticated service deletion races", () => {
                           placement: null,
                         },
                       ],
-                      joins: [],
                     },
                     NOW,
                   );
@@ -751,7 +748,7 @@ describe("mounted authenticated service deletion races", () => {
           venue.cfg,
           enabledTableRemovals(ALL_MODULES),
           f.zoneId,
-          { revision: 0, tables: [], joins: [] },
+          { revision: 0, tables: [] },
           NOW,
         ),
       ),
@@ -884,13 +881,6 @@ it.each(["zone", "department"] as const)(
           .update(diningTables)
           .set({ planTableId: masters[i]!.id })
           .where(eq(diningTables.id, tableId));
-      const [savedJoin] = await tx
-        .insert(floorPlanJoins)
-        .values({ planId: plan!.id, seats: 8 })
-        .returning();
-      await tx
-        .insert(floorPlanJoinTables)
-        .values(masters.map((m) => ({ joinId: savedJoin!.id, planTableId: m.id })));
       await resetZone(tx, venue.cfg, removals, f.zoneId, NOW);
       return { plan: plan!, masters };
     });
@@ -910,29 +900,12 @@ it.each(["zone", "department"] as const)(
     };
     const save = (revision: number) =>
       run((tx) =>
-        saveZonePlan(
-          tx,
-          venue.cfg,
-          removals,
-          f.zoneId,
-          { revision, tables: [kept], joins: [] },
-          NOW,
-        ),
+        saveZonePlan(tx, venue.cfg, removals, f.zoneId, { revision, tables: [kept] }, NOW),
       );
-    const resetCopy = await run(completeSnapshot);
     await expect(save(1)).resolves.toEqual({ revision: 2, ids: { kept: kept.id } });
-    const savedCopy = await run(completeSnapshot);
-    expect(savedCopy.floor_reset_joins).toEqual(resetCopy.floor_reset_joins);
-    expect(savedCopy.floor_reset_join_tables).toEqual(resetCopy.floor_reset_join_tables);
     expect(
       (await run((tx) => readZonePlan(tx, venue.cfg, f.zoneId))).tables.map((table) => table.id),
     ).toEqual([kept.id]);
-    expect(
-      await run((tx) =>
-        tx.select().from(floorPlanJoins).where(eq(floorPlanJoins.planId, master.plan.id)),
-      ),
-    ).toEqual([]);
-    expect(await run((tx) => tx.select().from(floorPlanJoinTables))).toEqual([]);
     expect(
       (
         await run((tx) =>
@@ -1091,7 +1064,6 @@ it.each(["zone", "department"] as const)(
           {
             revision: 0,
             tables: [{ key: "new", label, seats: 4, fixed: false, placement: null }],
-            joins: [],
           },
           NOW,
         ),
@@ -1267,7 +1239,7 @@ it("rechecks an upcoming booking added after the master editor opened, but allow
         venue.cfg,
         removals,
         f.zoneId,
-        { revision: opened.revision, tables: [], joins: [] },
+        { revision: opened.revision, tables: [] },
         NOW,
       ),
     );

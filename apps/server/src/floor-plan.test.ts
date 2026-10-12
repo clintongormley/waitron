@@ -6,8 +6,6 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   diningTables,
-  floorPlanJoins,
-  floorPlanJoinTables,
   floorPlans,
   floorPlanTables,
   floorResetTables,
@@ -122,32 +120,13 @@ function check(zoneId: string, input: ZonePlanSave, removals: readonly TableRemo
   return inTx(v, (tx) => checkZonePlanSave(tx, v.cfg, removals, zoneId, input, NOW));
 }
 
-/** The statements `readZonePlan` takes for a zone whose master has joins of the given sizes. */
-async function readCostWithJoins(sizes: readonly number[]): Promise<number> {
+/** The statements `readZonePlan` takes for a zone whose master holds `tables` tables. */
+async function readCost(tables: number): Promise<number> {
   const z = await zone();
-  const masters = await masterOf(
+  await masterOf(
     z,
-    Array.from({ length: sizes.reduce((sum, size) => sum + size, 0) }, (_, i) => ({
-      label: fresh(`j${i}`),
-    })),
+    Array.from({ length: tables }, (_, i) => ({ label: fresh(`r${i}`) })),
   );
-  await inTx(v, async (tx) => {
-    const [plan] = await tx
-      .select({ id: floorPlans.id })
-      .from(floorPlans)
-      .where(eq(floorPlans.zoneId, z));
-    let next = 0;
-    for (const size of sizes) {
-      const [row] = await tx
-        .insert(floorPlanJoins)
-        .values({ planId: plan!.id, seats: size * 2 })
-        .returning({ id: floorPlanJoins.id });
-      for (const planTableId of masters.slice(next, next + size)) {
-        await tx.insert(floorPlanJoinTables).values({ joinId: row!.id, planTableId });
-      }
-      next += size;
-    }
-  });
   return inTx(v, async (tx) => {
     const prepare = vi.spyOn(DatabaseSync.prototype, "prepare");
     try {
@@ -160,53 +139,10 @@ async function readCostWithJoins(sizes: readonly number[]): Promise<number> {
 }
 
 describe("readZonePlan", () => {
-  it("reads every join's tables in one query", async () => {
-    const z = await zone();
-    const masters = await masterOf(
-      z,
-      ["a", "b", "c", "d", "e"].map((name) => ({ label: fresh(name) })),
-    );
-    const [m1, m2, m3, m4, m5] = masters;
-    const joinIds = await inTx(v, async (tx) => {
-      const [plan] = await tx
-        .select({ id: floorPlans.id })
-        .from(floorPlans)
-        .where(eq(floorPlans.zoneId, z));
-      const ids: string[] = [];
-      for (const members of [
-        [m3!, m1!],
-        [m5!, m2!, m4!],
-      ]) {
-        const [row] = await tx
-          .insert(floorPlanJoins)
-          .values({ planId: plan!.id, seats: members.length * 2 })
-          .returning({ id: floorPlanJoins.id });
-        ids.push(row!.id);
-        for (const planTableId of members) {
-          await tx.insert(floorPlanJoinTables).values({ joinId: row!.id, planTableId });
-        }
-      }
-      return ids;
-    });
-
-    const { plan, statements } = await inTx(v, async (tx) => {
-      const prepare = vi.spyOn(DatabaseSync.prototype, "prepare");
-      try {
-        return { plan: await readZonePlan(tx, v.cfg, z), statements: prepare.mock.calls.length };
-      } finally {
-        prepare.mockRestore();
-      }
-    });
-
-    expect(plan.joins).toEqual(
-      [
-        { id: joinIds[0]!, seats: 4, tableIds: [m3!, m1!].sort() },
-        { id: joinIds[1]!, seats: 6, tableIds: [m5!, m2!, m4!].sort() },
-      ].sort((a, b) => (a.id < b.id ? -1 : 1)),
-    );
-    expect(statements).toBe(6);
-    expect(await readCostWithJoins([2])).toBe(statements);
-    expect(await readCostWithJoins([2, 2, 3])).toBe(statements);
+  it("reads a plan in the same statements however many tables it holds", async () => {
+    const two = await readCost(2);
+    expect(two).toBe(4);
+    expect(await readCost(7)).toBe(two);
   });
 
   it("refuses a zone that does not exist", async () => {
@@ -227,14 +163,13 @@ describe("checkZonePlanSave", () => {
     const input: ZonePlanSave = {
       revision: 1,
       tables: [{ id: master!, key: "a", label, seats: 4, fixed: false, placement: PLACE }],
-      joins: [],
     };
     return { z, live, master: master!, input };
   }
 
   it("refuses a zone that does not exist", async () => {
     const zoneId = randomUUID();
-    const error = await refusal(check(zoneId, { revision: 0, tables: [], joins: [] }));
+    const error = await refusal(check(zoneId, { revision: 0, tables: [] }));
     expect(error.code).toBe("zone.not_found");
   });
 
@@ -247,7 +182,7 @@ describe("checkZonePlanSave", () => {
 
   it("refuses a first save that is not at revision 0", async () => {
     const z = await zone();
-    const error = await refusal(check(z, { revision: 1, tables: [], joins: [] }));
+    const error = await refusal(check(z, { revision: 1, tables: [] }));
     expect(error.code).toBe("floor_plan.out_of_date");
     expect(error.params).toEqual({ zoneId: z, revision: 0 });
   });
@@ -356,66 +291,6 @@ describe("checkZonePlanSave", () => {
     expect(error.params).toEqual({ field: `tables.1.${name}` });
   });
 
-  it.each([
-    ["joins.0.tableKeys", { seats: 4, tableKeys: ["a"] }],
-    ["joins.0.tableKeys", { seats: 4, tableKeys: ["a", "a"] }],
-    ["joins.0.tableKeys", { seats: 4, tableKeys: ["a", "nope"] }],
-    ["joins.0.seats", { seats: 0, tableKeys: ["a", "b"] }],
-    ["joins.0.seats", { seats: 1.5, tableKeys: ["a", "b"] }],
-  ])("refuses %s of %j", async (field, join) => {
-    const { z, input } = await planned();
-    const save: ZonePlanSave = {
-      ...input,
-      tables: [
-        ...input.tables,
-        { key: "b", label: fresh("B"), seats: null, fixed: false, placement: null },
-      ],
-      joins: [join],
-    };
-    const error = await refusal(check(z, save));
-    expect(error.code).toBe("floor_plan.invalid");
-    expect(error.params).toEqual({ field });
-  });
-
-  async function threeTables() {
-    const { z, input } = await planned();
-    const tables: ZonePlanSave["tables"] = [
-      ...input.tables,
-      { key: "b", label: fresh("B"), seats: null, fixed: false, placement: null },
-      { key: "c", label: fresh("C"), seats: null, fixed: false, placement: null },
-    ];
-    return { z, input: { ...input, tables } };
-  }
-
-  it("refuses a second join of the same tables, in any order", async () => {
-    const { z, input } = await threeTables();
-    const joins = [
-      { seats: 6, tableKeys: ["a", "b"] },
-      { seats: 8, tableKeys: ["c", "a", "b"] },
-      { seats: 8, tableKeys: ["b", "a"] },
-    ];
-    const error = await refusal(check(z, { ...input, joins }));
-    expect(error.code).toBe("floor_plan.invalid");
-    expect(error.params).toEqual({ field: "joins.2.tableKeys" });
-  });
-
-  it("accepts joins of different tables that share some", async () => {
-    const { z, input } = await threeTables();
-    const joins = [
-      { seats: 6, tableKeys: ["a", "b"] },
-      { seats: 8, tableKeys: ["b", "c"] },
-      { seats: 10, tableKeys: ["a", "b", "c"] },
-    ];
-    await expect(check(z, { ...input, joins })).resolves.toBeUndefined();
-  });
-
-  it("refuses a join of one table", async () => {
-    const { z, input } = await planned();
-    const error = await refusal(check(z, { ...input, joins: [{ seats: 4, tableKeys: ["a"] }] }));
-    expect(error.code).toBe("floor_plan.invalid");
-    expect(error.params).toEqual({ field: "joins.0.tableKeys" });
-  });
-
   it("refuses an id that is not a master table of this zone", async () => {
     const other = await zone();
     const [foreign] = await masterOf(other, [{ label: fresh("F") }]);
@@ -453,7 +328,7 @@ describe("checkZonePlanSave", () => {
     await masterOf(z, [{ label: fresh("Lone") }]);
     const refuse = vi.fn<TableRemoval["refuse"]>();
     await expect(
-      check(z, { revision: 1, tables: [], joins: [] }, [{ refuse, release: vi.fn() }]),
+      check(z, { revision: 1, tables: [] }, [{ refuse, release: vi.fn() }]),
     ).resolves.toBeUndefined();
     expect(refuse).not.toHaveBeenCalled();
   });
@@ -485,7 +360,6 @@ describe("checkZonePlanSave", () => {
     const save: ZonePlanSave = {
       revision: 2,
       tables: [{ id: added, key: "a", label, seats: 4, fixed: false, placement: null }],
-      joins: [],
     };
     await expect(check(z, save)).resolves.toBeUndefined();
   });
@@ -501,7 +375,7 @@ describe("checkZonePlanSave", () => {
     const entry = { fixed: false, seats: null, placement: null, key: "k" };
     // First save: zone A's P is renamed X; its live table keeps P until the next reset.
     await expect(
-      check(a, { revision: 1, tables: [{ ...entry, id: ma!, label: x }], joins: [] }),
+      check(a, { revision: 1, tables: [{ ...entry, id: ma!, label: x }] }),
     ).resolves.toBeUndefined();
     await inTx(v, async (tx) => {
       await tx.update(floorPlanTables).set({ label: x }).where(eq(floorPlanTables.id, ma!));
@@ -509,7 +383,7 @@ describe("checkZonePlanSave", () => {
     });
 
     const error = await refusal(
-      check(b, { revision: 1, tables: [{ ...entry, id: mb!, label: p }], joins: [] }),
+      check(b, { revision: 1, tables: [{ ...entry, id: mb!, label: p }] }),
     );
     expect(error.code).toBe("table.label_taken");
     expect(error.params).toEqual({ label: p });
@@ -589,24 +463,19 @@ describe("saveZonePlan", () => {
           placement: { ...PLACE, x: 20 },
         }),
       ],
-      joins: [],
     });
     const live = (await liveOf(result.ids.t1!))!.id;
     return { z, t1, bar, live, result };
   }
 
-  it("inserts the new tables and the joins in the same statements, however many there are", async () => {
-    async function statementsFor(tables: number, joins: number): Promise<number> {
+  it("inserts the new tables in the same statements, however many there are", async () => {
+    async function statementsFor(tables: number): Promise<number> {
       const z = await zone();
-      await save(z, { revision: 0, tables: [], joins: [] });
+      await save(z, { revision: 0, tables: [] });
       const keys = Array.from({ length: tables }, (_, i) => `k${i}`);
       const input: ZonePlanSave = {
         revision: 1,
         tables: keys.map((key) => entry(key, fresh(key))),
-        joins: Array.from({ length: joins }, (_, i) => ({
-          seats: 4,
-          tableKeys: [keys[2 * i]!, keys[2 * i + 1]!],
-        })),
       };
       const counted = await inTx(v, async (tx) => {
         const prepare = vi.spyOn(DatabaseSync.prototype, "prepare");
@@ -619,12 +488,10 @@ describe("saveZonePlan", () => {
       });
       const plan = await inTx(v, (tx) => readZonePlan(tx, v.cfg, z));
       expect(plan.tables.map((t) => t.id).sort()).toEqual(Object.values(counted.saved.ids).sort());
-      expect(plan.joins).toHaveLength(joins);
-      for (const join of plan.joins) expect(join.tableIds).toHaveLength(2);
       return counted.statements;
     }
 
-    expect(await statementsFor(5, 2)).toBe(await statementsFor(2, 1));
+    expect(await statementsFor(5)).toBe(await statementsFor(2));
   });
 
   it("accepts the plan it read sent back unchanged, each table with its own live table", async () => {
@@ -632,7 +499,6 @@ describe("saveZonePlan", () => {
     const first = await save(z, {
       revision: 0,
       tables: [entry("a", fresh("Trip a")), entry("b", fresh("Trip b"), { placement: null })],
-      joins: [{ seats: 6, tableKeys: ["a", "b"] }],
     });
     const read = await inTx(v, (tx) => readZonePlan(tx, v.cfg, z));
     expect(read.tables.every((t) => t.id !== null && t.liveTableId !== null)).toBe(true);
@@ -650,18 +516,11 @@ describe("saveZonePlan", () => {
         fixed: t.fixed,
         placement: t.placement,
       })),
-      joins: read.joins.map((j) => ({
-        seats: j.seats,
-        tableKeys: j.tableIds.map((id) => keyOf.get(id)!),
-      })),
     });
 
     expect(second.revision).toBe(first.revision + 1);
     const after = await inTx(v, (tx) => readZonePlan(tx, v.cfg, z));
     expect(after.tables).toEqual(read.tables);
-    expect(after.joins.map(({ seats, tableIds }) => ({ seats, tableIds }))).toEqual(
-      read.joins.map(({ seats, tableIds }) => ({ seats, tableIds })),
-    );
     expect(await liveStateOf(z)).toEqual(live);
   });
 
@@ -694,7 +553,6 @@ describe("saveZonePlan", () => {
     const second = await save(z, {
       revision: 1,
       tables: [entry("t1", patio, { id: result.ids.t1!, placement: { ...PLACE, x: 30 } })],
-      joins: [],
     });
 
     expect(second).toEqual({ revision: 2, ids: { t1: result.ids.t1 } });
@@ -750,7 +608,6 @@ describe("saveZonePlan", () => {
           placement: { ...PLACE, x: 20 },
         }),
       ],
-      joins: [],
     });
 
     const after = await mastersOf();
@@ -762,64 +619,17 @@ describe("saveZonePlan", () => {
     );
   });
 
-  it("saves nothing when two joins name the same tables", async () => {
-    const z = await zone();
-    const error = await refusal(
-      save(z, {
-        revision: 0,
-        tables: [entry("1", fresh("T1")), entry("2", fresh("T2"))],
-        joins: [
-          { seats: 6, tableKeys: ["1", "2"] },
-          { seats: 8, tableKeys: ["2", "1"] },
-        ],
-      }),
-    );
-    expect(error.code).toBe("floor_plan.invalid");
-    expect(error.params).toEqual({ field: "joins.1.tableKeys" });
-    const plan = await inTx(v, (tx) => readZonePlan(tx, v.cfg, z));
-    expect(plan.joins).toEqual([]);
-  });
-
-  it("deletes a table that is in a saved join", async () => {
-    const z = await zone();
-    const [l1, l2, l3] = [fresh("T1"), fresh("T2"), fresh("T3")];
-    const first = await save(z, {
-      revision: 0,
-      tables: [entry("1", l1), entry("2", l2), entry("3", l3)],
-      joins: [{ seats: 12, tableKeys: ["1", "2", "3"] }],
-    });
-    const { ids } = first;
-
-    await save(z, {
-      revision: 1,
-      tables: [entry("1", l1, { id: ids["1"] }), entry("2", l2, { id: ids["2"] })],
-      joins: [{ seats: 8, tableKeys: ["1", "2"] }],
-    });
-
-    const plan = await inTx(v, (tx) => readZonePlan(tx, v.cfg, z));
-    expect(plan.tables.map((t) => t.id).sort()).toEqual([ids["1"], ids["2"]].sort());
-    expect(plan.joins).toEqual([
-      { id: expect.any(String) as string, seats: 8, tableIds: [ids["1"], ids["2"]].sort() },
-    ]);
-    const members = await inTx(v, (tx) =>
-      tx.select().from(floorPlanJoinTables).where(eq(floorPlanJoinTables.planTableId, ids["3"]!)),
-    );
-    expect(members).toEqual([]);
-  });
-
   it("swaps two tables' names in one save", async () => {
     const z = await zone();
     const [l1, l2] = [fresh("T1"), fresh("T2")];
     const { ids } = await save(z, {
       revision: 0,
       tables: [entry("1", l1), entry("2", l2)],
-      joins: [],
     });
 
     await save(z, {
       revision: 1,
       tables: [entry("1", l2, { id: ids["1"] }), entry("2", l1, { id: ids["2"] })],
-      joins: [],
     });
 
     expect(await labelsOf(z)).toEqual({ [ids["1"]!]: l2, [ids["2"]!]: l1 });
@@ -828,12 +638,11 @@ describe("saveZonePlan", () => {
   it("renames T1 to T9 and adds a new T1 in one save", async () => {
     const z = await zone();
     const [l1, l9] = [fresh("T1"), fresh("T9")];
-    const { ids } = await save(z, { revision: 0, tables: [entry("1", l1)], joins: [] });
+    const { ids } = await save(z, { revision: 0, tables: [entry("1", l1)] });
 
     const second = await save(z, {
       revision: 1,
       tables: [entry("1", l9, { id: ids["1"] }), entry("new", l1, { seats: 2, placement: null })],
-      joins: [],
     });
 
     expect(second.ids["1"]).toBe(ids["1"]);
@@ -848,18 +657,16 @@ describe("saveZonePlan", () => {
   it("renames a table while another table is named exactly the renamed table's id", async () => {
     const z = await zone();
     const [a, renamed] = [fresh("Id A"), fresh("Id A2")];
-    const first = await save(z, { revision: 0, tables: [entry("a", a)], joins: [] });
+    const first = await save(z, { revision: 0, tables: [entry("a", a)] });
     const aId = first.ids.a!;
     const second = await save(z, {
       revision: 1,
       tables: [entry("a", a, { id: aId }), entry("b", aId)],
-      joins: [],
     });
 
     await save(z, {
       revision: 2,
       tables: [entry("a", renamed, { id: aId }), entry("b", aId, { id: second.ids.b })],
-      joins: [],
     });
 
     expect(await labelsOf(z)).toEqual({ [aId]: renamed, [second.ids.b!]: aId });
@@ -871,35 +678,26 @@ describe("saveZonePlan", () => {
     const { ids } = await save(z, {
       revision: 0,
       tables: [entry("a", a), entry("b", b)],
-      joins: [],
     });
 
     await save(z, {
       revision: 1,
       tables: [entry("b", ids.a!, { id: ids.b }), entry("a", renamed, { id: ids.a })],
-      joins: [],
     });
 
     expect(await labelsOf(z)).toEqual({ [ids.a!]: renamed, [ids.b!]: ids.a });
   });
 
-  it("returns the id of a table whose draft key is __proto__, and saves a join naming it", async () => {
+  it("returns the id of a table whose draft key is __proto__", async () => {
     const z = await zone();
     const result = await save(z, {
       revision: 0,
       tables: [entry("__proto__", fresh("Proto 1")), entry("b", fresh("Proto 2"))],
-      joins: [{ seats: 6, tableKeys: ["__proto__", "b"] }],
     });
 
     expect(Object.hasOwn(result.ids, "__proto__")).toBe(true);
     const plan = await inTx(v, (tx) => readZonePlan(tx, v.cfg, z));
     expect(plan.tables.map((t) => t.id)).toContain(result.ids["__proto__"]);
-    expect(plan.joins).toEqual([
-      expect.objectContaining({
-        seats: 6,
-        tableIds: [result.ids["__proto__"], result.ids.b].sort(),
-      }),
-    ]);
   });
 
   it("writes nothing when a check refuses", async () => {
@@ -907,7 +705,7 @@ describe("saveZonePlan", () => {
     const before = await inTx(v, (tx) => readZonePlan(tx, v.cfg, z));
 
     const error = await refusal(
-      save(z, { revision: 0, tables: [entry("t1", fresh("X"), { id: result.ids.t1 })], joins: [] }),
+      save(z, { revision: 0, tables: [entry("t1", fresh("X"), { id: result.ids.t1 })] }),
     );
 
     expect(error.code).toBe("floor_plan.out_of_date");
@@ -922,7 +720,6 @@ describe("saveZonePlan", () => {
     const second = await save(z, {
       revision: 1,
       tables: [entry("bar", bar, { id: result.ids.bar })],
-      joins: [],
     });
 
     expect(second.revision).toBe(2);
@@ -936,13 +733,11 @@ describe("saveZonePlan", () => {
     const { ids } = await save(z, {
       revision: 1,
       tables: [entry("again", t1, { seats: 6 })],
-      joins: [],
     });
 
     const third = await save(z, {
       revision: 2,
       tables: [entry("again", t1, { id: ids.again, seats: 8 })],
-      joins: [],
     });
 
     expect(third).toEqual({ revision: 3, ids: { again: ids.again } });
@@ -955,7 +750,7 @@ describe("saveZonePlan", () => {
     const name = fresh("N");
     const held = await liveTable(z, name);
     await seat(v, held);
-    const { ids } = await save(z, { revision: 0, tables: [entry("n", name)], joins: [] });
+    const { ids } = await save(z, { revision: 0, tables: [entry("n", name)] });
     const pending = async () =>
       inTx(v, (tx) =>
         tx
@@ -967,7 +762,7 @@ describe("saveZonePlan", () => {
       expect.objectContaining({ planTableId: ids.n, pending: true, label: name }),
     ]);
 
-    await expect(save(z, { revision: 1, tables: [], joins: [] })).resolves.toEqual({
+    await expect(save(z, { revision: 1, tables: [] })).resolves.toEqual({
       revision: 2,
       ids: {},
     });
@@ -987,7 +782,6 @@ describe("floor plans without adoption", () => {
       revision: 0,
       savedAt: null,
       tables: [],
-      joins: [],
     });
   });
 
@@ -999,7 +793,6 @@ describe("floor plans without adoption", () => {
     const input = {
       revision: 0,
       tables: [{ key: "a", liveTableId: live, label, seats: 4, fixed: false, placement: PLACE }],
-      joins: [],
     };
     const saved = await inTx(v, (tx) => saveZonePlan(tx, v.cfg, NONE, z, input, NOW));
     const plan = await inTx(v, (tx) => readZonePlan(tx, v.cfg, z));
@@ -1025,7 +818,6 @@ describe("floor plans without adoption", () => {
     const input = (label: string): ZonePlanSave => ({
       revision: 0,
       tables: [{ key: "a", label, seats: 4, fixed: false, placement: PLACE }],
-      joins: [],
     });
     await expect(check(z, input(own))).resolves.toBeUndefined();
     const other = await zone();

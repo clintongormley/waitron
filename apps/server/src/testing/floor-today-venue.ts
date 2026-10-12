@@ -38,13 +38,12 @@ export async function tableServiceZone(v: PartyVenue): Promise<string> {
 }
 
 /**
- * A fresh table-service zone, its live tables, and a first saved master holding `entries` and
- * `joins`, which builds today's plan. Labels are made unique.
+ * A fresh table-service zone, its live tables, and a first saved master holding `entries`, which
+ * builds today's plan. Labels are made unique.
  */
 export async function plannedZone(
   v: PartyVenue,
   entries: PlannedEntry[],
-  joins: { seats: number; keys: string[] }[] = [],
   now: Date = new Date(),
 ): Promise<{
   zoneId: string;
@@ -77,18 +76,7 @@ export async function plannedZone(
     });
   }
   const { revision, ids } = await inTx(v, (tx) =>
-    saveZonePlan(
-      tx,
-      v.cfg,
-      REMOVALS,
-      zoneId,
-      {
-        revision: 0,
-        tables,
-        joins: joins.map((join) => ({ seats: join.seats, tableKeys: join.keys })),
-      },
-      now,
-    ),
+    saveZonePlan(tx, v.cfg, REMOVALS, zoneId, { revision: 0, tables }, now),
   );
   const plan = await inTx(v, (tx) => readZonePlan(tx, v.cfg, zoneId));
   for (const entry of entries) {

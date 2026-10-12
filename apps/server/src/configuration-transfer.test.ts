@@ -5896,7 +5896,6 @@ it("round-trips a deleted service hierarchy while remapping only its live namesa
             placement: { x: 0, y: 0, width: 8, height: 8, rotation: 0, shape: "rect" },
           },
         ],
-        joins: [],
       },
       new Date("2026-10-11T12:00:00Z"),
     );

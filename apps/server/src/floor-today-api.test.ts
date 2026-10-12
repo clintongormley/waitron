@@ -210,7 +210,6 @@ describe("today's routes", () => {
             placement: { x: 50, y: 0, width: 8, height: 8, shape: "rect", rotation: 0 },
           },
         ],
-        joins: [],
       }),
     );
     await expect204(send("POST", `/api/zones/${zoneId}/today/reset`, {}));

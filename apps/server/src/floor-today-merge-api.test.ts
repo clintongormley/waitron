@@ -87,14 +87,13 @@ async function floorToday(tableId: string): Promise<FloorToday> {
 }
 
 /** A at (0, 0) and B at (20, 0), both 8 × 8 and free. */
-async function twoTables(joins: { seats: number; keys: string[] }[] = [], now?: Date) {
+async function twoTables(now?: Date) {
   const { table, zoneId, master } = await plannedZone(
     v,
     [
       { key: "a", place: { x: 0, y: 0 } },
       { key: "b", place: { x: 20, y: 0 } },
     ],
-    joins,
     now,
   );
   return { a: table.a!, b: table.b!, zoneId, master };
@@ -138,7 +137,7 @@ describe("merging and splitting free tables", () => {
     expect(await todayRow(v, a)).toEqual(before);
   });
 
-  it("asks for seats whether or not the saved plan joins these tables", async () => {
+  it("asks for seats when a merge sends none", async () => {
     const unsaved = await twoTables();
     expect(
       await refusal(today(unsaved.a, "merge", { targetId: unsaved.b, side: "right" })),
@@ -147,13 +146,6 @@ describe("merging and splitting free tables", () => {
       body: { error: { code: "merge.seats_required", params: {} } },
     });
     expect(await mergeOf(v, unsaved.a)).toBeNull();
-
-    const saved = await twoTables([{ seats: 10, keys: ["a", "b"] }]);
-    expect(await refusal(today(saved.a, "merge", { targetId: saved.b, side: "right" }))).toEqual({
-      status: 400,
-      body: { error: { code: "merge.seats_required", params: {} } },
-    });
-    expect(await mergeOf(v, saved.a)).toBeNull();
   });
 
   it("refuses to merge a seated table or one needing clearing, and to split a seated merge here", async () => {

@@ -77,7 +77,7 @@ describe("the till's table-state answer carries today's plan", () => {
       { key: "o", label: lo, seats: 6, fixed: false, placement: place(40, 0) },
     ];
     await inTx(v, (tx) =>
-      saveZonePlan(tx, v.cfg, REMOVALS, zoneId, { revision: 0, tables: entries, joins: [] }, NOW),
+      saveZonePlan(tx, v.cfg, REMOVALS, zoneId, { revision: 0, tables: entries }, NOW),
     );
     const plan = await inTx(v, (tx) => readZonePlan(tx, v.cfg, zoneId));
     const liveId = (label: string) => plan.tables.find((t) => t.label === label)!.liveTableId!;

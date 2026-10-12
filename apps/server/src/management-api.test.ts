@@ -2905,7 +2905,7 @@ describe("floor plans", () => {
   it("accepts a save whose master entry carries another table's liveTableId, and ignores it", async () => {
     const zoneId = await createZone(unique("IgnoreLiveId"));
     const label = unique("Master");
-    const first = await put(zoneId, { revision: 0, tables: [entry("a", label)], joins: [] });
+    const first = await put(zoneId, { revision: 0, tables: [entry("a", label)] });
     const { ids } = (await first.json()) as { ids: Record<string, string> };
     const { id: otherId } = await withTransaction(suite.db, (tx) =>
       createTable(tx, tillConfigFromVenue(venue), { label: unique("Unrelated"), zoneId }),
@@ -2914,7 +2914,6 @@ describe("floor plans", () => {
     const response = await put(zoneId, {
       revision: 1,
       tables: [{ ...entry("a", label), id: ids.a, liveTableId: otherId }],
-      joins: [],
     });
     expect(response.status).toBe(200);
     const after = (await (await get(zoneId)).json()) as {
@@ -2926,7 +2925,6 @@ describe("floor plans", () => {
     const malformed = await put(zoneId, {
       revision: 2,
       tables: [{ ...entry("a", label), id: ids.a, liveTableId: 7 }],
-      joins: [],
     });
     expect(malformed.status).toBe(200);
   });
@@ -2935,13 +2933,13 @@ describe("floor plans", () => {
     const zoneId = await createZone(unique("PlanFirst"));
     const res = await get(zoneId);
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ zoneId, revision: 0, savedAt: null, tables: [], joins: [] });
+    expect(await res.json()).toEqual({ zoneId, revision: 0, savedAt: null, tables: [] });
   });
 
   it("saves a plan and reads it back; a save from an older copy is refused", async () => {
     const zoneId = await createZone(unique("PlanSave"));
     const label = unique("P");
-    const saved = await put(zoneId, { revision: 0, tables: [entry("a", label)], joins: [] });
+    const saved = await put(zoneId, { revision: 0, tables: [entry("a", label)] });
     expect(saved.status).toBe(200);
     const { revision, ids } = (await saved.json()) as {
       revision: number;
@@ -2957,7 +2955,7 @@ describe("floor plans", () => {
       expect.objectContaining({ id: ids.a, label, seats: 4, fixed: false, placement: PLACE }),
     ]);
 
-    const stale = await put(zoneId, { revision: 0, tables: [], joins: [] });
+    const stale = await put(zoneId, { revision: 0, tables: [] });
     expect(stale.status).toBe(409);
     expect(await stale.json()).toMatchObject({
       error: { code: "floor_plan.out_of_date", params: { zoneId, revision: 1 } },
@@ -2966,13 +2964,12 @@ describe("floor plans", () => {
 
   it("accepts back a plan exactly as read, each table given a key", async () => {
     const zoneId = await createZone(unique("PlanRoundTrip"));
-    expect(
-      (await put(zoneId, { revision: 0, tables: [entry("a", unique("R"))], joins: [] })).status,
-    ).toBe(200);
+    expect((await put(zoneId, { revision: 0, tables: [entry("a", unique("R"))] })).status).toBe(
+      200,
+    );
     const read = (await (await get(zoneId)).json()) as {
       revision: number;
       tables: { id: string | null; liveTableId: string | null }[];
-      joins: unknown[];
     };
     expect(read.tables.map((t) => [t.id === null, t.liveTableId !== null])).toEqual([
       [false, true],
@@ -2989,12 +2986,23 @@ describe("floor plans", () => {
     expect(after.tables.every((t) => t.id !== null)).toBe(true);
   });
 
+  it("a save that still sends joins is accepted and saves none", async () => {
+    const zoneId = await createZone(unique("OldTab"));
+    const res = await put(zoneId, {
+      revision: 0,
+      tables: [entry("a", unique("Old")), entry("b", unique("Tab"))],
+      joins: [{ seats: 6, tableKeys: ["a", "b"] }],
+    });
+    expect(res.status).toBe(200);
+    const read = (await (await get(zoneId)).json()) as Record<string, unknown>;
+    expect(Object.keys(read).sort()).toEqual(["revision", "savedAt", "tables", "zoneId"]);
+  });
+
   it("refuses a rotation off the 15-degree steps", async () => {
     const zoneId = await createZone(unique("PlanRotate"));
     const res = await put(zoneId, {
       revision: 0,
       tables: [{ ...entry("a", unique("T")), placement: { ...PLACE, rotation: 10 } }],
-      joins: [],
     });
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({
@@ -3004,21 +3012,14 @@ describe("floor plans", () => {
 
   it.each([
     ["body", []],
-    ["revision", { revision: "1", tables: [], joins: [] }],
-    ["tables", { revision: 0, tables: {}, joins: [] }],
-    ["joins", { revision: 0, tables: [], joins: null }],
-    ["tables.0", { revision: 0, tables: [null], joins: [] }],
-    ["tables.0.key", { revision: 0, tables: [{ ...entry("a", "L"), key: 1 }], joins: [] }],
-    ["tables.0.label", { revision: 0, tables: [{ ...entry("a", "L"), label: 1 }], joins: [] }],
-    ["tables.0.fixed", { revision: 0, tables: [{ ...entry("a", "L"), fixed: "no" }], joins: [] }],
-    ["tables.0.id", { revision: 0, tables: [{ ...entry("a", "L"), id: 7 }], joins: [] }],
-    [
-      "tables.0.placement",
-      { revision: 0, tables: [{ ...entry("a", "L"), placement: undefined }], joins: [] },
-    ],
-    ["joins.0", { revision: 0, tables: [], joins: [3] }],
-    ["joins.0.tableKeys", { revision: 0, tables: [], joins: [{ seats: 4, tableKeys: "ab" }] }],
-    ["joins.0.tableKeys", { revision: 0, tables: [], joins: [{ seats: 4, tableKeys: [1, 2] }] }],
+    ["revision", { revision: "1", tables: [] }],
+    ["tables", { revision: 0, tables: {} }],
+    ["tables.0", { revision: 0, tables: [null] }],
+    ["tables.0.key", { revision: 0, tables: [{ ...entry("a", "L"), key: 1 }] }],
+    ["tables.0.label", { revision: 0, tables: [{ ...entry("a", "L"), label: 1 }] }],
+    ["tables.0.fixed", { revision: 0, tables: [{ ...entry("a", "L"), fixed: "no" }] }],
+    ["tables.0.id", { revision: 0, tables: [{ ...entry("a", "L"), id: 7 }] }],
+    ["tables.0.placement", { revision: 0, tables: [{ ...entry("a", "L"), placement: undefined }] }],
   ])("refuses a malformed %s as management.request_invalid", async (field, body) => {
     const zoneId = await createZone(unique("PlanShape"));
     const res = await put(zoneId, body);
@@ -3030,14 +3031,14 @@ describe("floor plans", () => {
 
   it("refuses to remove a table a module still needs, and saves nothing", async () => {
     const zoneId = await createZone(unique("PlanBooked"));
-    await put(zoneId, { revision: 0, tables: [entry("a", unique("B"))], joins: [] });
+    await put(zoneId, { revision: 0, tables: [entry("a", unique("B"))] });
     const read = (await (await get(zoneId)).json()) as {
       tables: { liveTableId: string }[];
     };
     const liveId = read.tables[0]!.liveTableId;
     bookedTables.add(liveId);
     try {
-      const res = await put(zoneId, { revision: 1, tables: [], joins: [] });
+      const res = await put(zoneId, { revision: 1, tables: [] });
       expect(res.status).toBe(409);
       expect(await res.json()).toMatchObject({
         error: { code: "table.booked", params: { tableId: liveId } },
@@ -3050,7 +3051,7 @@ describe("floor plans", () => {
 
   it("refuses staff (403) and no session (401), on read and save", async () => {
     const zoneId = await createZone(unique("PlanAuth"));
-    const body = { revision: 0, tables: [], joins: [] };
+    const body = { revision: 0, tables: [] };
     for (const [cookie, status] of [
       [staffCookie, 403],
       ["", 401],
@@ -3062,10 +3063,7 @@ describe("floor plans", () => {
   });
 
   it.each([randomUUID(), "not-a-uuid"])("answers an unknown zone %s with 404", async (zoneId) => {
-    for (const res of [
-      await get(zoneId),
-      await put(zoneId, { revision: 0, tables: [], joins: [] }),
-    ]) {
+    for (const res of [await get(zoneId), await put(zoneId, { revision: 0, tables: [] })]) {
       expect(res.status).toBe(404);
       expect(await res.json()).toMatchObject({ error: { code: "zone.not_found" } });
     }

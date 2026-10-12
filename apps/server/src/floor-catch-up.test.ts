@@ -129,9 +129,7 @@ function place(x: number, y: number) {
 }
 
 function save(zoneId: string, revision: number, tables: Entry[]) {
-  return inTx(v, (tx) =>
-    saveZonePlan(tx, v.cfg, REMOVALS, zoneId, { revision, tables, joins: [] }, NOW),
-  );
+  return inTx(v, (tx) => saveZonePlan(tx, v.cfg, REMOVALS, zoneId, { revision, tables }, NOW));
 }
 
 const reset = (zoneId: string) => inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, NOW));

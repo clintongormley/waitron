@@ -264,7 +264,6 @@ export async function seedFloor(
         fixed: table.fixed,
         placement: table.placement,
       })),
-      joins: [],
     });
   }
 

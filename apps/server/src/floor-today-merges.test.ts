@@ -48,7 +48,7 @@ const byId = <T extends { tableId: string }>(rows: T[]): T[] =>
   [...rows].sort((a, b) => a.tableId.localeCompare(b.tableId));
 
 /** A and B 8×8 at (0, 0) and (20, 0), C at (40, 0) turned 30°. */
-async function threeTables(joins: { seats: number; keys: string[] }[] = []) {
+async function threeTables() {
   return plannedZone(
     v,
     [
@@ -56,7 +56,6 @@ async function threeTables(joins: { seats: number; keys: string[] }[] = []) {
       { key: "b", place: { x: 20, y: 0 } },
       { key: "c", place: { x: 40, y: 0, rotation: 30 } },
     ],
-    joins,
     NOW,
   );
 }
@@ -86,8 +85,8 @@ describe("today's merges", () => {
     expect((await inTx(v, (tx) => mergeMembers(tx, a))).sort()).toEqual([a, b].sort());
   });
 
-  it("refuses a merge without seats, even of tables the saved plan joins, and writes nothing", async () => {
-    const { table } = await threeTables([{ seats: 6, keys: ["a", "b"] }]);
+  it("refuses a merge without seats, and writes nothing", async () => {
+    const { table } = await threeTables();
 
     await expect(merge(table.b!, table.a!, "right", null)).rejects.toMatchObject({
       code: "merge.seats_required",
@@ -100,7 +99,7 @@ describe("today's merges", () => {
   });
 
   it("grows a merge with a third table, working its seats out again", async () => {
-    const { table } = await threeTables([{ seats: 6, keys: ["a", "b"] }]);
+    const { table } = await threeTables();
     await merge(table.b!, table.a!, "right", 8);
 
     await expect(merge(table.c!, table.b!, "bottom", null)).rejects.toMatchObject({
@@ -145,10 +144,9 @@ describe("today's merges", () => {
         { key: "c", place: { x: 40, y: 0 } },
         { key: "f", place: { x: 60, y: 0 }, fixed: true },
       ],
-      [],
       NOW,
     );
-    const other = await plannedZone(v, [{ key: "o", place: { x: 0, y: 0 } }], [], NOW);
+    const other = await plannedZone(v, [{ key: "o", place: { x: 0, y: 0 } }], NOW);
 
     await expect(merge(table.f!, table.a!, "right", 8)).rejects.toMatchObject({
       code: "table.fixed",
@@ -184,7 +182,6 @@ describe("today's merges", () => {
         { key: "s", place: null },
         { key: "t", place: { x: 40, y: 0 } },
       ],
-      [],
       NOW,
     );
     await setToday(table.t!, { takenOff: true });
