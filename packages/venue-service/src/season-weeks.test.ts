@@ -181,6 +181,22 @@ describe("replaceMenuWeek writes season weeks", () => {
     ).resolves.toBeUndefined();
   });
 
+  it("counts an unchanged week as no time change when a season stores it as touching ranges of one period, as an import may", async () => {
+    const v = await venue();
+    const split = [
+      { periodId: v.lunch, startsAt: "13:00", endsAt: "14:00" },
+      { periodId: v.lunch, startsAt: "14:00", endsAt: "16:00" },
+    ];
+    await scoped((tx) => replaceMenuWeek(tx, v.cfg, v.departmentId, menuWeek(split), AT, 0));
+    const stored = [0, 1, 2, 3, 4, 5, 6].map((weekday) => (weekday === TUESDAY ? split : []));
+    for (const seasonId of Object.values(await seasonIds(v)))
+      await scoped((tx) => writeDepartmentSeasonWeek(tx, v.departmentId, seasonId, stored));
+    expect(await departmentTuesdays(v)).toEqual(everySeason(split));
+    await expect(
+      scoped((tx) => replaceMenuWeek(tx, v.cfg, v.departmentId, menuWeek(split), AT, 5)),
+    ).resolves.toBeUndefined();
+  });
+
   it("joins touching ranges of one period, and keeps touching ranges of two periods apart", async () => {
     const v = await venue();
     await scoped((tx) =>
@@ -308,6 +324,22 @@ describe("replaceZoneClosedWeek writes season weeks", () => {
     expect(await zoneTuesdays(v)).toEqual(everySeason([night]));
     await expect(
       scoped((tx) => replaceZoneClosedWeek(tx, v.cfg, v.zoneId, closedWeek([night]), 5, AT)),
+    ).resolves.toBeUndefined();
+  });
+
+  it("counts an unchanged week as no time change when a season stores it as touching ranges, as an import may", async () => {
+    const v = await venue();
+    const split = [
+      { startsAt: "13:00", endsAt: "14:00" },
+      { startsAt: "14:00", endsAt: "16:00" },
+    ];
+    await scoped((tx) => replaceZoneClosedWeek(tx, v.cfg, v.zoneId, closedWeek(split), 0, AT));
+    const stored = [0, 1, 2, 3, 4, 5, 6].map((weekday) => (weekday === TUESDAY ? split : []));
+    for (const seasonId of Object.values(await seasonIds(v)))
+      await scoped((tx) => writeZoneSeasonWeek(tx, v.zoneId, seasonId, stored));
+    expect(await zoneTuesdays(v)).toEqual(everySeason(split));
+    await expect(
+      scoped((tx) => replaceZoneClosedWeek(tx, v.cfg, v.zoneId, closedWeek(split), 5, AT)),
     ).resolves.toBeUndefined();
   });
 

@@ -63,7 +63,11 @@ export async function replaceZoneClosedWeek(
   const seasonsNow = (await readZoneSeasonWeeks(tx, cfg, [zoneId], clock.dayCutover)).get(zoneId);
   let changed = targets.some((season) =>
     seasonWeek.some(
-      (ranges, weekday) => !sameScheduleRanges(seasonsNow?.get(season.id)?.[weekday] ?? [], ranges),
+      (ranges, weekday) =>
+        !sameScheduleRanges(
+          joinTouching(seasonsNow?.get(season.id)?.[weekday] ?? [], () => true),
+          ranges,
+        ),
     ),
   );
   if (!changed && options.seasonId === undefined) {

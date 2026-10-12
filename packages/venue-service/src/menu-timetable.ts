@@ -783,9 +783,8 @@ export async function replaceMenuWeek(
     existing.map((day) => day.id),
   );
   const targets = await targetSeasons(tx, cfg, options.seasonId);
-  const seasonWeek = week.slots.map((slots) =>
-    joinTouching(slots, (a, b) => a.periodId === b.periodId),
-  );
+  const samePeriod = (a: ServiceRange, b: ServiceRange) => a.periodId === b.periodId;
+  const seasonWeek = week.slots.map((slots) => joinTouching(slots, samePeriod));
   const seasonsNow = (
     await readDepartmentSeasonWeeks(tx, cfg, [departmentId], clock.dayCutover)
   ).get(departmentId);
@@ -801,7 +800,10 @@ export async function replaceMenuWeek(
     targets.some((season) =>
       seasonWeek.some(
         (ranges, weekday) =>
-          !sameScheduleRanges(seasonsNow?.get(season.id)?.[weekday] ?? [], ranges),
+          !sameScheduleRanges(
+            joinTouching(seasonsNow?.get(season.id)?.[weekday] ?? [], samePeriod),
+            ranges,
+          ),
       ),
     );
   await assertBusinessDayScheduleWrite(
