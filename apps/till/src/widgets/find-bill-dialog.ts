@@ -16,7 +16,7 @@ import "@waitron/ui/src/components/wt-price-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import type { BillLookupRow, InvoiceLookupRow, Tender, TillApi } from "../api/client.js";
 import { typedAmount } from "../state/bill-payment.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { currentLocale, overLimitText, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { trackDialog } from "./track-dialog.js";
 
@@ -77,7 +77,7 @@ export class TillFindBillDialog extends LitElement {
 
   @property({ attribute: false }) api!: TillApi;
   @property({ type: Boolean }) busy = false;
-  @property({ attribute: false }) error?: StringKey;
+  @property({ attribute: false }) error?: StringKey | { overLimit: string };
   @state() private kind: "bills" | "invoices" = "bills";
   @state() private invoiceResults: InvoiceLookupRow[] | null = null;
   @state() private query = "";
@@ -432,7 +432,15 @@ export class TillFindBillDialog extends LitElement {
               `
         }
         <wt-form-actions
-          .error=${this.error ? t(this.error) : this.queryError || this.cashError ? t("form.fix_fields") : ""}
+          .error=${
+            typeof this.error === "string"
+              ? t(this.error)
+              : this.error
+                ? overLimitText(this.error.overLimit)
+                : this.queryError || this.cashError
+                  ? t("form.fix_fields")
+                  : ""
+          }
         >
           <wt-button slot="cancel" variant="secondary" .disabled=${this.busy} @click=${this.#back}>
             ${bill === null ? t("find_bill.close") : t("find_bill.back")}</wt-button
