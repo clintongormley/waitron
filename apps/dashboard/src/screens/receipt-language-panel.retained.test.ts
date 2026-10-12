@@ -3,7 +3,15 @@ import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
-import { mount, field, pick, original, deferred } from "../testing/receipt-language-fixture.js";
+import {
+  mount,
+  field,
+  pick,
+  original,
+  deferred,
+  clickSave,
+  save,
+} from "../testing/receipt-language-fixture.js";
 import type { DashboardApi } from "../api/client.js";
 import "./receipt-language-panel.js";
 
@@ -121,4 +129,67 @@ it("a fixed-language correction refuses below its action and blocks duplicate wr
     panel.shadowRoot!.querySelector("[data-test=receipt-language-value]")!.textContent,
   ).toContain("Spanish");
   expect(field(panel)).toBeNull();
+});
+
+it("shows an arbitrary stored language unchanged without inventing a content warning or write", async () => {
+  const { panel, writes } = await mount({ ...original, language: "not a language" });
+  await field(panel).updateComplete;
+  expect(field(panel).value).toBe("not a language");
+  expect(field(panel).shadowRoot!.querySelector(".trigger")!.textContent).toContain(
+    "not a language",
+  );
+  expect(panel.shadowRoot!.querySelector("[data-test=receipt-language-warning]")).toBeNull();
+  expect(save(panel).disabled).toBe(true);
+  expect(writes).toEqual([]);
+});
+
+it("explains a rejected language value beside the chooser in its own wording", async () => {
+  const { panel, writes } = await mount(original, {
+    putReceiptLanguage: async () => {
+      throw { code: "management.request_invalid", params: { field: "receiptLanguage" } };
+    },
+  });
+  await pick(panel, "gl-ES");
+  await clickSave(panel);
+  await expect.poll(() => field(panel).error).toBe(t("receipts.language_invalid"));
+  expect(save(panel).disabled).toBe(false);
+  expect(writes).toEqual(["gl-ES"]);
+});
+
+it("words the missing-content warning and fixed regional reason and action in Spanish", async () => {
+  setLocale("es-ES");
+  const { panel } = await mount(
+    { ...original, language: "gl-ES" },
+    {
+      getContentLanguages: async () => ({ defaultLanguage: "es", languages: ["es"] }),
+    },
+  );
+  await expect
+    .poll(() =>
+      panel.shadowRoot!.querySelector("[data-test=receipt-language-warning]")?.textContent?.trim(),
+    )
+    .toBe(
+      "Por defecto, los recibos se imprimen en gallego, que no es uno de tus idiomas del contenido. Los nombres de los productos salen en español, el idioma predeterminado.",
+    );
+  cleanupWidgets();
+  const { panel: regional } = await mount({
+    ...original,
+    fixed: { locale: "ca-ES", reason: { en: "Regional rule", es: "Regla regional" } },
+  });
+  expect(regional.shadowRoot!.querySelector(".reason")!.textContent!.trim()).toBe("Regla regional");
+  expect(
+    regional.shadowRoot!.querySelector("[data-test=use-fixed-language]")!.textContent!.trim(),
+  ).toBe("Usar catalán");
+});
+
+it("warns when the fixed receipt language is absent from the content languages", async () => {
+  const { panel } = await mount(
+    { ...original, language: "ca-ES", fixed: { locale: "ca-ES", reason: { en: "Regional rule" } } },
+    { getContentLanguages: async () => ({ defaultLanguage: "es", languages: ["es"] }) },
+  );
+  await expect
+    .poll(
+      () => panel.shadowRoot!.querySelector("[data-test=receipt-language-warning]")?.textContent,
+    )
+    .toContain("Catalan");
 });

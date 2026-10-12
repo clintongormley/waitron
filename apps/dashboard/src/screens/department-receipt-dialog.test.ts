@@ -59,9 +59,19 @@ it("explains an empty required description and disables Save until repaired", as
   expect(receiptField(el, "operationDescription").error).toBe(t("location_settings.required"));
   expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(t("form.fix_fields"));
   expect(receiptSave(el).disabled).toBe(true);
+  const description = receiptField(el, "operationDescription");
+  await expect
+    .poll(() => description.shadowRoot!.activeElement)
+    .toBe(description.shadowRoot!.querySelector("input"));
+  expect(description.value).toBe("");
   expect(api.putDepartmentReceipt).not.toHaveBeenCalled();
   await editReceipt(el, "operationDescription", "Counter service");
+  expect(description.error).toBe("");
+  expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBe("");
   expect(receiptSave(el).disabled).toBe(false);
+  await editReceipt(el, "operationDescription", " ");
+  expect(description.error).toBe(t("location_settings.required"));
+  expect(receiptSave(el).disabled).toBe(true);
 });
 
 it("uses the server's installed contribution metadata to hide the description and save decoration", async () => {

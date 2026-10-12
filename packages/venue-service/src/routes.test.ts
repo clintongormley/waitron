@@ -73,7 +73,7 @@ interface Fixture {
   categoryId: string;
 }
 
-async function fixture(): Promise<Fixture> {
+async function fixture(operationDescriptionRequired?: boolean): Promise<Fixture> {
   await seedTenant(db);
   const [location] = await db
     .insert(locations)
@@ -140,7 +140,7 @@ async function fixture(): Promise<Fixture> {
     app,
     {
       db,
-      cfg: { locationId: scopedLocationId },
+      cfg: Object.assign({ locationId: scopedLocationId }, { operationDescriptionRequired }),
       core: {
         seatTable: () => Promise.reject(new Error("route fixture: seating needs the server seat")),
         floorDeletion: {
@@ -3805,4 +3805,69 @@ it("repairing an absent department policy preserves the previously read receipt 
     receiptPrintMode: "auto",
     printTradingName: false,
   });
+});
+
+describe("department description setup in the live model", () => {
+  it.each([
+    undefined,
+    "{}",
+    JSON.stringify({ operationDescription: "  \t " }),
+    '{"operationDescription":23}',
+    "{broken",
+    JSON.stringify({ operationDescription: "x".repeat(501) }),
+    JSON.stringify({ operationDescription: "bad\u0001text" }),
+  ])(
+    "reports missing or unreadable department description %j only when the installed field requires it",
+    async (receipt) => {
+      const fx = await fixture(true);
+      const department = await withTransaction(db, (tx) =>
+        createDepartment(tx, fx, { name: "Dining" }),
+      );
+      if (receipt !== undefined)
+        await db.execute(
+          sql`insert into department_receipts (department_id, receipt, updated_at) values (${department.id}, ${receipt}, ${"2026-10-12T12:00:00Z"})`,
+        );
+      const read = async () =>
+        (
+          await (
+            await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
+          ).json()
+        ).readiness;
+      expect(await read()).toContainEqual({
+        code: "department.operation_description_required",
+        departmentId: department.id,
+        departmentName: "Dining",
+      });
+      await db.execute(
+        sql`insert into department_receipts (department_id, receipt, updated_at) values (${department.id}, ${JSON.stringify({ operationDescription: "Deli meals" })}, ${"2026-10-12T12:00:00Z"}) on conflict (department_id) do update set receipt=excluded.receipt`,
+      );
+      expect(await read()).not.toContainEqual(
+        expect.objectContaining({ code: "department.operation_description_required" }),
+      );
+      const other = await fixture(true);
+      expect(
+        (
+          await (
+            await send(other.app, "GET", "/management-api/venue-service", other.managerCookie)
+          ).json()
+        ).readiness,
+      ).not.toContainEqual(expect.objectContaining({ departmentId: department.id }));
+    },
+  );
+  it.each([false, undefined])(
+    "a no-field or standalone route (%j) does not require a department description",
+    async (required) => {
+      const fx = await fixture(required);
+      await withTransaction(db, (tx) => createDepartment(tx, fx, { name: "No description" }));
+      expect(
+        (
+          await (
+            await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
+          ).json()
+        ).readiness,
+      ).not.toContainEqual(
+        expect.objectContaining({ code: "department.operation_description_required" }),
+      );
+    },
+  );
 });

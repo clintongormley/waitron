@@ -1675,6 +1675,7 @@ async function bootServer(
     cfg: {
       locationId: till.locationId,
       contentDefaultLanguage: venueLocale,
+      operationDescriptionRequired: enabledFiscal.venueFields !== undefined,
     },
     maxUploadBytes: MAX_UPLOAD_BYTES,
     core: moduleCoreServices(till, tableRemovals),

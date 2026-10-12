@@ -51,21 +51,41 @@ describe("the independent receipt language card", () => {
     expect(field(panel).value).toBe("es-ES");
     expect(unload()).toBe(false);
   });
-  it("puts a field refusal under the language, leaves retry available and clears it on change", async () => {
-    const { panel, writes } = await mount(original, {
-      putReceiptLanguage: async () => {
-        throw { code: "receipt.language_orders_open", params: { field: "receiptLanguage" } };
-      },
-    });
-    await pick(panel, "ca-ES");
-    await clickSave(panel);
-    await expect.poll(() => field(panel).error).toBe(codeMessage("receipt.language_orders_open"));
-    expect(save(panel).disabled).toBe(false);
-    expect(panel.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(t("form.fix_fields"));
-    expect(writes).toEqual(["ca-ES"]);
-    await pick(panel, "gl-ES");
-    expect(field(panel).error).toBe("");
-  });
+  it.each(["receipt.language_orders_open", "receipt.language_fixed"])(
+    "puts a %s refusal under the language, leaves retry available and clears it on change",
+    async (code) => {
+      const { panel, writes } = await mount(original, {
+        putReceiptLanguage: async () => {
+          throw { code, params: { field: "receiptLanguage" } };
+        },
+      });
+      await pick(panel, "ca-ES");
+      await clickSave(panel);
+      await expect.poll(() => field(panel).error).toBe(codeMessage(code));
+      const chooser = field(panel);
+      await chooser.updateComplete;
+      const native = chooser.shadowRoot!.querySelector(".trigger")!;
+      expect(native.getAttribute("aria-invalid")).toBe("true");
+      expect(
+        native
+          .getAttribute("aria-describedby")!
+          .split(" ")
+          .map((id) => chooser.shadowRoot!.getElementById(id)!.textContent!.trim()),
+      ).toEqual([codeMessage(code)]);
+      await expect.poll(() => panel.shadowRoot!.activeElement).toBe(chooser);
+      expect(chooser.value).toBe("ca-ES");
+      expect(native.textContent).toContain("Catalan");
+      expect(panel.shadowRoot!.querySelector("[role=status]")).toBeNull();
+      expect(save(panel).disabled).toBe(false);
+      expect(panel.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(t("form.fix_fields"));
+      expect(writes).toEqual(["ca-ES"]);
+      await pick(panel, "gl-ES");
+      expect(field(panel).error).toBe("");
+      await chooser.updateComplete;
+      expect(native.getAttribute("aria-invalid")).toBe("false");
+      expect(panel.shadowRoot!.querySelector("wt-form-actions")!.error).toBe("");
+    },
+  );
   it("puts a request refusal only below the form and keeps it through read recovery", async () => {
     let failing = false;
     const { panel, liveData } = await mount(original, {

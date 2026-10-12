@@ -546,3 +546,26 @@ it.each(["en-GB", "es-ES"] as const)(
       .toBe(t("receipts.no_address"));
   },
 );
+
+it("focuses a server-refused description and keeps its refusal until that field changes", async () => {
+  const { el, api } = await mountReceiptDialog();
+  api.putDepartmentReceipt.mockRejectedValue({
+    code: "management.request_invalid",
+    params: { field: "operationDescription" },
+  });
+  await editReceipt(el, "operationDescription", "Rejected service");
+  await clickReceiptSave(el);
+  const description = receiptField(el, "operationDescription");
+  await expect.poll(() => description.error).toBe(t("location_settings.invalid"));
+  await expect
+    .poll(() => description.shadowRoot!.activeElement)
+    .toBe(description.shadowRoot!.querySelector("input"));
+  expect(description.value).toBe("Rejected service");
+  expect(receiptSave(el).disabled).toBe(false);
+  await editReceipt(el, "email", "other@example.test");
+  expect(description.error).toBe(t("location_settings.invalid"));
+  await editReceipt(el, "operationDescription", "Corrected service");
+  expect(description.error).toBe("");
+  expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBe("");
+  expect(api.putDepartmentReceipt).toHaveBeenCalledTimes(1);
+});

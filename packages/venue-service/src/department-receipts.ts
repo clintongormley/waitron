@@ -165,6 +165,25 @@ function parsePicture(text: string | null, paper: ReceiptPaperWidth): ReceiptLog
   }
 }
 
+export async function listDepartmentReceiptReadiness(tx: Transaction, cfg: VenueScope) {
+  const rows = await tx
+    .select({ ...trimProjection({ ...cfg, receiptLanguages: [] }), name: departments.name })
+    .from(departments)
+    .leftJoin(departmentReceipts, eq(departmentReceipts.departmentId, departments.id))
+    .where(and(eq(departments.locationId, cfg.locationId), eq(departments.active, true)));
+  return rows.flatMap((row) =>
+    parseReceipt(row).operationDescription === undefined
+      ? [
+          {
+            code: "department.operation_description_required" as const,
+            departmentId: row.departmentId,
+            departmentName: row.name,
+          },
+        ]
+      : [],
+  );
+}
+
 export async function readDepartmentReceipt(
   tx: Transaction,
   cfg: DepartmentReceiptScope,

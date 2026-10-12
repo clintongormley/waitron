@@ -55,6 +55,11 @@ export type VenueReadinessIssue =
   | { code: "venue.default_station_missing" }
   | { code: "venue.department_missing" }
   | { code: "zone.department_missing"; zoneId: string; zoneName: string }
+  | {
+      code: "department.operation_description_required";
+      departmentId: string;
+      departmentName: string;
+    }
   | { code: "department.no_periods"; departmentId: string; departmentName: string }
   | { code: "zone.menu_unpublished"; zoneId: string; zoneName: string }
   | {
@@ -71,7 +76,6 @@ export interface NamedRow {
 export interface FloorZone extends NamedRow {
   active?: boolean;
 }
-/** The part of a zone's master plan the zone panel reads (`ZonePlan`, apps/server/src/floor-plan.ts). */
 export interface ZoneFloorPlan {
   /** `id` is null only for a live table offered for adoption, which is never placed. */
   tables: { id: string | null; fixed: boolean; placement: PlanPlacement | null }[];

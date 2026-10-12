@@ -1,3 +1,4 @@
+import { listDepartmentReceiptReadiness } from "./department-receipts.js";
 import { and, eq } from "drizzle-orm";
 import { departments } from "./schema/service.js";
 import { readDepartmentDeleteImpact, deleteDepartment } from "./service-delete.js";
@@ -550,7 +551,12 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           ),
           zones: await listServiceZones(tx, ctx.cfg),
           salePolicies: await listSalePolicies(tx, ctx.cfg),
-          readiness: await listVenueReadiness(tx, ctx.cfg),
+          readiness: [
+            ...(await listVenueReadiness(tx, ctx.cfg)),
+            ...(ctx.cfg.operationDescriptionRequired === true
+              ? await listDepartmentReceiptReadiness(tx, ctx.cfg)
+              : []),
+          ],
           settings: { editSentLines: await readEditSentLines(tx) },
           kitchenTicketGrouping: await readKitchenTicketGrouping(tx),
           printHeldWork: await readPrintHeldWork(tx),

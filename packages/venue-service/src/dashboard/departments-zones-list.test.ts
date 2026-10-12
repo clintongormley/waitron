@@ -141,3 +141,38 @@ it("a removed menu subject releases its floor-plan watch", async () => {
   await el.updateComplete;
   expect(detach).toHaveBeenCalledExactlyOnceWith();
 });
+
+it("names missing department receipt setup and opens that receipt without activating the row", async () => {
+  const { el, table } = await setup();
+  el.model!.readiness.push(
+    Object.assign(
+      {},
+      {
+        code: "department.operation_description_required" as const,
+        departmentId: "d1",
+        departmentName: "Restaurant",
+      },
+    ),
+  );
+  el.requestUpdate();
+  await el.updateComplete;
+  await table.updateComplete;
+  const row = table.shadowRoot!.querySelector('[data-row-key="department:d1"]')!;
+  expect(row.textContent).toContain("Set up the tax-agency description");
+  const receipt = vi.fn(),
+    edit = vi.fn();
+  el.addEventListener("edit-receipt", receipt);
+  el.addEventListener("open-department", edit);
+  const action = row.querySelector<HTMLElement>("[data-test=receipt-setup-d1]");
+  expect(action, "missing-description setup offers its receipt editor").not.toBeNull();
+  await userEvent.click(action!);
+  expect(receipt.mock.calls.map(([event]) => (event as CustomEvent).detail)).toEqual([
+    { departmentId: "d1" },
+  ]);
+  expect(edit).not.toHaveBeenCalled();
+  el.receiptAvailable = () => false;
+  await el.updateComplete;
+  await table.updateComplete;
+  expect(row.textContent).toContain("Set up the tax-agency description");
+  expect(row.querySelector("[data-test=receipt-setup-d1]")).toBeNull();
+});

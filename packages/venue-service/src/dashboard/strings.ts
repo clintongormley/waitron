@@ -424,6 +424,7 @@ const en = {
   "venue.readiness": "Ready for service",
   "venue.readiness.default_station_missing":
     "No default prep station is active. Items no rule sends anywhere cannot be sent.",
+  "venue.readiness.department_description": "Set up the tax-agency description",
   "venue.readiness.department_no_periods": "has no opening periods.",
   "venue.readiness.menu_empty": "has no products for",
   "venue.readiness.zone_menu_unpublished": "needs an active, published menu.",
@@ -1200,6 +1201,7 @@ const es: Record<keyof typeof en, string> = {
   "venue.readiness": "Preparado para el servicio",
   "venue.readiness.default_station_missing":
     "Ninguna estación de preparación predeterminada está activa. Los artículos que ninguna regla envía a una estación no se pueden enviar.",
+  "venue.readiness.department_description": "Configurar la descripción para Hacienda",
   "venue.readiness.department_no_periods": "no tiene períodos de apertura.",
   "venue.readiness.menu_empty": "no tiene productos para",
   "venue.readiness.zone_menu_unpublished": "necesita una carta activa y publicada.",

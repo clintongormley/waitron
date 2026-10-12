@@ -476,3 +476,37 @@ it("a live failure behind an unsaved dialog leaves its Save message empty", asyn
   ).toBe(false);
   expect(request.mock.calls.filter((call) => call[1] === "POST")).toHaveLength(0);
 });
+
+it("receipt changes refresh department description setup passively", async () => {
+  const { shell, request, value, liveData } = await mount();
+  const next = model();
+  next.readiness.push(
+    Object.assign(
+      {},
+      {
+        code: "department.operation_description_required" as const,
+        departmentId: "d1",
+        departmentName: "Restaurant",
+      },
+    ),
+  );
+  value(next);
+  const count = reads(request);
+  liveData.invalidate([{ type: "department_receipts", id: "d1" }]);
+  await expect.poll(() => reads(request)).toBeGreaterThan(count);
+  await expect
+    .poll(() => shell.model.readiness)
+    .toEqual([
+      {
+        code: "department.operation_description_required" as const,
+        departmentId: "d1",
+        departmentName: "Restaurant",
+      },
+    ]);
+  expect(request).toHaveBeenCalledWith("/management-api/venue-service", "GET", undefined, {
+    passive: true,
+  });
+  value(model());
+  liveData.invalidate([{ type: "department_receipts", id: "d1" }]);
+  await expect.poll(() => shell.model.readiness).toEqual([]);
+});

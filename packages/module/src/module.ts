@@ -45,7 +45,11 @@ export interface CoreServices {
  */
 export interface ModuleRouteContext {
   db: Database;
-  cfg: { locationId: LocationId; contentDefaultLanguage?: string };
+  cfg: {
+    locationId: LocationId;
+    contentDefaultLanguage?: string;
+    operationDescriptionRequired?: boolean;
+  };
   maxUploadBytes?: number;
   core: CoreServices;
 }

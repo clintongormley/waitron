@@ -191,6 +191,27 @@ export class DepartmentsList extends LitElement {
     if (!row.active)
       return html`<span part="disabled-setup">${t("venue.department_disabled")}</span>`;
     return this.model!.readiness.map((issue) => {
+      if (
+        issue.code === "department.operation_description_required" &&
+        issue.departmentId === row.id
+      )
+        return html`<div part="setup-issue">
+          ${
+            this.receiptAvailable?.(row) === false
+              ? t("venue.readiness.department_description")
+              : html`<wt-button
+                  part="link"
+                  variant="ghost"
+                  size="sm"
+                  data-test=${`receipt-setup-${row.id}`}
+                  @click=${(event: Event) => {
+                    event.stopPropagation();
+                    this.#emit("edit-receipt", { departmentId: row.id });
+                  }}
+                  >${t("venue.readiness.department_description")}</wt-button
+                >`
+          }
+        </div>`;
       if (issue.code === "department.no_periods" && issue.departmentId === row.id)
         return html`<div part="setup-issue">
           ${issue.departmentName} ${t("venue.readiness.department_no_periods")}
