@@ -3,8 +3,8 @@ import { assertBusinessDayScheduleWrite, sameScheduleRanges } from "./business-d
 import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
 import { floorZones, type Transaction } from "@waitron/db";
 import { readLocationClock } from "@waitron/reporting";
-import { AppError } from "@waitron/shared";
-import { resolveZoneContext, storedTime, type VenueScope } from "./operations.js";
+import { AppError, type BusinessDayClock } from "@waitron/shared";
+import { resolveZoneContext, storedTime, wireTime, type VenueScope } from "./operations.js";
 import {
   parseClosedRanges,
   type ClosedRange,
@@ -12,12 +12,13 @@ import {
   rangeSpanInDay,
   serviceMomentAt,
 } from "./service-day.js";
-import { resolveZoneClosedDays } from "./day-resolver.js";
+import { resolveZoneClosedDays, type DayPlan } from "./day-resolver.js";
 import {
   joinTouching,
   readZoneSeasonWeeks,
+  seasonsHolding,
   targetSeasons,
-  writeZoneSeasonWeek,
+  writeZoneSeasonWeeks,
 } from "./season-weeks.js";
 import { specialDates } from "./schema/hours.js";
 import { zoneExtensions } from "./schema/zone-extensions.js";
@@ -107,7 +108,17 @@ export async function replaceZoneClosedWeek(
         );
     }
   }
-  for (const season of targets) await writeZoneSeasonWeek(tx, zoneId, season.id, seasonWeek);
+  const holding = seasonsHolding(
+    seasonsNow,
+    targets.map((season) => season.id),
+    seasonWeek,
+  );
+  await writeZoneSeasonWeeks(
+    tx,
+    zoneId,
+    targets.flatMap((season) => (holding.has(season.id) ? [] : [season.id])),
+    seasonWeek,
+  );
 }
 
 export async function saveZoneClosedDate(
@@ -247,42 +258,84 @@ export function zoneExtensionForRange(
   return span.start < closed.end && span.end > closed.start ? extension : null;
 }
 
-export async function zoneClosureDay(tx: Transaction, cfg: VenueScope, zoneId: string, at: Date) {
-  const clock = await readLocationClock(tx, cfg.locationId);
+export interface ZoneClosure {
+  ranges: ClosedRange[];
+  extension: ClosedRange | null;
+}
+
+/** Each zone's closures and saved extension on the business day `at` falls in, read once for
+ *  every zone named, or every service zone when none are. */
+export async function zoneClosureDays(
+  tx: Transaction,
+  cfg: VenueScope,
+  zoneIds: readonly string[] | undefined,
+  at: Date,
+  prepared?: { clock: BusinessDayClock; plan?: DayPlan },
+) {
+  const clock = prepared?.clock ?? (await readLocationClock(tx, cfg.locationId));
   const moment = serviceMomentAt(at, clock);
-  if (moment === null)
-    return {
-      clock,
-      moment,
-      ranges: [],
-      extension: null,
-      dayContext: null,
-      cutover: clock.dayCutover,
-    };
+  const zones = new Map<string, ZoneClosure>();
+  if (moment === null) return { clock, moment, dayContext: null, cutover: clock.dayCutover, zones };
   const dayContext = serviceDayContext(clock, moment.businessDay);
-  const cutover = dayContext.dayCutover;
-  const ranges =
-    (await resolveZoneClosedDays(tx, cfg, [zoneId], [moment.businessDay], clock))
-      .get(zoneId)
-      ?.get(moment.businessDay) ?? [];
-  const [row] = await tx
-    .select({ startsAt: zoneExtensions.startsAt, endsAt: zoneExtensions.endsAt })
-    .from(zoneExtensions)
-    .where(
-      and(eq(zoneExtensions.zoneId, zoneId), eq(zoneExtensions.businessDay, moment.businessDay)),
-    );
-  const wire = (range: ClosedRange) => ({
-    startsAt: range.startsAt.slice(0, 5),
-    endsAt: range.endsAt.slice(0, 5),
-  });
-  return {
+  const closures = await resolveZoneClosedDays(
+    tx,
+    cfg,
+    zoneIds,
+    [moment.businessDay],
     clock,
-    moment,
-    dayContext,
-    cutover,
-    ranges,
-    extension: row === undefined ? null : wire(row),
+    prepared?.plan,
+  );
+  const extensions =
+    closures.size === 0
+      ? []
+      : await tx
+          .select({
+            zoneId: zoneExtensions.zoneId,
+            startsAt: zoneExtensions.startsAt,
+            endsAt: zoneExtensions.endsAt,
+          })
+          .from(zoneExtensions)
+          .innerJoin(zoneServicePolicies, eq(zoneServicePolicies.zoneId, zoneExtensions.zoneId))
+          .where(
+            and(
+              eq(zoneServicePolicies.locationId, cfg.locationId),
+              eq(zoneExtensions.businessDay, moment.businessDay),
+              zoneIds === undefined ? undefined : inArray(zoneExtensions.zoneId, [...zoneIds]),
+            ),
+          );
+  for (const [zoneId, days] of closures) {
+    const extension = extensions.find((entry) => entry.zoneId === zoneId);
+    zones.set(zoneId, {
+      ranges: days.get(moment.businessDay) ?? [],
+      extension:
+        extension === undefined
+          ? null
+          : { startsAt: wireTime(extension.startsAt), endsAt: wireTime(extension.endsAt) },
+    });
+  }
+  return { clock, moment, dayContext, cutover: dayContext.dayCutover, zones };
+}
+
+export type ZoneClosureDays = Awaited<ReturnType<typeof zoneClosureDays>>;
+
+export async function zoneClosureDay(tx: Transaction, cfg: VenueScope, zoneId: string, at: Date) {
+  const { zones, ...day } = await zoneClosureDays(tx, cfg, [zoneId], at);
+  return {
+    ...day,
+    ranges: zones.get(zoneId)?.ranges ?? [],
+    extension: zones.get(zoneId)?.extension ?? null,
   };
+}
+
+export function closedZoneIdsIn(days: ZoneClosureDays): ReadonlySet<string> {
+  const closed = new Set<string>();
+  if (days.moment === null) return closed;
+  for (const [zoneId, { ranges, extension }] of days.zones)
+    for (const range of withoutZoneExtension(ranges, extension, days.cutover)) {
+      const { start, end } = rangeSpanInDay(range, days.dayContext);
+      if (start <= days.moment.minute && days.moment.minute < end) closed.add(zoneId);
+    }
+  return closed;
 }
 
 export async function closedZoneIdsAt(
@@ -291,40 +344,8 @@ export async function closedZoneIdsAt(
   at: Date,
   zoneIds?: readonly string[],
 ): Promise<ReadonlySet<string>> {
-  const closed = new Set<string>();
-  if (zoneIds?.length === 0) return closed;
-  const clock = await readLocationClock(tx, cfg.locationId);
-  const moment = serviceMomentAt(at, clock);
-  if (moment === null) return closed;
-  const context = serviceDayContext(clock, moment.businessDay);
-  const closures = await resolveZoneClosedDays(tx, cfg, zoneIds, [moment.businessDay], clock);
-  const extensions = await tx
-    .select({
-      zoneId: zoneExtensions.zoneId,
-      startsAt: zoneExtensions.startsAt,
-      endsAt: zoneExtensions.endsAt,
-    })
-    .from(zoneExtensions)
-    .innerJoin(zoneServicePolicies, eq(zoneServicePolicies.zoneId, zoneExtensions.zoneId))
-    .where(
-      and(
-        eq(zoneServicePolicies.locationId, cfg.locationId),
-        eq(zoneExtensions.businessDay, moment.businessDay),
-        zoneIds === undefined ? undefined : inArray(zoneExtensions.zoneId, [...zoneIds]),
-      ),
-    );
-  for (const [zoneId, days] of closures) {
-    const extension = extensions.find((entry) => entry.zoneId === zoneId) ?? null;
-    for (const range of withoutZoneExtension(
-      days.get(moment.businessDay) ?? [],
-      extension,
-      context.dayCutover,
-    )) {
-      const { start, end } = rangeSpanInDay(range, context);
-      if (start <= moment.minute && moment.minute < end) closed.add(zoneId);
-    }
-  }
-  return closed;
+  if (zoneIds?.length === 0) return new Set();
+  return closedZoneIdsIn(await zoneClosureDays(tx, cfg, zoneIds, at));
 }
 
 export async function assertZoneTakesNewOrders(

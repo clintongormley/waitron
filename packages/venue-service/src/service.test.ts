@@ -79,6 +79,7 @@ describe("VENUE_SERVICE", () => {
       "readSaleReceiptHeader",
       "readStationScreens",
       "readZoneKeepOpenState",
+      "readZoneKeepOpenStates",
       "receiptDefaultDepartment",
       "receiptDepartmentForOrder",
       "receiptDepartmentForSale",

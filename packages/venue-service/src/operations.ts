@@ -1,9 +1,11 @@
 import { rangeSpanInDay } from "./service-day.js";
+import { readServiceDayPlan } from "./day-resolver.js";
 import {
-  closedZoneIdsAt,
-  zoneClosureDay,
+  closedZoneIdsIn,
+  zoneClosureDays,
   withoutZoneExtension,
   zoneExtensionForRange,
+  type ZoneClosureDays,
 } from "./zone-closed-times.js";
 import { setDepartmentTransferSettings } from "./department-transfers.js";
 import { withdrawPendingDepartmentTransfers } from "./department-transfer-lifecycle.js";
@@ -878,12 +880,11 @@ export async function listZoneOffers(
     options.menuItemIds === undefined ? undefined : new Set(options.menuItemIds),
   );
   const at = options.at ?? new Date();
-  const service =
+  const state =
     options.withDefault === false
       ? null
-      : await resolveDepartmentService(tx, cfg, context.departmentId, at);
-  const zoneOpen =
-    options.withDefault === false || !(await closedZoneIdsAt(tx, cfg, at, [zoneId])).has(zoneId);
+      : await zoneServiceState(tx, cfg, zoneId, context.departmentId, at);
+  const service = state?.service ?? null;
   const defaultMenuId = service?.open
     ? servedDefault(
         service.customerMenuId,
@@ -909,11 +910,10 @@ export async function listZoneOffers(
     defaultMenuId,
     service: {
       open: service?.open ?? true,
-      zoneOpen,
+      zoneOpen: state?.zoneOpen ?? true,
       periodName: service?.periodName ?? null,
       keepOpen: service?.keepOpen ?? null,
-      zoneKeepOpen:
-        options.withDefault === false ? null : await readZoneKeepOpenState(tx, cfg, zoneId, at),
+      zoneKeepOpen: state?.zoneKeepOpen ?? null,
     },
     menus,
     offers: published.flatMap((menu) => served.get(menu.menuId)!),
@@ -947,15 +947,21 @@ export async function menuState(
       menus: [],
       unavailable: { products: [], optionLabels: [] },
     };
-  const service = await resolveDepartmentService(tx, cfg, zone.departmentId, at);
+  const { service, zoneOpen, zoneKeepOpen } = await zoneServiceState(
+    tx,
+    cfg,
+    zoneId,
+    zone.departmentId,
+    at,
+  );
   const published = await zoneLiveDocuments(tx, zoneId);
   return {
     service: {
       open: service.open,
-      zoneOpen: !(await closedZoneIdsAt(tx, cfg, at, [zoneId])).has(zoneId),
+      zoneOpen,
       periodName: service.periodName,
       keepOpen: service.keepOpen,
-      zoneKeepOpen: await readZoneKeepOpenState(tx, cfg, zoneId, at),
+      zoneKeepOpen,
     },
     menus: published.map(({ menuId, versionId }) => ({
       menuId,
@@ -1341,31 +1347,94 @@ export async function copyWorkingLineContext(
   });
 }
 
+/** Each zone's floor closing summary, null for a zone with no closure still to come today. */
+async function keepOpenStatesIn(
+  tx: Transaction,
+  days: ZoneClosureDays,
+): Promise<Map<string, ZoneKeepOpenState | null>> {
+  const states = new Map<string, ZoneKeepOpenState | null>(
+    [...days.zones.keys()].map((zoneId) => [zoneId, null]),
+  );
+  const { moment, dayContext } = days;
+  if (moment === null || dayContext === null) return states;
+  const closing = [...days.zones].flatMap(([zoneId, zone]) => {
+    const closure = zone.ranges.find(
+      (range) => rangeSpanInDay(range, dayContext).end > moment.minute,
+    );
+    return closure === undefined ? [] : [{ zoneId, zone, closure }];
+  });
+  if (closing.length === 0) return states;
+  const names = new Map(
+    (
+      await tx
+        .select({ id: floorZones.id, name: floorZones.name })
+        .from(floorZones)
+        .where(
+          inArray(
+            floorZones.id,
+            closing.map((entry) => entry.zoneId),
+          ),
+        )
+    ).map((row) => [row.id, row.name]),
+  );
+  for (const { zoneId, zone, closure } of closing) {
+    const extended = zoneExtensionForRange(zone.extension, closure, days.cutover);
+    states.set(zoneId, {
+      zoneId,
+      zoneName: names.get(zoneId)!,
+      closesAt: extended?.endsAt ?? closure.startsAt,
+      running: !withoutZoneExtension(zone.ranges, zone.extension, days.cutover).some((range) => {
+        const span = rangeSpanInDay(range, dayContext);
+        return span.start <= moment.minute && moment.minute < span.end;
+      }),
+      extendedUntil: extended?.endsAt ?? null,
+    });
+  }
+  return states;
+}
+
+export interface ZoneKeepOpenState {
+  zoneId: string;
+  zoneName: string;
+  closesAt: string;
+  running: boolean;
+  extendedUntil: string | null;
+}
+
+export async function readZoneKeepOpenStates(
+  tx: Transaction,
+  cfg: VenueScope,
+  zoneIds: readonly string[],
+  at: Date,
+): Promise<Map<string, ZoneKeepOpenState | null>> {
+  if (zoneIds.length === 0) return new Map();
+  return keepOpenStatesIn(tx, await zoneClosureDays(tx, cfg, zoneIds, at));
+}
+
 export async function readZoneKeepOpenState(
   tx: Transaction,
   cfg: VenueScope,
   zoneId: string,
   at: Date,
+): Promise<ZoneKeepOpenState | null> {
+  return (await readZoneKeepOpenStates(tx, cfg, [zoneId], at)).get(zoneId) ?? null;
+}
+
+/** The department's service and the zone's own closure state at `at`, sharing one clock and
+ *  one day plan between them. */
+async function zoneServiceState(
+  tx: Transaction,
+  cfg: VenueScope,
+  zoneId: string,
+  departmentId: string,
+  at: Date,
 ) {
-  const c = await zoneClosureDay(tx, cfg, zoneId, at);
-  if (c.moment === null) return null;
-  const closure = c.ranges.find(
-    (range) => rangeSpanInDay(range, c.dayContext).end > c.moment!.minute,
-  );
-  if (closure === undefined) return null;
-  const [zone] = await tx
-    .select({ name: floorZones.name })
-    .from(floorZones)
-    .where(eq(floorZones.id, zoneId));
-  const extended = zoneExtensionForRange(c.extension, closure, c.cutover);
+  const prepared = await readServiceDayPlan(tx, cfg, at);
+  const service = await resolveDepartmentService(tx, cfg, departmentId, at, prepared);
+  const zoneDay = await zoneClosureDays(tx, cfg, [zoneId], at, prepared);
   return {
-    zoneId,
-    zoneName: zone!.name,
-    closesAt: extended?.endsAt ?? closure.startsAt,
-    running: !withoutZoneExtension(c.ranges, c.extension, c.cutover).some((range) => {
-      const span = rangeSpanInDay(range, c.dayContext);
-      return span.start <= c.moment!.minute && c.moment!.minute < span.end;
-    }),
-    extendedUntil: extended?.endsAt ?? null,
+    service,
+    zoneOpen: !closedZoneIdsIn(zoneDay).has(zoneId),
+    zoneKeepOpen: (await keepOpenStatesIn(tx, zoneDay)).get(zoneId) ?? null,
   };
 }

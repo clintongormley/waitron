@@ -2313,19 +2313,18 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
               .where(inArray(floorPlans.zoneId, ids))
           ).map((row) => row.zoneId),
         );
-        const answer = [];
-        for (const zone of visible) {
-          const keepOpen = serviceZones.has(zone.id)
-            ? await VENUE_SERVICE.readZoneKeepOpenState(tx, deps.cfg, zone.id, at)
-            : null;
-          answer.push({
-            ...zone,
-            closed: closed.has(zone.id),
-            closesAt: keepOpen?.closesAt ?? null,
-            hasPlan: planned.has(zone.id),
-          });
-        }
-        return answer;
+        const keepOpen = await VENUE_SERVICE.readZoneKeepOpenStates(
+          tx,
+          deps.cfg,
+          ids.filter((id) => serviceZones.has(id)),
+          at,
+        );
+        return visible.map((zone) => ({
+          ...zone,
+          closed: closed.has(zone.id),
+          closesAt: keepOpen.get(zone.id)?.closesAt ?? null,
+          hasPlan: planned.has(zone.id),
+        }));
       });
       return c.json(zones);
     }),

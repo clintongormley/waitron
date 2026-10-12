@@ -393,6 +393,62 @@ describe("zones closed at an instant", () => {
     }
     expect(three).toHaveLength(one.length);
   });
+  it("reads several zones' floor closing summaries in the statements one zone takes, answering as one zone at a time does", async () => {
+    const v = await venue();
+    await tx((db) => replaceZoneClosedWeek(db, v.cfg, v.terrace, week(mondayNight), 0));
+    await tx((db) =>
+      replaceZoneClosedWeek(db, v.cfg, v.bar, week([{ startsAt: "23:45", endsAt: "02:00" }]), 0),
+    );
+    const instant = new Date("2030-10-07T21:40:00Z");
+    const ids = [v.terrace, v.bar, v.disabled];
+    const single = await tx(async (db) => {
+      const answers = new Map<string, unknown>();
+      for (const id of ids)
+        answers.set(id, await VENUE_SERVICE.readZoneKeepOpenState(db, v.cfg, id, instant));
+      return answers;
+    });
+    expect(single).toEqual(
+      new Map([
+        [
+          v.terrace,
+          {
+            zoneId: v.terrace,
+            zoneName: "Terrace",
+            closesAt: "23:30",
+            running: false,
+            extendedUntil: null,
+          },
+        ],
+        [
+          v.bar,
+          { zoneId: v.bar, zoneName: "Bar", closesAt: "23:45", running: true, extendedUntil: null },
+        ],
+        [v.disabled, null],
+      ]),
+    );
+    const batch = (zoneIds: string[]) =>
+      tx(async (db) => {
+        const session = (
+          db as unknown as { session: { prepareQuery: (...args: never[]) => unknown } }
+        ).session;
+        const spy = vi.spyOn(session, "prepareQuery");
+        try {
+          const answers = await VENUE_SERVICE.readZoneKeepOpenStates(db, v.cfg, zoneIds, instant);
+          return {
+            answers,
+            texts: spy.mock.calls.map(([query]) => (query as unknown as { sql: string }).sql),
+          };
+        } finally {
+          spy.mockRestore();
+        }
+      });
+    const one = await batch([v.terrace]);
+    const three = await batch(ids);
+    expect(one.answers).toEqual(new Map([[v.terrace, single.get(v.terrace)]]));
+    expect(three.answers).toEqual(single);
+    expect(three.texts).toHaveLength(one.texts.length);
+    expect((await batch([])).answers).toEqual(new Map());
+  });
 });
 
 it.each([

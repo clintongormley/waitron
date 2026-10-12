@@ -676,6 +676,13 @@ export interface VenueServiceContribution {
     zoneId: string,
     at: Date,
   ): Promise<ZoneOffers["service"]["zoneKeepOpen"]>;
+  /** One entry per zone named, read together. */
+  readZoneKeepOpenStates(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    zoneIds: readonly string[],
+    at: Date,
+  ): Promise<ReadonlyMap<string, ZoneOffers["service"]["zoneKeepOpen"]>>;
   keepZoneOpen(
     tx: Transaction,
     cfg: { locationId: LocationId },

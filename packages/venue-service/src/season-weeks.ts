@@ -54,24 +54,57 @@ function assertWeek(week: readonly unknown[]): void {
   if (week.length !== 7) throw new Error("a season week has seven days");
 }
 
-export async function writeDepartmentSeasonWeek(
+/** Season weeks already holding `week` exactly, so a rewrite would store the same rows. */
+export function seasonsHolding<T extends { startsAt: string; endsAt: string; periodId?: string }>(
+  stored: ReadonlyMap<string, readonly (readonly T[])[]> | undefined,
+  seasonIds: readonly string[],
+  week: readonly (readonly T[])[],
+): Set<string> {
+  const same = (a: T, b: T) =>
+    a.periodId === b.periodId &&
+    wireTime(a.startsAt) === wireTime(b.startsAt) &&
+    wireTime(a.endsAt) === wireTime(b.endsAt);
+  return new Set(
+    seasonIds.filter((seasonId) => {
+      const held = stored?.get(seasonId);
+      return (
+        held !== undefined &&
+        week.every(
+          (ranges, weekday) =>
+            held[weekday]?.length === ranges.length &&
+            ranges.every((range, index) => same(held[weekday]![index]!, range)),
+        )
+      );
+    }),
+  );
+}
+
+export async function writeDepartmentSeasonWeeks(
   tx: Transaction,
   departmentId: string,
-  seasonId: string,
+  seasonIds: readonly string[],
   week: readonly (readonly ServiceRange[])[],
 ): Promise<void> {
   assertWeek(week);
   // A null period is Closed, which only a special-day date may hold (schema/seasons.ts).
   if (week.some((day) => day.some((range) => typeof range.periodId !== "string")))
     throw new Error("a season week takes periods only");
+  if (seasonIds.length === 0) return;
   await tx
     .delete(departmentDays)
     .where(
-      and(eq(departmentDays.departmentId, departmentId), eq(departmentDays.seasonId, seasonId)),
+      and(
+        eq(departmentDays.departmentId, departmentId),
+        inArray(departmentDays.seasonId, [...seasonIds]),
+      ),
     );
   const days = await tx
     .insert(departmentDays)
-    .values(WEEKDAYS.map((weekday) => ({ departmentId, seasonId, weekday })))
+    .values(
+      seasonIds.flatMap((seasonId) =>
+        WEEKDAYS.map((weekday) => ({ departmentId, seasonId, weekday })),
+      ),
+    )
     .returning({ id: departmentDays.id, weekday: departmentDays.weekday });
   const ranges = days.flatMap((day) =>
     week[day.weekday!]!.map((range) => ({
@@ -85,19 +118,22 @@ export async function writeDepartmentSeasonWeek(
   if (ranges.length > 0) await tx.insert(departmentDayRanges).values(ranges);
 }
 
-export async function writeZoneSeasonWeek(
+export async function writeZoneSeasonWeeks(
   tx: Transaction,
   zoneId: string,
-  seasonId: string,
+  seasonIds: readonly string[],
   week: readonly (readonly ClosedRange[])[],
 ): Promise<void> {
   assertWeek(week);
+  if (seasonIds.length === 0) return;
   await tx
     .delete(zoneDays)
-    .where(and(eq(zoneDays.zoneId, zoneId), eq(zoneDays.seasonId, seasonId)));
+    .where(and(eq(zoneDays.zoneId, zoneId), inArray(zoneDays.seasonId, [...seasonIds])));
   const days = await tx
     .insert(zoneDays)
-    .values(WEEKDAYS.map((weekday) => ({ zoneId, seasonId, weekday })))
+    .values(
+      seasonIds.flatMap((seasonId) => WEEKDAYS.map((weekday) => ({ zoneId, seasonId, weekday }))),
+    )
     .returning({ id: zoneDays.id, weekday: zoneDays.weekday });
   // Always "closed": an "open" range belongs on a special-day date only (schema/seasons.ts).
   const ranges = days.flatMap((day) =>
@@ -131,13 +167,23 @@ function groupWeeks<T extends { startsAt: string; endsAt: string }>(
   return weeks;
 }
 
+export interface SeasonDays {
+  seasonIds: readonly string[];
+  weekdays: readonly number[];
+}
+
+const emptyFilter = (only: SeasonDays | undefined) =>
+  only !== undefined && (only.seasonIds.length === 0 || only.weekdays.length === 0);
+
+/** With `only`, each read week holds just those weekdays' ranges, the rest left empty. */
 export async function readDepartmentSeasonWeeks(
   tx: Transaction,
   cfg: VenueScope,
   departmentIds?: readonly string[],
   cutover?: string,
+  only?: SeasonDays,
 ): Promise<Map<string, Map<string, ServiceRange[][]>>> {
-  if (departmentIds?.length === 0) return new Map();
+  if (departmentIds?.length === 0 || emptyFilter(only)) return new Map();
   const dayCutover = cutover ?? (await readLocationClock(tx, cfg.locationId)).dayCutover;
   const rows = await tx
     .select({
@@ -157,6 +203,8 @@ export async function readDepartmentSeasonWeeks(
         departmentIds === undefined
           ? undefined
           : inArray(departmentDays.departmentId, [...departmentIds]),
+        only === undefined ? undefined : inArray(departmentDays.seasonId, [...only.seasonIds]),
+        only === undefined ? undefined : inArray(departmentDays.weekday, [...only.weekdays]),
       ),
     );
   return groupWeeks(
@@ -177,13 +225,15 @@ export async function readDepartmentSeasonWeeks(
   );
 }
 
+/** With `only`, each read week holds just those weekdays' ranges, the rest left empty. */
 export async function readZoneSeasonWeeks(
   tx: Transaction,
   cfg: VenueScope,
   zoneIds?: readonly string[],
   cutover?: string,
+  only?: SeasonDays,
 ): Promise<Map<string, Map<string, ClosedRange[][]>>> {
-  if (zoneIds?.length === 0) return new Map();
+  if (zoneIds?.length === 0 || emptyFilter(only)) return new Map();
   const dayCutover = cutover ?? (await readLocationClock(tx, cfg.locationId)).dayCutover;
   const rows = await tx
     .select({
@@ -200,6 +250,8 @@ export async function readZoneSeasonWeeks(
       and(
         eq(seasons.locationId, cfg.locationId),
         zoneIds === undefined ? undefined : inArray(zoneDays.zoneId, [...zoneIds]),
+        only === undefined ? undefined : inArray(zoneDays.seasonId, [...only.seasonIds]),
+        only === undefined ? undefined : inArray(zoneDays.weekday, [...only.weekdays]),
       ),
     );
   return groupWeeks(

@@ -15,8 +15,10 @@ export async function readSeasons(tx: Transaction, cfg: VenueScope): Promise<Sea
 export async function ensureDefaultSeasons(tx: Transaction, cfg: VenueScope): Promise<Season[]> {
   const existing = await readSeasons(tx, cfg);
   if (existing.length > 0) return existing;
-  await tx
+  const inserted = await tx
     .insert(seasons)
-    .values(DEFAULT_SEASONS.map((season) => ({ ...season, locationId: cfg.locationId })));
-  return readSeasons(tx, cfg);
+    .values(DEFAULT_SEASONS.map((season) => ({ ...season, locationId: cfg.locationId })))
+    .returning({ id: seasons.id, name: seasons.name, startsOn: seasons.startsOn });
+  // "The rows emitted by the RETURNING clause appear in an arbitrary order" (sqlite.org/lang_returning.html).
+  return inserted.sort((a, b) => (a.startsOn < b.startsOn ? -1 : Number(a.startsOn > b.startsOn)));
 }

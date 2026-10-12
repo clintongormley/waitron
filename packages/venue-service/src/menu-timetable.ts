@@ -50,12 +50,13 @@ import { departments } from "./schema/service.js";
 import { routingCellPeriods, routingCells } from "./schema/routing.js";
 import { periodExtensions } from "./schema/period-extensions.js";
 import { readZoneClosedTimes } from "./zone-closed-times.js";
-import { resolveDepartmentDays } from "./day-resolver.js";
+import { resolveDepartmentDays, type DayPlan } from "./day-resolver.js";
 import {
   joinTouching,
   readDepartmentSeasonWeeks,
+  seasonsHolding,
   targetSeasons,
-  writeDepartmentSeasonWeek,
+  writeDepartmentSeasonWeeks,
 } from "./season-weeks.js";
 import { departmentDayRanges, departmentDays } from "./schema/seasons.js";
 import { zoneClosedTimes } from "./schema/zone-closed-times.js";
@@ -331,6 +332,7 @@ export async function departmentDay(
   departmentId: string,
   moment: ServiceMoment | null,
   clock: BusinessDayClock,
+  plan?: DayPlan,
 ) {
   const periods = await tx
     .select({
@@ -355,6 +357,7 @@ export async function departmentDay(
     departmentId,
     [yesterday, moment.businessDay],
     clock,
+    plan,
   );
   const [row] = await tx
     .select({
@@ -437,11 +440,12 @@ export async function resolveDepartmentService(
   cfg: VenueScope,
   departmentId: string,
   at: Date,
+  prepared?: { clock: BusinessDayClock; plan?: DayPlan },
 ): Promise<DepartmentService> {
   await assertDepartment(tx, cfg, departmentId);
-  const clock = await readLocationClock(tx, cfg.locationId);
+  const clock = prepared?.clock ?? (await readLocationClock(tx, cfg.locationId));
   const moment = serviceMomentAt(at, clock);
-  const day = await departmentDay(tx, cfg, departmentId, moment, clock);
+  const day = await departmentDay(tx, cfg, departmentId, moment, clock, prepared?.plan);
   const { periods, staff } = day;
   const menusOf = (periodId: string): string[] => {
     const period = periods.find((entry) => entry.id === periodId)!;
@@ -828,8 +832,17 @@ export async function replaceMenuWeek(
     for (const [weekday, slots] of week.slots.entries())
       if (slots.length > 0) await writeDay(tx, idOf(weekday), { departmentId, weekday }, slots);
   }
-  for (const season of targets)
-    await writeDepartmentSeasonWeek(tx, departmentId, season.id, seasonWeek);
+  const holding = seasonsHolding(
+    seasonsNow,
+    targets.map((season) => season.id),
+    seasonWeek,
+  );
+  await writeDepartmentSeasonWeeks(
+    tx,
+    departmentId,
+    targets.flatMap((season) => (holding.has(season.id) ? [] : [season.id])),
+    seasonWeek,
+  );
   const clash = await endOffsetClash(tx, cfg, departmentId, false, clock);
   if (clash !== null)
     invalidTimetable(
