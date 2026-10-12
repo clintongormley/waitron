@@ -16,6 +16,8 @@ import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-toast.js";
+import "@waitron/ui/src/components/wt-banner.js";
+import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { codeOf, codeMessage } from "./i18n/codes.js";
 import { setContentLanguages } from "@waitron/ui";
@@ -558,7 +560,6 @@ export class DashboardApp extends LitElement {
         margin-inline-start: auto;
       }
 
-      /* The pop-up hangs off the banner's real bottom edge, whatever the page margin or banner height. */
       .banner-row {
         position: relative;
       }
@@ -696,6 +697,7 @@ export class DashboardApp extends LitElement {
 
   @property({ attribute: false }) request!: DashboardRequest;
   @property({ attribute: false }) liveUpdates?: { start(): void; stop(): void };
+  @property({ attribute: false }) reload: () => void = () => location.reload();
 
   /** Defaults to `login`, so a cold load never flashes a logged-in face before the probe confirms a
    * session. */
@@ -769,6 +771,10 @@ export class DashboardApp extends LitElement {
   @state() private myPersonId = "";
 
   @state() private sessionNoticeCode: string | null = null;
+  @state() private updateAvailable = false;
+  readonly #onBuildChanged = (): void => {
+    this.updateAvailable = true;
+  };
   @state() private contentLanguageError: string | null = null;
   @state() private contentLanguagesReady = false;
   readonly #languageQueries = new DashboardQueries(
@@ -867,6 +873,7 @@ export class DashboardApp extends LitElement {
     this.addEventListener("click", this.#onAppLink, true);
     window.addEventListener("waitron-session-invalid", this.#onSessionInvalid);
     window.addEventListener("waitron-session-active", this.#onSessionActive);
+    window.addEventListener(BUILD_CHANGED_EVENT, this.#onBuildChanged);
     window.addEventListener("storage", this.#onSessionStorage);
     document.addEventListener("visibilitychange", this.#onVisibilityChange);
   }
@@ -879,6 +886,7 @@ export class DashboardApp extends LitElement {
     this.removeEventListener("click", this.#onAppLink, true);
     window.removeEventListener("waitron-session-invalid", this.#onSessionInvalid);
     window.removeEventListener("waitron-session-active", this.#onSessionActive);
+    window.removeEventListener(BUILD_CHANGED_EVENT, this.#onBuildChanged);
     window.removeEventListener("storage", this.#onSessionStorage);
     document.removeEventListener("visibilitychange", this.#onVisibilityChange);
     clearTimeout(this.sessionExpiryTimer);
@@ -1358,7 +1366,7 @@ export class DashboardApp extends LitElement {
           class="login-page"
           @wt-locale-selected=${(e: CustomEvent<{ code: string }>) => void this.#onLocaleSelected(e)}
         >
-          ${this.#demoBar(false)} ${this.#banner(false, false)}
+          ${this.#demoBar(false)} ${this.#banner(false, false)} ${this.#updateBar()}
           <div class="body">
             <dashboard-login-screen
               .api=${this.api}
@@ -1379,7 +1387,7 @@ export class DashboardApp extends LitElement {
       >
         ${this.#demoBar(true)}
         <div class="banner-row">
-          ${this.#banner(true, true)}
+          ${this.#banner(true, true)} ${this.#updateBar()}
           <wt-toast
             class="alert-toast"
             data-test="alert-toast"
@@ -1454,6 +1462,17 @@ export class DashboardApp extends LitElement {
         ${this.#renderProfileModal()}
       </div>
     `;
+  }
+
+  #updateBar(): TemplateResult | typeof nothing {
+    // A reset box has its own notice, with its own Reload, on the sign-in page.
+    if (!this.updateAvailable || this.sessionNoticeCode === "node.reset") return nothing;
+    return html`<wt-banner
+      data-test="update-bar"
+      message=${t("update.message")}
+      action-label=${t("update.reload")}
+      @wt-banner-action=${() => this.reload()}
+    ></wt-banner>`;
   }
 
   #demoBar(authenticated: boolean): TemplateResult | typeof nothing {

@@ -1,6 +1,11 @@
 import { html, render } from "lit";
 import { applyTokens } from "@waitron/ui";
-import { createInstrumentedFetch, installErrorCapture } from "@waitron/diagnostics";
+import {
+  BUILD_CHANGED_EVENT,
+  createInstrumentedFetch,
+  installErrorCapture,
+  watchBuild,
+} from "@waitron/diagnostics";
 import { TillApi } from "./api/client.js";
 import { withDevDeviceHeader } from "./api/dev-device.js";
 import { ServerRouter, withServerTarget } from "./api/server-router.js";
@@ -21,9 +26,13 @@ async function bootTill(): Promise<void> {
     render(trustInstructions(), app);
     return;
   }
-  const router = new ServerRouter({ origin: location.origin, fetchImpl: fetch });
+  const watchedFetch = watchBuild(fetch, {
+    origin: location.origin,
+    onChange: () => window.dispatchEvent(new Event(BUILD_CHANGED_EVENT)),
+  });
+  const router = new ServerRouter({ origin: location.origin, fetchImpl: watchedFetch });
   const fetchImpl = createInstrumentedFetch(
-    withDevDeviceHeader(withServerTarget(fetch, router)),
+    withDevDeviceHeader(withServerTarget(watchedFetch, router)),
     diag,
   );
   router.start();

@@ -82,6 +82,11 @@ const drawsQueue = (station: DeviceStation): station is WorkedStation =>
   station.available ||
   (worked(station) && (station.queue.length > 0 || station.notices.length > 0));
 
+/** `hold-reload`: a request out until `until` settles, which a reload would cut off. */
+export interface HoldReloadDetail {
+  until: Promise<unknown>;
+}
+
 /**
  * The TILL station-display screen: one station's queue. It fetches its own data and handles the queue
  * widget's events itself, STOPPING them so the app (which handles the counter's own default-station
@@ -743,7 +748,7 @@ export class TillStationScreen extends LitElement {
     this.moving = busy;
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
     try {
-      await resendUnanswered(
+      const sent = resendUnanswered(
         (signal) =>
           this.deviceMode
             ? this.api.deviceMoveDishStation(open.workingOrderId, body, { signal })
@@ -751,6 +756,15 @@ export class TillStationScreen extends LitElement {
         limit.signal,
         () => this.isConnected,
       );
+      // The till app counts it, so a box update does not reload the page while it is out.
+      this.dispatchEvent(
+        new CustomEvent<HoldReloadDetail>("hold-reload", {
+          detail: { until: sent },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await sent;
       if (this.moving === busy) this.moving = null;
     } catch (error) {
       if (this.#switched(error)) {

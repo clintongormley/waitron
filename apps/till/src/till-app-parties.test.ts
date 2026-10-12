@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
 import { userEvent } from "vitest/browser";
 import type { WtCombobox } from "@waitron/ui";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
@@ -311,10 +312,24 @@ const answering = (value: object) =>
 const partyDraft = (order: TillTableOrderScreen) =>
   order.shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser")!.store;
 
-async function mountApp(overrides: Record<string, unknown> = {}) {
+async function mountApp(overrides: Record<string, unknown> = {}, props: Partial<TillApp> = {}) {
   api = stubApi(overrides);
-  return mountWidget<TillApp>("till-app", { api });
+  return mountWidget<TillApp>("till-app", { api, ...props });
 }
+
+function idleActivity() {
+  return {
+    configure: vi.fn(),
+    noteInteraction: vi.fn(),
+    reacquire: vi.fn(),
+    start: vi.fn(),
+    stop: vi.fn(),
+  };
+}
+
+const signOutIdle = (activity: ReturnType<typeof idleActivity>) =>
+  (activity.configure.mock.calls.at(-1)![0] as { onIdle: () => void }).onIdle();
+const updateBar = (el: TillApp) => el.shadowRoot!.querySelector("wt-banner[data-test=update-bar]");
 
 /** A recorded cancel's answer, naming the bill's party as `party`. */
 const cancelAnswer = (party: { id: string; revision: number } | null) => ({
@@ -6357,15 +6372,21 @@ describe("till-app: recording an unpaid departure", () => {
     );
 
   /** Finish is refused for an unpaid bill, and the refusal's Record unpaid departure is pressed. */
-  async function openDeparture(overrides: Record<string, unknown> = {}) {
-    const mounted = await mountApp({
-      finishTable: vi.fn().mockRejectedValue({ code: "party.bill_outstanding" }),
-      recordUnpaidDeparture: vi.fn().mockResolvedValue(recorded),
-      listUnpaidDepartureAuthorizers: vi
-        .fn()
-        .mockResolvedValue([{ personId: "sup-1", displayName: "Luis" }]),
-      ...overrides,
-    });
+  async function openDeparture(
+    overrides: Record<string, unknown> = {},
+    props: Partial<TillApp> = {},
+  ) {
+    const mounted = await mountApp(
+      {
+        finishTable: vi.fn().mockRejectedValue({ code: "party.bill_outstanding" }),
+        recordUnpaidDeparture: vi.fn().mockResolvedValue(recorded),
+        listUnpaidDepartureAuthorizers: vi
+          .fn()
+          .mockResolvedValue([{ personId: "sup-1", displayName: "Luis" }]),
+        ...overrides,
+      },
+      props,
+    );
     const order = await openMesa(mounted.el);
     emit(order, "finish-table", {});
     await flush(mounted.el);
@@ -6392,6 +6413,27 @@ describe("till-app: recording an unpaid departure", () => {
     dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-departure-confirm]")!.click();
     await flush(el, 5);
   }
+
+  it("shows the box-update bar instead of reloading while the departure still waits for the server after an idle sign-out", async () => {
+    const activity = idleActivity();
+    const reload = vi.fn();
+    const recordUnpaidDeparture = vi.fn(() => new Promise(() => {}));
+    const { el } = await openDeparture(
+      { recordUnpaidDeparture },
+      { reload, sessionActivity: activity as never },
+    );
+    await typeReason(el, "Ran off");
+    await confirmDeparture(el);
+    expect(recordUnpaidDeparture).toHaveBeenCalledOnce();
+
+    signOutIdle(activity);
+    await flush(el, 6);
+    window.dispatchEvent(new Event(BUILD_CHANGED_EVENT));
+    await flush(el);
+
+    expect(reload).not.toHaveBeenCalled();
+    expect(updateBar(el)).not.toBeNull();
+  });
 
   it("opens over the table and shows each bill left unpaid, named as the table screen names it", async () => {
     const { el } = await openDeparture();
@@ -7308,5 +7350,25 @@ describe("till-app: cancelling and crediting an invoiced bill", () => {
     dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-cancel-credit-close]")!.click();
     await expect.poll(() => dialog(el)).toBeNull();
     expect(api.cancelOrder).not.toHaveBeenCalled();
+  });
+});
+
+describe("till-app: a box update while a bill request still waits for the server", () => {
+  it("shows the bar instead of reloading after an idle sign-out", async () => {
+    const activity = idleActivity();
+    const reload = vi.fn();
+    const requestBill = vi.fn(() => new Promise(() => {}));
+    const { el } = await mountApp({ requestBill }, { reload, sessionActivity: activity as never });
+    emit(await openMesa(el), "request-bill", { requested: true });
+    await flush(el);
+    expect(requestBill).toHaveBeenCalledOnce();
+
+    signOutIdle(activity);
+    await flush(el, 6);
+    window.dispatchEvent(new Event(BUILD_CHANGED_EVENT));
+    await flush(el);
+
+    expect(reload).not.toHaveBeenCalled();
+    expect(updateBar(el)).not.toBeNull();
   });
 });

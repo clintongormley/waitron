@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import type { TillApp } from "./till-app.js";
 import "./till-app.js";
@@ -189,17 +190,23 @@ const alert = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>('[role=
 const listNow = (el: TillApp, rows: CounterWaitingOrder[]) =>
   ((el as unknown as { counterWaiting: CounterWaitingOrder[] }).counterWaiting = rows);
 
-async function signedIn(overrides: Record<string, unknown> = {}): Promise<TillApp> {
+async function signedIn(
+  overrides: Record<string, unknown> = {},
+  props: Partial<TillApp> = {},
+): Promise<TillApp> {
   api = stubApi(overrides);
-  const { el } = await mountWidget<TillApp>("till-app", { api });
+  const { el } = await mountWidget<TillApp>("till-app", { api, ...props });
   await flush(el);
   emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
   await flush(el);
   return el;
 }
 
-async function openMove(overrides: Record<string, unknown> = {}): Promise<TillApp> {
-  const el = await signedIn(overrides);
+async function openMove(
+  overrides: Record<string, unknown> = {},
+  props: Partial<TillApp> = {},
+): Promise<TillApp> {
+  const el = await signedIn(overrides, props);
   moveButton(el)!.click();
   await flush(el);
   return el;
@@ -553,5 +560,30 @@ describe("till-app: moving a paid counter order to another station", () => {
     expect(api.listCounterWaiting).toHaveBeenCalledTimes(waitingReads);
     expect(dialog(el)).toBeNull();
     expect(alert(el)).toBeNull();
+  });
+});
+
+describe("till-app: a box update while a station move still waits for the server", () => {
+  it("shows the bar instead of reloading after an idle sign-out", async () => {
+    const activity = {
+      configure: vi.fn(),
+      noteInteraction: vi.fn(),
+      reacquire: vi.fn(),
+      start: vi.fn(),
+      stop: vi.fn(),
+    };
+    const reload = vi.fn();
+    const moveDishStation = vi.fn(() => new Promise(() => {}));
+    const el = await openMove({ moveDishStation }, { reload, sessionActivity: activity as never });
+    await choose(el);
+    expect(moveDishStation).toHaveBeenCalledOnce();
+
+    (activity.configure.mock.calls.at(-1)![0] as { onIdle: () => void }).onIdle();
+    await flush(el, 6);
+    window.dispatchEvent(new Event(BUILD_CHANGED_EVENT));
+    await flush(el);
+
+    expect(reload).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector("wt-banner[data-test=update-bar]")).not.toBeNull();
   });
 });

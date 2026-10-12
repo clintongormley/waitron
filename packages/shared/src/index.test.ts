@@ -6,6 +6,7 @@ import {
   blankComments,
   blankCommentsAndLiterals,
   BAND_RANK,
+  BUILD_HEADER,
   classifyBand,
   compareDecimal,
   decimal,
@@ -74,6 +75,10 @@ import {
 } from "./index.js";
 
 describe("package public surface (./index.js)", () => {
+  it("re-exports the build header name", () => {
+    expect(BUILD_HEADER).toBe("x-waitron-build");
+  });
+
   it("re-exports AppError, isAppError and hasCode", () => {
     const error = new AppError("shared.invalid_id", { kind: "DeviceId", value: "x" });
     expect(isAppError(error)).toBe(true);

@@ -708,7 +708,7 @@ To decide before building:
     took; decide whether it should drop to the bottom edge. On the dashboard, the language
     chooser's menu is now a native popover in the top layer (A187), so it paints over the alert
     pop-up (`.alert-toast` in `apps/dashboard/src/dashboard-app.ts`, which hangs below the
-    banner at its trailing edge with `z-index: 40`, a stacking order the top layer ignores): where
+    banner's row at its trailing edge, under the update bar while that shows, with `z-index: 40`, a stacking order the top layer ignores): where
     the two overlap, an alert arriving while the menu is open is hidden under it, and its
     countdown keeps running,
     since `wt-toast` (`packages/ui/src/components/wt-toast.ts`) pauses it only while the pointer

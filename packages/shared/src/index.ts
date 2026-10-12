@@ -136,6 +136,7 @@ export { mayTakeOver, type EquipmentVia } from "./equipment-takeover.js";
 export { tillProviderForReader, type TillReaderProvider } from "./till-card-provider.js";
 export { firstCodeInCauseChain, MAX_CAUSE_DEPTH } from "./cause-chain.js";
 export { sqliteFailureOf } from "./engine-failure.js";
+export { BUILD_HEADER } from "./build-header.js";
 export { quoteLiteral } from "./sql-literal.js";
 export { blankComments, blankCommentsAndLiterals, mapComments } from "./source-comments.js";
 export type { ResourceIdentity, ResourceChange, ChangeSource } from "./live-updates.js";

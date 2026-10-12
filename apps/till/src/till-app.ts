@@ -23,6 +23,7 @@ import {
 } from "@waitron/shared";
 import { carriedText, countText, currentLocale, named, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
+import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
 import { diag } from "./diagnostics.js";
 import {
   DepartmentTransferMonitor,
@@ -84,8 +85,10 @@ import type {
 } from "./screens/till-table-order-screen.js";
 import type { DraftGroup } from "./state/draft-groups.js";
 import "@waitron/ui/src/components/wt-toast.js";
+import "@waitron/ui/src/components/wt-banner.js";
 import type { WtToast } from "@waitron/ui/src/components/wt-toast.js";
 import "./screens/till-station-screen.js";
+import type { HoldReloadDetail } from "./screens/till-station-screen.js";
 import { CROSS_ICON_PATH } from "./widgets/station-queue.js";
 import "./screens/till-enrol-screen.js";
 import "./screens/till-device-chooser.js";
@@ -1074,6 +1077,10 @@ export class TillApp extends LitElement {
         height: 100%;
       }
 
+      .app > wt-banner {
+        flex: none;
+      }
+
       till-tab-shell {
         min-height: 0;
       }
@@ -1187,6 +1194,110 @@ export class TillApp extends LitElement {
 
   /** Set by `main.ts`; undefined in tests that inject none. */
   @property({ attribute: false }) router?: ServerRouter;
+
+  @property({ attribute: false }) reload: () => void = () => location.reload();
+  @state() private updateAvailable = false;
+
+  /** A newer build was seen and the box's state read after it; what to do waits until the box
+   * serves this till again. */
+  #newBuild = false;
+
+  readonly #onBuildChanged = (): void => void this.#confirmNewBuild();
+
+  /** The response naming the new build may be a reset box's setup page, which the router has not
+   * read yet: its round, or a new one, reads the box's state before anything is decided. */
+  async #confirmNewBuild(): Promise<void> {
+    await this.router?.probeNow();
+    if (!this.isConnected) return;
+    this.#newBuild = true;
+    this.#decideReload();
+  }
+
+  #decideReload(): void {
+    if (!this.#newBuild || this.updateAvailable || !this.#boxServesTill()) return;
+    if (this.#busyForReload()) {
+      this.updateAvailable = true;
+      return;
+    }
+    this.#newBuild = false;
+    this.reload();
+  }
+
+  /** A box in setup mode, or one refusing this device, has its own screen, which a reload would
+   * leave and the bar would cover. */
+  #boxServesTill(): boolean {
+    return !(this.router?.waiting ?? false) && this.frontDoor === undefined;
+  }
+
+  /** A reload signs the operator out and drops whatever is only in this page's memory. */
+  #busyForReload(): boolean {
+    return (
+      this.operatorName !== "" ||
+      this.#loginPending ||
+      this.#store.lines.length > 0 ||
+      this.#partylessDraft.lines.length > 0 ||
+      this.leave.coordinator.isDirty() ||
+      this.#unansweredPayment !== null ||
+      this.#unansweredRefund !== null ||
+      this.transferLocalCopies.length > 0 ||
+      this.#requestsOut()
+    );
+  }
+
+  /** Even a reload the operator asked for waits for these; their screens may already be gone. */
+  #requestsOut(): boolean {
+    return this.#counterOrderInFlight() || this.#cardAttemptsRunning > 0 || this.#reloadHolds > 0;
+  }
+
+  #reloadAsked = false;
+
+  #onReloadPressed(): void {
+    this.#reloadAsked = true;
+    this.#reloadWhenSettled();
+  }
+
+  /** A press waiting for requests is dropped once the box stops serving this till or the till is
+   * used again: either changes what the operator agreed to lose. The bar stays to be pressed again.
+   * Taking the till off the page drops it too (`disconnectedCallback`). */
+  #reloadWhenSettled(): void {
+    if (!this.#reloadAsked) return;
+    if (!this.#boxServesTill()) {
+      this.#reloadAsked = false;
+      return;
+    }
+    if (this.#requestsOut()) return;
+    this.#reloadAsked = false;
+    this.reload();
+  }
+
+  /** Requests out that a reload would cut off, so one the server never received would be lost:
+   * every resend-until-answered request, a whole bill payment or refund (`#unansweredPayment` and
+   * `#unansweredRefund` are set only once it ends), a prep-queue Collect, and a sign-out's save of
+   * the draft. */
+  #reloadHolds = 0;
+
+  async #holdingReload<T>(work: () => Promise<T>): Promise<T> {
+    this.#reloadHolds++;
+    try {
+      return await work();
+    } finally {
+      this.#reloadHolds--;
+      this.#reloadWhenSettled();
+    }
+  }
+
+  readonly #onHoldReload = (event: Event): void => {
+    const { until } = (event as CustomEvent<HoldReloadDetail>).detail;
+    void this.#holdingReload(() => until.catch(() => undefined));
+  };
+
+  #resend<T>(
+    send: (signal: AbortSignal) => Promise<T>,
+    signal: AbortSignal,
+    live: () => boolean,
+  ): Promise<T> {
+    return this.#holdingReload(() => resendUnanswered(send, signal, live));
+  }
 
   sessionActivity: SessionActivity = new SessionActivity();
 
@@ -1386,7 +1497,10 @@ export class TillApp extends LitElement {
     void this.#boot();
   };
 
-  readonly #onServerState = (): void => this.requestUpdate();
+  readonly #onServerState = (): void => {
+    this.requestUpdate();
+    this.#decideReload();
+  };
 
   #subscribeRouter(): void {
     if (this.#subscribedRouter === this.router) return;
@@ -1406,7 +1520,10 @@ export class TillApp extends LitElement {
   #inactivityTimeoutSeconds: number | null = null;
   #startingScreen: NavigationScreen | null = null;
 
-  readonly #onInteraction = (): void => this.sessionActivity.noteInteraction();
+  readonly #onInteraction = (): void => {
+    this.#reloadAsked = false;
+    this.sessionActivity.noteInteraction();
+  };
 
   readonly #onVisibility = (): void => this.sessionActivity.reacquire();
 
@@ -1431,11 +1548,14 @@ export class TillApp extends LitElement {
     this.addEventListener("pointerdown", this.#onInteraction);
     this.addEventListener("keydown", this.#onInteraction);
     document.addEventListener("visibilitychange", this.#onVisibility);
+    window.addEventListener(BUILD_CHANGED_EVENT, this.#onBuildChanged);
+    this.addEventListener("hold-reload", this.#onHoldReload);
     void this.sessionActivity.start();
     this.#syncDepartmentTransfers();
   }
 
   override disconnectedCallback(): void {
+    this.#reloadAsked = false;
     this.#stopDepartmentTransfers();
     this.#partylessScope?.dispose();
     this.#partylessScope = undefined;
@@ -1459,6 +1579,8 @@ export class TillApp extends LitElement {
     this.removeEventListener("pointerdown", this.#onInteraction);
     this.removeEventListener("keydown", this.#onInteraction);
     document.removeEventListener("visibilitychange", this.#onVisibility);
+    window.removeEventListener(BUILD_CHANGED_EVENT, this.#onBuildChanged);
+    this.removeEventListener("hold-reload", this.#onHoldReload);
     void this.sessionActivity.stop();
     super.disconnectedCallback();
   }
@@ -2300,6 +2422,10 @@ export class TillApp extends LitElement {
       this.#affordanceList = this.#affordances();
     // `router` may be assigned after `connectedCallback`.
     if (changed.has("router")) this.#subscribeRouter();
+    if (changed.has("frontDoor")) this.#decideReload();
+    // `submitting`, `parking`, `placing` and `cardAttemptsOver` are state, so a request that settles
+    // comes through here.
+    this.#reloadWhenSettled();
     // An answer can move the app off the order while the dialog is open. An apply already out
     // carries on without the dialog; #applyAdjustment says what its answer does then.
     const open = this.adjusting;
@@ -3952,7 +4078,7 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     let collected = false;
     try {
-      await this.api.markCollected(orderId);
+      await this.#holdingReload(() => this.api.markCollected(orderId));
       collected = true;
     } catch {
       if (session !== this.#operatorSession) return;
@@ -3987,7 +4113,7 @@ export class TillApp extends LitElement {
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
     let handedOver = false;
     try {
-      await resendUnanswered(
+      await this.#resend(
         (signal) => this.api.markCollected(id, submissionId, { signal }),
         limit.signal,
         live,
@@ -6114,7 +6240,7 @@ export class TillApp extends LitElement {
         ...(billId === undefined ? {} : { billId }),
       };
       const draftId = sync.draftId;
-      submitted = await resendUnanswered(
+      submitted = await this.#resend(
         (signal) => this.api.submitDraft(party.id, draftId, command, { signal }),
         send.signal,
         live,
@@ -6296,7 +6422,7 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     try {
       await this.#partyRequest(party, party.revision, (command) =>
-        resendUnanswered(
+        this.#resend(
           (signal) => this.api.requestBill(party.id, { ...command, requested }, { signal }),
           limit.signal,
           live,
@@ -6526,7 +6652,7 @@ export class TillApp extends LitElement {
     const unlock = counterSubmission === null ? () => {} : this.#store.lockEdits();
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
     try {
-      await resendUnanswered(
+      await this.#resend(
         (signal) => this.api.moveDishStation(open.workingOrderId, body, { signal }),
         limit.signal,
         () => session === this.#operatorSession,
@@ -6637,7 +6763,7 @@ export class TillApp extends LitElement {
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
     let refusal: string | null = null;
     try {
-      await resendUnanswered(
+      await this.#resend(
         (signal) => this.api.moveDishStation(open.workingOrderId, body, { signal }),
         limit.signal,
         live,
@@ -6839,7 +6965,7 @@ export class TillApp extends LitElement {
     const session = this.#operatorSession;
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
     try {
-      const answer = await resendUnanswered(
+      const answer = await this.#resend(
         (signal) => this.api.applyAdjustment(open.orderId, command, { signal }),
         limit.signal,
         () => session === this.#operatorSession,
@@ -7749,7 +7875,7 @@ export class TillApp extends LitElement {
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
     let sends = 0;
     try {
-      await resendUnanswered(
+      await this.#resend(
         (signal) => {
           sends++;
           return this.api.recordUnpaidDeparture(party.id, request, { signal });
@@ -8493,20 +8619,22 @@ export class TillApp extends LitElement {
     const settle = (error?: unknown) => {
       if (turn === this.#paymentSends) this.#unansweredPayment = unansweredAfter(submission, error);
     };
-    try {
-      const result = await resendUnanswered(
-        (signal) => this.api.takeBillPayment(open.billId, submission.request, { signal }),
-        limit.signal,
-        () => session === this.#operatorSession,
-      );
-      settle();
-      await this.#onBillPaid(open, result);
-    } catch (error) {
-      settle(error);
-      await this.#onBillPayRefused(open.id, error, asked, "take");
-    } finally {
-      limit.done();
-    }
+    await this.#holdingReload(async () => {
+      try {
+        const result = await this.#resend(
+          (signal) => this.api.takeBillPayment(open.billId, submission.request, { signal }),
+          limit.signal,
+          () => session === this.#operatorSession,
+        );
+        settle();
+        await this.#onBillPaid(open, result);
+      } catch (error) {
+        settle(error);
+        await this.#onBillPayRefused(open.id, error, asked, "take");
+      } finally {
+        limit.done();
+      }
+    });
   }
 
   /**
@@ -8713,32 +8841,34 @@ export class TillApp extends LitElement {
     const settle = (error?: unknown) => {
       if (turn === this.#refundSends) this.#unansweredRefund = unansweredAfter(submission, error);
     };
-    try {
-      const result = await resendUnanswered(
-        (signal) =>
-          this.api.refundBillPayment(
-            open.billId,
-            open.payment.id,
-            override === undefined ? submission.request : { ...submission.request, override },
-            { signal },
-          ),
-        limit.signal,
-        () => session === this.#operatorSession,
-      );
-      settle();
-      await this.#onRefunded(open, result);
-    } catch (error) {
-      settle(error);
-      if (
-        override === undefined &&
-        (error as { code?: unknown }).code === "authorization.not_permitted" &&
-        this.#billRefundingNow(open.id) !== null
-      )
-        await this.#askRefundApprover(open.id);
-      else await this.#onRefundRefused(open, error);
-    } finally {
-      limit.done();
-    }
+    await this.#holdingReload(async () => {
+      try {
+        const result = await this.#resend(
+          (signal) =>
+            this.api.refundBillPayment(
+              open.billId,
+              open.payment.id,
+              override === undefined ? submission.request : { ...submission.request, override },
+              { signal },
+            ),
+          limit.signal,
+          () => session === this.#operatorSession,
+        );
+        settle();
+        await this.#onRefunded(open, result);
+      } catch (error) {
+        settle(error);
+        if (
+          override === undefined &&
+          (error as { code?: unknown }).code === "authorization.not_permitted" &&
+          this.#billRefundingNow(open.id) !== null
+        )
+          await this.#askRefundApprover(open.id);
+        else await this.#onRefundRefused(open, error);
+      } finally {
+        limit.done();
+      }
+    });
   }
 
   /** The refund dialog closes; the bill payment dialog says what the refund did and shows the
@@ -8887,7 +9017,7 @@ export class TillApp extends LitElement {
     if (sync !== undefined) {
       this.#draftSync = undefined;
       this.#draftReady = false;
-      await sync.close();
+      await this.#holdingReload(() => sync.close());
       sync.drop();
     }
     if (signIns !== this.#signIns) return;
@@ -9373,6 +9503,16 @@ export class TillApp extends LitElement {
         }}
         @menu-selected=${(e: CustomEvent<{ id: string }>) => this.#onMenuSelected(e)}
       >
+        ${
+          this.updateAvailable && this.#boxServesTill()
+            ? html`<wt-banner
+                data-test="update-bar"
+                message=${t("update.message")}
+                action-label=${t("update.reload")}
+                @wt-banner-action=${() => this.#onReloadPressed()}
+              ></wt-banner>`
+            : nothing
+        }
         ${
           this.onboardingIntent
             ? html`<p class="mode-indicator" data-test="mode-indicator">

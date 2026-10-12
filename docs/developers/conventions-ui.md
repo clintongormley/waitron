@@ -384,6 +384,71 @@ Log out) at the trailing edge only when a session exists. Use the tenant name, n
 deployment database has one tenant and that tenant can contain several locations
 (`packages/db/src/schema/tenants.ts`).
 
+## An open page notices a box update from one response header
+
+Every response from the main listener after `/health` carries `x-waitron-build`
+(`BUILD_HEADER`, `@waitron/shared`), set by `buildHeaderMiddleware` (`apps/server/src/build-header.ts`) after the
+handler runs, because a handler that returns its own `Response` does not keep a header set before
+it. Two other apps never use the middleware, so they name no build: the
+failed-start recovery page (`recoveryApp`, `apps/server/src/recovery-surface.ts`) and the plain-HTTP
+landing listener (`buildLandingApp`, `apps/server/src/landing-app.ts`); both read, not tested.
+
+The dashboard's and the till's fetch pass through `watchBuild` (`@waitron/diagnostics`): the first build a response
+from the page's own origin names is the page's; the first different one sends
+`BUILD_CHANGED_EVENT` once, from its own microtask, so a listener that throws does not fail the
+request. A missing or empty header changes nothing. Another origin's build is ignored, and so is
+an answer a redirect brought from another origin (`response.url`), because a till's router can
+point at another server whose build says nothing about this page; by reasoning, not by a run,
+comparing it would reload an idle till in a loop. The dashboard adds no request: its automatic
+reads carry the header (read). On the till the router's 5 s probe of `/api/node` carries it, and
+the till adds at most one `/api/node` check per page, when a new build is seen: before deciding, it waits
+for the router's probe round in flight, or starts one, because the answer naming the new build may
+be a reset box's setup page, which the router reads after the watcher has seen it. "At most one"
+is read from the code (the event is sent once per page); a boot-suite case, where only a request
+other than the probe saw the new build, shows the till starting that check.
+
+The dashboard shows the update bar. The till decides only while the box serves it
+(`#boxServesTill()`, `apps/till/src/till-app.ts`): while the router finds no box accepting sales,
+or the join or device-picker screen shows, it neither reloads nor shows the bar, and decides once
+that ends. It then reloads by itself only when `#busyForReload()` is false, and otherwise shows the
+same bar. It counts as busy when
+someone is signed in (`operatorName`), a sign-in is still loading (`#loginPending`), the basket or
+the table-free draft holds a line (`#store`, `#partylessDraft`), any draft is unsaved
+(`leave.coordinator.isDirty()`), a department transfer's local copy waits to be dismissed
+(`transferLocalCopies`), a payment, a collection or a receipt-language save is being sent
+(`submitting`), an order is being held or placed, the receipt-language save each makes included
+(`parking`, `placing`), a card attempt is running (`#cardAttemptsRunning`), a bill payment or refund kept its send for a resend that must
+reuse its id — after no answer, or after a refusal that keeps the id (`#unansweredPayment`,
+`#unansweredRefund`), or a request is held by `#holdingReload`: every request sent again until
+answered (`#resend`, around `resendUnanswered`, and the station screen's dish move, which it
+announces with a `hold-reload` event), a whole bill payment or refund, a prep-queue Collect, and
+a sign-out's save of the draft. A signed-in person counts because a reload signs them out. The bar's Reload
+waits only for what `#requestsOut()` counts (`submitting`, `parking`, `placing`, a card
+attempt, or a held request), then reloads once, unless the operator touches or types on the till,
+or the box stops serving it, first; then the press is dropped and the bar stays to be pressed
+again. A till taken off the page drops the press.
+
+Guards: `packages/diagnostics/src/build-watch.test.ts`, `apps/server/src/build-header.test.ts`, the
+build-header lines in `apps/server/src/boot.test.ts`, the "build updates" cases in
+`apps/dashboard/src/dashboard-app.test.ts`, the "when the server reports another build" cases in
+`apps/till/src/till-app-boot-and-counter.test.ts` and its "box update meets a box reset or a
+refused device" cases, and the local-copy case among its "department transfers across operator
+lifetimes" cases, and the box-update cases in `apps/till/src/till-app-bill-payments.test.ts`,
+`apps/till/src/till-app-drafts.test.ts`, `apps/till/src/till-app-adjustments.test.ts`,
+`apps/till/src/till-app-counter-move-station.test.ts`, `apps/till/src/till-app-parties.test.ts`
+and `apps/till/src/till-app.test.ts` (a kitchen display's dish move, and a held order's receipt language). No test
+checks the wiring in either app's `main.ts`. It was run once instead, on 2026-10-11, on the demo
+stack (`wa-wt demo`) in Playwright's Chromium, with a route that swapped the header's value for
+another build: the header reached both pages through the Vite dev servers (`0.0.0`, not `null`);
+the signed-in dashboard showed the bar 26 ms after the script faked the tab coming back into view
+(it set `document.visibilityState` to `visible` and sent a synthetic `visibilitychange`), which
+makes the dashboard send its session read (`/management-api/session/me`); after Reload it showed
+none; a till on its lock screen with nobody signed
+in loaded again 3711 ms after the swap began, first brought by `/api/node`; a signed-in till showed
+the bar instead, had not reloaded 15 s later, and after Reload came back on the lock screen,
+signed out. The limits kept on purpose are in `docs/backlog/dashboard.md` → "Decisions and
+deliberate limits".
+
 ## The dashboard and pre-login till match the browser's `Accept-Language`
 
 The public locale response carries a separate `loginDefault`, and `venueDefault` still describes the

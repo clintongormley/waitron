@@ -1,6 +1,7 @@
 import { page, userEvent } from "vitest/browser";
 import { applyTokens, currentContentLanguages } from "@waitron/ui";
 import type { ContentLanguages } from "@waitron/shared";
+import { BUILD_CHANGED_EVENT, watchBuild } from "@waitron/diagnostics";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cleanupWidgets,
@@ -12,6 +13,7 @@ import indexHtml from "../index.html?raw";
 import { productUnit } from "./widgets/product-name.js";
 import { TillApp } from "./till-app.js";
 import { ServerRouter } from "./api/server-router.js";
+import { TillApi as TillClient } from "./api/client.js";
 import { setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import { DEV_DEVICE_STORAGE_KEY } from "./api/dev-device.js";
@@ -4368,6 +4370,44 @@ describe("department transfers across operator lifetimes", () => {
     expect(copy?.textContent).toContain("Retired cream");
   });
 
+  it("shows the update bar on the lock screen, not reloading, while a transfer's local copy waits to be dismissed", async () => {
+    const desk = transfers();
+    let accepted = false;
+    const reload = vi.fn();
+    const { el } = await mountApp(
+      {
+        ...desk.calls,
+        listDepartmentSentTransfers: vi.fn(async () => ({
+          requests: [
+            {
+              ...request,
+              tabId: "counter-tab",
+              status: accepted ? "accepted" : "pending",
+              revision: accepted ? 1 : 0,
+              currentDepartmentId: accepted ? "restaurant" : "deli",
+            },
+          ],
+        })),
+      },
+      { reload },
+    );
+    await signIn(el);
+    const c = counter(el)!;
+    c.store.loadFrom("counter-tab", [{ product: c.products[0]!, quantity: "2" }], "Lunch", 7);
+    c.store.addProduct(c.products[0]!, "1");
+    accepted = true;
+    desk.refresh();
+    await vi.waitFor(() => expect(c.store.persisted).toBe(false));
+    expect(el.shadowRoot!.querySelector("[data-transfer-local-copy]")).not.toBeNull();
+    emit(shell(el)!, "logout");
+    await vi.waitFor(() => expect(lock(el)).not.toBeNull());
+    await flush(el);
+    window.dispatchEvent(new Event(BUILD_CHANGED_EVENT));
+    await flush(el);
+    expect(reload).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector("wt-banner[data-test=update-bar]")).not.toBeNull();
+  });
+
   it("retains an unsent standalone table draft for review when its tab is transferred", async () => {
     const desk = transfers();
     let accepted = false;
@@ -4604,4 +4644,565 @@ describe("hierarchy deletion service choices", () => {
       expect(api.recordSale).not.toHaveBeenCalled();
     },
   );
+});
+
+describe("till-app when the server reports another build", () => {
+  type Banner = HTMLElement & { message: string; actionLabel: string };
+  const updateBar = (el: TillApp) =>
+    el.shadowRoot!.querySelector<Banner>("wt-banner[data-test=update-bar]");
+  const updated = () => window.dispatchEvent(new Event(BUILD_CHANGED_EVENT));
+  function unloadGuarded(): boolean {
+    const event = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  }
+
+  it("reloads by itself on the lock screen with nobody signed in and nothing open", async () => {
+    const reload = vi.fn();
+    const { el } = await mountApp({}, { reload });
+    await flush(el);
+    expect(lock(el)).not.toBeNull();
+    updated();
+    await flush(el);
+    expect(reload).toHaveBeenCalledOnce();
+    expect(updateBar(el)).toBeNull();
+  });
+
+  it("shows the bar instead of reloading while someone is signed in", async () => {
+    const reload = vi.fn();
+    const { el } = await mountApp({}, { reload });
+    await toCounter(el);
+    updated();
+    await flush(el);
+    expect(reload).not.toHaveBeenCalled();
+    expect(updateBar(el)!.message).toBe("Waitron se ha actualizado.");
+    expect(updateBar(el)!.actionLabel).toBe("Recargar");
+  });
+
+  it("words the bar in English for an English till", async () => {
+    const { el } = await mountApp({}, { reload: vi.fn() });
+    await toCounter(el);
+    setLocale("en-GB");
+    updated();
+    await flush(el);
+    expect(updateBar(el)!.message).toBe("Waitron was updated.");
+    expect(updateBar(el)!.actionLabel).toBe("Reload");
+  });
+
+  it("shows the bar while a sign-in is still loading", async () => {
+    const reload = vi.fn();
+    const { el } = await mountApp(
+      { listDefaultZoneOffers: vi.fn(() => new Promise(() => {})) },
+      { reload },
+    );
+    await flush(el);
+    emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
+    await flush(el);
+    updated();
+    await flush(el);
+    expect(reload).not.toHaveBeenCalled();
+    expect(updateBar(el)).not.toBeNull();
+  });
+
+  it("shows the bar on the lock screen while a retrieved order is still in the basket", async () => {
+    const reload = vi.fn();
+    const { el } = await mountApp(
+      {
+        retrieveWorkingOrder: vi.fn().mockResolvedValue({
+          id: "wo-1",
+          orderNumber: 5,
+          label: null,
+          lines: [{ quantity: "1.000", product: cafe }],
+        }),
+      },
+      { reload },
+    );
+    const c = await toCounter(el);
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await flush(el);
+    expect(c.store.lines).toHaveLength(1);
+    emit(shell(el)!, "logout");
+    await flush(el);
+    expect(lock(el)).not.toBeNull();
+    // A retrieved order is saved, so no draft guards the page: only its lines make the till busy.
+    expect(unloadGuarded()).toBe(false);
+    updated();
+    await flush(el);
+    expect(reload).not.toHaveBeenCalled();
+    expect(updateBar(el)).not.toBeNull();
+  });
+
+  it("shows the bar on the lock screen while the basket holds an unsaved change but no line", async () => {
+    const reload = vi.fn();
+    const { el } = await mountApp({}, { reload });
+    const c = await toCounter(el);
+    c.store.label = "Mesa 4";
+    await flush(el);
+    emit(shell(el)!, "logout");
+    await flush(el);
+    expect(c.store.lines).toHaveLength(0);
+    expect(unloadGuarded()).toBe(true);
+    updated();
+    await flush(el);
+    expect(reload).not.toHaveBeenCalled();
+    expect(updateBar(el)).not.toBeNull();
+  });
+
+  it("shows the bar while a payment still waits for the server after sign-out emptied the screen", async () => {
+    const reload = vi.fn();
+    const { el } = await mountApp({ recordSale: vi.fn(() => new Promise(() => {})) }, { reload });
+    const c = await toCounter(el);
+    c.store.addProduct(c.products[0]!, "1");
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+    expect(api.recordSale).toHaveBeenCalledOnce();
+    emit(shell(el)!, "logout");
+    await flush(el);
+    c.store.clear();
+    await flush(el);
+    expect(lock(el)).not.toBeNull();
+    expect(unloadGuarded()).toBe(false);
+    updated();
+    await flush(el);
+    expect(reload).not.toHaveBeenCalled();
+    expect(updateBar(el)).not.toBeNull();
+  });
+
+  function signOutIdle(activity: ReturnType<typeof fakeSessionActivity>): void {
+    (activity.configure.mock.calls.at(-1)![0] as { onIdle: () => void }).onIdle();
+  }
+
+  it("shows the bar instead of reloading while a hand-over still waits for the server after an idle sign-out", async () => {
+    const activity = fakeSessionActivity();
+    const reload = vi.fn();
+    const markCollected = vi.fn(() => new Promise(() => {}));
+    const { el } = await mountApp(
+      { markCollected },
+      { reload, sessionActivity: activity as never },
+    );
+    emit(await toCounter(el), "hand-over-order", { id: "wo-1" });
+    await flush(el);
+    expect(markCollected).toHaveBeenCalledOnce();
+    signOutIdle(activity);
+    await flush(el);
+    expect(lock(el)).not.toBeNull();
+    updated();
+    await flush(el);
+    expect(reload).not.toHaveBeenCalled();
+    expect(updateBar(el)).not.toBeNull();
+  });
+
+  it("shows the bar instead of reloading while a prep-queue Collect still waits for the server after an idle sign-out", async () => {
+    const activity = fakeSessionActivity();
+    const reload = vi.fn();
+    const markCollected = vi.fn(() => new Promise(() => {}));
+    const { el } = await mountApp(
+      { markCollected },
+      { reload, sessionActivity: activity as never },
+    );
+    emit(await toCounter(el), "mark-collected", { orderId: "wo-1" });
+    await flush(el);
+    expect(markCollected).toHaveBeenCalledOnce();
+    signOutIdle(activity);
+    await flush(el);
+    expect(lock(el)).not.toBeNull();
+    updated();
+    await flush(el);
+    expect(reload).not.toHaveBeenCalled();
+    expect(updateBar(el)).not.toBeNull();
+  });
+
+  it("waits for an unanswered park before a pressed Reload reloads, then reloads once it is answered", async () => {
+    const reload = vi.fn();
+    let answer!: () => void;
+    const parkOrder = vi.fn(() => new Promise<void>((resolve) => (answer = resolve)));
+    const { el } = await mountApp({ parkOrder }, { reload });
+    const c = await toCounter(el);
+    c.store.addProduct(c.products[0]!, "1");
+    emit(c, "park-order", {});
+    await flush(el);
+    expect(parkOrder).toHaveBeenCalledOnce();
+    updated();
+    await flush(el);
+    await userEvent.click(
+      updateBar(el)!.shadowRoot!.querySelector("wt-button")!.shadowRoot!.querySelector("button")!,
+    );
+    await flush(el);
+    expect(reload).not.toHaveBeenCalled();
+    answer();
+    await flush(el);
+    expect(reload).toHaveBeenCalledOnce();
+  });
+
+  it("waits for an unanswered place before a pressed Reload reloads, then reloads once it is answered", async () => {
+    const reload = vi.fn();
+    let answer!: () => void;
+    const placeOrder = vi.fn(() => new Promise<void>((resolve) => (answer = resolve)));
+    const { el } = await mountApp(
+      { parkOrder: vi.fn().mockResolvedValue(undefined), placeOrder },
+      { reload },
+    );
+    const c = await toCounter(el);
+    c.store.addProduct(c.products[0]!, "1");
+    emit(c, "place-order", {});
+    await flush(el);
+    expect(placeOrder).toHaveBeenCalledOnce();
+    updated();
+    await flush(el);
+    await userEvent.click(
+      updateBar(el)!.shadowRoot!.querySelector("wt-button")!.shadowRoot!.querySelector("button")!,
+    );
+    await flush(el);
+    expect(reload).not.toHaveBeenCalled();
+    answer();
+    await flush(el);
+    expect(reload).toHaveBeenCalledOnce();
+  });
+
+  it("does not reload a till taken off the page while a pressed Reload waited for a request", async () => {
+    const reload = vi.fn();
+    let answer!: () => void;
+    const markCollected = vi.fn(() => new Promise<void>((resolve) => (answer = resolve)));
+    const { el } = await mountApp({ markCollected }, { reload });
+    emit(await toCounter(el), "hand-over-order", { id: "wo-1" });
+    await flush(el);
+    updated();
+    await flush(el);
+    await userEvent.click(
+      updateBar(el)!.shadowRoot!.querySelector("wt-button")!.shadowRoot!.querySelector("button")!,
+    );
+    await flush(el);
+    expect(reload).not.toHaveBeenCalled();
+    el.remove();
+    answer();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(reload).not.toHaveBeenCalled();
+  });
+
+  it("reloads an idle till once a hand-over that was out has been answered", async () => {
+    const activity = fakeSessionActivity();
+    const reload = vi.fn();
+    let answer!: () => void;
+    const markCollected = vi.fn(() => new Promise<void>((resolve) => (answer = resolve)));
+    const { el } = await mountApp(
+      { markCollected },
+      { reload, sessionActivity: activity as never },
+    );
+    emit(await toCounter(el), "hand-over-order", { id: "wo-1" });
+    await flush(el);
+    signOutIdle(activity);
+    await flush(el);
+    answer();
+    await flush(el);
+    updated();
+    await flush(el);
+    expect(reload).toHaveBeenCalledOnce();
+    expect(updateBar(el)).toBeNull();
+  });
+
+  it("reloads only once a payment that was out is answered, when Reload was pressed while it was out", async () => {
+    const reload = vi.fn();
+    let answer!: (value: unknown) => void;
+    const recordSale = vi.fn(() => new Promise((resolve) => (answer = resolve)));
+    const { el } = await mountApp({ recordSale }, { reload });
+    const c = await toCounter(el);
+    c.store.addProduct(c.products[0]!, "1");
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+    expect(recordSale).toHaveBeenCalledOnce();
+    updated();
+    await flush(el);
+    await userEvent.click(
+      updateBar(el)!.shadowRoot!.querySelector("wt-button")!.shadowRoot!.querySelector("button")!,
+    );
+    await flush(el);
+    expect(reload).not.toHaveBeenCalled();
+    answer(saleResult);
+    await flush(el);
+    expect(reload).toHaveBeenCalledOnce();
+  });
+
+  it("drops a pressed Reload when the till is used before the request it waited for is answered", async () => {
+    const reload = vi.fn();
+    let answer!: () => void;
+    const markCollected = vi.fn(() => new Promise<void>((resolve) => (answer = resolve)));
+    const { el } = await mountApp({ markCollected }, { reload });
+    const c = await toCounter(el);
+    emit(c, "hand-over-order", { id: "wo-1" });
+    await flush(el);
+    updated();
+    await flush(el);
+    await userEvent.click(
+      updateBar(el)!.shadowRoot!.querySelector("wt-button")!.shadowRoot!.querySelector("button")!,
+    );
+    await flush(el);
+    expect(reload).not.toHaveBeenCalled();
+    await userEvent.click(c);
+    c.store.addProduct(c.products[0]!, "1");
+    answer();
+    await flush(el);
+    expect(reload).not.toHaveBeenCalled();
+    expect(updateBar(el)).not.toBeNull();
+  });
+
+  it("reloads when Reload on the bar is pressed", async () => {
+    const reload = vi.fn();
+    const { el } = await mountApp({}, { reload });
+    await toCounter(el);
+    updated();
+    await flush(el);
+    await userEvent.click(
+      updateBar(el)!.shadowRoot!.querySelector("wt-button")!.shadowRoot!.querySelector("button")!,
+    );
+    expect(reload).toHaveBeenCalledOnce();
+  });
+});
+
+describe("till-app when a box update meets a box reset or a refused device", () => {
+  const updateBar = (el: TillApp) =>
+    el.shadowRoot!.querySelector("wt-banner[data-test=update-bar]");
+  const enrol = (el: TillApp) => el.shadowRoot!.querySelector("till-enrol-screen");
+
+  /** A box whose answers go through the build watcher `main.ts` installs. In setup mode it answers
+   * every request with the setup page, as a reset box does. */
+  function fakeBox() {
+    const box = { build: "old", setup: false, down: false, deviceRefused: false };
+    const answer = async (input: RequestInfo | URL): Promise<Response> => {
+      if (box.down) throw new TypeError("Failed to fetch");
+      const headers = { "x-waitron-build": box.build };
+      if (box.setup)
+        return new Response("<html>Set up Waitron</html>", {
+          headers: { ...headers, "content-type": "text/html" },
+        });
+      const path = new URL(String(input instanceof Request ? input.url : input), location.origin)
+        .pathname;
+      if (path === "/api/device/me")
+        return box.deviceRefused
+          ? Response.json({ error: { code: "device.unauthorized" } }, { status: 401, headers })
+          : Response.json(
+              { deviceId: "till-dev", name: "Till 1", formFactor: "till" },
+              { headers },
+            );
+      return Response.json({ acceptingSales: true, term: 1 }, { headers });
+    };
+    const watched = watchBuild(answer as typeof fetch, {
+      origin: location.origin,
+      onChange: () => window.dispatchEvent(new Event(BUILD_CHANGED_EVENT)),
+    });
+    const router = new ServerRouter({
+      origin: location.origin,
+      fetchImpl: watched,
+      storage: { getItem: () => null, setItem: () => {} },
+    });
+    const client = new TillClient("", watched);
+    return { box, router, client };
+  }
+
+  async function mountOnBox(
+    box: ReturnType<typeof fakeBox>,
+    reload: () => void,
+    overrides: Record<string, unknown> = {},
+  ) {
+    await box.router.probeNow();
+    const { el } = await mountApp(
+      { getDeviceIdentity: () => box.client.getDeviceIdentity(), ...overrides },
+      { reload, router: box.router },
+    );
+    await flush(el);
+    return el;
+  }
+
+  it("neither reloads nor throws once the till has left the page before its server check answered", async () => {
+    const router = new ServerRouter({
+      origin: location.origin,
+      fetchImpl: fetch,
+      storage: { getItem: () => null, setItem: () => {} },
+    });
+    let answer!: () => void;
+    vi.spyOn(router, "probeNow").mockReturnValue(
+      new Promise<void>((resolve) => (answer = resolve)),
+    );
+    const reload = vi.fn();
+    const { el } = await mountApp({}, { reload, router });
+    await flush(el);
+    window.dispatchEvent(new Event(BUILD_CHANGED_EVENT));
+    el.remove();
+    answer();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(reload).not.toHaveBeenCalled();
+  });
+
+  it("shows no bar to a signed-in till when the box answers its probe in setup mode with a new build", async () => {
+    const fake = fakeBox();
+    const reload = vi.fn();
+    const el = await mountOnBox(fake, reload);
+    await toCounter(el);
+    fake.box.setup = true;
+    fake.box.build = "new";
+    await fake.router.probeNow();
+    await flush(el);
+    expect(fake.router.waiting).toBe(true);
+    expect(updateBar(el)).toBeNull();
+    expect(reload).not.toHaveBeenCalled();
+  });
+
+  it("hides the bar a signed-in till showed once the box answers its probe in setup mode", async () => {
+    const fake = fakeBox();
+    const reload = vi.fn();
+    const el = await mountOnBox(fake, reload);
+    await toCounter(el);
+    fake.box.build = "new";
+    await fake.router.probeNow();
+    await flush(el);
+    expect(updateBar(el)).not.toBeNull();
+    fake.box.setup = true;
+    await fake.router.probeNow();
+    await flush(el);
+    expect(fake.router.waiting).toBe(true);
+    expect(updateBar(el)).toBeNull();
+    expect(reload).not.toHaveBeenCalled();
+  });
+
+  it("does not reload an idle till onto a box in setup mode, whichever request saw the new build", async () => {
+    const fake = fakeBox();
+    const reload = vi.fn();
+    const el = await mountOnBox(fake, reload);
+    expect(lock(el)).not.toBeNull();
+    fake.box.setup = true;
+    fake.box.build = "new";
+    await fake.client.getDeviceIdentity().catch(() => undefined);
+    await flush(el);
+    await flush(el);
+    expect(reload).not.toHaveBeenCalled();
+    expect(fake.router.waiting).toBe(true);
+    expect(updateBar(el)).toBeNull();
+  });
+
+  it("reloads an idle till held by a box in setup mode once the box answers as a box again", async () => {
+    const fake = fakeBox();
+    const reload = vi.fn();
+    const el = await mountOnBox(fake, reload);
+    fake.box.setup = true;
+    fake.box.build = "new";
+    await fake.router.probeNow();
+    await flush(el);
+    expect(reload).not.toHaveBeenCalled();
+    fake.box.setup = false;
+    await fake.router.probeNow();
+    await flush(el);
+    expect(reload).toHaveBeenCalledOnce();
+  });
+
+  it("reloads an idle till when the box it could not reach while it restarted answers with the new build", async () => {
+    const fake = fakeBox();
+    const reload = vi.fn();
+    const el = await mountOnBox(fake, reload);
+    fake.box.down = true;
+    await fake.router.probeNow();
+    await flush(el);
+    expect(fake.router.waiting).toBe(true);
+    fake.box.down = false;
+    fake.box.build = "new";
+    await fake.router.probeNow();
+    await flush(el);
+    expect(reload).toHaveBeenCalledOnce();
+  });
+
+  it("shows no bar over the join screen when the refusal of a signed-in till's device names the new build", async () => {
+    const fake = fakeBox();
+    const reload = vi.fn();
+    const el = await mountOnBox(fake, reload);
+    const c = await toCounter(el);
+    fake.box.deviceRefused = true;
+    fake.box.build = "new";
+    emit(c, "device-unauthorized");
+    await vi.waitFor(() => expect(enrol(el)).not.toBeNull());
+    await flush(el);
+    expect(updateBar(el)).toBeNull();
+    expect(reload).not.toHaveBeenCalled();
+  });
+
+  /** A signed-in till on `fake` with a hand-over out, the bar showing for a new build, and Reload
+   * pressed; `answer` answers the hand-over. */
+  async function reloadPressedWithHandOverOut(fake: ReturnType<typeof fakeBox>) {
+    const reload = vi.fn();
+    let answer!: () => void;
+    const markCollected = vi.fn(() => new Promise<void>((resolve) => (answer = resolve)));
+    const el = await mountOnBox(fake, reload, { markCollected });
+    const c = await toCounter(el);
+    emit(c, "hand-over-order", { id: "wo-1" });
+    await flush(el);
+    fake.box.build = "new";
+    await fake.router.probeNow();
+    await flush(el);
+    await userEvent.click(
+      updateBar(el)!.shadowRoot!.querySelector("wt-button")!.shadowRoot!.querySelector("button")!,
+    );
+    await flush(el);
+    expect(reload).not.toHaveBeenCalled();
+    return { el, c, reload, answer };
+  }
+
+  it("drops a pressed Reload when the box is reset before the request it waited for is answered", async () => {
+    const fake = fakeBox();
+    const { el, reload, answer } = await reloadPressedWithHandOverOut(fake);
+    fake.box.setup = true;
+    await fake.router.probeNow();
+    await flush(el);
+    expect(updateBar(el)).toBeNull();
+    answer();
+    await flush(el);
+    expect(reload).not.toHaveBeenCalled();
+    fake.box.setup = false;
+    await fake.router.probeNow();
+    await flush(el);
+    expect(reload).not.toHaveBeenCalled();
+    expect(updateBar(el)).not.toBeNull();
+  });
+
+  it("drops a pressed Reload when the device is refused before the request it waited for is answered", async () => {
+    const fake = fakeBox();
+    const { el, c, reload, answer } = await reloadPressedWithHandOverOut(fake);
+    fake.box.deviceRefused = true;
+    emit(c, "device-unauthorized");
+    await vi.waitFor(() => expect(enrol(el)).not.toBeNull());
+    answer();
+    await flush(el);
+    expect(reload).not.toHaveBeenCalled();
+  });
+
+  it("reloads an idle till held by the join screen once its device has joined", async () => {
+    const fake = fakeBox();
+    fake.box.deviceRefused = true;
+    const reload = vi.fn();
+    const el = await mountOnBox(fake, reload);
+    await vi.waitFor(() => expect(enrol(el)).not.toBeNull());
+    fake.box.build = "new";
+    await fake.router.probeNow();
+    await flush(el);
+    expect(reload).not.toHaveBeenCalled();
+    expect(updateBar(el)).toBeNull();
+    fake.box.deviceRefused = false;
+    emit(enrol(el)!, "enrolled");
+    await vi.waitFor(() => expect(enrol(el)).toBeNull());
+    await flush(el);
+    expect(reload).toHaveBeenCalledOnce();
+  });
+
+  it("takes the bar a signed-in till showed off the screen when its device is then refused", async () => {
+    const fake = fakeBox();
+    const reload = vi.fn();
+    const el = await mountOnBox(fake, reload);
+    const c = await toCounter(el);
+    fake.box.build = "new";
+    await fake.router.probeNow();
+    await flush(el);
+    expect(updateBar(el)).not.toBeNull();
+    fake.box.deviceRefused = true;
+    emit(c, "device-unauthorized");
+    await vi.waitFor(() => expect(enrol(el)).not.toBeNull());
+    await flush(el);
+    expect(updateBar(el)).toBeNull();
+    expect(reload).not.toHaveBeenCalled();
+  });
 });

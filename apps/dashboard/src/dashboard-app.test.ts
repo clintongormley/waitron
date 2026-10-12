@@ -4,6 +4,7 @@ import { applyTokens, currentContentLanguages, setContentLanguages } from "@wait
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 import { html } from "lit";
 import { DASHBOARD_MODULES } from "@waitron/dashboard-modules";
+import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
 import { cleanupWidgets, menuDocument, mountWidget } from "./widgets/test-helpers.js";
 import { MenuPreviewPanel } from "./widgets/menu-preview.js";
 import { DashboardApp } from "./dashboard-app.js";
@@ -5965,6 +5966,111 @@ describe("dashboard-app: session signals", () => {
     fail({ code: "person.suspended" });
     await flush(el);
     expect(notice(el)).toBe(codeMessage("management_session.expired"));
+  });
+});
+
+describe("dashboard-app: build updates", () => {
+  type Banner = HTMLElement & { message: string; actionLabel: string };
+  const bar = (el: DashboardApp) =>
+    el.shadowRoot!.querySelector<Banner>("wt-banner[data-test=update-bar]");
+  const updated = () => window.dispatchEvent(new Event(BUILD_CHANGED_EVENT));
+  const sessionInvalid = (code: string) =>
+    window.dispatchEvent(new CustomEvent("waitron-session-invalid", { detail: { code } }));
+
+  async function signedIn() {
+    const reload = vi.fn();
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi(),
+      request: stubRequest,
+      reload,
+    });
+    await flush(el);
+    expect(overview(el)).not.toBeNull();
+    return { el, reload };
+  }
+
+  async function signedOut() {
+    const reload = vi.fn();
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ getMe: vi.fn().mockRejectedValue({ code: "management_session.required" }) }),
+      request: stubRequest,
+      reload,
+    });
+    await flush(el);
+    expect(login(el)).not.toBeNull();
+    return { el, reload };
+  }
+
+  it("shows no update bar while the server's build has not changed", async () => {
+    const { el } = await signedIn();
+    expect(bar(el)).toBeNull();
+  });
+
+  it("shows the update bar under the banner once the server reports another build", async () => {
+    const { el } = await signedIn();
+    updated();
+    await flush(el);
+    expect(bar(el)!.message).toBe("Waitron se ha actualizado.");
+    expect(bar(el)!.actionLabel).toBe("Recargar");
+    // The bar fills its live region two animation frames after it is drawn.
+    await vi.waitFor(() =>
+      expect(bar(el)!.shadowRoot!.querySelector(".message")!.textContent).toBe(
+        "Waitron se ha actualizado.",
+      ),
+    );
+    expect(bar(el)!.closest(".banner-row")).not.toBeNull();
+    expect(
+      bar(el)!.compareDocumentPosition(el.shadowRoot!.querySelector("[data-test=brand-banner]")!) &
+        Node.DOCUMENT_POSITION_PRECEDING,
+    ).toBeTruthy();
+  });
+
+  it("words the bar in English for an English page", async () => {
+    const { el } = await signedIn();
+    setLocale("en-GB");
+    updated();
+    await flush(el);
+    expect(bar(el)!.message).toBe("Waitron was updated.");
+    expect(bar(el)!.actionLabel).toBe("Reload");
+  });
+
+  it("shows the bar on the sign-in page too", async () => {
+    const { el } = await signedOut();
+    updated();
+    await flush(el);
+    expect(bar(el)).not.toBeNull();
+  });
+
+  it.each(["before", "after"] as const)(
+    "shows the reset notice and no update bar when the reset arrives %s the new build",
+    async (order) => {
+      const { el } = await signedIn();
+      if (order === "before") sessionInvalid("node.reset");
+      updated();
+      if (order === "after") sessionInvalid("node.reset");
+      await flush(el);
+      expect(bar(el)).toBeNull();
+      expect(login(el)!.shadowRoot!.querySelector("[data-test=reload]")).not.toBeNull();
+    },
+  );
+
+  it("reloads the page when Reload is pressed", async () => {
+    const { el, reload } = await signedIn();
+    updated();
+    await flush(el);
+    expect(reload).not.toHaveBeenCalled();
+    await userEvent.click(
+      bar(el)!.shadowRoot!.querySelector("wt-button")!.shadowRoot!.querySelector("button")!,
+    );
+    expect(reload).toHaveBeenCalledOnce();
+  });
+
+  it("stops listening once taken off the page", async () => {
+    const { el } = await signedIn();
+    el.remove();
+    updated();
+    await el.updateComplete;
+    expect((el as unknown as { updateAvailable: boolean }).updateAvailable).toBe(false);
   });
 });
 

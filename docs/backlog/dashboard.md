@@ -888,6 +888,20 @@ From **Variants as products (#511–#556) — what is left open.** How the model
 
 ## Decisions and deliberate limits
 
+- **An open tab offers to reload after a box update (A491, owner 2026-10-11).** How it works:
+  `docs/developers/conventions-ui.md` → "An open page notices a box update from one response
+  header". Limits kept on purpose: a signed-out dashboard tab that makes no automatic read sees the
+  update only on its next request; a page that first hears from the box after the update takes the
+  new build as its own and never shows the bar; a till with nobody signed in reloads even while
+  someone is typing a PIN (typed digits are not a draft); a signed-in till with nothing open shows
+  the bar rather than signing its operator out; once the till shows the bar it reloads only when
+  Reload is pressed (a press waiting for a request still out is the operator's reload); an idle
+  till whose bill payment or refund kept its send for a resend that must reuse its id shows the bar
+  rather than reloading. Every response from the main listener after
+  `/health` names the box's build to whoever can reach it, signed in or not. The failed-start
+  recovery page and the plain-HTTP landing listener send no build header (read, not tested). The
+  setup wizard does not watch the build.
+
 - **Sign-in screens never ask about unsaved changes (owner, 2026-10-11, A499).** The dashboard's
   sign-in screen, every step of it, and the account set-up and password-reset form an emailed link opens there, and the
   till's PIN sign-in, take no part in the leave check. The till's enrol screen and the supervisor's
