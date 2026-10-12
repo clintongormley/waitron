@@ -4422,7 +4422,11 @@ it("keeps Venue settings within the window at desktop width, in view and edit mo
       venueSettings(el)!.shadowRoot!.querySelector<HTMLElement>(
         '[data-test="venue-settings-venue-details"]',
       )!;
-    await expect.poll(() => panels()?.children.length).toBe(1);
+    await expect.poll(() => panels()?.children.length).toBe(2);
+    expect([...panels().children].map((panel) => panel.localName)).toEqual([
+      "dashboard-venue-details-panel",
+      "dashboard-receipt-language-panel",
+    ]);
     const details = panels().querySelector("dashboard-venue-details-panel")!;
     await expect
       .poll(() => details.shadowRoot!.querySelector<HTMLElement>('[data-test="edit"]'))

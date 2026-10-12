@@ -45,6 +45,11 @@ export class VenueSettingsScreen extends LitElement {
         display: block;
         min-width: 0;
       }
+      .panels {
+        display: grid;
+        gap: var(--wt-space-5);
+        min-width: 0;
+      }
       h1 {
         margin-top: 0;
       }
@@ -110,7 +115,7 @@ export class VenueSettingsScreen extends LitElement {
                 tabs,
                 (tab) => tab,
                 (tab) =>
-                  html`<div slot=${tab} data-test=${`venue-settings-${tab}`}>
+                  html`<div class="panels" slot=${tab} data-test=${`venue-settings-${tab}`}>
                     ${repeat(
                       this.panels.filter((panel) => panel.tab === tab),
                       (panel) => panel.key,
