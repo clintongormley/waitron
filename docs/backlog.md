@@ -2658,6 +2658,21 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   that moment (nothing was saved yet), and a place waiting on that question holds a pressed Reload
   until someone touches the till. Left open by A491.
 
+- **A till signs its staff out after its profile's idle time while its own card payment waits at
+  the reader.** Seen once on the dev stack with the Demo card reader: the counter profile's 5
+  minutes passed while the payment waited, the sale was still filed once, and that till never
+  showed its receipt. Timer: `apps/till/src/session-activity.ts`. Left open by A526.
+
+- **With the service closed, a wide till's menu area shows nothing, and the "Service area" picker
+  and the "Keep … open later" button go with it.** Seen once at 1280 wide. Read, not run: the sale
+  layout draws both inside the menu card, which draws nothing while the service or the area is
+  closed (`apps/till/src/widgets/card-grid.ts`, `#element` and `#cell`). Left open by A526.
+
+- **In Spanish at 390 wide, the counter's basket line showed no product name** in two screenshots
+  of the Collect step (light and dark): the row with quantity, price and Note is there, the name
+  row above it is missing, not cut off. In English at 390, and in Spanish at 1280, the name shows.
+  Seen once; cause not investigated. Left open by A526.
+
 ### Printers, the print agent and receipts
 
 _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/printers.md).
@@ -3029,10 +3044,11 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   manual Pay is believed to leave it the same way (read, not run). Left by B28's review (#1005), not
   acted on, under service Task 17 (#991).
 
-- **A placed order with no invoice is not checked against stored card payments.** Its cancel sees a
-  card running at the reader in this process, but not a stored payment its provider has not
-  resolved, nor one captured and not yet filed; the cancel had no payment check at all before C126.
-  Left open by C126 (cancelling an order whose invoice was issued credits it, #1030).
+- **A placed order with no invoice is not checked against stored card payments when it is
+  cancelled.** Its cancel sees a card running at the reader in this process, but not a stored
+  payment its provider has not resolved, nor one captured and not yet filed; the cancel had no
+  payment check at all before C126. (Its collect, card payment and unpaid departure do check both
+  since A526.) Left open by C126 (cancelling an order whose invoice was issued credits it, #1030).
 
 - **Task 4 (#832, every paper names all of a party's tables).** Not yet checked: the payment API's
   `/management-api/payments/stuck`, `/management-api/payments/bill-payments` and
@@ -3146,11 +3162,23 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   provider. Left open by A260 (several card readers' status reads at once can use up the browser's
   connections to the box; W18c #1145 and W48 #1162).
 
-- **A placed order can be charged twice while its card is at the reader — OPEN (found 2026-10-11
-  during A497's review, measured at main 126cd3ad2).** A cash collect or a second `/api/pay` on it
-  answers 200, and both payments go through while only one is recorded on a sale. Next: refuse
-  collect and pay on a placed order while a card payment is in flight (`order.payment_in_flight`).
-  [Detail](backlog/payments.md#a-placed-order-can-be-charged-twice-while-its-card-is-at-the-reader)
+- **A Stripe card payment that a crash leaves `attempting` on a placed order has no manager way to
+  clear it**, and since A526 that row refuses the order's collect, card payment and unpaid departure
+  (`order.payment_in_flight`). The stuck-payment screen and its resolve take only open orders
+  (`apps/server/src/payments-api.ts`); SumUp's sweep settles its own rows, Stripe's sweep does
+  nothing. Stripe is not in use. Read, not run. Left open by A526.
+
+- **`finalizeCapture`'s duplicate fallback can show a receipt for an order that is not settled**,
+  while the card's charge stays on no sale (`apps/server/src/till-sale.ts`). Measured before A526 by
+  the plan's reviewer, through an unpaid departure that A526 now refuses; no other way to reach it
+  is known. Left open by A526.
+  [Detail](backlog/payments.md#finalizecaptures-duplicate-fallback-can-show-a-receipt-for-an-order-that-is-not-settled)
+
+- **The demo card reader and the test card reader write their payment rows outside the write
+  queue**, so a row written while another request's transaction is open is rolled back if that
+  request fails (measured during A526). SumUp and Stripe do not do this. Next: write through
+  `withTransaction`. Left open by A526.
+  [Detail](backlog/payments.md#the-demo-card-reader-and-the-test-card-reader-write-their-payment-rows-outside-the-write-queue)
 
 ### Users, sign-in and the dashboard shell
 

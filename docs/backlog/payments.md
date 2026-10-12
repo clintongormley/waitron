@@ -168,17 +168,58 @@ their full text.
   Solo actually does on a signature-required card (it belongs with the SumUp Solo experiments above),
   because if the reader owns the whole step there may be nothing for us to build.
 
-## A placed order can be charged twice while its card is at the reader
+## `finalizeCapture`'s duplicate fallback can show a receipt for an order that is not settled
 
-**OPEN (found 2026-10-11 during A497's review, measured at main 126cd3ad2).** With a placed order's
-card payment held at the reader, a cash collect answered 200 and filed a sale, and the card then
-captured too, leaving a captured card payment no sale records. A second `/api/pay` also answered
-200, and both cards captured with one sale recording a payment. A497 refuses these only when they
-would change the receipt language (`refusePlacedPaymentInFlight`, `apps/server/src/till-sale.ts`).
-Fix: refuse collect and pay on a placed order while a card payment is in flight
-(`order.payment_in_flight`).
+Left open by A526. When a card payment's last step tries to file the sale and finds a sale already
+on the order, it answers that sale's receipt instead of failing (`finalizeCapture`'s catch,
+`apps/server/src/till-sale.ts`). The receipt comes from `readSettledTicket`, which reads the sale
+and never the order's status (read). So if another writer filed a sale on an order that is still
+`placed`, the till is shown a receipt while the card's charge is recorded on no sale.
+
+What was measured: the plan's fresh-context reviewer, on the code before A526 (2026-10-12), held a
+presented bill's card at the reader and recorded an unpaid departure for its party. The departure
+filed an invoice and recorded the bill as unpaid; when the card was released, `/api/pay` answered
+"captured" with a receipt, but the payment row stayed captured with no sale and the order stayed
+`placed`. A526 now refuses that departure, so the fallback is reachable that way no longer; it
+would be again by any sale written on an order that is not settled. Not re-run since A526. Next:
+decide what the fallback does when the order is not settled (for example, fail and leave the charge
+for reconciliation rather than show a receipt).
+
+## The demo card reader and the test card reader write their payment rows outside the write queue
+
+Left open by A526. `SimulatorPaymentProvider` (`packages/payments/src/simulator.ts`, the "Demo card
+reader" the server itself builds, `apps/server/src/boot.ts`) and the test readers
+`FakePaymentProvider` and `FakeAsyncProvider` (`packages/payments/src/testing/`) write their payment rows with
+`this.db.transaction(...)`, not `withTransaction`, so the write does not wait its turn in the
+store's write queue. When another request's transaction is open on the connection at that moment,
+the write becomes a savepoint inside it (`packages/store/src/node-sqlite-adapter.ts`, read) and is
+rolled back with it if that request fails.
+
+Measured during A526: with the new refusal moved, as an experiment, ahead of the recovery step, a
+two-till test's first card payment answered `payment.not_found` and left no payment row in all of
+its 20 rounds; the implementer traced it to that card's captured row having joined the other
+till's refused request and been rolled back with it.
+The branch's review also found that the same test's rounds all took one path only because of this
+(that test was then removed). SumUp and Stripe write through `withTransaction` (read). Next: write
+these readers' rows through `withTransaction`, after checking that no caller reaches them from
+inside a transaction body, where waiting for the queue would wait on itself.
 
 ## Decisions and deliberate limits
+
+- **A placed order takes one card payment at a time** (A526, 2026-10-12; defaults sent to the owner
+  as an FYI the same day and built). While a card payment of a placed order is in flight — running
+  in this process, still `attempting` at its provider, or captured (or accepted offline) and not yet
+  on a sale — a cash or hand-keyed card collect of the order, a second card payment of it and an
+  unpaid departure of the party it belongs to are refused `order.payment_in_flight`, writing
+  nothing. Pressing Pay again to file a card that was already charged is never refused, even from
+  another till and even while that card's own payment has not yet filed it: it files that charge
+  and asks no reader. A till on another payment provider is refused until a till on the provider
+  that took the charge presses Pay. A request that arrives after the order is settled gets its
+  receipt back, as a retry after a lost answer must (so a cash collect after the card settled
+  answers the card's receipt). After a reader timeout, cash waits while the provider reports the
+  card pending: with SumUp, for as long as SumUp answers PENDING, and up to 15 minutes when SumUp
+  has no record of the payment. Plan:
+  `docs/superpowers/plans/2026-10-12-a526-placed-order-one-payment.md`.
 
 - **A reader still paired at a provider that can unpair it (SumUp) is deleted in Waitron only
   while that provider's account is not connected** (owner, 2026-10-10), after the confirmation says

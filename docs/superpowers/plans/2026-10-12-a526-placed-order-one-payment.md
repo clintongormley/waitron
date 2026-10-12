@@ -883,3 +883,11 @@ probe found to pin the hold inside P1, and its mutation run must fail; decision 
 with a plain entry and deletes the C126 two-cards case; decision 9 maps `#collectCard` too; decision
 1 says cash waits while SumUp reports the card pending; decision 10 (mixed providers) added; Task 2
 split into 2a and 2b, and the look with two tills is its own task (6).
+
+**2026-10-12, during the build.** Two departures from the text above. Task 5 also maps
+`order.payment_in_flight` in the unpaid departure dialog (`#refusalText`,
+`apps/till/src/widgets/unpaid-departure-dialog.ts`), a driver decision after Task 3 found the dialog
+showed the code's own message ("… before changing the order"); this is contrary to Decision 6's "No
+till change". And Task 2a absorbed Task 2b's Steps 4–5 (the rewritten two-pays case in
+`till-sale-integrated.db.test.ts` and the deleted C126 "two cards" case in
+`cancel-invoiced-order.test.ts`), so that Task 2a ended green; Task 2b did Steps 1–3.
