@@ -1,3 +1,4 @@
+import { departments, departmentReceipts } from "@waitron/venue-service";
 import { floorTodayTables } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import { asc, eq, sql } from "drizzle-orm";
@@ -219,6 +220,14 @@ async function setupVenue(): Promise<SeededVenue> {
   );
 
   const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue));
+  const [department] = await suite.db
+    .select()
+    .from(departments)
+    .where(eq(departments.locationId, cfg.locationId));
+  await suite.db.insert(departmentReceipts).values({
+    departmentId: department!.id,
+    receipt: { operationDescription: "Venta en establecimiento" },
+  });
   const available = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, { name: "Bebidas" });

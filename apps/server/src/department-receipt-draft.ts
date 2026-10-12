@@ -99,6 +99,18 @@ export function validateDepartmentReceiptWrite(
       throw new AppError("management.request_invalid", { field: "operationDescription" });
     }
   }
+  if (validateOperationDescription === undefined && receipt.operationDescription !== undefined) {
+    const description = receipt.operationDescription;
+    if (
+      description.length > 500 ||
+      Array.from(description).some((character) => character < " " && !"\t\n\r".includes(character))
+    ) {
+      throw new AppError("receipt.invalid", {
+        field: "operationDescription",
+        reason: "invalid_description",
+      });
+    }
+  }
   return {
     receipt,
     policy: {

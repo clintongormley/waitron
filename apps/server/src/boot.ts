@@ -143,7 +143,7 @@ import { mountPaymentsApi } from "./payments-api.js";
 import { createCardProviderPool } from "./card-provider-pool.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
 import { mountLocationSettingsApi } from "./location-settings-api.js";
-import { mountReceiptPreviewApi } from "./receipt-preview-api.js";
+import { mountDepartmentReceiptDraftPreviewApi } from "./receipt-preview-api.js";
 import { mountManagementApi } from "./management-api.js";
 import { mountConfigurationExportApi } from "./configuration-export-api.js";
 import { createAccountEmailSender } from "./account-email.js";
@@ -1577,13 +1577,23 @@ async function bootServer(
     { db, cfg: till, fiscal: enabledFiscal, readBackupDeadlines: () => ({ ...backupDeadlines }) },
     log,
   );
-  mountReceiptPreviewApi(app, { db, cfg: till, receiptQrText: tillBackend.receiptQrText }, log);
+  mountDepartmentReceiptDraftPreviewApi(
+    app,
+    {
+      db,
+      cfg: till,
+      receiptQrText: tillBackend.receiptQrText,
+      validateOperationDescription: enabledFiscal.venueFields?.validateOperationDescription,
+    },
+    log,
+  );
   const managementApi = mountManagementApi(
     app,
     {
       db,
       cfg: { nodeId: till.nodeId },
       venueCfg: till,
+      validateOperationDescription: enabledFiscal.venueFields?.validateOperationDescription,
       secureCookies,
       rpId: config.managementRpId,
       origin: config.managementOrigin,

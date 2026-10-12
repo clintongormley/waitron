@@ -13,6 +13,7 @@ declare module "@waitron/shared" {
         | "too_long"
         | "unknown_field"
         | "invalid_phone"
+        | "invalid_description"
         | "invalid_email"
         | "not_boolean"
         | "invalid_logo"

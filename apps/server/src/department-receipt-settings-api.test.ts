@@ -204,6 +204,30 @@ describe("replacement department receipt HTTP contract", () => {
     expect((await f.put(body({ receipt: {} }))).status).toBe(204);
     expect((await rows()).receipts[0]!.receipt).toEqual({});
   });
+  it("a description without a fiscal field round trips its readable 500-character bound", async () => {
+    const f = await fixture("manager", "manager", false);
+    const operationDescription = "x".repeat(500);
+    expect((await f.put(body({ receipt: { operationDescription } }))).status).toBe(204);
+    const read = await f.app.request(f.path, { headers: f.headers });
+    expect(read.status).toBe(200);
+    expect((await read.json()).receipt).toEqual({ operationDescription });
+  });
+  it.each(["x".repeat(501), "bad\u0000text"])(
+    "a description without a fiscal field still refuses unreadable authored text %j",
+    async (operationDescription) => {
+      const f = await fixture("manager", "manager", false);
+      const before = await rows();
+      const response = await f.put(body({ receipt: { operationDescription } }));
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: {
+          code: "receipt.invalid",
+          params: { field: "operationDescription", reason: "invalid_description" },
+        },
+      });
+      expect(await rows()).toEqual(before);
+    },
+  );
   it.each([{ receipt: {} }, { ...body(), extra: true }, { ...body(), policy: null }])(
     "refuses a malformed envelope %j",
     async (input) => {

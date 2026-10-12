@@ -1,3 +1,4 @@
+import { readSaleOperationDescription } from "./sale-operation-description.js";
 import { assertStillSignedIn } from "./till-session.js";
 import { selectOrderInvoice } from "./invoice-selection.js";
 import { withReceiptListPrices } from "./receipt-lines.js";
@@ -846,6 +847,10 @@ async function fileImmediateSale(
   order: GrossOrder,
   operatorId?: string,
 ): Promise<TillSaleResult> {
+  const operationDescription = await readSaleOperationDescription(tx, cfg, {
+    kind: "order",
+    orderId: workingOrderId,
+  });
   const { priced, clock } = issueMoment(
     deps.clock,
     await issuancePass(tx, cfg, workingOrderId, order),
@@ -863,6 +868,7 @@ async function fileImmediateSale(
     workingOrderId,
   });
   const { saleId, fiscal } = await recordSale(tx, deps.backend, {
+    operationDescription,
     origin: cfg.origin,
     nodeId: cfg.nodeId,
     ...selected.sale,

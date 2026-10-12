@@ -1,3 +1,4 @@
+import { eq } from "drizzle-orm";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 // Sale writes and receipt reads through the real device-authenticated sale route, against a real
 // migrated venue database.
@@ -21,7 +22,7 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
-import { routingCells } from "@waitron/venue-service";
+import { routingCells, departments, departmentReceipts } from "@waitron/venue-service";
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import type { Logger } from "./logger.js";
@@ -134,6 +135,14 @@ async function setupVenue(): Promise<{
   );
 
   const cfg = tillConfigFromVenue(venue);
+  const [department] = await suite.db
+    .select()
+    .from(departments)
+    .where(eq(departments.locationId, cfg.locationId));
+  await suite.db.insert(departmentReceipts).values({
+    departmentId: department!.id,
+    receipt: { operationDescription: "Venta en establecimiento" },
+  });
   const { product, operatorId } = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, { name: "Bebidas" });
