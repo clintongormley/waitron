@@ -456,7 +456,11 @@ describe("venue service routing", () => {
         { locationId },
         { name: "Restaurant", orderStart: "table" },
       );
-      const bar = await createDepartment(tx, { locationId }, { name: "Bar", orderStart: "counter" });
+      const bar = await createDepartment(
+        tx,
+        { locationId },
+        { name: "Bar", orderStart: "counter" },
+      );
       const menu = await createCatalogue(tx, { name: "Lunch menu" });
       const lunch = await saveMenuPeriod(
         tx,
