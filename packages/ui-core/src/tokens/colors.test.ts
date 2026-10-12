@@ -275,14 +275,13 @@ const HOVER_FILLS = [
 ] as const;
 
 describe.each(["light", "dark"] as const)("hover fills (%s)", (theme) => {
-  test("each keeps its button's text at 4.5:1 or more and differs from the resting fill", () => {
+  test("each keeps its button's text at 4.5:1 or more", () => {
     const el = mount(theme);
-    for (const [hover, base, text] of HOVER_FILLS) {
+    for (const [hover, , text] of HOVER_FILLS) {
       expect(
         ratio(token(el, text), token(el, hover)),
         `${theme}: ${text} on ${hover}`,
       ).toBeGreaterThanOrEqual(4.5);
-      expect(token(el, hover), `${theme}: ${hover}`).not.toBe(token(el, base));
     }
   });
 
@@ -291,7 +290,7 @@ describe.each(["light", "dark"] as const)("hover fills (%s)", (theme) => {
     for (const [hover, base] of HOVER_FILLS) {
       expect(
         ratio(token(el, hover), token(el, base)),
-        `${theme}: ${hover} on ${base}`,
+        `${theme}: ${hover} vs ${base}`,
       ).toBeGreaterThanOrEqual(1.2);
     }
   });
