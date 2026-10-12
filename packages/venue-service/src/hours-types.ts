@@ -1,24 +1,10 @@
 // Browser-safe: types and constants only, no database or server imports.
-import type { NamedDayKind } from "./repeat-rules.js";
 
 /** A real venue-local calendar date, `YYYY-MM-DD`. */
 export type LocalDate = string;
 
 export const CALENDAR_COLOURS = ["red", "amber", "grey", "blue", "green", "purple"] as const;
 export type CalendarColour = (typeof CALENDAR_COLOURS)[number];
-
-export interface SpecialDate {
-  id: string;
-  date: LocalDate;
-  name: string;
-  kind: NamedDayKind;
-  repeats: boolean;
-  ownHours: boolean;
-  closeWholeVenue: boolean;
-}
-
-export type SpecialDateInput = Pick<SpecialDate, "date" | "name" | "closeWholeVenue"> &
-  Partial<Pick<SpecialDate, "kind" | "repeats" | "ownHours">>;
 
 export type CalendarTone = "public_holiday" | "special_day" | "closed" | "standard";
 

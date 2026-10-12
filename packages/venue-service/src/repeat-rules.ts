@@ -1,9 +1,6 @@
 import { isLocalDate } from "./hours-rules.js";
 import type { LocalDate } from "./hours-types.js";
 
-export const NAMED_DAY_KINDS = ["holiday", "working_day"] as const;
-export type NamedDayKind = (typeof NAMED_DAY_KINDS)[number];
-
 export interface NamedDayRule {
   date: LocalDate;
   repeats: boolean;

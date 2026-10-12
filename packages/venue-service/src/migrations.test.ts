@@ -190,6 +190,14 @@ describe("the venue-service migration set carries no tenant column", () => {
     expect((await columnsOf("special_dates")).length).toBeGreaterThan(0);
   });
 
+  it("leaves none of the named-day hours tables behind", async () => {
+    const left = await db.execute<{ name: string }>(
+      sql`select name from sqlite_master where type = 'table' and name in ('special_dates',
+        'menu_day_timetables', 'menu_slots', 'zone_closed_times')`,
+    );
+    expect(left.rows).toEqual([]);
+  });
+
   it("leaves no profile station or watcher list behind", async () => {
     const left = await db.execute<{ name: string }>(
       sql`select name from sqlite_master where name in ('device_profile_stations',

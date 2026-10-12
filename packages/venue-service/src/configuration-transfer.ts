@@ -1,13 +1,10 @@
-import { isNotNull } from "drizzle-orm";
 import { getCountryPack } from "@waitron/country-packs";
-import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { holidayCityKey } from "./holiday-rules.js";
 import type { PackLookup } from "./holidays.js";
-import { addDays, isLocalDate, parseSpecialDateInput } from "./hours-rules.js";
+import { isLocalDate } from "./hours-rules.js";
 import { CALENDAR_COLOURS, type CalendarColour, type LocalDate } from "./hours-types.js";
 import { isReadableClock } from "./hours-clock.js";
-import { occursOn, repeatKey } from "./repeat-rules.js";
 import { menuPeriodName } from "./menu-timetable-rules.js";
 import {
   findSeasonEndOffsetClash,
@@ -24,16 +21,11 @@ import {
   specialDateIn,
 } from "./special-days.js";
 import {
-  calendarDateOfTime,
   parseClosedRanges,
   parseServiceDay,
   type ClosedRange,
   type ServiceRange,
 } from "./service-day.js";
-import { localTimeOccurrences } from "./hours-occurrences.js";
-import type { MenuSlot } from "./menu-timetable-types.js";
-import { menuDayTimetables } from "./schema/menus.js";
-import { zoneClosedTimes } from "./schema/zone-closed-times.js";
 import "./errors.js";
 
 type Row = Record<string, unknown>;
@@ -41,12 +33,6 @@ type Tables = Readonly<Record<string, readonly Row[]>>;
 
 const STORED_TIME = /^(?:[01]\d|2[0-3]):[0-5]\d:00$/;
 const CUTOVER = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
-
-/** The minutes `menu_slots_step_ck` and `zone_closed_times_step_ck` allow. Those checks refuse an
- *  insert at once, unlike the import's foreign keys, which wait for commit. */
-function onQuarterHour(time: string): boolean {
-  return ["00", "15", "30", "45"].includes(time.slice(3, 5));
-}
 
 function refuse(field: string): never {
   throw new AppError("setup.request_invalid", { field });
@@ -59,8 +45,7 @@ function parsedAs<T>(table: string, parse: () => T): T {
   } catch (error) {
     if (
       error instanceof AppError &&
-      (error.code === "hours.invalid" ||
-        error.code === "menu_timetable.invalid" ||
+      (error.code === "menu_timetable.invalid" ||
         error.code === "menu_period.invalid" ||
         error.code === "zone_closed_time.invalid")
     )
@@ -99,47 +84,6 @@ function isActive(row: Row, table: string): boolean {
   return row.active === 1;
 }
 
-export function validateNamedDaysConfiguration(tables: Tables): void {
-  const taken: { locationId: unknown; date: LocalDate; repeats: boolean }[] = [];
-  for (const row of tables.special_dates ?? []) {
-    if (!isLocalDate(row.date)) refuse("special_dates.date");
-    if (
-      row.repeat_on !== undefined &&
-      row.repeat_on !== null &&
-      row.repeat_on !== repeatKey(row.date)
-    )
-      refuse("special_dates.repeat_on");
-    if (row.own_hours !== undefined && row.own_hours !== 0 && row.own_hours !== 1)
-      refuse("special_dates.own_hours");
-    const repeats = row.repeat_on !== undefined && row.repeat_on !== null;
-    const rule = { date: row.date, repeats };
-    for (const other of taken)
-      if (
-        other.locationId === row.location_id &&
-        ((repeats && other.repeats && repeatKey(rule.date) === repeatKey(other.date)) ||
-          occursOn(other, rule.date) ||
-          occursOn(rule, other.date))
-      )
-        refuse("special_dates.date");
-    taken.push({ locationId: row.location_id, ...rule });
-    if (typeof row.name !== "string" || row.name.trim() === "") refuse("special_dates.name");
-    if (row.close_whole_venue !== 0 && row.close_whole_venue !== 1)
-      refuse("special_dates.close_whole_venue");
-    parsedAs("special_dates", () =>
-      parseSpecialDateInput({
-        date: row.date,
-        name: row.name,
-        kind: row.kind,
-        repeats,
-        ownHours: row.own_hours === 1,
-        closeWholeVenue: row.close_whole_venue === 1,
-        cells: [],
-      }),
-    );
-    if (row.own_hours === 1 && row.close_whole_venue === 1) refuse("special_dates");
-  }
-}
-
 export function validateHolidayConfiguration(
   tables: Tables,
   findPack: PackLookup = getCountryPack,
@@ -171,10 +115,7 @@ export function validateHolidayConfiguration(
   }
 }
 
-export function validateMenuTimetables(
-  tables: Tables,
-  bundle?: { readonly createdAt: Date; readonly timeZone: string; readonly dayCutover: string },
-): void {
+export function validateMenuTimetables(tables: Tables): void {
   const departments = ids(tables.departments);
   const menus = ids(tables.catalogues);
   const periodDepartment = new Map<unknown, unknown>();
@@ -215,76 +156,6 @@ export function validateMenuTimetables(
     )
       refuse("menu_period_staff_menus.display_order");
   }
-
-  const dates = new Map((tables.special_dates ?? []).map((row) => [row.id, row.date as LocalDate]));
-  const days = new Map<
-    unknown,
-    { departmentId: unknown; weekday: number | null; date: LocalDate | null }
-  >();
-  const held = new Set<string>();
-  for (const row of tables.menu_day_timetables ?? []) {
-    if (!departments.has(row.department_id)) refuse("menu_day_timetables.department_id");
-    const weekday = row.weekday ?? null;
-    const dateId = row.special_date_id ?? null;
-    if ((weekday === null) === (dateId === null)) refuse("menu_day_timetables.weekday");
-    if (
-      weekday !== null &&
-      (typeof weekday !== "number" || !Number.isInteger(weekday) || weekday < 0 || weekday > 6)
-    )
-      refuse("menu_day_timetables.weekday");
-    if (dateId !== null && !dates.has(dateId)) refuse("menu_day_timetables.special_date_id");
-    const day = JSON.stringify([row.department_id, weekday, dateId]);
-    if (held.has(day))
-      refuse(`menu_day_timetables.${weekday === null ? "special_date_id" : "weekday"}`);
-    held.add(day);
-    days.set(row.id, {
-      departmentId: row.department_id,
-      weekday: weekday as number | null,
-      date: dateId === null ? null : dates.get(dateId)!,
-    });
-  }
-
-  // A weekday day's slots are checked only as far as inserting them needs: the import drops them.
-  const slotsByNamedDay = new Map<unknown, MenuSlot[]>(
-    [...days].filter(([, day]) => day.date !== null).map(([id]) => [id, []]),
-  );
-  let namedSlots = 0;
-  for (const row of tables.menu_slots ?? []) {
-    const day = days.get(row.timetable_id);
-    if (day === undefined) refuse("menu_slots.timetable_id");
-    if (row.department_id !== day.departmentId) refuse("menu_slots.department_id");
-    if (periodDepartment.get(row.period_id) !== day.departmentId) refuse("menu_slots.period_id");
-    for (const column of ["starts_at", "ends_at"])
-      if (typeof row[column] !== "string" || !STORED_TIME.test(row[column]))
-        refuse(`menu_slots.${column}`);
-    if (!onQuarterHour(row.starts_at as string) || !onQuarterHour(row.ends_at as string))
-      refuse("menu_slots");
-    const slots = slotsByNamedDay.get(row.timetable_id);
-    if (slots === undefined) continue;
-    slots.push({
-      periodId: row.period_id as string,
-      startsAt: (row.starts_at as string).slice(0, 5),
-      endsAt: (row.ends_at as string).slice(0, 5),
-    });
-    namedSlots += 1;
-  }
-  if (namedSlots === 0) return;
-  if (bundle === undefined || !CUTOVER.test(bundle.dayCutover)) refuse("menu_slots");
-  for (const [id, slots] of slotsByNamedDay) {
-    const parsed = parsedAs("menu_slots", () => parseServiceDay(slots, "slots", bundle.dayCutover));
-    const date = days.get(id)!.date!;
-    if (!isReadableClock(bundle)) continue;
-    for (const slot of parsed)
-      for (const end of ["startsAt", "endsAt"] as const) {
-        // The exclusive end at changeover belongs to the next calendar morning.
-        const calendarDate =
-          end === "endsAt" && slot[end] === bundle.dayCutover
-            ? addDays(date, 1)
-            : (calendarDateOfTime(date, slot[end], bundle.dayCutover) as LocalDate);
-        if (localTimeOccurrences(calendarDate, slot[end], bundle.timeZone).length === 0)
-          refuse(`menu_slots.${end === "startsAt" ? "starts_at" : "ends_at"}`);
-      }
-  }
 }
 
 const SEASON_START = /^(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])$/;
@@ -303,7 +174,7 @@ interface ImportedSpecialDate {
 }
 
 /** The bundle's special-day dates by id, refusing what `saveSpecialDay` could not have stored and
- *  two dates, or a date and a named day, that would stand on one day. The bundle carries no holiday
+ *  two dates that would stand on one day. The bundle carries no holiday
  *  lists, so a date following a holiday's name is compared in its first year only. */
 function validateSpecialDays(tables: Tables): Map<unknown, ImportedSpecialDate> {
   const repeats = new Map<unknown, boolean>();
@@ -315,11 +186,8 @@ function validateSpecialDays(tables: Tables): Map<unknown, ImportedSpecialDate> 
     repeats.set(row.id, flag === 1);
   }
   const dates = new Map<unknown, ImportedSpecialDate>();
-  // Every special-day date and named day lands at the importing venue, whatever location the
-  // bundle names.
-  const placed: { date: LocalDate; repeats: boolean }[] = (tables.special_dates ?? []).map(
-    (row) => ({ date: row.date as LocalDate, repeats: (row.repeat_on ?? null) !== null }),
-  );
+  // Every special-day date lands at the importing venue, whatever location the bundle names.
+  const placed: { date: LocalDate; repeats: boolean; holidayName: string | null }[] = [];
   for (const row of tables.special_day_dates ?? []) {
     if (!repeats.has(row.special_day_id)) refuse("special_day_dates.special_day_id");
     if (!isLocalDate(row.date)) refuse("special_day_dates.date");
@@ -523,16 +391,10 @@ function refuseSkippedPaint(
 
 /** Each department's end offsets over the bundle's seasons and special days, under the bundle's
  *  one changeover; run after the shape checks, which refuse ranges without a
- *  changeover. A weekday row of `menu_day_timetables` is not imported, so it is not checked. */
+ *  changeover. */
 function validateEndOffsets(tables: Tables, bundle?: { readonly dayCutover: string }): void {
   const seasonRows = tables.department_day_ranges ?? [];
-  const namedDays = new Map(
-    (tables.menu_day_timetables ?? [])
-      .filter((row) => (row.special_date_id ?? null) !== null)
-      .map((row) => [row.id, row]),
-  );
-  const namedRows = (tables.menu_slots ?? []).filter((row) => namedDays.has(row.timetable_id));
-  if (bundle === undefined || seasonRows.length + namedRows.length === 0) return;
+  if (bundle === undefined || seasonRows.length === 0) return;
   const days = new Map((tables.department_days ?? []).map((row) => [row.id, row]));
   const repeats = new Map((tables.special_days ?? []).map((row) => [row.id, row.repeats_yearly]));
   const range = (row: Row): ServiceRange => ({
@@ -558,16 +420,6 @@ function validateEndOffsets(tables: Tables, bundle?: { readonly dayCutover: stri
     week[day.weekday as number]!.push(range(row));
     weeks.set(key, week);
   }
-  const namedSlots = new Map<unknown, ServiceRange[]>();
-  for (const row of namedRows) {
-    const day = namedDays.get(row.timetable_id)!;
-    const key = JSON.stringify([day.department_id, day.special_date_id]);
-    namedSlots.set(key, [...(namedSlots.get(key) ?? []), range(row)]);
-  }
-  for (const day of namedDays.values()) {
-    const key = JSON.stringify([day.department_id, day.special_date_id]);
-    if (!namedSlots.has(key)) namedSlots.set(key, []);
-  }
   for (const departmentId of ids(tables.departments)) {
     const seasons = (tables.seasons ?? []).map((season) => ({
       seasonId: season.id as string,
@@ -591,12 +443,7 @@ function validateEndOffsets(tables: Tables, bundle?: { readonly dayCutover: stri
       };
     });
     const clash = findSeasonEndOffsetClash(seasons, specialDays, offsets, bundle.dayCutover);
-    if (clash !== null)
-      refuse(
-        clash.date === undefined || clash.specialDayId !== undefined
-          ? "department_day_ranges"
-          : "menu_slots",
-      );
+    if (clash !== null) refuse("department_day_ranges");
   }
 }
 
@@ -748,46 +595,6 @@ function validateServiceHierarchy(tables: Tables): void {
     if (!zones.has(row.zone_id)) refuse("zone_sale_policies.zone_id");
 }
 
-function validateZoneClosedTimes(tables: Tables, bundle?: { readonly dayCutover: string }): void {
-  const rows = tables.zone_closed_times ?? [];
-  const zones = ids(tables.floor_zones);
-  const configured = new Set((tables.zone_service_policies ?? []).map((row) => row.zone_id));
-  const days = new Map((tables.special_dates ?? []).map((row) => [row.id, row]));
-  const groups = new Map<string, { startsAt: string; endsAt: string }[]>();
-  for (const row of rows) {
-    if (!zones.has(row.zone_id) || !configured.has(row.zone_id))
-      refuse("zone_closed_times.zone_id");
-    const weekday = row.weekday;
-    const day = row.special_date_id;
-    if ((weekday === null) === (day === null)) refuse("zone_closed_times");
-    if (
-      weekday !== null &&
-      (typeof weekday !== "number" || !Number.isInteger(weekday) || weekday < 0 || weekday > 6)
-    )
-      refuse("zone_closed_times.weekday");
-    if (day !== null && days.get(day)?.own_hours !== 1) refuse("zone_closed_times.special_date_id");
-    for (const column of ["starts_at", "ends_at"] as const) {
-      if (typeof row[column] !== "string" || !STORED_TIME.test(row[column]))
-        refuse(`zone_closed_times.${column}`);
-    }
-    if (!onQuarterHour(row.starts_at as string) || !onQuarterHour(row.ends_at as string))
-      refuse("zone_closed_times");
-    // A weekday row is checked only as far as inserting it needs: the import drops it.
-    if (weekday !== null) continue;
-    const key = JSON.stringify([row.zone_id, day]);
-    const ranges = groups.get(key) ?? [];
-    ranges.push({
-      startsAt: (row.starts_at as string).slice(0, 5),
-      endsAt: (row.ends_at as string).slice(0, 5),
-    });
-    groups.set(key, ranges);
-  }
-  if (groups.size === 0) return;
-  if (bundle === undefined || !CUTOVER.test(bundle.dayCutover)) refuse("zone_closed_times");
-  for (const ranges of groups.values())
-    parsedAs("zone_closed_times", () => parseClosedRanges(ranges, "ranges", bundle.dayCutover));
-}
-
 function validateReceiptModes(tables: Tables): void {
   for (const table of ["department_sale_policies", "zone_sale_policies"] as const) {
     for (const row of tables[table] ?? []) {
@@ -845,21 +652,12 @@ function validateVenueServiceConfiguration(
   validateOrderStarts(tables);
   validateServiceHierarchy(tables);
   validateReceiptFields(tables);
-  validateNamedDaysConfiguration(tables);
   validateHolidayConfiguration(tables);
-  validateMenuTimetables(tables, bundle);
-  validateZoneClosedTimes(tables, bundle);
+  validateMenuTimetables(tables);
   validateSeasonWeeks(tables, bundle);
   validateEndOffsets(tables, bundle);
   validateDepartmentTransfers(tables);
   validateRoutingConfiguration(tables);
-}
-
-/** A week lives in the season tables; a bundle's old weekday rows, which no hours reader uses,
- *  are not kept. Named-day rows stay. */
-async function dropWeekdayRows(tx: Transaction): Promise<void> {
-  await tx.delete(menuDayTimetables).where(isNotNull(menuDayTimetables.weekday));
-  await tx.delete(zoneClosedTimes).where(isNotNull(zoneClosedTimes.weekday));
 }
 
 export const VENUE_SERVICE_CONFIGURATION_TRANSFER = {
@@ -879,11 +677,8 @@ export const VENUE_SERVICE_CONFIGURATION_TRANSFER = {
     { name: "department_transfer_destinations" },
     { name: "routing_cells", locationColumns: ["location_id"] },
     { name: "service_settings" },
-    { name: "special_dates", locationColumns: ["location_id"] },
     { name: "menu_periods" },
     { name: "menu_period_staff_menus" },
-    { name: "menu_day_timetables" },
-    { name: "menu_slots" },
     { name: "routing_cell_periods" },
     { name: "special_days", locationColumns: ["location_id"] },
     { name: "special_day_dates", locationColumns: ["location_id"] },
@@ -892,9 +687,7 @@ export const VENUE_SERVICE_CONFIGURATION_TRANSFER = {
     { name: "department_day_ranges" },
     { name: "zone_days" },
     { name: "zone_day_ranges" },
-    { name: "zone_closed_times" },
     { name: "holiday_geographies", locationColumns: ["location_id"] },
   ],
   validate: validateVenueServiceConfiguration,
-  afterImport: dropWeekdayRows,
 } as const;

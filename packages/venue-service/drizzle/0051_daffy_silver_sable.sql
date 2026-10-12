@@ -1,1 +1,0 @@
-ALTER TABLE `special_day_dates` ADD `holiday_name` text;
