@@ -7,7 +7,7 @@ import { formatMoney } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { metricStyles, renderMetric } from "../widgets/metric-row.js";
 import { sourceLabel } from "../widgets/alert-format.js";
@@ -44,11 +44,6 @@ interface CategoryRow {
   gross: string;
   net: string;
   parent: boolean;
-}
-
-function fill(template: string, key: string, value: string): string {
-  // A function replacement, so a `$&` in a category or printer name is not read as a pattern.
-  return template.replace(`{${key}}`, () => value);
 }
 
 /**
@@ -479,7 +474,7 @@ export class SalesScreen extends LitElement {
               ${
                 report.linesWithoutGross === 1
                   ? t("sales.gross_incomplete_one")
-                  : fill(t("sales.gross_incomplete"), "count", String(report.linesWithoutGross))
+                  : fill("sales.gross_incomplete", { count: String(report.linesWithoutGross) })
               }
             </p>`
       }
@@ -563,7 +558,7 @@ export class SalesScreen extends LitElement {
       rows.push({
         kind: "direct",
         label: category
-          ? fill(t("sales.directly_in"), "name", inside.join(PATH_SEPARATOR))
+          ? fill("sales.directly_in", { name: inside.join(PATH_SEPARATOR) })
           : t("sales.no_category_recorded"),
         path: category ? [] : inside,
         pathShown: false,
@@ -614,7 +609,7 @@ export class SalesScreen extends LitElement {
         this.printSentTo === null
           ? nothing
           : html`<p class="muted" role="status" data-test="print-status">
-              ${fill(t("sales.print_sent"), "printer", this.printSentTo)}
+              ${fill("sales.print_sent", { printer: this.printSentTo })}
             </p>`
       }
       ${

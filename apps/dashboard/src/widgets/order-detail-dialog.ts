@@ -8,7 +8,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import type { DashboardApi, OrderDetailDto, OrderRowDto } from "../api/client.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 
 const money = (value: string) => formatMoney(value, currentLocale());
@@ -17,11 +17,6 @@ const quantity = (value: string) =>
 const date = (value: string) =>
   new Intl.DateTimeFormat(currentLocale(), { dateStyle: "medium", timeStyle: "short" }).format(
     new Date(value),
-  );
-const fill = (template: string, values: Record<string, string>) =>
-  Object.entries(values).reduce(
-    (text, [key, value]) => text.replace(`{${key}}`, () => value),
-    template,
   );
 const differsFromListPrice = (line: OrderDetailDto["lines"][number]) =>
   line.listUnitPrice !== null &&
@@ -115,7 +110,7 @@ export class OrderDetailDialog extends LitElement {
               <section>
                 <h3>${t("orders.detail.lines")}</h3>
                 <ul>
-                  ${detail.lines.map((line) => html`<li>${staffPresentationName(line)} × ${quantity(line.quantity)} — ${money(line.total)}${differsFromListPrice(line) ? html` (${fill(t("orders.detail.was"), { price: money(line.listUnitPrice!) })})` : nothing}${line.creditedTo === null ? nothing : html` · ${fill(t("orders.detail.served_by"), { name: line.creditedTo })}`}</li>`)}
+                  ${detail.lines.map((line) => html`<li>${staffPresentationName(line)} × ${quantity(line.quantity)} — ${money(line.total)}${differsFromListPrice(line) ? html` (${fill("orders.detail.was", { price: money(line.listUnitPrice!) })})` : nothing}${line.creditedTo === null ? nothing : html` · ${fill("orders.detail.served_by", { name: line.creditedTo })}`}</li>`)}
                 </ul>
               </section>
               <section>
@@ -126,7 +121,7 @@ export class OrderDetailDialog extends LitElement {
                       html`<li>
                         ${invoice.kind === "credit_note" ? t("orders.detail.credit_note") : invoice.kind === "substitution" ? t("orders.detail.substitution") : invoice.invoiceType === "F1" ? t("orders.invoice_full") : t("orders.col.invoice")}
                         ${invoice.number} · ${date(invoice.issuedAt)} ·
-                        ${money(invoice.total)}${invoice.rungBy === null ? nothing : html` · ${fill(t("orders.detail.rung_by"), { name: invoice.rungBy })}`}${
+                        ${money(invoice.total)}${invoice.rungBy === null ? nothing : html` · ${fill("orders.detail.rung_by", { name: invoice.rungBy })}`}${
                           invoice.invoiceType === "F1" && invoice.taxpayerDomicile !== undefined
                             ? html`<div>
                                 ${t("orders.detail.issuer_address")}: ${invoice.taxpayerDomicile}
@@ -148,7 +143,7 @@ export class OrderDetailDialog extends LitElement {
               <section>
                 <h3>${t("orders.detail.payments")}</h3>
                 <ul>
-                  ${detail.tenders.map((tender) => html`<li>${tender.method === "cash" ? t("orders.detail.cash") : t("orders.detail.card")} ${money(tender.amount)} · ${fill(t("orders.detail.tip"), { amount: money(tender.tip) })}</li>`)}${detail.payments.map((payment) => html`<li>${payment.method === "cash" ? t("orders.detail.cash") : t("orders.detail.card")} ${money(payment.applied)} · ${stateLabel(payment.state, PAYMENT_STATES)} · ${t("orders.detail.before_invoice")} · ${date(payment.createdAt)}${payment.refunds.map((refund) => html`<div>${fill(t("orders.detail.refund"), { amount: money(refund.applied) })} · ${stateLabel(refund.state, REFUND_STATES)} · ${refund.reason}</div>`)}</li>`)}
+                  ${detail.tenders.map((tender) => html`<li>${tender.method === "cash" ? t("orders.detail.cash") : t("orders.detail.card")} ${money(tender.amount)} · ${fill("orders.detail.tip", { amount: money(tender.tip) })}</li>`)}${detail.payments.map((payment) => html`<li>${payment.method === "cash" ? t("orders.detail.cash") : t("orders.detail.card")} ${money(payment.applied)} · ${stateLabel(payment.state, PAYMENT_STATES)} · ${t("orders.detail.before_invoice")} · ${date(payment.createdAt)}${payment.refunds.map((refund) => html`<div>${fill("orders.detail.refund", { amount: money(refund.applied) })} · ${stateLabel(refund.state, REFUND_STATES)} · ${refund.reason}</div>`)}</li>`)}
                 </ul>
               </section>
               ${
@@ -156,10 +151,10 @@ export class OrderDetailDialog extends LitElement {
                   ? html`<section>
                       <h3>${t("orders.detail.party")}</h3>
                       <p>
-                        ${detail.party.name ?? t("orders.detail.unnamed_party")}${detail.party.tables.length ? html` · ${detail.party.tables.join(", ")}` : nothing}${detail.party.guestCount === null ? nothing : html` · ${fill(t("orders.detail.guests"), { count: String(detail.party.guestCount) })}`}
+                        ${detail.party.name ?? t("orders.detail.unnamed_party")}${detail.party.tables.length ? html` · ${detail.party.tables.join(", ")}` : nothing}${detail.party.guestCount === null ? nothing : html` · ${fill("orders.detail.guests", { count: String(detail.party.guestCount) })}`}
                       </p>
                       <p>
-                        ${fill(t("orders.detail.opened_closed"), { opened: date(detail.party.openedAt), by: detail.party.openedBy ?? t("orders.staff_unknown"), closed: detail.party.closedAt === null ? "—" : date(detail.party.closedAt) })}${detail.party.closedAt === null ? nothing : fill(t("orders.detail.closed_by"), { name: detail.party.closedBy ?? t("orders.staff_unknown") })}
+                        ${fill("orders.detail.opened_closed", { opened: date(detail.party.openedAt), by: detail.party.openedBy ?? t("orders.staff_unknown"), closed: detail.party.closedAt === null ? "—" : date(detail.party.closedAt) })}${detail.party.closedAt === null ? nothing : fill("orders.detail.closed_by", { name: detail.party.closedBy ?? t("orders.staff_unknown") })}
                       </p>
                     </section>`
                   : nothing
@@ -169,7 +164,7 @@ export class OrderDetailDialog extends LitElement {
                   ? html`<section>
                       <h3>${t("orders.detail.departure")}</h3>
                       <p>
-                        ${fill(t("orders.detail.departure_line"), { date: date(detail.departure.recordedAt), reason: detail.departure.reason, recorder: detail.departure.recordedBy ?? t("orders.staff_unknown"), approver: detail.departure.authorizedBy ?? t("orders.staff_unknown"), amount: money(detail.departure.amount) })}
+                        ${fill("orders.detail.departure_line", { date: date(detail.departure.recordedAt), reason: detail.departure.reason, recorder: detail.departure.recordedBy ?? t("orders.staff_unknown"), approver: detail.departure.authorizedBy ?? t("orders.staff_unknown"), amount: money(detail.departure.amount) })}
                       </p>
                     </section>`
                   : nothing
@@ -179,7 +174,7 @@ export class OrderDetailDialog extends LitElement {
                   ? html`<section>
                       <h3>${t("orders.detail.copies")}</h3>
                       <ul>
-                        ${detail.reprints.map((copy) => html`<li>${fill(t("orders.detail.copy_line"), { date: date(copy.requestedAt), name: copy.personName ?? t("orders.staff_unknown"), printer: copy.printerName })}</li>`)}
+                        ${detail.reprints.map((copy) => html`<li>${fill("orders.detail.copy_line", { date: date(copy.requestedAt), name: copy.personName ?? t("orders.staff_unknown"), printer: copy.printerName })}</li>`)}
                       </ul>
                     </section>`
                   : nothing
