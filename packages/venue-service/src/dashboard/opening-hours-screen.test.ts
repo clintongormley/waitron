@@ -1440,11 +1440,20 @@ describe("Calendar special-day actions", () => {
     id: "feast/2025",
     name: "Public feast",
     repeatsYearly: false,
-    dates: [{ date: "2026-10-20", closedAllDay: true }],
+    dates: [{ date: "2025-10-12", closedAllDay: true }],
     paint: [],
     zonePaint: [],
   };
-  async function calendarMount(withFeast = false) {
+  const olderFeast = {
+    id: "feast/2024",
+    name: "Public feast",
+    repeatsYearly: false,
+    dates: [{ date: "2024-10-12", closedAllDay: false }],
+  };
+  async function calendarMount(
+    options: { withFeast?: boolean; refuse?: unknown; readFails?: boolean } = {},
+  ) {
+    const { withFeast = false, refuse, readFails = false } = options;
     history.replaceState(null, "", "/manage/opening-hours/view/calendar/month/2026-10");
     const writes: unknown[][] = [];
     let reads = 0;
@@ -1452,10 +1461,22 @@ describe("Calendar special-day actions", () => {
     const el = await mount((async (path, method, body) => {
       if (method !== "GET") {
         writes.push([path, method, body]);
+        if (refuse) throw refuse;
         return { id: "new" };
       }
       if (path.includes("/hours?")) stationReads++;
-      if (path.endsWith("/special-days/annual%2Fday")) return structuredClone(stored);
+      if (path.endsWith("/special-days"))
+        return withFeast
+          ? [
+              { ...olderFeast },
+              { id: feast.id, name: feast.name, repeatsYearly: false, dates: feast.dates },
+              { id: stored.id, name: stored.name, repeatsYearly: true, dates: stored.dates },
+            ]
+          : [{ id: stored.id, name: stored.name, repeatsYearly: true, dates: stored.dates }];
+      if (path.endsWith("/special-days/annual%2Fday")) {
+        if (readFails) throw { code: "connection.failed" };
+        return structuredClone(stored);
+      }
       if (path.endsWith("/special-days/feast%2F2025")) return structuredClone(feast);
       if (path.includes("/named-days?")) {
         reads++;
@@ -1491,17 +1512,6 @@ describe("Calendar special-day actions", () => {
               tone: "public_holiday",
               closed: false,
             },
-            ...(withFeast
-              ? [
-                  {
-                    date: "2026-10-20",
-                    specialDay: { id: feast.id, name: feast.name },
-                    holidays: [],
-                    tone: "special_day",
-                    closed: true,
-                  },
-                ]
-              : []),
           ],
           holidayCoverage: [],
           holidaySources: [],
@@ -1603,8 +1613,8 @@ describe("Calendar special-day actions", () => {
       ]);
     await expect.poll(reads).toBe(2);
   });
-  it("Add to <name> saves the existing special day with the date added and nothing else changed", async () => {
-    const { el, cal, writes, reads } = await calendarMount(true);
+  it("Add to <name> saves the venue's latest same-named special day with the date added and nothing else changed", async () => {
+    const { el, cal, writes, reads } = await calendarMount({ withFeast: true });
     await action(cal, "2026-10-12", "add");
     const form = await dialog(el);
     await expect.poll(() => form.shadowRoot!.querySelector("[data-test=add-to]")).not.toBeNull();
@@ -1623,14 +1633,55 @@ describe("Calendar special-day actions", () => {
             name: "Public feast",
             repeatsYearly: false,
             dates: [
+              { date: "2025-10-12", closedAllDay: true },
               { date: "2026-10-12", closedAllDay: false },
-              { date: "2026-10-20", closedAllDay: true },
             ],
           },
         ],
       ]);
     await expect.poll(() => el.shadowRoot!.querySelector("special-day-dialog")).toBeNull();
     await expect.poll(reads).toBe(2);
+  });
+  it("shows a refused Add to in the offer, keeping the dialog open", async () => {
+    const { el, cal, writes } = await calendarMount({
+      withFeast: true,
+      refuse: { code: "hours.clock_changed" },
+    });
+    await action(cal, "2026-10-12", "add");
+    const form = await dialog(el);
+    await expect.poll(() => form.shadowRoot!.querySelector("[data-test=add-to]")).not.toBeNull();
+    form.shadowRoot!.querySelector<HTMLElement>("[data-test=add-to]")!.click();
+    await expect.poll(() => writes.length).toBe(1);
+    await expect
+      .poll(() => form.shadowRoot!.querySelector("[data-error=offer]")?.textContent)
+      .toBe("The change could not be saved.");
+    expect(el.shadowRoot!.querySelector("special-day-dialog")).toBe(form);
+  });
+  it("shows the holiday-name note when a date added in the dialog is a holiday the month shows", async () => {
+    const { el, cal } = await calendarMount();
+    await action(cal, "2026-10-11", "add");
+    const form = await dialog(el);
+    expect(form.shadowRoot!.querySelector("[data-test=holiday-note]")).toBeNull();
+    form.shadowRoot!.querySelector<HTMLElement>("[data-test=add-dates]")!.click();
+    await form.updateComplete;
+    await change(form, "addFrom", "2026-10-12");
+    form.shadowRoot!.querySelector<HTMLElement>("[data-test=add-dates-confirm]")!.click();
+    await form.updateComplete;
+    expect(form.shadowRoot!.querySelector("[data-test=holiday-note]")).not.toBeNull();
+  });
+  it("says when the special day cannot be read, and clears it on another tab", async () => {
+    const { el, cal } = await calendarMount({ readFails: true });
+    await action(cal, "2026-10-13", "edit");
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("[data-test=special-read-error]")?.textContent)
+      .toContain("Opening hours could not be loaded.");
+    expect(el.shadowRoot!.querySelector("special-day-dialog")).toBeNull();
+    el.shadowRoot!.querySelector("wt-tabs")!.dispatchEvent(
+      new CustomEvent("wt-tab-change", { detail: { value: "periods" } }),
+    );
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("[data-test=special-read-error]"))
+      .toBeNull();
   });
   it("Make on a plain date creates a special day and refreshes the month", async () => {
     const { el, cal, writes, reads } = await calendarMount();

@@ -47,8 +47,8 @@ async function mount(theme: "light" | "dark", state: string) {
     root.querySelector<HTMLElement>("[data-test=remove-date]")!.click();
     await el.updateComplete;
     root
-      .querySelector("[name=repeatsYearly]")!
-      .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "yes" } }));
+      .querySelector("[name=repeats]")!
+      .dispatchEvent(new CustomEvent("wt-change", { detail: { checked: true } }));
     await el.updateComplete;
     root.querySelector<HTMLElement>("[data-test=save-special-day]")!.click();
   }

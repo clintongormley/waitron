@@ -152,7 +152,7 @@ it("opens Save quiet and disabled, primary after a change and quiet again once u
 
 it("marks a missing name and an empty date list on Save and holds Save until fixed", async () => {
   await mount((dialog) => (dialog.date = "2026-11-04"));
-  await change("repeatsYearly", { value: "yes" });
+  await change("repeats", { checked: true });
   await click('[data-date="2026-11-04"] [data-test=remove-date]');
   save().click();
   await el.updateComplete;
@@ -234,7 +234,7 @@ it("shows the holiday-name note on a public-holiday date and not on an ordinary 
 it("shows the leap-year hint only for a repeating February 29", async () => {
   await mount((dialog) => (dialog.date = "2028-02-29"));
   expect(el.shadowRoot!.textContent).not.toContain("Repeats only in leap years");
-  await change("repeatsYearly", { value: "yes" });
+  await change("repeats", { checked: true });
   expect(el.shadowRoot!.textContent).toContain("Repeats only in leap years");
 });
 
@@ -279,7 +279,7 @@ it("places an unknown refusal at the bottom and keeps Save available", async () 
 it("sends Every year as repeatsYearly", async () => {
   await mount((dialog) => (dialog.specialDay = structuredClone(stored)));
   const sent = saves();
-  await change("repeatsYearly", { value: "yes" });
+  await change("repeats", { checked: true });
   save().click();
   expect(sent).toEqual([
     {
@@ -287,4 +287,101 @@ it("sends Every year as repeatsYearly", async () => {
       input: { name: "Christmas dinners", repeatsYearly: true, dates: stored.dates },
     },
   ]);
+});
+
+it.each([
+  ["name", "name"],
+  ["dates.0.date", "dates"],
+  ["repeatsYearly", "repeats"],
+])(
+  "puts a special_day.invalid naming %s under its field and keeps Save available",
+  async (named, shown) => {
+    await mount((dialog) => (dialog.specialDay = structuredClone(stored)));
+    await change("closed.2026-12-14", { checked: true });
+    el.refusal = { code: "special_day.invalid", params: { field: named } };
+    await el.updateComplete;
+    const message =
+      shown === "dates"
+        ? q("[data-error=dates]")?.textContent
+        : shown === "repeats"
+          ? q("[data-error=repeats]")?.textContent
+          : field(shown).error;
+    expect(message).toBe("Check this field.");
+    expect(footer().error).toBe("Correct the highlighted fields to continue.");
+    expect(save().disabled).toBe(false);
+  },
+);
+
+it.each([
+  ["en", "Sun, 20 Dec 2026 meets another of these dates."],
+  ["es", "dom, 20 dic 2026 coincide con otra de estas fechas."],
+] as const)("says which date meets another under Dates (%s)", async (locale, message) => {
+  setLocale(locale);
+  await mount((dialog) => (dialog.specialDay = structuredClone(stored)));
+  await change("repeats", { checked: true });
+  el.refusal = {
+    code: "special_day.invalid",
+    params: { field: "dates.1.date", reason: "overlap" },
+  };
+  await el.updateComplete;
+  expect(q("[data-error=dates]")!.textContent).toBe(message);
+});
+
+it("shows the holiday-name note on a saved date that stored a holiday name, with no holidays loaded", async () => {
+  await mount((dialog) => {
+    dialog.specialDay = {
+      ...structuredClone(stored),
+      dates: [{ date: "2026-04-03", closedAllDay: false, holidayName: "Viernes Santo" }],
+    };
+  });
+  const sent = saves();
+  expect(q("[data-test=holiday-note]")).not.toBeNull();
+  await change("name", { value: "Easter" });
+  save().click();
+  expect((sent[0] as { input: { dates: unknown } }).input.dates).toEqual([
+    { date: "2026-04-03", closedAllDay: false },
+  ]);
+});
+
+it("offers the same-named special day with the latest date, the lowest id on a tie", async () => {
+  await mount((dialog) => {
+    dialog.date = "2026-12-25";
+    dialog.holidays = [navidad];
+    dialog.existing = [
+      { id: "c", name: "Navidad", latest: "2025-12-25" },
+      { id: "a", name: "Navidad", latest: "2024-12-25" },
+      { id: "b", name: "Navidad", latest: "2025-12-25" },
+      { id: "z", name: "Navidad" },
+      { id: "x", name: "Other", latest: "2027-01-01" },
+    ];
+  });
+  const added: unknown[] = [];
+  el.addEventListener("special-day-add-to", (event) => added.push((event as CustomEvent).detail));
+  await click("[data-test=add-to]");
+  expect(added).toEqual([{ id: "b", date: "2026-12-25" }]);
+});
+
+it.each([
+  [
+    { code: "special_day.date_taken", params: { date: "2026-12-25", name: "Christmas dinners" } },
+    "Christmas dinners already holds Fri, 25 Dec 2026.",
+  ],
+  [{ code: "hours.clock_changed" }, "The change could not be saved."],
+])("shows a refused Add to in the offer and keeps it available (%#)", async (refusal, message) => {
+  await mount((dialog) => {
+    dialog.date = "2026-12-25";
+    dialog.holidays = [navidad];
+    dialog.existing = [{ id: "n2025", name: "Navidad" }];
+  });
+  el.refusal = refusal;
+  await el.updateComplete;
+  expect(q("[data-error=offer]")!.textContent).toBe(message);
+  expect(q<HTMLElementTagNameMap["wt-button"]>("[data-test=add-to]")!.disabled).toBe(false);
+});
+
+it("labels the range's second field Last date with its hint as the placeholder", async () => {
+  await mount((dialog) => (dialog.date = "2026-12-14"));
+  await click("[data-test=add-dates]");
+  expect(field("addTo").label).toBe("Last date");
+  expect(field("addTo").hint).toBe("Empty for one date");
 });

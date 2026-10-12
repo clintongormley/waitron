@@ -296,7 +296,7 @@ describe("Opening hours named month", () => {
     },
   );
 
-  it("special-day actions carry the date's special day and the month's others, and plain dates offer Make", async () => {
+  it("special-day actions carry the date's special day and the month's holidays, and plain dates offer Make", async () => {
     const el = await namedMount();
     const events: unknown[] = [];
     el.addEventListener("special-day-action", (event) =>
@@ -312,10 +312,14 @@ describe("Opening hours named month", () => {
       date: "2026-10-13",
       specialDay: { id: "own", name: "Anniversary" },
       holidays: [],
-      existing: [
-        { id: "staff", name: "Staff feast" },
-        { id: "own", name: "Anniversary" },
-        { id: "fair", name: "Fair" },
+      visibleHolidays: [
+        {
+          id: "p",
+          date: "2026-10-12",
+          name: "Public feast",
+          scope: "national",
+          sourceId: "official",
+        },
       ],
     });
     expect(events[1]).toMatchObject({ kind: "delete", specialDay: { id: "own" } });
