@@ -221,6 +221,10 @@ fingerprint comparison against the current outside register on replacement hardw
 paper evidence and the [custodian tool](../developers/paper-custodian.md) are on the Task 4 branch;
 persistent activation and recovery-pack enrolment remain open. The Task 4 branch also validates
 paper/emergency allocation and approval envelopes against separately supplied host context.
+Its transaction-bound preflight reads the stored taxpayer, environment, node and existing software
+scope, checks recovery bases against the live series, and refuses retained identities and codes
+across nodes, including retired rows (`packages/fiscal-verifactu/src/allocation.test.ts`). It writes
+no activation result. Initial setup without series uses the trusted host's intended bases.
 Committed replay, schema changes and activation writes are still open; Cloud input remains refused
 until its separate trusted adapter exists. The existing recovery kit carries the old box's pointer
 signer; it does not declare a paper custodian (`packages/stream/src/kit.ts`, `RecoveryKit`).

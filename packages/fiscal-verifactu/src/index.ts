@@ -52,3 +52,6 @@ export type {
   FiscalAllocation,
   RecoveryApproval,
 } from "./allocation-envelope.js";
+
+export { validateAllocationForActivation } from "./allocation.js";
+export type { ActivationRefusal, ActivationValidation } from "./allocation.js";
