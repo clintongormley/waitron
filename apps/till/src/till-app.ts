@@ -130,6 +130,7 @@ import type { DepartingBill } from "./widgets/unpaid-departure-dialog.js";
 import type { CancelCreditDone, TillCancelCreditDialog } from "./widgets/cancel-credit-dialog.js";
 import {
   confirmationOf,
+  isPaymentInFlight,
   isTakePaymentRefusal,
   moneyPlus,
   payLines,
@@ -3631,7 +3632,9 @@ export class TillApp extends LitElement {
               ? "card_reader.not_set_up"
               : isTakePaymentRefusal(error)
                 ? "take_payment.not_permitted"
-                : counterError(error, "sale.error");
+                : isPaymentInFlight(error)
+                  ? "sale.payment_in_flight"
+                  : counterError(error, "sale.error");
       paidMeanwhile = isPaymentsReceived(error);
     } finally {
       if (this.#demoAttempt?.attemptId === demoAttemptId) this.#demoAttempt = undefined;
@@ -3968,7 +3971,9 @@ export class TillApp extends LitElement {
           ? "sale.unconfirmed"
           : isTakePaymentRefusal(error)
             ? "take_payment.not_permitted"
-            : (overLimitOf(error) ?? "sale.error");
+            : isPaymentInFlight(error)
+              ? "sale.payment_in_flight"
+              : (overLimitOf(error) ?? "sale.error");
     } finally {
       this.submitting = false;
     }
@@ -4038,7 +4043,9 @@ export class TillApp extends LitElement {
           ? "sale.unconfirmed"
           : isTakePaymentRefusal(error)
             ? "take_payment.not_permitted"
-            : "sale.error";
+            : isPaymentInFlight(error)
+              ? "sale.payment_in_flight"
+              : "sale.error";
     } finally {
       this.submitting = false;
       this.findBillBusy = false;
@@ -8447,7 +8454,9 @@ export class TillApp extends LitElement {
             ? "sale.unconfirmed"
             : isTakePaymentRefusal(error)
               ? "take_payment.not_permitted"
-              : (overLimitOf(error) ?? "sale.error");
+              : isPaymentInFlight(error)
+                ? "sale.payment_in_flight"
+                : (overLimitOf(error) ?? "sale.error");
     } finally {
       this.submitting = false;
     }

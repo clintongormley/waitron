@@ -3074,6 +3074,29 @@ describe("till-app: paying a bill by its state", () => {
     expect(api.recordSale).not.toHaveBeenCalled();
   });
 
+  it("says a card payment is in progress when a presented bill's Pay is refused order.payment_in_flight", async () => {
+    const collectOrder = vi.fn().mockRejectedValue({
+      code: "order.payment_in_flight",
+      status: 409,
+      workingOrderId: "wo-check",
+    });
+    const { el } = await mountApp({
+      getPartyBills: vi.fn().mockResolvedValue([tabBill, placedCheck]),
+      collectOrder,
+    });
+    const order = await openMesa(el);
+    emit(order, "take-payment", { workingOrderId: "wo-check" });
+    await flush(el);
+
+    emit(tableOrder(el)!, "pay-tab", { method: "cash", amount: "30.00" });
+    await flush(el);
+
+    expect(collectOrder).toHaveBeenCalledOnce();
+    expect(api.recordSale).not.toHaveBeenCalled();
+    expect(banner(el)!.textContent).toContain(t("sale.payment_in_flight"));
+    expect(banner(el)!.textContent).not.toContain(t("sale.error"));
+  });
+
   it("takes no single payment for a partly paid bill, and says to take the rest as a bill payment", async () => {
     const partly: PartyBill = { ...checkBill, outstanding: "10.00", hasPayments: true };
     const { el } = await mountApp({ getPartyBills: vi.fn().mockResolvedValue([tabBill, partly]) });
@@ -6587,6 +6610,25 @@ describe("till-app: recording an unpaid departure", () => {
       expect(tableOrder(el)).not.toBeNull();
     },
   );
+
+  it("keeps the dialog open saying a card payment is in progress when refused order.payment_in_flight", async () => {
+    const { el } = await openDeparture({
+      recordUnpaidDeparture: vi.fn().mockRejectedValue({
+        code: "order.payment_in_flight",
+        status: 409,
+        workingOrderId: "wo-check",
+      }),
+    });
+    await typeReason(el, "Ran off");
+    await confirmDeparture(el);
+
+    const bottom = dialog(el)!.shadowRoot!.querySelector<HTMLElement & { error: string }>(
+      "wt-form-actions",
+    )!;
+    expect(bottom.error).toBe(t("sale.payment_in_flight"));
+    expect(bottom.error).not.toBe(codeMessage("order.payment_in_flight"));
+    expect(tableOrder(el)).not.toBeNull();
+  });
 
   it("sends a fresh request on each press, with what the dialog holds then", async () => {
     const recordUnpaidDeparture = vi

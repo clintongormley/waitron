@@ -132,6 +132,7 @@ export class TillUnpaidDepartureDialog extends LitElement {
   #refusalText(refusal: DialogRefusal): string {
     if (refusal.code === "network") return t("departure.unconfirmed");
     if (refusal.code === "approvers") return t("departure.approvers_failed");
+    if (refusal.code === "order.payment_in_flight") return t("sale.payment_in_flight");
     return codeMessage(refusal.code);
   }
 
