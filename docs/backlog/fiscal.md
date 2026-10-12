@@ -218,8 +218,13 @@ An internal operation now retains the signed proof and complete bases in `fiscal
 Its database-backed tests compare all active fiscal rows, retry the same join, refuse retained
 event/allocation/identity reuse and check rollback and update/delete refusals. A caller-mutation
 case failed before the operation took a detached proof snapshot. The root append-only list and
-fiscal schema-ownership list still need approval to add this table; neither check has been edited.
-Bundle, adoption and promotion integration remain open. Takeover must
+fiscal schema-ownership list gained exactly the two entries approved by the owner at 20:55.
+The internal takeover operation now rechecks the retained join signatures and binds a different
+consumption event to the same source, target, block and complete allocation. Its tests retain the
+primary and reservation rows, compare replay rows and roll back a refused final audit write.
+Ordinary recovery refuses using a name retained for a spare. Historical signature verification
+is separate from current outside consumption; it does not authenticate the caller or prove the
+current register state. Bundle, adoption and promotion integration remain open. Takeover must
 still authenticate the administrator, isolate the old box, rule out parallel recovery and check
 outside consumption before atomic activation. All three invoice purposes stay separate.
 

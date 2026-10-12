@@ -23,6 +23,8 @@ import { WAITRON_ID_SISTEMA } from "./provisioning.js";
 import { liveSeriesBases } from "./reserved-series.js";
 import { registroSif } from "./schema/sif.js";
 import { cadenas } from "./schema/cadenas.js";
+import { fiscalReservations } from "./schema/reservations.js";
+import { verifyRetainedPaperReservation } from "./paper-evidence.js";
 import { fiscalAllocations, type ActivationResult } from "./schema/allocations.js";
 
 export type ActivationRefusal =
@@ -41,6 +43,19 @@ export async function validateAllocationForActivation(
   allocation: unknown,
   approval: unknown,
   context: AllocationContext,
+): Promise<ActivationValidation> {
+  return validateForActivation(tx, node, allocation, approval, context);
+}
+
+type SeriesBases = readonly { readonly code: string; readonly purpose: string }[];
+
+async function validateForActivation(
+  tx: Transaction,
+  node: ProvisionedNode,
+  allocation: unknown,
+  approval: unknown,
+  context: AllocationContext,
+  dormantBases?: SeriesBases,
 ): Promise<ActivationValidation> {
   const [storedNode] = await tx
     .select({ locationId: nodes.locationId })
@@ -61,7 +76,7 @@ export async function validateAllocationForActivation(
     .select({ softwareId: registroSif.idSistemaInformatico })
     .from(registroSif)
     .where(and(eq(registroSif.nodeId, node.nodeId), isNull(registroSif.revocadoEn)));
-  const storedBases = await liveSeriesBases(tx, node);
+  const storedBases = dormantBases ?? (await liveSeriesBases(tx, node));
   if (storedBases.length === 0 && context.mode !== "initial-setup")
     return { ok: false, reason: "series_mismatch" };
   const validated = validateAllocationEnvelope(allocation, approval, {
@@ -72,6 +87,12 @@ export async function validateAllocationForActivation(
     requiredBases: storedBases.length > 0 ? storedBases : context.requiredBases,
   });
   if (!validated.ok) return validated;
+  const [reserved] = await tx
+    .select({ eventKey: fiscalReservations.eventKey })
+    .from(fiscalReservations)
+    .where(eq(fiscalReservations.allocationKey, validated.allocation.allocationId));
+  if (reserved !== undefined && dormantBases === undefined)
+    return { ok: false, reason: "reservation_mismatch" };
   const [usedAllocation] = await tx
     .select({ eventKey: fiscalAllocations.eventKey })
     .from(fiscalAllocations)
@@ -109,6 +130,102 @@ export async function activateAllocation(
   allocation: unknown,
   approval: unknown,
   context: AllocationContext,
+): Promise<ActivationResult> {
+  return activate(tx, node, allocation, approval, context);
+}
+
+export async function activateDormantAllocation(
+  tx: Transaction,
+  node: ProvisionedNode,
+  reservationEventId: string,
+  allocation: unknown,
+  approval: unknown,
+  context: AllocationContext,
+): Promise<ActivationResult> {
+  const refuse = (reason: string): never => {
+    throw new AppError("sif.allocation_invalid", { reason });
+  };
+  try {
+    allocation = structuredClone(allocation);
+    approval = structuredClone(approval);
+  } catch {
+    return refuse("reservation_mismatch");
+  }
+  const [retained] = await tx
+    .select()
+    .from(fiscalReservations)
+    .where(eq(fiscalReservations.eventKey, reservationEventId));
+  if (retained === undefined) return refuse("reservation_missing");
+  if (
+    retained.nodeId !== node.nodeId ||
+    retained.nodeId !== context.targetNodeId ||
+    retained.sourceNodeId !== context.sourceId ||
+    retained.eventKey === context.eventId ||
+    context.mode !== "recovery" ||
+    context.authority.kind !== "paper"
+  )
+    return refuse("reservation_mismatch");
+  const proof = retained.evidence as {
+    block?: unknown;
+    reservation?: { payload?: { operatorId?: unknown; incidentEvidence?: unknown } };
+  } | null;
+  const historical = verifyRetainedPaperReservation(retained.evidence, context.authority.trust, {
+    allocationId: retained.allocationKey,
+    taxpayerNif: retained.taxpayerNif,
+    softwareId: retained.softwareId,
+    environment: retained.environment,
+    recipientVenueId: context.authority.recipientVenueId,
+    generationId: context.authority.generationId,
+    blockId: context.authority.blockId,
+    eventId: retained.eventKey,
+    operatorId:
+      typeof proof?.reservation?.payload?.operatorId === "string"
+        ? proof.reservation.payload.operatorId
+        : "",
+    sourceId: retained.sourceNodeId,
+    targetNodeId: retained.nodeId,
+    incidentEvidence:
+      typeof proof?.reservation?.payload?.incidentEvidence === "string"
+        ? proof.reservation.payload.incidentEvidence
+        : "",
+    requiredBases: retained.bases,
+  });
+  if (!historical.ok) return refuse("reservation_untrusted");
+  const supplied = allocation as { reservationEvidence?: { block?: unknown } } | null;
+  if (
+    historical.allocation.installationIdentity !== retained.installationIdentity ||
+    !isDeepStrictEqual(allocation, {
+      ...historical.allocation,
+      reservationEvidence: supplied?.reservationEvidence,
+    }) ||
+    !isDeepStrictEqual(supplied?.reservationEvidence?.block, proof?.block)
+  )
+    return refuse("reservation_mismatch");
+  if (context.priorActivation !== "committed") {
+    const [activeSif] = await tx
+      .select({ id: registroSif.id })
+      .from(registroSif)
+      .where(and(eq(registroSif.nodeId, node.nodeId), isNull(registroSif.revocadoEn)))
+      .limit(1);
+    const [activeSeries] = await tx
+      .select({ id: invoiceSeries.id })
+      .from(invoiceSeries)
+      .where(and(eq(invoiceSeries.nodeId, node.nodeId), isNull(invoiceSeries.retiredAt)))
+      .limit(1);
+    if (activeSif !== undefined || activeSeries !== undefined)
+      return refuse("standby_already_active");
+  }
+  // Historical join signatures do not establish current outside consumption.
+  return activate(tx, node, allocation, approval, context, retained.bases);
+}
+
+async function activate(
+  tx: Transaction,
+  node: ProvisionedNode,
+  allocation: unknown,
+  approval: unknown,
+  context: AllocationContext,
+  dormantBases?: SeriesBases,
 ): Promise<ActivationResult> {
   const refuse = (reason: string): never => {
     throw new AppError("sif.allocation_invalid", { reason });
@@ -174,9 +291,16 @@ export async function activateAllocation(
       return refuse("activation_superseded");
     return prior.result;
   }
-  const validated = await validateAllocationForActivation(tx, node, allocation, approval, context);
+  const validated = await validateForActivation(
+    tx,
+    node,
+    allocation,
+    approval,
+    context,
+    dormantBases,
+  );
   if (!validated.ok) return refuse(validated.reason);
-  const bases = await liveSeriesBases(tx, node);
+  const bases = dormantBases ?? (await liveSeriesBases(tx, node));
   const retiredAt = now();
   const sifId = newId();
   await tx

@@ -43,3 +43,8 @@ The whole W41s-4 branch is still incomplete and has no PR. This checkpoint does 
 publishing an interim activation path. After approval, apply the two additions, verify them and
 finish takeover binding, authenticated host input, SIF text typing, counter retirement and all
 setup, seed, restore, adoption and promotion consumers before the full branch review and CI.
+
+**2026-10-12 20:55 decision and application:** the owner approved A exactly as proposed above.
+Both list failures were reproduced before adding the two names. The root suite passed 56 cases
+and the fiscal ownership suite passed four after those additions. No other existing assertion
+changed for this approval. Task 4's host and representation changes remain unfinished.

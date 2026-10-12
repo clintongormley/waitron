@@ -604,10 +604,32 @@ export function signPaperReservationForBlock(
 }
 
 // Reservation evidence identifies the dormant recipient; consumption requires a separate event.
+export type RetainedPaperReservationContext = Omit<
+  PaperReservationContext,
+  "currentRegisterConfirmed" | "reservationConfirmed" | "currentEntryState"
+>;
+
+export function verifyRetainedPaperReservation(
+  input: unknown,
+  trust: unknown,
+  context: RetainedPaperReservationContext,
+): PaperReservationVerification {
+  return verifyReservation(input, trust, context, null);
+}
+
 export function verifyPaperReservation(
   input: unknown,
   trust: unknown,
   context: PaperReservationContext,
+): PaperReservationVerification {
+  return verifyReservation(input, trust, context, context);
+}
+
+function verifyReservation(
+  input: unknown,
+  trust: unknown,
+  context: RetainedPaperReservationContext,
+  current: PaperReservationContext | null,
 ): PaperReservationVerification {
   if (
     !record(input) ||
@@ -642,10 +664,12 @@ export function verifyPaperReservation(
     )
   )
     return { ok: false, reason: "untrusted" };
-  if (context.currentRegisterConfirmed !== true || context.reservationConfirmed !== true)
-    return { ok: false, reason: "outside_confirmation_missing" };
-  if (context.currentEntryState !== "reserved")
-    return { ok: false, reason: "reservation_not_current" };
+  if (current !== null) {
+    if (current.currentRegisterConfirmed !== true || current.reservationConfirmed !== true)
+      return { ok: false, reason: "outside_confirmation_missing" };
+    if (current.currentEntryState !== "reserved")
+      return { ok: false, reason: "reservation_not_current" };
+  }
   const allocation = block.allocations.find((a) => a.allocationId === context.allocationId);
   if (
     allocation === undefined ||

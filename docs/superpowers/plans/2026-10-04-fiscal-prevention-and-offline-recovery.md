@@ -327,6 +327,26 @@ append-only and fiscal schema-ownership exact lists each fail only on the new ta
 The [list-change request](2026-10-12-w41s4-reservation-list-approval.md) specifies the two additions;
 no existing assertion or guard has changed in this checkpoint.
 
+**2026-10-12 takeover-binding checkpoint:** the owner approved the two exact dormant-table
+list additions at 20:55; both observed list failures now pass. The internal
+`activateDormantAllocation` reads the retained join proof and rechecks its signatures, then
+binds a distinct takeover event to its source, named target, signed block, identity and complete
+purpose set. It uses retained bases rather than a caller's subset and delegates current outside
+consumption, administrator confirmation and transactional writes to the allocation operation.
+Historical proof checking carries no fabricated current-reservation flags. Ordinary activation
+now refuses consuming a locally retained spare allocation through a different recovery path;
+that regression resolved instead of refusing before the shared check was added.
+
+The new suite checks all three purposes, unchanged primary and reservation rows, committed
+replay, substitutions, current confirmations, a refused final audit write and a detached
+consumption snapshot. The package coverage run passed 1,176 cases above all four bars; later
+qualification adds two cases without changing production code. The six-file root run passed
+2,548 cases, including the populated upgrade walk. Neither activation writer is exported from
+the package barrel or connected to a host. Host-issued authenticated inputs, role changes,
+SIF text typing, counter retirement and every setup/seed/restore/bundle/adoption/promotion
+consumer remain coupled work; current-main rebase and final schema regeneration still remain.
+Task 4 is incomplete and has no publication candidate.
+
 ## Task 5: select active series inside issuance transactions
 
 **Modify:** `apps/server/src/till-config.ts`, `trading-config.ts`, `till-sale.ts`,
