@@ -191,7 +191,8 @@ export interface TargetTable {
  * a revision alone can match a party seated there since; a table read free (`otherPartyId: null`)
  * that a party other than `source` holds now is `party.out_of_date` for the party holding it. Then
  * the revision of a party holding it, other than `source`, is checked and moved on (P27); then the
- * table is refused when it does not exist, is out of use or needs clearing.
+ * table is refused when it does not exist, is out of use, is still part of a joined table or needs
+ * clearing.
  */
 export async function readTargetTable(
   tx: Transaction,

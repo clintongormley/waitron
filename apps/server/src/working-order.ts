@@ -1277,8 +1277,8 @@ export async function parkOrder(
 
 /**
  * Open the party's first bill at a table, clearing the table's manual status. Refused while the
- * table needs clearing and while a party holds it (an active `party_tables` row); the caller adds
- * the party's membership afterwards. The check cannot interleave with a second `openTab`, because
+ * table is still part of a joined table, while it needs clearing and while a party holds it (an
+ * active `party_tables` row); the caller adds the party's membership afterwards. The check cannot interleave with a second `openTab`, because
  * `withTransaction` IS the venue file's write lock.
  */
 export async function openTab(

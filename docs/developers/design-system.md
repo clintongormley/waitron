@@ -3900,16 +3900,22 @@ matches the department. The row menus stay pinned at the end.
 
 Beside the plan, or in its bottom sheet on a phone, the editor shows a hint on how to choose and
 place a table while none is selected, then the selected table's form, then the tables list, with
-Add tables last at full width. The form holds Name; Seats beside Shape, a visible "Shape" caption
+Add tables and Add joined table side by side at its foot, wrapping when they do not fit. The form holds Name; Seats beside Shape, a visible "Shape" caption
 naming a group of two pressed-state icon buttons (Rectangle and Round, with no tooltip, since an
 icon tooltip's Escape would also start leaving the editor), shown for a placed table only and
-stacked under Seats when the pair does not fit beside it; then a Moveable switch, on for a table
-that is not fixed. Add tables uses the same Moveable switch, on by default. Size, turn and place
-are set on the plan; a refusal naming one of them selects the table and shows its own sentence. The list names its tables in number order under Name and Seats
-heads; seats blank reads "—". Each row is one button that puts the table on the plan or takes it
-off, with no question either way, and holds a marker: a filled `--wt-color-primary` circle on the
-plan, a hollow `--wt-color-text-muted` ring when not placed, so the two differ in shape as well as
-colour. A bin beside it asks "Delete {name}?" in a compact modal before the table goes. It is not
+stacked under Seats when the pair does not fit beside it; for a joined table, Seats is required and
+takes 1 to 999, and a required Made of picker follows, offering the tables not on the plan and in
+no other joined table; then a Moveable switch, on for a table that is not fixed. Add tables uses the same Moveable switch, on by default. Size, turn and place
+are set on the plan; a refusal naming one of them selects the table and shows its own sentence. The list names its tables in number order under Name, Seats and
+Made of heads; seats blank reads "—". A joined table's Made of names its parts in number order,
+written once with their shared beginning ("Counter 3, 4, 5") when every name is that beginning and
+a number, and "—" when it has none; a part's reads "in {joined table}". Each row is one button that
+puts the table on the plan or takes it off, with no question either way, except a part's row, which
+is greyed, marked disabled and does nothing. It holds a marker: a filled `--wt-color-primary`
+circle on the plan, a hollow `--wt-color-text-muted` ring when not placed, so the two differ in
+shape as well as colour, and a filled `--wt-color-text-muted` rounded square for a part of a joined
+table. A bin beside it asks "Delete {name}?" in a compact modal before the table goes; for a part,
+the question says it leaves the tables list and its joined table. It is not
 `wt-delete-dialog`: the delete changes only the draft, and Undo takes it back until Save. The
 selected table's row is `--wt-color-surface-lifted` with its name bold, and a table's mark or
 refusal shows under its name in `--wt-color-danger`, whichever table is selected. A table taken off
