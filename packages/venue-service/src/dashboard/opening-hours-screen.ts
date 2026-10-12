@@ -916,6 +916,7 @@ export class OpeningHoursScreen extends LitElement {
                             .dayCutover=${this.model.dayCutover}
                             .weekStart=${this.weekStart}
                             .seasonId=${this.season}
+                            .seasons=${this.model.seasons}
                             .namedDays=${this.model.namedDays}
                             @department-open=${(event: CustomEvent<{ departmentId: string }>) => {
                               event.stopPropagation();

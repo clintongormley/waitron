@@ -23,6 +23,7 @@ import type { RangeDialog } from "./range-dialog.js";
 import type { PeriodEditor } from "./period-editor.js";
 import type { NamedDaysModel } from "../holiday-types.js";
 import type { NamedCalendarAction } from "./hours-calendar.js";
+import { seasonWeekOn, zoneSeasonWeekOn } from "./real-week.js";
 import { format, formatDate } from "./hours-view.js";
 import { t } from "./strings.js";
 import "./service-grid.js";
@@ -258,9 +259,10 @@ export class OpeningHoursDay extends LitElement {
       weekday = weekdayOf(this.date);
     const menus = Object.fromEntries(
       this.departments().map((department) => {
+        const week = seasonWeekOn(this.model, department.id, this.date);
         const days: MenuWeekDay[] = Array.from({ length: 7 }, (_, day) => ({
           weekday: day,
-          slots: (department.week.find((row) => row.weekday === day)?.slots ?? []).map((slot) => ({
+          slots: (week.find((row) => row.weekday === day)?.slots ?? []).map((slot) => ({
             ...slot,
           })),
         }));
@@ -278,7 +280,9 @@ export class OpeningHoursDay extends LitElement {
             weekday: day,
             ranges: (special?.ownHours && day === weekday
               ? (zone.dates.find((row) => row.specialDateId === special.id)?.ranges ?? [])
-              : (zone.week.find((row) => row.weekday === day)?.ranges ?? [])
+              : (zoneSeasonWeekOn(this.model, department.id, zone.id, this.date).find(
+                  (row) => row.weekday === day,
+                )?.ranges ?? [])
             ).map((range) => ({ ...range })),
           })),
         ]),

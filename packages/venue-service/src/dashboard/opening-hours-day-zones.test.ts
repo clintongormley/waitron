@@ -23,6 +23,11 @@ afterEach(() => {
 function emit(target: Element, name: string, detail: unknown) {
   target.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
 }
+const closedEveryNight = () =>
+  Array.from({ length: 7 }, (_, weekday) => ({
+    weekday,
+    ranges: [{ startsAt: "23:00", endsAt: "06:00" }],
+  }));
 function fixture() {
   const model = realWeekModel();
   return {
@@ -35,10 +40,8 @@ function fixture() {
       ...department,
       zones: department.zones.map((zone) => ({
         ...zone,
-        week: Array.from({ length: 7 }, (_, weekday) => ({
-          weekday,
-          ranges: [{ startsAt: "23:00", endsAt: "06:00" }],
-        })),
+        seasonWeeks: [{ seasonId: "autumn", week: closedEveryNight() }],
+        week: closedEveryNight(),
         dates: [{ specialDateId: "annual/day", ranges: [{ startsAt: "22:00", endsAt: "06:00" }] }],
       })),
     })),
@@ -132,6 +135,55 @@ it("stages a closed range and saves the weekday while preserving other weekdays"
             ranges: [{ startsAt: "23:00", endsAt: "06:00" }],
           })),
         ],
+      },
+    ],
+  ]);
+});
+it("saves a Terrace edit on Monday 2 Dec 2030 as Winter's closed week, not the current Autumn's", async () => {
+  vi.setSystemTime(new Date("2030-12-02T12:00:00Z"));
+  const winter = Array.from({ length: 7 }, (_, weekday) => ({
+    weekday,
+    ranges: [{ startsAt: `22:0${weekday}`, endsAt: "06:00" }],
+  }));
+  const model = fixture();
+  const writes: unknown[][] = [];
+  const day = await mount(
+    async (...args) => {
+      writes.push(args);
+    },
+    {
+      ...model,
+      currentBusinessDay: "2030-12-02",
+      seasons: [...model.seasons, { id: "winter", name: "Winter", startsOn: "12-01" }],
+      departments: model.departments.map((department) => ({
+        ...department,
+        zones: department.zones.map((zone) => ({
+          ...zone,
+          seasonWeeks: [...zone.seasonWeeks, { seasonId: "winter", week: winter }],
+        })),
+      })),
+    },
+  );
+  expect(grid(day).columns[1]!.closed).toEqual(winter[1]!.ranges);
+  editZone(day);
+  await day.updateComplete;
+  save(day).click();
+  await expect.poll(() => writes.length).toBe(1);
+  expect(writes).toEqual([
+    [
+      "/management-api/venue-service/zones/z1/closed-week",
+      "PUT",
+      {
+        expectedClockRevision: 0,
+        seasonId: "winter",
+        days: winter.map((row) =>
+          row.weekday === 1
+            ? {
+                weekday: 1,
+                ranges: [{ startsAt: "13:00", endsAt: "14:00" }, ...row.ranges],
+              }
+            : row,
+        ),
       },
     ],
   ]);

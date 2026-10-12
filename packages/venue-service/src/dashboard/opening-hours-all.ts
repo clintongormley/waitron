@@ -5,7 +5,7 @@ import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import { t } from "./strings.js";
-import { dateInWeek, namedOn, realDayLabel } from "./real-week.js";
+import { dateInWeek, namedOn, realDayLabel, seasonWeekOn } from "./real-week.js";
 import { seasonWeek } from "./season-choice.js";
 import "./service-grid.js";
 
@@ -30,6 +30,7 @@ export class OpeningHoursAll extends LitElement {
   @property() dayCutover = "06:00";
   @property() weekStart = "";
   @property() seasonId = "";
+  @property({ attribute: false }) seasons: OpeningHoursModel["seasons"] = [];
   @property({ attribute: false }) namedDays: OpeningHoursModel["namedDays"] = [];
   override render() {
     const departments = this.departments.filter((department) => department.active);
@@ -37,7 +38,9 @@ export class OpeningHoursAll extends LitElement {
     const columns = weekdays.flatMap((weekday) =>
       departments.map((department) => {
         const named = this.weekStart ? namedOn(this.namedDays, this.weekStart, weekday) : undefined;
-        const week = seasonWeek(department.seasonWeeks, this.seasonId);
+        const week = this.weekStart
+          ? seasonWeekOn(this, department.id, dateInWeek(this.weekStart, weekday))
+          : seasonWeek(department.seasonWeeks, this.seasonId);
         return {
           key: `${weekday}:${department.id}`,
           clock:

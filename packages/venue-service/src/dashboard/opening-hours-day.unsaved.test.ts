@@ -40,6 +40,12 @@ class DayLeaveApp extends LitElement {
               {
                 id: "z1",
                 name: "Terrace",
+                seasonWeeks: [
+                  {
+                    seasonId: "autumn",
+                    week: [{ weekday: 1, ranges: [{ startsAt: "23:00", endsAt: "06:00" }] }],
+                  },
+                ],
                 week: [{ weekday: 1, ranges: [{ startsAt: "23:00", endsAt: "06:00" }] }],
                 dates: [],
               },
@@ -53,6 +59,14 @@ class DayLeaveApp extends LitElement {
                 staffMenuIds: [],
                 endOffsetMinutes: 0,
                 weekdays: [1],
+              },
+            ],
+            seasonWeeks: [
+              {
+                seasonId: "autumn",
+                week: [
+                  { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] },
+                ],
               },
             ],
             week: [{ weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] }],

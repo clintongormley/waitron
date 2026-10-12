@@ -89,6 +89,7 @@ async function mount() {
   el.departments = allDepartments();
   el.dayCutover = "06:00";
   el.seasonId = "s";
+  el.seasons = [{ id: "s", name: "Year", startsOn: "01-01" }];
   document.body.append(el);
   expect(el.shadowRoot, "All departments registered and rendered").not.toBeNull();
   await el.updateComplete;
@@ -193,5 +194,40 @@ it("shows dated ranges and whole-venue closure when a named day is selected", as
   expect(grid.columns.slice(0, 2).every((column) => column.slots.length === 0)).toBe(true);
   expect(grid.columns[3]!.slots).toEqual([
     { periodId: "dinner", startsAt: "18:00", endsAt: "23:00" },
+  ]);
+});
+
+it("in the real week from Monday 25 Nov 2030, shows Autumn's Monday to Saturday and Winter's Sunday 1 Dec", async () => {
+  const el = await mount();
+  const week = (endsAt: string) =>
+    Array.from({ length: 7 }, (_, weekday) => ({
+      weekday,
+      slots: [{ periodId: "lunch", startsAt: "12:00", endsAt: `${endsAt}${weekday}` }],
+    }));
+  el.seasons = [
+    { id: "autumn", name: "Autumn", startsOn: "09-01" },
+    { id: "winter", name: "Winter", startsOn: "12-01" },
+  ];
+  el.seasonId = "autumn";
+  el.departments = [
+    {
+      ...allDepartments()[0]!,
+      seasonWeeks: [
+        { seasonId: "autumn", week: week("16:0") },
+        { seasonId: "winter", week: week("17:0") },
+      ],
+    },
+  ];
+  el.weekStart = "2030-11-25";
+  await el.updateComplete;
+  const grid = el.shadowRoot!.querySelector<ServiceGrid>("service-grid")!;
+  expect(grid.columns.map((column) => column.slots[0]!.endsAt)).toEqual([
+    "16:01",
+    "16:02",
+    "16:03",
+    "16:04",
+    "16:05",
+    "16:06",
+    "17:00",
   ]);
 });

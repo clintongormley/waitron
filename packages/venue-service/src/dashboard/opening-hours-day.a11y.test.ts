@@ -74,6 +74,14 @@ describe.each(["light", "dark"] as const)("Opening Day (%s)", (theme) => {
                         {
                           id: "z1",
                           name: "Terrace",
+                          seasonWeeks: [
+                            {
+                              seasonId: "autumn",
+                              week: [
+                                { weekday: 1, ranges: [{ startsAt: "23:00", endsAt: "06:00" }] },
+                              ],
+                            },
+                          ],
                           week: [{ weekday: 1, ranges: [{ startsAt: "23:00", endsAt: "06:00" }] }],
                           dates: [],
                         },
@@ -88,6 +96,17 @@ describe.each(["light", "dark"] as const)("Opening Day (%s)", (theme) => {
                       endOffsetMinutes: 0,
                       weekdays: [1],
                       routingUses: [],
+                    },
+                  ],
+                  seasonWeeks: [
+                    {
+                      seasonId: "autumn",
+                      week: [
+                        {
+                          weekday: 1,
+                          slots: [{ periodId: `p${i + 1}`, startsAt: "10:00", endsAt: "14:00" }],
+                        },
+                      ],
                     },
                   ],
                   week: [

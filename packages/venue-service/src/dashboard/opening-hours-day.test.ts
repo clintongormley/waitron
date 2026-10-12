@@ -49,7 +49,15 @@ export function dayFixture(): OpeningHoursModel {
             routingUses: [],
           },
         ],
-        seasonWeeks: [],
+        seasonWeeks: [
+          {
+            seasonId: "autumn",
+            week: [
+              { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] },
+              { weekday: 2, slots: [{ periodId: "p1", startsAt: "11:00", endsAt: "15:00" }] },
+            ],
+          },
+        ],
         week: [
           { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] },
           { weekday: 2, slots: [{ periodId: "p1", startsAt: "11:00", endsAt: "15:00" }] },
@@ -75,7 +83,15 @@ export function dayFixture(): OpeningHoursModel {
             routingUses: [],
           },
         ],
-        seasonWeeks: [],
+        seasonWeeks: [
+          {
+            seasonId: "autumn",
+            week: [
+              { weekday: 1, slots: [{ periodId: "p2", startsAt: "09:00", endsAt: "18:00" }] },
+              { weekday: 2, slots: [{ periodId: "p2", startsAt: "09:00", endsAt: "18:00" }] },
+            ],
+          },
+        ],
         week: [
           { weekday: 1, slots: [{ periodId: "p2", startsAt: "09:00", endsAt: "18:00" }] },
           { weekday: 2, slots: [{ periodId: "p2", startsAt: "09:00", endsAt: "18:00" }] },
@@ -236,6 +252,13 @@ it.each([
         { id: "winter", name: "Winter", startsOn: "12-01" },
       ],
       currentSeasonId: "spring",
+      departments: dayFixture().departments.map((department) => ({
+        ...department,
+        seasonWeeks: ["spring", "summer", "autumn", "winter"].map((id) => ({
+          seasonId: id,
+          week: department.seasonWeeks[0]?.week ?? [],
+        })),
+      })),
     },
   );
   expect(day.shadowRoot!.textContent).toContain("Changes every Monday");
@@ -248,6 +271,70 @@ it.each([
       "/management-api/venue-service/departments/d1/menu-week",
       "PUT",
       expect.objectContaining({ seasonId }),
+    ],
+  ]);
+});
+const seasonSlots = (endsAt: (weekday: number) => string) =>
+  Array.from({ length: 7 }, (_, weekday) => ({
+    weekday,
+    slots: [{ periodId: "p1", startsAt: "10:00", endsAt: endsAt(weekday) }],
+  }));
+const winterWeek = seasonSlots((weekday) => `13:0${weekday}`);
+const autumnWeek = seasonSlots((weekday) => `14:0${weekday}`);
+function seasonsFixture(date: string): OpeningHoursModel {
+  const model = dayFixture();
+  return {
+    ...model,
+    currentBusinessDay: date,
+    seasons: [
+      { id: "autumn", name: "Autumn", startsOn: "09-01" },
+      { id: "winter", name: "Winter", startsOn: "12-01" },
+    ],
+    currentSeasonId: "autumn",
+    departments: model.departments.map((department) =>
+      department.id === "d1"
+        ? {
+            ...department,
+            seasonWeeks: [
+              { seasonId: "autumn", week: autumnWeek },
+              { seasonId: "winter", week: winterWeek },
+            ],
+          }
+        : department,
+    ),
+  };
+}
+it.each([
+  ["2030-12-02", winterWeek],
+  ["2030-11-25", autumnWeek],
+])("shows %s's own season's Monday", async (date, week) => {
+  vi.setSystemTime(new Date(`${date}T12:00:00Z`));
+  const day = await mount(undefined, seasonsFixture(date));
+  expect(grid(day).columns[0]!.slots).toEqual(week[1]!.slots);
+});
+it("saves Monday 2 Dec 2030 as Winter's whole week, not the current Autumn's", async () => {
+  vi.setSystemTime(new Date("2030-12-02T12:00:00Z"));
+  const writes: unknown[] = [];
+  const day = await mount(async (...args) => {
+    writes.push(args);
+  }, seasonsFixture("2030-12-02"));
+  resize(day);
+  await day.updateComplete;
+  save(day).click();
+  await expect.poll(() => writes.length).toBe(1);
+  expect(writes).toEqual([
+    [
+      "/management-api/venue-service/departments/d1/menu-week",
+      "PUT",
+      {
+        expectedClockRevision: 0,
+        seasonId: "winter",
+        days: winterWeek.map((row) =>
+          row.weekday === 1
+            ? { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "15:00" }] }
+            : row,
+        ),
+      },
     ],
   ]);
 });
