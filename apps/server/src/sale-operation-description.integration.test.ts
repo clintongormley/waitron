@@ -373,6 +373,48 @@ it.each(["cash", "card"] as const)(
   },
 );
 
+it.each(["cash", "integrated"] as const)(
+  "a fiscal contribution with no description field still refuses a damaged %s order before money or filing",
+  async (method) => {
+    const id = await open();
+    await venue.db.run(sql`delete from order_service_contexts where working_order_id = ${id}`);
+    const modules = enabledModules(
+      ALL_MODULES,
+      venueModuleConfig(parseModuleConfig({}, ALL_MODULES), "GB-vat"),
+    );
+    const backend = fiscalSlot(modules, null).makeBackend({
+      db: venue.db,
+      clock: venue.clock,
+      environment: "preproduction",
+    });
+    const cfg = { ...venue.cfg, operationDescriptionRequired: false };
+    const provider = new SimulatorPaymentProvider(venue.db);
+    const collect = vi.spyOn(provider, "collect");
+    const before = facts();
+    const pay =
+      method === "cash"
+        ? payWorkingOrder({ ...deps(), backend }, cfg, {
+            id,
+            lines: [],
+            tender: { method: "cash", amount: "3.00" },
+          })
+        : payIntegrated({ ...deps(), backend, provider }, cfg, {
+            id,
+            lines: [],
+            simulationOutcome: "captured",
+          });
+    await expect(pay).rejects.toMatchObject({
+      code: "order.service_context_missing",
+      params: { workingOrderId: id },
+    });
+    expect(collect).not.toHaveBeenCalled();
+    expect(facts()).toEqual(before);
+    expect(venue.db.all(sql`select status from working_orders where id = ${id}`)).toEqual([
+      { status: "open" },
+    ]);
+  },
+);
+
 it.each([undefined, "", "   "])(
   "a missing/blank description (%j) refuses before integrated dispatch",
   async (description) => {

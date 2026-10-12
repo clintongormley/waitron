@@ -338,3 +338,11 @@ pointer/keyboard cases cover a second pointer, no destination, wrapping and igno
 A full package coverage investigation and final current-head CI remain required.
 The completed whole-branch Claude approval is retained; the new order-creation continuation
 gets a bounded review of its added code, rather than repeating the earlier entire feature.
+
+
+Continuation review completed in 278 seconds. Its closed-zone split and scoped device-lookup
+coverage gaps now have behavioral cases and installed removal controls. The driver also
+observed two no-description-regime payments succeeding after context deletion; these now
+refuse `order.service_context_missing` before cash/card dispatch. The final six-file selection
+passes 119 cases, including the retained positive no-description-regime cases. Required
+normal push checks and current-head CI still remain.

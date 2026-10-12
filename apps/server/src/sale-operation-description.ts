@@ -8,7 +8,15 @@ export async function readSaleOperationDescription(
   cfg: { locationId: LocationId; operationDescriptionRequired?: boolean },
   source: { kind: "order"; orderId: string } | { kind: "sale"; saleId: string },
 ): Promise<string> {
-  if (cfg.operationDescriptionRequired === false) return "";
+  if (cfg.operationDescriptionRequired === false) {
+    if (
+      source.kind === "order" &&
+      (await VENUE_SERVICE.findOrderContext(tx, cfg, source.orderId)) === null
+    ) {
+      throw new AppError("order.service_context_missing", { workingOrderId: source.orderId });
+    }
+    return "";
+  }
   let departmentId: string | null;
   if (source.kind === "sale") {
     departmentId = await VENUE_SERVICE.receiptDepartmentForSale(tx, cfg, source.saleId);

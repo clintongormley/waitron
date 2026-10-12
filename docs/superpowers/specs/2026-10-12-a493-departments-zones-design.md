@@ -199,3 +199,10 @@ money, filing, invoice numbers, drawer or kitchen changes; no default department
 a description. The owner explicitly retires the contextless payment-success expectation in
 `till-api.unroutable-dish.test.ts` and approves equally strict refusal/unchanged-state checks.
 This replaces the proposed default-department option in the earlier parked checkpoint.
+
+
+The damaged-order rule also applies to a fiscal contribution with no description field.
+That path validates the order context and refuses `order.service_context_missing` if it
+is missing; valid context still yields an explicit empty description without reading a
+department receipt or location description. Existing bills can split after their zone
+stops taking new orders; splitting does not start a new service.
