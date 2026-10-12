@@ -336,7 +336,8 @@ export async function businessDayClockConflicts(
         });
     }
   }
-  // The cap and the count are of distinct ranges: one range painted in several seasons is one.
+  // The cap and the count are of distinct conflicts once `seasonId` is set aside; the same range at
+  // another position in another season counts again.
   const rangeKey = (conflict: BusinessDayClockConflict) =>
     JSON.stringify({ ...conflict, seasonId: undefined });
   const keys = conflicts.map(rangeKey);

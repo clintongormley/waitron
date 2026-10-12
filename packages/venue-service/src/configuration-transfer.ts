@@ -366,8 +366,8 @@ export function validateSeasonWeeks(
     parsedAs("zone_day_ranges", () => parseClosedRanges(ranges, "ranges", bundle.dayCutover));
 }
 
-/** Each department's end offsets over the bundle's seasons and named days, as the writers check
- *  them; run after the shape checks, which refuse ranges without a changeover. A weekday row of
+/** Each department's end offsets over the bundle's seasons and named days, under the bundle's one
+ *  changeover; run after the shape checks, which refuse ranges without a changeover. A weekday row of
  *  `menu_day_timetables` is not imported, so it is not checked. */
 function validateEndOffsets(tables: Tables, bundle?: { readonly dayCutover: string }): void {
   const seasonRows = tables.department_day_ranges ?? [];
@@ -644,8 +644,8 @@ function validateVenueServiceConfiguration(
   validateRoutingConfiguration(tables);
 }
 
-/** A week lives in the season tables; a bundle's old weekday rows, which nothing reads, are not
- *  kept. Named-day rows stay. */
+/** A week lives in the season tables; a bundle's old weekday rows, which no hours reader uses,
+ *  are not kept. Named-day rows stay. */
 async function dropWeekdayRows(tx: Transaction): Promise<void> {
   await tx.delete(menuDayTimetables).where(isNotNull(menuDayTimetables.weekday));
   await tx.delete(zoneClosedTimes).where(isNotNull(zoneClosedTimes.weekday));

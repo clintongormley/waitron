@@ -59,7 +59,7 @@ export interface OpeningHoursModel extends BusinessDayScheduleStatus {
   namedDays: readonly NamedDay[];
   /** Ordered by `startsOn`. */
   seasons: readonly { id: string; name: string; startsOn: string }[];
-  /** The season of the business day `at` falls in; null when the clock cannot be read. */
+  /** The season of the business day `at` falls in; null when the clock cannot be read or the venue has no seasons. */
   currentSeasonId: string | null;
   departments: readonly {
     id: string;

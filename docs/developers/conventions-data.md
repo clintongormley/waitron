@@ -617,7 +617,9 @@ changes that season alone (`replaceMenuWeek` in `packages/venue-service/src/menu
 `menu_day_timetables` with `menu_slots` and `zone_closed_times`, get no weekday row from any
 writer (the case "a week written with no season named leaves no weekday row in the old tables" in
 `packages/venue-service/src/season-weeks.test.ts`). A venue database that ran #1577 (A506-1) and
-was not reset still holds the weekday rows written then, and nothing reads them.
+was not reset still holds the weekday rows written then. No opening-hours reader uses them; the
+department and zone delete previews still count them, and the venue's configuration export still
+carries them.
 
 A configuration transfer carries the five tables (`VENUE_SERVICE_CONFIGURATION_TRANSFER` in
 `packages/venue-service/src/configuration-transfer.ts`). `importConfigurationTables`
@@ -641,7 +643,8 @@ is refused, because the bundle carries no `special_days` or `special_day_dates`.
 season's week, from each season's last day to the next season's first on every weekday, and
 between each named day and the days either side of it, a day without hours of its own read from
 the season that holds it. It reads no old weekday row. The cases are under "season weeks in a
-configuration bundle" in `packages/venue-service/src/configuration-transfer.test.ts`.
+configuration bundle" in `packages/venue-service/src/configuration-transfer.test.ts`, and the
+named-day grace case under "named days in configuration transfer".
 
 ### Earlier W98 menu timetable model
 

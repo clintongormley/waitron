@@ -77,7 +77,7 @@ async function authorRange(
       },
       0,
     );
-    // Only the season holding the cases' November dates, so each weekday's range is one conflict.
+    // Only the season holding the cases' November dates, so each weekday's range is one entry in `conflicts`.
     const seasonId = (
       await tx.execute<{ id: string }>(
         sql`select id from seasons where location_id = ${venue.cfg.locationId} and starts_on <= '11-03' order by starts_on desc limit 1`,
