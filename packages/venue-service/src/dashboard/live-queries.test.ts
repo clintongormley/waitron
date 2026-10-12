@@ -117,8 +117,6 @@ it("refreshes a zone's floor plan preview when a floor plan, its tables or joins
   expect(QUERY_DEPENDENCIES["floor-plan"]).toEqual([
     "floor_plans",
     "floor_plan_tables",
-    "floor_plan_joins",
-    "floor_plan_join_tables",
     "dining_tables",
     "floor_zones",
   ]);
@@ -132,11 +130,7 @@ it.each(["zone-delete-impact", "department-delete-impact"] as const)(
       "dining_tables",
       "floor_plans",
       "floor_plan_tables",
-      "floor_plan_joins",
-      "floor_plan_join_tables",
       "floor_reset_tables",
-      "floor_reset_joins",
-      "floor_reset_join_tables",
       "floor_today_zones",
       "floor_today_tables",
       "floor_today_joins",
