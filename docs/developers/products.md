@@ -212,7 +212,8 @@ import from `apps/server`. A third builder for the till's own staff wording
 
 None of these columns enters the fiscal hash, and none of them is sent to AEAT either. A filed
 Veri\*Factu record has no line list at all — the goods reach it only as the sale's total, its VAT
-breakdown, and one `DescripcionOperacion` string for the whole sale. Product issuance selects that string from the department receipt through
+breakdown, and one `DescripcionOperacion` string for the whole sale. Product issuance selects
+that string from the department receipt through
 `apps/server/src/sale-operation-description.ts`. Core passes a supplied
 `operationDescription` to the fiscal backend as `descriptionOfOperation`; only when that input
 is absent does `operationDescriptionFor` read `locations.operation_description`. An explicit empty
