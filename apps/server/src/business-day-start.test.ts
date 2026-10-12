@@ -73,6 +73,12 @@ async function authorRange(startsAt: string, endsAt: string) {
       },
       0,
     );
+    // Only the season holding the cases' November dates, so each weekday's range is one conflict.
+    const seasonId = (
+      await tx.execute<{ id: string }>(
+        sql`select id from seasons where location_id = ${venue.cfg.locationId} and starts_on <= '11-03' order by starts_on desc limit 1`,
+      )
+    ).rows[0]!.id;
     await replaceMenuWeek(
       tx,
       venue.cfg,
@@ -83,6 +89,7 @@ async function authorRange(startsAt: string, endsAt: string) {
       })),
       at,
       0,
+      { seasonId },
     );
     return { department, period };
   });

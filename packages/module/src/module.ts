@@ -547,6 +547,7 @@ export interface BusinessDayClockConflict {
   endsAt?: string;
   zoneId?: string;
   weekday?: number;
+  seasonId?: string;
   specialDateId?: string;
   date?: string;
   periodId?: string;
