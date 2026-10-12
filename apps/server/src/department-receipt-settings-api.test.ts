@@ -19,7 +19,7 @@ import {
   departmentReceipts,
   departmentSalePolicies,
 } from "@waitron/venue-service";
-import { locationId, nodeId, seriesId, type DepartmentReceiptWrite } from "@waitron/shared";
+import { locationId, nodeId, type DepartmentReceiptWrite } from "@waitron/shared";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { ALL_MODULES } from "./modules.js";
 import { mountDepartmentReceiptSettingsApi } from "./department-receipt-api.js";
@@ -70,7 +70,6 @@ async function fixture(
   const cfg: TillConfig = {
     locationId: locationId(location!.id),
     nodeId: nodeId(randomUUID()),
-    seriesId: seriesId(randomUUID()),
     locale: "es-ES",
     invoiceLocales: ["gl-ES"],
     tipsEnabled: false,

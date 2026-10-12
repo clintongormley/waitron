@@ -126,6 +126,17 @@ function nextNif(): string {
   return nifWithControlLetter(50_000_000 + nifCounter);
 }
 
+async function readyDepartment(venue: VenueResult): Promise<void> {
+  const [department] = await suite.db
+    .select({ id: departments.id })
+    .from(departments)
+    .where(eq(departments.locationId, venue.locationId));
+  await suite.db.insert(departmentReceipts).values({
+    departmentId: department!.id,
+    receipt: { operationDescription: "Venta en establecimiento" },
+  });
+}
+
 function tillConfigFromVenue(venue: VenueResult): TillConfig {
   return {
     nodeId: brandNodeId(venue.nodeId),
@@ -185,6 +196,7 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
     { db: suite.db, modules: ALL_MODULES },
   );
 
+  await readyDepartment(venue);
   const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue));
   const catalogue = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
@@ -769,6 +781,7 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
       ),
       { db: suite.db, modules: ALL_MODULES },
     );
+    await readyDepartment(venue);
     const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue));
     const productId = await withTransaction(suite.db, async (tx) => {
       const cat = await createCatalogue(tx, { name: "Delicatessen" });
@@ -1010,6 +1023,7 @@ describe("ordering extras and options — parent + child lines", () => {
       ),
       { db: suite.db, modules: ALL_MODULES },
     );
+    await readyDepartment(venue);
     const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue));
     const seeded = await withTransaction(suite.db, async (tx) => {
       const { defaultLanguage } = await readContentLanguages(tx, cfg.locale);
@@ -2457,15 +2471,18 @@ describe("per-answer receipt presentation", () => {
         .insert(tenantReceipts)
         .values({ id: 1, receipt: global })
         .onConflictDoUpdate({ target: tenantReceipts.id, set: { receipt: global } });
-      await suite.db.insert(departmentReceipts).values({
-        departmentId: department!.id,
-        receipt: {
-          headerSubtitle: { "es-ES": "Department subtitle" },
-          footerMessage: { "es-ES": "Department footer" },
-          printAddress: true,
-          email: "department@example.test",
-        },
-      });
+      await suite.db
+        .update(departmentReceipts)
+        .set({
+          receipt: {
+            operationDescription: "Venta en establecimiento",
+            headerSubtitle: { "es-ES": "Department subtitle" },
+            footerMessage: { "es-ES": "Department footer" },
+            printAddress: true,
+            email: "department@example.test",
+          },
+        })
+        .where(eq(departmentReceipts.departmentId, department!.id));
       const req: TillSaleRequest = {
         zoneId,
         workingOrderId: randomUUID(),
@@ -2621,10 +2638,16 @@ describe("receipt presentation sources", () => {
           target: tenantReceipts.id,
           set: { receipt: { headerSubtitle: "Venue subtitle", phone: "+34910000000" } },
         });
-      await suite.db.insert(departmentReceipts).values({
-        departmentId: department!.id,
-        receipt: { footerMessage: { "es-ES": "Own footer" }, email: "own@example.test" },
-      });
+      await suite.db
+        .update(departmentReceipts)
+        .set({
+          receipt: {
+            operationDescription: "Venta en establecimiento",
+            footerMessage: { "es-ES": "Own footer" },
+            email: "own@example.test",
+          },
+        })
+        .where(eq(departmentReceipts.departmentId, department!.id));
       const req: TillSaleRequest = {
         zoneId,
         workingOrderId: randomUUID(),
@@ -2686,11 +2709,14 @@ describe("receipt presentation address failure", () => {
       .from(departments)
       .where(eq(departments.locationId, cfg.locationId));
     await suite.db
-      .insert(departmentReceipts)
-      .values({
-        departmentId: department!.id,
-        receipt: { headerSubtitle: { "es-ES": "Surviving subtitle" } },
-      });
+      .update(departmentReceipts)
+      .set({
+        receipt: {
+          operationDescription: "Venta en establecimiento",
+          headerSubtitle: { "es-ES": "Surviving subtitle" },
+        },
+      })
+      .where(eq(departmentReceipts.departmentId, department!.id));
     const address = vi
       .spyOn(venueAddressReads, "readLocationAddress")
       .mockRejectedValue(new Error("current address read refused"));

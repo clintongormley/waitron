@@ -90,13 +90,14 @@ Disable with permanent Delete in the same screens
 mockup is the private canvas https://claude.ai/artifact/Tya5FcmK39ESBkQ2hTaA7s, which has four
 boards: the list, Edit department, Edit zone and Edit receipt.
 
-**Branch checkpoint, 2026-10-12.** Product issuance and receipt dialogs use department-owned
-content. Department and zone dialogs sit over the combined list; zones save their name and raw
-policy overrides together. The old department page, zone panel, Rename/Move dialogs and combined
-internal department writer are retired. Their retained policy, deletion, live-read, layout and
-leave checks now run at the replacement owners. Late name replies, reconnect and departed zone
-controls have regression cases. The complete consumer/prose audit, remaining drag/delete/printed/
-till/onboarding acceptance and final review are still open. The branch is unpublished.
+**Branch checkpoint, 2026-10-12.** The list and department-owned receipt/dialog changes are
+rebased over the current season, invoice and floor-plan changes. Focused combined-path checks
+pass, including the unchanged fiscal pair. Managed captures cover editors, floor-plan return,
+loaded printed preview, pointer/keyboard/scrolled drag and cancellation, deleted targets and
+simulated delete loading/refusal/success in both languages, themes and widths. The till's populated
+and cleared receipt component is captured separately with explicit fixtures; this is not a new
+sale or printer transport check. Onboarding visual acceptance and the complete source/prose
+and assertion audit remain before final review, CI and landing. The branch is unpublished.
 
 **The list.** "Departments and zones" becomes one list. Each department is a row, and its zones are
 indented beneath it. The columns are name, service style (how orders start), counter service (when

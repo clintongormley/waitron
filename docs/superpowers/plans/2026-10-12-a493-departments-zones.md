@@ -231,3 +231,36 @@ on that attempt. A first native Cancel run did not open its question; the port n
 its real click arrived and the dirty scope existed, and the final run passes. No cause or repair
 claim is made for that first click. Source/prose audit, remaining acceptance and Task 5 remain; no
 whole-branch review, PR or intermediate publication has run.
+
+
+Rebase and visual-acceptance checkpoint (2026-10-12): the candidate now contains main's season,
+invoice and floor-plan modal work. Append-at-end configuration suites keep both sides; till-sale
+fixtures keep main's separately returned series id. A full focused till-sale run exposed missing
+authored descriptions in three fixture builders. They now seed department descriptions, and the
+optional-presentation fixtures replace that receipt while retaining their existing assertions.
+The receipt host's remaining page assertion now checks close-to-list and the refreshed printing
+policy there. Two new fixtures stop carrying main's retired configuration series field.
+
+The combined six-file module run passed 566 cases, three server files 167, three dashboard files
+520, two boot/receipt-boundary files 31, six root files 2482 and the unedited fiscal pair 20.
+The final scoped till-sale rerun passed 46, and till presentation/axe passed 53. Server/dashboard
+types and focused lint/format pass. These are focused checks, not CI or whole-feature completion.
+
+Managed EN/ES, light/dark, 390/1280 captures were inspected for the list/editor flow, floor-plan
+modal return, full loaded printed preview, pointer/keyboard and scrolled lifts, cancellation and
+deleted targets. Delete read/write responses were substituted on the in-browser API instance;
+no venue row was deleted. Pointer cancellation uses a dispatched PointerEvent, and the scroll
+capture does not measure automatic edge-scroll timing. Till receipt components use explicit
+populated/cleared fixtures over the managed app; they do not submit sales or print jobs.
+Onboarding visual acceptance and whole source/prose/assertion audit still remain. The source
+comment inventory includes all touched production files but is not yet fully reviewed. Current
+design-system and data-convention prose no longer describe the retired page/tab or receipt defaults.
+No full Claude review, PR, push, finish or land has run; this is an unpublished checkpoint.
+
+Setup component acceptance adds eight blank/invalid EN/ES, light/dark, 390/1280 captures with
+explicit prepare-mode/regime defaults; all were inspected and its two focused files passed 132
+cases. It runs the actual setup screen over the existing managed Vite in a fresh blank document,
+without provisioning or changing the inherited demo target. This does not replace the full managed
+onboarding shell flow. That limit and the complete source/prose/assertion audit remain before
+whole-feature completion. Till's final captures wait for Spanish action labels using the exact
+loaded Vite locale module; earlier wrong-locale captures supply no acceptance evidence.

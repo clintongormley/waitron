@@ -190,7 +190,7 @@ it("successful receipt save closes the hosted dialog and updates the department 
   const closed = dialogClosed(dialog);
   await userEvent.click(page.elementLocator(receiptSave(editor)));
   await closed;
-  await expect.poll(() => location.pathname).toBe("/manage/venue-operations/department/bar");
+  await expect.poll(() => location.pathname).toBe("/manage/venue-operations");
   expect(
     JSON.parse(
       fetchImpl.mock.calls.find(
@@ -201,12 +201,16 @@ it("successful receipt save closes the hosted dialog and updates the department 
     receipt: { ...receiptModel.receipt, email: "bar@example.com" },
     policy: { ...receiptModel.policy, printTradingName: false },
   });
+  expect(deep(app.shadowRoot!, "dashboard-department-receipt-dialog")).toBeNull();
+  const list = deep(
+    app.shadowRoot!,
+    "departments-list",
+  ) as HTMLElementTagNameMap["departments-list"];
   await expect
     .poll(
       () =>
-        deep(app.shadowRoot!, "department-settings")?.shadowRoot?.querySelector<
-          HTMLElementTagNameMap["wt-switch"]
-        >("wt-switch[name=printTradingName]")?.checked,
+        list?.model?.salePolicies.departments.find((policy) => policy.departmentId === "bar")
+          ?.printTradingName,
     )
     .toBe(false);
 });

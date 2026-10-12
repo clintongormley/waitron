@@ -2273,9 +2273,9 @@ and downloads keep browser handling. Fragment-only form links keep their target'
 which owns any leave request. The dashboard catches a link click before the link's own handler
 sees it, so a link that handles a plain click itself (the product swatch that opens Edit in
 place) carries `data-own-click` to keep it, and a link with `aria-disabled="true"` is cancelled
-there and goes nowhere. The department Receipt tab protects its authored draft. A tab or
-management-link departure asks about all outstanding drafts; Venue settings keeps its
-defaults, receipt language and description scopes independent.
+there and goes nowhere. The department receipt dialog protects its authored draft. A tab or
+management-link departure asks about all outstanding drafts; Venue settings keeps receipt
+language separate from its other settings.
 
 Each form owns its comparison and successful-write boundary. Compare membership for selected
 ID sets and preserve order for submitted positions. Nested image forms retain File identity;
@@ -3786,15 +3786,15 @@ Keep passwords, PINs, pairing codes and unsaved form contents out of the URL.
 
 Module management tabs use `/manage/<section>/view/<key>`. Departments always opens its list
 at `/manage/venue-operations`. A department opens at
-`/manage/venue-operations/department/<id>` (Settings); its Zones tab adds `/view/zones`,
-and a selected zone adds `/zone/<id>`. The parent link returns to the list. Unknown
-departments show a missing-department message; a stale zone selection falls back to a visible zone.
+`/manage/venue-operations/department/<id>` in its edit dialog; a zone editor adds
+`/view/zones/zone/<id>` and the receipt editor adds `/view/receipt`. The list stays beneath
+these dialogs. Closing one returns to the list; a removed subject closes its editor.
 Old top-level tab addresses are replaced with the list URL. Venue settings
-(`/manage/venue-settings`) starts with `venue-details`, followed by `receipts`, `tables`,
+(`/manage/venue-settings`) starts with `venue-details`, followed by `tables`,
 `adjustment-reasons` and `kitchen`; a tab
 appears only when a panel on it is visible to the session, and an address naming a hidden tab
 opens the first visible tab. Venue details needs `venue.view`; its editor needs `venue.configure`.
-An explicit Receipts link keeps that tab selected. The dashboard preserves module-owned
+Receipt language sits in Venue details. The dashboard preserves module-owned
 `view` segments while the module validates its keys. The Menus screen (`/manage/menus`) puts the menu's id before
 the tab:
 `/manage/menus/menu/<id>/view/<key>`, with `structure`, `prices` and `preview` (`dashboardPath`,

@@ -52,7 +52,6 @@ it("a trading boot without a fiscal description field accepts a department's emp
       WAITRON_CREDENTIALS_KEY_VERSION: "1",
       WAITRON_TILL_LOCATION_ID: venue.cfg.locationId,
       WAITRON_TILL_NODE_ID: venue.cfg.nodeId,
-      WAITRON_TILL_SERIES_ID: venue.cfg.seriesId,
       WAITRON_ONBOARDING_INTENT: "demo",
     });
     const reply = await fetch(`http://127.0.0.1:${port}/api/sales`, {
