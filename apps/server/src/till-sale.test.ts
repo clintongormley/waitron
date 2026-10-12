@@ -129,7 +129,6 @@ function nextNif(): string {
 function tillConfigFromVenue(venue: VenueResult): TillConfig {
   return {
     nodeId: brandNodeId(venue.nodeId),
-    // planVenue emits the standard series first, then the rectificative one.
     locationId: brandLocationId(venue.locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],

@@ -311,7 +311,6 @@ describe("promote: local secondary → primary, live", () => {
 // A booted mirror's promote flips mode and singleton_role to primary, rewrites `trading.env` with
 // the cloud's own reserved standard series id, and schedules a restart.
 
-// The mirror boots with the primary's inert designated series, which the promote must overwrite.
 const MIRROR_LOCATION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const MIRROR_ORIGIN_NODE_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 const MIRROR_NUMERO_INSTALACION = 7;

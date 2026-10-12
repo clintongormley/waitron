@@ -326,7 +326,7 @@ afterAll(async () => {
 });
 
 describe("fiscal restore, end to end", () => {
-  it("re-registers the SIF, retires and replaces the series, rewrites trading.env, keeps the ledger immutable", async () => {
+  it("re-registers the SIF, replaces series, publishes trading identity, and keeps the ledger immutable", async () => {
     const dirs = await arrangeDirs();
     await drive(dirs);
 

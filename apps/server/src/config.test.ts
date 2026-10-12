@@ -107,7 +107,7 @@ describe("loadConfig", () => {
   });
 
   // Setup mode: an unprovisioned box has no till identity, and loading does not throw.
-  it("leaves config.till undefined when the three WAITRON_TILL_*_ID are absent, else populates it", () => {
+  it("leaves config.till undefined when both WAITRON_TILL_*_ID are absent, else populates it", () => {
     const setup = loadConfig({}, ROOT, STATE_ROOT);
     expect(setup.till).toBeUndefined();
 
