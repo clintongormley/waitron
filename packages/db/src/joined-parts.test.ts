@@ -9,8 +9,11 @@ import {
   floorPlans,
   floorResetTableParts,
   floorResetTables,
+  floorTodayJoinTables,
+  floorTodayJoins,
 } from "./schema/floor-plans.js";
 import { floorZones } from "./schema/floor-zones.js";
+import { parties, partyTables } from "./schema/parties.js";
 import { locations } from "./schema/tenants.js";
 import { seedTenant } from "./testing/seed.js";
 import { useVenueDb } from "./testing/venue-db.js";
@@ -28,6 +31,7 @@ const COUNTER_4_ROW = "dddddddd-0000-4000-8000-000000000004";
 const COUNTER_5_ROW = "dddddddd-0000-4000-8000-000000000005";
 const PLAIN_ROW = "dddddddd-0000-4000-8000-000000000009";
 const WAITING_PART_ROW = "dddddddd-0000-4000-8000-000000000006";
+const OPERATOR = "99999999-0000-4000-8000-000000000001";
 
 describe("still joined part", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
@@ -127,6 +131,41 @@ describe("still joined part", () => {
       [COUNTER_5]: 0,
       [PLAIN]: 0,
     });
+  });
+
+  it("names no part a party holds, and names it once the party has left it", async () => {
+    const [party] = await suite.db
+      .insert(parties)
+      .values({ openedBy: OPERATOR })
+      .returning({ id: parties.id });
+    const [held] = await suite.db
+      .insert(partyTables)
+      .values({ partyId: party!.id, tableId: COUNTER_4 })
+      .returning({ id: partyTables.id });
+    expect((await read())[COUNTER_4]).toBe(0);
+    expect((await read())[COUNTER_3]).toBe(1);
+
+    await suite.db
+      .update(partyTables)
+      .set({ leftAt: "2026-10-12T12:00:00.000Z" })
+      .where(eq(partyTables.id, held!.id));
+    expect((await read())[COUNTER_4]).toBe(1);
+  });
+
+  it("names no part in one of today's merges, and names it once the merge has ended", async () => {
+    const [join] = await suite.db
+      .insert(floorTodayJoins)
+      .values({ zoneId: ZONE, seats: 8 })
+      .returning({ id: floorTodayJoins.id });
+    await suite.db.insert(floorTodayJoinTables).values([
+      { joinId: join!.id, tableId: COUNTER_5, beforeX: 0, beforeY: 0, beforeRotation: 0 },
+      { joinId: join!.id, tableId: PLAIN, beforeX: 10, beforeY: 0, beforeRotation: 0 },
+    ]);
+    expect((await read())[COUNTER_5]).toBe(0);
+    expect((await read())[COUNTER_3]).toBe(1);
+
+    await suite.db.delete(floorTodayJoinTables).where(eq(floorTodayJoinTables.joinId, join!.id));
+    expect((await read())[COUNTER_5]).toBe(1);
   });
 });
 

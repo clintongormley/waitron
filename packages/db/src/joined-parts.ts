@@ -2,7 +2,9 @@ import { sql, type SQL, type SQLWrapper } from "drizzle-orm";
 
 /**
  * A table is a still-joined part while today's copy names its reset row as a part, the reset has
- * applied that row, and the joined table's reset row has a live table.
+ * applied that row, the joined table's reset row has a live table, and the table is in use by
+ * neither an open party nor one of today's merges: a part in use when its joined table goes live
+ * stays in use until it is free.
  */
 export function stillJoinedPart(tableId: SQLWrapper): SQL {
   return sql`${tableId} in (
@@ -13,6 +15,13 @@ export function stillJoinedPart(tableId: SQLWrapper): SQL {
     where part_row.table_id is not null
       and (part_row.placed = 1 or part_row.pending = 0)
       and joined_row.table_id is not null
+      and not exists (
+        select 1 from party_tables held
+        where held.table_id = part_row.table_id and held.left_at is null
+      )
+      and not exists (
+        select 1 from floor_today_join_tables merged where merged.table_id = part_row.table_id
+      )
   )`;
 }
 

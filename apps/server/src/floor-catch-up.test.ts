@@ -178,6 +178,49 @@ async function plannedTable(label: string) {
   return { zoneId, tableId, masterId: ids.t!, revision };
 }
 
+/**
+ * A zone where a party holds T9 while the save deletes it and makes Long table, under T9's name,
+ * of Counter 3, 4 and 5, all three off the plan; Bar stays placed. Long table waits for its name.
+ */
+async function longWaitsForItsName() {
+  const zoneId = await zone();
+  const [long, c3, c4, c5, bar] = [
+    fresh("T9"),
+    fresh("Counter 3"),
+    fresh("Counter 4"),
+    fresh("Counter 5"),
+    fresh("Bar"),
+  ];
+  const first = await save(zoneId, 0, [
+    entry("t9", long, { placement: place(0, 0) }),
+    entry("c3", c3, { seats: 2, placement: null }),
+    entry("c4", c4, { seats: 6, placement: null }),
+    entry("c5", c5, { seats: 4, placement: null }),
+    entry("bar", bar, { placement: place(60, 0) }),
+  ]);
+  const plan = await inTx(v, (tx) => readZonePlan(tx, v.cfg, zoneId));
+  const liveOf = (key: string) => plan.tables.find((t) => t.id === first.ids[key])!.liveTableId!;
+  const held = await seatAt(liveOf("t9"));
+  await save(zoneId, first.revision, [
+    entry("c3", c3, { id: first.ids.c3, seats: 2, placement: null }),
+    entry("c4", c4, { id: first.ids.c4, seats: 6, placement: null }),
+    entry("c5", c5, { id: first.ids.c5, seats: 4, placement: null }),
+    entry("bar", bar, { id: first.ids.bar, placement: place(60, 0) }),
+    entry("long", long, { seats: 10, placement: place(0, 20), partKeys: ["c3", "c4", "c5"] }),
+  ]);
+  await reset(zoneId);
+  const waiting = await readJoined();
+  expect(waiting.get(liveOf("c4"))).toBeNull();
+  return {
+    held,
+    long,
+    t3: liveOf("c3"),
+    t4: liveOf("c4"),
+    t5: liveOf("c5"),
+    bar: liveOf("bar"),
+  };
+}
+
 describe("the till's floor routes catch today's plan up", () => {
   it("brings a table back to the master on the first floor read after its party finishes", async () => {
     const label = fresh("T1");
@@ -290,6 +333,66 @@ describe("the till's floor routes catch today's plan up", () => {
 
     await finish(partyId);
     expect((await readJoined()).get(t3)).toBe(long);
+  });
+
+  it("a part a party holds when its joined table goes live stays in service until the party finishes", async () => {
+    const z = await longWaitsForItsName();
+    const p2 = await seatAt(z.t3);
+    const joined = await send("POST", `/api/parties/${p2}/join`, {
+      tableId: z.t4,
+      expectedPartyRevision: await revisionOf(v, p2),
+    });
+    expect(joined.status).toBe(200);
+
+    await finish(z.held);
+    const live = await readJoined();
+    expect(live.get(z.t5)).toBe(z.long);
+    expect(live.get(z.t3)).toBeNull();
+    expect(live.get(z.t4)).toBeNull();
+
+    const split = await send("POST", `/api/parties/${p2}/split-table`, {
+      tableId: z.t4,
+      billId: null,
+      expectedPartyRevision: await revisionOf(v, p2),
+    });
+    expect(split.status).toBe(200);
+    const p3 = ((await split.json()) as { partyId: string }).partyId;
+    expect((await readJoined()).get(z.t4)).toBeNull();
+
+    await finish(p2);
+    const afterP2 = await readJoined();
+    expect(afterP2.get(z.t3)).toBe(z.long);
+    expect(afterP2.get(z.t4)).toBeNull();
+
+    await finish(p3);
+    expect((await readJoined()).get(z.t4)).toBe(z.long);
+  });
+
+  it("a part merged on today's map when its joined table goes live stays in service until the merge ends", async () => {
+    const z = await longWaitsForItsName();
+    const placed = await send("POST", `/api/tables/${z.t3}/today/place`, { x: 20, y: 40 });
+    expect(placed.status).toBe(204);
+    const merged = await send("POST", `/api/tables/${z.t3}/today/merge`, {
+      targetId: z.bar,
+      side: "right",
+      seats: 6,
+    });
+    expect(merged.status).toBe(204);
+
+    await finish(z.held);
+    const live = await readJoined();
+    expect(live.get(z.t4)).toBe(z.long);
+    expect(live.get(z.t3)).toBeNull();
+
+    const party = await seatAt(z.bar);
+    expect((await readJoined()).get(z.t3)).toBeNull();
+    await finish(party);
+    expect((await readJoined()).get(z.t3)).toBeNull();
+
+    const split = await send("POST", `/api/tables/${z.bar}/today/split`, {});
+    expect(split.status).toBe(204);
+    expect((await readJoined()).get(z.t3)).toBe(z.long);
+    expect((await todayRow(z.t3))?.x).not.toBeNull();
   });
 
   it("does nothing when no reset happened while the table was taken", async () => {
