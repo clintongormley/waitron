@@ -902,7 +902,8 @@ it("identifies conflicting period and zone schedules with names and recorded ran
         departmentId: v.departmentId,
         departmentName: "Service",
         date: E,
-        specialDateName: "Named day",
+        specialDayId: v.specialDayId,
+        specialDayName: "Named day",
         startsAt: "05:00",
         endsAt: "05:00",
         rangeIndex: 0,
@@ -1550,7 +1551,7 @@ it("lists the same conflicts for many yearly named days and special days", async
   const lines = result.conflicts.map((c) =>
     [
       c.departmentName,
-      c.specialDayName ?? c.specialDateName ?? c.seasonName,
+      c.specialDayName ?? c.seasonName,
       c.date ?? c.weekday,
       c.periodName ?? "Closed",
       `${c.startsAt}-${c.endsAt}`,
