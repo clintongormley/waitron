@@ -107,6 +107,13 @@ export async function readZonePlan(
       tx,
       masters.map((m) => m.id),
     );
+    const byJoined = new Map<string, string[]>();
+    for (const m of masters) {
+      if (m.partOf === null) continue;
+      const parts = byJoined.get(m.partOf);
+      if (parts === undefined) byJoined.set(m.partOf, [m.id]);
+      else parts.push(m.id);
+    }
     for (const master of masters) {
       tables.push({
         id: master.id,
@@ -115,7 +122,7 @@ export async function readZonePlan(
         seats: master.seats,
         fixed: master.fixed,
         placement: placementOf(master),
-        partIds: masters.filter((m) => m.partOf === master.id).map((m) => m.id),
+        partIds: byJoined.get(master.id) ?? [],
       });
     }
   }
@@ -179,12 +186,12 @@ function checkParts(tables: ZonePlanSave["tables"]): void {
   tables.forEach((table, index) => {
     if (table.partKeys.length === 0) return;
     const at = `tables.${index}.partKeys`;
+    // An entry with no partKeys is a plain table, so a joined table stripped of every part
+    // saves as a plain one; the editor refuses that before sending.
     if (table.partKeys.length < 2) throw invalid(at);
-    if (new Set(table.partKeys).size !== table.partKeys.length) throw invalid(at);
     for (const key of table.partKeys) {
       const part = byKey.get(key);
       if (part === undefined) throw invalid(at);
-      if (key === table.key) throw invalid(at);
       if (part.placement !== null) throw invalid(at);
       if (part.partKeys.length > 0) throw invalid(at);
       if (claimed.has(key)) throw invalid(at);
