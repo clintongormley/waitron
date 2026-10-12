@@ -655,6 +655,15 @@ describe("floor plan draft", () => {
     expect(table(restored, "new:1").parts).toEqual(["c3"]);
   });
 
+  it("a restored joined table leaves out a part placed since", () => {
+    const opened = draftFromPlan(joinedPlan);
+    const placed = placeTable(deleteTable(opened, "long"), "c3");
+    const restored = restoreTable(placed, table(opened, "long"), opened);
+    expect(table(restored, "long").parts).toEqual(["c4", "c5"]);
+    expect(table(restored, "c3").placement).not.toBeNull();
+    expect(checkDraft(restored)).toBeNull();
+  });
+
   it("returns the draft itself when the key is already in it", () => {
     const d = open();
     expect(restoreTable(d, { ...table(d, "m2"), label: "Other" }, d)).toBe(d);

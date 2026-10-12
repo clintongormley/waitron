@@ -230,7 +230,7 @@ export function deleteTable(draft: FloorPlanDraft, key: string): FloorPlanDraft 
 
 /** Puts a table back, as given, after the others. A part re-joins the joined table that held it
  *  in `opened` when that table is in the draft and no other joined table holds the part; a joined
- *  table keeps only the parts in the draft that no other joined table holds. */
+ *  table keeps only the parts `freeTables` would still offer it. */
 export function restoreTable(
   draft: FloorPlanDraft,
   table: DraftTable,
@@ -238,13 +238,8 @@ export function restoreTable(
 ): FloorPlanDraft {
   if (draft.tables.some((t) => t.key === table.key)) return draft;
   const placement = table.placement === null ? null : { ...table.placement };
-  const parts =
-    table.parts === null
-      ? null
-      : table.parts.filter(
-          (part) =>
-            draft.tables.some((t) => t.key === part) && joinedTableOf(draft, part) === undefined,
-        );
+  const free = new Set(freeTables(draft).map((t) => t.key));
+  const parts = table.parts === null ? null : table.parts.filter((part) => free.has(part));
   const heldBy = joinedTableOf(opened, table.key)?.key;
   const rejoins = heldBy !== undefined && joinedTableOf(draft, table.key) === undefined;
   const tables = draft.tables.map((t) =>

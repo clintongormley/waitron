@@ -14,6 +14,7 @@ import {
   deleteTable,
   draftFromPlan,
   patchTable,
+  placeTable,
   setParts,
   type FloorPlanDraft,
 } from "./floor-plan-draft.js";
@@ -590,6 +591,22 @@ it("a booked part whose delete was refused comes back inside Long table", async 
   expect(panelRow(el, "c5")!.querySelector("[data-mark]")!.textContent!.trim()).toBe(
     "Booked 12 Oct, 21:00",
   );
+});
+
+it("Long table refused as booked comes back without a part placed since its delete", async () => {
+  const el = await open(
+    stubApi({
+      getFloorPlan: vi.fn().mockResolvedValue(joinedPlan()),
+      saveFloorPlan: vi
+        .fn()
+        .mockRejectedValue(booked({ tableId: "llong", date: "2026-10-12", time: "21:00" })),
+    }),
+  );
+  await change(el, placeTable(deleteTable(draftFromPlan(joinedPlan()), "long"), "c3"));
+  await press(el, "save");
+  const draft = el["draft"]!;
+  expect(draft.tables.find((t) => t.key === "long")!.parts).toEqual(["c4", "c5"]);
+  expect(draft.tables.find((t) => t.key === "c3")!.placement).not.toBeNull();
 });
 
 it("a refusal of a joined table's parts selects it and marks its Made of", async () => {
