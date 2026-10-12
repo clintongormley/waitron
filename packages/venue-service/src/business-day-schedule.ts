@@ -143,10 +143,12 @@ export async function businessDayClockConflicts(
     .from(seasons)
     .where(eq(seasons.locationId, cfg.locationId))
     .orderBy(asc(seasons.startsOn));
+  const seasonById = new Map<string | null, { index: number; name: string }>(
+    seasonList.map((season, index) => [season.id, { index, name: season.name }]),
+  );
   const seasonOf = (date: string) => seasonOnSorted(seasonList, date)?.id ?? null;
   const nextSeason = (seasonId: string) =>
-    seasonList[(seasonList.findIndex((season) => season.id === seasonId) + 1) % seasonList.length]!
-      .id;
+    seasonList[((seasonById.get(seasonId)?.index ?? -1) + 1) % seasonList.length]!.id;
   const undated = { specialDateName: null, specialDateId: null, date: null, repeatOn: null };
   const periods: Placement[] = [
     ...named.map((row) => ({ ...row, weekday: null, seasonId: null })),
@@ -198,7 +200,7 @@ export async function businessDayClockConflicts(
     )
       continue;
     // A season's position in the venue's order leads its key, so the sorted groups list seasons by `startsOn`.
-    const season = `${String(seasonList.findIndex((s) => s.id === placement.seasonId)).padStart(4, "0")}:${placement.seasonId}`;
+    const season = `${String(seasonById.get(placement.seasonId)?.index ?? -1).padStart(4, "0")}:${placement.seasonId}`;
     const key = `${placement.departmentId}/${placement.zoneId ?? ""}/${placement.specialDateId ?? `${season}:${placement.weekday}`}`;
     groups.set(key, [...(groups.get(key) ?? []), placement]);
   }
@@ -318,7 +320,7 @@ export async function businessDayClockConflicts(
         inStrip(((newCutoff % 1440) + 1440) % 1440)
       )
         reason = "transition_strip";
-      const seasonName = seasonList.find((season) => season.id === p.seasonId)?.name;
+      const seasonName = seasonById.get(p.seasonId)?.name;
       if (reason !== null)
         conflicts.push({
           departmentId: p.departmentId,
