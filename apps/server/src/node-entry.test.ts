@@ -882,8 +882,8 @@ describe("runEntry", () => {
     expect(reported).toContain("deadbeefhash");
   });
 
-  // The boot cases in boot.test.ts pin that a damaged restored membership document rejects the start
-  // with this error; this follows the error from the start's rejection to the rendered page.
+  // The boot cases in boot.restore.test.ts pin that a damaged restored membership document rejects
+  // the start with this error; this follows the error from the start's rejection to the rendered page.
   it("shows a start refused with restore.membership_invalid its own line on the page", async () => {
     const writeRecoveryState = vi.fn<(stateDir: string, next: RecoveryState) => Promise<void>>(() =>
       Promise.resolve(),

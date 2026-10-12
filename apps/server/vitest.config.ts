@@ -4,6 +4,7 @@ export default defineConfig({
   test: {
     globals: true,
     clearMocks: false,
+    setupFiles: ["src/testing/byte-equality-setup.ts"],
     // `useVenueDb` times its own `beforeAll` (`packages/db/src/testing/venue-db.ts`, 60s unless a
     // suite passes `timeoutMs`), so `hookTimeout` bounds the hooks left untimed: that helper's
     // per-test reset and close, and any hook a test file writes for itself.

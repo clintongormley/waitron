@@ -4435,13 +4435,6 @@ the tree. What remains, largest first:
   (`scripts/vitest-file-progress.mjs`); that run was cancelled, not timed out, after 3m26s with no
   output.
 
-- **Seven tests in `apps/server/src/bill-payments.test.ts` take 16–27 s each in CI** — about 150 s of
-  the file's 175 s, and the floor under the six server shards (A441, #1477). In a Linux container
-  with four CPUs they take about 2 s each, with or without a reachable DNS server, and the file 37 s
-  with coverage; so they are probably CPU-heavy whole-table reads and comparisons that slow down
-  under CI's four workers; that cause is not measured on a CI runner. Next: narrow what they read, or move them to a file of
-  their own, after lane E's departments slice (which edits the file) lands.
-
 _Formerly B9, and the old Track C's development-stack and house-rules items; part of A9._ Detail: [backlog/ci.md](backlog/ci.md).
 
 - **A dev venue built before A230 keeps the tax ID `50000000K`**, whose sales 0.2.1 refuses;

@@ -10,11 +10,12 @@ function fakeModule(relativeModuleId, { project = "", state = "passed" } = {}) {
 }
 
 // A hand-driven clock and interval, so no case waits on a real timer.
-function harness() {
+function harness(options = {}) {
   const lines = [];
   const clock = { now: 0 };
   const timers = [];
   const reporter = new FileProgressReporter({
+    ...options,
     now: () => clock.now,
     write: (line) => lines.push(line),
     setInterval: (fn, ms) => {
@@ -101,6 +102,55 @@ describe("vitest file progress reporter", () => {
 
   it("prints an end with no duration for a file it never saw start", () => {
     const { reporter, lines } = harness();
+    reporter.onTestModuleEnd(fakeModule("src/c.test.ts"));
+    expect(lines).toEqual(["[file-progress] end src/c.test.ts passed"]);
+  });
+
+  it("warns GitHub Actions when a file takes longer than 90 seconds by default", () => {
+    const { reporter, lines, clock } = harness();
+    const mod = fakeModule("src/slow.test.ts", { project: "node" });
+    reporter.onTestModuleQueued(mod);
+    clock.now = 95_200;
+    reporter.onTestModuleEnd(mod);
+    expect(lines).toEqual([
+      "[file-progress] start src/slow.test.ts [node]",
+      "[file-progress] end src/slow.test.ts [node] passed 95.2s",
+      "::warning title=Slow test file::src/slow.test.ts [node] took 95.2s; a file over 90s holds up its CI shard (docs/developers/ci-and-gates.md)",
+    ]);
+  });
+
+  it("does not warn for a file that takes exactly the threshold", () => {
+    const { reporter, lines, clock } = harness();
+    const mod = fakeModule("src/edge.test.ts");
+    reporter.onTestModuleQueued(mod);
+    clock.now = 90_000;
+    reporter.onTestModuleEnd(mod);
+    expect(lines).toEqual([
+      "[file-progress] start src/edge.test.ts",
+      "[file-progress] end src/edge.test.ts passed 90.0s",
+    ]);
+  });
+
+  it("takes its threshold from the slowFileMs option", () => {
+    const { reporter, lines, clock } = harness({ slowFileMs: 2000 });
+    const fast = fakeModule("src/fast.test.ts");
+    const slow = fakeModule("src/slow.test.ts");
+    reporter.onTestModuleQueued(fast);
+    reporter.onTestModuleQueued(slow);
+    clock.now = 1999;
+    reporter.onTestModuleEnd(fast);
+    clock.now = 2001;
+    reporter.onTestModuleEnd(slow);
+    expect(lines.slice(2)).toEqual([
+      "[file-progress] end src/fast.test.ts passed 2.0s",
+      "[file-progress] end src/slow.test.ts passed 2.0s",
+      "::warning title=Slow test file::src/slow.test.ts took 2.0s; a file over 2s holds up its CI shard (docs/developers/ci-and-gates.md)",
+    ]);
+  });
+
+  it("does not warn for a file it never saw start, however late it ends", () => {
+    const { reporter, lines, clock } = harness();
+    clock.now = 500_000;
     reporter.onTestModuleEnd(fakeModule("src/c.test.ts"));
     expect(lines).toEqual(["[file-progress] end src/c.test.ts passed"]);
   });

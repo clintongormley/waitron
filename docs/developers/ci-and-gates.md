@@ -465,7 +465,7 @@ list.
 Before calling a package green, verify its CI coverage result on the current head. Run
 `pnpm --filter <pkg> test:coverage` locally when investigating a failure. There is no single `test`
 job: `.github/workflows/ci.yml` runs `test-heavy` (`packages/db`) and `test-server`
-(`apps/server`) as three-way and six-way file shards, each with a `-merge` job that enforces the thresholds on
+(`apps/server`) as three-way and eight-way file shards, each with a `-merge` job that enforces the thresholds on
 the merged blob (#216) — `apps/server`'s two stream tests run in `test-server-stream` instead, whose
 blob joins the same merge. `test-dashboard` and `test-venue-service` are four-way and `test-till`
 two-way file shards in the same pattern, each with its own `-merge` job, so those three packages'
@@ -517,6 +517,11 @@ to a browser worker, which happens in batches, so it can come before the file is
 the default one; `test:shard` already names `default` and `blob`. Guard: the file-progress case in
 `scripts/ci-workflow.test.mjs`, weaker than its name — it reads `ci.yml` as text, and finds a test
 command only in a `Run the … shard` step or the stream step.
+
+A file whose `end` line comes more than 90 seconds after its `start` line also gets a GitHub
+warning annotation (`::warning title=Slow test file::`), because one file that long holds up its
+shard (see "Every CI test job should finish in about 4 minutes" below). In browser mode that time can
+include waiting to be loaded (above). It warns and never fails the job.
 
 ### The `ci` check passes only when every needed job succeeded or was skipped
 
@@ -807,6 +812,65 @@ two states are NOT self-repairing: a `:main` carrying no build id, and one built
 repository's history does not contain (an image built outside CI, or a rewritten history). Both
 wedge every later publish identically until `:main` is deleted or retagged by hand. Its suite,
 `scripts/main-tag-guard.test.mjs`, runs the real script against a stubbed `docker` and `gh`.
+
+### Every CI test job should finish in about 4 minutes
+
+Owner decision (2026-10-09, restated 2026-10-11 in the watcher session: "if something regularly
+takes 10 minutes it is not good, we want tests to max out at around 4 minutes" — "Each test group
+≤ 4 min"): each CI test job, one shard of one package, should take about 4 minutes at most on a
+normal runner. The whole run's wall time is not the target. The fix for a job over it is at its
+cause: a shard holding one slow file (split the file or find why it is slow), too few shards for the
+package, or slow setup. Never cut what a test checks to save time, and never move coverage or
+mutation out of CI.
+
+Measured for A528 over the 42 successful `main` runs that ran the test jobs, up to run
+38177927525 (2026-10-11), minutes from the jobs API:
+
+| Job                 | Median | Worst | Of which the test step (median) |
+| ------------------- | ------ | ----- | ------------------------------- |
+| `test-server (5)`   | 5.3    | 5.9   | 4.6                             |
+| `test-server (4)`   | 3.9    | 4.2   | 3.3                             |
+| `test-server (2)`   | 3.7    | 4.1   | 3.1                             |
+| `test-light-b`      | 3.6    | 3.8   | 3.0                             |
+| `test-server (6)`   | 3.6    | 4.3   | 3.0                             |
+| `test-light-a`      | 3.4    | 3.7   | 2.9                             |
+| `test-dashboard (3)`| 3.4    | 4.1   | 2.8                             |
+
+Every other test job's median was 3.2 minutes or less. The steps beside the test step (checkout,
+pnpm, Node, install, the blob upload) took 0.5 to 0.7 minutes of each job.
+
+`test-server (5)` held the two slowest files in the package, read from the shards' `[file-progress]`
+lines in runs 38177927525, 38171667214 and 38170124439: `src/bill-payments.test.ts` (140.5–208.5 s) and
+`src/boot.test.ts` (163.4–186.8 s). No other server file took more than 73.6 s.
+
+- `bill-payments.test.ts` was slow in Vitest's own deep equality, not in the product: a CPU profile
+  of a local run put most of its time in `@vitest/expect`'s `keys`, `eq` and
+  `iterableEquality`. Its whole-table `toEqual`s read `print_jobs`, whose `payload` is a
+  `Uint8Array`, and Vitest compares a typed array one element at a time. `apps/server` now registers
+  an equality tester for byte arrays (`apps/server/src/testing/byte-equality.ts`, through the
+  config's `setupFiles`) that compares two arrays of one constructor with `Buffer.compare`, and
+  leaves equal bytes to Vitest when either array has an enumerable own key besides its indices,
+  string or symbol. Measured locally with coverage: the file fell from 44.3 s to 6.4–7.3 s; with
+  the tester, `print-api.test.ts`, `receipt-print.test.ts` and `till-api.receipt.test.ts` together
+  took 24.2–29.6 s.
+- `boot.test.ts` is real work — a CPU profile put about half of a local run in migrating fresh
+  databases and about a sixth in deriving and generating keys — so it was split, test for test, into
+  `boot.test.ts`, `boot.restore.test.ts` and `boot.setup-routes.test.ts` (17.9, 14.4 and 23.4 s
+  locally, each file run alone, without coverage), with their shared helpers in
+  `apps/server/src/testing/boot-harness.ts`. Vitest runs one file on one worker, so a file of that
+  size set a floor under its shard.
+- `test-server` went from six shards to eight. Vitest 4.1.11 assigns files to shards by the sha1 of
+  each file's path, sorted and cut into equal COUNTS (`BaseSequencer.shard`), so which files share a
+  shard is luck. A simulation of that split over the three runs' per-file times, with the two fixes
+  above applied, left the busiest of six shards with about 870 s of file time (the old shard 5 held
+  about 1,080 s, the old shard 2 about 740 s at a 3.7-minute median) and the busiest of eight with
+  about 690 s.
+
+Guards, each weaker than the rule: the 90-second warning above names a slow FILE but never fails a
+job; the "pin each sharded package's shard count" case in `scripts/ci-workflow.test.mjs` holds the
+counts, not the times; and each test job's 10-minute `timeout-minutes` (the "bounds every test job"
+case in the same file) is the only one that stops a job: GitHub cancels it at 10 minutes, which fails
+the `ci` check. Nothing measures a job's time against 4 minutes.
 
 ### A cheap job can still be the critical path
 
@@ -1192,7 +1256,7 @@ every other gate false. `test-server`'s and `test-server-stream`'s `if:` ask for
 request, PR #682: its run for `1081bbb7c`, which changed `ci.yml`, docs and root scripts but neither
 installer, skipped the shards and `test-server-stream`; its next run, 36231025265, for a commit
 that added one line to `scripts/setup-litestream.mjs`, ran both and `test-server-merge`. The cost, read from the jobs' `if:` lines
-in `.github/workflows/ci.yml`: on a pull request an installer change runs the server shards (three then, six since A441),
+in `.github/workflows/ci.yml`: on a pull request an installer change runs the server shards (three then, six from A441, eight since A528),
 `test-server-stream`, `test-server-merge`, and `typecheck` and `bundle-smoke`, which ask for
 `code` alone; on its merge to `main` those two run again, the forced global scope runs every test job and `mutation-shared`, and
 the push runs `image` and, once `ci` passes, `publish`, which moves `:main` unless

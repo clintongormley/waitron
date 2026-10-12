@@ -1392,8 +1392,6 @@ describe("the sharded jobs", () => {
     PNPM_LS_TEST_TIMEOUT_MS,
   );
 
-  // db's three date from 2026-09-04; the rest were set for the owner's four-minute bound
-  // (2026-10-09).
   it("pin each sharded package's shard count", () => {
     const counts = Object.fromEntries(
       shardedJobs.map(({ pkg, body }) => [pkg, shardDenominator(body)]),
@@ -1401,7 +1399,7 @@ describe("the sharded jobs", () => {
     expect(counts).toEqual({
       "@waitron/dashboard": 4,
       "@waitron/db": 3,
-      "@waitron/server": 6,
+      "@waitron/server": 8,
       "@waitron/venue-service": 4,
       "@waitron/till": 2,
     });
