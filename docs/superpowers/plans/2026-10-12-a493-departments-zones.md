@@ -320,3 +320,21 @@ fixture; it is recorded in the backlog and lane questions for an owner ruling. N
 guard or fiscal invariant is weakened to obtain green CI. The branch must not land while
 that required case fails. Earlier local-readiness notes do not constitute current-head CI
 approval or whole-feature completion.
+
+
+Owner ruling continuation (2026-10-12): make `createOpenOrder` resolve an omitted zone
+through the existing device-profile/counter rule and record context for empty orders too.
+Pass a source order when creating a split so its frozen context travels at creation;
+refuse a missing source context. Port test-only create-then-copy fixtures without changing
+their behavioral assertions. Replace the explicitly owner-approved contextless-payment
+success case with a domain refusal and exact snapshots of money, filing, number, drawer,
+order, line, kitchen and incident rows. Delete the now-resolved backlog decision entry.
+
+The initial new creation tests reported five failures and two passes before the fix
+(`owner-zone-red.log` in the lane receipts). The focused nine-file selection reported
+602 passing cases after the implementation and initial fixture ports. Venue-service's
+current-head CI coverage merge reported 94.93% branches against 95%; additional real
+pointer/keyboard cases cover a second pointer, no destination, wrapping and ignored keys.
+A full package coverage investigation and final current-head CI remain required.
+The completed whole-branch Claude approval is retained; the new order-creation continuation
+gets a bounded review of its added code, rather than repeating the earlier entire feature.

@@ -379,17 +379,40 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     ]);
   });
 
-  it("settles a paid order with no service zone and leaves its unroutable dish unstamped, with no zone in the alert", async () => {
+  it("refuses a damaged order with no service context before money, filing, number, drawer or kitchen changes", async () => {
     const made = await dish("Unzoned soup");
     const id = randomUUID();
     await park(id, [made]);
     await inTx(v, async (tx) =>
       tx.run(sql`delete from order_service_contexts where working_order_id = ${id}`),
     );
-    const res = await payCash(await enrolTill(), id);
-    expect(res.status).toBe(200);
-    expect(await filedFor(id)).toBe(1);
-    expect(await statusOf(id)).toBe("settled");
+    const till = await enrolTill();
+    const facts = () => ({
+      sales: suite.db.all(sql`select * from sales order by id`),
+      payments: suite.db.all(sql`select * from payments order by id`),
+      billPayments: suite.db.all(sql`select * from bill_payments order by id`),
+      fiscal: suite.db.all(sql`select * from registros_facturacion order by id`),
+      series: suite.db.all(sql`select * from invoice_series order by id`),
+      counters: suite.db.all(sql`select * from working_order_counters order by node_id`),
+      jobs: suite.db.all(sql`select * from print_jobs order by id`),
+      drawers: suite.db.all(sql`select * from drawer_opens order by id`),
+      orders: suite.db.all(sql`select * from working_orders order by id`),
+      lines: suite.db.all(sql`select * from working_order_lines order by id`),
+      kitchen: suite.db.all(sql`select * from ticket_items order by id`),
+      incidents: suite.db.all(sql`select * from incidents order by id`),
+    });
+    const before = facts();
+    const res = await payCash(till, id);
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: {
+        code: "department.operation_description_required",
+        params: { departmentId: null },
+      },
+    });
+    expect(facts()).toEqual(before);
+    expect(await suite.db.select().from(sales).where(eq(sales.workingOrderId, id))).toEqual([]);
+    expect(await statusOf(id)).toBe("open");
     expect(await kitchenItems(id)).toEqual([]);
     const [line] = await inTx(v, (tx) =>
       tx
@@ -398,12 +421,6 @@ describe("paying a pay-first order, or an open counter order in a zone that send
         .where(eq(workingOrderLines.workingOrderId, id)),
     );
     expect(line!.sentAt).toBeNull();
-    const alerts = await alertsFor(await saleOf(id));
-    expect(alerts).toEqual([
-      expect.objectContaining(dishNotSent(id, made.name, await orderNumberOf(id), "Mesa 3")),
-    ]);
-    expect(alerts[0]!.params).not.toHaveProperty("zoneId");
-    expect(alerts[0]!.params).not.toHaveProperty("zoneName");
   });
 
   it("does the same for a walk-up cash sale", async () => {

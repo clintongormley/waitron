@@ -24,6 +24,7 @@ import {
 import { createOpenOrder, placeOrder } from "./working-order.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { provisionBillVenue, tabWith, send, type BillVenue } from "./testing/bill-venue.js";
+import { offerProducts } from "./testing/zone-offers.js";
 
 let venue: BillVenue;
 let departmentId: string;
@@ -116,6 +117,37 @@ it("integrated capture files the department description and replay keeps its fil
   expect(await payIntegrated({ ...deps(), provider }, venue.cfg, input)).toEqual(first);
   expect(facts()).toEqual(before);
   expect(records(input.id)).toEqual([{ description: "Dining meals" }]);
+});
+
+it("a counter sale sent without a zone records the selected zone and files that department's description", async () => {
+  const counter = await withTransaction(venue.db, async (tx) => {
+    const offers = await offerProducts(tx, venue.cfg, { zone: "counter" });
+    const [zone] = await tx
+      .select()
+      .from(zoneServicePolicies)
+      .where(eq(zoneServicePolicies.zoneId, offers.zoneId));
+    await tx
+      .update(departmentReceipts)
+      .set({ receipt: { operationDescription: "Counter drinks" } })
+      .where(eq(departmentReceipts.departmentId, zone!.departmentId));
+    return { ...offers, departmentId: zone!.departmentId };
+  });
+  const product = venue.db.all<{ id: string }>(
+    sql`select product_id as id from menu_items where id = ${venue.offerFor("Caña")}`,
+  )[0]!;
+  const id = randomUUID();
+  const result = await send(venue.app, venue.cookie, "POST", "/api/sales", {
+    workingOrderId: id,
+    lines: [{ menuItemId: counter.offerFor(product.id), quantity: "1" }],
+    tender: { method: "cash", amount: "3.00" },
+  });
+  expect(result.status).toBe(200);
+  expect(
+    venue.db.all(
+      sql`select zone_id as zoneId, department_id as departmentId from order_service_contexts where working_order_id = ${id}`,
+    ),
+  ).toEqual([{ zoneId: counter.zoneId, departmentId: counter.departmentId }]);
+  expect(records(id)).toEqual([{ description: "Counter drinks" }]);
 });
 
 it.each(["cash", "card"] as const)(

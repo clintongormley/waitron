@@ -27,7 +27,6 @@ import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { createOpenOrder } from "./working-order.js";
-import { VENUE_SERVICE } from "./modules.js";
 import { seedSessionDevice } from "./testing/session-device.js";
 
 // The HTTP surface of the transfer route: the session guard, the malformed-`:id`/`toBillId` screens
@@ -161,8 +160,11 @@ async function setupTabsApp(
       lines: [{ menuItemId: cafeOffer, quantity: aQty }],
     });
     const tabB = randomUUID();
-    await createOpenOrder(tx, cfg, tabB, [], null, { partyId: tabAResult.partyId });
-    await VENUE_SERVICE.copyOrderContext(tx, cfg, tabAResult.tabId, tabB);
+    await createOpenOrder(tx, cfg, tabB, [], null, {
+      partyId: tabAResult.partyId,
+      existingService: true,
+      copyServiceContextFrom: tabAResult.tabId,
+    });
     return { tabA: tabAResult.tabId, tabB };
   });
   return { app, d, tabA, tabB, cookie };

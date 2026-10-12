@@ -24,7 +24,6 @@ import {
   type PartyVenue,
 } from "./testing/party-venue.js";
 import { createOpenOrder, carveOffLines } from "./working-order.js";
-import { VENUE_SERVICE } from "./modules.js";
 import { moveDishesToStation } from "./station-move.js";
 import { placeGroups, fireGroup } from "./order-groups.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
@@ -511,8 +510,11 @@ it.each(["leave", "send", "move", "split"] as const)(
       const otherBill = randomUUID();
       billIds.push(otherBill);
       await inTx(v, async (tx) => {
-        await createOpenOrder(tx, v.cfg, otherBill, [], null, { partyId: seated.partyId });
-        await VENUE_SERVICE.copyOrderContext(tx, v.cfg, seated.tabId, otherBill);
+        await createOpenOrder(tx, v.cfg, otherBill, [], null, {
+          partyId: seated.partyId,
+          existingService: true,
+          copyServiceContextFrom: seated.tabId,
+        });
         await carveOffLines(tx, v.cfg, seated.tabId, otherBill, [{ lineNo: 1, quantity: "1" }], {
           refuseHeld: false,
         });

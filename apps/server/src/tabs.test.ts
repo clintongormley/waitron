@@ -65,7 +65,6 @@ import {
 import { finishTable, seatTable, partyRevisionOfOrder } from "./parties.js";
 import "./errors.js";
 import { mergeBills, splitBill, transferItems } from "./bill-actions.js";
-import { VENUE_SERVICE } from "./modules.js";
 import { fireGroup } from "./order-groups.js";
 import { cancelLine } from "./testing/cancel-line.js";
 import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
@@ -2524,8 +2523,11 @@ async function twoTabs() {
   const { tabId, partyId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
   const otherId: string = randomUUID();
   await asApp(cfg, async (tx) => {
-    await createOpenOrder(tx, cfg, otherId, [], null, { partyId });
-    await VENUE_SERVICE.copyOrderContext(tx, cfg, tabId, otherId);
+    await createOpenOrder(tx, cfg, otherId, [], null, {
+      partyId,
+      existingService: true,
+      copyServiceContextFrom: tabId,
+    });
   });
   await asApp(cfg, (tx) =>
     addTabRound(tx, cfg, tabId, [

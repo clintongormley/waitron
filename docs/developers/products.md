@@ -261,6 +261,13 @@ venue has none (`resolveHttpOrderZone`, `apps/server/src/till-api.ts`; `resolveN
 refuses removal of the last usable profile zone and replaces a removed starting zone with a
 permitted survivor. The fallback above still handles moved or invalid stored scope.
 
+Every new order, including an empty bill, records its zone at creation. Direct server callers
+use the same profile/counter rule when they omit a zone; a delivery table supplies its own zone.
+Splits retain their source's recorded zone and payment flow. A missing source context refuses
+the split; a removed order context refuses payment before filing. The creation and damaged-order
+cases are in `apps/server/src/order-creation-zone.test.ts` and
+`apps/server/src/till-api.unroutable-dish.test.ts`.
+
 The top-sellers report groups lines under the parent's staff name, `sale_lines.name`, ranks those
 products by quantity sold (name breaks a tie), and lists
 under each one a row per `sale_lines.variant_name` sold with it — so "Wine by the glass" shows its

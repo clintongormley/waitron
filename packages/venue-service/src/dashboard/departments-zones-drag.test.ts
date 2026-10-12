@@ -113,6 +113,95 @@ it("a press under five pixels sends no move", async () => {
   pointer(document, "pointerup", at);
   expect(writes).toEqual([]);
 });
+
+it("another pointer cannot move, release or cancel the active zone drag", async () => {
+  const { table, writes, grip } = await setup();
+  const target = table.shadowRoot!.querySelector('[data-row-key="department:d2"]')!;
+  pointer(grip, "pointerdown", point(grip));
+  for (const type of ["pointermove", "pointerup", "pointercancel"]) {
+    document.dispatchEvent(
+      new PointerEvent(type, {
+        ...point(target),
+        pointerId: 43,
+        button: 0,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+  }
+  expect(writes).toEqual([]);
+  expect(table.shadowRoot!.querySelector('[data-test="lifted-zone-row"]')).toBeNull();
+  pointer(document, "pointermove", point(target));
+  expect(table.shadowRoot!.querySelector('[data-test="lifted-zone-row"]')).not.toBeNull();
+  pointer(document, "pointerup", point(target));
+  await expect
+    .poll(() => writes)
+    .toEqual([["/management-api/venue-service/zones/z1", "PUT", { departmentId: "d2" }]]);
+});
+
+it.each(["Enter", " "])(
+  "keyboard drop with %j and no other live department cancels without writing",
+  async (drop) => {
+    const { el, table, writes } = await setup();
+    el.model = { ...el.model!, departments: [el.model!.departments[0]!] };
+    await el.updateComplete;
+    await table.updateComplete;
+    const grip = table.shadowRoot!.querySelector<HTMLElement>('[data-test="zone-grip-z1"]')!;
+    grip.focus();
+    await userEvent.keyboard("{Enter}");
+    expect(table.shadowRoot!.querySelector('[data-test="lifted-zone-row"]')).not.toBeNull();
+    await userEvent.keyboard("{ArrowDown}{ArrowUp}");
+    expect(table.shadowRoot!.querySelector('[part~="drop-into"]')).toBeNull();
+    await userEvent.keyboard(drop === "Enter" ? "{Enter}" : " ");
+    expect(writes).toEqual([]);
+    expect(table.shadowRoot!.querySelector('[data-test="lifted-zone-row"]')).toBeNull();
+  },
+);
+
+it("keyboard navigation wraps in both directions and ignores unrelated keys and other grips", async () => {
+  const { el, table, writes, grip } = await setup();
+  el.model = {
+    ...el.model!,
+    departments: [
+      ...el.model!.departments,
+      {
+        id: "d4",
+        name: "Last",
+        tradingName: "Last shop",
+        active: true,
+      },
+    ],
+  };
+  await el.updateComplete;
+  await table.updateComplete;
+  const key = (target: Element, value: string) =>
+    target.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: value,
+        bubbles: true,
+        composed: true,
+        cancelable: true,
+      }),
+    );
+  key(grip, " ");
+  key(grip, "ArrowUp");
+  const marked = () =>
+    [...table.shadowRoot!.querySelectorAll('[part~="drop-into"]')].map(
+      (cell) => cell.closest("tr")!.dataset.rowKey,
+    );
+  expect(marked()).toEqual(Array(5).fill("department:d4"));
+  key(grip, "ArrowDown");
+  expect(marked()).toEqual(Array(5).fill("department:d2"));
+  key(grip, "ArrowUp");
+  expect(marked()).toEqual(Array(5).fill("department:d4"));
+  key(grip, "a");
+  key(table.shadowRoot!.querySelector('[data-test="zone-grip-z2"]')!, "ArrowDown");
+  expect(marked()).toEqual(Array(5).fill("department:d4"));
+  key(grip, " ");
+  await expect
+    .poll(() => writes)
+    .toEqual([["/management-api/venue-service/zones/z1", "PUT", { departmentId: "d4" }]]);
+});
 it("a real pointer drag releases over the pinned cell without opening an editor", async () => {
   const { el, table, grip, writes } = await setup();
   const opened = vi.fn();

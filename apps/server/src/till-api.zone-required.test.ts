@@ -38,9 +38,7 @@ import { SESSION_COOKIE } from "./till-session.js";
 import "./errors.js";
 import { BASIC_ACTIONS } from "./testing/session-device.js";
 
-// Every line sold is priced from a service zone's menu offer. A venue with no zone, and an order
-// with no service context, sell nothing; an order with no lines still opens. The fiscal seat is an
-// empty object, so a case that reached a filing would fail rather than file.
+// The empty fiscal seat makes any unintended filing fail rather than file.
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
@@ -236,29 +234,32 @@ describe("a venue with no service zone sells nothing", () => {
   }
 });
 
-describe("an order with no service context takes no lines", () => {
-  it("parkOrder with no zone refuses order.service_context_missing, whatever the line names", async () => {
+describe("an order requires a resolvable service zone", () => {
+  it("parkOrder with no zone or counter default refuses service_zone.default_missing, whatever the line names", async () => {
     const venue = await seedVenue(suite.db);
     for (const line of [productLine(venue.water), { menuItemId: randomUUID(), quantity: "1" }]) {
       const id = randomUUID();
       await expect(
         parkOrder({ db: suite.db }, venue.cfg, { id, lines: [line] }),
       ).rejects.toMatchObject({
-        code: "order.service_context_missing",
-        params: { workingOrderId: id },
+        code: "service_zone.default_missing",
+        params: {},
       });
     }
     expect(await recorded()).toEqual({ orders: 0, lines: 0 });
   });
 
-  it("createOpenOrder with no lines and no zone opens an empty order", async () => {
+  it("createOpenOrder with no lines, zone or counter default refuses before creating an empty order", async () => {
     const venue = await seedVenue(suite.db);
     const id = randomUUID();
-    const opened = await withTransaction(suite.db, (tx) =>
-      createOpenOrder(tx, venue.cfg, id, [], null),
+    const before = suite.db.all(sql`select * from working_order_counters order by node_id`);
+    await expect(
+      withTransaction(suite.db, (tx) => createOpenOrder(tx, venue.cfg, id, [], null)),
+    ).rejects.toMatchObject({ code: "service_zone.default_missing", params: {} });
+    expect(await recorded()).toEqual({ orders: 0, lines: 0 });
+    expect(suite.db.all(sql`select * from working_order_counters order by node_id`)).toEqual(
+      before,
     );
-    expect(opened.lineRows).toEqual([]);
-    expect(await recorded()).toEqual({ orders: 1, lines: 0 });
   });
 });
 

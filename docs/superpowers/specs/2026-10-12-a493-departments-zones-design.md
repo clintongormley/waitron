@@ -182,3 +182,20 @@ exist. Creation, unassigned assignment and permanent Delete remain. The internal
 operation and its public client remain for the independent route contract specified above.
 The live loader, inherited-policy flow, geometry and deleted-editor assertions are ported to
 these owners; complete branch acceptance and review remain pending.
+
+
+## Owner ruling: every new order has a zone (2026-10-12)
+
+Every new order records its service context at creation. An explicit zone (including the
+delivery table's zone) wins; otherwise use the device profile's starting zone, then the
+location's counter-default zone through `resolveNewOrderZone`. With neither, refuse
+`service_zone.default_missing` before allocating an order number. An empty order follows
+the same rule. A party bill uses its party's zone; a split copies the source's recorded
+zone, department and payment flow instead of selecting current defaults or reopening service.
+A damaged split source with no context is refused `order.service_context_missing`.
+
+An order whose context has been removed is damaged data. Payment refuses it before
+money, filing, invoice numbers, drawer or kitchen changes; no default department supplies
+a description. The owner explicitly retires the contextless payment-success expectation in
+`till-api.unroutable-dish.test.ts` and approves equally strict refusal/unchanged-state checks.
+This replaces the proposed default-department option in the earlier parked checkpoint.

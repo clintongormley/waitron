@@ -1293,15 +1293,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
 
 ### Service periods, opening hours and departments
 
-- **A493. Resolve the paid order with no service context before landing the dialog branch.**
-  PR #1592 has the list, protected editors and department-owned receipts implemented. Its
-  required CI exposed `till-api.unroutable-dish.test.ts` deleting all order context and expecting
-  payment to succeed, while the A493 contract refuses that missing department. Owner decision:
-  use the local default department's authored description for a real unzoned order, or change
-  this scenario to a refusal. Keep the existing fiscal and payment checks until that decision.
-  [Detail](backlog/service-periods.md#a493-missing-service-context-decision)
-
-
 - **A per-field department policy repair changes the trading-name default.** With no policy row,
   readers show the trading name off; PATCH of `orderStart` inserts a row with it on. A real route
   probe at base `c704ac0dc` returned `{before:false, after:true}`. Left open by A493's review;

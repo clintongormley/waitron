@@ -469,7 +469,9 @@ async function fireContextlessDish(
   pickIds: string[],
 ): Promise<string> {
   const id = randomUUID();
-  await createOpenOrder(tx, cfg, id, [], null);
+  const offers = await offerProducts(tx, cfg);
+  await createOpenOrder(tx, cfg, id, [], null, { zoneId: offers.zoneId });
+  await tx.run(sql`delete from order_service_contexts where working_order_id = ${id}`);
   const placeholder = {
     workingOrderId: id,
     name: "Line",
