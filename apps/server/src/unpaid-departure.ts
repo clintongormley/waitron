@@ -89,14 +89,12 @@ export async function recordUnpaidDeparture(
       workingOrderId: holding.workingOrderId,
     });
   }
-  // What is left of the in-flight check once no bill holds a payment: a card at the reader for a
-  // whole bill, which marks the bill rather than writing a payment of it.
   await refusePaymentInFlight(tx, [...openIds]);
-  for (const bill of owing) {
-    if (bill.status === "placed") {
-      await refusePlacedPaymentInFlight(deps.db, tx, bill.workingOrderId);
-    }
-  }
+  await refusePlacedPaymentInFlight(
+    deps.db,
+    tx,
+    owing.filter((bill) => bill.status === "placed").map((bill) => bill.workingOrderId),
+  );
 
   const invoices = [];
   for (const bill of toInvoice) {

@@ -3481,7 +3481,7 @@ async function readChoiceChangeableOrder(
     });
   }
   await refusePaymentInFlight(tx, [orderId]);
-  if (order.status === "placed") await refusePlacedPaymentInFlight(db, tx, orderId);
+  if (order.status === "placed") await refusePlacedPaymentInFlight(db, tx, [orderId]);
   return order;
 }
 

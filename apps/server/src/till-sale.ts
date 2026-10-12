@@ -999,29 +999,15 @@ async function runIntegratedPay(
   admit: WriteAdmission,
 ): Promise<IntegratedPayOutcome> {
   const live = liveAttemptsOf(deps.db);
-  // The mark this call wrote, once P1 has written it; unregistered however the call ends.
-  let marked: string | null = null;
-  let heldPlaced = false;
+  // This call's entry in the live map, once P1 has registered it; unregistered however the call ends.
+  let held: string | null = null;
   try {
-    return await payIntegrated(
-      deps,
-      cfg,
-      req,
-      operatorId,
-      live,
-      admit,
-      (attemptAt) => {
-        marked = attemptAt;
-        live.set(req.id, attemptAt);
-      },
-      () => {
-        heldPlaced = true;
-        holdPlacedAttempt(deps.db, req.id);
-      },
-    );
+    return await payIntegrated(deps, cfg, req, operatorId, live, admit, (entry) => {
+      held = entry;
+      live.set(req.id, entry);
+    });
   } finally {
-    if (marked !== null && live.get(req.id) === marked) live.delete(req.id);
-    if (heldPlaced) releasePlacedAttempt(deps.db, req.id);
+    if (held !== null && live.get(req.id) === held) live.delete(req.id);
   }
 }
 
@@ -1032,8 +1018,7 @@ async function payIntegrated(
   operatorId: string | undefined,
   live: ReadonlyMap<string, string>,
   admit: WriteAdmission,
-  onMarked: (attemptAt: string) => void,
-  onPlacedCollect: () => void,
+  onLive: (entry: string) => void,
 ): Promise<IntegratedPayOutcome> {
   // ---- P1 (tx A) ----
   const prepared = await withTransaction(deps.db, async (tx) => {
@@ -1090,7 +1075,7 @@ async function payIntegrated(
           : { kind: "recover" as const, captured };
       }
 
-      if (locked.status === "placed") await refusePlacedPaymentInFlight(deps.db, tx, req.id);
+      if (locked.status === "placed") await refusePlacedPaymentInFlight(deps.db, tx, [req.id]);
 
       if (outstanding !== undefined) {
         if (compareDecimal(outstanding.amountDue, ZERO) <= 0) {
@@ -1102,7 +1087,7 @@ async function payIntegrated(
             ticket: await settleOwingNothing(tx, deps, cfg, req.id, outstanding.saleId),
           };
         }
-        if (locked.status === "placed") onPlacedCollect();
+        if (locked.status === "placed") onLive(PLACED_ATTEMPT);
         return { kind: "settle" as const, outstanding };
       }
 
@@ -1170,13 +1155,11 @@ async function payIntegrated(
         .update(workingOrders)
         .set({ paymentAttemptAt: attemptAt })
         .where(eq(workingOrders.id, req.id));
-      // Inside the transaction, so no release pass runs between the mark and its registration.
-      onMarked(attemptAt);
-    } else {
-      // Inside the transaction, so a cancel either runs first, and this P1 reads it `abandoned`, or
-      // runs after and sees the attempt live.
-      onPlacedCollect();
     }
+    // Inside the transaction, so no release pass runs between a mark and its registration, and a
+    // check of this order in any transaction after this one (`refusePlacedPaymentInFlight`, a
+    // cancel's `paymentAttemptIsLive`) sees the attempt live until this call ends.
+    onLive(attemptAt ?? PLACED_ATTEMPT);
     return {
       kind: "collect" as const,
       gross,
@@ -1264,35 +1247,28 @@ export function paymentAttemptIsLive(db: Database, workingOrderId: string): bool
 }
 
 /**
- * Refuse `order.payment_in_flight` while a card payment of PLACED order `workingOrderId` could
- * still file its sale: an integrated collection of it running in this process, or a payment its
- * provider has not resolved or no sale records yet. A placed order's collection writes no mark, so
+ * Refuse `order.payment_in_flight` while a card payment of any of these PLACED orders could still
+ * file its sale: an integrated collection of it running in this process, or a payment its provider
+ * has not resolved or no sale records yet. A placed order's collection writes no mark, so
  * `refusePaymentInFlight` does not see one.
  */
 export async function refusePlacedPaymentInFlight(
   db: Database,
   tx: Transaction,
-  workingOrderId: string,
+  orderIds: readonly string[],
 ): Promise<void> {
-  if (
-    paymentAttemptIsLive(db, workingOrderId) ||
-    (await ordersWithUnfiledPayment(tx, [workingOrderId])).has(workingOrderId)
-  ) {
-    throw new AppError("order.payment_in_flight", { workingOrderId });
+  const live = liveAttemptsOf(db);
+  const notLive = orderIds.filter((id) => !live.has(id));
+  const unfiled =
+    notLive.length === 0 ? new Set<string>() : await ordersWithUnfiledPayment(tx, notLive);
+  const inFlight = orderIds.find((id) => live.has(id) || unfiled.has(id));
+  if (inFlight !== undefined) {
+    throw new AppError("order.payment_in_flight", { workingOrderId: inFlight });
   }
 }
 
 /** A placed order writes no mark, so its entry in the live map carries this instead of one. */
 const PLACED_ATTEMPT = "placed";
-
-function holdPlacedAttempt(db: Database, workingOrderId: string): void {
-  liveAttemptsOf(db).set(workingOrderId, PLACED_ATTEMPT);
-}
-
-function releasePlacedAttempt(db: Database, workingOrderId: string): void {
-  const live = liveAttemptsOf(db);
-  if (live.get(workingOrderId) === PLACED_ATTEMPT) live.delete(workingOrderId);
-}
 
 /**
  * Which of these orders has a payment that is, or could still become, a capture no sale records:
@@ -1920,7 +1896,7 @@ async function runCollectOrder(
       throw new AppError("working_order.not_placed", { workingOrderId: req.id });
     }
     await refuseBillWithPayments(tx, req.id);
-    await refusePlacedPaymentInFlight(deps.db, tx, req.id);
+    await refusePlacedPaymentInFlight(deps.db, tx, [req.id]);
 
     // AFTER the replay check, so a retry is never refused for its body shape.
     if (req.tender.method !== "cash" && req.tender.method !== "card") {
