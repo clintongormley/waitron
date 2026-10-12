@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import {
   encodeEmergencyIdentity,
   installationChecksum,
@@ -231,6 +232,29 @@ export function validateAllocationEnvelope(
   permission: unknown,
   context: AllocationContext,
 ): AllocationValidation {
+  return validateEnvelope(input, permission, context, false);
+}
+
+export function validateAllocationReplay(
+  input: unknown,
+  permission: unknown,
+  context: AllocationContext,
+  committed: { readonly allocation: FiscalAllocation; readonly approval: RecoveryApproval },
+): AllocationValidation {
+  if (
+    !isDeepStrictEqual(input, committed.allocation) ||
+    !isDeepStrictEqual(permission, committed.approval)
+  )
+    return { ok: false, reason: "event_mismatch" };
+  return validateEnvelope(input, permission, { ...context, priorActivation: "none" }, true);
+}
+
+function validateEnvelope(
+  input: unknown,
+  permission: unknown,
+  context: AllocationContext,
+  replay: boolean,
+): AllocationValidation {
   const refuse = (reason: AllocationRefusal): AllocationValidation => ({ ok: false, reason });
   if (!allocationShape(input)) return refuse("malformed_allocation");
   if (!approvalShape(permission)) return refuse("malformed_approval");
@@ -265,7 +289,7 @@ export function validateAllocationEnvelope(
   if (context.priorActivation === "committed") return refuse("prior_activation_requires_replay");
   if (input.source === "emergency" && context.authority.kind === "emergency") {
     if (
-      !emergencyDraws.has(context.authority.draw) ||
+      (!replay && !emergencyDraws.has(context.authority.draw)) ||
       context.authority.draw.identity !== input.installationIdentity
     )
       return refuse("emergency_draw_untrusted");
@@ -278,7 +302,7 @@ export function validateAllocationEnvelope(
     if (!context.authority.incidentRecorded) return refuse("outside_confirmation_missing");
     if (context.authority.knownIdentities === null && !context.authority.uncertaintyRecorded)
       return refuse("emergency_uncertainty_missing");
-    if (context.authority.knownIdentities?.includes(input.installationIdentity))
+    if (!replay && context.authority.knownIdentities?.includes(input.installationIdentity))
       return refuse("identity_known");
   } else {
     if (

@@ -1,7 +1,19 @@
 import { generateKeyPairSync } from "node:crypto";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { deployment, invoiceSeries, nodes, withTransaction, type Transaction } from "@waitron/db";
+import {
+  deployment,
+  invoiceSeries,
+  nodes,
+  openVenueDatabase,
+  withTransaction,
+  type Database,
+  type Transaction,
+  type VenueDatabase,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
@@ -760,5 +772,209 @@ describe("activation over retained fiscal rows", () => {
       { code: "R-P000042", purpose: "rectificative" },
       { code: "S13-P000042", purpose: "standard" },
     ]);
+  });
+});
+
+function emergencyInput() {
+  const draw = fiscal.drawEmergencyIdentity();
+  const input: FiscalAllocation = {
+    ...candidate,
+    allocationId: `emergency-${draw.identity}`,
+    source: "emergency",
+    installationIdentity: draw.identity,
+    series: bases.map((base) => ({ code: `${base.code}-${draw.identity}`, purpose: base.purpose })),
+    reservationEvidence: { checksum: draw.checksum },
+  };
+  const expected: AllocationContext = {
+    ...context,
+    authority: {
+      kind: "emergency",
+      draw,
+      knownIdentities: [],
+      incidentRecorded: true,
+      uncertaintyRecorded: false,
+    },
+  };
+  return { input, expected, draw };
+}
+
+async function inRestoredCopy(body: (db: Database) => Promise<void>) {
+  const directory = await mkdtemp(join(tmpdir(), "waitron-allocation-replay-"));
+  let opened: VenueDatabase | undefined;
+  try {
+    await suite.db.archiveTo(join(directory, "venue.db"));
+    opened = await openVenueDatabase(directory);
+    await opened.close();
+    opened = undefined;
+    opened = await openVenueDatabase(directory);
+    await body(opened.venue);
+  } finally {
+    if (opened !== undefined) await opened.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
+async function rawActivationSnapshot(db: Database) {
+  const result: Record<string, unknown> = {};
+  for (const table of ["registro_sif", "invoice_series", "cadenas", "fiscal_allocations"]) {
+    if (!/^[a-z_]+$/.test(table)) throw new Error("invalid snapshot table");
+    result[table] = (await db.execute(sql.raw(`select * from "${table}" order by rowid`))).rows;
+  }
+  return result;
+}
+
+describe("emergency activation after reopening a restored database", () => {
+  it("returns the committed result from each of two restored copies without the original random draw", async () => {
+    const { input, expected, draw } = emergencyInput();
+    const first = await activate(expected, input);
+    const replay: AllocationContext = {
+      ...expected,
+      priorActivation: "committed",
+      authority: {
+        kind: "emergency",
+        draw: structuredClone(draw),
+        knownIdentities: [draw.identity],
+        incidentRecorded: true,
+        uncertaintyRecorded: false,
+      },
+    };
+    for (let copy = 0; copy < 2; copy++) {
+      await inRestoredCopy(async (db) => {
+        const before = await rawActivationSnapshot(db);
+        expect(
+          await withTransaction(db, (tx) => activateAllocation(tx, node, input, approval, replay)),
+        ).toEqual(first);
+        expect(await rawActivationSnapshot(db)).toEqual(before);
+      });
+    }
+  });
+
+  it("refuses a reconstructed draw for a new activation", async () => {
+    const { input, expected, draw } = emergencyInput();
+    const reconstructed: AllocationContext = {
+      ...expected,
+      authority: {
+        kind: "emergency",
+        draw: structuredClone(draw),
+        knownIdentities: [],
+        incidentRecorded: true,
+        uncertaintyRecorded: false,
+      },
+    };
+    const before = await activationSnapshot();
+    await expect(activate(reconstructed, input)).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "emergency_draw_untrusted" },
+    });
+    expect(await activationSnapshot()).toEqual(before);
+  });
+
+  it("does not replay the committed emergency result without renewed outside confirmation", async () => {
+    const { input, expected, draw } = emergencyInput();
+    await activate(expected, input);
+    const replay: AllocationContext = {
+      ...expected,
+      priorActivation: "committed",
+      authority: {
+        kind: "emergency",
+        draw: structuredClone(draw),
+        knownIdentities: [],
+        incidentRecorded: false,
+        uncertaintyRecorded: false,
+      },
+    };
+    const before = await activationSnapshot();
+    await expect(activate(replay, input)).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "outside_confirmation_missing" },
+    });
+    expect(await activationSnapshot()).toEqual(before);
+  });
+
+  it("cannot change the complete emergency identity set while replaying an event", async () => {
+    const { input, expected } = emergencyInput();
+    await activate(expected, input);
+    const other = emergencyInput();
+    const before = await activationSnapshot();
+    await expect(
+      activate({ ...other.expected, priorActivation: "committed" }, other.input),
+    ).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "event_mismatch" },
+    });
+    expect(await activationSnapshot()).toEqual(before);
+  });
+});
+
+describe("independent attempts from the same old backup", () => {
+  it("cannot reuse an outside-committed emergency event when the local result is absent", async () => {
+    const { input, expected, draw } = emergencyInput();
+    const replay: AllocationContext = {
+      ...expected,
+      priorActivation: "committed",
+      authority: {
+        kind: "emergency",
+        draw: structuredClone(draw),
+        knownIdentities: [draw.identity],
+        incidentRecorded: true,
+        uncertaintyRecorded: false,
+      },
+    };
+    for (let copy = 0; copy < 2; copy++) {
+      await inRestoredCopy(async (db) => {
+        const before = await rawActivationSnapshot(db);
+        await expect(
+          withTransaction(db, (tx) => activateAllocation(tx, node, input, approval, replay)),
+        ).rejects.toMatchObject({
+          code: "sif.allocation_invalid",
+          params: { reason: "prior_activation_requires_replay" },
+        });
+        expect(await rawActivationSnapshot(db)).toEqual(before);
+      });
+    }
+  });
+
+  it("uses different outside incident events and fresh complete identities for two restored copies", async () => {
+    const known: string[] = [];
+    const results: Awaited<ReturnType<typeof activateAllocation>>[] = [];
+    for (const eventId of ["recovery-attempt-1", "recovery-attempt-2"]) {
+      await inRestoredCopy(async (db) => {
+        const { input, expected, draw } = emergencyInput();
+        const permission = { ...approval, eventId, incidentEvidence: `master/${eventId}` };
+        const attempt: AllocationContext = {
+          ...expected,
+          eventId,
+          incidentEvidence: permission.incidentEvidence,
+          reauthentication: { operatorId: permission.operatorId, eventId },
+          authority: {
+            kind: "emergency",
+            draw,
+            knownIdentities: [...known],
+            incidentRecorded: true,
+            uncertaintyRecorded: false,
+          },
+        };
+        const result = await withTransaction(db, (tx) =>
+          activateAllocation(tx, node, input, permission, attempt),
+        );
+        expect(result.activationEventId).toBe(eventId);
+        expect(result.series.map(({ code, purpose }) => ({ code, purpose }))).toEqual([
+          { code: `A-${draw.identity}`, purpose: "standard" },
+          { code: `R-${draw.identity}`, purpose: "rectificative" },
+        ]);
+        expect(
+          (await db.execute(sql`select installation_identity from fiscal_allocations`)).rows,
+        ).toEqual([{ installation_identity: draw.identity }]);
+        expect(known).not.toContain(draw.identity);
+        known.push(draw.identity);
+        results.push(result);
+      });
+    }
+    expect(results[0]!.sifId).not.toBe(results[1]!.sifId);
+    for (const series of results[0]!.series)
+      expect(results[1]!.series.map((entry) => entry.code)).not.toContain(series.code);
+    expect(
+      (await suite.db.execute(sql`select count(*) as n from fiscal_allocations`)).rows,
+    ).toEqual([{ n: 0 }]);
   });
 });

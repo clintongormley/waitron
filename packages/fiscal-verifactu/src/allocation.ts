@@ -14,6 +14,7 @@ import {
 import type { ProvisionedNode } from "@waitron/module";
 import {
   validateAllocationEnvelope,
+  validateAllocationReplay,
   type AllocationContext,
   type AllocationRefusal,
   type AllocationValidation,
@@ -136,20 +137,19 @@ export async function activateAllocation(
     if (stamp?.environment !== "production" && stamp?.environment !== "preproduction")
       return refuse("environment_unstamped");
     if (stamp.environment !== prior.environment) return refuse("environment_mismatch");
-    const validated = validateAllocationEnvelope(allocation, approval, {
-      ...context,
-      priorActivation: "none",
-      taxpayerNif: prior.taxpayerNif,
-      softwareId: prior.softwareId,
-      environment: stamp.environment,
-      requiredBases: prior.bases,
-    });
+    const validated = validateAllocationReplay(
+      allocation,
+      approval,
+      {
+        ...context,
+        taxpayerNif: prior.taxpayerNif,
+        softwareId: prior.softwareId,
+        environment: stamp.environment,
+        requiredBases: prior.bases,
+      },
+      prior,
+    );
     if (!validated.ok) return refuse(validated.reason);
-    if (
-      !isDeepStrictEqual(validated.allocation, prior.allocation) ||
-      !isDeepStrictEqual(validated.approval, prior.approval)
-    )
-      return refuse("event_mismatch");
     const [activeSif] = await tx
       .select({
         id: registroSif.id,
@@ -183,15 +183,13 @@ export async function activateAllocation(
     .update(registroSif)
     .set({ revocadoEn: retiredAt })
     .where(and(eq(registroSif.nodeId, node.nodeId), isNull(registroSif.revocadoEn)));
-  await tx
-    .insert(registroSif)
-    .values({
-      id: sifId,
-      nodeId: node.nodeId,
-      nif: validated.allocation.taxpayerNif,
-      idSistemaInformatico: validated.allocation.softwareId,
-      numeroInstalacion: sql`${validated.allocation.installationIdentity}`,
-    });
+  await tx.insert(registroSif).values({
+    id: sifId,
+    nodeId: node.nodeId,
+    nif: validated.allocation.taxpayerNif,
+    idSistemaInformatico: validated.allocation.softwareId,
+    numeroInstalacion: sql`${validated.allocation.installationIdentity}`,
+  });
   await tx
     .insert(cadenas)
     .values({ nodeId: node.nodeId })
@@ -209,21 +207,19 @@ export async function activateAllocation(
   for (const entry of series)
     await tx.insert(invoiceSeries).values({ ...entry, nodeId: node.nodeId });
   const result: ActivationResult = { activationEventId: validated.approval.eventId, sifId, series };
-  await tx
-    .insert(fiscalAllocations)
-    .values({
-      eventKey: result.activationEventId,
-      allocationKey: validated.allocation.allocationId,
-      nodeId: node.nodeId,
-      sifId,
-      taxpayerNif: validated.allocation.taxpayerNif,
-      softwareId: validated.allocation.softwareId,
-      environment: validated.allocation.environment,
-      installationIdentity: validated.allocation.installationIdentity,
-      allocation: validated.allocation,
-      approval: validated.approval,
-      bases: bases.length > 0 ? bases : context.requiredBases,
-      result,
-    });
+  await tx.insert(fiscalAllocations).values({
+    eventKey: result.activationEventId,
+    allocationKey: validated.allocation.allocationId,
+    nodeId: node.nodeId,
+    sifId,
+    taxpayerNif: validated.allocation.taxpayerNif,
+    softwareId: validated.allocation.softwareId,
+    environment: validated.allocation.environment,
+    installationIdentity: validated.allocation.installationIdentity,
+    allocation: validated.allocation,
+    approval: validated.approval,
+    bases: bases.length > 0 ? bases : context.requiredBases,
+    result,
+  });
   return result;
 }

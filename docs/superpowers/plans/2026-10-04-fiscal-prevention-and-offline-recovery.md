@@ -285,6 +285,20 @@ text through SQL while the declaration and counter-based host consumers still aw
 Do not expose or call it from setup/restore until that coupled transition, restart/emergency
 replay and two-restored-database qualification are complete. Task 4 remains incomplete.
 
+**2026-10-12 replay and host-audit checkpoint:** the owner approved the one additional
+append-only table-name entry. Its guard passes. Emergency replay now compares the complete
+persisted allocation and approval before revalidating current scope and outside confirmation;
+a new allocation still requires a fresh in-process random draw. Qualification reopens two archived
+database copies, replays the committed result without that original draw, and compares all
+activation rows. Two copies of a pre-activation backup refuse reuse when the committed local result
+is absent; independently recorded attempts use separate fresh emergency identity sets.
+
+The host audit found a standby lifecycle decision: reservation/adoption happen before the current
+primary stops, while the recovery approval requires isolation before activation. The concrete
+[decision inventory](2026-10-12-w41s4-standby-activation-decision.md) proposes dormant reservation
+followed by activation at promotion. No host path or SIF declaration has changed. Task 4 remains
+incomplete; the owner's earlier signer/assertion/list-entry approvals remain valid.
+
 ## Task 5: select active series inside issuance transactions
 
 **Modify:** `apps/server/src/till-config.ts`, `trading-config.ts`, `till-sale.ts`,
