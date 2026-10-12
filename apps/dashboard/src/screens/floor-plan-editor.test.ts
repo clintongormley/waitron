@@ -856,6 +856,134 @@ const tablePanel = (el: FloorPlanEditor) =>
     "floor-plan-table-panel",
   );
 
+const listRow = (el: FloorPlanEditor, key: string) =>
+  el
+    .shadowRoot!.querySelector("floor-plan-tables-panel")!
+    .shadowRoot!.querySelector<HTMLElement>(`li[data-table="${key}"]`)!;
+const deleteDialog = (el: FloorPlanEditor) =>
+  el.shadowRoot!.querySelector<WtModal>("wt-modal[data-dialog=delete-table]");
+
+async function askDelete(el: FloorPlanEditor, key: string): Promise<WtModal> {
+  listRow(el, key).querySelector<HTMLElement>("wt-button[data-action=delete]")!.click();
+  await el.updateComplete;
+  const dialog = deleteDialog(el)!;
+  await dialog.updateComplete;
+  return dialog;
+}
+
+const closeOf = (dialog: WtModal) =>
+  new Promise((resolve) => dialog.addEventListener("wt-close", resolve, { once: true }));
+
+const joinedTerrace = (): FloorPlan => ({
+  ...terrace(),
+  joins: [{ id: "j1", seats: 6, tableIds: ["m1", "m2"] }],
+});
+
+it.each([
+  ["en-GB", "Delete T2?", "It leaves the tables list and the plan.", "Cancel", "Delete"],
+  ["es-ES", "¿Eliminar T2?", "Sale de la lista de mesas y del plano.", "Cancelar", "Eliminar"],
+])(
+  "the bin asks before deleting, in a compact dialog (%s)",
+  async (locale, head, text, no, yes) => {
+    setLocale(locale);
+    const el = await open();
+    expect(deleteDialog(el)?.open ?? false).toBe(false);
+    const dialog = await askDelete(el, "m2");
+    expect(dialog.open).toBe(true);
+    expect(dialog.getAttribute("size")).toBe("compact");
+    expect(dialog.heading).toBe(head);
+    expect(dialog.querySelector("[data-delete-text]")!.textContent!.trim()).toBe(text);
+    expect(button(el, "delete-cancel").textContent!.trim()).toBe(no);
+    expect(button(el, "delete-confirm").textContent!.trim()).toBe(yes);
+    expect(button(el, "delete-confirm").variant).toBe("danger");
+    expect(button(el, "delete-confirm").disabled).toBe(false);
+    expect(canvas(el).tables.map((t) => t.key)).toEqual(["m1"]);
+    expectSaveQuiet(el);
+  },
+);
+
+it("Cancel on the delete question changes nothing and closes it", async () => {
+  const el = await open(stubApi({ getFloorPlan: vi.fn().mockResolvedValue(joinedTerrace()) }));
+  const dialog = await askDelete(el, "m2");
+  const closed = closeOf(dialog);
+  await press(el, "delete-cancel");
+  await closed;
+  await el.updateComplete;
+  expect(dialog.open).toBe(false);
+  expect(el.shadowRoot!.querySelector("floor-plan-tables-panel")!.draft.tables).toHaveLength(2);
+  expectSaveQuiet(el);
+  expect(button(el, "undo").disabled).toBe(true);
+});
+
+it("Escape on the delete question changes nothing, closes it and does not start leaving", async () => {
+  const el = await open();
+  let leaving = 0;
+  el.shadowRoot!.querySelector("a.close")!.addEventListener("click", (event) => {
+    event.preventDefault();
+    leaving++;
+  });
+  const dialog = await askDelete(el, "m2");
+  const closed = closeOf(dialog);
+  await userEvent.keyboard("{Escape}");
+  await closed;
+  await el.updateComplete;
+  expect(dialog.open).toBe(false);
+  expect(leaving).toBe(0);
+  expect(el.shadowRoot!.querySelector("floor-plan-tables-panel")!.draft.tables).toHaveLength(2);
+  expectSaveQuiet(el);
+});
+
+it("Delete on the question removes the table and its join as one step, clears its selection and closes", async () => {
+  const el = await open(stubApi({ getFloorPlan: vi.fn().mockResolvedValue(joinedTerrace()) }));
+  await fromCanvas(el, "wt-table-select", { key: "m1" });
+  const dialog = await askDelete(el, "m1");
+  const closed = closeOf(dialog);
+  await press(el, "delete-confirm");
+  await closed;
+  await el.updateComplete;
+  expect(dialog.open).toBe(false);
+  const panel = el.shadowRoot!.querySelector("floor-plan-tables-panel")!;
+  expect(panel.draft.tables.map((t) => t.key)).toEqual(["m2"]);
+  expect(panel.draft.joins).toEqual([]);
+  expect(canvas(el).selected).toBeNull();
+  expectSaveAwake(el);
+  await press(el, "undo");
+  expectSaveQuiet(el);
+  expect(button(el, "undo").disabled).toBe(true);
+});
+
+it("Delete on the question keeps the selection of another table", async () => {
+  const el = await open();
+  await fromCanvas(el, "wt-table-select", { key: "m1" });
+  const dialog = await askDelete(el, "m2");
+  const closed = closeOf(dialog);
+  await press(el, "delete-confirm");
+  await closed;
+  await el.updateComplete;
+  expect(canvas(el).selected).toBe("m1");
+  expect(el.shadowRoot!.querySelector("floor-plan-tables-panel")!.draft.tables).toHaveLength(1);
+});
+
+it("hands the tables list the selection, so the selected table's row is current", async () => {
+  const el = await open();
+  expect(listRow(el, "m1").getAttribute("aria-current")).toBeNull();
+  await fromCanvas(el, "wt-table-select", { key: "m1" });
+  await el.shadowRoot!.querySelector("floor-plan-tables-panel")!.updateComplete;
+  expect(listRow(el, "m1").getAttribute("aria-current")).toBe("true");
+  expect(listRow(el, "m2").getAttribute("aria-current")).toBeNull();
+});
+
+it("taking a saved placed table off through its row wakes Save; Undo puts it back and quiets Save", async () => {
+  const el = await open();
+  listRow(el, "m1").querySelector<HTMLElement>("button[data-action=toggle]")!.click();
+  await el.updateComplete;
+  expect(canvas(el).tables).toEqual([]);
+  expectSaveAwake(el);
+  await press(el, "undo");
+  expect(placed(el, "m1")).toEqual(placement);
+  expectSaveQuiet(el);
+});
+
 it("Undo of a Delete brings back the table and its join", async () => {
   const joined: FloorPlan = {
     ...terrace(),
@@ -863,8 +991,8 @@ it("Undo of a Delete brings back the table and its join", async () => {
   };
   const el = await open(stubApi({ getFloorPlan: vi.fn().mockResolvedValue(joined) }));
   await fromCanvas(el, "wt-table-select", { key: "m1" });
-  tablePanel(el)!.shadowRoot!.querySelector<HTMLElement>("[data-test=delete]")!.click();
-  await el.updateComplete;
+  await askDelete(el, "m1");
+  await press(el, "delete-confirm");
   expect(canvas(el).tables.map((t) => t.key)).toEqual([]);
   expect(canvas(el).selected).toBeNull();
   expect(tablePanel(el)).toBeNull();

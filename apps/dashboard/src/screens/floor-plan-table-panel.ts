@@ -13,9 +13,7 @@ import { LocaleChangeController } from "../state/locale-controller.js";
 import type { PlanPlacement } from "../api/client.js";
 import {
   MAX_SEATS,
-  deleteTable,
   patchTable,
-  placeTable,
   removeJoin,
   sendChange,
   tableName,
@@ -26,7 +24,6 @@ import type {
   FloorPlanAddJoinAsk,
   FloorPlanInvalid,
   FloorPlanPanelError,
-  FloorPlanSelect,
   FloorPlanTypedField,
 } from "./floor-plan-editor.js";
 
@@ -44,7 +41,7 @@ function value(event: CustomEvent<{ value: string }>): string {
   return event.detail.value;
 }
 
-/** The selected table's fields and actions. Every value it draws comes from `draft`, so the page
+/** The selected table's fields and joins. Every value it draws comes from `draft`, so the page
  *  may re-create it when it crosses its narrow width. */
 @customElement("floor-plan-table-panel")
 export class FloorPlanTablePanel extends LitElement {
@@ -84,12 +81,6 @@ export class FloorPlanTablePanel extends LitElement {
         justify-content: space-between;
         gap: var(--wt-space-2);
         padding: var(--wt-space-1) 0;
-      }
-      .actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--wt-space-2);
-        margin-top: var(--wt-space-3);
       }
     `,
   ];
@@ -177,11 +168,6 @@ export class FloorPlanTablePanel extends LitElement {
       ];
     }
     return this.#shapeOptions;
-  }
-
-  #delete(): void {
-    sendChange(this, deleteTable(this.draft, this.tableKey));
-    this.#send<FloorPlanSelect>("floor-plan-select", { key: null });
   }
 
   #otherNames(tableKeys: string[]): string {
@@ -312,26 +298,6 @@ export class FloorPlanTablePanel extends LitElement {
             : html`<p class="field-error" data-error="fixed">${fixedError}</p>`
         }
         ${table.placement === null ? nothing : this.#placed(table)}
-      </div>
-      <div class="actions">
-        ${
-          table.placement === null
-            ? html`<wt-button
-                variant="secondary"
-                data-test="place"
-                @click=${() => sendChange(this, placeTable(this.draft, this.tableKey))}
-                >${t("floor_plan_editor.place")}</wt-button
-              >`
-            : html`<wt-button
-                variant="secondary"
-                data-test="remove"
-                @click=${() => this.#patch({ placement: null })}
-                >${t("floor_plan_editor.remove_from_plan")}</wt-button
-              >`
-        }
-        <wt-button variant="danger" data-test="delete" @click=${() => this.#delete()}
-          >${t("action.delete")}</wt-button
-        >
       </div>
       ${this.#joins()}`;
   }
