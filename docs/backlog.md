@@ -3577,6 +3577,14 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   (secret checks and the write lock).
   [Detail](backlog/dashboard.md#secret-checks-and-the-write-lock-the-pin-manager-login-and-profile-checks-moved--done-w1-1117-two-blocking-derivations-and-one-stale-answer-window-remain-open)
 
+- **A refused early dashboard payment authorization may become allowed before the PIN transaction —
+  UNVERIFIED (A530 review).** `managerPinToCheck` (`apps/server/src/payments-api.ts`) returns no
+  credential when its read refuses; `pinGated` then opens the transaction without a turn. If the
+  permission changes to allowed between those reads, a text PIN may derive under the write lock
+  outside the attempt queue. The same fallback is present at base `c704ac0dc`; no race was run.
+  **Next action:** reproduce the permission-grant window through a real attestation route, then
+  decide whether the refused early read must still join a person-specific turn.
+
 - **Ongoing — the dashboard UI overhaul, screen by screen.** Every screen is being brought onto one
   shared look, and the rules for it live in [design-system.md](developers/design-system.md). The
   till (`apps/till`) and the setup wizard (`apps/setup`) are separate apps drawing on the same
