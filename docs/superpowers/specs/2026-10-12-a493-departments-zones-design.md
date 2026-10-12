@@ -150,3 +150,24 @@ editors. Removing the native dialog from the document and retaining its `open` p
 it outside the browser's modal layer; the receipt host binds its native opening to its connection.
 Offered receipt text is trimmed for comparison and submission, while hidden map entries keep their
 exact stored values. These qualifications do not authorise deleting unrelated legacy assertions.
+
+
+## Task 3 retirement qualification (2026-10-12)
+
+The visible department receipt language list uses `readOfferedReceiptLanguages`, the same
+installed-country/content selection the till uses. Private storage metadata still keeps all
+labelled locales plus the current receipt language, so historical text remains readable. The
+Spanish API and language fixtures now include a taxpayer with country `ES`; missing/unknown
+country cases offer only the stored receipt language.
+
+Live receipt updates adopt untouched scalar fields and each untouched translation while keeping
+typed values against their original saved baseline. An unchanged snapshot commits no baseline,
+so it leaves an unanswered receipt/language leave choice current. The old dashboard receipt
+page and editors, their client/query methods and the unused old department API mount are
+retired. Task 3 still awaits the legacy server preview retirement and full managed product look;
+Tasks 4–5 remain.
+
+The original quoted copies-only explanation predates A497. The current A493 backlog wording
+names languages staff can choose for the receipt itself; the dialog now says “Available at the
+till” rather than describing every other language as a requested copy. The selection paths use
+`readOfferedReceiptLanguages` in `working-order.ts`, `till-sale.ts` and `till-api.ts`.

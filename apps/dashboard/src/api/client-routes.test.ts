@@ -296,20 +296,27 @@ describe("DashboardApi routes", () => {
     ]);
   });
 
-  it("reads and saves the location's operation description", async () => {
-    const settings = { name: "Bar Pepe", operationDescription: "Restaurant service" };
+  it("reads and saves the department's operation description with its receipt policy", async () => {
+    const settings = {
+      receipt: { operationDescription: "Restaurant service" },
+      policy: { receiptPrintMode: "auto" as const, printTradingName: true },
+      receiptLanguage: "es-ES",
+      operationDescriptionRequired: true,
+      languages: ["es-ES"],
+      warningLanguages: [],
+      venueAddress: [],
+    };
+    const input = { receipt: { operationDescription: "Takeaway" }, policy: settings.policy };
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse(settings))
       .mockResolvedValueOnce(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
-
-    await expect(api.getLocationSettings()).resolves.toEqual(settings);
-    await expect(api.putLocationSettings("Takeaway")).resolves.toBeUndefined();
-
+    await expect(api.getDepartmentReceipt("bar")).resolves.toEqual(settings);
+    await expect(api.putDepartmentReceipt("bar", input)).resolves.toBeUndefined();
     expect(callsOf(fetchImpl)).toEqual([
-      ["/management-api/location-settings", "GET", undefined],
-      ["/management-api/location-settings", "PUT", { operationDescription: "Takeaway" }],
+      ["/management-api/venue-service/departments/bar/receipt", "GET", undefined],
+      ["/management-api/venue-service/departments/bar/receipt", "PUT", input],
     ]);
   });
 

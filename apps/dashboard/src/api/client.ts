@@ -1,8 +1,4 @@
-import type {
-  BusinessDayClock,
-  DepartmentReceiptWrite,
-  VenueReceiptSettings,
-} from "@waitron/shared";
+import type { BusinessDayClock, DepartmentReceiptWrite } from "@waitron/shared";
 import type { PlanPlacement } from "@waitron/ui";
 import type { CatalogueSettings } from "@waitron/catalogue/src/settings-types.js";
 export type { CatalogueSettings };
@@ -542,17 +538,6 @@ export interface IngredientPatch {
 export type RecipeLine = Ingredient;
 
 // ── Receipt-trim (configurable-till) types ────────────────────────────────────────────────────────
-
-export interface ReceiptConfig {
-  headerSubtitle?: string;
-  footerMessage?: string;
-  phone?: string;
-  email?: string;
-  /** Absent prints the location's address; `false` prints none. */
-  printAddress?: boolean;
-  /** A media library filename. */
-  logo?: string;
-}
 
 /** The parts of a receipt a preview marks. */
 export type ReceiptMarkName =
@@ -2734,19 +2719,6 @@ export class DashboardApi {
     return this.#request("/management-api/venue-details/business-day-start", "DELETE", input);
   }
 
-  getLocationSettings(): Promise<{ name: string; operationDescription: string }> {
-    return this.#request("/management-api/location-settings", "GET");
-  }
-
-  putLocationSettings(operationDescription: string): Promise<void> {
-    return this.#request("/management-api/location-settings", "PUT", { operationDescription });
-  }
-
-  /** `venueAddress` is this location's address as a receipt prints it, whatever `printAddress` says. */
-  getReceipt(): Promise<{ receipt: ReceiptConfig; venueAddress: string[] }> {
-    return this.#request("/management-api/receipt", "GET");
-  }
-
   async getProfileScopeChoices(): Promise<ProfileScopeChoices> {
     const venue = await this.#request<ProfileScopeChoices>(
       "/management-api/venue-service/departments-and-zones",
@@ -2772,24 +2744,12 @@ export class DashboardApi {
     return venue.departments;
   }
 
-  putReceipt(receipt: ReceiptConfig): Promise<void> {
-    return this.#request<void>("/management-api/receipt", "PUT", { receipt });
-  }
-
   getDepartmentReceipt(id: string): Promise<DepartmentReceiptSettings> {
     return this.#request(`/management-api/venue-service/departments/${id}/receipt`, "GET");
   }
 
   putDepartmentReceipt(id: string, input: DepartmentReceiptWrite): Promise<void> {
     return this.#request(`/management-api/venue-service/departments/${id}/receipt`, "PUT", input);
-  }
-
-  getVenueReceiptSettings(): Promise<{ settings: VenueReceiptSettings }> {
-    return this.#request("/management-api/receipt-settings", "GET");
-  }
-
-  putVenueReceiptSettings(settings: VenueReceiptSettings): Promise<void> {
-    return this.#request("/management-api/receipt-settings", "PUT", { settings });
   }
 
   getReceiptLanguage(): Promise<ReceiptLanguage> {

@@ -13,6 +13,7 @@ import {
   editReceipt,
   mountReceiptDialog,
   receiptApi,
+  receiptModel,
   receiptField,
   receiptSave,
 } from "../testing/department-receipt-dialog-fixture.js";
@@ -115,3 +116,84 @@ it("a removed receipt closes the native modal and releases its mounted draft", a
   expect(dialog.shadowRoot!.querySelector("dialog")!.matches(":modal")).toBe(false);
   expect(app.leave.coordinator.isDirty()).toBe(false);
 });
+
+it("an unchanged live read leaves the receipt leave question open and its choice current", async () => {
+  const { app, el, api } = await mountReceiptDialog();
+  await editReceipt(el, "email", "draft@example.com");
+  const pending = app.leave.coordinator.request({
+    scopes: "all",
+    reason: "navigation",
+    proceed() {},
+  });
+  await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")?.open).toBe(true);
+  const question = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
+  await question.updateComplete;
+  const keep = question.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!;
+  api.liveData.invalidate([{ type: "department_receipts" }]);
+  await expect.poll(() => api.getDepartmentReceipt.mock.calls.length).toBe(2);
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  expect(question.open).toBe(true);
+  await userEvent.click(page.elementLocator(keep));
+  expect(await pending).toBe("kept");
+  expect(receiptField(el, "email").value).toBe("draft@example.com");
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+});
+it.each(["keep", "discard"] as const)(
+  "deletion retires a pending %s choice before a replacement receipt opens",
+  async (decision) => {
+    const { app, el, api, dialog } = await mountReceiptDialog();
+    await editReceipt(el, "email", "old@example.com");
+    let proceeded = false;
+    const pending = app.leave.coordinator.request({
+      scopes: "all",
+      reason: "navigation",
+      proceed() {
+        proceeded = true;
+      },
+    });
+    await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")?.open).toBe(true);
+    const question = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
+    await question.updateComplete;
+    const stale = question.shadowRoot!.querySelector<HTMLElement>(`[data-choice=${decision}]`)!;
+    const closed = dialogClosed(dialog);
+    api.getDepartmentReceipt.mockRejectedValueOnce({ code: "department.not_found" });
+    api.liveData.invalidate([{ type: "departments" }]);
+    await closed;
+    expect(await pending).toBe("stale");
+    el.show({ id: "replacement", name: "Replacement" });
+    await expect.poll(() => el.shadowRoot!.querySelector("[name=email]")).toBeTruthy();
+    await editReceipt(el, "email", "replacement@example.com");
+    stale.click();
+    await el.updateComplete;
+    expect(proceeded).toBe(false);
+    expect(receiptField(el, "email").value).toBe("replacement@example.com");
+    expect(app.leave.coordinator.isDirty()).toBe(true);
+  },
+);
+it.each(["success", "refusal"] as const)(
+  "an old Save %s cannot close or clean a reconnected receipt draft",
+  async (answer) => {
+    const api = receiptApi(receiptModel);
+    const held = deferred<void>();
+    api.putDepartmentReceipt.mockImplementationOnce(() => held.promise);
+    const { app, el, dialog } = await mountReceiptDialog(api);
+    await editReceipt(el, "email", "sent@example.com");
+    await clickReceiptSave(el);
+    await reattachAfterDetachedUpdate(el);
+    await expect
+      .poll(() => dialog.shadowRoot!.querySelector("dialog")!.matches(":modal"))
+      .toBe(true);
+    await editReceipt(el, "email", "new@example.com");
+    if (answer === "success") held.resolve();
+    else held.reject({ code: "management.failed" });
+    await held.promise.catch(() => {});
+    await el.updateComplete;
+    expect(dialog.open).toBe(true);
+    expect(receiptField(el, "email").value).toBe("new@example.com");
+    expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBe("");
+    expect(receiptSave(el).disabled).toBe(false);
+    expect(app.leave.coordinator.isDirty()).toBe(true);
+    await editReceipt(el, "email", "");
+    expect(receiptSave(el).disabled).toBe(true);
+  },
+);

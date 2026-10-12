@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, locations, tenants, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { CATALOGUE_MIGRATIONS, contentLanguages } from "@waitron/catalogue";
 import {
@@ -52,6 +52,9 @@ async function fixture(
   withFiscal = true,
 ) {
   registerModulePermissions([{ permission: "venue_service.manage", grantedFrom: managementFloor }]);
+  await suite.db
+    .insert(tenants)
+    .values({ id: 1, country: "ES", taxId: "B12345678", legalName: "Venue SL" });
   const [location] = await suite.db
     .insert(locations)
     .values({

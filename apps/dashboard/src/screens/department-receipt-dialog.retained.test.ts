@@ -1,9 +1,11 @@
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import "@waitron/dashboard-modules";
 import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, dialogClosed, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import {
+  deferred,
   clickReceiptSave,
   editReceipt,
   mountReceiptDialog,
@@ -239,3 +241,308 @@ it("an unassigned save refusal stays visible when another authored field changes
   );
   expect(receiptSave(el).disabled).toBe(false);
 });
+
+it.each([
+  {
+    error: { code: "receipt.invalid", params: { field: "logo", reason: "image_not_found" } },
+    key: "receipts.logo_not_found",
+  },
+  {
+    error: { code: "receipt.invalid", params: { field: "logo", reason: "invalid_logo" } },
+    key: "receipts.invalid_logo",
+  },
+  { error: { code: "image.invalid_file", params: {} }, key: "image.invalid_file" },
+])(
+  "places $key beside the logo and clears only that refusal when the image changes",
+  async ({ error, key }) => {
+    const api = receiptApi();
+    api.putDepartmentReceipt.mockRejectedValue(error);
+    const { el } = await mountReceiptDialog(api);
+    const upload = el.shadowRoot!.querySelector("dashboard-image-upload")!;
+    upload.dispatchEvent(
+      new CustomEvent("image-changed", { detail: { image: LOGO }, bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
+    await clickReceiptSave(el);
+    const sentence =
+      key === "image.invalid_file"
+        ? codeMessage(key)
+        : t(key as "receipts.logo_not_found" | "receipts.invalid_logo");
+    await expect
+      .poll(() =>
+        upload.nextElementSibling?.matches("p.error")
+          ? upload.nextElementSibling.textContent
+          : undefined,
+      )
+      .toBe(sentence);
+    expect(upload.invalid).toBe(true);
+    expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(t("form.fix_fields"));
+    expect(receiptSave(el).disabled).toBe(false);
+    await editReceipt(el, "email", "bar@example.com");
+    expect(
+      upload.nextElementSibling?.matches("p.error")
+        ? upload.nextElementSibling.textContent
+        : undefined,
+    ).toBe(sentence);
+    upload.dispatchEvent(
+      new CustomEvent("image-changed", { detail: { image: null }, bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
+    expect(upload.nextElementSibling?.matches("p.error")).toBe(false);
+    expect(upload.invalid).toBe(false);
+  },
+);
+
+it("adopts untouched receipt fields and translations while retaining typed values and their original baseline", async () => {
+  const { el, api } = await mountReceiptDialog();
+  await editReceipt(el, "headerSubtitle-es-ES", "Typed");
+  api.getDepartmentReceipt.mockResolvedValue({
+    ...receiptModel,
+    receipt: {
+      operationDescription: "Remote service",
+      phone: "933333333",
+      logo: LOGO,
+      printAddress: true,
+      headerSubtitle: { "es-ES": "Remote subtitle", "ca-ES": "Cafè", "eu-ES": "New hidden" },
+      footerMessage: { "ca-ES": "Remote footer" },
+    },
+  });
+  api.liveData.invalidate([{ type: "department_receipts" }]);
+  await expect.poll(() => receiptField(el, "phone").value).toBe("933333333");
+  expect(receiptField(el, "headerSubtitle-es-ES").value).toBe("Typed");
+  expect(receiptField(el, "headerSubtitle-ca-ES").value).toBe("Cafè");
+  expect(receiptField(el, "footerMessage-ca-ES").value).toBe("Remote footer");
+  expect(el.shadowRoot!.querySelector("dashboard-image-upload")!.image).toBe(LOGO);
+  expect(
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>("[name=printAddress]")!
+      .checked,
+  ).toBe(true);
+  await editReceipt(el, "headerSubtitle-es-ES", "Bar");
+  expect(receiptSave(el).disabled).toBe(true);
+  await editReceipt(el, "headerSubtitle-es-ES", "Typed again");
+  await clickReceiptSave(el);
+  expect(api.putDepartmentReceipt.mock.lastCall?.[1]).toEqual({
+    policy: receiptModel.policy,
+    receipt: {
+      operationDescription: "Remote service",
+      phone: "933333333",
+      logo: LOGO,
+      printAddress: true,
+      headerSubtitle: { "es-ES": "Typed again", "ca-ES": "Cafè", "eu-ES": "New hidden" },
+      footerMessage: { "ca-ES": "Remote footer" },
+    },
+  });
+});
+it("pending Save freezes the saved logo and closes an already open picker", async () => {
+  const api = receiptApi({ ...receiptModel, receipt: { ...receiptModel.receipt, logo: LOGO } });
+  const pending = deferred<void>();
+  api.putDepartmentReceipt.mockImplementation(() => pending.promise);
+  const { el } = await mountReceiptDialog(api);
+  const upload = el.shadowRoot!.querySelector("dashboard-image-upload")!;
+  await editReceipt(el, "email", "bar@example.com");
+  await upload.updateComplete;
+  await userEvent.click(
+    page.elementLocator(upload.shadowRoot!.querySelector("[data-test=choose-image]")!),
+  );
+  await expect.poll(() => upload.shadowRoot!.querySelector("media-image-picker")).toBeTruthy();
+  receiptSave(el).click();
+  await expect.poll(() => upload.disabled).toBe(true);
+  await upload.updateComplete;
+  expect(upload.shadowRoot!.querySelector("media-image-picker")).toBeNull();
+  for (const action of ["remove-image", "choose-image"]) {
+    const button = upload.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+      `[data-test=${action}]`,
+    )!;
+    expect(button.disabled).toBe(true);
+    button.click();
+  }
+  upload.dispatchEvent(
+    new CustomEvent("image-changed", { detail: { image: null }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+  expect(upload.image).toBe(LOGO);
+  expect(api.putDepartmentReceipt.mock.lastCall?.[1].receipt.logo).toBe(LOGO);
+  pending.reject({ code: "management.failed" });
+  await expect.poll(() => upload.disabled).toBe(false);
+  expect(upload.image).toBe(LOGO);
+});
+it("shows the current address and previews its live replacement without changing authored receipt fields", async () => {
+  const { el, api } = await mountReceiptDialog();
+  await expect
+    .poll(() => el.shadowRoot!.querySelector("[data-test=venue-address]")?.textContent)
+    .toContain("Calle Mayor 1");
+  await editReceipt(el, "email", "bar@example.com");
+  const before = api.previewReceiptDraft.mock.calls.length;
+  api.getDepartmentReceipt.mockResolvedValue({
+    ...receiptModel,
+    venueAddress: ["Plaza Nueva 2", "41001 Sevilla"],
+  });
+  api.liveData.invalidate([{ type: "locations" }]);
+  await expect
+    .poll(() => el.shadowRoot!.querySelector("[data-test=venue-address]")?.textContent)
+    .toContain("Plaza Nueva 2");
+  await expect.poll(() => api.previewReceiptDraft.mock.calls.length).toBeGreaterThan(before);
+  expect(receiptField(el, "email").value).toBe("bar@example.com");
+  expect(api.putDepartmentReceipt).not.toHaveBeenCalled();
+});
+
+it("marks exactly the offered languages missing authored translations, including the receipt language", async () => {
+  const { el } = await mountReceiptDialog(
+    receiptApi({
+      ...receiptModel,
+      languages: ["es-ES", "ca-ES", "gl-ES", "eu-ES"],
+      receipt: { operationDescription: "Dining service" },
+    }),
+  );
+  const missing = () =>
+    [...el.shadowRoot!.querySelectorAll("h3")]
+      .filter((heading) => heading.parentElement!.querySelector("[aria-label]"))
+      .map((heading) => heading.lang);
+  expect(missing()).toEqual([]);
+  expect(el.shadowRoot!.querySelector("[data-test=translation-warning]")).toBeNull();
+  await editReceipt(el, "footerMessage-eu-ES", "Eskerrik asko");
+  expect(missing()).toEqual(["es-ES", "ca-ES", "gl-ES"]);
+  expect(
+    el.shadowRoot!.querySelector("[data-test=translation-warning]")!.getAttribute("role"),
+  ).toBe("note");
+  for (const language of ["es-ES", "ca-ES", "gl-ES", "eu-ES"])
+    for (const field of ["headerSubtitle", "footerMessage"])
+      expect(receiptField(el, `${field}-${language}`).name).toBe(`${field}-${language}`);
+  await editReceipt(el, "footerMessage-eu-ES", "   ");
+  expect(missing()).toEqual([]);
+  await editReceipt(el, "headerSubtitle-ca-ES", "Cafè");
+  expect(missing()).toEqual(["es-ES", "gl-ES", "eu-ES"]);
+  expect(el.shadowRoot!.textContent).toContain(t("receipts.offered_languages"));
+});
+
+it("the real logo library keeps an upload refusal visible without changing the receipt", async () => {
+  const api = receiptApi();
+  api.imageLibraryRequest = (async <T>(_path: string, method: string) => {
+    if (method === "POST") throw { code: "image.too_large", params: {}, status: 413 };
+    return { images: [], total: 0 } as T;
+  }) as typeof api.imageLibraryRequest;
+  const { el } = await mountReceiptDialog(api);
+  const upload = el.shadowRoot!.querySelector("dashboard-image-upload")!;
+  await upload.updateComplete;
+  await userEvent.click(
+    page.elementLocator(upload.shadowRoot!.querySelector("[data-test=choose-image]")!),
+  );
+  const library = await expect
+    .poll(() =>
+      upload
+        .shadowRoot!.querySelector("media-image-picker")
+        ?.shadowRoot?.querySelector("dashboard-image-library"),
+    )
+    .toBeTruthy()
+    .then(() =>
+      upload
+        .shadowRoot!.querySelector("media-image-picker")!
+        .shadowRoot!.querySelector("dashboard-image-library")!,
+    );
+  const root = library.shadowRoot!;
+  await expect.poll(() => root.querySelector("[data-test=upload]")).toBeTruthy();
+  await userEvent.click(page.elementLocator(root.querySelector("[data-test=upload]")!));
+  await expect.poll(() => root.querySelector("input[name=image-file]")).toBeTruthy();
+  const transfer = new DataTransfer();
+  transfer.items.add(new File(["big"], "logo.png", { type: "image/png" }));
+  const file = root.querySelector<HTMLInputElement>("input[name=image-file]")!;
+  file.files = transfer.files;
+  file.dispatchEvent(new Event("change"));
+  root
+    .querySelector("[name=name-es]")!
+    .dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "Logo" }, bubbles: true, composed: true }),
+    );
+  await library.updateComplete;
+  await userEvent.click(page.elementLocator(root.querySelector("wt-modal [data-test=save]")!));
+  await expect
+    .poll(() => root.querySelector("#file-error")?.textContent?.trim())
+    .toBe(codeMessage("image.too_large"));
+  expect(upload.image).toBeNull();
+  expect(api.putDepartmentReceipt).not.toHaveBeenCalled();
+});
+
+it("keeps a request failure beside the local correction summary when the draft becomes invalid", async () => {
+  const api = receiptApi();
+  api.putDepartmentReceipt.mockRejectedValue({ code: "management.failed" });
+  const { el } = await mountReceiptDialog(api);
+  await editReceipt(el, "email", "bar@example.com");
+  await clickReceiptSave(el);
+  await expect
+    .poll(() => el.shadowRoot!.querySelector("wt-form-actions")!.error)
+    .toBe(codeMessage("management.failed"));
+  await editReceipt(el, "operationDescription", "");
+  expect(receiptField(el, "operationDescription").error).toBe(t("location_settings.required"));
+  expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(
+    `${t("form.fix_fields")} ${codeMessage("management.failed")}`,
+  );
+  expect(receiptSave(el).disabled).toBe(true);
+  await editReceipt(el, "operationDescription", "Repaired");
+  expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(
+    codeMessage("management.failed"),
+  );
+  expect(receiptSave(el).disabled).toBe(false);
+});
+
+it("an uncoded save refusal uses the localized fallback and leaves the exact draft available to retry", async () => {
+  const api = receiptApi();
+  api.putDepartmentReceipt.mockRejectedValueOnce(new Error("private internal detail"));
+  const { el } = await mountReceiptDialog(api);
+  await editReceipt(el, "email", "bar@example.com");
+  await clickReceiptSave(el);
+  await expect
+    .poll(() => el.shadowRoot!.querySelector("wt-form-actions")!.error)
+    .toBe(codeMessage("server.internal_error"));
+  expect(el.shadowRoot!.textContent).not.toContain("private internal detail");
+  expect(receiptField(el, "email").error).toBe("");
+  expect(receiptField(el, "email").value).toBe("bar@example.com");
+  expect(receiptSave(el).disabled).toBe(false);
+  await clickReceiptSave(el);
+  expect(api.putDepartmentReceipt.mock.calls).toEqual([
+    [
+      "bar",
+      {
+        receipt: { ...receiptModel.receipt, email: "bar@example.com" },
+        policy: receiptModel.policy,
+      },
+    ],
+    [
+      "bar",
+      {
+        receipt: { ...receiptModel.receipt, email: "bar@example.com" },
+        policy: receiptModel.policy,
+      },
+    ],
+  ]);
+});
+it.each(["phone", "email", "operationDescription", "headerSubtitle-es-ES", "footerMessage-ca-ES"])(
+  "contains the native %s field change event",
+  async (name) => {
+    const { el } = await mountReceiptDialog();
+    const leaked = vi.fn();
+    el.addEventListener("wt-change", leaked);
+    await editReceipt(el, name, "Updated");
+    expect(receiptField(el, name).value).toBe("Updated");
+    expect(leaked).not.toHaveBeenCalled();
+  },
+);
+
+it.each(["en-GB", "es-ES"] as const)(
+  "shows each printed address line separately and words an absent address in %s",
+  async (locale) => {
+    setLocale(locale);
+    const { el, api } = await mountReceiptDialog(
+      receiptApi({ ...receiptModel, venueAddress: ["Calle Mayor 1", "28013 Madrid"] }),
+    );
+    expect(
+      [...el.shadowRoot!.querySelector("[data-test=venue-address]")!.children].map(
+        (line) => line.textContent,
+      ),
+    ).toEqual(["Calle Mayor 1", "28013 Madrid"]);
+    api.getDepartmentReceipt.mockResolvedValue({ ...receiptModel, venueAddress: [] });
+    api.liveData.invalidate([{ type: "locations" }]);
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("[data-test=venue-address]")?.textContent?.trim())
+      .toBe(t("receipts.no_address"));
+  },
+);

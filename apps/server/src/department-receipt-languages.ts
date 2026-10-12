@@ -1,7 +1,8 @@
 import type { Transaction } from "@waitron/db";
-import { readContentLanguages, readReceiptLanguage } from "@waitron/catalogue";
+import { readReceiptLanguage } from "@waitron/catalogue";
 import { COUNTRY_PACKS } from "@waitron/country-packs";
-import { contentLanguageCode, type LocationId } from "@waitron/shared";
+import type { LocationId } from "@waitron/shared";
+import { readOfferedReceiptLanguages } from "./venue-locale.js";
 
 export interface DepartmentReceiptLanguages {
   receiptLanguage: string;
@@ -14,18 +15,12 @@ export async function departmentReceiptLanguages(
   cfg: { locationId: LocationId },
 ): Promise<DepartmentReceiptLanguages> {
   const { locale: receiptLanguage } = await readReceiptLanguage(tx, cfg.locationId);
-  const content = await readContentLanguages(tx, receiptLanguage);
   const labelled = [
     ...new Set(COUNTRY_PACKS.flatMap((pack) => Object.keys(pack.receiptLabels ?? {}))),
   ];
   return {
     receiptLanguage,
-    languages: [
-      ...new Set([
-        receiptLanguage,
-        ...labelled.filter((locale) => content.languages.includes(contentLanguageCode(locale))),
-      ]),
-    ],
+    languages: await readOfferedReceiptLanguages(tx, cfg),
     storageLanguages: [...new Set([receiptLanguage, ...labelled])],
   };
 }

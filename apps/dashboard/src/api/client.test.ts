@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FetchLike } from "@waitron/dashboard-kit";
 import { DashboardApi } from "./client.js";
-import type { ReceiptConfig } from "./client.js";
+import type { DepartmentReceiptWrite } from "@waitron/shared";
 
 function jsonResponse(body: unknown, ok = true, status = 200): Response {
   return { ok, status, json: async () => body, text: async () => JSON.stringify(body) } as Response;
@@ -814,40 +814,62 @@ describe("DashboardApi", () => {
     ).rejects.toMatchObject({ code: "media.unsupported_type" });
   });
 
-  it("getReceipt GETs the receipt trim with credentials", async () => {
-    const payload = { receipt: { headerSubtitle: "C/ Mayor 1", footerMessage: "Gracias" } };
+  it("getDepartmentReceipt GETs the department receipt with credentials", async () => {
+    const payload = {
+      receipt: { headerSubtitle: { "es-ES": "C/ Mayor 1" }, footerMessage: { "es-ES": "Gracias" } },
+      policy: { receiptPrintMode: "auto", printTradingName: true },
+      receiptLanguage: "es-ES",
+      operationDescriptionRequired: true,
+      languages: ["es-ES"],
+      warningLanguages: [],
+      venueAddress: [],
+    };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(payload));
     const api = new DashboardApi("", fetchImpl);
-    expect(await api.getReceipt()).toEqual(payload);
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/receipt", {
-      method: "GET",
-      credentials: "include",
-      signal: expect.any(AbortSignal),
-    });
+    expect(await api.getDepartmentReceipt("bar")).toEqual(payload);
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "/management-api/venue-service/departments/bar/receipt",
+      {
+        method: "GET",
+        credentials: "include",
+        signal: expect.any(AbortSignal),
+      },
+    );
   });
 
-  it("putReceipt PUTs the receipt body and resolves undefined on an empty 204", async () => {
+  it("putDepartmentReceipt PUTs the full department draft and resolves undefined on an empty 204", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
-    const receipt: ReceiptConfig = {
-      headerSubtitle: "C/ Mayor 1",
-      footerMessage: "Gracias por su visita",
+    const receipt: DepartmentReceiptWrite = {
+      receipt: {
+        headerSubtitle: { "es-ES": "C/ Mayor 1" },
+        footerMessage: { "es-ES": "Gracias por su visita" },
+      },
+      policy: { receiptPrintMode: "auto", printTradingName: true },
     };
-    await expect(api.putReceipt(receipt)).resolves.toBeUndefined();
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/receipt", {
-      method: "PUT",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ receipt }),
-    });
+    await expect(api.putDepartmentReceipt("bar", receipt)).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "/management-api/venue-service/departments/bar/receipt",
+      {
+        method: "PUT",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(receipt),
+      },
+    );
   });
 
-  it("putReceipt throws the envelope code on a non-2xx", async () => {
+  it("putDepartmentReceipt throws the envelope code on a non-2xx", async () => {
     const fetchImpl = vi
       .fn()
       .mockResolvedValue(jsonResponse({ error: { code: "receipt.invalid" } }, false, 400));
     const api = new DashboardApi("", fetchImpl);
-    await expect(api.putReceipt({ footerMessage: "x" })).rejects.toMatchObject({
+    await expect(
+      api.putDepartmentReceipt("bar", {
+        receipt: { footerMessage: { "es-ES": "x" } },
+        policy: { receiptPrintMode: "auto", printTradingName: true },
+      }),
+    ).rejects.toMatchObject({
       code: "receipt.invalid",
     });
   });
@@ -3264,22 +3286,34 @@ describe("department receipt client contracts", () => {
       },
     ]);
   });
-  it("reads and writes the independent global settings envelope", async () => {
+  it("reads and writes the department address and receipt policies together", async () => {
+    const model = {
+      receipt: { printAddress: false },
+      policy: { receiptPrintMode: "auto" as const, printTradingName: true },
+      receiptLanguage: "es-ES",
+      operationDescriptionRequired: true,
+      languages: ["es-ES"],
+      warningLanguages: [],
+      venueAddress: [],
+    };
+    const input = { receipt: { printAddress: false }, policy: model.policy };
     const fetchImpl = vi
       .fn()
-      .mockResolvedValueOnce(jsonResponse({ settings: { printAddress: false } }))
+      .mockResolvedValueOnce(jsonResponse(model))
       .mockResolvedValueOnce(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
-    expect(await api.getVenueReceiptSettings()).toEqual({ settings: { printAddress: false } });
-    await api.putVenueReceiptSettings({ printAddress: false });
-    expect(fetchImpl.mock.calls[0]![0]).toBe("/management-api/receipt-settings");
+    expect(await api.getDepartmentReceipt("bar")).toEqual(model);
+    await api.putDepartmentReceipt("bar", input);
+    expect(fetchImpl.mock.calls[0]![0]).toBe(
+      "/management-api/venue-service/departments/bar/receipt",
+    );
     expect(fetchImpl.mock.calls[1]).toEqual([
-      "/management-api/receipt-settings",
+      "/management-api/venue-service/departments/bar/receipt",
       {
         method: "PUT",
         credentials: "include",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ settings: { printAddress: false } }),
+        body: JSON.stringify(input),
       },
     ]);
   });

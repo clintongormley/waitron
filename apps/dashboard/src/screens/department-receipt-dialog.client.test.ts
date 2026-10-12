@@ -84,12 +84,12 @@ it("a live policy and receipt read preserves the host-selected dialog's authored
     .poll(() => fetchImpl.mock.calls.filter(([path]) => path.endsWith("/bar/receipt")).length)
     .toBe(2);
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-  expect(receiptField(el, "operationDescription").value).toBe("Dining service");
+  expect(receiptField(el, "operationDescription").value).toBe("New elsewhere");
   expect(receiptField(el, "email").value).toBe("draft@example.com");
   expect(
     el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>("[name=receiptPrintMode]")!
       .checked,
-  ).toBe(true);
+  ).toBe(false);
   expect(receiptSave(el).disabled).toBe(false);
 });
 it("the host-selected dialog writes the exact model envelope through the real client and closes", async () => {

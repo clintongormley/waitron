@@ -133,7 +133,6 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     listCategories: vi.fn().mockResolvedValue([]),
     listProducts: vi.fn().mockResolvedValue([]),
     listStations: vi.fn().mockResolvedValue([]),
-    getReceipt: vi.fn().mockResolvedValue({ receipt: {}, venueAddress: [] }),
     putReceipt: vi.fn().mockResolvedValue(undefined),
     listStatuses: vi.fn().mockResolvedValue([]),
     getBumpMode: vi.fn().mockResolvedValue({ mode: "line" }),
@@ -145,9 +144,6 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     setKitchenTimingDefaults: vi.fn().mockResolvedValue(undefined),
     getFireControl: vi.fn().mockResolvedValue({ mode: "waiter" }),
     listCourses: vi.fn().mockResolvedValue([]),
-    getLocationSettings: vi
-      .fn()
-      .mockResolvedValue({ name: "Sala principal", operationDescription: "Venta" }),
     getReceiptLanguage: vi
       .fn()
       .mockResolvedValue({ language: "es-ES", choices: ["es-ES"], fixed: null }),
@@ -1688,13 +1684,13 @@ describe("dashboard-app", () => {
     const keys = [
       ...page.shadowRoot!.querySelector("wt-tabs")!.shadowRoot!.querySelectorAll('[role="tab"]'),
     ].map((tab) => tab.getAttribute("data-key"));
-    expect(keys).toEqual(["receipts", "tables", "kitchen"]);
+    expect(keys).toEqual(["tables", "kitchen"]);
     expect(
       page.shadowRoot!.querySelector('[slot="tables"] dashboard-service-status-screen'),
     ).not.toBeNull();
     expect(page.shadowRoot!.querySelector("dashboard-kitchen-screen")).not.toBeNull();
     expect(allH1(el.shadowRoot!)).toHaveLength(1);
-    expect(location.pathname).toBe("/manage/venue-settings/view/receipts");
+    expect(location.pathname).toBe("/manage/venue-settings/view/tables");
   });
 
   const panelsOn = (el: DashboardApp, tab: string) =>
@@ -1760,11 +1756,7 @@ describe("dashboard-app", () => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
     const page = venueSettings(el)!;
-    for (const tag of [
-      "dashboard-receipts-screen",
-      "dashboard-service-status-screen",
-      "dashboard-kitchen-screen",
-    ])
+    for (const tag of ["dashboard-service-status-screen", "dashboard-kitchen-screen"])
       expect(page.shadowRoot!.querySelector<HTMLElement & { api: DashboardApi }>(tag)!.api).toBe(
         api,
       );
@@ -2588,7 +2580,7 @@ describe("dashboard-app", () => {
     }
   });
 
-  it("offers a manager Venue settings in Venue operations, opening on its Receipts tab", async () => {
+  it("offers a manager Venue settings in Venue operations, opening on its first permitted tab", async () => {
     const api = stubApi({ listStaff: vi.fn().mockResolvedValue([]) });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
@@ -2599,11 +2591,11 @@ describe("dashboard-app", () => {
     expect(panel.contains(item)).toBe(true);
     item.click();
     await flush(el);
-    const receipts = venueSettings(el)!.shadowRoot!.querySelector<
+    const status = venueSettings(el)!.shadowRoot!.querySelector<
       HTMLElement & { api?: DashboardApi }
-    >("dashboard-receipts-screen");
-    expect(receipts!.api).toBe(api);
-    expect(location.pathname).toBe("/manage/venue-settings/view/receipts");
+    >("dashboard-service-status-screen");
+    expect(status!.api).toBe(api);
+    expect(location.pathname).toBe("/manage/venue-settings/view/tables");
   });
 
   it("shows a supervisor Venue settings without its Receipts tab", async () => {
@@ -6220,7 +6212,6 @@ describe("dashboard-app: remaining faces and shell controls", () => {
   const faceApi = () =>
     stubApi({
       listLibraryProducts: pending(),
-      getLocationSettings: pending(),
       listDeviceProfiles: pending(),
       getBackupStatus: pending(),
       getStreamSettings: pending(),
@@ -7733,10 +7724,11 @@ describe("mounted public department pages", () => {
             isDefault: department.id === "d1",
           })),
         ),
-        getVenueReceiptSettings: vi.fn(async () => ({ settings: {} })),
         getDepartmentReceipt: vi.fn(async () => ({
-          receipt: {},
-          venueDefaults: {},
+          receipt: { operationDescription: "Dining service" },
+          policy: { receiptPrintMode: "auto", printTradingName: true },
+          receiptLanguage: "es-ES",
+          operationDescriptionRequired: true,
           languages: ["es-ES"],
           warningLanguages: [],
           venueAddress: [],
@@ -7839,7 +7831,7 @@ describe("mounted public department pages", () => {
       .toBe("/manage/venue-operations/department/d1/view/receipt");
     expect(box.isConnected).toBe(true);
     expect(box.value).toBe("Restaurant");
-    await expect.poll(() => find(app, "dashboard-department-receipt-editor")).not.toBeNull();
+    await expect.poll(() => find(app, "dashboard-department-receipt-dialog")).not.toBeNull();
   });
   it.each([{ permissions: [] }, { permissions: ["venue.view"] }])(
     "a department deep link still requires its own permission: %j",
@@ -7857,16 +7849,19 @@ describe("mounted public department pages", () => {
       false,
       true,
     );
-    const screen = find(app, "dashboard-receipts-screen") as HTMLElement & {
-      departmentId: string;
+    const screen = find(app, "dashboard-department-receipt-dialog") as HTMLElement & {
+      subject: { id: string };
     };
     expect(screen).not.toBeNull();
-    expect(screen.departmentId).toBe(id);
+    expect(screen.subject.id).toBe(id);
     expect(find(app, 'button[data-key="receipt"]')!.getAttribute("aria-selected")).toBe("true");
-    await expect.poll(() => find(app, "dashboard-department-receipt-editor")).not.toBeNull();
+    await expect.poll(() => find(app, "dashboard-department-receipt-dialog")).not.toBeNull();
     expect(
-      (find(app, "dashboard-department-receipt-editor") as HTMLElement & { departmentId: string })
-        .departmentId,
+      (
+        find(app, "dashboard-department-receipt-dialog") as HTMLElement & {
+          subject: { id: string };
+        }
+      ).subject.id,
     ).toBe(id);
     expect(find(app, 'wt-combobox[name="departmentId"]')).toBeNull();
     expect(find(app, "dashboard-venue-receipt-defaults-editor")).toBeNull();
@@ -7906,7 +7901,7 @@ describe("mounted public department pages", () => {
             : "/manage/venue-operations",
         );
       expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
-      expect(find(app, "dashboard-department-receipt-editor")).toBeNull();
+      expect(find(app, "dashboard-department-receipt-dialog")).toBeNull();
     },
   );
   it("a missing department Receipt URL does not borrow another department", async () => {
@@ -7914,7 +7909,7 @@ describe("mounted public department pages", () => {
       "venue_service.manage",
       "layout.configure",
     ]);
-    expect(find(app, "dashboard-receipts-screen")).toBeNull();
+    expect(find(app, "dashboard-department-receipt-dialog")).toBeNull();
     expect(
       find(app, "venue-departments-shell")!.shadowRoot!.querySelector('[role="status"]')!
         .textContent,
@@ -7931,10 +7926,13 @@ describe("mounted public department pages", () => {
     await expect
       .poll(() => location.pathname)
       .toBe("/manage/venue-operations/department/d2/view/receipt");
-    await expect.poll(() => find(app, "dashboard-department-receipt-editor")).not.toBeNull();
+    await expect.poll(() => find(app, "dashboard-department-receipt-dialog")).not.toBeNull();
     expect(
-      (find(app, "dashboard-department-receipt-editor") as HTMLElement & { departmentId: string })
-        .departmentId,
+      (
+        find(app, "dashboard-department-receipt-dialog") as HTMLElement & {
+          subject: { id: string };
+        }
+      ).subject.id,
     ).toBe("d2");
   });
   it("Settings hides Edit the receipt when the host cannot offer Receipt", async () => {
@@ -7953,7 +7951,7 @@ describe("mounted public department pages", () => {
         "/manage/venue-operations/department/d1/view/receipt",
         permissions,
       );
-      expect(find(app, "dashboard-receipts-screen")).toBeNull();
+      expect(find(app, "dashboard-department-receipt-dialog")).toBeNull();
       expect(find(app, 'button[data-key="receipt"]')).toBeNull();
       if (permissions.some((permission: string) => permission === "venue_service.manage")) {
         expect(find(app, 'button[data-key="settings"]')?.getAttribute("aria-selected")).toBe(

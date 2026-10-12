@@ -1299,8 +1299,9 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   indented under their departments, a row menu on each, a dialog to edit, and the venue receipt
   page folded into each department's receipt.
   [Detail](backlog/service-periods.md#a493-departments-and-zones-as-one-list-edited-in-dialogs)
-  Remaining: dashboard receipt integration and obsolete-editor retirement,
-  contribution-driven field visibility, the full product look, and the list/dialog replacement.
+  Remaining: the legacy server preview retirement and full product look,
+  then the one-list editors and drag moves. Department receipt dialogs and their retained
+  behaviour are connected; the branch remains unpublished.
 
 - **Which name a record sent across a legal-name change carries** (A494 follow-up, 2026-10-11). A
   record keeps the name it was written with, so one written before the change but sent after it

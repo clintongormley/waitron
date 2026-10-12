@@ -1946,6 +1946,11 @@ written per screen (one stated exception, the till's profile dialog, is in the b
   (`beforeClose`, Cancel's `requestClose`) on the coordinator, not on the scope. The scope's
   `commit` and `dispose` redraw the host, so a form left open after a save draws its action quiet
   again;
+- leave an unchanged passive snapshot's baseline alone. Calling `scope.commit` also retires an
+  unanswered leave choice, even when the repeated baseline belongs to another clean form in
+  that choice's scope (`packages/ui-core/src/unsaved-changes.ts`, `invalidate`). The two
+  unchanged-read cases in `apps/dashboard/src/screens/receipt-editor-boundaries.test.ts` keep
+  the receipt and language forms' questions current;
 - a form that takes its scope in `willUpdate` and disposes it on disconnect takes a new scope only
   while `this.isConnected`, and asks for an update when it is put back (Lit runs none on
   reconnect). Disposing the scope redraws the form, so without that check a form taken out of the
@@ -3062,8 +3067,7 @@ A narrower `max-width` on a settings/form screen keeps line length readable, but
 stays anchored to the body's left padding, the same as a full-width `wt-data-table` screen — never
 `margin-inline: auto`. Centering a narrow screen in the _remaining_ space beside the sidebar makes
 it read as a visually different app from the wide table screens next to it; anchoring both to the
-same edge and varying only the width does not. `backup-screen.ts` and `receipts-screen.ts` (its
-form column) already follow this (`max-width` alone). `profile-screen.ts` no longer applies here at all — it isn't a
+same edge and varying only the width does not. `backup-screen.ts` follows this with `max-width` alone. `profile-screen.ts` no longer applies here at all — it isn't a
 screen positioned beside the sidebar any more; it's a modal, and its fields stop at
 `--wt-form-max-width`. The one legitimate exception among actual screens is a full-page one with no
 sidebar at all, like the login screen — centering a freestanding form with nothing to anchor to is
@@ -3074,7 +3078,7 @@ the normal, expected treatment there.
 | Role        | Token(s)                                    | Example                                                                                                                                                                                                                     |
 | ----------- | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Page title  | `--wt-font-size-xl`, bold                   | a screen's own `<h1>` — "Your profile" no longer qualifies: it's a `wt-modal` heading now (`--wt-font-size-lg`, its own role, not this one)                                                                                 |
-| Group label | `--wt-font-size-sm`, bold, uppercase, muted | the receipts screen's section headings (`apps/dashboard/src/screens/receipts-screen.ts`); the nav's own small-caps group header is styled separately (primary-accent, not muted — see "Dashboard sidebar navigation" below) |
+| Group label | `--wt-font-size-sm`, bold, uppercase, muted | the receipt-language card's heading (`apps/dashboard/src/screens/receipt-language-panel.ts`); the nav's own small-caps group header is styled separately (primary-accent, not muted — see "Dashboard sidebar navigation" below) |
 | Field label | `--wt-font-size-sm`, normal weight, muted   | "Name"                                                                                                                                                                                                                      |
 | Field value | `--wt-font-size-md`, bold                   | "Clinton Gormley"                                                                                                                                                                                                           |
 

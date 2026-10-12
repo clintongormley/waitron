@@ -84,6 +84,11 @@ export class DepartmentReceiptDialog extends LitElement {
       h3 {
         font-size: var(--wt-font-size-md);
       }
+      .language-heading {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-2);
+      }
       .note {
         color: var(--wt-color-text-muted);
       }
@@ -133,6 +138,7 @@ export class DepartmentReceiptDialog extends LitElement {
   #leave?: LeaveCoordinator;
   #opening = 0;
   #previewGeneration = 0;
+  #explicitPreviewLanguage = false;
   #previewTimer?: ReturnType<typeof setTimeout>;
   #previewFlight?: object;
   #previewDue = false;
@@ -162,6 +168,7 @@ export class DepartmentReceiptDialog extends LitElement {
     this.actionError = this.readError = this.previewError = "";
     this.preview = undefined;
     this.previewLanguage = "";
+    this.#explicitPreviewLanguage = false;
     this.previewWidth = undefined;
     this.focusedField = "";
     void this.#load();
@@ -270,20 +277,84 @@ export class DepartmentReceiptDialog extends LitElement {
           if (opening !== this.#opening) return;
           this.readError = "";
           const first = this.model === undefined;
+          if (!first && !this.saving && this.#scope?.isDirty()) this.#adoptUntouched(model);
           this.model = model;
           this.requiresDescription = model.operationDescriptionRequired;
           if (first || (!this.saving && !this.#scope?.isDirty())) {
+            const previous = this.#baseline;
+            const registered = this.#scope !== undefined;
             this.draft = structuredClone({ receipt: model.receipt, policy: model.policy });
             this.#baseline = this.#body();
             this.#registerDraft();
-            this.#scope!.commit(this.#baseline);
+            if (
+              registered &&
+              (!previous ||
+                !sameValue(comparableReceipt(previous), comparableReceipt(this.#baseline)))
+            )
+              this.#scope!.commit(this.#baseline);
           }
-          if (!model.languages.includes(this.previewLanguage))
+          if (!this.#explicitPreviewLanguage || !model.languages.includes(this.previewLanguage)) {
             this.previewLanguage = model.receiptLanguage;
+            this.#explicitPreviewLanguage = false;
+          }
           this.#queuePreview();
         },
       )
       .catch(() => {});
+  }
+  #adoptUntouched(model: DepartmentReceiptDialogModel): void {
+    const current = comparableReceipt(this.#body());
+    const baseline = comparableReceipt(this.#baseline!);
+    const next = comparableReceipt({ receipt: model.receipt, policy: model.policy });
+    const draft = structuredClone(this.draft);
+    const saved = structuredClone(this.#baseline!);
+    for (const field of [
+      "logo",
+      "phone",
+      "email",
+      "operationDescription",
+      "printAddress",
+    ] as const) {
+      if (!sameValue(current.receipt[field], baseline.receipt[field])) continue;
+      Object.assign(draft.receipt, { [field]: model.receipt[field] });
+      Object.assign(saved.receipt, { [field]: model.receipt[field] });
+      if (model.receipt[field] === undefined) {
+        delete draft.receipt[field];
+        delete saved.receipt[field];
+      }
+    }
+    for (const field of ["headerSubtitle", "footerMessage"] as const) {
+      const values = { ...draft.receipt[field] };
+      const clean = { ...saved.receipt[field] };
+      const languages = new Set([
+        ...Object.keys(current.receipt[field] ?? {}),
+        ...Object.keys(baseline.receipt[field] ?? {}),
+        ...Object.keys(next.receipt[field] ?? {}),
+      ]);
+      for (const language of languages) {
+        if (!sameValue(current.receipt[field]?.[language], baseline.receipt[field]?.[language]))
+          continue;
+        const value = next.receipt[field]?.[language];
+        if (value === undefined) {
+          delete values[language];
+          delete clean[language];
+        } else values[language] = clean[language] = value;
+      }
+      if (Object.keys(values).length) draft.receipt[field] = values;
+      else delete draft.receipt[field];
+      if (Object.keys(clean).length) saved.receipt[field] = clean;
+      else delete saved.receipt[field];
+    }
+    for (const field of ["receiptPrintMode", "printTradingName"] as const) {
+      if (!sameValue(current.policy[field], baseline.policy[field])) continue;
+      Object.assign(draft.policy, { [field]: model.policy[field] });
+      Object.assign(saved.policy, { [field]: model.policy[field] });
+    }
+    this.draft = draft;
+    if (!sameValue(comparableReceipt(saved), baseline)) {
+      this.#baseline = saved;
+      this.#scope!.commit(saved);
+    }
   }
   #body(): DepartmentReceiptWrite {
     const body = structuredClone(this.draft);
@@ -385,7 +456,7 @@ export class DepartmentReceiptDialog extends LitElement {
       ...(this.previewWidth ? { paperWidth: this.previewWidth } : {}),
     };
   }
-  #queuePreview(): void {
+  #queuePreview(immediate = false): void {
     if (!this.department || !this.model) return;
     const source = { body: this.#previewBody(), venueAddress: this.model.venueAddress };
     if (sameValue(source, this.#previewSource)) return;
@@ -393,6 +464,11 @@ export class DepartmentReceiptDialog extends LitElement {
     clearTimeout(this.#previewTimer);
     this.#previewDue = false;
     const generation = ++this.#previewGeneration;
+    if (immediate) {
+      this.#previewDue = true;
+      void this.#drawPreview(generation);
+      return;
+    }
     this.#previewTimer = setTimeout(() => {
       this.#previewDue = true;
       void this.#drawPreview(generation);
@@ -445,7 +521,12 @@ export class DepartmentReceiptDialog extends LitElement {
       if (opening !== this.#opening) return;
       this.saving = false;
       const params = (error as { params?: Record<string, unknown> } | null)?.params;
-      const field = typeof params?.field === "string" ? params.field : "";
+      const field =
+        codeOf(error) === "image.invalid_file"
+          ? "logo"
+          : typeof params?.field === "string"
+            ? params.field
+            : "";
       const key = typeof params?.language === "string" ? `${field}-${params.language}` : field;
       const sentence =
         typeof params?.maxLength === "number"
@@ -454,9 +535,13 @@ export class DepartmentReceiptDialog extends LitElement {
             ? t("receipts.invalid_phone")
             : params?.reason === "invalid_email"
               ? t("receipts.invalid_email")
-              : field === "operationDescription"
-                ? t("location_settings.invalid")
-                : codeMessage(codeOf(error));
+              : params?.reason === "image_not_found"
+                ? t("receipts.logo_not_found")
+                : params?.reason === "invalid_logo"
+                  ? t("receipts.invalid_logo")
+                  : field === "operationDescription"
+                    ? t("location_settings.invalid")
+                    : codeMessage(codeOf(error));
       if (
         Array.from(this.shadowRoot!.querySelectorAll("[name]")).some(
           (element) => element.getAttribute("name") === key,
@@ -521,7 +606,19 @@ export class DepartmentReceiptDialog extends LitElement {
       : [];
     const marks = this.preview
       ? Object.entries(this.preview.marks).flatMap(([name, range]) =>
-          range ? [{ name, range, active: name === this.focusedField.split("-")[0] }] : [],
+          range
+            ? [
+                {
+                  name,
+                  range,
+                  active:
+                    name ===
+                    (this.focusedField === "printAddress"
+                      ? "address"
+                      : this.focusedField.split("-")[0]),
+                },
+              ]
+            : [],
         )
       : [];
     return html`<wt-dialog
@@ -614,6 +711,9 @@ export class DepartmentReceiptDialog extends LitElement {
                   ></wt-switch
                   >${errors.printAddress ? html`<p class="error" data-field-error="printAddress">${errors.printAddress}</p>` : nothing}
                 </div>
+                <div class="note" data-test="venue-address">
+                  ${this.model.venueAddress.length ? this.model.venueAddress.map((line) => html`<div>${line}</div>`) : t("receipts.no_address")}
+                </div>
                 <dashboard-image-upload
                   name="logo"
                   .api=${this.api}
@@ -661,15 +761,19 @@ export class DepartmentReceiptDialog extends LitElement {
                       ></wt-input>`
                     : nothing
                 }
-                <p class="note">${t("receipts.copies_on_request")}</p>
+                <p class="note">${t("receipts.offered_languages")}</p>
                 ${warnings.length ? html`<p class="note" data-test="translation-warning" role="note">${t("receipts.translation_warning")}</p>` : nothing}
                 ${this.model.languages.map(
                   (language) =>
-                    html`<h3 lang=${language}>${receiptLanguageName(language)}</h3>
+                    html`<div class="language-heading">
+                        <h3 lang=${language}>${receiptLanguageName(language)}</h3>
+                        ${warnings.includes(language) ? html`<span aria-label=${t("receipts.translation_warning")}>⚠</span>` : nothing}
+                      </div>
                       ${this.#text("headerSubtitle", language)}${this.#text("footerMessage", language)}`,
                 )}
               </div>
               <section class="preview" aria-label=${t("receipts.preview")}>
+                <h3>${t("receipts.preview")}</h3>
                 <wt-combobox
                   name="previewLanguage"
                   label=${t("receipts.preview_language")}
@@ -677,8 +781,9 @@ export class DepartmentReceiptDialog extends LitElement {
                   .value=${this.previewLanguage}
                   @wt-change=${(event: CustomEvent<{ value: string }>) => {
                     event.stopPropagation();
+                    this.#explicitPreviewLanguage = true;
                     this.previewLanguage = event.detail.value;
-                    this.#queuePreview();
+                    this.#queuePreview(true);
                   }}
                 ></wt-combobox>
                 ${
@@ -686,12 +791,12 @@ export class DepartmentReceiptDialog extends LitElement {
                     ? html`<wt-combobox
                         name="previewWidth"
                         label=${t("printers.paper_width")}
-                        .options=${this.preview.paperWidths.map((width) => ({ value: width, label: width }))}
+                        .options=${this.preview.paperWidths.map((width) => ({ value: width, label: t(width === "58mm" ? "printers.paper_width_58" : "printers.paper_width_80") }))}
                         .value=${this.previewWidth ?? this.preview.paperWidth}
                         @wt-change=${(event: CustomEvent<{ value: string }>) => {
                           event.stopPropagation();
                           this.previewWidth = event.detail.value as PrintPaperWidth;
-                          this.#queuePreview();
+                          this.#queuePreview(true);
                         }}
                       ></wt-combobox>`
                     : nothing
@@ -702,7 +807,10 @@ export class DepartmentReceiptDialog extends LitElement {
             </div>`
           : nothing
       }
-      <wt-form-actions slot="footer" .error=${hasErrors ? t("form.fix_fields") : this.actionError}>
+      <wt-form-actions
+        slot="footer"
+        .error=${[hasErrors ? t("form.fix_fields") : "", this.actionError].filter(Boolean).join(" ")}
+      >
         <wt-button
           slot="cancel"
           variant="secondary"

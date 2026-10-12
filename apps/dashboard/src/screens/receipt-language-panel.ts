@@ -140,9 +140,10 @@ export class ReceiptLanguagePanel extends LitElement {
             if (writes !== this.#writes) return;
             const clean = this.#scope === undefined || !this.#scope.isDirty();
             if (this.model === undefined || clean || value.fixed !== null) {
+              const changed = this.picked !== value.language || this.#baseline !== value.language;
               this.picked = value.language;
               this.#baseline = value.language;
-              this.#scope?.commit(value.language);
+              if (changed) this.#scope?.commit(value.language);
             }
             if (value.fixed !== null) this.fieldError = "";
             this.model = value;
