@@ -286,6 +286,16 @@ describe.each(["light", "dark"] as const)("hover fills (%s)", (theme) => {
     }
   });
 
+  test("each is at least 1.2:1 from its resting fill, so the hover shows", () => {
+    const el = mount(theme);
+    for (const [hover, base] of HOVER_FILLS) {
+      expect(
+        ratio(token(el, hover), token(el, base)),
+        `${theme}: ${hover} on ${base}`,
+      ).toBeGreaterThanOrEqual(1.2);
+    }
+  });
+
   test("the OS preference gives them the same values as the explicit theme", async () => {
     await commands.emulateColorScheme(theme);
     const byPreference = mount();
