@@ -73,6 +73,7 @@ import {
   deviceOrigin,
   workingOrderId as brandWorkingOrderId,
   jobOrigin,
+  type ReceiptLogoRasters,
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
@@ -999,7 +1000,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     expect(opens[0]!.saleId).toBe(await onlySaleId(cfg));
   });
 
-  it("prints the tenant's authored receipt trim from tenant_receipts (SP-B4 rehome)", async () => {
+  it("ignores the venue footer while printing the filed invoice", async () => {
     const { cfg, each, zoneId } = await setupVenue();
     const printerId = await makePrinter(cfg, { transport: "network_tcp" });
     await configureReceipt(cfg, { mode: "auto", printerId });
@@ -1026,7 +1027,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     expect(jobs).toHaveLength(2);
     const decoded = decodeTicket(new Uint8Array(jobs[0]!.payload));
     expect(decoded).toContain("VERI*FACTU"); // still a real fiscal receipt
-    expect(decoded).toContain("Gracias por su visita"); // the authored trim renders around the art
+    expect(decoded).not.toContain("Gracias por su visita");
   });
 
   it("marks an automatically printed practice sale as simulated", async () => {
@@ -2086,24 +2087,30 @@ describe("the receipt's top block: logo, address, phone and email", () => {
     data: Buffer.from(LOGO_BITS).toString("base64"),
   };
 
-  async function storeReceipt(receipt: Record<string, unknown>): Promise<void> {
+  async function storeReceipt(
+    receipt: Record<string, unknown> & { logoRasters?: ReceiptLogoRasters },
+  ): Promise<void> {
     await withTransaction(suite.db, async (tx) => {
       await tx
         .insert(tenantReceipts)
-        .values({ receipt })
-        .onConflictDoUpdate({ target: tenantReceipts.id, set: { receipt } });
-      const contact = {
-        ...(typeof receipt.phone === "string" ? { phone: receipt.phone } : {}),
-        ...(typeof receipt.email === "string" ? { email: receipt.email } : {}),
-      };
+        .values({
+          receipt: { phone: "910999999", footerMessage: "Global decoration", printAddress: true },
+        })
+        .onConflictDoUpdate({
+          target: tenantReceipts.id,
+          set: {
+            receipt: { phone: "910999999", footerMessage: "Global decoration", printAddress: true },
+          },
+        });
+      const { logoRasters, ...authored } = receipt;
       const rows = await tx.select({ id: departments.id }).from(departments);
       for (const row of rows)
         await tx
           .insert(departmentReceipts)
-          .values({ departmentId: row.id, receipt: contact })
+          .values({ departmentId: row.id, receipt: authored, logoRasters: logoRasters ?? null })
           .onConflictDoUpdate({
             target: departmentReceipts.departmentId,
-            set: { receipt: contact },
+            set: { receipt: authored, logoRasters: logoRasters ?? null },
           });
     });
   }
@@ -2148,6 +2155,7 @@ describe("the receipt's top block: logo, address, phone and email", () => {
     const printerId = await makePrinter(cfg);
     await configureReceipt(cfg, { mode: "auto", printerId });
     await storeReceipt({
+      printAddress: true,
       logo: LOGO,
       phone: "+34 910 000 000",
       email: "hola@deli.test",
@@ -2189,6 +2197,7 @@ describe("the receipt's top block: logo, address, phone and email", () => {
     const { cfg, each, zoneId } = await setupVenue();
     await configureReceipt(cfg, { mode: "auto", printerId: await makePrinter(cfg) });
     await storeReceipt({
+      printAddress: true,
       logo: LOGO,
       logoRasters: { "58mm": logoRaster, "80mm": { ...logoRaster, data } },
     });
@@ -2207,7 +2216,7 @@ describe("the receipt's top block: logo, address, phone and email", () => {
     ["a number for the phone", { phone: 5 }],
     ["an object for the email", { email: {} }],
     ["a list for the footer", { footerMessage: [] }],
-    ["a word for the address switch, which prints the address", { printAddress: "no" }],
+    ["a word for the address switch, which omits the address", { printAddress: "no" }],
   ])("files and prints the sale without a trim field stored as %s", async (_, trim) => {
     const { cfg, each, zoneId } = await setupVenue();
     await configureReceipt(cfg, { mode: "auto", printerId: await makePrinter(cfg) });
@@ -2218,11 +2227,7 @@ describe("the receipt's top block: logo, address, phone and email", () => {
     expect(await registroCount(cfg)).toBe(1);
     const [payload] = await receiptPayloads(cfg);
     const taxId = (await withTransaction(suite.db, (tx) => readTenant(tx)))!.taxId;
-    expect(topBlock(payload!)).toEqual([
-      `Deli Recibos SL · NIF: ${taxId}`,
-      "Calle Mayor 1",
-      "28013 Madrid",
-    ]);
+    expect(topBlock(payload!)).toEqual([`Deli Recibos SL · NIF: ${taxId}`]);
     // The footer prints after the tender line.
     const lines = printedLines(payload!).map((line) => line.trim());
     expect(lines.slice(lines.indexOf("Tarjeta") + 1).filter(Boolean)).toEqual([]);
@@ -2243,7 +2248,7 @@ describe("the receipt's top block: logo, address, phone and email", () => {
     await withTransaction(suite.db, (tx) => enqueueReceiptReprint(tx, cfg, filed, saleId));
     const [original, reprint] = await receiptPayloads(cfg);
     expect(pictures(original!)).toHaveLength(1);
-    expect(topBlock(original!)).toContain("Calle Mayor 1");
+    expect(topBlock(original!)).not.toContain("Calle Mayor 1");
     expect(pictures(reprint!).slice(1)).toEqual([[16, 2, LOGO_BITS]]);
     expect(topBlock(reprint!)).toContain("Tel. 910000000");
     expect(topBlock(reprint!)).not.toContain("Calle Mayor 1");
@@ -2441,7 +2446,7 @@ describe("automatic F1 receipt delivery enrollment", () => {
   });
 
   it.each(["absent", "null"] as const)(
-    "uses only venue fields with an %s department header",
+    "omits optional decoration with an %s department header",
     async (kind) => {
       const { cfg, saleId, ticket } = await issued("auto");
       await suite.db.insert(tenantReceipts).values({
@@ -2471,10 +2476,10 @@ describe("automatic F1 receipt delivery enrollment", () => {
       const jobs = await suite.db.select().from(printJobs);
       expect(jobs).toHaveLength(1);
       const text = decodeTicket(jobs[0]!.payload);
-      expect(text).toContain("Venue subtitle");
-      expect(text).toContain("Venue footer");
-      expect(text).toContain("910000000");
-      expect(text).toContain("venue@example.test");
+      expect(text).not.toContain("Venue subtitle");
+      expect(text).not.toContain("Venue footer");
+      expect(text).not.toContain("910000000");
+      expect(text).not.toContain("venue@example.test");
       expect(text).not.toContain("Default department text");
       expect(text).not.toContain("default@example.test");
       expect(text).not.toContain("Inconsistent brand");
@@ -2847,7 +2852,7 @@ describe("department receipt presentation on thermal jobs", () => {
   }
 
   it.each(["58mm", "80mm"] as const)(
-    "uses the current owner of the logo on %s and inherits after clearing",
+    "uses the current department logo on %s and omits it after clearing",
     async (paperWidth) => {
       const { cfg, departmentId, sell, documents } = await setupReceipt();
       await suite.db
@@ -2882,7 +2887,7 @@ describe("department receipt presentation on thermal jobs", () => {
           .map((c) => [...c.bytes.subarray(8)]),
       );
       expect(logoBytes).toEqual(
-        paperWidth === "58mm" ? [[[255, 255]], [[129]]] : [[[255, 255, 255]], [[129, 255]]],
+        paperWidth === "58mm" ? [[[255, 255]], []] : [[[255, 255, 255]], []],
       );
       expect(await registroCount(cfg)).toBe(1);
     },
@@ -2956,7 +2961,9 @@ describe("department receipt presentation on thermal jobs", () => {
         const jobs = await documents();
         expect(jobs).toHaveLength(1);
         const text = decodeTicket(jobs[0]!.payload);
-        expect(text).toContain(source === "venue" ? "Own subtitle" : "Venue subtitle");
+        expect(text.includes("Own subtitle")).toBe(source === "venue");
+        expect(text).not.toContain("Venue subtitle");
+        expect(text).not.toContain("Venue footer");
         expect(text.includes("own@example.test")).toBe(source === "venue");
         expect(text).not.toContain("venue@example.test");
         expect(await registroCount(cfg)).toBe(1);
@@ -2971,7 +2978,9 @@ describe("department receipt presentation on thermal jobs", () => {
                 code: "receipt.read_failed",
               },
         ];
-        expect(warning.mock.calls).toEqual([diagnostic, diagnostic]);
+        expect(warning.mock.calls).toEqual(
+          source === "venue" ? [diagnostic] : [diagnostic, diagnostic],
+        );
         expect(ticket.receiptTrim).toEqual(
           source === "venue"
             ? { headerSubtitle: "Own subtitle", email: "own@example.test" }
@@ -3117,7 +3126,7 @@ describe("department receipt presentation on thermal jobs", () => {
     expect(text[1]).toContain("second@example.test");
     expect(text[1]).not.toContain("910000000");
     expect(text[1]).not.toContain("First subtitle");
-    expect(text.every((t) => t.includes("Venue footer"))).toBe(true);
+    expect(text.every((t) => !t.includes("Venue footer"))).toBe(true);
   });
 
   it("reprints a disabled recorded department with live text and recorded trading name", async () => {
@@ -3133,7 +3142,7 @@ describe("department receipt presentation on thermal jobs", () => {
       .where(eq(departments.id, departmentId));
     await suite.db
       .update(departmentReceipts)
-      .set({ receipt: { headerSubtitle: { "es-ES": "After edit" } } })
+      .set({ receipt: { headerSubtitle: { "es-ES": "After edit" }, printAddress: true } })
       .where(eq(departmentReceipts.departmentId, departmentId));
     await suite.db.update(tenantReceipts).set({ receipt: { footerMessage: "New venue footer" } });
     await suite.db
@@ -3144,13 +3153,16 @@ describe("department receipt presentation on thermal jobs", () => {
     const text = (await documents()).map((job) => decodeTicket(job.payload));
     expect(text[0]).toContain("Before edit");
     expect(text[1]).toContain("After edit");
-    expect(text[1]).toContain("New venue footer");
+    expect(text[1]).not.toContain("New venue footer");
     expect(text[1]).toContain("Recorded brand");
     expect(text[1]).not.toContain("New mutable brand");
     expect(text[1]).toContain("New current address");
     expect(text[1]).toContain("DUPLICADO");
     expect(await registroCount(cfg)).toBe(1);
-    await suite.db.update(tenantReceipts).set({ receipt: { printAddress: false } });
+    await suite.db
+      .update(departmentReceipts)
+      .set({ receipt: { headerSubtitle: { "es-ES": "After edit" }, printAddress: false } })
+      .where(eq(departmentReceipts.departmentId, departmentId));
     await withTransaction(suite.db, (tx) => enqueueReceiptReprint(tx, cfg, ticket, id));
     expect(decodeTicket((await documents())[2]!.payload)).not.toContain("New current address");
   });
@@ -3185,7 +3197,7 @@ describe("department receipt presentation on thermal jobs", () => {
   it.each([
     { printed: "ca-ES", current: "es-ES", subtitle: "Catalan subtitle", footer: "Spanish footer" },
     { printed: "ca-ES", current: "gl-ES", subtitle: "Catalan subtitle", footer: "Galician footer" },
-    { printed: "eu-ES", current: "gl-ES", subtitle: "Venue subtitle", footer: "Galician footer" },
+    { printed: "eu-ES", current: "gl-ES", subtitle: null, footer: "Galician footer" },
   ])(
     "resolves $printed against current $current without a third-language candidate",
     async ({ printed, current, subtitle, footer }) => {
@@ -3205,7 +3217,8 @@ describe("department receipt presentation on thermal jobs", () => {
         .where(eq(locations.id, cfg.locationId));
       await withTransaction(suite.db, (tx) => enqueueReceiptReprint(tx, cfg, ticket, id, printed));
       const text = decodeTicket((await documents())[1]!.payload);
-      expect(text).toContain(subtitle);
+      if (subtitle === null) expect(text).not.toContain("Venue subtitle");
+      else expect(text).toContain(subtitle);
       expect(text).toContain(footer);
       expect(text).not.toContain("venue@example.test");
       expect(text).not.toContain("Spanish subtitle");
