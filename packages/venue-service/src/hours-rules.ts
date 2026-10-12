@@ -5,8 +5,8 @@ import "./errors.js";
 
 const DATE_SHAPE = /^\d{4}-\d{2}-\d{2}$/;
 
-export function invalidHours(field: string, clash?: { date: LocalDate; subjectId: string }): never {
-  throw new AppError("hours.invalid", { field, ...clash });
+export function invalidHours(field: string): never {
+  throw new AppError("hours.invalid", { field });
 }
 
 export function isLocalDate(value: unknown): value is LocalDate {

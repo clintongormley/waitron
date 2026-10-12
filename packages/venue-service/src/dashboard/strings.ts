@@ -295,7 +295,6 @@ const en = {
   "venue.business_day_hours_conflict": "Adjust the conflicting hours first.",
   "hours.invalid":
     "Check the highlighted hours: periods must not overlap, including past midnight.",
-  "hours.invalid_clash": "These hours overlap the hours on {date}.",
   "hours.date_taken": "{date} already has special hours.",
   "hours.date_not_found": "This special date no longer exists.",
   "hours.always_open": "The default station is always open, so its hours cannot change.",
@@ -1063,7 +1062,6 @@ const es: Record<keyof typeof en, string> = {
   "venue.business_day_hours_conflict": "Ajusta primero los horarios en conflicto.",
   "hours.invalid":
     "Revisa los horarios marcados: los periodos no pueden solaparse, tampoco pasada la medianoche.",
-  "hours.invalid_clash": "Este horario se solapa con el del {date}.",
   "hours.date_taken": "El {date} ya tiene un horario especial.",
   "hours.date_not_found": "Esta fecha especial ya no existe.",
   "hours.always_open":
