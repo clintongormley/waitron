@@ -6059,7 +6059,9 @@ describe("dashboard-app: build updates", () => {
     updated();
     await flush(el);
     expect(reload).not.toHaveBeenCalled();
-    await userEvent.click(bar(el)!.shadowRoot!.querySelector("button")!);
+    await userEvent.click(
+      bar(el)!.shadowRoot!.querySelector("wt-button")!.shadowRoot!.querySelector("button")!,
+    );
     expect(reload).toHaveBeenCalledOnce();
   });
 

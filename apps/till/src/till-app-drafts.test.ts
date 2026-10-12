@@ -1267,6 +1267,7 @@ describe("till-app: signing out with a draft", () => {
     await userEvent.click(
       el
         .shadowRoot!.querySelector("wt-banner[data-test=update-bar]")!
+        .shadowRoot!.querySelector("wt-button")!
         .shadowRoot!.querySelector("button")!,
     );
     await flush(el);

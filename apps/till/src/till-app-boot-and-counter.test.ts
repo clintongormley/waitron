@@ -4829,7 +4829,9 @@ describe("till-app when the server reports another build", () => {
       expect(parkOrder).toHaveBeenCalledOnce();
       updated();
       await flush(el);
-      await userEvent.click(updateBar(el)!.shadowRoot!.querySelector("button")!);
+      await userEvent.click(
+        updateBar(el)!.shadowRoot!.querySelector("wt-button")!.shadowRoot!.querySelector("button")!,
+      );
       await flush(el);
       expect(reload).not.toHaveBeenCalled();
       if (action === "park-order") {
@@ -4849,7 +4851,9 @@ describe("till-app when the server reports another build", () => {
     await flush(el);
     updated();
     await flush(el);
-    await userEvent.click(updateBar(el)!.shadowRoot!.querySelector("button")!);
+    await userEvent.click(
+      updateBar(el)!.shadowRoot!.querySelector("wt-button")!.shadowRoot!.querySelector("button")!,
+    );
     await flush(el);
     expect(reload).not.toHaveBeenCalled();
     el.remove();
@@ -4891,7 +4895,9 @@ describe("till-app when the server reports another build", () => {
     expect(recordSale).toHaveBeenCalledOnce();
     updated();
     await flush(el);
-    await userEvent.click(updateBar(el)!.shadowRoot!.querySelector("button")!);
+    await userEvent.click(
+      updateBar(el)!.shadowRoot!.querySelector("wt-button")!.shadowRoot!.querySelector("button")!,
+    );
     await flush(el);
     expect(reload).not.toHaveBeenCalled();
     answer(saleResult);
@@ -4909,7 +4915,9 @@ describe("till-app when the server reports another build", () => {
     await flush(el);
     updated();
     await flush(el);
-    await userEvent.click(updateBar(el)!.shadowRoot!.querySelector("button")!);
+    await userEvent.click(
+      updateBar(el)!.shadowRoot!.querySelector("wt-button")!.shadowRoot!.querySelector("button")!,
+    );
     await flush(el);
     expect(reload).not.toHaveBeenCalled();
     await userEvent.click(c);
@@ -4926,7 +4934,9 @@ describe("till-app when the server reports another build", () => {
     await toCounter(el);
     updated();
     await flush(el);
-    await userEvent.click(updateBar(el)!.shadowRoot!.querySelector("button")!);
+    await userEvent.click(
+      updateBar(el)!.shadowRoot!.querySelector("wt-button")!.shadowRoot!.querySelector("button")!,
+    );
     expect(reload).toHaveBeenCalledOnce();
   });
 });
@@ -5108,7 +5118,9 @@ describe("till-app when a box update meets a box reset or a refused device", () 
     fake.box.build = "new";
     await fake.router.probeNow();
     await flush(el);
-    await userEvent.click(updateBar(el)!.shadowRoot!.querySelector("button")!);
+    await userEvent.click(
+      updateBar(el)!.shadowRoot!.querySelector("wt-button")!.shadowRoot!.querySelector("button")!,
+    );
     await flush(el);
     expect(reload).not.toHaveBeenCalled();
     return { el, c, reload, answer };

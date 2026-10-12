@@ -2,6 +2,7 @@ import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions } from "../interactive.js";
+import "./wt-button.js";
 
 /** A full-width strip with one message and, when given an action label, one action. */
 @customElement("wt-banner")
@@ -30,28 +31,6 @@ export class WtBanner extends LitElement {
       .message {
         flex: 1 1 auto;
         margin: 0;
-      }
-
-      button {
-        min-width: var(--wt-tap-min);
-        min-height: var(--wt-tap-min);
-        padding: 0 var(--wt-space-3);
-        border: 0;
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-primary);
-        color: var(--wt-color-on-primary);
-        font: inherit;
-        font-weight: var(--wt-font-weight-bold);
-        cursor: pointer;
-      }
-
-      button:hover {
-        background: var(--wt-color-primary-hover);
-      }
-
-      button:focus-visible {
-        outline: var(--wt-focus-ring);
-        outline-offset: var(--wt-focus-offset);
       }
     `,
   ];
@@ -95,7 +74,9 @@ export class WtBanner extends LitElement {
       ${
         this.actionLabel === ""
           ? nothing
-          : html`<button type="button" @click=${this.#onAction}>${this.actionLabel}</button>`
+          : html`<wt-button variant="primary" @click=${this.#onAction}
+              >${this.actionLabel}</wt-button
+            >`
       }
     </div>`;
   }

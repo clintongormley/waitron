@@ -35,7 +35,7 @@ describe.each(["light", "dark"] as const)("wt-banner a11y (%s theme)", (theme) =
       theme,
     )) as WtBanner;
     await shown(el);
-    el.shadowRoot!.querySelector("button")!.focus();
+    el.shadowRoot!.querySelector("wt-button")!.shadowRoot!.querySelector("button")!.focus();
     await expectNoA11yViolations(host);
   });
 });

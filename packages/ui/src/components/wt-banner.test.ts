@@ -6,7 +6,8 @@ import "./wt-banner.js";
 
 afterEach(cleanup);
 
-const button = (el: WtBanner) => el.shadowRoot!.querySelector("button");
+const action = (el: WtBanner) => el.shadowRoot!.querySelector("wt-button");
+const button = (el: WtBanner) => action(el)?.shadowRoot!.querySelector("button") ?? null;
 const message = (el: WtBanner) => el.shadowRoot!.querySelector(".message")!.textContent;
 const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 const shown = async (el: WtBanner) => {
@@ -22,7 +23,8 @@ test("shows its message and its action, and is announced politely", async () => 
   expect(el.getAttribute("role")).toBe("status");
   await shown(el);
   expect(message(el)).toBe("Waitron was updated.");
-  expect(button(el)!.textContent!.trim()).toBe("Reload");
+  expect(action(el)!.getAttribute("variant")).toBe("primary");
+  expect(action(el)!.textContent!.trim()).toBe("Reload");
 });
 
 test("draws its live region empty for a whole frame before putting the message in", async () => {
@@ -70,7 +72,8 @@ test("keeps a role it was given", async () => {
 
 test("draws no button without an action label", async () => {
   const el = (await mount('<wt-banner message="Waitron was updated."></wt-banner>')) as WtBanner;
-  expect(button(el)).toBeNull();
+  expect(action(el)).toBeNull();
+  expect(el.shadowRoot!.querySelector("button")).toBeNull();
 });
 
 test("pressing the action sends one wt-banner-action and stops the click", async () => {
@@ -92,14 +95,14 @@ test("pressing the action sends one wt-banner-action and stops the click", async
   expect(action.detail).toEqual({});
 });
 
-test("the keyboard presses the action too", async () => {
+test.each(["{Enter}", " "])("the keyboard presses the action too (%s)", async (key) => {
   const el = (await mount(
     '<wt-banner message="Waitron was updated." action-label="Reload"></wt-banner>',
   )) as WtBanner;
   const pressed = vi.fn();
   el.addEventListener("wt-banner-action", pressed);
   button(el)!.focus();
-  await userEvent.keyboard("{Enter}");
+  await userEvent.keyboard(key);
   expect(pressed).toHaveBeenCalledOnce();
 });
 
@@ -118,8 +121,8 @@ test("paints the strip and its action from tokens", async () => {
   expect(strip.color).toBe("rgb(4, 5, 6)");
   expect(strip.borderBottomColor).toBe("rgb(7, 8, 9)");
   expect(strip.borderLeftColor).toBe("rgb(10, 11, 12)");
-  const action = getComputedStyle(button(el)!);
-  expect(action.backgroundColor).toBe("rgb(10, 11, 12)");
-  expect(action.color).toBe("rgb(13, 14, 15)");
-  expect(action.minHeight).toBe("51px");
+  const painted = getComputedStyle(button(el)!);
+  expect(painted.backgroundColor).toBe("rgb(10, 11, 12)");
+  expect(painted.color).toBe("rgb(13, 14, 15)");
+  expect(painted.minHeight).toBe("51px");
 });
