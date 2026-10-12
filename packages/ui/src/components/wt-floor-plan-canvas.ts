@@ -227,8 +227,14 @@ export class WtFloorPlanCanvas extends LitElement {
         outline: var(--wt-focus-ring);
       }
 
-      .resize-handle {
+      .resize-handle,
+      .resize-dot {
         position: absolute;
+      }
+
+      /* Under the table's button, which takes a press where the two overlap, so a selected table
+         of any size can still be dragged; the dot is grabbed outside the table. */
+      .resize-handle {
         width: var(--wt-space-5);
         height: var(--wt-space-5);
         margin: calc(var(--wt-space-5) / -2) 0 0 calc(var(--wt-space-5) / -2);
@@ -237,41 +243,38 @@ export class WtFloorPlanCanvas extends LitElement {
         pointer-events: auto;
       }
 
-      .resize-handle::before {
-        content: "";
-        position: absolute;
-        top: calc((var(--wt-space-5) - var(--wt-space-3)) / 2);
-        left: calc((var(--wt-space-5) - var(--wt-space-3)) / 2);
+      .resize-dot {
         width: var(--wt-space-3);
         height: var(--wt-space-3);
+        margin: calc(var(--wt-space-3) / -2) 0 0 calc(var(--wt-space-3) / -2);
         border: calc(var(--wt-space-1) / 2) solid var(--wt-color-primary);
         border-radius: var(--wt-radius-full);
         background: var(--wt-color-surface);
       }
 
-      .resize-handle[data-dragging]::before {
+      .resize-dot[data-dragging] {
         background: var(--wt-color-primary);
       }
 
-      .resize-handle[data-side="top"] {
+      [data-side="top"] {
         top: 0;
         left: 50%;
         cursor: ns-resize;
       }
 
-      .resize-handle[data-side="right"] {
+      [data-side="right"] {
         top: 50%;
         left: 100%;
         cursor: ew-resize;
       }
 
-      .resize-handle[data-side="bottom"] {
+      [data-side="bottom"] {
         top: 100%;
         left: 50%;
         cursor: ns-resize;
       }
 
-      .resize-handle[data-side="left"] {
+      [data-side="left"] {
         top: 50%;
         left: 0;
         cursor: ew-resize;
@@ -454,7 +457,9 @@ export class WtFloorPlanCanvas extends LitElement {
   #renderTable(t: PlanCanvasTable, copy: FloorPlanCanvasCopy): TemplateResult {
     const p = this.#placementOf(t);
     const style = this.#frameStyle(p);
+    const selected = t.key === this.selected;
     return html`
+      ${selected ? this.#renderHitAreas(t, p) : nothing}
       <button
         type="button"
         class="table"
@@ -474,7 +479,7 @@ export class WtFloorPlanCanvas extends LitElement {
         ${t.fixed ? html`<span class="fixed-marker" part="fixed-marker"></span>` : nothing}
       </button>
       ${t.refused === undefined ? nothing : this.#renderReason(t, p)}
-      ${t.key === this.selected ? this.#renderHandles(t, p, copy) : nothing}
+      ${selected ? this.#renderHandles(t, p, copy) : nothing}
       ${
         this.#drag?.kind === "resize" && this.#drag.table.key === t.key
           ? this.#renderBadge(p)
@@ -530,11 +535,25 @@ export class WtFloorPlanCanvas extends LitElement {
       ${SIDES.map(
         (side) =>
           html`<div
+            class="resize-dot"
+            part="resize-dot"
+            data-side=${side}
+            ?data-dragging=${side === dragged}
+          ></div>`,
+      )}
+    </div>`;
+  }
+
+  /** Drawn before the table's button, so the button is above them; the dots are drawn after it. */
+  #renderHitAreas(t: PlanCanvasTable, p: PlanPlacement): TemplateResult {
+    return html`<div class="frame" aria-hidden="true" style=${this.#frameStyle(p)}>
+      ${SIDES.map(
+        (side) =>
+          html`<div
             class="resize-handle"
             part="resize-handle"
             data-side=${side}
             aria-hidden="true"
-            ?data-dragging=${side === dragged}
             @click=${(e: Event) => e.stopPropagation()}
             @pointerdown=${(e: PointerEvent) => this.#onPointerDown(e, t, "resize", side)}
           ></div>`,

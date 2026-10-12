@@ -366,14 +366,14 @@ it("paints the side dots, the size badge and the turn arrow from tokens", async 
   host.style.setProperty("--wt-color-surface", "rgb(10, 11, 12)");
   host.style.setProperty("--wt-color-text", "rgb(13, 14, 15)");
   host.style.setProperty("--wt-color-bg", "rgb(16, 17, 18)");
-  const drawn = getComputedStyle(dot(el, "top"), "::before");
-  expect(drawn.borderTopColor).toBe("rgb(4, 5, 6)");
-  expect(drawn.backgroundColor).toBe("rgb(10, 11, 12)");
+  const top = getComputedStyle(drawn(el, "top"));
+  expect(top.borderTopColor).toBe("rgb(4, 5, 6)");
+  expect(top.backgroundColor).toBe("rgb(10, 11, 12)");
   expect(getComputedStyle(handles(el)[0]!).color).toBe("rgb(13, 14, 15)");
   const at = dragDot(el, "right", 24, 0);
   await el.updateComplete;
-  expect(getComputedStyle(dot(el, "right"), "::before").backgroundColor).toBe("rgb(4, 5, 6)");
-  expect(getComputedStyle(dot(el, "top"), "::before").backgroundColor).toBe("rgb(10, 11, 12)");
+  expect(getComputedStyle(drawn(el, "right")).backgroundColor).toBe("rgb(4, 5, 6)");
+  expect(getComputedStyle(drawn(el, "top")).backgroundColor).toBe("rgb(10, 11, 12)");
   const badge = getComputedStyle(part(el, "size-badge"));
   expect(badge.backgroundColor).toBe("rgb(13, 14, 15)");
   expect(badge.color).toBe("rgb(16, 17, 18)");
@@ -823,10 +823,10 @@ it("a real drag of a table released over empty grid keeps the selection", async 
   const seen = moves(el);
   const selections = selects(el);
   // The pointer moves about 15 px left and the table one square (12 px), so the release lands on
-  // the grid just left of the table. Pressed clear of the side dots.
+  // the grid just left of the table.
   await userEvent.dragAndDrop(button(el, "t1"), part(el, "grid"), {
-    sourcePosition: { x: 1, y: 10 },
-    targetPosition: { x: 82, y: 118 },
+    sourcePosition: { x: 1, y: 40 },
+    targetPosition: { x: 82, y: 148 },
   });
   expect(seen).toEqual([{ key: "t1", x: 1, y: 3 }]);
   expect(selections).toEqual([]);
@@ -847,17 +847,16 @@ it("a real drag of the handle that turns nothing keeps the selection", async () 
 });
 
 it("a real drag of a table that moves nothing keeps the selection", async () => {
-  const el = await canvas([table("t1", "T1", { x: 2, y: 3, width: 2, height: 4 })], {
+  const el = await canvas([table("t1", "T1", { x: 2, y: 3, width: 2, height: 2 })], {
     selected: "t1",
   });
   await settled(el);
   const seen = moves(el);
   const selections = selects(el);
-  // About 5 px right, under half a square, ending past the table's right edge (120 px). Pressed
-  // between the right and bottom dots' round hit areas.
+  // About 5 px right, under half a square, ending past the table's right edge (120 px).
   await userEvent.dragAndDrop(button(el, "t1"), part(el, "grid"), {
-    sourcePosition: { x: 22, y: 38 },
-    targetPosition: { x: 123, y: 146 },
+    sourcePosition: { x: 20, y: 12 },
+    targetPosition: { x: 122, y: 120 },
   });
   expect(seen).toEqual([]);
   expect(selections).toEqual([]);
@@ -1001,6 +1000,10 @@ const dots = (el: WtFloorPlanCanvas) =>
 const dot = (el: WtFloorPlanCanvas, side: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(`[part~="resize-handle"][data-side="${side}"]`)!;
 
+/** The drawn dot; `dot` is its hit area, under the table. */
+const drawn = (el: WtFloorPlanCanvas, side: string) =>
+  el.shadowRoot!.querySelector<HTMLElement>(`[part~="resize-dot"][data-side="${side}"]`)!;
+
 const badgeOf = (el: WtFloorPlanCanvas) =>
   el.shadowRoot!.querySelector<HTMLElement>('[part~="size-badge"]');
 
@@ -1036,7 +1039,8 @@ it("draws four side dots in the turn arrow's frame on the selected table only, o
   for (const d of found) {
     expect(d.getAttribute("aria-hidden")).toBe("true");
     expect(d.hasAttribute("tabindex")).toBe(false);
-    expect(d.parentElement).toBe(handles(el)[0]!.parentElement);
+    expect(drawn(el, d.dataset.side!).parentElement).toBe(handles(el)[0]!.parentElement);
+    expect(getComputedStyle(drawn(el, d.dataset.side!)).pointerEvents).toBe("none");
   }
   el.selected = null;
   await el.updateComplete;
@@ -1059,9 +1063,11 @@ it.each([0, 30])("centres each side dot on its side's midpoint turned %i°", asy
     left: turnedPoint(el, "t1", rotation, -48, 0),
   };
   for (const [side, at] of Object.entries(want)) {
-    const c = centreOf(dot(el, side));
-    expect(Math.abs(c.x - at.x)).toBeLessThanOrEqual(1);
-    expect(Math.abs(c.y - at.y)).toBeLessThanOrEqual(1);
+    for (const node of [dot(el, side), drawn(el, side)]) {
+      const c = centreOf(node);
+      expect(Math.abs(c.x - at.x)).toBeLessThanOrEqual(1);
+      expect(Math.abs(c.y - at.y)).toBeLessThanOrEqual(1);
+    }
   }
 });
 
@@ -1072,9 +1078,9 @@ it("draws each side dot a hit area of --wt-space-5 round a dot --wt-space-3 acro
   const area = dot(el, "left").getBoundingClientRect();
   expect(area.width).toBe(30);
   expect(area.height).toBe(30);
-  const drawn = getComputedStyle(dot(el, "left"), "::before");
-  expect(drawn.width).toBe("10px");
-  expect(drawn.height).toBe("10px");
+  const left = drawn(el, "left").getBoundingClientRect();
+  expect(left.width).toBe(10);
+  expect(left.height).toBe(10);
 });
 
 it("dragging the right dot sends one resize at release, from resizeFrom", async () => {
@@ -1125,11 +1131,11 @@ it("shows the size badge under the table, past its bottom dot, while a dot is dr
   expect(badge.getBoundingClientRect().top).toBeGreaterThanOrEqual(
     dot(el, "bottom").getBoundingClientRect().bottom,
   );
-  expect(dot(el, "right").hasAttribute("data-dragging")).toBe(true);
-  expect([...dots(el)].filter((d) => d.hasAttribute("data-dragging"))).toHaveLength(1);
+  expect(drawn(el, "right").hasAttribute("data-dragging")).toBe(true);
+  expect([...el.shadowRoot!.querySelectorAll("[part~=resize-dot][data-dragging]")]).toHaveLength(1);
   await release(el, at);
   expect(badgeOf(el)).toBeNull();
-  expect([...dots(el)].filter((d) => d.hasAttribute("data-dragging"))).toHaveLength(0);
+  expect([...el.shadowRoot!.querySelectorAll("[part~=resize-dot][data-dragging]")]).toHaveLength(0);
 });
 
 it("draws a refused table's reason below the size badge while a dot is dragged", async () => {
@@ -1168,17 +1174,89 @@ it("writes a selected refused table's reason below every side dot at every turn"
   }
 });
 
+/** Presses whatever is drawn topmost at (x, y), as a real pointer would, and drags it `by` px. */
+async function pressAndDrag(
+  el: WtFloorPlanCanvas,
+  at: { x: number; y: number },
+  by: { x: number; y: number },
+) {
+  const target = el.shadowRoot!.elementFromPoint(at.x, at.y)!;
+  pointer(target, "pointerdown", 1, at.x, at.y);
+  pointer(window, "pointermove", 1, at.x + by.x, at.y + by.y);
+  await release(el, { x: at.x + by.x, y: at.y + by.y });
+}
+
+/** For a selected 2 × 2 table turned `rotation`: each side's midpoint, `out` px outwards, and
+ *  24 px further outwards on screen. */
+function sidePresses(el: WtFloorPlanCanvas, rotation: number, out: number) {
+  const a = (rotation * Math.PI) / 180;
+  return (
+    [
+      ["top", 0, -1],
+      ["right", 1, 0],
+      ["bottom", 0, 1],
+      ["left", -1, 0],
+    ] as const
+  ).map(([side, u, v]) => ({
+    side,
+    at: turnedPoint(el, "t1", rotation, u * (12 + out), v * (12 + out)),
+    by: {
+      x: 24 * (u * Math.cos(a) - v * Math.sin(a)),
+      y: 24 * (u * Math.sin(a) + v * Math.cos(a)),
+    },
+  }));
+}
+
+it.each([0, 30])(
+  "a selected 2 × 2 table turned %i° is dragged by a press at its centre or just inside a side's dot",
+  async (rotation) => {
+    const p = place({ x: 10, y: 10, width: 2, height: 2, rotation });
+    const el = await canvas([{ key: "t1", label: "T1", fixed: false, placement: p }], {
+      selected: "t1",
+    });
+    await settled(el);
+    const sized = resizes(el);
+    const moved = moves(el);
+    await pressAndDrag(el, centreOf(button(el, "t1")), { x: 24, y: 24 });
+    expect(moved).toHaveLength(1);
+    for (const [i, { side, at, by }] of sidePresses(el, rotation, -3).entries()) {
+      await pressAndDrag(el, at, by);
+      expect(moved, side).toHaveLength(i + 2);
+    }
+    expect(sized).toEqual([]);
+  },
+);
+
+it.each([0, 30])(
+  "a press just outside a side of a selected 2 × 2 table turned %i° resizes that side",
+  async (rotation) => {
+    const p = place({ x: 10, y: 10, width: 2, height: 2, rotation });
+    const el = await canvas([{ key: "t1", label: "T1", fixed: false, placement: p }], {
+      selected: "t1",
+    });
+    await settled(el);
+    const sized = resizes(el);
+    const moved = moves(el);
+    for (const { side, at, by } of sidePresses(el, rotation, 3)) {
+      await pressAndDrag(el, at, by);
+      expect(sized.at(-1)?.detail, side).toEqual({ key: "t1", ...resized(resizeFrom(p, side, 2)) });
+    }
+    expect(sized).toHaveLength(4);
+    expect(moved).toEqual([]);
+  },
+);
+
 it("a dot drag that ends where it began sends nothing", async () => {
   const el = await canvas([table("t1", "T1", { x: 10, y: 10 })], { selected: "t1" });
   const seen = resizes(el);
   const at = dragDot(el, "right", 5, 5);
   await el.updateComplete;
   expect(badgeOf(el)!.textContent!.trim()).toBe("8 × 8");
-  expect(dot(el, "right").hasAttribute("data-dragging")).toBe(true);
+  expect(drawn(el, "right").hasAttribute("data-dragging")).toBe(true);
   await release(el, at);
   expect(seen).toEqual([]);
   expect(badgeOf(el)).toBeNull();
-  expect(dot(el, "right").hasAttribute("data-dragging")).toBe(false);
+  expect(drawn(el, "right").hasAttribute("data-dragging")).toBe(false);
 });
 
 it("a pointer cancel puts the size back and sends nothing", async () => {
