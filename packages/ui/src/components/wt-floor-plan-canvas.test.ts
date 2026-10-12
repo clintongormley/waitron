@@ -62,8 +62,8 @@ it("draws each table at its grid place and size", async () => {
   const el = await canvas([table("t1", "T1", { x: 2, y: 3, width: 8, height: 4 })]);
   const grid = part(el, "grid").getBoundingClientRect();
   const box = button(el, "t1").getBoundingClientRect();
-  expect(box.left - grid.left).toBe(72);
-  expect(box.top - grid.top).toBe(84);
+  expect(box.left - grid.left).toBe(96);
+  expect(box.top - grid.top).toBe(108);
   expect(box.width).toBe(96);
   expect(box.height).toBe(48);
 });
@@ -283,15 +283,15 @@ it("keeps a steady height in a box that takes its height from the plan", async (
     await settled(el);
     heights.push(part(el, "grid").getBoundingClientRect().height);
   }
-  expect(heights).toEqual(Array(6).fill(240));
+  expect(heights).toEqual(Array(6).fill(264));
 });
 
 it("draws 8 squares past the furthest table", async () => {
   const el = await canvas([table("t1", "T1", { x: 100, width: 8 })]);
-  expect(part(el, "grid").getBoundingClientRect().width).toBe(1440);
+  expect(part(el, "grid").getBoundingClientRect().width).toBe(1464);
   await settled(el);
-  expect(part(el, "grid").getBoundingClientRect().width).toBe(1440);
-  expect(part(el, "viewport").scrollWidth).toBe(1440);
+  expect(part(el, "grid").getBoundingClientRect().width).toBe(1464);
+  expect(part(el, "viewport").scrollWidth).toBe(1464);
 });
 
 it("a click on a table asks to select it and stops the click", async () => {
@@ -491,7 +491,7 @@ it("draws the table where the drag has it before release", async () => {
   const seen = moves(el);
   dragBy(el, "t1", 30, 13);
   await el.updateComplete;
-  expect(offset(el, "t1")).toEqual({ left: 108, top: 96 });
+  expect(offset(el, "t1")).toEqual({ left: 132, top: 120 });
   expect(seen).toEqual([]);
 });
 
@@ -524,7 +524,7 @@ it("a drag ends at release", async () => {
   await release(el, at);
   pointer(window, "pointermove", 1, at.x + 120, at.y);
   await el.updateComplete;
-  expect(offset(el, "t1")).toEqual({ left: 72, top: 84 });
+  expect(offset(el, "t1")).toEqual({ left: 96, top: 108 });
   pointer(window, "pointerup", 1, at.x + 120, at.y);
   expect(seen).toEqual([{ key: "t1", x: 4, y: 3 }]);
 });
@@ -546,7 +546,7 @@ it("a drag ends when the canvas is removed", async () => {
   el.remove();
   parent.appendChild(el);
   await el.updateComplete;
-  expect(offset(el, "t1")).toEqual({ left: 72, top: 84 });
+  expect(offset(el, "t1")).toEqual({ left: 96, top: 108 });
   await release(el, at);
   expect(seen).toEqual([]);
 });
@@ -564,8 +564,8 @@ it("the grid grows while a table is dragged right and down", async () => {
   dragBy(el, "t1", 1440, 1440);
   await el.updateComplete;
   const grid = part(el, "grid").getBoundingClientRect();
-  expect(grid.width).toBe((4 + 122 + 8 + 8) * 12);
-  expect(grid.height).toBe((4 + 123 + 8 + 8) * 12);
+  expect(grid.width).toBe((6 + 122 + 8 + 8) * 12);
+  expect(grid.height).toBe((6 + 123 + 8 + 8) * 12);
 });
 
 it("a pointer cancel puts the table back and sends nothing", async () => {
@@ -574,7 +574,7 @@ it("a pointer cancel puts the table back and sends nothing", async () => {
   const at = dragBy(el, "t1", 30, 13);
   pointer(window, "pointercancel", 1, at.x, at.y);
   await el.updateComplete;
-  expect(offset(el, "t1")).toEqual({ left: 72, top: 84 });
+  expect(offset(el, "t1")).toEqual({ left: 96, top: 108 });
   pointer(window, "pointerup", 1, at.x, at.y);
   expect(seen).toEqual([]);
 });
@@ -585,8 +585,8 @@ it("a second pointer cannot take over a drag", async () => {
   const first = dragBy(el, "t1", 24, 0, 1);
   const second = dragBy(el, "t2", 60, 60, 2);
   await el.updateComplete;
-  expect(offset(el, "t2")).toEqual({ left: 288, top: 48 });
-  expect(offset(el, "t1")).toEqual({ left: 96, top: 84 });
+  expect(offset(el, "t2")).toEqual({ left: 312, top: 72 });
+  expect(offset(el, "t1")).toEqual({ left: 120, top: 108 });
   await release(el, second, 2);
   expect(seen).toEqual([]);
   await release(el, first, 1);
@@ -790,7 +790,7 @@ it("a real drag of the handle turns the table and keeps the selection", async ()
   const selections = selects(el);
   const grid = part(el, "grid").getBoundingClientRect();
   const h = centreOf(handles(el)[0]!);
-  const to = roundFrom({ x: 216, y: 216 }, { x: h.x - grid.left, y: h.y - grid.top }, 90);
+  const to = roundFrom({ x: 240, y: 240 }, { x: h.x - grid.left, y: h.y - grid.top }, 90);
   await userEvent.dragAndDrop(handles(el)[0]!, part(el, "grid"), { targetPosition: to });
   expect(seen).toEqual([{ key: "t1", rotation: 90 }]);
   expect(selections).toEqual([]);
@@ -805,7 +805,7 @@ it("a real drag of a table released over empty grid keeps the selection", async 
   // the grid just left of the table.
   await userEvent.dragAndDrop(button(el, "t1"), part(el, "grid"), {
     sourcePosition: { x: 1, y: 40 },
-    targetPosition: { x: 58, y: 124 },
+    targetPosition: { x: 82, y: 148 },
   });
   expect(seen).toEqual([{ key: "t1", x: 1, y: 3 }]);
   expect(selections).toEqual([]);
@@ -819,7 +819,7 @@ it("a real drag of the handle that turns nothing keeps the selection", async () 
   // Further out along the line the handle was pressed on, past the handle itself.
   const grid = part(el, "grid").getBoundingClientRect();
   const h = centreOf(handles(el)[0]!);
-  const to = roundFrom({ x: 216, y: 216 }, { x: h.x - grid.left, y: h.y - grid.top }, 0, 150);
+  const to = roundFrom({ x: 240, y: 240 }, { x: h.x - grid.left, y: h.y - grid.top }, 0, 150);
   await userEvent.dragAndDrop(handles(el)[0]!, part(el, "grid"), { targetPosition: to });
   expect(seen).toEqual([]);
   expect(selections).toEqual([]);
@@ -832,10 +832,10 @@ it("a real drag of a table that moves nothing keeps the selection", async () => 
   await settled(el);
   const seen = moves(el);
   const selections = selects(el);
-  // About 5 px right, under half a square, ending past the table's right edge (96 px).
+  // About 5 px right, under half a square, ending past the table's right edge (120 px).
   await userEvent.dragAndDrop(button(el, "t1"), part(el, "grid"), {
     sourcePosition: { x: 20, y: 12 },
-    targetPosition: { x: 98, y: 96 },
+    targetPosition: { x: 122, y: 120 },
   });
   expect(seen).toEqual([]);
   expect(selections).toEqual([]);
@@ -1115,7 +1115,7 @@ it("reveal brings a table below the top of a scrolled page down onto the screen"
   });
   const el = await canvas([table("t1", "T1", { y: 20 }), table("t2", "T2", { y: 60 })]);
   await settled(el);
-  viewportOf(el).scrollTop = 200;
+  viewportOf(el).scrollTop = 272;
   window.scrollTo(0, el.getBoundingClientRect().top + 100);
   el.reveal("t1");
   expect(button(el, "t1").getBoundingClientRect().top).toBeCloseTo(0, 0);
@@ -1243,7 +1243,7 @@ it("keeps a steady height with a turned table in a box that takes its height fro
     await settled(el);
     heights.push(part(el, "grid").getBoundingClientRect().height);
   }
-  expect(heights).toEqual(Array(6).fill(288));
+  expect(heights).toEqual(Array(6).fill(312));
 });
 
 it("drops the room for a turned corner table once it is turned back, moved or replaced", async () => {
@@ -1251,17 +1251,17 @@ it("drops the room for a turned corner table once it is turned back, moved or re
   await settled(el);
   el.tables = [table("t1", "T1")];
   await settled(el);
-  expect(offset(el, "t1")).toEqual({ left: 48, top: 48 });
+  expect(offset(el, "t1")).toEqual({ left: 72, top: 72 });
 
   el.tables = [table("t1", "T1", { rotation: 45 })];
   await settled(el);
   el.tables = [table("t1", "T1", { x: 10, y: 10, rotation: 45 })];
   await settled(el);
-  expect(offset(el, "t1").left).toBeCloseTo(120 + 48 + 48 - 48 * Math.SQRT2, 1);
+  expect(offset(el, "t1").left).toBeCloseTo(120 + 72 + 48 - 48 * Math.SQRT2, 1);
 
   el.tables = [table("t1", "T1", { rotation: 45 })];
   await settled(el);
-  el.tables = [table("t2", "T2", { x: 10, y: 10 })];
+  el.tables = [table("t2", "T2", { x: 8, y: 8 })];
   await settled(el);
   expect(offset(el, "t2")).toEqual({ left: 168, top: 168 });
   expect(viewportOf(el).scrollWidth).toBe(viewportOf(el).clientWidth);
@@ -1387,7 +1387,7 @@ it("a corner table turned straight by its handle is let go where it is drawn", a
 });
 
 it("follows a box made smaller after a drop", async () => {
-  const el = await canvas([table("t1", "T1", { x: 5, y: 5 })]);
+  const el = await canvas([table("t1", "T1", { x: 5, y: 3 })]);
   applyChanges(el);
   await settled(el);
   await dropAndCompare(el, "t1", 60, 0);
@@ -1554,9 +1554,20 @@ it("in a plan that fits, selecting and deselecting a table moves nothing and add
 
 it("keeps room round the grid's corner for the turn arrow, from the tokens", async () => {
   const el = await canvas([table("t1", "T1")]);
-  expect(offset(el, "t1")).toEqual({ left: 48, top: 48 });
+  expect(offset(el, "t1")).toEqual({ left: 72, top: 72 });
   el.style.setProperty("--wt-tap-min", "68px");
   el.tables = [table("t1", "T1")];
   await el.updateComplete;
-  expect(offset(el, "t1")).toEqual({ left: 72, top: 72 });
+  expect(offset(el, "t1")).toEqual({ left: 108, top: 108 });
 });
+
+it.each(Array.from({ length: 24 }, (_, i) => i * 15))(
+  "keeps the whole turn arrow of a corner table turned %i° inside the grid",
+  async (rotation) => {
+    const el = await canvas([table("t1", "T1", { rotation, width: 8, height: 4 })], {
+      selected: "t1",
+    });
+    await settled(el);
+    expectInside(handles(el)[0]!.getBoundingClientRect(), part(el, "grid").getBoundingClientRect());
+  },
+);

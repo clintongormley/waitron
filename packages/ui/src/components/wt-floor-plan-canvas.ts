@@ -285,9 +285,12 @@ export class WtFloorPlanCanvas extends LitElement {
     const holds = this.#holds();
     if (!holds) {
       const host = getComputedStyle(this);
+      // The arrow's far corner sits on the table's corner diagonal, which a turn can point along
+      // either axis, so its reach past the table's turned box is the side times √2.
       const reach =
-        parseFloat(host.getPropertyValue("--wt-tap-min")) +
-        parseFloat(host.getPropertyValue("--wt-space-1"));
+        (parseFloat(host.getPropertyValue("--wt-tap-min")) +
+          parseFloat(host.getPropertyValue("--wt-space-1"))) *
+        Math.SQRT2;
       this.#margin = Math.ceil(reach / GRID_SQUARE_PX);
     }
     // Tolerates float error in a corner computed to land exactly on the edge.
