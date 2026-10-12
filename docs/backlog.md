@@ -3733,7 +3733,7 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
 - **The service status screen's colour field label is cut to "C…" at 390 px** — seen on A450's
   look pass (#1484), not changed; not checked whether it predates that branch.
 
-- **An update bar added while the tab is hidden is believed to show only its button until the tab
+- **An update bar (dashboard or till) added while the tab is hidden is believed to show only its button until the tab
   is seen again**: `wt-banner` puts its message in two animation frames after it joins the page.
   Not run in a hidden tab. Left open by A491.
 

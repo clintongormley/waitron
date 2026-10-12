@@ -429,7 +429,7 @@ email through its mail server when one is set, and adds no way to set one there.
   containers' image IDs and report commits, requested ref, local build time and GitHub link. The optional
   `/health` or dashboard display is omitted by default. (2026-10-11: A491 sends the build in an
   `x-waitron-build` header on every main-listener response after `/health`; see
-  `backlog/dashboard.md` → Decisions and deliberate limits.)
+  `docs/backlog/dashboard.md` → Decisions and deliberate limits.)
 
 
 - **Guided Cloud snapshot recovery for test venues is built.** Cloud approval alone does not

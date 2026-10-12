@@ -3806,7 +3806,7 @@ back when the screen grows wider, the bar's content other than the transfer coun
 language changes, but not while More is open. While the transfers are in More, its button carries the pending count. Cases:
 `apps/till/src/widgets/tab-shell.test.ts`.
 
-After a box update a till with nobody signed in and nothing open reloads by itself; otherwise the
+After a box update, while the box serves it, a till with nobody signed in and nothing open reloads by itself; otherwise the
 same update bar the dashboard uses shows at the very top of the till, above the Demo or Preparation
 strip and the screens. When it hides (a reset box, a refused device), what Reload waits for, and
 what counts as "nothing open" are in `conventions-ui.md` → "An open page notices a box update from
