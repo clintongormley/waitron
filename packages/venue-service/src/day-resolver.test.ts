@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   CATALOGUE_MIGRATIONS,
   buildMenuDocument,
@@ -846,6 +846,69 @@ describe("special-day paint over the season", () => {
     expect((await zoneDays(v, [v.sala], ["2030-12-13"])).get(v.sala)?.get("2030-12-13")).toEqual([
       { startsAt: "22:00", endsAt: "23:00" },
     ]);
+  });
+
+  it("reads special-day dates and their paint once, however many zones and days a call covers", async () => {
+    const v = await venue();
+    const third = await scoped(async (tx) => {
+      const [zone] = await tx
+        .insert(floorZones)
+        .values({ locationId: v.cfg.locationId, name: "Barra", displayOrder: 2 })
+        .returning({ id: floorZones.id });
+      await configureZone(tx, v.cfg, { zoneId: zone!.id, departmentId: v.departmentId });
+      return zone!.id;
+    });
+    const closedEvening = [{ kind: "closed" as const, startsAt: "22:00", endsAt: "23:00" }];
+    const dinner = [{ periodId: v.dinner, startsAt: "20:00", endsAt: "23:00" }];
+    for (const date of ["2030-12-13", "2030-12-14"])
+      await specialDay(v, date, {
+        paint: { [v.departmentId]: dinner },
+        zonePaint: { [v.sala]: closedEvening, [v.terraza]: closedEvening, [third]: closedEvening },
+      });
+    const at = new Date("2030-12-14T21:30:00Z"); // 22:30 in Madrid, business day 14 December
+    const statements = (call: (tx: Transaction) => Promise<void>) =>
+      scoped(async (tx) => {
+        const session = (
+          tx as unknown as { session: { prepareQuery: (...args: never[]) => unknown } }
+        ).session;
+        const spy = vi.spyOn(session, "prepareQuery");
+        try {
+          await call(tx);
+          return spy.mock.calls.map(([query]) => (query as unknown as { sql: string }).sql);
+        } finally {
+          spy.mockRestore();
+        }
+      });
+    const zones = (zoneIds: string[]) =>
+      statements(async (tx) => {
+        expect([...(await closedZoneIdsAt(tx, v.cfg, at, zoneIds))].sort()).toEqual(
+          [...zoneIds].sort(),
+        );
+      });
+    const days = (businessDays: string[]) =>
+      statements(async (tx) => {
+        const resolved = await resolveDepartmentDays(
+          tx,
+          v.cfg,
+          v.departmentId,
+          businessDays,
+          CLOCK,
+        );
+        expect(businessDays.map((day) => resolved.get(day)?.ranges)).toEqual(
+          businessDays.map(() => dinner),
+        );
+      });
+    const one = await zones([v.sala]);
+    const three = await zones([v.sala, v.terraza, third]);
+    const oneDay = await days(["2030-12-13"]);
+    const twoDays = await days(["2030-12-13", "2030-12-14"]);
+    expect(twoDays).toHaveLength(oneDay.length);
+    for (const texts of [one, three, oneDay, twoDays]) {
+      expect(texts.filter((text) => text.includes(`from "special_day_dates"`))).toHaveLength(1);
+      // Department and zone paint come back in one statement.
+      expect(texts.filter((text) => text.includes(`"special_day_date_id" in`))).toHaveLength(1);
+    }
+    expect(three).toHaveLength(one.length);
   });
 
   it("refuses a shared plan that does not cover a requested day's special days", async () => {
