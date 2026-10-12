@@ -402,6 +402,12 @@ it("reads the folders' Made at again when a season week changes", () => {
     expect(query.dependencies).toContainEqual({ type });
 });
 
+it("reads the folders' Made at again when a special day or one of its dates changes", () => {
+  const query = dashboardQuery(new DashboardApi("", vi.fn()), "getFolderRouting", []);
+  for (const type of ["special_days", "special_day_dates"])
+    expect(query.dependencies).toContainEqual({ type });
+});
+
 it("reads the folders' Made at again when a period, its department or the products its menus reach change", () => {
   const query = dashboardQuery(new DashboardApi("", vi.fn()), "getFolderRouting", []);
   for (const type of [

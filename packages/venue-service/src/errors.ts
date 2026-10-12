@@ -72,8 +72,9 @@ declare module "@waitron/shared" {
       seasonId?: string;
       weekday?: number;
       date?: string;
+      specialDayId?: string;
     };
-    /** Deleting a named period that `uses` still place, past special dates included. */
+    /** Deleting a named period that `uses` still place, past special dates and special-day dates included. */
     "menu_period.in_use": { periodId: string; uses: MenuPeriodUse[] };
     /** Another of the department's named periods already has `name`, as trimmed. */
     "menu_period.name_taken": { departmentId: string; name: string };
@@ -84,6 +85,7 @@ declare module "@waitron/shared" {
       departmentId?: string;
       seasonId?: string;
       weekday?: number;
+      specialDayId?: string;
       reason?: "overlap" | "clock_skips" | "empty" | "order" | "step" | "end_offset";
     };
     "zone.name_taken": { name: string };
@@ -159,6 +161,23 @@ declare module "@waitron/shared" {
     "special_date.not_found": { specialDateId: string };
     "special_date.date_taken": { date: string };
     "season.not_found": { seasonId: string };
+    "special_day.invalid": {
+      field: string;
+      date?: string;
+      reason?: "empty" | "order" | "step" | "overlap" | "clock_skips" | "end_offset";
+      departmentId?: string;
+      zoneId?: string;
+      periodId?: string;
+    };
+    "special_day.not_found": { specialDayId: string };
+    /** Another special day, or a named day (`specialDateId`), already holds `date` (the first day
+     *  the two would share). */
+    "special_day.date_taken": {
+      date: string;
+      name: string;
+      specialDayId?: string;
+      specialDateId?: string;
+    };
     "zone_closed_time.invalid": { field: string; reason?: "empty" | "order" | "step" | "overlap" };
     "special_date.keeps_week": { specialDateId: string };
     "station.always_open": { stationId: string };

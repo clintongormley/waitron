@@ -421,10 +421,17 @@ describe("zones closed at an instant", () => {
     const one = await reads([v.terrace]);
     const three = await reads([v.bar, v.terrace, v.disabled]);
     for (const texts of [one, three]) {
-      for (const table of ["locations", "seasons", "special_dates", "zone_days", "zone_extensions"])
+      for (const table of [
+        "locations",
+        "seasons",
+        "special_dates",
+        "special_day_dates",
+        "zone_days",
+        "zone_extensions",
+      ])
         expect(texts.filter((text) => text.includes(`from "${table}"`))).toHaveLength(1);
       expect(texts.filter((text) => text.includes(`from "zone_closed_times"`))).toHaveLength(0);
-      expect(texts).toHaveLength(5);
+      expect(texts).toHaveLength(6);
     }
     expect(three).toHaveLength(one.length);
   });

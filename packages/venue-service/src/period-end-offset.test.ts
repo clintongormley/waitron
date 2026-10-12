@@ -184,3 +184,136 @@ describe("end offsets across seasons", () => {
     ).toBeNull();
   });
 });
+
+describe("end offsets around special days", () => {
+  const empty = (): ServiceRange[][] => Array.from({ length: 7 }, () => []);
+  const special = (
+    date: string,
+    paint: { periodId: string | null; startsAt: string; endsAt: string }[],
+    repeats = false,
+  ) => ({
+    date,
+    closeWholeVenue: false,
+    repeatOn: repeats ? date.slice(5) : null,
+    slots: null,
+    paint,
+    specialDayId: "sd-1",
+  });
+
+  it("pairs a one-off special date with the day before it", () => {
+    const week = empty();
+    week[1] = [{ periodId: "late", startsAt: "21:00", endsAt: "06:00" }];
+    const seasons = [{ seasonId: "year", startsOn: "01-01", week }];
+    const offsets = new Map([["late", 120]]);
+    // 2026-10-13 is a Tuesday; the season leaves Tuesday empty.
+    const tuesday = special("2026-10-13", [
+      { periodId: "early", startsAt: "07:00", endsAt: "09:00" },
+    ]);
+    expect(findSeasonEndOffsetClash(seasons, [], offsets, "06:00")).toBeNull();
+    expect(findSeasonEndOffsetClash(seasons, [tuesday], offsets, "06:00")).toEqual({
+      periodId: "late",
+      slotIndex: 0,
+      date: "2026-10-12",
+      specialDayId: "sd-1",
+    });
+  });
+
+  it("pairs a one-off special date with the day after it", () => {
+    const week = empty();
+    week[6] = [{ periodId: "early", startsAt: "07:15", endsAt: "09:00" }];
+    const seasons = [{ seasonId: "year", startsOn: "01-01", week }];
+    const offsets = new Map([["late", 180]]);
+    // 2026-11-06 is a Friday.
+    const friday = special("2026-11-06", [
+      { periodId: "late", startsAt: "22:00", endsAt: "04:30" },
+    ]);
+    expect(findSeasonEndOffsetClash(seasons, [friday], offsets, "06:00")).toEqual({
+      periodId: "late",
+      slotIndex: 0,
+      date: "2026-11-06",
+      specialDayId: "sd-1",
+    });
+    expect(findSeasonEndOffsetClash(seasons, [friday], new Map([["late", 0]]), "06:00")).toBeNull();
+  });
+
+  it("lays the paint over the season's day rather than beside it", () => {
+    const week = empty();
+    week[1] = [{ periodId: "late", startsAt: "21:00", endsAt: "06:00" }];
+    week[2] = [{ periodId: "early", startsAt: "07:00", endsAt: "09:00" }];
+    const seasons = [{ seasonId: "year", startsOn: "01-01", week }];
+    // Monday's late paint is Closed on 2026-10-12, so its grace meets nothing that Tuesday.
+    const closedMonday = special("2026-10-12", [
+      { periodId: null, startsAt: "21:00", endsAt: "06:00" },
+    ]);
+    const offsets = new Map([["late", 120]]);
+    expect(
+      findSeasonEndOffsetClash([{ ...seasons[0]!, week: empty() }], [], offsets, "06:00"),
+    ).toBeNull();
+    const repainted = { ...seasons[0]!, week: [...week] };
+    repainted.week[2] = [];
+    expect(
+      findSeasonEndOffsetClash(
+        [repainted],
+        [
+          special("2026-10-13", [{ periodId: "early", startsAt: "07:00", endsAt: "09:00" }]),
+          { ...closedMonday, specialDayId: "sd-2" },
+        ],
+        offsets,
+        "06:00",
+      ),
+    ).toBeNull();
+  });
+
+  it("checks a repeating special date under every weekday it falls on", () => {
+    const week = empty();
+    week[6] = [{ periodId: "dinner", startsAt: "20:00", endsAt: "05:45" }];
+    const seasons = [{ seasonId: "year", startsOn: "01-01", week }];
+    const christmasEve = special(
+      "2026-12-24",
+      [{ periodId: "breakfast", startsAt: "06:00", endsAt: "09:00" }],
+      true,
+    );
+    // 24 December first falls on a Sunday in 2028, after a Saturday whose Dinner sends until 06:15.
+    expect(
+      findSeasonEndOffsetClash(seasons, [christmasEve], new Map([["dinner", 30]]), "06:00"),
+    ).toEqual({ periodId: "dinner", slotIndex: 0, date: "2028-12-23", specialDayId: "sd-1" });
+    expect(
+      findSeasonEndOffsetClash(seasons, [christmasEve], new Map([["dinner", 14]]), "06:00"),
+    ).toBeNull();
+  });
+
+  it("closes a Closed-all-day special date whatever it paints", () => {
+    const week = empty();
+    week[1] = [{ periodId: "late", startsAt: "21:00", endsAt: "06:00" }];
+    const seasons = [{ seasonId: "year", startsOn: "01-01", week }];
+    const tuesday = {
+      ...special("2026-10-13", [{ periodId: "early", startsAt: "07:00", endsAt: "09:00" }]),
+      closeWholeVenue: true,
+    };
+    expect(
+      findSeasonEndOffsetClash(seasons, [tuesday], new Map([["late", 120]]), "06:00"),
+    ).toBeNull();
+  });
+});
+
+it("walks a repeating special date through where it says it falls each year", () => {
+  const week: ServiceRange[][] = Array.from({ length: 7 }, () => []);
+  week[6] = [{ periodId: "dinner", startsAt: "20:00", endsAt: "05:45" }];
+  const moved = {
+    date: "2026-12-24",
+    closeWholeVenue: false,
+    slots: null,
+    paint: [{ periodId: "breakfast", startsAt: "06:00", endsAt: "09:00" }],
+    specialDayId: "sd-1",
+    // Stored on 24 December (first a Sunday in 2028) but falling on 20 December (a Sunday in 2026).
+    occursIn: (year: number) => (year >= 2026 ? `${year}-12-20` : null),
+  };
+  expect(
+    findSeasonEndOffsetClash(
+      [{ seasonId: "year", startsOn: "01-01", week }],
+      [moved],
+      new Map([["dinner", 30]]),
+      "06:00",
+    ),
+  ).toEqual({ periodId: "dinner", slotIndex: 0, date: "2026-12-19", specialDayId: "sd-1" });
+});

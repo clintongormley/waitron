@@ -1,3 +1,4 @@
+import { layerPaint, type PaintRange } from "./day-paint.js";
 import { addDays, weekdayOf } from "./hours-rules.js";
 import type { LocalDate } from "./hours-types.js";
 import { seasonOnSorted } from "./season-rules.js";
@@ -67,13 +68,18 @@ export interface SeasonSchedule {
   week: readonly (readonly ServiceRange[])[];
 }
 
-/** A named day; `slots` null when it keeps its season's hours. */
+/** A named day; `slots` null when it keeps its season's hours. A special-day date instead carries
+ *  `paint`, laid over its season's day, and `closeWholeVenue` for its Closed-all-day tick; a
+ *  repeating one says where it falls in a year through `occursIn` rather than `repeatOn`. */
 export interface DatedSchedule {
   date: LocalDate;
   closeWholeVenue: boolean;
   repeatOn?: string | null;
+  occursIn?: (year: number) => LocalDate | null;
   ownHours?: boolean;
   slots: readonly ServiceRange[] | null;
+  paint?: readonly PaintRange[];
+  specialDayId?: string;
 }
 
 export function findSeasonEndOffsetClash(
@@ -87,6 +93,7 @@ export function findSeasonEndOffsetClash(
   seasonId?: string;
   weekday?: number;
   date?: LocalDate;
+  specialDayId?: string;
 } | null {
   const ordered = [...seasons].sort((a, b) =>
     a.startsOn < b.startsOn ? -1 : Number(a.startsOn > b.startsOn),
@@ -120,7 +127,7 @@ export function findSeasonEndOffsetClash(
     for (const change of clock.cutoverChanges)
       years.add(Number(change.effectiveBusinessDay.slice(0, 4)));
   for (const day of dated) {
-    if (day.repeatOn == null) continue;
+    if (day.repeatOn == null && day.occursIn === undefined) continue;
     const firstYear = Number(day.date.slice(0, 4));
     for (let year = firstYear; year < Math.min(firstYear + 400, 10000); year++) years.add(year);
     if (typeof clock !== "string")
@@ -130,37 +137,68 @@ export function findSeasonEndOffsetClash(
       }
   }
   const occurrences = dated.flatMap((day) =>
-    day.repeatOn == null
-      ? [day]
-      : [...years].flatMap((year) => {
-          const date = `${String(year).padStart(4, "0")}-${day.repeatOn}`;
-          return date >= day.date &&
-            new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) === date
-            ? [{ ...day, date }]
-            : [];
-        }),
+    day.occursIn !== undefined
+      ? [...years].flatMap((year) => {
+          const date = day.occursIn!(year);
+          return date === null ? [] : [{ ...day, date }];
+        })
+      : day.repeatOn == null
+        ? [day]
+        : [...years].flatMap((year) => {
+            const date = `${String(year).padStart(4, "0")}-${day.repeatOn}`;
+            return date >= day.date &&
+              new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) === date
+              ? [{ ...day, date }]
+              : [];
+          }),
   );
   const special = new Map(occurrences.map((day) => [day.date, day]));
+  const seasonOf = (date: LocalDate) => seasonOnSorted(ordered, date);
   const seasonal = (date: LocalDate): readonly ServiceRange[] => {
-    const season = seasonOnSorted(ordered, date);
+    const season = seasonOf(date);
     return season === null ? [] : weekOf(season, weekdayOf(date));
   };
   // The first entry in `dated` that holds a date: on that date, or repeating from on or before it.
   const firstOnDate = new Map<LocalDate, number>();
   const repeatsOn = new Map<string, number[]>();
   dated.forEach((entry, index) => {
-    if (!firstOnDate.has(entry.date)) firstOnDate.set(entry.date, index);
+    if (entry.occursIn === undefined && !firstOnDate.has(entry.date))
+      firstOnDate.set(entry.date, index);
     if (entry.repeatOn != null)
       repeatsOn.set(entry.repeatOn, [...(repeatsOn.get(entry.repeatOn) ?? []), index]);
   });
-  const storedOn = (date: LocalDate): DatedSchedule | undefined => {
-    const repeat = repeatsOn.get(date.slice(5))?.find((index) => dated[index]!.date <= date);
-    const index = Math.min(firstOnDate.get(date) ?? Infinity, repeat ?? Infinity);
-    return index === Infinity ? undefined : dated[index];
+  const occursInYear = new Map<number, Map<LocalDate, number>>();
+  const occursOn = (date: LocalDate): number => {
+    const year = Number(date.slice(0, 4));
+    let index = occursInYear.get(year);
+    if (index === undefined) {
+      index = new Map();
+      for (const [at, entry] of dated.entries()) {
+        const on = entry.occursIn?.(year) ?? null;
+        if (on !== null && !index.has(on)) index.set(on, at);
+      }
+      occursInYear.set(year, index);
+    }
+    return index.get(date) ?? Infinity;
   };
-  const effective = (date: LocalDate): readonly ServiceRange[] => {
+  const storedIndex = (date: LocalDate): number => {
+    const repeat = repeatsOn.get(date.slice(5))?.find((index) => dated[index]!.date <= date);
+    return Math.min(firstOnDate.get(date) ?? Infinity, repeat ?? Infinity, occursOn(date));
+  };
+  const storedOn = (date: LocalDate): DatedSchedule | undefined => dated[storedIndex(date)];
+  // A repeating date falls on up to 400 years of dates but only (season, weekday) varies its day.
+  const layered = new Map<string, readonly ServiceRange[]>();
+  const effective = (date: LocalDate, cutover: string): readonly ServiceRange[] => {
+    const index = storedIndex(date);
+    const stored = dated[index];
+    if (stored?.paint !== undefined) {
+      if (stored.closeWholeVenue) return [];
+      const key = `${index}|${seasonOf(date)?.seasonId}|${weekdayOf(date)}|${cutover}`;
+      const day = layered.get(key) ?? layerPaint(seasonal(date), stored.paint, cutover);
+      layered.set(key, day);
+      return day;
+    }
     if (special.get(date)?.closeWholeVenue === true) return [];
-    const stored = storedOn(date);
     return stored === undefined || stored.ownHours === false
       ? seasonal(date)
       : (stored.slots ?? seasonal(date));
@@ -179,17 +217,23 @@ export function findSeasonEndOffsetClash(
         ? [clock, clock]
         : [date, next].map((day) => serviceDayWallContext(clock, day).dayCutover);
     const clash = findEndOffsetClash(
-      [effective(date), effective(next)],
+      [effective(date, contexts[0]!), effective(next, contexts[1]!)],
       offsets,
       contexts[0]!,
       contexts,
     );
-    if (clash !== null)
+    if (clash !== null) {
+      const clashDate = addDays(date, clash.dayIndex);
+      const specialDayId =
+        storedOn(clashDate)?.specialDayId ??
+        storedOn(clashDate === date ? next : date)?.specialDayId;
       return {
         periodId: clash.periodId,
         slotIndex: clash.slotIndex,
-        date: addDays(date, clash.dayIndex),
+        date: clashDate,
+        ...(specialDayId === undefined ? {} : { specialDayId }),
       };
+    }
   }
   return null;
 }

@@ -87,6 +87,8 @@ describe("OpeningHoursApi", () => {
           "department_day_ranges",
           "zone_days",
           "zone_day_ranges",
+          "special_days",
+          "special_day_dates",
         ].map((type) => ({ type })),
       );
       expect(request.mock.calls).toEqual([

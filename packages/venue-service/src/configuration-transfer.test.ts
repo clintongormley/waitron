@@ -2127,3 +2127,278 @@ describe("department receipt configuration fields", () => {
     );
   });
 });
+
+describe("special days in a configuration bundle", () => {
+  const { validate } = VENUE_SERVICE_CONFIGURATION_TRANSFER;
+  const BAR_PERIOD = "77777777-7777-4777-8777-777777777777";
+  const LUNCH = "88888888-8888-4888-8888-888888888888";
+  const clock = {
+    createdAt: new Date("2026-10-07T10:00:00Z"),
+    timeZone: "Europe/Madrid",
+    dayCutover: "06:00",
+  };
+  const range = (
+    dayId: string,
+    periodId: string | null,
+    startsAt: string,
+    endsAt: string,
+  ): Row => ({
+    id: randomUUID(),
+    day_id: dayId,
+    department_id: RESTAURANT,
+    period_id: periodId,
+    starts_at: startsAt,
+    ends_at: endsAt,
+  });
+
+  /** Fiesta repeats from 15 August 2025: Bar 20:00–23:00 and Closed 12:00–16:00 in the
+   *  restaurant, the terrace open 12:00–14:00; 16 August is Closed all day. */
+  function specialTables(): Tables {
+    return {
+      departments: [{ id: RESTAURANT }],
+      floor_zones: [{ id: "terrace", active: 1 }],
+      zone_service_policies: [{ zone_id: "terrace", department_id: RESTAURANT }],
+      catalogues: [{ id: "m-bar" }, { id: "m-lunch" }],
+      menu_periods: [
+        { id: BAR_PERIOD, department_id: RESTAURANT, name: "Bar", colour: "red", menu_id: "m-bar" },
+        { id: LUNCH, department_id: RESTAURANT, name: "Lunch", colour: "blue", menu_id: "m-lunch" },
+      ],
+      special_days: [{ id: "fiesta", location_id: "venue", name: "Fiesta", repeats_yearly: 1 }],
+      special_day_dates: [
+        {
+          id: "fiesta-15",
+          special_day_id: "fiesta",
+          location_id: "venue",
+          date: "2025-08-15",
+          closed_all_day: 0,
+        },
+        {
+          id: "fiesta-16",
+          special_day_id: "fiesta",
+          location_id: "venue",
+          date: "2025-08-16",
+          closed_all_day: 1,
+        },
+      ],
+      department_days: [
+        {
+          id: "dd-15",
+          department_id: RESTAURANT,
+          season_id: null,
+          weekday: null,
+          special_day_date_id: "fiesta-15",
+        },
+      ],
+      department_day_ranges: [
+        range("dd-15", BAR_PERIOD, "20:00:00", "23:00:00"),
+        range("dd-15", null, "12:00:00", "16:00:00"),
+      ],
+      zone_days: [
+        {
+          id: "zd-15",
+          zone_id: "terrace",
+          season_id: null,
+          weekday: null,
+          special_day_date_id: "fiesta-15",
+        },
+      ],
+      zone_day_ranges: [
+        { id: "zr-15", day_id: "zd-15", kind: "open", starts_at: "12:00:00", ends_at: "14:00:00" },
+      ],
+    };
+  }
+
+  /** One special day `repeats` or not, on `date`, painting Bar over `startsAt`–`endsAt`. */
+  function painted(date: string, repeats: number, startsAt: string, endsAt: string): Tables {
+    const tables = specialTables();
+    tables.special_days![0]!.repeats_yearly = repeats;
+    tables.special_day_dates = [tables.special_day_dates![0]!];
+    tables.special_day_dates[0]!.date = date;
+    tables.department_day_ranges = [range("dd-15", BAR_PERIOD, startsAt, endsAt)];
+    tables.zone_days = [];
+    tables.zone_day_ranges = [];
+    return tables;
+  }
+
+  it("are transferred under the importing venue before the days that name their dates", () => {
+    const tables = VENUE_SERVICE_CONFIGURATION_TRANSFER.tables;
+    const names = tables.map((table) => table.name);
+    expect(tables.find((table) => table.name === "special_days")).toEqual({
+      name: "special_days",
+      locationColumns: ["location_id"],
+    });
+    expect(tables.find((table) => table.name === "special_day_dates")).toEqual({
+      name: "special_day_dates",
+      locationColumns: ["location_id"],
+    });
+    expect(names.indexOf("special_days")).toBeLessThan(names.indexOf("special_day_dates"));
+    expect(names.indexOf("special_day_dates")).toBeLessThan(names.indexOf("department_days"));
+    expect(names.indexOf("special_day_dates")).toBeLessThan(names.indexOf("zone_days"));
+  });
+
+  it("accepts paint, a Closed range, open zone time and a Closed-all-day date", () => {
+    expect(() => validate(specialTables(), clock)).not.toThrow();
+  });
+
+  it.each([
+    ["special_days.name", "special_days", { name: "  " }],
+    ["special_days.name", "special_days", { name: 3 }],
+    ["special_days.name", "special_days", { name: " Fiesta " }],
+    ["special_days.repeats_yearly", "special_days", { repeats_yearly: 2 }],
+    ["special_days.repeats_yearly", "special_days", { repeats_yearly: true }],
+    ["special_days.repeats_yearly", "special_days", { repeats_yearly: null }],
+    ["special_day_dates.special_day_id", "special_day_dates", { special_day_id: "missing" }],
+    ["special_day_dates.date", "special_day_dates", { date: "2025-02-30" }],
+    ["special_day_dates.closed_all_day", "special_day_dates", { closed_all_day: 2 }],
+    ["special_day_dates.closed_all_day", "special_day_dates", { closed_all_day: null }],
+  ])("refuses %s when a row holds %s %j", (field, table, change) => {
+    const tables = specialTables();
+    Object.assign(tables[table]![0]!, change);
+    expect(() => validate(tables, clock)).toThrowError(refusal(field));
+  });
+
+  it("refuses two special-day dates on one date, a one-off on a repeating date's later year, but not before it begins", () => {
+    const twice = specialTables();
+    twice.special_days!.push({ id: "other", location_id: "venue", name: "Other" });
+    twice.special_day_dates!.push({
+      id: "other-15",
+      special_day_id: "other",
+      location_id: "venue",
+      date: "2027-08-15",
+      closed_all_day: 0,
+    });
+    expect(() => validate(twice, clock)).toThrowError(refusal("special_day_dates.date"));
+    twice.special_day_dates![2]!.date = "2024-08-15";
+    expect(() => validate(twice, clock)).not.toThrow();
+    const oneOffs = specialTables();
+    oneOffs.special_days![0]!.repeats_yearly = 0;
+    oneOffs.special_day_dates![1]!.date = "2025-08-15";
+    expect(() => validate(oneOffs, clock)).toThrowError(refusal("special_day_dates.date"));
+    // The import gives every location column the importing venue's location.
+    oneOffs.special_day_dates![1]!.location_id = "elsewhere";
+    expect(() => validate(oneOffs, clock)).toThrowError(refusal("special_day_dates.date"));
+    twice.special_day_dates![2]!.date = "2027-08-15";
+    twice.special_day_dates![2]!.location_id = "elsewhere";
+    expect(() => validate(twice, clock)).toThrowError(refusal("special_day_dates.date"));
+  });
+
+  it("refuses a named day and a special day on one date", () => {
+    const tables = specialTables();
+    tables.special_dates = [
+      {
+        id: "named",
+        location_id: "venue",
+        date: "2026-08-16",
+        name: "Saint's day",
+        kind: "holiday",
+        repeat_on: null,
+        own_hours: 0,
+        close_whole_venue: 0,
+      },
+    ];
+    expect(() => validate(tables, clock)).toThrowError(refusal("special_day_dates.date"));
+    // The import gives every location column the importing venue's location.
+    tables.special_dates[0]!.location_id = "elsewhere";
+    expect(() => validate(tables, clock)).toThrowError(refusal("special_day_dates.date"));
+    tables.special_dates[0]!.date = "2026-08-17";
+    expect(() => validate(tables, clock)).not.toThrow();
+  });
+
+  it.each([
+    ["department_days", "weekday", { weekday: 3 }],
+    ["department_days", "season_id", { season_id: "s-autumn" }],
+    ["zone_days", "weekday", { weekday: 3 }],
+    ["zone_days", "season_id", { season_id: "s-autumn" }],
+  ])("refuses a special-day %s row with a %s", (table, field, change) => {
+    const tables = specialTables();
+    tables.seasons = [{ id: "s-autumn", location_id: "venue", name: "Autumn", starts_on: "09-01" }];
+    Object.assign(tables[table]![0]!, change);
+    expect(() => validate(tables, clock)).toThrowError(refusal(`${table}.${field}`));
+  });
+
+  it("refuses a second day for one department or zone on one special-day date", () => {
+    const departments = specialTables();
+    departments.department_days!.push({ ...departments.department_days![0]!, id: "dd-again" });
+    expect(() => validate(departments, clock)).toThrowError(
+      refusal("department_days.special_day_date_id"),
+    );
+    const zones = specialTables();
+    zones.zone_days!.push({ ...zones.zone_days![0]!, id: "zd-again" });
+    expect(() => validate(zones, clock)).toThrowError(refusal("zone_days.special_day_date_id"));
+  });
+
+  it("refuses special-day paint a writer could not have saved", () => {
+    const foreign = specialTables();
+    foreign.department_day_ranges![0]!.period_id = "66666666-6666-4666-8666-666666666666";
+    expect(() => validate(foreign, clock)).toThrowError(refusal("department_day_ranges.period_id"));
+    const overlap = specialTables();
+    overlap.department_day_ranges!.push(range("dd-15", LUNCH, "15:00:00", "17:00:00"));
+    expect(() => validate(overlap, clock)).toThrowError(refusal("department_day_ranges"));
+    const offStep = specialTables();
+    offStep.department_day_ranges![0]!.starts_at = "20:10:00";
+    expect(() => validate(offStep, clock)).toThrowError(refusal("department_day_ranges"));
+    const kind = specialTables();
+    kind.zone_day_ranges![0]!.kind = "half";
+    expect(() => validate(kind, clock)).toThrowError(refusal("zone_day_ranges.kind"));
+    const zoneOverlap = specialTables();
+    zoneOverlap.zone_day_ranges!.push({
+      id: "zr-again",
+      day_id: "zd-15",
+      kind: "closed",
+      starts_at: "13:00:00",
+      ends_at: "15:00:00",
+    });
+    expect(() => validate(zoneOverlap, clock)).toThrowError(refusal("zone_day_ranges"));
+  });
+
+  // With the 06:00 changeover, 02:15 on Sunday 29 March 2026 belongs to business day 28 March and
+  // does not happen in Madrid; in 2025 the clocks changed on 30 March and in 2027 on 28 March.
+  it("refuses paint starting at a time the clocks skip on its date, a repeating date at its next occurrence from the bundle's creation", () => {
+    expect(() => validate(painted("2026-03-28", 0, "02:15:00", "03:00:00"), clock)).toThrowError(
+      refusal("department_day_ranges"),
+    );
+    expect(() => validate(painted("2026-03-29", 0, "02:15:00", "03:00:00"), clock)).not.toThrow();
+    const repeating = painted("2025-03-28", 1, "02:15:00", "03:00:00");
+    expect(() => validate(repeating, clock)).not.toThrow();
+    expect(() =>
+      validate(repeating, { ...clock, createdAt: new Date("2026-01-10T10:00:00Z") }),
+    ).toThrowError(refusal("department_day_ranges"));
+    const zone = painted("2026-03-28", 0, "20:00:00", "23:00:00");
+    zone.zone_days = specialTables().zone_days!;
+    zone.zone_day_ranges = [
+      { id: "zr", day_id: "zd-15", kind: "closed", starts_at: "02:15:00", ends_at: "03:00:00" },
+    ];
+    zone.special_day_dates![0]!.id = "fiesta-15";
+    expect(() => validate(zone, clock)).toThrowError(refusal("zone_day_ranges"));
+  });
+
+  // 02:30 on 29 March 2026 does not happen in Madrid, but `clockTimeSkippedInDay`, the writer's
+  // check, reads an end at the changeover as the day's own end.
+  it("accepts paint ending at the changeover on the night the clocks skip it", () => {
+    const tables = painted("2026-03-28", 0, "22:00:00", "02:30:00");
+    expect(() => validate(tables, { ...clock, dayCutover: "02:30" })).not.toThrow();
+  });
+
+  it("refuses paint whose period's end offset reaches the next day's paint", () => {
+    const tables = painted("2026-11-23", 0, "22:00:00", "02:00:00");
+    tables.special_day_dates!.push({
+      id: "fiesta-24",
+      special_day_id: "fiesta",
+      location_id: "venue",
+      date: "2026-11-24",
+      closed_all_day: 0,
+    });
+    tables.department_days!.push({
+      id: "dd-24",
+      department_id: RESTAURANT,
+      season_id: null,
+      weekday: null,
+      special_day_date_id: "fiesta-24",
+    });
+    tables.department_day_ranges!.push(range("dd-24", LUNCH, "06:00:00", "09:00:00"));
+    tables.menu_periods![0]!.end_offset_minutes = 240;
+    expect(() => validate(tables, clock)).toThrowError(refusal("department_day_ranges"));
+    tables.menu_periods![0]!.end_offset_minutes = 239;
+    expect(() => validate(tables, clock)).not.toThrow();
+  });
+});

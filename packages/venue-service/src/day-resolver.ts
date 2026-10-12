@@ -2,6 +2,7 @@ import { and, asc, eq, inArray } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { readLocationClock } from "@waitron/reporting";
 import { cutoverForBusinessDay, type BusinessDayClock } from "@waitron/shared";
+import { layerPaint, layerZonePaint } from "./day-paint.js";
 import { addDays, weekdayOf } from "./hours-rules.js";
 import type { LocalDate } from "./hours-types.js";
 import { namedDaysOn, type NamedDayOccurrence } from "./named-days.js";
@@ -13,6 +14,7 @@ import { seasonOn } from "./season-rules.js";
 import { readDepartmentSeasonWeeks, readZoneSeasonWeeks, type SeasonDays } from "./season-weeks.js";
 import { readSeasons } from "./seasons.js";
 import { rangeSpan, serviceMomentAt, type ClosedRange, type ServiceRange } from "./service-day.js";
+import { specialDaysOn, type SpecialDayOccurrence } from "./special-days.js";
 
 export interface ResolvedDepartmentDay {
   businessDay: LocalDate;
@@ -27,10 +29,12 @@ function fromChangeover<T extends { startsAt: string; endsAt: string }>(
   return [...ranges].sort((a, b) => rangeSpan(a, cutover).start - rangeSpan(b, cutover).start);
 }
 
-/** Each day's season, and the named day standing on it, for the days it was read for. */
+/** Each day's season, and the named day and special day standing on it, for the days it was read
+ *  for. A special day wins over a named day on the same date. */
 export interface DayPlan {
   named: ReadonlyMap<LocalDate, NamedDayOccurrence>;
   seasonIdOn: ReadonlyMap<LocalDate, string | null>;
+  special: ReadonlyMap<LocalDate, SpecialDayOccurrence | null>;
 }
 
 export async function readDayPlan(
@@ -42,6 +46,7 @@ export async function readDayPlan(
   return {
     named: await namedDaysOn(tx, cfg, businessDays),
     seasonIdOn: new Map(businessDays.map((day) => [day, seasonOn(seasons, day)?.id ?? null])),
+    special: await specialDaysOn(tx, cfg, businessDays),
   };
 }
 
@@ -69,7 +74,8 @@ async function planFor(
 ): Promise<DayPlan> {
   if (given === undefined) return readDayPlan(tx, cfg, businessDays);
   for (const day of businessDays)
-    if (!given.seasonIdOn.has(day)) throw new Error(`the day plan does not cover ${day}`);
+    if (!given.seasonIdOn.has(day) || !given.special.has(day))
+      throw new Error(`the day plan does not cover ${day}`);
   return given;
 }
 
@@ -83,7 +89,9 @@ function seasonDays(
   const weekdays = new Set<number>();
   for (const day of businessDays) {
     const seasonId = plan.seasonIdOn.get(day);
-    if (seasonId == null || !takesWeek(plan.named.get(day))) continue;
+    const special = plan.special.get(day);
+    if (seasonId == null) continue;
+    if (special ? special.closedAllDay : !takesWeek(plan.named.get(day))) continue;
     seasonIds.add(seasonId);
     weekdays.add(weekdayOf(day));
   }
@@ -101,8 +109,9 @@ function ownHoursOn(plan: DayPlan, businessDays: readonly LocalDate[]): string[]
   ];
 }
 
-/** A named day closing the whole venue has no hours; one with its own hours keeps its own
- *  timetable, or the season's week when it saved none; any other day has its season's week. */
+/** A special-day date closed all day has no hours, and otherwise has its paint laid over the
+ *  season's day. A named day closing the whole venue has no hours; one with its own hours keeps its
+ *  own timetable, or the season's week when it saved none. Any other day has its season's week. */
 export async function resolveDepartmentDays(
   tx: Transaction,
   cfg: VenueScope,
@@ -159,23 +168,26 @@ export async function resolveDepartmentDays(
     ).get(departmentId) ?? new Map<string, ServiceRange[][]>();
   for (const day of businessDays) {
     const named = plan.named.get(day);
+    const special = plan.special.get(day);
     const seasonId = plan.seasonIdOn.get(day) ?? null;
-    const ranges = named?.closeWholeVenue
-      ? []
-      : ((named?.ownHours ? own.get(named.id) : undefined) ??
-        (seasonId === null ? undefined : weeks.get(seasonId)?.[weekdayOf(day)]) ??
-        []);
-    resolved.set(day, {
-      businessDay: day,
-      seasonId,
-      ranges: fromChangeover(ranges, cutoverForBusinessDay(clock, day)),
-    });
+    const cutover = cutoverForBusinessDay(clock, day);
+    const season = (seasonId === null ? undefined : weeks.get(seasonId)?.[weekdayOf(day)]) ?? [];
+    const ranges = special
+      ? special.closedAllDay
+        ? []
+        : layerPaint(season, special.paint.get(departmentId) ?? [], cutover)
+      : named?.closeWholeVenue
+        ? []
+        : ((named?.ownHours ? own.get(named.id) : undefined) ?? season);
+    resolved.set(day, { businessDay: day, seasonId, ranges: fromChangeover(ranges, cutover) });
   }
   return resolved;
 }
 
-/** A named day closing the whole venue closes no zone (the venue is shut); one with its own hours
- *  has only its own closures, none when it saved none; any other day has its season's week. */
+/** A special-day date closed all day closes no zone, and otherwise has its zone paint laid over
+ *  the season's closures. A named day closing the whole venue closes no zone (the venue is shut);
+ *  one with its own hours has only its own closures, none when it saved none. Any other day has its
+ *  season's week. */
 export async function resolveZoneClosedDays(
   tx: Transaction,
   cfg: VenueScope,
@@ -232,13 +244,19 @@ export async function resolveZoneClosedDays(
     const days = new Map<LocalDate, ClosedRange[]>();
     for (const day of businessDays) {
       const named = plan.named.get(day);
+      const special = plan.special.get(day);
       const seasonId = plan.seasonIdOn.get(day) ?? null;
-      const ranges = named?.closeWholeVenue
-        ? []
-        : named?.ownHours
-          ? (own.get(`${zoneId}/${named.id}`) ?? [])
-          : ((seasonId === null ? undefined : weeks.get(zoneId)?.get(seasonId)?.[weekdayOf(day)]) ??
-            []);
+      const season =
+        (seasonId === null ? undefined : weeks.get(zoneId)?.get(seasonId)?.[weekdayOf(day)]) ?? [];
+      const ranges = special
+        ? special.closedAllDay
+          ? []
+          : layerZonePaint(season, special.zonePaint.get(zoneId) ?? [], cutovers.get(day)!)
+        : named?.closeWholeVenue
+          ? []
+          : named?.ownHours
+            ? (own.get(`${zoneId}/${named.id}`) ?? [])
+            : season;
       days.set(day, fromChangeover(ranges, cutovers.get(day)!));
     }
     resolved.set(zoneId, days);

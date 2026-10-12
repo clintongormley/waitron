@@ -75,7 +75,8 @@ An own holiday is your assertion; these paths do not check a municipal list.
 carries named days and retained holiday-area geographies, without local-holiday entries or the
 retired colour. It also carries dated department schedules, zone closed times, and seasons with
 their department and zone weeks (see "Seasons and season weeks" in
-[conventions-data.md](conventions-data.md)). Public facts,
+[conventions-data.md](conventions-data.md)), and special days with their dates and paint (see
+"Special days" there). Public facts,
 source hashes and shipped data versions come from the receiving build's pack.
 
 `validateHolidayConfiguration` validates geographies and area choices against the receiving packs;

@@ -410,6 +410,7 @@ On an own-hours day, a department without a dated timetable row follows its seas
 that weekday; a dated row with no ranges closes that department. `resolveDepartmentDays` in
 `packages/venue-service/src/day-resolver.ts` selects the dated row only for own-hours days,
 then falls back to the business day's season week when there is no row. Whole-venue closure closes departments.
+A special-day date comes first: Closed all day, or its paint laid over the season's day (see "Special days" below).
 Switching to own hours copies that weekday's department ranges and zone closed times from the
 season holding the date; switching back removes the dated schedules (`switchNamedDayHours` in `hours.ts`).
 The individual department's Follow the normal week DELETE route is retired (`routes.ts` and
@@ -576,8 +577,8 @@ a zone's closed ranges for a named day. `saveZoneClosedDate` in `zone-closed-tim
 validated against the business-day changeover, on quarter-hour boundaries; `switchNamedDayHours`
 (`hours.ts`) copies the season's day into them when a named day takes own hours, and the
 special-date copy (`MENU_TIMETABLE_CALENDAR_PARTICIPANT`, `menu-timetable.ts`) copies a named day's
-ranges to its duplicate. A date must have own hours before you can save its closed times. `closedZoneIdsAt` uses that named day's dated ranges, including repeats, or the business day's
-season week (`zone_days`, through `resolveZoneClosedDays` in `day-resolver.ts`) otherwise. No dated closed ranges means no zone-specific closure on an own-hours day;
+ranges to its duplicate. A date must have own hours before you can save its closed times. On a special-day date `closedZoneIdsAt` reports no closed zone when the date is Closed all day, and otherwise lays the date's zone paint over the season's closures (`layerZonePaint`); otherwise it uses that named day's dated ranges, including repeats, or the business day's
+season week (`zone_days`, through `resolveZoneClosedDays` in `day-resolver.ts`). No dated closed ranges means no zone-specific closure on an own-hours day;
 it does not inherit the zone's normal-week closure. The start is closed and the end is open.
 When the venue clock is unreadable, this zone check reports no closed zone; department checks
 remain separate.
@@ -627,7 +628,7 @@ was not reset still holds the weekday rows written then. No opening-hours reader
 department and zone delete previews still count them, and the venue's configuration export still
 carries them.
 
-A configuration transfer carries the five tables (`VENUE_SERVICE_CONFIGURATION_TRANSFER` in
+A configuration transfer carries the five season tables (`VENUE_SERVICE_CONFIGURATION_TRANSFER` in
 `packages/venue-service/src/configuration-transfer.ts`). `importConfigurationTables`
 (`apps/server/src/configuration-transfer.ts`) deletes every row of a transferred table before
 inserting the bundle's, so the target's four provisioned seasons give way to the exported ones:
@@ -647,16 +648,45 @@ not a database error" in the same file).
 
 `validateSeasonWeeks` (`packages/venue-service/src/configuration-transfer.ts`) refuses, among
 others: a season start that is not a common year's date or is `02-29`; a range off the
-quarter-hour or overlapping another on the same day; a department range with no period (Closed)
-and a zone range of any kind but `closed`. It accepts a season with fewer than seven day rows, and
-checks no skipped clock hour, as a season week has no date. A season day naming a special-day date
-is refused, because the bundle carries no `special_days` or `special_day_dates`.
-`validateEndOffsets`, beside it, refuses a period end offset reaching the next placement: within a
-season's week, from each season's last day to the next season's first on every weekday, and
-between each named day and the days either side of it, a day without hours of its own read from
-the season that holds it. It reads no old weekday row. The cases are under "season weeks in a
+quarter-hour or overlapping another on the same day; on a season day, a department range with no
+period (Closed) and a zone range of any kind but `closed`. It accepts a season with fewer than
+seven day rows, and checks no skipped clock hour on a season day, as a season week has no date.
+A day row naming a special-day date the bundle does not hold is refused; special days themselves
+are under "Special days" below. `validateEndOffsets`, beside it, refuses a period end offset
+reaching the next placement: within a season's week, from each season's last day to the next
+season's first on every weekday, and between each special day or named day and the days either
+side of it, a day without hours of its own read from the season that holds it. It reads no old weekday row. The cases are under "season weeks in a
 configuration bundle" in `packages/venue-service/src/configuration-transfer.test.ts`, and the
 named-day grace case under "named days in configuration transfer".
+
+### Special days
+
+**2026-10-12, A506-4.** A special day is a name, a `repeats_yearly` flag and a list of dates, possibly empty
+(`special_days`, `special_day_dates`); each date is Closed all day or carries paint, which
+`department_days` and `zone_days` rows naming `special_day_date_id` hold (no season, no weekday).
+A department range with no period is Closed; a zone range is `closed` or `open`. Paint is laid
+over the season's day for that date (`layerPaint`, `layerZonePaint` in
+`packages/venue-service/src/day-paint.ts`); a Closed-all-day date closes every department.
+Whether a date falls on a day is decided in one place, `specialDateIn` and `sharedSpecialDate`
+(`packages/venue-service/src/special-days.ts`): a repeating date from its first year on, and a
+29 February only in leap years. `saveSpecialDay` in the same file is the writer behind the API; a
+configuration import inserts a bundle's rows directly (below). Until A506-5 the dashboard neither
+writes special days nor shows their paint.
+
+**The bridge.** Until A506-5 removes named days, a named day and a special day never stand on one
+date. `assertDatesFree` (`special-days.ts`) refuses a special-day save with
+`special_day.date_taken`, naming the named day's `specialDateId`; `assertNamedDayAvailable`
+(`packages/venue-service/src/hours.ts`) refuses a named-day save with `special_date.date_taken`.
+
+A configuration transfer carries both tables under the importing venue's location
+(`VENUE_SERVICE_CONFIGURATION_TRANSFER`). The import refuses, as `setup.request_invalid` naming
+the field, a bundle the writer could not have stored: two special-day dates, or a special day and
+a named day, on one date; a special-day day row with a season or a weekday; paint off the
+quarter-hour or overlapping; paint at a time the clocks skip, a repeating date checked at its
+next occurrence from the venue's date of the bundle's `createdAt`; and a period end offset
+reaching the next day. The cases are under "special days in a configuration bundle" in
+`packages/venue-service/src/configuration-transfer.test.ts` and "special days in a configuration
+transfer" in `apps/server/src/configuration-transfer.test.ts`.
 
 ### Earlier W98 menu timetable model
 

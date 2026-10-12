@@ -71,7 +71,7 @@ cascade` foreign key).
 | --- | --- |
 | Season | A named stretch of the year, from its start date to the day before the next season's start. Repeats every year. |
 | Season week | One department's seven days in one season, painted with periods. |
-| Special day | A name over one or more dates, optionally repeating on the same dates every year, with paint laid over the season. |
+| Special day | A name over a list of dates, optionally repeating every year (on the same month and day, or, for a public holiday's date, wherever the holiday's name falls; section 5), with paint laid over the season. |
 | Public holiday | A date from the official lists for the venue's address. It is a mark on the calendar, not a stored row; it becomes a special day only when someone edits it. |
 | Ordinary date | A date that is in no special day. It follows its season's week. |
 | Paint | A range on one day, in 15-minute steps, naming a period or Closed. |
@@ -92,7 +92,7 @@ cascade` foreign key).
   request. Past days are not kept as they were, since nothing reads past hours (section 2). A start
   cannot be 29 February (not every year has it) and two seasons cannot start on the same day — both
   refused with `season.invalid` naming `startsOn` **(default)**.
-- **Adding and removing seasons** **(default, asked of the owner)**. "+ Season" asks for a name and a
+- **Adding and removing seasons** **(default, confirmed by the owner 2026-10-11)**. "+ Season" asks for a name and a
   start date; the new season takes its days from the season they belonged to and starts with a COPY
   of that season's weeks, so no date's hours change until someone paints. Deleting a season gives its
   days to the season before it and deletes its weeks, after a confirmation naming the departments
@@ -109,7 +109,7 @@ cascade` foreign key).
   special days. Today's own-holiday / working-day split goes, with the three readers in section 2;
   section 10.1 says what the Calendar shows instead.
 - **One special day is a name over any number of dates** ("Christmas company dinners", 14–23
-  December), optionally repeating on the same dates every year. Dates are added on a small calendar,
+  December), optionally repeating every year (on the same month and day, or, for a public holiday's date, wherever the holiday's name falls; see below). Dates are added on a small calendar,
   singly or as ranges. Names need not be unique **(default)**: one-off "Viernes Santo" in 2026 and
   another in 2027 can both exist.
 - **A date belongs to at most one special day.** Adding a date another special day already covers is
@@ -139,10 +139,22 @@ cascade` foreign key).
   the holiday's official name and its date, and saving creates a special day holding that date. When
   a special day of that name already exists, the dialog first offers to add the date to it (the
   control mockup 5 has). An unedited public holiday follows its season, as today.
-- **"Every year" on a public holiday's special day repeats the same date** **(default, asked of the
-  owner)**. That is right for fixed holidays (1 January, 25 December) and wrong for moving ones (Good
-  Friday): the official lists have no key that carries into the next year (section 2). The painter
-  says so beside "Every year" when the date is a moving holiday.
+- **"Every year" on a public holiday's date follows the holiday's official name** (owner,
+  2026-10-11 ~22:45, question 2 answered (b)): "Every year follows the holiday's official name (for
+  example "Viernes Santo") to wherever it falls in the next year's list", and "if the name changes
+  then the holiday will be missing the following year. we should be able to warn in that case".
+  - When a date is saved into a special day, the server records the official name of the public
+    holiday on that date in the venue's own list for that year, if there is one (`holiday_name`,
+    section 11). A date with no holiday name repeats on the same month and day, as above.
+  - In a later year, a repeating date with a holiday name falls on the date the venue's list for
+    that year gives a holiday of exactly that name. A fixed holiday (25 December) therefore keeps
+    its date, and Good Friday moves with Easter.
+  - When that year's list has no holiday of that name, or there is no list for that year yet, the
+    date does not apply that year, and the venue is warned: the year view says, under its legend,
+    "Viernes Santo (Every year) has no public holiday of that name in 2027", and the venue's
+    readiness list carries the same line while the year is the current or next one **(default)**.
+    Not applying is the default because the other choice, keeping the old month and day, would
+    close or reshape an ordinary day the venue never chose **(default)**.
 - **Drawing.** A date that is in a special day is drawn as a special day; if it is also a public
   holiday it keeps the public-holiday mark (mockup 2's 8 December is a public holiday whose hours
   were changed, drawn with the holiday's name in red) **(default)**. A year with no official list
@@ -253,9 +265,10 @@ changes which week a date lies under. A refusal names the season or the special 
 ## 9. Prep station times
 
 A station still has no hours to set: it is open whenever something it makes can be ordered (2026-10-07
-spec, section 8). The read-only view moves to **"Times" in each station's row menu (⋮) on the Prep
-stations page, opening a full page with the month view of section 10.2 and one bar per day for
-that station** **(default, asked of the owner)**. It answers "what are the kitchen's times three
+spec, section 8). The read-only view moves to **a fourth Prep stations tab, "Times", with a station picker at
+the top, showing the chosen station's month view of section 10.2: one bar per day, ‹ › to step
+months** (owner, 2026-10-11 ~22:50, question 3 answered (c) — not the row menu and not a picker on
+Opening hours). It answers "what are the kitchen's times three
 weeks from now" for any date, seasons and special days included, where the old view showed the
 normal week or one real week. It is worked out on the server from the day resolver and routing.
 Lane C's A507 is rebuilding the same page (it moves the row menu to its own column on the right and
@@ -319,7 +332,7 @@ All of the owner's painter text in backlog A506 applies as written; in short:
 
 - One column per date instead of Monday to Sunday; the season's hours drawn faded under the paint.
 - A side panel: Name (required), Dates (chips; "+ Add dates…" opens a small calendar for single
-  dates or ranges), Every year (No / Yes, same dates), and the "season shows through" explanation.
+  dates or ranges), Every year (No / Yes), and the "season shows through" explanation.
 - Each date has its Closed tick under its heading (the whole venue, section 5).
 - Delete (in the bar) deletes the special day: its dates follow their seasons again.
 - **Saving keeps what was not edited.** The save compares the date list by value: it adds the dates
@@ -347,7 +360,7 @@ All new tables are in the venue-service migration set, classified `state`.
 | --- | --- |
 | `seasons` | id, location, name, `starts_on` (`MM-DD`, never `02-29`). Unique (location, starts_on) and (location, name). |
 | `special_days` | id, location, name, `repeats_yearly`. |
-| `special_day_dates` | id, special day (deleted with it), location, `date` (`YYYY-MM-DD`), `closed_all_day` (the whole-venue tick). Unique (location, date); the repeat collision of section 5 is checked in code, as the database cannot express it. |
+| `special_day_dates` | id, special day (deleted with it), location, `date` (`YYYY-MM-DD`), `closed_all_day` (the whole-venue tick), `holiday_name` (the official name of the public holiday on `date` when saved, or none; added by slice 2's migration, section 5). Unique (location, date); the repeat collision of section 5 is checked in code, as the database cannot express it. |
 | `department_days` | id, department (deleted with it), and EITHER season (deleted with it) and weekday OR special-day date (deleted with it). One row per (department, season, weekday) and per (department, special-day date). |
 | `department_day_ranges` | id, day (deleted with it), period (or none for Closed — Closed only on special-day dates), starts_at, ends_at, on 15-minute steps. Touching ranges of the same period are joined on write. |
 | `zone_days` / `zone_day_ranges` | The same for a zone: per season and weekday, or per special-day date; a range is `closed`, or `open` on special-day dates only. |
@@ -484,14 +497,17 @@ those too.
 
 ## 16. Defaults, and the owner's questions
 
-Asked of the owner in lane A's `questions.md`, each with a worked example; the default is built
-unless the owner answers otherwise:
+Asked of the owner in lane A's `questions.md`, each with a worked example; all three answered
+2026-10-11 (~22:45 and ~22:50):
 
 1. Seasons can be added and removed; a new season copies the weeks of the season it splits
-   (section 4).
-2. "Every year" on a public holiday's special day repeats the same date, not the moving holiday
-   (section 5).
-3. Prep station times open from "Times" in each station's row menu, as a month view (section 9).
+   (section 4). Answered: the default.
+2. "Every year" on a public holiday's special day follows the holiday's official name, with a
+   warning when a year's list has no holiday of that name (section 5). Answered (b), with the
+   warning added by the owner; where the warning shows and what happens when a year has no list
+   are defaults.
+3. Prep station times are a fourth Prep stations tab, "Times", with a station picker (section 9).
+   Answered (c).
 
 Settled by the owner's own words, after the review of this spec: the whole-venue Closed tick
 (section 5), and venues reset rather than carrying hours across (section 11).
@@ -507,8 +523,6 @@ Calendar's local-holiday sentence.
 
 ## 17. Later work, not in this design
 
-- Following a moving public holiday from year to year (the official lists carry no holiday identity
-  across years).
 - A504's floor plan per period (the Periods page and dialog show its column greyed until it lands).
 - A495's dated business-day start: whatever check A495 lands with for "a change would reinterpret
   an existing range" must read the season weeks and special-day paint; the slice that moves the

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   CATALOGUE_MIGRATIONS,
   buildMenuDocument,
@@ -40,7 +40,15 @@ import {
   type VenueScope,
 } from "./operations.js";
 import { specialDates } from "./schema/hours.js";
-import { seasons } from "./schema/seasons.js";
+import {
+  departmentDayRanges,
+  departmentDays as departmentDayRows,
+  seasons,
+  specialDayDates,
+  specialDays,
+  zoneDayRanges,
+  zoneDays as zoneDayRows,
+} from "./schema/seasons.js";
 import { ensureDefaultSeasons } from "./seasons.js";
 import { closedZoneIdsAt, replaceZoneClosedWeek, saveZoneClosedDate } from "./zone-closed-times.js";
 
@@ -604,5 +612,313 @@ describe("resolveZoneClosedDays", () => {
   it("answers an empty map for an empty zone list", async () => {
     const v = await zones();
     expect((await zoneDays(v, [], ["2030-11-30"])).size).toBe(0);
+  });
+});
+
+type PaintSlot = { periodId: string | null; startsAt: string; endsAt: string };
+type ZoneSlot = { kind: "closed" | "open"; startsAt: string; endsAt: string };
+
+async function specialDay(
+  v: Venue,
+  date: string,
+  options: {
+    repeats?: boolean;
+    closedAllDay?: boolean;
+    paint?: Record<string, PaintSlot[]>;
+    zonePaint?: Record<string, ZoneSlot[]>;
+  } = {},
+): Promise<string> {
+  const [day] = await db
+    .insert(specialDays)
+    .values({
+      locationId: v.cfg.locationId,
+      name: `Special ${date}`,
+      repeatsYearly: options.repeats,
+    })
+    .returning({ id: specialDays.id });
+  const [dated] = await db
+    .insert(specialDayDates)
+    .values({
+      specialDayId: day!.id,
+      locationId: v.cfg.locationId,
+      date,
+      closedAllDay: options.closedAllDay,
+    })
+    .returning({ id: specialDayDates.id });
+  for (const [departmentId, ranges] of Object.entries(options.paint ?? {})) {
+    const [row] = await db
+      .insert(departmentDayRows)
+      .values({ departmentId, specialDayDateId: dated!.id })
+      .returning({ id: departmentDayRows.id });
+    if (ranges.length > 0)
+      await db
+        .insert(departmentDayRanges)
+        .values(ranges.map((range) => ({ ...range, dayId: row!.id, departmentId })));
+  }
+  for (const [zoneId, ranges] of Object.entries(options.zonePaint ?? {})) {
+    const [row] = await db
+      .insert(zoneDayRows)
+      .values({ zoneId, specialDayDateId: dated!.id })
+      .returning({ id: zoneDayRows.id });
+    if (ranges.length > 0)
+      await db.insert(zoneDayRanges).values(ranges.map((range) => ({ ...range, dayId: row!.id })));
+  }
+  return day!.id;
+}
+
+describe("special-day paint over the season", () => {
+  const FRIDAY = 5;
+  const WEDNESDAY = 3;
+
+  it("runs a special night's Dinner past midnight on its own night only", async () => {
+    const v = await venue();
+    await menuSeason(v, v.seasons.Winter!, {
+      [FRIDAY]: [{ periodId: v.dinner, startsAt: "20:00", endsAt: "23:30" }],
+      [SATURDAY]: [{ periodId: v.dinner, startsAt: "20:00", endsAt: "23:30" }],
+    });
+    await specialDay(v, "2030-12-13", {
+      paint: { [v.departmentId]: [{ periodId: v.dinner, startsAt: "20:00", endsAt: "02:00" }] },
+    });
+    const service = (at: string) =>
+      scoped((tx) => resolveDepartmentService(tx, v.cfg, v.departmentId, new Date(at)));
+    // 01:00 in Madrid on Saturday 14 December, business day Friday 13th.
+    const first = await service("2030-12-14T00:00:00Z");
+    expect({ open: first.open, period: first.periodName }).toEqual({
+      open: true,
+      period: "Dinner",
+    });
+    // 01:00 in Madrid on Sunday 15 December, business day Saturday 14th.
+    const second = await service("2030-12-15T00:00:00Z");
+    expect({ open: second.open, period: second.periodName }).toEqual({ open: false, period: null });
+    const days = await departmentDays(v, ["2030-12-13", "2030-12-14"]);
+    expect(days.get("2030-12-13")).toEqual({
+      businessDay: "2030-12-13",
+      seasonId: v.seasons.Winter,
+      ranges: [{ periodId: v.dinner, startsAt: "20:00", endsAt: "02:00" }],
+    });
+    expect(days.get("2030-12-14")?.ranges).toEqual([
+      { periodId: v.dinner, startsAt: "20:00", endsAt: "23:30" },
+    ]);
+  });
+
+  it("closes every department and ignores zone paint on a date with the Closed tick", async () => {
+    const v = await venue();
+    await menuSeason(v, v.seasons.Winter!, {
+      [FRIDAY]: [{ periodId: v.dinner, startsAt: "20:00", endsAt: "23:30" }],
+    });
+    await zoneSeason(v, v.sala, v.seasons.Winter!, {
+      [FRIDAY]: [{ startsAt: "22:00", endsAt: "23:00" }],
+    });
+    await specialDay(v, "2030-12-13", {
+      closedAllDay: true,
+      paint: { [v.departmentId]: [{ periodId: v.dinner, startsAt: "12:00", endsAt: "16:00" }] },
+      zonePaint: { [v.terraza]: [{ kind: "closed", startsAt: "12:00", endsAt: "13:00" }] },
+    });
+    const later = await scoped(async (tx) => {
+      const id = (await createDepartment(tx, v.cfg, { name: "Later", orderStart: "table" })).id;
+      const period = (
+        await saveMenuPeriod(
+          tx,
+          v.cfg,
+          id,
+          { name: "Later dinner", menuId: v.menus.Dinner!, staffMenuIds: [] },
+          0,
+        )
+      ).id;
+      await replaceMenuWeek(
+        tx,
+        v.cfg,
+        id,
+        menuWeek({ [FRIDAY]: [{ periodId: period, startsAt: "19:00", endsAt: "23:00" }] }),
+        AT,
+        0,
+        { seasonId: v.seasons.Winter! },
+      );
+      return id;
+    });
+    expect((await departmentDays(v, ["2030-12-13"])).get("2030-12-13")?.ranges).toEqual([]);
+    const laterDays = await scoped((tx) =>
+      resolveDepartmentDays(tx, v.cfg, later, ["2030-12-13", "2030-12-20"], CLOCK),
+    );
+    expect(laterDays.get("2030-12-13")?.ranges).toEqual([]);
+    expect(laterDays.get("2030-12-20")?.ranges).toHaveLength(1);
+    const zones = await zoneDays(v, [v.sala, v.terraza], ["2030-12-13"]);
+    expect(zones.get(v.sala)?.get("2030-12-13")).toEqual([]);
+    expect(zones.get(v.terraza)?.get("2030-12-13")).toEqual([]);
+  });
+
+  it("repeats a yearly special day from its first year on, never before", async () => {
+    const v = await venue();
+    await specialDay(v, "2030-12-24", {
+      repeats: true,
+      paint: { [v.departmentId]: [{ periodId: v.dinner, startsAt: "19:00", endsAt: "22:00" }] },
+    });
+    const days = await departmentDays(v, ["2029-12-24", "2030-12-24", "2031-12-24"]);
+    expect(days.get("2029-12-24")?.ranges).toEqual([]);
+    expect(days.get("2030-12-24")?.ranges).toEqual([
+      { periodId: v.dinner, startsAt: "19:00", endsAt: "22:00" },
+    ]);
+    expect(days.get("2031-12-24")?.ranges).toEqual([
+      { periodId: v.dinner, startsAt: "19:00", endsAt: "22:00" },
+    ]);
+  });
+
+  it("repeats a 29 February special day in leap years only", async () => {
+    const v = await venue();
+    await specialDay(v, "2028-02-29", {
+      repeats: true,
+      paint: { [v.departmentId]: [{ periodId: v.dinner, startsAt: "19:00", endsAt: "22:00" }] },
+    });
+    const days = await departmentDays(v, ["2031-02-28", "2031-03-01", "2032-02-29"]);
+    expect(days.get("2031-02-28")?.ranges).toEqual([]);
+    expect(days.get("2031-03-01")?.ranges).toEqual([]);
+    expect(days.get("2032-02-29")?.ranges).toEqual([
+      { periodId: v.dinner, startsAt: "19:00", endsAt: "22:00" },
+    ]);
+  });
+
+  it("opens a zone its season closes, and still sells nothing where the department is closed", async () => {
+    const v = await venue();
+    await menuSeason(v, v.seasons.Winter!, {
+      [FRIDAY]: [{ periodId: v.dinner, startsAt: "20:00", endsAt: "22:00" }],
+    });
+    await zoneSeason(v, v.terraza, v.seasons.Winter!, {
+      [FRIDAY]: [{ startsAt: "22:00", endsAt: "06:00" }],
+    });
+    await specialDay(v, "2030-12-13", {
+      zonePaint: { [v.terraza]: [{ kind: "open", startsAt: "22:00", endsAt: "23:30" }] },
+    });
+    const at = new Date("2030-12-13T21:30:00Z"); // 22:30 in Madrid
+    expect([...(await scoped((tx) => closedZoneIdsAt(tx, v.cfg, at)))]).toEqual([]);
+    const zones = await zoneDays(v, [v.terraza], ["2030-12-13"]);
+    expect(zones.get(v.terraza)?.get("2030-12-13")).toEqual([
+      { startsAt: "23:30", endsAt: "06:00" },
+    ]);
+    const service = await scoped((tx) => resolveDepartmentService(tx, v.cfg, v.departmentId, at));
+    expect(service.open).toBe(false);
+  });
+
+  it("follows the season now holding a special date after a season start moves", async () => {
+    const v = await venue();
+    await menuSeason(v, v.seasons.Autumn!, {
+      [WEDNESDAY]: [{ periodId: v.dinner, startsAt: "20:00", endsAt: "23:00" }],
+    });
+    await menuSeason(v, v.seasons.Winter!, {
+      [WEDNESDAY]: [{ periodId: v.lateBar, startsAt: "21:00", endsAt: "23:30" }],
+    });
+    await specialDay(v, "2030-11-20", {
+      paint: { [v.departmentId]: [{ periodId: v.breakfast, startsAt: "09:00", endsAt: "10:00" }] },
+    });
+    expect((await departmentDays(v, ["2030-11-20"])).get("2030-11-20")).toEqual({
+      businessDay: "2030-11-20",
+      seasonId: v.seasons.Autumn,
+      ranges: [
+        { periodId: v.breakfast, startsAt: "09:00", endsAt: "10:00" },
+        { periodId: v.dinner, startsAt: "20:00", endsAt: "23:00" },
+      ],
+    });
+    await db.update(seasons).set({ startsOn: "11-15" }).where(eq(seasons.id, v.seasons.Winter!));
+    expect((await departmentDays(v, ["2030-11-20"])).get("2030-11-20")).toEqual({
+      businessDay: "2030-11-20",
+      seasonId: v.seasons.Winter,
+      ranges: [
+        { periodId: v.breakfast, startsAt: "09:00", endsAt: "10:00" },
+        { periodId: v.lateBar, startsAt: "21:00", endsAt: "23:30" },
+      ],
+    });
+  });
+
+  it("lets a special day win over a named day on the same date", async () => {
+    const v = await venue();
+    await menuSeason(v, v.seasons.Winter!, {
+      [FRIDAY]: [{ periodId: v.dinner, startsAt: "20:00", endsAt: "23:30" }],
+    });
+    await zoneSeason(v, v.sala, v.seasons.Winter!, {
+      [FRIDAY]: [{ startsAt: "22:00", endsAt: "23:00" }],
+    });
+    await namedDay(v, "2030-12-13", { closeWholeVenue: true });
+    await specialDay(v, "2030-12-13", {
+      paint: { [v.departmentId]: [{ periodId: null, startsAt: "22:00", endsAt: "23:30" }] },
+    });
+    expect((await departmentDays(v, ["2030-12-13"])).get("2030-12-13")?.ranges).toEqual([
+      { periodId: v.dinner, startsAt: "20:00", endsAt: "22:00" },
+    ]);
+    expect((await zoneDays(v, [v.sala], ["2030-12-13"])).get(v.sala)?.get("2030-12-13")).toEqual([
+      { startsAt: "22:00", endsAt: "23:00" },
+    ]);
+  });
+
+  it("reads special-day dates and their paint once, however many zones and days a call covers", async () => {
+    const v = await venue();
+    const third = await scoped(async (tx) => {
+      const [zone] = await tx
+        .insert(floorZones)
+        .values({ locationId: v.cfg.locationId, name: "Barra", displayOrder: 2 })
+        .returning({ id: floorZones.id });
+      await configureZone(tx, v.cfg, { zoneId: zone!.id, departmentId: v.departmentId });
+      return zone!.id;
+    });
+    const closedEvening = [{ kind: "closed" as const, startsAt: "22:00", endsAt: "23:00" }];
+    const dinner = [{ periodId: v.dinner, startsAt: "20:00", endsAt: "23:00" }];
+    for (const date of ["2030-12-13", "2030-12-14"])
+      await specialDay(v, date, {
+        paint: { [v.departmentId]: dinner },
+        zonePaint: { [v.sala]: closedEvening, [v.terraza]: closedEvening, [third]: closedEvening },
+      });
+    const at = new Date("2030-12-14T21:30:00Z"); // 22:30 in Madrid, business day 14 December
+    const statements = (call: (tx: Transaction) => Promise<void>) =>
+      scoped(async (tx) => {
+        const session = (
+          tx as unknown as { session: { prepareQuery: (...args: never[]) => unknown } }
+        ).session;
+        const spy = vi.spyOn(session, "prepareQuery");
+        try {
+          await call(tx);
+          return spy.mock.calls.map(([query]) => (query as unknown as { sql: string }).sql);
+        } finally {
+          spy.mockRestore();
+        }
+      });
+    const zones = (zoneIds: string[]) =>
+      statements(async (tx) => {
+        expect([...(await closedZoneIdsAt(tx, v.cfg, at, zoneIds))].sort()).toEqual(
+          [...zoneIds].sort(),
+        );
+      });
+    const days = (businessDays: string[]) =>
+      statements(async (tx) => {
+        const resolved = await resolveDepartmentDays(
+          tx,
+          v.cfg,
+          v.departmentId,
+          businessDays,
+          CLOCK,
+        );
+        expect(businessDays.map((day) => resolved.get(day)?.ranges)).toEqual(
+          businessDays.map(() => dinner),
+        );
+      });
+    const one = await zones([v.sala]);
+    const three = await zones([v.sala, v.terraza, third]);
+    const oneDay = await days(["2030-12-13"]);
+    const twoDays = await days(["2030-12-13", "2030-12-14"]);
+    expect(twoDays).toHaveLength(oneDay.length);
+    for (const texts of [one, three, oneDay, twoDays]) {
+      expect(texts.filter((text) => text.includes(`from "special_day_dates"`))).toHaveLength(1);
+      // Department and zone paint come back in one statement.
+      expect(texts.filter((text) => text.includes(`"special_day_date_id" in`))).toHaveLength(1);
+    }
+    expect(three).toHaveLength(one.length);
+  });
+
+  it("refuses a shared plan that does not cover a requested day's special days", async () => {
+    const v = await venue();
+    const plan = await scoped((tx) => readDayPlan(tx, v.cfg, ["2030-12-13"]));
+    const partial = { ...plan, special: new Map() };
+    await expect(
+      scoped((tx) =>
+        resolveDepartmentDays(tx, v.cfg, v.departmentId, ["2030-12-13"], CLOCK, partial),
+      ),
+    ).rejects.toThrow("the day plan does not cover 2030-12-13");
   });
 });

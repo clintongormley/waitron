@@ -45,6 +45,7 @@ import {
 } from "./operations.js";
 import { specialDates } from "./schema/hours.js";
 import { nextOccurrence } from "./named-day-rules.js";
+import { readSpecialDaySchedules, specialDateIn } from "./special-days.js";
 import { menuDayTimetables, menuPeriods, menuPeriodStaffMenus, menuSlots } from "./schema/menus.js";
 import { departments } from "./schema/service.js";
 import { routingCellPeriods, routingCells } from "./schema/routing.js";
@@ -61,7 +62,12 @@ import {
 } from "./season-weeks.js";
 import { seasonOn } from "./season-rules.js";
 import { readSeasons } from "./seasons.js";
-import { departmentDayRanges, departmentDays } from "./schema/seasons.js";
+import {
+  departmentDayRanges,
+  departmentDays,
+  specialDayDates,
+  specialDays,
+} from "./schema/seasons.js";
 import { zoneClosedTimes } from "./schema/zone-closed-times.js";
 import {
   scheduleCutovers,
@@ -289,6 +295,7 @@ async function endOffsetClash(
     .where(eq(specialDates.locationId, cfg.locationId));
   const offsets = new Map(periods.map((period) => [period.id, period.offset]));
   const departmentIds = [...new Set(periods.map((period) => period.departmentId))];
+  const specialDays = await readSpecialDaySchedules(tx, cfg, departmentIds);
   const allSeasons = await readSeasons(tx, cfg);
   const weeks = await readDepartmentSeasonWeeks(tx, cfg, departmentIds, clock.dayCutover);
   const ownDay = new Map(
@@ -301,7 +308,20 @@ async function endOffsetClash(
         startsOn: season.startsOn,
         week: weeks.get(id)?.get(season.id) ?? [],
       })),
-      dates.map((date) => ({ ...date, slots: ownDay.get(`${id}|${date.id}`) ?? null })),
+      [
+        // First, so a special day wins a date a named day also holds, as on the till.
+        ...specialDays.map((day) => ({
+          date: day.date,
+          closeWholeVenue: day.closedAllDay,
+          ...(day.repeats
+            ? { occursIn: (year: number) => specialDateIn({ date: day.date, repeats: true }, year) }
+            : {}),
+          slots: null,
+          paint: day.paint.get(id) ?? [],
+          specialDayId: day.specialDayId,
+        })),
+        ...dates.map((date) => ({ ...date, slots: ownDay.get(`${id}|${date.id}`) ?? null })),
+      ],
       offsets,
       clock,
     );
@@ -312,10 +332,16 @@ async function endOffsetClash(
         weekday: clash.weekday,
         date: clash.date,
         departmentId: id,
+        ...(clash.specialDayId === undefined ? {} : { specialDayId: clash.specialDayId }),
       };
     }
   }
   return null;
+}
+
+/** The first sending cutoff that runs into what follows it, over every department. */
+export function scheduleEndOffsetClash(tx: Transaction, cfg: VenueScope, clock?: BusinessDayClock) {
+  return endOffsetClash(tx, cfg, undefined, false, clock);
 }
 
 export async function assertPeriodEndOffsets(tx: Transaction, cfg: VenueScope): Promise<void> {
@@ -671,6 +697,7 @@ async function writeMenuPeriod(
       seasonId: clash.seasonId,
       weekday: clash.weekday,
       date: clash.date,
+      ...(clash.specialDayId === undefined ? {} : { specialDayId: clash.specialDayId }),
     });
   return { id: id! };
 }
@@ -712,7 +739,8 @@ export async function updateMenuPeriod(
   );
 }
 
-/** Every day that places each listed period: weekdays in order, then special dates by date. */
+/** Every day that places each listed period: weekdays in order, then special dates by date, then
+ *  special-day dates by date. */
 async function periodUses(
   tx: Transaction,
   periodIds: readonly string[],
@@ -740,6 +768,19 @@ async function periodUses(
         inArray(departmentDayRanges.periodId, [...periodIds]),
       ),
     );
+  const specialDayPaint = await tx
+    .selectDistinct({
+      periodId: departmentDayRanges.periodId,
+      specialDayId: specialDays.id,
+      name: specialDays.name,
+      date: specialDayDates.date,
+    })
+    .from(departmentDayRanges)
+    .innerJoin(departmentDays, eq(departmentDays.id, departmentDayRanges.dayId))
+    .innerJoin(specialDayDates, eq(specialDayDates.id, departmentDays.specialDayDateId))
+    .innerJoin(specialDays, eq(specialDays.id, specialDayDates.specialDayId))
+    .where(inArray(departmentDayRanges.periodId, [...periodIds]))
+    .orderBy(asc(specialDayDates.date), asc(specialDays.id));
   const weekdays = new Map<string, Set<number>>(periodIds.map((id) => [id, new Set()]));
   for (const row of painted) weekdays.get(row.periodId!)!.add(row.weekday!);
   for (const [periodId, days] of weekdays)
@@ -749,6 +790,13 @@ async function periodUses(
     uses.get(row.periodId)!.push({
       kind: "special_date",
       specialDateId: row.specialDateId,
+      date: row.date,
+    });
+  for (const row of specialDayPaint)
+    uses.get(row.periodId!)!.push({
+      kind: "special_day",
+      specialDayId: row.specialDayId,
+      name: row.name,
       date: row.date,
     });
   return uses;

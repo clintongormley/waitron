@@ -122,6 +122,8 @@ export const QUERY_DEPENDENCIES = {
     "department_day_ranges",
     "zone_days",
     "zone_day_ranges",
+    "special_days",
+    "special_day_dates",
   ],
   "named-days": [
     "special_dates",
@@ -138,8 +140,17 @@ export const QUERY_DEPENDENCIES = {
     "department_day_ranges",
     "zone_days",
     "zone_day_ranges",
+    "special_days",
+    "special_day_dates",
   ],
-  holidays: ["tenants", "locations", "holiday_geographies", "special_dates"],
+  holidays: [
+    "tenants",
+    "locations",
+    "holiday_geographies",
+    "special_dates",
+    "special_days",
+    "special_day_dates",
+  ],
   "floor-plan": [
     "floor_plans",
     "floor_plan_tables",
@@ -172,6 +183,8 @@ export const QUERY_DEPENDENCIES = {
     "department_day_ranges",
     "zone_days",
     "zone_day_ranges",
+    "special_days",
+    "special_day_dates",
   ],
   operations: [
     "department_receipts",
@@ -203,5 +216,7 @@ export const QUERY_DEPENDENCIES = {
     "department_day_ranges",
     "zone_days",
     "zone_day_ranges",
+    "special_days",
+    "special_day_dates",
   ],
 } as const;
