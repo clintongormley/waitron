@@ -118,8 +118,11 @@ declare module "@waitron/shared" {
     "fiscal.anulacion_retenida": { registroId: string };
 
     /**
-     * `./drain.ts`: AEAT accepted this record but flagged it (`EstadoRegistro="AceptadoConErrores"`).
-     * A warning: the record counts as accepted, but a human should still see why AEAT flagged it.
+     * `./drain.ts`'s `settleAcceptedWithErrors` and `./reconcile.ts`'s lost-acknowledgement path:
+     * AEAT holds this record accepted with errors, as its reply line, the duplicate detail of a
+     * re-sent record (3000) or AEAT's consulta says. `codigo`/`mensaje` are the stored copy's own
+     * error, never 3000. A warning: the record counts as accepted, but a human should still see
+     * why AEAT flagged it.
      */
     "fiscal.aceptado_con_errores": {
       registroId: string;

@@ -158,7 +158,7 @@ export async function reconcile(
       if (PENDIENTE.has(row.estado)) {
         if (found !== null) {
           result.lostAck.push(mismatchOf(row, found.estado));
-          await correct(tx, row, found, detectedAt);
+          await correct(tx, row, found, detectedAt, { lostAck: true, result });
         }
         continue;
       }
@@ -206,7 +206,7 @@ export async function reconcile(
           // raised at most once per genuine clean→errors transition — the unconditional `raise`.
           await raise(tx, row, drift.severity, drift.code, detectedAt);
           result.incidentsRaised += 1;
-          await correct(tx, row, found!, detectedAt);
+          await correct(tx, row, found!, detectedAt, { lostAck: false, result });
         }
       }
       // Clean agreement, nothing to do (the drainer already acked it — never re-ack a record that
@@ -324,7 +324,9 @@ function mismatchOf(row: PeriodRow, reported: EstadoRegistroConsulta | null): Re
  * Corrects one mismatch's local estado toward what AEAT reports, then writes the ack the lost
  * response would have produced, on the same transaction so the ack reflects the estado this commit
  * writes. No-ops for a state `CORRECTION` does not map. A record corrected to
- * `aceptado_con_errores` gets the drainer's case for it, with the error AEAT reports.
+ * `aceptado_con_errores` gets the drainer's case for it, with the error AEAT reports, and, on the
+ * lost-acknowledgement path, the drainer's `fiscal.aceptado_con_errores` warning; on the drift
+ * path the sweep has already raised `fiscal.reconcile_drift_errores` for it.
  *
  * A targeted `update` rather than the drainer's `setEstado`, which requires a csv: a consulta never
  * returns one, so `csv` keeps whatever the row already held.
@@ -334,6 +336,7 @@ async function correct(
   row: PeriodRow,
   reported: Reported,
   now: Date,
+  { lostAck, result }: { lostAck: boolean; result: ReconcileResult },
 ): Promise<void> {
   const target = CORRECTION[reported.estado];
   if (target === undefined) return; // Anulado / no clean local estado — incident-only.
@@ -343,6 +346,20 @@ async function correct(
   `);
   await writeAck(tx, row.id, now);
   if (target === "aceptado_con_errores") {
+    if (lostAck) {
+      await recordIncident(tx, {
+        origin: jobOrigin("fiscal_filing"),
+        saleId: row.sale_id as SaleId,
+        error: new AppError("fiscal.aceptado_con_errores", {
+          registroId: row.id,
+          codigo: reported.codigo,
+          mensaje: reported.mensaje,
+        }),
+        severity: "warning",
+        detectedAt: now,
+      });
+      result.incidentsRaised += 1;
+    }
     await openAcceptedWithErrorsCase(tx, {
       registroId: row.id,
       codigo: reported.codigo,

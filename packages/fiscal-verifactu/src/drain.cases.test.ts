@@ -7,6 +7,7 @@ import { createClient } from "@waitron/verifactu";
 import type { IDFactura, RespuestaLinea, VerifactuClient } from "@waitron/verifactu";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import {
+  consultaNames,
   appendCancellation,
   appendPendingAlta,
   collideAtAeat,
@@ -643,22 +644,6 @@ describe("drain — a re-sent record whose stored copy AEAT accepted with errors
             },
           },
     );
-
-  /** AEAT's consulta reports the stored copy's error, which the fake AEAT sends only for 2007. */
-  const consultaNames = (client: VerifactuClient, codigo: number): VerifactuClient => ({
-    submit: (...args) => client.submit(...args),
-    consultar: async (...args) => {
-      const respuesta = await client.consultar(...args);
-      return {
-        ...respuesta,
-        registros: respuesta.registros.map((r) =>
-          r.EstadoRegistro === "AceptadoConErrores"
-            ? { ...r, CodigoErrorRegistro: codigo, DescripcionErrorRegistro: `Error ${codigo}` }
-            : r,
-        ),
-      };
-    },
-  });
 
   async function aceptadoConErroresParams() {
     const { rows } = await suite.db.execute<{ params: string }>(sql`

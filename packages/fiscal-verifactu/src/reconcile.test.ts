@@ -12,7 +12,7 @@ import { DEFAULT_SKIP_RETRY_MS, drain, type DrainDeps } from "./drain.js";
 import { listFilingCases } from "./filing-cases.js";
 import { reconcile, type ReconcileDeps } from "./reconcile.js";
 import { toAeatDate } from "./registro-row.js";
-import { seedPendingEnvios } from "../test/drain-fixtures.js";
+import { consultaNames, seedPendingEnvios } from "../test/drain-fixtures.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
 import { saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
@@ -591,22 +591,6 @@ describe("reconcile — the three audit cases", () => {
 });
 
 describe("reconcile — a record AEAT holds accepted with errors opens a case", () => {
-  /** AEAT's consulta names the stored copy's error, which the fake AEAT sends only for 2007. */
-  const naming = (client: VerifactuClient, codigo: number): VerifactuClient => ({
-    submit: (...args) => client.submit(...args),
-    consultar: async (...args) => {
-      const respuesta = await client.consultar(...args);
-      return {
-        ...respuesta,
-        registros: respuesta.registros.map((r) =>
-          r.EstadoRegistro === "AceptadoConErrores"
-            ? { ...r, CodigoErrorRegistro: codigo, DescripcionErrorRegistro: `Error ${codigo}` }
-            : r,
-        ),
-      };
-    },
-  });
-
   const casesFor = () => withTransaction(suite.db, (tx) => listFilingCases(tx));
 
   it("drift: opens a case with the error AEAT names, keeping the envío's CSV as evidence", async () => {
@@ -620,7 +604,7 @@ describe("reconcile — a record AEAT holds accepted with errors opens a case", 
     aeat.setConsultaState(seeded.facturaKeys[0]!, "AceptadoConErrores");
 
     await reconcile(
-      reconcileDeps(staticResolver(naming(aeat.client(), 2005)), seeded.clock),
+      reconcileDeps(staticResolver(consultaNames(aeat.client(), 2005)), seeded.clock),
       PERIOD,
     );
 
@@ -631,9 +615,12 @@ describe("reconcile — a record AEAT holds accepted with errors opens a case", 
         { codigo: 2005, mensaje: "Error 2005", csv: rows[0]!.csv },
       ],
     ]);
+    expect((await incidentsFor()).map((i) => [i.code, i.severity])).toEqual([
+      ["fiscal.reconcile_drift_errores", "warning"],
+    ]);
   });
 
-  it("lost acknowledgement: opens a case with the error AEAT names", async () => {
+  it("lost acknowledgement: opens a case with the error AEAT names, beside the warning the drain raises", async () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     const [record] = seeded.registroIds;
@@ -641,14 +628,22 @@ describe("reconcile — a record AEAT holds accepted with errors opens a case", 
     await suite.db.execute(sql`update envios set estado = 'pendiente', csv = null`);
     aeat.setConsultaState(seeded.facturaKeys[0]!, "AceptadoConErrores");
 
-    await reconcile(
-      reconcileDeps(staticResolver(naming(aeat.client(), 2005)), seeded.clock),
+    const result = await reconcile(
+      reconcileDeps(staticResolver(consultaNames(aeat.client(), 2005)), seeded.clock),
       PERIOD,
     );
 
+    expect(result.incidentsRaised).toBe(1);
     expect((await estadosFor()).get(record!)).toBe("aceptado_con_errores");
     expect((await casesFor()).map((c) => [c.registroId, c.cause, c.evidence])).toEqual([
       [record, "fiscal.aceptado_con_errores", { codigo: 2005, mensaje: "Error 2005", csv: null }],
+    ]);
+    expect(await incidentsFor()).toEqual([
+      {
+        code: "fiscal.aceptado_con_errores",
+        severity: "warning",
+        params: { registroId: record, codigo: 2005, mensaje: "Error 2005" },
+      },
     ]);
   });
 
@@ -659,7 +654,7 @@ describe("reconcile — a record AEAT holds accepted with errors opens a case", 
     aeat.setConsultaState(seeded.facturaKeys[0]!, "AceptadoConErrores");
 
     await reconcile(
-      reconcileDeps(staticResolver(naming(aeat.client(), 2004)), seeded.clock),
+      reconcileDeps(staticResolver(consultaNames(aeat.client(), 2004)), seeded.clock),
       PERIOD,
     );
 
