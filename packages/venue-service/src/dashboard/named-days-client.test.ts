@@ -60,6 +60,11 @@ describe("NamedDaysApi", () => {
           "location_business_day_settings",
           "location_day_cutover_changes",
           "holiday_geographies",
+          "seasons",
+          "department_days",
+          "department_day_ranges",
+          "zone_days",
+          "zone_day_ranges",
         ].map((type) => ({ type })),
       );
       api.rereadWatches();
