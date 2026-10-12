@@ -694,10 +694,27 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   the NUL; closing it needs a migration. Found by #609 (`packages/media`), not fixable in a
   comments-only change.
 
-- **Leftovers from #603's catalogue comment prune** — refusals that look unreachable, PostgreSQL-era
-  integer bounds and key ordering, insert orders pinned by four transfer tests, and test titles to
-  rename in `packages/catalogue`.
-  [Detail](backlog/catalogue.md#leftovers-from-603s-catalogue-comment-prune)
+- **`writeItems` and `writeLabels` each keep a refusal after their insert that looks unreachable
+  now** — OPEN (found by #603). Read only, not run: `writeItems` (`packages/catalogue/src/extras.ts`)
+  and `writeLabels` (`src/options.ts`); duplicate and foreign ids are refused earlier and one write
+  runs at a time.
+
+- **`MAX_MODIFIER_INTEGER` and the extras contract's `whole` bound have no stated reason on this
+  engine** — OPEN (found by #603). Read only, not run: both were PostgreSQL's integer maximum.
+  [Detail](backlog/catalogue.md#max_modifier_integer-and-the-extras-contracts-whole-bound-have-no-stated-reason-on-this-engine)
+
+- **`assertRefsExist` still reads lists in sorted key order** — OPEN (found by #603). Read only, not
+  run: that order (`packages/catalogue/src/product-modifiers.ts`) served PostgreSQL's lock ordering
+  only.
+
+- **Four configuration-transfer cases pin an insert order the importer's `pragma defer_foreign_keys`
+  may make unnecessary for foreign keys** — OPEN (found by #603). Read only, not run: in
+  `packages/catalogue`'s `options.test.ts`, `product-modifiers.test.ts`, `extras.test.ts` and
+  `extra-projection.test.ts`; whether to keep pinning it is the owner's call.
+
+- **Test titles in `packages/catalogue` a comments-only change cannot touch** — OPEN (found by
+  #603). Four titles, in `dietary.test.ts`, `product-modifiers.test.ts` and `migrations.test.ts`.
+  [Detail](backlog/catalogue.md#test-titles-in-packagescatalogue-a-comments-only-change-cannot-touch)
 
 - **The media library still reads every matching image for search and name sorting, inside the venue
   write lock** — OPEN (found 2026-09-23, task F1's review wave). The route (`GET /management-api/images`)
@@ -4466,14 +4483,10 @@ the tree. What remains, largest first:
   (`scripts/vitest-file-progress.mjs`); that run was cancelled, not timed out, after 3m26s with no
   output.
 
-- **A catalogue test fails now and then on two products made in the same millisecond (found by
-  A521).** "listProducts carries each product's recipe diet derivation, null where it has none"
-  (`packages/catalogue/src/operations.test.ts`) expects "stew" before "plain", but `listProducts`
-  orders by `createdAt` and then `id`, and ids are random (`newId`, `packages/db/src/schema/columns.ts`),
-  so two products created in the same millisecond come back in either order. Running the whole file
-  failed it 1 time in 3 on A521's branch and 2 times in 5 on main's `derivation.ts`; six runs of
-  the test alone all passed. The tie-break explanation is from reading the code, not measured.
-  Next: make the test independent of the tie (or give the two products different times).
+- **A catalogue test fails now and then; read, not measured, as two products created in the same
+  millisecond (found by A521).** Next: make the test independent of the tie (or give the two
+  products different times).
+  [Detail](backlog/ci.md#a-catalogue-test-fails-now-and-then-read-not-measured-as-two-products-created-in-the-same-millisecond-found-by-a521)
 
 _Formerly B9, and the old Track C's development-stack and house-rules items; part of A9._ Detail: [backlog/ci.md](backlog/ci.md).
 

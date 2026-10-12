@@ -3,24 +3,22 @@
 The open entries are listed in [the backlog](../backlog.md), under "Menus and the catalogue". This file holds
 their full text.
 
-## Leftovers from #603's catalogue comment prune
+## `MAX_MODIFIER_INTEGER` and the extras contract's `whole` bound have no stated reason on this engine
 
-- Found by #603 (`packages/catalogue`). Read only, not run: `writeItems`
-  (`src/extras.ts`) and `writeLabels` (`src/options.ts`) each keep a refusal after their insert
-  that looks unreachable now (duplicate and foreign ids are refused earlier and one write runs at
-  a time). `MAX_MODIFIER_INTEGER` (`src/modifier-limits.ts`, 2147483647) and the extras
-  contract's `whole` bound were PostgreSQL's integer maximum and have no stated reason on this
-  engine; the test names "refuses a pick bound above what the column can hold" and "refuses a
-  maxQuantity above what the column can hold" (`src/extra-contract.test.ts`) assume a column
-  limit. `assertRefsExist` (`src/product-modifiers.ts`) still reads lists in sorted key order,
-  which served PostgreSQL's lock ordering only. Four configuration-transfer cases (in
-  `options.test.ts`, `product-modifiers.test.ts`, `extras.test.ts` and
-  `extra-projection.test.ts`) pin an insert order that the importer's
-  `pragma defer_foreign_keys` makes unnecessary for foreign keys — whether to keep pinning it is
-  the owner's call. Test titles a comments-only change cannot touch: `describe("validateContainsTag
-(Task 4)")` and `describe("validateDietOverride (Task 4)")` (`src/dietary.test.ts`), "settles
-  a product id sent in upper case in the database" (`src/product-modifiers.test.ts`, the code
-  settles it now), "rebuilds every lookup index without the tenant" (`src/migrations.test.ts`).
+**`MAX_MODIFIER_INTEGER` and the extras contract's `whole` bound have no stated reason on this
+engine — OPEN (found by #603).** Read only, not run: `MAX_MODIFIER_INTEGER`
+(`packages/catalogue/src/modifier-limits.ts`, 2147483647) and the extras contract's `whole` bound
+were PostgreSQL's integer maximum; the test names "refuses a pick bound above what the column can
+hold" and "refuses a maxQuantity above what the column can hold" (`src/extra-contract.test.ts`)
+assume a column limit.
+
+## Test titles in `packages/catalogue` a comments-only change cannot touch
+
+**Test titles in `packages/catalogue` a comments-only change cannot touch — OPEN (found by #603).** Read only, not run:
+`describe("validateContainsTag (Task 4)")` and `describe("validateDietOverride (Task 4)")`
+(`src/dietary.test.ts`), "settles a product id sent in upper case in the database"
+(`src/product-modifiers.test.ts`, the code settles it now), "rebuilds every lookup index without the
+tenant" (`src/migrations.test.ts`).
 
 ## The media library still reads every matching image for search and name sorting, inside the venue write lock
 
