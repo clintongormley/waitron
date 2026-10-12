@@ -1,18 +1,22 @@
 import { describe, expect, it } from "vitest";
 import type { FloorPlan } from "../api/client.js";
 import {
+  addJoinedTable,
   addTables,
   changePlacement,
   checkDraft,
   deleteTable,
   draftFromPlan,
+  freeTables,
   joinedTableOf,
+  madeOfText,
   patchTable,
   placeTable,
   rekeyDraft,
   restoreTable,
   sameDraft,
   saveFromDraft,
+  setParts,
   withLiveTables,
   type FloorPlanDraft,
 } from "./floor-plan-draft.js";
@@ -654,5 +658,76 @@ describe("floor plan draft", () => {
   it("returns the draft itself when the key is already in it", () => {
     const d = open();
     expect(restoreTable(d, { ...table(d, "m2"), label: "Other" }, d)).toBe(d);
+  });
+
+  it("adds Long table not placed, made of the tables chosen", () => {
+    const opened = draftFromPlan(joinedPlan);
+    const d = addJoinedTable(
+      deleteTable(opened, "long"),
+      { label: "Long table", seats: 10, parts: ["c3", "c4", "c5"] },
+      counter("new"),
+    );
+    expect(d.tables.at(-1)).toEqual({
+      key: "new:1",
+      id: null,
+      liveTableId: null,
+      label: "Long table",
+      seats: 10,
+      fixed: false,
+      placement: null,
+      parts: ["c3", "c4", "c5"],
+    });
+    expect(joinedTableOf(d, "c4")?.key).toBe("new:1");
+    expect(d.tables.slice(0, -1).map((t) => t.key)).toEqual(["m1", "c3", "c4", "c5"]);
+    const parts = ["c3", "c4"];
+    const own = addJoinedTable(opened, { label: "Bar", seats: 8, parts }, counter("new"));
+    expect(table(own, "new:1").parts).not.toBe(parts);
+    const set = setParts(d, "new:1", ["c3", "c5"]);
+    expect(table(set, "new:1").parts).toEqual(["c3", "c5"]);
+    expect(table(d, "new:1").parts).toEqual(["c3", "c4", "c5"]);
+    expect(setParts(d, "missing", ["c3"])).toBe(d);
+  });
+
+  it("lists the free tables in number order, a joined table's own parts included for it", () => {
+    const d = addTables(
+      draftFromPlan(joinedPlan),
+      [
+        { label: "Counter 10", seats: 2, fixed: false },
+        { label: "Counter 9", seats: 2, fixed: false },
+        { label: "Counter 11", seats: 2, fixed: false },
+      ],
+      counter("new"),
+    );
+    const withBar = addJoinedTable(d, { label: "Bar", seats: 4, parts: ["new:3"] }, () => "bar");
+    const names = (key?: string) => freeTables(withBar, key).map((t) => t.label);
+    expect(names()).toEqual(["Counter 9", "Counter 10"]);
+    expect(names("long")).toEqual([
+      "Counter 3",
+      "Counter 4",
+      "Counter 5",
+      "Counter 9",
+      "Counter 10",
+    ]);
+    expect(names("bar")).toEqual(["Counter 9", "Counter 10", "Counter 11"]);
+  });
+
+  it.each([
+    [["Counter 3", "Counter 5", "Counter 4"], "Counter 3, 4, 5"],
+    [["Window 1", "Stool 2"], "Window 1, Stool 2"],
+    [["T1", "T2"], "T1, T2"],
+    [["Bar 2", "Bar 10"], "Bar 2, 10"],
+    [[], ""],
+  ])("writes %s as %s", (names, text) => {
+    expect(madeOfText(names)).toBe(text);
+  });
+
+  it("finds a joined table with fewer than two parts", () => {
+    const d = draftFromPlan(joinedPlan);
+    expect(checkDraft(d)).toBeNull();
+    expect(checkDraft(setParts(d, "long", ["c3"]))).toEqual({
+      key: "long",
+      problem: "parts_too_few",
+    });
+    expect(checkDraft(setParts(d, "long", []))).toEqual({ key: "long", problem: "parts_too_few" });
   });
 });

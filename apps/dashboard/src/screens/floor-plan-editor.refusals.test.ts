@@ -14,6 +14,7 @@ import {
   deleteTable,
   draftFromPlan,
   patchTable,
+  setParts,
   type FloorPlanDraft,
 } from "./floor-plan-draft.js";
 
@@ -589,6 +590,46 @@ it("a booked part whose delete was refused comes back inside Long table", async 
   expect(panelRow(el, "c5")!.querySelector("[data-mark]")!.textContent!.trim()).toBe(
     "Booked 12 Oct, 21:00",
   );
+});
+
+it("a refusal of a joined table's parts selects it and marks its Made of", async () => {
+  const el = await open(
+    stubApi({
+      getFloorPlan: vi.fn().mockResolvedValue(joinedPlan()),
+      saveFloorPlan: vi.fn().mockRejectedValue(invalid("tables.3.partKeys")),
+    }),
+  );
+  await change(el, setParts(draftFromPlan(joinedPlan()), "long", ["c3", "c4"]));
+  await press(el, "save");
+  expect(canvas(el).selected).toBe("long");
+  expect(el.fieldError).toEqual({
+    key: "long",
+    field: "parts",
+    message: "Check the floor plan's tables and try again",
+  });
+  expect(message(el)).toBe("Correct the highlighted fields to continue.");
+  expect(button(el, "save").disabled).toBe(false);
+});
+
+it("Save with a joined table of one part marks it and keeps Save disabled until it is fixed", async () => {
+  const api = stubApi({ getFloorPlan: vi.fn().mockResolvedValue(joinedPlan()) });
+  const el = await open(api);
+  const start = draftFromPlan(joinedPlan());
+  await change(el, setParts(start, "long", ["c3"]));
+  await press(el, "save");
+  expect(api.saveFloorPlan).not.toHaveBeenCalled();
+  expect(canvas(el).selected).toBe("long");
+  expect(el.fieldError).toEqual({
+    key: "long",
+    field: "parts",
+    message: "Choose at least 2 tables.",
+  });
+  expect(message(el)).toBe("Correct the highlighted fields to continue.");
+  expect(button(el, "save").disabled).toBe(true);
+  await change(el, setParts(start, "long", ["c3", "c4"]));
+  expect(el.fieldError).toBeNull();
+  expect(message(el)).toBe("");
+  expect(button(el, "save").disabled).toBe(false);
 });
 
 it("a booked table the opened plan does not hold shows the code's own sentence", async () => {

@@ -42,6 +42,7 @@ import type {
 import {
   changePlacement,
   checkDraft,
+  type DraftProblem,
   deleteTable,
   draftFromPlan,
   rekeyDraft,
@@ -99,7 +100,7 @@ interface EditorMessage {
 }
 
 /** A table field a side panel shows, so a refusal naming it can sit beside it. */
-export type FloorPlanField = "label" | "seats" | "fixed" | "shape";
+export type FloorPlanField = "label" | "seats" | "fixed" | "shape" | "parts";
 
 export interface FloorPlanFieldError {
   key: string;
@@ -138,6 +139,7 @@ const SERVER_FIELDS: Record<string, FloorPlanField> = {
   seats: "seats",
   fixed: "fixed",
   "placement.shape": "shape",
+  partKeys: "parts",
 };
 
 function fieldValue(table: DraftTable, field: FloorPlanField): unknown {
@@ -146,17 +148,13 @@ function fieldValue(table: DraftTable, field: FloorPlanField): unknown {
 }
 
 /** The marked table keeps its mark while it fails at all, even when `checkDraft` blames another. */
-function tableProblem(
-  draft: FloorPlanDraft,
-  key: string,
-): "label_missing" | "label_repeated" | null {
+function tableProblem(draft: FloorPlanDraft, key: string): DraftProblem | null {
   const table = draft.tables.find((t) => t.key === key);
   if (table === undefined) return null;
   const label = table.label.trim();
   if (label === "") return "label_missing";
-  return draft.tables.some((t) => t.key !== key && t.label.trim() === label)
-    ? "label_repeated"
-    : null;
+  if (draft.tables.some((t) => t.key !== key && t.label.trim() === label)) return "label_repeated";
+  return table.parts !== null && table.parts.length < 2 ? "parts_too_few" : null;
 }
 
 const actionMessage = (text: () => string): EditorMessage => ({ text, from: "action" });
@@ -713,11 +711,13 @@ export class FloorPlanEditor extends LitElement {
   #markProblem(problem: NonNullable<ReturnType<typeof checkDraft>>): void {
     this.#setMark({
       key: problem.key,
-      field: "label",
+      field: problem.problem === "parts_too_few" ? "parts" : "label",
       text: () =>
         problem.problem === "label_missing"
           ? t("floor_plan_editor.name_missing")
-          : codeMessage("table.label_taken"),
+          : problem.problem === "parts_too_few"
+            ? t("floor_plan_editor.parts_too_few")
+            : codeMessage("table.label_taken"),
       from: "check",
     });
   }

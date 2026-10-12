@@ -1,3 +1,4 @@
+import { createLabelComparator } from "@waitron/shared";
 import { NEW_TABLE_SIZE, clampToGrid, firstFreeSpot } from "@waitron/ui";
 import type { FloorPlan, FloorPlanSave, PlanPlacement } from "../api/client.js";
 import { t } from "../i18n/t.js";
@@ -147,15 +148,16 @@ export function sameDraft(a: FloorPlanDraft, b: FloorPlanDraft): boolean {
   return true;
 }
 
-export function checkDraft(
-  draft: FloorPlanDraft,
-): { key: string; problem: "label_missing" | "label_repeated" } | null {
+export type DraftProblem = "label_missing" | "label_repeated" | "parts_too_few";
+
+export function checkDraft(draft: FloorPlanDraft): { key: string; problem: DraftProblem } | null {
   const seen = new Set<string>();
   for (const t of draft.tables) {
     const label = t.label.trim();
     if (label === "") return { key: t.key, problem: "label_missing" };
     if (seen.has(label)) return { key: t.key, problem: "label_repeated" };
     seen.add(label);
+    if (t.parts !== null && t.parts.length < 2) return { key: t.key, problem: "parts_too_few" };
   }
   return null;
 }
@@ -272,4 +274,65 @@ export function addTables(
       })),
     ],
   };
+}
+
+export function addJoinedTable(
+  draft: FloorPlanDraft,
+  table: { label: string; seats: number | null; parts: readonly string[] },
+  nextKey: () => string,
+): FloorPlanDraft {
+  return {
+    ...draft,
+    tables: [
+      ...draft.tables,
+      {
+        key: nextKey(),
+        id: null,
+        liveTableId: null,
+        label: table.label,
+        seats: table.seats,
+        fixed: false,
+        placement: null,
+        parts: [...table.parts],
+      },
+    ],
+  };
+}
+
+export function setParts(
+  draft: FloorPlanDraft,
+  key: string,
+  parts: readonly string[],
+): FloorPlanDraft {
+  return mapTable(draft, key, (t) => ({ ...t, parts: [...parts] }));
+}
+
+/** Tables a joined table may be made of: off the plan, not joined tables, and in no joined table
+ *  but `joinedKey`. */
+export function freeTables(draft: FloorPlanDraft, joinedKey?: string): DraftTable[] {
+  const compare = createLabelComparator();
+  return draft.tables
+    .filter((t) => {
+      if (t.placement !== null || t.parts !== null) return false;
+      const heldBy = joinedTableOf(draft, t.key);
+      return heldBy === undefined || heldBy.key === joinedKey;
+    })
+    .sort((a, b) => compare(tableName(a), tableName(b)));
+}
+
+const NUMBERED = /^(.*\S)\s+(\d+)$/;
+
+/** "Counter 3, 4, 5" when every name is one prefix and a number, else the names joined. */
+export function madeOfText(names: readonly string[]): string {
+  const numbered: { name: string; prefix: string; number: string }[] = [];
+  for (const name of names) {
+    const match = NUMBERED.exec(name);
+    if (match === null) return names.join(", ");
+    numbered.push({ name, prefix: match[1]!, number: match[2]! });
+  }
+  numbered.sort((a, b) => Number(a.number) - Number(b.number));
+  const prefix = numbered[0]?.prefix;
+  if (prefix === undefined) return "";
+  if (numbered.some((n) => n.prefix !== prefix)) return numbered.map((n) => n.name).join(", ");
+  return `${prefix} ${numbered.map((n) => n.number).join(", ")}`;
 }
