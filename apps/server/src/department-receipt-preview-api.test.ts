@@ -9,10 +9,7 @@ import { contentLanguages } from "@waitron/catalogue";
 import { departments, departmentReceipts, departmentSalePolicies } from "@waitron/venue-service";
 import { ALL_MODULES } from "./modules.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
-import {
-  mountDepartmentReceiptDraftPreviewApi,
-  type ReceiptPreviewResponse,
-} from "./receipt-preview-api.js";
+import { mountReceiptPreviewApi, type ReceiptPreviewResponse } from "./receipt-preview-api.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 const fiscal = ALL_MODULES.find((module) => module.fiscal?.venueFields !== undefined)!.fiscal!
@@ -65,7 +62,7 @@ beforeEach(async () => {
 });
 function ask(input: unknown, cookie = venue.managerCookie) {
   const app = new Hono();
-  mountDepartmentReceiptDraftPreviewApi(
+  mountReceiptPreviewApi(
     app,
     {
       db: suite.db,

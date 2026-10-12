@@ -10,16 +10,9 @@ import {
   type Database,
   type Transaction,
 } from "@waitron/db";
-import { readReceiptLanguage } from "@waitron/catalogue";
-import { departments, departmentSalePolicies } from "@waitron/venue-service";
+import { departments } from "@waitron/venue-service";
 import { authorizeManager } from "@waitron/identity";
-import {
-  getPrintedReceipt,
-  resolveDevicePrinterIds,
-  validateDepartmentReceipt,
-  validateVenueReceiptSettings,
-  type ReceiptConfig,
-} from "@waitron/layouts";
+import { resolveDevicePrinterIds, type ReceiptConfig } from "@waitron/layouts";
 import { imageExists, readImageBytes } from "@waitron/media";
 import { textGrid, type EscSetting, type MonoRaster, type PaperWidth } from "@waitron/printing";
 import {
@@ -29,7 +22,7 @@ import {
   requireUuidParam,
 } from "@waitron/server-kit";
 import type { ReceiptQrText } from "@waitron/fiscal";
-import { AppError, resolveReceiptTrim, type DepartmentReceiptConfig } from "@waitron/shared";
+import { AppError, resolveReceiptTrim } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 import type { Logger } from "./logger.js";
 import {
@@ -41,7 +34,6 @@ import { formatReceipt } from "./receipt-ticket.js";
 import { createLogoCache, drawPreviewLogo, type LogoCache } from "./receipt-logo.js";
 import { sampleSale } from "./sample-receipt.js";
 import type { TillConfig } from "./till-config.js";
-import { readVenueReceiptLanguageRules } from "./venue-locale.js";
 import { readReceiptAddress } from "./venue-address.js";
 import { checkedDepartmentReceiptWrite } from "./department-receipt-draft.js";
 import { departmentReceiptLanguages } from "./department-receipt-languages.js";
@@ -144,7 +136,7 @@ function chooseSetting(settings: EscSetting[], asked: PaperWidth | undefined): E
   return settings.find((setting) => setting.paperWidth === width) ?? DEFAULT_PRINTER;
 }
 
-async function draftBody(c: Context, policyField = "settings"): Promise<Record<string, unknown>> {
+async function draftBody(c: Context): Promise<Record<string, unknown>> {
   const invalid = () => new AppError("management.request_invalid", { field: "body" });
   const reader = c.req.raw.body?.getReader();
   if (!reader) throw invalid();
@@ -176,145 +168,19 @@ async function draftBody(c: Context, policyField = "settings"): Promise<Record<s
   if (
     !Object.hasOwn(result, "departmentId") ||
     !Object.hasOwn(result, "receipt") ||
-    !Object.hasOwn(result, policyField)
+    !Object.hasOwn(result, "policy")
   )
     throw invalid();
   if (
     Object.keys(result).some(
       (key) =>
-        !["departmentId", "receipt", policyField, "language", "paperWidth", "passive"].includes(
-          key,
-        ),
+        !["departmentId", "receipt", "policy", "language", "paperWidth", "passive"].includes(key),
     )
   )
     throw invalid();
   if (result.passive !== undefined && typeof result.passive !== "boolean")
     throw new AppError("management.request_invalid", { field: "passive" });
   return result;
-}
-
-export function mountReceiptPreviewApi(
-  app: Hono,
-  deps: { db: Database; cfg: TillConfig; receiptQrText?: ReceiptQrText },
-  log: Logger,
-): void {
-  const sample = sampleSale(deps.receiptQrText);
-  const logoCache = createLogoCache();
-  app.post("/management-api/receipt-preview", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      // Refuse unauthorised bodies without holding the write queue while their bytes arrive.
-      await withTransaction(deps.db, (tx) =>
-        authorizeManager(tx, {
-          managementSessionId: sessionId,
-          permission: "layout.configure",
-          touch: false,
-        }),
-      );
-      const body = await draftBody(c);
-      const departmentId =
-        body.departmentId === null
-          ? null
-          : requireUuidParam(body.departmentId as string, "departmentId");
-      const requestedWidth =
-        body.paperWidth === undefined
-          ? undefined
-          : requireEnum(body.paperWidth, "paperWidth", printPaperWidth.enumValues);
-      const snapshot = await withTransaction(deps.db, async (tx) => {
-        await authorizeManager(tx, {
-          managementSessionId: sessionId,
-          permission: "layout.configure",
-          touch: body.passive !== true,
-        });
-        const rules = await readVenueReceiptLanguageRules(tx, deps.cfg);
-        const current = await readReceiptLanguage(tx, deps.cfg.locationId);
-        const locale =
-          body.language === undefined
-            ? current.locale
-            : requireEnum(body.language, "language", rules.choices);
-        const settings = validateVenueReceiptSettings(body.settings);
-        const department = validateDepartmentReceipt(body.receipt, rules.choices);
-        if (departmentId === null && Object.keys(department).length !== 0)
-          throw new AppError("management.request_invalid", { field: "receipt" });
-        const scope = { ...deps.cfg, receiptLanguages: rules.choices };
-        let receiptHeader: { tradingName: string | null; printTradingName: boolean } | undefined;
-        let authored: DepartmentReceiptConfig | null = null;
-        let storedDepartment: DepartmentReceiptConfig | null = null;
-        if (departmentId !== null) {
-          storedDepartment = await VENUE_SERVICE.readDepartmentReceipt(tx, scope, departmentId);
-          const [row] = await tx
-            .select({
-              tradingName: departments.tradingName,
-              printTradingName: departmentSalePolicies.printTradingName,
-            })
-            .from(departments)
-            .leftJoin(
-              departmentSalePolicies,
-              eq(departmentSalePolicies.departmentId, departments.id),
-            )
-            .where(
-              and(
-                eq(departments.id, departmentId),
-                eq(departments.locationId, deps.cfg.locationId),
-              ),
-            );
-          receiptHeader = {
-            tradingName: row!.tradingName,
-            printTradingName: row!.printTradingName ?? true,
-          };
-          authored = department;
-        }
-        const venueContacts =
-          departmentId === null
-            ? (await getPrintedReceipt(tx, requestedWidth ?? "80mm")).receipt
-            : {};
-        const receipt = resolveReceiptTrim(
-          authored,
-          { phone: venueContacts.phone, email: venueContacts.email, ...settings },
-          locale,
-          current.locale,
-        );
-        const available = await activeReceiptSettings(tx, deps.cfg.locationId);
-        const printer =
-          requestedWidth === undefined
-            ? chooseSetting(available, undefined)
-            : (available.find((setting) => setting.paperWidth === requestedWidth) ?? {
-                ...DEFAULT_PRINTER,
-                paperWidth: requestedWidth,
-              });
-        const taxpayer = (await readTenant(tx))!;
-        let savedLogo: MonoRaster | null = null;
-        if (receipt.logo !== undefined) {
-          if (authored?.logo) {
-            if (storedDepartment?.logo === authored.logo) {
-              savedLogo = (
-                await VENUE_SERVICE.readPrintedDepartmentReceipt(
-                  tx,
-                  scope,
-                  departmentId!,
-                  printer.paperWidth,
-                )
-              ).logo;
-            }
-          } else {
-            const stored = await getPrintedReceipt(tx, printer.paperWidth);
-            if (stored.receipt.logo === receipt.logo) savedLogo = stored.logo;
-          }
-        }
-        return {
-          receipt,
-          printer,
-          available,
-          locale,
-          receiptHeader,
-          issuer: { venueName: taxpayer.legalName, nif: taxpayer.taxId },
-          address: await readReceiptAddress(tx, deps.cfg.locationId, settings),
-          savedLogo,
-        };
-      });
-      return c.json(await renderDraftPreview(deps, sample, logoCache, snapshot));
-    }),
-  );
 }
 
 interface ReceiptPreviewSnapshot {
@@ -382,7 +248,7 @@ async function renderDraftPreview(
   return response;
 }
 
-export function mountDepartmentReceiptDraftPreviewApi(
+export function mountReceiptPreviewApi(
   app: Hono,
   deps: {
     db: Database;
@@ -404,7 +270,7 @@ export function mountDepartmentReceiptDraftPreviewApi(
           touch: false,
         }),
       );
-      const body = await draftBody(c, "policy");
+      const body = await draftBody(c);
       if (typeof body.departmentId !== "string")
         throw new AppError("management.request_invalid", { field: "departmentId" });
       const id = requireUuidParam(body.departmentId, "departmentId");

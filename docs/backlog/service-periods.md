@@ -93,8 +93,8 @@ boards: the list, Edit department, Edit zone and Edit receipt.
 **Branch checkpoint, 2026-10-12.** Product issuance now uses department descriptions, with
 readiness checked before new payment dispatch and the no-field fiscal slot handled at boot.
 Dashboard receipt dialogs, field visibility and old dashboard-editor retirement are connected.
-The legacy server preview retirement and full product look remain, followed by the one-list
-editors and drag moves. The branch is unpublished.
+The server preview now accepts only department drafts. The full product look and one-list
+editors with drag moves remain. The branch is unpublished.
 
 **The list.** "Departments and zones" becomes one list. Each department is a row, and its zones are
 indented beneath it. The columns are name, service style (how orders start), counter service (when

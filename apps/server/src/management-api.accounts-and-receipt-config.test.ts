@@ -1349,6 +1349,7 @@ describe("Management API — receipt routes (Task 7)", () => {
       receiptLanguage: LOCALE,
       languages: [LOCALE],
       warningLanguages: [],
+      operationDescriptionRequired: false,
     });
   });
 
@@ -1373,6 +1374,7 @@ describe("Management API — receipt routes (Task 7)", () => {
       receiptLanguage: LOCALE,
       languages: [LOCALE],
       warningLanguages: [],
+      operationDescriptionRequired: false,
     });
   });
 
@@ -1388,6 +1390,7 @@ describe("Management API — receipt routes (Task 7)", () => {
       receiptLanguage: LOCALE,
       languages: [LOCALE],
       warningLanguages: [],
+      operationDescriptionRequired: false,
     });
   });
 
@@ -1407,6 +1410,7 @@ describe("Management API — receipt routes (Task 7)", () => {
       receiptLanguage: LOCALE,
       languages: [LOCALE],
       warningLanguages: [],
+      operationDescriptionRequired: false,
     });
     const printable = await withTransaction(suite.db, async (tx) => [
       (
@@ -2186,6 +2190,7 @@ describe("independent department receipt routes", () => {
       policy: RECEIPT_POLICY,
       languages: ["es-ES", "ca-ES", "gl-ES", "eu-ES"],
       warningLanguages: [],
+      operationDescriptionRequired: false,
       venueAddress: VENUE_ADDRESS,
     });
   });
@@ -2224,6 +2229,7 @@ describe("independent department receipt routes", () => {
         policy: RECEIPT_POLICY,
         languages: ["es-ES", "ca-ES", "gl-ES", "eu-ES"],
         warningLanguages: ["gl-ES", "eu-ES"],
+        operationDescriptionRequired: false,
         venueAddress: VENUE_ADDRESS,
       });
       expect((await getReceiptOverHttp(app, cookie)).receipt).toEqual({

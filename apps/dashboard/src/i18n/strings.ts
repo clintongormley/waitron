@@ -342,7 +342,7 @@ export const en = {
   "receipts.offered_languages": "Available at the till.",
   "receipts.venue_wide": "Every location",
   "receipts.venue_defaults": "Venue defaults",
-  "receipts.header_subtitle_hint": "Printed under the legal name, e.g. a tagline",
+  "receipts.header_subtitle_hint": "e.g. a tagline",
   "receipts.logo": "Logo",
   "receipts.print_address": "Print the venue's address",
   "receipts.no_address": "This location has no address saved. It is set during setup.",
@@ -3005,7 +3005,7 @@ export const es: Record<StringKey, string> = {
   "receipts.offered_languages": "Disponibles en el TPV.",
   "receipts.venue_wide": "Todos los locales",
   "receipts.venue_defaults": "Valores del local",
-  "receipts.header_subtitle_hint": "Se imprime bajo la razón social; p. ej., un lema",
+  "receipts.header_subtitle_hint": "p. ej., un lema",
   "receipts.logo": "Logotipo",
   "receipts.print_address": "Imprimir la dirección del local",
   "receipts.no_address":
