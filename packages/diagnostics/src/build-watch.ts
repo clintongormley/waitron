@@ -20,11 +20,12 @@ export function watchBuild(
   let told = false;
   return (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const response = await baseFetch(input, init);
-    if (told || !fromOrigin(input, origin)) return response;
-    // fetch follows redirects, so the answer can come from another origin than the one asked.
-    if (response.url !== "" && !fromOrigin(response.url, origin)) return response;
+    if (told) return response;
     const build = response.headers.get(BUILD_HEADER);
     if (build === null || build === "") return response;
+    if (!fromOrigin(input, origin)) return response;
+    // fetch follows redirects, so the answer can come from another origin than the one asked.
+    if (response.url !== "" && !fromOrigin(response.url, origin)) return response;
     if (own === undefined) own = build;
     else if (build !== own) {
       told = true;

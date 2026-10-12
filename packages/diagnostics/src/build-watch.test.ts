@@ -45,6 +45,25 @@ describe("watchBuild", () => {
     expect(onChange).toHaveBeenCalledWith("b");
   });
 
+  it("does not look at where a response without a build came from", async () => {
+    const response = new Response("{}");
+    const answeredFrom = vi.fn(() => `${ORIGIN}/api/node`);
+    Object.defineProperty(response, "url", { get: answeredFrom });
+    const askedFor = vi.fn(() => `${ORIGIN}/api/node`);
+    const request = {
+      get url() {
+        return askedFor();
+      },
+    } as unknown as Request;
+    const { fetch, onChange } = watched(
+      vi.fn(async () => response) as unknown as typeof globalThis.fetch,
+    );
+    expect(await fetch(request)).toBe(response);
+    expect(askedFor).not.toHaveBeenCalled();
+    expect(answeredFrom).not.toHaveBeenCalled();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it("ignores another origin's build, and never takes it as the page's own", async () => {
     const { fetch, onChange } = watched(
       serving("z", "a", "z", "a") as unknown as typeof globalThis.fetch,
