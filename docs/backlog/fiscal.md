@@ -575,6 +575,9 @@ are not held; only unsent ones wait. Not probed: a successor reaching AEAT befor
 arrives. The owner kept the hold for now (it landed with W41s-3c, #1304) and asked to revisit it
 when the asesor answers Q37 and its siblings ([questions](../compliance/asesor-questions.md)): drop the
 hold, keep it, or add the overtaking case to the W41s-1b probe first.
+The question is now [Q47](../compliance/asesor-questions.md#q47-keeping-a-chains-later-records-unsent-added-2026-10-12)
+(S19 in the short list, added 2026-10-12), which also covers the holds after a 3000 conflict,
+behind a held cancellation and after three same-code refusals.
 **For Task 9 (the filing screen):** `listFilingCases` reads every case and event with no filter or
 paging, and `heldRecords` reads every `rechazado`/`detenido` row; neither has a production caller
 yet, so the screen should add an open-only filter or paging when it calls them.

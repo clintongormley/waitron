@@ -233,7 +233,9 @@ sent.
 
 Questions not in the 6 October Word copy (Q3, Q4, Q8, Q10, and the lawyer's Q9, Q11, Q12 and Q16)
 are unchanged by this pass. Q46, on selling by weight, was added afterwards the same day as S17.
-Q37(d), on a change of legal name, was added on 2026-10-11 as S18 (A494).
+Q37(d), on a change of legal name, was added on 2026-10-11 as S18 (A494). Q47, on keeping the
+later records of a chain unsent, was added on 2026-10-12 as S19 at the owner's request; the Word
+copies do not carry it.
 
 ### What happened to each question sent on 6 October
 
@@ -354,6 +356,15 @@ Q37(d), on a change of legal name, was added on 2026-10-11 as S18 (A494).
   with. Which name must a record written before the change but sent after it carry: the one on the
   invoice issued, or the one AEAT's census now holds? And a cancellation, written after the change,
   of an invoice issued before it?
+- **S19. Keeping a chain's later records unsent (Q47).** Each record carries the fingerprint of the
+  one before it. Waitron keeps the later records of a chain unsent while an earlier record's answer
+  is unknown; after a duplicate refusal (3000) where AEAT holds a different or cancelled record under
+  that number and date; behind a cancellation it keeps back (Q40); and after three refusals in a row
+  with one code, retrying the first held record hourly. After a single refusal it keeps sending.
+  AEAT's test service accepted, without warning, records chained to a refused record, to one refused
+  as a duplicate and to a cancellation it never received. Given «no pueden quedar RF generados sin
+  remitir a la AEAT» (developer FAQ §5) and the hourly retry (OM art. 16.4), may we hold them, or
+  must they be sent? If we may, until when, and what must we keep?
 
 **Review list: read, and correct only where we are wrong.**
 
@@ -493,6 +504,17 @@ Q37(d), on a change of legal name, was added on 2026-10-11 as S18 (A494).
 > nombre debe llevar un registro generado antes del cambio pero remitido después: el que figura en la
 > factura expedida o el que la AEAT tiene ya en el censo? ¿Y una anulación, generada después del
 > cambio, de una factura expedida antes?
+>
+> **S19. Retener los registros posteriores de una cadena.** Cada registro lleva la huella del
+> anterior. Hoy retenemos sin remitir los registros posteriores de una cadena: mientras se desconoce
+> la respuesta a un registro anterior; cuando la AEAT rechaza uno por duplicado (error 3000) y
+> conserva con ese número y fecha otro distinto o uno anulado; detrás de una anulación que
+> retenemos; y tras tres rechazos seguidos con el mismo código, reintentando cada hora el
+> primero retenido. Tras un rechazo aislado seguimos remitiendo. En el entorno de pruebas, la AEAT
+> aceptó sin avisos registros encadenados a uno rechazado, a uno rechazado por duplicado y a una
+> anulación que nunca recibió. Dado que «no pueden quedar RF generados sin remitir a la AEAT» (FAQ de
+> desarrolladores §5) y que hay que reintentar el envío al menos cada hora (OM art. 16.4), ¿podemos
+> retenerlos o debemos remitirlos? Si podemos, ¿hasta cuándo y qué debemos conservar?
 >
 > **Para revisar: corríjanos solo si nos equivocamos.**
 >
@@ -3069,6 +3091,85 @@ Sources: [saved protocol evidence](../superpowers/specs/2026-10-05-aeat-protocol
 [reply-order evidence](../superpowers/specs/2026-10-07-aeat-reply-order-evidence.json).
 
 This records a question; no enquiry has been sent.
+
+### Q47. Keeping a chain's later records unsent (added 2026-10-12)
+
+**Why it matters.** Each record carries the fingerprint of the record before it on its chain. When
+one record cannot be settled, Waitron keeps the records after it unsent. On 2026-10-06 the owner kept
+holds 1 to 3 below and asked to revisit them once the asesor answers; this is that question. The
+developer FAQ, §5, says «no pueden quedar RF generados sin remitir a la AEAT»
+([findings](verifactu-findings.md)), and the order requires a retry at least once an hour of «los
+registros de facturación pendientes de remitir» (OM art. 16.4, as quoted in
+[research/2026-10-09-operations.md](research/2026-10-09-operations.md)).
+
+What Waitron does today, in `packages/fiscal-verifactu/src/drain.ts`:
+
+1. While an earlier record of the chain is being sent, or waits for a retry because its answer is
+   unknown, a later record not yet sent waits, and goes once that earlier record has its answer.
+2. When AEAT refuses a record as a duplicate (3000) and holds a different record, or a cancelled
+   one, under that invoice number and date, the chain's later unsent records are held.
+3. A cancellation whose original AEAT refused, or whose original is held, is itself held and never
+   sent, and the chain's later records are held behind it. Nothing in Waitron sets
+   `SinRegistroPrevio` yet (Q40(c)).
+4. After three refusals in a row with one code, the chain's next records are held; the first held
+   record is sent again once an hour, and an accept or a refusal with another code can release
+   the rest.
+
+After a single refusal, Waitron keeps sending the later records (design D2). Nothing releases the
+holds in 2 and 3 yet: a person's release is planned (W41s Task 8), so until then those records can
+stay unsent indefinitely.
+
+> Cada registro de facturación lleva la huella del registro anterior de su cadena. Cuando un
+> registro no puede darse por resuelto, nuestro SIF retiene sin remitir los registros posteriores
+> de esa cadena en cuatro casos:
+>
+> 1. mientras se desconoce la respuesta de la AEAT a un registro anterior y está pendiente su
+>    reenvío; se remiten en cuanto ese registro tiene respuesta;
+> 2. cuando la AEAT rechaza un registro por duplicado (error 3000) y conserva con ese número y
+>    fecha otro registro distinto, o uno anulado (Q35, Q39);
+> 3. detrás de una anulación que retenemos porque la AEAT rechazó o tiene retenida el alta original
+>    (Q40); esa anulación no se remite;
+> 4. tras tres rechazos seguidos con el mismo código; el primero retenido se reenvía cada hora y,
+>    si la respuesta es otra, pueden remitirse los demás.
+>
+> Tras un rechazo aislado seguimos remitiendo los posteriores. En los casos 2 y 3 los registros
+> quedan retenidos hasta que una persona resuelva el caso.
+>
+> En el entorno de pruebas de la AEAT se aceptaron sin avisos (`Correcto`) registros encadenados a
+> uno rechazado, a uno rechazado por duplicado (también en el mismo envío) y a una anulación que la
+> AEAT nunca recibió. No hemos probado un registro que llegue a la AEAT antes que su anterior, ni el
+> entorno de producción.
+>
+> **(a)** La FAQ de desarrolladores, §5, dice que «no pueden quedar RF generados sin remitir a la
+> AEAT», y la OM, art. 16.4, exige reintentar al menos cada hora el envío de los registros
+> pendientes de remitir. ¿Es admisible retener los registros posteriores en alguno de estos cuatro
+> casos? ¿Influye que la espera sea breve (caso 1) o indefinida hasta que una persona resuelva
+> (casos 2 y 3)?
+>
+> **(b)** Si deben remitirse, ¿es correcto hacerlo en su orden, encadenados a un registro que la
+> AEAT rechazó o no recibió, o debe tratarse la cadena de otra forma?
+>
+> **(c)** Si la retención es admisible, ¿hay un plazo a partir del cual deben remitirse en todo caso?
+> ¿Qué debemos conservar para justificarla si la AEAT lo requiere?
+
+**Proposed interim treatment (owner, 2026-10-06):** keep the four holds as built. Each held record
+stays unchanged, and the refused or conflicting record behind holds 2 and 3 has a filing case for a
+person to resolve.
+
+**Observed in AEAT's preproduction environment (W41s-1, 2026-10-05; W41s-1c, 2026-10-12).** Records
+chained to a record refused with 1161 were `Correcto` in the same envío, in a later envío and as
+all 999 successors in a 1,000-record envío (runs 37283677375, 37283909983, 37283910284). A record
+chained to one refused as a duplicate (3000) was `Correcto` in a later envío and in the same envío
+(run 38260029961). A record chained to a cancellation never sent was `Correcto` (run 38261082840).
+The 1161 refusal was triggered artificially. No consulta checked what AEAT stored, and production
+was not tested. These are test-system observations, not legal answers.
+
+Sources: [W41s-1 receipt, §7.1](../superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#71-protocol-receipt-2026-10-05-w41s-1);
+[W41s-1c receipt](../superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#successor-receipt-2026-10-12-w41s-1c-both-probes-re-run-with-fresh-chains).
+
+This records a question; no enquiry has been sent.
+
+---
 
 ### Sources checked for the 2026-10-04 revision
 

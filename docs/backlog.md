@@ -329,7 +329,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   asked to revisit it when the asesor answers Q37 and its siblings
   ([questions](compliance/asesor-questions.md)): drop the hold, keep it, or add the overtaking case
   to the W41s-1b probe first. The W41s-1b probes have since run without an overtaking case; their
-  results are in [W41s-1c's receipt](superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#successor-receipt-2026-10-12-w41s-1c-both-probes-re-run-with-fresh-chains). [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04)
+  results are in [W41s-1c's receipt](superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#successor-receipt-2026-10-12-w41s-1c-both-probes-re-run-with-fresh-chains).
+  The decision is put to the asesor as [Q47](compliance/asesor-questions.md#q47-keeping-a-chains-later-records-unsent-added-2026-10-12)
+  (S19 in the short list), covering this hold and the holds after a 3000 conflict, behind a held
+  cancellation and after three same-code refusals. [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04)
 
 - **For Task 9 (the filing screen):** `listFilingCases` reads every case and event with no filter or
   paging, and `heldRecords` reads every `rechazado`/`detenido` row; neither has a production caller
