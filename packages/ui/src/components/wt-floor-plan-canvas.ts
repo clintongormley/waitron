@@ -221,8 +221,8 @@ export class WtFloorPlanCanvas extends LitElement {
 
   #ignoreGridClick = false;
 
-  /** Squares drawn left of and above the plan's (0, 0), so a turned table's corners past it can be
-   *  scrolled to. */
+  /** Squares drawn left of and above the plan's (0, 0): `#margin`, plus a turned table's overhang
+   *  past it, so its corners can be scrolled to. */
   #origin = { x: 0, y: 0 };
 
   /** Squares the grid is drawn, before `bottomInset`. */
@@ -242,6 +242,10 @@ export class WtFloorPlanCanvas extends LitElement {
   #shift = { x: 0, y: 0 };
 
   #drewTables = false;
+
+  /** Squares kept above and left of the plan for a turn arrow: never read during a drag or its
+   *  hold, so nothing drawn moves under the pointer. */
+  #margin = 0;
 
   #observer = new ResizeObserver(([entry]) => {
     // The content box excludes scrollbars, and rounding down keeps the grid inside it, so the grid
@@ -278,12 +282,20 @@ export class WtFloorPlanCanvas extends LitElement {
     const placements = this.tables.map((t) => this.#placementOf(t));
     const box = bounds(placements);
     const plan = gridExtent(placements, { columns: 0, rows: 0 });
+    const holds = this.#holds();
+    if (!holds) {
+      const host = getComputedStyle(this);
+      const reach =
+        parseFloat(host.getPropertyValue("--wt-tap-min")) +
+        parseFloat(host.getPropertyValue("--wt-space-1"));
+      this.#margin = Math.ceil(reach / GRID_SQUARE_PX);
+    }
     // Tolerates float error in a corner computed to land exactly on the edge.
-    let x = box === null ? 0 : Math.max(0, Math.ceil(-box.x - 1e-9));
-    let y = box === null ? 0 : Math.max(0, Math.ceil(-box.y - 1e-9));
+    let x = this.#margin + (box === null ? 0 : Math.max(0, Math.ceil(-box.x - 1e-9)));
+    let y = this.#margin + (box === null ? 0 : Math.max(0, Math.ceil(-box.y - 1e-9)));
     let columns: number;
     let rows: number;
-    if (this.#holds()) {
+    if (holds) {
       // Only grows, and the grid by as much again, so `updated` can scroll the growth away.
       x = Math.max(this.#origin.x, x);
       y = Math.max(this.#origin.y, y);
