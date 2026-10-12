@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, locations, tenants, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { CATALOGUE_MIGRATIONS, contentLanguages } from "@waitron/catalogue";
 import {
@@ -41,6 +41,10 @@ async function fixture(
   managementFloor: "manager" | "admin" = "manager",
 ) {
   registerModulePermissions([{ permission: "venue_service.manage", grantedFrom: managementFloor }]);
+  await suite.db
+    .insert(tenants)
+    .values({ id: 1, country: "ES", taxId: "B12345678", legalName: "Venue SL" })
+    .onConflictDoNothing({ target: tenants.id });
   const [location] = await suite.db
     .insert(locations)
     .values({ name: randomUUID(), invoiceLocales: ["gl-ES"], operationDescription: "Bootstrap" })

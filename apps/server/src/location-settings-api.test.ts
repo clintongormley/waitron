@@ -213,6 +213,7 @@ describe("department invoice settings", () => {
     });
     expect(await response.json()).toEqual({
       receipt: { operationDescription: "Venta en establecimiento" },
+      operationDescriptionRequired: true,
       policy,
       receiptLanguage: "es-ES",
       languages: ["es-ES"],
@@ -229,6 +230,7 @@ describe("department invoice settings", () => {
       });
       expect(await read.json()).toEqual({
         receipt: { operationDescription: "Venta de comidas" },
+        operationDescriptionRequired: true,
         policy,
         receiptLanguage: "es-ES",
         languages: ["es-ES"],
