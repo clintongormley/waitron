@@ -4,13 +4,13 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { floorZones } from "@waitron/db";
+import { floorZones, withTransaction } from "@waitron/db";
 import { failAttempting } from "@waitron/payments";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { inTx, provisionBillVenue, send, statusOf, type BillVenue } from "./testing/bill-venue.js";
-import { payWorkingOrderIntegratedOrchestration } from "./till-sale.js";
+import { paymentAttemptIsLive, payWorkingOrderIntegratedOrchestration } from "./till-sale.js";
 import "./errors.js";
 
 let venue: BillVenue;
@@ -518,4 +518,27 @@ describe("a second card payment of a placed order while the first is in flight",
     }
     expect(broken).toEqual([]);
   });
+});
+
+describe("where a placed order's card registers itself as in flight", () => {
+  it.each(KINDS)(
+    "$label: the card's first transaction registers it before any later transaction runs (database-level probe: relies on the queue running the pay's first transaction first)",
+    async ({ kind }) => {
+      const id = await placed(kind);
+      const reader = new FakePaymentProvider(venue.db);
+      const release = reader.holdNextCollect();
+      let paying: ReturnType<typeof payWith> | undefined;
+      let live: boolean | undefined;
+      try {
+        paying = payWith(reader, id);
+        live = await withTransaction(venue.db, async () => paymentAttemptIsLive(venue.db, id));
+      } finally {
+        release();
+      }
+      const paid = await paying;
+
+      expect(live).toBe(true);
+      expect(paid).toMatchObject({ outcome: "captured" });
+    },
+  );
 });

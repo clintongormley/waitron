@@ -1287,24 +1287,11 @@ export async function refusePlacedPaymentInFlight(
 /** A placed order writes no mark, so its entry in the live map carries this instead of one. */
 const PLACED_ATTEMPT = "placed";
 
-/** How many integrated attempts on each placed order are running: two pays of one placed order may
- * both reach the reader, and the entry must outlive the first to finish. */
-const placedAttemptsOf = perDatabase(() => new Map<string, number>());
-
 function holdPlacedAttempt(db: Database, workingOrderId: string): void {
-  const held = placedAttemptsOf(db);
-  held.set(workingOrderId, (held.get(workingOrderId) ?? 0) + 1);
   liveAttemptsOf(db).set(workingOrderId, PLACED_ATTEMPT);
 }
 
 function releasePlacedAttempt(db: Database, workingOrderId: string): void {
-  const held = placedAttemptsOf(db);
-  const left = held.get(workingOrderId)! - 1;
-  if (left > 0) {
-    held.set(workingOrderId, left);
-    return;
-  }
-  held.delete(workingOrderId);
   const live = liveAttemptsOf(db);
   if (live.get(workingOrderId) === PLACED_ATTEMPT) live.delete(workingOrderId);
 }
