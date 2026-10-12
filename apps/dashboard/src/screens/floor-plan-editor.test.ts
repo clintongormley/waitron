@@ -1176,6 +1176,66 @@ it.each([
   expect(hintText(el)).toBeNull();
 });
 
+function counters(): FloorPlan {
+  const plain = (id: string, label: string, seats: number) => ({
+    id,
+    liveTableId: `l${id}`,
+    label,
+    seats,
+    fixed: false,
+    placement: null,
+    partIds: [],
+  });
+  return {
+    zoneId: "z1",
+    revision: 3,
+    savedAt: "2026-10-01T10:00:00.000Z",
+    tables: [
+      { ...plain("c1", "Counter 1", 4), placement },
+      plain("c3", "Counter 3", 2),
+      plain("c4", "Counter 4", 6),
+      plain("c5", "Counter 5", 4),
+      {
+        ...plain("long", "Long table", 10),
+        placement: { ...placement, x: 20 },
+        partIds: ["c3", "c4", "c5"],
+      },
+    ],
+  };
+}
+
+it.each([
+  ["en-GB", "Delete Counter 4?", "It leaves the tables list and Long table."],
+  ["es-ES", "¿Eliminar Counter 4?", "Sale de la lista de mesas y de Long table."],
+])(
+  "the delete question for a part says it leaves its joined table (%s)",
+  async (locale, head, text) => {
+    setLocale(locale);
+    const el = await open(stubApi({ getFloorPlan: vi.fn().mockResolvedValue(counters()) }));
+    const dialog = await askDelete(el, "c4");
+    expect(dialog.heading).toBe(head);
+    expect(dialog.querySelector("[data-delete-text]")!.textContent!.trim()).toBe(text);
+  },
+);
+
+it("Delete on a part takes it out of Long table as one step, and Undo puts it back in", async () => {
+  const el = await open(stubApi({ getFloorPlan: vi.fn().mockResolvedValue(counters()) }));
+  const panel = () => el.shadowRoot!.querySelector("floor-plan-tables-panel")!;
+  const dialog = await askDelete(el, "c4");
+  const closed = closeOf(dialog);
+  await press(el, "delete-confirm");
+  await closed;
+  await el.updateComplete;
+  expect(panel().draft.tables.map((t) => t.key)).toEqual(["c1", "c3", "c5", "long"]);
+  expect(panel().draft.tables.find((t) => t.key === "long")!.parts).toEqual(["c3", "c5"]);
+  expectSaveAwake(el);
+  await press(el, "undo");
+  expect(panel().draft.tables.map((t) => t.key)).toEqual(["c1", "c3", "c4", "c5", "long"]);
+  expect(panel().draft.tables.find((t) => t.key === "long")!.parts).toEqual(["c3", "c4", "c5"]);
+  expectSaveQuiet(el);
+  expect(button(el, "undo").disabled).toBe(true);
+});
+
 it("Undo of a Delete brings back the table", async () => {
   const el = await open(stubApi({ getFloorPlan: vi.fn().mockResolvedValue(terrace()) }));
   await fromCanvas(el, "wt-table-select", { key: "m1" });

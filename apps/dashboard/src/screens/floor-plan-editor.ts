@@ -45,6 +45,7 @@ import {
   type DraftProblem,
   deleteTable,
   draftFromPlan,
+  joinedTableOf,
   rekeyDraft,
   rekeyWith,
   restoreTable,
@@ -1034,6 +1035,7 @@ export class FloorPlanEditor extends LitElement {
   #deleteQuestion(draft: FloorPlanDraft) {
     const key = this.deleteAsk;
     const name = tableName(draft.tables.find((table) => table.key === key));
+    const joined = key === null ? undefined : joinedTableOf(draft, key);
     return html`<wt-modal
       data-dialog="delete-table"
       size="compact"
@@ -1044,7 +1046,13 @@ export class FloorPlanEditor extends LitElement {
         if (event.target === event.currentTarget) this.deleteAsk = null;
       }}
     >
-      <p data-delete-text>${t("floor_plan_editor.delete_text")}</p>
+      <p data-delete-text>
+        ${
+          joined === undefined
+            ? t("floor_plan_editor.delete_text")
+            : fill("floor_plan_editor.delete_part_text", { name: tableName(joined) })
+        }
+      </p>
       <wt-form-actions slot="footer"
         ><wt-button
           slot="cancel"
