@@ -4071,18 +4071,28 @@ export class TillApp extends LitElement {
     await this.#refreshStationQueue();
   }
 
-  /** Non-fiscal, so no single-flight guard; refreshes on both paths like {@link #onAdvanceTicketItem}. */
   async #onMarkCollected(event: Event): Promise<void> {
     const { orderId } = (event as CustomEvent<{ orderId: string }>).detail;
+    if (this.#handingOver.has(orderId)) return;
+    this.#handingOver.add(orderId);
     const session = this.#operatorSession;
+    const submissionId = crypto.randomUUID();
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
     this.errorKey = undefined;
     let collected = false;
     try {
-      await this.#holdingReload(() => this.api.markCollected(orderId));
+      await this.#resend(
+        (signal) => this.api.markCollected(orderId, submissionId, { signal }),
+        limit.signal,
+        () => session === this.#operatorSession,
+      );
       collected = true;
     } catch {
       if (session !== this.#operatorSession) return;
       this.errorKey = "station.collect_error";
+    } finally {
+      limit.done();
+      this.#handingOver.delete(orderId);
     }
     if (session !== this.#operatorSession) return;
     if (collected) {

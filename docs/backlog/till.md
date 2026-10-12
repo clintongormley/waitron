@@ -653,11 +653,6 @@ To decide before building:
 ## Task 16 (#981, counter handover; with B25, B26, B29, B30)
 
 - **Task 16 (#981, counter handover; with B25, B26, B29, B30).** Open:
-  - **The kitchen queue's Collect sends no submission id**, on the station screen and on the
-    counter's prep-queue card, so a Collect resent after a lost reply is refused
-    `working_order.already_collected`. The waiting list's Hand over sends one. Assertions pin
-    the no-id call in `apps/till/src/till-app.test.ts`,
-    `apps/till/src/screens/till-station-screen.test.ts` and `apps/till/src/api/client.test.ts`.
   - **A collect straight after Place order does not re-read the kitchen queue.** The till
     re-reads it after a collect only when the collect was opened from the waiting list, so the
     prep-queue card can keep showing the order without Collect until the queue is next read

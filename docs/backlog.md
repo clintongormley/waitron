@@ -2174,12 +2174,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   `rowid` tie-break, with a test whose ids sort against the writing order. Left open by service Task
   14 (#721, several payments against one bill, the server).
 
-- **The kitchen queue's Collect sends no submission id**, on the station screen and on the counter's
-  prep-queue card, so a Collect resent after a lost reply is refused
-  `working_order.already_collected`. The waiting list's Hand over sends one. Left open by service
-  Task 16 (#981, counter handover; with B25, B26, B29, B30).
-  [Detail](backlog/till.md#task-16-981-counter-handover-with-b25-b26-b29-b30)
-
 - **A collect straight after Place order does not re-read the kitchen queue.** Left open by service
   Task 16 (#981). [Detail](backlog/till.md#task-16-981-counter-handover-with-b25-b26-b29-b30)
 
