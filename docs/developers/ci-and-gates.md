@@ -909,8 +909,8 @@ since the SQLite switch (#489, 2026-09-23), because its earlier shards ran a dif
 | licence.yml        | licence-integrity                 | 0.2                            | 5     |
 | licence.yml        | dco                               | 0.3                            | 5     |
 | mutation.yml       | mutation (matrix ui-core)         | 5.3 (2026-10-05)               | 15    |
-| mutation.yml       | mutation-ui (matrix shards)       | 17 (run 38241392066, slowest of 30) | 35    |
-| mutation.yml       | mutation-ui-aggregate             | under 1 (run 38241392066)      | 5     |
+| mutation.yml       | mutation-ui (matrix shards)       | 23.7 (run 38256003987, slowest of 30) | 50    |
+| mutation.yml       | mutation-ui-aggregate             | under 1 (run 38256003987)      | 5     |
 | mutation.yml       | mutation-db (matrix shards)       | 8.8 (since the SQLite switch); 12.2 (run 38241392066) | 25    |
 | mutation.yml       | mutation-db-aggregate             | 0.3                            | 5     |
 | stripe-sandbox.yml | stripe-sandbox                    | 0.7                            | 5     |
@@ -922,9 +922,10 @@ from the owner's four-minute bound (2026-10-09), not the doubling rule; the
 
 ui-core's figure is run `37267389722` (5m18s; its other two weekly runs, `36380351019` and
 `38206876422`, took 2m06s and 4m56s).
-`mutation-ui`'s and `mutation-ui-aggregate`'s figures are dispatch run `38241392066` on
-`c3a6857fa`, with 30 ui shards: the slowest shard (9, `wt-data-table.ts:1029-1285`) took 17 minutes
-and the aggregate under 1, so its limit is 35 by the doubling rule. On
+`mutation-ui`'s and `mutation-ui-aggregate`'s figures are dispatch run `38256003987` on
+`70dd7f6bf`, with 30 ui shards: the slowest shard (9, `wt-data-table.ts:1029-1285`) took 23.7
+minutes and the aggregate under 1, so its limit is 50 by the doubling rule. The same shard took 17
+minutes on run `38241392066`, before A539 added data-table tests. On
 the previous run, `38233718266`, with 20 ui shards, `wt-combobox.ts` and `wt-dialog.ts` each reached
 the 30-minute limit alone. Until A539 split it, ui ran inside the `mutation` matrix at a 185-minute
 limit, which run `38206876422` reached and was cancelled at. `mutation-db`'s 8.8 is from runs `36380351019` and `37267389722`, the two weekly runs since the

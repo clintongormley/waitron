@@ -86,7 +86,7 @@ jobs:
   # range in a shard of its own. Why, on run 38233718266 at 20 shards: wt-combobox.ts and
   # wt-dialog.ts, each alone in a shard, hit the 30-minute limit (716 of 780 and 325 of 382 mutants
   # tested), and one of wt-data-table.ts's four ranges took 28.7 minutes.
-  # At 30 shards, run 38241392066: the slowest shard took 17 minutes.
+  # At 30 shards, run 38256003987: the slowest shard (wt-data-table.ts:1029-1285) took 23.7 minutes.
   mutation-ui:
     strategy:
       fail-fast: false
@@ -94,7 +94,7 @@ jobs:
         # prettier-ignore
         shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v7
 
