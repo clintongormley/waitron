@@ -101,7 +101,7 @@ it("groups the Terrace's closing times in the shown season by identical ranges",
       Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy();
 });
-it("says the zone follows its department when the shown season's week has no closed ranges, ignoring named days", async () => {
+it("says the zone follows its department when the shown season's week has no closed ranges", async () => {
   const hours = model();
   const zone = hours.departments[0]!.zones[0]!;
   zone.seasonWeeks[0]!.week = [];
