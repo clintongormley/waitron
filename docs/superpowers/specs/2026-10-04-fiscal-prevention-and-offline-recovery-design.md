@@ -262,6 +262,39 @@ The library PR remains for owner review. D2 still requires the plan's owner-revi
 D5's old-chain survival and adviser gates remain. Targeted lookup returning `SistemaInformatico`
 and the stored duplicate fingerprint are unverified by these probes.
 
+
+#### Successor receipt, 2026-10-12 (W41s-1b; partial conflict run)
+
+The owner-reviewed [Verifactu PR #140](https://github.com/waitron-io/verifactu/pull/140)
+merged as `416ae5a8cd30d8a20ba7f308c8123ec2b8ae760b`. Both manual modes ran on that
+exact main commit against AEAT preproduction with synthetic invoices. Keep the individual
+outcomes below separate from each workflow's exit status.
+
+| Case and source run | AEAT wording and individual outcomes | What remains unmeasured |
+| --- | --- | --- |
+| [Conflict, later submission](https://github.com/waitron-io/verifactu/actions/runs/38256395046) | Control original and successor `Correcto`; test original `Correcto`. Changed contents under that original's invoice key returned `Incorrecto`/3000, “Registro de facturación duplicado.” Its successor linked to the changed fingerprint returned `AceptadoConErrores`/2004. | No consulta checked the stored original fingerprint. This is acceptance with a timestamp warning, not a warning-free result. |
+| [Conflict batch and replay, same run](https://github.com/waitron-io/verifactu/actions/runs/38256395046) | The batch's independent original returned `AceptadoConErrores`/2004 instead of the required `Correcto` control. The probe stopped there and reported `incomplete=true`, `stoppedAfter=batchOriginal`; the workflow failed. | The conflict batch, its successor replay and the next successor were not sent. No actual missing-reply or simulated lost-reply observation was obtained. |
+| [Unsent held cancellation](https://github.com/waitron-io/verifactu/actions/runs/38256519070) | Control original, cancellation and successor `Correcto`; test original `Incorrecto`/1161. The test cancellation stayed unsent. Its successor named that cancellation's fingerprint and returned `AceptadoConErrores`/2004. The workflow succeeded with `incomplete=false`. | AEAT did not receive the held cancellation. Its possible later submission, production behavior and a legal remedy are unmeasured. |
+
+For 2004 AEAT says the generation timestamp must match its current time, with “un margen de
+error de: 240 segundos.” The probe created all chains before starting its 60-second submission
+waits. The conflict run's later control therefore reached AEAT over five minutes after generation;
+its timestamp warning stopped the required-control gate. The cancellation run's final successor
+also received 2004. You cannot infer a warning-free outcome from either accepted-with-errors line.
+
+[Saved evidence](2026-10-12-aeat-successor-evidence.json) retains each logged plan, sent
+fingerprint and predecessor, per-record response, workflow status, exact head and dispatch command.
+The plan includes records that were never sent; only the response stages establish submission.
+These are logged request and parsed reply projections, not raw SOAP bytes or consulta results.
+Source archives were retrieved with `gh api repos/waitron-io/verifactu/actions/runs/<run-id>/logs`;
+the saved archive hashes identify them. Configured names and taxpayer identifiers are omitted or
+redacted. The preproduction environment's deployment policy still names only `main` (60719401).
+
+The clock defect needs a corrected, owner-reviewed library probe before another live run.
+Generate each independent synthetic chain after its preceding wait, then keep that chain's bytes
+unchanged through the batch replay. Retain this failed run alongside any later result. Existing
+Waitron holds and the dependent tasks' technical and adviser gates remain unchanged.
+
 ## 8. Primary-source boundaries
 
 The [adviser document's provenance table](../../compliance/asesor-questions.md#sources-checked-for-the-2026-10-04-revision)

@@ -1,0 +1,651 @@
+{
+  "version": "@waitron/verifactu 0.2.1, owner-reviewed PR #140",
+  "scope": "Synthetic AEAT preproduction only. Logged request and parsed reply projections, not raw SOAP XML or consulta evidence. Configured names and NIFs omitted/redacted. A failed conflict run and its incomplete result are retained.",
+  "runs": [
+    {
+      "run": 38256395046,
+      "url": "https://github.com/waitron-io/verifactu/actions/runs/38256395046",
+      "command": "gh workflow run live-aeat.yml --repo waitron-io/verifactu --ref main -f mode=conflict-successors",
+      "mode": "conflict-successors",
+      "head": "416ae5a8cd30d8a20ba7f308c8123ec2b8ae760b",
+      "workflow": {
+        "conclusion": "failure",
+        "createdAt": "2026-10-12T13:32:34Z",
+        "status": "completed",
+        "updatedAt": "2026-10-12T13:37:58Z"
+      },
+      "source_archive_sha256": "956cd0837e524c659c23eb705986aedbebf487b2309a0cfc6cf1edd696945c14",
+      "entries": [
+        {
+          "stage": "plan",
+          "data": {
+            "control": {
+              "original": {
+                "NumSerieFactura": "CI-SU-control-1/20261012/38256395046",
+                "Huella": "85F480D8EBAFC9CE80832F15C072D786F68504514224A9E975AF3B611A1D6F2A",
+                "FechaExpedicionFactura": "12-10-2026",
+                "NumeroInstalacion": "CI-SU-control-38256395046"
+              },
+              "successor": {
+                "NumSerieFactura": "CI-SU-control-2/20261012/38256395046",
+                "Huella": "11723CD4ECFC958849E16FC1F2CEFCF03C17B7FC805AA4A51AB8C8459B6B4189",
+                "FechaExpedicionFactura": "12-10-2026",
+                "NumeroInstalacion": "CI-SU-control-38256395046",
+                "RegistroAnterior": {
+                  "NumSerieFactura": "CI-SU-control-1/20261012/38256395046",
+                  "Huella": "85F480D8EBAFC9CE80832F15C072D786F68504514224A9E975AF3B611A1D6F2A"
+                }
+              }
+            },
+            "later": {
+              "original": {
+                "NumSerieFactura": "CI-SU-later-1/20261012/38256395046",
+                "Huella": "A0CD0021332998D9C407DEBB280BD66D74A99D575D7BB917ED0CDE320E7626ED",
+                "FechaExpedicionFactura": "12-10-2026",
+                "NumeroInstalacion": "CI-SU-later-38256395046"
+              },
+              "changed": {
+                "NumSerieFactura": "CI-SU-later-1/20261012/38256395046",
+                "Huella": "5C37832648CE8BC04D67916A4F6E0627B99C42D2DE50A235D822BAFDD9872869",
+                "FechaExpedicionFactura": "12-10-2026",
+                "NumeroInstalacion": "CI-SU-later-38256395046",
+                "RegistroAnterior": {
+                  "NumSerieFactura": "CI-SU-later-1/20261012/38256395046",
+                  "Huella": "A0CD0021332998D9C407DEBB280BD66D74A99D575D7BB917ED0CDE320E7626ED"
+                }
+              },
+              "successor": {
+                "NumSerieFactura": "CI-SU-later-2/20261012/38256395046",
+                "Huella": "7B9D04DF0A51A0F7630F67F195C196B71266F23D49B992864120538F9740A388",
+                "FechaExpedicionFactura": "12-10-2026",
+                "NumeroInstalacion": "CI-SU-later-38256395046",
+                "RegistroAnterior": {
+                  "NumSerieFactura": "CI-SU-later-1/20261012/38256395046",
+                  "Huella": "5C37832648CE8BC04D67916A4F6E0627B99C42D2DE50A235D822BAFDD9872869"
+                }
+              }
+            },
+            "batch": {
+              "original": {
+                "NumSerieFactura": "CI-SU-batch-1/20261012/38256395046",
+                "Huella": "6FB8690F799A0A2E8F21BCF8C87CE8C2B5885E54FE89A0657E14677E93D62D3C",
+                "FechaExpedicionFactura": "12-10-2026",
+                "NumeroInstalacion": "CI-SU-batch-38256395046"
+              },
+              "changed": {
+                "NumSerieFactura": "CI-SU-batch-1/20261012/38256395046",
+                "Huella": "8274DA4317A2F6F74602DAF0348D229193DE7D63732E4D11E6ECDB606AB47BE8",
+                "FechaExpedicionFactura": "12-10-2026",
+                "NumeroInstalacion": "CI-SU-batch-38256395046",
+                "RegistroAnterior": {
+                  "NumSerieFactura": "CI-SU-batch-1/20261012/38256395046",
+                  "Huella": "6FB8690F799A0A2E8F21BCF8C87CE8C2B5885E54FE89A0657E14677E93D62D3C"
+                }
+              },
+              "successor": {
+                "NumSerieFactura": "CI-SU-batch-2/20261012/38256395046",
+                "Huella": "151B79E7A2C67BF2678F590D21AC6A21A3909C62776F032537C0D9107A4DAD7C",
+                "FechaExpedicionFactura": "12-10-2026",
+                "NumeroInstalacion": "CI-SU-batch-38256395046",
+                "RegistroAnterior": {
+                  "NumSerieFactura": "CI-SU-batch-1/20261012/38256395046",
+                  "Huella": "8274DA4317A2F6F74602DAF0348D229193DE7D63732E4D11E6ECDB606AB47BE8"
+                }
+              },
+              "later": {
+                "NumSerieFactura": "CI-SU-batch-3/20261012/38256395046",
+                "Huella": "6C9DCDE3918F044B06583ADF8268B544ED8890CCCE7A2051ECBB5E09CA6A7491",
+                "FechaExpedicionFactura": "12-10-2026",
+                "NumeroInstalacion": "CI-SU-batch-38256395046",
+                "RegistroAnterior": {
+                  "NumSerieFactura": "CI-SU-batch-2/20261012/38256395046",
+                  "Huella": "151B79E7A2C67BF2678F590D21AC6A21A3909C62776F032537C0D9107A4DAD7C"
+                }
+              }
+            }
+          }
+        },
+        {
+          "stage": "controlOriginal",
+          "data": {
+            "EstadoEnvio": "Correcto",
+            "TiempoEsperaEnvio": 60,
+            "CSV": "A-U546BZWXG5VJMH",
+            "lines": [
+              {
+                "NumSerieFactura": "CI-SU-control-1/20261012/38256395046",
+                "FechaExpedicionFactura": "12-10-2026",
+                "HuellaEnviada": "85F480D8EBAFC9CE80832F15C072D786F68504514224A9E975AF3B611A1D6F2A",
+                "EstadoRegistro": "Correcto",
+                "Respuestas": 1
+              }
+            ],
+            "unexpected": 0
+          }
+        },
+        {
+          "stage": "controlSuccessor",
+          "data": {
+            "EstadoEnvio": "Correcto",
+            "TiempoEsperaEnvio": 60,
+            "CSV": "A-XJMAEZGURL8L5F",
+            "lines": [
+              {
+                "NumSerieFactura": "CI-SU-control-2/20261012/38256395046",
+                "FechaExpedicionFactura": "12-10-2026",
+                "HuellaEnviada": "11723CD4ECFC958849E16FC1F2CEFCF03C17B7FC805AA4A51AB8C8459B6B4189",
+                "RegistroAnterior": {
+                  "NumSerieFactura": "CI-SU-control-1/20261012/38256395046",
+                  "Huella": "85F480D8EBAFC9CE80832F15C072D786F68504514224A9E975AF3B611A1D6F2A"
+                },
+                "EstadoRegistro": "Correcto",
+                "Respuestas": 1
+              }
+            ],
+            "unexpected": 0
+          }
+        },
+        {
+          "stage": "laterOriginal",
+          "data": {
+            "EstadoEnvio": "Correcto",
+            "TiempoEsperaEnvio": 60,
+            "CSV": "A-2X994AQXX9VD6W",
+            "lines": [
+              {
+                "NumSerieFactura": "CI-SU-later-1/20261012/38256395046",
+                "FechaExpedicionFactura": "12-10-2026",
+                "HuellaEnviada": "A0CD0021332998D9C407DEBB280BD66D74A99D575D7BB917ED0CDE320E7626ED",
+                "EstadoRegistro": "Correcto",
+                "Respuestas": 1
+              }
+            ],
+            "unexpected": 0
+          }
+        },
+        {
+          "stage": "laterConflict",
+          "data": {
+            "EstadoEnvio": "Incorrecto",
+            "TiempoEsperaEnvio": 60,
+            "lines": [
+              {
+                "NumSerieFactura": "CI-SU-later-1/20261012/38256395046",
+                "FechaExpedicionFactura": "12-10-2026",
+                "HuellaEnviada": "5C37832648CE8BC04D67916A4F6E0627B99C42D2DE50A235D822BAFDD9872869",
+                "RegistroAnterior": {
+                  "NumSerieFactura": "CI-SU-later-1/20261012/38256395046",
+                  "Huella": "A0CD0021332998D9C407DEBB280BD66D74A99D575D7BB917ED0CDE320E7626ED"
+                },
+                "EstadoRegistro": "Incorrecto",
+                "CodigoErrorRegistro": 3000,
+                "DescripcionErrorRegistro": "Registro de facturación duplicado.",
+                "RegistroDuplicado": {
+                  "IdPeticionRegistroDuplicado": "20261012153452961191",
+                  "EstadoRegistroDuplicado": "Correcta"
+                },
+                "Respuestas": 1
+              }
+            ],
+            "unexpected": 0
+          }
+        },
+        {
+          "stage": "laterSuccessor",
+          "data": {
+            "EstadoEnvio": "ParcialmenteCorrecto",
+            "TiempoEsperaEnvio": 60,
+            "CSV": "A-GYLUGQGRRJBXGC",
+            "lines": [
+              {
+                "NumSerieFactura": "CI-SU-later-2/20261012/38256395046",
+                "FechaExpedicionFactura": "12-10-2026",
+                "HuellaEnviada": "7B9D04DF0A51A0F7630F67F195C196B71266F23D49B992864120538F9740A388",
+                "RegistroAnterior": {
+                  "NumSerieFactura": "CI-SU-later-1/20261012/38256395046",
+                  "Huella": "5C37832648CE8BC04D67916A4F6E0627B99C42D2DE50A235D822BAFDD9872869"
+                },
+                "EstadoRegistro": "AceptadoConErrores",
+                "CodigoErrorRegistro": 2004,
+                "DescripcionErrorRegistro": "El valor del campo FechaHoraHusoGenRegistro debe ser la fecha actual del sistema de la AEAT, admitiéndose un margen de error de: 240 segundos.",
+                "Respuestas": 1
+              }
+            ],
+            "unexpected": 0
+          }
+        },
+        {
+          "stage": "batchOriginal",
+          "data": {
+            "EstadoEnvio": "ParcialmenteCorrecto",
+            "TiempoEsperaEnvio": 60,
+            "CSV": "A-TYZEYCMQ6SZC63",
+            "lines": [
+              {
+                "NumSerieFactura": "CI-SU-batch-1/20261012/38256395046",
+                "FechaExpedicionFactura": "12-10-2026",
+                "HuellaEnviada": "6FB8690F799A0A2E8F21BCF8C87CE8C2B5885E54FE89A0657E14677E93D62D3C",
+                "EstadoRegistro": "AceptadoConErrores",
+                "CodigoErrorRegistro": 2004,
+                "DescripcionErrorRegistro": "El valor del campo FechaHoraHusoGenRegistro debe ser la fecha actual del sistema de la AEAT, admitiéndose un margen de error de: 240 segundos.",
+                "Respuestas": 1
+              }
+            ],
+            "unexpected": 0
+          }
+        },
+        {
+          "stage": "complete",
+          "data": {
+            "incomplete": true,
+            "controlOriginal": {
+              "EstadoEnvio": "Correcto",
+              "TiempoEsperaEnvio": 60,
+              "CSV": "A-U546BZWXG5VJMH",
+              "lines": [
+                {
+                  "NumSerieFactura": "CI-SU-control-1/20261012/38256395046",
+                  "FechaExpedicionFactura": "12-10-2026",
+                  "HuellaEnviada": "85F480D8EBAFC9CE80832F15C072D786F68504514224A9E975AF3B611A1D6F2A",
+                  "EstadoRegistro": "Correcto",
+                  "Respuestas": 1
+                }
+              ],
+              "unexpected": 0
+            },
+            "controlSuccessor": {
+              "EstadoEnvio": "Correcto",
+              "TiempoEsperaEnvio": 60,
+              "CSV": "A-XJMAEZGURL8L5F",
+              "lines": [
+                {
+                  "NumSerieFactura": "CI-SU-control-2/20261012/38256395046",
+                  "FechaExpedicionFactura": "12-10-2026",
+                  "HuellaEnviada": "11723CD4ECFC958849E16FC1F2CEFCF03C17B7FC805AA4A51AB8C8459B6B4189",
+                  "RegistroAnterior": {
+                    "NumSerieFactura": "CI-SU-control-1/20261012/38256395046",
+                    "Huella": "85F480D8EBAFC9CE80832F15C072D786F68504514224A9E975AF3B611A1D6F2A"
+                  },
+                  "EstadoRegistro": "Correcto",
+                  "Respuestas": 1
+                }
+              ],
+              "unexpected": 0
+            },
+            "laterOriginal": {
+              "EstadoEnvio": "Correcto",
+              "TiempoEsperaEnvio": 60,
+              "CSV": "A-2X994AQXX9VD6W",
+              "lines": [
+                {
+                  "NumSerieFactura": "CI-SU-later-1/20261012/38256395046",
+                  "FechaExpedicionFactura": "12-10-2026",
+                  "HuellaEnviada": "A0CD0021332998D9C407DEBB280BD66D74A99D575D7BB917ED0CDE320E7626ED",
+                  "EstadoRegistro": "Correcto",
+                  "Respuestas": 1
+                }
+              ],
+              "unexpected": 0
+            },
+            "laterConflict": {
+              "EstadoEnvio": "Incorrecto",
+              "TiempoEsperaEnvio": 60,
+              "lines": [
+                {
+                  "NumSerieFactura": "CI-SU-later-1/20261012/38256395046",
+                  "FechaExpedicionFactura": "12-10-2026",
+                  "HuellaEnviada": "5C37832648CE8BC04D67916A4F6E0627B99C42D2DE50A235D822BAFDD9872869",
+                  "RegistroAnterior": {
+                    "NumSerieFactura": "CI-SU-later-1/20261012/38256395046",
+                    "Huella": "A0CD0021332998D9C407DEBB280BD66D74A99D575D7BB917ED0CDE320E7626ED"
+                  },
+                  "EstadoRegistro": "Incorrecto",
+                  "CodigoErrorRegistro": 3000,
+                  "DescripcionErrorRegistro": "Registro de facturación duplicado.",
+                  "RegistroDuplicado": {
+                    "IdPeticionRegistroDuplicado": "20261012153452961191",
+                    "EstadoRegistroDuplicado": "Correcta"
+                  },
+                  "Respuestas": 1
+                }
+              ],
+              "unexpected": 0
+            },
+            "laterSuccessor": {
+              "EstadoEnvio": "ParcialmenteCorrecto",
+              "TiempoEsperaEnvio": 60,
+              "CSV": "A-GYLUGQGRRJBXGC",
+              "lines": [
+                {
+                  "NumSerieFactura": "CI-SU-later-2/20261012/38256395046",
+                  "FechaExpedicionFactura": "12-10-2026",
+                  "HuellaEnviada": "7B9D04DF0A51A0F7630F67F195C196B71266F23D49B992864120538F9740A388",
+                  "RegistroAnterior": {
+                    "NumSerieFactura": "CI-SU-later-1/20261012/38256395046",
+                    "Huella": "5C37832648CE8BC04D67916A4F6E0627B99C42D2DE50A235D822BAFDD9872869"
+                  },
+                  "EstadoRegistro": "AceptadoConErrores",
+                  "CodigoErrorRegistro": 2004,
+                  "DescripcionErrorRegistro": "El valor del campo FechaHoraHusoGenRegistro debe ser la fecha actual del sistema de la AEAT, admitiéndose un margen de error de: 240 segundos.",
+                  "Respuestas": 1
+                }
+              ],
+              "unexpected": 0
+            },
+            "batchOriginal": {
+              "EstadoEnvio": "ParcialmenteCorrecto",
+              "TiempoEsperaEnvio": 60,
+              "CSV": "A-TYZEYCMQ6SZC63",
+              "lines": [
+                {
+                  "NumSerieFactura": "CI-SU-batch-1/20261012/38256395046",
+                  "FechaExpedicionFactura": "12-10-2026",
+                  "HuellaEnviada": "6FB8690F799A0A2E8F21BCF8C87CE8C2B5885E54FE89A0657E14677E93D62D3C",
+                  "EstadoRegistro": "AceptadoConErrores",
+                  "CodigoErrorRegistro": 2004,
+                  "DescripcionErrorRegistro": "El valor del campo FechaHoraHusoGenRegistro debe ser la fecha actual del sistema de la AEAT, admitiéndose un margen de error de: 240 segundos.",
+                  "Respuestas": 1
+                }
+              ],
+              "unexpected": 0
+            },
+            "stoppedAfter": "batchOriginal"
+          }
+        }
+      ]
+    },
+    {
+      "run": 38256519070,
+      "url": "https://github.com/waitron-io/verifactu/actions/runs/38256519070",
+      "command": "gh workflow run live-aeat.yml --repo waitron-io/verifactu --ref main -f mode=held-cancellation-successors",
+      "mode": "held-cancellation-successors",
+      "head": "416ae5a8cd30d8a20ba7f308c8123ec2b8ae760b",
+      "workflow": {
+        "conclusion": "success",
+        "createdAt": "2026-10-12T13:33:35Z",
+        "status": "completed",
+        "updatedAt": "2026-10-12T13:37:56Z"
+      },
+      "source_archive_sha256": "34e9f126105af678483d0a1d788c25fc073ef4c6b608d01ddd44a65214e705b7",
+      "entries": [
+        {
+          "stage": "plan",
+          "data": {
+            "control": {
+              "original": {
+                "NumSerieFactura": "CI-SU-cancel-control-1/20261012/38256519070",
+                "Huella": "F5178F490D7E48CBCF6150850D8DA530EA22746AB95A57FA0A1FD443F8D2A813",
+                "FechaExpedicionFactura": "12-10-2026",
+                "NumeroInstalacion": "CI-SU-cancel-control-38256519070"
+              },
+              "cancellation": {
+                "NumSerieFactura": "CI-SU-cancel-control-1/20261012/38256519070",
+                "Huella": "D79E2915F7FB492384F36233189EF1B14297327A478A5EF001E6429DFEE21168",
+                "FechaExpedicionFactura": "12-10-2026",
+                "NumeroInstalacion": "CI-SU-cancel-control-38256519070",
+                "RegistroAnterior": {
+                  "NumSerieFactura": "CI-SU-cancel-control-1/20261012/38256519070",
+                  "Huella": "F5178F490D7E48CBCF6150850D8DA530EA22746AB95A57FA0A1FD443F8D2A813"
+                }
+              },
+              "successor": {
+                "NumSerieFactura": "CI-SU-cancel-control-2/20261012/38256519070",
+                "Huella": "B5C00E3EE38EFACA1A292C47FD887D7717AA7675F87B2748A679C9E4A4794ECF",
+                "FechaExpedicionFactura": "12-10-2026",
+                "NumeroInstalacion": "CI-SU-cancel-control-38256519070",
+                "RegistroAnterior": {
+                  "NumSerieFactura": "CI-SU-cancel-control-1/20261012/38256519070",
+                  "Huella": "D79E2915F7FB492384F36233189EF1B14297327A478A5EF001E6429DFEE21168"
+                }
+              }
+            },
+            "rejected": {
+              "original": {
+                "NumSerieFactura": "CI-SU-cancel-rejected-1/20261012/38256519070",
+                "Huella": "792EADC45A435DD2D40684EB9182D232D1CB09EED38B957678A855FB487762F2",
+                "FechaExpedicionFactura": "12-10-2026",
+                "NumeroInstalacion": "CI-SU-cancel-rejected-38256519070"
+              },
+              "cancellation": {
+                "NumSerieFactura": "CI-SU-cancel-rejected-1/20261012/38256519070",
+                "Huella": "AACFC6466570F9576C42F0EB500E8BB3EF16D67EDFA2C33C79208BE9764EF75E",
+                "FechaExpedicionFactura": "12-10-2026",
+                "NumeroInstalacion": "CI-SU-cancel-rejected-38256519070",
+                "RegistroAnterior": {
+                  "NumSerieFactura": "CI-SU-cancel-rejected-1/20261012/38256519070",
+                  "Huella": "792EADC45A435DD2D40684EB9182D232D1CB09EED38B957678A855FB487762F2"
+                }
+              },
+              "successor": {
+                "NumSerieFactura": "CI-SU-cancel-rejected-2/20261012/38256519070",
+                "Huella": "3FB8EF12A1DF93A47FF920E24229E35805CE55195E4C1A8E51E613A23FCE25C7",
+                "FechaExpedicionFactura": "12-10-2026",
+                "NumeroInstalacion": "CI-SU-cancel-rejected-38256519070",
+                "RegistroAnterior": {
+                  "NumSerieFactura": "CI-SU-cancel-rejected-1/20261012/38256519070",
+                  "Huella": "AACFC6466570F9576C42F0EB500E8BB3EF16D67EDFA2C33C79208BE9764EF75E"
+                }
+              }
+            }
+          }
+        },
+        {
+          "stage": "controlOriginal",
+          "data": {
+            "EstadoEnvio": "Correcto",
+            "TiempoEsperaEnvio": 60,
+            "CSV": "A-646SAPWLLDCTNF",
+            "lines": [
+              {
+                "NumSerieFactura": "CI-SU-cancel-control-1/20261012/38256519070",
+                "FechaExpedicionFactura": "12-10-2026",
+                "HuellaEnviada": "F5178F490D7E48CBCF6150850D8DA530EA22746AB95A57FA0A1FD443F8D2A813",
+                "EstadoRegistro": "Correcto",
+                "Respuestas": 1
+              }
+            ],
+            "unexpected": 0
+          }
+        },
+        {
+          "stage": "controlCancellation",
+          "data": {
+            "EstadoEnvio": "Correcto",
+            "TiempoEsperaEnvio": 60,
+            "CSV": "A-T8YF33FLU8FF5M",
+            "lines": [
+              {
+                "NumSerieFactura": "CI-SU-cancel-control-1/20261012/38256519070",
+                "FechaExpedicionFactura": "12-10-2026",
+                "HuellaEnviada": "D79E2915F7FB492384F36233189EF1B14297327A478A5EF001E6429DFEE21168",
+                "RegistroAnterior": {
+                  "NumSerieFactura": "CI-SU-cancel-control-1/20261012/38256519070",
+                  "Huella": "F5178F490D7E48CBCF6150850D8DA530EA22746AB95A57FA0A1FD443F8D2A813"
+                },
+                "EstadoRegistro": "Correcto",
+                "Respuestas": 1
+              }
+            ],
+            "unexpected": 0
+          }
+        },
+        {
+          "stage": "controlSuccessor",
+          "data": {
+            "EstadoEnvio": "Correcto",
+            "TiempoEsperaEnvio": 60,
+            "CSV": "A-UPPLMSUCVVUZLX",
+            "lines": [
+              {
+                "NumSerieFactura": "CI-SU-cancel-control-2/20261012/38256519070",
+                "FechaExpedicionFactura": "12-10-2026",
+                "HuellaEnviada": "B5C00E3EE38EFACA1A292C47FD887D7717AA7675F87B2748A679C9E4A4794ECF",
+                "RegistroAnterior": {
+                  "NumSerieFactura": "CI-SU-cancel-control-1/20261012/38256519070",
+                  "Huella": "D79E2915F7FB492384F36233189EF1B14297327A478A5EF001E6429DFEE21168"
+                },
+                "EstadoRegistro": "Correcto",
+                "Respuestas": 1
+              }
+            ],
+            "unexpected": 0
+          }
+        },
+        {
+          "stage": "rejectedOriginal",
+          "data": {
+            "EstadoEnvio": "Incorrecto",
+            "TiempoEsperaEnvio": 60,
+            "lines": [
+              {
+                "NumSerieFactura": "CI-SU-cancel-rejected-1/20261012/38256519070",
+                "FechaExpedicionFactura": "12-10-2026",
+                "HuellaEnviada": "792EADC45A435DD2D40684EB9182D232D1CB09EED38B957678A855FB487762F2",
+                "EstadoRegistro": "Incorrecto",
+                "CodigoErrorRegistro": 1161,
+                "DescripcionErrorRegistro": "El valor del campo RechazoPrevio no es válido, no podrá incluirse el campo RechazoPrevio con valor S si no se ha informado del campo Subsanacion o tiene el valor N.",
+                "Respuestas": 1
+              }
+            ],
+            "unexpected": 0
+          }
+        },
+        {
+          "stage": "heldCancellation",
+          "data": {
+            "notSubmitted": true,
+            "reason": "held-after-original-rejection",
+            "NumSerieFactura": "CI-SU-cancel-rejected-1/20261012/38256519070",
+            "Huella": "AACFC6466570F9576C42F0EB500E8BB3EF16D67EDFA2C33C79208BE9764EF75E"
+          }
+        },
+        {
+          "stage": "rejectedSuccessor",
+          "data": {
+            "EstadoEnvio": "ParcialmenteCorrecto",
+            "TiempoEsperaEnvio": 60,
+            "CSV": "A-VCM8X2CPCWUGPF",
+            "lines": [
+              {
+                "NumSerieFactura": "CI-SU-cancel-rejected-2/20261012/38256519070",
+                "FechaExpedicionFactura": "12-10-2026",
+                "HuellaEnviada": "3FB8EF12A1DF93A47FF920E24229E35805CE55195E4C1A8E51E613A23FCE25C7",
+                "RegistroAnterior": {
+                  "NumSerieFactura": "CI-SU-cancel-rejected-1/20261012/38256519070",
+                  "Huella": "AACFC6466570F9576C42F0EB500E8BB3EF16D67EDFA2C33C79208BE9764EF75E"
+                },
+                "EstadoRegistro": "AceptadoConErrores",
+                "CodigoErrorRegistro": 2004,
+                "DescripcionErrorRegistro": "El valor del campo FechaHoraHusoGenRegistro debe ser la fecha actual del sistema de la AEAT, admitiéndose un margen de error de: 240 segundos.",
+                "Respuestas": 1
+              }
+            ],
+            "unexpected": 0
+          }
+        },
+        {
+          "stage": "complete",
+          "data": {
+            "incomplete": false,
+            "controlOriginal": {
+              "EstadoEnvio": "Correcto",
+              "TiempoEsperaEnvio": 60,
+              "CSV": "A-646SAPWLLDCTNF",
+              "lines": [
+                {
+                  "NumSerieFactura": "CI-SU-cancel-control-1/20261012/38256519070",
+                  "FechaExpedicionFactura": "12-10-2026",
+                  "HuellaEnviada": "F5178F490D7E48CBCF6150850D8DA530EA22746AB95A57FA0A1FD443F8D2A813",
+                  "EstadoRegistro": "Correcto",
+                  "Respuestas": 1
+                }
+              ],
+              "unexpected": 0
+            },
+            "controlCancellation": {
+              "EstadoEnvio": "Correcto",
+              "TiempoEsperaEnvio": 60,
+              "CSV": "A-T8YF33FLU8FF5M",
+              "lines": [
+                {
+                  "NumSerieFactura": "CI-SU-cancel-control-1/20261012/38256519070",
+                  "FechaExpedicionFactura": "12-10-2026",
+                  "HuellaEnviada": "D79E2915F7FB492384F36233189EF1B14297327A478A5EF001E6429DFEE21168",
+                  "RegistroAnterior": {
+                    "NumSerieFactura": "CI-SU-cancel-control-1/20261012/38256519070",
+                    "Huella": "F5178F490D7E48CBCF6150850D8DA530EA22746AB95A57FA0A1FD443F8D2A813"
+                  },
+                  "EstadoRegistro": "Correcto",
+                  "Respuestas": 1
+                }
+              ],
+              "unexpected": 0
+            },
+            "controlSuccessor": {
+              "EstadoEnvio": "Correcto",
+              "TiempoEsperaEnvio": 60,
+              "CSV": "A-UPPLMSUCVVUZLX",
+              "lines": [
+                {
+                  "NumSerieFactura": "CI-SU-cancel-control-2/20261012/38256519070",
+                  "FechaExpedicionFactura": "12-10-2026",
+                  "HuellaEnviada": "B5C00E3EE38EFACA1A292C47FD887D7717AA7675F87B2748A679C9E4A4794ECF",
+                  "RegistroAnterior": {
+                    "NumSerieFactura": "CI-SU-cancel-control-1/20261012/38256519070",
+                    "Huella": "D79E2915F7FB492384F36233189EF1B14297327A478A5EF001E6429DFEE21168"
+                  },
+                  "EstadoRegistro": "Correcto",
+                  "Respuestas": 1
+                }
+              ],
+              "unexpected": 0
+            },
+            "rejectedOriginal": {
+              "EstadoEnvio": "Incorrecto",
+              "TiempoEsperaEnvio": 60,
+              "lines": [
+                {
+                  "NumSerieFactura": "CI-SU-cancel-rejected-1/20261012/38256519070",
+                  "FechaExpedicionFactura": "12-10-2026",
+                  "HuellaEnviada": "792EADC45A435DD2D40684EB9182D232D1CB09EED38B957678A855FB487762F2",
+                  "EstadoRegistro": "Incorrecto",
+                  "CodigoErrorRegistro": 1161,
+                  "DescripcionErrorRegistro": "El valor del campo RechazoPrevio no es válido, no podrá incluirse el campo RechazoPrevio con valor S si no se ha informado del campo Subsanacion o tiene el valor N.",
+                  "Respuestas": 1
+                }
+              ],
+              "unexpected": 0
+            },
+            "heldCancellation": {
+              "notSubmitted": true,
+              "reason": "held-after-original-rejection",
+              "NumSerieFactura": "CI-SU-cancel-rejected-1/20261012/38256519070",
+              "Huella": "AACFC6466570F9576C42F0EB500E8BB3EF16D67EDFA2C33C79208BE9764EF75E"
+            },
+            "rejectedSuccessor": {
+              "EstadoEnvio": "ParcialmenteCorrecto",
+              "TiempoEsperaEnvio": 60,
+              "CSV": "A-VCM8X2CPCWUGPF",
+              "lines": [
+                {
+                  "NumSerieFactura": "CI-SU-cancel-rejected-2/20261012/38256519070",
+                  "FechaExpedicionFactura": "12-10-2026",
+                  "HuellaEnviada": "3FB8EF12A1DF93A47FF920E24229E35805CE55195E4C1A8E51E613A23FCE25C7",
+                  "RegistroAnterior": {
+                    "NumSerieFactura": "CI-SU-cancel-rejected-1/20261012/38256519070",
+                    "Huella": "AACFC6466570F9576C42F0EB500E8BB3EF16D67EDFA2C33C79208BE9764EF75E"
+                  },
+                  "EstadoRegistro": "AceptadoConErrores",
+                  "CodigoErrorRegistro": 2004,
+                  "DescripcionErrorRegistro": "El valor del campo FechaHoraHusoGenRegistro debe ser la fecha actual del sistema de la AEAT, admitiéndose un margen de error de: 240 segundos.",
+                  "Respuestas": 1
+                }
+              ],
+              "unexpected": 0
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

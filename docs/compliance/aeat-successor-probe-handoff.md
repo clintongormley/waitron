@@ -1,5 +1,13 @@
 # W41s-1b: successor probe handoff
 
+> **Result update, 2026-10-12:** the owner merged #140 as
+> `416ae5a8cd30d8a20ba7f308c8123ec2b8ae760b`; both live modes ran on that commit.
+> [The dated receipt](../superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#successor-receipt-2026-10-12-w41s-1b-partial-conflict-run)
+> preserves the accepted-with-errors successors and the incomplete conflict run. Its stale
+> timestamp stopped the control before the batch/replay cases. Review the clock fix before
+> another dispatch, and retain the failed run. The preparation notes below describe the earlier
+> handoff; their owner-review and no-live-request status is historical.
+
 You still need AEAT evidence before changing Waitron's holds after a conflict or an unsent
 cancellation. [Verifactu PR #140](https://github.com/waitron-io/verifactu/pull/140) prepares the
 probes. It awaits owner review; no live request has run and no legal conclusion follows from

@@ -300,13 +300,14 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   and retires the boot series setting. Task 4 still owes allocation activation; the owner selected
   first symbol `0–7` with 128 random bits. The later recovery and resolution tasks remain open. [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04)
 
-- **Still open after W41s-3 (#1289)** — no probe has yet shown what AEAT does with a record sent
-  after a 3000 conflict or after a held cancellation; the owner chose (2026-10-06) to keep holding
-  there. W41s-1b’s probes are prepared on [Verifactu PR #140](https://github.com/waitron-io/verifactu/pull/140),
-  awaiting owner review before live execution. No AEAT result has been recorded. A refusal that would refuse
-  every later record (one about the taxpayer's identity, say) opens one case per record until the
-  brake below stops the chain; one reply can still open up to 1,000 cases first
-  (`MAX_REGISTROS_POR_ENVIO`). [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04)
+- **Still open after W41s-3 (#1289): conflict batch replay and warning-free successor probes.**
+  W41s-1b's dated [receipt](superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#successor-receipt-2026-10-12-w41s-1b-partial-conflict-run)
+  records a later successor after 3000 and a successor linked to an unsent cancellation, both
+  `AceptadoConErrores`/2004. The conflict run stopped on its stale-timestamp control before the
+  batch/replay cases. Next: owner review of the library clock fix, then fresh-clock preproduction
+  probes; retain both first-run results. Existing holds remain. A refusal applying to every later
+  record can still open up to 1,000 cases before the repeated-code brake takes effect.
+  [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04)
 
 - **Follow-up (W41s Task 8, held-record resolution): release a brake hold (send the held records
   again).** — left open by W41s-3b (#1303), which says "Nothing releases the hold yet." Task 8 as

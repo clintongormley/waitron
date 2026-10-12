@@ -487,6 +487,13 @@ and the evidence to retain. The held cancellation stays unsent in its probe, mat
 current drain; the successor links to that cancellation's hash. Existing holds remain in place
 until actual service evidence and the dependent task's gates support a change.
 
+**Update, 2026-10-12 (W41s-1b live result):** the earlier preparation and unprobed-successor
+notes above are superseded by [the dated receipt](../superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#successor-receipt-2026-10-12-w41s-1b-partial-conflict-run).
+AEAT accepted the later successor after 3000 and the successor linked to an unsent cancellation
+as `AceptadoConErrores`/2004. The stale-generation control stopped the conflict run before its
+batch and exact-replay cases. Those cases and warning-free successor observations remain open;
+the library clock fix needs owner review before another live run. Existing holds are unchanged.
+
 **Update, 2026-10-12 (W41s-3d):** PR
 [#1309](https://github.com/clintongormley/waitron/pull/1309) adds an hourly retry of the first
 eligible brake-held record. An accept or a different-code refusal can release the remaining
