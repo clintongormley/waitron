@@ -71,7 +71,7 @@ cascade` foreign key).
 | --- | --- |
 | Season | A named stretch of the year, from its start date to the day before the next season's start. Repeats every year. |
 | Season week | One department's seven days in one season, painted with periods. |
-| Special day | A name over one or more dates, optionally repeating every year (on the same month and day, or, for a public holiday's date, wherever the holiday's name falls; section 5), with paint laid over the season. |
+| Special day | A name over a list of dates, optionally repeating every year (on the same month and day, or, for a public holiday's date, wherever the holiday's name falls; section 5), with paint laid over the season. |
 | Public holiday | A date from the official lists for the venue's address. It is a mark on the calendar, not a stored row; it becomes a special day only when someone edits it. |
 | Ordinary date | A date that is in no special day. It follows its season's week. |
 | Paint | A range on one day, in 15-minute steps, naming a period or Closed. |

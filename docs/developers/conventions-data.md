@@ -577,7 +577,7 @@ a zone's closed ranges for a named day. `saveZoneClosedDate` in `zone-closed-tim
 validated against the business-day changeover, on quarter-hour boundaries; `switchNamedDayHours`
 (`hours.ts`) copies the season's day into them when a named day takes own hours, and the
 special-date copy (`MENU_TIMETABLE_CALENDAR_PARTICIPANT`, `menu-timetable.ts`) copies a named day's
-ranges to its duplicate. A date must have own hours before you can save its closed times. On a special-day date `closedZoneIdsAt` lays the date's zone paint over the season's closures (`layerZonePaint`); otherwise it uses that named day's dated ranges, including repeats, or the business day's
+ranges to its duplicate. A date must have own hours before you can save its closed times. On a special-day date `closedZoneIdsAt` reports no closed zone when the date is Closed all day, and otherwise lays the date's zone paint over the season's closures (`layerZonePaint`); otherwise it uses that named day's dated ranges, including repeats, or the business day's
 season week (`zone_days`, through `resolveZoneClosedDays` in `day-resolver.ts`). No dated closed ranges means no zone-specific closure on an own-hours day;
 it does not inherit the zone's normal-week closure. The start is closed and the end is open.
 When the venue clock is unreadable, this zone check reports no closed zone; department checks

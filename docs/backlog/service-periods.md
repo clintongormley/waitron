@@ -157,7 +157,8 @@ week into future dates would bury the special days among ordinary ones.
   Today's own-holiday / working-day split goes: a search of non-test code found the kind read only to
   choose the Calendar's colour (`packages/venue-service/src/named-days.ts`, the `tone` choice).
 - One special day is a name over any number of dates ("Christmas company dinners", 14–23 December),
-  optionally repeating on the same dates every year. Dates are added on a small calendar, singly or
+  optionally repeating every year (on the same month and day, or, for a public holiday's date,
+  wherever the holiday's name falls; spec section 5). Dates are added on a small calendar, singly or
   as ranges.
 - **The season shows through.** Each date starts with the season's hours; what is painted on top
   replaces them for that stretch of time, and unpainted time keeps following the season. A
