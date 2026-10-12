@@ -4370,6 +4370,44 @@ describe("department transfers across operator lifetimes", () => {
     expect(copy?.textContent).toContain("Retired cream");
   });
 
+  it("shows the update bar on the lock screen, not reloading, while a transfer's local copy waits to be dismissed", async () => {
+    const desk = transfers();
+    let accepted = false;
+    const reload = vi.fn();
+    const { el } = await mountApp(
+      {
+        ...desk.calls,
+        listDepartmentSentTransfers: vi.fn(async () => ({
+          requests: [
+            {
+              ...request,
+              tabId: "counter-tab",
+              status: accepted ? "accepted" : "pending",
+              revision: accepted ? 1 : 0,
+              currentDepartmentId: accepted ? "restaurant" : "deli",
+            },
+          ],
+        })),
+      },
+      { reload },
+    );
+    await signIn(el);
+    const c = counter(el)!;
+    c.store.loadFrom("counter-tab", [{ product: c.products[0]!, quantity: "2" }], "Lunch", 7);
+    c.store.addProduct(c.products[0]!, "1");
+    accepted = true;
+    desk.refresh();
+    await vi.waitFor(() => expect(c.store.persisted).toBe(false));
+    expect(el.shadowRoot!.querySelector("[data-transfer-local-copy]")).not.toBeNull();
+    emit(shell(el)!, "logout");
+    await vi.waitFor(() => expect(lock(el)).not.toBeNull());
+    await flush(el);
+    window.dispatchEvent(new Event(BUILD_CHANGED_EVENT));
+    await flush(el);
+    expect(reload).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector("wt-banner[data-test=update-bar]")).not.toBeNull();
+  });
+
   it("retains an unsent standalone table draft for review when its tab is transferred", async () => {
     const desk = transfers();
     let accepted = false;
@@ -4752,6 +4790,72 @@ describe("till-app when the server reports another build", () => {
     await flush(el);
     expect(reload).not.toHaveBeenCalled();
     expect(updateBar(el)).not.toBeNull();
+  });
+
+  it("shows the bar instead of reloading while a prep-queue Collect still waits for the server after an idle sign-out", async () => {
+    const activity = fakeSessionActivity();
+    const reload = vi.fn();
+    const markCollected = vi.fn(() => new Promise(() => {}));
+    const { el } = await mountApp(
+      { markCollected },
+      { reload, sessionActivity: activity as never },
+    );
+    emit(await toCounter(el), "mark-collected", { orderId: "wo-1" });
+    await flush(el);
+    expect(markCollected).toHaveBeenCalledOnce();
+    signOutIdle(activity);
+    await flush(el);
+    expect(lock(el)).not.toBeNull();
+    updated();
+    await flush(el);
+    expect(reload).not.toHaveBeenCalled();
+    expect(updateBar(el)).not.toBeNull();
+  });
+
+  it.each(["park-order", "place-order"])(
+    "waits for an unanswered %s before a pressed Reload reloads",
+    async (action) => {
+      const reload = vi.fn();
+      let answer!: (value: unknown) => void;
+      const parkOrder = vi.fn(() => new Promise((resolve) => (answer = resolve)));
+      const { el } = await mountApp(
+        { parkOrder, placeOrder: vi.fn(() => new Promise(() => {})) },
+        { reload },
+      );
+      const c = await toCounter(el);
+      c.store.addProduct(c.products[0]!, "1");
+      emit(c, action, {});
+      await flush(el);
+      expect(parkOrder).toHaveBeenCalledOnce();
+      updated();
+      await flush(el);
+      await userEvent.click(updateBar(el)!.shadowRoot!.querySelector("button")!);
+      await flush(el);
+      expect(reload).not.toHaveBeenCalled();
+      if (action === "park-order") {
+        answer({});
+        await flush(el);
+        expect(reload).toHaveBeenCalledOnce();
+      }
+    },
+  );
+
+  it("does not reload a till taken off the page while a pressed Reload waited for a request", async () => {
+    const reload = vi.fn();
+    let answer!: () => void;
+    const markCollected = vi.fn(() => new Promise<void>((resolve) => (answer = resolve)));
+    const { el } = await mountApp({ markCollected }, { reload });
+    emit(await toCounter(el), "hand-over-order", { id: "wo-1" });
+    await flush(el);
+    updated();
+    await flush(el);
+    await userEvent.click(updateBar(el)!.shadowRoot!.querySelector("button")!);
+    await flush(el);
+    expect(reload).not.toHaveBeenCalled();
+    el.remove();
+    answer();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(reload).not.toHaveBeenCalled();
   });
 
   it("reloads an idle till once a hand-over that was out has been answered", async () => {

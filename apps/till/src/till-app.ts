@@ -1239,13 +1239,14 @@ export class TillApp extends LitElement {
       this.leave.coordinator.isDirty() ||
       this.#unansweredPayment !== null ||
       this.#unansweredRefund !== null ||
+      this.transferLocalCopies.length > 0 ||
       this.#requestsOut()
     );
   }
 
   /** Even a reload the operator asked for waits for these; their screens may already be gone. */
   #requestsOut(): boolean {
-    return this.submitting || this.#cardAttemptsRunning > 0 || this.#reloadHolds > 0;
+    return this.#counterOrderInFlight() || this.#cardAttemptsRunning > 0 || this.#reloadHolds > 0;
   }
 
   #reloadAsked = false;
@@ -1270,7 +1271,8 @@ export class TillApp extends LitElement {
 
   /** Requests out that a reload would cut off, so one the server never received would be lost:
    * every resend-until-answered request, a whole bill payment or refund (`#unansweredPayment` and
-   * `#unansweredRefund` are set only once it ends), and a sign-out's save of the draft. */
+   * `#unansweredRefund` are set only once it ends), a prep-queue Collect, and a sign-out's save of
+   * the draft. */
   #reloadHolds = 0;
 
   async #holdingReload<T>(work: () => Promise<T>): Promise<T> {
@@ -1552,6 +1554,7 @@ export class TillApp extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    this.#reloadAsked = false;
     this.#stopDepartmentTransfers();
     this.#partylessScope?.dispose();
     this.#partylessScope = undefined;
@@ -4073,7 +4076,7 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     let collected = false;
     try {
-      await this.api.markCollected(orderId);
+      await this.#holdingReload(() => this.api.markCollected(orderId));
       collected = true;
     } catch {
       if (session !== this.#operatorSession) return;

@@ -414,17 +414,19 @@ that ends. It then reloads by itself only when `#busyForReload()` is false, and 
 same bar. It counts as busy when
 someone is signed in (`operatorName`), a sign-in is still loading (`#loginPending`), the basket or
 the table-free draft holds a line (`#store`, `#partylessDraft`), any draft is unsaved
-(`leave.coordinator.isDirty()`), a payment, a collection or a receipt-language save is being sent
-(`submitting`; holding and placing an order, `parking` and `placing`, are not counted), a card attempt
-is running (`#cardAttemptsRunning`), a bill payment or refund kept its send for a resend that must
+(`leave.coordinator.isDirty()`), a department transfer's local copy waits to be dismissed
+(`transferLocalCopies`), a payment, a collection or a receipt-language save is being sent
+(`submitting`), an order is being held or placed, the receipt-language save each makes included
+(`parking`, `placing`), a card attempt is running (`#cardAttemptsRunning`), a bill payment or refund kept its send for a resend that must
 reuse its id — after no answer, or after a refusal that keeps the id (`#unansweredPayment`,
 `#unansweredRefund`), or a request is held by `#holdingReload`: every request sent again until
 answered (`#resend`, around `resendUnanswered`, and the station screen's dish move, which it
-announces with a `hold-reload` event), a whole bill payment or refund, and a sign-out's save of
-the draft. A signed-in person counts because a reload signs them out. The bar's Reload
-waits only for requests still out (`#requestsOut()`: `submitting`, a card attempt, or a held
-request), then reloads once, unless the operator touches or types on the till, or the box stops
-serving it, first; then the press is dropped and the bar stays to be pressed again.
+announces with a `hold-reload` event), a whole bill payment or refund, a prep-queue Collect, and
+a sign-out's save of the draft. A signed-in person counts because a reload signs them out. The bar's Reload
+waits only for requests still out (`#requestsOut()`: `submitting`, `parking`, `placing`, a card
+attempt, or a held request), then reloads once, unless the operator touches or types on the till,
+or the box stops serving it, first; then the press is dropped and the bar stays to be pressed
+again. A till taken off the page drops the press.
 
 Guards: `packages/diagnostics/src/build-watch.test.ts`, `apps/server/src/build-header.test.ts`, the
 build-header lines in `apps/server/src/boot.test.ts`, the "build updates" cases in

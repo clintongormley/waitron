@@ -3860,6 +3860,32 @@ describe("till-app", () => {
       expect(languageButton(el)!.textContent!.trim()).toBe("Recibo: Español");
     });
 
+    it("waits for a held order's chosen language to be saved before a pressed Reload reloads", async () => {
+      const reload = vi.fn();
+      let answer!: (value: unknown) => void;
+      const { el, c } = await counterWith({
+        setOrderReceiptLanguage: vi.fn(() => new Promise((resolve) => (answer = resolve))),
+      });
+      el.reload = reload;
+      await choose(el, "es-ES");
+      emit(c, "park-order", {});
+      await flush(el);
+      expect(currentApi.parkOrder).toHaveBeenCalledOnce();
+      expect(currentApi.setOrderReceiptLanguage).toHaveBeenCalledOnce();
+      window.dispatchEvent(new Event(BUILD_CHANGED_EVENT));
+      await flush(el);
+      await userEvent.click(
+        el
+          .shadowRoot!.querySelector("wt-banner[data-test=update-bar]")!
+          .shadowRoot!.querySelector("button")!,
+      );
+      await flush(el);
+      expect(reload).not.toHaveBeenCalled();
+      answer({ revision: 1 });
+      await flush(el);
+      expect(reload).toHaveBeenCalledOnce();
+    });
+
     it("holds the order, and says so, when its chosen language could not be saved", async () => {
       const { el, c } = await counterWith({
         setOrderReceiptLanguage: vi.fn().mockRejectedValue({ code: "server.internal" }),
