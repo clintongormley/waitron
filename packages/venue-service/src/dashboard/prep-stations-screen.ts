@@ -1377,7 +1377,7 @@ export class PrepStationsScreen extends LitElement {
               : "prep.preview_group_many_during",
           {
             row: this.#rowName(row),
-            zone: move.zoneName ?? t("prep.any_zone"),
+            zone: move.zoneName ?? t("routing.every_zone"),
             from: this.#moveFrom(move),
             to: this.#moveTo(move),
             count: String(products.size),
@@ -1426,7 +1426,7 @@ export class PrepStationsScreen extends LitElement {
                           (move) =>
                             html`<tr>
                               <td>${this.#moveName(move)}</td>
-                              <td>${move.zoneName ?? t("prep.any_zone")}</td>
+                              <td>${move.zoneName ?? t("routing.every_zone")}</td>
                               <td>${this.#moveFrom(move)}</td>
                               <td>${this.#moveTo(move)}</td>
                             </tr>`,

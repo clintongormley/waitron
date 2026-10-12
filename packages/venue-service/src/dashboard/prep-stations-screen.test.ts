@@ -3237,7 +3237,7 @@ describe("Routing grid", () => {
     await chooseCell(el, "c:food", "every", "No preparation");
     const rows = [...el.shadowRoot!.querySelectorAll('[data-test="routing-preview"] tbody tr')];
     expect(rows.map((row) => row.textContent!.replace(/\s+/g, " ").trim())).toEqual([
-      "Bread Any service zone No station No preparation",
+      "Bread Every zone No station No preparation",
       "Bread Terrace Bar unknown",
       "Bread Terrace Bar No replacement",
     ]);
@@ -3321,11 +3321,32 @@ describe("Routing grid", () => {
         move("Cake", { zoneId: null, zoneName: null, from: null }),
       ]);
       expect(sentences(preview)).toEqual([
-        "Food, Any service zone: 2 products move from No station to Bar.",
+        "Food, Every zone: 2 products move from No station to Bar.",
         "Food, Patio: 1 product moves from Kitchen to No replacement.",
         "Food, Terrace: 1 product moves from Kitchen to Bar.",
         "Food, Terrace: 1 product moves from Kitchen to Bar during Lunch.",
       ]);
+    });
+
+    it("names a move with no zone the way the first sentence does, in English and Spanish", async () => {
+      const noZone = [move("Bread", { zoneId: null, zoneName: null })];
+      const zoneCells = (preview: Element) =>
+        [...preview.querySelectorAll("tbody tr")].map((row) =>
+          row.querySelectorAll("td")[1]!.textContent!.trim(),
+        );
+      setLocale("en");
+      const en = await openNotice(noZone);
+      expect(sentences(en.preview)).toEqual([
+        "Food, Every zone: 1 product moves from Kitchen to Bar.",
+      ]);
+      expect(zoneCells(en.preview)).toEqual(["Every zone"]);
+      en.el.remove();
+      setLocale("es");
+      const es = await openNotice(noZone);
+      expect(sentences(es.preview)).toEqual([
+        "Food, Todas las zonas: 1 producto pasa de Kitchen a Bar.",
+      ]);
+      expect(zoneCells(es.preview)).toEqual(["Todas las zonas"]);
     });
 
     it("an extra counts once in its group whatever dishes carry it", async () => {
