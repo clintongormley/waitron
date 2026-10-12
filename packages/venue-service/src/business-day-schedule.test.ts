@@ -139,6 +139,45 @@ async function fixture(
   });
 }
 const range = (startsAt: string, endsAt: string) => ({ startsAt, endsAt });
+/** The fixture's venue with its hours written through the public week writers on one weekday,
+ *  for the cases that read the sale path. */
+async function writtenFixture(
+  ranges: { startsAt: string; endsAt: string }[],
+  options: Parameters<typeof fixture>[1] & { weekday: number; dayCutover?: string },
+) {
+  const v = await fixture([], options);
+  await withTransaction(suite.db, async (tx) => {
+    if (options.dayCutover !== undefined)
+      await tx
+        .update(locations)
+        .set({ dayCutover: `${options.dayCutover}:00` })
+        .where(eq(locations.id, v.cfg.locationId));
+    const on = <T>(entries: T[]) =>
+      Array.from({ length: 7 }, (_, weekday) => (weekday === options.weekday ? entries : []));
+    if (options.zone)
+      await replaceZoneClosedWeek(
+        tx,
+        v.cfg,
+        v.zoneId!,
+        on(ranges).map((entries, weekday) => ({ weekday, ranges: entries })),
+        0,
+        at,
+      );
+    else
+      await replaceMenuWeek(
+        tx,
+        v.cfg,
+        v.departmentId,
+        on(ranges.map((r) => ({ periodId: v.periodId, ...r }))).map((slots, weekday) => ({
+          weekday,
+          slots,
+        })),
+        at,
+        0,
+      );
+  });
+  return v;
+}
 const check = (v: Awaited<ReturnType<typeof fixture>>, time: string) =>
   withTransaction(suite.db, (tx) =>
     assertBusinessDayClockChange(tx, v.cfg, before, candidate(time), E),
@@ -290,19 +329,7 @@ describe("service boundaries remain chronological", () => {
     ["2026-10-25T00:45:00Z", "2026-10-25T01:30:00Z"],
     ["2026-03-29T01:10:00Z", "2026-03-29T01:30:00Z"],
   ])("keeps an initial 02:30 all-day period running at %s", async (instant, end) => {
-    const v = await fixture([range("02:30", "02:30")]);
-    await withTransaction(suite.db, (tx) =>
-      tx
-        .update(locations)
-        .set({ dayCutover: "02:30:00" })
-        .where(eq(locations.id, v.cfg.locationId)),
-    );
-    await withTransaction(suite.db, (tx) =>
-      tx
-        .update(menuDayTimetables)
-        .set({ weekday: 6 })
-        .where(eq(menuDayTimetables.departmentId, v.departmentId)),
-    );
+    const v = await writtenFixture([range("02:30", "02:30")], { weekday: 6, dayCutover: "02:30" });
     const read = (time: string) =>
       withTransaction(suite.db, (tx) =>
         resolveDepartmentService(tx, v.cfg, v.departmentId, new Date(time)),
@@ -775,16 +802,14 @@ describe("dated runtime service and yesterday sending", () => {
         effectiveBusinessDay: E,
         dayCutover: `${time}:00`,
       });
-      await tx
-        .update(menuDayTimetables)
-        .set({ weekday: 2 })
-        .where(eq(menuDayTimetables.departmentId, v.departmentId));
     });
   }
   it.each(["07:00", "03:00"])(
     "does not replay a completed service across the %s boundary",
     async (time) => {
-      const v = await fixture([range("22:00", time === "07:00" ? "04:30" : "02:30")]);
+      const v = await writtenFixture([range("22:00", time === "07:00" ? "04:30" : "02:30")], {
+        weekday: 2,
+      });
       await timeline(v, time);
       const read = (instant: string) =>
         withTransaction(suite.db, (tx) =>
@@ -810,7 +835,7 @@ describe("dated runtime service and yesterday sending", () => {
     },
   );
   it("uses yesterday's own 05:00 start for positive grace after the 07:00 boundary", async () => {
-    const v = await fixture([range("22:00", "04:30")], { offset: 180 });
+    const v = await writtenFixture([range("22:00", "04:30")], { offset: 180, weekday: 2 });
     await timeline(v, "07:00");
     const read = (instant: string) =>
       withTransaction(suite.db, (tx) =>
@@ -822,7 +847,7 @@ describe("dated runtime service and yesterday sending", () => {
     expect((await read("2026-11-04T06:30:00Z")).sendableMenuIds).toEqual([]);
   });
   it("retains yesterday's negative offset and the exact early sending cutoff", async () => {
-    const v = await fixture([range("22:00", "04:30")], { offset: -60 });
+    const v = await writtenFixture([range("22:00", "04:30")], { offset: -60, weekday: 2 });
     await timeline(v, "07:00");
     const read = (instant: string) =>
       withTransaction(suite.db, (tx) =>
@@ -842,16 +867,10 @@ it.each([
   ["2026-10-25T00:45:00Z", "2026-10-25T01:30:00Z"],
   ["2026-03-29T01:10:00Z", "2026-03-29T01:30:00Z"],
 ])("keeps zone closure through the actual DST boundary at %s", async (instant, boundary) => {
-  const v = await fixture([range("02:30", "02:30")], { zone: true });
-  await withTransaction(suite.db, async (tx) => {
-    await tx
-      .update(locations)
-      .set({ dayCutover: "02:30:00" })
-      .where(eq(locations.id, v.cfg.locationId));
-    await tx
-      .update(zoneClosedTimes)
-      .set({ weekday: 6 })
-      .where(eq(zoneClosedTimes.zoneId, v.zoneId!));
+  const v = await writtenFixture([range("02:30", "02:30")], {
+    zone: true,
+    weekday: 6,
+    dayCutover: "02:30",
   });
   const read = (time: string) =>
     withTransaction(suite.db, (tx) => readZoneKeepOpenState(tx, v.cfg, v.zoneId!, new Date(time)));
