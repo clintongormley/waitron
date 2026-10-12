@@ -472,7 +472,7 @@ export class TillFloorScreen extends LitElement {
   @state() private details: { tableId: string } | null = null;
   /** The floor's last refusal, in its code's words; cleared by the next drop or a change of zone. */
   @state() private refusal: string | null = null;
-  /** A merge the server would not size, or Change seats, waiting for the seats prompt. */
+  /** A merge's seats, or Change seats, waiting for the seats prompt. */
   @state() private askingSeats: {
     heading: string;
     seats: number | null;

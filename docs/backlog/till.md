@@ -256,7 +256,7 @@ screen is designed.
 
 ## A503. Joined tables replace saved joins
 
-**A503 (owner, 2026-10-11) — OPEN. Needs a short design before a plan.** It changes what is stored
+**A503 (owner, 2026-10-11) — OPEN.** It changes what is stored
 for joins and how the till merges and splits tables. Until A503 part 1 a saved join was a seat
 count for tables each placed on their own; part 1 removed saved joins and their copy, and a merge's
 seats now come only from the waiter, whose seats prompt opens empty
@@ -271,11 +271,7 @@ seats now come only from the waiter, whose seats prompt opens empty
   tables in number order, as the tables list does.
 - **On the till a joined table can be split.** Its parts go side by side inside the outline the
   joined table took up, each with its own seats.
-- **Two separate tables dragged together during service ask for the seat count.** Adding the two
-  tables' seats is wrong: two four-seat tables pushed together seat six.
-- Saved joins and the editor's Joins section go. Before go-live no data needs carrying over. "A
-  saved join's seats have no upper bound" (Small floor-plan refusals, below) goes with them; a
-  joined table's seats need their own bound.
+- A joined table's seats need their own upper bound.
 
 ## A504. Floor plans published for a future date, and one per service period
 
