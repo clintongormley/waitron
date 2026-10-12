@@ -155,6 +155,37 @@ describe("mutateFiles", () => {
     const dir = fixturePackage(["src/a.ts"]);
     expect(mutateFiles(dir, ["!src/b.ts"])).toEqual([]);
   });
+
+  // Stryker 10.0.0's ProjectReader applies the list in order: a later positive pattern puts back
+  // what an earlier `!` took out.
+  it("applies the patterns in order, so a later positive pattern re-includes an excluded file", () => {
+    const dir = fixturePackage(["src/a.ts", "src/b.ts", "src/deep/x-one.ts", "src/x-two.ts"]);
+    expect(mutateFiles(dir, ["src/**/*.ts", "!src/b.ts", "src/b.ts"])).toEqual([
+      "src/a.ts",
+      "src/b.ts",
+      "src/deep/x-one.ts",
+      "src/x-two.ts",
+    ]);
+    expect(mutateFiles(dir, ["!src/b.ts", "src/**/*.ts"])).toContain("src/b.ts");
+    expect(mutateFiles(dir, ["src/**/*.ts", "!src/**/x-*.ts", "src/deep/x-one.ts"])).toEqual([
+      "src/a.ts",
+      "src/b.ts",
+      "src/deep/x-one.ts",
+    ]);
+  });
+
+  it("applies the patterns in order, so an exclusion after an inclusion still excludes", () => {
+    const dir = fixturePackage(["src/a.ts", "src/b.ts", "src/deep/x-one.ts", "src/x-two.ts"]);
+    expect(mutateFiles(dir, ["src/**/*.ts", "src/b.ts", "!src/b.ts"])).toEqual([
+      "src/a.ts",
+      "src/deep/x-one.ts",
+      "src/x-two.ts",
+    ]);
+    expect(mutateFiles(dir, ["src/deep/x-one.ts", "src/**/*.ts", "!src/**/x-*.ts"])).toEqual([
+      "src/a.ts",
+      "src/b.ts",
+    ]);
+  });
 });
 
 describe("the selection follows each package's own stryker config", () => {
@@ -301,31 +332,44 @@ describe("shardFiles", () => {
   });
 });
 
-for (const [pkg, heavy, total] of [
-  ["db", { "src/schema/sales.ts": 3 }, 10],
-  [
-    "ui",
-    {
-      "src/components/wt-combobox.ts": 4,
-      "src/components/wt-data-table.ts": 12,
-      "src/components/wt-dialog.ts": 6,
-    },
-    30,
-  ],
-]) {
-  describe(`the CLI over the real @waitron/${pkg} tree at the workflow's ${total} shards`, () => {
+/**
+ * The length of the `shard: [...]` matrix list in mutation.yml's `mutation-<pkg>` job, which is
+ * the `strategy.job-total` the job hands the sharder as its total.
+ */
+function workflowShardCount(pkg) {
+  const workflow = readFileSync(join(root, ".github", "workflows", "mutation.yml"), "utf8");
+  const start = workflow.indexOf(`\n  mutation-${pkg}:\n`);
+  expect(start, `no \`mutation-${pkg}\` job in mutation.yml`).toBeGreaterThan(-1);
+  const rest = workflow.slice(start + 1);
+  const end = rest.slice(1).search(/\n {2}\S/);
+  const job = end === -1 ? rest : rest.slice(0, end + 1);
+  const list = /^ {8}shard:\s*\[([^\]]*)\]/m.exec(job);
+  expect(list, `no inline \`shard:\` list in \`mutation-${pkg}\``).not.toBeNull();
+  return list[1].split(",").filter((entry) => entry.trim() !== "").length;
+}
+
+for (const pkg of ["db", "ui"]) {
+  describe(`the CLI over the real @waitron/${pkg} tree at the workflow's shard count`, () => {
+    const heavy = HEAVY_FILES[pkg];
     const fileOf = (entry) => entry.replace(/:\d+-\d+$/, "");
     const isRange = (entry) => /:\d+-\d+$/.test(entry);
-    const config = JSON.parse(readFileSync(join(packageDir(pkg), "stryker.config.json"), "utf8"));
     const rangeCount = Object.values(heavy).reduce((sum, parts) => sum + parts, 0);
-    const shards = Array.from({ length: total }, (_, i) => shardFiles(i + 1, total, pkg));
+    let shards;
+    const shardsOf = () => {
+      if (shards === undefined) {
+        const total = workflowShardCount(pkg);
+        shards = Array.from({ length: total }, (_, i) => shardFiles(i + 1, total, pkg));
+      }
+      return shards;
+    };
 
     it("fills every shard", () => {
-      expect(shards.filter((shard) => shard.length === 0)).toEqual([]);
+      expect(shardsOf().filter((shard) => shard.length === 0)).toEqual([]);
     });
 
     it("covers every mutate-eligible file exactly once — whole, or as ranges for a split file", () => {
-      const collected = shards.flat();
+      const config = JSON.parse(readFileSync(join(packageDir(pkg), "stryker.config.json"), "utf8"));
+      const collected = shardsOf().flat();
       expect([...new Set(collected.map(fileOf))].sort()).toEqual(
         mutateFiles(packageDir(pkg), config.mutate),
       );
@@ -338,13 +382,13 @@ for (const [pkg, heavy, total] of [
     });
 
     it("gives each heavy range a shard of its own", () => {
-      const withRange = shards.filter((shard) => shard.some(isRange));
+      const withRange = shardsOf().filter((shard) => shard.some(isRange));
       expect(withRange).toHaveLength(rangeCount);
       for (const shard of withRange) expect(shard).toHaveLength(1);
     });
 
     it("emits src/-relative .ts paths (optionally line-ranged) a stryker run can consume", () => {
-      const files = shards.flat();
+      const files = shardsOf().flat();
       expect(files.every((p) => /^src\/.+\.ts(:\d+-\d+)?$/.test(p))).toBe(true);
       expect(files.some((p) => p.includes(".test.ts"))).toBe(false);
     });
@@ -383,7 +427,7 @@ describe("the CLI rejects bad input loudly", () => {
     // are slices guarantees the HIGHEST-index shard is empty (greedy packs slices into the
     // lowest-index shards), so requesting it must fail loudly, never print an empty --mutate list
     // that would make stryker a confusing no-op.
-    const ranges = 3;
+    const ranges = Object.values(HEAVY_FILES.db).reduce((sum, parts) => sum + parts, 0);
     const slices = shardFiles(ranges + 1, ranges + 1).length + ranges;
     const n = String(slices + 1);
     const r = run("db", n, n);
