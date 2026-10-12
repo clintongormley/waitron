@@ -1905,11 +1905,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 - Per-line Send and Change have no guard against a second press while the first is running (Cancel
   has one since B11a; the group commands have one). Left open by service Task 4 (#748).
 
-- **Splitting a held line's quantity on the till takes one request per unit.** A refusal part-way
-  leaves the units already split. **Next action:** a server command that splits a line into single
-  units in one transaction. Left open by the service, ordering and billing plan.
-  [Detail](backlog/till.md#splitting-a-held-lines-quantity-on-the-till-takes-one-request-per-unit)
-
 - "Ready" and "Fired N min ago" on the table screen are the plan's default, not an owner decision.
   Left open by service Task 5 (#750, kitchen, pass and table screen by group).
 

@@ -77,7 +77,7 @@ import {
  * | POST /api/tables/:id/today/move, /rotate, /take-off, /put-back, /place, /seats, /back, /merge, /split; POST /api/zones/:id/today/reset | take-orders | take-orders |
  * | POST /api/parties/:id/finish, /bill-request, /move, /join, /split-table | take-orders  | take-orders           |
  * | PUT /api/parties/:id/name                                 | take-orders                | take-orders           |
- * | POST /api/parties/:id/groups, /groups/move; PUT /groups/order | take-orders            | take-orders           |
+ * | POST /api/parties/:id/groups, /groups/move, /groups/split-line; PUT /groups/order | take-orders            | take-orders           |
  * | POST /api/parties/:id/groups/:gid/fire, /snooze, /unsnooze | take-orders               | take-orders           |
  * | POST /api/parties/:id/groups/:gid/ready                   | prepare-orders             | prepare-orders        |
  * | POST /api/parties/:id/groups/:gid/away, /served           | hand-over-orders           | hand-over-orders      |
@@ -389,6 +389,7 @@ const ROUTES: readonly Row[] = [
   ordering("POST", `/api/parties/${id}/split-table`),
   ordering("POST", `/api/parties/${id}/groups`),
   ordering("POST", `/api/parties/${id}/groups/move`),
+  ordering("POST", `/api/parties/${id}/groups/split-line`),
   ordering("PUT", `/api/parties/${id}/groups/order`),
   ordering("POST", `/api/parties/${id}/groups/${id}/fire`),
   ordering("POST", `/api/parties/${id}/groups/${id}/snooze`),

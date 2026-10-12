@@ -122,7 +122,7 @@ import { offerProducts } from "./testing/zone-offers.js";
  * | POST /api/parties/:id/groups/:gid/fire|ready|away|served|snooze|unsnooze | party | refuses POST /api/parties/:id/groups/:gid/<verb>  |
  * | POST /api/parties/:id/served, /unserved                 | party                  | refuses POST /api/parties/:id/<served|unserved>      |
  * | PUT  /api/parties/:id/groups/order                      | party                  | refuses PUT /api/parties/:id/groups/order            |
- * | POST /api/parties/:id/groups/move                       | party                  | refuses POST /api/parties/:id/groups/move            |
+ * | POST /api/parties/:id/groups/move, /groups/split-line   | party                  | refuses POST /api/parties/:id/groups/<move|split-line> |
  * | PUT  /api/parties/:id/drafts                            | party                  | refuses PUT /api/parties/:id/drafts                  |
  * | POST /api/parties/:id/drafts/:did/take-over, /submit    | party                  | refuses POST /api/parties/:id/drafts/:did/<verb>     |
  * | POST /api/parties/:id/unpaid-departure                  | party                  | refuses POST /api/parties/:id/unpaid-departure       |
@@ -863,6 +863,13 @@ const ROUTES: readonly Row[] = [
     "PUT",
     (x) => `/api/parties/${x.deliParty}/groups/order`,
     () => ({ submissionId: randomUUID(), expectedPartyRevision: 0, heldGroupIds: [] }),
+    deliTableZone,
+  ],
+  [
+    "POST /api/parties/:id/groups/split-line",
+    "POST",
+    (x) => `/api/parties/${x.deliParty}/groups/split-line`,
+    () => ({ submissionId: randomUUID(), expectedPartyRevision: 0, lineId: randomUUID() }),
     deliTableZone,
   ],
   [

@@ -40,6 +40,7 @@ import {
   type RoutingOnce,
   refusePaymentInFlight,
   splitLinesWithinOrder,
+  splitUnitsWithinOrder,
   type TabRoundLine,
 } from "./working-order.js";
 import "./errors.js";
@@ -758,6 +759,61 @@ export async function moveLinesToGroup(
         detail: { moves, from: [...sources] },
       });
       await removeEmptiedHeldGroups(tx, partyId, [...sources], args.operatorId);
+      return { revision };
+    },
+    cfg.madeHereSink,
+  );
+}
+
+export async function splitHeldLineIntoUnits(
+  tx: Transaction,
+  cfg: TillConfig,
+  partyId: string,
+  lineId: string,
+  args: PartyCommandArgs,
+): Promise<{ revision: number }> {
+  return runServiceCommand(
+    tx,
+    { kind: "party", partyId },
+    args.submissionId,
+    "group.split_line",
+    { partyId, lineId, operatorId: args.operatorId },
+    async () => {
+      const revision = await checkAndBumpParty(tx, partyId, args.expectedPartyRevision, "open");
+      const [line] = await tx
+        .select({
+          workingOrderId: workingOrderLines.workingOrderId,
+          lineNo: workingOrderLines.lineNo,
+          groupId: workingOrderLines.groupId,
+          groupState: orderGroups.state,
+          billStatus: workingOrders.status,
+        })
+        .from(workingOrderLines)
+        .innerJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
+        .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
+        .where(
+          and(
+            eq(workingOrderLines.id, lineId),
+            isNull(workingOrderLines.parentLineId),
+            eq(orderGroups.partyId, partyId),
+            ne(orderGroups.state, "removed"),
+          ),
+        );
+      if (line === undefined) throw new AppError("group.not_found", { lineId });
+      if (line.groupState !== "held")
+        throw new AppError("group.not_held", { groupId: line.groupId! });
+      if (line.billStatus !== "open")
+        throw new AppError("working_order.not_open", { workingOrderId: line.workingOrderId });
+      await refusePaymentInFlight(tx, [line.workingOrderId]);
+      await splitUnitsWithinOrder(tx, cfg, line.workingOrderId, line.lineNo);
+      await bumpRevision(tx, [line.workingOrderId]);
+      await recordGroupEvent(tx, {
+        partyId,
+        groupId: line.groupId!,
+        kind: "lines_moved",
+        actorId: args.operatorId,
+        detail: { splitLineId: lineId },
+      });
       return { revision };
     },
     cfg.madeHereSink,

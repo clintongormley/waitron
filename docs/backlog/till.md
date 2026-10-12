@@ -457,15 +457,6 @@ To decide before building:
   3's plan makes a kitchen display's "Close for today" take a manager's PIN because nobody is
   signed in; a signed-in manager could skip it.
 
-## Splitting a held line's quantity on the till takes one request per unit
-
-- **Splitting a held line's quantity on the till takes one request per unit.** Splitting a
-  quantity of N sends N−1 move requests in turn (`#onSplitGroupLine`,
-  `apps/till/src/till-app.ts`), because the move route refuses a request naming the same line
-  twice (`moveLinesToGroup`, `apps/server/src/order-groups.ts`). A refusal part-way leaves the
-  units already split. **Next action:** a server command that splits a line into single units in
-  one transaction.
-
 ## Task 7 (#789, each person's draft kept on the server)
 
 - **Task 7 (#789, each person's draft kept on the server).** Left open:

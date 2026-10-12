@@ -1509,6 +1509,22 @@ describe("till-table-order-screen", () => {
       expect(moves).toEqual([]);
     });
 
+    it("a held top-level line without a recorded unit precision has no Split quantity action", async () => {
+      const unknown = dishLine("l-unknown", 12, "Unknown unit", "2.000", "g4", {
+        unitPrecision: null,
+      });
+      const { el } = await mountGroups({
+        lines: [unknown],
+        groups: groups.map((group) =>
+          group.id === "g4" ? { ...group, lineIds: [unknown.id] } : group,
+        ),
+      });
+      expect(el.shadowRoot!.querySelector('[data-group-line="l-unknown"]')!.textContent).toContain(
+        "Unknown unit ×2",
+      );
+      expect(el.shadowRoot!.querySelector('[data-split-group-line="l-unknown"]')).toBeNull();
+    });
+
     it("offers Split quantity only on a held dish sold by the unit, of more than one, with no extras", async () => {
       const weighed = dishLine("l-ham", 7, "Ham", "1.500", "g5", { unitPrecision: 3 });
       const burger = dishLine("l-burger", 8, "Burger", "2.000", "g5");

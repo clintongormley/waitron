@@ -3689,6 +3689,21 @@ describe("TillApi: a seated party", () => {
     );
   });
 
+  it("splitHeldLineIntoUnits sends one revision-checked command for the whole stored line", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ revision: 11 }));
+    const api = new TillApi("", fetchStub);
+    await expect(
+      api.splitHeldLineIntoUnits("v1", "l2", {
+        submissionId: "split-1",
+        expectedPartyRevision: 10,
+      }),
+    ).resolves.toEqual({ revision: 11 });
+    expect(fetchStub).toHaveBeenCalledExactlyOnceWith(
+      "/api/parties/v1/groups/split-line",
+      post({ submissionId: "split-1", expectedPartyRevision: 10, lineId: "l2" }),
+    );
+  });
+
   it("moveLinesToGroup POSTs the moves and the target group, or a new one, and returns the party's revision", async () => {
     const fetchStub = vi
       .fn()
