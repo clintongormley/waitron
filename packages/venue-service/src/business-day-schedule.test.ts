@@ -639,14 +639,14 @@ describe("schedule authoring retains date-specific starts", () => {
     ).resolves.toBeUndefined();
   });
   it("checks annual menu ranges against every retained start", async () => {
-    const v = await fixture([], { date: "2026-12-25", annual: true });
+    const v = await fixture([]);
     await activated(v);
     await expect(
       paintDate(v, "menu", "2026-12-25", [range("07:00", "07:00")], after, 1, true),
     ).rejects.toMatchObject({ code: "special_day.invalid", params: { field: "paint.0.ranges" } });
   });
   it("checks annual zone ranges against every retained start", async () => {
-    const v = await fixture([], { zone: true, date: "2026-12-25", annual: true });
+    const v = await fixture([], { zone: true });
     await activated(v);
     await expect(
       paintDate(v, "zone", "2026-12-25", [range("07:00", "07:00")], after, 1, true),
@@ -720,8 +720,10 @@ describe("clock compatibility resolves neighboring named-day substitutions", () 
   it.each([
     [true, false],
     [false, true],
-  ])("honors an empty override or closed neighbor (%s,%s)", async (ownHours, closed) => {
-    await expect(check(await neighbor(ownHours, closed), "07:00")).resolves.toBeUndefined();
+  ])("honors an empty override or closed neighbor (%s,%s)", async (emptyOverride, closedAllDay) => {
+    await expect(
+      check(await neighbor(emptyOverride, closedAllDay), "07:00"),
+    ).resolves.toBeUndefined();
   });
   it("includes the next occurrence of an annual override beside a normal week", async () => {
     const v = await fixture([range("22:00", "04:30")], { offset: 180 });
@@ -1195,37 +1197,12 @@ describe("clock compatibility reads each day's neighbours from its own season", 
 });
 
 describe("clock compatibility reads special-day paint", () => {
-  /** Raw rows, bypassing the special-day writer's checks. */
   async function specialDay(
     v: Awaited<ReturnType<typeof fixture>>,
     date: string,
     ranges: { periodId: string | null; startsAt: string; endsAt: string }[],
   ) {
-    return withTransaction(suite.db, async (tx) => {
-      const specialDayId = randomUUID(),
-        dateId = randomUUID(),
-        dayId = randomUUID();
-      await tx
-        .insert(specialDays)
-        .values({ id: specialDayId, locationId: v.cfg.locationId, name: "Fiesta" });
-      await tx
-        .insert(specialDayDates)
-        .values({ id: dateId, specialDayId, locationId: v.cfg.locationId, date });
-      await tx
-        .insert(departmentDays)
-        .values({ id: dayId, departmentId: v.departmentId, specialDayDateId: dateId });
-      if (ranges.length > 0)
-        await tx.insert(departmentDayRanges).values(
-          ranges.map((r) => ({
-            dayId,
-            departmentId: v.departmentId,
-            periodId: r.periodId,
-            startsAt: `${r.startsAt}:00`,
-            endsAt: `${r.endsAt}:00`,
-          })),
-        );
-      return specialDayId;
-    });
+    return withTransaction(suite.db, (tx) => paintedDay(tx, v, { name: "Fiesta", date, ranges }));
   }
   const conflicts = (v: Awaited<ReturnType<typeof fixture>>, time: string) =>
     withTransaction(suite.db, (tx) =>
