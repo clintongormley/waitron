@@ -208,6 +208,13 @@ export class FloorPlanEditor extends LitElement {
       header.narrow wt-button[data-action="load-newer"] {
         flex-basis: 100%;
       }
+      .history {
+        display: inline-flex;
+        gap: var(--wt-space-2);
+      }
+      header:not(.narrow) a.close {
+        margin-inline-start: var(--wt-space-4);
+      }
       /* Room on a phone for fonts wider than macOS's system font. */
       header.narrow wt-button:not([shape="round"])::part(button),
       header.narrow a.close {
@@ -1049,6 +1056,8 @@ export class FloorPlanEditor extends LitElement {
   override render() {
     const save = saveActionState(this.#scope);
     const history = this.#history;
+    // On a phone an empty cancel slot would still take a gap the row lacks room for.
+    const historySlot = this.narrow ? "cancel" : "secondary";
     return html`
       <wt-modal
         size="full"
@@ -1071,9 +1080,6 @@ export class FloorPlanEditor extends LitElement {
               }
             </div>
             <wt-form-actions .error=${this.message === null ? "" : this.message.text()}>
-              <a slot="cancel" class="close" data-action="close" href=${closeHref(this.back)}
-                >${t("action.cancel")}</a
-              >
               ${
                 this.outOfDate && !this.saving
                   ? html`<wt-button
@@ -1085,26 +1091,29 @@ export class FloorPlanEditor extends LitElement {
                     >`
                   : nothing
               }
-              <wt-button
-                slot="secondary"
-                data-action="undo"
-                shape="round"
-                variant="secondary"
-                aria-label=${t("floor_plan_editor.undo")}
-                ?disabled=${!history?.canUndo}
-                @click=${() => this.#step(history?.undo())}
-                ><wt-icon name="undo"></wt-icon
-              ></wt-button>
-              <wt-button
-                slot="secondary"
-                data-action="redo"
-                shape="round"
-                variant="secondary"
-                aria-label=${t("floor_plan_editor.redo")}
-                ?disabled=${!history?.canRedo}
-                @click=${() => this.#step(history?.redo())}
-                ><wt-icon name="redo"></wt-icon
-              ></wt-button>
+              <span slot=${historySlot} class="history">
+                <wt-button
+                  data-action="undo"
+                  shape="round"
+                  variant="secondary"
+                  aria-label=${t("floor_plan_editor.undo")}
+                  ?disabled=${!history?.canUndo}
+                  @click=${() => this.#step(history?.undo())}
+                  ><wt-icon name="undo"></wt-icon
+                ></wt-button>
+                <wt-button
+                  data-action="redo"
+                  shape="round"
+                  variant="secondary"
+                  aria-label=${t("floor_plan_editor.redo")}
+                  ?disabled=${!history?.canRedo}
+                  @click=${() => this.#step(history?.redo())}
+                  ><wt-icon name="redo"></wt-icon
+                ></wt-button>
+              </span>
+              <a slot="secondary" class="close" data-action="close" href=${closeHref(this.back)}
+                >${t("action.cancel")}</a
+              >
               <wt-button
                 data-action="save"
                 variant=${save.variant}

@@ -2616,7 +2616,7 @@ holding Account settings and Log out — at the banner's trailing (right-hand in
 edge. Do not show it before authentication. Below the drawer breakpoint (`48rem`) the banner takes
 two rows: the menu toggle, the lockup and the menus share the first, with the lockup shrinking when
 space runs short, and the legal name and Live mode pill take the second in full. The floor plan
-editor covers the banner and the menu with its full-window modal; its Cancel, Undo, Redo and Save
+editor covers the banner and the menu with its full-window modal; its Undo, Redo, Cancel and Save
 keep one row down to 320 px (A502). The language chooser sits at the trailing
 edge too, before the alerts bell and the account menu, signed in and signed out (see "Navigation and language controls"). In Demo and Preparation, `wt-demo-bar` shows the mode,
 the current dashboard page, a link to the device page, and an "Email inbox" link to `/manage/email`
@@ -3864,7 +3864,8 @@ show a day count. A week without closed ranges says the zone opens with its depa
 exceptions stay in Opening hours.
 Under it, a zone whose master floor plan has placed tables shows a small read-only preview
 (`wt-floor-plan-preview`, refreshed live) above Edit floor plan, which opens the zone's floor plan
-editor, whose Cancel (or Escape) returns to the zone. The editor opens as a full-window modal over
+editor, whose Cancel (or Escape) returns to the zone. Its header ends with Undo and Redo, then
+Cancel beside Save — the owner's exception to Cancel on the left (A502). The editor opens as a full-window modal over
 the dashboard, with the dashboard's alert toast and update bar still shown, and pressable, at its top. A zone with no placed tables shows Add a floor plan to the
 same editor instead, and a failed read adds an alert line above the link.
 

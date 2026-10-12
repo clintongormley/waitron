@@ -409,6 +409,23 @@ it.each([
   },
 );
 
+// The owner's header order for this screen (A502), against the house's Cancel-first rule.
+it.each([
+  [1280, 800],
+  [390, 844],
+])("puts Undo, Redo, Cancel and Save left to right at %i px", async (width, height) => {
+  const before = [window.innerWidth, window.innerHeight] as const;
+  await page.viewport(width, height);
+  onTestFinished(() => page.viewport(...before));
+  const el = await open(stubApi());
+  await expect.poll(() => el.shadowRoot!.querySelector("wt-sheet, .layout")).not.toBeNull();
+  const left = (node: Element) => node.getBoundingClientRect().left;
+  const close = el.shadowRoot!.querySelector("[data-action=close]")!;
+  expect(left(button(el, "undo")!)).toBeLessThan(left(button(el, "redo")!));
+  expect(left(button(el, "redo")!)).toBeLessThan(left(close));
+  expect(left(close)).toBeLessThan(left(button(el, "save")!));
+});
+
 it("Reload replaces the draft and writes nothing", async () => {
   const saveFloorPlan = vi
     .fn()
