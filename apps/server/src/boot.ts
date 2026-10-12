@@ -862,12 +862,13 @@ async function bootServer(
     }
   }
 
+  const build = applicationVersion(process.env);
   const health = createHealthState(now());
   const app = healthApp(health, now, { venueDir: config.venueDir });
   // Registered before every surface below, so each wraps all of them; `/health`, registered above, is
   // deliberately left out of the request log and names no build.
   app.use("*", requestIdMiddleware(log, now));
-  app.use("*", buildHeaderMiddleware(applicationVersion(process.env)));
+  app.use("*", buildHeaderMiddleware(build));
   app.use("*", async (c, next) => {
     if (c.req.method === "GET" && c.req.header("x-waitron-live") === "1") {
       await withPassiveManagementRead(next);
@@ -997,7 +998,7 @@ async function bootServer(
             contribution,
             secret,
             moduleVersions,
-            applicationVersion: applicationVersion(process.env),
+            applicationVersion: build,
           });
           return createFiscalReadinessStore(
             config.stateDir,
@@ -1032,7 +1033,7 @@ async function bootServer(
               contribution,
               secret,
               moduleVersions,
-              applicationVersion: applicationVersion(process.env),
+              applicationVersion: build,
             }),
           );
         },
