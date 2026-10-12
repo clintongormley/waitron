@@ -108,20 +108,9 @@ async function authored(departmentId: string, receipt: Record<string, unknown>) 
     .onConflictDoUpdate({ target: departmentReceipts.departmentId, set: { receipt } });
 }
 
-const now = new Date("2026-10-12T00:00:00Z");
-const context = { personId: "operator", emailAvailable: true, now };
-function delivery(email = "dining@example.com", phone: string | undefined = "+34911234567") {
-  return {
-    medium: "email",
-    recipient: " customer@example.com ",
-    consent: {
-      accepted: true,
-      statementVersion: "invoice-email-v1",
-      language: "es-ES",
-      contactEmail: email,
-      ...(phone === undefined ? {} : { contactPhone: phone }),
-    },
-  };
+const context = { personId: "operator", emailAvailable: true };
+function delivery() {
+  return { medium: "email", recipient: " customer@example.com " };
 }
 async function contacts(f: Awaited<ReturnType<typeof fixture>>) {
   await authored(f.primary, { email: "dining@example.com", phone: "+34911234567" });
@@ -130,9 +119,9 @@ async function contacts(f: Awaited<ReturnType<typeof fixture>>) {
     .insert(tenantReceipts)
     .values({ receipt: { email: "global@example.com", phone: "+34933456789" } });
 }
-describe("invoice-choice consent contact selection", () => {
+describe("invoice-choice email contact selection", () => {
   it.each(["order", "sale"] as const)(
-    "validates consent against its %s department rather than global contact",
+    "accepts an email choice when its %s department has a contact email",
     async (kind) => {
       const f = await fixture();
       await contacts(f);
@@ -145,25 +134,16 @@ describe("invoice-choice consent contact selection", () => {
       };
       expect(
         await withTransaction(suite.db, (tx) => checkedInvoiceChoiceDelivery(tx, input)),
-      ).toEqual({
-        medium: "email",
-        recipient: "customer@example.com",
-        consent: {
-          statementVersion: "invoice-email-v1",
-          language: "es-ES",
-          recordedAt: "2026-10-12T00:00:00.000Z",
-          personId: "operator",
-          contactEmail: "dining@example.com",
-          contactPhone: "+34911234567",
-        },
-      });
+      ).toEqual({ medium: "email", recipient: "customer@example.com", personId: "operator" });
     },
   );
-  it("rejects consent naming the global contact even when the global row still contains it", async () => {
+  it("refuses email when only the venue-wide contact has an address", async () => {
     const f = await fixture();
     await contacts(f);
+    await authored(f.primary, {});
+    await authored(f.fallback, {});
     const input = {
-      delivery: delivery("global@example.com", "+34933456789"),
+      delivery: delivery(),
       invoiceType: "F1" as const,
       locationId: f.cfg.locationId,
       context,
@@ -171,17 +151,14 @@ describe("invoice-choice consent contact selection", () => {
     };
     await expect(
       withTransaction(suite.db, (tx) => checkedInvoiceChoiceDelivery(tx, input)),
-    ).rejects.toMatchObject({
-      code: "management.request_invalid",
-      params: { field: "delivery.consent" },
-    });
+    ).rejects.toMatchObject({ code: "invoice_delivery.email_unavailable", params: {} });
   });
   it("uses the local default department contact when the selected department has no email", async () => {
     const f = await fixture();
     await contacts(f);
     await authored(f.primary, {});
     const input = {
-      delivery: delivery("default@example.com", "+34922345678"),
+      delivery: delivery(),
       invoiceType: "F1" as const,
       locationId: f.cfg.locationId,
       context,
@@ -189,9 +166,7 @@ describe("invoice-choice consent contact selection", () => {
     };
     expect(
       await withTransaction(suite.db, (tx) => checkedInvoiceChoiceDelivery(tx, input)),
-    ).toMatchObject({
-      consent: { contactEmail: "default@example.com", contactPhone: "+34922345678" },
-    });
+    ).toEqual({ medium: "email", recipient: "customer@example.com", personId: "operator" });
     await authored(f.fallback, {});
     await expect(
       withTransaction(suite.db, (tx) => checkedInvoiceChoiceDelivery(tx, input)),
@@ -200,7 +175,7 @@ describe("invoice-choice consent contact selection", () => {
       params: {},
     });
   });
-  it("stages the real order's matching consent and refuses a stale contact without changing its revision", async () => {
+  it("stages the real order's email choice and refuses one without a contact without changing its revision", async () => {
     const f = await fixture();
     await contacts(f);
     const request = {
@@ -228,10 +203,13 @@ describe("invoice-choice consent contact selection", () => {
       .select()
       .from(workingOrders)
       .where(eq(workingOrders.id, f.orderId));
-    expect(saved[0]!.invoiceDelivery).toMatchObject({
-      consent: { contactEmail: "dining@example.com", personId: "operator" },
+    expect(saved[0]!.invoiceDelivery).toEqual({
+      medium: "email",
+      recipient: "customer@example.com",
+      personId: "operator",
     });
-    await authored(f.primary, { email: "changed@example.com" });
+    await authored(f.primary, {});
+    await authored(f.fallback, {});
     await expect(
       setOrderInvoiceChoice(
         suite.db,
@@ -241,10 +219,7 @@ describe("invoice-choice consent contact selection", () => {
         { ...request, revision: 1 },
         context,
       ),
-    ).rejects.toMatchObject({
-      code: "management.request_invalid",
-      params: { field: "delivery.consent" },
-    });
+    ).rejects.toMatchObject({ code: "invoice_delivery.email_unavailable" });
     expect(
       await suite.db.select().from(workingOrders).where(eq(workingOrders.id, f.orderId)),
     ).toEqual(saved);

@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { createAgent } from "./agent.js";
+import {
+  createAgent,
+  PAGE_RENEW_INTERVAL_MS,
+  PAGE_RENEW_SETTLE_MS,
+  PAGE_REPORT_GIVE_UP_MS,
+} from "./agent.js";
 import type {
   AgentClient,
   AgentInventory,
@@ -7,11 +12,14 @@ import type {
   Failure,
   JoinStatus,
   NodeProbe,
+  PageHold,
+  PageJob,
+  PageJobOutcome,
   PullReply,
   Result,
   WireJob,
 } from "./client.js";
-import type { DiscoveredDevice, Host } from "./host.js";
+import type { DiscoveredDevice, Host, PagePrintOutcome } from "./host.js";
 import { fakeHost } from "./testing/fake-host.js";
 import { FakeSink, type PrinterTarget } from "./transport.js";
 
@@ -36,6 +44,17 @@ function deferred<T = void>() {
   return { promise, resolve };
 }
 
+/** Answers renewals in turn (then success) and never answers past `limit`, so a renewal loop that
+ * does not stop fails its case instead of exhausting the heap. */
+function renewer(answers: Result<void>[] = [], limit = 10) {
+  let calls = 0;
+  return vi.fn(async (): Promise<Result<void>> => {
+    calls += 1;
+    if (calls > limit) return new Promise<never>(() => {});
+    return answers[calls - 1] ?? okR(undefined);
+  });
+}
+
 /** A scripted client; each method is a vi.fn you override per test. Defaults walk the happy path:
  * probe → join → approved → empty pull. */
 function client(over: Partial<AgentClient> = {}): AgentClient {
@@ -50,6 +69,10 @@ function client(over: Partial<AgentClient> = {}): AgentClient {
       okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryUntil: null }),
     ),
     report: vi.fn(async () => okR(undefined)),
+    claimPageJob: vi.fn(async () => okR<PageJob | null>(null)),
+    fetchPageDocument: vi.fn(async () => okR(new Uint8Array([0x25, 0x50]))),
+    renewPageJob: renewer(),
+    reportPageJob: vi.fn(async () => okR(undefined)),
     ...over,
   };
 }
@@ -1211,6 +1234,115 @@ describe("createAgent — inventory, discovery and resolve", () => {
       });
       expect(c.report).toHaveBeenCalledTimes(2); // the pull whose classification threw printed too
       expect(host.logs.some((line) => line.includes("office-printer check failed"))).toBe(true);
+    });
+
+    describe("a host announced only by IPP", () => {
+      const ippOnly: DiscoveredDevice = {
+        transport: "network_tcp",
+        host: "192.168.20.70",
+        port: 8631,
+        ipp: { port: 8631, resourcePath: "/ipp/printer" },
+        ippOnly: true,
+      };
+      const unreadable = {
+        ...ippOnly,
+        office: {
+          port: 8631,
+          resourcePath: "/ipp/printer",
+          printable: false,
+          reason: "invalid_reply",
+          supportedFormats: [],
+        },
+      };
+      /** A raw device whose host also announced IPP: it has a raw port, so the fallback leaves it. */
+      const rawWithIpp: DiscoveredDevice = {
+        transport: "network_tcp",
+        host: "192.168.20.71",
+        port: 9100,
+        ipp: { port: 631, resourcePath: "/ipp/print" },
+      };
+      const windowOpen = () =>
+        vi
+          .fn()
+          .mockResolvedValue(
+            okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryUntil: 10_000_000_000 }),
+          );
+
+      it.each([
+        [
+          "the classification throws",
+          {
+            markPagePrinters: async () => {
+              throw new Error("ipp exploded");
+            },
+          },
+        ],
+        ["the host has no classifier", {}],
+        ["the classifier leaves it without a report", { markPagePrinters: markHp }],
+      ] as Array<[string, Pick<Host, "markPagePrinters">]>)(
+        "is reported unreadable, never a receipt printer, when %s",
+        async (_label, over) => {
+          const host = fakeHost({
+            config: CONFIG,
+            token: "a1.s",
+            scan: async () => [{ ...ippOnly }, { ...rawWithIpp }, { ...scannedHp }],
+            ...over,
+          });
+          const c = client({ pullJobs: windowOpen() });
+          const agent = createAgent({ host, client: c });
+          await agent.runOnce();
+          await agent.runOnce();
+          await agent.runOnce();
+          expect(inventoryOf(c, 2).scanned).toStrictEqual([
+            unreadable,
+            rawWithIpp,
+            over.markPagePrinters === markHp ? { ...scannedHp, pagePrinter: true } : scannedHp,
+          ]);
+        },
+      );
+
+      it("adds no report to one that names no IPP queue to report on", async () => {
+        const queueless: DiscoveredDevice = { ...ippOnly };
+        delete queueless.ipp;
+        const host = fakeHost({
+          config: CONFIG,
+          token: "a1.s",
+          scan: async () => [{ ...queueless }],
+        });
+        const c = client({ pullJobs: windowOpen() });
+        const agent = createAgent({ host, client: c });
+        await agent.runOnce();
+        await agent.runOnce();
+        await agent.runOnce();
+        expect(inventoryOf(c, 2).scanned).toStrictEqual([queueless]);
+      });
+
+      it("keeps the report its classifier gave", async () => {
+        const office = {
+          port: 8631,
+          resourcePath: "/ipp/printer",
+          printable: true as const,
+          documentFormat: "application/pdf" as const,
+          media: "iso_a4_210x297mm" as const,
+          resolutionDpi: 300 as const,
+          supportedFormats: ["application/pdf"],
+        };
+        const host = fakeHost({
+          config: CONFIG,
+          token: "a1.s",
+          scan: async () => [{ ...ippOnly }],
+          markPagePrinters: async (devices) =>
+            devices.map((d) => ({ ...d, pagePrinter: true as const, office })),
+        });
+        const c = client({ pullJobs: windowOpen() });
+        const agent = createAgent({ host, client: c });
+        await agent.runOnce();
+        await agent.runOnce();
+        await agent.runOnce();
+        expect(inventoryOf(c, 2).scanned).toStrictEqual([
+          { ...ippOnly, pagePrinter: true, office },
+        ]);
+      });
     });
 
     it("reports the merged devices unchanged on a host without the classifier", async () => {
@@ -2474,5 +2606,968 @@ describe("createAgent — Bluetooth commands", () => {
     await agent.runOnce();
     await settle();
     expect(host.calls.filter((call) => call === "pair")).toHaveLength(2);
+  });
+});
+
+describe("createAgent — A4 page jobs", () => {
+  const PAGE_JOB: PageJob = {
+    id: "0f8fad5b-d9cb-469f-a165-70867728950e",
+    generation: 2,
+    token: "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+    printer: {
+      id: "p-office",
+      host: "192.168.20.40",
+      port: 631,
+      resourcePath: "/ipp/print",
+      documentFormat: "application/pdf",
+      media: "iso_a4_210x297mm",
+      resolutionDpi: 300,
+    },
+  };
+  const TARGET = { host: "192.168.20.40", port: 631, resourcePath: "/ipp/print" };
+  const SENT: PagePrintOutcome = { status: "sent" };
+  const UNCERTAIN_OUTCOME: PagePrintOutcome = { status: "unknown", failureCode: "timeout" };
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+  const receipt = (id: string): WireJob => ({
+    id,
+    printerId: "p-receipt",
+    transport: "usb",
+    host: null,
+    port: null,
+    localKey: "SN-1",
+    payload: new Uint8Array([7]),
+  });
+  const pull = (jobs: WireJob[] = []) =>
+    okR<PullReply>({ nodeId: "n1", servers: [], jobs, discoveryUntil: null });
+
+  /** Renewal waits are held until the test releases them; any other sleep never ends. */
+  function pageHost(printPage: Host["printPage"], extra: Parameters<typeof fakeHost>[0] = {}) {
+    const renewals: ReturnType<typeof deferred<void>>[] = [];
+    const others: { ms: number; wait: ReturnType<typeof deferred<void>> }[] = [];
+    const sleeps: number[] = [];
+    const host = fakeHost({
+      config: CONFIG,
+      token: "a1.s",
+      sleep: (ms) => {
+        sleeps.push(ms);
+        const wait = deferred();
+        if (ms === PAGE_RENEW_INTERVAL_MS) renewals.push(wait);
+        else others.push({ ms, wait });
+        return wait.promise;
+      },
+      ...(printPage === undefined ? {} : { printPage }),
+      ...extra,
+    });
+    return { host, renewals, others, sleeps };
+  }
+
+  it("a host without printPage claims nothing", async () => {
+    const { host } = pageHost(undefined);
+    const c = client();
+    await createAgent({ host, client: c }).runOnce();
+    await settle();
+    expect(c.pullJobs).toHaveBeenCalledTimes(1);
+    expect(c.claimPageJob).not.toHaveBeenCalled();
+  });
+
+  it("claims after a pull, fetches the claimed pages, prints them and reports the outcome", async () => {
+    const printPage = vi.fn(async () => SENT);
+    const { host } = pageHost(printPage);
+    const c = client({
+      claimPageJob: vi.fn().mockResolvedValueOnce(okR(PAGE_JOB)).mockResolvedValue(okR(null)),
+    });
+    await createAgent({ host, client: c }).runOnce();
+    await settle();
+    expect(c.claimPageJob).toHaveBeenCalledWith(A, "a1.s");
+    expect(c.fetchPageDocument).toHaveBeenCalledWith(A, "a1.s", PAGE_JOB);
+    expect(printPage).toHaveBeenCalledWith(
+      TARGET,
+      new Uint8Array([0x25, 0x50]),
+      "application/pdf",
+      expect.any(AbortSignal),
+      expect.any(Function),
+    );
+    expect(c.reportPageJob).toHaveBeenCalledExactlyOnceWith(A, "a1.s", PAGE_JOB, {
+      status: "sent",
+    });
+    // The next job is claimed as soon as this one is reported.
+    const [reported] = vi.mocked(c.reportPageJob).mock.invocationCallOrder;
+    expect(vi.mocked(c.claimPageJob).mock.invocationCallOrder.at(-1)).toBeGreaterThan(reported!);
+  });
+
+  it("a receipt job pulled during a long A4 job prints at once, and the pull still claims", async () => {
+    const printing = deferred<PagePrintOutcome>();
+    const printPage = vi.fn(() => printing.promise);
+    const sink = new FakeSink();
+    const { host } = pageHost(printPage, { transport: sink });
+    const c = client({
+      claimPageJob: vi.fn().mockResolvedValueOnce(okR(PAGE_JOB)).mockResolvedValue(okR(null)),
+      pullJobs: vi
+        .fn()
+        .mockResolvedValueOnce(pull())
+        .mockResolvedValue(pull([receipt("r1")])),
+    });
+    const agent = createAgent({ host, client: c });
+    await agent.runOnce();
+    await settle();
+    expect(printPage).toHaveBeenCalledTimes(1);
+    const claimsBefore = vi.mocked(c.claimPageJob).mock.calls.length;
+
+    await agent.runOnce();
+    expect(sink.written).toEqual([{ printerId: "p-receipt", bytes: new Uint8Array([7]) }]);
+    expect(c.report).toHaveBeenCalledWith(A, "a1.s", "r1", { status: "done" });
+    expect(c.claimPageJob).toHaveBeenCalledTimes(claimsBefore + 1);
+    expect(printPage).toHaveBeenCalledTimes(1);
+    expect(c.reportPageJob).not.toHaveBeenCalled();
+
+    printing.resolve(SENT);
+    await settle();
+    expect(c.reportPageJob).toHaveBeenCalledTimes(1);
+  });
+
+  it("renews the claim every 20 seconds while the job is out, and stops when it ends", async () => {
+    const printing = deferred<PagePrintOutcome>();
+    const { host, renewals, sleeps } = pageHost(() => printing.promise);
+    const c = client({
+      claimPageJob: vi.fn().mockResolvedValueOnce(okR(PAGE_JOB)).mockResolvedValue(okR(null)),
+    });
+    await createAgent({ host, client: c }).runOnce();
+    await settle();
+    expect(PAGE_RENEW_INTERVAL_MS).toBe(20_000);
+    expect(sleeps).toEqual([20_000]);
+    expect(c.renewPageJob).not.toHaveBeenCalled();
+
+    renewals[0]!.resolve();
+    await settle();
+    expect(c.renewPageJob).toHaveBeenCalledExactlyOnceWith(A, "a1.s", PAGE_JOB, null);
+    renewals[1]!.resolve();
+    await settle();
+    expect(c.renewPageJob).toHaveBeenCalledTimes(2);
+
+    printing.resolve(SENT);
+    await settle();
+    renewals[2]!.resolve();
+    await settle();
+    expect(c.renewPageJob).toHaveBeenCalledTimes(2);
+    expect(renewals).toHaveLength(3);
+  });
+
+  it("keeps renewing past a renewal that did not get through", async () => {
+    const printing = deferred<PagePrintOutcome>();
+    const { host, renewals } = pageHost(() => printing.promise);
+    const c = client({
+      claimPageJob: vi.fn().mockResolvedValueOnce(okR(PAGE_JOB)).mockResolvedValue(okR(null)),
+      renewPageJob: renewer([failR({ kind: "unreachable", detail: "ECONNRESET" })]),
+    });
+    let signal: AbortSignal | undefined;
+    host.printPage = (_target, _bytes, _format, given) => {
+      signal = given;
+      return printing.promise;
+    };
+    await createAgent({ host, client: c }).runOnce();
+    await settle();
+    renewals[0]!.resolve();
+    await settle();
+    expect(signal!.aborted).toBe(false);
+    renewals[1]!.resolve();
+    await settle();
+    expect(c.renewPageJob).toHaveBeenCalledTimes(2);
+    printing.resolve(SENT);
+    await settle();
+    expect(c.reportPageJob).toHaveBeenCalledWith(A, "a1.s", PAGE_JOB, { status: "sent" });
+  });
+
+  it("a lost renewal stops the polling and still reports the outcome once", async () => {
+    const printing = deferred<PagePrintOutcome>();
+    let signal: AbortSignal | undefined;
+    const { host, renewals } = pageHost((_target, _bytes, _format, given) => {
+      signal = given;
+      given.addEventListener("abort", () =>
+        printing.resolve({ status: "unknown", failureCode: "timeout" }),
+      );
+      return printing.promise;
+    });
+    const c = client({
+      claimPageJob: vi.fn().mockResolvedValueOnce(okR(PAGE_JOB)).mockResolvedValue(okR(null)),
+      renewPageJob: renewer([failR({ kind: "claim_lost" })]),
+    });
+    await createAgent({ host, client: c }).runOnce();
+    await settle();
+    expect(signal!.aborted).toBe(false);
+    renewals[0]!.resolve();
+    await settle();
+    expect(signal!.aborted).toBe(true);
+    expect(c.reportPageJob).toHaveBeenCalledExactlyOnceWith(A, "a1.s", PAGE_JOB, {
+      status: "unknown",
+      failureCode: "timeout",
+    });
+    expect(renewals).toHaveLength(1);
+  });
+
+  it("a claim lost while the pages are fetched prints nothing and reports that nothing was sent", async () => {
+    const fetching = deferred<Result<Uint8Array>>();
+    const printPage = vi.fn(async () => SENT);
+    const { host, renewals } = pageHost(printPage);
+    const c = client({
+      claimPageJob: vi.fn().mockResolvedValueOnce(okR(PAGE_JOB)).mockResolvedValue(okR(null)),
+      fetchPageDocument: vi.fn(() => fetching.promise),
+      renewPageJob: renewer([failR({ kind: "claim_lost" })]),
+    });
+    await createAgent({ host, client: c }).runOnce();
+    await settle();
+    renewals[0]!.resolve();
+    await settle();
+    fetching.resolve(okR(new Uint8Array([1])));
+    await settle();
+    expect(printPage).not.toHaveBeenCalled();
+    expect(c.reportPageJob).toHaveBeenCalledExactlyOnceWith(A, "a1.s", PAGE_JOB, {
+      status: "failed",
+      failureCode: "document_unavailable",
+    });
+  });
+
+  it.each([
+    failR({ kind: "unreachable", detail: "timed out" }),
+    failR({ kind: "claim_lost" }),
+    failR({ kind: "bad_reply", detail: "status 400" }),
+  ])("a failed fetch prints nothing and reports failed (%j)", async (fetched) => {
+    const printPage = vi.fn(async () => SENT);
+    const { host } = pageHost(printPage);
+    const c = client({
+      claimPageJob: vi.fn().mockResolvedValueOnce(okR(PAGE_JOB)).mockResolvedValue(okR(null)),
+      fetchPageDocument: vi.fn(async () => fetched),
+    });
+    await createAgent({ host, client: c }).runOnce();
+    await settle();
+    expect(printPage).not.toHaveBeenCalled();
+    expect(c.reportPageJob).toHaveBeenCalledExactlyOnceWith(A, "a1.s", PAGE_JOB, {
+      status: "failed",
+      failureCode: "document_unavailable",
+    });
+  });
+
+  it("a printPage that throws reports an uncertain outcome, never a resend", async () => {
+    const printPage = vi.fn(async () => {
+      throw new Error("socket closed");
+    });
+    const { host } = pageHost(printPage);
+    const c = client({
+      claimPageJob: vi.fn().mockResolvedValueOnce(okR(PAGE_JOB)).mockResolvedValue(okR(null)),
+    });
+    await createAgent({ host, client: c }).runOnce();
+    await settle();
+    expect(printPage).toHaveBeenCalledTimes(1);
+    expect(c.reportPageJob).toHaveBeenCalledExactlyOnceWith(A, "a1.s", PAGE_JOB, {
+      status: "unknown",
+      failureCode: "timeout",
+    });
+  });
+
+  it.each([
+    failR({ kind: "unreachable", detail: "ECONNRESET" }),
+    failR({ kind: "rate_limited" }),
+    failR({ kind: "pairing_closed" }),
+  ])(
+    "a report that does not get through (%j) is retried on the next tick with the same claim, and claiming goes on",
+    async (dropped) => {
+      const printPage = vi.fn(async (): Promise<PagePrintOutcome> => ({
+        status: "unknown",
+        failureCode: "printer_aborted",
+      }));
+      const { host } = pageHost(printPage);
+      const reportPageJob = vi
+        .fn()
+        .mockResolvedValueOnce(dropped)
+        .mockResolvedValueOnce(dropped)
+        .mockResolvedValue(okR(undefined));
+      const c = client({
+        claimPageJob: vi.fn().mockResolvedValueOnce(okR(PAGE_JOB)).mockResolvedValue(okR(null)),
+        reportPageJob,
+      });
+      const agent = createAgent({ host, client: c });
+      await agent.runOnce();
+      await settle();
+      expect(host.logs.some((l) => l.includes("page job report dropped"))).toBe(true);
+      const claimsBefore = vi.mocked(c.claimPageJob).mock.calls.length;
+
+      await agent.runOnce();
+      await settle();
+      expect(reportPageJob).toHaveBeenCalledTimes(2);
+      expect(c.claimPageJob).toHaveBeenCalledTimes(claimsBefore + 1);
+
+      await agent.runOnce();
+      await settle();
+      const expected: PageJobOutcome = { status: "unknown", failureCode: "printer_aborted" };
+      expect(reportPageJob.mock.calls).toEqual([
+        [A, "a1.s", PAGE_JOB, expected],
+        [A, "a1.s", PAGE_JOB, expected],
+        [A, "a1.s", PAGE_JOB, expected],
+      ]);
+      expect(printPage).toHaveBeenCalledTimes(1);
+      expect(c.claimPageJob).toHaveBeenCalledTimes(claimsBefore + 2);
+    },
+  );
+
+  it.each([
+    failR({ kind: "claim_lost" }),
+    failR({ kind: "bad_reply", detail: "status 400" }),
+    failR({ kind: "unauthorized" }),
+  ])("a report the server answers (%j) is final and never sent again", async (answer) => {
+    const { host } = pageHost(vi.fn(async () => SENT));
+    const c = client({
+      claimPageJob: vi.fn().mockResolvedValueOnce(okR(PAGE_JOB)).mockResolvedValue(okR(null)),
+      reportPageJob: vi.fn(async () => answer),
+    });
+    const agent = createAgent({ host, client: c });
+    await agent.runOnce();
+    await settle();
+    await agent.runOnce();
+    await settle();
+    expect(c.reportPageJob).toHaveBeenCalledTimes(1);
+    // The first pull claims the job and then the server's none, the job's end claims again, and
+    // the second pull once more.
+    expect(c.claimPageJob).toHaveBeenCalledTimes(4);
+    expect(host.logs.some((l) => l.includes("page job report refused"))).toBe(true);
+  });
+
+  it("claims nothing after a failed pull", async () => {
+    const { host } = pageHost(vi.fn(async () => SENT));
+    const c = client({ pullJobs: vi.fn(async () => failR({ kind: "unreachable", detail: "x" })) });
+    await createAgent({ host, client: c }).runOnce();
+    await settle();
+    expect(c.claimPageJob).not.toHaveBeenCalled();
+  });
+
+  it("a failed claim waits for the next pull", async () => {
+    const { host } = pageHost(vi.fn(async () => SENT));
+    const c = client({
+      claimPageJob: vi.fn(async () => failR({ kind: "unreachable", detail: "x" })),
+    });
+    const agent = createAgent({ host, client: c });
+    await agent.runOnce();
+    await settle();
+    expect(c.claimPageJob).toHaveBeenCalledTimes(1);
+    await agent.runOnce();
+    await settle();
+    expect(c.claimPageJob).toHaveBeenCalledTimes(2);
+  });
+
+  it("still prints and reports when the host's renewal wait rejects", async () => {
+    const printing = deferred<PagePrintOutcome>();
+    const host = fakeHost({
+      config: CONFIG,
+      token: "a1.s",
+      printPage: () => printing.promise,
+      sleep: async () => {
+        throw new Error("no timers");
+      },
+    });
+    const c = client({
+      claimPageJob: vi.fn().mockResolvedValueOnce(okR(PAGE_JOB)).mockResolvedValue(okR(null)),
+    });
+    await createAgent({ host, client: c }).runOnce();
+    await settle();
+    printing.resolve(SENT);
+    await settle();
+    expect(c.reportPageJob).toHaveBeenCalledExactlyOnceWith(A, "a1.s", PAGE_JOB, {
+      status: "sent",
+    });
+    expect(host.logs).toContain(
+      `warn page job renewal stopped {"job":"${PAGE_JOB.id}","error":"no timers"}`,
+    );
+  });
+
+  it("still reports when the renewal wait rejects and logging that throws too", async () => {
+    const host = fakeHost({
+      config: CONFIG,
+      token: "a1.s",
+      printPage: async () => SENT,
+      sleep: async () => {
+        throw new Error("no timers");
+      },
+    });
+    host.log.warn = () => {
+      throw new Error("log closed");
+    };
+    const c = client({
+      claimPageJob: vi.fn().mockResolvedValueOnce(okR(PAGE_JOB)).mockResolvedValue(okR(null)),
+    });
+    await createAgent({ host, client: c }).runOnce();
+    await settle();
+    expect(c.reportPageJob).toHaveBeenCalledExactlyOnceWith(A, "a1.s", PAGE_JOB, {
+      status: "sent",
+    });
+  });
+
+  it("waits at most 5 seconds for a renewal still out when the job ends, then reports", async () => {
+    const printing = deferred<PagePrintOutcome>();
+    const { host, renewals, others } = pageHost(() => printing.promise);
+    const c = client({
+      claimPageJob: vi.fn().mockResolvedValueOnce(okR(PAGE_JOB)).mockResolvedValue(okR(null)),
+      renewPageJob: vi.fn(() => new Promise<never>(() => {})),
+    });
+    await createAgent({ host, client: c }).runOnce();
+    await settle();
+    renewals[0]!.resolve();
+    await settle();
+    expect(c.renewPageJob).toHaveBeenCalledTimes(1);
+    printing.resolve(SENT);
+    await settle();
+    expect(c.reportPageJob).not.toHaveBeenCalled();
+    expect(PAGE_RENEW_SETTLE_MS).toBe(5_000);
+    expect(others.map(({ ms }) => ms)).toEqual([5_000]);
+    others[0]!.wait.resolve();
+    await settle();
+    expect(c.reportPageJob).toHaveBeenCalledExactlyOnceWith(A, "a1.s", PAGE_JOB, {
+      status: "sent",
+    });
+  });
+
+  it("gives up resending a report two leases after the claim was last known alive, claiming meanwhile", async () => {
+    let clock = 1_000;
+    const printing = deferred<PagePrintOutcome>();
+    const { host, renewals } = pageHost(() => printing.promise, { now: () => clock });
+    const reportPageJob = vi.fn(async () => failR({ kind: "unreachable", detail: "status 503" }));
+    const c = client({
+      claimPageJob: vi.fn().mockResolvedValueOnce(okR(PAGE_JOB)).mockResolvedValue(okR(null)),
+      reportPageJob,
+    });
+    const agent = createAgent({ host, client: c });
+    await agent.runOnce();
+    await settle();
+    // A renewal that got through at 50 s moves the bound on.
+    clock = 50_000;
+    renewals[0]!.resolve();
+    await settle();
+    printing.resolve(SENT);
+    await settle();
+    expect(reportPageJob).toHaveBeenCalledTimes(1);
+
+    expect(PAGE_REPORT_GIVE_UP_MS).toBe(120_000);
+    clock = 1_000 + PAGE_REPORT_GIVE_UP_MS + 1;
+    await agent.runOnce();
+    await settle();
+    clock = 50_000 + PAGE_REPORT_GIVE_UP_MS;
+    await agent.runOnce();
+    await settle();
+    expect(reportPageJob).toHaveBeenCalledTimes(3);
+    const claimsBefore = vi.mocked(c.claimPageJob).mock.calls.length;
+
+    clock += 1;
+    await agent.runOnce();
+    await settle();
+    expect(reportPageJob).toHaveBeenCalledTimes(3);
+    expect(host.logs).toContain(`warn page job report abandoned {"delivery":"${PAGE_JOB.id}"}`);
+    expect(c.claimPageJob).toHaveBeenCalledTimes(claimsBefore + 1);
+  });
+
+  it("logs a runner that throws and claims again on the next pull", async () => {
+    const { host } = pageHost(vi.fn(async () => SENT));
+    const c = client({
+      claimPageJob: vi
+        .fn()
+        .mockRejectedValueOnce(new Error("client bug"))
+        .mockResolvedValue(okR(null)),
+    });
+    const agent = createAgent({ host, client: c });
+    await agent.runOnce();
+    await settle();
+    expect(host.logs).toContain('error page job runner failed {"error":"client bug"}');
+    await agent.runOnce();
+    await settle();
+    expect(c.claimPageJob).toHaveBeenCalledTimes(2);
+  });
+
+  describe("one job per printer, side by side", () => {
+    const JOB_Y: PageJob = {
+      ...PAGE_JOB,
+      id: "9b2d1c4e-5f6a-4b7c-8d9e-0a1b2c3d4e5f",
+      token: "3e7a9c1b-2d4f-4a6b-8c0d-1e2f3a4b5c6d",
+      printer: { ...PAGE_JOB.printer, id: "p-office-2", host: "192.168.20.41" },
+    };
+    const TARGET_Y = { ...TARGET, host: "192.168.20.41" };
+
+    /** The server's due jobs, handed out oldest first; an empty queue answers 204. */
+    function serverQueue(...jobs: PageJob[]) {
+      const due = [...jobs];
+      const claimPageJob = vi.fn(async (): Promise<Result<PageJob | null>> =>
+        okR(due.shift() ?? null),
+      );
+      return { due, claimPageJob };
+    }
+
+    /** Printers by host: each print waits on its own outcome until the test settles it. */
+    function printers() {
+      const outcomes = new Map<string, ReturnType<typeof deferred<PagePrintOutcome>>>();
+      const printPage = vi.fn((target: { host: string }) => {
+        const outcome = deferred<PagePrintOutcome>();
+        outcomes.set(target.host, outcome);
+        return outcome.promise;
+      });
+      return { printPage, finish: (host: string) => outcomes.get(host)!.resolve(SENT) };
+    }
+
+    const reportedIds = (reportPageJob: AgentClient["reportPageJob"]) =>
+      vi.mocked(reportPageJob).mock.calls.map(([, , job]) => job.id);
+
+    it("prints and reports a job on another printer while a long job on the first is out", async () => {
+      const { printPage, finish } = printers();
+      const { host } = pageHost(printPage);
+      const { due, claimPageJob } = serverQueue(PAGE_JOB);
+      const c = client({ claimPageJob });
+      const agent = createAgent({ host, client: c });
+      await agent.runOnce();
+      await settle();
+      expect(printPage).toHaveBeenCalledTimes(1);
+
+      due.push(JOB_Y);
+      await agent.runOnce();
+      await settle();
+      expect(printPage).toHaveBeenLastCalledWith(
+        TARGET_Y,
+        new Uint8Array([0x25, 0x50]),
+        "application/pdf",
+        expect.any(AbortSignal),
+        expect.any(Function),
+      );
+      finish(TARGET_Y.host);
+      await settle();
+      expect(reportedIds(c.reportPageJob)).toEqual([JOB_Y.id]);
+
+      finish(TARGET.host);
+      await settle();
+      expect(reportedIds(c.reportPageJob)).toEqual([JOB_Y.id, PAGE_JOB.id]);
+    });
+
+    it("starts each claimed job without waiting for it, and claims until the server has none", async () => {
+      const { printPage } = printers();
+      const { host } = pageHost(printPage);
+      const { claimPageJob } = serverQueue(PAGE_JOB, JOB_Y);
+      const c = client({ claimPageJob });
+      await createAgent({ host, client: c }).runOnce();
+      await settle();
+      expect(printPage.mock.calls.map(([target]) => target)).toEqual([TARGET, TARGET_Y]);
+      expect(claimPageJob).toHaveBeenCalledTimes(3);
+      expect(c.reportPageJob).not.toHaveBeenCalled();
+    });
+
+    it("prints a receipt at once while jobs on two printers are out", async () => {
+      const { printPage } = printers();
+      const sink = new FakeSink();
+      const { host } = pageHost(printPage, { transport: sink });
+      const { due, claimPageJob } = serverQueue(PAGE_JOB);
+      const c = client({
+        claimPageJob,
+        pullJobs: vi
+          .fn()
+          .mockResolvedValueOnce(pull())
+          .mockResolvedValueOnce(pull([receipt("r1")]))
+          .mockResolvedValue(pull([receipt("r2")])),
+      });
+      const agent = createAgent({ host, client: c });
+      await agent.runOnce();
+      await settle();
+      due.push(JOB_Y);
+      await agent.runOnce();
+      await settle();
+      expect(printPage).toHaveBeenCalledTimes(2);
+      await agent.runOnce();
+      expect(sink.written.map(({ bytes }) => bytes)).toEqual([
+        new Uint8Array([7]),
+        new Uint8Array([7]),
+      ]);
+      expect(vi.mocked(c.report).mock.calls.map(([, , id]) => id)).toEqual(["r1", "r2"]);
+      expect(c.reportPageJob).not.toHaveBeenCalled();
+    });
+
+    it("keeps claiming and printing on another printer while a report is unsent", async () => {
+      const { printPage, finish } = printers();
+      const { host } = pageHost(printPage);
+      const { due, claimPageJob } = serverQueue(PAGE_JOB);
+      const reportPageJob = vi.fn(async (_url: string, _token: string, job: PageJob) =>
+        job.id === PAGE_JOB.id
+          ? failR({ kind: "unreachable", detail: "ECONNRESET" })
+          : okR(undefined),
+      );
+      const c = client({ claimPageJob, reportPageJob });
+      const agent = createAgent({ host, client: c });
+      await agent.runOnce();
+      await settle();
+      finish(TARGET.host);
+      await settle();
+      expect(reportedIds(reportPageJob)).toEqual([PAGE_JOB.id]);
+
+      due.push(JOB_Y);
+      await agent.runOnce();
+      await settle();
+      expect(printPage).toHaveBeenCalledTimes(2);
+      finish(TARGET_Y.host);
+      await settle();
+      expect(reportedIds(reportPageJob)).toEqual([PAGE_JOB.id, PAGE_JOB.id, JOB_Y.id]);
+    });
+
+    it("keeps each unsent report, resends each on the next pull with its own claim, and drops each at its own give-up time", async () => {
+      let clock = 1_000;
+      const { printPage, finish } = printers();
+      const { host } = pageHost(printPage, { now: () => clock });
+      const { due, claimPageJob } = serverQueue(PAGE_JOB);
+      const reportPageJob = vi.fn(async () => failR({ kind: "unreachable", detail: "status 503" }));
+      const c = client({ claimPageJob, reportPageJob });
+      const agent = createAgent({ host, client: c });
+      await agent.runOnce();
+      await settle();
+      finish(TARGET.host);
+      await settle();
+
+      clock = 30_000;
+      due.push(JOB_Y);
+      await agent.runOnce();
+      await settle();
+      finish(TARGET_Y.host);
+      await settle();
+      expect(reportedIds(reportPageJob)).toEqual([PAGE_JOB.id, PAGE_JOB.id, JOB_Y.id]);
+
+      clock = 1_000 + PAGE_REPORT_GIVE_UP_MS;
+      await agent.runOnce();
+      await settle();
+      expect(reportedIds(reportPageJob).slice(3)).toEqual([PAGE_JOB.id, JOB_Y.id]);
+      // Each resend carries its own job's claim token.
+      expect(
+        vi
+          .mocked(c.reportPageJob)
+          .mock.calls.slice(3)
+          .map(([, , job]) => job),
+      ).toEqual([PAGE_JOB, JOB_Y]);
+
+      clock = 1_000 + PAGE_REPORT_GIVE_UP_MS + 1;
+      await agent.runOnce();
+      await settle();
+      expect(reportedIds(reportPageJob).slice(5)).toEqual([JOB_Y.id]);
+      expect(host.logs).toContain(`warn page job report abandoned {"delivery":"${PAGE_JOB.id}"}`);
+
+      clock = 30_000 + PAGE_REPORT_GIVE_UP_MS + 1;
+      await agent.runOnce();
+      await settle();
+      expect(reportedIds(reportPageJob)).toHaveLength(6);
+      expect(host.logs).toContain(`warn page job report abandoned {"delivery":"${JOB_Y.id}"}`);
+    });
+
+    it("gives up each kept report by its own last-alive time, not by its place in the list", async () => {
+      let clock = 1_000;
+      const { printPage, finish } = printers();
+      const { host, renewals } = pageHost(printPage, { now: () => clock });
+      const { due, claimPageJob } = serverQueue(PAGE_JOB);
+      const reportPageJob = vi.fn(async () => failR({ kind: "unreachable", detail: "status 503" }));
+      const c = client({ claimPageJob, reportPageJob });
+      const agent = createAgent({ host, client: c });
+      await agent.runOnce();
+      await settle();
+      clock = 5_000;
+      due.push(JOB_Y);
+      await agent.runOnce();
+      await settle();
+      // Only the first printer's job renews, so its claim is known alive later than the second's.
+      clock = 50_000;
+      renewals[0]!.resolve();
+      await settle();
+      finish(TARGET.host);
+      await settle();
+      finish(TARGET_Y.host);
+      await settle();
+      expect(reportedIds(c.reportPageJob)).toEqual([PAGE_JOB.id, JOB_Y.id]);
+
+      clock = 5_000 + PAGE_REPORT_GIVE_UP_MS + 1;
+      await agent.runOnce();
+      await settle();
+      expect(reportedIds(c.reportPageJob).slice(2)).toEqual([PAGE_JOB.id]);
+      expect(host.logs).toContain(`warn page job report abandoned {"delivery":"${JOB_Y.id}"}`);
+      expect(host.logs).not.toContain(
+        `warn page job report abandoned {"delivery":"${PAGE_JOB.id}"}`,
+      );
+    });
+
+    it("never runs two claim loops for two pulls in a row", async () => {
+      const answer = deferred<Result<PageJob | null>>();
+      const claimPageJob = vi.fn(() => answer.promise);
+      const { host } = pageHost(vi.fn(async () => SENT));
+      const c = client({ claimPageJob });
+      const agent = createAgent({ host, client: c });
+      await agent.runOnce();
+      await agent.runOnce();
+      await settle();
+      expect(c.pullJobs).toHaveBeenCalledTimes(2);
+      expect(claimPageJob).toHaveBeenCalledTimes(1);
+      answer.resolve(okR(null));
+      await settle();
+      expect(claimPageJob).toHaveBeenCalledTimes(1);
+    });
+
+    it("a finished job's report wakes the claim loop, without a pull", async () => {
+      const { printPage, finish } = printers();
+      const { host } = pageHost(printPage);
+      const { due, claimPageJob } = serverQueue(PAGE_JOB);
+      const c = client({ claimPageJob });
+      await createAgent({ host, client: c }).runOnce();
+      await settle();
+      due.push(JOB_Y);
+      finish(TARGET.host);
+      await settle();
+      expect(c.pullJobs).toHaveBeenCalledTimes(1);
+      expect(printPage.mock.calls.map(([target]) => target)).toEqual([TARGET, TARGET_Y]);
+      const [reported] = vi.mocked(c.reportPageJob).mock.invocationCallOrder;
+      expect(claimPageJob.mock.invocationCallOrder.at(-1)).toBeGreaterThan(reported!);
+    });
+
+    it("claims once more when a job ends while a claim loop is still waiting on the server", async () => {
+      const { printPage, finish } = printers();
+      const { host } = pageHost(printPage);
+      const due: PageJob[] = [PAGE_JOB];
+      const held = deferred();
+      let holdNext = false;
+      const claimPageJob = vi.fn(async (): Promise<Result<PageJob | null>> => {
+        if (holdNext) {
+          holdNext = false;
+          await held.promise;
+          return okR(null);
+        }
+        return okR(due.shift() ?? null);
+      });
+      const c = client({ claimPageJob });
+      const agent = createAgent({ host, client: c });
+      await agent.runOnce();
+      await settle();
+      holdNext = true;
+      await agent.runOnce();
+      await settle();
+      // The server answered this claim before the job's report freed the printer.
+      finish(TARGET.host);
+      await settle();
+      due.push(JOB_Y);
+      held.resolve();
+      await settle();
+      expect(printPage.mock.calls.map(([target]) => target)).toEqual([TARGET, TARGET_Y]);
+    });
+
+    it("logs a job that throws, and still claims again", async () => {
+      const { host } = pageHost(vi.fn(async () => SENT));
+      const { due, claimPageJob } = serverQueue(PAGE_JOB);
+      const fetchPageDocument = vi
+        .fn()
+        .mockImplementationOnce(async () => {
+          due.push(JOB_Y);
+          throw new Error("client bug");
+        })
+        .mockResolvedValue(okR(new Uint8Array([1])));
+      const c = client({ claimPageJob, fetchPageDocument });
+      await createAgent({ host, client: c }).runOnce();
+      await settle();
+      expect(host.logs).toContain(
+        `error page job failed {"job":"${PAGE_JOB.id}","error":"client bug"}`,
+      );
+      expect(reportedIds(c.reportPageJob)).toEqual([JOB_Y.id]);
+    });
+
+    it("a job whose failure log throws still frees the claim loop", async () => {
+      const { host } = pageHost(vi.fn(async () => SENT));
+      host.log.error = () => {
+        throw new Error("log closed");
+      };
+      const { due, claimPageJob } = serverQueue(PAGE_JOB);
+      const fetchPageDocument = vi
+        .fn()
+        .mockImplementationOnce(async () => {
+          due.push(JOB_Y);
+          throw new Error("client bug");
+        })
+        .mockResolvedValue(okR(new Uint8Array([1])));
+      const c = client({ claimPageJob, fetchPageDocument });
+      await createAgent({ host, client: c }).runOnce();
+      await settle();
+      expect(reportedIds(c.reportPageJob)).toEqual([JOB_Y.id]);
+    });
+  });
+
+  describe("the printer's hold rides each renewal", () => {
+    type OnHold = (hold: PageHold | null) => void;
+
+    /** One held print per printer host: the test reports holds through it and settles it. */
+    function holdingPrinters() {
+      const jobs = new Map<
+        string,
+        {
+          onHold: OnHold;
+          signal: AbortSignal;
+          outcome: ReturnType<typeof deferred<PagePrintOutcome>>;
+        }
+      >();
+      const printPage = vi.fn(
+        (
+          target: { host: string },
+          _bytes: Uint8Array,
+          _format: string,
+          signal: AbortSignal,
+          onHold?: OnHold,
+        ) => {
+          const outcome = deferred<PagePrintOutcome>();
+          jobs.set(target.host, { onHold: (hold) => onHold?.(hold), signal, outcome });
+          return outcome.promise;
+        },
+      );
+      return { printPage, job: (host: string) => jobs.get(host)! };
+    }
+
+    const renewedHolds = (c: AgentClient) =>
+      vi.mocked(c.renewPageJob).mock.calls.map(([, , job, hold]) => [job.id, hold]);
+
+    it("carries the last hold the printer reported in the next renewal, and null once it clears", async () => {
+      const { printPage, job } = holdingPrinters();
+      const { host, renewals } = pageHost(printPage);
+      const c = client({
+        claimPageJob: vi.fn().mockResolvedValueOnce(okR(PAGE_JOB)).mockResolvedValue(okR(null)),
+      });
+      await createAgent({ host, client: c }).runOnce();
+      await settle();
+      renewals[0]!.resolve();
+      await settle();
+      expect(renewedHolds(c)).toEqual([[PAGE_JOB.id, null]]);
+
+      job(TARGET.host).onHold("paper_out");
+      await settle();
+      // A change in the hold sends nothing of its own: the next renewal carries it.
+      expect(c.renewPageJob).toHaveBeenCalledTimes(1);
+      renewals[1]!.resolve();
+      await settle();
+      expect(renewedHolds(c)).toEqual([
+        [PAGE_JOB.id, null],
+        [PAGE_JOB.id, "paper_out"],
+      ]);
+
+      job(TARGET.host).onHold(null);
+      renewals[2]!.resolve();
+      await settle();
+      expect(renewedHolds(c).at(-1)).toEqual([PAGE_JOB.id, null]);
+    });
+
+    it("carries each job's own hold when two printers hold two jobs", async () => {
+      const JOB_Y: PageJob = {
+        ...PAGE_JOB,
+        id: "9b2d1c4e-5f6a-4b7c-8d9e-0a1b2c3d4e5f",
+        token: "3e7a9c1b-2d4f-4a6b-8c0d-1e2f3a4b5c6d",
+        printer: { ...PAGE_JOB.printer, id: "p-office-2", host: "192.168.20.41" },
+      };
+      const { printPage, job } = holdingPrinters();
+      const { host, renewals } = pageHost(printPage);
+      const c = client({
+        claimPageJob: vi
+          .fn()
+          .mockResolvedValueOnce(okR(PAGE_JOB))
+          .mockResolvedValueOnce(okR(JOB_Y))
+          .mockResolvedValue(okR(null)),
+      });
+      await createAgent({ host, client: c }).runOnce();
+      await settle();
+      expect(printPage).toHaveBeenCalledTimes(2);
+      job(TARGET.host).onHold("paper_out");
+      job(JOB_Y.printer.host).onHold("paper_jam");
+      for (const wait of renewals.splice(0)) wait.resolve();
+      await settle();
+      expect(renewedHolds(c)).toEqual(
+        expect.arrayContaining([
+          [PAGE_JOB.id, "paper_out"],
+          [JOB_Y.id, "paper_jam"],
+        ]),
+      );
+      expect(c.renewPageJob).toHaveBeenCalledTimes(2);
+
+      job(JOB_Y.printer.host).onHold(null);
+      for (const wait of renewals.splice(0)) wait.resolve();
+      await settle();
+      expect(renewedHolds(c).slice(2)).toEqual(
+        expect.arrayContaining([
+          [PAGE_JOB.id, "paper_out"],
+          [JOB_Y.id, null],
+        ]),
+      );
+      expect(c.renewPageJob).toHaveBeenCalledTimes(4);
+    });
+
+    it("a job held past the report give-up time, renewed meanwhile, still has its unsent report resent, not abandoned", async () => {
+      let clock = 1_000;
+      const { printPage, job } = holdingPrinters();
+      const { host, renewals } = pageHost(printPage, { now: () => clock });
+      const reportPageJob = vi
+        .fn<AgentClient["reportPageJob"]>()
+        .mockResolvedValueOnce(failR({ kind: "unreachable", detail: "status 503" }))
+        .mockResolvedValue(okR(undefined));
+      const c = client({
+        claimPageJob: vi.fn().mockResolvedValueOnce(okR(PAGE_JOB)).mockResolvedValue(okR(null)),
+        renewPageJob: renewer([], 20),
+        reportPageJob,
+      });
+      const agent = createAgent({ host, client: c });
+      await agent.runOnce();
+      await settle();
+      job(TARGET.host).onHold("paper_out");
+      const renewalsHeld = PAGE_REPORT_GIVE_UP_MS / PAGE_RENEW_INTERVAL_MS + 2;
+      for (let i = 0; i < renewalsHeld; i += 1) {
+        clock += PAGE_RENEW_INTERVAL_MS;
+        renewals[i]!.resolve();
+        await settle();
+      }
+      // Counted from the claim, the give-up time has passed; counted from the last renewal, it has not.
+      expect(clock - 1_000).toBeGreaterThan(PAGE_REPORT_GIVE_UP_MS);
+      expect(renewedHolds(c)).toEqual(
+        Array.from({ length: renewalsHeld }, () => [PAGE_JOB.id, "paper_out"]),
+      );
+      expect(job(TARGET.host).signal.aborted).toBe(false);
+      expect(reportPageJob).not.toHaveBeenCalled();
+
+      job(TARGET.host).onHold(null);
+      job(TARGET.host).outcome.resolve(SENT);
+      await settle();
+      expect(reportPageJob).toHaveBeenCalledTimes(1);
+
+      await agent.runOnce();
+      await settle();
+      expect(reportPageJob).toHaveBeenCalledTimes(2);
+      expect(reportPageJob).toHaveBeenLastCalledWith(A, "a1.s", PAGE_JOB, { status: "sent" });
+      expect(host.logs.filter((line) => line.includes("abandoned"))).toEqual([]);
+
+      await agent.runOnce();
+      await settle();
+      expect(reportPageJob).toHaveBeenCalledTimes(2);
+    });
+
+    it("a claim lost while the printer holds the job stops following it and reports once", async () => {
+      const { printPage, job } = holdingPrinters();
+      const { host, renewals } = pageHost(printPage);
+      const c = client({
+        claimPageJob: vi.fn().mockResolvedValueOnce(okR(PAGE_JOB)).mockResolvedValue(okR(null)),
+        renewPageJob: renewer([okR(undefined), failR({ kind: "claim_lost" })]),
+      });
+      await createAgent({ host, client: c }).runOnce();
+      await settle();
+      job(TARGET.host).onHold("paper_out");
+      job(TARGET.host).signal.addEventListener("abort", () =>
+        job(TARGET.host).outcome.resolve(UNCERTAIN_OUTCOME),
+      );
+      renewals[0]!.resolve();
+      await settle();
+      expect(job(TARGET.host).signal.aborted).toBe(false);
+      renewals[1]!.resolve();
+      await settle();
+      expect(renewedHolds(c)).toEqual([
+        [PAGE_JOB.id, "paper_out"],
+        [PAGE_JOB.id, "paper_out"],
+      ]);
+      expect(job(TARGET.host).signal.aborted).toBe(true);
+      expect(c.reportPageJob).toHaveBeenCalledExactlyOnceWith(
+        A,
+        "a1.s",
+        PAGE_JOB,
+        UNCERTAIN_OUTCOME,
+      );
+      expect(renewals).toHaveLength(2);
+    });
   });
 });

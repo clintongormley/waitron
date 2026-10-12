@@ -5,9 +5,16 @@
 > receipt row. See [A493](../specs/2026-10-12-a493-departments-zones-design.md). The consent payload,
 > reservation and retry contracts remain; their separate rewrite is still open.
 
+> **2026-10-12, A231q:** the consent step is gone from the product: tasks C1a and C1b of the [A231q
+> plan](2026-10-12-a231q-invoice-delivery-part-2.md) removed it from staging, delivery rows and
+> retries, so the consent paths below, and any note calling that removal still open, are history. It
+> also built the office printers, delivery status, send-again, download and email actions that "Part
+> 2 still owes" lists; the withdrawal actions went with the consent step, and the open points are
+> backlog entries A552–A559. A448 and the legal research are unchanged.
+
 > **2026-10-10, A366 slice 7 and the owner's 2026-10-09 answer:** the planned consent box,
 > statement and withdrawal actions below are superseded by the
-> [single core rewrite](../../backlog/printers.md#remove-the-consent-step-from-emailed-receipts).
+> [single core rewrite](../../backlog/printers.md#decisions-and-deliberate-limits).
 > Current consent checks, stored payloads, reservation and retry remain until that work lands;
 > do not build the historical consent UI or fabricate acceptance data. The
 > [slice 7 plan](2026-10-08-a366-slice-7-receipts-per-department.md) supplies the independent
@@ -20,7 +27,7 @@
 
 **Owner split, 2026-10-07.** The owner prioritised UI work and authorised the completed foundation as A231p part 1. Part 1 keeps public F1 issuance disabled and ends `needs-owner-review`, with two run-it reviews and a convention review. A231q completes the remaining work after part 1 lands and the queued UI items finish. This supersedes the earlier requirement to put both complete deliveries in one PR.
 
-**Part 2 still owes:** the live wizard Email screen/client, required accepted test and provisioning credential sealing; the dashboard SMTP editor and restore checks (Task 3); office-printer discovery, registration/reactivation, location selection, claim/renewal and transient IPP transport (Task 5); delivery choices/status and send-again/download screens, withdrawal actions and their permission, draft and accessibility checks (Tasks 4 and 6); and the remaining integration, built-image rendering, box measurements and physical output checks (Tasks 1 and 7). The queued schema, receipt adapter and email worker in part 1 do not complete office-printer transport or any delivery screen. Physical printing still requires owner presence or arrangement. Public F1 remains disabled until the separate enablement gates are met.
+**Part 2 still owes:** office-printer discovery, registration/reactivation, location selection, claim/renewal and transient IPP transport (Task 5); delivery choices/status and send-again/download screens, withdrawal actions and their permission, draft and accessibility checks (Tasks 4 and 6); and the remaining integration, built-image rendering, box measurements and physical output checks (Tasks 1 and 7). The queued schema, receipt adapter and email worker in part 1 do not complete office-printer transport or any delivery screen. Physical printing still requires owner presence or arrangement. Public F1 remains disabled until the separate enablement gates are met.
 
 ## 0. Reconcile the starting point
 
@@ -48,7 +55,7 @@
 4. **The fiscal core stays untouched:** no changes to the hash/chain, allocator, immutable fiscal rows, alta builders, `registerSif`, `restoreFiscal` or `packages/core/src/record-sale.ts`. Task 4 may thread delivery metadata around existing issuance, never implement a new issue path. Public F1 refusals in `working-order.ts` and `till-sale.ts` remain closed. Exercise delivery with synthetic F1s created through the existing core in test fixtures, not by bypassing a public gate in production. The golden huella suite `packages/fiscal-verifactu/src/write-path.e2e.test.ts` and `packages/fiscal-verifactu/src/inmutabilidad.test.ts` must pass UNEDITED.
 5. **Focused baseline, before edits.** Run `pnpm --filter @waitron/server test src/receipt-ticket.test.ts src/receipt-lines.test.ts src/receipt-adjustments.test.ts src/receipt-print.test.ts src/orders-reprint.test.ts src/till-api.receipt.test.ts src/invoice-selection.test.ts src/collect-by-invoice.test.ts`, then the relevant F1/public-refusal cases in `src/till-sale-integrated.db.test.ts`, `src/simplified-limit.test.ts`, `src/bill-payments.test.ts` and `src/bill-payments-api.test.ts`. Run the unedited golden/immutability suites with `pnpm --filter @waitron/fiscal-verifactu test src/write-path.e2e.test.ts src/inmutabilidad.test.ts`, and the existing ticket-view and invoice-recipient dialog behavioural/a11y/unsaved suites before UI edits. Read the reported test counts; these are implementation instructions, not checks run by this documentation amendment.
 
-**Starting-point uncertainties.** The renderer/font bundle and independent raster readback still need Task 1's experiments; SMTP survival across restore paths still needs Task 3's tests; the wider raw HP reply and physical outcomes remain uncaptured here. Box memory/time measurements and real HP prints require owner presence or arrangement. Authorisation to build is not authorisation to print real paper. Keep these pending in the final handoff if unavailable, rather than claiming them verified.
+**Starting-point uncertainties.** The renderer/font bundle and independent raster readback still need Task 1's experiments; Task 3's restore matrix now covers credential survival at the local restore boundaries; real bucket downloads and Cloud transport are outside that matrix; the wider raw HP reply and physical outcomes remain uncaptured here. Box memory/time measurements and real HP prints require owner presence or arrangement. Authorisation to build is not authorisation to print real paper. Keep these pending in the final handoff if unavailable, rather than claiming them verified.
 
 **Every task below:**
 
@@ -321,6 +328,83 @@ The default sender refuses a plaintext server when STARTTLS is required. The rel
 run passed 381 cases. This endpoint does not yet provide the wizard screen or seal credentials
 at provisioning; those, the dashboard editor and restore checks remain pending.
 
+**2026-10-08 A231q provisioning checkpoint.** The final production Live provision now requires
+structured `email` settings, validates them before venue work and seals `email.smtp` before
+publishing. Demo and Prepare refuse supplied settings; development Live setup may omit them.
+The fiscal-test endpoint still accepts a request before the wizard collects email settings.
+Both seals must finish before the existing `secret_sealed` phase advances. A real-vault fixture
+refuses the SMTP insert after the fiscal seal, then resumes the same request to both stored
+purposes without provisioning again. A publishing-failure case resumes with settings sealed,
+while the persisted operation contains no proposed SMTP fields or fiscal secret. These cases
+exercise orchestration with a provisioning stub, not real venue minting. The first related six-file
+run passed 376 cases and the unedited golden/immutability suites passed 20. Four disposable
+controls removed required-email, non-live refusal, validation and SMTP sealing respectively;
+each failed intended cases, and restoration passed all 13 new cases. The wizard/client, dashboard
+editor, restores and browser/visual checks remain pending; Task 3 is not complete.
+
+
+**2026-10-08 A231q wizard checkpoint.** The live wizard Email step/client now tests structured
+settings through the existing setup endpoint, binds acceptance to the current values and
+administrator address, and includes the settings in final provisioning. It follows the fiscal test
+where required, otherwise venue details; Demo and Prepare omit stale email settings. Development
+onboarding still permits omission. The form uses shared fields, localized field/bottom messages,
+password reveal and Enter submission. Its draft scope retains the committed baseline on reconnect,
+and a departed request cannot accept a reopened screen. A required-email provisioning refusal
+returns to Email. The focused 13-file browser run passed 552 cases, and the unedited fiscal suites
+passed 20. A restricted new-screen coverage report reached 99.21/100/100/98.29
+(statements/lines/functions/branches), not package coverage. Four independently installed deletion
+controls failed intended assertions; restoration passed 30 cases. Six states passed axe in both
+languages, themes and measured CSS widths 390/1280; 48 screenshots were retained and inspected.
+Vitest scaled their PNG output; the width assertions measure the rendered iframe. One retained
+journey assertion now expects Email instead of immediate review, under Task 3's approved flow.
+The dashboard editor and restore experiments remain; Task 3 is not complete.
+
+**2026-10-08 A231q dashboard checkpoint.** The Email card and editor now use the existing
+redacted settings, save and test routes. Automatic reads are passive; tests and saves are active.
+Only a session with `system.manage` mounts the card. Demo and Prepare show delivery information
+without editing. Authentication is an explicit switch; changing an authenticated gateway needs
+fresh credentials, while switching it off submits empty credentials. The shared draft scope
+retains edits and their baseline across reconnects. Save commits the submitted snapshot before
+reporting success; later edits remain open. Successful writes close the current editor before
+refreshing; a failed refresh shows a load refusal. Departed reads and saves cannot overwrite the
+reopened editor. Phone screenshots exposed a password-label/reveal overlap, reproduced by two
+geometry failures and fixed with the shared minimum-column/form-width tokens. Restore experiments
+remain before Task 3 can be marked complete. Whole-branch review, package CI and the remaining
+A231q transport/delivery/physical gates are still owed. The restricted two-component report
+passed 72 cases with 98.42/100/100/95.28 coverage (statements/lines/functions/branches);
+this is not package coverage. Five installed guard-deletion controls failed intended assertions
+and restoration passed 40 cases. Ten states passed axe in both languages, themes and measured
+CSS widths 390/1280; all 80 retained screenshots were inspected through eight contact sheets.
+A combined eight-file browser startup stalled before reporting tests; process samples and the
+responsive HTTP server were retained, and only the owned processes were stopped. The serial
+eight-file focused run passed 635 cases; the startup stall's cause remains unverified.
+
+**2026-10-08 restore checkpoint (Task 3).** `apps/server/src/restore-email.test.ts`
+runs 20 cases across the archive command, staged wizard archive, bucket command, staged wizard
+bucket and managed Cloud staging. Each path restores a real migrated SQLite copy with and without
+`email.smtp`, into a destination with the source key and identity or one with a different vault
+key and no trading identity. The archive producer is the real backup sweep; Cloud uses the real
+snapshot builder; bucket preparation reads a signed pointer and unlocks the real sealed-state row.
+The restored key opens the original SMTP credential in every configured case. Each absent case
+returns `unconfigured`, and the authenticated settings API returns `settings: null` with editing
+available. A manager then saves fresh settings through the real PUT, and the resolver reads them
+back. The configured API response is redacted. The existing dashboard missing-email cases
+passed in `email-settings-panel.test.ts` and `email-screen.test.ts`.
+
+These are separate directories on one host, not two physical machines. Bucket storage uses the
+memory fixture and its downloader copies the real SQLite fixture instead of invoking Litestream;
+command wrappers select source migrations. Wizard and Cloud cases run staging and the entrypoint's
+restore consumer, not their HTTP or approval/download journeys. Managed Cloud cases use
+preproduction snapshots, matching `runStagedRestore`'s accepted managed marker; they do not establish
+production Cloud recovery. No physical transfer, real S3 download or Cloud service request was run.
+
+The six-file focused server run passed 226 cases, including the 20 restore cases. Removing key restoration in an independently installed disposable
+checkout failed all 10 replacement cases at the restored-key assertion. Changing missing email
+from `unconfigured` to local capture failed all 10 absent cases at the delivery equality; restoring
+both files passed 20. No production change was needed for these observations, and no retained
+assertion changed. Task 3's server, wizard, dashboard and local restore work is complete; whole-branch
+reviews, package CI and the remaining transport, delivery and physical gates are still owed.
+
 ## 4. Email the PDF
 
 **2026-10-07 transport checkpoint.** `resolveInvoiceEmailDelivery` applies the mode rules below
@@ -390,6 +474,18 @@ no Task 4 completion claim.
 **The till's sale view** shows the delivery's state ("sending", "sent to …", "not delivered", "may not have been delivered") and not-delivered actions. Both `failed` and `unknown` offer an original retry; completion offers marked duplicates. Preserve the handover/status distinction and the existing view's accessibility tests.
 
 ## 5. Office printers for invoices
+
+**Capability-query checkpoint, 2026-10-08 (A231q):** the wider Get-Printer-Attributes encoder,
+bounded HTTP query and format selector are implemented in `apps/print-agent/src/ipp-capabilities.ts`.
+The owner's printer answered the read-only query; its raw reply and capture provenance are in
+`apps/print-agent/src/__fixtures__/hp-color-laserjet-m181fw-capabilities.ipp` and the sibling `.md`.
+The current selector uses the advertised format list, requires the grey pixel type and square
+300/600 dpi for raster, and refuses letter-only raster while the invoice encoder emits A4 only.
+PDF selection accepts A4 or letter. The package coverage run passed 406 cases; five installed
+controls failed and restored 71 focused cases before the additive letter-only checks. The wider
+query is not connected to discovery yet. Next: carry IPP announcement kind, port and `rp` through
+discovery, keep it excluded from receipt registration on failed queries, and merge raw/IPP sightings.
+Registration, claim/renewal, transient Print-Job transport, polling and physical checks remain open.
 
 **Inspect/change:**
 

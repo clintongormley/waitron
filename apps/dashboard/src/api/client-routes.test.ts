@@ -1107,6 +1107,67 @@ describe("DashboardApi routes", () => {
   });
 });
 
+it("asks for a bill's full invoice on A4 under the given request key", async () => {
+  const attempt = { id: "delivery-1", medium: "a4", status: "queued" };
+  const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(attempt));
+  const api = new DashboardApi("", fetchImpl);
+
+  expect(await api.requestOrderA4Delivery("bill/1", "key-1")).toEqual(attempt);
+  expect(callsOf(fetchImpl)).toEqual([
+    [
+      "/management-api/orders/bill%2F1/invoice-deliveries",
+      "POST",
+      { medium: "a4", requestKey: "key-1" },
+    ],
+  ]);
+});
+
+it("asks for a bill's full invoice by email to the given address under the given request key", async () => {
+  const attempt = { id: "delivery-1", medium: "email", status: "queued" };
+  const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(attempt));
+  const api = new DashboardApi("", fetchImpl);
+
+  expect(await api.requestOrderEmailDelivery("bill/1", "ana@example.com", "key-1")).toEqual(
+    attempt,
+  );
+  expect(callsOf(fetchImpl)).toEqual([
+    [
+      "/management-api/orders/bill%2F1/invoice-deliveries",
+      "POST",
+      { medium: "email", recipient: "ana@example.com", requestKey: "key-1" },
+    ],
+  ]);
+});
+
+it("emails a bill's full invoice again through the ended attempt, under the given request key", async () => {
+  const attempt = { id: "delivery-2", medium: "email", status: "queued" };
+  const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(attempt));
+  const api = new DashboardApi("", fetchImpl);
+
+  expect(await api.retryOrderEmailDelivery("bill/1", "delivery/1", "key-2")).toEqual(attempt);
+  expect(callsOf(fetchImpl)).toEqual([
+    [
+      "/management-api/orders/bill%2F1/invoice-deliveries/delivery%2F1/retry",
+      "POST",
+      { requestKey: "key-2" },
+    ],
+  ]);
+});
+
+it("downloads a bill's full invoice PDF as a POST, bytes untouched", async () => {
+  const fetchImpl = vi
+    .fn()
+    .mockResolvedValue(new Response(new Uint8Array([0x25, 0x50, 0x44, 0x46]), { status: 200 }));
+  const api = new DashboardApi("", fetchImpl);
+
+  const file = await api.downloadOrderInvoicePdf("bill/1");
+
+  expect(callsOf(fetchImpl)).toEqual([
+    ["/management-api/orders/bill%2F1/invoice-pdf", "POST", undefined],
+  ]);
+  expect([...new Uint8Array(await file.arrayBuffer())]).toEqual([0x25, 0x50, 0x44, 0x46]);
+});
+
 it("downloads the modelo 303 file for the chosen period as an ordinary GET, bytes untouched", async () => {
   const fetchImpl = vi
     .fn()
@@ -1309,4 +1370,76 @@ it("makes only explicitly passive draft previews passive, including on the backg
     ["/management-api/receipt-preview", "POST", draft],
     ["/management-api/receipt-preview", "POST", draft],
   ]);
+});
+
+it("reads, registers, changes and chooses office printers on the page-printer routes", async () => {
+  const row = {
+    id: "pp1",
+    name: "Office",
+    host: "10.0.0.56",
+    port: 631,
+    resourcePath: "/ipp/print",
+    documentFormat: "application/pdf",
+    supportedFormats: ["application/pdf"],
+    media: "iso_a4_210x297mm",
+    resolutionDpi: 600,
+    active: true,
+    invoicePrinter: false,
+    agentId: "a1",
+    agentName: "Office agent",
+  };
+  const fetchImpl = vi
+    .fn()
+    .mockResolvedValueOnce(jsonResponse([row]))
+    .mockResolvedValueOnce(jsonResponse({ id: "pp1", outcome: "repointed" }))
+    .mockResolvedValueOnce(emptyResponse())
+    .mockResolvedValueOnce(emptyResponse())
+    .mockResolvedValueOnce(emptyResponse())
+    .mockResolvedValueOnce(refusal("page_printer.not_found", 404));
+  const api = new DashboardApi("", fetchImpl);
+  expect(await api.listPagePrinters()).toEqual([row]);
+  const entry = { agentId: "a2", host: "10.0.0.56", port: 631, path: "/ipp/print" };
+  expect(await api.registerPagePrinter({ ...entry, name: "Office" })).toEqual({
+    id: "pp1",
+    outcome: "repointed",
+  });
+  await api.updatePagePrinter("pp1", { name: "Back office" });
+  await api.updatePagePrinter("pp1", { active: false });
+  await api.setInvoicePrinter(null);
+  await expect(api.setInvoicePrinter("pp1")).rejects.toMatchObject({
+    code: "page_printer.not_found",
+  });
+  expect(callsOf(fetchImpl)).toEqual([
+    ["/management-api/page-printers", "GET", undefined],
+    ["/management-api/page-printers", "POST", { ...entry, name: "Office" }],
+    ["/management-api/page-printers/pp1", "PATCH", { name: "Back office" }],
+    ["/management-api/page-printers/pp1", "PATCH", { active: false }],
+    ["/management-api/page-printers/invoice-printer", "PUT", { pagePrinterId: null }],
+    ["/management-api/page-printers/invoice-printer", "PUT", { pagePrinterId: "pp1" }],
+  ]);
+});
+
+it("requests an office printer's test page and reads its outcome passively", async () => {
+  const fetchImpl = vi
+    .fn()
+    .mockResolvedValueOnce(jsonResponse({ id: "tp1", status: "waiting" }))
+    .mockResolvedValueOnce(jsonResponse({ id: "tp1", status: "unknown", failureCode: "timeout" }))
+    .mockResolvedValueOnce(jsonResponse(null));
+  const api = new DashboardApi("", fetchImpl);
+  expect(await api.printPagePrinterTestPage("pp1")).toEqual({ id: "tp1", status: "waiting" });
+  expect(await api.background.readPagePrinterTestPage("pp1")).toEqual({
+    id: "tp1",
+    status: "unknown",
+    failureCode: "timeout",
+  });
+  expect(await api.background.readPagePrinterTestPage("pp1")).toBeNull();
+  expect(callsOf(fetchImpl)).toEqual([
+    ["/management-api/page-printers/pp1/test-page", "POST", undefined],
+    ["/management-api/page-printers/pp1/test-page", "GET", undefined],
+    ["/management-api/page-printers/pp1/test-page", "GET", undefined],
+  ]);
+  const live = (fetchImpl.mock.calls as [string, RequestInit][]).map(([, init]) =>
+    new Headers(init.headers).get("x-waitron-live"),
+  );
+  expect(live).toEqual([null, "1", "1"]);
 });

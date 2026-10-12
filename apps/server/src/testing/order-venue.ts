@@ -80,7 +80,13 @@ export async function provisionOrderVenue(db: Database): Promise<OrderVenue> {
   const orders = new Hono();
   mountOrdersApi(
     orders,
-    { db, backend: venue.backend, cfg: { nodeId: venue.cfg.nodeId }, till: venue.cfg },
+    {
+      db,
+      backend: venue.backend,
+      cfg: { nodeId: venue.cfg.nodeId },
+      till: venue.cfg,
+      invoiceEmailAvailable: () => Promise.resolve(false),
+    },
     quiet,
   );
   return {

@@ -35,11 +35,11 @@ export async function renderInvoicePdf(input: ReceiptDocumentInput): Promise<Buf
       } else if (element.kind === "rule") {
         pdf.rect(element.x, element.y, element.width, element.thickness).fill();
       } else {
-        const pitch = element.size / (element.modules.length + 8);
+        const pitch = element.moduleSize;
         for (let row = 0; row < element.modules.length; row++) {
           for (let col = 0; col < element.modules.length; col++) {
             if (element.modules[row]![col]) {
-              pdf.rect(element.x + (col + 4) * pitch, element.y + (row + 4) * pitch, pitch, pitch);
+              pdf.rect(element.x + col * pitch, element.y + row * pitch, pitch, pitch);
             }
           }
         }

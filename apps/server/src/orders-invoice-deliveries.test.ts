@@ -1,0 +1,750 @@
+import { randomUUID } from "node:crypto";
+import { Hono } from "hono";
+import { and, eq, sql } from "drizzle-orm";
+import { describe, expect, it, vi } from "vitest";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import {
+  deviceProfiles,
+  invoiceDeliveries,
+  invoiceSeries,
+  pagePrinters,
+  printAgents,
+  tenants,
+} from "@waitron/db";
+import { recordSale } from "@waitron/core";
+import { seriesId as brandSeriesId, workingOrderId as brandWorkingOrderId } from "@waitron/shared";
+import { inTx, send } from "./testing/bill-venue.js";
+import { enrolDeviceForTest } from "./testing/enrol.js";
+import {
+  collect,
+  parked,
+  placedIssuedBill,
+  provisionOrderVenue,
+  type OrderVenue,
+} from "./testing/order-venue.js";
+import { DEVICE_COOKIE } from "./device-session.js";
+import { reserveInvoiceDelivery } from "./invoice-delivery.js";
+import { enqueueOriginalReceipt } from "./receipt-print.js";
+import { readSettledTicket } from "./till-sale.js";
+import { placeOrder } from "./working-order.js";
+import { departmentReceipts, departments } from "@waitron/venue-service";
+import { mountOrdersApi } from "./orders-api.js";
+
+// The dashboard's Print on A4 and the order detail's delivery status, against synthetic full
+// invoices written through the core (public F1 issuance stays disabled).
+const EMAIL = "cliente@example.test";
+let venue: OrderVenue;
+let fullSeriesId = "";
+let officeId = "";
+/** The Orders routes with a mail transport whose check answers `email.transport`. */
+const emailOrders = new Hono();
+const email: { transport: boolean | Error } = { transport: true };
+const logged: unknown[][] = [];
+useVenueDb({
+  resetPerTest: false,
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+  setup: async (db) => {
+    venue = await provisionOrderVenue(db);
+    await inTx(venue, async (tx) => {
+      await tx.update(tenants).set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" });
+      const [series] = await tx
+        .select({ id: invoiceSeries.id })
+        .from(invoiceSeries)
+        .where(and(eq(invoiceSeries.nodeId, venue.cfg.nodeId), eq(invoiceSeries.purpose, "full")));
+      fullSeriesId = series!.id;
+      const [agent] = await tx
+        .insert(printAgents)
+        .values({ locationId: venue.cfg.locationId, name: "Back office agent", tokenHash: "x" })
+        .returning({ id: printAgents.id });
+      const [office] = await tx
+        .insert(pagePrinters)
+        .values({
+          locationId: venue.cfg.locationId,
+          name: "Oficina",
+          host: "192.0.2.20",
+          port: 631,
+          resourcePath: "/ipp/print",
+          documentFormat: "application/pdf",
+          supportedFormats: ["application/pdf"],
+          media: "iso_a4_210x297mm",
+          resolutionDpi: 600,
+          agentId: agent!.id,
+          invoiceDefault: true,
+        })
+        .returning({ id: pagePrinters.id });
+      officeId = office!.id;
+      const receipt = { email: "facturas@example.test" };
+      for (const { id } of await tx
+        .select({ id: departments.id })
+        .from(departments)
+        .where(eq(departments.locationId, venue.cfg.locationId))) {
+        await tx
+          .insert(departmentReceipts)
+          .values({ departmentId: id, receipt })
+          .onConflictDoUpdate({ target: departmentReceipts.departmentId, set: { receipt } });
+      }
+    });
+    mountOrdersApi(
+      emailOrders,
+      {
+        db,
+        backend: venue.backend,
+        cfg: { nodeId: venue.cfg.nodeId },
+        till: venue.cfg,
+        invoiceEmailAvailable: () =>
+          email.transport instanceof Error
+            ? Promise.reject(email.transport)
+            : Promise.resolve(email.transport),
+      },
+      (...args: unknown[]) => {
+        logged.push(args);
+      },
+    );
+  },
+});
+
+/** A full invoice on a new open bill (sent to the kitchen when `placed`), written through the core. */
+async function fullInvoice(placed = false): Promise<{ billId: string; saleId: string }> {
+  const billId = await parked(venue, "Caña");
+  if (placed)
+    await placeOrder(
+      { db: venue.db, backend: venue.backend, clock: venue.clock },
+      venue.cfg,
+      billId,
+      venue.operatorId,
+    );
+  const { saleId } = await inTx(venue, (tx) =>
+    recordSale(tx, venue.backend, {
+      origin: venue.cfg.origin,
+      nodeId: venue.cfg.nodeId,
+      seriesId: brandSeriesId(fullSeriesId),
+      workingOrderId: brandWorkingOrderId(billId),
+      locale: venue.cfg.locale,
+      invoiceLocales: venue.cfg.invoiceLocales,
+      counterparty: { taxId: "12345678Z", legalName: "Cliente Mayorista SL", countryCode: "ES" },
+      recipientAddress: "Calle Cliente 9, Madrid",
+      total: "3.00",
+      lines: [
+        {
+          lineNo: 1,
+          name: "Caña",
+          descriptions: { [venue.cfg.locale]: "Caña de cerveza" },
+          quantity: "1",
+          unitPrice: "3.00",
+          vatRate: "10",
+          lineTotal: "3.00",
+        },
+      ],
+      clock: venue.clock,
+      settlement: { kind: "deferred" },
+      operatorId: venue.operatorId,
+    }),
+  );
+  return { billId, saleId };
+}
+
+const printOnA4 = (cookie: string, billId: string, body: Record<string, unknown>) =>
+  send(venue.orders, cookie, "POST", `/management-api/orders/${billId}/invoice-deliveries`, body);
+
+const a4 = (requestKey: string = randomUUID()) => ({ medium: "a4", requestKey });
+
+const deliveriesOf = (saleId: string) =>
+  inTx(venue, (tx) =>
+    tx.select().from(invoiceDeliveries).where(eq(invoiceDeliveries.saleId, saleId)),
+  );
+
+const detailOf = (cookie: string, billId: string) =>
+  send(venue.orders, cookie, "GET", `/management-api/orders/${billId}`);
+
+async function deliveryCount(): Promise<number> {
+  return venue.db.all<{ n: number }>(sql`select count(*) as n from invoice_deliveries`)[0]!.n;
+}
+
+describe("dashboard print on A4", () => {
+  it("queues an A4 original on the location's invoice printer for a staff dashboard session", async () => {
+    const { billId, saleId } = await fullInvoice();
+    const answer = await printOnA4(venue.staffDashboard, billId, a4());
+    expect(answer.status).toBe(200);
+    expect(answer.json).toMatchObject({
+      medium: "a4",
+      designation: "original",
+      status: "queued",
+      personId: venue.operatorId,
+      printerHold: null,
+    });
+    const rows = await deliveriesOf(saleId);
+    expect(rows).toEqual([
+      expect.objectContaining({
+        id: (answer.json as { id: string }).id,
+        medium: "a4",
+        pagePrinterId: officeId,
+        personId: venue.operatorId,
+      }),
+    ]);
+  });
+
+  it("answers a replayed request key with the same attempt and no second row", async () => {
+    const { billId, saleId } = await fullInvoice();
+    const key = randomUUID();
+    const first = await printOnA4(venue.adminDashboard, billId, a4(key));
+    expect(first.status).toBe(200);
+    const again = await printOnA4(venue.adminDashboard, billId, a4(key));
+    expect(again).toEqual(first);
+    expect(await deliveriesOf(saleId)).toHaveLength(1);
+  });
+
+  it("refuses a second attempt while one is active, writing nothing", async () => {
+    const { billId, saleId } = await fullInvoice();
+    expect((await printOnA4(venue.adminDashboard, billId, a4())).status).toBe(200);
+    const before = await deliveriesOf(saleId);
+    expect(await printOnA4(venue.adminDashboard, billId, a4())).toMatchObject({
+      status: 409,
+      json: { code: "invoice_delivery.active" },
+    });
+    expect(await deliveriesOf(saleId)).toEqual(before);
+  });
+
+  it("refuses a request key that already asked for an email, changing nothing", async () => {
+    const { billId, saleId } = await fullInvoice();
+    const key = randomUUID();
+    await inTx(venue, (tx) =>
+      reserveInvoiceDelivery(tx, saleId, {
+        requestKey: key,
+        personId: venue.operatorId,
+        medium: "email",
+        recipient: EMAIL,
+      }),
+    );
+    const before = await deliveriesOf(saleId);
+    expect(await printOnA4(venue.adminDashboard, billId, a4(key))).toMatchObject({
+      status: 409,
+      json: { code: "submission.id_reused", params: { submissionId: key } },
+    });
+    expect(await deliveriesOf(saleId)).toEqual(before);
+  });
+
+  it("refuses a simplified invoice, writing nothing", async () => {
+    const billId = await placedIssuedBill(venue, "Caña");
+    const before = await deliveryCount();
+    expect(await printOnA4(venue.adminDashboard, billId, a4())).toMatchObject({
+      status: 409,
+      json: { code: "invoice_delivery.full_invoice_required" },
+    });
+    expect(await deliveryCount()).toBe(before);
+  });
+
+  it("refuses when the location has no invoice printer", async () => {
+    const { billId, saleId } = await fullInvoice();
+    await inTx(venue, (tx) =>
+      tx.update(pagePrinters).set({ invoiceDefault: false }).where(eq(pagePrinters.id, officeId)),
+    );
+    try {
+      expect(await printOnA4(venue.adminDashboard, billId, a4())).toMatchObject({
+        status: 409,
+        json: { code: "invoice_delivery.printer_invalid" },
+      });
+    } finally {
+      await inTx(venue, (tx) =>
+        tx.update(pagePrinters).set({ invoiceDefault: true }).where(eq(pagePrinters.id, officeId)),
+      );
+    }
+    expect(await deliveriesOf(saleId)).toEqual([]);
+  });
+
+  it("refuses a bound dashboard device without print-receipt, writing nothing", async () => {
+    const { billId, saleId } = await fullInvoice();
+    const [profile] = await inTx(venue, (tx) =>
+      tx
+        .insert(deviceProfiles)
+        .values({
+          name: `No receipt ${randomUUID()}`,
+          formFactor: "phone-portrait",
+          capabilities: [],
+        })
+        .returning({ id: deviceProfiles.id }),
+    );
+    const device = await enrolDeviceForTest(venue.db, venue.cfg, {
+      name: "No receipt",
+      profileId: profile!.id,
+    });
+    const cookie = `${venue.staffDashboard}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`;
+    expect(await printOnA4(cookie, billId, a4())).toMatchObject({
+      status: 403,
+      json: { code: "device.forbidden_action", params: { action: "invoice_delivery" } },
+    });
+    expect(await deliveriesOf(saleId)).toEqual([]);
+  });
+
+  it("does not let staff print an older finished invoice hidden from their Orders detail", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-01-01T12:00:00.000Z"));
+    let old: { billId: string; saleId: string };
+    try {
+      old = await fullInvoice(true);
+      expect((await collect(venue, old.billId, "3.00")).status).toBe(200);
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(await printOnA4(venue.staffDashboard, old.billId, a4())).toMatchObject({
+      status: 404,
+      json: { code: "working_order.not_found" },
+    });
+    expect(await deliveriesOf(old.saleId)).toEqual([]);
+    expect((await printOnA4(venue.supervisorDashboard, old.billId, a4())).status).toBe(200);
+  });
+
+  it("refuses a missing session, a bad body and a bill with no invoice", async () => {
+    const { billId } = await fullInvoice();
+    const open = await parked(venue, "Caña");
+    const before = await deliveryCount();
+    expect(await printOnA4("", billId, a4())).toMatchObject({
+      status: 401,
+      json: { code: "management_session.required" },
+    });
+    for (const body of [{ requestKey: randomUUID() }, { medium: "fax", requestKey: randomUUID() }])
+      expect(await printOnA4(venue.adminDashboard, billId, body)).toMatchObject({
+        status: 400,
+        json: { code: "management.request_invalid", params: { field: "medium" } },
+      });
+    for (const requestKey of [undefined, "not-an-id"])
+      expect(
+        await printOnA4(venue.adminDashboard, billId, { medium: "a4", requestKey }),
+      ).toMatchObject({
+        status: 400,
+        json: { code: "management.request_invalid", params: { field: "requestKey" } },
+      });
+    for (const id of [open, randomUUID(), "not-a-bill"])
+      expect(await printOnA4(venue.adminDashboard, id, a4())).toMatchObject({
+        status: 404,
+        json: { code: "working_order.not_found" },
+      });
+    expect(await deliveryCount()).toBe(before);
+  });
+});
+
+describe("the order detail's delivery status", () => {
+  it("carries the status, the history with names and the downloads, and no recipient address", async () => {
+    const { billId, saleId } = await fullInvoice();
+    const email = await inTx(venue, (tx) =>
+      reserveInvoiceDelivery(tx, saleId, {
+        requestKey: randomUUID(),
+        personId: venue.adminId,
+        medium: "email",
+        recipient: EMAIL,
+      }),
+    );
+    await inTx(venue, (tx) =>
+      tx
+        .update(invoiceDeliveries)
+        .set({ status: "sent", completedAt: new Date().toISOString() })
+        .where(eq(invoiceDeliveries.id, email.id)),
+    );
+    const printed = await printOnA4(venue.staffDashboard, billId, a4());
+    expect(printed.status).toBe(200);
+    expect(
+      (
+        await venue.orders.request(`/management-api/orders/${billId}/invoice-pdf`, {
+          method: "POST",
+          headers: { cookie: venue.adminDashboard },
+        })
+      ).status,
+    ).toBe(200);
+
+    const detail = await detailOf(venue.supervisorDashboard, billId);
+    expect(detail.status).toBe(200);
+    expect(detail.json).toMatchObject({
+      deliveries: {
+        current: {
+          id: (printed.json as { id: string }).id,
+          medium: "a4",
+          designation: "duplicate",
+          status: "queued",
+          personId: venue.operatorId,
+          personName: "Ana",
+          printerHold: null,
+        },
+        originalCompleted: true,
+        actions: { retryOriginal: null, printOnA4: null, receiptInstead: null },
+        history: [
+          { medium: "a4", designation: "duplicate", personName: "Ana" },
+          {
+            id: email.id,
+            medium: "email",
+            designation: "original",
+            status: "sent",
+            personId: venue.adminId,
+            personName: "Administradora",
+          },
+        ],
+      },
+      invoicePdfDownloads: [{ personId: venue.adminId, personName: "Administradora" }],
+    });
+    const body = detail.json as {
+      deliveries: { history: unknown[] };
+      invoicePdfDownloads: { requestedAt: string }[];
+    };
+    expect(body.deliveries.history).toHaveLength(2);
+    expect(body.invoicePdfDownloads).toHaveLength(1);
+    expect(Date.parse(body.invoicePdfDownloads[0]!.requestedAt)).not.toBeNaN();
+    // The stored email row does hold the address, so its absence from the answer is meaningful.
+    const [stored] = await inTx(venue, (tx) =>
+      tx.select().from(invoiceDeliveries).where(eq(invoiceDeliveries.id, email.id)),
+    );
+    expect(stored!.recipient).toBe(EMAIL);
+    expect(JSON.stringify(detail.json)).not.toContain(EMAIL);
+  });
+
+  it("names nobody for a receipt original no one asked for", async () => {
+    const { billId, saleId } = await fullInvoice();
+    await inTx(venue, async (tx) =>
+      enqueueOriginalReceipt(
+        tx,
+        venue.cfg,
+        await readSettledTicket(venue.backend, tx, venue.cfg, billId),
+        saleId,
+      ),
+    );
+    expect((await detailOf(venue.adminDashboard, billId)).json).toMatchObject({
+      deliveries: {
+        current: { id: null, medium: "receipt", personId: null, personName: null },
+        history: [{ id: null, medium: "receipt", personId: null, personName: null }],
+      },
+    });
+  });
+
+  it("offers Print on A4 with the invoice printer when nothing is active", async () => {
+    const { billId } = await fullInvoice();
+    expect((await detailOf(venue.adminDashboard, billId)).json).toMatchObject({
+      deliveries: {
+        current: null,
+        originalCompleted: false,
+        actions: {
+          printOnA4: { printer: { id: officeId, name: "Oficina" }, designation: "original" },
+        },
+        history: [],
+      },
+      invoicePdfDownloads: [],
+    });
+  });
+
+  it("shows what the office printer is holding the A4 for", async () => {
+    const { billId, saleId } = await fullInvoice();
+    const printed = await printOnA4(venue.adminDashboard, billId, a4());
+    await inTx(venue, (tx) =>
+      tx
+        .update(invoiceDeliveries)
+        .set({ status: "sending", claimedAt: new Date().toISOString(), printerHold: "paper_out" })
+        .where(eq(invoiceDeliveries.saleId, saleId)),
+    );
+    expect((await detailOf(venue.adminDashboard, billId)).json).toMatchObject({
+      deliveries: {
+        current: {
+          id: (printed.json as { id: string }).id,
+          status: "sending",
+          printerHold: "paper_out",
+        },
+      },
+    });
+  });
+
+  it("ends a lapsed A4 claim before reading", async () => {
+    const { billId, saleId } = await fullInvoice();
+    expect((await printOnA4(venue.adminDashboard, billId, a4())).status).toBe(200);
+    await inTx(venue, (tx) =>
+      tx
+        .update(invoiceDeliveries)
+        .set({ status: "sending", claimedAt: new Date(Date.now() - 120_000).toISOString() })
+        .where(eq(invoiceDeliveries.saleId, saleId)),
+    );
+    expect((await detailOf(venue.adminDashboard, billId)).json).toMatchObject({
+      deliveries: { current: { status: "unknown", failureCode: "timeout" } },
+    });
+  });
+
+  it("has no delivery status and no downloads for a simplified invoice or an open bill", async () => {
+    const simplified = await placedIssuedBill(venue, "Caña");
+    const open = await parked(venue, "Caña");
+    for (const billId of [simplified, open])
+      expect((await detailOf(venue.adminDashboard, billId)).json).toMatchObject({
+        deliveries: null,
+        invoicePdfDownloads: [],
+      });
+  });
+});
+
+const CUSTOMER_EMAIL = "cliente.privado@example.test";
+
+const emailIt = (cookie: string, billId: string, body: Record<string, unknown> = {}) =>
+  send(emailOrders, cookie, "POST", `/management-api/orders/${billId}/invoice-deliveries`, {
+    medium: "email",
+    recipient: CUSTOMER_EMAIL,
+    requestKey: randomUUID(),
+    ...body,
+  });
+
+const retry = (
+  cookie: string,
+  billId: string,
+  deliveryId: string,
+  requestKey: string = randomUUID(),
+) =>
+  send(
+    emailOrders,
+    cookie,
+    "POST",
+    `/management-api/orders/${billId}/invoice-deliveries/${deliveryId}/retry`,
+    { requestKey },
+  );
+
+/** An email original to the customer that the mail server refused. */
+async function failedEmail(billId: string, saleId: string): Promise<string> {
+  const queued = await emailIt(venue.adminDashboard, billId);
+  expect(queued.status).toBe(200);
+  const id = (queued.json as { id: string }).id;
+  await inTx(venue, (tx) =>
+    tx
+      .update(invoiceDeliveries)
+      .set({
+        status: "failed",
+        failureCode: "transport_failed",
+        reportedAt: new Date().toISOString(),
+      })
+      .where(eq(invoiceDeliveries.id, id)),
+  );
+  expect(await deliveriesOf(saleId)).toHaveLength(1);
+  return id;
+}
+
+describe("dashboard email", () => {
+  it("emails a full invoice for a person holding report.export, answering no address", async () => {
+    email.transport = true;
+    const { billId, saleId } = await fullInvoice();
+    const answer = await emailIt(venue.adminDashboard, billId, { recipient: ` ${CUSTOMER_EMAIL}` });
+    expect(answer.status).toBe(200);
+    const rows = await deliveriesOf(saleId);
+    expect(rows).toEqual([
+      expect.objectContaining({
+        id: (answer.json as { id: string }).id,
+        medium: "email",
+        designation: "original",
+        status: "queued",
+        recipient: CUSTOMER_EMAIL,
+        personId: venue.adminId,
+      }),
+    ]);
+    expect(answer.json).toMatchObject({ medium: "email", personId: venue.adminId });
+    expect(JSON.stringify(answer.json)).not.toContain("cliente.privado");
+  });
+
+  it("refuses a person without report.export, writing nothing", async () => {
+    email.transport = true;
+    const { billId, saleId } = await fullInvoice();
+    const failed = await failedEmail(billId, saleId);
+    for (const cookie of [venue.supervisorDashboard, venue.staffDashboard]) {
+      expect(await emailIt(cookie, billId)).toMatchObject({
+        status: 403,
+        json: { code: "authorization.not_permitted" },
+      });
+      expect(await retry(cookie, billId, failed)).toMatchObject({
+        status: 403,
+        json: { code: "authorization.not_permitted" },
+      });
+    }
+    expect(await deliveriesOf(saleId)).toHaveLength(1);
+  });
+
+  it("refuses a missing or malformed address, and mail that cannot be sent, writing nothing", async () => {
+    email.transport = true;
+    const { billId, saleId } = await fullInvoice();
+    for (const recipient of [undefined, "", "cliente@", 7])
+      expect(await emailIt(venue.adminDashboard, billId, { recipient })).toMatchObject({
+        status: 400,
+        json: { code: "management.request_invalid", params: { field: "recipient" } },
+      });
+    email.transport = false;
+    expect(await emailIt(venue.adminDashboard, billId)).toMatchObject({
+      status: 409,
+      json: { code: "invoice_delivery.email_unavailable" },
+    });
+    email.transport = true;
+    expect(await deliveriesOf(saleId)).toEqual([]);
+  });
+
+  it("answers a replayed key with the same attempt, and gives one attempt to two requests racing", async () => {
+    email.transport = true;
+    const { billId, saleId } = await fullInvoice();
+    const key = randomUUID();
+    const answers = await Promise.all([
+      emailIt(venue.adminDashboard, billId, { requestKey: key }),
+      emailIt(venue.adminDashboard, billId),
+    ]);
+    expect(answers.map((answer) => answer.status).sort()).toEqual([200, 409]);
+    expect(answers.find((answer) => answer.status === 409)).toMatchObject({
+      json: { code: "invoice_delivery.active" },
+    });
+    const rows = await deliveriesOf(saleId);
+    expect(rows).toHaveLength(1);
+    const again = await emailIt(venue.adminDashboard, billId, { requestKey: rows[0]!.requestKey });
+    expect(again).toEqual(answers.find((answer) => answer.status === 200));
+    expect(await deliveriesOf(saleId)).toEqual(rows);
+  });
+
+  it("refuses a bill with no invoice, a malformed id and a bad request key, writing nothing", async () => {
+    email.transport = true;
+    const open = await parked(venue, "Caña");
+    const before = await deliveryCount();
+    for (const id of [open, randomUUID(), "not-a-bill"]) {
+      expect(await emailIt(venue.adminDashboard, id)).toMatchObject({
+        status: 404,
+        json: { code: "working_order.not_found" },
+      });
+      expect(await retry(venue.adminDashboard, id, randomUUID())).toMatchObject({
+        status: 404,
+        json: { code: "working_order.not_found" },
+      });
+    }
+    const { billId } = await fullInvoice();
+    expect(await retry(venue.adminDashboard, billId, randomUUID(), "again")).toMatchObject({
+      status: 400,
+      json: { code: "management.request_invalid", params: { field: "requestKey" } },
+    });
+    expect(await deliveryCount()).toBe(before);
+  });
+
+  it("emails a duplicate once the original was sent", async () => {
+    email.transport = true;
+    const { billId, saleId } = await fullInvoice();
+    const first = (await emailIt(venue.adminDashboard, billId)).json as { id: string };
+    await inTx(venue, (tx) =>
+      tx
+        .update(invoiceDeliveries)
+        .set({ status: "sent", completedAt: new Date().toISOString() })
+        .where(eq(invoiceDeliveries.id, first.id)),
+    );
+    expect((await emailIt(venue.adminDashboard, billId)).json).toMatchObject({
+      designation: "duplicate",
+      status: "queued",
+    });
+    expect(await deliveriesOf(saleId)).toHaveLength(2);
+  });
+
+  it("emails the same address again as the original after a failure, once per key", async () => {
+    email.transport = true;
+    const { billId, saleId } = await fullInvoice();
+    const failed = await failedEmail(billId, saleId);
+    const key = randomUUID();
+    const answer = await retry(venue.adminDashboard, billId, failed, key);
+    expect(answer.status).toBe(200);
+    expect(answer.json).toMatchObject({
+      medium: "email",
+      designation: "original",
+      status: "queued",
+    });
+    expect(await retry(venue.adminDashboard, billId, failed, key)).toEqual(answer);
+    const rows = await deliveriesOf(saleId);
+    expect(rows).toHaveLength(2);
+    expect(rows.find((row) => row.id !== failed)).toMatchObject({
+      recipient: CUSTOMER_EMAIL,
+      requestKey: key,
+      personId: venue.adminId,
+      generation: 2,
+    });
+    expect(await retry(venue.adminDashboard, billId, failed)).toMatchObject({
+      status: 409,
+      json: { code: "invoice_delivery.active" },
+    });
+    expect(await retry(venue.adminDashboard, billId, randomUUID())).toMatchObject({
+      status: 404,
+      json: { code: "invoice_delivery.not_found" },
+    });
+    expect(await deliveriesOf(saleId)).toHaveLength(2);
+  });
+
+  it("refuses a key used by an email request as a retry, and the reverse, changing nothing", async () => {
+    email.transport = true;
+    const { billId, saleId } = await fullInvoice();
+    const failed = await failedEmail(billId, saleId);
+    const emailKey = randomUUID();
+    expect((await emailIt(venue.adminDashboard, billId, { requestKey: emailKey })).status).toBe(
+      200,
+    );
+    expect(await retry(venue.adminDashboard, billId, failed, emailKey)).toMatchObject({
+      status: 409,
+      json: { code: "submission.id_reused", params: { submissionId: emailKey } },
+    });
+    const other = await fullInvoice();
+    const otherFailed = await failedEmail(other.billId, other.saleId);
+    const retryKey = randomUUID();
+    expect((await retry(venue.adminDashboard, other.billId, otherFailed, retryKey)).status).toBe(
+      200,
+    );
+    expect(
+      await emailIt(venue.adminDashboard, other.billId, { requestKey: retryKey }),
+    ).toMatchObject({
+      status: 409,
+      json: { code: "submission.id_reused", params: { submissionId: retryKey } },
+    });
+    expect(await deliveriesOf(saleId)).toHaveLength(2);
+    expect(await deliveriesOf(other.saleId)).toHaveLength(2);
+  });
+
+  it("offers email in the detail only while mail can be sent", async () => {
+    email.transport = true;
+    const { billId } = await fullInvoice();
+    const read = async () =>
+      (await send(emailOrders, venue.adminDashboard, "GET", `/management-api/orders/${billId}`))
+        .json;
+    expect(await read()).toMatchObject({
+      deliveries: { actions: { email: { designation: "original" } } },
+    });
+    email.transport = false;
+    expect(await read()).toMatchObject({ deliveries: { actions: { email: null } } });
+    email.transport = new Error("credentials unreadable");
+    expect(await read()).toMatchObject({ deliveries: { actions: { email: null } } });
+    email.transport = true;
+  });
+
+  it("puts the customer's address in no response and no log line", async () => {
+    email.transport = true;
+    logged.length = 0;
+    const { billId, saleId } = await fullInvoice();
+    const key = randomUUID();
+    const answers = [
+      await emailIt(venue.adminDashboard, billId, { requestKey: key }),
+      await emailIt(venue.adminDashboard, billId, {
+        requestKey: key,
+        recipient: "otra@example.test",
+      }),
+      await emailIt(venue.adminDashboard, billId),
+    ];
+    const id = (answers[0]!.json as { id: string }).id;
+    await inTx(venue, (tx) =>
+      tx
+        .update(invoiceDeliveries)
+        .set({ status: "failed", failureCode: "transport_failed" })
+        .where(eq(invoiceDeliveries.id, id)),
+    );
+    email.transport = new Error("credentials unreadable");
+    answers.push(
+      await send(emailOrders, venue.adminDashboard, "GET", `/management-api/orders/${billId}`),
+    );
+    email.transport = true;
+    answers.push(await retry(venue.adminDashboard, billId, id));
+    answers.push(
+      await send(emailOrders, venue.adminDashboard, "GET", `/management-api/orders/${billId}`),
+    );
+    expect(answers.map((answer) => answer.status)).toEqual([200, 409, 409, 200, 200, 200]);
+    const responses = JSON.stringify(answers);
+    const logs = JSON.stringify(logged);
+    // Controls: each haystack holds what it should, and the address is in the stored rows.
+    expect(responses).toContain(id);
+    expect(logs).toContain("invoice_delivery.email_check_failed");
+    expect(JSON.stringify(await deliveriesOf(saleId))).toContain(CUSTOMER_EMAIL);
+    for (const haystack of [responses, logs]) {
+      expect(haystack).not.toContain("cliente.privado");
+      expect(haystack).not.toContain("otra@");
+    }
+  });
+});

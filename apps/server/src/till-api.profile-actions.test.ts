@@ -70,6 +70,9 @@ import {
  * | POST /api/orders/:id/stations/:sid/advance                | prepare-orders             | prepare-orders        |
  * | POST /api/kitchen-notices/:id/acknowledge                 | prepare-orders             | prepare-orders        |
  * | POST /api/sales/:id/receipt/retry                         | print-receipt              | receipt_retry         |
+ * | POST /api/sales/:id/deliveries (print on A4, email)       | print-receipt              | invoice_delivery      |
+ * | POST /api/sales/:id/deliveries/:deliveryId/to-receipt     | print-receipt              | invoice_delivery_to_receipt |
+ * | POST /api/sales/:id/deliveries/:deliveryId/retry (email)  | print-receipt              | invoice_delivery_retry |
  * | POST /api/sales/:id/receipt, /payment-slip                | print-receipt              | receipt, payment-slip |
  * | POST /api/sales/:id/reprint                               | print-receipt              | reprint               |
  * | POST /api/drawer/open                                     | open-cash-drawer           | drawer_open           |
@@ -102,7 +105,8 @@ import {
  * device cookie it carries, if any (`orders-reprint.test.ts`).
  *
  * Not action-gated, so a signed-in person (or, for a display's reads, the device) is enough: every
- * read, including a display's `GET /api/device/stations`, the POST previews (`/payments/preview`,
+ * read, including a display's `GET /api/device/stations` and the till's
+ * `GET /api/invoice-delivery-options`, the POST previews (`/payments/preview`,
  * `/adjustments/preview`) and the dead-end checks (`/api/dead-ends/*`); the session, locale, schedule, profile-switch and device-equipment
  * routes (choosing equipment is not printing, paying or opening the drawer). Left ungated by
  * decision, each with its reason:
@@ -366,6 +370,21 @@ const ROUTES: readonly Row[] = [
   preparing("POST", `/api/orders/${id}/stations/${id}/advance`),
   preparing("POST", `/api/kitchen-notices/${id}/acknowledge`),
   ["POST", `/api/sales/${id}/receipt/retry`, "print-receipt", forbidden("receipt_retry"), {}],
+  ["POST", `/api/sales/${id}/deliveries`, "print-receipt", forbidden("invoice_delivery"), {}],
+  [
+    "POST",
+    `/api/sales/${id}/deliveries/${id}/to-receipt`,
+    "print-receipt",
+    forbidden("invoice_delivery_to_receipt"),
+    {},
+  ],
+  [
+    "POST",
+    `/api/sales/${id}/deliveries/${id}/retry`,
+    "print-receipt",
+    forbidden("invoice_delivery_retry"),
+    {},
+  ],
   ["POST", `/api/sales/${id}/receipt`, "print-receipt", forbidden("receipt"), {}],
   ["POST", `/api/sales/${id}/payment-slip`, "print-receipt", forbidden("payment-slip"), {}],
   ["POST", `/api/sales/${id}/reprint`, "print-receipt", forbidden("reprint"), {}],

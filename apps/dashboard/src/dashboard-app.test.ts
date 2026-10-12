@@ -1852,6 +1852,47 @@ describe("dashboard-app", () => {
     },
   );
 
+  it.each([
+    { permissions: ["booking.manage"], canManage: false },
+    { permissions: ["booking.manage", "printer.manage"], canManage: true },
+  ])(
+    "tells the printers screen whether the session may manage printers ($permissions)",
+    async ({ permissions, canManage }) => {
+      const api = stubApi({
+        listStaff: vi.fn().mockResolvedValue([]),
+        getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions }),
+      });
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+      await flush(el);
+      navItem(el, "printers")!.click();
+      await flush(el);
+      const printers = el.shadowRoot!.querySelector("dashboard-printers-screen") as HTMLElement & {
+        canManage: boolean;
+      };
+      expect(printers.canManage).toBe(canManage);
+    },
+  );
+
+  it.each([
+    { permissions: ["report.view"], canExport: false },
+    { permissions: ["report.view", "report.export"], canExport: true },
+  ])(
+    "tells the orders screen whether the session may export reports ($permissions)",
+    async ({ permissions, canExport }) => {
+      history.replaceState(null, "", "/manage/orders");
+      const api = stubApi({
+        listStaff: vi.fn().mockResolvedValue([]),
+        getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions }),
+      });
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+      await flush(el);
+      const orders = el.shadowRoot!.querySelector("dashboard-orders-screen") as HTMLElement & {
+        canExport: boolean;
+      };
+      expect(orders.canExport).toBe(canExport);
+    },
+  );
+
   it("tells the open devices screen when a session re-read finds payments.manage gone", async () => {
     const getMe = vi
       .fn()
@@ -7202,6 +7243,7 @@ describe("printer breadcrumb during a pending save", () => {
             ]),
             listPrinterProfiles: vi.fn().mockResolvedValue([]),
             listDiscoveredPrinters: vi.fn().mockResolvedValue([]),
+            listPagePrinters: vi.fn().mockResolvedValue([]),
             pairingMode: vi.fn().mockResolvedValue({
               open: false,
               openUntil: null,

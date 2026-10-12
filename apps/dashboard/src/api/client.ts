@@ -594,6 +594,26 @@ export interface EmailInbox {
   messages: TestEmailSummary[];
 }
 
+export interface EmailSettingsDraft {
+  server: string;
+  port: number;
+  encryption: "starttls" | "tls";
+  user: string;
+  password: string;
+  from: string;
+}
+
+export type EmailSettingsView =
+  | {
+      mode: "smtp";
+      editable: boolean;
+      settings: Omit<EmailSettingsDraft, "user" | "password"> & { hasAuthentication: boolean };
+    }
+  | { mode: "local_capture" | "unconfigured"; editable: boolean; settings: null };
+
+export type EmailSettingsTestResult =
+  { accepted: true } | { accepted: false; code: "email.test_refused" | "email.test_timeout" };
+
 // ── Table service-status configuration types ──────────────────────────────────────────────────────
 
 export interface ServiceStatus {
@@ -1170,6 +1190,25 @@ export interface BluetoothCommandStatus {
   expiresInMs?: number;
 }
 
+export type OfficePrinterReport = { port: number; resourcePath: string } & (
+  | {
+      printable: true;
+      documentFormat: "application/pdf" | "image/pwg-raster" | "image/urf";
+      media: "iso_a4_210x297mm" | "na_letter_8.5x11in";
+      resolutionDpi: 300 | 600;
+      supportedFormats: string[];
+    }
+  | {
+      printable: false;
+      reason:
+        | "invalid_reply"
+        | "unsupported_media"
+        | "unsupported_document_format"
+        | "unsupported_raster";
+      supportedFormats: string[];
+    }
+);
+
 export interface DiscoveredPrinter {
   agentId: string;
   agentName: string | null;
@@ -1181,6 +1220,15 @@ export interface DiscoveredPrinter {
   model?: string | null;
   name?: string | null;
   pagePrinter?: true;
+  /** The IPP queue the host announced over mDNS. */
+  ipp?: { port: number; resourcePath: string };
+  /** The host announced IPP and no raw queue, so `port` is its IPP port. Never a receipt printer. */
+  ippOnly?: true;
+  /** What the office printer's IPP queue answered: the format an A4 invoice would use, or why none. */
+  office?: OfficePrinterReport;
+  /** `office` is another agent's report for the address, not this agent's: it cannot be registered
+   * through this agent. */
+  officeLent?: true;
   /** Bluetooth only: the agent's scan decoded the device as a printer. */
   printerLike?: true;
   /** Bluetooth only: the agent reported the device paired within the list's freshness window. */
@@ -1189,6 +1237,56 @@ export interface DiscoveredPrinter {
   alreadyRegistered: boolean;
   printerId: string | null;
   lastSeenAt: string;
+}
+
+/** An office printer the location prints A4 invoices on, as `GET /management-api/page-printers` lists it. */
+export interface PagePrinterRow {
+  id: string;
+  name: string;
+  host: string;
+  port: number;
+  resourcePath: string;
+  documentFormat: "application/pdf" | "image/pwg-raster" | "image/urf";
+  supportedFormats: string[];
+  media: "iso_a4_210x297mm" | "na_letter_8.5x11in";
+  resolutionDpi: number;
+  active: boolean;
+  invoicePrinter: boolean;
+  /** The agent that prints to it, or null once that agent's record is gone. */
+  agentId: string | null;
+  agentName: string | null;
+}
+
+/** An office printer's test page, held by the server for a few minutes only. */
+export interface PageTestPage {
+  id: string;
+  status: "waiting" | "printing" | "sent" | "failed" | "unknown";
+  failureCode?:
+    | "printer_refused"
+    | "printer_unreachable"
+    | "document_unavailable"
+    | "printer_disabled"
+    | "not_claimed"
+    | "printer_aborted"
+    | "timeout";
+  /** What the printer is holding the page for, while it is printing. */
+  hold?:
+    | "paper_jam"
+    | "cover_open"
+    | "paper_out"
+    | "tray_missing"
+    | "ink_or_toner_out"
+    | "output_full"
+    | "paused"
+    | "stopped";
+}
+
+/** One agent's discovered IPP queue, as `POST /management-api/page-printers` names it. */
+export interface PagePrinterEntry {
+  agentId: string;
+  host: string;
+  port: number;
+  path: string;
 }
 
 export interface PrinterPatch {
@@ -1808,6 +1906,43 @@ export interface OrderDetailDto {
     personName: string | null;
     printerName: string;
   }[];
+  /** Null unless the bill's invoice is a full invoice. */
+  deliveries: OrderDeliveries | null;
+  invoicePdfDownloads: { requestedAt: string; personId: string; personName: string | null }[];
+}
+
+/** One attempt to deliver a full invoice (`readInvoiceDeliveries`, `apps/server/src/invoice-delivery-status.ts`). */
+export interface OrderDeliveryAttempt {
+  /** Null for a receipt original that no delivery row tracks. */
+  id: string | null;
+  medium: "email" | "a4" | "receipt";
+  designation: "original" | "duplicate";
+  status: "queued" | "sending" | "sent" | "failed" | "unknown";
+  failureCode: string | null;
+  requestedAt: string;
+  at: string | null;
+  personId: string | null;
+  personName: string | null;
+  /** What the office printer holds an A4 for; the server may send a code `holdReason` has no words for. */
+  printerHold: string | null;
+  lateSuccess: boolean;
+}
+
+export interface OrderDeliveries {
+  current: OrderDeliveryAttempt | null;
+  originalCompleted: boolean;
+  actions: {
+    retryOriginal: { medium: OrderDeliveryAttempt["medium"] } | null;
+    printOnA4: {
+      printer: { id: string; name: string };
+      designation: OrderDeliveryAttempt["designation"];
+    } | null;
+    receiptInstead: { deliveryId: string } | null;
+    /** Offered while nothing is on its way and the server can send invoice email now. */
+    email: { designation: OrderDeliveryAttempt["designation"] } | null;
+  };
+  /** Newest first, the current attempt included. */
+  history: OrderDeliveryAttempt[];
 }
 
 /** Above three Stripe attempts that go silent for 80 s once connected (`defaultMakeStripe`, in
@@ -2021,6 +2156,18 @@ export class DashboardApi {
 
   getEmailInbox(): Promise<EmailInbox> {
     return this.#request<EmailInbox>("/management-api/email", "GET");
+  }
+
+  getEmailSettings(): Promise<EmailSettingsView> {
+    return this.#request<EmailSettingsView>("/management-api/email/settings", "GET");
+  }
+
+  saveEmailSettings(body: EmailSettingsDraft): Promise<{ saved: true }> {
+    return this.#request("/management-api/email/settings", "PUT", body);
+  }
+
+  testEmailSettings(body: EmailSettingsDraft): Promise<EmailSettingsTestResult> {
+    return this.#request("/management-api/email/settings/test", "POST", body);
   }
 
   getTestEmail(id: string): Promise<TestEmail> {
@@ -3271,6 +3418,40 @@ export class DashboardApi {
     return this.#request<DiscoveredPrinter[]>("/management-api/discovered-printers", "GET");
   }
 
+  listPagePrinters(): Promise<PagePrinterRow[]> {
+    return this.#request<PagePrinterRow[]>("/management-api/page-printers", "GET");
+  }
+
+  /** Adds the printer, enables the disabled one at that queue, or moves the active one to this agent. */
+  registerPagePrinter(
+    input: PagePrinterEntry & { name?: string },
+  ): Promise<{ id: string; outcome: "created" | "enabled" | "repointed" }> {
+    return this.#request("/management-api/page-printers", "POST", input);
+  }
+
+  updatePagePrinter(id: string, patch: { name?: string; active?: false }): Promise<void> {
+    return this.#request<void>(`/management-api/page-printers/${id}`, "PATCH", patch);
+  }
+
+  /** Answers the printer's page already out, if there is one. */
+  printPagePrinterTestPage(id: string): Promise<PageTestPage> {
+    return this.#request<PageTestPage>(`/management-api/page-printers/${id}/test-page`, "POST");
+  }
+
+  /** Null once the server no longer holds a page for the printer; call it through `background`. */
+  readPagePrinterTestPage(id: string): Promise<PageTestPage | null> {
+    return this.#request<PageTestPage | null>(
+      `/management-api/page-printers/${id}/test-page`,
+      "GET",
+    );
+  }
+
+  setInvoicePrinter(pagePrinterId: string | null): Promise<void> {
+    return this.#request<void>("/management-api/page-printers/invoice-printer", "PUT", {
+      pagePrinterId,
+    });
+  }
+
   pairBluetooth(
     agentId: string,
     address: string,
@@ -3631,6 +3812,49 @@ export class DashboardApi {
     return this.#request(`/management-api/orders/${encodeURIComponent(id)}/reprint`, "POST", {
       printerId,
     });
+  }
+
+  requestOrderA4Delivery(id: string, requestKey: string): Promise<OrderDeliveryAttempt> {
+    return this.#request(
+      `/management-api/orders/${encodeURIComponent(id)}/invoice-deliveries`,
+      "POST",
+      { medium: "a4", requestKey },
+    );
+  }
+
+  requestOrderEmailDelivery(
+    id: string,
+    recipient: string,
+    requestKey: string,
+  ): Promise<OrderDeliveryAttempt> {
+    return this.#request(
+      `/management-api/orders/${encodeURIComponent(id)}/invoice-deliveries`,
+      "POST",
+      { medium: "email", recipient, requestKey },
+    );
+  }
+
+  /** Emails the invoice again to the address the ended attempt went to; the dashboard never sees it. */
+  retryOrderEmailDelivery(
+    id: string,
+    deliveryId: string,
+    requestKey: string,
+  ): Promise<OrderDeliveryAttempt> {
+    return this.#request(
+      `/management-api/orders/${encodeURIComponent(id)}/invoice-deliveries/${encodeURIComponent(deliveryId)}/retry`,
+      "POST",
+      { requestKey },
+    );
+  }
+
+  /** The bill's full invoice as a PDF copy; the server records who downloaded it. */
+  downloadOrderInvoicePdf(id: string): Promise<Blob> {
+    return this.#request<Blob>(
+      `/management-api/orders/${encodeURIComponent(id)}/invoice-pdf`,
+      "POST",
+      undefined,
+      { as: "blob" },
+    );
   }
 
   getCategorySales(

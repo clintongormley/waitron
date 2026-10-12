@@ -32,12 +32,24 @@ import { readCreditNotes, readPartyTables } from "./orders-list.js";
 import { readIssuedSales } from "./sale-due.js";
 import "./errors.js";
 
+/** A staged delivery choice as a bill shows it: who staged it stays on the server. */
+export type BillInvoiceDelivery =
+  | { medium: "receipt" }
+  | { medium: "a4"; pagePrinterId: string }
+  | { medium: "email"; recipient: string };
+
+function billInvoiceDelivery(choice: StagedInvoiceDelivery): BillInvoiceDelivery {
+  if (choice.medium === "email") return { medium: "email", recipient: choice.recipient };
+  if (choice.medium === "a4") return { medium: "a4", pagePrinterId: choice.pagePrinterId };
+  return choice;
+}
+
 /** One bill of a party, as the table screen lists it. */
 export interface PartyBill {
   workingOrderId: string;
   revision: number;
   invoiceType: "F1" | "F2";
-  invoiceDelivery?: StagedInvoiceDelivery;
+  invoiceDelivery?: BillInvoiceDelivery;
   recipient: { taxId: string; legalName: string; address: string; countryCode: string } | null;
   /** The party the bill is recorded on; for a bill a merged party kept, not the one asked about. */
   partyId: string;
@@ -490,7 +502,9 @@ export async function readPartyBills(tx: Transaction, partyId: string): Promise<
       workingOrderId: bill.workingOrderId,
       revision: choice.revision,
       invoiceType: choice.invoiceType,
-      ...(choice.invoiceDelivery === null ? {} : { invoiceDelivery: choice.invoiceDelivery }),
+      ...(choice.invoiceDelivery === null
+        ? {}
+        : { invoiceDelivery: billInvoiceDelivery(choice.invoiceDelivery) }),
       recipient:
         choice.taxId !== null &&
         choice.legalName !== null &&

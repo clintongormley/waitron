@@ -5,12 +5,14 @@ import type {
   DiscoveredDevice,
   Host,
   NetworkProbe,
+  PagePrintOutcome,
+  PageTarget,
   PairResult,
   PairedBluetoothDevice,
   TransportKind,
   VisibleDevice,
 } from "../host.js";
-import type { WireJob } from "../client.js";
+import type { PageFormat, PageHold, WireJob } from "../client.js";
 import { FakeSink, type PrinterTarget, type Transport } from "../transport.js";
 
 /** The default `fetch` rejects (unreachable); `resolve` maps a job's `localKey` straight to a device
@@ -30,6 +32,13 @@ export function fakeHost(
     pairedBluetooth: () => Promise<PairedBluetoothDevice[]>;
     forgetBluetooth: (mac: string) => Promise<BluetoothCommandResult>;
     bluetoothPrinting: () => boolean;
+    printPage: (
+      target: PageTarget,
+      bytes: Uint8Array,
+      format: PageFormat,
+      signal: AbortSignal,
+      onHold: (hold: PageHold | null) => void,
+    ) => Promise<PagePrintOutcome>;
     now: () => number;
     sleep: (ms: number) => Promise<void>;
   }> = {},
@@ -114,5 +123,6 @@ export function fakeHost(
     ...(overrides.bluetoothPrinting === undefined
       ? {}
       : { bluetoothPrinting: overrides.bluetoothPrinting }),
+    ...(overrides.printPage === undefined ? {} : { printPage: overrides.printPage }),
   };
 }

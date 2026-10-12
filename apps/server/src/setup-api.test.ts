@@ -171,7 +171,16 @@ function demoBody(): Record<string, unknown> {
 const BARCELONA = { postalCode: "08001", city: "Barcelona", province: "Barcelona" };
 
 function liveBody(): Record<string, unknown> {
-  return { ...demoBody(), mode: "live" };
+  return {
+    ...demoBody(),
+    mode: "live",
+    email: {
+      server: "smtp.example.test",
+      port: 587,
+      encryption: "starttls",
+      from: "venue@example.test",
+    },
+  };
 }
 
 function prepareBody(): Record<string, unknown> {
@@ -224,12 +233,10 @@ function makeDeps(overrides: Partial<SetupDeps> = {}): {
   });
   const runFiscalTest = vi.fn().mockResolvedValue({ status: "accepted" });
   const assertFiscalReady = vi.fn().mockResolvedValue(undefined);
-  // A fake db that RECORDS the seal in order into `calls`; the seal's own database write is the
-  // regime's `provisioning-secret.test.ts`'s to test. The seam is `withWriteLock` because
-  // `withTransaction` IS the write lock (`packages/db/src/tenancy.ts`).
+  let credentialWrites = 0;
   const db = {
     withWriteLock: async () => {
-      calls.push("sealAeat");
+      calls.push(credentialWrites++ === 0 ? "sealAeat" : "sealEmail");
     },
   } as unknown as Database;
   const ring = {} as unknown as KeyRing;
@@ -984,6 +991,7 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
       "establishIdentity",
       "seedMembership",
       "sealAeat",
+      "sealEmail",
       "persistTrading",
       "requestRestart",
     ]);

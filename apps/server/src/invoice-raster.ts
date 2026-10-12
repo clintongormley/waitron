@@ -53,12 +53,12 @@ export async function renderInvoiceRaster(
           `<rect shape-rendering="crispEdges" x="${element.x}" y="${element.y}" width="${element.width}" height="${element.thickness}"/>`,
         );
       } else if (element.kind === "qr") {
-        const pitch = element.size / (element.modules.length + 8);
+        const pitch = element.moduleSize;
         for (let row = 0; row < element.modules.length; row++) {
           for (let col = 0; col < element.modules.length; col++) {
             if (element.modules[row]![col]) {
               paths.push(
-                `<rect shape-rendering="crispEdges" x="${element.x + (col + 4) * pitch}" y="${element.y + (row + 4) * pitch}" width="${pitch}" height="${pitch}"/>`,
+                `<rect shape-rendering="crispEdges" x="${element.x + col * pitch}" y="${element.y + row * pitch}" width="${pitch}" height="${pitch}"/>`,
               );
             }
           }

@@ -11,6 +11,7 @@
       "sale_voids",
       "sale_substitutions",
       "receipt_reprints",
+      "invoice_pdf_downloads",
       "daily_closes",
       "membership_removals",
       "membership_clearances",

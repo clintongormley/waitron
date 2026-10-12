@@ -1,5 +1,6 @@
-// Reads source TEXT, which makes it weaker than its name in one way: a code assembled at runtime
-// (rather than written as a plain `code: "..."` string literal) escapes this scan.
+// Reads source TEXT, which makes it weaker than its name: only a double-quoted `code: "..."` literal
+// with one dot and nothing but lowercase letters, digits and underscores is found, so a code
+// assembled at runtime, or spelled with another quote or a second dot, escapes this scan.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -13,7 +14,7 @@ const ONGOING_CODE_SOURCES = [
   "packages/fiscal-verifactu/src/submission-alerts.ts",
 ];
 
-const CODE_RE = /code: "([a-z_]+\.[a-z_]+)"/g;
+const CODE_RE = /code: "([a-z0-9_]+\.[a-z0-9_]+)"/g;
 
 function ongoingCodes(): string[] {
   const codes = new Set<string>();

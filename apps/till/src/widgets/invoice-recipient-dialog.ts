@@ -1,4 +1,4 @@
-import { LitElement, css, html } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
 import {
@@ -10,16 +10,24 @@ import {
 } from "@waitron/ui";
 import type { WtDialog, DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
 import { getCountryPack } from "@waitron/country-packs";
+import { isValidEmail } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-combobox.js";
 import { trackDialog } from "./track-dialog.js";
 import { t } from "../i18n/t.js";
+import type { InvoiceDeliveryChoice, InvoiceDeliveryOptions } from "../api/client.js";
 
 export interface InvoiceRecipientDetail {
   invoiceType: "F1";
   recipient: { taxId: string; legalName: string; address: string; countryCode: "ES" };
+  /** Absent when there is neither a choice to offer nor a saved one to send back. */
+  delivery?: InvoiceDeliveryChoice;
 }
+
+/** `saved` sends {@link TillInvoiceRecipientDialog.savedDelivery} back as it is. */
+type DeliveryMedium = "receipt" | "a4" | "email" | "saved";
 
 interface RecipientDraft {
   taxId: string;
@@ -28,6 +36,8 @@ interface RecipientDraft {
   postalCode: string;
   locality: string;
   province: string;
+  medium: DeliveryMedium;
+  email: string;
 }
 
 @customElement("till-invoice-recipient-dialog")
@@ -45,6 +55,14 @@ export class TillInvoiceRecipientDialog extends LitElement {
 
   @property({ attribute: false }) refusal = "";
   @property({ attribute: false }) refusalField = "";
+  /** Null when the options could not be read, so whether a saved A4's printer is still the
+   * invoice printer is unknown. */
+  @property({ attribute: false }) deliveryOptions: InvoiceDeliveryOptions | null = {
+    invoicePrinter: null,
+    emailAvailable: false,
+  };
+  /** The delivery already staged for the order; kept unless the delivery field is changed. */
+  @property({ attribute: false }) savedDelivery?: InvoiceDeliveryChoice;
   @state() private attempted = false;
   @state() private taxId = "";
   @state() private legalName = "";
@@ -52,6 +70,9 @@ export class TillInvoiceRecipientDialog extends LitElement {
   @state() private postalCode = "";
   @state() private locality = "";
   @state() private province = "";
+  @state() private medium: DeliveryMedium = "receipt";
+  @state() private email = "";
+  #choiceShown = false;
 
   @state() private active = true;
   #scope?: DraftScope<RecipientDraft>;
@@ -70,7 +91,79 @@ export class TillInvoiceRecipientDialog extends LitElement {
       postalCode: this.postalCode,
       locality: this.locality,
       province: this.province,
+      medium: this.medium,
+      email: this.email,
     };
+  }
+
+  #printer() {
+    return this.deliveryOptions?.invoicePrinter ?? null;
+  }
+
+  #emailAvailable() {
+    return this.deliveryOptions?.emailAvailable === true;
+  }
+
+  /** A saved delivery listed as itself: an email while email is not offered, or an A4 while the
+   * options are unknown. */
+  #savedUnoffered(): InvoiceDeliveryChoice | undefined {
+    const saved = this.savedDelivery;
+    if (saved?.medium === "email" && !this.#emailAvailable()) return saved;
+    if (saved?.medium === "a4" && this.deliveryOptions === null) return saved;
+    return undefined;
+  }
+
+  /** The medium standing for the saved delivery in the draft's baseline. A saved A4 for a printer
+   * the read says is no longer the invoice printer is `saved`, which nothing shown equals, so opening
+   * on its replacement counts as a change. */
+  #savedMedium(): DeliveryMedium {
+    const saved = this.savedDelivery;
+    if (saved === undefined || saved.medium === "receipt") return "receipt";
+    if (saved.medium === "a4" && saved.pagePrinterId === this.#printer()?.id) return "a4";
+    if (saved.medium === "email" && this.#emailAvailable()) return "email";
+    return "saved";
+  }
+
+  #openingMedium(): DeliveryMedium {
+    const medium = this.#savedMedium();
+    if (medium === "saved" && this.#savedUnoffered() === undefined)
+      return this.#printer() === null ? "receipt" : "a4";
+    return medium;
+  }
+
+  #offered(): { value: DeliveryMedium; label: string }[] {
+    const printer = this.#printer();
+    const kept = this.#savedUnoffered();
+    const savedOther = this.savedDelivery !== undefined && this.savedDelivery.medium !== "receipt";
+    if (printer === null && !this.#emailAvailable() && !savedOther && !this.#choiceShown) return [];
+    const offered: { value: DeliveryMedium; label: string }[] = [
+      { value: "receipt", label: t("invoice.delivery_receipt") },
+    ];
+    if (printer !== null)
+      offered.push({
+        value: "a4",
+        label: t("invoice.delivery_a4_on").replace("{printer}", () => printer.name),
+      });
+    if (this.#emailAvailable())
+      offered.push({ value: "email", label: t("invoice.delivery_email") });
+    if (kept !== undefined)
+      offered.push({
+        value: "saved",
+        label: t(
+          kept.medium === "a4" ? "invoice.delivery_saved_a4" : "invoice.delivery_saved_email",
+        ),
+      });
+    return offered;
+  }
+
+  #delivery(): InvoiceDeliveryChoice | undefined {
+    const printer = this.#printer();
+    if (this.#offered().length === 0) return this.savedDelivery;
+    if (this.medium === "saved") return this.#savedUnoffered();
+    if (this.medium === "a4" && printer !== null)
+      return { medium: "a4", pagePrinterId: printer.id };
+    if (this.medium === "email") return { medium: "email", recipient: this.email };
+    return { medium: "receipt" };
   }
 
   override connectedCallback(): void {
@@ -97,9 +190,21 @@ export class TillInvoiceRecipientDialog extends LitElement {
     };
   }
 
-  override willUpdate(): void {
+  override willUpdate(changed: PropertyValues<this>): void {
+    if (
+      changed.has("deliveryOptions") &&
+      this.#baseline !== undefined &&
+      !this.#offered().some((option) => option.value === this.medium)
+    ) {
+      this.medium = this.#openingMedium();
+      this.#scope?.changed();
+    }
     if (!this.isConnected || !this.active || this.#scope) return;
-    this.#baseline ??= this.#value();
+    if (this.#baseline === undefined) {
+      this.medium = this.#openingMedium();
+      if (this.savedDelivery?.medium === "email") this.email = this.savedDelivery.recipient;
+      this.#baseline = { ...this.#value(), medium: this.#savedMedium() };
+    }
     const { coordinator, scope } = draftScopeFor<RecipientDraft>(this, {
       id: this,
       current: () => this.#value(),
@@ -107,6 +212,7 @@ export class TillInvoiceRecipientDialog extends LitElement {
       equal: (a, b) =>
         Object.keys(a).every((key) => {
           const field = key as keyof RecipientDraft;
+          if (field === "email" && a.medium !== "email" && b.medium !== "email") return true;
           const canonical = (value: string) => {
             if (field !== "taxId") return value.trim();
             const result = getCountryPack("ES")!.taxIdentifier!.validate(value);
@@ -146,6 +252,7 @@ export class TillInvoiceRecipientDialog extends LitElement {
       postalCode: /^\d{5}$/.test(this.postalCode.trim()) ? "" : t("invoice.postal_code_invalid"),
       locality: this.locality.trim() === "" ? t("invoice.locality_required") : "",
       province: this.province.trim() === "" ? t("invoice.province_required") : "",
+      email: this.medium !== "email" || isValidEmail(this.email) ? "" : t("invoice.email_invalid"),
     };
   }
 
@@ -161,6 +268,7 @@ export class TillInvoiceRecipientDialog extends LitElement {
     const taxId = this.#taxIdResult();
     if (!taxId.valid) return;
     this.#submitted = this.#value();
+    const delivery = this.#delivery();
     this.dispatchEvent(
       new CustomEvent<InvoiceRecipientDetail>("invoice-recipient-confirm", {
         detail: {
@@ -171,6 +279,7 @@ export class TillInvoiceRecipientDialog extends LitElement {
             address: `${this.streetAddress.trim()}, ${this.postalCode.trim()} ${this.locality.trim()}, ${this.province.trim()}, España`,
             countryCode: "ES",
           },
+          ...(delivery === undefined ? {} : { delivery }),
         },
         bubbles: true,
         composed: true,
@@ -193,12 +302,55 @@ export class TillInvoiceRecipientDialog extends LitElement {
     );
   }
 
-  #change(field: keyof RecipientDraft, event: CustomEvent<{ value: string }>): void {
+  #change(
+    field: Exclude<keyof RecipientDraft, "medium">,
+    event: CustomEvent<{ value: string }>,
+  ): void {
     event.stopPropagation();
     if (!this.isConnected || !this.active) return;
     this[field] = event.detail.value;
     this.#scope?.changed();
     this.#edited(field === "streetAddress" ? "address" : field);
+  }
+
+  #chooseDelivery(event: CustomEvent<{ value: string }>): void {
+    event.stopPropagation();
+    if (!this.isConnected || !this.active) return;
+    this.medium = event.detail.value as DeliveryMedium;
+    this.#scope?.changed();
+  }
+
+  #renderDelivery() {
+    const offered = this.#offered();
+    if (offered.length === 0) return nothing;
+    this.#choiceShown = true;
+    return html`<wt-combobox
+        name="delivery"
+        search="never"
+        .label=${t("invoice.delivery")}
+        .options=${offered}
+        .value=${this.medium}
+        @wt-change=${(event: CustomEvent<{ value: string }>) => this.#chooseDelivery(event)}
+      ></wt-combobox>
+      ${
+        this.medium === "email"
+          ? html`<wt-input
+              name="email"
+              type="email"
+              required
+              autocomplete="off"
+              .label=${t("invoice.email")}
+              .value=${live(this.email)}
+              .error=${this.#fieldError("email", this.#errors().email)}
+              @wt-change=${(event: CustomEvent<{ value: string }>) => this.#change("email", event)}
+              @keydown=${(event: KeyboardEvent) =>
+                submitOnEnter(
+                  event,
+                  this.shadowRoot!.querySelector<HTMLElement>("[data-invoice-save]"),
+                )}
+            ></wt-input>`
+          : nothing
+      }`;
   }
 
   #edited(field: string): void {
@@ -222,7 +374,7 @@ export class TillInvoiceRecipientDialog extends LitElement {
     const invalid = Object.values(errors).some(Boolean);
     const saveAction = saveActionState(this.#scope);
     const fieldRefused =
-      this.refusal !== "" && ["taxId", "legalName", "address"].includes(this.refusalField);
+      this.refusal !== "" && ["taxId", "legalName", "address", "email"].includes(this.refusalField);
     const bottomMessages: string[] = [];
     if ((this.attempted && invalid) || fieldRefused) bottomMessages.push(t("form.fix_fields"));
     if (this.refusal !== "" && !fieldRefused) bottomMessages.push(this.refusal);
@@ -237,6 +389,7 @@ export class TillInvoiceRecipientDialog extends LitElement {
         <wt-input
           name="taxId"
           required
+          autocomplete="off"
           .label=${t("invoice.tax_id")}
           .value=${live(this.taxId)}
           .error=${this.#fieldError("taxId", errors.taxId)}
@@ -250,7 +403,7 @@ export class TillInvoiceRecipientDialog extends LitElement {
         <wt-input
           name="legalName"
           required
-          autocomplete="name"
+          autocomplete="off"
           .label=${t("invoice.legal_name")}
           .value=${live(this.legalName)}
           .error=${this.#fieldError("legalName", errors.legalName)}
@@ -264,7 +417,7 @@ export class TillInvoiceRecipientDialog extends LitElement {
         <wt-input
           name="address"
           required
-          autocomplete="street-address"
+          autocomplete="off"
           .label=${t("invoice.street_address")}
           .value=${live(this.streetAddress)}
           .error=${this.#fieldError("address", errors.streetAddress)}
@@ -278,7 +431,7 @@ export class TillInvoiceRecipientDialog extends LitElement {
         <wt-input
           name="postalCode"
           required
-          autocomplete="postal-code"
+          autocomplete="off"
           .label=${t("invoice.postal_code")}
           .value=${live(this.postalCode)}
           .error=${this.attempted ? errors.postalCode : ""}
@@ -292,7 +445,7 @@ export class TillInvoiceRecipientDialog extends LitElement {
         <wt-input
           name="locality"
           required
-          autocomplete="address-level2"
+          autocomplete="off"
           .label=${t("invoice.locality")}
           .value=${live(this.locality)}
           .error=${this.attempted ? errors.locality : ""}
@@ -306,7 +459,7 @@ export class TillInvoiceRecipientDialog extends LitElement {
         <wt-input
           name="province"
           required
-          autocomplete="address-level1"
+          autocomplete="off"
           .label=${t("invoice.province")}
           .value=${live(this.province)}
           .error=${this.attempted ? errors.province : ""}
@@ -323,6 +476,7 @@ export class TillInvoiceRecipientDialog extends LitElement {
           .label=${t("invoice.country")}
           .value=${t("invoice.country_spain")}
         ></wt-input>
+        ${this.#renderDelivery()}
         <wt-form-actions .error=${bottomMessages.join(" ")}>
           <wt-button slot="cancel" variant="secondary" @click=${() => this.#cancel()}
             >${t("action.cancel")}</wt-button

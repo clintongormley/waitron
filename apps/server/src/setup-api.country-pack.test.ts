@@ -63,7 +63,7 @@ function deps(): { deps: SetupDeps; requests: ProvisionRequest[] } {
       seedDemo: vi.fn(async () => {}),
       establishIdentity: vi.fn(async () => {}),
       seedMembership: vi.fn(async () => {}),
-      db: {} as Database,
+      db: { withWriteLock: async () => {} } as unknown as Database,
       ring: {} as KeyRing,
       persistTrading: vi.fn(async () => {}),
       requestRestart: vi.fn(),
@@ -155,7 +155,16 @@ describe("POST /setup-api/provision for country packs other than Spain", () => {
     const { deps: setupDeps, requests } = deps();
     mountSetup(app, setupDeps, () => {});
 
-    const res = await post(app, { mode: "live", venue: venue("gb") });
+    const res = await post(app, {
+      mode: "live",
+      venue: venue("gb"),
+      email: {
+        server: "smtp.example.test",
+        port: 587,
+        encryption: "starttls",
+        from: "venue@example.test",
+      },
+    });
 
     expect(res.status).toBe(200);
     expect(requests[0]!.environment).toBe("production");

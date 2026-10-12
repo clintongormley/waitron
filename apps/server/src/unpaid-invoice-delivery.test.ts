@@ -9,7 +9,6 @@ import {
   printJobs,
   sales,
   saleSettlements,
-  tenantReceipts,
   tenants,
   workingOrders,
   withTransaction,
@@ -18,6 +17,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { decimal } from "@waitron/shared";
+import { departmentReceipts, departments } from "@waitron/venue-service";
 import * as selection from "./invoice-selection.js";
 import {
   issueUnpaidInvoice,
@@ -36,21 +36,17 @@ beforeEach(async () => {
   venue = await provisionBillVenue(suite.db);
   await withTransaction(suite.db, async (tx) => {
     await tx.update(tenants).set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" });
-    await tx.insert(tenantReceipts).values({ receipt: { email: "global@example.test" } });
+    const receipt = { email: "dining@example.test" };
     const rows = await tx
-      .select()
+      .select({ id: departments.id })
       .from(departments)
       .where(eq(departments.locationId, venue.cfg.locationId));
-    await tx
-      .insert(departmentReceipts)
-      .values({
-        departmentId: rows.find((row) => row.isDefault)!.id,
-        receipt: { operationDescription: "Restaurante", email: "venue@example.test" },
-      })
-      .onConflictDoUpdate({
-        target: departmentReceipts.departmentId,
-        set: { receipt: { operationDescription: "Restaurante", email: "venue@example.test" } },
-      });
+    for (const { id } of rows) {
+      await tx
+        .insert(departmentReceipts)
+        .values({ departmentId: id, receipt })
+        .onConflictDoUpdate({ target: departmentReceipts.departmentId, set: { receipt } });
+    }
   });
 });
 
@@ -71,6 +67,7 @@ async function bill(kind: "email" | "a4" | "disabled-a4" | "receipt" | "unset") 
       supportedFormats: ["application/pdf"],
       media: "iso_a4_210x297mm",
       resolutionDpi: 300,
+      invoiceDefault: true,
     }),
   );
   await setOrderInvoiceChoice(
@@ -92,26 +89,13 @@ async function bill(kind: "email" | "a4" | "disabled-a4" | "receipt" | "unset") 
         : {
             delivery:
               kind === "email"
-                ? {
-                    medium: "email",
-                    recipient: "customer@example.test",
-                    consent: {
-                      accepted: true,
-                      statementVersion: "invoice-email-v1",
-                      language: "es-ES",
-                      contactEmail: "venue@example.test",
-                    },
-                  }
+                ? { medium: "email", recipient: "customer@example.test" }
                 : kind === "receipt"
                   ? { medium: "receipt" }
                   : { medium: "a4", pagePrinterId },
           }),
     },
-    {
-      personId: venue.adminId,
-      emailAvailable: true,
-      now: new Date("2026-10-07T17:00:00Z"),
-    },
+    { personId: venue.adminId, emailAvailable: true },
   );
   if (kind === "disabled-a4") {
     await withTransaction(suite.db, (tx) =>
@@ -166,20 +150,11 @@ describe("unpaid invoice delivery", () => {
             requestKey: `issuance:${result.saleId}`,
             medium,
             designation: "original",
-            status: "queued",
+            ...(kind === "disabled-a4"
+              ? { status: "failed", failureCode: "printer_disabled" }
+              : { status: "queued" }),
             personId: venue.operatorId,
-            ...(medium === "email"
-              ? {
-                  recipient: "customer@example.test",
-                  consent: {
-                    statementVersion: "invoice-email-v1",
-                    language: "es-ES",
-                    recordedAt: "2026-10-07T17:00:00.000Z",
-                    personId: venue.adminId,
-                    contactEmail: "venue@example.test",
-                  },
-                }
-              : { pagePrinterId }),
+            ...(medium === "email" ? { recipient: "customer@example.test" } : { pagePrinterId }),
           }),
         ]);
         expect(await tx.select().from(saleSettlements)).toEqual([]);

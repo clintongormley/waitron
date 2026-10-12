@@ -152,222 +152,16 @@ refusal, including its could-not-open operator advice; provenance, HTTP400/domai
 unchanged-database and empty-staging checks remain. This is preproduction format rejection,
 with no backward-compatibility implementation.
 
-**Next action:** verify physical 58/80 mm paper and QR output, complete A231q's remaining original-delivery
-choices, obtain the asesor's manual-remedy approval and settle applicable B2B delivery before
-enabling public F1. The enablement change needs its own direct, invoice-first, unpaid-departure,
+**Next action:** verify physical 58/80 mm paper and QR output, settle what paying at the counter
+does with an email or A4 choice (A555), obtain the asesor's manual-remedy approval and settle
+applicable B2B delivery before enabling public F1. The enablement change needs its own direct, invoice-first, unpaid-departure,
 offline and zero-total public-path acceptance checks. F3 conversion, F1's R1–R4 correction path
 and foreign-recipient `IDOtro`/`IDType` remain separate decisions. Follow the campaign's current
 queue order; this landing does not start another fiscal item.
 
-## A231d. Full invoices by email as a PDF, and on an office printer — PART 1 LANDED (#1399); PART 2 OPEN
+## When the business e-invoicing regime starts
 
-> **2026-10-10, later product decision:** the owner removed the separate email consent step
-> on 2026-10-09. The consent proposals and dated implementation receipts below describe the
-> earlier flow. Follow [the single core rewrite](printers.md#remove-the-consent-step-from-emailed-receipts);
-> A366 slice 7 keeps today’s checker and stored evidence. A448 and the legal research remain open.
-
-The owner asked, approving A231's design, that an F1 can also be emailed to the customer as a PDF and
-printed on an ordinary office printer. The [design](../superpowers/specs/2026-10-03-invoice-pdf-email-and-office-printing-design.md)
-and [plan](../superpowers/plans/2026-10-03-invoice-pdf-email-and-office-printing.md) cover the PDF (made
-on the server, QR first), email with the customer's express consent from a queue that never makes a
-sale wait, office printers kept apart from receipt printers, and resending from the till and the
-dashboard. The customer chooses one way to receive the original; anything after it is a «duplicado».
-
-The owner approved the first version's decisions 1–5 (2026-10-03, about 08:45) and changed the
-sixth; the amended version builds email and A4 printing together. Any network office printer is
-added as an invoice printer through the Printers screen's existing add-printer dialog, and is sent
-PDF when it lists PDF, otherwise PWG Raster, otherwise Apple Raster, drawn on the server from the
-same layout. No printing standard requires PDF: IPP Everywhere 1.1 requires PWG Raster and only
-recommends PDF, and AirPrint and Mopria publish no public list. A live venue sets up its mail server in the
-setup wizard's live path, with a test message, and can change it from the dashboard. A venue
-preparing to go live sends invoice email through its mail server when one is set, otherwise to the
-box's captured inbox; a demo always captures it. Measured 2026-10-03: the owner's HP M181fw takes
-PDF and Apple Raster, not PWG Raster.
-
-The owner asked (about 08:55) to weigh Debian's printing system (CUPS) against drawing pages
-ourselves, and answered decisions 7–9 (about 10:05). Measured in Debian 13 containers on the owner's
-Mac: CUPS, its converters, `ipp-usb` and `cups-browsed` add 52.7 MB (about 50% more) to the print
-agent's download and bring Ghostscript (GNU Affero GPL). CUPS converted a PDF for an Apple Raster
-printer. Its own driverless setup refused a printer taking only PWG Raster (apparently a mistake in
-CUPS 2.4.10 that later versions fix; Debian testing's 2.4.18 accepted it), and that printer did
-print through a route CUPS calls deprecated. CUPS held a job while the printer was away and printed
-it by itself later; its source code waits 7 days before counting such a job failed. The owner approved drawing pages ourselves (decision 10), and A231 has landed.
-**Part 1 landed, 2026-10-08:** [#1399](https://github.com/clintongormley/waitron/pull/1399),
-merge `eb6403150efe76b16a15dd63a8486d3636ab50ee`. The stored-fact document, transient
-PDF/raster rendering, metadata-only delivery attempts, correlated receipt claims/results,
-queued email worker and SMTP settings/test endpoints are on main. Public F1 remains disabled.
-A231q still owes the setup/dashboard and delivery screens, provisioning/restore checks,
-office-printer discovery/registration/location selection and IPP transport, send-again/download
-and withdrawal actions, built-image renderer execution, box measurements and physical output.
-Physical checks require owner presence or arrangement; adviser confirmation and public F1
-acceptance gates remain separate.
-
-**Next action:** follow the lane's UI priority order, then complete A231q. The following dated
-notes preserve earlier candidates and the owner's split decision.
-
-**Owner split, 2026-10-07:** finish the completed foundation as A231p part 1, keeping public F1 issuance disabled, and park its PR `needs-owner-review`. UI work takes priority next. A231q finishes the live email setup/provisioning and dashboard editor, restore checks, office-printer discovery/registration/location selection and IPP transport, delivery and send-again/download screens, withdrawal actions and the remaining integration and gate. Built-image rendering, box measurements and physical printer checks remain; physical printing requires owner presence or arrangement. The [reconciled plan](../superpowers/plans/2026-10-03-invoice-pdf-email-and-office-printing.md) lists the split. The foundation built so far: the shared document content has been extracted from the roll renderer,
-with captured mixed-rate discounted F1 bytes preserved on 58/80 mm paper. The A4 PDF and
-300/600 dpi glyph-outline page renderers now share a paginated layout. Tests extract the saved
-figures, decode the drawn QR, compare raster text with the PDF rendered at 300 dpi, and check
-repeatable PDF bytes. Spanish, Catalan, Galician and Basque fixtures preserve their saved names,
-localized labels and cent-exact figures in extracted PDF text. At 300 and 600 dpi, each nonblank
-text row passes a threshold of 99% of the PDF reference ink present within two dots in the raster;
-the bundled font has a glyph for every character in those rendered fixtures. Removing the accented é outline fails the Spanish and Galician row
-comparisons while the Catalan and Basque controls pass. The PWG and Apple Raster encoders
-now match native CUPS reference files at 300/600 dpi. Native readback compared every decoded pixel and header size, resolution and
-colour space for the invoice page and two-page pattern fixtures. A synthetic `ippeveprinter`
-completed all four format/resolution jobs; its command decoded both pattern pages unchanged.
-These checks ran against source modules. The metadata-only queue now reserves email attempts,
-retains the recipient and consent for each request, and distinguishes original retries from
-duplicates. Its claim helpers use fresh tokens, keep only their hashes, expire to an unknown
-outcome, and authenticate late reports against the recorded attempt. Tests cover late results
-before a retry, while it is queued or sending, and after it succeeds or fails. Existing receipt
-originals participate in reservation checks. Receipt reservations now correlate to the existing
-job through a declared foreign key and unique index, and reject another sale's job, drawer
-jobs, non-receipts, reused jobs and an original/copy designation that differs from the saved
-job. Receipt claim metadata references the print agent and requires that agent's current
-print-job claim. At helper expiry the linked job loses automatic claim eligibility before an
-email retry is reserved; a historical report leaves that job unchanged. Current and latest
-late reports project the outcome onto the existing job without another handover snapshot.
-The focused tests and independent guard deletions cover these helper paths.
-The print pull/result routes and demo printer now attach and return the delivery's token and
-generation for correlated receipt jobs. The real agent/client integration tests cover successful
-and failed sends, malformed claims, another job or holder, expiry without automatic replay,
-and old same-agent success/failure reports during each newer receipt-retry state. The generic
-local runtime leaves correlated jobs for this adapter, and the generic reporter refuses them.
-Nineteen disposable guard deletions each failed the intended assertion beside a valid passing
-control. The till's original-retry route and the management print-job resend route now enroll
-F1 resends in the same transaction as the new job, attributing them to the authenticated
-staff member. They preserve receipt bytes, printer and resend history, refuse an active
-cross-medium attempt, and refuse resending original bytes after completion. The till expires
-an old claim before checking whether the original can be retried. Synthetic F1 HTTP cases
-cover failed and expired retries, concurrent requests, late results, copy resends and rollback
-when metadata cannot be written; existing F2 and drawer assertions remain unchanged.
-The till's explicit original/copy actions and dashboard copy helper now enroll newly rendered
-F1 paper jobs with the requesting staff member, in the same transaction as the job and
-copy audit. Synthetic tests cover replayed original requests, paper copies after completed
-email, active-email refusal with no job/audit left behind, expiry before a paper original,
-and the F2/no-printer controls. Eight independent deletions fail the intended case beside
-a valid passing control. The automatic receipt hook now enrolls F1 originals using the
-operator recorded on the sale, including when optional receipt printing is off. Synthetic
-cases cover replay, cross-medium refusal and rollback, absent printers, and sales with no
-recorded operator. Removing the forwarded operator makes the attributed-original test fail
-while the unattributed-sale control still passes. The next checkpoint enrolls unattributed
-paper originals with a null staff attribution. Synthetic tests cover reservation/replay,
-automatic enrollment and token-checked completion without a handover snapshot; email/A4
-rows without staff attribution are refused. Generated core migration 0119, schema
-conformance and stepwise upgrade checks passed. No whole-Task-2 claim.
-The invoice-mail routing helper now captures demo/development mail locally, resolves prepare
-mail through configured SMTP or capture, and reports unconfigured live/restored venues.
-The standalone sender renders a transient PDF and uses Nodemailer. Local SMTP fixtures cover
-readable original/duplicate attachments, recipient and DATA refusals, lost final acknowledgement,
-and an unanswered attempt ending at 30 seconds with its socket closed. Implicit TLS tests
-cover a refused untrusted certificate and a trusted test connection. The worker pass now
-commits a claim, closes a separate projection transaction before transport, and reports with the saved claim identity. Certain email
-refusals retain their metadata and reserve another generation, due after 5 seconds,
-30 seconds, 2 minutes or 10 minutes, stopping after five attempts. Unknown outcomes are
-not automatically replayed. Synthetic database cases cover another sale committing while
-the injected sender waits, competing passes, due times, unchanged consent/recipient snapshots,
-duplicate markers, late outcomes, rollback and sanitised throws. The routed sender now reads
-the current mail settings before each send; a real local SMTP case rotates the saved gateway
-and sender address between two sends, then removes it and observes a certain failure with
-no further message. The standalone loop checks primary status on each iteration, contains
-pass failures and finishes the pending send's report before returning after a stop signal.
-Database cases cover idle and in-flight stops, an already-stopped worker, secondary-to-primary
-gating and recovery after a pass failure. The stored-document reader now projects sale and
-line snapshots, saved receipt grouping/header, adjustments and payments. Eight synthetic
-cases cover no-regime and filed invoices, weighted extras, a paid discounted bill and its
-operation date, current optional trim, taxpayer changes, no-order settlements, absent line
-gross and refused lookups. Trading boot now starts the routed email worker after claim
-recovery, checks the singleton role on each pass, and joins the pending send and its report
-before normal shutdown or failed-start cleanup closes the store. Real local SMTP cases
-exercise a queued duplicate's saved invoice facts, a held acceptance during normal close,
-a later failed startup, and queued-email controls on a local secondary and a read-only mirror.
-The separate page-printer schema now records IPP endpoints, supported and selected formats,
-media and resolution. A new A4 delivery request stores its page-printer reference and refuses a
-receipt-printer id, a disabled page printer or one outside the sale node's location. Replayed
-reservations retain their row after printer disablement. Configuration transfer preserves the
-capabilities, remaps the id/location and imports the page printer disabled with a reconnect
-notice. Synthetic database cases cover these paths; core schema conformance and the stepwise
-upgrade guard passed with generated migrations 0120/0121. Registration, location selection,
-A4 claim/renewal/transport and delivery UI remain open.
-The bill's internal invoice-choice writer now stages receipt/email/A4 metadata under its
-revision check. Email consent snapshots use server staff/time and preserve the displayed
-venue contact; stale edits, malformed choices and unavailable email are refused. A4 staging
-requires an active local page printer. The new column is included in the database's
-transition restrictions, with focused refusal and valid-revision cases. The HTTP invoice-choice
-route now forwards the delivery choice, stamps consent with the authenticated staff member and
-server clock, and asks the current invoice-mail resolver whether email is available. Real boot
-cases cover demo, prepare, development and live SMTP, with unconfigured live email refused.
-Bill reads return a saved delivery draft. Null choices and unavailable A4 destinations are refused
-without advancing the bill. The automatic sale-receipt hook now reserves the saved email/A4
-original against the issued sale, using the existing caller transaction, and suppresses its
-fiscal receipt. Synthetic paid-bill cases check that a rollback removes both the sale and the
-reservation, and a replay preserves the reservation. An A4 destination disabled after its
-accepted choice does not refuse captured-bill completion; new delivery requests still require
-an active destination. Receipt cases keep a prepaid collection ticket separate, retain explicit paper originals and ignore a synthetic F2's stale email draft.
-The internal unpaid-issuance function now reserves the saved email/A4 choice in its existing
-transaction after the sale is written. Synthetic selection fixtures exercise real core invoice
-writes, consent/staff snapshots, rollback, accepted A4 disablement and unchanged paper/F2
-controls. Separate cases keep the public F1 refusal ahead of both sale and delivery writes.
-The trading server now offers manager-only SMTP settings reads, changes and test messages.
-The settings write seals the existing `email.smtp` payload; the read returns the server, port,
-encryption choice and sender, without the username, password or URL query. Demo and prepare
-changes are refused. The test goes to the authenticated person's own address, sends outside the
-database transaction and saves no proposed credential. Real local SMTP cases exercise accepted
-mail, refused recipients/data, lost acknowledgement, timeout closure and trusted/untrusted TLS.
-The wizard's required live email step, provisioning, dashboard editor and restore checks remain
-open, alongside printer registration/transport and the delivery UI; no Task 3 or 4 completion claim.
-For enrolled receipts, the real pull now projects
-confirmed unpairing and unavailable-Bluetooth endings onto delivery metadata in the same
-transaction. Queued receipts become failed; handed-out receipts become unknown and retain
-their token hash for authenticated late results. Six API cases cover cross-medium original
-retry, printer reactivation without replay, another agent's printable-device control,
-completed originals, and late success before and after a newer attempt. Trading boot now
-marks inherited receipt and email claims unknown before the pretend printer and print-agent
-routes start, separately from fiscal drain recovery. Synthetic real-boot cases cover fresh
-claims, ordinary printable jobs, authenticated late email success/failure and a read-only
-mirror control. Bill staging, A4 printer registration and location selection, SMTP setup, office
-transport, delivery UI and image/box checks remain. Office printing reverses the 2026-09-09
-provisioning design’s "raw ESC/POS only" decision.
-Task 1 font/build checks are still open: the standalone PDFKit 0.20.2/fontkit 2.0.4 probe
-throws when embedding the current Google Sans WOFF2 for “í”; Noto Sans rendered the same probe
-as PDF and glyph outlines. In the pre-alias bundle probe, PDFKit's ESM import collided with
-the shared banner's `createRequire` name, and the notices collector required upstream notices
-for brotli 1.3.3,
-dfa 1.2.0 and fontkit 2.0.4. Their upstream licence declarations and terms are now collected,
-including the Apache notice on brotli's Google decompressor. The normal renderer bundle writes
-its notices. The owner approved the banner alias on 2026-10-07. With that alias, a new real
-bundle-load regression passes with both the entry's own `createRequire` import and the
-CommonJS shim exercised. The standalone renderer bundle produces the same 12,353-byte PDF
-and byte-identical 300/600 dpi PNGs as the prior source-rendered fixtures; both raster QRs
-decode to the filed link. All four shared-bundler consumers build, and Node syntax checks
-pass for their 12 JavaScript bundles. Built-image rendering and box measurements remain open.
-
-Renderer receipt, 2026-10-07: the mixed-rate discounted F1 PDF is 12,353 bytes; the six-page
-35-line fixture is 17,421 bytes. The 600 dpi SVG QR initially had antialiased module seams and
-failed jsQR decoding, including when cropped; hard QR edges make both 300/600 dpi pages decode
-the filed link. Source text retains antialiasing. Noto Sans and its licence match the pinned
-upstream files byte for byte; the build copy matches the source font. Image/box timings and
-physical HP output remain pending.
-
-The wizard's SMTP test endpoint is now mounted in setup mode. A Live request sends a short
-message to the submitted administrator's normalised address through the shared bounded sender,
-without database dependencies. Its 21 added cases exercise real SMTP acceptance, refusals,
-lost acknowledgement and timeout, as well as field validation and secret-free answers/logs;
-the related six-file run passed 381 cases. The wizard screen, provisioning requirement and
-credential sealing, dashboard editor and restore checks remain open.
-
-**Owner decisions in place of the asesor's answers (2026-10-07, under the plan's Task 0.1), so A231p may be built.** Public F1 stays disabled until A231's own enablement gates are met; the asesor is asked to confirm these as [Q44](../compliance/asesor-questions.md#q44-sending-a-full-invoice-as-a-pdf-by-email-or-on-a4--the-owners-interim-answers-added-2026-10-07):
-
-1. A PDF emailed after a paper original, or paper after an emailed original, is a «duplicado» and is marked so.
-2. Consent to email: staff ask the customer and record the answer on the till. The customer does not sign or confirm anything themselves.
-   **Gap found 2026-10-09 (A448):** for a consumer, TRLGDCU art. 63.3 requires the request for consent to «precisar la forma en la que se procederá a recibir la factura electrónica, así como la posibilidad de que el destinatario que haya dado su consentimiento pueda revocarlo y la forma en la que podrá realizarse dicha revocación». The till's question must say both.
-3. Keeping: the same as a printed F1 — the invoice's database record. No copy of the PDF file is stored. The reconciled plan drops the proposed delivered-PDF table and keeps delivery metadata only.
-4. An unsigned PDF is a valid original for a business customer before the business regime below applies, carrying the same QR and legend as paper. Receipts, each found word for word in the source fetched 2026-10-07: RD 1619/2012 art. 8.4, «se presumirá acreditada cuando se haya expedido utilizando un sistema o programa informático en conformidad con los requisitos»; DGT binding ruling V2891-18 (08/11/2018), an emailed PDF «con independencia de que no haya sido firmada digitalmente por el emisor de la misma, tendrá la calificación de factura electrónica»; AEAT's Veri*Factu FAQ, the QR on a PDF «no tendrá especialidades respecto de la que corresponde a la emisión en papel».
-5. A retry after a failed or uncertain send is still the original.
-
-**When the business e-invoicing regime starts.** [Orden HAC/1028/2026](https://www.boe.es/buscar/doc.php?id=BOE-A-2026-20587) (BOE núm. 247, 5 October 2026) «entrará en vigor el día siguiente al de su publicación en el «Boletín Oficial del Estado», dándose inicio al cómputo de los plazos» of [RD 238/2026](https://www.boe.es/buscar/act.php?id=BOE-A-2026-7295)'s fourth final provision: «Doce meses después» for businesses whose turnover is over €8 million, and «Veinticuatro meses después, para el resto de los empresarios y profesionales». So from about October 2027, or October 2028 for smaller businesses, an invoice to a Spanish business must be a structured message, and a PDF alone is not enough (the design's register, RD 238/2026 art. 7.1). The exact end day of each period, and whether a restaurant's F1s to businesses fall inside the regime, are asked as [Q45](../compliance/asesor-questions.md#q45-when-does-structured-business-invoicing-reach-a-restaurants-full-invoices-added-2026-10-07). Researched 2026-10-07 in the watcher session; the fetched texts were not kept in the repository.
+Found by A231d's research. [Orden HAC/1028/2026](https://www.boe.es/buscar/doc.php?id=BOE-A-2026-20587) (BOE núm. 247, 5 October 2026) «entrará en vigor el día siguiente al de su publicación en el «Boletín Oficial del Estado», dándose inicio al cómputo de los plazos» of [RD 238/2026](https://www.boe.es/buscar/act.php?id=BOE-A-2026-7295)'s fourth final provision: «Doce meses después» for businesses whose turnover is over €8 million, and «Veinticuatro meses después, para el resto de los empresarios y profesionales». So from about October 2027, or October 2028 for smaller businesses, an invoice to a Spanish business must be a structured message, and a PDF alone is not enough (the design's register, RD 238/2026 art. 7.1). The exact end day of each period, and whether a restaurant's F1s to businesses fall inside the regime, are asked as [Q45](../compliance/asesor-questions.md#q45-when-does-structured-business-invoicing-reach-a-restaurants-full-invoices-added-2026-10-07). Researched 2026-10-07 in the watcher session; the fetched texts were not kept in the repository.
 
 ## A275. Invoice a bill paid later by transfer (full or simplified invoice) — WAITS ON ASESOR Q42 (2026-10-06)
 
@@ -602,7 +396,7 @@ The question is now [Q47](../compliance/asesor-questions.md#q47-keeping-a-chains
 **For Task 9 (the filing screen):** `listFilingCases` reads every case and event with no filter or
 paging, and `heldRecords` reads every `rechazado`/`detenido` row; neither has a production caller
 yet, so the screen should add an open-only filter or paging when it calls them.
-Public F1 issuance stays disabled pending the physical 58/80 mm paper and QR checks, A231q
+Public F1 issuance stays disabled pending the physical 58/80 mm paper and QR checks, A555
 and the asesor's approval. The F1 taxpayer-domicile receipt must omit the location address.
 Task 3 can use the published receipts; D2 retains its remaining plan gates, and D5 still needs
 old-chain evidence and its adviser answer. Independent queue items may proceed under the plan.
@@ -771,3 +565,21 @@ From **The product editor and catalogue (#345, #379, #387) — what is left open
   card payment slip, the Modelo 303 export and the till's start-up read the current name. A
   reconcile query across a rename takes its header name from whichever of its rows comes first
   (`packages/fiscal-verifactu/src/reconcile.ts`).
+- **Full invoices by email or on A4: the owner's answers in place of the asesor's (2026-10-07, A231d's
+  plan Task 0.1, so A231p could be built).** Public F1 stays disabled until A231's own enablement gates are met; the asesor is asked to confirm these as [Q44](../compliance/asesor-questions.md#q44-sending-a-full-invoice-as-a-pdf-by-email-or-on-a4--the-owners-interim-answers-added-2026-10-07):
+  1. A PDF emailed after a paper original, or paper after an emailed original, is a «duplicado» and is marked so.
+  2. Consent to email: staff ask the customer and record the answer on the till. The customer does not sign or confirm anything themselves.
+     **Gap found 2026-10-09 (A448):** for a consumer, TRLGDCU art. 63.3 requires the request for consent to «precisar la forma en la que se procederá a recibir la factura electrónica, así como la posibilidad de que el destinatario que haya dado su consentimiento pueda revocarlo y la forma en la que podrá realizarse dicha revocación». The till's question must say both.
+     _2026-10-12: for the product this answer is superseded. The owner removed the consent step on
+     2026-10-09 ("We don't need customer consent to send them an email; just giving us the email
+     address is sufficient."), and A231q's tasks C1a and C1b removed it
+     ([plan](../superpowers/plans/2026-10-12-a231q-invoice-delivery-part-2.md)). A448 keeps the
+     legal question open._
+  3. Keeping: the same as a printed F1 — the invoice's database record. No copy of the PDF file is stored. The reconciled plan drops the proposed delivered-PDF table and keeps delivery metadata only.
+  4. An unsigned PDF is a valid original for a business customer before the [business regime](#when-the-business-e-invoicing-regime-starts) applies, carrying the same QR and legend as paper. Receipts, each found word for word in the source fetched 2026-10-07: RD 1619/2012 art. 8.4, «se presumirá acreditada cuando se haya expedido utilizando un sistema o programa informático en conformidad con los requisitos»; DGT binding ruling V2891-18 (08/11/2018), an emailed PDF «con independencia de que no haya sido firmada digitalmente por el emisor de la misma, tendrá la calificación de factura electrónica»; AEAT's Veri*Factu FAQ, the QR on a PDF «no tendrá especialidades respecto de la que corresponde a la emisión en papel».
+  5. A retry after a failed or uncertain send is still the original.
+- **Office printers are sent pages Waitron draws itself, rather than through CUPS** (owner, 2026-10-03,
+  A231d's decision 10): PDF when the printer lists it, else PWG Raster, else Apple Raster
+  (`apps/print-agent/src/ipp-capabilities.ts`). The measurements behind it are in the
+  [design](../superpowers/specs/2026-10-03-invoice-pdf-email-and-office-printing-design.md). Office
+  printing reverses the 2026-09-09 provisioning design's "raw ESC/POS only" decision.

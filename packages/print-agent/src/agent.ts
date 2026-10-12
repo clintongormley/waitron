@@ -8,6 +8,9 @@ import {
   type BluetoothCommandOutcome,
   type Failure,
   type JobOutcome,
+  type PageHold,
+  type PageJob,
+  type PageJobOutcome,
   type WireJob,
 } from "./client.js";
 import type {
@@ -24,6 +27,33 @@ import { Router } from "./router.js";
  * or a discovery pass that found devices cuts the sleep short so what it produced goes out at once. */
 export const POLL_INTERVAL_MS = 2_000;
 const RESET_WINDOW_MS = 5 * 60_000;
+/** A third of the server's 60 s claim lease (`INVOICE_DELIVERY_LEASE_MS`,
+ * `apps/server/src/invoice-delivery.ts`), so one renewal that does not get through leaves the claim
+ * alive. */
+export const PAGE_RENEW_INTERVAL_MS = 20_000;
+/** How long a finished job waits for a renewal still out before reporting: above the client's
+ * 3 s bound on one request (`DEFAULT_TIMEOUT_MS`). */
+export const PAGE_RENEW_SETTLE_MS = 5_000;
+/** Twice the 60 s lease, counted from the claim or its last renewal that got through: by then the
+ * server has ended the claim as uncertain, so a report it never received is dropped. */
+export const PAGE_REPORT_GIVE_UP_MS = 120_000;
+const DOCUMENT_UNAVAILABLE: PageJobOutcome = {
+  status: "failed",
+  failureCode: "document_unavailable",
+};
+const UNCERTAIN: PageJobOutcome = { status: "unknown", failureCode: "timeout" };
+/** Failures in which the report may never have reached the server. */
+const REPORT_RETRIED = new Set<Failure["kind"]>(["unreachable", "rate_limited", "pairing_closed"]);
+
+/** `aliveAt`: when the claim was taken or last renewed. `hold`: the printer's last reported hold,
+ * sent with the next renewal. */
+interface HeldClaim {
+  job: PageJob;
+  aliveAt: number;
+  hold: PageHold | null;
+}
+
+type PageReport = HeldClaim & { outcome: PageJobOutcome };
 
 export interface AgentOptions {
   host: Host;
@@ -93,6 +123,12 @@ export function createAgent(opts: AgentOptions): Agent {
   let scanGeneration = 0;
   let scanFound: DiscoveredDevice[] = [];
   let nextScanAt = 0;
+  // One claim loop at a time, with any number of A4 jobs out: the server hands out at most one job
+  // per printer, so the agent keeps no lock of its own.
+  let pageServer: { url: string; token: string } | undefined;
+  let claiming = false;
+  let claimAgain = false;
+  let unsentPageReports: PageReport[] = [];
 
   function replaceWakeSignal(): void {
     wakePromise = new Promise((resolve) => {
@@ -315,6 +351,156 @@ export function createAgent(opts: AgentOptions): Agent {
     }
   }
 
+  /** Renews until `ended` is set; a lost claim aborts `lost`. */
+  async function keepClaim(
+    url: string,
+    token: string,
+    held: HeldClaim,
+    ended: { now: boolean; signal: Promise<void> },
+    lost: AbortController,
+  ): Promise<void> {
+    for (;;) {
+      await Promise.race([host.sleep(PAGE_RENEW_INTERVAL_MS), ended.signal]);
+      if (ended.now) return;
+      const renewed = await client.renewPageJob(url, token, held.job, held.hold);
+      if (renewed.ok) {
+        held.aliveAt = host.now();
+      } else {
+        if (renewed.failure.kind === "claim_lost") {
+          lost.abort();
+          return;
+        }
+        host.log.warn("page job renewal failed", { job: held.job.id, failure: renewed.failure });
+      }
+    }
+  }
+
+  async function printClaimed(
+    url: string,
+    token: string,
+    held: HeldClaim,
+    printPage: NonNullable<typeof host.printPage>,
+  ): Promise<PageJobOutcome> {
+    const { job } = held;
+    const lost = new AbortController();
+    let end!: () => void;
+    const ended = { now: false, signal: new Promise<void>((resolve) => (end = resolve)) };
+    const renewing = keepClaim(url, token, held, ended, lost).catch((error: unknown) => {
+      try {
+        host.log.warn("page job renewal stopped", { job: job.id, error: describeRejection(error) });
+      } catch {
+        // A throw here would skip the report.
+      }
+    });
+    try {
+      const document = await client.fetchPageDocument(url, token, job);
+      // A claim lost before printing prints nothing, so the printer was never sent anything.
+      if (!document.ok || lost.signal.aborted) return DOCUMENT_UNAVAILABLE;
+      const { host: printerHost, port, resourcePath } = job.printer;
+      try {
+        return await printPage(
+          { host: printerHost, port, resourcePath },
+          document.value,
+          job.printer.documentFormat,
+          lost.signal,
+          (hold) => {
+            held.hold = hold;
+          },
+        );
+      } catch {
+        return UNCERTAIN;
+      }
+    } finally {
+      ended.now = true;
+      end();
+      await Promise.race([renewing, host.sleep(PAGE_RENEW_SETTLE_MS).catch(() => undefined)]);
+    }
+  }
+
+  /** A report that may not have reached the server is kept, to be resent on the next pull. */
+  async function sendPageReport(url: string, token: string, report: PageReport): Promise<void> {
+    const sent = await client.reportPageJob(url, token, report.job, report.outcome);
+    if (!sent.ok && REPORT_RETRIED.has(sent.failure.kind)) {
+      if (!unsentPageReports.includes(report)) unsentPageReports = [...unsentPageReports, report];
+      host.log.warn("page job report dropped", { job: report.job.id, failure: sent.failure });
+      return;
+    }
+    unsentPageReports = unsentPageReports.filter((kept) => kept !== report);
+    if (!sent.ok) {
+      host.log.warn("page job report refused", { job: report.job.id, failure: sent.failure });
+    }
+  }
+
+  async function resendPageReports(url: string, token: string): Promise<void> {
+    for (const report of unsentPageReports) {
+      if (host.now() - report.aliveAt > PAGE_REPORT_GIVE_UP_MS) {
+        host.log.warn("page job report abandoned", { delivery: report.job.id });
+        unsentPageReports = unsentPageReports.filter((kept) => kept !== report);
+      } else {
+        await sendPageReport(url, token, report);
+      }
+    }
+  }
+
+  /** Nothing awaits a job, so it ends by waking the claim loop, whatever happened to it. */
+  async function runPageJob(
+    url: string,
+    token: string,
+    held: HeldClaim,
+    printPage: NonNullable<typeof host.printPage>,
+  ): Promise<void> {
+    try {
+      const outcome = await printClaimed(url, token, held, printPage);
+      await sendPageReport(url, token, { ...held, outcome });
+    } catch (error) {
+      try {
+        host.log.error("page job failed", { job: held.job.id, error: describeRejection(error) });
+      } catch {
+        // A throw here would be an unhandled rejection.
+      }
+    } finally {
+      void claimPageJobs(false);
+    }
+  }
+
+  /** Claims until the server has none, starting each job without waiting for it. A call while the
+   * loop runs makes it claim once more after the server's "none", unless the call is a pull's,
+   * whose job the running loop is already doing. */
+  async function claimPageJobs(fromPull: boolean): Promise<void> {
+    const printPage = host.printPage?.bind(host);
+    if (printPage === undefined || pageServer === undefined) return;
+    if (claiming) {
+      if (!fromPull) claimAgain = true;
+      return;
+    }
+    claiming = true;
+    const { url, token } = pageServer;
+    try {
+      if (fromPull) await resendPageReports(url, token);
+      do {
+        claimAgain = false;
+        for (;;) {
+          const claimed = await client.claimPageJob(url, token);
+          if (!claimed.ok || claimed.value === null) break;
+          void runPageJob(
+            url,
+            token,
+            { job: claimed.value, aliveAt: host.now(), hold: null },
+            printPage,
+          );
+        }
+      } while (claimAgain);
+    } catch (error) {
+      try {
+        host.log.error("page job runner failed", { error: describeRejection(error) });
+      } catch {
+        // Nothing awaits this runner, so a throw here would be an unhandled rejection.
+      }
+    } finally {
+      claiming = false;
+    }
+  }
+
   /** Returns true when the tick did work (a non-empty batch), so `start` re-polls at once. */
   async function tick(): Promise<boolean> {
     // The loop, not the host, holds the live config, so a later merge never clobbers an earlier
@@ -489,6 +675,21 @@ export function createAgent(opts: AgentOptions): Agent {
         });
       }
     }
+    // A device announced only by IPP has no raw port, so it is never offered as a receipt printer,
+    // however its check went.
+    scanned = scanned.map((device) =>
+      device.ippOnly === true && device.ipp !== undefined && device.office === undefined
+        ? {
+            ...device,
+            office: {
+              ...device.ipp,
+              printable: false,
+              reason: "invalid_reply",
+              supportedFormats: [],
+            },
+          }
+        : device,
+    );
     const hostname = host.hostname?.();
     const setupUrl = host.setupUrl?.();
     const setupPort = host.setupPort?.();
@@ -539,6 +740,8 @@ export function createAgent(opts: AgentOptions): Agent {
       expiresAt: receivedAt + target.expiresInMs,
     }));
     probeServer = current;
+    pageServer = { url: current, token };
+    void claimPageJobs(true);
     let anyFailed = false;
     for (const job of pulled.value.jobs) if (await push(job, token, current)) anyFailed = true;
     report({

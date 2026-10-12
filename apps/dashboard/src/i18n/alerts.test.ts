@@ -1,6 +1,6 @@
-import { expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { alertMessage, hasAlertMessage } from "./alerts.js";
-import { ALERT_MESSAGES } from "./alert-messages.js";
+import { ALERT_MESSAGES, ALERT_WORDS } from "./alert-messages.js";
 
 it("registers the dashboard's alert wording on import", () => {
   expect(hasAlertMessage("payment.offline_forward_declined")).toBe(true);
@@ -129,4 +129,136 @@ it("marks every amount slot in the alert wording as money", () => {
     ),
   );
   expect(unmarked).toEqual([]);
+});
+
+it("names the undelivered full invoice, and says how to hand an unclaimed one to an agent", () => {
+  const params = { invoice: "F1A/7", printer: "Back office" };
+  for (const code of [
+    "invoice_delivery.failed",
+    "invoice_delivery.uncertain",
+    "invoice_delivery.office_printer_unclaimed",
+  ]) {
+    expect(alertMessage(code, params, "en"), code).toContain("F1A/7");
+    expect(alertMessage(code, params, "es"), code).toContain("F1A/7");
+  }
+  const en = alertMessage("invoice_delivery.office_printer_unclaimed", params, "en");
+  const es = alertMessage("invoice_delivery.office_printer_unclaimed", params, "es");
+  expect(en).toContain("Back office");
+  expect(en).toContain("Add a printer");
+  expect(en).toContain("“Use this agent”");
+  expect(es).toContain("Back office");
+  expect(es).toContain("Añadir impresora");
+  expect(es).toContain("«Usar este agente»");
+  // Only a manager holds `printer.manage`; a supervisor sees this alert too.
+  expect(en).toContain("A manager can open Add a printer");
+  expect(es).toContain("Un responsable puede abrir Añadir impresora");
+});
+
+it("says an uncertain invoice may not have arrived in two short sentences", () => {
+  const params = { invoice: "F1A/7" };
+  expect(alertMessage("invoice_delivery.uncertain", params, "en")).toBe(
+    "Full invoice F1A/7 may not have reached its customer. Check before sending it again.",
+  );
+  expect(alertMessage("invoice_delivery.uncertain", params, "es")).toBe(
+    "Puede que la factura completa F1A/7 no haya llegado a su cliente. Compruébalo antes de volver a enviarla.",
+  );
+});
+
+describe("an invoice the office printer is holding", () => {
+  const holds = {
+    paper_out: ["It is out of paper: load paper.", "No tiene papel: carga papel."],
+    paper_jam: [
+      "Paper is jammed in it: clear the jam.",
+      "Tiene un atasco de papel: retira el papel atascado.",
+    ],
+    cover_open: [
+      "A cover or door is open: close it.",
+      "Tiene una tapa o una puerta abierta: ciérrala.",
+    ],
+    tray_missing: [
+      "A paper tray is missing: put it back.",
+      "Le falta una bandeja de papel: vuelve a colocarla.",
+    ],
+    ink_or_toner_out: [
+      "It is out of ink or toner: replace the cartridge.",
+      "Se ha quedado sin tinta o sin tóner: cambia el cartucho.",
+    ],
+    output_full: [
+      "Its output tray is full or missing: empty it or put it back.",
+      "Su bandeja de salida está llena o no está puesta: vacíala o vuelve a colocarla.",
+    ],
+    paused: [
+      "It is paused: resume it on the printer itself.",
+      "Está en pausa: reanúdala en la propia impresora.",
+    ],
+    stopped: [
+      "It has stopped: check the printer for what it needs.",
+      "Se ha detenido: revisa qué necesita la impresora.",
+    ],
+  } as const;
+
+  it.each(Object.entries(holds))(
+    "says what to do at the printer for %s, and not to print the invoice again",
+    (hold, [enWords, esWords]) => {
+      const params = { invoice: "F1A/7", printer: "Back office", hold };
+      expect(alertMessage("invoice_delivery.held", params, "en")).toBe(
+        `Full invoice F1A/7 is waiting at office printer “Back office”. ${enWords} The invoice will then print by itself: do not print it again.`,
+      );
+      expect(alertMessage("invoice_delivery.held", params, "es")).toBe(
+        `La factura completa F1A/7 está esperando en la impresora de oficina «Back office». ${esWords} Después la factura se imprimirá sola: no la vuelvas a imprimir.`,
+      );
+    },
+  );
+
+  it.each(Object.entries(holds))(
+    "names the hold %s ahead of a waiting invoice and offers the receipt printer, not Use this agent",
+    (hold, [enWords, esWords]) => {
+      const params = { invoice: "F1A/7", printer: "Back office", hold };
+      expect(alertMessage("invoice_delivery.queued_behind_hold", params, "en")).toBe(
+        `Full invoice F1A/7 is waiting for office printer “Back office”, which is holding an earlier job. ${enWords} The invoice will then print after it. To give the customer the invoice on the receipt printer instead, open the order on the till.`,
+      );
+      expect(alertMessage("invoice_delivery.queued_behind_hold", params, "es")).toBe(
+        `La factura completa F1A/7 está esperando a la impresora de oficina «Back office», que tiene retenido un trabajo anterior. ${esWords} Después la factura se imprimirá tras él. Para darle al cliente la factura en la impresora de tickets, abre el pedido en el TPV.`,
+      );
+    },
+  );
+
+  it("says a hold it has no words for only sends the reader to the printer, never the raw code", () => {
+    for (const code of ["invoice_delivery.held", "invoice_delivery.queued_behind_hold"]) {
+      for (const hold of ["media_low", undefined]) {
+        const params = { invoice: "F1A/7", printer: "Back office", hold };
+        const en = alertMessage(code, params, "en");
+        const es = alertMessage(code, params, "es");
+        expect(en, code).toContain(
+          " It is waiting for something: check the printer for what it needs. ",
+        );
+        expect(es, code).toContain(" Está esperando algo: revisa qué necesita la impresora. ");
+        for (const text of [en, es]) {
+          expect(text).not.toContain("media_low");
+          expect(text).not.toMatch(/[{}]/);
+        }
+      }
+    }
+  });
+
+  it("says an invoice that ended while held may still print, and to check the printer first", () => {
+    const params = { invoice: "F1A/7", printer: "Back office" };
+    expect(alertMessage("invoice_delivery.uncertain_held", params, "en")).toBe(
+      "Full invoice F1A/7 may still print on office printer “Back office”: the printer was holding it when Waitron lost track of it. Check the printer first; only if it did not print, send it again from the order, on the till or on the Orders page.",
+    );
+    expect(alertMessage("invoice_delivery.uncertain_held", params, "es")).toBe(
+      "Puede que la factura completa F1A/7 aún se imprima en la impresora de oficina «Back office»: la impresora la tenía retenida cuando Waitron perdió su rastro. Comprueba primero la impresora; solo si no se ha imprimido, vuelve a enviarla desde el pedido, en el TPV o en la página de Pedidos.",
+    );
+  });
+});
+
+it("names only registered word lists in its word-list slots", () => {
+  const unknown = Object.entries(ALERT_MESSAGES).flatMap(([code, { en, es }]) =>
+    [en, es].flatMap((text) =>
+      [...text.matchAll(/\{[A-Za-z0-9_]+:([a-z_]+)\}/g)]
+        .filter((m) => m[1] !== "money" && !Object.hasOwn(ALERT_WORDS, m[1]!))
+        .map((m) => `${code}: ${m[0]}`),
+    ),
+  );
+  expect(unknown).toEqual([]);
 });

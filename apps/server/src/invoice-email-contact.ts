@@ -1,5 +1,6 @@
-import type { Transaction } from "@waitron/db";
-import { AppError, type LocationId } from "@waitron/shared";
+import { eq } from "drizzle-orm";
+import { nodes, sales, type Transaction } from "@waitron/db";
+import { AppError, locationId, type LocationId } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 
 export type InvoiceEmailContactSource =
@@ -34,4 +35,31 @@ export async function resolveInvoiceEmailContact(
   if (selected !== null) return selected;
   const fallback = await VENUE_SERVICE.receiptDefaultDepartment(tx, cfg);
   return fallback === departmentId ? null : contact(fallback);
+}
+
+export async function saleLocation(tx: Transaction, saleId: string): Promise<string> {
+  const [sale] = await tx
+    .select({ locationId: nodes.locationId })
+    .from(sales)
+    .innerJoin(nodes, eq(nodes.id, sales.nodeId))
+    .where(eq(sales.id, saleId));
+  return sale!.locationId;
+}
+
+/**
+ * Whether this sale's invoice can be emailed now: the caller's mail transport check, and a contact
+ * for the sale's department, which staging an email choice also requires.
+ */
+export async function canEmailInvoice(
+  tx: Transaction,
+  saleId: string,
+  transport: boolean,
+): Promise<boolean> {
+  if (!transport) return false;
+  const contact = await resolveInvoiceEmailContact(
+    tx,
+    { locationId: locationId(await saleLocation(tx, saleId)) },
+    { kind: "sale", saleId },
+  );
+  return contact !== null;
 }

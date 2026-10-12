@@ -3,6 +3,7 @@ import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
+import "./email-settings-panel.js";
 import type { DashboardApi, EmailInbox, TestEmail, TestEmailAddress } from "../api/client.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
@@ -76,6 +77,7 @@ export class EmailScreen extends LitElement {
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
+  @property({ type: Boolean }) canManage = false;
   readonly #queries = new DashboardQueries(
     this,
     () => this.api,
@@ -173,6 +175,7 @@ export class EmailScreen extends LitElement {
   override render(): TemplateResult {
     return html`
       <h1>${t("email.title")}</h1>
+      ${this.canManage ? html`<dashboard-email-settings-panel .api=${this.api}></dashboard-email-settings-panel>` : nothing}
       ${
         this.inbox?.mode === "local_capture"
           ? this.#renderLocal(this.inbox)

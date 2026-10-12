@@ -3,6 +3,9 @@ import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
+  UNIQUE_VIOLATION,
+  checkFailed,
+  refusalOn,
   sales,
   nodes,
   pagePrinters,
@@ -62,20 +65,11 @@ const clock: TrustedClock = {
   },
   currentAnchor: () => null,
 };
-const consent = {
-  statementVersion: "invoice-email-v1",
-  language: "es-ES",
-  recordedAt: "2026-10-07T14:00:00+02:00",
-  personId: "staff-one",
-  contactEmail: "venue@example.test",
-  contactPhone: "910000000",
-};
 const email = () => ({
   requestKey: randomUUID(),
   personId: "staff-one",
   medium: "email" as const,
   recipient: "customer@example.test",
-  consent,
 });
 
 async function issue(full = true) {
@@ -166,7 +160,6 @@ describe("invoice delivery reservation", () => {
       pagePrinterId: printer!.id,
       printJobId: null,
       recipient: null,
-      consent: null,
       status: "queued",
       attempts: 0,
       designation: "original",
@@ -220,6 +213,96 @@ describe("invoice delivery reservation", () => {
     },
   );
 
+  it("records issuance's A4 original for a disabled printer as failed, and the next one is still an original", async () => {
+    const sale = await issue();
+    const [node] = await suite.db.select().from(nodes);
+    const [printer] = await suite.db
+      .insert(pagePrinters)
+      .values({
+        locationId: node!.locationId,
+        name: "Office",
+        host: "192.0.2.20",
+        port: 8631,
+        resourcePath: "/ipp/printer",
+        documentFormat: "application/pdf",
+        supportedFormats: ["application/pdf"],
+        media: "iso_a4_210x297mm",
+        resolutionDpi: 600,
+        active: false,
+      })
+      .returning();
+    const request = {
+      requestKey: `issuance:${sale.saleId}`,
+      personId: "staff-one",
+      medium: "a4" as const,
+      pagePrinterId: printer!.id,
+    };
+    const issued = await withTransaction(suite.db, (tx) =>
+      reserveInvoiceDelivery(tx, sale.saleId, request, { allowInactivePagePrinter: true }),
+    );
+    expect(issued).toMatchObject({
+      medium: "a4",
+      pagePrinterId: printer!.id,
+      status: "failed",
+      failureCode: "printer_disabled",
+      designation: "original",
+      attempts: 0,
+      completedAt: null,
+    });
+    expect(
+      await withTransaction(suite.db, (tx) =>
+        reserveInvoiceDelivery(tx, sale.saleId, request, { allowInactivePagePrinter: true }),
+      ),
+    ).toEqual(issued);
+    await suite.db
+      .update(pagePrinters)
+      .set({ active: true })
+      .where(eq(pagePrinters.id, printer!.id));
+    const retry = await withTransaction(suite.db, (tx) =>
+      reserveInvoiceDelivery(tx, sale.saleId, { ...request, requestKey: randomUUID() }),
+    );
+    expect(retry).toMatchObject({
+      status: "queued",
+      failureCode: null,
+      designation: "original",
+      generation: 2,
+    });
+  });
+
+  it("queues issuance's A4 original for an active printer when inactive printers are allowed", async () => {
+    const sale = await issue();
+    const [node] = await suite.db.select().from(nodes);
+    const [printer] = await suite.db
+      .insert(pagePrinters)
+      .values({
+        locationId: node!.locationId,
+        name: "Office",
+        host: "192.0.2.20",
+        port: 8631,
+        resourcePath: "/ipp/printer",
+        documentFormat: "application/pdf",
+        supportedFormats: ["application/pdf"],
+        media: "iso_a4_210x297mm",
+        resolutionDpi: 600,
+      })
+      .returning();
+    expect(
+      await withTransaction(suite.db, (tx) =>
+        reserveInvoiceDelivery(
+          tx,
+          sale.saleId,
+          {
+            requestKey: `issuance:${sale.saleId}`,
+            personId: "staff-one",
+            medium: "a4",
+            pagePrinterId: printer!.id,
+          },
+          { allowInactivePagePrinter: true },
+        ),
+      ),
+    ).toMatchObject({ status: "queued", failureCode: null });
+  });
+
   it("refuses a receipt printer as an A4 destination without reserving a delivery", async () => {
     const sale = await issue();
     const [location] = await suite.db.select().from(locations);
@@ -239,7 +322,7 @@ describe("invoice delivery reservation", () => {
     expect(await rows()).toEqual([]);
   });
 
-  it("stores a queued original and frozen consent metadata without sending or retaining a document", async () => {
+  it("stores a queued original with its recipient and staff member without sending or retaining a document", async () => {
     const sale = await issue();
     const input = email();
     const delivery = await withTransaction(suite.db, (tx) =>
@@ -253,29 +336,17 @@ describe("invoice delivery reservation", () => {
       generation: 1,
       attempts: 0,
       recipient: "customer@example.test",
-      consent: {
-        statementVersion: "invoice-email-v1",
-        language: "es-ES",
-        recordedAt: "2026-10-07T12:00:00.000Z",
-        personId: "staff-one",
-        contactEmail: "venue@example.test",
-        contactPhone: "910000000",
-      },
+      personId: "staff-one",
     });
-    consent.contactEmail = "changed@example.test";
-    try {
-      expect(JSON.parse(String((await rows())[0]!.consent)).contactEmail).toBe(
-        "venue@example.test",
-      );
-    } finally {
-      consent.contactEmail = "venue@example.test";
-    }
+    expect(await rows()).toHaveLength(1);
     const columns = (
       await suite.db.execute<{ name: string }>(
         sql`select name from pragma_table_info('invoice_deliveries')`,
       )
     ).rows.map((row) => row.name);
     expect(columns.some((name) => /payload|pdf|raster|document/.test(name))).toBe(false);
+    expect(columns).toContain("recipient");
+    expect(columns).not.toContain("consent");
   });
 
   it("replays the same request after completion without allocating another delivery", async () => {
@@ -381,10 +452,14 @@ async function queued() {
   const delivery = await withTransaction(suite.db, (tx) =>
     reserveInvoiceDelivery(tx, sale.saleId, email()),
   );
-  await suite.db.execute(
-    sql`update invoice_deliveries set next_attempt_at = ${start.toISOString()} where id = ${delivery.id}`,
-  );
+  await dueAtStart(delivery.id);
   return { sale, delivery };
+}
+/** A reservation takes the real time; the suite's claims use fixed times, so date it to `start`. */
+async function dueAtStart(id: string) {
+  await suite.db.execute(
+    sql`update invoice_deliveries set next_attempt_at = ${start.toISOString()} where id = ${id}`,
+  );
 }
 async function claim(id: string, holder = "server-one", now = start) {
   return withTransaction(suite.db, (tx) => claimInvoiceDelivery(tx, id, holder, now));
@@ -783,7 +858,6 @@ describe("receipt delivery reservation", () => {
       generation: 1,
       status: "queued",
       recipient: null,
-      consent: null,
     });
     const replay = await withTransaction(suite.db, (tx) =>
       reserveInvoiceDelivery(tx, sale.saleId, input),
@@ -844,6 +918,7 @@ describe("receipt delivery reservation", () => {
     const delivery = await withTransaction(suite.db, (tx) =>
       reserveInvoiceDelivery(tx, sale.saleId, email()),
     );
+    await dueAtStart(delivery.id);
     const held = (await claim(delivery.id, "server-one", new Date("2026-12-01T00:00:00.000Z")))!;
     await withTransaction(suite.db, (tx) => reportInvoiceDelivery(tx, held, { status: "sent" }));
     const copy = await receiptJob(sale.saleId, true);
@@ -1374,11 +1449,93 @@ describe("invoice delivery staff attribution", () => {
           designation: "original",
           generation: 1,
           personId: null,
-          ...(medium === "email" ? { recipient: "customer@example.test", consent } : {}),
+          ...(medium === "email" ? { recipient: "customer@example.test" } : {}),
         }),
       ),
     ).rejects.toThrow("CHECK constraint failed: invoice_deliveries_person_ck");
     expect(await rows()).toEqual([]);
+  });
+});
+
+describe("email delivery recipient rules", () => {
+  const plainEmail = () => ({
+    requestKey: randomUUID(),
+    personId: "staff-one",
+    medium: "email" as const,
+    recipient: "customer@example.test",
+  });
+
+  it("schedules a retry of a refused email with its recipient and staff member", async () => {
+    const sale = await issue();
+    const delivery = await withTransaction(suite.db, (tx) =>
+      reserveInvoiceDelivery(tx, sale.saleId, plainEmail()),
+    );
+    await suite.db.execute(
+      sql`update invoice_deliveries set next_attempt_at = ${start.toISOString()} where id = ${delivery.id}`,
+    );
+    const held = (await claim(delivery.id))!;
+    await withTransaction(suite.db, (tx) =>
+      reportInvoiceEmailDelivery(
+        tx,
+        held,
+        { status: "failed", failureCode: "transport_failed" },
+        start,
+      ),
+    );
+    const history = await rows();
+    expect(history).toHaveLength(2);
+    expect(history[1]).toMatchObject({
+      sale_id: sale.saleId,
+      medium: "email",
+      status: "queued",
+      designation: "original",
+      generation: 2,
+      attempts: 1,
+      recipient: "customer@example.test",
+      person_id: "staff-one",
+    });
+  });
+
+  it.each([
+    ["an email with no recipient", { medium: "email" as const, recipient: null }],
+    ["an A4 delivery with a recipient", { medium: "a4" as const, recipient: "c@example.test" }],
+  ])("refuses %s through the email check", async (_label, values) => {
+    const sale = await issue();
+    const refused = await withTransaction(suite.db, (tx) =>
+      tx.insert(invoiceDeliveries).values({
+        saleId: sale.saleId,
+        requestKey: randomUUID(),
+        designation: "original",
+        generation: 1,
+        personId: "staff-one",
+        ...values,
+      }),
+    ).catch((error: unknown) => error);
+    expect(checkFailed(refused, "invoice_deliveries_email_ck")).toBe(true);
+    expect(await rows()).toEqual([]);
+  });
+
+  it("refuses a second active delivery for one sale and accepts one beside a finished row", async () => {
+    const sale = await issue();
+    const row = (generation: number, status: "queued" | "sending" | "sent") => ({
+      saleId: sale.saleId,
+      requestKey: randomUUID(),
+      medium: "email" as const,
+      designation: "original" as const,
+      generation,
+      status,
+      personId: "staff-one",
+      recipient: "customer@example.test",
+    });
+    await suite.db.insert(invoiceDeliveries).values(row(1, "sent"));
+    await suite.db.insert(invoiceDeliveries).values(row(2, "queued"));
+    const refused = await withTransaction(suite.db, (tx) =>
+      tx.insert(invoiceDeliveries).values(row(3, "sending")),
+    ).catch((error: unknown) => error);
+    expect(
+      refusalOn(refused, UNIQUE_VIOLATION, { table: "invoice_deliveries", columns: ["sale_id"] }),
+    ).toBe(true);
+    expect((await rows()).map((stored) => stored.status)).toEqual(["sent", "queued"]);
   });
 });
 
@@ -1415,7 +1572,6 @@ describe("receipt agent correlation key", () => {
           generation: 1,
           personId: "staff-one",
           recipient: "customer@example.test",
-          consent,
           claimedAgentId: randomUUID(),
         }),
       ),
@@ -1461,6 +1617,7 @@ describe("invoice email automatic retries", () => {
       .update(printJobs)
       .set({ status: "printing", claimedBy: agent!.id })
       .where(eq(printJobs.id, delivery.printJobId!));
+    await dueAtStart(delivery.id);
     const held = (await claim(delivery.id, agent!.id, new Date("2026-12-01T00:00:00.000Z")))!;
     await withTransaction(suite.db, (tx) =>
       reportInvoiceEmailDelivery(
@@ -1543,7 +1700,6 @@ describe("invoice email automatic retries", () => {
           attempts: attempt,
           recipient: "customer@example.test",
           person_id: "staff-one",
-          consent: history[0]!.consent,
           next_attempt_at: times[attempt],
           claim_token_hash: null,
           claimed_by: null,
@@ -1589,6 +1745,7 @@ describe("invoice email automatic retries", () => {
       status: "queued",
       attempts: 0,
     });
+    await dueAtStart(explicit.id);
     expect(
       await claim(explicit.id, "server-one", new Date("2026-12-01T00:00:00.000Z")),
     ).toBeDefined();
@@ -1670,6 +1827,7 @@ describe("invoice email automatic retries", () => {
     const copy = await withTransaction(suite.db, (tx) =>
       reserveInvoiceDelivery(tx, sale.saleId, email()),
     );
+    await dueAtStart(copy.id);
     const now = new Date("2026-12-01T00:00:00.000Z");
     const held = (await claim(copy.id, "server-one", now))!;
     await withTransaction(suite.db, (tx) =>
@@ -1936,6 +2094,7 @@ describe("invoice email worker pass", () => {
     const copy = await withTransaction(suite.db, (tx) =>
       reserveInvoiceDelivery(tx, sale.saleId, email()),
     );
+    await dueAtStart(copy.id);
     let duplicate: boolean | undefined;
     await runInvoiceEmailPass({
       db: suite.db,
@@ -2125,7 +2284,7 @@ describe("invoice email worker pass", () => {
     expect((await rows())[0]).toMatchObject({ id: delivery.id, status: "queued", attempts: 0 });
     await suite.db
       .update(invoiceDeliveries)
-      .set({ medium: "a4", recipient: null, consent: null })
+      .set({ medium: "a4", recipient: null })
       .where(eq(invoiceDeliveries.id, delivery.id));
     expect(await runInvoiceEmailPass({ ...options, now: () => start })).toEqual({
       processed: false,

@@ -1774,6 +1774,7 @@ export interface PartyBill {
   workingOrderId: string;
   revision: number;
   invoiceType: "F1" | "F2";
+  invoiceDelivery?: InvoiceDeliveryChoice;
   recipient: { taxId: string; legalName: string; address: string; countryCode: string } | null;
   partyId: string;
   label: string | null;
@@ -2054,6 +2055,66 @@ export type OriginalReceiptPrint =
       failureCode?: "printer.deleted";
       handover?: { personId: string; confirmedAt: string };
     };
+
+/**
+ * What an office printer can be holding an A4 for (`a4HoldCodes`, `packages/db`, pinned to this
+ * copy by `scripts/a4-hold-code-copies.test.ts`). The server may send a code this list lacks.
+ */
+export const a4HoldCodes = [
+  "paper_jam",
+  "cover_open",
+  "paper_out",
+  "tray_missing",
+  "ink_or_toner_out",
+  "output_full",
+  "paused",
+  "stopped",
+] as const;
+export type A4HoldCode = (typeof a4HoldCodes)[number];
+
+export type InvoiceDeliveryMedium = "email" | "a4" | "receipt";
+
+/** The location's current invoice printer (`readInvoicePrinter`, `apps/server/src/page-printers.ts`),
+ * and whether the server has a mail transport to send an invoice by email. */
+export interface InvoiceDeliveryOptions {
+  invoicePrinter: { id: string; name: string } | null;
+  emailAvailable: boolean;
+}
+
+/** How a full invoice is delivered, staged with the invoice choice; a bill's read returns it too. */
+export type InvoiceDeliveryChoice =
+  | { medium: "receipt" }
+  | { medium: "a4"; pagePrinterId: string }
+  | { medium: "email"; recipient: string };
+
+/** One attempt to deliver a full invoice (`readInvoiceDeliveries`, `apps/server/src/invoice-delivery-status.ts`). */
+export interface InvoiceDeliveryAttempt {
+  id: string | null;
+  medium: InvoiceDeliveryMedium;
+  designation: "original" | "duplicate";
+  status: "queued" | "sending" | "sent" | "failed" | "unknown";
+  failureCode: string | null;
+  requestedAt: string;
+  at: string | null;
+  personId: string | null;
+  printerHold: string | null;
+  lateSuccess: boolean;
+}
+
+export interface InvoiceDeliveryStatus {
+  current: InvoiceDeliveryAttempt | null;
+  originalCompleted: boolean;
+  actions: {
+    retryOriginal: { medium: InvoiceDeliveryMedium } | null;
+    printOnA4: {
+      printer: { id: string; name: string };
+      designation: "original" | "duplicate";
+    } | null;
+    receiptInstead: { deliveryId: string } | null;
+    email: { designation: "original" | "duplicate" } | null;
+  };
+  history: InvoiceDeliveryAttempt[];
+}
 
 export interface DepartmentTransfer {
   currentDepartmentId?: string;
@@ -2422,6 +2483,73 @@ export class TillApi {
     );
   }
 
+  /** How a full invoice can be delivered here → `GET /api/invoice-delivery-options`. */
+  getInvoiceDeliveryOptions(options: ReadOptions = {}): Promise<InvoiceDeliveryOptions> {
+    return this.#request<InvoiceDeliveryOptions>(
+      "/api/invoice-delivery-options",
+      "GET",
+      undefined,
+      options.signal,
+    );
+  }
+
+  /** Null for a simplified invoice. */
+  getInvoiceDeliveries(workingOrderId: string): Promise<InvoiceDeliveryStatus | null> {
+    return this.#request<InvoiceDeliveryStatus | null>(
+      `/api/sales/${workingOrderId}/deliveries`,
+      "GET",
+    );
+  }
+
+  requestA4Delivery(workingOrderId: string, requestKey: string): Promise<InvoiceDeliveryAttempt> {
+    return this.#request<InvoiceDeliveryAttempt>(
+      `/api/sales/${workingOrderId}/deliveries`,
+      "POST",
+      {
+        medium: "a4",
+        requestKey,
+      },
+    );
+  }
+
+  requestEmailDelivery(
+    workingOrderId: string,
+    recipient: string,
+    requestKey: string,
+  ): Promise<InvoiceDeliveryAttempt> {
+    return this.#request<InvoiceDeliveryAttempt>(
+      `/api/sales/${workingOrderId}/deliveries`,
+      "POST",
+      { medium: "email", recipient, requestKey },
+    );
+  }
+
+  /** Sends an ended email original again, to the address it was sent to. */
+  retryEmailDelivery(
+    workingOrderId: string,
+    deliveryId: string,
+    requestKey: string,
+  ): Promise<InvoiceDeliveryAttempt> {
+    return this.#request<InvoiceDeliveryAttempt>(
+      `/api/sales/${workingOrderId}/deliveries/${deliveryId}/retry`,
+      "POST",
+      { requestKey },
+    );
+  }
+
+  /** A waiting A4 or email original goes to the receipt printer instead. */
+  switchA4ToReceipt(
+    workingOrderId: string,
+    deliveryId: string,
+    requestKey: string,
+  ): Promise<InvoiceDeliveryAttempt> {
+    return this.#request<InvoiceDeliveryAttempt>(
+      `/api/sales/${workingOrderId}/deliveries/${deliveryId}/to-receipt`,
+      "POST",
+      { requestKey },
+    );
+  }
+
   /** Print the ORIGINAL receipt offered at invoice issuance. */
   async printReceipt(workingOrderId: string): Promise<void> {
     await this.#request<void>(`/api/sales/${workingOrderId}/receipt`, "POST", {});
@@ -2480,6 +2608,7 @@ export class TillApi {
       revision: number;
       invoiceType: "F1" | "F2";
       recipient: { taxId: string; legalName: string; address: string; countryCode: string } | null;
+      delivery?: InvoiceDeliveryChoice;
     },
   ): Promise<{ revision: number }> {
     return this.#request<{ revision: number }>(

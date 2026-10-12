@@ -7,6 +7,7 @@ import {
   AppError,
   deviceOrigin,
   isAppError,
+  isValidEmail,
   isValidGuestCount,
   JOIN_SIDES,
   type JoinSide,
@@ -66,7 +67,7 @@ import { resendInvoicePrintJob } from "./invoice-print.js";
 import { expireInvoiceDeliveryClaims } from "./invoice-delivery.js";
 import { tenantCredentials } from "@waitron/credentials";
 import { routableServers } from "@waitron/membership";
-import { createErrorBoundary, requireManagementSession } from "@waitron/server-kit";
+import { codeOf, createErrorBoundary, requireManagementSession } from "@waitron/server-kit";
 import { readJsonBody, readRawJsonBody } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import type { OnboardingIntent } from "./trading-config.js";
@@ -210,6 +211,15 @@ import { mountStationTodayApi } from "./station-today-api.js";
 import { mountUnpaidDepartureApi } from "./unpaid-departure-api.js";
 import { mountBillLookupApi } from "./bill-lookup-api.js";
 import { mountInvoiceLookupApi } from "./invoice-lookup-api.js";
+import { readInvoicePrinter } from "./page-printers.js";
+import { readInvoiceDeliveries } from "./invoice-delivery-status.js";
+import {
+  requestA4Delivery,
+  requestEmailDelivery,
+  retryEmailDelivery,
+  switchToReceipt,
+} from "./invoice-delivery-actions.js";
+import { canEmailInvoice } from "./invoice-email-contact.js";
 import { readOfferedReceiptLanguages } from "./venue-locale.js";
 import { resolveLoginLocale } from "./login-locale.js";
 // Side-effect only: loads this host's errors.ts augmentation.
@@ -446,6 +456,9 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "invoice_delivery.receipt_invalid": 409,
   "invoice_delivery.email_unavailable": 409,
   "invoice_delivery.printer_invalid": 409,
+  "invoice_delivery.full_invoice_required": 409,
+  "invoice_delivery.receipt_unavailable": 409,
+  "invoice_delivery.not_found": 404,
   "sale.voided": 409,
   "sale.already_settled": 409,
   "working_order.not_settled": 409,
@@ -705,6 +718,20 @@ export function requireRevision(
 ): number {
   if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
     throw new AppError("management.request_invalid", { field });
+  }
+  return value;
+}
+
+function requireRecipient(value: unknown): string {
+  if (typeof value !== "string" || !isValidEmail(value)) {
+    throw new AppError("management.request_invalid", { field: "recipient" });
+  }
+  return value.trim();
+}
+
+function requireRequestKey(value: unknown): string {
+  if (typeof value !== "string" || !isUuid(value)) {
+    throw new AppError("management.request_invalid", { field: "requestKey" });
   }
   return value;
 }
@@ -1848,9 +1875,26 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           recipient: body.recipient,
           delivery,
         },
-        { personId: session.personId, emailAvailable, now: deps.clock.now().instant },
+        { personId: session.personId, emailAvailable },
       );
       return c.json({ revision });
+    }),
+  );
+
+  /** For a read: a failed check reads as no mail. */
+  const readEmailTransport = async (): Promise<boolean> =>
+    (await deps.invoiceEmailAvailable?.().catch((error: unknown) => {
+      log("warn", "invoice_delivery.email_check_failed", { errorCode: codeOf(error) });
+      return false;
+    })) === true;
+
+  app.get("/api/invoice-delivery-options", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const invoicePrinter = await withTransaction(deps.db, (tx) =>
+        readInvoicePrinter(tx, deps.cfg.locationId),
+      );
+      return c.json({ invoicePrinter, emailAvailable: await readEmailTransport() });
     }),
   );
 
@@ -2125,6 +2169,125 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         return resendInvoicePrintJob(tx, original.jobId, session.personId);
       });
       return c.json(result);
+    }),
+  );
+
+  /** The sale filed for working order `id`, once its zone is checked. */
+  async function zonedSale(
+    tx: Transaction,
+    session: Parameters<typeof checkZones>[2],
+    id: string,
+  ): Promise<string> {
+    await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
+    const [sale] = await tx
+      .select({ id: sales.id })
+      .from(sales)
+      .where(eq(sales.workingOrderId, id));
+    if (sale === undefined) throw new AppError("working_order.not_found", { workingOrderId: id });
+    return sale.id;
+  }
+
+  app.get("/api/sales/:id/deliveries", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c);
+      const id = requireUuidId(c.req.param("id"), "working_order.not_found");
+      const transport = await readEmailTransport();
+      const status = await withTransaction(deps.db, async (tx) => {
+        const saleId = await zonedSale(tx, session, id);
+        await expireInvoiceDeliveryClaims(tx);
+        return readInvoiceDeliveries(tx, saleId, {
+          emailAvailable: await canEmailInvoice(tx, saleId, transport),
+        });
+      });
+      return c.json(status);
+    }),
+  );
+
+  app.post("/api/sales/:id/deliveries", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c);
+      await assertDeviceCapability(deps, c, "print-receipt", "invoice_delivery", session.device);
+      const id = requireUuidId(c.req.param("id"), "working_order.not_found");
+      const body = await readJsonBody<{
+        medium?: unknown;
+        requestKey?: unknown;
+        recipient?: unknown;
+      }>(c);
+      if (body.medium !== "a4" && body.medium !== "email")
+        throw new AppError("management.request_invalid", { field: "medium" });
+      const requestKey = requireRequestKey(body.requestKey);
+      const request = { requestKey, personId: session.personId };
+      if (body.medium === "a4") {
+        const attempt = await withTransaction(deps.db, async (tx) =>
+          requestA4Delivery(tx, await zonedSale(tx, session, id), request),
+        );
+        return c.json(attempt);
+      }
+      const recipient = requireRecipient(body.recipient);
+      const transport = (await deps.invoiceEmailAvailable?.()) === true;
+      const attempt = await withTransaction(deps.db, async (tx) =>
+        requestEmailDelivery(tx, await zonedSale(tx, session, id), {
+          ...request,
+          recipient,
+          transport,
+        }),
+      );
+      return c.json(attempt);
+    }),
+  );
+
+  app.post("/api/sales/:id/deliveries/:deliveryId/to-receipt", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c);
+      await assertDeviceCapability(
+        deps,
+        c,
+        "print-receipt",
+        "invoice_delivery_to_receipt",
+        session.device,
+      );
+      const cfg = requestCfg(deps.cfg, session);
+      const id = requireUuidId(c.req.param("id"), "working_order.not_found");
+      const deliveryId = c.req.param("deliveryId");
+      const body = await readJsonBody<{ requestKey?: unknown }>(c);
+      const requestKey = requireRequestKey(body.requestKey);
+      const attempt = await withTransaction(deps.db, async (tx) => {
+        const saleId = await zonedSale(tx, session, id);
+        return switchToReceipt(
+          tx,
+          { backend: deps.backend, cfg },
+          { id: saleId, workingOrderId: id },
+          deliveryId,
+          { requestKey, personId: session.personId },
+        );
+      });
+      return c.json(attempt);
+    }),
+  );
+
+  app.post("/api/sales/:id/deliveries/:deliveryId/retry", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c);
+      await assertDeviceCapability(
+        deps,
+        c,
+        "print-receipt",
+        "invoice_delivery_retry",
+        session.device,
+      );
+      const id = requireUuidId(c.req.param("id"), "working_order.not_found");
+      const deliveryId = c.req.param("deliveryId");
+      const body = await readJsonBody<{ requestKey?: unknown }>(c);
+      const requestKey = requireRequestKey(body.requestKey);
+      const transport = (await deps.invoiceEmailAvailable?.()) === true;
+      const attempt = await withTransaction(deps.db, async (tx) =>
+        retryEmailDelivery(tx, await zonedSale(tx, session, id), deliveryId, {
+          requestKey,
+          personId: session.personId,
+          transport,
+        }),
+      );
+      return c.json(attempt);
     }),
   );
 

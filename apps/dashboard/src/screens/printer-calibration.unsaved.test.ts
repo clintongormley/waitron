@@ -76,6 +76,7 @@ async function mount(overrides: Partial<DashboardApi> = {}) {
       }),
       joinRequests: async () => [],
       listDiscoveredPrinters: async () => [],
+      listPagePrinters: async () => [],
       updatePrinter: async () => {},
       testPrint: async () => ({ jobId: "ruler" }),
       sampleReceipt: async () => ({ jobId: "sample" }),

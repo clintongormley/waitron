@@ -18,8 +18,8 @@ import {
   verifySecretAsync,
 } from "@waitron/identity";
 import { AppError, FALLBACK_LOCALE, SUPPORTED_LOCALE_CODES, isAppError } from "@waitron/shared";
-import type { Database } from "@waitron/db";
-import type { KeyRing } from "@waitron/credentials";
+import { withTransaction, type Database } from "@waitron/db";
+import { putCredential, type KeyRing } from "@waitron/credentials";
 import type { DeploymentEnvironment } from "./config.js";
 import type { ProvisionRequest } from "./provision.js";
 import type { AdoptCredential, AdoptHooks, AdoptRequest } from "./adopt.js";
@@ -42,6 +42,7 @@ import type { ConfigurationPreview } from "./configuration-import.js";
 import type { FiscalContribution } from "@waitron/fiscal";
 import type { FiscalReadinessResult } from "./fiscal-readiness.js";
 import { mountSetupEmailTest } from "./setup-email-api.js";
+import { parseEmailSettings } from "./email-settings-api.js";
 import type { sendSmtpTestMessage } from "./smtp-test-message.js";
 import "./errors.js";
 
@@ -687,6 +688,13 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       );
       const { mode, request, contribution, secret, secretExpected: expected, rawSecret } = payload;
       const { environment, venue } = request;
+      const rawEmail = (parsed as Record<string, unknown>).email;
+      if (environment === "production" && rawEmail === undefined) {
+        throw new AppError("setup.email_required", { field: "email" });
+      }
+      if (mode !== "live" && rawEmail !== undefined) invalidRequest("email");
+      const email =
+        rawEmail === undefined ? undefined : parseEmailSettings(asObject(rawEmail, "email"));
       if (environment === "production") {
         if (deps.assertFiscalReady === undefined) {
           throw new AppError("setup.fiscal_test_required", { module: contribution.id });
@@ -730,9 +738,14 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         await operation?.advance("membership_seeded");
       }
 
-      // Reaches the regime only through the `seal` seat, so this file imports no regime package.
       if (!setupPhaseReached(operation, "secret_sealed")) {
         if (expected) await secret!.seal({ db, ring }, rawSecret);
+        // The fiscal seat owns its transaction; resume repeats idempotent seals until both finish.
+        if (email !== undefined) {
+          await withTransaction(db, (tx) =>
+            putCredential(tx, ring, { purpose: "email.smtp", value: email }),
+          );
+        }
         await operation?.advance("secret_sealed");
       }
 

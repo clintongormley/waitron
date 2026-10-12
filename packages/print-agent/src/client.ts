@@ -60,6 +60,7 @@ export type Failure =
   | { kind: "rate_limited" } // 429 — window flood OR pending cap; both mean back off
   | { kind: "pairing_closed" } // 403 — the venue's pairing window is shut
   | { kind: "refused" } // self-enrol only — the box's OWN server said no (any non-2xx); NOT a pairing event
+  | { kind: "claim_lost" } // page jobs only — 409 `invoice_delivery.claim_lost`; final
   | { kind: "bad_reply"; detail: string };
 
 export type Result<T> = { ok: true; value: T } | { ok: false; failure: Failure };
@@ -99,6 +100,51 @@ export type JobOutcome = ({ status: "done" } | { status: "failed"; error: string
   invoiceClaim?: InvoicePrintClaim;
 };
 
+/** The server's `pagePrinterFormat` and `pagePrinterMedia` (`packages/db`); a server-side case in
+ * `apps/server/src/page-print-api.test.ts` holds them equal. */
+export const PAGE_FORMATS = ["application/pdf", "image/pwg-raster", "image/urf"] as const;
+export const PAGE_MEDIA = ["iso_a4_210x297mm", "na_letter_8.5x11in"] as const;
+export type PageFormat = (typeof PAGE_FORMATS)[number];
+export type PageMedia = (typeof PAGE_MEDIA)[number];
+/** Why a printer is holding an unfinished job, read from its `printer-state-reasons`. */
+export const PAGE_HOLDS = [
+  "paper_jam",
+  "cover_open",
+  "paper_out",
+  "tray_missing",
+  "ink_or_toner_out",
+  "output_full",
+  "paused",
+  "stopped",
+] as const;
+export type PageHold = (typeof PAGE_HOLDS)[number];
+
+/** An A4 invoice this agent holds a claim on, and the office printer it goes to. */
+export interface PageJob {
+  id: string;
+  generation: number;
+  token: string;
+  printer: {
+    id: string;
+    host: string;
+    port: number;
+    resourcePath: string;
+    documentFormat: PageFormat;
+    media: PageMedia;
+    resolutionDpi: number;
+  };
+}
+
+/** The outcomes the server accepts from an agent (`AGENT_FAILURES`,
+ * `apps/server/src/page-print-api.ts`). */
+export type PageJobOutcome =
+  | { status: "sent" }
+  | {
+      status: "failed";
+      failureCode: "printer_refused" | "printer_unreachable" | "document_unavailable";
+    }
+  | { status: "unknown"; failureCode: "printer_aborted" | "timeout" };
+
 export interface AgentClient {
   probeNode(url: string): Promise<Result<NodeProbe>>;
   join(url: string, name: string): Promise<Result<JoinReply>>;
@@ -108,10 +154,29 @@ export interface AgentClient {
   joinStatus(url: string, token: string): Promise<Result<JoinStatus>>;
   pullJobs(url: string, token: string, inventory: AgentInventory): Promise<Result<PullReply>>;
   report(url: string, token: string, jobId: string, outcome: JobOutcome): Promise<Result<void>>;
+  /** `null` when no A4 job is waiting for this agent. */
+  claimPageJob(url: string, token: string): Promise<Result<PageJob | null>>;
+  fetchPageDocument(url: string, token: string, job: PageJob): Promise<Result<Uint8Array>>;
+  renewPageJob(
+    url: string,
+    token: string,
+    job: PageJob,
+    hold: PageHold | null,
+  ): Promise<Result<void>>;
+  reportPageJob(
+    url: string,
+    token: string,
+    job: PageJob,
+    outcome: PageJobOutcome,
+  ): Promise<Result<void>>;
 }
 
 /** Bounds a dead box's probe so the router's poll loop is never held open. */
 export const DEFAULT_TIMEOUT_MS = 3_000;
+
+/** The server renders the pages while this request waits, so it gets far longer than the other
+ * calls; still inside the 60 s claim lease. */
+export const PAGE_DOCUMENT_TIMEOUT_MS = 30_000;
 
 /** `String(value)` invokes a `toString` an object is free to implement badly, and that throw must not
  * escape this module. */
@@ -141,6 +206,7 @@ async function foldFetch<T>(
   timeoutMs: number,
   init: { method?: string; headers?: Record<string, string>; body?: string },
   parseOk: (response: Response) => Promise<T | undefined>,
+  refusal?: (response: Response) => Promise<Failure | undefined>,
 ): Promise<Result<T>> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -154,6 +220,8 @@ async function foldFetch<T>(
     if (response.status === 401) return { ok: false, failure: { kind: "unauthorized" } };
     if (response.status === 403) return { ok: false, failure: { kind: "pairing_closed" } };
     if (response.status === 429) return { ok: false, failure: { kind: "rate_limited" } };
+    const refused = response.ok ? undefined : await refusal?.(response);
+    if (refused !== undefined) return { ok: false, failure: refused };
     if (response.status >= 500) {
       return {
         ok: false,
@@ -206,6 +274,8 @@ function parseVoid(): Promise<true> {
   return Promise.resolve(true);
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 async function parsePullReply(response: Response): Promise<PullReply | undefined> {
   const b = await readJson(response);
   if (b === undefined) return undefined;
@@ -248,12 +318,11 @@ async function parsePullReply(response: Response): Promise<PullReply | undefined
       )
         return undefined;
       const claim = e.invoiceClaim as Record<string, unknown>;
-      const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       if (
         typeof claim.deliveryId !== "string" ||
-        !uuid.test(claim.deliveryId) ||
+        !UUID.test(claim.deliveryId) ||
         typeof claim.token !== "string" ||
-        !uuid.test(claim.token) ||
+        !UUID.test(claim.token) ||
         typeof claim.generation !== "number" ||
         !Number.isSafeInteger(claim.generation) ||
         claim.generation < 1
@@ -356,6 +425,64 @@ function decodeBluetoothCommands(raw: unknown): BluetoothCommand[] {
     commands.push(command);
   }
   return commands;
+}
+
+async function parsePageJob(response: Response): Promise<PageJob | null | undefined> {
+  if (response.status === 204) return null;
+  const b = await readJson(response);
+  const p = b?.printer;
+  if (b === undefined || typeof p !== "object" || p === null) return undefined;
+  const printer = p as Record<string, unknown>;
+  if (
+    typeof b.id !== "string" ||
+    !UUID.test(b.id) ||
+    typeof b.generation !== "number" ||
+    !Number.isSafeInteger(b.generation) ||
+    b.generation < 1 ||
+    typeof b.token !== "string" ||
+    !UUID.test(b.token) ||
+    typeof printer.id !== "string" ||
+    typeof printer.host !== "string" ||
+    printer.host.length === 0 ||
+    typeof printer.port !== "number" ||
+    !Number.isInteger(printer.port) ||
+    printer.port < 1 ||
+    printer.port > 65535 ||
+    typeof printer.resourcePath !== "string" ||
+    !printer.resourcePath.startsWith("/") ||
+    typeof printer.documentFormat !== "string" ||
+    !(PAGE_FORMATS as readonly string[]).includes(printer.documentFormat) ||
+    typeof printer.media !== "string" ||
+    !(PAGE_MEDIA as readonly string[]).includes(printer.media) ||
+    typeof printer.resolutionDpi !== "number" ||
+    !Number.isInteger(printer.resolutionDpi) ||
+    printer.resolutionDpi < 1
+  )
+    return undefined;
+  return {
+    id: b.id,
+    generation: b.generation,
+    token: b.token,
+    printer: {
+      id: printer.id,
+      host: printer.host,
+      port: printer.port,
+      resourcePath: printer.resourcePath,
+      documentFormat: printer.documentFormat as PageFormat,
+      media: printer.media as PageMedia,
+      resolutionDpi: printer.resolutionDpi,
+    },
+  };
+}
+
+async function claimLost(response: Response): Promise<Failure | undefined> {
+  if (response.status !== 409) return undefined;
+  const error = (await readJson(response))?.error;
+  return typeof error === "object" &&
+    error !== null &&
+    (error as Record<string, unknown>).code === "invoice_delivery.claim_lost"
+    ? { kind: "claim_lost" }
+    : undefined;
 }
 
 function boundInventory(inventory: AgentInventory): AgentInventory {
@@ -462,5 +589,54 @@ export function createClient(opts: { fetch: typeof fetch; timeoutMs?: number }):
       );
       return result.ok ? { ok: true, value: undefined } : result;
     },
+    claimPageJob(url, token) {
+      return foldFetch(
+        opts.fetch,
+        `${url}/print-api/agent/page-jobs/claim`,
+        timeoutMs,
+        { method: "POST", headers: { authorization: `Bearer ${token}` } },
+        parsePageJob,
+      );
+    },
+    fetchPageDocument(url, token, job) {
+      return foldFetch(
+        opts.fetch,
+        `${url}/print-api/agent/page-jobs/${job.id}/document`,
+        PAGE_DOCUMENT_TIMEOUT_MS,
+        claimed(token, job, {}),
+        async (response) => new Uint8Array(await response.arrayBuffer()),
+        claimLost,
+      );
+    },
+    async renewPageJob(url, token, job, hold) {
+      const result = await foldFetch(
+        opts.fetch,
+        `${url}/print-api/agent/page-jobs/${job.id}/renew`,
+        timeoutMs,
+        claimed(token, job, { hold }),
+        parseVoid,
+        claimLost,
+      );
+      return result.ok ? { ok: true, value: undefined } : result;
+    },
+    async reportPageJob(url, token, job, outcome) {
+      const result = await foldFetch(
+        opts.fetch,
+        `${url}/print-api/agent/page-jobs/${job.id}/result`,
+        timeoutMs,
+        claimed(token, job, outcome),
+        parseVoid,
+        claimLost,
+      );
+      return result.ok ? { ok: true, value: undefined } : result;
+    },
+  };
+}
+
+function claimed(token: string, job: PageJob, extra: object) {
+  return {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+    body: JSON.stringify({ generation: job.generation, token: job.token, ...extra }),
   };
 }

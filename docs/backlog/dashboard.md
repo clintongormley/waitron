@@ -838,7 +838,7 @@ request per batch: [plan](../superpowers/plans/2026-10-07-a331-save-follows-chan
   the ResizeObserver message. A407 (#1432) fixes the measured currency-field notifications;
   the historical catalogue-only warning was not reproduced.
   A396's disabled-zone profile ruling is
-  done in #1428; A231q's future invoice screens remain a separate task.
+  done in #1428; A231q built the invoice screens separately (2026-10-12).
   **2026-10-11:** A435 step 6 prevents public hierarchy Delete from emptying ordering access.
   Existing invalid stored-scope validation still applies; this earlier A396 receipt remains historical.
 

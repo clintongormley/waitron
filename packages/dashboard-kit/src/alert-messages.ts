@@ -2,9 +2,17 @@ import { formatMoney } from "@waitron/shared";
 import { currentLocale, pickLocale } from "./i18n.js";
 
 /** `{name}` is filled with the param as it is; `{name:money}` writes a decimal-string param as
- * euros, the way the alert's language writes them. */
+ * euros, the way the alert's language writes them; `{name:list}` writes the words a registered
+ * word list gives the param's value. */
 export type AlertMessageTable = Readonly<
   Record<string, { readonly en: string; readonly es: string }>
+>;
+
+type Words = { readonly en: string; readonly es: string };
+
+/** Words for each value a param can take, and `otherwise` for any value the list does not name. */
+export type AlertWordLists = Readonly<
+  Record<string, { readonly words: Readonly<Record<string, Words>>; readonly otherwise: Words }>
 >;
 
 // Unlike an error banner, an alert with no wording is still worth identifying, so the caller shows
@@ -12,9 +20,14 @@ export type AlertMessageTable = Readonly<
 const GENERIC = { en: "Something needs attention", es: "Algo requiere atención" };
 
 const messages: Record<string, { en: string; es: string }> = {};
+const wordLists: Record<string, AlertWordLists[string]> = {};
 
 export function registerAlertMessages(table: AlertMessageTable): void {
   Object.assign(messages, table);
+}
+
+export function registerAlertWords(lists: AlertWordLists): void {
+  Object.assign(wordLists, lists);
 }
 
 export function hasAlertMessage(code: string): boolean {
@@ -37,12 +50,23 @@ export function alertMessage(
 ): string {
   const template = pickLocale(hasAlertMessage(code) ? messages[code]! : GENERIC, l);
   return template.replace(
-    /\{([A-Za-z0-9_]+)(:money)?\}/g,
-    (_match, name: string, money: string | undefined) => {
+    /\{([A-Za-z0-9_]+)(?::([a-z_]+))?\}/g,
+    (_match, name: string, kind: string | undefined) => {
       const value = Object.hasOwn(params, name) ? params[name] : undefined;
-      return money && typeof value === "string" && DECIMAL.test(value)
-        ? formatMoney(value, l)
-        : formatParam(value);
+      if (kind === "money") {
+        return typeof value === "string" && DECIMAL.test(value)
+          ? formatMoney(value, l)
+          : formatParam(value);
+      }
+      if (kind === undefined) return formatParam(value);
+      if (!Object.hasOwn(wordLists, kind)) return formatParam(null);
+      const list = wordLists[kind]!;
+      return pickLocale(
+        typeof value === "string" && Object.hasOwn(list.words, value)
+          ? list.words[value]!
+          : list.otherwise,
+        l,
+      );
     },
   );
 }

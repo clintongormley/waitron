@@ -2172,8 +2172,10 @@ when none are sent" in `packages/catalogue/src/include-folder.db.test.ts`, hold 
 
 Give every field an explicit semantic `name`. Use the standard autocomplete purposes where they
 exist: `username` for a login email, `current-password` for a login password, and `new-password`
-for password creation and confirmation. A generated name such as `wt-input-2` describes the widget,
-not the value, and gives automation nothing useful to work with.
+for password creation and confirmation. A customer's details typed on a shared till or office
+machine take `autocomplete="off"` instead, so one customer's details are not offered to the next. A
+generated name such as `wt-input-2` describes the widget, not the value, and gives automation
+nothing useful to work with.
 
 Put an icon-only password visibility button in the input's `end` slot. Toggle the native input type
 between `password` and `text`, retain the entered value, and give the button a localized accessible

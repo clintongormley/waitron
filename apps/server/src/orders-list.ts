@@ -1,4 +1,5 @@
 import type { BusinessDayClock } from "@waitron/shared";
+import { canEmailInvoice } from "./invoice-email-contact.js";
 import { and, asc, eq, inArray, isNotNull, sql, type SQL } from "drizzle-orm";
 import { formatInvoiceNumber } from "@waitron/core";
 import {
@@ -17,6 +18,7 @@ import {
   receiptReprints,
   printJobs,
   printers,
+  invoicePdfDownloads,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { persons } from "@waitron/identity";
@@ -32,6 +34,11 @@ import {
 import type { Decimal } from "@waitron/shared";
 import { outstandingOf, readPaymentsByBill } from "./bill-payments.js";
 import { readIssuedSales } from "./sale-due.js";
+import {
+  readInvoiceDeliveries,
+  type InvoiceDeliveryAttempt,
+  type InvoiceDeliveryStatus,
+} from "./invoice-delivery-status.js";
 import "./errors.js";
 
 export const ORDER_STATUSES = [
@@ -607,6 +614,18 @@ export interface OrderReprint {
   personName: string | null;
   printerName: string;
 }
+export interface OrderDeliveryAttempt extends InvoiceDeliveryAttempt {
+  personName: string | null;
+}
+export interface OrderDeliveries extends Omit<InvoiceDeliveryStatus, "current" | "history"> {
+  current: OrderDeliveryAttempt | null;
+  history: OrderDeliveryAttempt[];
+}
+export interface OrderInvoicePdfDownload {
+  requestedAt: string;
+  personId: string;
+  personName: string | null;
+}
 export interface OrderDetail {
   row: OrderRow;
   lines: OrderLine[];
@@ -616,12 +635,17 @@ export interface OrderDetail {
   party: OrderParty | null;
   departure: OrderDeparture | null;
   reprints: OrderReprint[];
+  /** Null unless the bill's invoice is a full invoice. */
+  deliveries: OrderDeliveries | null;
+  invoicePdfDownloads: OrderInvoicePdfDownload[];
 }
 
+/** `emailTransport`: whether the caller's mail transport check answered available. */
 export async function readOrderDetail(
   tx: Transaction,
   id: string,
   scope: OrderListFilter["scope"],
+  emailTransport: boolean,
 ): Promise<OrderDetail> {
   const { rows } = await listOrders(tx, {
     status: "all",
@@ -642,7 +666,53 @@ export async function readOrderDetail(
     party: row.partyId === null ? null : await readParty(tx, row.partyId, row.tables),
     departure: row.kind === "bill" ? await readDeparture(tx, id) : null,
     reprints: row.saleId === null ? [] : await readReprints(tx, row.saleId),
+    deliveries: row.saleId === null ? null : await readDeliveries(tx, row.saleId, emailTransport),
+    invoicePdfDownloads: row.saleId === null ? [] : await readPdfDownloads(tx, row.saleId),
   };
+}
+
+async function readDeliveries(
+  tx: Transaction,
+  saleId: string,
+  emailTransport: boolean,
+): Promise<OrderDeliveries | null> {
+  const status = await readInvoiceDeliveries(tx, saleId, {
+    emailAvailable: await canEmailInvoice(tx, saleId, emailTransport),
+  });
+  if (status === null) return null;
+  const ids = [...new Set(status.history.flatMap((attempt) => attempt.personId ?? []))];
+  const names =
+    ids.length === 0
+      ? []
+      : await tx
+          .select({ id: persons.id, name: persons.displayName })
+          .from(persons)
+          .where(inArray(persons.id, ids));
+  const named = (attempt: InvoiceDeliveryAttempt): OrderDeliveryAttempt => ({
+    ...attempt,
+    personName: names.find((person) => person.id === attempt.personId)?.name ?? null,
+  });
+  return {
+    ...status,
+    current: status.current === null ? null : named(status.current),
+    history: status.history.map(named),
+  };
+}
+
+async function readPdfDownloads(
+  tx: Transaction,
+  saleId: string,
+): Promise<OrderInvoicePdfDownload[]> {
+  return tx
+    .select({
+      requestedAt: invoicePdfDownloads.requestedAt,
+      personId: invoicePdfDownloads.personId,
+      personName: persons.displayName,
+    })
+    .from(invoicePdfDownloads)
+    .leftJoin(persons, eq(persons.id, invoicePdfDownloads.personId))
+    .where(eq(invoicePdfDownloads.saleId, saleId))
+    .orderBy(invoicePdfDownloads.requestedAt, invoicePdfDownloads.id);
 }
 
 async function readBillLines(tx: Transaction, billId: string): Promise<OrderLine[]> {

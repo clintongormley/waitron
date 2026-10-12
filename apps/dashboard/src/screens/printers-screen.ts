@@ -35,6 +35,8 @@ import "@waitron/ui/src/components/wt-delete-dialog.js";
 import type { DeleteImpact } from "@waitron/shared";
 import "../widgets/row-actions.js";
 import "../widgets/print-job-preview.js";
+import "../widgets/page-printer-add.js";
+import "../widgets/page-printers-panel.js";
 import { holdNotice, holdNoticeStyles } from "../widgets/hold-notice.js";
 import "../widgets/equipment-label.js";
 import { holderText } from "../i18n/equipment.js";
@@ -55,6 +57,9 @@ import type {
   DashboardApi,
   DiscoveredPrinter,
   JoinRequestRow,
+  OfficePrinterReport,
+  PagePrinterEntry,
+  PagePrinterRow,
   PairingModeState,
   PrintAgentRow,
   PrintJobRow,
@@ -112,6 +117,23 @@ type TrackedCommand = Omit<BluetoothCommandStatus, "state" | "expiresInMs"> & {
   noticeGone?: true;
   /** A read sent after this unpairing succeeded did not list the device paired. */
   listedUnpaired?: true;
+};
+
+/** What an office printer's discovery row offers, judged against the location's page printers. */
+type OfficeRow =
+  | { kind: "add" | "enable"; entry: PagePrinterEntry }
+  | { kind: "repoint"; entry: PagePrinterEntry; agentGone: boolean }
+  | { kind: "added" }
+  | { kind: "refused"; reason: StringKey };
+
+const OFFICE_REFUSAL: Record<
+  Extract<OfficePrinterReport, { printable: false }>["reason"],
+  StringKey
+> = {
+  invalid_reply: "printers.page_printer_no_answer",
+  unsupported_media: "printers.page_printer_unsupported_media",
+  unsupported_document_format: "printers.page_printer_unsupported_document_format",
+  unsupported_raster: "printers.page_printer_unsupported_raster",
 };
 
 /** How long a command's success notice stays before it fades. */
@@ -224,6 +246,12 @@ export class PrintersScreen extends LitElement {
       wt-data-table::part(discovered-page-printer),
       wt-data-table::part(page-printer-hint) {
         color: var(--wt-color-text-muted);
+      }
+      wt-data-table::part(page-printer-error) {
+        display: block;
+        max-width: min(28vw, 24dvh);
+        color: var(--wt-color-danger);
+        font-size: var(--wt-font-size-sm);
       }
       wt-data-table::part(page-printer-hint) {
         display: block;
@@ -475,6 +503,8 @@ export class PrintersScreen extends LitElement {
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
+  /** The session holds `printer.manage`: the invoice printers panel offers its actions. */
+  @property({ type: Boolean }) canManage = false;
   readonly #queries = new DashboardQueries(
     this,
     () => this.api,
@@ -532,6 +562,15 @@ export class PrintersScreen extends LitElement {
   @state() private submitting = false;
   @state() private agents: PrintAgentRow[] = [];
   @state() private printers: Printer[] = [];
+  @state() private pagePrinters: PagePrinterRow[] = [];
+  /** `#pagePrinterReads` when the live query last delivered, so a one-off read begun earlier is dropped. */
+  #pagePrinterLiveAt = 0;
+  #pagePrinterReads = 0;
+  @state() private addingPagePrinter: { entry: PagePrinterEntry; description: string } | null =
+    null;
+  /** The office rows (`agentId:deviceKey`) whose Enable or Use this agent is being sent. */
+  @state() private pagePrinterSending = new Set<string>();
+  @state() private pagePrinterRefusals: Record<string, string> = {};
   @state() private loading = true;
   @state() private addingAgent = false;
   @state() private addingPrinter = false;
@@ -948,6 +987,10 @@ export class PrintersScreen extends LitElement {
         this.#queries.watch("listPrinterProfiles", [], (printerProfiles) => {
           this.printerProfiles = printerProfiles;
         }),
+        this.#queries.watch("listPagePrinters", [], (pagePrinters) => {
+          this.pagePrinters = pagePrinters;
+          this.#pagePrinterLiveAt = ++this.#pagePrinterReads;
+        }),
         this.#queries.watch("pairingMode", [], (pairing) => {
           this.pairing = pairing;
         }),
@@ -1172,10 +1215,10 @@ export class PrintersScreen extends LitElement {
           Date.parse(device.lastSeenAt) >= target.requestedAt,
       );
       if (match)
-        this.probeStatus = !this.#canAdd(match)
-          ? "registered"
-          : this.#unsupportedPagePrinter(match)
-            ? "page_printer"
+        this.probeStatus = this.#officeRow(match)
+          ? "page_printer"
+          : !this.#canAdd(match)
+            ? "registered"
             : "found";
     }
   }
@@ -1296,9 +1339,86 @@ export class PrintersScreen extends LitElement {
     return this.printers.find((printer) => printer.id === device.printerId && !printer.active);
   }
 
-  /** An office printer that is not a disabled registration: a retained registration stays re-addable. */
-  #unsupportedPagePrinter(device: DiscoveredPrinter): boolean {
-    return device.pagePrinter === true && this.#disabledPrinter(device) === undefined;
+  /**
+   * An office printer's row, matched against the location's page printers by its IPP queue and the
+   * agent reporting it — never by the receipt printers' marks. Undefined for any other device, and
+   * for a disabled receipt registration, which stays re-addable as one.
+   */
+  #officeRow(device: DiscoveredPrinter): OfficeRow | undefined {
+    if (device.office === undefined && device.pagePrinter !== true && device.ippOnly !== true)
+      return undefined;
+    if (this.#disabledPrinter(device) !== undefined) return undefined;
+    const report = device.office;
+    if (report === undefined || !device.host)
+      return { kind: "refused", reason: "printers.page_printer_no_answer" };
+    const host = device.host.toLowerCase();
+    const match = this.pagePrinters.find(
+      (p) =>
+        p.host.toLowerCase() === host &&
+        p.port === report.port &&
+        p.resourcePath === report.resourcePath,
+    );
+    if (match?.active && match.agentId === device.agentId) return { kind: "added" };
+    if (!report.printable) return { kind: "refused", reason: OFFICE_REFUSAL[report.reason] };
+    // The server registers only from the named agent's own report.
+    if (device.officeLent) return { kind: "refused", reason: "printers.page_printer_lent" };
+    const entry = {
+      agentId: device.agentId,
+      host: device.host,
+      port: report.port,
+      path: report.resourcePath,
+    };
+    if (match === undefined) return { kind: "add", entry };
+    if (!match.active) return { kind: "enable", entry };
+    return { kind: "repoint", entry, agentGone: match.agentId === null };
+  }
+
+  #officeKey(device: DiscoveredPrinter): string {
+    return `${device.agentId}:${this.#deviceKey(device)}`;
+  }
+
+  #openPagePrinterAdd(device: DiscoveredPrinter, entry: PagePrinterEntry): void {
+    const parts = [this.#discoveredLabel(device), `${entry.host}:${entry.port}`];
+    if (device.agentName)
+      parts.push(t("printers.discovered_seen_on").replace("{agent}", device.agentName));
+    this.addingPagePrinter = { entry, description: parts.join(" · ") };
+  }
+
+  /** Enable and Use this agent: the server takes the queue's current report from the agent named. */
+  async #registerPagePrinter(key: string, entry: PagePrinterEntry): Promise<void> {
+    if (this.pagePrinterSending.has(key)) return;
+    this.pagePrinterSending = new Set([...this.pagePrinterSending, key]);
+    this.pagePrinterRefusals = Object.fromEntries(
+      Object.entries(this.pagePrinterRefusals).filter(([refused]) => refused !== key),
+    );
+    try {
+      await this.api.registerPagePrinter(entry);
+    } catch (error) {
+      this.pagePrinterRefusals = { ...this.pagePrinterRefusals, [key]: codeOf(error) };
+      return;
+    } finally {
+      this.pagePrinterSending = new Set(
+        [...this.pagePrinterSending].filter((sending) => sending !== key),
+      );
+    }
+    await this.#refreshPagePrinters();
+  }
+
+  async #refreshPagePrinters(): Promise<void> {
+    try {
+      await this.#readPagePrinters();
+    } catch (error) {
+      this.refreshErrorKey = codeOf(error);
+    }
+  }
+
+  readonly #rereadPagePrinters = (): Promise<void> => this.#readPagePrinters();
+
+  async #readPagePrinters(): Promise<void> {
+    const started = ++this.#pagePrinterReads;
+    const rows = await this.api.listPagePrinters();
+    if (this.#pagePrinterLiveAt > started) return;
+    this.pagePrinters = rows;
   }
 
   #canAdd(device: DiscoveredPrinter): boolean {
@@ -2983,6 +3103,12 @@ export class PrintersScreen extends LitElement {
         .emptyMessage=${t("printers.no_printers")}
         >${this.printers.length === 0 ? this.#renderAddPrinter("empty-action") : nothing}</wt-data-table
       >
+      <dashboard-page-printers-panel
+        .api=${this.api}
+        .rows=${this.pagePrinters}
+        .canManage=${this.canManage}
+        .reload=${this.#rereadPagePrinters}
+      ></dashboard-page-printers-panel>
     </section>`;
   }
 
@@ -3029,6 +3155,8 @@ export class PrintersScreen extends LitElement {
     this.probeErrorKey = null;
     this.#registeredDevices.clear();
     this.discoveredNames = {};
+    this.addingPagePrinter = null;
+    this.pagePrinterRefusals = {};
     this.addedPrinterName = null;
     this.showAllBluetooth = false;
     this.#addressLeave = leaveCoordinatorFor(this);
@@ -3657,6 +3785,7 @@ export class PrintersScreen extends LitElement {
     if (opening !== this.#addPrinterOpening) return;
     this.#addPrinterOpening++;
     this.addingPrinter = false;
+    this.addingPagePrinter = null;
     this.#finishPrinterName(this.#printerNameOpening);
     if (!this.pairSubmitting) this.#resetPair();
     this.#disposeAddressDraft();
@@ -3675,11 +3804,85 @@ export class PrintersScreen extends LitElement {
     this.#settleCommandPoll();
   }
 
+  #repointNote(row: OfficeRow | undefined): TemplateResult | typeof nothing {
+    if (row?.kind !== "repoint") return nothing;
+    return html`<div>
+      ${t(row.agentGone ? "printers.page_printer_no_agent" : "printers.page_printer_other_agent")}
+    </div>`;
+  }
+
+  #officeAction(d: DiscoveredPrinter, row: OfficeRow): TemplateResult {
+    const key = this.#officeKey(d);
+    if (row.kind === "refused")
+      return html`<span part="page-printer-hint" data-test=${`page-printer-${this.#deviceKey(d)}`}
+        >${t(row.reason)}</span
+      >`;
+    if (row.kind === "added")
+      return html`<span part="page-printer-added" data-test=${`page-printer-added-${key}`}
+        >${t("printers.page_printer_added")}</span
+      >`;
+    const { entry } = row;
+    if (row.kind === "add")
+      return html`<wt-button
+        variant="primary"
+        data-test=${`add-page-printer-${key}`}
+        @click=${() => this.#openPagePrinterAdd(d, entry)}
+        >${t("printers.page_printer_add")}</wt-button
+      >`;
+    const refusedCode = this.pagePrinterRefusals[key];
+    return html`<div part="page-printer-action">
+      <wt-button
+        variant="primary"
+        data-test=${`${row.kind}-page-printer-${key}`}
+        ?loading=${this.pagePrinterSending.has(key)}
+        @click=${() => void this.#registerPagePrinter(key, entry)}
+        >${row.kind === "enable" ? t("printers.enable") : t("printers.page_printer_use_agent")}</wt-button
+      >
+      ${
+        refusedCode === undefined
+          ? nothing
+          : html`<span
+              part="page-printer-error"
+              role="alert"
+              data-test=${`page-printer-error-${key}`}
+              >${codeMessage(refusedCode)}</span
+            >`
+      }
+    </div>`;
+  }
+
+  #renderPagePrinterAdd(): TemplateResult | typeof nothing {
+    const adding = this.addingPagePrinter;
+    if (adding === null) return nothing;
+    return html`<dashboard-page-printer-add
+      .api=${this.api}
+      .entry=${adding.entry}
+      .draftParent=${this.#addressScope?.id}
+      description=${adding.description}
+      @page-printer-added=${(event: CustomEvent<{ name: string }>) => {
+        this.addedPrinterName = event.detail.name;
+        void this.#refreshPagePrinters();
+      }}
+      @page-printer-add-closed=${() => {
+        this.addingPagePrinter = null;
+      }}
+    ></dashboard-page-printer-add>`;
+  }
+
   #renderNewPrinter(): TemplateResult | typeof nothing {
     if (!this.addingPrinter) return nothing;
     const opening = this.#addPrinterOpening;
     const pairOnly = new Set(this.discovered.filter((d) => this.#canPairOnly(d)));
-    const addable = this.discovered.filter((d) => pairOnly.has(d) || this.#canAdd(d));
+    const office = new Map(
+      this.discovered.flatMap((d) => {
+        const row = this.#officeRow(d);
+        return row ? [[d, row] as const] : [];
+      }),
+    );
+    const refused = (d: DiscoveredPrinter) => office.get(d)?.kind === "refused";
+    const addable = this.discovered.filter(
+      (d) => office.has(d) || pairOnly.has(d) || this.#canAdd(d),
+    );
     // A device registered to a switched-on printer is a printer, whatever the scan decoded.
     const shown = (d: DiscoveredPrinter) =>
       d.transport !== "bluetooth" || d.printerLike === true || pairOnly.has(d);
@@ -3688,9 +3891,7 @@ export class PrintersScreen extends LitElement {
         (d) =>
           shown(d) || this.showAllBluetooth || this.commands[this.#commandKeyOf(d)] !== undefined,
       )
-      .sort(
-        (a, b) => Number(this.#unsupportedPagePrinter(a)) - Number(this.#unsupportedPagePrinter(b)),
-      );
+      .sort((a, b) => Number(refused(a)) - Number(refused(b)));
     const bluetoothKeys = (devices: DiscoveredPrinter[]) =>
       new Set(devices.filter((d) => d.transport === "bluetooth").map((d) => this.#commandKeyOf(d)));
     const rowKeys = bluetoothKeys(rows);
@@ -3707,11 +3908,7 @@ export class PrintersScreen extends LitElement {
         label: t("printers.name"),
         cell: (d) =>
           html`<div
-            part=${
-              this.#unsupportedPagePrinter(d)
-                ? "discovered-details discovered-page-printer"
-                : "discovered-details"
-            }
+            part=${refused(d) ? "discovered-details discovered-page-printer" : "discovered-details"}
             data-test=${`discovered-row-${this.#deviceKey(d)}`}
           >
             <strong>${this.#discoveredLabel(d)}</strong>
@@ -3720,6 +3917,8 @@ export class PrintersScreen extends LitElement {
               <div>${d.host ? `${d.host}:${d.port ?? 9100}` : (d.localKey ?? "—")}</div>
               ${d.agentName ? html`<div>${t("printers.discovered_seen_on").replace("{agent}", d.agentName)}</div>` : nothing}
               ${this.#disabledPrinter(d) ? html`<div>${t("printers.enable_hint")}</div>` : nothing}
+              ${office.get(d)?.kind === "enable" ? html`<div>${t("printers.page_printer_enable_hint")}</div>` : nothing}
+              ${this.#repointNote(office.get(d))}
               ${lost.has(d) && !listed.has(this.#commandKeyOf(d)) ? html`<div>${t("printers.bluetooth_not_seen")}</div>` : nothing}
             </div>
           </div>`,
@@ -3728,12 +3927,8 @@ export class PrintersScreen extends LitElement {
         key: "add",
         label: t("printers.actions"),
         cell: (d) => {
-          if (this.#unsupportedPagePrinter(d))
-            return html`<span
-              part="page-printer-hint"
-              data-test=${`page-printer-${this.#deviceKey(d)}`}
-              >${t("printers.page_printer_hint")}</span
-            >`;
+          const officeRow = office.get(d);
+          if (officeRow) return this.#officeAction(d, officeRow);
           const add = html`<wt-button
             variant="primary"
             data-test=${`register-${this.#deviceKey(d)}`}
@@ -4123,7 +4318,7 @@ export class PrintersScreen extends LitElement {
           : html`${this.#renderTestPageSent()}${this.errorKey ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>` : nothing}
             ${this.#renderRefreshError()}`
       }
-      ${this.#renderAgentModal()}${this.#renderEditAgent()}${this.#renderNewPrinter()}${this.#renderPrinterName()}${this.#renderPairDialog()}${this.#renderEditPrinter()}${this.#renderAcceptDialog()}${this.#renderEquipmentLabel()}${this.#renderDeleteDialog()}
+      ${this.#renderAgentModal()}${this.#renderEditAgent()}${this.#renderNewPrinter()}${this.#renderPrinterName()}${this.#renderPagePrinterAdd()}${this.#renderPairDialog()}${this.#renderEditPrinter()}${this.#renderAcceptDialog()}${this.#renderEquipmentLabel()}${this.#renderDeleteDialog()}
       <dashboard-print-job-preview
         .preview=${this.preview}
         .open=${this.previewOpen}

@@ -24,6 +24,7 @@ export class SetupFiscalTestScreen extends LitElement {
     `,
   ];
 
+  @property() nextScreen: "review" | "email" = "review";
   @property() status?: "accepted" | "rejected" | "uncertain";
   @property({ attribute: false }) rejections: { code: string | null; message: string | null }[] =
     [];
@@ -63,7 +64,7 @@ export class SetupFiscalTestScreen extends LitElement {
             ? html`<wt-button
                 variant="primary"
                 data-test="continue"
-                @click=${() => dispatchSetupGoto(this, "review")}
+                @click=${() => dispatchSetupGoto(this, this.nextScreen)}
                 >${t("fiscal_test.continue")}</wt-button
               >`
             : html`<wt-button

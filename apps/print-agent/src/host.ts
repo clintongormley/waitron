@@ -1,5 +1,7 @@
 import { hostname } from "node:os";
-import { type MediaQuery, createPagePrinterMarker, queryMediaSupported } from "./ipp-probe.js";
+import { queryPrinterCapabilities } from "./ipp-capabilities.js";
+import { type CapabilitiesQuery, createOfficePrinterClassifier } from "./ipp-probe.js";
+import { printOverIpp } from "./ipp-print.js";
 import { probeNetwork } from "./tcp-probe.js";
 import {
   NetworkTcpTransport,
@@ -32,8 +34,8 @@ export interface ContainerHostOptions {
   /** The loop calls this on every status change; the setup page reads the latest value. */
   onStatus: (status: AgentStatus) => void;
   devices?: LinuxDevices;
-  /** The IPP paper-size query behind `markPagePrinters`; defaults to the live query. */
-  mediaQuery?: MediaQuery;
+  /** The IPP capability query behind `markPagePrinters`; defaults to the live query. */
+  capabilitiesQuery?: CapabilitiesQuery;
   /** Injected in tests; defaults to `Date.now`. */
   now?: () => number;
 }
@@ -86,8 +88,8 @@ export function createContainerHost(opts: ContainerHostOptions): Host {
     log,
     status: opts.onStatus,
     probeNetwork,
-    markPagePrinters: createPagePrinterMarker({
-      query: opts.mediaQuery ?? queryMediaSupported,
+    markPagePrinters: createOfficePrinterClassifier({
+      query: opts.capabilitiesQuery ?? queryPrinterCapabilities,
       now,
     }),
     visibleDevices: devices.visibleDevices,
@@ -97,5 +99,7 @@ export function createContainerHost(opts: ContainerHostOptions): Host {
     forgetBluetooth: devices.forgetBluetooth,
     resolve: devices.resolve,
     bluetoothPrinting: devices.bluetoothPrinting,
+    printPage: (target, bytes, format, signal, onHold) =>
+      printOverIpp({ ...target, documentFormat: format }, bytes, { signal, onHold }),
   };
 }

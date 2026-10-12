@@ -62,6 +62,7 @@ useVenueDb({
         cfg: venue.cfg,
         pairingMode,
         readMembership: async () => null,
+        readInvoiceDocument: () => Promise.reject(new Error("No invoice is read here")),
         venueLocale: "es-ES",
       },
       () => {},

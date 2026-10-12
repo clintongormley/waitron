@@ -20,7 +20,7 @@ import {
   classifyBluetoothFailure,
   sameAvailability,
 } from "./bluetooth-availability.js";
-import { PDL_SERVICE, parsePdlResponse } from "./network.js";
+import { IPP_SERVICE, PDL_SERVICE, parsePdlResponse } from "./network.js";
 import { SWEEP_PORT, mergeDiscovered, sweepCandidates, sweepPort } from "./sweep.js";
 import { type UsbPrinter, readUsbPrinters } from "./usb.js";
 
@@ -257,25 +257,27 @@ function liveBtDevicePath(mac: string): string {
   return mac;
 }
 
-/** A minimal mDNS PTR/IN query for the PDL service. */
+/** A minimal mDNS query with one PTR/IN question for the PDL service and one for IPP. */
 export function buildPdlQuery(): Buffer {
   const header = Buffer.alloc(12);
-  header.writeUInt16BE(1, 4); // one question
-  const labels = PDL_SERVICE.split(".");
-  const parts: Buffer[] = [];
-  for (const label of labels) {
-    const b = Buffer.from(label, "ascii");
-    parts.push(Buffer.from([b.length]), b);
+  const services = [PDL_SERVICE, IPP_SERVICE];
+  header.writeUInt16BE(services.length, 4);
+  const parts: Buffer[] = [header];
+  for (const service of services) {
+    for (const label of service.split(".")) {
+      const b = Buffer.from(label, "ascii");
+      parts.push(Buffer.from([b.length]), b);
+    }
+    parts.push(Buffer.from([0])); // root
+    parts.push(Buffer.from([0, 12, 0, 1])); // PTR, IN
   }
-  parts.push(Buffer.from([0])); // root
-  const qtypeClass = Buffer.from([0, 12, 0, 1]); // PTR, IN
-  return Buffer.concat([header, ...parts, qtypeClass]);
+  return Buffer.concat(parts);
 }
 
 /* v8 ignore start -- opens the mDNS and port-9100 sockets; covered by the
    receipts, not unit tests (no radio or LAN in CI). */
 
-/** An announced entry, which carries the printer's own name, wins over a swept duplicate. */
+/** Repeated answers and the IPP and raw announcements of one printer are merged by {@link mergeDiscovered}. */
 async function liveNetworkScan(): Promise<DiscoveredDevice[]> {
   const [announced, swept] = await Promise.all([liveMdnsScan(), liveSweep()]);
   return mergeDiscovered(announced, swept);
@@ -289,17 +291,17 @@ function liveSweep(): Promise<DiscoveredDevice[]> {
 function liveMdnsScan(windowMs = 1500): Promise<DiscoveredDevice[]> {
   return new Promise((resolve) => {
     const socket = dgram.createSocket({ type: "udp4", reuseAddr: true });
-    const byHost = new Map<string, DiscoveredDevice>();
+    const heard: DiscoveredDevice[] = [];
     const done = (): void => {
       try {
         socket.close();
       } catch {
         /* already closed */
       }
-      resolve([...byHost.values()]);
+      resolve(heard);
     };
     socket.on("message", (msg) => {
-      for (const d of parsePdlResponse(msg)) byHost.set(`${d.host}:${d.port}`, d);
+      heard.push(...parsePdlResponse(msg));
     });
     socket.on("error", done);
     socket.bind(() => {

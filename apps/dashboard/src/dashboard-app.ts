@@ -2006,7 +2006,10 @@ export class DashboardApp extends LitElement {
       case "vat-return":
         return html`<dashboard-vat-return-screen .api=${this.api}></dashboard-vat-return-screen>`;
       case "orders":
-        return html`<dashboard-orders-screen .api=${this.api}></dashboard-orders-screen>`;
+        return html`<dashboard-orders-screen
+          .api=${this.api}
+          .canExport=${this.#sessionPermissions.includes("report.export")}
+        ></dashboard-orders-screen>`;
       case "staff":
         return html`<dashboard-staff-screen
           .api=${this.api}
@@ -2052,7 +2055,10 @@ export class DashboardApp extends LitElement {
           .canManageReaders=${this.#sessionPermissions.includes("payments.manage")}
         ></dashboard-devices-screen>`;
       case "printers":
-        return html`<dashboard-printers-screen .api=${this.api}></dashboard-printers-screen>`;
+        return html`<dashboard-printers-screen
+          .api=${this.api}
+          .canManage=${this.#sessionPermissions.includes("printer.manage")}
+        ></dashboard-printers-screen>`;
       case "canvas-editor":
         return html`<dashboard-canvas-editor-screen
           .api=${this.api}
@@ -2076,7 +2082,10 @@ export class DashboardApp extends LitElement {
       case "servers":
         return html`<dashboard-servers-screen .api=${this.api}></dashboard-servers-screen>`;
       case "email":
-        return html`<dashboard-email-screen .api=${this.api}></dashboard-email-screen>`;
+        return html`<dashboard-email-screen
+          .api=${this.api}
+          .canManage=${this.#sessionPermissions.includes("system.manage")}
+        ></dashboard-email-screen>`;
       case "demo-printer":
         return html`<dashboard-demo-printer-screen
           .api=${this.api}

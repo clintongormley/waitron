@@ -319,6 +319,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     listZones: vi.fn().mockResolvedValue([zone]),
     listStatuses: vi.fn().mockResolvedValue([]),
     getPartyBills: vi.fn().mockResolvedValue([billOf()]),
+    getInvoiceDeliveryOptions: vi.fn().mockResolvedValue({ invoicePrinter: null }),
     getTabLines: vi.fn().mockResolvedValue({ lines: bill120, revision: 0, editSentLines: true }),
     listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [] }),
     splitBill: vi.fn().mockResolvedValue({ billId: "wo-check" }),
@@ -4141,3 +4142,351 @@ function unloadGuarded(): boolean {
 function updateBar(el: TillApp): HTMLElement | null {
   return el.shadowRoot!.querySelector("wt-banner[data-test=update-bar]");
 }
+
+describe("till-app: a bill's full invoice offers A4 on the location's invoice printer", () => {
+  const officePrinter = { id: "pp-office", name: "Office HP" };
+  const recipient = {
+    taxId: "12345678Z",
+    legalName: "Ana García",
+    address: "Calle Mayor 1, 28013 Madrid, Madrid, España",
+    countryCode: "ES",
+  };
+  const recipientDialog = (el: TillApp) =>
+    el.shadowRoot!.querySelector("till-invoice-recipient-dialog");
+
+  it("reads the delivery options before opening, and sends the chosen A4 with the choice", async () => {
+    const getInvoiceDeliveryOptions = vi.fn().mockResolvedValue({ invoicePrinter: officePrinter });
+    const setOrderInvoiceChoice = vi.fn().mockResolvedValue({ revision: 8 });
+    const getPartyBills = vi.fn().mockResolvedValue([billOf({ revision: 7 })]);
+    const { el } = await mountApp({
+      getInvoiceDeliveryOptions,
+      setOrderInvoiceChoice,
+      getPartyBills,
+    });
+    const order = await openTable(el);
+
+    order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
+    await flush(el);
+    const dialog = recipientDialog(el)!;
+    expect(getInvoiceDeliveryOptions).toHaveBeenCalledOnce();
+    expect(dialog.deliveryOptions).toEqual({ invoicePrinter: officePrinter });
+    expect(dialog.savedDelivery).toBeUndefined();
+
+    emit(dialog, "invoice-recipient-confirm", {
+      invoiceType: "F1",
+      recipient,
+      delivery: { medium: "a4", pagePrinterId: "pp-office" },
+    });
+    await flush(el);
+    expect(setOrderInvoiceChoice).toHaveBeenCalledWith("wo-4", {
+      revision: 7,
+      invoiceType: "F1",
+      recipient,
+      delivery: { medium: "a4", pagePrinterId: "pp-office" },
+    });
+    expect(recipientDialog(el)).toBeNull();
+  });
+
+  it("opens on the bill's saved delivery when the full invoice is chosen again", async () => {
+    const getInvoiceDeliveryOptions = vi.fn().mockResolvedValue({ invoicePrinter: officePrinter });
+    const getPartyBills = vi.fn().mockResolvedValue([
+      billOf({
+        invoiceType: "F1",
+        recipient,
+        invoiceDelivery: { medium: "a4", pagePrinterId: "pp-office" },
+      }),
+    ]);
+    const { el } = await mountApp({ getInvoiceDeliveryOptions, getPartyBills });
+    const order = await openTable(el);
+    order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
+    await flush(el);
+    const dialog = recipientDialog(el)!;
+    expect(dialog.savedDelivery).toEqual({ medium: "a4", pagePrinterId: "pp-office" });
+    expect(
+      dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+        "wt-combobox[name=delivery]",
+      )!.value,
+    ).toBe("a4");
+  });
+
+  it("puts a refused email address under the dialog's email field, and unavailable email at the bottom", async () => {
+    const getInvoiceDeliveryOptions = vi
+      .fn()
+      .mockResolvedValue({ invoicePrinter: null, emailAvailable: true });
+    const setOrderInvoiceChoice = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "management.request_invalid", field: "delivery.recipient" })
+      .mockRejectedValueOnce({ code: "invoice_delivery.email_unavailable" });
+    const getPartyBills = vi.fn().mockResolvedValue([
+      billOf({
+        invoiceType: "F1",
+        recipient,
+        invoiceDelivery: { medium: "email", recipient: "ana@example.com" },
+      }),
+    ]);
+    const { el } = await mountApp({
+      getInvoiceDeliveryOptions,
+      setOrderInvoiceChoice,
+      getPartyBills,
+    });
+    const order = await openTable(el);
+    order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
+    await flush(el);
+    const dialog = recipientDialog(el)!;
+    const email = () =>
+      dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=email]")!;
+    expect(email().value).toBe("ana@example.com");
+
+    const choice = {
+      invoiceType: "F1",
+      recipient,
+      delivery: { medium: "email", recipient: "ana@example.com" },
+    };
+    emit(dialog, "invoice-recipient-confirm", choice);
+    await flush(el);
+    expect(email().error).toBe(t("invoice.email_invalid"));
+    expect(dialog.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(t("form.fix_fields"));
+    emit(email(), "wt-change", { value: "ana@example.org" });
+    await flush(el);
+    expect(email().error).toBe("");
+    expect(dialog.shadowRoot!.querySelector("wt-form-actions")!.error).toBe("");
+
+    emit(dialog, "invoice-recipient-confirm", choice);
+    await flush(el);
+    expect(email().error).toBe("");
+    expect(dialog.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(
+      codeMessage("invoice_delivery.email_unavailable"),
+    );
+    expect(setOrderInvoiceChoice).toHaveBeenCalledTimes(2);
+  });
+
+  it("offers paper only when the delivery options cannot be read", async () => {
+    const getInvoiceDeliveryOptions = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    const { el } = await mountApp({ getInvoiceDeliveryOptions });
+    const order = await openTable(el);
+    order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
+    await flush(el);
+    const dialog = recipientDialog(el)!;
+    expect(dialog.deliveryOptions).toBeNull();
+    expect(dialog.shadowRoot!.querySelector("wt-combobox[name=delivery]")).toBeNull();
+  });
+
+  it("shows a refused invoice printer at the bottom and keeps the A4 choice retryable", async () => {
+    const getInvoiceDeliveryOptions = vi.fn().mockResolvedValue({ invoicePrinter: officePrinter });
+    const setOrderInvoiceChoice = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "invoice_delivery.printer_invalid" })
+      .mockResolvedValueOnce({ revision: 8 });
+    const getPartyBills = vi.fn().mockResolvedValue([billOf({ revision: 7 })]);
+    const { el } = await mountApp({
+      getInvoiceDeliveryOptions,
+      setOrderInvoiceChoice,
+      getPartyBills,
+    });
+    const order = await openTable(el);
+    order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
+    await flush(el);
+    const choice = {
+      invoiceType: "F1",
+      recipient,
+      delivery: { medium: "a4", pagePrinterId: "pp-office" },
+    };
+    emit(recipientDialog(el)!, "invoice-recipient-confirm", choice);
+    await flush(el);
+
+    const dialog = recipientDialog(el)!;
+    expect(dialog).not.toBeNull();
+    expect(dialog.refusal).toBe(t("invoice.delivery_printer_changed"));
+    expect(dialog.refusalField).toBe("");
+    expect(dialog.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(
+      t("invoice.delivery_printer_changed"),
+    );
+    emit(dialog, "invoice-recipient-confirm", choice);
+    await flush(el);
+    expect(setOrderInvoiceChoice.mock.calls).toEqual([
+      ["wo-4", { revision: 7, ...choice }],
+      ["wo-4", { revision: 7, ...choice }],
+    ]);
+    expect(recipientDialog(el)).toBeNull();
+  });
+
+  it("does not open a dialog whose options arrive after the operator signed out", async () => {
+    let answer!: (value: unknown) => void;
+    const getInvoiceDeliveryOptions = vi.fn().mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+    );
+    const { el } = await mountApp({ getInvoiceDeliveryOptions });
+    const order = await openTable(el);
+    order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
+    await flush(el);
+    expect(recipientDialog(el)).toBeNull();
+    emit(order, "logout");
+    await flush(el);
+    answer({ invoicePrinter: officePrinter });
+    await flush(el);
+    expect(recipientDialog(el)).toBeNull();
+  });
+});
+
+describe("till-app: a bill's full invoice keeps its saved delivery and re-reads its printer", () => {
+  const officePrinter = { id: "pp-office", name: "Office HP" };
+  const recipient = {
+    taxId: "12345678Z",
+    legalName: "Ana García",
+    address: "Calle Mayor 1, 28013 Madrid, Madrid, España",
+    countryCode: "ES",
+  };
+  const recipientDialog = (el: TillApp) =>
+    el.shadowRoot!.querySelector("till-invoice-recipient-dialog");
+  async function fillAndSave(el: TillApp, legalName = "Ana García") {
+    const form = recipientDialog(el)!;
+    for (const [name, value] of [
+      ["taxId", "12345678Z"],
+      ["legalName", legalName],
+      ["address", "Calle Mayor 1"],
+      ["postalCode", "28013"],
+      ["locality", "Madrid"],
+      ["province", "Madrid"],
+    ]) {
+      const input = form
+        .shadowRoot!.querySelector(`wt-input[name=${name}]`)!
+        .shadowRoot!.querySelector<HTMLInputElement>("input")!;
+      input.value = value!;
+      input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+      await form.updateComplete;
+    }
+    form.shadowRoot!.querySelector<HTMLElement>("[data-invoice-save]")!.click();
+    await flush(el);
+  }
+
+  it("sends the bill's saved A4 back unchanged when the options read fails", async () => {
+    const getInvoiceDeliveryOptions = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    const setOrderInvoiceChoice = vi.fn().mockResolvedValue({ revision: 8 });
+    const getPartyBills = vi.fn().mockResolvedValue([
+      billOf({
+        revision: 7,
+        invoiceType: "F1",
+        recipient,
+        invoiceDelivery: { medium: "a4", pagePrinterId: "pp-office" },
+      }),
+    ]);
+    const { el } = await mountApp({
+      getInvoiceDeliveryOptions,
+      setOrderInvoiceChoice,
+      getPartyBills,
+    });
+    const order = await openTable(el);
+    order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
+    await flush(el);
+    await fillAndSave(el, "Ana García López");
+    expect(setOrderInvoiceChoice).toHaveBeenCalledWith("wo-4", {
+      revision: 7,
+      invoiceType: "F1",
+      recipient: { ...recipient, legalName: "Ana García López" },
+      delivery: { medium: "a4", pagePrinterId: "pp-office" },
+    });
+  });
+
+  it("re-reads the options after a refused invoice printer, so the retry names the current one", async () => {
+    const getInvoiceDeliveryOptions = vi
+      .fn()
+      .mockResolvedValueOnce({ invoicePrinter: officePrinter })
+      .mockResolvedValueOnce({ invoicePrinter: { id: "pp-new", name: "New HP" } });
+    const setOrderInvoiceChoice = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "invoice_delivery.printer_invalid" })
+      .mockResolvedValueOnce({ revision: 8 });
+    const getPartyBills = vi.fn().mockResolvedValue([billOf({ revision: 7 })]);
+    const { el } = await mountApp({
+      getInvoiceDeliveryOptions,
+      setOrderInvoiceChoice,
+      getPartyBills,
+    });
+    const order = await openTable(el);
+    order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
+    await flush(el);
+    const form = recipientDialog(el)!;
+    const field = form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+      "wt-combobox[name=delivery]",
+    )!;
+    field.shadowRoot!.querySelector<HTMLElement>(".trigger")!.click();
+    await field.updateComplete;
+    field.shadowRoot!.querySelectorAll<HTMLElement>("[role=option]")[1]!.click();
+    await form.updateComplete;
+    await fillAndSave(el);
+
+    expect(getInvoiceDeliveryOptions).toHaveBeenCalledTimes(2);
+    expect(recipientDialog(el)).toBe(form);
+    expect(form.deliveryOptions).toEqual({ invoicePrinter: { id: "pp-new", name: "New HP" } });
+    expect(form.refusal).toBe(t("invoice.delivery_printer_changed"));
+    form.shadowRoot!.querySelector<HTMLElement>("[data-invoice-save]")!.click();
+    await flush(el);
+    expect(setOrderInvoiceChoice.mock.calls.map(([, choice]) => choice.delivery)).toEqual([
+      { medium: "a4", pagePrinterId: "pp-office" },
+      { medium: "a4", pagePrinterId: "pp-new" },
+    ]);
+  });
+
+  it("keeps the dialog's options when the re-read after a refused printer fails", async () => {
+    const getInvoiceDeliveryOptions = vi
+      .fn()
+      .mockResolvedValueOnce({ invoicePrinter: officePrinter })
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    const setOrderInvoiceChoice = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "invoice_delivery.printer_invalid" });
+    const getPartyBills = vi.fn().mockResolvedValue([billOf({ revision: 7 })]);
+    const { el } = await mountApp({
+      getInvoiceDeliveryOptions,
+      setOrderInvoiceChoice,
+      getPartyBills,
+    });
+    const order = await openTable(el);
+    order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
+    await flush(el);
+    await fillAndSave(el);
+    const form = recipientDialog(el)!;
+    expect(getInvoiceDeliveryOptions).toHaveBeenCalledTimes(2);
+    expect(form.refusal).toBe(t("invoice.delivery_printer_changed"));
+    expect(form.deliveryOptions).toEqual({ invoicePrinter: officePrinter });
+  });
+
+  it("holds Full invoice quiet while the options are read, and opens as after a failed read when the read outlasts its limit", async () => {
+    const getInvoiceDeliveryOptions = vi.fn().mockImplementation(() => new Promise(() => {}));
+    const getPartyBills = vi
+      .fn()
+      .mockResolvedValue([
+        billOf({ invoiceDelivery: { medium: "a4", pagePrinterId: "pp-office" } }),
+      ]);
+    const { el } = await mountApp({ getInvoiceDeliveryOptions, getPartyBills });
+    const order = await openTable(el);
+    const button = () =>
+      order.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+        "[data-choose-bill-invoice]",
+      )!;
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      button().click();
+      await vi.advanceTimersByTimeAsync(0);
+      await el.updateComplete;
+      await order.updateComplete;
+      expect(button().disabled).toBe(true);
+      expect(recipientDialog(el)).toBeNull();
+      await vi.advanceTimersByTimeAsync(4_999);
+      expect(recipientDialog(el)).toBeNull();
+      await vi.advanceTimersByTimeAsync(1);
+      await el.updateComplete;
+      await order.updateComplete;
+    } finally {
+      vi.useRealTimers();
+    }
+    await flush(el);
+    const dialog = recipientDialog(el)!;
+    expect(dialog.deliveryOptions).toBeNull();
+    expect(dialog.savedDelivery).toEqual({ medium: "a4", pagePrinterId: "pp-office" });
+    expect(button().disabled).toBe(false);
+  });
+});

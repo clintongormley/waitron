@@ -409,6 +409,22 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Too many attempts. Wait a minute and try again.",
     es: "Demasiados intentos. Espera un minuto e inténtalo de nuevo.",
   },
+  "email.test_refused": {
+    en: "The mail server refused the test message. Check the settings and try again.",
+    es: "El servidor de correo ha rechazado la prueba. Revisa la configuración y vuelve a intentarlo.",
+  },
+  "email.test_timeout": {
+    en: "The mail server did not answer in time. Check the settings and try again.",
+    es: "El servidor de correo no ha respondido a tiempo. Revisa la configuración y vuelve a intentarlo.",
+  },
+  "email.settings_invalid": {
+    en: "Check the mail server settings and your account email address, then try again.",
+    es: "Revisa la configuración de correo y la dirección de tu cuenta, y vuelve a intentarlo.",
+  },
+  "email.settings_not_allowed": {
+    en: "You cannot change mail settings in Demo or Prepare mode.",
+    es: "No puedes cambiar el correo en modo Demo o Preparación.",
+  },
   "email.test_inbox_unavailable": {
     en: "The email inbox is unavailable because account email is not using local capture",
     es: "La bandeja de correo no está disponible porque el correo de cuentas no usa la captura local",
@@ -738,9 +754,57 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That bill was not found",
     es: "No se encontró esa cuenta",
   },
+  "device.forbidden_action": {
+    en: "This device's profile does not allow that. Ask a manager",
+    es: "El perfil de este dispositivo no lo permite. Avisa a un responsable",
+  },
+  "invoice_delivery.active": {
+    en: "This invoice is already waiting for delivery. Check its status before trying again.",
+    es: "Esta factura ya está pendiente de entrega. Comprueba su estado antes de intentarlo de nuevo.",
+  },
+  "invoice_delivery.printer_invalid": {
+    en: "The invoice printer is unavailable. Choose another in Printers",
+    es: "La impresora de facturas no está disponible. Elige otra en Impresoras",
+  },
+  "invoice_delivery.email_unavailable": {
+    en: "Invoice email is unavailable. Check the mail server and the Email field in Receipts",
+    es: "No se puede enviar la factura por correo. Revisa el servidor de correo y el campo Correo electrónico en Recibos",
+  },
+  "invoice_delivery.full_invoice_required": {
+    en: "Only a full invoice can be sent this way",
+    es: "Solo una factura completa se puede enviar así",
+  },
+  "invoice_delivery.not_found": {
+    en: "That invoice was not found",
+    es: "No se encontró esa factura",
+  },
+  "submission.id_reused": {
+    en: "This request could not be matched to what was sent before. Reload and try again",
+    es: "Esta petición no coincide con la que se envió antes. Vuelve a cargar e inténtalo de nuevo",
+  },
   "printer.already_registered": {
     en: "That device is already registered as a printer",
     es: "Ese dispositivo ya está dado de alta como impresora",
+  },
+  "printer.office_printer": {
+    en: "That is an office printer, not a receipt printer",
+    es: "Es una impresora de oficina, no una impresora de tickets",
+  },
+  "page_printer.not_found": {
+    en: "That office printer wasn't found. Scan again and retry",
+    es: "No se encontró esa impresora de oficina. Vuelve a buscar e inténtalo de nuevo",
+  },
+  "page_printer.not_printable": {
+    en: "That printer can't print Waitron's invoices",
+    es: "Esa impresora no puede imprimir las facturas de Waitron",
+  },
+  "page_printer.rediscover": {
+    en: "To enable that printer, find it again in Add a printer",
+    es: "Para habilitar esa impresora, búscala de nuevo en Añadir impresora",
+  },
+  "page_printer.no_agent": {
+    en: "That printer has no print agent. Find it again in Add a printer",
+    es: "Esa impresora no tiene agente de impresión. Búscala de nuevo en Añadir impresora",
   },
   "print_job.not_resendable": {
     en: "That job is still waiting to print or retry automatically",

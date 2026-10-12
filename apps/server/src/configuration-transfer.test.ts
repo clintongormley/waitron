@@ -337,11 +337,15 @@ describe("configuration transfer database path", () => {
     expect(persisted.rows[0]!.count).toBe(0);
   });
 
-  it("transfers page-printer capabilities to the target location and requires reactivation", async () => {
+  it("transfers page-printer capabilities to the target location, clears its invoice choice and agent, and requires reactivation", async () => {
     const source = await applyVenue(planVenue(venue("B12345678"), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
     });
+    const [agent] = await suite.db
+      .insert(printAgents)
+      .values({ locationId: source.locationId, name: "Back office", tokenHash: "hash" })
+      .returning({ id: printAgents.id });
     await suite.db.insert(pagePrinters).values({
       id: "55555555-aaaa-aaaa-aaaa-555555555555",
       locationId: source.locationId,
@@ -354,6 +358,8 @@ describe("configuration transfer database path", () => {
       media: "iso_a4_210x297mm",
       resolutionDpi: 600,
       active: true,
+      invoiceDefault: true,
+      agentId: agent!.id,
     });
     const [operator] = await suite.db.select({ id: persons.id }).from(persons);
     const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
@@ -390,7 +396,11 @@ describe("configuration transfer database path", () => {
       media: "iso_a4_210x297mm",
       resolutionDpi: 600,
       active: false,
+      invoiceDefault: false,
+      agentId: null,
     });
+    // The agent itself travels, so a kept key would have been remapped to the imported agent.
+    expect(await targetSuite.db.select({ id: printAgents.id }).from(printAgents)).toHaveLength(1);
     expect(imported!.id).not.toBe("55555555-aaaa-aaaa-aaaa-555555555555");
     expect(await targetSuite.db.select().from(printers)).toEqual([]);
   });

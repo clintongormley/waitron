@@ -9,6 +9,8 @@ import type {
   DashboardApi,
   DiscoveredPrinter,
   JoinRequestRow,
+  OfficePrinterReport,
+  PagePrinterRow,
   PrintAgentRow,
   PrintJobRow,
   Printer,
@@ -189,6 +191,7 @@ function stubApi(pairingOpen = false, overrides: Partial<DashboardApi> = {}): Da
     startPrinterDiscovery: vi.fn().mockResolvedValue({ discoveryUntil: Date.now() + 60_000 }),
     renewPrinterDiscovery: vi.fn().mockResolvedValue({ discoveryUntil: Date.now() + 180_000 }),
     listDiscoveredPrinters: vi.fn().mockResolvedValue(discovered),
+    listPagePrinters: vi.fn().mockResolvedValue([]),
     listPrinterProfiles: vi.fn().mockResolvedValue(printerProfiles),
     ...overrides,
   } as unknown as DashboardApi;
@@ -490,6 +493,112 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     expect((q(el, "[data-test=probe-host]") as unknown as { invalid: boolean }).invalid).toBe(true);
     await expectNoA11yViolations(host);
   });
+  it("renders each office printer row and the add dialog with its messages accessibly", async () => {
+    const queue = { port: 631, resourcePath: "/ipp/print" };
+    const printable: OfficePrinterReport = {
+      ...queue,
+      printable: true,
+      documentFormat: "application/pdf",
+      media: "iso_a4_210x297mm",
+      resolutionDpi: 600,
+      supportedFormats: ["application/pdf"],
+    };
+    const office = (host: string, overrides: Partial<DiscoveredPrinter> = {}) =>
+      ({
+        agentId: "a1",
+        agentName: "Cocina agent",
+        transport: "network_tcp",
+        host,
+        port: 9100,
+        name: "HP LaserJet",
+        pagePrinter: true,
+        office: printable,
+        alreadyRegistered: false,
+        printerId: null,
+        lastSeenAt: "2026-08-25T14:30:00.000Z",
+        ...overrides,
+      }) as DiscoveredPrinter;
+    const row = (host: string, overrides: Partial<PagePrinterRow> = {}): PagePrinterRow => ({
+      id: `pp-${host}`,
+      name: "Office",
+      host,
+      ...queue,
+      documentFormat: "application/pdf",
+      supportedFormats: ["application/pdf"],
+      media: "iso_a4_210x297mm",
+      resolutionDpi: 600,
+      active: true,
+      invoicePrinter: false,
+      agentId: "a1",
+      agentName: "Cocina agent",
+      ...overrides,
+    });
+    const { el, host } = await mountWidget<PrintersScreen>(
+      "dashboard-printers-screen",
+      {
+        api: stubApi(false, {
+          listDiscoveredPrinters: vi.fn().mockResolvedValue([
+            office("10.0.0.61"),
+            office("10.0.0.62"),
+            office("10.0.0.63", { agentId: "a2", agentName: "Barra agent" }),
+            office("10.0.0.64"),
+            office("10.0.0.65", {
+              office: {
+                ...queue,
+                printable: false,
+                reason: "unsupported_raster",
+                supportedFormats: [],
+              },
+            }),
+          ]),
+          listPagePrinters: vi
+            .fn()
+            .mockResolvedValue([
+              row("10.0.0.62"),
+              row("10.0.0.63"),
+              row("10.0.0.64", { active: false }),
+            ]),
+          registerPagePrinter: vi.fn().mockRejectedValue({ code: "page_printer.not_found" }),
+        }),
+      },
+      theme,
+    );
+    await flush(el);
+    await openDiscovery(el);
+    q(el, "[data-test='repoint-page-printer-a2:10.0.0.63:9100']")!.click();
+    await flush(el);
+    expect(q(el, "[data-test='page-printer-added-a1:10.0.0.62:9100']")).not.toBeNull();
+    expect(q(el, "[data-test='page-printer-error-a2:10.0.0.63:9100']")).not.toBeNull();
+    expect(q(el, "[data-test='enable-page-printer-a1:10.0.0.64:9100']")).not.toBeNull();
+    expect(q(el, "[data-test='page-printer-10.0.0.65:9100']")).not.toBeNull();
+    await expectNoA11yViolations(host);
+    q(el, "[data-test='add-page-printer-a1:10.0.0.61:9100']")!.click();
+    await flush(el);
+    await expectNoA11yViolations(host);
+    q(el, "[data-test=page-printer-add-modal] wt-input[name=name]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: " " }, bubbles: true, composed: true }),
+    );
+    await flush(el);
+    q(el, "[data-test=confirm-add-page-printer]")!.click();
+    await flush(el);
+    expect(
+      (
+        q(el, "[data-test=page-printer-add-modal] wt-input[name=name]") as unknown as {
+          invalid: boolean;
+        }
+      ).invalid,
+    ).toBe(true);
+    await expectNoA11yViolations(host);
+    q(el, "[data-test=page-printer-add-modal] wt-input[name=name]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "Office" }, bubbles: true, composed: true }),
+    );
+    await flush(el);
+    q(el, "[data-test=confirm-add-page-printer]")!.click();
+    await flush(el);
+    expect(q(el, "[data-test=page-printer-add-modal]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   it("renders printer editing accessibly", async () => {
     const { el, host } = await mountWidget<PrintersScreen>(
       "dashboard-printers-screen",

@@ -8,9 +8,14 @@
 > receipt row. See [A493](2026-10-12-a493-departments-zones-design.md). The consent payload,
 > reservation and retry contracts remain; their separate rewrite is still open.
 
+> **2026-10-12, A231q:** the consent step is gone from the product: tasks C1a and C1b of the [A231q
+> plan](../plans/2026-10-12-a231q-invoice-delivery-part-2.md) removed it from staging, delivery rows
+> and retries, so the consent paths below, and any note calling that removal still open, are
+> history. A448 and the legal research are unchanged.
+
 > **2026-10-10, A366 slice 7 and the owner's 2026-10-09 answer:** the consent controls and
 > venue-contact proposal below are historical product plans. The owner removed the separate
-> consent step; its [core rewrite](../../backlog/printers.md#remove-the-consent-step-from-emailed-receipts)
+> consent step; its [core rewrite](../../backlog/printers.md#decisions-and-deliberate-limits)
 > is still open, and today's staging, reservation and retry paths still require consent data.
 > [Slice 7](../plans/2026-10-08-a366-slice-7-receipts-per-department.md) owns department/default
 > contact selection and receipt presentation, retaining live venue logo and text defaults and

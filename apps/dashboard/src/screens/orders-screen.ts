@@ -84,6 +84,8 @@ export class OrdersScreen extends LitElement {
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
+  /** The session holds `report.export`. */
+  @property({ attribute: false }) canExport = false;
   @state() private filter: OrdersFilter = DEFAULT_ORDERS_FILTER;
   @state() private pages = 1;
   @state() private page?: OrdersPageDto;
@@ -393,6 +395,7 @@ export class OrdersScreen extends LitElement {
         .api=${this.api}
         .orderId=${this.openId}
         .mayReprint=${(row: OrderRowDto) => this.#mayReprint(row)}
+        .mayExport=${this.canExport}
         @order-reprint=${(event: CustomEvent<{ id: string }>) => {
           this.reprintRow = rows.find((row) => row.id === event.detail.id) ?? null;
         }}

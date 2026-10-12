@@ -53,7 +53,9 @@ import { createPrinter } from "@waitron/printing";
 import {
   createDepartment,
   createServiceZone,
+  departmentReceipts,
   departmentSalePolicies,
+  departments,
 } from "@waitron/venue-service";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import {
@@ -112,6 +114,12 @@ const invoiceMailRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 9).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
 });
+// The suite's mail ring holds no key of this version, so a row it writes cannot be read back.
+const unreadableMailRing = loadKeyRing({
+  WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64"),
+  WAITRON_CREDENTIALS_KEY_VERSION: "99",
+});
+const SMTP = { url: "smtp://smtp.example.test:2525", from: "Venue <venue@example.test>" };
 
 interface Venue {
   cfg: OriginConfig;
@@ -171,7 +179,7 @@ function systemClock(): TrustedClock {
   };
 }
 
-const quiet: Logger = () => {};
+const quiet = vi.fn<Logger>();
 
 async function provision(db: typeof suite.db): Promise<Venue> {
   clock = systemClock();
@@ -1802,6 +1810,13 @@ describe("the invoice at full payment (design §8 test 8)", () => {
         printerLocation = other!.id;
       }
       const pagePrinterId = randomUUID();
+      // The suite does not reset per test; one invoice printer per location.
+      await inTx((tx) =>
+        tx
+          .update(pagePrinters)
+          .set({ invoiceDefault: false })
+          .where(eq(pagePrinters.locationId, printerLocation)),
+      );
       if (kind !== "missing")
         await inTx((tx) =>
           tx.insert(pagePrinters).values({
@@ -1816,6 +1831,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
             media: "iso_a4_210x297mm",
             resolutionDpi: 300,
             active: kind !== "disabled",
+            invoiceDefault: true,
           }),
         );
       const response = await request("PUT", `/api/working-orders/${billId}/invoice-choice`, {
@@ -1834,7 +1850,11 @@ describe("the invoice at full payment (design §8 test 8)", () => {
       );
       if (kind === "active") {
         expect(response).toEqual({ status: 200, json: { revision: before!.revision + 1 } });
-        expect(saved!.invoiceDelivery).toEqual({ medium: "a4", pagePrinterId });
+        expect(saved!.invoiceDelivery).toEqual({
+          medium: "a4",
+          pagePrinterId,
+          personId: venue.staffId,
+        });
       } else {
         expect(response).toEqual({
           status: 409,
@@ -1844,6 +1864,178 @@ describe("the invoice at full payment (design §8 test 8)", () => {
       }
     },
   );
+
+  describe("the location's invoice printer", () => {
+    async function pagePrinter(values: {
+      name: string;
+      locationId?: string;
+      active?: boolean;
+      invoiceDefault?: boolean;
+    }): Promise<string> {
+      const id = randomUUID();
+      await inTx((tx) =>
+        tx.insert(pagePrinters).values({
+          id,
+          locationId: values.locationId ?? venue.cfg.locationId,
+          name: values.name,
+          host: id,
+          port: 631,
+          resourcePath: "/ipp/print",
+          documentFormat: "application/pdf",
+          supportedFormats: ["application/pdf"],
+          media: "iso_a4_210x297mm",
+          resolutionDpi: 300,
+          active: values.active ?? true,
+          invoiceDefault: values.invoiceDefault ?? false,
+        }),
+      );
+      return id;
+    }
+
+    async function otherLocation(): Promise<string> {
+      const [other] = await inTx((tx) =>
+        tx
+          .insert(locations)
+          .values({
+            name: `Other ${randomUUID()}`,
+            invoiceLocales: ["es-ES"],
+            operationDescription: "Restaurant",
+          })
+          .returning(),
+      );
+      return other!.id;
+    }
+
+    beforeEach(async () => {
+      await inTx((tx) => tx.update(pagePrinters).set({ active: false, invoiceDefault: false }));
+    });
+
+    it("answers no invoice printer when the location has none, only another location's or a disabled one", async () => {
+      await pagePrinter({ name: "Office" });
+      await pagePrinter({
+        name: "Elsewhere",
+        locationId: await otherLocation(),
+        invoiceDefault: true,
+      });
+      expect(await request("GET", "/api/invoice-delivery-options")).toEqual({
+        status: 200,
+        json: { invoicePrinter: null, emailAvailable: false },
+      });
+      await pagePrinter({ name: "Back office", active: false, invoiceDefault: true });
+      expect(await request("GET", "/api/invoice-delivery-options")).toEqual({
+        status: 200,
+        json: { invoicePrinter: null, emailAvailable: false },
+      });
+    });
+
+    it("answers the location's active invoice printer by id and name", async () => {
+      await pagePrinter({ name: "Office" });
+      const id = await pagePrinter({ name: "Invoices", invoiceDefault: true });
+      expect(await request("GET", "/api/invoice-delivery-options")).toEqual({
+        status: 200,
+        json: { invoicePrinter: { id, name: "Invoices" }, emailAvailable: false },
+      });
+    });
+
+    it("answers whether invoice email can be sent, as staging an email choice decides it", async () => {
+      try {
+        for (const [onboardingIntent, devMode, emailAvailable] of [
+          ["live", false, false],
+          ["demo", false, true],
+          ["live", true, true],
+          ["prepare", false, true],
+        ] as const) {
+          invoiceMailMode = { onboardingIntent, devMode };
+          expect(await request("GET", "/api/invoice-delivery-options")).toEqual({
+            status: 200,
+            json: { invoicePrinter: null, emailAvailable },
+          });
+        }
+      } finally {
+        invoiceMailMode = { onboardingIntent: "live", devMode: false };
+      }
+    });
+
+    it("answers email unavailable beside the invoice printer when the mail server's credential cannot be read", async () => {
+      const id = await pagePrinter({ name: "Invoices", invoiceDefault: true });
+      try {
+        await inTx((tx) =>
+          putCredential(tx, unreadableMailRing, { purpose: "email.smtp", value: SMTP }),
+        );
+        quiet.mockClear();
+        expect(await request("GET", "/api/invoice-delivery-options")).toEqual({
+          status: 200,
+          json: { invoicePrinter: { id, name: "Invoices" }, emailAvailable: false },
+        });
+        expect(quiet.mock.calls).toEqual([
+          [
+            "warn",
+            "invoice_delivery.email_check_failed",
+            { errorCode: "credentials.key_version_unknown" },
+          ],
+        ]);
+      } finally {
+        await inTx((tx) => deleteCredential(tx, { purpose: "email.smtp" }));
+      }
+    });
+
+    it("refuses a caller with no session", async () => {
+      await pagePrinter({ name: "Invoices", invoiceDefault: true });
+      expect(await request("GET", "/api/invoice-delivery-options", undefined, "")).toEqual({
+        status: 401,
+        json: { code: "session.required", params: {} },
+      });
+    });
+
+    it("stages A4 only on the invoice printer, for the signed-in staff member", async () => {
+      const billId = await tabWith("Chuletón");
+      const office = await pagePrinter({ name: "Office" });
+      const invoices = await pagePrinter({ name: "Invoices", invoiceDefault: true });
+      const [before] = await inTx((tx) =>
+        tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+      );
+      const choice = (pagePrinterId: string) => ({
+        revision: before!.revision,
+        invoiceType: "F1",
+        recipient: {
+          taxId: "B12345674",
+          legalName: "Cliente SL",
+          address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+          countryCode: "ES",
+        },
+        delivery: { medium: "a4", pagePrinterId, personId: "forged" },
+        personId: "forged",
+      });
+      const path = `/api/working-orders/${billId}/invoice-choice`;
+      expect(await request("PUT", path, choice(office))).toEqual({
+        status: 409,
+        json: { code: "invoice_delivery.printer_invalid", params: {} },
+      });
+      const [refused] = await inTx((tx) =>
+        tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+      );
+      expect(refused).toEqual(before);
+      expect(await request("PUT", path, choice(invoices))).toEqual({
+        status: 200,
+        json: { revision: before!.revision + 1 },
+      });
+      const [saved] = await inTx((tx) =>
+        tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+      );
+      expect(saved!.invoiceDelivery).toEqual({
+        medium: "a4",
+        pagePrinterId: invoices,
+        personId: venue.staffId,
+      });
+      const read = await request("GET", `/api/parties/${saved!.partyId}/bills`);
+      expect(read.status).toBe(200);
+      const bills = read.json as unknown as { workingOrderId: string; invoiceDelivery?: unknown }[];
+      expect(bills.find((row) => row.workingOrderId === billId)?.invoiceDelivery).toEqual({
+        medium: "a4",
+        pagePrinterId: invoices,
+      });
+    });
+  });
 
   describe("staged original delivery over HTTP", () => {
     beforeEach(() => {
@@ -1855,35 +2047,27 @@ describe("the invoice at full payment (design §8 test 8)", () => {
     });
 
     async function withContact(body: () => Promise<void>) {
-      const contactDepartmentId = await invoiceContactDepartment();
-      const [original] = await inTx((tx) =>
-        tx
-          .select()
-          .from(departmentReceipts)
-          .where(eq(departmentReceipts.departmentId, contactDepartmentId)),
-      );
+      const original = await inTx((tx) => tx.select().from(departmentReceipts));
+      const receipt = { email: "dining@example.test", phone: "910000000" };
       try {
-        await inTx((tx) =>
-          tx
-            .insert(departmentReceipts)
-            .values({
-              departmentId: contactDepartmentId,
-              receipt: { email: "venue@example.test", phone: "910000000" },
-            })
-            .onConflictDoUpdate({
-              target: departmentReceipts.departmentId,
-              set: { receipt: { email: "venue@example.test", phone: "910000000" } },
-            }),
-        );
+        await inTx(async (tx) => {
+          const rows = await tx
+            .select({ id: departments.id })
+            .from(departments)
+            .where(eq(departments.locationId, venue.cfg.locationId));
+          for (const { id } of rows) {
+            await tx
+              .insert(departmentReceipts)
+              .values({ departmentId: id, receipt })
+              .onConflictDoUpdate({ target: departmentReceipts.departmentId, set: { receipt } });
+          }
+        });
         await body();
       } finally {
-        await inTx((tx) =>
-          tx
-            .delete(departmentReceipts)
-            .where(eq(departmentReceipts.departmentId, contactDepartmentId)),
-        );
-        if (original !== undefined)
-          await inTx((tx) => tx.insert(departmentReceipts).values(original));
+        await inTx(async (tx) => {
+          await tx.delete(departmentReceipts);
+          if (original.length > 0) await tx.insert(departmentReceipts).values(original);
+        });
       }
     }
 
@@ -1897,19 +2081,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
           address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
           countryCode: "ES",
         },
-        delivery: {
-          medium: "email",
-          recipient: " customer@example.test ",
-          consent: {
-            accepted: true,
-            statementVersion: "invoice-email-v1",
-            language: "es-ES",
-            contactEmail: "venue@example.test",
-            contactPhone: "910000000",
-            personId: "forged",
-            recordedAt: "1900-01-01",
-          },
-        },
+        delivery: { medium: "email", recipient: " customer@example.test ", personId: "forged" },
         emailAvailable: true,
         personId: "forged",
         now: "1900-01-01",
@@ -1921,7 +2093,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
       ["prepare", false],
       ["live", true],
     ] as const)(
-      "stages captured email in %s development=%s with authenticated staff and server time",
+      "stages captured email in %s development=%s for the authenticated staff member",
       async (onboardingIntent, devMode) => {
         invoiceMailMode = { onboardingIntent, devMode };
         await withContact(async () => {
@@ -1950,19 +2122,52 @@ describe("the invoice at full payment (design §8 test 8)", () => {
           expect(after!.invoiceDelivery).toEqual({
             medium: "email",
             recipient: "customer@example.test",
-            consent: {
-              statementVersion: "invoice-email-v1",
-              language: "es-ES",
-              contactEmail: "venue@example.test",
-              contactPhone: "910000000",
-              personId: venue.staffId,
-              recordedAt: "2026-10-07T18:00:00.000Z",
-            },
+            personId: venue.staffId,
           });
           expect(await paymentRows(billId)).toEqual([]);
         });
       },
     );
+
+    it("ignores a consent key and reads the staged email back without its staff member", async () => {
+      invoiceMailMode = { onboardingIntent: "demo", devMode: false };
+      await withContact(async () => {
+        const billId = await tabWith("Chuletón");
+        const [before] = await inTx((tx) =>
+          tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+        );
+        expect(
+          await request("PUT", `/api/working-orders/${billId}/invoice-choice`, {
+            ...emailChoice(before!.revision),
+            delivery: {
+              medium: "email",
+              recipient: " customer@example.test ",
+              consent: { accepted: true, statementVersion: "invoice-email-v1" },
+            },
+          }),
+        ).toEqual({ status: 200, json: { revision: before!.revision + 1 } });
+        const [after] = await inTx((tx) =>
+          tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+        );
+        expect(after!.invoiceDelivery).toEqual({
+          medium: "email",
+          recipient: "customer@example.test",
+          personId: venue.staffId,
+        });
+        const read = await venue.app.request(`/api/parties/${after!.partyId}/bills`, {
+          headers: { cookie: venue.cookie },
+        });
+        expect(read.status).toBe(200);
+        const bills = (await read.json()) as {
+          workingOrderId: string;
+          invoiceDelivery?: unknown;
+        }[];
+        expect(bills.find((row) => row.workingOrderId === billId)?.invoiceDelivery).toEqual({
+          medium: "email",
+          recipient: "customer@example.test",
+        });
+      });
+    });
 
     it("refuses unconfigured live invoice mail despite client-forged availability", async () => {
       await withContact(async () => {
@@ -1984,6 +2189,39 @@ describe("the invoice at full payment (design §8 test 8)", () => {
           tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
         );
         expect(after).toEqual(before);
+      });
+    });
+
+    it("refuses an email choice when the mail server's credential cannot be read", async () => {
+      await withContact(async () => {
+        try {
+          await inTx((tx) =>
+            putCredential(tx, unreadableMailRing, { purpose: "email.smtp", value: SMTP }),
+          );
+          const billId = await tabWith("Chuletón");
+          const [before] = await inTx((tx) =>
+            tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+          );
+          expect(
+            await request(
+              "PUT",
+              `/api/working-orders/${billId}/invoice-choice`,
+              emailChoice(before!.revision),
+            ),
+          ).toEqual({
+            status: 400,
+            json: {
+              code: "credentials.key_version_unknown",
+              params: { purpose: "email.smtp", keyVersion: 99 },
+            },
+          });
+          const [after] = await inTx((tx) =>
+            tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+          );
+          expect(after).toEqual(before);
+        } finally {
+          await inTx((tx) => deleteCredential(tx, { purpose: "email.smtp" }));
+        }
       });
     });
 
@@ -2013,7 +2251,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
           expect(saved!.invoiceDelivery).toMatchObject({
             medium: "email",
             recipient: "customer@example.test",
-            consent: { personId: venue.staffId },
+            personId: venue.staffId,
           });
           await inTx((tx) => deleteCredential(tx, { purpose: "email.smtp" }));
           expect(
@@ -5043,13 +5281,3 @@ describe("a refund's supervisor PIN is checked before the write lock is taken", 
     expect(await refundRows(paymentId)).toEqual([]);
   });
 });
-
-async function invoiceContactDepartment() {
-  const rows = await inTx((tx) =>
-    tx
-      .select({ id: departments.id, isDefault: departments.isDefault })
-      .from(departments)
-      .where(eq(departments.locationId, venue.cfg.locationId)),
-  );
-  return rows.find((row) => row.isDefault)!.id;
-}

@@ -192,3 +192,90 @@ describe("parsePdlResponse", () => {
     expect(parsePdlResponse(w.build())).toEqual([]);
   });
 });
+
+// One SRV+TXT+A announcement for `instance` under `service`, its target at 192.168.1.60.
+function announcement(service: string, instance: string, port: number, txt: string[]): Buffer {
+  const fqdn = `${instance}.${service}`;
+  const target = "office-printer.local";
+  const w = new DnsWriter();
+  w.u16(0).u16(0x8400).u16(0).u16(3).u16(0).u16(0);
+  w.name(fqdn).u16(33).u16(1).u32(120);
+  const fixed = [...new DnsWriter().u16(0).u16(0).u16(port).build()];
+  const targetName = [...new DnsWriter().name(target).build()];
+  w.u16(fixed.length + targetName.length).raw(...fixed, ...targetName);
+  const rdata = txtRdata(txt);
+  w.name(fqdn)
+    .u16(16)
+    .u16(1)
+    .u32(120)
+    .u16(rdata.length)
+    .raw(...rdata);
+  w.name(target).u16(1).u16(1).u32(120).u16(4).raw(192, 168, 1, 60);
+  return w.build();
+}
+
+describe("parsePdlResponse — IPP announcements", () => {
+  it("reads an _ipp._tcp answer's port and resource path into an IPP endpoint", () => {
+    const packet = announcement("_ipp._tcp.local", "Office HP", 8631, [
+      "rp=ipp/printer",
+      "ty=HP Color LaserJet MFP M181fw",
+      "usb_MFG=HP",
+    ]);
+    expect(parsePdlResponse(packet)).toEqual([
+      {
+        transport: "network_tcp",
+        host: "192.168.1.60",
+        port: 8631,
+        name: "Office HP",
+        make: "HP",
+        model: "HP Color LaserJet MFP M181fw",
+        ipp: { port: 8631, resourcePath: "/ipp/printer" },
+      },
+    ]);
+  });
+
+  it("keeps a resource path that already starts with a slash to one slash", () => {
+    const packet = announcement("_ipp._tcp.local", "Office HP", 631, ["rp=/ipp/print"]);
+    expect(parsePdlResponse(packet)).toEqual([
+      expect.objectContaining({ ipp: { port: 631, resourcePath: "/ipp/print" } }),
+    ]);
+  });
+
+  it.each([
+    ["no rp key", ["ty=HP"]],
+    ["an empty rp", ["rp=", "ty=HP"]],
+  ])("gives no device for an _ipp._tcp answer with %s", (_label, txt) => {
+    expect(parsePdlResponse(announcement("_ipp._tcp.local", "Office HP", 631, txt))).toEqual([]);
+  });
+
+  it("skips only the IPP answer without rp, keeping the other printer in the same packet", () => {
+    const w = new DnsWriter();
+    w.u16(0).u16(0x8400).u16(0).u16(2).u16(0).u16(0);
+    const fixed = (port: number) => [...new DnsWriter().u16(0).u16(0).u16(port).build()];
+    const target = [...new DnsWriter().name("star.local").build()];
+    w.name("Office HP._ipp._tcp.local").u16(33).u16(1).u32(120);
+    w.u16(fixed(631).length + target.length).raw(...fixed(631), ...target);
+    w.name("Star._pdl-datastream._tcp.local").u16(33).u16(1).u32(120);
+    w.u16(fixed(9100).length + target.length).raw(...fixed(9100), ...target);
+    expect(parsePdlResponse(w.build())).toEqual([
+      { transport: "network_tcp", host: "star.local", port: 9100, name: "Star" },
+    ]);
+  });
+
+  it("matches the IPP service type whatever its letter case", () => {
+    const packet = announcement("_IPP._TCP.local", "Office HP", 631, ["rp=ipp/print"]);
+    expect(parsePdlResponse(packet)).toEqual([
+      expect.objectContaining({ port: 631, ipp: { port: 631, resourcePath: "/ipp/print" } }),
+    ]);
+  });
+
+  it("gives a _pdl-datastream._tcp answer no IPP endpoint, even with an rp key", () => {
+    const packet = announcement("_pdl-datastream._tcp.local", "Office HP", 9100, [
+      "rp=ipp/print",
+      "usb_MFG=HP",
+    ]);
+    expect(parsePdlResponse(packet)).toEqual([
+      { transport: "network_tcp", host: "192.168.1.60", port: 9100, name: "Office HP", make: "HP" },
+    ]);
+  });
+});

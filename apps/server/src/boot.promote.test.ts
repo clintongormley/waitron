@@ -434,6 +434,17 @@ describe("promote: mirror → primary, in-process, restart-into-primary", () => 
       expect(await readDeploymentMode(mirrorDb, seed.nodeId)).toBe("primary");
       expect(await readSingletonRole(mirrorDb, seed.nodeId)).toBe("primary");
 
+      // The read-only gate has lifted, so a write route mounted on the mirror answers its own
+      // refusal; the agent routes boot left unmounted on the mirror stay absent until a restart.
+      const base = `http://127.0.0.1:${port}`;
+      const write = await fetch(`${base}/management-api/catalogues`, {
+        method: "POST",
+        body: "{}",
+      });
+      expect(write.status).toBe(401);
+      const pageClaim = await fetch(`${base}/print-api/agent/page-jobs/claim`, { method: "POST" });
+      expect(pageClaim.status).toBe(404);
+
       await delay(50);
       expect(killSpy).toHaveBeenCalledWith(process.pid, "SIGTERM");
 

@@ -1,6 +1,7 @@
 // Load server-owned error codes; imported printing verbs load the printing registry.
 import "./errors.js";
 import { createPrinterProbes } from "./printer-probes.js";
+import { createPageTestPages, type PageTestPages } from "./page-test-pages.js";
 import { createPrinterBluetoothCommands } from "./printer-bluetooth-commands.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
@@ -44,6 +45,7 @@ import {
   isBluetoothAddress,
   isBluetoothPin,
   type BluetoothCommandOutcome,
+  type OfficePrinterReport,
 } from "@waitron/print-agent";
 import { routableServers, type SignedMembershipDocument } from "@waitron/membership";
 import { createErrorBoundary } from "@waitron/server-kit";
@@ -80,6 +82,11 @@ import { DEMO_PRINTER_KEY } from "./demo-printer.js";
 import { setPrinterPortable } from "@waitron/layouts";
 import { readPrinterHolders } from "./device-equipment.js";
 import { deletePrinter, readPrinterDeleteImpact } from "./printer-delete.js";
+import { DISCOVERED_TTL_MS, isListed as listedAt } from "./discovery-listing.js";
+import { mountPagePrintersApi, type PagePrinterQueue } from "./page-printers-api.js";
+import type { PagePrinterDiscovery } from "./page-printers.js";
+import { mountPagePrintApi, type RenderInvoicePage } from "./page-print-api.js";
+import type { ReceiptDocumentInput } from "./receipt-document.js";
 
 export interface PrintApiDeps {
   db: Database;
@@ -96,6 +103,11 @@ export interface PrintApiDeps {
   now?: () => Date;
   /** The venue fiscal backend's words around a receipt QR; the sample receipt has a QR only with them. */
   receiptQrText?: ReceiptQrText;
+  /** The stored invoice an A4 page job prints (`readInvoiceDocument` over the venue's backend). */
+  readInvoiceDocument: (tx: Transaction, saleId: string) => Promise<ReceiptDocumentInput>;
+  renderInvoicePage?: RenderInvoicePage;
+  /** The office printers' test pages; boot shares its store with the alert sources. */
+  testPages?: PageTestPages;
 }
 
 const PRINTER_MANAGE_PERMISSION: Permission = "printer.manage";
@@ -121,6 +133,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "print_job.not_resendable": 409,
   "printer.invalid_config": 422,
   "printer.already_registered": 409,
+  "printer.office_printer": 409,
   "agent.not_found": 404,
   "station.not_found": 404,
   "management_session.required": 401,
@@ -237,7 +250,16 @@ interface DiscoveredDeviceWire {
   name?: string;
   /** True when the agent saw A4/letter media over IPP: an office printer, not a receipt printer. */
   pagePrinter?: true;
+  /** The IPP queue the host announced over mDNS. */
+  ipp?: IppQueue;
+  /** The host announced IPP and no raw queue, so `port` is its IPP port. */
+  ippOnly?: true;
+  office?: OfficePrinterReport;
   printerLike?: true;
+}
+interface IppQueue {
+  port: number;
+  resourcePath: string;
 }
 interface PairedBluetoothWire {
   localKey: string;
@@ -272,6 +294,75 @@ function screenVisible(raw: unknown): VisibleDeviceWire[] {
   return out;
 }
 
+const OFFICE_FORMATS = ["application/pdf", "image/pwg-raster", "image/urf"] as const;
+const OFFICE_MEDIA = ["iso_a4_210x297mm", "na_letter_8.5x11in"] as const;
+const OFFICE_REFUSALS = [
+  "invalid_reply",
+  "unsupported_media",
+  "unsupported_document_format",
+  "unsupported_raster",
+] as const;
+const MAX_ADVERTISED_FORMATS = 32;
+const MAX_FORMAT_LENGTH = 100;
+const MAX_RESOURCE_PATH_LENGTH = 255;
+/** Printable ASCII only: these strings come from a printer's own answer and reach the dashboard. */
+const PRINTABLE_ASCII = /^[\x20-\x7e]+$/;
+
+const oneOf = <T extends string>(members: readonly T[], v: unknown): T | undefined =>
+  members.find((m) => m === v);
+
+function screenIppQueue(raw: unknown): IppQueue | undefined {
+  if (typeof raw !== "object" || raw === null) return undefined;
+  const { port, resourcePath } = raw as Record<string, unknown>;
+  if (typeof port !== "number" || !Number.isInteger(port) || port < 1 || port > 65535) {
+    return undefined;
+  }
+  if (
+    typeof resourcePath !== "string" ||
+    !resourcePath.startsWith("/") ||
+    resourcePath.length > MAX_RESOURCE_PATH_LENGTH ||
+    !PRINTABLE_ASCII.test(resourcePath)
+  ) {
+    return undefined;
+  }
+  return { port, resourcePath };
+}
+
+/**
+ * Rebuilt from its named fields, so nothing else the agent sent is kept. Formats past the 32nd are
+ * dropped; any other bad field drops the report.
+ */
+function screenOfficeReport(raw: unknown): OfficePrinterReport | undefined {
+  const queue = screenIppQueue(raw);
+  if (queue === undefined) return undefined;
+  const r = raw as Record<string, unknown>;
+  if (!Array.isArray(r.supportedFormats)) return undefined;
+  const supportedFormats: unknown[] = r.supportedFormats.slice(0, MAX_ADVERTISED_FORMATS);
+  if (
+    !supportedFormats.every(
+      (f): f is string =>
+        typeof f === "string" && f.length <= MAX_FORMAT_LENGTH && PRINTABLE_ASCII.test(f),
+    )
+  ) {
+    return undefined;
+  }
+  if (r.printable === true) {
+    const documentFormat = oneOf(OFFICE_FORMATS, r.documentFormat);
+    const media = oneOf(OFFICE_MEDIA, r.media);
+    const resolutionDpi = r.resolutionDpi === 300 || r.resolutionDpi === 600 ? r.resolutionDpi : 0;
+    if (documentFormat === undefined || media === undefined || resolutionDpi === 0) {
+      return undefined;
+    }
+    return { ...queue, printable: true, documentFormat, media, resolutionDpi, supportedFormats };
+  }
+  if (r.printable === false) {
+    const reason = oneOf(OFFICE_REFUSALS, r.reason);
+    if (reason === undefined) return undefined;
+    return { ...queue, printable: false, reason, supportedFormats };
+  }
+  return undefined;
+}
+
 function screenScanned(raw: unknown): DiscoveredDeviceWire[] {
   if (!Array.isArray(raw)) return [];
   const members = printTransport.enumValues as readonly string[];
@@ -281,6 +372,7 @@ function screenScanned(raw: unknown): DiscoveredDeviceWire[] {
     const d = entry as Record<string, unknown>;
     if (typeof d.transport !== "string" || !members.includes(d.transport)) continue;
     const localKey = wireString(d.localKey);
+    const network = d.transport === "network_tcp";
     out.push({
       transport: d.transport,
       // Upper case, as paired reports and commands are, so one device keeps one entry and a Pair
@@ -292,6 +384,9 @@ function screenScanned(raw: unknown): DiscoveredDeviceWire[] {
       model: wireString(d.model),
       name: wireString(d.name),
       pagePrinter: d.pagePrinter === true ? true : undefined,
+      ipp: network ? screenIppQueue(d.ipp) : undefined,
+      ippOnly: network && d.ippOnly === true ? true : undefined,
+      office: network ? screenOfficeReport(d.office) : undefined,
       printerLike: d.printerLike === true ? true : undefined,
     });
   }
@@ -358,6 +453,9 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     model?: string;
     name?: string;
     pagePrinter?: true;
+    ipp?: IppQueue;
+    ippOnly?: true;
+    office?: OfficePrinterReport;
     printerLike?: true;
     /** The latest report of any kind; the entry is listed while it is fresh. */
     lastSeenAt: number;
@@ -370,18 +468,15 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   }
   const discovered = new Map<string, DiscoveredEntry>();
   const printerProbes = createPrinterProbes();
+  const testPages = deps.testPages ?? createPageTestPages(() => deps.now?.() ?? new Date());
   const bluetoothCommands = createPrinterBluetoothCommands();
   let discoveryUntil = 0; // epoch ms; 0 = closed
   const DISCOVERY_WINDOW_MS = 3 * 60_000;
-  const DISCOVERED_TTL_MS = 15_000;
-  // While the window is open an agent reports a pass's devices once per pass, on the pull after it
-  // ends, not every 2 s; a pass whose Bluetooth `info` call is killed at 15 s runs past 15 s.
-  const SCANNING_TTL_MS = 45_000;
   const isFresh = (at: number | undefined, now: number): boolean =>
     at !== undefined && now - at <= DISCOVERED_TTL_MS;
   /** The discovered list's own freshness, which also bounds the Pair and Forget it offers. */
   const isListed = (at: number | undefined, now: number): boolean =>
-    at !== undefined && now - at <= (now < discoveryUntil ? SCANNING_TTL_MS : DISCOVERED_TTL_MS);
+    listedAt(at, now, discoveryUntil);
   const keyOf = (agentId: string, transport: string, locator: string): string =>
     `${agentId}:${transport}:${locator}`;
   const reportedFresh = (
@@ -389,6 +484,25 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     address: string,
     stamp: "scannedAt" | "pairedAt",
   ): boolean => isListed(discovered.get(keyOf(agentId, "bluetooth", address))?.[stamp], Date.now());
+  // Host names and IPv6 literals compare without regard to case.
+  const addressOf = (host: string, port: number | undefined): string =>
+    `${host.toLowerCase()}:${port ?? 9100}`;
+  /**
+   * The addresses any listed entry marks as an office printer: its own address when it is marked,
+   * reports IPP only, or carries an office report, and the IPP queue that report names. Each agent
+   * asks on its own and a failed query leaves a raw device unmarked, so one agent's mark covers
+   * every agent's entry for the address.
+   */
+  const officeAddresses = (now: number): Set<string> => {
+    const marked = new Set<string>();
+    for (const e of discovered.values()) {
+      if (e.host === undefined || !isListed(e.lastSeenAt, now)) continue;
+      if (e.pagePrinter || e.ippOnly || e.office !== undefined)
+        marked.add(addressOf(e.host, e.port));
+      if (e.office !== undefined) marked.add(addressOf(e.host, e.office.port));
+    }
+    return marked;
+  };
   const requireAgentRow = async (tx: Transaction, id: string): Promise<void> => {
     const [row] = await tx
       .select({ id: printAgents.id })
@@ -829,15 +943,27 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         (e.host !== undefined ? byHostPort.get(`${e.host}:${e.port ?? 9100}`) : undefined) ??
         null;
       // Each agent checks on its own and a failed check leaves a device unmarked, so an address is an
-      // office printer for every agent's entry once any agent reporting that address marked it.
+      // office printer for every agent's entry once any agent reporting that address marked it, and
+      // a printable report one agent's query answered stands for the address over any other report.
       const pagePrinterAddresses = new Set<string>();
-      for (const e of discovered.values())
-        if (e.pagePrinter && e.host !== undefined)
-          pagePrinterAddresses.add(`${e.host}:${e.port ?? 9100}`);
+      const reportsByAddress = new Map<string, OfficePrinterReport>();
+      for (const e of discovered.values()) {
+        if (e.host === undefined) continue;
+        const address = addressOf(e.host, e.port);
+        if (e.pagePrinter) pagePrinterAddresses.add(address);
+        if (e.office?.printable && !reportsByAddress.get(address)?.printable) {
+          reportsByAddress.set(address, e.office);
+        }
+      }
+      const officeOf = (e: DiscoveredEntry): OfficePrinterReport | undefined => {
+        if (e.office?.printable || e.host === undefined) return e.office;
+        return reportsByAddress.get(addressOf(e.host, e.port)) ?? e.office;
+      };
       return c.json(
         [...discovered.values()].map((e) => {
           const printerId = printerIdOf(e);
           const address = e.transport === "bluetooth" ? e.localKey : undefined;
+          const office = officeOf(e);
           return {
             agentId: e.agentId,
             agentName: names.get(e.agentId) ?? null,
@@ -849,9 +975,14 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             model: e.model,
             name: e.name,
             pagePrinter:
-              e.host !== undefined && pagePrinterAddresses.has(`${e.host}:${e.port ?? 9100}`)
+              e.host !== undefined && pagePrinterAddresses.has(addressOf(e.host, e.port))
                 ? (true as const)
                 : undefined,
+            ipp: e.ipp,
+            ippOnly: e.ippOnly,
+            office,
+            // The page-printer POST reads only the named agent's own report (findPagePrinterDiscovery).
+            officeLent: office !== e.office ? (true as const) : undefined,
             printerLike: address === undefined ? undefined : e.printerLike,
             paired:
               address !== undefined && isListed(e.pairedAt, now) ? (true as const) : undefined,
@@ -864,6 +995,50 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         }),
       );
     }),
+  );
+
+  // Of this agent's entries naming the queue, the latest report wins; within one pull a printable
+  // report stands over an unprintable one (the raw and IPP entries of one device both carry it).
+  const findPagePrinterDiscovery = (queue: PagePrinterQueue): PagePrinterDiscovery | undefined => {
+    let found: PagePrinterDiscovery | undefined;
+    for (const e of discovered.values()) {
+      if (e.agentId !== queue.agentId || e.host === undefined || e.office === undefined) continue;
+      if (e.host.toLowerCase() !== queue.host.toLowerCase()) continue;
+      if (e.office.port !== queue.port || e.office.resourcePath !== queue.resourcePath) continue;
+      if (
+        found === undefined ||
+        e.lastSeenAt > found.lastSeenAt ||
+        (e.lastSeenAt === found.lastSeenAt && e.office.printable)
+      ) {
+        found = { agentId: e.agentId, host: e.host, office: e.office, lastSeenAt: e.lastSeenAt };
+      }
+    }
+    return found;
+  };
+  mountPagePrintersApi(
+    app,
+    {
+      db: deps.db,
+      locationId: deps.cfg.locationId,
+      findDiscovery: findPagePrinterDiscovery,
+      discoveryWindow: () => ({ now: Date.now(), discoveryUntil }),
+      testPages,
+      ...(deps.now === undefined ? {} : { now: deps.now }),
+    },
+    log,
+  );
+  mountPagePrintApi(
+    app,
+    {
+      db: deps.db,
+      locationId: deps.cfg.locationId,
+      readInvoiceDocument: deps.readInvoiceDocument,
+      testPages,
+      ...(deps.receiptQrText === undefined ? {} : { receiptQrText: deps.receiptQrText }),
+      ...(deps.renderInvoicePage === undefined ? {} : { render: deps.renderInvoicePage }),
+      ...(deps.now === undefined ? {} : { now: deps.now }),
+    },
+    log,
   );
 
   app.post("/management-api/printers", (c) =>
@@ -893,7 +1068,19 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       if (hasCashDrawer !== undefined) input.hasCashDrawer = hasCashDrawer;
       const portable = optionalBool(body.portable, "portable");
       if (portable !== undefined) input.portable = portable;
-      const created = await gated(sessionId, (tx) => createPrinter(tx, deps.cfg, input));
+      const created = await gated(sessionId, (tx) => {
+        // Weaker than its name: it matches only the host text (ignoring case) and port an agent
+        // reported recently; a different port, a name instead of an address, or an edit through
+        // PATCH is accepted.
+        if (
+          input.transport === "network_tcp" &&
+          input.host !== undefined &&
+          officeAddresses(Date.now()).has(addressOf(input.host, input.port))
+        ) {
+          throw new AppError("printer.office_printer", {});
+        }
+        return createPrinter(tx, deps.cfg, input);
+      });
       return c.json(created, 201);
     }),
   );

@@ -17,6 +17,8 @@ import type {
   DashboardApi,
   DiscoveredPrinter,
   JoinRequestRow,
+  OfficePrinterReport,
+  PagePrinterRow,
   PrintAgentRow,
   PrintJobRow,
   Printer,
@@ -302,6 +304,8 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     renewPrinterDiscovery: vi.fn().mockResolvedValue({ discoveryUntil: Date.now() + 180_000 }),
     listDiscoveredPrinters: vi.fn().mockResolvedValue([] as DiscoveredPrinter[]),
     listPrinterProfiles: vi.fn().mockResolvedValue(printerProfiles),
+    listPagePrinters: vi.fn().mockResolvedValue([] as PagePrinterRow[]),
+    registerPagePrinter: vi.fn().mockResolvedValue({ id: "pp9", outcome: "created" }),
     ...overrides,
   } as unknown as DashboardApi;
 }
@@ -2709,7 +2713,7 @@ describe("printers-screen", () => {
     });
   });
 
-  it("greys out a discovered office printer with an explanation and no Add, beside a receipt printer that keeps its Add", async () => {
+  it("greys out a discovered office printer with no report of its own with an explanation and no Add, beside a receipt printer that keeps its Add", async () => {
     const office: DiscoveredPrinter = {
       agentId: "a1",
       agentName: "Cocina agent",
@@ -2744,7 +2748,7 @@ describe("printers-screen", () => {
     expect(q(el, "[data-test='register-10.0.0.56:9100']")).toBeNull();
     // Fails if the explanation is not rendered beside the device.
     expect(text(el, "[data-test='page-printer-10.0.0.56:9100']")).toBe(
-      t("printers.page_printer_hint"),
+      t("printers.page_printer_no_answer"),
     );
     // Fails if the muted styling is dropped or applied through a class a table cell cannot see.
     const muted = getComputedStyle(officeRow!).color;
@@ -10652,5 +10656,514 @@ describe("Deleting a printer", () => {
     await addDiscovered(el, add!);
     expect(api.createPrinter).toHaveBeenCalled();
     expect(api.updatePrinter).not.toHaveBeenCalledWith("p3", expect.anything());
+  });
+});
+
+describe("office printers in discovery", () => {
+  beforeEach(() => {
+    history.replaceState(null, "", "/");
+  });
+
+  const queue = { port: 631, resourcePath: "/ipp/print" };
+  const printable: OfficePrinterReport = {
+    ...queue,
+    printable: true,
+    documentFormat: "application/pdf",
+    media: "iso_a4_210x297mm",
+    resolutionDpi: 600,
+    supportedFormats: ["application/pdf"],
+  };
+  const office = (overrides: Partial<DiscoveredPrinter> = {}): DiscoveredPrinter => ({
+    agentId: "a1",
+    agentName: "Cocina agent",
+    transport: "network_tcp",
+    host: "10.0.0.56",
+    port: 9100,
+    name: "HP LaserJet",
+    pagePrinter: true,
+    office: printable,
+    alreadyRegistered: false,
+    printerId: null,
+    lastSeenAt: "2023-11-14T22:13:20.000Z",
+    ...overrides,
+  });
+  const added: PagePrinterRow = {
+    id: "pp1",
+    name: "Back office",
+    host: "10.0.0.56",
+    port: 631,
+    resourcePath: "/ipp/print",
+    documentFormat: "application/pdf",
+    supportedFormats: ["application/pdf"],
+    media: "iso_a4_210x297mm",
+    resolutionDpi: 600,
+    active: true,
+    invoicePrinter: false,
+    agentId: "a1",
+    agentName: "Cocina agent",
+  };
+
+  async function mountWith(devices: DiscoveredPrinter[], overrides: Partial<DashboardApi> = {}) {
+    const api = stubApi({
+      listDiscoveredPrinters: vi.fn().mockResolvedValue(devices),
+      ...overrides,
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    await openDiscovery(el);
+    return { el, api };
+  }
+
+  it.each(["en", "es-ES"] as const)(
+    "keeps every office row's action in view on a phone-width list in %s",
+    async (locale) => {
+      const before = currentLocale();
+      setLocale(locale);
+      await page.viewport(390, 844);
+      try {
+        const { el } = await mountWith(
+          [
+            office(),
+            office({ host: "10.0.0.57" }),
+            office({ host: "10.0.0.58", agentId: "a2", agentName: "Barra agent" }),
+            office({ host: "10.0.0.59" }),
+            office({ host: "10.0.0.60", officeLent: true }),
+          ],
+          {
+            listPagePrinters: vi.fn().mockResolvedValue([
+              { ...added, host: "10.0.0.57" },
+              { ...added, id: "pp2", host: "10.0.0.58" },
+              { ...added, id: "pp3", host: "10.0.0.59", active: false },
+            ]),
+          },
+        );
+        expect(q(el, "[data-test='add-page-printer-a1:10.0.0.56:9100']")).not.toBeNull();
+        expect(q(el, "[data-test='page-printer-added-a1:10.0.0.57:9100']")).not.toBeNull();
+        expect(q(el, "[data-test='repoint-page-printer-a2:10.0.0.58:9100']")).not.toBeNull();
+        expect(q(el, "[data-test='enable-page-printer-a1:10.0.0.59:9100']")).not.toBeNull();
+        const scroll = q(el, "[data-test=discovered-table]")!.shadowRoot!.querySelector(".scroll")!;
+        expect(scroll.scrollWidth).toBeLessThanOrEqual(scroll.clientWidth);
+      } finally {
+        setLocale(before);
+        await page.viewport(1280, 900);
+      }
+    },
+  );
+
+  it("offers Add as invoice printer for a printable office printer, the reason for one that is not, and keeps a receipt printer's Add", async () => {
+    const { el } = await mountWith([
+      ...discoveredNetwork,
+      office(),
+      office({
+        host: "10.0.0.57",
+        office: {
+          ...queue,
+          printable: false,
+          reason: "unsupported_media",
+          supportedFormats: ["application/pdf"],
+        },
+      }),
+      // An IPP-only device whose capability query failed: never a receipt printer.
+      office({
+        host: "10.0.0.58",
+        port: 631,
+        pagePrinter: undefined,
+        ippOnly: true,
+        office: { ...queue, printable: false, reason: "invalid_reply", supportedFormats: [] },
+      }),
+      // Marked an office printer by another agent's report, with no report of its own.
+      office({ host: "10.0.0.59", office: undefined }),
+      // The receipt-printer marks never hide an office printer's row.
+      office({ host: "10.0.0.60", alreadyRegistered: true, printerId: "p1" }),
+    ]);
+    expect(q(el, "[data-test='register-10.0.0.77:9100']")).not.toBeNull();
+    expect(text(el, "[data-test='add-page-printer-a1:10.0.0.56:9100']")).toBe(
+      t("printers.page_printer_add"),
+    );
+    expect(q(el, "[data-test='add-page-printer-a1:10.0.0.60:9100']")).not.toBeNull();
+    for (const key of ["10.0.0.56:9100", "10.0.0.57:9100", "10.0.0.58:631", "10.0.0.59:9100"]) {
+      // Fails if an office printer's row falls through to the receipt Add.
+      expect(q(el, `[data-test='register-${key}']`)).toBeNull();
+    }
+    expect(text(el, "[data-test='page-printer-10.0.0.57:9100']")).toBe(
+      t("printers.page_printer_unsupported_media"),
+    );
+    expect(text(el, "[data-test='page-printer-10.0.0.58:631']")).toBe(
+      t("printers.page_printer_no_answer"),
+    );
+    expect(text(el, "[data-test='page-printer-10.0.0.59:9100']")).toBe(
+      t("printers.page_printer_no_answer"),
+    );
+    expect(q(el, "[data-test='add-page-printer-a1:10.0.0.57:9100']")).toBeNull();
+    const greyed = getComputedStyle(q(el, "[data-test='discovered-row-10.0.0.57:9100']")!).color;
+    expect(greyed).not.toBe(
+      getComputedStyle(q(el, "[data-test='discovered-row-10.0.0.56:9100']")!).color,
+    );
+    const table = q(el, "[data-test=discovered-table]") as import("@waitron/ui").WtDataTable;
+    // Rows that cannot be added sort after those that can.
+    expect((table.rows as DiscoveredPrinter[]).map((row) => row.host)).toEqual([
+      "10.0.0.77",
+      "10.0.0.56",
+      "10.0.0.60",
+      "10.0.0.57",
+      "10.0.0.58",
+      "10.0.0.59",
+    ]);
+  });
+
+  it("names a new invoice printer in a dialog whose Add waits for a name, then adds it from the row's discovery entry", async () => {
+    const listPagePrinters = vi.fn().mockResolvedValue([]);
+    const { el, api } = await mountWith([office()], { listPagePrinters });
+    q(el, "[data-test='add-page-printer-a1:10.0.0.56:9100']")!.click();
+    await flush(el);
+    const field = q(el, "[data-test=page-printer-add-modal] wt-input[name=name]") as unknown as {
+      required: boolean;
+      error: string;
+    };
+    expect(field.required).toBe(true);
+    expect(text(el, "[data-test=page-printer-add-modal] p")).toBe(
+      `HP LaserJet · 10.0.0.56:631 · ${t("printers.discovered_seen_on").replace("{agent}", "Cocina agent")}`,
+    );
+    expect(isDisabled(el, "[data-test=confirm-add-page-printer]")).toBe(true);
+    expect(q(el, "[data-test=confirm-add-page-printer]")!.getAttribute("variant")).toBe(
+      "secondary",
+    );
+    // Whitespace counts as typing, so Add works and then explains the missing name.
+    typeField(el, "[data-test=page-printer-add-modal] wt-input[name=name]", "  ");
+    await flush(el);
+    expect(isDisabled(el, "[data-test=confirm-add-page-printer]")).toBe(false);
+    q(el, "[data-test=confirm-add-page-printer]")!.click();
+    await flush(el);
+    expect(field.error).toBe(t("form.name_required"));
+    expect(await bottomOf(el, footerOf("page-printer-add-modal"))).toBe(t("form.fix_fields"));
+    expect(isDisabled(el, "[data-test=confirm-add-page-printer]")).toBe(true);
+    expect(api.registerPagePrinter).not.toHaveBeenCalled();
+
+    typeField(el, "[data-test=page-printer-add-modal] wt-input[name=name]", "Back office");
+    await flush(el);
+    expect(field.error).toBe("");
+    expect(q(el, "[data-test=confirm-add-page-printer]")!.getAttribute("variant")).toBe("primary");
+    listPagePrinters.mockResolvedValue([{ ...added, agentId: "a1" }]);
+    q(el, "[data-test=confirm-add-page-printer]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=page-printer-add-modal]")).toBeNull());
+    expect(api.registerPagePrinter).toHaveBeenCalledWith({
+      agentId: "a1",
+      host: "10.0.0.56",
+      port: 631,
+      path: "/ipp/print",
+      name: "Back office",
+    });
+    await flush(el);
+    expect(text(el, "[data-test='page-printer-added-a1:10.0.0.56:9100']")).toBe(
+      t("printers.page_printer_added"),
+    );
+    expect(q(el, "[data-test='add-page-printer-a1:10.0.0.56:9100']")).toBeNull();
+    expect(text(el, "[data-test=printer-added]")).toBe(
+      t("printers.added").replace("{name}", "Back office"),
+    );
+    expect(q(el, "[data-test=new-printer-modal]")).not.toBeNull();
+  });
+
+  it("keeps the dialog and the name when the server refuses the add, with Add still pressable", async () => {
+    const registerPagePrinter = vi.fn().mockRejectedValue({ code: "page_printer.not_printable" });
+    const { el } = await mountWith([office({ agentName: null })], { registerPagePrinter });
+    q(el, "[data-test='add-page-printer-a1:10.0.0.56:9100']")!.click();
+    await flush(el);
+    expect(text(el, "[data-test=page-printer-add-modal] p")).toBe("HP LaserJet · 10.0.0.56:631");
+    typeField(el, "[data-test=page-printer-add-modal] wt-input[name=name]", "Back office");
+    await flush(el);
+    q(el, "[data-test=confirm-add-page-printer]")!.click();
+    await flush(el);
+    expect(registerPagePrinter).toHaveBeenCalledOnce();
+    expect(q(el, "[data-test=page-printer-add-modal]")).not.toBeNull();
+    expect(
+      (
+        q(el, "[data-test=page-printer-add-modal] wt-input[name=name]") as unknown as {
+          value: string;
+        }
+      ).value,
+    ).toBe("Back office");
+    expect(await bottomOf(el, footerOf("page-printer-add-modal"))).toBe(
+      codeMessage("page_printer.not_printable"),
+    );
+    expect(isDisabled(el, "[data-test=confirm-add-page-printer]")).toBe(false);
+  });
+
+  it("offers Use this agent on another agent's row at an added printer's queue, and moves the printer to that agent", async () => {
+    const listPagePrinters = vi.fn().mockResolvedValue([added]);
+    const { el, api } = await mountWith(
+      [office(), office({ agentId: "a2", agentName: "Bar agent" })],
+      { listPagePrinters },
+    );
+    // The recorded agent's own row is already added, with nothing to press.
+    expect(text(el, "[data-test='page-printer-added-a1:10.0.0.56:9100']")).toBe(
+      t("printers.page_printer_added"),
+    );
+    expect(q(el, "[data-test='repoint-page-printer-a1:10.0.0.56:9100']")).toBeNull();
+    expect(q(el, "[data-test='add-page-printer-a1:10.0.0.56:9100']")).toBeNull();
+    const repoint = q(el, "[data-test='repoint-page-printer-a2:10.0.0.56:9100']")!;
+    expect(repoint.textContent!.trim()).toBe(t("printers.page_printer_use_agent"));
+    listPagePrinters.mockResolvedValue([{ ...added, agentId: "a2", agentName: "Bar agent" }]);
+    await userEvent.click(repoint);
+    await flush(el);
+    expect(api.registerPagePrinter).toHaveBeenCalledWith({
+      agentId: "a2",
+      host: "10.0.0.56",
+      port: 631,
+      path: "/ipp/print",
+    });
+    expect(text(el, "[data-test='page-printer-added-a2:10.0.0.56:9100']")).toBe(
+      t("printers.page_printer_added"),
+    );
+    expect(q(el, "[data-test='repoint-page-printer-a2:10.0.0.56:9100']")).toBeNull();
+    expect(q(el, "[data-test='repoint-page-printer-a1:10.0.0.56:9100']")).not.toBeNull();
+  });
+
+  it("keeps a live list delivered while a move's own re-read is still out", async () => {
+    let answerReread!: (rows: PagePrinterRow[]) => void;
+    const moved = { ...added, agentId: "a2", agentName: "Bar agent" };
+    const listPagePrinters = vi.fn().mockResolvedValue([added]);
+    const liveData = new LiveData();
+    const { el } = await mountWith([office(), office({ agentId: "a2", agentName: "Bar agent" })], {
+      listPagePrinters,
+      liveData,
+    } as Partial<DashboardApi>);
+    listPagePrinters.mockImplementationOnce(
+      () => new Promise<PagePrinterRow[]>((resolve) => (answerReread = resolve)),
+    );
+    await userEvent.click(q(el, "[data-test='repoint-page-printer-a2:10.0.0.56:9100']")!);
+    await vi.waitFor(() => expect(listPagePrinters).toHaveBeenCalledTimes(2));
+    listPagePrinters.mockResolvedValue([moved]);
+    liveData.invalidate([{ type: "page_printers", id: "pp1" }]);
+    await vi.waitFor(() => expect(listPagePrinters).toHaveBeenCalledTimes(3));
+    await flush(el);
+    expect(q(el, "[data-test='page-printer-added-a2:10.0.0.56:9100']")).not.toBeNull();
+    // The re-read began before the live delivery, so its older answer must not replace it.
+    answerReread([added]);
+    await flush(el);
+    expect(q(el, "[data-test='page-printer-added-a2:10.0.0.56:9100']")).not.toBeNull();
+    expect(q(el, "[data-test='repoint-page-printer-a2:10.0.0.56:9100']")).toBeNull();
+  });
+
+  it("sends one move however often it is pressed while the first is out", async () => {
+    let answer!: (value: { id: string; outcome: "repointed" }) => void;
+    const registerPagePrinter = vi
+      .fn()
+      .mockImplementation(() => new Promise((resolve) => (answer = resolve)));
+    const { el } = await mountWith([office({ agentId: "a2", agentName: "Bar agent" })], {
+      listPagePrinters: vi.fn().mockResolvedValue([added]),
+      registerPagePrinter,
+    });
+    const repoint = q(el, "[data-test='repoint-page-printer-a2:10.0.0.56:9100']")!;
+    repoint.click();
+    repoint.click();
+    await flush(el);
+    expect(registerPagePrinter).toHaveBeenCalledOnce();
+    answer({ id: "pp1", outcome: "repointed" });
+    await flush(el);
+  });
+
+  it("reports a failed re-read after a successful move as a load failure, not a refused move", async () => {
+    const listPagePrinters = vi.fn().mockResolvedValue([added]);
+    const { el, api } = await mountWith([office({ agentId: "a2", agentName: "Bar agent" })], {
+      listPagePrinters,
+    });
+    listPagePrinters.mockRejectedValue({ code: "network.unreachable" });
+    await userEvent.click(q(el, "[data-test='repoint-page-printer-a2:10.0.0.56:9100']")!);
+    await flush(el);
+    expect(api.registerPagePrinter).toHaveBeenCalledOnce();
+    expect(q(el, "[data-test=printer-refresh-error]")).not.toBeNull();
+    expect(q(el, "[data-test='page-printer-error-a2:10.0.0.56:9100']")).toBeNull();
+  });
+
+  it("offers nothing on a row whose printable report was lent by another agent", async () => {
+    const { el, api } = await mountWith([
+      office(),
+      office({ agentId: "a2", agentName: "Bar agent", officeLent: true }),
+    ]);
+    expect(q(el, "[data-test='add-page-printer-a1:10.0.0.56:9100']")).not.toBeNull();
+    expect(q(el, "[data-test='add-page-printer-a2:10.0.0.56:9100']")).toBeNull();
+    expect(q(el, "[data-test='repoint-page-printer-a2:10.0.0.56:9100']")).toBeNull();
+    expect(q(el, "[data-test='register-10.0.0.56:9100']")).toBeNull();
+    const rows = (q(el, "[data-test=discovered-table]") as import("@waitron/ui").WtDataTable)
+      .rows as DiscoveredPrinter[];
+    expect(rows.map((row) => row.agentId)).toEqual(["a1", "a2"]);
+    // Only the lent row draws a reason, so the address's one hint is its.
+    expect(text(el, "[data-test='page-printer-10.0.0.56:9100']")).toBe(
+      t("printers.page_printer_lent"),
+    );
+    expect(api.registerPagePrinter).not.toHaveBeenCalled();
+  });
+
+  it("offers nothing on a lent report at an added printer recorded for another agent", async () => {
+    const { el } = await mountWith(
+      [office({ agentId: "a2", agentName: "Bar agent", officeLent: true })],
+      { listPagePrinters: vi.fn().mockResolvedValue([added]) },
+    );
+    expect(q(el, "[data-test='repoint-page-printer-a2:10.0.0.56:9100']")).toBeNull();
+    expect(text(el, "[data-test='page-printer-10.0.0.56:9100']")).toBe(
+      t("printers.page_printer_lent"),
+    );
+  });
+
+  it("sends another row's Enable or Use this agent while one row's request is out, and keeps the first row busy", async () => {
+    let answer!: (value: { id: string; outcome: "enabled" }) => void;
+    const registerPagePrinter = vi
+      .fn()
+      .mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)))
+      .mockResolvedValue({ id: "pp1", outcome: "repointed" });
+    const { el } = await mountWith(
+      [office(), office({ host: "10.0.0.66", agentId: "a2", agentName: "Bar agent" })],
+      {
+        listPagePrinters: vi.fn().mockResolvedValue([
+          { ...added, active: false },
+          { ...added, id: "pp2", host: "10.0.0.66" },
+        ]),
+        registerPagePrinter,
+      },
+    );
+    const enable = "[data-test='enable-page-printer-a1:10.0.0.56:9100']";
+    const repoint = "[data-test='repoint-page-printer-a2:10.0.0.66:9100']";
+    q(el, enable)!.click();
+    await flush(el);
+    expect(q(el, enable)!.hasAttribute("loading")).toBe(true);
+    expect(q(el, repoint)!.hasAttribute("loading")).toBe(false);
+    expect(isDisabled(el, repoint)).toBe(false);
+    q(el, repoint)!.click();
+    await flush(el);
+    expect(registerPagePrinter).toHaveBeenCalledTimes(2);
+    expect(registerPagePrinter).toHaveBeenLastCalledWith({
+      agentId: "a2",
+      host: "10.0.0.66",
+      port: 631,
+      path: "/ipp/print",
+    });
+    expect(q(el, enable)!.hasAttribute("loading")).toBe(true);
+    answer({ id: "pp1", outcome: "enabled" });
+    await flush(el);
+  });
+
+  it("says no agent is recorded when the printer's agent is gone, and offers Use this agent", async () => {
+    const { el } = await mountWith([office()], {
+      listPagePrinters: vi.fn().mockResolvedValue([{ ...added, agentId: null, agentName: null }]),
+    });
+    expect(text(el, "[data-test='discovered-row-10.0.0.56:9100']")).toContain(
+      t("printers.page_printer_no_agent"),
+    );
+    expect(text(el, "[data-test='discovered-row-10.0.0.56:9100']")).not.toContain(
+      t("printers.page_printer_other_agent"),
+    );
+    expect(q(el, "[data-test='repoint-page-printer-a1:10.0.0.56:9100']")).not.toBeNull();
+  });
+
+  it("shows a refused move on its row and keeps the row and its action", async () => {
+    const registerPagePrinter = vi.fn().mockRejectedValue({ code: "page_printer.not_found" });
+    const { el } = await mountWith([office({ agentId: "a2", agentName: "Bar agent" })], {
+      listPagePrinters: vi.fn().mockResolvedValue([added]),
+      registerPagePrinter,
+    });
+    await userEvent.click(q(el, "[data-test='repoint-page-printer-a2:10.0.0.56:9100']")!);
+    await flush(el);
+    expect(registerPagePrinter).toHaveBeenCalledOnce();
+    expect(text(el, "[data-test='page-printer-error-a2:10.0.0.56:9100']")).toBe(
+      codeMessage("page_printer.not_found"),
+    );
+    expect(q(el, "[data-test='discovered-row-10.0.0.56:9100']")).not.toBeNull();
+    expect(isDisabled(el, "[data-test='repoint-page-printer-a2:10.0.0.56:9100']")).toBe(false);
+    // Pressing again clears the old refusal; this time the server accepts.
+    registerPagePrinter.mockResolvedValue({ id: "pp1", outcome: "repointed" });
+    await userEvent.click(q(el, "[data-test='repoint-page-printer-a2:10.0.0.56:9100']")!);
+    await flush(el);
+    expect(registerPagePrinter).toHaveBeenCalledTimes(2);
+    expect(q(el, "[data-test='page-printer-error-a2:10.0.0.56:9100']")).toBeNull();
+  });
+
+  it("offers Enable on a disabled invoice printer found again, and enables the same row", async () => {
+    const listPagePrinters = vi.fn().mockResolvedValue([{ ...added, active: false }]);
+    const { el, api } = await mountWith([office()], {
+      listPagePrinters,
+      registerPagePrinter: vi.fn().mockResolvedValue({ id: "pp1", outcome: "enabled" }),
+    });
+    expect(q(el, "[data-test='add-page-printer-a1:10.0.0.56:9100']")).toBeNull();
+    const enable = q(el, "[data-test='enable-page-printer-a1:10.0.0.56:9100']")!;
+    expect(enable.textContent!.trim()).toBe(t("printers.enable"));
+    listPagePrinters.mockResolvedValue([added]);
+    await userEvent.click(enable);
+    await flush(el);
+    expect(api.registerPagePrinter).toHaveBeenCalledWith({
+      agentId: "a1",
+      host: "10.0.0.56",
+      port: 631,
+      path: "/ipp/print",
+    });
+    expect(text(el, "[data-test='page-printer-added-a1:10.0.0.56:9100']")).toBe(
+      t("printers.page_printer_added"),
+    );
+  });
+});
+
+describe("the invoice printers panel", () => {
+  beforeEach(() => {
+    history.replaceState(null, "", "/");
+  });
+
+  const pagePrinter: PagePrinterRow = {
+    id: "pp1",
+    name: "Back office",
+    host: "10.0.0.56",
+    port: 631,
+    resourcePath: "/ipp/print",
+    documentFormat: "application/pdf",
+    supportedFormats: ["application/pdf"],
+    media: "iso_a4_210x297mm",
+    resolutionDpi: 600,
+    active: true,
+    invoicePrinter: true,
+    agentId: "a1",
+    agentName: "Cocina agent",
+  };
+  const panelOf = (el: PrintersScreen) =>
+    q(
+      el,
+      "dashboard-page-printers-panel",
+    ) as unknown as HTMLElementTagNameMap["dashboard-page-printers-panel"] & {
+      reload: () => Promise<void>;
+    };
+
+  it.each([true, false])(
+    "shows the watched office printers on the Printers tab, passing whether actions are allowed (%s)",
+    async (canManage) => {
+      const api = stubApi({ listPagePrinters: vi.fn().mockResolvedValue([pagePrinter]) });
+      const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+        api,
+        canManage,
+      } as Partial<PrintersScreen>);
+      await flush(el);
+      await selectTab(el, "printers");
+      const panel = panelOf(el);
+      expect(panel.closest("[slot=printers]")).not.toBeNull();
+      expect(panel.rows).toEqual([pagePrinter]);
+      expect(panel.canManage).toBe(canManage);
+    },
+  );
+
+  it("reads the list again for the panel, and rejects when that read fails", async () => {
+    const listPagePrinters = vi.fn().mockResolvedValue([pagePrinter]);
+    const api = stubApi({ listPagePrinters });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+      api,
+      canManage: true,
+    } as Partial<PrintersScreen>);
+    await flush(el);
+    await selectTab(el, "printers");
+    const renamed = { ...pagePrinter, name: "Upstairs" };
+    listPagePrinters.mockResolvedValueOnce([renamed]);
+    await panelOf(el).reload();
+    await flush(el);
+    expect(panelOf(el).rows).toEqual([renamed]);
+    listPagePrinters.mockRejectedValueOnce({ code: "connection.failed" });
+    await expect(panelOf(el).reload()).rejects.toEqual({ code: "connection.failed" });
+    await flush(el);
+    expect(q(el, "[data-test=printer-refresh-error]")).toBeNull();
   });
 });

@@ -548,3 +548,51 @@ describe("SetupApi calls the fetch it was given as a free function", () => {
     }
   });
 });
+
+describe("setup email test", () => {
+  const email = {
+    server: "smtp.example.com",
+    port: 587,
+    encryption: "starttls" as const,
+    user: "venue",
+    password: "test secret",
+    from: "invoices@example.com",
+  };
+  it.each([
+    { accepted: true },
+    { accepted: false, code: "email.test_refused" },
+    { accepted: false, code: "email.test_timeout" },
+  ])("returns %j without replacing the server outcome", async (result) => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(result));
+    const api = new SetupApi("https://box.test", fetchImpl);
+    await expect(api.runEmailTest(email, "admin@example.com")).resolves.toEqual(result);
+    expect(fetchImpl).toHaveBeenCalledWith("https://box.test/setup-api/email-test", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        mode: "live",
+        email,
+        venue: { admin: { email: "admin@example.com" } },
+      }),
+    });
+  });
+  it("preserves a named invalid field for the email screen", async () => {
+    const api = new SetupApi(
+      "",
+      vi
+        .fn()
+        .mockResolvedValue(
+          jsonResponse(
+            { error: { code: "email.settings_invalid", params: { field: "from" } } },
+            false,
+            400,
+          ),
+        ),
+    );
+    await expect(api.runEmailTest(email, "admin@example.com")).rejects.toMatchObject({
+      code: "email.settings_invalid",
+      params: { field: "from" },
+    });
+  });
+});

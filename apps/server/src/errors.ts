@@ -27,6 +27,19 @@ declare module "@waitron/shared" {
     "invoice_delivery.active": Record<string, never>;
     "invoice_delivery.not_found": Record<string, never>;
     "invoice_delivery.full_invoice_required": Record<string, never>;
+    /** Paper instead of A4 would print nowhere: the till resolves no receipt printer. */
+    "invoice_delivery.receipt_unavailable": Record<string, never>;
+    /** The agent's A4 claim is no longer the delivery's current one, or this process never handed it out. */
+    "invoice_delivery.claim_lost": Record<string, never>;
+    /** No page printer with that id in this location (for the invoice printer: no ACTIVE one), or
+     * no discovery entry an agent reported recently enough for the discovered list to show it. */
+    "page_printer.not_found": Record<string, never>;
+    /** The discovery entry carries no office report, or one whose printer cannot print an A4 invoice. */
+    "page_printer.not_printable": Record<string, never>;
+    /** A disabled page printer is enabled by adding it again from a fresh discovery entry, never by an edit. */
+    "page_printer.rediscover": Record<string, never>;
+    /** The page printer has no print agent to send it a test page; adding it again re-points it. */
+    "page_printer.no_agent": Record<string, never>;
     "venue.business_day_invalid": { field: string; reason: string };
     "venue.business_day_changed": Record<string, never>;
     "venue.business_day_locked": { reason: string };
@@ -59,6 +72,13 @@ declare module "@waitron/shared" {
     "printer.bluetooth_not_discovered": { address: string };
     /** Forget names an address the named print agent does not currently report as paired. */
     "printer.bluetooth_not_paired": { address: string };
+    /**
+     * A receipt printer was asked for at an address a print agent reported as an office printer.
+     * Weaker than its name: it matches only the host text (ignoring case) and port an agent
+     * reported recently (`isListed`, `print-api.ts`); a different port, a name instead of an
+     * address, or an edit through PATCH is accepted.
+     */
+    "printer.office_printer": Record<string, never>;
     "password.throttled": { retryAfterSeconds: number };
     /** Too many public invitation/reset attempts reached this process in the current window. */
     "account_action.rate_limited": Record<string, never>;
@@ -908,6 +928,7 @@ declare module "@waitron/shared" {
     "setup.provisioning_secret_required": { module: string };
     /** First production activation lacks an accepted test submission bound to its fiscal inputs. */
     "setup.fiscal_test_required": { module: string };
+    "setup.email_required": { field: "email" };
     /** Another handler currently holds the persistent first-boot operation lease. */
     "setup.already_provisioning": Record<string, never>;
     /** A different request owns the box's persisted incomplete first-boot operation. */

@@ -12,6 +12,11 @@
 > receipt row. See [A493](2026-10-12-a493-departments-zones-design.md). The consent payload,
 > reservation and retry contracts remain; their separate rewrite is still open.
 
+> **2026-10-12, A231q:** the consent step is gone from the product: tasks C1a and C1b of the [A231q
+> plan](../plans/2026-10-12-a231q-invoice-delivery-part-2.md) removed it from staging, delivery rows
+> and retries, so the consent paths below, and any note calling that removal still open, are
+> history. A448 and the legal research are unchanged.
+
 > **2026-10-11, A495:** the [dated business-day design](2026-10-11-a495-business-day-history-design.md) replaces the
 > scalar start edit and its history lock. The time-zone lock remains. Reports and actual-date
 > service views resolve each date through the retained timeline; pending changes pause hours
@@ -77,7 +82,7 @@ with source pointers. The dated slice 6 plan inventory describes the newer base 
 - [Invoice PDF, email and office printing](2026-10-03-invoice-pdf-email-and-office-printing-design.md):
   section 11 replaces its planned venue-wide offer contact with department/default contact,
   and the owner withdrew the product consent step. Existing core consent remains until
-  [the separate delivery rewrite](../../backlog/printers.md#remove-the-consent-step-from-emailed-receipts).
+  [the separate delivery rewrite](../../backlog/printers.md#decisions-and-deliberate-limits).
   This does not settle the independent A448 compliance question or change fiscal facts.
 - [Devices, menus and service zones](2026-10-04-devices-menus-and-service-zones-design.md): §2
   (menus and the department timetable) and the station and watcher bindings in §4.
@@ -467,7 +472,7 @@ Part B moves only the department editor into the landed slice 6 page's Receipt t
   new contact-echo checks and accepted snapshot work. Existing APIs still require legacy stored
   consent/global contact: leave schema/checker/client/staging/reservation unchanged here, without
   fabricated evidence or a compatibility schema. Completing consent-free core delivery/F1 UI
-  belongs to [one backlog item](../../backlog/printers.md#remove-the-consent-step-from-emailed-receipts);
+  belongs to [one backlog item](../../backlog/printers.md#decisions-and-deliberate-limits);
   the independent A448 compliance entry stays verbatim, with no legal conclusion in this slice.
 - **Sale answers, not boot.** Fresh sale/replay/invoice-first/bill answers carry current composed
   trim and separate global address presentation. Boot owns no receipt presentation. A clear

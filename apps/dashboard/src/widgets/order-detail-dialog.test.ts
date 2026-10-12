@@ -100,6 +100,8 @@ const detail: OrderDetailDto = {
       printerName: "Barra",
     },
   ],
+  deliveries: null,
+  invoicePdfDownloads: [],
 };
 
 afterEach(() => {

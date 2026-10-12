@@ -30,17 +30,21 @@ export function sampleSale(qrText: ReceiptQrText | undefined): ReceiptDocumentIn
   };
 }
 
-/** A realistic but unmistakably non-fiscal receipt for checking the printer's current draft settings. */
-export function formatSampleReceipt(
-  printer: EscSetting,
-  qrText: ReceiptQrText | undefined,
-): Uint8Array {
-  return formatReceipt({
+/** A realistic but unmistakably non-fiscal document: a sample receipt, or an office printer's test page. */
+export function sampleDocument(qrText: ReceiptQrText | undefined): ReceiptDocumentInput {
+  return {
     result: sampleSale(qrText),
     issuer: { venueName: "Waitron - Recibo de muestra", nif: "B00000000" },
     receipt: { footerMessage: "Café, jamón, niño, pingüino · 5 €" },
     invoiceLocale: "es-ES",
-    printer,
     simulated: true,
-  });
+  };
+}
+
+/** For checking the printer's current draft settings. */
+export function formatSampleReceipt(
+  printer: EscSetting,
+  qrText: ReceiptQrText | undefined,
+): Uint8Array {
+  return formatReceipt({ ...sampleDocument(qrText), printer });
 }

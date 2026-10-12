@@ -7,8 +7,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { EnvConfig } from "./config.js";
 import { createLinuxDevices } from "./linux-devices.js";
 import { createContainerHost } from "./host.js";
-import type { MediaQuery } from "./ipp-probe.js";
+import type { CapabilitiesQuery } from "./ipp-probe.js";
+import { printOverIpp } from "./ipp-print.js";
 import { FileState } from "./state.js";
+
+vi.mock("./ipp-print.js", async (importOriginal) => {
+  const real = await importOriginal<typeof import("./ipp-print.js")>();
+  return { ...real, printOverIpp: vi.fn(real.printOverIpp) };
+});
 
 let dir: string;
 const baseEnv: EnvConfig = {
@@ -294,9 +300,49 @@ describe("createContainerHost — the rest of the seam", () => {
     expect(host.bluetoothPrinting?.()).toBe(true);
   });
 
+  const hpOffice = {
+    port: 631,
+    resourcePath: "/ipp/print",
+    printable: true,
+    documentFormat: "application/pdf",
+  };
+
+  it("asks an IPP-only host at its announced queue, and reports a failed check as unreadable", async () => {
+    const query = vi.fn<CapabilitiesQuery>(async () => undefined);
+    const host = createContainerHost({
+      env: baseEnv,
+      state: new FileState(dir),
+      onStatus: () => {},
+      capabilitiesQuery: query,
+    });
+    const ippOnly = {
+      transport: "network_tcp" as const,
+      host: "10.0.0.8",
+      port: 8631,
+      ipp: { port: 8631, resourcePath: "/ipp/printer" },
+      ippOnly: true as const,
+    };
+    expect(await host.markPagePrinters!([ippOnly])).toStrictEqual([
+      {
+        ...ippOnly,
+        office: {
+          port: 8631,
+          resourcePath: "/ipp/printer",
+          printable: false,
+          reason: "invalid_reply",
+          supportedFormats: [],
+        },
+      },
+    ]);
+    expect(query).toHaveBeenCalledWith(
+      { host: "10.0.0.8", port: 8631, resourcePath: "/ipp/printer" },
+      1500,
+    );
+  });
+
   it("checks a typed address over TCP without asking IPP, and marks page printers in a separate step", async () => {
     const hp = await readFile(
-      new URL("./__fixtures__/hp-color-laserjet-m181fw-media-supported.ipp", import.meta.url),
+      new URL("./__fixtures__/hp-color-laserjet-m181fw-capabilities.ipp", import.meta.url),
     );
     const server = createServer((socket) => socket.destroy());
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -305,25 +351,28 @@ describe("createContainerHost — the rest of the seam", () => {
     const target = { host: "127.0.0.1", port: address.port, expiresInMs: 30000 };
     const found = { transport: "network_tcp" as const, host: "127.0.0.1", port: address.port };
     try {
-      const pageQuery = vi.fn<MediaQuery>(async () => hp);
+      const pageQuery = vi.fn<CapabilitiesQuery>(async () => hp);
       const pageHost = createContainerHost({
         env: baseEnv,
         state: new FileState(dir),
         onStatus: () => {},
-        mediaQuery: pageQuery,
+        capabilitiesQuery: pageQuery,
       });
       expect(await pageHost.probeNetwork([target])).toStrictEqual([found]);
       expect(pageQuery).not.toHaveBeenCalled();
       expect(await pageHost.markPagePrinters!([found])).toStrictEqual([
-        { ...found, pagePrinter: true },
+        { ...found, pagePrinter: true, office: expect.objectContaining(hpOffice) },
       ]);
-      expect(pageQuery).toHaveBeenCalledWith("127.0.0.1", 1500);
+      expect(pageQuery).toHaveBeenCalledWith(
+        { host: "127.0.0.1", port: 631, resourcePath: "/ipp/print" },
+        1500,
+      );
 
       const closedHost = createContainerHost({
         env: baseEnv,
         state: new FileState(dir),
         onStatus: () => {},
-        mediaQuery: async () => undefined,
+        capabilitiesQuery: async () => undefined,
       });
       expect(await closedHost.markPagePrinters!([found])).toStrictEqual([found]);
     } finally {
@@ -335,7 +384,11 @@ describe("createContainerHost — the rest of the seam", () => {
     const device = (host: string) => ({ transport: "network_tcp" as const, host, port: 9100 });
 
     it.each([
-      ["a page-printer reply", "page" as const, [{ ...device("10.0.0.5"), pagePrinter: true }]],
+      [
+        "a page-printer reply",
+        "page" as const,
+        [{ ...device("10.0.0.5"), pagePrinter: true, office: expect.objectContaining(hpOffice) }],
+      ],
       ["a receipt-printer reply", "roll" as const, [device("10.0.0.5")]],
       ["no reply", "none" as const, [device("10.0.0.5")]],
       ["a thrown query", "throw" as const, [device("10.0.0.5")]],
@@ -343,9 +396,9 @@ describe("createContainerHost — the rest of the seam", () => {
       "remembers %s, then asks again once 30 seconds have passed",
       async (_label, kind, expected) => {
         const hp = await readFile(
-          new URL("./__fixtures__/hp-color-laserjet-m181fw-media-supported.ipp", import.meta.url),
+          new URL("./__fixtures__/hp-color-laserjet-m181fw-capabilities.ipp", import.meta.url),
         );
-        const query = vi.fn<MediaQuery>(async () => {
+        const query = vi.fn<CapabilitiesQuery>(async () => {
           if (kind === "throw") throw new Error("socket hang up");
           if (kind === "page") return hp;
           if (kind === "roll") return new Uint8Array([0x02, 0x00, 0x00, 0x00, 0, 0, 0, 1, 0x03]);
@@ -356,7 +409,7 @@ describe("createContainerHost — the rest of the seam", () => {
           env: baseEnv,
           state: new FileState(dir),
           onStatus: () => {},
-          mediaQuery: query,
+          capabilitiesQuery: query,
           now: () => clock,
         });
         expect(await host.markPagePrinters!([device("10.0.0.5")])).toStrictEqual(expected);
@@ -371,30 +424,30 @@ describe("createContainerHost — the rest of the seam", () => {
     );
 
     it("asks only the hosts it has no fresh answer for", async () => {
-      const query = vi.fn<MediaQuery>(async () => undefined);
+      const query = vi.fn<CapabilitiesQuery>(async () => undefined);
       let clock = 0;
       const host = createContainerHost({
         env: baseEnv,
         state: new FileState(dir),
         onStatus: () => {},
-        mediaQuery: query,
+        capabilitiesQuery: query,
         now: () => clock,
       });
       await host.markPagePrinters!([device("10.0.0.5")]);
       clock += 10_000;
       await host.markPagePrinters!([device("10.0.0.5"), device("10.0.0.6")]);
-      expect(query.mock.calls.map(([h]) => h)).toEqual(["10.0.0.5", "10.0.0.6"]);
+      expect(query.mock.calls.map(([e]) => e.host)).toEqual(["10.0.0.5", "10.0.0.6"]);
       expect(host.now()).toBe(10_000);
     });
 
     it("asks again when the clock has moved back past a remembered answer", async () => {
-      const query = vi.fn<MediaQuery>(async () => undefined);
+      const query = vi.fn<CapabilitiesQuery>(async () => undefined);
       let clock = 1_000_000;
       const host = createContainerHost({
         env: baseEnv,
         state: new FileState(dir),
         onStatus: () => {},
-        mediaQuery: query,
+        capabilitiesQuery: query,
         now: () => clock,
       });
       await host.markPagePrinters!([device("10.0.0.5")]);
@@ -402,6 +455,32 @@ describe("createContainerHost — the rest of the seam", () => {
       await host.markPagePrinters!([device("10.0.0.5")]);
       expect(query).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it("sends an A4 job over IPP in the claimed format, handing on the claim-lost signal and the hold callback", async () => {
+    const closed = createServer();
+    await new Promise<void>((resolve) => closed.listen(0, "127.0.0.1", resolve));
+    const { port } = closed.address() as { port: number };
+    await new Promise<void>((resolve) => closed.close(() => resolve()));
+    const host = createContainerHost({
+      env: baseEnv,
+      state: new FileState(dir),
+      onStatus: () => {},
+    });
+    const target = { host: "127.0.0.1", port, resourcePath: "/ipp/print" };
+    const bytes = new Uint8Array([0x25, 0x50, 0x44, 0x46]);
+    const signal = new AbortController().signal;
+    const onHold = vi.fn();
+
+    expect(await host.printPage!(target, bytes, "image/urf", signal, onHold)).toEqual({
+      status: "failed",
+      failureCode: "printer_unreachable",
+    });
+    expect(printOverIpp).toHaveBeenCalledExactlyOnceWith(
+      { ...target, documentFormat: "image/urf" },
+      bytes,
+      { signal, onHold },
+    );
   });
 
   it("logs one structured JSON line per call, carrying the level, message and fields", () => {

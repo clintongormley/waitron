@@ -372,6 +372,10 @@ describe("boot promote endpoint: mounted on both modes, exempt from the read-onl
       expect(removal.status).toBe(403);
       expect(await removal.json()).toEqual({ error: { code: "node.read_only", params: {} } });
 
+      const pageClaim = await fetch(`${base}/print-api/agent/page-jobs/claim`, { method: "POST" });
+      expect(pageClaim.status).toBe(403);
+      expect(await pageClaim.json()).toEqual({ error: { code: "node.read_only", params: {} } });
+
       const res = await postPromote(base, {
         oldNodeNeutralised: true,
         personId: ADMIN_ID,

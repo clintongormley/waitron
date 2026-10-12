@@ -23,6 +23,31 @@ it("degrades a prototype-chain code (toString/constructor) to GENERIC, never und
   }
 });
 
+it("words an office printer refused as a receipt printer in both languages", () => {
+  expect(codeMessage("printer.office_printer", "en")).toBe(
+    "That is an office printer, not a receipt printer",
+  );
+  expect(codeMessage("printer.office_printer", "es")).toBe(
+    "Es una impresora de oficina, no una impresora de tickets",
+  );
+});
+
+it("words the office-printer refusals in both languages", () => {
+  for (const code of [
+    "page_printer.not_found",
+    "page_printer.not_printable",
+    "page_printer.rediscover",
+    "page_printer.no_agent",
+  ]) {
+    for (const locale of ["en", "es"] as const) {
+      expect(codeMessage(code, locale)).not.toBe(codeMessage("unknown.code", locale));
+    }
+  }
+  expect(codeMessage("page_printer.not_found", "en")).toBe(
+    "That office printer wasn't found. Scan again and retry",
+  );
+});
+
 it("resolves a known code to its English copy", () => {
   expect(codeMessage("password.invalid", "en")).toBe("Incorrect password, try again");
 });
@@ -570,4 +595,43 @@ it("has its own English and Spanish copy for a reader id the provider does not k
 it("says a part of a joined table cannot be used, in English and Spanish", () => {
   expect(codeMessage("table.in_joined_table", "en")).toBe("That table is part of a joined table");
   expect(codeMessage("table.in_joined_table", "es")).toBe("Esa mesa forma parte de una mesa unida");
+});
+
+it("ends the already-waiting delivery refusal with a full stop, like the delivery lines beside it", () => {
+  expect(codeMessage("invoice_delivery.active", "en")).toBe(
+    "This invoice is already waiting for delivery. Check its status before trying again.",
+  );
+  expect(codeMessage("invoice_delivery.active", "es")).toBe(
+    "Esta factura ya está pendiente de entrega. Comprueba su estado antes de intentarlo de nuevo.",
+  );
+});
+
+// The order detail's email routes (`STATUS` in apps/server/src/orders-api.ts, and the codes
+// `requestEmailDelivery` and `retryEmailDelivery` throw).
+it("says what to check when invoice email is unavailable, in English and Spanish", () => {
+  expect(codeMessage("invoice_delivery.email_unavailable", "en")).toBe(
+    "Invoice email is unavailable. Check the mail server and the Email field in Receipts",
+  );
+  expect(codeMessage("invoice_delivery.email_unavailable", "es")).toBe(
+    "No se puede enviar la factura por correo. Revisa el servidor de correo y el campo Correo electrónico en Recibos",
+  );
+});
+
+// The order detail's Print on A4 and Download PDF routes (`STATUS` in apps/server/src/orders-api.ts,
+// and the codes `requestA4Delivery` and `readInvoiceDocument` throw).
+it("has English and Spanish copy for every refusal of Print on A4 and Download PDF", () => {
+  for (const code of [
+    "device.forbidden_action",
+    "invoice_delivery.active",
+    "invoice_delivery.printer_invalid",
+    "invoice_delivery.full_invoice_required",
+    "invoice_delivery.not_found",
+    "submission.id_reused",
+    "working_order.not_found",
+    "authorization.not_permitted",
+  ]) {
+    expect(codeMessage(code, "en"), code).not.toBe(codeMessage("test.unmapped_code", "en"));
+    expect(codeMessage(code, "es"), code).not.toBe(codeMessage("test.unmapped_code", "es"));
+    expect(codeMessage(code, "es"), code).not.toBe(codeMessage(code, "en"));
+  }
 });

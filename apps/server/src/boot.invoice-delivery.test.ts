@@ -10,7 +10,6 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 import {
   invoiceDeliveries,
   workingOrders,
-  tenantReceipts,
   invoiceSeries,
   locations,
   nodes,
@@ -23,6 +22,7 @@ import {
   writeMirrorConfig,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { departmentReceipts, departments } from "@waitron/venue-service";
 import { seedDevice, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
@@ -256,13 +256,6 @@ describe("invoice delivery recovery at trading boot", () => {
           requestKey: randomUUID(),
           personId: "staff-one",
           recipient: "customer@example.test",
-          consent: {
-            statementVersion: "invoice-email-v1",
-            language: "es-ES",
-            recordedAt: new Date().toISOString(),
-            personId: "staff-one",
-            contactEmail: "venue@example.test",
-          },
         }),
       );
       const claim = (await withTransaction(suite.db, (tx) =>
@@ -282,7 +275,7 @@ describe("invoice delivery recovery at trading boot", () => {
           attempts: 1,
           designation: "original",
           recipient: "customer@example.test",
-          consent: email.consent,
+          personId: "staff-one",
         });
         expect(
           await withTransaction(suite.db, (tx) => claimInvoiceDelivery(tx, email.id, "new-server")),
@@ -416,13 +409,6 @@ async function queuedEmail(
       requestKey: randomUUID(),
       personId: "staff-one",
       recipient: "saved-customer@example.test",
-      consent: {
-        statementVersion: "invoice-email-v1",
-        language: "es-ES",
-        recordedAt: new Date().toISOString(),
-        personId: "staff-one",
-        contactEmail: "boot-venue@example.test",
-      },
     }),
   );
 }
@@ -548,7 +534,6 @@ describe("invoice email worker at trading boot", () => {
           requestKey: randomUUID(),
           personId: "staff-one",
           recipient: email.recipient!,
-          consent: email.consent!,
         }),
       );
       await new Promise<void>((resolve) => setTimeout(resolve, 600));
@@ -637,19 +622,19 @@ describe("invoice-choice email context at trading boot", () => {
         .insert(workingOrders)
         .values({ source: "dashboard", nodeId: ctx.node, locationId: ctx.location, orderNumber: 1 })
         .returning();
-      await suite.db.insert(tenantReceipts).values({ receipt: { email: "global@example.test" } });
       const [department] = await suite.db
         .insert(departments)
         .values({
           locationId: ctx.location,
-          name: "Email contact",
-          tradingName: "Email contact",
+          name: "Dining",
+          tradingName: "Dining",
           isDefault: true,
+          active: true,
         })
         .returning();
       await suite.db
         .insert(departmentReceipts)
-        .values({ departmentId: department!.id, receipt: { email: "venue@example.test" } });
+        .values({ departmentId: department!.id, receipt: { email: "dining@example.test" } });
       if (configured)
         await withTransaction(suite.db, (tx) =>
           putCredential(tx, loadKeyRing(env), {
@@ -685,14 +670,7 @@ describe("invoice-choice email context at trading boot", () => {
               delivery: {
                 medium: "email",
                 recipient: "customer@example.test",
-                consent: {
-                  accepted: true,
-                  statementVersion: "invoice-email-v1",
-                  language: "es-ES",
-                  contactEmail: "venue@example.test",
-                  personId: "forged",
-                  recordedAt: "1900-01-01",
-                },
+                personId: "forged",
               },
               emailAvailable: true,
             }),
@@ -705,15 +683,11 @@ describe("invoice-choice email context at trading boot", () => {
           .where(eq(workingOrders.id, order!.id));
         if (status === 200) {
           expect(await response.json()).toEqual({ revision: 1 });
-          expect(saved!.invoiceDelivery).toMatchObject({
+          expect(saved!.invoiceDelivery).toEqual({
             medium: "email",
             recipient: "customer@example.test",
-            consent: { personId: person!.id, contactEmail: "venue@example.test" },
+            personId: person!.id,
           });
-          expect(
-            saved!.invoiceDelivery?.medium === "email" &&
-              Date.parse(saved.invoiceDelivery.consent.recordedAt),
-          ).toBeGreaterThan(Date.now() - 60_000);
         } else {
           expect(await response.json()).toEqual({
             error: { code: "invoice_delivery.email_unavailable", params: {} },

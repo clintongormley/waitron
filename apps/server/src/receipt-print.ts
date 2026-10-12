@@ -318,11 +318,12 @@ async function enrollExplicitInvoiceReceipt(
   saleId: string,
   jobId: string,
   personId: string | null | undefined,
+  requestKey = jobId,
 ): Promise<void> {
   if (ticket.invoiceType !== "F1" || personId === undefined) return;
   await expireInvoiceDeliveryClaims(tx);
   await reserveInvoiceDelivery(tx, saleId, {
-    requestKey: jobId,
+    requestKey,
     personId,
     medium: "receipt",
     printJobId: jobId,
@@ -369,8 +370,17 @@ export async function readOriginalReceiptPrint(
   tx: Transaction,
   saleId: string,
 ): Promise<OriginalReceiptPrint> {
-  const jobs = await tx
+  return (await readOriginalReceiptPrints(tx, [saleId])).get(saleId)!;
+}
+
+/** {@link readOriginalReceiptPrint} for several sales in one query. */
+export async function readOriginalReceiptPrints(
+  tx: Transaction,
+  saleIds: readonly string[],
+): Promise<Map<string, OriginalReceiptPrint>> {
+  const rows = await tx
     .select({
+      saleId: printJobs.saleId,
       id: printJobs.id,
       status: printJobs.status,
       attempts: printJobs.attempts,
@@ -383,12 +393,33 @@ export async function readOriginalReceiptPrint(
     .innerJoin(printers, eq(printers.id, printJobs.printerId))
     .where(
       and(
-        eq(printJobs.saleId, saleId),
+        inArray(printJobs.saleId, [...saleIds]),
         eq(printJobs.receiptCopy, false),
         eq(printJobs.kind, "document"),
       ),
     )
     .orderBy(desc(sql`${printJobs}.rowid`));
+  const bySale = new Map<string, typeof rows>();
+  for (const row of rows) {
+    const jobs = bySale.get(row.saleId!);
+    if (jobs === undefined) bySale.set(row.saleId!, [row]);
+    else jobs.push(row);
+  }
+  return new Map(saleIds.map((saleId) => [saleId, originalReceiptOf(bySale.get(saleId) ?? [])]));
+}
+
+/** `jobs` are one sale's original receipt jobs, newest first. */
+function originalReceiptOf(
+  jobs: readonly {
+    id: string;
+    status: "queued" | "printing" | "failed" | "done";
+    attempts: number;
+    kind: "document" | "drawer";
+    lastError: string | null;
+    handover: { personId: string; confirmedAt: string } | null;
+    printerDeletedAt: string | null;
+  }[],
+): OriginalReceiptPrint {
   // A completed original attempt remains complete even if a later resend fails.
   const job = jobs.find((candidate) => candidate.status === "done") ?? jobs[0];
   if (job === undefined) return { status: "not_queued" };
@@ -428,6 +459,7 @@ export async function enqueueOriginalReceipt(
   saleId: string,
   printers: PrinterLookup = printerLookup(tx, cfg.origin),
   personId?: string | null,
+  requestKey?: string,
 ): Promise<void> {
   if (ticket.invoiceType === "F1") {
     const [original] = await tx
@@ -448,7 +480,7 @@ export async function enqueueOriginalReceipt(
     "document",
     { saleId, receiptCopy: false },
   );
-  await enrollExplicitInvoiceReceipt(tx, ticket, saleId, job.jobId, personId);
+  await enrollExplicitInvoiceReceipt(tx, ticket, saleId, job.jobId, personId, requestKey);
 }
 
 async function enqueueBillDrawer(

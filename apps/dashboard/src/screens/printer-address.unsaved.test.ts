@@ -69,6 +69,7 @@ async function mount(overrides: Partial<DashboardApi> = {}) {
         deviceAddress: "https://waitron.local",
       }),
       listDiscoveredPrinters: async () => [network],
+      listPagePrinters: async () => [],
       startPrinterDiscovery: async () => {},
       renewPrinterDiscovery: async () => {},
       createPrinter: async () => ({ id: "p1" }),

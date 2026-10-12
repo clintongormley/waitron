@@ -70,6 +70,7 @@ async function mount(overrides: Partial<DashboardApi> = {}) {
       }),
       joinRequests: async () => [],
       listDiscoveredPrinters: async () => [device, other],
+      listPagePrinters: async () => [],
       startPrinterDiscovery: async () => {},
       renewPrinterDiscovery: async () => {},
       createPrinter: async () => ({ id: "p1" }),

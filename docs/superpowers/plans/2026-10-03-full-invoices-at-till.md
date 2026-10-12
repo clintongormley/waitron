@@ -3,12 +3,17 @@
 > **2026-10-12, A493:** Live venue receipt defaults are retired. Decoration and the tax-agency description belong to each department. Earlier contracts below are historical.
 > See [A493](../specs/2026-10-12-a493-departments-zones-design.md).
 
+> **2026-10-12, A231q:** the consent step is gone from the product: tasks C1a and C1b of the [A231q
+> plan](2026-10-12-a231q-invoice-delivery-part-2.md) removed it from staging, delivery rows and
+> retries, so the consent paths below, and any note calling that removal still open, are history.
+> A448 and the legal research are unchanged.
+
 > **2026-10-10, A366 slice 7:** the W111 top-block and current-address checkpoints below
 > describe their dated implementation. Follow the
 > [slice 7 plan](2026-10-08-a366-slice-7-receipts-per-department.md) for current department
 > translations, live venue defaults and thermal/till versus A4 presentation. Part A is still
 > unlanded. The owner's removal of the separate email consent step belongs to the
-> [core rewrite](../../backlog/printers.md#remove-the-consent-step-from-emailed-receipts);
+> [core rewrite](../../backlog/printers.md#decisions-and-deliberate-limits);
 > current consent paths and public F1 gates remain. Filed invoice facts are outside this change.
 
 > **2026-10-06, A261-2c:** The owner retired the invoice-first service style and the
