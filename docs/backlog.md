@@ -298,7 +298,16 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   backup. Task 3 can use the published receipts; D2 retains its remaining plan gates, and D5 still
   needs old-chain evidence and its adviser answer. Task 5 reads the live series during issuance
   and retires the boot series setting. Task 4 still owes allocation activation; the owner selected
-  first symbol `0–7` with 128 random bits. The later recovery and resolution tasks remain open. [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04)
+  first symbol `0–7` with 128 random bits. The later recovery and resolution tasks remain open.
+  **Owner, 2026-10-12:** three duplicate conflicts in a row should switch to a fresh number series
+  automatically and keep selling, never stop sales; this needs Task 4's activation and Task 7's
+  automatic recovery, and until then the same-code brake holds the chain. Any invoice that needs
+  correction or cancellation opens a filing case for the owner to fix and submit. [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04)
+
+- **A re-sent invoice whose stored copy AEAT accepted with errors opens no case.** AEAT answers it
+  as a duplicate (3000), not with the original error code, so Waitron cannot tell whether the error
+  is one AEAT exempts from correction (2004, 2009); it raises only the warning. A consulta of the
+  stored record might name the error. From the conflict-holds-nothing branch (2026-10-12).
 
 - **Still open after W41s-3 (#1289): one reply can open up to 1,000 filing cases.** A refusal
   that applies to every later record (one about the taxpayer's identity, say) opens one case per
@@ -332,8 +341,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   to the W41s-1b probe first. The W41s-1b probes have since run without an overtaking case; their
   results are in [W41s-1c's receipt](superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#successor-receipt-2026-10-12-w41s-1c-both-probes-re-run-with-fresh-chains).
   The decision is put to the asesor as [Q47](compliance/asesor-questions.md#q47-keeping-a-chains-later-records-unsent-added-2026-10-12)
-  (S19 in the short list), covering this hold and the holds behind a held cancellation and after
-  three same-code refusals. The hold after a 3000 conflict was dropped on 2026-10-12 (owner). [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04)
+  (S19 in the short list), covering this hold and the three-refusal brake. The hold after a 3000 conflict was dropped on 2026-10-12 (owner). [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04)
 
 - **For Task 9 (the filing screen):** `listFilingCases` reads every case and event with no filter or
   paging, and `heldRecords` reads every `rechazado`/`detenido` row; neither has a production caller

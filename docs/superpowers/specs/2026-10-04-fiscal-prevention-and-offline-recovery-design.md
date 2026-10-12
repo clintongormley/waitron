@@ -141,8 +141,9 @@ Q43); see `docs/backlog.md`.)_
 A rejection
 on its own no longer holds its chain (D2, on §7.1's receipts; only code 1161 was tested, triggered
 artificially). A conflict, or a held cancellation, holds the later unsent records of its chain
-_(2026-10-12, owner: a conflict no longer does; it is refused with code 3000 like any refusal, and
-a held cancellation still does — see `docs/backlog/fiscal.md`)_. A
+_(2026-10-12, owner: neither does any more. A conflict is refused with code 3000 like any refusal,
+and a cancellation of a refused original is set aside on its own with a filing case — see
+`docs/backlog/fiscal.md`)_. A
 record of the conflict's own envío is not held when the reply is applied; one whose outcome is still
 unknown is held at its next claim like any later record of that chain, and is not sent again
 _(narrowed 2026-10-07: only when it comes after the conflict on the chain; 2026-10-12: a

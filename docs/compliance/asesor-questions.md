@@ -358,10 +358,10 @@ copies do not carry it.
   of an invoice issued before it?
 - **S19. Keeping a chain's later records unsent (Q47).** Each record carries the fingerprint of the
   one before it. Waitron keeps the later records of a chain unsent while an earlier record's answer
-  is unknown; behind a cancellation it keeps back (Q40); and after three refusals in a row with one
-  code, retrying the first held record hourly. After a single refusal, including a duplicate refusal
-  (3000) where AEAT holds a different or cancelled record under that number and date, it keeps
-  sending.
+  is unknown, and after three refusals in a row with one code, retrying the first held record
+  hourly. After a single refusal, including a duplicate refusal (3000) where AEAT holds a different
+  or cancelled record under that number and date, it keeps sending; a cancellation of a refused
+  invoice is kept back on its own (Q40) and holds nothing behind it.
   AEAT's test service accepted, without warning, records chained to a refused record, to one refused
   as a duplicate and to a cancellation it never received. Given «no pueden quedar RF generados sin
   remitir a la AEAT» (developer FAQ §5) and the hourly retry (OM art. 16.4), may we hold them, or
@@ -507,14 +507,16 @@ copies do not carry it.
 > cambio, de una factura expedida antes?
 >
 > **S19. Retener los registros posteriores de una cadena.** Cada registro lleva la huella del
-> anterior. Hoy retenemos sin remitir los registros posteriores de una cadena: mientras se desconoce
-> la respuesta a un registro anterior; detrás de una anulación que retenemos; y tras tres rechazos
-> seguidos con el mismo código, reintentando cada hora el primero retenido. Tras un rechazo aislado,
-> también por duplicado (error 3000) cuando la AEAT conserva con ese número y fecha otro registro distinto o uno anulado, seguimos remitiendo. En el entorno de pruebas, la AEAT
-> aceptó sin avisos registros encadenados a uno rechazado, a uno rechazado por duplicado y a una
-> anulación que nunca recibió. Dado que «no pueden quedar RF generados sin remitir a la AEAT» (FAQ de
-> desarrolladores §5) y que hay que reintentar el envío al menos cada hora (OM art. 16.4), ¿podemos
-> retenerlos o debemos remitirlos? Si podemos, ¿hasta cuándo y qué debemos conservar?
+> anterior. Hoy retenemos sin remitir los registros posteriores de una cadena mientras se desconoce
+> la respuesta a un registro anterior, y tras tres rechazos seguidos con el mismo código,
+> reintentando cada hora el primero retenido. Tras un rechazo aislado, también por duplicado (error
+> 3000) cuando la AEAT conserva con ese número y fecha otro registro distinto o uno anulado,
+> seguimos remitiendo; una anulación de una factura rechazada se retiene sola y no retiene nada
+> detrás. En el entorno de pruebas, la AEAT aceptó sin avisos registros encadenados a uno rechazado,
+> a uno rechazado por duplicado y a una anulación que nunca recibió. Dado que «no pueden quedar RF
+> generados sin remitir a la AEAT» (FAQ de desarrolladores §5) y que hay que reintentar el envío al
+> menos cada hora (OM art. 16.4), ¿podemos retenerlos o debemos remitirlos? Si podemos, ¿hasta
+> cuándo y qué debemos conservar?
 >
 > **Para revisar: corríjanos solo si nos equivocamos.**
 >
@@ -2956,6 +2958,8 @@ in the provenance table below.
 to (a) and (b). For an absent rejected original, remove the blanket instruction to send and expect
 a refusal. Select the remedy on the facts, generate the appropriate new record and preserve any
 earlier record unchanged. The precise operator workflow remains under design review.
+_(2026-10-12, owner: a cancellation of a refused original is kept back on its own, opens a filing
+case for a person to resolve with its original, and no longer holds the later records.)_
 
 **Observed in AEAT's preproduction environment, 2026-10-05 (W41s-1; added 2026-10-05).**
 A cancellation carrying `SinRegistroPrevio: "S"` for an identity never submitted as an alta
@@ -3096,8 +3100,9 @@ This records a question; no enquiry has been sent.
 
 **Why it matters.** Each record carries the fingerprint of the record before it on its chain. When
 one record cannot be settled, Waitron keeps the records after it unsent. On 2026-10-06 the owner kept
-holds 1 and 2 below, and a hold after a duplicate conflict that was dropped on 2026-10-12, and asked
-to revisit them once the asesor answers; this is that question. The
+the wait in 1 below and the holds after a duplicate conflict and behind a held cancellation, and
+asked to revisit them once the asesor answers; on 2026-10-12 the owner dropped the last two. This
+question is about what remains. The
 developer FAQ, §5, says «no pueden quedar RF generados sin remitir a la AEAT»
 ([findings](verifactu-findings.md)), and the order requires a retry at least once an hour of «los
 registros de facturación pendientes de remitir» (OM art. 16.4, as quoted in
@@ -3107,10 +3112,7 @@ What Waitron does today, in `packages/fiscal-verifactu/src/drain.ts`:
 
 1. While an earlier record of the chain is being sent, or waits for a retry because its answer is
    unknown, a later record not yet sent waits, and goes once that earlier record has its answer.
-2. A cancellation whose original AEAT refused, or whose original is held, is itself held and never
-   sent, and the chain's later records are held behind it. Nothing in Waitron sets
-   `SinRegistroPrevio` yet (Q40(c)).
-3. After three refusals in a row with one code, the chain's next records are held; the first held
+2. After three refusals in a row with one code, the chain's next records are held; the first held
    record is sent again once an hour, and an accept or a refusal with another code can release
    the rest.
 
@@ -3118,23 +3120,25 @@ After a single refusal, Waitron keeps sending the later records (design D2). Sin
 includes a duplicate refusal (3000) where AEAT holds a different or cancelled record under that
 invoice number and date: the owner dropped the hold there after AEAT's test service accepted, without a
 warning, a later record after a conflict over changed contents (none after a conflict over a
-cancelled record was tested). Nothing releases the hold in 2 yet: a person's release is planned
-(W41s Task 8), so until then those records can stay unsent indefinitely.
+cancelled record was tested). Also since 2026-10-12, a cancellation whose original AEAT refused is
+set aside on its own: it is not sent, it holds nothing behind it, and it opens a filing case for a
+person to resolve with its original (Q40 asks whether keeping it back is admissible). Nothing in
+Waitron sets `SinRegistroPrevio` yet (Q40(c)).
 
 > Cada registro de facturación lleva la huella del registro anterior de su cadena. Cuando un
 > registro no puede darse por resuelto, nuestro SIF retiene sin remitir los registros posteriores
-> de esa cadena en tres casos:
+> de esa cadena en dos casos:
 >
 > 1. mientras se desconoce la respuesta de la AEAT a un registro anterior y está pendiente su
 >    reenvío; se remiten en cuanto ese registro tiene respuesta;
-> 2. detrás de una anulación que retenemos porque la AEAT rechazó o tiene retenida el alta original
->    (Q40); esa anulación no se remite;
-> 3. tras tres rechazos seguidos con el mismo código; el primero retenido se reenvía cada hora y,
+> 2. tras tres rechazos seguidos con el mismo código; el primero retenido se reenvía cada hora y,
 >    si la respuesta es otra, pueden remitirse los demás.
 >
 > Tras un rechazo aislado seguimos remitiendo los posteriores, también tras un rechazo por duplicado
 > (error 3000) cuando la AEAT conserva con ese número y fecha otro registro distinto o uno anulado
-> (Q35, Q39). En el caso 2 los registros quedan retenidos hasta que una persona resuelva el caso.
+> (Q35, Q39). Una anulación de una factura que la AEAT rechazó no se remite (Q40): queda apartada
+> sola, sin retener nada detrás, y abre un caso para que una persona la resuelva junto con la
+> original.
 >
 > En el entorno de pruebas de la AEAT se aceptaron sin avisos (`Correcto`) registros encadenados a
 > uno rechazado, a uno rechazado por duplicado (también en el mismo envío) y a una anulación que la
@@ -3143,9 +3147,9 @@ cancelled record was tested). Nothing releases the hold in 2 yet: a person's rel
 >
 > **(a)** La FAQ de desarrolladores, §5, dice que «no pueden quedar RF generados sin remitir a la
 > AEAT», y la OM, art. 16.4, exige reintentar al menos cada hora el envío de los registros
-> pendientes de remitir. ¿Es admisible retener los registros posteriores en alguno de estos tres
-> casos? ¿Influye que la espera sea breve (caso 1) o indefinida hasta que una persona resuelva
-> (caso 2)?
+> pendientes de remitir. ¿Es admisible retener los registros posteriores en alguno de estos dos
+> casos? ¿Influye que la espera sea breve (caso 1) o dure hasta que la AEAT acepte el registro que
+> se reintenta cada hora (caso 2)?
 >
 > **(b)** Si deben remitirse, ¿es correcto hacerlo en su orden, encadenados a un registro que la
 > AEAT rechazó o no recibió, o debe tratarse la cadena de otra forma?
@@ -3153,9 +3157,9 @@ cancelled record was tested). Nothing releases the hold in 2 yet: a person's rel
 > **(c)** Si la retención es admisible, ¿hay un plazo a partir del cual deben remitirse en todo caso?
 > ¿Qué debemos conservar para justificarla si la AEAT lo requiere?
 
-**Proposed interim treatment (owner, 2026-10-06; revised 2026-10-12):** keep the three holds as
-built, and keep sending after a duplicate conflict. Each held record stays unchanged, and the
-refused original behind hold 2 has a filing case for a person to resolve.
+**Proposed interim treatment (owner, 2026-10-06; revised 2026-10-12):** keep the two holds as
+built; keep sending after a duplicate conflict and after a cancellation of a refused invoice, which
+is set aside with its own case. Each held record stays unchanged.
 
 **Observed in AEAT's preproduction environment (W41s-1, 2026-10-05; W41s-1c, 2026-10-12).** Records
 chained to a record refused with 1161 were `Correcto` in the same envío, in a later envío and as

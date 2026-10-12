@@ -399,8 +399,14 @@ invoice still owed; and what happens when the customer never pays. An F1 also ne
 (`handleDuplicate`, `packages/fiscal-verifactu/src/drain.ts`). AEAT preproduction accepted, without a
 warning, a later record after a conflict over changed contents; none after a conflict over a
 cancelled record was tested ([W41s-1c receipt](../superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#successor-receipt-2026-10-12-w41s-1c-both-probes-re-run-with-fresh-chains)).
-Three conflicts in a row now trip the same-code brake. The hold behind a held cancellation stays.
-Statements below that a conflict holds its chain describe the earlier behaviour.
+Three conflicts in a row now trip the same-code brake; the owner wants them to switch to a fresh
+number series automatically and keep selling instead (needs Tasks 4 and 7). A cancellation whose
+original AEAT refused is now set aside on its own (envío state `retenido`, migration
+`0005_envio_retenido`) with a filing case `fiscal.anulacion_retenida`, and holds nothing behind it.
+A record accepted with errors opens a filing case unless AEAT exempts the code (2004, 2009). What
+still holds later records: the three-refusal brake and the wait behind an unknown answer.
+Statements below that a conflict or a held cancellation holds its chain describe the earlier
+behaviour.
 
 **2026-10-12, Task 5:** invoice issuance reads the live series inside its transaction.
 Startup, development seeds, mirror bundles and saved trading identity carry node and location
@@ -585,8 +591,7 @@ arrives. The owner kept the hold for now (it landed with W41s-3c, #1304) and ask
 when the asesor answers Q37 and its siblings ([questions](../compliance/asesor-questions.md)): drop the
 hold, keep it, or add the overtaking case to the W41s-1b probe first.
 The question is now [Q47](../compliance/asesor-questions.md#q47-keeping-a-chains-later-records-unsent-added-2026-10-12)
-(S19 in the short list, added 2026-10-12), which also covers the holds behind a held cancellation
-and after three same-code refusals.
+(S19 in the short list, added 2026-10-12), which also covers the three-refusal brake.
 **For Task 9 (the filing screen):** `listFilingCases` reads every case and event with no filter or
 paging, and `heldRecords` reads every `rechazado`/`detenido` row; neither has a production caller
 yet, so the screen should add an open-only filter or paging when it calls them.
