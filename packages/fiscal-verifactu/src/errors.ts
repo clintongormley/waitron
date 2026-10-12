@@ -112,8 +112,17 @@ declare module "@waitron/shared" {
     };
 
     /**
-     * `./drain.ts`: AEAT accepted this record but flagged it (`EstadoRegistro="AceptadoConErrores"`).
-     * A warning: the record counts as accepted, but a human should still see why AEAT flagged it.
+     * `./drain.ts`'s `setAside`: a cancellation whose original AEAT refused, set aside
+     * (`retenido`) and never sent. Raised as an `error` incident beside its filing case.
+     */
+    "fiscal.anulacion_retenida": { registroId: string };
+
+    /**
+     * `./drain.ts`'s `settleAcceptedWithErrors` and `./reconcile.ts`'s lost-acknowledgement path:
+     * AEAT holds this record accepted with errors, as its reply line, the duplicate detail of a
+     * re-sent record (3000) or AEAT's consulta says. `codigo`/`mensaje` are the stored copy's own
+     * error, not the duplicate reply's 3000. A warning: the record counts as accepted, but a human should still see
+     * why AEAT flagged it.
      */
     "fiscal.aceptado_con_errores": {
       registroId: string;
@@ -170,14 +179,14 @@ declare module "@waitron/shared" {
     /**
      * `./drain.ts`'s `handleDuplicate` (error 3000): AEAT's own copy of this identity is `Anulada`,
      * and the record is a sale, or a cancellation the lookup did not match to the record AEAT
-     * holds. The record is held, with its chain's later records not yet sent behind it, and a filing
-     * case opened. No `codigo`/`mensaje` params: they would only ever repeat 3000.
+     * holds. The record is refused and a filing case opened. No `codigo`/`mensaje` params: they
+     * would only ever repeat 3000.
      */
     "fiscal.duplicado_anulado": { registroId: string };
 
     /**
      * `./drain.ts`'s `routeB` (error 3000): AEAT's stored `Huella` for this identity differs from
-     * ours — a genuine identity collision, not a resubmission of our own record. Halts like
+     * ours — a genuine identity collision, not a resubmission of our own record. Refused like
      * `fiscal.duplicado_anulado` above, and carries no `codigo`/`mensaje` for the same reason.
      */
     "fiscal.huella_divergente": { registroId: string };

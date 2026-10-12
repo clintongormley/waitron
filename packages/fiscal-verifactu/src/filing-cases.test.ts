@@ -557,8 +557,8 @@ describe("heldRecords", () => {
   it("names a held cancellation's original's case, and the records held behind it the same case", async () => {
     const seeded = await seedPendingEnvios(suite.db, { count: 2 });
     const [original, unrelated] = seeded.registroIds as [string, string];
-    await setEstado(original, "rechazado");
-    await setEstado(unrelated, "rechazado");
+    await setEstado(original, "detenido");
+    await setEstado(unrelated, "detenido");
     const originalCase = await inTx(async (tx) => {
       const opened = await openFilingCase(tx, {
         registroId: original,

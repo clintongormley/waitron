@@ -3,7 +3,7 @@ import { invoiceSeries, locations, newId, nodes, sales, type Database } from "@w
 import type { TrustedClock } from "@waitron/fiscal";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import type { NodeId } from "@waitron/shared";
-import type { RegistroAlta } from "@waitron/verifactu";
+import type { RegistroAlta, VerifactuClient } from "@waitron/verifactu";
 import type { FakeAeat } from "@waitron/verifactu/testing";
 import { envios } from "../src/schema/envios.js";
 import { registrosFacturacion } from "../src/schema/registros.js";
@@ -537,3 +537,19 @@ export async function seedPinnedChain(
     registroIds,
   };
 }
+
+/** AEAT's consulta names the stored copy's error, which the fake AEAT sends only for 2007. */
+export const consultaNames = (client: VerifactuClient, codigo: number): VerifactuClient => ({
+  submit: (...args) => client.submit(...args),
+  consultar: async (...args) => {
+    const respuesta = await client.consultar(...args);
+    return {
+      ...respuesta,
+      registros: respuesta.registros.map((r) =>
+        r.EstadoRegistro === "AceptadoConErrores"
+          ? { ...r, CodigoErrorRegistro: codigo, DescripcionErrorRegistro: `Error ${codigo}` }
+          : r,
+      ),
+    };
+  },
+});

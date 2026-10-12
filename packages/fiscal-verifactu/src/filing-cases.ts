@@ -1,4 +1,4 @@
-import { and, count, eq, min, notExists, sql } from "drizzle-orm";
+import { and, count, eq, min, notExists, sql, type SQL } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
@@ -21,6 +21,25 @@ export interface FilingCaseReport extends FilingCase {
   estado: string | null;
   status: "open" | "resolved";
   events: FilingCaseEvent[];
+}
+
+/**
+ * The FROM and WHERE of a walk over the records before `record` on its chain, as `preceding` with
+ * its envío `preceding_envio`, leaving out set-aside (`retenido`) records: one is never sent, so
+ * it neither breaks nor lengthens a run of refusals, and is never the record before a held one. A
+ * caller adds its own conditions, order and limit. A chain's records are all on its node
+ * (`appendToChain`, ./chain.ts), and naming the node lets `registros_node_secuencia_idx` serve
+ * the walk.
+ */
+export function recordsBefore(record: "r" | "d" | "p" | "h" | "held" | "runs"): SQL {
+  const alias = sql.raw(record);
+  return sql`
+    from registros_facturacion preceding
+    left join envios preceding_envio on preceding_envio.registro_id = preceding.id
+    where preceding.node_id = ${alias}.node_id and preceding.sif_id = ${alias}.sif_id
+      and preceding.secuencia < ${alias}.secuencia
+      and preceding_envio.estado is not 'retenido'
+  `;
 }
 
 export interface HeldRecord {
@@ -49,6 +68,37 @@ export async function openFilingCase(
     })
     .returning();
   return opened!;
+}
+
+/** The accepted-with-errors codes taken to need no correction. AEAT's validation document
+ * (Validaciones_Errores_Veri-Factu v1.2.2, §4.3.1) says «Se excepciona este error de la necesidad
+ * de ser subsanado» of two cases: no `ClaveRegimen` when the tax is IPSI, and a
+ * `FechaHoraHusoGenRegistro` later than AEAT's clock. 2009 and 2004 are read as those cases' codes;
+ * a late send also gets 2004, which that wording does not name (docs/compliance/verifactu-findings.md). */
+const EXEMPT_FROM_CORRECTION = new Set([2004, 2009]);
+
+/**
+ * Opens the `fiscal.aceptado_con_errores` case for a record AEAT stored with an error, unless AEAT
+ * exempts that error from correction. `codigo` is the stored copy's own error, never a duplicate
+ * reply's 3000; a null one cannot be shown exempt, so it opens the case.
+ */
+export async function openAcceptedWithErrorsCase(
+  tx: Transaction,
+  input: {
+    registroId: string;
+    codigo: number | null;
+    mensaje: string | null;
+    csv: string | null;
+    now: Date;
+  },
+): Promise<void> {
+  if (input.codigo !== null && EXEMPT_FROM_CORRECTION.has(input.codigo)) return;
+  await openFilingCase(tx, {
+    registroId: input.registroId,
+    cause: "fiscal.aceptado_con_errores",
+    evidence: { codigo: input.codigo, mensaje: input.mensaje, csv: input.csv },
+    now: input.now,
+  });
 }
 
 /**
@@ -184,11 +234,13 @@ export async function openFilingCasesSummary(
 /**
  * Every `detenido` record that has no case of its own: the records held behind another record,
  * or behind a run of refusals with one code. A held cancellation whose original alta (same
- * `sif_id`, same invoice identity) is `rechazado` or `detenido` names its original's case. Any
+ * `sif_id`, same invoice identity) is `detenido` names its original's case; one whose original is
+ * `rechazado` is set aside with a case of its own (`./drain.ts`), so it is not listed. Any
  * other held record names the case of the nearest earlier `detenido` record on its chain
  * (`sif_id`): that record's own case, or, when it has none, the case it names in turn. With no
- * earlier `detenido` record, it names the case of the record immediately before it when that one
- * is `rechazado`, the last refusal of the run that held it, and otherwise none. Mirrors the hold
+ * earlier `detenido` record, it names the case of the record immediately before it, set-aside
+ * records skipped (`recordsBefore`), when that one is `rechazado`: the last refusal of the run
+ * that held it. Otherwise it names none. Mirrors the hold
  * rule in `./drain.ts`'s `haltOpenChainClaims`: the two change together.
  */
 export async function heldRecords(tx: Transaction): Promise<HeldRecord[]> {
@@ -206,12 +258,11 @@ export async function heldRecords(tx: Transaction): Promise<HeldRecord[]> {
         as identity,
       c.id as case_id,
       case when e.estado = 'detenido' and c.id is null then (
-        select case when preceding_envio.estado = 'rechazado' then preceding_case.id end
-        from registros_facturacion preceding
-        left join envios preceding_envio on preceding_envio.registro_id = preceding.id
-        left join filing_cases preceding_case on preceding_case.registro_id = preceding.id
-        where preceding.node_id = r.node_id and preceding.sif_id = r.sif_id
-          and preceding.secuencia < r.secuencia
+        select case when preceding_envio.estado = 'rechazado' then (
+          select preceding_case.id from filing_cases preceding_case
+          where preceding_case.registro_id = preceding.id
+        ) end
+        ${recordsBefore("r")}
         order by preceding.secuencia desc
         limit 1
       ) end as refused_before_case_id

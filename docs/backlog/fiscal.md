@@ -393,6 +393,28 @@ invoice still owed; and what happens when the customer never pays. An F1 also ne
 
 ## W41s. Fiscal prevention and offline recovery — DESIGN AND REVISED PLAN APPROVED (2026-10-04)
 
+**2026-10-12, a conflict no longer holds its chain (owner).** A record AEAT refuses as a duplicate
+(3000) while holding a different or cancelled record under that key is now `rechazado` with code
+3000, with its incident and filing case, and the chain's later records are still sent
+(`handleDuplicate`, `packages/fiscal-verifactu/src/drain.ts`). AEAT preproduction accepted, without a
+warning, a later record after a conflict over changed contents; none after a conflict over a
+cancelled record was tested ([W41s-1c receipt](../superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#successor-receipt-2026-10-12-w41s-1c-both-probes-re-run-with-fresh-chains)).
+Three conflicts in a row now trip the same-code brake; the owner wants them to switch to a fresh
+number series automatically and keep selling instead (needs Tasks 4 and 7). A cancellation whose
+original AEAT refused is now set aside on its own (envío state `retenido`, migration
+`0005_envio_retenido`) with an `error` incident and a filing case, both `fiscal.anulacion_retenida`,
+and holds nothing behind it; one already held behind its original is set aside in the transaction
+that records the original's refusal. The three-refusal brake does not see a set-aside record: it
+neither breaks a run of refusals nor counts towards one.
+A record accepted with errors opens a filing case unless AEAT exempts the code (2004, 2009); a
+re-sent one AEAT answers as a duplicate (3000), and one the reconciliation sweep corrects
+(`reconcile`, no production caller yet), are judged by
+the stored copy's own error, read from the duplicate detail or AEAT's consulta. What
+still holds later records: the three-refusal brake and the wait behind an unknown answer.
+Statements below that a conflict holds its chain, that a cancellation of a rejected original is
+held or holds its chain, or that the brake reads the three records immediately before a record,
+describe the earlier behaviour.
+
 **2026-10-12, Task 5:** invoice issuance reads the live series inside its transaction.
 Startup, development seeds, mirror bundles and saved trading identity carry node and location
 without a cached invoice-series id. Restore still checks live standard and full series before
@@ -576,8 +598,7 @@ arrives. The owner kept the hold for now (it landed with W41s-3c, #1304) and ask
 when the asesor answers Q37 and its siblings ([questions](../compliance/asesor-questions.md)): drop the
 hold, keep it, or add the overtaking case to the W41s-1b probe first.
 The question is now [Q47](../compliance/asesor-questions.md#q47-keeping-a-chains-later-records-unsent-added-2026-10-12)
-(S19 in the short list, added 2026-10-12), which also covers the holds after a 3000 conflict,
-behind a held cancellation and after three same-code refusals.
+(S19 in the short list, added 2026-10-12), which also covers the three-refusal brake.
 **For Task 9 (the filing screen):** `listFilingCases` reads every case and event with no filter or
 paging, and `heldRecords` reads every `rechazado`/`detenido` row; neither has a production caller
 yet, so the screen should add an open-only filter or paging when it calls them.
@@ -733,6 +754,11 @@ From **The product editor and catalogue (#345, #379, #387) — what is left open
 
 ## Decisions and deliberate limits
 
+- **Records that need a person's decision (owner, 2026-10-12, PR #1596).** A 3000 conflict is
+  refused and holds nothing; a cancellation of a refused original is set aside (`retenido`) with a
+  filing case of its own and holds nothing; a record accepted with errors opens a filing case
+  unless AEAT exempts its code (2004, 2009). Three conflicts in a row still trip the same-code
+  brake until Tasks 4 and 7 switch to a fresh number series instead.
 - **Decided (owner, 2026-10-02): a whole-invoice credit copies the invoice's own VAT split,
   negated** (`recordCorrection`'s `wholeInvoice`, `packages/core/src/record-correction.ts`).
   Worked out from the lines, as a partial correction still is, a 0.55 dish at 21% invoiced

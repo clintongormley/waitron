@@ -15,7 +15,7 @@ import {
 } from "../test/drain-fixtures.js";
 import { staticResolver } from "../test/write-path-fixtures.js";
 import { DEFAULT_SKIP_RETRY_MS, drain, resetInFlightClaims, type DrainDeps } from "./drain.js";
-import { listFilingCases, openFilingCase } from "./filing-cases.js";
+import { heldRecords, listFilingCases, openFilingCase } from "./filing-cases.js";
 import { fiscalSubmissionSource } from "./submission-alerts.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -154,6 +154,30 @@ async function brakeHold(
 }
 
 describe("drain — a chain stopped by the same-code brake sends its first held record once an hour (real client over the fake AEAT's SOAP)", () => {
+  it("holds the chain after three conflicts in a row, and a probe that conflicts again opens its case without a new incident", async () => {
+    const aeat = fakeAeat();
+    const seeded = await seedPendingEnvios(suite.db, { count: 3 });
+    for (const id of seeded.registroIds) await collideAtAeat(suite.db, aeat, seeded, id);
+    await drain(deps(aeat.client()), T0);
+    expect(await estados(seeded.registroIds)).toEqual(["rechazado", "rechazado", "rechazado"]);
+    const probe = await appendPendingAlta(suite.db, seeded, 4);
+    await drain(deps(aeat.client()), T);
+    expect(await envioOf(probe.registroId)).toMatchObject({ estado: "detenido" });
+    await collideAtAeat(suite.db, aeat, seeded, probe.registroId);
+    const wire = recording(aeat.client());
+
+    await drain(deps(wire.client), at(HOUR));
+
+    expect(wire.sent).toEqual([[probe.registroId]]);
+    expect(await envioOf(probe.registroId)).toMatchObject({ estado: "rechazado" });
+    expect((await cases()).filter((c) => c.registroId === probe.registroId)).toHaveLength(1);
+    expect(await incidentCodes()).toEqual([
+      "fiscal.huella_divergente",
+      "fiscal.huella_divergente",
+      "fiscal.huella_divergente",
+    ]);
+  });
+
   it("sends nothing for the chain before the hour, then exactly its first held record at the hour", async () => {
     const aeat = fakeAeat();
     const { held } = await brakeHold(aeat, 2);
@@ -598,12 +622,15 @@ describe("drain — a chain stopped by the same-code brake sends its first held 
   describe("controls: never probed, never released", () => {
     it("a chain whose earliest held record has a case of its own after the run is never probed", async () => {
       const aeat = fakeAeat();
-      const seeded = await seedPendingEnvios(suite.db, { count: 4 });
-      for (const key of seeded.facturaKeys.slice(0, 3)) aeat.reject(key, RUN_CODE, "Rechazo");
-      const conflicting = seeded.registroIds[3]!;
-      await collideAtAeat(suite.db, aeat, seeded, conflicting);
-      await drain(deps(aeat.client()), T0);
-      expect(await envioOf(conflicting)).toMatchObject({ estado: "detenido" });
+      const { held } = await brakeHold(aeat, 1);
+      await withTransaction(suite.db, (tx) =>
+        openFilingCase(tx, {
+          registroId: held[0]!,
+          cause: "fiscal.huella_divergente",
+          evidence: { codigo: 3000, mensaje: null, csv: null },
+          now: at(MINUTE),
+        }),
+      );
       const wire = recording(aeat.client());
 
       await drain(deps(wire.client), at(2 * HOUR));
@@ -611,7 +638,7 @@ describe("drain — a chain stopped by the same-code brake sends its first held 
       expect(wire.sent).toEqual([]);
     });
 
-    it("a record held behind a conflict whose own envío also carried a same-code run is never probed", async () => {
+    it("a record after a conflict and a same-code run in one envío is held by the run and probed", async () => {
       const aeat = fakeAeat();
       const seeded = await seedPendingEnvios(suite.db, { count: 4 });
       const [conflicting] = seeded.registroIds;
@@ -619,7 +646,7 @@ describe("drain — a chain stopped by the same-code brake sends its first held 
       for (const key of seeded.facturaKeys.slice(1)) aeat.reject(key, RUN_CODE, "Rechazo");
       await drain(deps(aeat.client()), T0);
       expect(await estados(seeded.registroIds)).toEqual([
-        "detenido",
+        "rechazado",
         "rechazado",
         "rechazado",
         "rechazado",
@@ -631,10 +658,10 @@ describe("drain — a chain stopped by the same-code brake sends its first held 
 
       await drain(deps(wire.client), at(2 * HOUR));
 
-      expect(wire.sent).toEqual([]);
+      expect(wire.sent).toEqual([[behind.registroId]]);
     });
 
-    it("a probe that meets a conflict is never probed again", async () => {
+    it("a probe that meets a conflict is refused with its own case, and releases the records held behind it", async () => {
       const aeat = fakeAeat();
       const { seeded, held } = await brakeHold(aeat, 2);
       const [first, second] = held;
@@ -643,17 +670,17 @@ describe("drain — a chain stopped by the same-code brake sends its first held 
 
       await drain(deps(wire.client), at(HOUR));
       expect(wire.sent).toEqual([[first]]);
-      expect(await envioOf(first!)).toMatchObject({ estado: "detenido" });
+      expect(await envioOf(first!)).toMatchObject({ estado: "rechazado" });
       expect((await cases()).find((c) => c.registroId === first)?.cause).toBe(
         "fiscal.huella_divergente",
       );
 
-      await drain(deps(wire.client), at(3 * HOUR));
-      expect(wire.sent).toEqual([[first]]);
-      expect(await envioOf(second!)).toMatchObject({ estado: "detenido" });
+      await drain(deps(wire.client), at(HOUR + MINUTE));
+      expect(wire.sent).toEqual([[first], [second]]);
+      expect(await envioOf(second!)).toMatchObject({ estado: "aceptado" });
     });
 
-    it("a released record that then meets a conflict stays held", async () => {
+    it("a released record that then meets a conflict is refused and not sent again", async () => {
       const aeat = fakeAeat();
       const { seeded, held, heldKeys } = await brakeHold(aeat, 2);
       const [first, second] = held;
@@ -665,20 +692,20 @@ describe("drain — a chain stopped by the same-code brake sends its first held 
       await drain(deps(wire.client), at(HOUR + MINUTE));
 
       expect(wire.sent).toEqual([[first], [second]]);
-      expect(await envioOf(second!)).toMatchObject({ estado: "detenido" });
+      expect(await envioOf(second!)).toMatchObject({ estado: "rechazado" });
 
       await drain(deps(wire.client), at(3 * HOUR));
       expect(wire.sent).toHaveLength(2);
     });
 
-    it("a chain whose earliest held record is a cancellation of a refused original is never probed", async () => {
+    it("a cancellation of a refused original after a run is set aside and never probed", async () => {
       const aeat = fakeAeat();
       const seeded = await seedPendingEnvios(suite.db, { count: 3 });
       for (const key of seeded.facturaKeys) aeat.reject(key, RUN_CODE, "Rechazo");
       await drain(deps(aeat.client()), T0);
       const cancellation = await appendCancellation(suite.db, seeded, seeded.registroIds[2]!, 4);
       await drain(deps(aeat.client()), T);
-      expect(await envioOf(cancellation)).toMatchObject({ estado: "detenido" });
+      expect(await envioOf(cancellation)).toMatchObject({ estado: "retenido" });
       const wire = recording(aeat.client());
 
       await drain(deps(wire.client), at(2 * HOUR));
@@ -686,24 +713,123 @@ describe("drain — a chain stopped by the same-code brake sends its first held 
       expect(wire.sent).toEqual([]);
     });
 
-    it("a cancellation of the refused probe, held behind it, is not released", async () => {
+    it("a cancellation held behind the probe is set aside with its own case once the probe is refused, and the record after it is sent", async () => {
       const aeat = fakeAeat();
       const { seeded, held, heldKeys } = await brakeHold(aeat, 1);
       const [first] = held;
       const cancellation = await appendCancellation(suite.db, seeded, first!, 5);
+      const later = await appendPendingAlta(suite.db, seeded, 6);
       await drain(deps(aeat.client()), at(MINUTE));
-      expect(await envioOf(cancellation)).toMatchObject({ estado: "detenido" });
+      expect(await estados([cancellation, later.registroId])).toEqual(["detenido", "detenido"]);
       aeat.reject(heldKeys[0]!, 1200, "Rechazo 1200");
       const wire = recording(aeat.client());
 
       await drain(deps(wire.client), at(HOUR));
 
       expect(wire.sent).toEqual([[first]]);
-      expect(await envioOf(cancellation)).toMatchObject({ estado: "detenido" });
+      expect(await envioOf(first!)).toMatchObject({ estado: "rechazado" });
+      expect(await envioOf(cancellation)).toMatchObject({ estado: "retenido" });
       expect(await ackOf(cancellation)).toBe("halted");
+      const caseOf = async (id: string) =>
+        (await cases()).filter((c) => c.registroId === id).map((c) => [c.cause, c.status]);
+      expect(await caseOf(cancellation)).toEqual([["fiscal.anulacion_retenida", "open"]]);
+      expect(await incidentCodes()).toEqual([
+        "fiscal.registro_rechazado",
+        "fiscal.registro_rechazado",
+        "fiscal.registro_rechazado",
+        "fiscal.anulacion_retenida",
+        "fiscal.registro_rechazado",
+      ]);
+
+      await drain(deps(wire.client), at(HOUR + MINUTE));
+      expect(wire.sent).toEqual([[first], [later.registroId]]);
+      expect(await envioOf(later.registroId)).toMatchObject({ estado: "aceptado" });
 
       await drain(deps(wire.client), at(3 * HOUR));
-      expect(wire.sent).toHaveLength(1);
+      expect(wire.sent).toHaveLength(2);
+    });
+
+    it("a cancellation held behind a probe refused with the run's code is set aside, and the record after it stays held until a later probe is accepted", async () => {
+      const aeat = fakeAeat();
+      const { seeded, held, heldKeys } = await brakeHold(aeat, 1);
+      const [first] = held;
+      const cancellation = await appendCancellation(suite.db, seeded, first!, 5);
+      const later = await appendPendingAlta(suite.db, seeded, 6);
+      await drain(deps(aeat.client()), at(MINUTE));
+      expect(await estados([cancellation, later.registroId])).toEqual(["detenido", "detenido"]);
+      aeat.reject(heldKeys[0]!, RUN_CODE, `Rechazo ${RUN_CODE}`);
+      const wire = recording(aeat.client());
+
+      const refused = await drain(deps(wire.client), at(HOUR));
+
+      expect(wire.sent).toEqual([[first]]);
+      expect(await estados([first!, cancellation, later.registroId])).toEqual([
+        "rechazado",
+        "retenido",
+        "detenido",
+      ]);
+      expect(
+        (await cases()).filter((c) => c.registroId === cancellation).map((c) => c.cause),
+      ).toEqual(["fiscal.anulacion_retenida"]);
+      expect(refused.nextDueAt).toEqual(at(2 * HOUR));
+      expect(await incidentCodes()).toEqual([
+        "fiscal.registro_rechazado",
+        "fiscal.registro_rechazado",
+        "fiscal.registro_rechazado",
+        "fiscal.anulacion_retenida",
+      ]);
+      expect(await refusalAlerts(at(HOUR))).toEqual([
+        {
+          key: `fiscal.refusals_repeated:${seeded.sifId}`,
+          params: { codigo: String(RUN_CODE), count: 4 },
+        },
+      ]);
+      expect(
+        (await withTransaction(suite.db, (tx) => heldRecords(tx))).map((h) => [
+          h.registroId,
+          h.caseId,
+        ]),
+      ).toEqual([[later.registroId, (await cases()).find((c) => c.registroId === first)!.id]]);
+
+      await drain(deps(wire.client), at(HOUR + 59 * MINUTE));
+      expect(wire.sent).toEqual([[first]]);
+
+      await drain(deps(wire.client), at(2 * HOUR));
+      expect(wire.sent).toEqual([[first], [later.registroId]]);
+      expect(await envioOf(later.registroId)).toMatchObject({ estado: "aceptado" });
+    });
+
+    it("a cancellation set aside after a run neither breaks it nor stops it holding the next sale", async () => {
+      const aeat = fakeAeat();
+      const seeded = await seedPendingEnvios(suite.db, { count: 3 });
+      for (const key of seeded.facturaKeys) aeat.reject(key, RUN_CODE, "Rechazo");
+      await drain(deps(aeat.client()), T0);
+      const cancellation = await appendCancellation(suite.db, seeded, seeded.registroIds[0]!, 4);
+      await drain(deps(aeat.client()), T);
+      expect(await envioOf(cancellation)).toMatchObject({ estado: "retenido" });
+      const sale = await appendPendingAlta(suite.db, seeded, 5);
+      const wire = recording(aeat.client());
+
+      const pass = await drain(deps(wire.client), at(MINUTE));
+
+      expect(wire.sent).toEqual([]);
+      expect(await envioOf(sale.registroId)).toMatchObject({ estado: "detenido" });
+      expect(pass.nextDueAt).toEqual(at(HOUR + MINUTE));
+    });
+
+    it("a cancellation set aside in the same claim as the next sale does not break the run that holds the sale", async () => {
+      const aeat = fakeAeat();
+      const seeded = await seedPendingEnvios(suite.db, { count: 3 });
+      for (const key of seeded.facturaKeys) aeat.reject(key, RUN_CODE, "Rechazo");
+      await drain(deps(aeat.client()), T0);
+      const cancellation = await appendCancellation(suite.db, seeded, seeded.registroIds[0]!, 4);
+      const sale = await appendPendingAlta(suite.db, seeded, 5);
+      const wire = recording(aeat.client());
+
+      await drain(deps(wire.client), T);
+
+      expect(wire.sent).toEqual([]);
+      expect(await estados([cancellation, sale.registroId])).toEqual(["retenido", "detenido"]);
     });
 
     it("keeps a healthy chain sending beside a stopped one", async () => {

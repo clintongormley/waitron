@@ -47,7 +47,7 @@ export const envios = table(
     index("envios_drenaje_idx").on(t.estado, t.proximoIntentoEn),
     check(
       "envios_estado_ck",
-      sql`${t.estado} in ('pendiente', 'enviando', 'aceptado', 'aceptado_con_errores', 'rechazado', 'detenido')`,
+      sql`${t.estado} in ('pendiente', 'enviando', 'aceptado', 'aceptado_con_errores', 'rechazado', 'detenido', 'retenido')`,
     ),
   ],
   /* v8 ignore stop */

@@ -430,7 +430,7 @@ things — three visible in the body above without needing the logs, one that ne
   table above) or a `failed` one (which retries on its own backoff and does NOT flip this field —
   see `src/pass.ts`'s own comment on why). `fiscal.drain` has no equivalent terminal outcome at
   all — a rejected or held fiscal record is a different, already-persisted signal, deliberately not
-  fed into `/health`: the record that caused a hold, or that AEAT rejected, gets a row in the
+  fed into `/health`: a record AEAT rejected, or a cancellation set aside because AEAT rejected its original, gets a row in the
   `incidents` table and a filing case in `filing_cases` (open ones raise the `fiscal.filing_cases_open`
   alert), except that the hourly retry of a chain held by a run of rejections, rejected again with
   the run's code, gets the filing case and no incident; a record held behind it gets neither, and shows in the `fiscal.submission_stopped` alert

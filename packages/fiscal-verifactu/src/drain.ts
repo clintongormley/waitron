@@ -19,7 +19,12 @@ import type {
 } from "@waitron/verifactu";
 import { deleteAck, writeAck } from "./acks.js";
 import type { FacturaParams, LineaParams, Operacion } from "./errors.js";
-import { openFilingCase, type FilingCaseCause } from "./filing-cases.js";
+import {
+  openAcceptedWithErrorsCase,
+  openFilingCase,
+  recordsBefore,
+  type FilingCaseCause,
+} from "./filing-cases.js";
 import { decodeRegistroRow, fromRegistroRow, toAeatDate } from "./registro-row.js";
 import type { Entorno, RegistroRow } from "./registro-row.js";
 
@@ -50,8 +55,8 @@ export const DEFAULT_SKIP_RETRY_MS = 5 * 60 * 1000;
 const MAX_CONSULTA_PAGES = 10;
 const deferredBatch = new Error("Wait for a full sending batch");
 
-/** How many records immediately before a never-sent record on its chain must all be refused
- * with one code for `haltOpenChainClaims` to hold it. A record still awaiting its answer among
+/** How many records immediately before a never-sent record on its chain, set-aside records
+ * skipped (`recordsBefore`), must all be refused with one code for `haltOpenChainClaims` to hold it. A record still awaiting its answer among
  * them breaks the run. The chain's first held record is sent hourly when `claimProbes` finds it
  * due, and the hold is lifted once that send breaks the run (`releaseSettledBrakeHolds`). */
 export const SAME_CODE_REFUSAL_LIMIT = 3;
@@ -196,9 +201,9 @@ async function drainDue(
 ): Promise<void> {
   // Commits before anything else in this pass reads `envios`, so a recovered row is an ordinary
   // `pendiente` row to the later transactions.
-  await withTransaction(db, async (tx) => {
+  await countOnCommit(db, result, async (tx, counts) => {
     await recoverStaleClaims(tx, now);
-    await releaseSettledBrakeHolds(tx, now);
+    await releaseSettledBrakeHolds(tx, now, counts);
   });
 
   const { flujo, dueCount0 } = await withTransaction(db, async (tx) => ({
@@ -629,11 +634,15 @@ async function claimBatch(
 
 /**
  * Holds a row `claimBatch` just claimed, in the claim's own transaction so it never reaches
- * `client.submit`, when an earlier row of its chain is `detenido`, when it is a cancellation
- * whose original (same chain, same invoice identity) is `rechazado`, or when this is its first
+ * `client.submit`, when an earlier row of its chain is `detenido`, or when this is its first
  * claim and the `SAME_CODE_REFUSAL_LIMIT` rows immediately before it on its chain are all
  * `rechazado` with one and the same code. A held row becomes `detenido` with `incidencia`, so
  * every later claimed row of its chain is held with it.
+ *
+ * A cancellation whose original (same chain, same invoice identity) is `rechazado` is set aside
+ * instead (`setAside`): `retenido`, with an incident and a filing case of its own
+ * (`fiscal.anulacion_retenida`) for a person to resolve, never sent, and holding nothing behind it. Nothing in this repository sets
+ * `SinRegistroPrevio`, which AEAT documents for cancelling an original it refused.
  *
  * A row still awaiting its answer (`pendiente` or `enviando`) breaks a run. So when the row right
  * after a run was sent and its answer is unreadable or missing, the run rule does not hold the rows
@@ -641,24 +650,22 @@ async function claimBatch(
  * immediately before it make a run of the limit.
  *
  * A cancellation whose original, on the same chain, is `detenido` is held by the first rule: that
- * original is an earlier row of the chain. For a record of a conflict's own envío, see
- * `haltSuccessors`.
+ * original is an earlier row of the chain. Once that original is `rechazado`, the cancellation is
+ * set aside in the same transaction (`setAsideHeldCancellations`).
  *
  * Short of such a run, a `rechazado` row holds nothing behind it (design §7.1,
- * docs/superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md). A cancellation of a
- * rejected original is held because nothing in this repository sets `SinRegistroPrevio`.
+ * docs/superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md).
  *
  * The run rule holds only a row claimed for the first time: `claimBatch` has incremented
  * `intentos` in this transaction, so a first claim reads 1 here. A row with `intentos` above 1
  * was claimed before, which includes an envío whose submit failed in transport; it may have
  * reached AEAT, so it is sent again rather than held, or its outcome there would stay unknown.
  * `secuencia` is unique per node (`registros_tenant_node_secuencia_uq`), not per chain, so
- * "immediately before" is the highest positions below this row's on its chain. A chain's rows are
- * all on its node (`appendToChain`, ./chain.ts), and naming the node lets
- * `registros_node_secuencia_idx` serve that walk.
+ * "immediately before" is the highest positions below this row's on its chain, set-aside records
+ * skipped (`recordsBefore`, ./filing-cases.ts).
  *
- * No incident and no case of its own: `heldRecords` (./filing-cases.ts) lists each held record
- * beside the case that holds it. A `halted` ack is written per held id, because this
+ * A held row gets no incident and no case of its own: `heldRecords` (./filing-cases.ts) lists each
+ * held record beside the case that holds it. A `halted` ack is written per held id, because this
  * bulk UPDATE bypasses `setEstado`'s `writeAck`.
  *
  * Of these holds, only the run's is lifted by the drain: `claimProbes` sends its first held record
@@ -671,36 +678,40 @@ async function haltOpenChainClaims(
   result: CommittedCounts,
 ): Promise<DueRow[]> {
   if (claimed.length === 0) return claimed;
-  const ids = claimed.map((row) => row.id);
+  // Set aside first, whatever else applies: the run rule below must already read these as
+  // `retenido`, or one claimed beside a later row would break the run that holds it.
+  const setAsideFound = await tx.execute<{ id: string }>(sql`
+    select r.id from registros_facturacion r
+    where r.id in ${claimed.map((row) => row.id)} and ${cancelsRefusedOriginal("r")}
+  `);
+  const setAsideIds = new Set(setAsideFound.rows.map((row) => row.id));
+  for (const row of claimed) {
+    if (!setAsideIds.has(row.id)) continue;
+    await setAside(tx, row, now, result);
+    result.recordsHalted += 1;
+  }
+  const rest = claimed.filter((row) => !setAsideIds.has(row.id));
+  if (rest.length === 0) return rest;
   const blocked = await tx.execute<{ id: string }>(sql`
     select r.id from registros_facturacion r
-    where r.id in ${ids}
+    where r.id in ${rest.map((row) => row.id)}
       and (exists (
         select 1 from envios held_envio
         join registros_facturacion held on held.id = held_envio.registro_id
         where held.sif_id = r.sif_id and held.secuencia < r.secuencia
           and held_envio.estado = 'detenido'
-      ) or (r.tipo_registro = 'anulacion' and exists (
-        select 1 from registros_facturacion original
-        join envios original_envio on original_envio.registro_id = original.id
-        where original.tipo_registro = 'alta'
-          and original.sif_id = r.sif_id
-          and original.id_emisor_factura = r.id_emisor_factura
-          and original.num_serie_factura = r.num_serie_factura
-          and original.fecha_expedicion_factura = r.fecha_expedicion_factura
-          and original_envio.estado = 'rechazado'
-      )) or (exists (
+      ) or (exists (
         select 1 from envios own where own.registro_id = r.id and own.intentos = 1
       ) and ${sameCodeRunBefore("r")}))
   `);
-  if (blocked.rows.length === 0) return claimed;
+  if (blocked.rows.length === 0) return rest;
   const blockedIds = new Set(blocked.rows.map((row) => row.id));
 
   // `claimed` is in `claimBatch`'s chain order, so a chain is held from its first held row on.
   const heldChains = new Set<string>();
   const kept: DueRow[] = [];
   const haltedIds: string[] = [];
-  for (const row of claimed) {
+  for (const row of rest) {
     if (blockedIds.has(row.id) || heldChains.has(row.sif_id)) {
       heldChains.add(row.sif_id);
       haltedIds.push(row.id);
@@ -708,33 +719,83 @@ async function haltOpenChainClaims(
       kept.push(row);
     }
   }
-  if (haltedIds.length > 0) {
-    await tx.execute(sql`
-      update envios set estado = 'detenido', incidencia = true where registro_id in ${haltedIds}
-    `);
-    for (const id of haltedIds) await writeAck(tx, id, now);
-    result.recordsHalted += haltedIds.length;
-  }
+  await tx.execute(sql`
+    update envios set estado = 'detenido', incidencia = true where registro_id in ${haltedIds}
+  `);
+  for (const id of haltedIds) await writeAck(tx, id, now);
+  result.recordsHalted += haltedIds.length;
   return kept;
 }
 
+/** True when `record`, the alias in the enclosing query, is a cancellation whose original alta
+ * (same chain, same invoice identity) is `rechazado`. */
+function cancelsRefusedOriginal(record: "r"): SQL {
+  const alias = sql.raw(record);
+  return sql`(${alias}.tipo_registro = 'anulacion' and exists (
+    select 1 from registros_facturacion original
+    join envios original_envio on original_envio.registro_id = original.id
+    where original.tipo_registro = 'alta'
+      and original.sif_id = ${alias}.sif_id
+      and original.id_emisor_factura = ${alias}.id_emisor_factura
+      and original.num_serie_factura = ${alias}.num_serie_factura
+      and original.fecha_expedicion_factura = ${alias}.fecha_expedicion_factura
+      and original_envio.estado = 'rechazado'
+  ))`;
+}
+
+/** Sets a cancellation of a refused original aside: `retenido`, never sent, with an incident and a
+ * filing case of its own for a person to resolve. */
+async function setAside(
+  tx: Transaction,
+  row: Pick<RegistroRow, "id" | "sale_id">,
+  now: Date,
+  result: CommittedCounts,
+): Promise<void> {
+  await setEstado(tx, row.id, "retenido", now, { csv: null, incidencia: true });
+  await raiseIncident(
+    tx,
+    row,
+    "error",
+    new AppError("fiscal.anulacion_retenida", { registroId: row.id }),
+    now,
+    result,
+  );
+  await openFilingCase(tx, {
+    registroId: row.id,
+    cause: "fiscal.anulacion_retenida",
+    evidence: { codigo: null, mensaje: null, csv: null },
+    now,
+  });
+}
+
+/** Sets aside each `detenido` cancellation whose original has since been refused, as
+ * `haltOpenChainClaims` does at claim time. Already counted halted when it was held. */
+async function setAsideHeldCancellations(
+  tx: Transaction,
+  now: Date,
+  result: CommittedCounts,
+): Promise<void> {
+  const { rows } = await tx.execute<{ id: string; sale_id: string }>(sql`
+    select r.id, r.sale_id from envios e
+    join registros_facturacion r on r.id = e.registro_id
+    where e.estado = 'detenido' and ${cancelsRefusedOriginal("r")}
+  `);
+  for (const row of rows) await setAside(tx, row, now, result);
+}
+
 /**
- * True when the `SAME_CODE_REFUSAL_LIMIT` records immediately before `record` on its chain are all
- * `rechazado` with one and the same code: the run rule, for the alias `record` names in the
- * enclosing query.
+ * True when the `SAME_CODE_REFUSAL_LIMIT` records immediately before `record` on its chain,
+ * set-aside records skipped (`recordsBefore`), are all `rechazado` with one and the same code: the
+ * run rule, for the alias `record` names in the enclosing query.
  */
 function sameCodeRunBefore(record: "r" | "d" | "p"): SQL {
-  const alias = sql.raw(record);
   return sql`(
     select count(run.codigo_error) = ${SAME_CODE_REFUSAL_LIMIT}
       and count(distinct run.codigo_error) = 1
       and sum(run.estado = 'rechazado') = ${SAME_CODE_REFUSAL_LIMIT}
     from (
       select preceding_envio.estado, preceding_envio.codigo_error
-      from registros_facturacion preceding
-      left join envios preceding_envio on preceding_envio.registro_id = preceding.id
-      where preceding.node_id = ${alias}.node_id and preceding.sif_id = ${alias}.sif_id
-        and preceding.secuencia < ${alias}.secuencia
+      ${recordsBefore(record)}
       order by preceding.secuencia desc
       limit ${SAME_CODE_REFUSAL_LIMIT}
     ) run
@@ -743,17 +804,15 @@ function sameCodeRunBefore(record: "r" | "d" | "p"): SQL {
 
 /**
  * Each chain's earliest `detenido` record `d`, with its envío `de`, the record immediately before
- * it `p` and that record's envío `p_envio`, where `d` has no case of its own and is not a
- * cancellation whose original (same chain, same invoice identity) is `rechazado`.
+ * it `p`, set-aside records skipped (`recordsBefore`), and that record's envío `p_envio`, where `d`
+ * has no case of its own.
  */
 const HELD_HEADS = sql`
   from envios de
   join registros_facturacion d on d.id = de.registro_id
   join registros_facturacion p on p.id = (
-    select previous.id from registros_facturacion previous
-    where previous.node_id = d.node_id and previous.sif_id = d.sif_id
-      and previous.secuencia < d.secuencia
-    order by previous.secuencia desc
+    select preceding.id ${recordsBefore("d")}
+    order by preceding.secuencia desc
     limit 1
   )
   join envios p_envio on p_envio.registro_id = p.id
@@ -765,16 +824,6 @@ const HELD_HEADS = sql`
         and earlier_envio.estado = 'detenido'
     )
     and not exists (select 1 from filing_cases own where own.registro_id = d.id)
-    and not (d.tipo_registro = 'anulacion' and exists (
-      select 1 from registros_facturacion original
-      join envios original_envio on original_envio.registro_id = original.id
-      where original.tipo_registro = 'alta'
-        and original.sif_id = d.sif_id
-        and original.id_emisor_factura = d.id_emisor_factura
-        and original.num_serie_factura = d.num_serie_factura
-        and original.fecha_expedicion_factura = d.fecha_expedicion_factura
-        and original_envio.estado = 'rechazado'
-    ))
 `;
 
 /**
@@ -868,8 +917,9 @@ async function claimProbes(
 }
 
 /**
- * The held heads where the record before them is settled, the `SAME_CODE_REFUSAL_LIMIT` records
- * before THAT record are a same-code run, and the ones before the head are not.
+ * The held heads the records before them on their chain no longer hold: the ones before the head
+ * are not a same-code run, and the record before it is settled with a same-code run before THAT
+ * record.
  */
 function releasableHeads(): SQL {
   return sql`
@@ -882,12 +932,19 @@ function releasableHeads(): SQL {
 }
 
 /**
- * Releases each `releasableHeads` chain: its head and the `detenido` records after it go back to
- * `pendiente`, due `now`, up to the first `detenido` record with a case of its own. Each one's
- * claim is given back (`intentos - 1`), so a first claim after the release still reads 1 in
- * `haltOpenChainClaims`. Its ack is deleted, as `pendiente` carries none.
+ * First sets aside the held cancellations whose original is now refused
+ * (`setAsideHeldCancellations`), then releases each `releasableHeads` chain: its head and the
+ * `detenido` records after it go back to `pendiente`, due `now`, up to the first `detenido` record
+ * with a case of its own. Each one's claim is given back (`intentos - 1`), so a first claim after
+ * the release still reads 1 in `haltOpenChainClaims`. Its ack is deleted, as `pendiente` carries
+ * none.
  */
-async function releaseSettledBrakeHolds(tx: Transaction, now: Date): Promise<void> {
+async function releaseSettledBrakeHolds(
+  tx: Transaction,
+  now: Date,
+  result: CommittedCounts,
+): Promise<void> {
+  await setAsideHeldCancellations(tx, now, result);
   const heads = await tx.execute<{
     id: string;
     node_id: string;
@@ -954,8 +1011,15 @@ function cabeceraFor(row: RegistroRow): Cabecera {
   return { ObligadoEmision: { NombreRazon: row.nombre_razon_emisor, NIF: row.id_emisor_factura } };
 }
 
-/** A missing fingerprint or invoice leaves the duplicate unresolved. */
-type Lookup = { matched: boolean | null } | { failed: unknown };
+/** The error AEAT reports for the copy it stored under an invoice key. */
+interface StoredError {
+  codigo: number | null;
+  mensaje: string | null;
+}
+
+/** A missing fingerprint or invoice leaves the duplicate unresolved. `storedError` is set when
+ * AEAT's consulta shows the stored copy accepted with errors. */
+type Lookup = { matched: boolean | null; storedError: StoredError | null } | { failed: unknown };
 
 /** A reply line matched to its claimed row. */
 interface ResolvedLine {
@@ -1092,7 +1156,7 @@ function lineaParams(linea: RespuestaLinea): LineaParams {
 
 async function lookUp(client: VerifactuClient, row: DueRow): Promise<Lookup> {
   try {
-    return { matched: await routeB(client, row) };
+    return await routeB(client, row);
   } catch (failed) {
     return { failed };
   }
@@ -1115,7 +1179,7 @@ async function persistResponse(
   const sentIds = batch.map((row) => row.id);
 
   for (const line of lines) {
-    await applyOutcome(tx, line, csv, now, result, sentIds);
+    await applyOutcome(tx, line, csv, now, result);
   }
   for (const { row, answer } of unmatched) {
     await awaitReadableAnswer(tx, row, csv, now, result, answer);
@@ -1134,18 +1198,16 @@ async function persistResponse(
       result,
     );
   }
-  await releaseSettledBrakeHolds(tx, now);
+  await releaseSettledBrakeHolds(tx, now, result);
 }
 
-/** Routes one resolved line to its estado transition + side effects. `sentIds` is the envío's
- * batch (see `haltSuccessors`). */
+/** Routes one resolved line to its estado transition + side effects. */
 async function applyOutcome(
   tx: Transaction,
   { row, linea, efectivo, lookup, duplicateAcceptedWithErrors }: ResolvedLine,
   csv: string | null,
   now: Date,
   result: CommittedCounts,
-  sentIds: string[],
 ): Promise<void> {
   switch (efectivo) {
     case "accepted":
@@ -1154,22 +1216,19 @@ async function applyOutcome(
       await setEstado(tx, row.id, "aceptado", now, { csv, confirmadoEn: now });
       result.recordsAccepted += 1;
       return;
-    case "accepted_with_errors": {
-      // Still an accept: AEAT stored the record, and only a warning incident marks the difference.
-      await setEstado(tx, row.id, "aceptado_con_errores", now, { csv, confirmadoEn: now });
-      const codigo = linea.CodigoErrorRegistro ?? null;
-      const mensaje = linea.DescripcionErrorRegistro ?? null;
-      await raiseIncident(
+    case "accepted_with_errors":
+      await settleAcceptedWithErrors(
         tx,
         row,
-        "warning",
-        new AppError("fiscal.aceptado_con_errores", { registroId: row.id, codigo, mensaje }),
+        {
+          codigo: linea.CodigoErrorRegistro ?? null,
+          mensaje: linea.DescripcionErrorRegistro ?? null,
+        },
+        csv,
         now,
         result,
       );
-      result.recordsAccepted += 1;
       return;
-    }
     case "rejected": {
       const codigo = linea.CodigoErrorRegistro ?? null;
       const mensaje = linea.DescripcionErrorRegistro ?? null;
@@ -1210,9 +1269,34 @@ async function applyOutcome(
         csv,
         now,
         result,
-        sentIds,
       );
   }
+}
+
+/**
+ * Still an accept: AEAT stored the record. A warning marks the difference, and a case asks a person
+ * to correct it unless AEAT exempts the error (`openAcceptedWithErrorsCase`). `original` is the
+ * stored copy's own error.
+ */
+async function settleAcceptedWithErrors(
+  tx: Transaction,
+  row: DueRow,
+  original: StoredError,
+  csv: string | null,
+  now: Date,
+  result: CommittedCounts,
+): Promise<void> {
+  await setEstado(tx, row.id, "aceptado_con_errores", now, { csv, confirmadoEn: now });
+  await raiseIncident(
+    tx,
+    row,
+    "warning",
+    new AppError("fiscal.aceptado_con_errores", { registroId: row.id, ...original }),
+    now,
+    result,
+  );
+  await openAcceptedWithErrorsCase(tx, { registroId: row.id, ...original, csv, now });
+  result.recordsAccepted += 1;
 }
 
 /** The case a person decides, opened in the same transaction as the outcome. */
@@ -1308,39 +1392,8 @@ async function setEstado(
     where registro_id = ${registroId}
   `);
   // The ack is written in the same transaction as the estado it reflects, so the two never
-  // disagree. The bulk halt paths write their own.
+  // disagree. `haltOpenChainClaims` writes its own.
   await writeAck(tx, registroId, now);
-}
-
-/**
- * Holds a conflict's still-`pendiente`/`enviando` successors on its chain (same `sif_id`, higher
- * `secuencia`) as `detenido`, flagging `incidencia`, except the records of this envío: those were
- * sent, and each keeps its own line's outcome here. One whose outcome stays unknown is held at its
- * next claim instead (`haltOpenChainClaims`). Writes a `halted` ack for each, because this bulk
- * UPDATE bypasses `setEstado`.
- *
- * A subquery rather than `UPDATE ... FROM`, which this engine refused with an alias on the target
- * table.
- */
-async function haltSuccessors(
-  tx: Transaction,
-  row: DueRow,
-  sentIds: string[],
-  now: Date,
-): Promise<string[]> {
-  const halted = await tx.execute<{ registro_id: string }>(sql`
-    update envios set estado = 'detenido', incidencia = true
-    where estado in ('pendiente', 'enviando')
-      and registro_id not in ${sentIds}
-      and registro_id in (
-        select id from registros_facturacion
-        where sif_id = ${row.sif_id} and secuencia > ${row.secuencia}
-      )
-    returning registro_id
-  `);
-  const haltedIds = halted.rows.map((r) => r.registro_id);
-  for (const id of haltedIds) await writeAck(tx, id, now);
-  return haltedIds;
 }
 
 /**
@@ -1349,7 +1402,7 @@ async function haltSuccessors(
  */
 async function raiseIncident(
   tx: Transaction,
-  row: DueRow,
+  row: Pick<RegistroRow, "sale_id">,
   severity: IncidentSeverity,
   error: AppError,
   now: Date,
@@ -1373,7 +1426,10 @@ async function raiseIncident(
  * `Ejercicio`/`Periodo` come from `fecha_expedicion_factura`: our records never carry a separate
  * `FechaOperacion`, so the operation month is the expedition month.
  */
-async function routeB(client: VerifactuClient, row: DueRow): Promise<boolean | null> {
+async function routeB(
+  client: VerifactuClient,
+  row: DueRow,
+): Promise<{ matched: boolean | null; storedError: StoredError | null }> {
   const [ejercicio, periodo] = row.fecha_expedicion_factura.split("-");
   const fecha = toAeatDate(row.fecha_expedicion_factura);
   let page: RespuestaConsulta["ClavePaginacion"];
@@ -1399,37 +1455,46 @@ async function routeB(client: VerifactuClient, row: DueRow): Promise<boolean | n
     );
     const huella = stored?.DatosRegistroFacturacion.Huella;
     if (huella !== undefined) {
-      if (huella !== row.huella) return false;
+      const storedError =
+        stored!.EstadoRegistro === "AceptadoConErrores"
+          ? {
+              codigo: stored!.CodigoErrorRegistro ?? null,
+              mensaje: stored!.DescripcionErrorRegistro ?? null,
+            }
+          : null;
+      if (huella !== row.huella) return { matched: false, storedError };
       const sistema = stored?.DatosRegistroFacturacion.SistemaInformatico;
-      if (typeof sistema !== "object" || sistema === null) return null;
+      if (typeof sistema !== "object" || sistema === null) return { matched: null, storedError };
       const original = fromRegistroRow(row).SistemaInformatico;
-      return (
+      const matched =
         "NIF" in sistema &&
         sistema.NIF === original.NIF &&
         "IdSistemaInformatico" in sistema &&
         sistema.IdSistemaInformatico === original.IdSistemaInformatico &&
         "NumeroInstalacion" in sistema &&
-        sistema.NumeroInstalacion === original.NumeroInstalacion
-      );
+        sistema.NumeroInstalacion === original.NumeroInstalacion;
+      return { matched, storedError };
     }
     const next = respuesta.ClavePaginacion;
-    if (respuesta.IndicadorPaginacion !== "S" || next === undefined) return null;
+    if (respuesta.IndicadorPaginacion !== "S" || next === undefined) return UNSETTLED;
     const key = JSON.stringify(next);
-    if (seenPages.has(key)) return null;
+    if (seenPages.has(key)) return UNSETTLED;
     seenPages.add(key);
     page = next;
   }
-  return null;
+  return UNSETTLED;
 }
+
+const UNSETTLED = { matched: null, storedError: null } as const;
 
 /**
  * The error-3000 duplicate cases:
  *
  *   - Route A (`duplicate_annulled` on an alta): AEAT's own copy of this identity is `Anulada`. This
- *     record can never become a confirmed accept under this identity, so it halts with
+ *     record can never become a confirmed accept under this identity, so it is refused with
  *     `fiscal.duplicado_anulado` rather than retrying forever.
  *   - Route B (all other duplicates): a consulta reads the record AEAT holds under this identity.
- *     A matching fingerprint and installation confirm our record. A mismatch halts; missing
+ *     A matching fingerprint and installation confirm our record. A mismatch is refused; missing
  *     evidence leaves the row pending, or a probe `detenido` for its next probe. An anulación
  *     belongs here because `Anulada` on a resent anulación is most likely AEAT holding that very
  *     anulación: the verifactu library's live preproduction check asserts that the final consulta
@@ -1440,8 +1505,9 @@ async function routeB(client: VerifactuClient, row: DueRow): Promise<boolean | n
  * `resolveLines` makes Route B's consulta before this transaction opens; a failed one leaves this
  * record unknown, as missing evidence does.
  *
- * A conflict opens a case and holds this chain's records not yet sent (`haltSuccessors`): no live
- * AEAT test has sent a successor after one (design §5, "Implemented, 2026-10-06"). Design:
+ * A conflict is `rechazado` with AEAT's code and opens a case. AEAT preproduction accepted, without
+ * a warning, a successor of a record refused with 3000 for changed contents (design §7.1,
+ * "Successor receipt, 2026-10-12 (W41s-1c …)"):
  * docs/superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md.
  */
 async function handleDuplicate(
@@ -1454,7 +1520,6 @@ async function handleDuplicate(
   csv: string | null,
   now: Date,
   result: CommittedCounts,
-  sentIds: string[],
 ): Promise<void> {
   const annulled = efectivo === "duplicate_annulled";
   if (lookup !== null) {
@@ -1466,27 +1531,21 @@ async function handleDuplicate(
       return;
     }
     if (lookup.matched) {
-      await setEstado(
-        tx,
-        row.id,
-        duplicateAcceptedWithErrors ? "aceptado_con_errores" : "aceptado",
-        now,
-        { csv, confirmadoEn: now },
-      );
-      if (duplicateAcceptedWithErrors) {
-        await raiseIncident(
-          tx,
-          row,
-          "warning",
-          new AppError("fiscal.aceptado_con_errores", {
-            registroId: row.id,
-            codigo: linea.CodigoErrorRegistro ?? null,
-            mensaje: linea.DescripcionErrorRegistro ?? null,
-          }),
-          now,
-          result,
-        );
+      if (duplicateAcceptedWithErrors || lookup.storedError !== null) {
+        // The line's own code is 3000. The stored copy's error is in the duplicate detail, which
+        // AEAT may omit, or in the consulta; when neither names it, the case opens with no code.
+        const detail = linea.RegistroDuplicado;
+        const original =
+          detail?.CodigoErrorRegistro !== undefined
+            ? {
+                codigo: detail.CodigoErrorRegistro,
+                mensaje: detail.DescripcionErrorRegistro ?? null,
+              }
+            : (lookup.storedError ?? { codigo: null, mensaje: null });
+        await settleAcceptedWithErrors(tx, row, original, csv, now, result);
+        return;
       }
+      await setEstado(tx, row.id, "aceptado", now, { csv, confirmadoEn: now });
       result.recordsAccepted += 1;
       return;
     }
@@ -1499,11 +1558,19 @@ async function handleDuplicate(
     }
   }
   const cause = annulled ? "fiscal.duplicado_anulado" : "fiscal.huella_divergente";
-  await setEstado(tx, row.id, "detenido", now, { csv, incidencia: true });
-  await raiseIncident(tx, row, "error", new AppError(cause, { registroId: row.id }), now, result);
+  await setEstado(tx, row.id, "rechazado", now, {
+    csv,
+    codigoError: linea.CodigoErrorRegistro ?? null,
+    mensajeError: linea.DescripcionErrorRegistro ?? null,
+    incidencia: true,
+  });
+  // As for a refusal: a probe that conflicts with its run's code lengthens the run that
+  // `fiscal.refusals_repeated` already reports.
+  if (row.probe === undefined || String(linea.CodigoErrorRegistro) !== row.probe.runCode) {
+    await raiseIncident(tx, row, "error", new AppError(cause, { registroId: row.id }), now, result);
+  }
   await openCase(tx, row, cause, linea, csv, now);
-  const haltedIds = await haltSuccessors(tx, row, sentIds, now);
-  result.recordsHalted += 1 + haltedIds.length;
+  result.recordsHalted += 1;
 }
 
 /** A structured code, never prose: the AppError's own code, or the literal "unknown". The same

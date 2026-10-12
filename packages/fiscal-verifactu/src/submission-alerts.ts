@@ -3,7 +3,7 @@ import type { Transaction } from "@waitron/db";
 import type { AlertSource, OngoingAlert } from "@waitron/module";
 import { SAME_CODE_REFUSAL_LIMIT } from "./drain.js";
 import { envios } from "./schema/envios.js";
-import { openFilingCasesSummary } from "./filing-cases.js";
+import { openFilingCasesSummary, recordsBefore } from "./filing-cases.js";
 import { registrosFacturacion } from "./schema/registros.js";
 import "./errors.js";
 
@@ -80,7 +80,8 @@ export const fiscalSubmissionSource: AlertSource = {
  * One alert per chain whose earliest `detenido` record has no case of its own and follows at least
  * `SAME_CODE_REFUSAL_LIMIT` `rechazado` records with one code: the hold `haltOpenChainClaims`
  * (./drain.ts) puts on a run of refusals. `count` is the whole run, which one envío can make
- * longer than the limit.
+ * longer than the limit. Every walk back skips set-aside records (`recordsBefore`), as the hold
+ * does.
  *
  * Each walk back names the chain's node, so `registros_node_secuencia_idx` serves it, and the
  * `materialized` steps compute each chain's walks once rather than once per reference. A run with
@@ -102,9 +103,7 @@ async function refusalsRepeated(tx: Transaction): Promise<OngoingAlert[]> {
     ),
     held as materialized (
       select h.node_id, h.sif_id, h.secuencia, (
-        select preceding.id from registros_facturacion preceding
-        where preceding.node_id = h.node_id and preceding.sif_id = h.sif_id
-          and preceding.secuencia < h.secuencia
+        select preceding.id ${recordsBefore("h")}
         order by preceding.secuencia desc
         limit 1
       ) as last_id
@@ -115,10 +114,7 @@ async function refusalsRepeated(tx: Transaction): Promise<OngoingAlert[]> {
     runs as materialized (
       select held.node_id, held.sif_id, held.secuencia, last_envio.codigo_error as codigo,
         (
-          select preceding.secuencia from registros_facturacion preceding
-          left join envios preceding_envio on preceding_envio.registro_id = preceding.id
-          where preceding.node_id = held.node_id and preceding.sif_id = held.sif_id
-            and preceding.secuencia < held.secuencia
+          select preceding.secuencia ${recordsBefore("held")}
             and (preceding_envio.estado is not 'rechazado'
               or preceding_envio.codigo_error is not last_envio.codigo_error)
           order by preceding.secuencia desc
@@ -130,17 +126,16 @@ async function refusalsRepeated(tx: Transaction): Promise<OngoingAlert[]> {
       where last_envio.estado = 'rechazado' and last_envio.codigo_error is not null
     )
     select sif_id, codigo, (
-      select stop_case.opened_at from registros_facturacion stop_record
-      join filing_cases stop_case on stop_case.registro_id = stop_record.id
-      where stop_record.node_id = runs.node_id and stop_record.sif_id = runs.sif_id
-        and stop_record.secuencia < runs.secuencia
-        and stop_record.secuencia > coalesce(runs.break_secuencia, 0)
-      order by stop_record.secuencia
+      select (
+        select stop_case.opened_at from filing_cases stop_case
+        where stop_case.registro_id = preceding.id
+      ) ${recordsBefore("runs")}
+        and preceding.secuencia > coalesce(runs.break_secuencia, 0)
+        and preceding.id in (select registro_id from filing_cases)
+      order by preceding.secuencia
       limit 1 offset ${SAME_CODE_REFUSAL_LIMIT - 1}
     ) as opened_at, (
-      select count(*) from registros_facturacion preceding
-      where preceding.node_id = runs.node_id and preceding.sif_id = runs.sif_id
-        and preceding.secuencia < runs.secuencia
+      select count(*) ${recordsBefore("runs")}
         and preceding.secuencia > coalesce(runs.break_secuencia, 0)
     ) as run_length
     from runs

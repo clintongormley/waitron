@@ -9,9 +9,10 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import { VerifactuBackend } from "./backend.js";
 import { DEFAULT_SKIP_RETRY_MS, drain, type DrainDeps } from "./drain.js";
+import { listFilingCases } from "./filing-cases.js";
 import { reconcile, type ReconcileDeps } from "./reconcile.js";
 import { toAeatDate } from "./registro-row.js";
-import { seedPendingEnvios } from "../test/drain-fixtures.js";
+import { consultaNames, seedPendingEnvios } from "../test/drain-fixtures.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
 import { saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
@@ -586,6 +587,92 @@ describe("reconcile — the three audit cases", () => {
     // No correction needed — it was already a clean match.
     const estados = await estadosFor();
     expect(estados.get(seeded.registroIds[0]!)).toBe("aceptado_con_errores");
+  });
+});
+
+describe("reconcile — a record AEAT holds accepted with errors opens a case", () => {
+  const casesFor = () => withTransaction(suite.db, (tx) => listFilingCases(tx));
+
+  it("drift: opens a case with the error AEAT names, keeping the envío's CSV as evidence", async () => {
+    const aeat = createFakeAeat({ serverNow: SERVER_NOW });
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    const [record] = seeded.registroIds;
+    await storeAllAtAeat(staticResolver(aeat.client()));
+    const { rows } = await suite.db.execute<{ csv: string }>(
+      sql`select csv from envios where registro_id = ${record}`,
+    );
+    aeat.setConsultaState(seeded.facturaKeys[0]!, "AceptadoConErrores");
+
+    await reconcile(
+      reconcileDeps(staticResolver(consultaNames(aeat.client(), 2005)), seeded.clock),
+      PERIOD,
+    );
+
+    expect((await casesFor()).map((c) => [c.registroId, c.cause, c.evidence])).toEqual([
+      [
+        record,
+        "fiscal.aceptado_con_errores",
+        { codigo: 2005, mensaje: "Error 2005", csv: rows[0]!.csv },
+      ],
+    ]);
+    expect((await incidentsFor()).map((i) => [i.code, i.severity])).toEqual([
+      ["fiscal.reconcile_drift_errores", "warning"],
+    ]);
+  });
+
+  it("lost acknowledgement: opens a case with the error AEAT names, beside the warning the drain raises", async () => {
+    const aeat = createFakeAeat({ serverNow: SERVER_NOW });
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    const [record] = seeded.registroIds;
+    await storeAllAtAeat(staticResolver(aeat.client()));
+    await suite.db.execute(sql`update envios set estado = 'pendiente', csv = null`);
+    aeat.setConsultaState(seeded.facturaKeys[0]!, "AceptadoConErrores");
+
+    const result = await reconcile(
+      reconcileDeps(staticResolver(consultaNames(aeat.client(), 2005)), seeded.clock),
+      PERIOD,
+    );
+
+    expect(result.incidentsRaised).toBe(1);
+    expect((await estadosFor()).get(record!)).toBe("aceptado_con_errores");
+    expect((await casesFor()).map((c) => [c.registroId, c.cause, c.evidence])).toEqual([
+      [record, "fiscal.aceptado_con_errores", { codigo: 2005, mensaje: "Error 2005", csv: null }],
+    ]);
+    expect(await incidentsFor()).toEqual([
+      {
+        code: "fiscal.aceptado_con_errores",
+        severity: "warning",
+        params: { registroId: record, codigo: 2005, mensaje: "Error 2005" },
+      },
+    ]);
+  });
+
+  it("opens no case for an error AEAT exempts from correction", async () => {
+    const aeat = createFakeAeat({ serverNow: SERVER_NOW });
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    await storeAllAtAeat(staticResolver(aeat.client()));
+    aeat.setConsultaState(seeded.facturaKeys[0]!, "AceptadoConErrores");
+
+    await reconcile(
+      reconcileDeps(staticResolver(consultaNames(aeat.client(), 2004)), seeded.clock),
+      PERIOD,
+    );
+
+    expect((await estadosFor()).get(seeded.registroIds[0]!)).toBe("aceptado_con_errores");
+    expect(await casesFor()).toEqual([]);
+  });
+
+  it("opens a case with no code when AEAT names no error", async () => {
+    const aeat = createFakeAeat({ serverNow: SERVER_NOW });
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    await storeAllAtAeat(staticResolver(aeat.client()));
+    aeat.setConsultaState(seeded.facturaKeys[0]!, "AceptadoConErrores");
+
+    await reconcile(reconcileDeps(staticResolver(aeat.client()), seeded.clock), PERIOD);
+
+    expect((await casesFor()).map((c) => [c.cause, c.evidence.codigo])).toEqual([
+      ["fiscal.aceptado_con_errores", null],
+    ]);
   });
 });
 
