@@ -405,7 +405,10 @@ original AEAT refused is now set aside on its own (envío state `retenido`, migr
 `0005_envio_retenido`) with an `error` incident and a filing case, both `fiscal.anulacion_retenida`,
 and holds nothing behind it; one already held behind its original is set aside in the transaction
 that records the original's refusal.
-A record accepted with errors opens a filing case unless AEAT exempts the code (2004, 2009). What
+A record accepted with errors opens a filing case unless AEAT exempts the code (2004, 2009); a
+re-sent one AEAT answers as a duplicate (3000), and one the reconciliation sweep corrects
+(`reconcile`, no production caller yet), are judged by
+the stored copy's own error, read from the duplicate detail or AEAT's consulta. What
 still holds later records: the three-refusal brake and the wait behind an unknown answer.
 Statements below that a conflict or a held cancellation holds its chain describe the earlier
 behaviour.

@@ -13,6 +13,7 @@ import type {
   VerifactuClient,
 } from "@waitron/verifactu";
 import { deleteAck, writeAck } from "./acks.js";
+import { openAcceptedWithErrorsCase } from "./filing-cases.js";
 import { toAeatDate } from "./registro-row.js";
 
 export interface ReconcileDeps {
@@ -40,11 +41,19 @@ type PeriodRow = {
   /** For an alta, the id of its sale's anulación, if one exists; otherwise null. */
   anulacion_id: string | null;
   estado: string;
+  csv: string | null;
   reconciled_resubmit_at: string | null;
   id_emisor_factura: string;
   nombre_razon_emisor: string;
   num_serie_factura: string;
   fecha_expedicion_factura: string;
+};
+
+/** What AEAT's consulta reports for one stored record: its state, and its error when it has one. */
+type Reported = {
+  estado: EstadoRegistroConsulta;
+  codigo: number | null;
+  mensaje: string | null;
 };
 
 /** `envios.estado` values we read as "still awaiting acknowledgement". */
@@ -143,12 +152,13 @@ export async function reconcile(
   const detectedAt = deps.clock.now().instant;
   await withTransaction(deps.db, async (tx) => {
     for (const row of rows) {
-      const reported = authority.get(row.id) ?? reportedThroughAnulacion(row, authority);
+      const found = authority.get(row.id) ?? reportedThroughAnulacion(row, authority);
+      const reported = found?.estado ?? null;
 
       if (PENDIENTE.has(row.estado)) {
-        if (reported !== null) {
-          result.lostAck.push(mismatchOf(row, reported));
-          await correct(tx, row, reported, detectedAt);
+        if (found !== null) {
+          result.lostAck.push(mismatchOf(row, found.estado));
+          await correct(tx, row, found, detectedAt);
         }
         continue;
       }
@@ -196,7 +206,7 @@ export async function reconcile(
           // raised at most once per genuine clean→errors transition — the unconditional `raise`.
           await raise(tx, row, drift.severity, drift.code, detectedAt);
           result.incidentsRaised += 1;
-          await correct(tx, row, reported, detectedAt);
+          await correct(tx, row, found!, detectedAt);
         }
       }
       // Clean agreement, nothing to do (the drainer already acked it — never re-ack a record that
@@ -230,7 +240,7 @@ async function rowsForPeriod(
         where a.sale_id = r.sale_id and a.tipo_registro = 'anulacion'
         limit 1
       ) end as anulacion_id,
-      e.estado, e.reconciled_resubmit_at,
+      e.estado, e.csv, e.reconciled_resubmit_at,
       r.id_emisor_factura, r.nombre_razon_emisor, r.num_serie_factura,
       r.fecha_expedicion_factura
     from envios e
@@ -251,10 +261,12 @@ async function rowsForPeriod(
  */
 function reportedThroughAnulacion(
   row: PeriodRow,
-  authority: Map<string, EstadoRegistroConsulta>,
-): EstadoRegistroConsulta | null {
+  authority: Map<string, Reported>,
+): Reported | null {
   if (row.anulacion_id === null) return null;
-  return authority.get(row.anulacion_id) === "Anulado" ? "Anulado" : null;
+  return authority.get(row.anulacion_id)?.estado === "Anulado"
+    ? { estado: "Anulado", codigo: null, mensaje: null }
+    : null;
 }
 
 function cabeceraFor(row: PeriodRow): Cabecera {
@@ -262,7 +274,7 @@ function cabeceraFor(row: PeriodRow): Cabecera {
 }
 
 /**
- * Pages the whole period consulta into `RefExterna → EstadoRegistro`. A record with no `RefExterna`
+ * Pages the whole period consulta into `RefExterna → Reported`. A record with no `RefExterna`
  * is one we cannot attribute to any of our registros (e.g. filed for this obligado by another
  * software system), so it is skipped.
  *
@@ -273,8 +285,8 @@ async function fetchAuthority(
   client: VerifactuClient,
   cabecera: Cabecera,
   period: { year: string; month: string },
-): Promise<Map<string, EstadoRegistroConsulta>> {
-  const authority = new Map<string, EstadoRegistroConsulta>();
+): Promise<Map<string, Reported>> {
+  const authority = new Map<string, Reported>();
   let clave: ConsultaFiltro["ClavePaginacion"];
   do {
     const resp = await client.consultar(cabecera, {
@@ -284,7 +296,13 @@ async function fetchAuthority(
     });
     for (const r of resp.registros) {
       const ref = (r.DatosRegistroFacturacion as { RefExterna?: string }).RefExterna;
-      if (ref !== undefined) authority.set(ref, r.EstadoRegistro);
+      if (ref !== undefined) {
+        authority.set(ref, {
+          estado: r.EstadoRegistro,
+          codigo: r.CodigoErrorRegistro ?? null,
+          mensaje: r.DescripcionErrorRegistro ?? null,
+        });
+      }
     }
     if (resp.IndicadorPaginacion === "S") {
       if (resp.ClavePaginacion === undefined) {
@@ -305,7 +323,8 @@ function mismatchOf(row: PeriodRow, reported: EstadoRegistroConsulta | null): Re
 /**
  * Corrects one mismatch's local estado toward what AEAT reports, then writes the ack the lost
  * response would have produced, on the same transaction so the ack reflects the estado this commit
- * writes. No-ops for a state `CORRECTION` does not map.
+ * writes. No-ops for a state `CORRECTION` does not map. A record corrected to
+ * `aceptado_con_errores` gets the drainer's case for it, with the error AEAT reports.
  *
  * A targeted `update` rather than the drainer's `setEstado`, which requires a csv: a consulta never
  * returns one, so `csv` keeps whatever the row already held.
@@ -313,16 +332,25 @@ function mismatchOf(row: PeriodRow, reported: EstadoRegistroConsulta | null): Re
 async function correct(
   tx: Transaction,
   row: PeriodRow,
-  reported: EstadoRegistroConsulta,
+  reported: Reported,
   now: Date,
 ): Promise<void> {
-  const target = CORRECTION[reported];
+  const target = CORRECTION[reported.estado];
   if (target === undefined) return; // Anulado / no clean local estado — incident-only.
   await tx.execute(sql`
     update envios set estado = ${target}, confirmado_en = ${now.toISOString()}
     where registro_id = ${row.id}
   `);
   await writeAck(tx, row.id, now);
+  if (target === "aceptado_con_errores") {
+    await openAcceptedWithErrorsCase(tx, {
+      registroId: row.id,
+      codigo: reported.codigo,
+      mensaje: reported.mensaje,
+      csv: row.csv,
+      now,
+    });
+  }
 }
 
 /** First-detection `noTrace` remediation: reset to `pendiente` so the drainer re-submits it (safe:

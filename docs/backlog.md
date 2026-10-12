@@ -304,11 +304,6 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   automatic recovery, and until then the same-code brake holds the chain. Any invoice that needs
   correction or cancellation opens a filing case for the owner to fix and submit. [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04)
 
-- **A re-sent invoice whose stored copy AEAT accepted with errors opens no case.** AEAT answers it
-  as a duplicate (3000), not with the original error code, so Waitron cannot tell whether the error
-  is one AEAT exempts from correction (2004, 2009); it raises only the warning. A consulta of the
-  stored record might name the error. From the conflict-holds-nothing branch (2026-10-12).
-
 - **Still open after W41s-3 (#1289): one reply can open up to 1,000 filing cases.** A refusal
   that applies to every later record (one about the taxpayer's identity, say) opens one case per
   record in that reply before the repeated-code brake takes effect (`MAX_REGISTROS_POR_ENVIO`).

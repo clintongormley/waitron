@@ -19,7 +19,11 @@ import type {
 } from "@waitron/verifactu";
 import { deleteAck, writeAck } from "./acks.js";
 import type { FacturaParams, LineaParams, Operacion } from "./errors.js";
-import { openFilingCase, type FilingCaseCause } from "./filing-cases.js";
+import {
+  openAcceptedWithErrorsCase,
+  openFilingCase,
+  type FilingCaseCause,
+} from "./filing-cases.js";
 import { decodeRegistroRow, fromRegistroRow, toAeatDate } from "./registro-row.js";
 import type { Entorno, RegistroRow } from "./registro-row.js";
 
@@ -55,10 +59,6 @@ const deferredBatch = new Error("Wait for a full sending batch");
  * them breaks the run. The chain's first held record is sent hourly when `claimProbes` finds it
  * due, and the hold is lifted once that send breaks the run (`releaseSettledBrakeHolds`). */
 export const SAME_CODE_REFUSAL_LIMIT = 3;
-
-/** The accepted-with-errors codes AEAT says need no correction: «Se excepciona este error de la
- * necesidad de ser subsanado» (Validaciones_Errores_Veri-Factu v1.2.2, §4.3.1). */
-const EXEMPT_FROM_CORRECTION = new Set([2004, 2009]);
 
 /** The first retry's wait, and the per-attempt doubling unit `backoffMs` scales from. */
 export const BACKOFF_BASE_MS = 60_000;
@@ -1021,8 +1021,15 @@ function cabeceraFor(row: RegistroRow): Cabecera {
   return { ObligadoEmision: { NombreRazon: row.nombre_razon_emisor, NIF: row.id_emisor_factura } };
 }
 
-/** A missing fingerprint or invoice leaves the duplicate unresolved. */
-type Lookup = { matched: boolean | null } | { failed: unknown };
+/** The error AEAT reports for the copy it stored under an invoice key. */
+interface StoredError {
+  codigo: number | null;
+  mensaje: string | null;
+}
+
+/** A missing fingerprint or invoice leaves the duplicate unresolved. `storedError` is set when
+ * AEAT's consulta shows the stored copy accepted with errors. */
+type Lookup = { matched: boolean | null; storedError: StoredError | null } | { failed: unknown };
 
 /** A reply line matched to its claimed row. */
 interface ResolvedLine {
@@ -1159,7 +1166,7 @@ function lineaParams(linea: RespuestaLinea): LineaParams {
 
 async function lookUp(client: VerifactuClient, row: DueRow): Promise<Lookup> {
   try {
-    return { matched: await routeB(client, row) };
+    return await routeB(client, row);
   } catch (failed) {
     return { failed };
   }
@@ -1219,26 +1226,19 @@ async function applyOutcome(
       await setEstado(tx, row.id, "aceptado", now, { csv, confirmadoEn: now });
       result.recordsAccepted += 1;
       return;
-    case "accepted_with_errors": {
-      // Still an accept: AEAT stored the record. A warning marks the difference, and a case asks
-      // a person to correct it unless AEAT exempts the error.
-      await setEstado(tx, row.id, "aceptado_con_errores", now, { csv, confirmadoEn: now });
-      const codigo = linea.CodigoErrorRegistro ?? null;
-      const mensaje = linea.DescripcionErrorRegistro ?? null;
-      await raiseIncident(
+    case "accepted_with_errors":
+      await settleAcceptedWithErrors(
         tx,
         row,
-        "warning",
-        new AppError("fiscal.aceptado_con_errores", { registroId: row.id, codigo, mensaje }),
+        {
+          codigo: linea.CodigoErrorRegistro ?? null,
+          mensaje: linea.DescripcionErrorRegistro ?? null,
+        },
+        csv,
         now,
         result,
       );
-      if (codigo === null || !EXEMPT_FROM_CORRECTION.has(codigo)) {
-        await openCase(tx, row, "fiscal.aceptado_con_errores", linea, csv, now);
-      }
-      result.recordsAccepted += 1;
       return;
-    }
     case "rejected": {
       const codigo = linea.CodigoErrorRegistro ?? null;
       const mensaje = linea.DescripcionErrorRegistro ?? null;
@@ -1281,6 +1281,32 @@ async function applyOutcome(
         result,
       );
   }
+}
+
+/**
+ * Still an accept: AEAT stored the record. A warning marks the difference, and a case asks a person
+ * to correct it unless AEAT exempts the error (`openAcceptedWithErrorsCase`). `original` is the
+ * stored copy's own error.
+ */
+async function settleAcceptedWithErrors(
+  tx: Transaction,
+  row: DueRow,
+  original: StoredError,
+  csv: string | null,
+  now: Date,
+  result: CommittedCounts,
+): Promise<void> {
+  await setEstado(tx, row.id, "aceptado_con_errores", now, { csv, confirmadoEn: now });
+  await raiseIncident(
+    tx,
+    row,
+    "warning",
+    new AppError("fiscal.aceptado_con_errores", { registroId: row.id, ...original }),
+    now,
+    result,
+  );
+  await openAcceptedWithErrorsCase(tx, { registroId: row.id, ...original, csv, now });
+  result.recordsAccepted += 1;
 }
 
 /** The case a person decides, opened in the same transaction as the outcome. */
@@ -1410,7 +1436,10 @@ async function raiseIncident(
  * `Ejercicio`/`Periodo` come from `fecha_expedicion_factura`: our records never carry a separate
  * `FechaOperacion`, so the operation month is the expedition month.
  */
-async function routeB(client: VerifactuClient, row: DueRow): Promise<boolean | null> {
+async function routeB(
+  client: VerifactuClient,
+  row: DueRow,
+): Promise<{ matched: boolean | null; storedError: StoredError | null }> {
   const [ejercicio, periodo] = row.fecha_expedicion_factura.split("-");
   const fecha = toAeatDate(row.fecha_expedicion_factura);
   let page: RespuestaConsulta["ClavePaginacion"];
@@ -1436,28 +1465,37 @@ async function routeB(client: VerifactuClient, row: DueRow): Promise<boolean | n
     );
     const huella = stored?.DatosRegistroFacturacion.Huella;
     if (huella !== undefined) {
-      if (huella !== row.huella) return false;
+      const storedError =
+        stored!.EstadoRegistro === "AceptadoConErrores"
+          ? {
+              codigo: stored!.CodigoErrorRegistro ?? null,
+              mensaje: stored!.DescripcionErrorRegistro ?? null,
+            }
+          : null;
+      if (huella !== row.huella) return { matched: false, storedError };
       const sistema = stored?.DatosRegistroFacturacion.SistemaInformatico;
-      if (typeof sistema !== "object" || sistema === null) return null;
+      if (typeof sistema !== "object" || sistema === null) return { matched: null, storedError };
       const original = fromRegistroRow(row).SistemaInformatico;
-      return (
+      const matched =
         "NIF" in sistema &&
         sistema.NIF === original.NIF &&
         "IdSistemaInformatico" in sistema &&
         sistema.IdSistemaInformatico === original.IdSistemaInformatico &&
         "NumeroInstalacion" in sistema &&
-        sistema.NumeroInstalacion === original.NumeroInstalacion
-      );
+        sistema.NumeroInstalacion === original.NumeroInstalacion;
+      return { matched, storedError };
     }
     const next = respuesta.ClavePaginacion;
-    if (respuesta.IndicadorPaginacion !== "S" || next === undefined) return null;
+    if (respuesta.IndicadorPaginacion !== "S" || next === undefined) return UNSETTLED;
     const key = JSON.stringify(next);
-    if (seenPages.has(key)) return null;
+    if (seenPages.has(key)) return UNSETTLED;
     seenPages.add(key);
     page = next;
   }
-  return null;
+  return UNSETTLED;
 }
+
+const UNSETTLED = { matched: null, storedError: null } as const;
 
 /**
  * The error-3000 duplicate cases:
@@ -1503,27 +1541,21 @@ async function handleDuplicate(
       return;
     }
     if (lookup.matched) {
-      await setEstado(
-        tx,
-        row.id,
-        duplicateAcceptedWithErrors ? "aceptado_con_errores" : "aceptado",
-        now,
-        { csv, confirmadoEn: now },
-      );
-      if (duplicateAcceptedWithErrors) {
-        await raiseIncident(
-          tx,
-          row,
-          "warning",
-          new AppError("fiscal.aceptado_con_errores", {
-            registroId: row.id,
-            codigo: linea.CodigoErrorRegistro ?? null,
-            mensaje: linea.DescripcionErrorRegistro ?? null,
-          }),
-          now,
-          result,
-        );
+      if (duplicateAcceptedWithErrors || lookup.storedError !== null) {
+        // The line's own code is 3000. The stored copy's error is in the duplicate detail, which
+        // AEAT may omit, or in the consulta; when neither names it, the case opens with no code.
+        const detail = linea.RegistroDuplicado;
+        const original =
+          detail?.CodigoErrorRegistro !== undefined
+            ? {
+                codigo: detail.CodigoErrorRegistro,
+                mensaje: detail.DescripcionErrorRegistro ?? null,
+              }
+            : (lookup.storedError ?? { codigo: null, mensaje: null });
+        await settleAcceptedWithErrors(tx, row, original, csv, now, result);
+        return;
       }
+      await setEstado(tx, row.id, "aceptado", now, { csv, confirmadoEn: now });
       result.recordsAccepted += 1;
       return;
     }

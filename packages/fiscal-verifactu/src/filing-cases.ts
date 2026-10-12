@@ -51,6 +51,34 @@ export async function openFilingCase(
   return opened!;
 }
 
+/** The accepted-with-errors codes AEAT says need no correction: «Se excepciona este error de la
+ * necesidad de ser subsanado» (Validaciones_Errores_Veri-Factu v1.2.2, §4.3.1). */
+const EXEMPT_FROM_CORRECTION = new Set([2004, 2009]);
+
+/**
+ * Opens the `fiscal.aceptado_con_errores` case for a record AEAT stored with an error, unless AEAT
+ * exempts that error from correction. `codigo` is the stored copy's own error, never a duplicate
+ * reply's 3000; a null one cannot be shown exempt, so it opens the case.
+ */
+export async function openAcceptedWithErrorsCase(
+  tx: Transaction,
+  input: {
+    registroId: string;
+    codigo: number | null;
+    mensaje: string | null;
+    csv: string | null;
+    now: Date;
+  },
+): Promise<void> {
+  if (input.codigo !== null && EXEMPT_FROM_CORRECTION.has(input.codigo)) return;
+  await openFilingCase(tx, {
+    registroId: input.registroId,
+    cause: "fiscal.aceptado_con_errores",
+    evidence: { codigo: input.codigo, mensaje: input.mensaje, csv: input.csv },
+    now: input.now,
+  });
+}
+
 /**
  * Records what a person did about a case. `actionKey` is the caller's idempotency key: a retry with
  * the same content returns the event already stored, and the same key with other content is

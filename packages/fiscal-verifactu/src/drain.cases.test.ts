@@ -608,6 +608,152 @@ describe("drain — a record accepted with errors", () => {
   });
 });
 
+describe("drain — a re-sent record whose stored copy AEAT accepted with errors", () => {
+  /** Files the record, has AEAT's stored copy read accepted with errors, then puts the envío back
+   * to waiting with no CSV, as a lost reply leaves it, so the next pass sends it again and AEAT
+   * answers 3000. */
+  async function storedWithErrorsReplyLost(aeat: ReturnType<typeof fakeAeat>, seeded: SeededDrain) {
+    const [record] = seeded.registroIds;
+    await drain(deps(aeat.client()), FIRST);
+    aeat.setConsultaState(seeded.facturaKeys[0]!, "AceptadoConErrores");
+    await resend(record!);
+    return record!;
+  }
+
+  async function resend(registroId: string) {
+    await suite.db.execute(sql`
+      update envios set estado = 'pendiente', csv = null, confirmado_en = null,
+        proximo_intento_en = ${FIRST.toISOString()}
+      where registro_id = ${registroId}
+    `);
+  }
+
+  /** The 3000 line's duplicate detail carries the stored copy's own error, which AEAT's schema
+   * allows and the fake AEAT never sends. */
+  const detailNames = (client: VerifactuClient, codigo: number) =>
+    rewritingLines(client, (linea) =>
+      linea.RegistroDuplicado === undefined
+        ? linea
+        : {
+            ...linea,
+            RegistroDuplicado: {
+              ...linea.RegistroDuplicado,
+              CodigoErrorRegistro: codigo,
+              DescripcionErrorRegistro: `Error ${codigo}`,
+            },
+          },
+    );
+
+  /** AEAT's consulta reports the stored copy's error, which the fake AEAT sends only for 2007. */
+  const consultaNames = (client: VerifactuClient, codigo: number): VerifactuClient => ({
+    submit: (...args) => client.submit(...args),
+    consultar: async (...args) => {
+      const respuesta = await client.consultar(...args);
+      return {
+        ...respuesta,
+        registros: respuesta.registros.map((r) =>
+          r.EstadoRegistro === "AceptadoConErrores"
+            ? { ...r, CodigoErrorRegistro: codigo, DescripcionErrorRegistro: `Error ${codigo}` }
+            : r,
+        ),
+      };
+    },
+  });
+
+  async function aceptadoConErroresParams() {
+    const { rows } = await suite.db.execute<{ params: string }>(sql`
+      select params from incidents where code = 'fiscal.aceptado_con_errores'
+    `);
+    return rows.map((row) => JSON.parse(row.params) as Record<string, unknown>);
+  }
+
+  it("opens a case with the original error the duplicate detail names", async () => {
+    const aeat = fakeAeat();
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    const record = await storedWithErrorsReplyLost(aeat, seeded);
+
+    const result = await drain(deps(detailNames(aeat.client(), 2005)), SECOND);
+
+    expect(await envioOf(record)).toMatchObject({ estado: "aceptado_con_errores" });
+    expect(result.recordsAccepted).toBe(1);
+    const opened = await cases();
+    expect(opened.map((c) => [c.registroId, c.cause, c.status])).toEqual([
+      [record, "fiscal.aceptado_con_errores", "open"],
+    ]);
+    expect(opened[0]!.evidence).toEqual({
+      codigo: 2005,
+      mensaje: "Error 2005",
+      csv: null,
+    });
+    expect(await aceptadoConErroresParams()).toEqual([
+      { registroId: record, codigo: 2005, mensaje: "Error 2005" },
+    ]);
+  });
+
+  it("without the duplicate detail, records it accepted with errors and opens a case with the error AEAT's stored copy shows", async () => {
+    const aeat = fakeAeat();
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    const record = await storedWithErrorsReplyLost(aeat, seeded);
+    aeat.dropRegistroDuplicadoDetail(seeded.facturaKeys[0]!);
+
+    const result = await drain(deps(consultaNames(aeat.client(), 2005)), SECOND);
+
+    expect(await envioOf(record)).toMatchObject({ estado: "aceptado_con_errores" });
+    expect(await ackOf(record)).toBe("accepted_with_errors");
+    expect(result.recordsAccepted).toBe(1);
+    const opened = await cases();
+    expect(opened.map((c) => [c.registroId, c.cause, c.evidence])).toEqual([
+      [record, "fiscal.aceptado_con_errores", { codigo: 2005, mensaje: "Error 2005", csv: null }],
+    ]);
+    expect(await aceptadoConErroresParams()).toEqual([
+      { registroId: record, codigo: 2005, mensaje: "Error 2005" },
+    ]);
+  });
+
+  it("opens no case when the original error is one AEAT exempts from correction", async () => {
+    const aeat = fakeAeat();
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    const record = await storedWithErrorsReplyLost(aeat, seeded);
+
+    await drain(deps(detailNames(aeat.client(), 2009)), SECOND);
+
+    expect(await envioOf(record)).toMatchObject({ estado: "aceptado_con_errores" });
+    expect(await cases()).toEqual([]);
+    expect(await aceptadoConErroresParams()).toEqual([
+      { registroId: record, codigo: 2009, mensaje: "Error 2009" },
+    ]);
+  });
+
+  it("opens a case with no code when neither the reply nor AEAT's stored copy names the error", async () => {
+    const aeat = fakeAeat();
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    const record = await storedWithErrorsReplyLost(aeat, seeded);
+    aeat.dropRegistroDuplicadoDetail(seeded.facturaKeys[0]!);
+
+    await drain(deps(aeat.client()), SECOND);
+
+    expect(await envioOf(record)).toMatchObject({ estado: "aceptado_con_errores" });
+    expect((await cases()).map((c) => [c.registroId, c.cause, c.evidence])).toEqual([
+      [record, "fiscal.aceptado_con_errores", { codigo: null, mensaje: null, csv: null }],
+    ]);
+  });
+
+  it("keeps one case when the same record is settled accepted with errors again", async () => {
+    const aeat = fakeAeat();
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    const record = await storedWithErrorsReplyLost(aeat, seeded);
+    const client = detailNames(aeat.client(), 2005);
+    await drain(deps(client), SECOND);
+    const [first] = await cases();
+    await resend(record);
+
+    await drain(deps(client), new Date(SECOND.getTime() + 60_000));
+
+    expect(await envioOf(record)).toMatchObject({ estado: "aceptado_con_errores" });
+    expect(await cases()).toEqual([first]);
+  });
+});
+
 describe("drain — a conflict no longer holds its chain", () => {
   it("Route B: refuses the conflicting record with AEAT's code, opens one case, and sends the next record", async () => {
     const aeat = fakeAeat();
