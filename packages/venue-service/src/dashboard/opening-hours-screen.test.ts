@@ -451,7 +451,7 @@ it("explains an in-use deletion in one sentence and read recovery leaves it inta
       params: {
         uses: [
           { kind: "week", weekday: 1 },
-          { kind: "special_date", specialDateId: "s1", date: "2026-12-25" },
+          { kind: "special_day", specialDayId: "s1", name: "Navidad", date: "2026-12-25" },
         ],
       },
     };
@@ -460,7 +460,9 @@ it("explains an in-use deletion in one sentence and read recovery leaves it inta
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
   await expect
     .poll(() => el.shadowRoot!.querySelector("[data-test=delete-error]")?.textContent)
-    .toBe("Lunch is still placed on Monday, Fri, 25 Dec 2026. Take it off those days first.");
+    .toBe(
+      "Lunch is still placed on Monday, Navidad (Fri, 25 Dec 2026). Take it off those days first.",
+    );
   failRead = true;
   el.api.rereadWatches();
   await expect.poll(() => el.shadowRoot!.querySelector("[data-test=read-error]")).not.toBeNull();
@@ -934,7 +936,7 @@ it("places a refused period name under Name with the bottom explanation and retr
   ]);
 });
 
-it("names every weekday and special date preventing deletion in one sentence", async () => {
+it("names every weekday and special day preventing deletion in one sentence", async () => {
   const data = model();
   data.departments[0]!.periods = [{ ...data.departments[0]!.periods[0]!, name: "Madrugada" }];
   const writes: unknown[] = [];
@@ -948,7 +950,7 @@ it("names every weekday and special date preventing deletion in one sentence", a
         uses: [
           { kind: "week", weekday: 5 },
           { kind: "week", weekday: 6 },
-          { kind: "special_date", specialDateId: "navidad", date: "2025-12-25" },
+          { kind: "special_day", specialDayId: "navidad", name: "Navidad", date: "2025-12-25" },
         ],
       },
     };
@@ -958,7 +960,7 @@ it("names every weekday and special date preventing deletion in one sentence", a
   await expect
     .poll(() => el.shadowRoot!.querySelector("[data-test=delete-error]")?.textContent)
     .toBe(
-      "Madrugada is still placed on Friday, Saturday, Thu, 25 Dec 2025. Take it off those days first.",
+      "Madrugada is still placed on Friday, Saturday, Navidad (Thu, 25 Dec 2025). Take it off those days first.",
     );
   expect(writes).toEqual([
     {
