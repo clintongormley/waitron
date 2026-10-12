@@ -2011,6 +2011,24 @@ it.each([
   expect(viewport.scrollHeight).toBe(viewport.clientHeight);
 });
 
+it("a parent's other layout after a drag that grew the grid gives the grown grid back", async () => {
+  const el = await canvas([table("t1", "T1", { x: 5, y: 5 })]);
+  await settled(el);
+  const start = dragBy(el, "t1", 1200, 1200);
+  await settled(el);
+  const back = { x: start.x - 1200, y: start.y - 1200 };
+  pointer(window, "pointermove", 1, back.x, back.y);
+  await settled(el);
+  await release(el, back);
+  await settled(el);
+  el.tables = [table("t1", "T1", { x: 6, y: 5 })];
+  await settled(el);
+  await settled(el);
+  const viewport = viewportOf(el);
+  expect(viewport.scrollWidth).toBe(viewport.clientWidth);
+  expect(viewport.scrollHeight).toBe(viewport.clientHeight);
+});
+
 it("a turned table dragged to the top keeps a steady height in a box that takes its height from the plan", async () => {
   const errors: string[] = [];
   const onError = (e: ErrorEvent) => errors.push(e.message);
