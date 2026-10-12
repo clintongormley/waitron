@@ -1256,7 +1256,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
   });
 });
 
-// A captured payment with no sale (P2 committed, P3 never ran) must be finished WITHOUT charging
+// A captured payment with no sale (P2 committed, P3 has not run) must be finished WITHOUT charging
 // again. The state is seeded directly, as the row `collect` leaves behind.
 describe("payWorkingOrderIntegrated — capture idempotency (recovery window + concurrency)", () => {
   /** Seed an OPEN order with a locked café line and a captured stripe payment whose `sale_id` is

@@ -973,7 +973,7 @@ async function readOutstandingSaleForOrder(
  *
  * P1's result:
  *  - `replay` — already `settled`; return the stored ticket, file nothing.
- *  - `recover` / `recover-settle` — a captured payment with no sale (P2 committed, P3 never ran).
+ *  - `recover` / `recover-settle` — a captured payment with no sale (P2 committed, P3 has not run).
  *    Finish it WITHOUT charging again: file a sale, or settle the already-issued invoice when there is
  *    one, since a second `recordSale` would collide with it.
  *  - `owes-nothing` — a sale was already issued and its corrections leave nothing owed, or there is
@@ -1078,7 +1078,7 @@ async function payIntegrated(
       await refuseBillWithPayments(tx, req.id);
       const outstanding = await readOutstandingSaleForOrder(tx, req.id);
 
-      // A captured payment with no sale: P2 committed but P3 never ran. Driving `collect` again
+      // A captured payment with no sale: P2 committed but P3 has not run. Driving `collect` again
       // would charge the card a SECOND time.
       const captured = await findCapturedPaymentForWorkingOrder(tx, {
         provider: deps.provider.provider,
@@ -1516,7 +1516,7 @@ async function finalizeCapture(
 }
 
 /**
- * File the sale for a captured payment that has none (P2 committed, P3 never ran) WITHOUT charging
+ * File the sale for a captured payment that has none (P2 committed, P3 has not run) WITHOUT charging
  * again: file from the order's STORED locked lines and associate THIS captured row, in ONE
  * transaction. A concurrent recovery needs no backstop: its whole transaction runs after the winner
  * committed, reads the order `settled`, and replays.
