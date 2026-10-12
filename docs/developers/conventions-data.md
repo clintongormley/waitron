@@ -2520,3 +2520,16 @@ src/local-fs-backend.test.ts`.
 Sparse 2147487744-byte placement and codec tests check size, offsets and edge bytes. They do not
 measure integrity checks or cryptographic throughput over a valid SQLite database that large.
 Managed Cloud's 512 MiB and setup upload's 256 MiB limits remain separate from this local file path.
+
+
+The closed placement source must have one filesystem name (`nlink == 1`), so a surviving hard link
+cannot become another path to the placed database. The multiply-linked and missing-source cases
+in `restore-file-placement.test.ts` require `restore.unsafe_entry_path` before old-set cleanup.
+Setup disposal is asserted after successful staging and a source-liveness refusal through
+`boot.setup-routes.test.ts`; deleting `boot.ts`'s discard failed both cases.
+
+Source liveness opens the private validation copy through SQLite. That can change its journal
+metadata and create local scratch files, so the placed database is not promised byte-identical to
+the archived database. Validation owns and disposes that directory; the encrypted input remains
+caller-owned. The review's rollback-journal probe observed changed file bytes after open/close,
+while its WAL-mode control observed unchanged bytes.

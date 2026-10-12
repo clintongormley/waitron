@@ -94,3 +94,12 @@ also be created and restored without that limit. Choices below are **driver defa
 - Cover EXDEV copy/mode failure, rollback, aliases, cleanup, authentication, malformed lengths,
   no partial backend publication, bucket confirmations and lock-busy staged retention.
   No implementation or tests were run by this planning turn. No unresolved owner decisions.
+
+
+## Post-review scope qualification, 2026-10-12
+
+A528 landed (#1570, `baf3d338`) before the full review found that setup's validation disposal had
+no discriminating assertion. The queue permits necessary boot tests after A528 lands. The new
+setup staging case and added refusal cleanup assertion use its split `boot.setup-routes.test.ts`;
+the harness and all prior assertions stay intact. Placement follows this spec's single-link and
+missing-source refusal contract; the contradictory early plan/test is corrected.

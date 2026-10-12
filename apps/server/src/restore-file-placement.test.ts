@@ -205,14 +205,20 @@ describe("restoreDatabase consumes a database file", () => {
     },
   );
 
-  it("accepts an unrelated hard link while preserving its other link", async () => {
+  it("refuses a multiply linked source without changing either link or the old set", async () => {
     const { root, source, target, venueDir } = await fixture();
     const retained = join(root, "retained.db");
+    await chmod(source, 0o644);
     await link(source, retained);
-    await restoreDatabase({ databasePath: source, venueDir, log: () => {} });
-    expect(await readFile(target, "utf8")).toBe("NEW-DATABASE");
+    await expect(
+      restoreDatabase({ databasePath: source, venueDir, log: () => {} }),
+    ).rejects.toMatchObject({ code: "restore.unsafe_entry_path" });
+    await oldIntact(venueDir);
+    expect(await readFile(`${target}.incoming`, "utf8")).toBe("STALE");
+    expect(await readFile(source, "utf8")).toBe("NEW-DATABASE");
     expect(await readFile(retained, "utf8")).toBe("NEW-DATABASE");
-    await expect(stat(source)).rejects.toMatchObject({ code: "ENOENT" });
+    expect((await stat(source)).mode & 0o777).toBe(0o644);
+    expect((await stat(retained)).mode & 0o777).toBe(0o644);
   });
 
   it.each(["symlink", "directory", "missing"])(
@@ -225,7 +231,7 @@ describe("restoreDatabase consumes a database file", () => {
       await expect(
         restoreDatabase({ databasePath: source, venueDir, log: () => {} }),
       ).rejects.toMatchObject({
-        code: kind === "missing" ? "ENOENT" : "restore.unsafe_entry_path",
+        code: "restore.unsafe_entry_path",
       });
       await oldIntact(venueDir);
       expect(await readFile(`${target}.incoming`, "utf8")).toBe("STALE");

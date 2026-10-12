@@ -358,7 +358,12 @@ export async function restoreDatabase(args: {
   await mkdir(args.venueDir, { recursive: true, mode: 0o700 });
   const target = join(args.venueDir, VENUE_FILE);
   const incoming = `${target}${INCOMING_SUFFIX}`;
-  const source = await lstat(args.databasePath);
+  const source = await lstat(args.databasePath).catch((error: unknown) => {
+    if (errnoOf(error) === "ENOENT") {
+      throw new AppError("restore.unsafe_entry_path", { name: DB_DUMP_NAME });
+    }
+    throw error;
+  });
   const sourceParent = await realpath(dirname(args.databasePath));
   const venueParent = await realpath(args.venueDir);
   const canonicalSource = join(sourceParent, basename(args.databasePath));
@@ -372,6 +377,7 @@ export async function restoreDatabase(args: {
     sourceParent === venueParent ? "" : sourceParent.slice(venueParent.length + 1).split(sep)[0];
   if (
     !source.isFile() ||
+    source.nlink !== 1 ||
     (sourceParent.startsWith(`${venueParent}${sep}`) &&
       (protectedFolder === basename(litestreamMetaDir(target)) ||
         protectedFolder.startsWith(ASIDE_PREFIX))) ||

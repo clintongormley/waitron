@@ -15,7 +15,8 @@
 - Before any test or implementation code, read `superpowers:test-driven-development/SKILL.md`.
   For each behavioral change, write the test, observe the intended failure, implement, rerun.
 - Read CLAUDE.md and the data/testing/writing/workflow topics. No fiscal implementation edits,
-  migrations, campaign-file edits, test exclusions, reduced thresholds or `boot*.test.ts` edits.
+  migrations, campaign-file commits, test exclusions or reduced thresholds. Boot test changes wait
+  for A528 to land; its setup split now permits the post-review cleanup qualification below.
 - Keep all assertions except the spec's explicit interface adaptations. Keep lock/recovery rules;
   any recovery-state change uses `updateRecoveryState`. Do not unlink lock files.
 - Driver defaults: 64 KiB bulk chunks, 4096 entries, 4096 name bytes, 16 MiB aggregate non-DB
@@ -42,7 +43,7 @@ Retain byte `validateEntries`/`validateArtifact`; shared validation materializes
 
 - [x] Add source fixtures and failing placement cases: sparse `2 ** 31 + 4096` file, size/edge
   content/mode/source-consumption checks; symlink/directory/missing input; target/incoming/sidecar/
-  node/lock aliases and unrelated hard links. Seed stale incoming to prove alias refusal precedes
+  node/lock aliases and multiply linked sources, including unrelated second names. Seed stale incoming to prove alias refusal precedes
   its removal. Sparse tests never allocate/read the entire file.
 - [x] Add injected EXDEV then real `copyFile` cases, source retention, copy/chmod failures and
   existing rollback cases. Assert old main/WAL/SHM contents, incoming cleanup and log size.
@@ -210,3 +211,19 @@ the snapshot passed 159 tests across seven suites, and all 40 changed paths matc
 checkout. The real SQLite roundtrip checks restored rows and secrets; it does not measure a valid
 2 GiB database's full integrity or encryption throughput. Cloud and upload limits remain intact.
 The remaining branch gates are the Claude review, normal push hook and required current-head CI.
+
+
+### Post-review qualification, 2026-10-12
+
+The completed Claude review took 691 seconds. It found a contradiction between the spec's
+multiply-linked-source refusal and Task 1's new positive test. The spec controls: the source now
+requires one link, and missing sources return `restore.unsafe_entry_path`. Both corrected expectations
+failed before implementation. They retain both source names and the old database, sidecars and incoming
+on refusal. The earlier hard-link-positive receipts describe their original candidate only.
+
+The setup validation boundary now has a successful staging case and a cleanup assertion on an
+actual liveness refusal. A528 already landed as #1570 (`baf3d338`), so the queue's explicit
+permission to add necessary boot tests after that split applies. Deleting setup disposal fails two
+cases; deleting the link-count or missing-source mapping fails one each; restored placement,
+file-artifact and boot-setup suites pass 48. This adds no boot production behavior. SQLite may change
+journal metadata when it opens a private validation file; no byte-identical-placement claim is made.
