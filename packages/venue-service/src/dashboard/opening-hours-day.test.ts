@@ -796,9 +796,12 @@ it("updates a clean model, preserves dirty drafts across disabled departments an
       i === 0
         ? {
             ...department,
-            week: department.week.map((row) => ({
-              ...row,
-              slots: row.slots.map((slot) => ({ ...slot, endsAt: "16:00" })),
+            seasonWeeks: department.seasonWeeks.map((entry) => ({
+              ...entry,
+              week: entry.week.map((row) => ({
+                ...row,
+                slots: row.slots.map((slot) => ({ ...slot, endsAt: "16:00" })),
+              })),
             })),
           }
         : department,
