@@ -2505,6 +2505,93 @@ async function park(
 }
 
 describe("/api/working-orders (session-guarded park & retrieve)", () => {
+  it.each([
+    ["stale", "working_order.out_of_date", 409],
+    ["closed", "working_order.not_open", 409],
+    ["paying", "order.payment_in_flight", 409],
+  ])("refuses a %s held label save without changing the order", async (state, code, status) => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const id = randomUUID();
+    await park(app, cookie, {
+      id,
+      lines: [{ menuItemId: aguaOfferId, quantity: "2" }],
+      label: "Mesa 7",
+    });
+    if (state === "closed")
+      await suite.db.execute(sql`update working_orders set status = 'abandoned' where id = ${id}`);
+    if (state === "paying")
+      await suite.db.execute(
+        sql`update working_orders set payment_attempt_at = '2026-10-12T10:00:00Z' where id = ${id}`,
+      );
+    const before = await suite.db.execute(sql`select * from working_orders where id = ${id}`);
+    const response = await app.request(`/api/working-orders/${id}/label`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ label: "Ana", revision: state === "stale" ? 99 : 0 }),
+    });
+    expect(response.status).toBe(status);
+    expect(await response.json()).toMatchObject({ error: { code } });
+    expect(
+      (await suite.db.execute(sql`select * from working_orders where id = ${id}`)).rows,
+    ).toEqual(before.rows);
+  });
+
+  it("saves only a held order label and retains its stored lines", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const id = randomUUID();
+    await park(app, cookie, {
+      id,
+      lines: [{ menuItemId: aguaOfferId, quantity: "2" }],
+      label: "Mesa 7",
+    });
+    const before = await (
+      await app.request(`/api/working-orders/${id}`, { headers: { cookie } })
+    ).json();
+    const save = (body: unknown, authenticated = true) =>
+      app.request(`/api/working-orders/${id}/label`, {
+        method: "PUT",
+        headers: { "content-type": "application/json", ...(authenticated ? { cookie } : {}) },
+        body: JSON.stringify(body),
+      });
+    const storedLines = await suite.db.execute(
+      sql`select * from working_order_lines where working_order_id = ${id} order by line_no`,
+    );
+    const renamed = await save({ label: "Ana", revision: 0 });
+    expect(renamed.status).toBe(200);
+    expect(await renamed.json()).toEqual({ revision: 1 });
+    const after = await (
+      await app.request(`/api/working-orders/${id}`, { headers: { cookie } })
+    ).json();
+    expect(after).toEqual({ ...before, label: "Ana", revision: 1 });
+    expect(
+      (
+        await suite.db.execute(
+          sql`select * from working_order_lines where working_order_id = ${id} order by line_no`,
+        )
+      ).rows,
+    ).toEqual(storedLines.rows);
+    const replay = await save({ label: "Ana", revision: 1 });
+    expect(replay.status).toBe(200);
+    expect(await replay.json()).toEqual({ revision: 1 });
+    const stale = await save({ label: "Old copy", revision: 0 });
+    expect(stale.status).toBe(409);
+    expect(await stale.json()).toMatchObject({ error: { code: "working_order.out_of_date" } });
+    for (const label of [undefined, null, 42, []]) {
+      const invalid = await save({ label, revision: 1 });
+      expect(invalid.status).toBe(400);
+      expect(await invalid.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "label" } },
+      });
+    }
+    const anonymous = await save({ label: "No session", revision: 1 }, false);
+    expect(anonymous.status).toBe(401);
+    expect(await anonymous.json()).toMatchObject({ error: { code: "session.required" } });
+  });
+
   it("REJECTS every route with 401 session.required when no cookie is present", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));

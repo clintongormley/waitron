@@ -81,6 +81,7 @@ import { offerProducts } from "./testing/zone-offers.js";
  * | PUT  /api/working-orders/:id                            | order                  | refuses PUT /api/working-orders/:id                  |
  * | PUT  /api/working-orders/:id/invoice-choice             | order                  | refuses PUT .../invoice-choice                       |
  * | PUT  /api/working-orders/:id/receipt-language           | order                  | refuses PUT .../receipt-language                     |
+ * | PUT  /api/working-orders/:id/label                      | order                  | refuses PUT .../label                                |
  * | DELETE /api/working-orders/:id                          | order                  | refuses DELETE /api/working-orders/:id               |
  * | POST /api/working-orders/:id/place                      | order                  | refuses POST .../place                               |
  * | POST /api/working-orders/:id/prep                       | order                  | refuses POST .../prep                                |
@@ -563,6 +564,13 @@ const ROUTES: readonly Row[] = [
     "PUT /api/working-orders/:id/receipt-language",
     "PUT",
     (x) => `/api/working-orders/${x.deliOrder}/receipt-language`,
+    () => ({}),
+    deliOrderZone,
+  ],
+  [
+    "PUT /api/working-orders/:id/label",
+    "PUT",
+    (x) => `/api/working-orders/${x.deliOrder}/label`,
     () => ({}),
     deliOrderZone,
   ],

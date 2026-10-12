@@ -2539,6 +2539,13 @@ export class TillApi {
     return this.#request<{ revision: number }>(`/api/working-orders/${id}`, "PUT", req);
   }
 
+  setWorkingOrderLabel(
+    id: string,
+    req: { label: string; revision: number },
+  ): Promise<{ revision: number }> {
+    return this.#request<{ revision: number }>(`/api/working-orders/${id}/label`, "PUT", req);
+  }
+
   /**
    * Edit ONE dish line of an open order → `PUT /api/working-orders/:orderId/lines/:lineNo`, from the
    * copy read at `revision`. An absent field keeps the line's own. Rejects `working_order.out_of_date`,

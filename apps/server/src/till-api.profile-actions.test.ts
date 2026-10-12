@@ -50,6 +50,7 @@ import {
  * | PUT, DELETE /api/working-orders/:id                       | take-orders                | take-orders           |
  * | PUT /api/working-orders/:id/invoice-choice                | take-orders                | take-orders           |
  * | PUT /api/working-orders/:id/receipt-language              | take-orders                | take-orders           |
+ * | PUT /api/working-orders/:id/label                         | take-orders                | take-orders           |
  * | POST /api/working-orders/:id/place, /prep                 | take-orders                | take-orders           |
  * | POST /api/working-orders/:id/cancel                       | take-orders                | take-orders           |
  * | PUT /api/working-orders/:id/make-at                       | take-orders                | take-orders           |
@@ -298,6 +299,7 @@ const ROUTES: readonly Row[] = [
   ordering("DELETE", `/api/working-orders/${id}`),
   ordering("PUT", `/api/working-orders/${id}/invoice-choice`),
   ordering("PUT", `/api/working-orders/${id}/receipt-language`),
+  ordering("PUT", `/api/working-orders/${id}/label`),
   ordering("POST", `/api/working-orders/${id}/place`),
   ordering("POST", `/api/working-orders/${id}/prep`),
   ordering("POST", `/api/working-orders/${id}/cancel`),

@@ -123,6 +123,7 @@ import {
   unmarkServed,
   readOrderRevision,
   updateHeldOrder,
+  setWorkingOrderLabel,
   updateOrderLine,
   bumpRevision,
   refusePaymentInFlight,
@@ -1782,6 +1783,20 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         },
         { fiscal, saleCfg: sendCfg },
       );
+      return c.json({ revision });
+    }),
+  );
+
+  app.put("/api/working-orders/:id/label", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c, { action: "take-orders" });
+      const id = requireUuidId(c.req.param("id"), "working_order.not_open");
+      await gateZones(deps, session, [{ orderId: id }]);
+      const body = await readJsonBody<{ label?: unknown; revision?: unknown }>(c);
+      const revision = await setWorkingOrderLabel(deps.db, id, {
+        label: requireString(body.label, "label"),
+        revision: requireRevision(body.revision),
+      });
       return c.json({ revision });
     }),
   );

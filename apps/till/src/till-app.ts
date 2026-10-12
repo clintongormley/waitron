@@ -4239,11 +4239,6 @@ export class TillApp extends LitElement {
     this.#pushDrill({ kind: "expo" });
   }
 
-  /**
-   * A fresh basket is parked under the store's id; a retrieved one is saved only if edited, never
-   * re-parked (see {@link TillApp.#onPlaceOrder}). On success `clear()` re-mints the id, and
-   * `cardOutcome` is cleared so a decline never carries over to the next customer.
-   */
   async #onParkOrder(event: Event, retried = false): Promise<void> {
     if (this.parking) return;
     this.parking = true;
@@ -4262,9 +4257,14 @@ export class TillApp extends LitElement {
     let inactiveChoice = false;
     try {
       if (this.#store.persisted) {
-        // The Hold field opens blank, so fall back to the stored label rather than wipe it. A typed
-        // label is saved only when a line was also edited (docs/backlog.md).
-        if (!(await this.#syncIfDirty(id, lines, label ?? this.#store.label))) return;
+        if (!this.#store.dirty && label !== undefined && label !== this.#store.label) {
+          const saved = await this.api.setWorkingOrderLabel(id, {
+            label,
+            revision: this.#store.revision,
+          });
+          if (session !== this.#operatorSession) return;
+          this.#store.markSaved(saved.revision);
+        } else if (!(await this.#syncIfDirty(id, lines, label ?? this.#store.label))) return;
       } else {
         await this.api.parkOrder({ id, lines, label });
       }
@@ -4289,6 +4289,8 @@ export class TillApp extends LitElement {
       ) {
         recheck = true;
         inactiveChoice = (error as { code?: string }).code === "route.station_inactive";
+      } else if ((error as { code?: string }).code === "working_order.out_of_date") {
+        await this.#reloadChangedOrder(id);
       } else if (isVersionRefusal(error)) refreshed = await this.#refreshBasket();
       else this.errorKey = counterError(error, "held.park_error");
     } finally {
