@@ -2975,6 +2975,23 @@ describe("floor plans", () => {
     });
   });
 
+  it("reads a table's kept size over HTTP", async () => {
+    const zoneId = await createZone(unique("PlanKept"));
+    const label = unique("K");
+    const placed = { ...entry("a", label), placement: { ...PLACE, width: 2, height: 3 } };
+    const first = await put(zoneId, { revision: 0, tables: [placed] });
+    const { ids } = (await first.json()) as { ids: Record<string, string> };
+    const off = await put(zoneId, {
+      revision: 1,
+      tables: [{ ...placed, id: ids.a, placement: null }],
+    });
+    expect(off.status).toBe(200);
+    const read = (await (await get(zoneId)).json()) as { tables: unknown[] };
+    expect(read.tables).toEqual([
+      expect.objectContaining({ id: ids.a, placement: null, keptSize: { width: 2, height: 3 } }),
+    ]);
+  });
+
   it("accepts back a plan exactly as read, each table given a key", async () => {
     const zoneId = await createZone(unique("PlanRoundTrip"));
     expect((await put(zoneId, { revision: 0, tables: [entry("a", unique("R"))] })).status).toBe(

@@ -9,6 +9,7 @@ import {
   floorPlans,
   floorPlanTableParts,
   floorPlanTables,
+  floorPlanTableSizes,
   floorResetTables,
   floorTodayTables,
   floorTodayZones,
@@ -1015,6 +1016,108 @@ describe("saveZonePlan", () => {
       expect.objectContaining({ planTableId: null, pending: true, label: name }),
     ]);
   });
+
+  describe("a table's kept size", () => {
+    const SIZED = { ...PLACE, width: 2, height: 3 };
+
+    async function tableOf(z: string, id: string) {
+      const plan = await inTx(v, (tx) => readZonePlan(tx, v.cfg, z));
+      return plan.tables.find((t) => t.id === id)!;
+    }
+
+    /** Counter 3 saved on the plan at 2 × 3, then saved off it. */
+    async function takenOff() {
+      const z = await zone();
+      const label = fresh("Counter 3");
+      const { ids } = await save(z, {
+        revision: 0,
+        tables: [entry("c3", label, { placement: SIZED })],
+      });
+      const c3 = ids.c3!;
+      await save(z, {
+        revision: 1,
+        tables: [entry("c3", label, { id: c3, placement: null })],
+      });
+      return { z, label, c3 };
+    }
+
+    it("keeps the width and height of a table taken off the plan", async () => {
+      const { z, c3 } = await takenOff();
+      const table = await tableOf(z, c3);
+      expect(table.keptSize).toEqual({ width: 2, height: 3 });
+      expect(table.placement).toBeNull();
+    });
+
+    it("keeps the size through later saves while the table stays off the plan", async () => {
+      const { z, label, c3 } = await takenOff();
+      await save(z, {
+        revision: 2,
+        tables: [entry("c3", label, { id: c3, placement: null, seats: 6 })],
+      });
+      const table = await tableOf(z, c3);
+      expect(table.seats).toBe(6);
+      expect(table.keptSize).toEqual({ width: 2, height: 3 });
+    });
+
+    it("drops the kept size once the table is placed again", async () => {
+      const { z, label, c3 } = await takenOff();
+      await save(z, { revision: 2, tables: [entry("c3", label, { id: c3 })] });
+      const table = await tableOf(z, c3);
+      expect(table.keptSize).toBeNull();
+      expect(table.placement).toEqual(PLACE);
+    });
+
+    it("gives a table that was never placed no kept size", async () => {
+      const z = await zone();
+      const { ids } = await save(z, { revision: 0, tables: [unplaced("n", "Never placed")] });
+      expect((await tableOf(z, ids.n!)).keptSize).toBeNull();
+    });
+
+    it("deletes a kept size with its table", async () => {
+      const { z, c3 } = await takenOff();
+      await expect(save(z, { revision: 2, tables: [] })).resolves.toEqual({
+        revision: 3,
+        ids: {},
+      });
+      const sizes = await inTx(v, (tx) =>
+        tx.select().from(floorPlanTableSizes).where(eq(floorPlanTableSizes.planTableId, c3)),
+      );
+      expect(sizes).toEqual([]);
+    });
+
+    it("keeps sizes in the same statements, however many tables leave the plan", async () => {
+      async function statementsFor(tables: number): Promise<number> {
+        const z = await zone();
+        const keys = Array.from({ length: tables }, (_, i) => `k${i}`);
+        const labels = keys.map((key) => fresh(key));
+        const { ids } = await save(z, {
+          revision: 0,
+          tables: keys.map((key, i) => entry(key, labels[i]!, { placement: SIZED })),
+        });
+        const input: ZonePlanSave = {
+          revision: 1,
+          tables: keys.map((key, i) => entry(key, labels[i]!, { id: ids[key]!, placement: null })),
+        };
+        const statements = await inTx(v, async (tx) => {
+          const prepare = vi.spyOn(DatabaseSync.prototype, "prepare");
+          try {
+            await saveZonePlan(tx, v.cfg, NONE, z, input, NOW);
+            return prepare.mock.calls.filter(([sql]) => sql.includes("floor_plan_table_sizes"))
+              .length;
+          } finally {
+            prepare.mockRestore();
+          }
+        });
+        const plan = await inTx(v, (tx) => readZonePlan(tx, v.cfg, z));
+        expect(plan.tables.map((t) => t.keptSize)).toEqual(
+          keys.map(() => ({ width: 2, height: 3 })),
+        );
+        return statements;
+      }
+
+      expect(await statementsFor(5)).toBe(await statementsFor(2));
+    });
+  });
 });
 
 describe("floor plans without adoption", () => {
@@ -1058,6 +1161,7 @@ describe("floor plans without adoption", () => {
         seats: 4,
         fixed: false,
         placement: PLACE,
+        keptSize: null,
         partIds: [],
       },
     ]);

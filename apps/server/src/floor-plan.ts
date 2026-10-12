@@ -4,6 +4,7 @@ import {
   floorPlans,
   floorPlanTableParts,
   floorPlanTables,
+  floorPlanTableSizes,
   floorResetTables,
   floorTodayZones,
   floorZones,
@@ -25,6 +26,8 @@ export interface PlanTable {
   seats: number | null;
   fixed: boolean;
   placement: Placement | null;
+  /** The size the table last had on the plan, while it is off the plan; null otherwise. */
+  keptSize: { width: number; height: number } | null;
   /** A joined table's parts, in label order; empty for any other table. */
   partIds: string[];
 }
@@ -76,9 +79,15 @@ async function planOf(tx: Transaction, zoneId: string) {
 
 async function mastersOf(tx: Transaction, planId: string) {
   return tx
-    .select({ ...getTableColumns(floorPlanTables), partOf: floorPlanTableParts.joinedTableId })
+    .select({
+      ...getTableColumns(floorPlanTables),
+      partOf: floorPlanTableParts.joinedTableId,
+      keptWidth: floorPlanTableSizes.width,
+      keptHeight: floorPlanTableSizes.height,
+    })
     .from(floorPlanTables)
     .leftJoin(floorPlanTableParts, eq(floorPlanTableParts.partTableId, floorPlanTables.id))
+    .leftJoin(floorPlanTableSizes, eq(floorPlanTableSizes.planTableId, floorPlanTables.id))
     .where(eq(floorPlanTables.planId, planId))
     .orderBy(asc(floorPlanTables.label));
 }
@@ -122,6 +131,10 @@ export async function readZonePlan(
         seats: master.seats,
         fixed: master.fixed,
         placement: placementOf(master),
+        keptSize:
+          master.keptWidth === null || master.keptHeight === null
+            ? null
+            : { width: master.keptWidth, height: master.keptHeight },
         partIds: byJoined.get(master.id) ?? [],
       });
     }
@@ -323,6 +336,15 @@ export async function saveZonePlan(
 
   const kept = new Set(tables.flatMap((t) => (t.id === undefined ? [] : [t.id])));
   const deleted = masters.filter((m) => !kept.has(m.id)).map((m) => m.id);
+  const masterOf = new Map(masters.map((m) => [m.id, m]));
+  const leaving = tables.flatMap((t) =>
+    t.id !== undefined && t.placement === null && masterOf.get(t.id)!.x !== null ? [t.id] : [],
+  );
+  const placed = tables.flatMap((t) => (t.id !== undefined && t.placement !== null ? [t.id] : []));
+  const sizesGone = [...leaving, ...placed, ...deleted];
+  if (sizesGone.length > 0) {
+    await tx.delete(floorPlanTableSizes).where(inArray(floorPlanTableSizes.planTableId, sizesGone));
+  }
   if (deleted.length > 0) {
     await tx
       .update(diningTables)
@@ -337,7 +359,6 @@ export async function saveZonePlan(
 
   // Each renamed table first steps aside under a spare name, so a swap or a rename onto a name
   // another row is giving up never meets the unique (plan_id, label) key halfway.
-  const masterOf = new Map(masters.map((m) => [m.id, m]));
   const spare = spareLabels(
     tables.flatMap((t) =>
       t.id !== undefined && masterOf.get(t.id)!.label !== t.label.trim() ? [t.id] : [],
@@ -364,6 +385,14 @@ export async function saveZonePlan(
     const current = masterOf.get(table.id)!;
     if ((Object.keys(next) as (keyof typeof next)[]).every((k) => current[k] === next[k])) continue;
     await tx.update(floorPlanTables).set(next).where(eq(floorPlanTables.id, table.id));
+  }
+  if (leaving.length > 0) {
+    await tx.insert(floorPlanTableSizes).values(
+      leaving.map((id) => {
+        const master = masterOf.get(id)!;
+        return { planTableId: id, width: master.width!, height: master.height! };
+      }),
+    );
   }
   const parts = tables.flatMap((table) =>
     table.partKeys.map((key) => ({

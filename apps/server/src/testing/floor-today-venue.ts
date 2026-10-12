@@ -1,6 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { floorTodayJoinTables, floorTodayJoins, floorTodayTables, floorZones } from "@waitron/db";
+import {
+  floorPlanTableSizes,
+  floorTodayJoinTables,
+  floorTodayJoins,
+  floorTodayTables,
+  floorZones,
+} from "@waitron/db";
 import { zoneSalePolicies, zoneServicePolicies } from "@waitron/venue-service";
 import { readZonePlan, saveZonePlan, type ZonePlanSave } from "../floor-plan.js";
 import { ALL_MODULES, enabledTableRemovals } from "../modules.js";
@@ -85,6 +91,15 @@ export async function plannedZone(
     table[entry.key] = plan.tables.find((t) => t.id === ids[entry.key])!.liveTableId!;
   }
   return { zoneId, table, master: ids, revision };
+}
+
+/** Gives master table `masterId` the size it keeps while off the plan. */
+export async function giveKeptSize(
+  v: PartyVenue,
+  masterId: string,
+  size: { width: number; height: number },
+): Promise<void> {
+  await inTx(v, (tx) => tx.insert(floorPlanTableSizes).values({ planTableId: masterId, ...size }));
 }
 
 export async function todayRow(
