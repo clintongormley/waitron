@@ -97,7 +97,7 @@ and nothing writes the old weekday rows of `menu_day_timetables`, `menu_slots` o
 A506-3: the two week routes save one named season; the Week tab has a season picker, and the Day tab
 and every real week draw each date's own season; the Business day start dialog names the season of
 each conflict in a season's week.
-A506-4 landed in #NNNN: special days are stored and saved through the API, the till sells and
+A506-4 landed in #1597: special days are stored and saved through the API, the till sells and
 closes by their paint, end-offset and changeover checks read them, and a configuration transfer
 carries and checks them; the dashboard shows none of their paint until A506-5.
 
@@ -139,6 +139,29 @@ carries and checks them; the dashboard shows none of their paint until A506-5.
 - A venue with no seasons cannot save a week from the dashboard: the Day and Week tabs send an empty
   `seasonId`, the route refuses it, and the person sees only the generic save error. Provisioning gives
   every venue its four seasons, so this is believed unreachable — read in the code, not run.
+
+**Left open by A506-4, for the later parts.**
+- The Periods tab's "Placed on" column counts season weeks only, so a period placed only on a special
+  day reads "Not placed". A506-11 rebuilds that page.
+- A business-day changeover conflict reports "Invalid or overlapping range" before "Range crosses the
+  new start" (`packages/venue-service/src/business-day-schedule.ts`, season lines too).
+- A special-day line in the Business day start dialog shows its date unformatted ("2026-11-03").
+- `assertOwnPeriods` and `skippedSlot` in `packages/venue-service/src/menu-timetable.ts` name a refused
+  slot by its sorted position, not its position in the request (read in the code, not run).
+- The clock-skip check runs before touching ranges are joined: two halves of one period meeting at a
+  skipped 02:30 are refused, while the joined range is accepted. The named-day path does the same.
+- The `holidays` live-query list (both copies) names `special_days` and `special_day_dates`, which
+  its route does not read until A506-5, so saving a special day reloads the Holidays screen for nothing.
+- A506-5, when named days go: the rule "special day, then named day, then season" is written out in
+  `day-resolver.ts` (twice), `business-day-schedule.ts` and `period-end-offset.ts`, and the end-offset
+  check relies on list order for it; special-day paint is read by four separately written queries in
+  `special-days.ts` and `business-day-schedule.ts`; `specialDateIn` and `sharedSpecialDate` live in the
+  database module `special-days.ts` rather than the browser-safe repeat rules, which leaves import
+  loops with `business-day-schedule.ts` and `menu-timetable.ts`. Removing named days is the moment to
+  collapse each to one place.
+- `business-day-schedule.ts` copies the changeover lookup of `packages/shared/src/business-day-clock.ts`
+  (`oldCutoverOn`) to avoid validating the clock on every day; a lookup exported from `shared` that
+  validates once would remove the copy.
 
 **Why.** One standard week does not fit a venue whose hours change with the season, and copying a
 week into future dates would bury the special days among ordinary ones.
