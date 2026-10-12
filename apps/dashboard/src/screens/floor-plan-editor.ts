@@ -351,7 +351,7 @@ export class FloorPlanEditor extends LitElement {
   @state() private sheetOverlap = 0;
 
   /** The field a save's refusal points at, else the first field whose typed text the editor's own
-   *  check refused. The panels are given every mark through `#panelErrors`. */
+   *  check refused. */
   get fieldError(): FloorPlanFieldError | null {
     const mark = this.mark ?? this.typedMarks[0] ?? null;
     return mark === null ? null : { key: mark.key, field: mark.field, message: mark.text() };

@@ -287,11 +287,7 @@ screen is designed.
 
 ## A502. The floor plan editor as a big modal, with handles and a shorter form
 
-**A502 (owner, 2026-10-11) — OPEN; parts 1 and 2 done.** Part 1 (#1584) opened the editor over the
-whole window. Part 2 gave the tables list its markers, seats and bins, asks before a delete, puts a
-table taken off back where it stood while the editor stays open, and sorts every table picker by
-number. Left (part 3): the short form, the handles, and resizing from the keyboard.
-A selected table's form is a long column of fields. The owner's mockups, saved
+**A502 (owner, 2026-10-11) — OPEN.** A selected table's form is a long column of fields. The owner's mockups, saved
 as images: [1, the editor with a table selected](mockups/a502-a503-floor-plan-editor/1-editor-table-selected.png),
 [2, the tables list](mockups/a502-a503-floor-plan-editor/2-tables-list-nothing-selected.png) (its
 joined-table rows are A503), [3, the handles](mockups/a502-a503-floor-plan-editor/3-handles.png),
@@ -299,18 +295,14 @@ joined-table rows are A503), [3, the handles](mockups/a502-a503-floor-plan-edito
 canvas they came from is https://claude.ai/artifact/NkwkgPN6rjSu26P6qAjTyK.
 
 - **The selected table's form** is Name; Seats beside a rectangle/round shape toggle; and a
-  Moveable switch, on by default, replacing "Fixed in place". Width, Height, Rotation, Remove from
-  plan and Delete leave the form. Joins leave it too once A503 lands; until then they stay.
+  Moveable switch, on by default, replacing "Fixed in place". Width, Height and Rotation leave the
+  form. Joins leave it too once A503 lands; until then they stay.
 - **Handles on the selected table.** A dot in the middle of each side changes width or height. A
   two-headed quarter-circle arrow on the top-right corner turns the table, and turns with it, so it
   stays at the same corner. The arrow-key nudge and turn shortcuts
   stay. With the Width and Height fields gone, the plan needs a keyboard way to resize as well.
 - A503 adds a third marker to the tables list, for a table that is part of a joined table, and its
   "made of" picker must sort by number too.
-- The entry said the till already sorted tables by number. Its floor and zone menu did, but three
-  of its table pickers listed them in the server's text order (T1, T10, T2) until part 2: the table
-  order screen's move and seat targets, held orders' Move bill, and the department transfer's
-  table choice.
 - A466's canvas items (the rotate handle drawn outside the grid) are on the same code; fold in the
   ones this job does not make moot.
 

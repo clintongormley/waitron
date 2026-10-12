@@ -3882,9 +3882,11 @@ Add tables last at full width. The list names its tables in number order under N
 heads; seats blank reads "—". Each row is one button that puts the table on the plan or takes it
 off, with no question either way, and holds a marker: a filled `--wt-color-primary` circle on the
 plan, a hollow `--wt-color-text-muted` ring when not placed, so the two differ in shape as well as
-colour. A bin beside it asks "Delete {name}?" in a compact modal before the table goes. The
-selected table's row is `--wt-color-surface-lifted` with its name bold, and a table's mark or
-refusal shows under its name in `--wt-color-danger`, whichever table is selected. A table taken off
+colour. A bin beside it asks "Delete {name}?" in a compact modal before the table goes. It is not
+`wt-delete-dialog`: the delete changes only the draft and Undo takes it back until Save, so there
+is no impact to read. The selected table's row is `--wt-color-surface-lifted` with its name bold,
+and a table's mark or refusal shows under its name in `--wt-color-danger`, whichever table is
+selected. A table taken off
 goes back to the same place when pressed again, for as long as the editor stays open on that zone;
 the place is not saved. A table that never had a place, pressed when the plan has no free spot,
 changes nothing and says "No room on the plan." Cases: `floor-plan-tables-panel.test.ts` and the
