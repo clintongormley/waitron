@@ -701,6 +701,7 @@ export class OpeningHoursDay extends LitElement {
       special = this.special(),
       state = saveActionState(this.scope),
       closed = special?.closeWholeVenue,
+      season = seasonOn(this.model.seasons, this.date)?.name,
       zoneOpening = this.zoneOpening,
       blocked = this.readOnly || this.saving || !!opening || !!zoneOpening;
     return html`<div class="date-nav">
@@ -762,7 +763,7 @@ export class OpeningHoursDay extends LitElement {
             : nothing
       }
       ${this.calendarError ? html`<p class="refusal">${t("opening.load_error")}</p>` : nothing}
-      ${closed || special?.ownHours ? nothing : html`<p class="note">${format("opening.changes_weekday", { weekday: t(`hours.day_in_sentence.${weekdayOf(this.date)}` as Parameters<typeof t>[0]) })}</p>`}
+      ${closed || special?.ownHours || season === undefined ? nothing : html`<p class="note">${format("opening.changes_weekday", { weekday: t(`hours.day_in_sentence.${weekdayOf(this.date)}` as Parameters<typeof t>[0]), season })}</p>`}
       ${
         this.departments().length
           ? html`<service-grid

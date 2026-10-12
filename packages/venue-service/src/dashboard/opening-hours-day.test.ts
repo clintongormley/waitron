@@ -303,6 +303,25 @@ it.each([
   const day = await mount(undefined, seasonsFixture(date));
   expect(grid(day).columns[0]!.slots).toEqual(week[1]!.slots);
 });
+it.each([
+  ["2030-12-02", "en", "Changes every Monday in Winter"],
+  ["2030-11-25", "en", "Changes every Monday in Autumn"],
+  ["2030-12-02", "es", "Cambia cada lunes en Winter"],
+  ["2030-11-25", "es", "Cambia cada lunes en Autumn"],
+] as const)(
+  "notes that saving %s in %s changes its weekday in its season",
+  async (date, locale, note) => {
+    setLocale(locale);
+    vi.setSystemTime(new Date(`${date}T12:00:00Z`));
+    const day = await mount(undefined, seasonsFixture(date));
+    expect(day.shadowRoot!.querySelector(".note")!.textContent).toBe(note);
+  },
+);
+it("shows no weekday note when no season holds the date", async () => {
+  const day = await mount(undefined, { ...dayFixture(), seasons: [], currentSeasonId: null });
+  expect(grid(day).columns.map((c) => c.key)).toEqual(["d1", "d2"]);
+  expect(day.shadowRoot!.querySelector(".note")).toBeNull();
+});
 it("saves Monday 2 Dec 2030 as Winter's whole week, not the current Autumn's", async () => {
   vi.setSystemTime(new Date("2030-12-02T12:00:00Z"));
   const writes: unknown[] = [];
