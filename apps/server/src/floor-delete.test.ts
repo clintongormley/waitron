@@ -6,6 +6,7 @@ import {
   diningTables,
   floorPlans,
   floorPlanTableParts,
+  floorPlanTableSizes,
   floorPlanTables,
   floorResetTableParts,
   floorResetTables,
@@ -37,7 +38,7 @@ import {
   OPERATOR,
   type PartyVenue,
 } from "./testing/party-venue.js";
-import { plannedZone } from "./testing/floor-today-venue.js";
+import { giveKeptSize, plannedZone } from "./testing/floor-today-venue.js";
 import { handOverOrder, placeOrder } from "./working-order.js";
 
 let v: PartyVenue;
@@ -80,6 +81,7 @@ const floorRows = {
   floorPlans,
   floorPlanTables,
   floorPlanTableParts,
+  floorPlanTableSizes,
   floorResetTableParts,
   floorResetTables,
   floorTodayTables,
@@ -502,6 +504,49 @@ describe("floor hierarchy deletion", () => {
     ).toEqual([]);
     expect(
       await inTx(v, (tx) => tx.select().from(floorPlans).where(eq(floorPlans.zoneId, z))),
+    ).toEqual([]);
+  });
+
+  it("clears a zone whose saved plan keeps a table's size", async () => {
+    const { zoneId, master } = await plannedZone(
+      v,
+      [
+        { key: "bar", label: "Bar", seats: 4 },
+        { key: "c3", label: "Counter 3", seats: 2, place: null },
+      ],
+      NOW,
+    );
+    await giveKeptSize(v, master.c3!, { width: 2, height: 2 });
+    const masterIds = Object.values(master);
+    await inTx(v, (tx) => seatFor().clear(tx, [zoneId], NOW));
+    expect(
+      await inTx(v, (tx) =>
+        tx
+          .select()
+          .from(floorPlanTableSizes)
+          .where(inArray(floorPlanTableSizes.planTableId, masterIds)),
+      ),
+    ).toEqual([]);
+    expect(
+      await inTx(v, (tx) =>
+        tx.select().from(floorPlanTables).where(inArray(floorPlanTables.id, masterIds)),
+      ),
+    ).toEqual([]);
+    expect(
+      await inTx(v, (tx) => tx.select().from(floorPlans).where(eq(floorPlans.zoneId, zoneId))),
+    ).toEqual([]);
+    expect(
+      await inTx(v, (tx) => tx.select().from(diningTables).where(eq(diningTables.zoneId, zoneId))),
+    ).toEqual([]);
+    expect(
+      await inTx(v, (tx) =>
+        tx.select().from(floorResetTables).where(eq(floorResetTables.zoneId, zoneId)),
+      ),
+    ).toEqual([]);
+    expect(
+      await inTx(v, (tx) =>
+        tx.select().from(floorTodayZones).where(eq(floorTodayZones.zoneId, zoneId)),
+      ),
     ).toEqual([]);
   });
 
