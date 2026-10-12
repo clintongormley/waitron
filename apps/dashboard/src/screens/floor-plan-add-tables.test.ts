@@ -121,7 +121,9 @@ it("Add tables opens with one table, four seats and the zone's name as prefix", 
   expect(addField(el, "prefix").value).toBe("Terrace");
   expect(addField<HTMLElement & { hint: string }>(el, "prefix").hint).toBe("");
   expect(preview(el)).toBe("Terrace 11");
-  expect(addField<HTMLElement & { checked: boolean }>(el, "fixed").checked).toBe(false);
+  const moveable = addField<HTMLElement & { checked: boolean; label: string }>(el, "moveable");
+  expect([moveable.checked, moveable.label]).toEqual([true, "Moveable"]);
+  expect(addField(el, "fixed")).toBeNull();
   expect(addAction(el, "add-confirm").variant).toBe("primary");
   expect(addAction(el, "add-confirm").disabled).toBe(false);
 });
@@ -252,14 +254,14 @@ it("a seat count outside 0 to 999 is refused beside its field", async () => {
   expect(added(changes).map((t) => t.seats)).toEqual([0]);
 });
 
-it("Fixed in place adds fixed tables", async () => {
+it("turning Moveable off adds fixed tables", async () => {
   const el = await openAdd();
   const { changes } = listen(el);
   await set(el, addField(el, "table-count"), "2");
-  const fixed = addField<HTMLElement & { checked: boolean }>(el, "fixed");
-  fixed.checked = true;
-  fixed.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { checked: true }, bubbles: true, composed: true }),
+  const moveable = addField<HTMLElement & { checked: boolean }>(el, "moveable");
+  moveable.checked = false;
+  moveable.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { checked: false }, bubbles: true, composed: true }),
   );
   await el.updateComplete;
   await pressAdd(el);

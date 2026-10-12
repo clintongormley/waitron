@@ -246,12 +246,12 @@ it("refused text standing in a field holds the plan, though the draft is unchang
   const panel = el.shadowRoot!.querySelector("floor-plan-table-panel")!;
   await panel.updateComplete;
   const input = panel
-    .shadowRoot!.querySelector("[name=width]")!
+    .shadowRoot!.querySelector("[name=seats]")!
     .shadowRoot!.querySelector("input")!;
   await userEvent.clear(input);
-  await userEvent.type(input, "8.");
+  await userEvent.type(input, "4.");
   await el.updateComplete;
-  expect(placed(el, "m1").width).toBe(8);
+  expect(panel.draft.tables.find((t) => t.key === "m1")!.seats).toBe(4);
   expect(unload()).toBe(true);
   close(el);
   await choose(app, "keep");
@@ -373,12 +373,12 @@ it("Discard clears refused text standing in a field when the editor stays open",
   const panel = el.shadowRoot!.querySelector("floor-plan-table-panel")!;
   await panel.updateComplete;
   const input = panel
-    .shadowRoot!.querySelector("[name=width]")!
+    .shadowRoot!.querySelector("[name=seats]")!
     .shadowRoot!.querySelector("input")!;
   await userEvent.clear(input);
-  await userEvent.type(input, "8.");
+  await userEvent.type(input, "4.");
   await el.updateComplete;
-  expect(el.fieldError?.field).toBe("width");
+  expect(el.fieldError?.field).toBe("seats");
   const proceed = vi.fn();
   const outcome = leaveCoordinatorFor(el)!.request({ scopes: [el], reason: "navigation", proceed });
   await choose(app, "discard");

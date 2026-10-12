@@ -246,7 +246,36 @@ describe.each(["light", "dark"] as const)("floor-plan-editor a11y (%s theme)", (
   it("shows a placed table's panel accessibly", async () => {
     const { el, host } = await open(stubApi(vi.fn().mockResolvedValue(plan)), theme);
     const panel = await selectTable(el, "m2");
-    expect(panel.shadowRoot!.querySelector("[name=shape]")).not.toBeNull();
+    const round = panel.shadowRoot!.querySelector("[data-field=shape] button[data-shape=round]")!;
+    expect(round.getAttribute("aria-pressed")).toBe("true");
+    expect(
+      panel.shadowRoot!.querySelector<HTMLElement & { checked: boolean }>("[name=moveable]")!
+        .checked,
+    ).toBe(false);
+    await expectNoA11yViolations(host);
+  });
+
+  it("shows a refusal of the shape under the shape pair accessibly", async () => {
+    const before = [window.innerWidth, window.innerHeight] as const;
+    await page.viewport(1280, 1000);
+    onTestFinished(() => page.viewport(...before));
+    const { el, host } = await open(
+      stubApi(
+        vi.fn().mockResolvedValue(plan),
+        vi.fn().mockRejectedValue({
+          code: "floor_plan.invalid",
+          params: { field: "tables.0.placement.shape" },
+        }),
+      ),
+      theme,
+    );
+    const panel = await selectTable(el, "m1");
+    panel
+      .shadowRoot!.querySelector<HTMLElement>("[data-field=shape] button[data-shape=round]")!
+      .click();
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("wt-button[data-action=save]")!.click();
+    await expect.poll(() => panel.shadowRoot!.querySelector("[data-error=shape]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 
@@ -293,7 +322,7 @@ describe.each(["light", "dark"] as const)("floor-plan-editor a11y (%s theme)", (
     const panel = el.shadowRoot!.querySelector("floor-plan-table-panel")!;
     await panel.updateComplete;
     expect(panel.tableKey).toBe("m2");
-    expect(panel.shadowRoot!.querySelector("[name=shape]")).toBeNull();
+    expect(panel.shadowRoot!.querySelector("[data-field=shape]")).toBeNull();
     await expectNoA11yViolations(host);
   });
 

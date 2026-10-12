@@ -77,7 +77,7 @@ export interface FloorPlanNoRoom {
 }
 
 /** A panel field whose typed text the draft cannot hold. */
-export type FloorPlanTypedField = "seats" | "width" | "height";
+export type FloorPlanTypedField = "seats";
 
 /** A panel refusing typed text (`text`), or saying the field it refused holds a value again. */
 export type FloorPlanInvalid =
@@ -106,8 +106,7 @@ interface EditorMessage {
 }
 
 /** A table field a side panel shows, so a refusal naming it can sit beside it. */
-export type FloorPlanField =
-  "label" | "seats" | "fixed" | "width" | "height" | "shape" | "rotation";
+export type FloorPlanField = "label" | "seats" | "fixed" | "shape";
 
 export interface FloorPlanFieldError {
   key: string;
@@ -145,15 +144,12 @@ const SERVER_FIELDS: Record<string, FloorPlanField> = {
   label: "label",
   seats: "seats",
   fixed: "fixed",
-  "placement.width": "width",
-  "placement.height": "height",
   "placement.shape": "shape",
-  "placement.rotation": "rotation",
 };
 
 function fieldValue(table: DraftTable, field: FloorPlanField): unknown {
-  if (field === "label" || field === "seats" || field === "fixed") return table[field];
-  return table.placement?.[field] ?? null;
+  if (field === "shape") return table.placement?.shape ?? null;
+  return table[field];
 }
 
 /** The marked table keeps its mark while it fails at all, even when `checkDraft` blames another. */
