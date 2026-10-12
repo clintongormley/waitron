@@ -1092,6 +1092,8 @@ async function payIntegrated(
           : { kind: "recover" as const, captured };
       }
 
+      if (locked.status === "placed") await refusePlacedPaymentInFlight(deps.db, tx, req.id);
+
       if (outstanding !== undefined) {
         if (compareDecimal(outstanding.amountDue, ZERO) <= 0) {
           // Called only to refuse a malformed tip when tips are on; none is charged on a bill that

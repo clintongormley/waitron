@@ -6,9 +6,11 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { floorZones } from "@waitron/db";
 import { failAttempting } from "@waitron/payments";
+import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { inTx, provisionBillVenue, send, statusOf, type BillVenue } from "./testing/bill-venue.js";
+import { payWorkingOrderIntegratedOrchestration } from "./till-sale.js";
 import "./errors.js";
 
 let venue: BillVenue;
@@ -220,5 +222,300 @@ describe("a placed order's collect while its card is in flight", () => {
       expect(paymentsOf(id)).toEqual([]);
       expect(await statusOf(venue, id)).toBe("settled");
     });
+  });
+});
+
+/** A card payment of `id` through the orchestration, with `provider` as its reader. */
+function payWith(provider: FakePaymentProvider, id: string) {
+  return payWorkingOrderIntegratedOrchestration(
+    { db: venue.db, backend: venue.backend, clock: venue.clock, provider },
+    venue.cfg,
+    { id, lines: [] },
+  );
+}
+
+function readerCallsFor(id: string): number {
+  return venue.card.collectCalls.filter((call) => call.workingOrderId === id).length;
+}
+
+/** A reader that charges the card and writes its captured row, then holds its answer until
+ * `release`, so the pay that asked it has not yet filed the sale. */
+class ChargedThenHeld extends FakePaymentProvider {
+  readonly charged: Promise<void>;
+  release!: () => void;
+  private signal!: () => void;
+  private readonly gate: Promise<void>;
+
+  constructor() {
+    super(venue.db);
+    this.charged = new Promise((resolve) => (this.signal = resolve));
+    this.gate = new Promise((resolve) => (this.release = resolve));
+  }
+
+  override async collect(params: Parameters<FakePaymentProvider["collect"]>[0]) {
+    const result = await super.collect(params);
+    this.signal();
+    await this.gate;
+    return result;
+  }
+}
+
+describe("a second card payment of a placed order while the first is in flight", () => {
+  describe.each(KINDS)("$label", ({ kind }) => {
+    it("refuses till 2's card while till 1's is at the reader, asking no second reader, and keeps refusing cash after", async () => {
+      const id = await placed(kind);
+      const calls = venue.card.collectCalls.length;
+      const release = venue.card.holdNextCollect();
+      let paying: ReturnType<typeof pay> | undefined;
+      let observed;
+      try {
+        paying = pay(id);
+        await expect.poll(() => venue.card.collectCalls.length).toBe(calls + 1);
+        const second = await pay(id, venue.cookie2);
+        const callsAfterSecond = venue.card.collectCalls.length;
+        const cash = await collect(id, { method: "cash", amount: "50.00" });
+        observed = { second, callsAfterSecond, cash };
+      } finally {
+        release();
+      }
+      const paid = await paying;
+
+      expect(observed.second).toEqual(refusedInFlight(id));
+      expect(observed.callsAfterSecond).toBe(calls + 1);
+      expect(observed.cash).toEqual(refusedInFlight(id));
+      expect(paid.status).toBe(200);
+      expect(paid.json.outcome).toBe("captured");
+      const sales = salesOf(id);
+      expect(sales).toHaveLength(1);
+      expect(paymentsOf(id)).toEqual([
+        { provider: "fake", state: "captured", saleId: sales[0]!.id },
+      ]);
+    });
+
+    it("refuses a second card while a reader that timed out leaves the first unresolved", async () => {
+      const id = await placed(kind);
+      venue.card.stallNextCollect();
+      expect(await pay(id)).toEqual({ status: 200, json: { outcome: "timeout" } });
+      const calls = venue.card.collectCalls.length;
+
+      const second = await pay(id, venue.cookie2);
+
+      expect(second).toEqual(refusedInFlight(id));
+      expect(venue.card.collectCalls.length).toBe(calls);
+      expect(paymentsOf(id)).toEqual([{ provider: "fake", state: "attempting", saleId: null }]);
+    });
+
+    it("never refuses Pay again after a crash: it files the captured card asking no reader", async () => {
+      const id = await placed(kind);
+      venue.card.crashNextCollect("captured");
+      expect((await pay(id)).status).toBe(500);
+      const calls = venue.card.collectCalls.length;
+
+      const recovered = await pay(id);
+
+      expect(recovered.status).toBe(200);
+      expect(recovered.json.outcome).toBe("captured");
+      expect(venue.card.collectCalls.length).toBe(calls);
+      const sales = salesOf(id);
+      expect(sales).toHaveLength(1);
+      expect(paymentsOf(id)).toEqual([
+        { provider: "fake", state: "captured", saleId: sales[0]!.id },
+      ]);
+    });
+
+    it("takes a normal card payment", async () => {
+      const id = await placed(kind);
+
+      const paid = await pay(id);
+
+      expect(paid.status).toBe(200);
+      expect(paid.json.outcome).toBe("captured");
+      const sales = salesOf(id);
+      expect(sales).toHaveLength(1);
+      expect(tendersOf(id)).toEqual([{ method: "card", amount: 300 }]);
+      expect(paymentsOf(id)).toEqual([
+        { provider: "fake", state: "captured", saleId: sales[0]!.id },
+      ]);
+    });
+
+    it("takes a card after a declined card", async () => {
+      const id = await placed(kind);
+      venue.card.failNextCollect();
+      expect(await pay(id)).toEqual({ status: 200, json: { outcome: "declined" } });
+
+      const paid = await pay(id, venue.cookie2);
+
+      expect(paid.status).toBe(200);
+      expect(paid.json.outcome).toBe("captured");
+      const sales = salesOf(id);
+      expect(sales).toHaveLength(1);
+      expect(tendersOf(id)).toEqual([{ method: "card", amount: 300 }]);
+      expect(paymentsOf(id)).toEqual([
+        { provider: "fake", state: "failed", saleId: null },
+        { provider: "fake", state: "captured", saleId: sales[0]!.id },
+      ]);
+    });
+
+    it("lets a second Pay file the first card's charge while the first has not yet filed it, asking no reader", async () => {
+      const id = await placed(kind);
+      const reader = new ChargedThenHeld();
+      const first = payWith(reader, id);
+      let second;
+      try {
+        await reader.charged;
+        const calls = venue.card.collectCalls.length;
+        second = await pay(id, venue.cookie2);
+        expect(venue.card.collectCalls.length).toBe(calls);
+      } finally {
+        reader.release();
+      }
+      const firstPaid = await first;
+
+      expect(second.status).toBe(200);
+      expect(second.json.outcome).toBe("captured");
+      expect(firstPaid.outcome).toBe("captured");
+      if (firstPaid.outcome !== "captured") throw new Error("unreachable");
+      expect(firstPaid.ticket.invoiceNumber).toBe(
+        (second.json.ticket as { invoiceNumber: string }).invoiceNumber,
+      );
+      const sales = salesOf(id);
+      expect(sales).toHaveLength(1);
+      expect(tendersOf(id)).toEqual([{ method: "card", amount: 300 }]);
+      expect(paymentsOf(id)).toEqual([
+        { provider: "fake", state: "captured", saleId: sales[0]!.id },
+      ]);
+    });
+
+    it("lets one of two card payments started in the same tick reach its reader, and refuses the other before it asks", async () => {
+      const id = await placed(kind);
+      const readers = [new FakePaymentProvider(venue.db), new FakePaymentProvider(venue.db)];
+      const releases = readers.map((reader) => reader.holdNextCollect());
+      const settled: (PromiseSettledResult<unknown> | undefined)[] = [undefined, undefined];
+      const paying = readers.map((reader, i) =>
+        payWith(reader, id)
+          .then(
+            (value): PromiseSettledResult<unknown> => ({ status: "fulfilled", value }),
+            (reason: unknown): PromiseSettledResult<unknown> => ({ status: "rejected", reason }),
+          )
+          .then((outcome) => (settled[i] = outcome)),
+      );
+      let whileHeld;
+      try {
+        await expect.poll(() => settled.filter((s) => s !== undefined).length).toBe(1);
+        whileHeld = {
+          calls: readers.map((reader) => reader.collectCalls.length),
+          settled: [...settled],
+        };
+      } finally {
+        releases.forEach((release) => release());
+      }
+      const outcomes = await Promise.all(paying);
+
+      const loser = whileHeld.settled.findIndex((s) => s !== undefined);
+      const winner = 1 - loser;
+      expect(whileHeld.calls[loser]).toBe(0);
+      expect(whileHeld.calls[winner]).toBe(1);
+      expect(outcomes[loser]).toMatchObject({
+        status: "rejected",
+        reason: { code: "order.payment_in_flight", params: { workingOrderId: id } },
+      });
+      expect(outcomes[winner]).toMatchObject({
+        status: "fulfilled",
+        value: { outcome: "captured" },
+      });
+      expect(readers[loser]!.collectCalls).toHaveLength(0);
+      const sales = salesOf(id);
+      expect(sales).toHaveLength(1);
+      expect(paymentsOf(id)).toEqual([
+        { provider: "fake", state: "captured", saleId: sales[0]!.id },
+      ]);
+    });
+
+    it("answers a card payment after a cash collect settled the order with the cash ticket, asking no reader and dispensing no change again", async () => {
+      const id = await placed(kind);
+      const collected = await collect(id, { method: "cash", amount: "5.00" });
+      expect(collected.status).toBe(200);
+      expect(collected.json.tender).toEqual({ method: "cash", change: "2.00" });
+      const calls = venue.card.collectCalls.length;
+
+      const paid = await pay(id);
+
+      expect(paid.status).toBe(200);
+      expect(paid.json.outcome).toBe("captured");
+      expect((paid.json.ticket as { tender: unknown }).tender).toEqual({
+        method: "cash",
+        change: "2.00",
+      });
+      expect(venue.card.collectCalls.length).toBe(calls);
+      expect(salesOf(id)).toHaveLength(1);
+      expect(tendersOf(id)).toEqual([{ method: "cash", amount: 300 }]);
+      expect(paymentsOf(id)).toEqual([]);
+    });
+  });
+
+  it("guard, which may not catch the race: Pay from two tills at once, over many orders, charges and files each order once", async () => {
+    const broken: unknown[] = [];
+    for (let round = 0; round < 20; round++) {
+      const id = await placed("uninvoiced");
+      const answers = await Promise.all([pay(id), pay(id, venue.cookie2)]);
+      const sales = salesOf(id);
+      const payments = paymentsOf(id);
+      const captured = answers.filter((a) => a.status === 200 && a.json.outcome === "captured");
+      const numbers = new Set(
+        captured.map((a) => (a.json.ticket as { invoiceNumber: string }).invoiceNumber),
+      );
+      const ok =
+        readerCallsFor(id) === 1 &&
+        sales.length === 1 &&
+        payments.length === 1 &&
+        payments[0]!.state === "captured" &&
+        payments[0]!.saleId === sales[0]!.id &&
+        answers.every(
+          (a) =>
+            (a.status === 200 && a.json.outcome === "captured") ||
+            (a.status === 409 && a.json.code === "order.payment_in_flight"),
+        ) &&
+        captured.length >= 1 &&
+        numbers.size === 1;
+      if (!ok) broken.push({ round, readerCalls: readerCallsFor(id), answers, sales, payments });
+    }
+    expect(broken).toEqual([]);
+  });
+
+  it("guard, which may not catch the race: Pay and a cash collect at once, over many orders, take each order's money once", async () => {
+    const broken: unknown[] = [];
+    for (let round = 0; round < 20; round++) {
+      const id = await placed("uninvoiced");
+      const [paid, collected] = await Promise.all([
+        pay(id),
+        collect(id, { method: "cash", amount: "50.00" }),
+      ]);
+      const sales = salesOf(id);
+      const tenders = tendersOf(id);
+      const payments = paymentsOf(id);
+      const cashWon =
+        tenders.length === 1 &&
+        tenders[0]!.method === "cash" &&
+        readerCallsFor(id) === 0 &&
+        collected.status === 200 &&
+        paid.status === 200 &&
+        payments.length === 0;
+      const cardWon =
+        tenders.length === 1 &&
+        tenders[0]!.method === "card" &&
+        readerCallsFor(id) === 1 &&
+        paid.status === 200 &&
+        paid.json.outcome === "captured" &&
+        (collected.status === 409
+          ? collected.json.code === "order.payment_in_flight"
+          : collected.status === 200 &&
+            (collected.json.tender as { method: string }).method === "card") &&
+        payments.length === 1 &&
+        payments[0]!.saleId === sales[0]?.id;
+      if (sales.length !== 1 || !(cashWon || cardWon)) {
+        broken.push({ round, readerCalls: readerCallsFor(id), paid, collected, tenders, payments });
+      }
+    }
+    expect(broken).toEqual([]);
   });
 });

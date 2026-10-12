@@ -42,6 +42,7 @@ import {
   saleId as brandSaleId,
   seriesId as brandSeriesId,
 } from "@waitron/shared";
+import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import {
   insertAcceptedOffline,
   insertAttempting,
@@ -1551,9 +1552,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     expect(await rawPaymentsFor(id)).toEqual([{ state: "captured", hasSale: false }]);
   });
 
-  it("two concurrent pays for one placed order file ONE sale; the loser replays (one sale/settlement)", async () => {
-    // Placed, because a second card pay of an OPEN order is refused while the first runs (plan
-    // D22); a placed order's collect writes no mark, so both still reach the reader.
+  it("two concurrent pays for one placed order: one is captured, the other is refused before asking its reader, and ONE sale is filed", async () => {
     const { cfg, cafe } = await modeVenue("ticket_then_pay");
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
@@ -1564,27 +1563,25 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     });
     await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
 
-    // Two orchestrations, each with its own reader, pay the SAME placed order, interleaved by
-    // `Promise.allSettled`. P1 commits before `collect`, so both capture; P3's duplicate backstop
-    // files exactly one sale and the loser replays.
-    const { deps: depsA } = integratedDeps(cfg, suite.db);
-    const { deps: depsB } = integratedDeps(cfg, suite.db);
+    const readers = [new FakePaymentProvider(suite.db), new FakePaymentProvider(suite.db)];
+    const releases = readers.map((reader) => reader.holdNextCollect());
     const req = { id, lines: [] };
+    const paying = Promise.allSettled(
+      readers.map((provider) =>
+        payWorkingOrderIntegrated({ db: suite.db, backend, clock, provider }, cfg, req),
+      ),
+    );
+    await expect.poll(() => readers.map((reader) => reader.collectCalls.length)).toContain(1);
+    const winner = readers.findIndex((reader) => reader.collectCalls.length === 1);
+    releases.forEach((release) => release());
+    const settled = await paying;
 
-    const [a, b] = await Promise.allSettled([
-      payWorkingOrderIntegrated(depsA, cfg, req),
-      payWorkingOrderIntegrated(depsB, cfg, req),
-    ]);
-
-    if (a.status !== "fulfilled" || b.status !== "fulfilled") {
-      throw new Error(`both pays should settle: a=${JSON.stringify(a)} b=${JSON.stringify(b)}`);
-    }
-    expect(a.value.outcome).toBe("captured");
-    expect(b.value.outcome).toBe("captured");
-    if (a.value.outcome !== "captured" || b.value.outcome !== "captured") {
-      throw new Error("unreachable");
-    }
-    expect(a.value.ticket.invoiceNumber).toBe(b.value.ticket.invoiceNumber);
+    expect(readers[1 - winner]!.collectCalls).toHaveLength(0);
+    expect(settled[winner]).toMatchObject({ status: "fulfilled", value: { outcome: "captured" } });
+    expect(settled[1 - winner]).toMatchObject({
+      status: "rejected",
+      reason: { code: "order.payment_in_flight", params: { workingOrderId: id } },
+    });
     expect(await saleCount(id)).toBe(1);
     expect(await registroCount(id)).toBe(1);
   });
