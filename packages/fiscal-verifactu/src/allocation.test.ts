@@ -5,9 +5,10 @@ import { deployment, invoiceSeries, nodes, withTransaction, type Transaction } f
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { TENANT_A, TENANT_B, seedTenants } from "../test/fixtures.js";
+import { TENANT_A, TENANT_B, seedTenants, seedSoldRegistro } from "../test/fixtures.js";
 import * as fiscal from "./index.js";
 import { registroSif } from "./schema/sif.js";
+import { activateAllocation } from "./allocation.js";
 import {
   enrolPaperCustodian,
   paperCustodianFingerprint,
@@ -388,5 +389,376 @@ describe("allocation activation checks inside the venue transaction", () => {
         authority: { ...context.authority, currentEntryState: "abandoned" },
       } as AllocationContext),
     ).toEqual({ ok: false, reason: "reservation_abandoned" });
+  });
+});
+
+async function activate(
+  expected = context,
+  input: unknown = allocation,
+  permission: unknown = approval,
+) {
+  return withTransaction(suite.db, (tx) =>
+    activateAllocation(tx, node, input, permission, expected),
+  );
+}
+async function activationSnapshot() {
+  const tables = ["registro_sif", "invoice_series", "cadenas", "fiscal_allocations"];
+  const snapshot: Record<string, unknown> = {};
+  for (const name of tables) {
+    if (!/^[a-z_]+$/.test(name)) throw new Error("invalid probe table");
+    snapshot[name] = (
+      await suite.db.execute(sql.raw(`select * from "${name}" order by rowid`))
+    ).rows;
+  }
+  return snapshot;
+}
+
+describe("atomic allocation activation", () => {
+  it("commits the exact outside identity, complete series and audit result together", async () => {
+    const result = await activate();
+    expect(result.activationEventId).toBe("event-42");
+    expect(result.series.map(({ code, purpose }) => ({ code, purpose }))).toEqual([
+      { code: "A-P000042", purpose: "standard" },
+      { code: "R-P000042", purpose: "rectificative" },
+    ]);
+    expect(
+      (
+        await suite.db.execute(
+          sql`select id, numero_instalacion from registro_sif where revocado_en is null`,
+        )
+      ).rows,
+    ).toEqual([{ id: result.sifId, numero_instalacion: "P000042" }]);
+    expect(
+      (await suite.db.select().from(invoiceSeries))
+        .filter((s) => s.retiredAt === null)
+        .map((s) => s.id)
+        .sort(),
+    ).toEqual(result.series.map((s) => s.id).sort());
+    expect(
+      (
+        await suite.db.execute(
+          sql`select node_id, ultimo_registro_id, ultima_huella, secuencia from cadenas`,
+        )
+      ).rows,
+    ).toEqual([
+      { node_id: node.nodeId, ultimo_registro_id: null, ultima_huella: null, secuencia: 0 },
+    ]);
+    expect(
+      (
+        await suite.db.execute(
+          sql`select event_key, allocation_key, installation_identity, result from fiscal_allocations`,
+        )
+      ).rows,
+    ).toEqual([
+      {
+        event_key: "event-42",
+        allocation_key: "allocation-42",
+        installation_identity: "P000042",
+        result: JSON.stringify(result),
+      },
+    ]);
+  });
+
+  it("replays the committed event after outside confirmation without changing any row", async () => {
+    const first = await activate();
+    const before = await activationSnapshot();
+    expect(await activate({ ...context, priorActivation: "committed" })).toEqual(first);
+    expect(await activationSnapshot()).toEqual(before);
+  });
+
+  it("refuses an uncertain outside event even when the local result exists", async () => {
+    await activate();
+    const before = await activationSnapshot();
+    await expect(activate({ ...context, priorActivation: "uncertain" })).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "uncertain_prior_activation" },
+    });
+    expect(await activationSnapshot()).toEqual(before);
+  });
+
+  it("cannot reuse a consumed allocation for a different authorised event", async () => {
+    await activate();
+    const otherApproval = {
+      ...approval,
+      eventId: "another-event",
+      incidentEvidence: "master/another-event",
+    };
+    const otherContext = {
+      ...context,
+      eventId: otherApproval.eventId,
+      incidentEvidence: otherApproval.incidentEvidence,
+      reauthentication: { operatorId: otherApproval.operatorId, eventId: otherApproval.eventId },
+    };
+    const before = await activationSnapshot();
+    await expect(
+      activate(otherContext, signed(candidate, otherApproval), otherApproval),
+    ).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "allocation_consumed" },
+    });
+    expect(await activationSnapshot()).toEqual(before);
+  });
+
+  it("does not replay a stored event without independently trusted paper evidence", async () => {
+    await activate();
+    const before = await activationSnapshot();
+    await expect(
+      activate({
+        ...context,
+        priorActivation: "committed",
+        authority: { ...context.authority, trust: null },
+      } as AllocationContext),
+    ).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "reservation_untrusted" },
+    });
+    expect(await activationSnapshot()).toEqual(before);
+  });
+
+  it.each([
+    ["retire SIF", "before update on registro_sif"],
+    ["insert SIF", "before insert on registro_sif"],
+    ["reset chain", "before insert on cadenas"],
+    ["retire series", "before update on invoice_series"],
+    ["insert series", "before insert on invoice_series when new.code = 'R-P000042'"],
+    ["audit result", "before insert on fiscal_allocations"],
+  ])("rolls back every local write when %s is refused", async (_step, timing) => {
+    await suite.db.insert(registroSif).values({
+      nodeId: node.nodeId,
+      nif: candidate.taxpayerNif,
+      idSistemaInformatico: candidate.softwareId,
+      numeroInstalacion: 99,
+    });
+    const before = await activationSnapshot();
+    await suite.db.execute(
+      sql.raw(
+        `create trigger allocation_fail ${timing} begin select raise(abort, 'activation probe'); end`,
+      ),
+    );
+    try {
+      await expect(activate()).rejects.toThrow("activation probe");
+      expect(await activationSnapshot()).toEqual(before);
+    } finally {
+      await suite.db.execute(sql`drop trigger allocation_fail`);
+    }
+  });
+});
+
+describe("activation replay identity integrity", () => {
+  it.each([
+    ["numero_instalacion", "P000043"],
+    ["nif", "B12345678"],
+    ["id_sistema_informatico", "ZZ"],
+  ])("refuses replay after the retained SIF %s changes", async (column, value) => {
+    const first = await activate();
+    if (!/^[a-z_]+$/.test(column)) throw new Error("invalid probe column");
+    await suite.db.execute(
+      sql`update registro_sif set ${sql.raw(column)} = ${value} where id = ${first.sifId}`,
+    );
+    const before = await activationSnapshot();
+    await expect(activate({ ...context, priorActivation: "committed" })).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "activation_superseded" },
+    });
+    expect(await activationSnapshot()).toEqual(before);
+  });
+});
+
+describe("replay scope and history", () => {
+  it("requires outside commitment rather than treating a restored event key as permission", async () => {
+    await activate();
+    const before = await activationSnapshot();
+    await expect(activate()).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "outside_confirmation_missing" },
+    });
+    expect(await activationSnapshot()).toEqual(before);
+  });
+
+  it("checks the stored node location again on replay", async () => {
+    await activate();
+    await suite.db
+      .update(nodes)
+      .set({ locationId: TENANT_B.locationId })
+      .where(eq(nodes.id, node.nodeId));
+    await expect(activate({ ...context, priorActivation: "committed" })).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "node_mismatch" },
+    });
+  });
+
+  it("refuses a different trusted target on replay", async () => {
+    await activate();
+    await expect(
+      activate({ ...context, priorActivation: "committed", targetNodeId: TENANT_A.nodeId2 }),
+    ).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "node_mismatch" },
+    });
+  });
+
+  it("checks the current taxpayer on replay", async () => {
+    await activate();
+    await suite.db.execute(sql`update tenants set tax_id = ${"B12345678"}`);
+    await expect(activate({ ...context, priorActivation: "committed" })).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "taxpayer_mismatch" },
+    });
+  });
+
+  it("checks the environment stamp on replay", async () => {
+    await activate();
+    await suite.db.update(deployment).set({ environment: "production" });
+    await expect(activate({ ...context, priorActivation: "committed" })).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "environment_mismatch" },
+    });
+  });
+
+  it("refuses replay without an environment stamp", async () => {
+    await activate();
+    await suite.db.delete(deployment);
+    await expect(activate({ ...context, priorActivation: "committed" })).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "environment_unstamped" },
+    });
+  });
+
+  it("refuses a different valid signed allocation for a committed event", async () => {
+    await activate();
+    const other = signed({ ...candidate, allocationId: "other-allocation" });
+    expect(fiscal.validateAllocationEnvelope(other, approval, context).ok).toBe(true);
+    await expect(
+      activate({ ...context, priorActivation: "committed" }, other),
+    ).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "event_mismatch" },
+    });
+  });
+
+  it("refuses a different valid approval for a committed event", async () => {
+    await activate();
+    const changed = { ...approval, confirmedAt: "2026-10-12T09:01:00.000Z" };
+    const other = allocation;
+    expect(fiscal.validateAllocationEnvelope(other, changed, context).ok).toBe(true);
+    await expect(
+      activate({ ...context, priorActivation: "committed" }, other, changed),
+    ).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "event_mismatch" },
+    });
+  });
+
+  it("does not reactivate a retired SIF through replay", async () => {
+    const first = await activate();
+    await suite.db
+      .update(registroSif)
+      .set({ revocadoEn: new Date("2026-10-12T10:00:00.000Z") })
+      .where(eq(registroSif.id, first.sifId));
+    await expect(activate({ ...context, priorActivation: "committed" })).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "activation_superseded" },
+    });
+  });
+
+  it("does not replay a partial live series set", async () => {
+    const first = await activate();
+    await suite.db
+      .update(invoiceSeries)
+      .set({ retiredAt: new Date("2026-10-12T10:00:00.000Z") })
+      .where(eq(invoiceSeries.id, first.series[1]!.id));
+    await expect(activate({ ...context, priorActivation: "committed" })).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "activation_superseded" },
+    });
+  });
+
+  it("starts an empty chain while retaining its existing sequence", async () => {
+    await suite.db.execute(
+      sql`insert into cadenas(node_id, secuencia, actualizado_en) values(${node.nodeId}, 13, ${new Date("2026-10-12T08:00:00.000Z").getTime()})`,
+    );
+    await activate();
+    expect(
+      (
+        await suite.db.execute(
+          sql`select ultimo_registro_id, ultima_huella, secuencia from cadenas where node_id=${node.nodeId}`,
+        )
+      ).rows,
+    ).toEqual([{ ultimo_registro_id: null, ultima_huella: null, secuencia: 13 }]);
+  });
+
+  it("refuses a malformed new activation without changing any row", async () => {
+    const before = await activationSnapshot();
+    await expect(activate(context, null)).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "malformed_allocation" },
+    });
+    expect(await activationSnapshot()).toEqual(before);
+  });
+
+  it("retains audit evidence against both update and deletion", async () => {
+    await activate();
+    const before = await activationSnapshot();
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        tx.execute(sql`update fiscal_allocations set allocation_key=${"rewritten"}`),
+      ),
+    ).rejects.toThrow("fiscal_allocations is append-only");
+    await expect(
+      withTransaction(suite.db, (tx) => tx.execute(sql`delete from fiscal_allocations`)),
+    ).rejects.toThrow("fiscal_allocations is append-only");
+    expect(await activationSnapshot()).toEqual(before);
+  });
+});
+
+describe("activation over retained fiscal rows", () => {
+  it("retains the old record and identity while retiring its series and resetting only the head", async () => {
+    const old = await withTransaction(suite.db, (tx) =>
+      fiscal.registerSif(tx, {
+        nodeId: node.nodeId,
+        nif: candidate.taxpayerNif,
+        idSistemaInformatico: candidate.softwareId,
+      }),
+    );
+    await seedSoldRegistro(suite.db, {
+      locationId: node.locationId,
+      nodeId: node.nodeId,
+      sifId: old.id,
+      nif: candidate.taxpayerNif,
+      secuencia: 13,
+      huella: "A".repeat(64),
+      entorno: "preproduction",
+    });
+    const before = (await suite.db.execute(sql`select * from registros_facturacion`)).rows;
+    const oldSeries = await suite.db.select().from(invoiceSeries);
+    const input = signed({
+      ...candidate,
+      series: [...candidate.series, { code: "S13-P000042", purpose: "standard" }],
+    });
+    const result = await activate(context, input);
+    expect(result.sifId).not.toBe(old.id);
+    expect((await suite.db.execute(sql`select * from registros_facturacion`)).rows).toEqual(before);
+    const oldRow = (
+      await suite.db.select().from(registroSif).where(eq(registroSif.id, old.id))
+    )[0]!;
+    expect(oldRow).toEqual({ ...old, revocadoEn: expect.any(Date) });
+    const afterSeries = await suite.db.select().from(invoiceSeries);
+    for (const retained of oldSeries)
+      expect(afterSeries.find((s) => s.id === retained.id)).toEqual({
+        ...retained,
+        retiredAt: expect.any(Date),
+      });
+    expect(
+      (
+        await suite.db.execute(
+          sql`select ultimo_registro_id, ultima_huella, secuencia from cadenas where node_id=${node.nodeId}`,
+        )
+      ).rows,
+    ).toEqual([{ ultimo_registro_id: null, ultima_huella: null, secuencia: 13 }]);
+    expect(result.series.map((s) => ({ code: s.code, purpose: s.purpose }))).toEqual([
+      { code: "A-P000042", purpose: "standard" },
+      { code: "R-P000042", purpose: "rectificative" },
+      { code: "S13-P000042", purpose: "standard" },
+    ]);
   });
 });

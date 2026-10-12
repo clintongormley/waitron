@@ -223,10 +223,19 @@ persistent activation and recovery-pack enrolment remain open. The Task 4 branch
 paper/emergency allocation and approval envelopes against separately supplied host context.
 Its transaction-bound preflight reads the stored taxpayer, environment, node and existing software
 scope, checks recovery bases against the live series, and refuses retained identities and codes
-across nodes, including retired rows (`packages/fiscal-verifactu/src/allocation.test.ts`). It writes
-no activation result. Initial setup without series uses the trusted host's intended bases.
-Committed replay, schema changes and activation writes are still open; Cloud input remains refused
-until its separate trusted adapter exists. The existing recovery kit carries the old box's pointer
+across nodes, including retired rows (`packages/fiscal-verifactu/src/allocation.test.ts`). Initial setup without series uses the trusted host's intended bases. An inactive `activateAllocation`
+operation now retires the live SIF and series, creates the supplied identity and complete series
+set, resets the chain head without resetting its sequence and appends the result to the new
+immutable `fiscal_allocations` ledger in the caller's transaction. Paper replay checks outside
+commitment and evidence again, binds both envelopes to the stored event, and checks the live SIF
+and complete series set before returning the saved references. Six forced-write failures roll
+back the local rows; a synthetic retained-record comparison checks unchanged stored bytes.
+The operation has no package-root export or host caller. SIF typing remains numeric until the
+coupled representation and consumer replacement: the inactive writer currently binds the text
+identity through SQL, as the transaction-validation fixtures did. Counter retirement, all host
+entry points, emergency replay following restart and the two-restored-database control remain
+open. The root append-only `EXPECTED` list needs owner approval for one added ledger name; the
+guard is unchanged. Cloud input remains refused until its separate trusted adapter exists. The existing recovery kit carries the old box's pointer
 signer; it does not declare a paper custodian (`packages/stream/src/kit.ts`, `RecoveryKit`).
 A disposable SIF text-schema candidate has passed populated-record migration and integrity
 controls, recorded in [the migration notes](../developers/conventions-data.md). The complete

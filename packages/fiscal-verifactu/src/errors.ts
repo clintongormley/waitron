@@ -62,6 +62,7 @@ declare module "@waitron/shared" {
      * reports this code rather than `sif.id_sistema_invalid`. `reason` is our own English
      * description, never the payload. */
     "sif.reservation_invalid": { reason: string };
+    "sif.allocation_invalid": { reason: string };
 
     /**
      * Thrown by `appendToChain` (./chain.ts) once `MAX_APPEND_ATTEMPTS` attempts have each lost a

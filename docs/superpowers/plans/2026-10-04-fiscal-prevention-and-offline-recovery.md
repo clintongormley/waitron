@@ -272,6 +272,19 @@ SQL byte for byte. The numeric consumer inventory is a search inventory, not a c
 replace those consumers with the schema and atomic activation in one working milestone.
 Task 4 remains incomplete, with no activation entry point connected.
 
+
+**2026-10-12 atomic-write checkpoint:** an inactive `activateAllocation` now writes the supplied
+identity, complete series and immutable audit result in the caller's transaction. A confirmed
+paper replay rechecks outside evidence and stored/current scope and returns the recorded result.
+Six injected write failures roll back; tests compare a synthetic retained record and preserve
+its chain sequence. Installed deletion controls cover writes, outside commitment, envelope
+binding and current identity/series checks. The ledger-only generated migration passes the
+upgrade walk. The root append-only table-name pin needs approval for one additional entry;
+no guard logic has changed. This is not the final SIF text migration: the inactive writer binds
+text through SQL while the declaration and counter-based host consumers still await replacement.
+Do not expose or call it from setup/restore until that coupled transition, restart/emergency
+replay and two-restored-database qualification are complete. Task 4 remains incomplete.
+
 ## Task 5: select active series inside issuance transactions
 
 **Modify:** `apps/server/src/till-config.ts`, `trading-config.ts`, `till-sale.ts`,

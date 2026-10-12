@@ -90,3 +90,13 @@ describe("liveSeriesBases across purposes", () => {
     });
   });
 });
+
+describe("externally allocated installation suffixes", () => {
+  it("removes retained paper and emergency identities without removing a human suffix", () => {
+    const registered = new Set(["P000042", "E00000000000000000000000000"]);
+    expect(stripOwnSuffixes("FA-P000042", registered)).toBe("FA");
+    expect(stripOwnSuffixes("FA-P000042-E00000000000000000000000000", registered)).toBe("FA");
+    expect(stripOwnSuffixes("FA-2026-P000042", registered)).toBe("FA-2026");
+    expect(stripOwnSuffixes("FA-P000043", registered)).toBe("FA-P000043");
+  });
+});
