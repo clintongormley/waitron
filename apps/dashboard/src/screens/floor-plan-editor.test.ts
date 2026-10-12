@@ -542,17 +542,25 @@ it("puts the panel beside the canvas at 1280 px and in a collapsed sheet at 390 
   expect(sheet(el)!.heading).toBe("Tables");
 });
 
-it("at 1280 px puts Add tables at the bottom of a side column taller than its list", async () => {
-  await viewport(1280, 800);
-  const el = await open();
-  await expect.poll(() => el.shadowRoot!.querySelector(".side")).not.toBeNull();
-  const column = el.shadowRoot!.querySelector<HTMLElement>(".side")!;
-  const add = column
-    .querySelector("floor-plan-tables-panel")!
-    .shadowRoot!.querySelector<HTMLElement>("wt-button[data-action=add-tables]")!;
-  expect(column.scrollHeight).toBe(column.clientHeight);
-  expect(add.getBoundingClientRect().bottom).toBeCloseTo(column.getBoundingClientRect().bottom, 0);
-});
+it.each(["en-GB", "es-ES"] as const)(
+  "at 1280 px in %s puts the Add buttons at the bottom of a side column taller than its list",
+  async (locale) => {
+    setLocale(locale);
+    await viewport(1280, 800);
+    const el = await open();
+    await expect.poll(() => el.shadowRoot!.querySelector(".side")).not.toBeNull();
+    const column = el.shadowRoot!.querySelector<HTMLElement>(".side")!;
+    const foot = column
+      .querySelector("floor-plan-tables-panel")!
+      .shadowRoot!.querySelector<HTMLElement>(".foot")!;
+    expect(foot.querySelector("wt-button[data-action=add-tables]")).not.toBeNull();
+    expect(column.scrollHeight).toBe(column.clientHeight);
+    expect(foot.getBoundingClientRect().bottom).toBeCloseTo(
+      column.getBoundingClientRect().bottom,
+      0,
+    );
+  },
+);
 
 it("the sheet's heading names the selected table", async () => {
   await viewport(390, 844);
