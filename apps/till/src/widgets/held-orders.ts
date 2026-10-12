@@ -1,6 +1,6 @@
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, renderFloorChips } from "@waitron/ui";
+import { baseStyles, inNumberOrder, renderFloorChips } from "@waitron/ui";
 import { formatMoney } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
 import { trackDialog } from "./track-dialog.js";
@@ -245,9 +245,9 @@ export class TillHeldOrders extends LitElement {
         this.tables.length === 0
           ? html`<p class="picker-empty">${t("held.no_tables")}</p>`
           : html`<div class="action-options">
-              ${this.tables.map((table) =>
-                tableTarget(table, undefined, (picked) => this.#pick(picked)),
-              )}
+              ${[...this.tables]
+                .sort((a, b) => inNumberOrder(a.label, b.label))
+                .map((table) => tableTarget(table, undefined, (picked) => this.#pick(picked)))}
             </div>`
       }
       <wt-button

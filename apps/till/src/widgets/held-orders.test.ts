@@ -329,13 +329,28 @@ describe("till-held-orders: moving a counter order to a table", () => {
       [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-target]")].map(
         (row) => row.dataset.target,
       ),
-    ).toEqual(["t7", "t6", "t9"]);
+    ).toEqual(["t6", "t7", "t9"]);
     expect(target(el, "t9")!.textContent).toContain(t("floor.free"));
     expect(target(el, "t7")!.textContent).toContain(t("table.held_by").replace("{party}", "Luis"));
     expect(target(el, "t6")!.disabled).toBe(true);
     expect(el.shadowRoot!.querySelector('[data-target-reason="t6"]')!.textContent!.trim()).toBe(
       codeMessage("table.needs_clearing"),
     );
+  });
+
+  it("lists the tables in number order, whatever order the floor sends them in", async () => {
+    const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
+      orders: [mesa],
+      tables: [tableRow("t1", "T1"), tableRow("t10", "T10"), tableRow("t2", "T2")],
+    });
+
+    await openPicker(el);
+
+    expect(
+      [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-target]")].map(
+        (row) => row.dataset.target,
+      ),
+    ).toEqual(["t1", "t2", "t10"]);
   });
 
   it("says so when the floor lists no table", async () => {

@@ -1,7 +1,13 @@
 import { staffPresentationName } from "@waitron/catalogue/src/product-presentation.js";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, leaveCoordinatorFor, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
+import {
+  baseStyles,
+  inNumberOrder,
+  leaveCoordinatorFor,
+  focusFirstInvalid,
+  submitOnEnter,
+} from "@waitron/ui";
 import type { DraftScope, LeaveCoordinator, LeaveReason, WtDialog } from "@waitron/ui";
 import type {
   DepartmentTransfer,
@@ -592,7 +598,13 @@ export class TillDepartmentTransfers extends LitElement {
                   search="never"
                   .label=${t("department_transfer.table")}
                   .value=${this.tableId}
-                  .options=${[{ value: "", label: t("department_transfer.no_table") }, ...this.tables.filter((table) => table.zoneId === this.zoneId).map((table) => ({ value: table.id, label: table.label }))]}
+                  .options=${[
+                    { value: "", label: t("department_transfer.no_table") },
+                    ...this.tables
+                      .filter((table) => table.zoneId === this.zoneId)
+                      .map((table) => ({ value: table.id, label: table.label }))
+                      .sort((a, b) => inNumberOrder(a.label, b.label)),
+                  ]}
                   .error=${tableError}
                   ?disabled=${this.busy || !this.#validZone()}
                   @wt-change=${(event: CustomEvent<{ value: string }>) => this.#change("tableId", event)}
