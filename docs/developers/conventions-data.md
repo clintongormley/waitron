@@ -1531,7 +1531,7 @@ cancelled, a profile save that changes the email and blanks the name) has derive
 `ownPasswordChanges` ask the throttle's `wouldRefuse`, which changes no state, and attempts on the
 same throttle key take turns, outside the write lock, from the early check until the request's
 transaction finishes and its outcome is counted or cleared (`inTurn`, `apps/server/src/attempt-turns.ts`;
-at the till's sign-in a PIN that is not text takes the same turn to be counted, through `inPinTurn`), so attempts sent at once are
+at the till's sign-in and the dashboard's payment attestation routes a PIN that is not text takes the same turn to be counted, through `inPinTurn`), so attempts sent at once are
 each checked only after the outcomes before them are counted. `inTurn` must never be awaited inside
 a transaction, and nothing checks that. **Weaker than it looks:** nothing makes a route pass a result or take turns, so a new
 route that forgets the early half still derives under the write lock, one that skips the turns derives a key for every attempt
