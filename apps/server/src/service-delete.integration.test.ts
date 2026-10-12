@@ -96,6 +96,10 @@ async function target() {
       name: randomUUID(),
       orderStart: "table",
     });
+    await tx.insert(departmentReceipts).values({
+      departmentId: department.id,
+      receipt: { operationDescription: "Restaurante" },
+    });
     const zone = await createServiceZone(tx, venue.cfg, {
       name: randomUUID(),
       departmentId: department.id,
@@ -1036,10 +1040,15 @@ it.each(["zone", "department"] as const)(
         reason: "Retained lifecycle",
         resolvedAt: NOW.toISOString(),
       });
-      await tx.insert(departmentReceipts).values({
-        departmentId: f.departmentId,
-        receipt: { headerSubtitle: { "es-ES": "Retained table service" } },
-      });
+      await tx
+        .update(departmentReceipts)
+        .set({
+          receipt: {
+            operationDescription: "Restaurante",
+            headerSubtitle: { "es-ES": "Retained table service" },
+          },
+        })
+        .where(eq(departmentReceipts.departmentId, f.departmentId));
       const [timekeeper] = await tx
         .select()
         .from(persons)

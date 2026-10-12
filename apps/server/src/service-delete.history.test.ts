@@ -66,10 +66,16 @@ it("deleted department reprints its original receipt configuration and frozen he
       .update(departmentSalePolicies)
       .set({ printTradingName: true })
       .where(eq(departmentSalePolicies.departmentId, departmentId));
-    await tx.insert(departmentReceipts).values({
-      departmentId,
-      receipt: { headerSubtitle: { "es-ES": "Retained service subtitle" }, phone: "911111111" },
-    });
+    await tx
+      .update(departmentReceipts)
+      .set({
+        receipt: {
+          operationDescription: "Restaurante",
+          headerSubtitle: { "es-ES": "Retained service subtitle" },
+          phone: "911111111",
+        },
+      })
+      .where(eq(departmentReceipts.departmentId, departmentId));
     return survivor.id;
   });
   const billId = await counterOrder(venue, "Paella");
