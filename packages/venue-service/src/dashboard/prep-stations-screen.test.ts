@@ -3276,18 +3276,18 @@ describe("Routing grid", () => {
       }),
       ...Array.from({ length: 12 }, (_, i) => move(`P${String(i + 1).padStart(2, "0")}`, atLunch)),
     ];
-    function summaryView(): PrepStationsView {
+    function summaryView(periods = [lunch]): PrepStationsView {
       const next = gridView();
-      next.routing.periods = [lunch];
+      next.routing.periods = periods;
       next.routing.zones = [
         { id: "patio", name: "Patio", departmentId: null },
         { id: "terrace", name: "Terrace", departmentId: null },
       ];
       return next;
     }
-    async function openNotice(moves: object[]) {
+    async function openNotice(moves: object[], periods = [lunch]) {
       const { el } = await mountGrid({
-        load: vi.fn().mockResolvedValue(summaryView()),
+        load: vi.fn().mockResolvedValue(summaryView(periods)),
         preview: vi.fn().mockResolvedValue(moves),
       });
       await chooseCell(el, "c:food", "every", "Bar");
@@ -3324,6 +3324,35 @@ describe("Routing grid", () => {
         "Food, Patio: 1 product moves from Kitchen to No replacement.",
         "Food, Terrace: 1 product moves from Kitchen to Bar.",
         "Food, Terrace: 1 product moves from Kitchen to Bar during Lunch.",
+      ]);
+    });
+
+    it("groups by which periods, not by how their names read: the same set in any order is one group", async () => {
+      setLocale("en");
+      const dinner = { ...lunch, id: "dinner", name: "Dinner" };
+      const lunchAndDinner = { ...lunch, id: "lunch-and-dinner", name: "Lunch, Dinner" };
+      const periods = [lunch, dinner, lunchAndDinner];
+      const separate = await openNotice(
+        [
+          move("Bread", { periodIds: ["lunch", "dinner"] }),
+          move("Cake", { periodIds: ["lunch-and-dinner"] }),
+        ],
+        periods,
+      );
+      expect(sentences(separate.preview)).toEqual([
+        "Food, Terrace: 1 product moves from Kitchen to Bar during Lunch, Dinner.",
+        "Food, Terrace: 1 product moves from Kitchen to Bar during Lunch, Dinner.",
+      ]);
+      separate.el.remove();
+      const reordered = await openNotice(
+        [
+          move("Bread", { periodIds: ["lunch", "dinner"] }),
+          move("Cake", { periodIds: ["dinner", "lunch"] }),
+        ],
+        periods,
+      );
+      expect(sentences(reordered.preview)).toEqual([
+        "Food, Terrace: 2 products move from Kitchen to Bar during Lunch, Dinner.",
       ]);
     });
 

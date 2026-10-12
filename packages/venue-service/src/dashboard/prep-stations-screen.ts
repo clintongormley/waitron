@@ -1347,7 +1347,7 @@ export class PrepStationsScreen extends LitElement {
       const periods = move.periodIds ? this.#periodNames(move.periodIds) : null;
       const key = JSON.stringify([
         move.zoneId,
-        periods,
+        move.periodIds ? [...move.periodIds].sort() : null,
         move.from,
         move.to,
         move.to === null && move.toNoReplacement,
