@@ -602,7 +602,7 @@ it("a failed Reload replaces the older copy's message with its own, and Reload s
   expect(placed(el, "m1").x).toBe(5);
 });
 
-// At the narrowest phone width, with fonts wider than macOS's system one (A466).
+// At the narrowest phone width, with fonts wider than macOS's system one.
 describe.each([
   ["en-GB", "the system font", ""],
   ["es-ES", "the system font", ""],

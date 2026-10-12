@@ -1816,7 +1816,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **Resizing a floor plan table needs a pointer or a keyboard.** The side dots are hidden from
   assistive technology and Shift+arrow needs a keyboard, so a screen-reader user on a touch screen
-  cannot resize a table (accepted for now). Left open by A466 (A429 slice 2) / A502 part 3.
+  cannot resize a table (accepted by the A502 coordinator, not yet by the owner). Left open by A466 (A429 slice 2) / A502 part 3.
 
 - **Small floor plan canvas details:** `reveal` does not count the side dots, and on a turned
   table the resize cursor points the screen's way, not the side's. Left open by A466 (A429 slice 2) / A502 part 3.

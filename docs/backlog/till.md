@@ -272,7 +272,8 @@ section 6.1, `docs/superpowers/specs/2026-10-08-floor-plan-design.md`; `floor_pl
   ([mockup 5](mockups/a502-a503-floor-plan-editor/5-add-joined-table.png); the tables list in
   [mockup 2](mockups/a502-a503-floor-plan-editor/2-tables-list-nothing-selected.png)). The joined table is placed on the plan as
   one table; its parts are marked "in <joined table>" in the tables list and cannot be placed on
-  their own. The list's last column shows what a joined table is made of.
+  their own. The list's last column shows what a joined table is made of. The made-of picker lists
+  tables in number order, as the tables list does.
 - **On the till a joined table can be split.** Its parts go side by side inside the outline the
   joined table took up, each with its own seats.
 - **Two separate tables dragged together during service ask for the seat count.** Adding the two
@@ -1258,14 +1259,14 @@ From **Variants as products (#511–#556) — what is left open.** How the model
   2026-10-10).** "Booked 12 Oct, 21:00" is worded in the dashboard's core strings, not the bookings
   module's, because the module code-message route takes no parameters.
 - **A floor plan seat error keeps showing while the person types (owner, 2026-10-10).**
-- **A taken-off table's place is kept only while the editor is open (A502, D9).** Pressed again, a
+- **A taken-off table's place is kept only while the editor is open (A502, coordinator decision).** Pressed again, a
   table taken off the plan goes back to the same place for as long as the editor stays open on
   that zone; the place is not saved.
-- **Shift+arrow keys resize the selected table on the editor's plan (A502, D19).** Only the
+- **Shift+arrow keys resize the selected table on the editor's plan (A502, coordinator decision).** Only the
   selected table resizes, so only it carries the keys' description
   ([design-system.md](../developers/design-system.md)).
 - **The floor plan editor's header runs Undo, Redo, Cancel, Save (A502, owner, 2026-10-11).**
-  Cancel sits beside Save, after Undo and Redo, as the owner's backlog entry and mockup 1 put it: an
+  Cancel sits beside Save, after Undo and Redo, as the owner's [mockup 1](mockups/a502-a503-floor-plan-editor/1-editor-table-selected.png) puts it: an
   exception to Cancel on the left ([design-system.md](../developers/design-system.md)).
 - **Individual tables keep the later floor contract (A435 step 6, 2026-10-11).** Delete is a master
   draft edit with Undo until Save; today's release remains deferred. There is no table active flag

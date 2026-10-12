@@ -254,7 +254,7 @@ Their contrast, computed 2026-10-01 from `colors.css` with WCAG 2.2's relative-l
 a short Python script (light / dark): the line is 3.37 / 3.72 on the fill, 3.80 / 4.41 on
 `--wt-color-surface` and 3.55 / 4.85 on `--wt-color-bg`; the focused label is 5.18 / 5.06 on the
 fill; `--wt-color-text-muted` (the resting and floated label, the hint) is 5.43 / 5.95 on the fill
-and 5.72 / 6.59 on the disabled fill; `--wt-color-danger` is 5.79 / 5.14 and the value 18.59 /
+and 5.72 / 6.59 on the disabled fill; `--wt-color-danger` is 5.79 / 5.84 and the value 18.59 /
 14.37 on the fill. The focused label has its own token because `--wt-color-primary` as 12px text on
 the fill is 4.10 / 4.49, under the 4.5:1 small text needs; the focused LINE is
 `--wt-color-primary` itself, which as a non-text mark needs only 3:1. **The fill alone does not
@@ -3906,7 +3906,7 @@ place a table while none is selected, then the selected table's form, then the t
 Add tables last at full width. The form holds Name; Seats beside Shape, a visible "Shape" caption
 naming a group of two pressed-state icon buttons (Rectangle and Round, with no tooltip, since an
 icon tooltip's Escape would also start leaving the editor), shown for a placed table only and
-stacked under Seats when the panel is under 300 px wide; then a Moveable switch, on for a table
+stacked under Seats when the pair does not fit beside it; then a Moveable switch, on for a table
 that is not fixed. Add tables uses the same Moveable switch, on by default. Size, turn and place
 are set on the plan; a refusal naming one of them selects the table and shows its own sentence. The list names its tables in number order under Name and Seats
 heads; seats blank reads "—". Each row is one button that puts the table on the plan or takes it
