@@ -229,6 +229,10 @@ export class FloorPlanEditor extends LitElement {
       .frame > * {
         flex: none;
       }
+      /* The shell's toast positions itself against this strip. */
+      .notices {
+        position: relative;
+      }
       .frame > .layout {
         flex: 1 1 0;
         min-height: 0;
@@ -1046,6 +1050,7 @@ export class FloorPlanEditor extends LitElement {
         aria-label=${this.zoneName ?? t("floor_plan_editor.title")}
       >
         <div class="frame">
+          <div class="notices"><slot name="notices"></slot></div>
           <div class="width-probe"></div>
           <header class=${this.narrow ? "narrow" : ""}>
             <h1>${this.zoneName ?? t("floor_plan_editor.title")}</h1>
