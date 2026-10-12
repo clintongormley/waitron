@@ -155,12 +155,15 @@ function authenticatedContext(context: AllocationContext, authority: unknown, ac
     sourceId: context.sourceId,
     targetNodeId: context.targetNodeId,
   };
-  const operatorId = context.operatorId;
+  const operatorId =
+    typeof context.operatorId === "string"
+      ? context.operatorId
+      : Object.freeze({ ...context.operatorId });
   const mode = context.mode;
   const authorise = (): void => {
     const verified = readOperationAuthority(authority, binding);
     if (
-      verified?.operatorId !== operatorId ||
+      !isDeepStrictEqual(verified?.operatorId, operatorId) ||
       (mode === "initial-setup"
         ? action !== "setup"
         : !["restore", "re-register", "promote"].includes(action))

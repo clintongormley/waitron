@@ -10,6 +10,23 @@ const binding = {
 };
 
 describe("host operation authority", () => {
+  it("detaches a recovery-key event from caller mutation and never attributes it to a person", async () => {
+    const operator = {
+      kind: "recovery-key" as const,
+      nodeId: "replacement-1",
+      eventId: "takeover-1",
+    };
+    await module.withOperationAuthority(binding, operator, async (token) => {
+      operator.nodeId = "other";
+      operator.eventId = "other";
+      const verdict = module.readOperationAuthority(token, binding)!;
+      expect(verdict).toEqual({
+        operatorId: { kind: "recovery-key", nodeId: "replacement-1", eventId: "takeover-1" },
+      });
+      expect(Reflect.set(verdict.operatorId as object, "nodeId", "other")).toBe(false);
+    });
+  });
+
   it("supplies the verified operator only for the exact module, action, event, source and target", async () => {
     const authority = module;
     const result = await authority.withOperationAuthority(binding, "admin-1", async (token) => {

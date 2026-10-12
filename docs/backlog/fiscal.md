@@ -656,3 +656,11 @@ From **The product editor and catalogue (#345, #379, #387) — what is left open
   (`apps/print-agent/src/ipp-capabilities.ts`). The measurements behind it are in the
   [design](../superpowers/specs/2026-10-03-invoice-pdf-email-and-office-printing-design.md). Office
   printing reverses the 2026-09-09 provisioning design's "raw ESC/POS only" decision.
+
+**Update, 2026-10-12 (W41s-4 key authority):** the owner selected the current node key alone
+with permanent attribution to its authentication event. Internal qualification now checks the
+real verifier before the lock and rechecks it in the write transaction. Signed consumption and
+approval bind `{kind:"recovery-key",nodeId,eventId}`; normal administrator actions retain person
+attribution. Tests compare retained audit/role rows around takeover and rollback, with no accounts
+or management sessions. This does not connect a public promotion or cold restore. Coupled
+representation, all host consumers, outside continuity and final review remain open.

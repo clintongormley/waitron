@@ -180,3 +180,13 @@ register, stop short-name allocation and follow the separately approved emergenc
 The command supplies key generation and signing; you perform these register and enrolment steps.
 Recovery-pack enrolment and persistent activation must implement this procedure before the paper
 path is connected to trading.
+
+## Recovery authorised by a node key
+
+When you recover with the current node recovery key, the consumption event names that
+authentication rather than an account (owner decision, 2026-10-12 22:55). Replace the example's
+`operatorId` with `{"kind":"recovery-key","nodeId":"replacement-node","eventId":"recovery-event"}`.
+Use the same target node and event in the enclosing consumption and local approval. The signing
+command refuses a mismatched node or event and any extra field in this object. Enter no recovery
+key or password into the consumption JSON. This authority grants recovery only; it creates no
+management session and changes no password. Administrator-led operations keep their person ID.

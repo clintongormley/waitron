@@ -1,5 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
+import type { OperationOperator } from "@waitron/module";
+import { parseAllocationOperator } from "./allocation-operator.js";
 import {
   encodeEmergencyIdentity,
   installationChecksum,
@@ -25,7 +27,7 @@ export interface FiscalAllocation {
 export interface RecoveryApproval {
   readonly version: 1;
   readonly eventId: string;
-  readonly operatorId: string;
+  readonly operatorId: OperationOperator;
   readonly sourceId: string;
   readonly targetNodeId: string;
   readonly oldMachineOffline: boolean;
@@ -55,12 +57,15 @@ export interface AllocationContext {
   readonly environment: "preproduction" | "production";
   readonly mode: "initial-setup" | "recovery";
   readonly eventId: string;
-  readonly operatorId: string;
+  readonly operatorId: OperationOperator;
   readonly sourceId: string;
   readonly targetNodeId: string;
   readonly incidentEvidence: string;
   readonly requiredBases: readonly { readonly code: string; readonly purpose: string }[];
-  readonly reauthentication: { readonly operatorId: string; readonly eventId: string } | null;
+  readonly reauthentication: {
+    readonly operatorId: OperationOperator;
+    readonly eventId: string;
+  } | null;
   readonly priorActivation: "none" | "committed" | "uncertain";
   readonly authority:
     | {
@@ -199,9 +204,8 @@ function approvalShape(value: unknown): value is RecoveryApproval {
       "incidentEvidence",
     ]) &&
     value.version === 1 &&
-    ["eventId", "operatorId", "sourceId", "targetNodeId", "incidentEvidence"].every((key) =>
-      text(value[key]),
-    ) &&
+    parseAllocationOperator(value.operatorId) !== null &&
+    ["eventId", "sourceId", "targetNodeId", "incidentEvidence"].every((key) => text(value[key])) &&
     ["oldMachineOffline", "oldMachineAbsent", "noParallelRecovery"].every(
       (key) => typeof value[key] === "boolean",
     ) &&
@@ -269,9 +273,11 @@ function validateEnvelope(
   )
     return refuse("source_mismatch");
   if (
-    !["eventId", "operatorId", "sourceId", "targetNodeId", "incidentEvidence"].every(
-      (key) =>
-        permission[key as keyof RecoveryApproval] === context[key as keyof AllocationContext],
+    !["eventId", "operatorId", "sourceId", "targetNodeId", "incidentEvidence"].every((key) =>
+      isDeepStrictEqual(
+        permission[key as keyof RecoveryApproval],
+        context[key as keyof AllocationContext],
+      ),
     )
   )
     return refuse("event_mismatch");
@@ -281,8 +287,12 @@ function validateEnvelope(
     return refuse("old_machine_active");
   if (!permission.noParallelRecovery) return refuse("parallel_recovery");
   if (
-    context.reauthentication?.operatorId !== permission.operatorId ||
-    context.reauthentication.eventId !== permission.eventId
+    !isDeepStrictEqual(context.reauthentication?.operatorId, permission.operatorId) ||
+    context.reauthentication?.eventId !== permission.eventId ||
+    (typeof permission.operatorId !== "string" &&
+      (context.mode !== "recovery" ||
+        permission.operatorId.nodeId !== context.targetNodeId ||
+        permission.operatorId.eventId !== context.eventId))
   )
     return refuse("reauthentication_required");
   if (context.priorActivation === "uncertain") return refuse("uncertain_prior_activation");

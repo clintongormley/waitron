@@ -7,6 +7,9 @@ import {
   type KeyObject,
 } from "node:crypto";
 import { isAllocatedSeries, isInstallationIdentity } from "./allocation-identity.js";
+import { isDeepStrictEqual } from "node:util";
+import type { OperationOperator } from "@waitron/module";
+import { parseAllocationOperator } from "./allocation-operator.js";
 
 export interface PaperAllocation {
   readonly version: 1;
@@ -36,7 +39,7 @@ export interface PaperConsumption {
   readonly blockDigest: string;
   readonly allocationId: string;
   readonly eventId: string;
-  readonly operatorId: string;
+  readonly operatorId: OperationOperator;
   readonly sourceId: string;
   readonly targetNodeId: string;
   readonly incidentEvidence: string;
@@ -92,7 +95,7 @@ export interface PaperEvidenceContext {
   readonly generationId: string;
   readonly blockId: string;
   readonly eventId: string;
-  readonly operatorId: string;
+  readonly operatorId: OperationOperator;
   readonly sourceId: string;
   readonly targetNodeId: string;
   readonly incidentEvidence: string;
@@ -277,6 +280,7 @@ function parseBlock(value: unknown): PaperBlock | null {
 }
 
 function parseConsumption(value: unknown): PaperConsumption | null {
+  const operator = record(value) ? parseAllocationOperator(value.operatorId) : null;
   if (
     !record(value) ||
     !exactKeys(value, CONSUMPTION_KEYS) ||
@@ -285,11 +289,13 @@ function parseConsumption(value: unknown): PaperConsumption | null {
       "custodianId",
       "allocationId",
       "eventId",
-      "operatorId",
       "sourceId",
       "targetNodeId",
       "incidentEvidence",
     ].every((key) => text(value[key])) ||
+    operator === null ||
+    (typeof operator !== "string" &&
+      (operator.nodeId !== value.targetNodeId || operator.eventId !== value.eventId)) ||
     typeof value.blockDigest !== "string" ||
     !/^[a-f0-9]{64}$/.test(value.blockDigest) ||
     !timestamp(value.consumedAt)
@@ -301,7 +307,7 @@ function parseConsumption(value: unknown): PaperConsumption | null {
     blockDigest: value.blockDigest,
     allocationId: value.allocationId as string,
     eventId: value.eventId as string,
-    operatorId: value.operatorId as string,
+    operatorId: operator,
     sourceId: value.sourceId as string,
     targetNodeId: value.targetNodeId as string,
     incidentEvidence: value.incidentEvidence as string,
@@ -687,12 +693,13 @@ function verifyReservation(
         block[key as "recipientVenueId" | "generationId" | "blockId"] ===
         context[key as "recipientVenueId" | "generationId" | "blockId"],
     ) ||
-    !["eventId", "operatorId", "sourceId", "targetNodeId", "incidentEvidence"].every(
-      (key) =>
+    !["eventId", "operatorId", "sourceId", "targetNodeId", "incidentEvidence"].every((key) =>
+      isDeepStrictEqual(
         reservation[
           key as "eventId" | "operatorId" | "sourceId" | "targetNodeId" | "incidentEvidence"
-        ] ===
+        ],
         context[key as "eventId" | "operatorId" | "sourceId" | "targetNodeId" | "incidentEvidence"],
+      ),
     )
   )
     return { ok: false, reason: "scope_mismatch" };
@@ -754,12 +761,13 @@ export function verifyPaperEvidence(
         block[key as "recipientVenueId" | "generationId" | "blockId"] ===
         context[key as "recipientVenueId" | "generationId" | "blockId"],
     ) ||
-    !["eventId", "operatorId", "sourceId", "targetNodeId", "incidentEvidence"].every(
-      (key) =>
+    !["eventId", "operatorId", "sourceId", "targetNodeId", "incidentEvidence"].every((key) =>
+      isDeepStrictEqual(
         consumption[
           key as "eventId" | "operatorId" | "sourceId" | "targetNodeId" | "incidentEvidence"
-        ] ===
+        ],
         context[key as "eventId" | "operatorId" | "sourceId" | "targetNodeId" | "incidentEvidence"],
+      ),
     )
   )
     return { ok: false, reason: "scope_mismatch" };

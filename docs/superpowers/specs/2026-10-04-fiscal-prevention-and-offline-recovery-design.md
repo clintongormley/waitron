@@ -532,3 +532,13 @@ run the library validator over boundary examples, including the longest emergenc
 10-digit counter. Changing `registerSif`, `restoreFiscal`, an alta builder or the hash path is
 outside RUNNER H2 until the owner records a narrow, item-specific exception. Approval of this
 appendix alone does not grant that exception or enable issuance after recovery.
+
+### Recovery-key attribution, owner decision 2026-10-12 22:55
+
+The current node recovery key alone authorises offline recovery or takeover. No account is
+selected, no password is required, no management session is created and no password is reset.
+Bind the outside consumption and local approval to `operatorId:{kind:"recovery-key",nodeId,eventId}`.
+This records a key-authenticated event rather than naming a person; the key itself is never
+recorded. Wrong or replaced keys refuse. Normal administrator operations retain person attribution.
+Old-machine isolation, complete series, independent outside consumption and atomic local activation
+still apply. This owner decision supersedes any assumption above that every recovery names an account.

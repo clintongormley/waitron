@@ -621,3 +621,19 @@ the adapter stays unavailable until the service contract is fulfilled, while pap
 - Product implementation and probes have not run in the planning session. Completion requires
   the offline exercise, concrete correction/investigation workflows, Cloud delivery separately,
   recorded protocol evidence and explicit disposition of every remaining gated action.
+
+**2026-10-12 recovery-key authority checkpoint:** the owner chose key-only authority with
+attribution to the key event. `withRecoveryKeyOperation` checks the actual node verifier outside
+the write lock, rechecks it in the operation transaction and issues temporary scoped authority.
+No account is required or modified. The supplied callback runs in that same transaction; its
+refusal rolls back its writes and revokes the authority. The signed paper consumption and local
+approval carry the same structured key event, while ordinary administrator attribution stays a
+person ID. New tests use independently signed bytes, account-free dormant takeover, all three
+purposes, retained audit replay and membership-write rollback. These are internal synthetic
+qualification paths, not connected promotion or cold-restore entry points.
+
+Remaining Task 4 work: staged/CLI input and authentication carriers; text SIF/counter retirement
+and every setup, seed, restore, bundle, adoption and promotion consumer together; current-main
+rebase, complete migration regeneration and populated upgrade; sync the Cloud handoff's proposed
+operator binding to the owner-selected union; two full reviews, normal hook and current-head CI.
+Do not publish this incomplete candidate.

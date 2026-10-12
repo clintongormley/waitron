@@ -66,3 +66,22 @@ choice about administrator authentication and permanent fiscal attribution. Gene
 authorisation does not select A or B. Neither recovery-key adapter is implemented, and no existing
 test assertion has changed in this checkpoint. Any existing fiscal assertion port beyond the
 previous exact approvals still requires its own exact-line approval.
+
+## Owner decision, 2026-10-12 22:55
+
+The owner selected C: the current node recovery key authorises recovery by itself. You do not
+select an account or enter its password. Record the authentication event, never a person:
+`operatorId` is `{kind:"recovery-key",nodeId,eventId}` in both the signed outside consumption
+and the permanent approval. Ordinary administrator operations keep their person ID. Neither
+form carries a secret. The key grants no management session and resets no password.
+
+The internal host helper verifies the key before taking the write lock, then rechecks the
+stored verifier inside the operation's transaction. It issues authority only for restore,
+re-registration or promotion on that same node. This replaces the A/B choice above. Existing
+public promotion and cold-restore paths still await the coupled Task 4 transition.
+
+The shared field now carries a person ID or a recovery-key event. Paper signing uses a parsed,
+fixed-order event object, and verification compares values rather than object identity. The
+Cloud handoff plan's proposed `ClaimBinding.operatorId:string` must carry the same union when
+this branch rebases over that plan; its custody adapter must preserve which form was approved.
+No Cloud login is inferred from a node key.

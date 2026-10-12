@@ -11,8 +11,16 @@ export interface OperationAuthority {
   readonly [operationAuthority]: true;
 }
 
+export interface RecoveryKeyOperator {
+  readonly kind: "recovery-key";
+  readonly nodeId: string;
+  readonly eventId: string;
+}
+
+export type OperationOperator = string | RecoveryKeyOperator;
+
 interface VerifiedOperator {
-  readonly operatorId: string;
+  readonly operatorId: OperationOperator;
 }
 
 const issued = new WeakMap<object, { binding: OperationBinding; operator: VerifiedOperator }>();
@@ -20,13 +28,15 @@ const issued = new WeakMap<object, { binding: OperationBinding; operator: Verifi
 // The trusted host authenticates the operator before issuance; this carrier performs no login.
 export async function withOperationAuthority<T>(
   binding: OperationBinding,
-  operatorId: string,
+  operatorId: OperationOperator,
   run: (authority: OperationAuthority) => Promise<T>,
 ): Promise<T> {
   const authority = Object.freeze({}) as OperationAuthority;
   issued.set(authority, {
     binding: Object.freeze({ ...binding }),
-    operator: Object.freeze({ operatorId }),
+    operator: Object.freeze({
+      operatorId: typeof operatorId === "string" ? operatorId : Object.freeze({ ...operatorId }),
+    }),
   });
   try {
     return await run(authority);

@@ -1,11 +1,17 @@
 import "./errors.js";
 import { AppError } from "@waitron/shared";
-import { withTransaction, type Database } from "@waitron/db";
+import {
+  readBreakGlassVerifier,
+  withTransaction,
+  type Database,
+  type Transaction,
+} from "@waitron/db";
 import {
   authorizeManager,
   checkManagerPassword,
   endManagementSession,
   loginManagerById,
+  verifySecretAsync,
   type TotpKeyRing,
 } from "@waitron/identity";
 import {
@@ -15,6 +21,36 @@ import {
 } from "@waitron/module";
 import { inTurn } from "./attempt-turns.js";
 import { isUuid } from "./till-session.js";
+
+export async function withRecoveryKeyOperation<T>(
+  deps: { readonly db: Database; readonly nodeId: string },
+  operation: OperationBinding,
+  secret: unknown,
+  run: (tx: Transaction, authority: OperationAuthority) => Promise<T>,
+): Promise<T> {
+  const binding = { ...operation };
+  const targetNodeId = deps.nodeId;
+  const refuse = (): never => {
+    throw new AppError("promotion.break_glass_invalid", {});
+  };
+  if (
+    typeof secret !== "string" ||
+    secret.length === 0 ||
+    binding.targetNodeId !== targetNodeId ||
+    !["restore", "re-register", "promote"].includes(binding.action)
+  )
+    return refuse();
+  const verifier = await readBreakGlassVerifier(deps.db, targetNodeId);
+  if (verifier === null || !(await verifySecretAsync(secret, verifier))) return refuse();
+  return withTransaction(deps.db, async (tx) => {
+    if ((await readBreakGlassVerifier(tx, targetNodeId)) !== verifier) return refuse();
+    return withOperationAuthority(
+      binding,
+      { kind: "recovery-key", nodeId: targetNodeId, eventId: binding.eventId },
+      (authority) => run(tx, authority),
+    );
+  });
+}
 
 export async function withAuthenticatedOperation<T>(
   deps: { readonly db: Database; readonly credentialKeyRing: TotpKeyRing },
