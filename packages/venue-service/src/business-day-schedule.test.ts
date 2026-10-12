@@ -1072,7 +1072,8 @@ it("reports a clashing season range once per season it is painted in, naming the
         ...(zone ? { zoneId: v.zoneId } : { periodId: v.periodId }),
       });
     expect(result.once).toEqual({ conflictCount: 1, conflicts: [conflict(result.winter)] });
-    expect(result.twice.conflictCount).toBe(2);
+    expect(result.twice.conflictCount).toBe(1);
+    expect(result.twice.conflicts).toHaveLength(2);
     expect(result.twice.conflicts).toEqual(
       expect.arrayContaining([conflict(result.winter), conflict(result.summer)]),
     );
@@ -1102,4 +1103,58 @@ it("checks a season's last day against the next season's first", async () => {
       ],
     },
   });
+});
+
+it("counts a range painted in every season once, so a capped list still names every department", async () => {
+  const v = await fixture([]);
+  const result = await withTransaction(suite.db, async (tx) => {
+    await tx.insert(seasons).values(
+      [
+        ["Spring", "03-01"],
+        ["Summer", "06-01"],
+        ["Autumn", "09-01"],
+      ].map(([name, startsOn]) => ({
+        locationId: v.cfg.locationId,
+        name: name!,
+        startsOn: startsOn!,
+      })),
+    );
+    const secondId = randomUUID(),
+      secondPeriodId = randomUUID(),
+      menuId = randomUUID();
+    await tx.insert(departments).values({
+      id: secondId,
+      locationId: v.cfg.locationId,
+      name: "Bar",
+      tradingName: "Bar",
+    });
+    await tx.insert(catalogues).values({ id: menuId, name: "Bar menu" });
+    await tx
+      .insert(menuPeriods)
+      .values({ id: secondPeriodId, departmentId: secondId, menuId, name: "Bar" });
+    for (const [departmentId, periodId] of [
+      [v.departmentId, v.periodId],
+      [secondId, secondPeriodId],
+    ])
+      await replaceMenuWeek(
+        tx,
+        v.cfg,
+        departmentId!,
+        Array.from({ length: 7 }, (_, weekday) => ({
+          weekday,
+          slots: [{ periodId, ...range("22:00", "04:30") }],
+        })),
+        at,
+        0,
+      );
+    return {
+      secondId,
+      conflicts: await businessDayClockConflicts(tx, v.cfg, before, candidate("03:00"), E),
+    };
+  });
+  expect(result.conflicts.conflictCount).toBe(14);
+  expect(new Set(result.conflicts.conflicts.map((c) => c.departmentId))).toEqual(
+    new Set([v.departmentId, result.secondId]),
+  );
+  expect(result.conflicts.conflicts).toHaveLength(56);
 });

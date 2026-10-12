@@ -216,11 +216,11 @@ export async function businessDayClockConflicts(
       return allPeriods.filter(
         (row) => row.departmentId === departmentId && row.specialDateId === named.id,
       );
+    const seasonId = seasonOf(date),
+      weekday = weekdayOf(date);
     return allPeriods.filter(
       (row) =>
-        row.departmentId === departmentId &&
-        row.seasonId === seasonOf(date) &&
-        row.weekday === weekdayOf(date),
+        row.departmentId === departmentId && row.seasonId === seasonId && row.weekday === weekday,
     );
   };
   const nextPlacements = (p: Placement): Placement[] => {
@@ -336,7 +336,15 @@ export async function businessDayClockConflicts(
         });
     }
   }
-  return { conflicts: conflicts.slice(0, 20), conflictCount: conflicts.length };
+  // The cap and the count are of distinct ranges: one range painted in several seasons is one.
+  const rangeKey = (conflict: BusinessDayClockConflict) =>
+    JSON.stringify({ ...conflict, seasonId: undefined });
+  const ranges = [...new Set(conflicts.map(rangeKey))];
+  const listed = new Set(ranges.slice(0, 20));
+  return {
+    conflicts: conflicts.filter((conflict) => listed.has(rangeKey(conflict))),
+    conflictCount: ranges.length,
+  };
 }
 export async function assertBusinessDayClockChange(
   tx: Transaction,
