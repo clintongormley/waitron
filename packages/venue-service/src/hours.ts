@@ -17,13 +17,15 @@ import {
   type SpecialDate,
   type SpecialDateInput,
 } from "./hours-types.js";
-import { type VenueScope } from "./operations.js";
+import { storedTime, type VenueScope } from "./operations.js";
+import { seasonOn } from "./season-rules.js";
+import { readDepartmentSeasonWeeks, readZoneSeasonWeeks } from "./season-weeks.js";
+import { readSeasons } from "./seasons.js";
 import { specialDates } from "./schema/hours.js";
 import { namedDaysOn } from "./named-days.js";
 import { occursOn, repeatKey } from "./named-day-rules.js";
 import { readOpeningHoursModel } from "./menu-timetable.js";
 import { menuDayTimetables, menuSlots } from "./schema/menus.js";
-import { departments, zoneServicePolicies } from "./schema/service.js";
 import { zoneClosedTimes } from "./schema/zone-closed-times.js";
 import "./errors.js";
 
@@ -96,43 +98,42 @@ async function switchNamedDayHours(
   await tx.delete(menuDayTimetables).where(eq(menuDayTimetables.specialDateId, specialDateId));
   await tx.delete(zoneClosedTimes).where(eq(zoneClosedTimes.specialDateId, specialDateId));
   if (!ownHours) return;
+  const season = seasonOn(await readSeasons(tx, cfg), date);
+  if (season === null) return;
   const weekday = weekdayOf(date);
-  const days = await tx
-    .select({ id: menuDayTimetables.id, departmentId: menuDayTimetables.departmentId })
-    .from(menuDayTimetables)
-    .innerJoin(departments, eq(departments.id, menuDayTimetables.departmentId))
-    .where(and(eq(departments.locationId, cfg.locationId), eq(menuDayTimetables.weekday, weekday)));
-  for (const day of days) {
-    const slots = await tx.select().from(menuSlots).where(eq(menuSlots.timetableId, day.id));
+  const only = { seasonIds: [season.id], weekdays: [weekday] };
+  for (const [departmentId, weeks] of await readDepartmentSeasonWeeks(
+    tx,
+    cfg,
+    undefined,
+    undefined,
+    only,
+  )) {
+    const slots = weeks.get(season.id)?.[weekday] ?? [];
+    if (slots.length === 0) continue;
     const timetableId = newId();
-    await tx
-      .insert(menuDayTimetables)
-      .values({ id: timetableId, departmentId: day.departmentId, specialDateId });
-    if (slots.length > 0)
-      await tx.insert(menuSlots).values(
-        slots.map((slot) => ({
-          id: newId(),
-          timetableId,
-          departmentId: day.departmentId,
-          periodId: slot.periodId,
-          startsAt: slot.startsAt,
-          endsAt: slot.endsAt,
-        })),
-      );
-  }
-  const closures = await tx
-    .select({
-      zoneId: zoneClosedTimes.zoneId,
-      startsAt: zoneClosedTimes.startsAt,
-      endsAt: zoneClosedTimes.endsAt,
-    })
-    .from(zoneClosedTimes)
-    .innerJoin(zoneServicePolicies, eq(zoneServicePolicies.zoneId, zoneClosedTimes.zoneId))
-    .where(
-      and(eq(zoneServicePolicies.locationId, cfg.locationId), eq(zoneClosedTimes.weekday, weekday)),
+    await tx.insert(menuDayTimetables).values({ id: timetableId, departmentId, specialDateId });
+    await tx.insert(menuSlots).values(
+      slots.map((slot) => ({
+        id: newId(),
+        timetableId,
+        departmentId,
+        periodId: slot.periodId,
+        startsAt: storedTime(slot.startsAt),
+        endsAt: storedTime(slot.endsAt),
+      })),
     );
-  if (closures.length > 0)
-    await tx.insert(zoneClosedTimes).values(closures.map((row) => ({ ...row, specialDateId })));
+  }
+  const closures = [...(await readZoneSeasonWeeks(tx, cfg, undefined, undefined, only))].flatMap(
+    ([zoneId, weeks]) =>
+      (weeks.get(season.id)?.[weekday] ?? []).map((range) => ({
+        zoneId,
+        specialDateId,
+        startsAt: storedTime(range.startsAt),
+        endsAt: storedTime(range.endsAt),
+      })),
+  );
+  if (closures.length > 0) await tx.insert(zoneClosedTimes).values(closures);
 }
 
 export async function saveSpecialDate<Input extends SpecialDateInput>(
@@ -361,6 +362,7 @@ function calendarDays(
   }
   const active = opening.departments.filter((department) => department.active);
   return dates.map((date) => {
+    const seasonId = seasonOn(opening.seasons, date)?.id;
     const occurrence = named.get(date);
     const special =
       occurrence === undefined
@@ -381,7 +383,11 @@ function calendarDays(
           ? undefined
           : department.dates.find((day) => day.specialDateId === occurrence.id);
         const slots =
-          own?.slots ?? department.week.find((day) => day.weekday === weekdayOf(date))!.slots;
+          own?.slots ??
+          department.seasonWeeks
+            .find((entry) => entry.seasonId === seasonId)
+            ?.week.find((day) => day.weekday === weekdayOf(date))!.slots ??
+          [];
         return slots.length > 0;
       });
     return {

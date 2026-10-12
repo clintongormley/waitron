@@ -20,6 +20,7 @@ import {
   locationBusinessDaySettings,
   locationDayCutoverChanges,
   withTransaction,
+  type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
@@ -29,6 +30,13 @@ import { departments, zoneServicePolicies } from "./schema/service.js";
 import { menuDayTimetables, menuPeriods, menuSlots } from "./schema/menus.js";
 import { specialDates } from "./schema/hours.js";
 import { zoneClosedTimes } from "./schema/zone-closed-times.js";
+import {
+  departmentDayRanges,
+  departmentDays,
+  seasons,
+  zoneDayRanges,
+  zoneDays,
+} from "./schema/seasons.js";
 import {
   businessDayClockConflicts,
   assertBusinessDayClockChange,
@@ -88,6 +96,11 @@ async function fixture(
       name: "Service",
       endOffsetMinutes: options.offset ?? 0,
     });
+    // One season covers the whole year, so every weekday range is in it.
+    const seasonId = randomUUID();
+    await tx
+      .insert(seasons)
+      .values({ id: seasonId, locationId: loc, name: "Winter", startsOn: "12-01" });
     const specialDateId = options.date === undefined ? undefined : randomUUID();
     if (specialDateId !== undefined)
       await tx.insert(specialDates).values({
@@ -106,22 +119,33 @@ async function fixture(
         .insert(floorZones)
         .values({ id: zoneId, locationId: loc, name: "Zone", active: !options.disabled });
       await tx.insert(zoneServicePolicies).values({ zoneId, locationId: loc, departmentId });
-      if (ranges.length)
+      if (ranges.length && specialDateId)
         await tx.insert(zoneClosedTimes).values(
           ranges.map((r) => ({
             zoneId: zoneId!,
-            weekday: specialDateId ? null : 3,
+            weekday: null,
             specialDateId,
             startsAt: `${r.startsAt}:00`,
             endsAt: `${r.endsAt}:00`,
           })),
         );
-    } else {
+      else if (ranges.length) {
+        const dayId = randomUUID();
+        await tx.insert(zoneDays).values({ id: dayId, zoneId, seasonId, weekday: 3 });
+        await tx.insert(zoneDayRanges).values(
+          ranges.map((r) => ({
+            dayId,
+            startsAt: `${r.startsAt}:00`,
+            endsAt: `${r.endsAt}:00`,
+          })),
+        );
+      }
+    } else if (specialDateId) {
       const timetableId = randomUUID();
       await tx.insert(menuDayTimetables).values({
         id: timetableId,
         departmentId,
-        weekday: specialDateId ? null : 3,
+        weekday: null,
         specialDateId,
       });
       if (ranges.length)
@@ -134,11 +158,42 @@ async function fixture(
             endsAt: `${r.endsAt}:00`,
           })),
         );
+    } else {
+      await seasonDay(tx, { departmentId, seasonId, weekday: 3, periodId, ranges });
     }
-    return { cfg: { locationId: loc }, departmentId, periodId, specialDateId, zoneId };
+    return { cfg: { locationId: loc }, departmentId, periodId, seasonId, specialDateId, zoneId };
   });
 }
 const range = (startsAt: string, endsAt: string) => ({ startsAt, endsAt });
+/** Raw rows, bypassing the writers' checks, so a case can hold ranges no writer accepts. */
+async function seasonDay(
+  tx: Transaction,
+  day: {
+    departmentId: string;
+    seasonId: string;
+    weekday: number;
+    periodId: string;
+    ranges: { startsAt: string; endsAt: string }[];
+  },
+) {
+  const dayId = randomUUID();
+  await tx.insert(departmentDays).values({
+    id: dayId,
+    departmentId: day.departmentId,
+    seasonId: day.seasonId,
+    weekday: day.weekday,
+  });
+  if (day.ranges.length)
+    await tx.insert(departmentDayRanges).values(
+      day.ranges.map((r) => ({
+        dayId,
+        departmentId: day.departmentId,
+        periodId: day.periodId,
+        startsAt: `${r.startsAt}:00`,
+        endsAt: `${r.endsAt}:00`,
+      })),
+    );
+}
 /** The fixture's venue with its hours written through the public week writers on one weekday,
  *  for the cases that read the sale path. */
 async function writtenFixture(
@@ -717,16 +772,12 @@ describe("clock compatibility resolves neighboring named-day substitutions", () 
   ) {
     const v = await fixture([range("22:00", "04:30")], { offset: 180, date: E });
     await withTransaction(suite.db, async (tx) => {
-      const normal = randomUUID();
-      await tx
-        .insert(menuDayTimetables)
-        .values({ id: normal, departmentId: v.departmentId, weekday: 4 });
-      await tx.insert(menuSlots).values({
-        timetableId: normal,
+      await seasonDay(tx, {
         departmentId: v.departmentId,
+        seasonId: v.seasonId,
+        weekday: 4,
         periodId: v.periodId,
-        startsAt: "07:15:00",
-        endsAt: "09:00:00",
+        ranges: [range("07:15", "09:00")],
       });
       const id = randomUUID();
       await tx.insert(specialDates).values({
@@ -937,9 +988,9 @@ it("rechecks a time writer queued before a clock change commits", async () => {
   await first;
   await refused;
   const saved = await suite.db
-    .select({ endsAt: menuSlots.endsAt })
-    .from(menuSlots)
-    .where(eq(menuSlots.departmentId, v.departmentId));
+    .select({ endsAt: departmentDayRanges.endsAt })
+    .from(departmentDayRanges)
+    .where(eq(departmentDayRanges.departmentId, v.departmentId));
   expect(saved).toEqual([{ endsAt: "17:00:00" }]);
 });
 
@@ -966,4 +1017,217 @@ it("identifies conflicting period and zone schedules with names and recorded ran
       }),
     ]);
   }
+});
+
+it("reports a clashing season range once per season it is painted in, naming the season", async () => {
+  for (const zone of [false, true]) {
+    const v = await fixture([], { zone });
+    const result = await withTransaction(suite.db, async (tx) => {
+      const winter = { id: v.seasonId };
+      const [summer] = await tx
+        .insert(seasons)
+        .values({ locationId: v.cfg.locationId, name: "Summer", startsOn: "06-01" })
+        .returning();
+      const paint = (seasonId: string, ranges: { startsAt: string; endsAt: string }[]) => {
+        const on = <T>(entries: T[]) =>
+          Array.from({ length: 7 }, (_, weekday) => (weekday === 3 ? entries : []));
+        return zone
+          ? replaceZoneClosedWeek(
+              tx,
+              v.cfg,
+              v.zoneId!,
+              on(ranges).map((entries, weekday) => ({ weekday, ranges: entries })),
+              0,
+              at,
+              { seasonId },
+            )
+          : replaceMenuWeek(
+              tx,
+              v.cfg,
+              v.departmentId,
+              on(ranges.map((r) => ({ periodId: v.periodId, ...r }))).map((slots, weekday) => ({
+                weekday,
+                slots,
+              })),
+              at,
+              0,
+              { seasonId },
+            );
+      };
+      await paint(winter.id, [range("22:00", "04:30")]);
+      await paint(summer!.id, [range("09:00", "17:00")]);
+      const once = await businessDayClockConflicts(tx, v.cfg, before, candidate("03:00"), E);
+      await paint(summer!.id, [range("22:00", "04:30")]);
+      const twice = await businessDayClockConflicts(tx, v.cfg, before, candidate("03:00"), E);
+      return { once, twice, winter: winter.id, summer: summer!.id };
+    });
+    const conflict = (seasonId: string) =>
+      expect.objectContaining({
+        departmentId: v.departmentId,
+        seasonId,
+        weekday: 3,
+        startsAt: "22:00",
+        endsAt: "04:30",
+        reason: "range",
+        ...(zone ? { zoneId: v.zoneId } : { periodId: v.periodId }),
+      });
+    expect(result.once).toEqual({ conflictCount: 1, conflicts: [conflict(result.winter)] });
+    expect(result.twice.conflictCount).toBe(1);
+    expect(result.twice.conflicts).toHaveLength(2);
+    expect(result.twice.conflicts).toEqual(
+      expect.arrayContaining([conflict(result.winter), conflict(result.summer)]),
+    );
+  }
+});
+
+it("checks a season's last day against the next season's first", async () => {
+  const v = await fixture([range("22:00", "04:30")], { offset: 180 });
+  await withTransaction(suite.db, async (tx) => {
+    const [summer] = await tx
+      .insert(seasons)
+      .values({ locationId: v.cfg.locationId, name: "Summer", startsOn: "06-01" })
+      .returning();
+    await seasonDay(tx, {
+      departmentId: v.departmentId,
+      seasonId: summer!.id,
+      weekday: 4,
+      periodId: v.periodId,
+      ranges: [range("07:15", "09:00")],
+    });
+  });
+  await expect(check(v, "07:00")).rejects.toMatchObject({
+    code: "venue.business_day_hours_conflict",
+    params: {
+      conflicts: [
+        expect.objectContaining({ reason: "sending_cutoff", weekday: 3, seasonId: v.seasonId }),
+      ],
+    },
+  });
+});
+
+it("counts a range painted in every season once, so a capped list still names every department", async () => {
+  const v = await fixture([]);
+  const result = await withTransaction(suite.db, async (tx) => {
+    await tx.insert(seasons).values(
+      [
+        ["Spring", "03-01"],
+        ["Summer", "06-01"],
+        ["Autumn", "09-01"],
+      ].map(([name, startsOn]) => ({
+        locationId: v.cfg.locationId,
+        name: name!,
+        startsOn: startsOn!,
+      })),
+    );
+    const secondId = randomUUID(),
+      secondPeriodId = randomUUID(),
+      menuId = randomUUID();
+    await tx.insert(departments).values({
+      id: secondId,
+      locationId: v.cfg.locationId,
+      name: "Bar",
+      tradingName: "Bar",
+    });
+    await tx.insert(catalogues).values({ id: menuId, name: "Bar menu" });
+    await tx
+      .insert(menuPeriods)
+      .values({ id: secondPeriodId, departmentId: secondId, menuId, name: "Bar" });
+    for (const [departmentId, periodId] of [
+      [v.departmentId, v.periodId],
+      [secondId, secondPeriodId],
+    ])
+      await replaceMenuWeek(
+        tx,
+        v.cfg,
+        departmentId!,
+        Array.from({ length: 7 }, (_, weekday) => ({
+          weekday,
+          slots: [{ periodId, ...range("22:00", "04:30") }],
+        })),
+        at,
+        0,
+      );
+    return {
+      secondId,
+      conflicts: await businessDayClockConflicts(tx, v.cfg, before, candidate("03:00"), E),
+    };
+  });
+  expect(result.conflicts.conflictCount).toBe(14);
+  expect(new Set(result.conflicts.conflicts.map((c) => c.departmentId))).toEqual(
+    new Set([v.departmentId, result.secondId]),
+  );
+  expect(result.conflicts.conflicts).toHaveLength(56);
+});
+
+describe("clock compatibility reads each day's neighbours from its own season", () => {
+  async function twoSeasons(v: Awaited<ReturnType<typeof fixture>>) {
+    const [summer] = await suite.db
+      .insert(seasons)
+      .values({ locationId: v.cfg.locationId, name: "Summer", startsOn: "06-01" })
+      .returning();
+    return summer!.id;
+  }
+  it("checks a season weekday against the same season's next weekday", async () => {
+    const v = await fixture([range("22:00", "04:30")], { offset: 180 });
+    await twoSeasons(v);
+    await withTransaction(suite.db, (tx) =>
+      seasonDay(tx, {
+        departmentId: v.departmentId,
+        seasonId: v.seasonId,
+        weekday: 4,
+        periodId: v.periodId,
+        ranges: [range("07:15", "09:00")],
+      }),
+    );
+    await expect(check(v, "07:00")).rejects.toMatchObject({
+      code: "venue.business_day_hours_conflict",
+      params: {
+        conflicts: [
+          expect.objectContaining({ reason: "sending_cutoff", weekday: 3, seasonId: v.seasonId }),
+        ],
+      },
+    });
+  });
+  it("ignores a named day whose day before is another season's weekday", async () => {
+    const v = await fixture([range("22:00", "04:30")], { offset: 180 });
+    await twoSeasons(v);
+    await withTransaction(suite.db, async (tx) => {
+      const id = randomUUID(),
+        timetableId = randomUUID();
+      // 2026-11-04, the Wednesday before, is in Summer; the painted Wednesday is Winter's.
+      await tx.insert(specialDates).values({
+        id,
+        locationId: v.cfg.locationId,
+        date: "2026-11-05",
+        name: "Summer neighbour",
+        ownHours: true,
+      });
+      await tx
+        .insert(menuDayTimetables)
+        .values({ id: timetableId, departmentId: v.departmentId, specialDateId: id });
+      await tx.insert(menuSlots).values({
+        timetableId,
+        departmentId: v.departmentId,
+        periodId: v.periodId,
+        startsAt: "07:15:00",
+        endsAt: "09:00:00",
+      });
+    });
+    await expect(check(v, "07:00")).resolves.toBeUndefined();
+  });
+  it("follows a named day with the next day's own season week", async () => {
+    const v = await fixture([range("22:00", "04:30")], { offset: 180, date: E });
+    await twoSeasons(v);
+    // 2026-11-05 is a Summer Thursday; only Winter paints Thursday.
+    await withTransaction(suite.db, (tx) =>
+      seasonDay(tx, {
+        departmentId: v.departmentId,
+        seasonId: v.seasonId,
+        weekday: 4,
+        periodId: v.periodId,
+        ranges: [range("07:15", "09:00")],
+      }),
+    );
+    await expect(check(v, "07:00")).resolves.toBeUndefined();
+  });
 });

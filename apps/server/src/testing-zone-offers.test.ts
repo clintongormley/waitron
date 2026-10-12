@@ -143,8 +143,8 @@ async function counts(db: Database) {
       (select count(*) from catalogues) as menus,
       (select count(*) from menu_periods) as periods,
       (select count(*) from menu_period_staff_menus) as staff_menus,
-      (select count(*) from menu_day_timetables) as timetables,
-      (select count(*) from menu_slots) as slots,
+      (select count(*) from department_days) as timetables,
+      (select count(*) from department_day_ranges) as slots,
       (select count(*) from menu_items) as items,
       (select count(*) from product_modifiers where extra_list_id is not null) as extras,
       (select count(*) from routing_cells) as routes`);

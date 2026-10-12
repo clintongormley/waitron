@@ -80,6 +80,8 @@ it("Today keeps chronological ownership in a repeated hour instead of applying t
     currentBusinessDay: "2026-10-24",
     pending: null,
     menus: [],
+    seasons: [],
+    currentSeasonId: null,
     namedDays: [],
     departments: [],
     timeZone: "Europe/Madrid",
@@ -188,6 +190,8 @@ it("the Day view uses its selected business date for every department and zone c
     clockReadable: true,
     dayCutover: "03:00",
     menus: [],
+    seasons: [],
+    currentSeasonId: null,
     namedDays: [],
     departments: [
       {
@@ -195,9 +199,10 @@ it("the Day view uses its selected business date for every department and zone c
         name: "Restaurant",
         active: true,
         periods: [],
+        seasonWeeks: [],
         week: [],
         dates: [],
-        zones: [{ id: "z", name: "Terrace", week: [], dates: [] }],
+        zones: [{ id: "z", name: "Terrace", seasonWeeks: [], week: [], dates: [] }],
       },
     ],
   };

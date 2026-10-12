@@ -160,6 +160,21 @@ function groupWeeks<T extends { startsAt: string; endsAt: string }>(
   return weeks;
 }
 
+/** Every season's week in `seasons` order, an unwritten season empty, and the week of `current`
+ *  (the first season's when null; seven empty days when there are no seasons). */
+export function seasonWeekList<T>(
+  seasons: readonly Season[],
+  stored: ReadonlyMap<string, T[][]> | undefined,
+  current: string | null,
+): { seasonWeeks: { seasonId: string; week: T[][] }[]; week: T[][] } {
+  const seasonWeeks = seasons.map((season) => ({
+    seasonId: season.id,
+    week: stored?.get(season.id) ?? WEEKDAYS.map((): T[] => []),
+  }));
+  const shown = seasonWeeks.find((entry) => entry.seasonId === current) ?? seasonWeeks[0];
+  return { seasonWeeks, week: shown?.week ?? WEEKDAYS.map((): T[] => []) };
+}
+
 export interface SeasonDays {
   seasonIds: readonly string[];
   weekdays: readonly number[];

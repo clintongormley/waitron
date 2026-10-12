@@ -16,10 +16,13 @@ import { resolveZoneClosedDays, type DayPlan } from "./day-resolver.js";
 import {
   joinTouching,
   readZoneSeasonWeeks,
+  seasonWeekList,
   seasonsHolding,
   targetSeasons,
   writeZoneSeasonWeeks,
 } from "./season-weeks.js";
+import type { Season } from "./season-rules.js";
+import { readSeasons } from "./seasons.js";
 import { specialDates } from "./schema/hours.js";
 import { zoneExtensions } from "./schema/zone-extensions.js";
 import { zoneClosedTimes } from "./schema/zone-closed-times.js";
@@ -62,7 +65,7 @@ export async function replaceZoneClosedWeek(
     joinTouching(week.get(weekday)!, () => true),
   );
   const seasonsNow = (await readZoneSeasonWeeks(tx, cfg, [zoneId], clock.dayCutover)).get(zoneId);
-  let changed = targets.some((season) =>
+  const changed = targets.some((season) =>
     seasonWeek.some(
       (ranges, weekday) =>
         !sameScheduleRanges(
@@ -71,19 +74,6 @@ export async function replaceZoneClosedWeek(
         ),
     ),
   );
-  if (!changed && options.seasonId === undefined) {
-    const current = await tx
-      .select()
-      .from(zoneClosedTimes)
-      .where(and(eq(zoneClosedTimes.zoneId, zoneId), isNotNull(zoneClosedTimes.weekday)));
-    changed = [...week].some(
-      ([weekday, ranges]) =>
-        !sameScheduleRanges(
-          current.filter((row) => row.weekday === weekday),
-          ranges,
-        ),
-    );
-  }
   await assertBusinessDayScheduleWrite(
     tx,
     cfg,
@@ -92,22 +82,6 @@ export async function replaceZoneClosedWeek(
     expectedClockRevision,
     clock,
   );
-  if (options.seasonId === undefined) {
-    await tx
-      .delete(zoneClosedTimes)
-      .where(and(eq(zoneClosedTimes.zoneId, zoneId), isNotNull(zoneClosedTimes.weekday)));
-    for (const [weekday, ranges] of week) {
-      if (ranges.length > 0)
-        await tx.insert(zoneClosedTimes).values(
-          ranges.map((range) => ({
-            zoneId,
-            weekday,
-            startsAt: storedTime(range.startsAt),
-            endsAt: storedTime(range.endsAt),
-          })),
-        );
-    }
-  }
   const holding = seasonsHolding(
     seasonsNow,
     targets.map((season) => season.id),
@@ -174,7 +148,13 @@ export async function saveZoneClosedDate(
     );
 }
 
-export async function readZoneClosedTimes(tx: Transaction, cfg: VenueScope, cutover: string) {
+export async function readZoneClosedTimes(
+  tx: Transaction,
+  cfg: VenueScope,
+  cutover: string,
+  currentSeasonId: string | null = null,
+  venueSeasons?: readonly Season[],
+) {
   const zones = await tx
     .select({
       id: floorZones.id,
@@ -196,26 +176,40 @@ export async function readZoneClosedTimes(tx: Transaction, cfg: VenueScope, cuto
   const rows = await tx
     .select({
       zoneId: zoneClosedTimes.zoneId,
-      weekday: zoneClosedTimes.weekday,
       specialDateId: zoneClosedTimes.specialDateId,
       startsAt: zoneClosedTimes.startsAt,
       endsAt: zoneClosedTimes.endsAt,
     })
     .from(zoneClosedTimes)
     .innerJoin(zoneServicePolicies, eq(zoneServicePolicies.zoneId, zoneClosedTimes.zoneId))
-    .where(eq(zoneServicePolicies.locationId, cfg.locationId));
+    .where(
+      and(
+        eq(zoneServicePolicies.locationId, cfg.locationId),
+        isNotNull(zoneClosedTimes.specialDateId),
+      ),
+    );
+  const seasonList = venueSeasons ?? (await readSeasons(tx, cfg));
+  const stored = await readZoneSeasonWeeks(
+    tx,
+    cfg,
+    zones.map((zone) => zone.id),
+    cutover,
+  );
+  const days = (week: ClosedRange[][]) => week.map((ranges, weekday) => ({ weekday, ranges }));
   const ranges = (values: typeof rows): ClosedRange[] =>
     values
       .map((row) => ({ startsAt: wireTime(row.startsAt), endsAt: wireTime(row.endsAt) }))
       .sort((a, b) => rangeSpan(a, cutover).start - rangeSpan(b, cutover).start);
   return zones.map((zone) => {
     const own = rows.filter((row) => row.zoneId === zone.id);
+    const { seasonWeeks, week } = seasonWeekList(seasonList, stored.get(zone.id), currentSeasonId);
     return {
       ...zone,
-      week: [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
-        weekday,
-        ranges: ranges(own.filter((row) => row.weekday === weekday)),
+      seasonWeeks: seasonWeeks.map((entry) => ({
+        seasonId: entry.seasonId,
+        week: days(entry.week),
       })),
+      week: days(week),
       dates: [
         ...new Set(own.flatMap((row) => (row.specialDateId === null ? [] : [row.specialDateId]))),
       ]

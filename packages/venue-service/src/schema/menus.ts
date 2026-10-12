@@ -70,9 +70,8 @@ export const menuPeriodStaffMenus = table(
 );
 
 /**
- * One department's day: a weekday of its week, or a special date that replaces the week for it.
- * A weekday with no row has no slots; a special date with no row for the department follows the
- * week. The SQL cannot tie `department_id` and `special_date_id` to one venue; the writers do.
+ * One department's timetable for a special date, replacing its season's week for that date; a
+ * special date with no row for the department follows the week. The SQL cannot tie `department_id` and `special_date_id` to one venue; the writers do.
  */
 export const menuDayTimetables = table(
   "menu_day_timetables",

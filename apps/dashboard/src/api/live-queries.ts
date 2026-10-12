@@ -360,6 +360,17 @@ export const QUERY_DEPENDENCIES = {
     "locations",
     "location_business_day_settings",
     "location_day_cutover_changes",
+    "menu_periods",
+    "menu_period_staff_menus",
+    "departments",
+    "sections",
+    "section_members",
+    "catalogues",
+    "seasons",
+    "department_days",
+    "department_day_ranges",
+    "zone_days",
+    "zone_day_ranges",
   ],
   // The extras and options lists: the list table, then its children (`listOptionLists` and
   // `getOptionList` in packages/catalogue/src/options.ts, `listExtraLists` and `getExtraList` in

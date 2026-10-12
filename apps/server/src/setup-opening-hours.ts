@@ -25,13 +25,17 @@ export async function readSetupOpeningHours(
   if (!department?.active || department.periods.length !== 1) return undefined;
   const period = department.periods[0]!;
   if (period.name !== "Open") return undefined;
-  const matches = department.week.every(({ weekday, slots }) =>
-    weekday === 0 || weekday === 6
-      ? slots.length === 0
-      : slots.length === 1 &&
-        slots[0]!.periodId === period.id &&
-        slots[0]!.startsAt === "09:00" &&
-        slots[0]!.endsAt === "17:00",
-  );
+  const matches =
+    department.seasonWeeks.length > 0 &&
+    department.seasonWeeks.every(({ week }) =>
+      week.every(({ weekday, slots }) =>
+        weekday === 0 || weekday === 6
+          ? slots.length === 0
+          : slots.length === 1 &&
+            slots[0]!.periodId === period.id &&
+            slots[0]!.startsAt === "09:00" &&
+            slots[0]!.endsAt === "17:00",
+      ),
+    );
   return matches ? { departmentId: first.id } : undefined;
 }

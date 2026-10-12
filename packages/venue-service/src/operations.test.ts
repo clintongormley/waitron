@@ -54,6 +54,8 @@ import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { resolveMakers, setRoutingCell } from "./routing-store.js";
 import { departments, zoneSalePolicies } from "./schema/service.js";
 import { menuPeriods } from "./schema/menus.js";
+import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
+import { ensureDefaultSeasons } from "./seasons.js";
 import {
   type Department,
   copyOrderServiceContext,
@@ -276,7 +278,7 @@ describe("new department service periods", () => {
     );
     expect(periods.rows).toEqual([{ name: "Open", menu_id: menu.id }]);
     const slots = await db.execute(
-      sql`select d.weekday, s.starts_at, s.ends_at from menu_day_timetables d join menu_slots s on s.timetable_id = d.id where d.department_id = ${department.id} order by d.weekday`,
+      sql`select d.weekday, s.starts_at, s.ends_at from department_days d join department_day_ranges s on s.day_id = d.id join seasons se on se.id = d.season_id and se.starts_on = '12-01' where d.department_id = ${department.id} order by d.weekday`,
     );
     expect(slots.rows).toEqual(
       [1, 2, 3, 4, 5].map((weekday) => ({ weekday, starts_at: "09:00:00", ends_at: "17:00:00" })),
@@ -442,6 +444,52 @@ describe("venue service routing", () => {
       await addMember(tx, soft.id, { kind: "product", productId: product.id });
       await publish(tx, menu.id);
       await expect(listVenueReadiness(tx, { locationId })).resolves.toEqual([]);
+    });
+  });
+
+  it("counts a department painted in one season alone as placed, and one painted nowhere as not", async () => {
+    await seedUnitTenant();
+    const locationId = brandLocationId(await seedLocation("Venue"));
+    await scoped(async (tx) => {
+      const restaurant = await createDepartment(
+        tx,
+        { locationId },
+        { name: "Restaurant", orderStart: "table" },
+      );
+      const bar = await createDepartment(
+        tx,
+        { locationId },
+        { name: "Bar", orderStart: "counter" },
+      );
+      const menu = await createCatalogue(tx, { name: "Lunch menu" });
+      const lunch = await saveMenuPeriod(
+        tx,
+        { locationId },
+        restaurant.id,
+        { name: "Lunch", menuId: menu.id, staffMenuIds: [], colour: "blue" },
+        0,
+      );
+      const summer = (await ensureDefaultSeasons(tx, { locationId })).find(
+        (season) => season.name === "Summer",
+      )!;
+      await replaceMenuWeek(
+        tx,
+        { locationId },
+        restaurant.id,
+        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+          weekday,
+          slots: weekday === 3 ? [{ periodId: lunch.id, startsAt: "12:00", endsAt: "15:00" }] : [],
+        })),
+        new Date("2026-10-02T10:00:00Z"),
+        0,
+        { seasonId: summer.id },
+      );
+      const noPeriods = (await listVenueReadiness(tx, { locationId })).filter(
+        (issue) => issue.code === "department.no_periods",
+      );
+      expect(noPeriods).toEqual([
+        { code: "department.no_periods", departmentId: bar.id, departmentName: "Bar" },
+      ]);
     });
   });
 

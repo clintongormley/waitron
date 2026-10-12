@@ -57,6 +57,10 @@ export interface OpeningHoursModel extends BusinessDayScheduleStatus {
   dayCutover: string;
   menus: readonly { id: string; name: string; active: boolean; includes: readonly string[] }[];
   namedDays: readonly NamedDay[];
+  /** Ordered by `startsOn`. */
+  seasons: readonly { id: string; name: string; startsOn: string }[];
+  /** The season of the business day `at` falls in; null when the clock cannot be read or the venue has no seasons. */
+  currentSeasonId: string | null;
   departments: readonly {
     id: string;
     name: string;
@@ -64,6 +68,12 @@ export interface OpeningHoursModel extends BusinessDayScheduleStatus {
     zones: readonly {
       id: string;
       name: string;
+      /** One entry per season, in `seasons` order; a season never written is an empty week. */
+      seasonWeeks: readonly {
+        seasonId: string;
+        week: readonly { weekday: number; ranges: readonly ClosedRange[] }[];
+      }[];
+      /** The current season's week, the first season's when there is no current season. */
       week: readonly { weekday: number; ranges: readonly ClosedRange[] }[];
       dates: readonly { specialDateId: string; ranges: readonly ClosedRange[] }[];
     }[];
@@ -74,9 +84,16 @@ export interface OpeningHoursModel extends BusinessDayScheduleStatus {
       menuId: string;
       staffMenuIds: readonly string[];
       endOffsetMinutes: number;
+      /** The weekdays the period is painted on in any season. */
       weekdays: readonly number[];
       routingUses: readonly PeriodRoutingUse[];
     }[];
+    /** One entry per season, in `seasons` order; a season never written is an empty week. */
+    seasonWeeks: readonly {
+      seasonId: string;
+      week: readonly { weekday: number; slots: readonly ServiceRange[] }[];
+    }[];
+    /** The current season's week, the first season's when there is no current season. */
     week: readonly { weekday: number; slots: readonly ServiceRange[] }[];
     dates: readonly { specialDateId: string; slots: readonly ServiceRange[] }[];
   }[];

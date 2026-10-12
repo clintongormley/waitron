@@ -58,7 +58,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     const seed = () => db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
     const rows = () =>
       db.execute(
-        sql`select p.name, p.menu_id, d.weekday, s.starts_at, s.ends_at from menu_periods p join departments dep on dep.id = p.department_id join menu_slots s on s.period_id = p.id join menu_day_timetables d on d.id = s.timetable_id where dep.location_id = ${locationId} order by d.weekday`,
+        sql`select p.name, p.menu_id, d.weekday, s.starts_at, s.ends_at from menu_periods p join departments dep on dep.id = p.department_id join department_day_ranges s on s.period_id = p.id join department_days d on d.id = s.day_id join seasons se on se.id = d.season_id and se.starts_on = '12-01' where dep.location_id = ${locationId} order by d.weekday`,
       );
     await seed();
     expect((await rows()).rows).toEqual(
@@ -71,7 +71,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       })),
     );
     await db.execute(
-      sql`update menu_slots set ends_at = '16:00:00' where period_id = (select p.id from menu_periods p join departments d on d.id = p.department_id where d.location_id = ${locationId})`,
+      sql`update department_day_ranges set ends_at = '16:00:00' where period_id = (select p.id from menu_periods p join departments d on d.id = p.department_id where d.location_id = ${locationId})`,
     );
     await seed();
     expect((await rows()).rows).toEqual(

@@ -31,6 +31,7 @@ function allDepartments(): OpeningHoursModel["departments"] {
           routingUses: [],
         },
       ],
+      seasonWeeks: [],
       week: [{ weekday: 1, slots: [{ periodId: "lunch", startsAt: "12:00", endsAt: "16:00" }] }],
       dates: [],
     },
@@ -51,10 +52,20 @@ function allDepartments(): OpeningHoursModel["departments"] {
           routingUses: [],
         },
       ],
+      seasonWeeks: [],
       week: [{ weekday: 2, slots: [{ periodId: "dinner", startsAt: "18:00", endsAt: "23:00" }] }],
       dates: [],
     },
-    { id: "retired", name: "Retired", active: false, zones: [], periods: [], week: [], dates: [] },
+    {
+      id: "retired",
+      name: "Retired",
+      active: false,
+      zones: [],
+      periods: [],
+      seasonWeeks: [],
+      week: [],
+      dates: [],
+    },
   ];
 }
 async function mount() {

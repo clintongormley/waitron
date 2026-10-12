@@ -43,7 +43,8 @@ import {
   zoneSalePolicies,
   zoneServicePolicies,
 } from "./schema/service.js";
-import { menuPeriods, menuPeriodStaffMenus, menuDayTimetables, menuSlots } from "./schema/menus.js";
+import { menuPeriods, menuPeriodStaffMenus } from "./schema/menus.js";
+import { departmentDayRanges, departmentDays } from "./schema/seasons.js";
 import { placeOpenPeriod, resolveDepartmentService, servedDefault } from "./menu-timetable.js";
 import { routingCellPeriods, routingCells } from "./schema/routing.js";
 import { readProfileZones } from "./profile-access.js";
@@ -278,16 +279,17 @@ export async function listVenueReadiness(
     .orderBy(asc(departments.name), asc(departments.id));
   if (activeDepartments.length === 0) return [...issues, { code: "venue.department_missing" }];
   const placed = await tx
-    .selectDistinct({ departmentId: menuDayTimetables.departmentId })
-    .from(menuDayTimetables)
-    .innerJoin(menuSlots, eq(menuSlots.timetableId, menuDayTimetables.id))
+    .selectDistinct({ departmentId: departmentDays.departmentId })
+    .from(departmentDays)
+    .innerJoin(departmentDayRanges, eq(departmentDayRanges.dayId, departmentDays.id))
     .where(
       and(
         inArray(
-          menuDayTimetables.departmentId,
+          departmentDays.departmentId,
           activeDepartments.map((department) => department.id),
         ),
-        isNotNull(menuDayTimetables.weekday),
+        isNotNull(departmentDays.seasonId),
+        isNotNull(departmentDayRanges.periodId),
       ),
     );
   const placedDepartments = new Set(placed.map((row) => row.departmentId));

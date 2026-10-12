@@ -208,7 +208,9 @@ describe("provisionVenue", () => {
         (select cast(count(*) as int) from menu_periods p
           join departments d on d.id = p.department_id
           where d.location_id = ${result.locationId}) as periods,
-        (select cast(count(*) as int) from menu_slots s
+        (select cast(count(*) as int) from department_day_ranges s
+          join department_days t on t.id = s.day_id
+          join seasons se on se.id = t.season_id and se.starts_on = '12-01'
           join departments d on d.id = s.department_id
           where d.location_id = ${result.locationId}) as slots`);
     expect(defaults.rows[0]).toEqual({ menus: 1, periods: 1, slots: 5 });

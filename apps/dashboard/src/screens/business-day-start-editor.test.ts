@@ -288,6 +288,54 @@ it("shows identifying conflict rows with localized reasons while keeping the tot
   expect(save(el).disabled).toBe(true);
 });
 
+it("shows a range clashing in four seasons as one line", async () => {
+  setLocale("en-GB");
+  const { el } = await rig({
+    previewBusinessDayStart: async () => ({
+      ...preview(),
+      conflictCount: 2,
+      conflicts: [
+        ...["spring", "summer", "autumn", "winter"].map((seasonId) => ({
+          departmentId: "d",
+          departmentName: "Restaurant",
+          weekday: 3,
+          seasonId,
+          periodId: "p",
+          periodName: "Dinner",
+          startsAt: "22:00",
+          endsAt: "04:30",
+          rangeIndex: 0,
+          reason: "endpoint_day" as const,
+        })),
+        {
+          departmentId: "d",
+          departmentName: "Restaurant",
+          weekday: 4,
+          seasonId: "winter",
+          periodId: "p",
+          periodName: "Dinner",
+          startsAt: "22:00",
+          endsAt: "04:30",
+          rangeIndex: 0,
+          reason: "endpoint_day" as const,
+        },
+      ],
+    }),
+  });
+  await click(el, "change");
+  await change(el, "effectiveBusinessDay", "2026-11-04");
+  await change(el, "dayCutover", "03:00");
+  const lines = [...el.shadowRoot!.querySelectorAll("[data-test=conflict-rows] li")].map(
+    (line) => line.textContent,
+  );
+  expect(lines).toHaveLength(2);
+  expect(lines[0]).toContain("Wed");
+  expect(lines[1]).toContain("Thu");
+  expect(q(el, "[data-test=conflicts]")?.textContent?.replace(/\s+/g, " ").trim()).toBe(
+    "Conflicting schedules: 2. Review opening hours",
+  );
+});
+
 it.each([
   [0, "Sun"],
   [1, "Mon"],

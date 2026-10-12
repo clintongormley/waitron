@@ -361,7 +361,7 @@ describe("the menu timetable rows of a bundle", () => {
     expect(() => validateMenuTimetables(tables, madrid("2026-10-07T10:00:00Z"))).not.toThrow();
   });
 
-  it("refuses imported grace reaching the next business day's period", () => {
+  it("refuses imported grace reaching the next business day's period in a season week, not in old weekday rows", () => {
     const tables = menuTables();
     tables.menu_periods![1]!.end_offset_minutes = 240;
     tables.menu_day_timetables!.push({
@@ -371,11 +371,32 @@ describe("the menu timetable rows of a bundle", () => {
       special_date_id: null,
     });
     tables.menu_slots!.push(slotRow("t-saturday", MANANAS, "06:00:00", "09:00:00"));
-    expect(() => validateMenuTimetables(tables, madrid("2026-10-07T10:00:00Z"))).toThrowError(
-      refusal("menu_slots"),
+    // Old weekday rows are left behind on import, so their grace is not checked.
+    expect(() => validate(tables, madrid("2026-10-07T10:00:00Z"))).not.toThrow();
+    tables.seasons = [{ id: "s-year", location_id: "location", name: "Year", starts_on: "01-01" }];
+    tables.department_days = [5, 6].map((weekday) => ({
+      id: `d-${weekday}`,
+      department_id: RESTAURANT,
+      season_id: "s-year",
+      weekday,
+      special_day_date_id: null,
+    }));
+    tables.department_day_ranges = [
+      ["d-5", MADRUGADA, "22:00:00", "02:00:00"],
+      ["d-6", MANANAS, "06:00:00", "09:00:00"],
+    ].map(([dayId, periodId, startsAt, endsAt]) => ({
+      id: randomUUID(),
+      day_id: dayId,
+      department_id: RESTAURANT,
+      period_id: periodId,
+      starts_at: startsAt,
+      ends_at: endsAt,
+    }));
+    expect(() => validate(tables, madrid("2026-10-07T10:00:00Z"))).toThrowError(
+      refusal("department_day_ranges"),
     );
     tables.menu_periods![1]!.end_offset_minutes = 239;
-    expect(() => validateMenuTimetables(tables, madrid("2026-10-07T10:00:00Z"))).not.toThrow();
+    expect(() => validate(tables, madrid("2026-10-07T10:00:00Z"))).not.toThrow();
   });
 
   const BARRA = "z-barra";
@@ -598,29 +619,16 @@ describe("the menu timetable rows of a bundle", () => {
       "menu_slots.starts_at",
     ],
     [
-      "a slot ending where it starts",
+      "a named-day slot ending where it starts",
       (t: Tables) => {
-        t.menu_slots![0]!.ends_at = "09:00:00";
+        t.menu_slots![2]!.ends_at = "10:00:00";
       },
       "menu_slots",
     ],
     [
-      "two slots overlapping within a day",
+      "two slots overlapping within a named day",
       (t: Tables) => {
-        t.menu_slots!.push(slotRow("t-monday", MADRUGADA, "11:00:00", "13:00:00"));
-      },
-      "menu_slots",
-    ],
-    [
-      "a week range crossing the business-day boundary",
-      (t: Tables) => {
-        t.menu_day_timetables!.push({
-          id: "t-saturday",
-          department_id: RESTAURANT,
-          weekday: 6,
-          special_date_id: null,
-        });
-        t.menu_slots!.push(slotRow("t-saturday", MANANAS, "01:00:00", "07:00:00"));
+        t.menu_slots!.push(slotRow("t-christmas", MADRUGADA, "12:00:00", "14:00:00"));
       },
       "menu_slots",
     ],
@@ -672,6 +680,31 @@ describe("the menu timetable rows of a bundle", () => {
     edit(tables);
     expect(() => validateMenuTimetables(tables, madrid("2026-10-07T10:00:00Z"))).toThrowError(
       refusal(field),
+    );
+  });
+
+  it("accept old weekday ranges the import drops, crossing the changeover or overlapping, but refuse the crossing range on a named day", () => {
+    const tables = menuTables();
+    tables.menu_day_timetables!.push({
+      id: "t-saturday",
+      department_id: RESTAURANT,
+      weekday: 6,
+      special_date_id: null,
+    });
+    tables.menu_slots!.push(
+      slotRow("t-saturday", MANANAS, "01:00:00", "07:00:00"),
+      slotRow("t-monday", MADRUGADA, "11:00:00", "13:00:00"),
+    );
+    expect(() => validateMenuTimetables(tables, madrid("2026-10-07T10:00:00Z"))).not.toThrow();
+    expect(() => validate(tables, madrid("2026-10-07T10:00:00Z"))).not.toThrow();
+    tables.menu_day_timetables!.at(-1)!.weekday = null;
+    tables.menu_day_timetables!.at(-1)!.special_date_id = CHRISTMAS;
+    tables.menu_day_timetables = tables.menu_day_timetables!.filter(
+      (row) => row.id !== "t-christmas",
+    );
+    tables.menu_slots = tables.menu_slots!.filter((row) => row.timetable_id !== "t-christmas");
+    expect(() => validateMenuTimetables(tables, madrid("2026-10-07T10:00:00Z"))).toThrowError(
+      refusal("menu_slots"),
     );
   });
 
@@ -1306,6 +1339,11 @@ describe("service-period configuration", () => {
       ],
     };
   }
+  function onNamedDay(t: Tables): void {
+    t.special_dates = [{ id: "june", date: "2027-06-01", name: "June", close_whole_venue: 0 }];
+    t.menu_day_timetables![0]!.weekday = null;
+    t.menu_day_timetables![0]!.special_date_id = "june";
+  }
   it("accepts customer and staff menus without a retired department menu list", () => {
     expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(tables(), context)).not.toThrow();
   });
@@ -1374,15 +1412,17 @@ describe("service-period configuration", () => {
       "menu_period_staff_menus.display_order",
     ],
     [
-      "a non-quarter-hour endpoint",
+      "a non-quarter-hour endpoint on a named day",
       (t: Tables) => {
+        onNamedDay(t);
         t.menu_slots![0]!.starts_at = "21:01:00";
       },
       "menu_slots",
     ],
     [
-      "a range crossing the changeover",
+      "a named-day range crossing the changeover",
       (t: Tables) => {
+        onNamedDay(t);
         t.menu_slots![0]!.ends_at = "07:00:00";
       },
       "menu_slots",
@@ -1394,16 +1434,34 @@ describe("service-period configuration", () => {
       refusal(field),
     );
   });
+  it("accepts an old weekday range crossing the changeover, which the import drops, but not one off the quarter-hour", () => {
+    const t = tables();
+    t.menu_slots![0]!.ends_at = "07:00:00";
+    expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(t, context)).not.toThrow();
+    // The import inserts the row before dropping it, and `menu_slots_step_ck` refuses the insert.
+    for (const [column, time] of [
+      ["starts_at", "21:01:00"],
+      ["ends_at", "07:05:00"],
+    ] as const) {
+      const off = tables();
+      off.menu_slots![0]![column] = time;
+      expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(off, context)).toThrowError(
+        refusal("menu_slots"),
+      );
+    }
+  });
   it("keeps early-morning ranges in their own business day, including whole-day ranges", () => {
     const t = tables();
+    onNamedDay(t);
     t.menu_slots![0]!.starts_at = "06:00:00";
     t.menu_slots![0]!.ends_at = "06:00:00";
     expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(t, context)).not.toThrow();
+    t.special_dates!.push({ id: "june-2", date: "2027-06-02", name: "June", close_whole_venue: 0 });
     t.menu_day_timetables!.push({
       id: "tuesday",
       department_id: RESTAURANT,
-      weekday: 2,
-      special_date_id: null,
+      weekday: null,
+      special_date_id: "june-2",
     });
     t.menu_slots!.push({
       ...t.menu_slots![0]!,
@@ -1446,6 +1504,7 @@ describe("service-period configuration", () => {
 });
 
 describe("zone closed times in configuration transfer", () => {
+  const ownDay = { weekday: null, special_date_id: "own-day" };
   const clock = {
     createdAt: new Date("2026-10-08T12:00:00Z"),
     timeZone: "Europe/Madrid",
@@ -1487,8 +1546,8 @@ describe("zone closed times in configuration transfer", () => {
       {
         id: "early",
         zone_id: "terrace",
-        weekday: 5,
-        special_date_id: null,
+        weekday: null,
+        special_date_id: "own-day",
         starts_at: "22:00:00",
         ends_at: "23:00:00",
       },
@@ -1526,10 +1585,15 @@ describe("zone closed times in configuration transfer", () => {
     ["late weekday", { weekday: 7 }, "zone_closed_times.weekday"],
     ["noncanonical start", { starts_at: "23:00" }, "zone_closed_times.starts_at"],
     ["nonzero seconds", { ends_at: "04:00:01" }, "zone_closed_times.ends_at"],
-    ["empty range", { ends_at: "23:00:00" }, "zone_closed_times"],
-    ["backwards range", { ends_at: "22:00:00" }, "zone_closed_times"],
-    ["off-step start", { starts_at: "23:05:00" }, "zone_closed_times"],
-    ["off-step end", { ends_at: "03:55:00" }, "zone_closed_times"],
+    ["empty named-day range", { ...ownDay, ends_at: "23:00:00" }, "zone_closed_times"],
+    ["backwards named-day range", { ...ownDay, ends_at: "22:00:00" }, "zone_closed_times"],
+    ["off-step named-day start", { ...ownDay, starts_at: "23:05:00" }, "zone_closed_times"],
+    ["off-step named-day end", { ...ownDay, ends_at: "03:55:00" }, "zone_closed_times"],
+    [
+      "named-day range crossing the changeover",
+      { ...ownDay, ends_at: "05:00:00" },
+      "zone_closed_times",
+    ],
   ])("refuses %s", (_name, changes, field) => {
     const tables = closureTables();
     Object.assign(tables.zone_closed_times![0]!, changes);
@@ -1545,8 +1609,31 @@ describe("zone closed times in configuration transfer", () => {
       refusal("zone_closed_times.special_date_id"),
     );
   });
-  it("refuses overlapping ranges in the same zone and weekday", () => {
+  it("accepts old weekday ranges the import drops: empty, crossing the changeover or overlapping", () => {
     const tables = closureTables();
+    tables.zone_closed_times![0]!.ends_at = "05:00:00";
+    tables.zone_closed_times!.push(
+      { ...tables.zone_closed_times![0]!, id: "overlap", starts_at: "23:15:00" },
+      { ...tables.zone_closed_times![0]!, id: "empty", weekday: 1, ends_at: "23:00:00" },
+    );
+    expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(tables, clock)).not.toThrow();
+  });
+  it.each([
+    ["start", { starts_at: "23:05:00" }],
+    ["end", { ends_at: "03:55:00" }],
+  ])(
+    "refuses an old weekday range off the quarter-hour at its %s, which no insert takes",
+    (_, changes) => {
+      const tables = closureTables();
+      Object.assign(tables.zone_closed_times![0]!, changes);
+      expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(tables, clock)).toThrowError(
+        refusal("zone_closed_times"),
+      );
+    },
+  );
+  it("refuses overlapping ranges in the same zone and named day", () => {
+    const tables = closureTables();
+    Object.assign(tables.zone_closed_times![0]!, ownDay);
     tables.zone_closed_times!.push({
       ...tables.zone_closed_times![0]!,
       id: "overlap",
@@ -1826,15 +1913,125 @@ describe("season weeks in a configuration bundle", () => {
     expect(() => validate(tables, clock)).not.toThrow();
   });
 
-  it("checks the end offset within each season, not across two", () => {
+  it("checks the end offset across a season boundary, and accepts different weeks that meet no grace", () => {
     const tables = seasonTables();
     tables.menu_periods![1]!.end_offset_minutes = 240;
-    // Winter holds no Saturday; Autumn's Saturday Lunch follows no Late in Autumn.
+    // Winter, which runs to 31 August, holds no Saturday. Its Friday Late sends until 06:00, when
+    // Autumn's first day, on a Saturday, opens Lunch.
     tables.department_days = tables.department_days!.filter((row) => row.id !== "w-sat");
     tables.department_day_ranges = tables.department_day_ranges!.filter(
       (row) => row.day_id !== "w-sat",
     );
+    expect(() => validate(tables, clock)).toThrowError(refusal("department_day_ranges"));
+    // Autumn's Lunch from 06:15 is clear of that grace; the two seasons' weeks still differ.
+    for (const row of tables.department_day_ranges)
+      if (row.day_id === "a-sat") row.starts_at = "06:15:00";
     expect(() => validate(tables, clock)).not.toThrow();
+  });
+
+  it("refuses a period's end offset reaching the first day of the next season", () => {
+    const tables = seasonTables();
+    // Autumn's Friday Late sends until 06:00; Winter's first day, on a Saturday, opens Lunch then.
+    tables.department_days = [day("a-fri", "s-autumn", 5), day("w-sat", "s-winter", 6)];
+    tables.department_day_ranges = [
+      range("a-fri", LATE, "22:00:00", "02:00:00"),
+      range("w-sat", LUNCH, "06:00:00", "09:00:00"),
+    ];
+    tables.menu_periods![1]!.end_offset_minutes = 240;
+    expect(() => validate(tables, clock)).toThrowError(refusal("department_day_ranges"));
+    tables.menu_periods![1]!.end_offset_minutes = 239;
+    expect(() => validate(tables, clock)).not.toThrow();
+  });
+
+  it("checks a named day against its neighbour in the season holding that neighbour", () => {
+    const named = (date: string) => {
+      const tables = seasonTables();
+      tables.department_days = [day("w-tue", "s-winter", 2)];
+      tables.department_day_ranges = [range("w-tue", LUNCH, "06:00:00", "09:00:00")];
+      tables.menu_periods![1]!.end_offset_minutes = 240;
+      tables.special_dates = [
+        {
+          id: "sd-late",
+          location_id: "venue",
+          date,
+          name: "Fiesta",
+          colour: "red",
+          own_hours: 1,
+          close_whole_venue: 0,
+        },
+      ];
+      tables.menu_day_timetables = [
+        { id: "t-late", department_id: RESTAURANT, weekday: null, special_date_id: "sd-late" },
+      ];
+      tables.menu_slots = [
+        {
+          id: randomUUID(),
+          timetable_id: "t-late",
+          department_id: RESTAURANT,
+          period_id: LATE,
+          starts_at: "22:00:00",
+          ends_at: "02:00:00",
+        },
+      ];
+      return tables;
+    };
+    // 2026-11-30, a Monday, is Autumn's last day; the Tuesday after it is Winter's.
+    expect(() => validate(named("2026-11-30"), clock)).toThrowError(refusal("menu_slots"));
+    expect(() => validate(named("2026-11-23"), clock)).not.toThrow();
+  });
+
+  /** One named day holding Late 22:00–02:00 with 240 minutes' grace, beside an Autumn week. */
+  function namedLate(
+    date: { date: string; repeat_on?: string; own_hours: number },
+    autumn: [string, number][],
+  ): Tables {
+    const tables = seasonTables();
+    tables.department_days = autumn.map(([id, weekday]) => day(id, "s-autumn", weekday));
+    tables.department_day_ranges = autumn.map(([id]) => range(id, LUNCH, "06:00:00", "09:00:00"));
+    tables.menu_periods![1]!.end_offset_minutes = 240;
+    tables.special_dates = [
+      {
+        id: "sd-late",
+        location_id: "venue",
+        name: "Fiesta",
+        colour: "red",
+        close_whole_venue: 0,
+        ...date,
+      },
+    ];
+    tables.menu_day_timetables = [
+      { id: "t-late", department_id: RESTAURANT, weekday: null, special_date_id: "sd-late" },
+    ];
+    tables.menu_slots = [
+      {
+        id: randomUUID(),
+        timetable_id: "t-late",
+        department_id: RESTAURANT,
+        period_id: LATE,
+        starts_at: "22:00:00",
+        ends_at: "02:00:00",
+      },
+    ];
+    return tables;
+  }
+
+  it("checks a repeating named day in the later years it falls on another weekday", () => {
+    // 23 November 2026 is a Monday, followed by an Autumn Tuesday with no Lunch; in 2027 it is a
+    // Tuesday, followed by the Wednesday Lunch at 06:00.
+    const once = { date: "2026-11-23", own_hours: 1 };
+    expect(() => validate(namedLate(once, [["a-wed", 3]]), clock)).not.toThrow();
+    expect(() =>
+      validate(namedLate({ ...once, repeat_on: "11-23" }, [["a-wed", 3]]), clock),
+    ).toThrowError(refusal("menu_slots"));
+  });
+
+  it("reads a named day without its own hours from its season, not from a row it holds", () => {
+    // 23 November 2026, a Monday, is followed by Tuesday's Lunch at 06:00; Autumn's Monday is empty.
+    const date = { date: "2026-11-23", own_hours: 0 };
+    expect(() => validate(namedLate(date, [["a-tue", 2]]), clock)).not.toThrow();
+    expect(() =>
+      validate(namedLate({ ...date, own_hours: 1 }, [["a-tue", 2]]), clock),
+    ).toThrowError(refusal("menu_slots"));
   });
 
   it.each([

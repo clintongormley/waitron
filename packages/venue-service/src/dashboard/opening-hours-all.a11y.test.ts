@@ -24,6 +24,8 @@ function model(): OpeningHoursModel {
     timeZone: "Europe/Madrid",
     clockReadable: true,
     dayCutover: "06:00",
+    seasons: [],
+    currentSeasonId: null,
     namedDays: [],
     menus: [],
     departments: [
@@ -31,7 +33,7 @@ function model(): OpeningHoursModel {
         id: "restaurant",
         name: "Restaurant",
         active: true,
-        zones: [{ id: "terrace", name: "Terrace", week: [], dates: [] }],
+        zones: [{ id: "terrace", name: "Terrace", seasonWeeks: [], week: [], dates: [] }],
         periods: [
           {
             id: "lunch",
@@ -44,6 +46,7 @@ function model(): OpeningHoursModel {
             routingUses: [],
           },
         ],
+        seasonWeeks: [],
         week: [{ weekday: 1, slots: [{ periodId: "lunch", startsAt: "12:00", endsAt: "16:00" }] }],
         dates: [],
       },
@@ -64,6 +67,7 @@ function model(): OpeningHoursModel {
             routingUses: [],
           },
         ],
+        seasonWeeks: [],
         week: [{ weekday: 2, slots: [{ periodId: "dinner", startsAt: "18:00", endsAt: "23:00" }] }],
         dates: [],
       },

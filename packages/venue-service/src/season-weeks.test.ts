@@ -36,6 +36,8 @@ import {
   writeZoneSeasonWeeks,
 } from "./season-weeks.js";
 import { readSeasons } from "./seasons.js";
+import { menuDayTimetables, menuSlots } from "./schema/menus.js";
+import { zoneClosedTimes } from "./schema/zone-closed-times.js";
 import type { ServiceRange } from "./service-day.js";
 import { readZoneClosedTimes, replaceZoneClosedWeek } from "./zone-closed-times.js";
 
@@ -128,7 +130,7 @@ const everySeason = <T>(value: T) => ({
 });
 
 describe("replaceMenuWeek writes season weeks", () => {
-  it("with no season named, gives a venue without seasons its four and paints every one, keeping the old weekday rows", async () => {
+  it("with no season named, gives a venue without seasons its four and paints every one, and the model's week is the current season's", async () => {
     const v = await venue();
     expect(await scoped((tx) => readSeasons(tx, v.cfg))).toEqual([]);
     const lunch = { periodId: v.lunch, startsAt: "13:00", endsAt: "16:00" };
@@ -139,11 +141,12 @@ describe("replaceMenuWeek writes season weeks", () => {
     for (const week of weeks.get(v.departmentId)!.values())
       expect(week).toEqual([[], [], [lunch], [], [], [], []]);
     const model = await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT));
+    expect(model.currentSeasonId).toBe((await seasonIds(v)).Autumn);
     const department = model.departments.find((entry) => entry.id === v.departmentId)!;
     expect(department.week.find((day) => day.weekday === TUESDAY)!.slots).toEqual([lunch]);
   });
 
-  it("with a season named, changes that season alone and leaves the old weekday rows", async () => {
+  it("with a season named, changes that season alone, and the model's week stays the current season's", async () => {
     const v = await venue();
     const lunch = { periodId: v.lunch, startsAt: "13:00", endsAt: "16:00" };
     const dinner = { periodId: v.dinner, startsAt: "20:00", endsAt: "23:00" };
@@ -161,6 +164,7 @@ describe("replaceMenuWeek writes season weeks", () => {
       Winter: [dinner],
     });
     const model = await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT));
+    expect(model.currentSeasonId).toBe((await seasonIds(v)).Autumn);
     const department = model.departments.find((entry) => entry.id === v.departmentId)!;
     expect(department.week.find((day) => day.weekday === TUESDAY)!.slots).toEqual([lunch]);
   });
@@ -280,17 +284,18 @@ describe("replaceMenuWeek writes season weeks", () => {
 });
 
 describe("replaceZoneClosedWeek writes season weeks", () => {
-  it("with no season named, gives a venue without seasons its four and closes every one, keeping the old weekday rows", async () => {
+  it("with no season named, gives a venue without seasons its four and closes every one, and a zone's week is the current season's", async () => {
     const v = await venue();
     const night = { startsAt: "23:00", endsAt: "02:00" };
     await scoped((tx) => replaceZoneClosedWeek(tx, v.cfg, v.zoneId, closedWeek([night]), 0, AT));
     expect(Object.keys(await seasonIds(v))).toEqual(["Spring", "Summer", "Autumn", "Winter"]);
     expect(await zoneTuesdays(v)).toEqual(everySeason([night]));
-    const [zone] = await scoped((tx) => readZoneClosedTimes(tx, v.cfg, "06:00"));
+    const { Autumn } = await seasonIds(v);
+    const [zone] = await scoped((tx) => readZoneClosedTimes(tx, v.cfg, "06:00", Autumn!));
     expect(zone!.week[TUESDAY]!.ranges).toEqual([night]);
   });
 
-  it("with a season named, changes that season alone and leaves the old weekday rows", async () => {
+  it("with a season named, changes that season alone, and a zone's week is the current season's", async () => {
     const v = await venue();
     const night = { startsAt: "23:00", endsAt: "02:00" };
     const afternoon = { startsAt: "16:00", endsAt: "19:00" };
@@ -307,7 +312,10 @@ describe("replaceZoneClosedWeek writes season weeks", () => {
       Autumn: [night],
       Winter: [afternoon],
     });
-    const [zone] = await scoped((tx) => readZoneClosedTimes(tx, v.cfg, "06:00"));
+    const [winterZone] = await scoped((tx) => readZoneClosedTimes(tx, v.cfg, "06:00", Winter!));
+    expect(winterZone!.week[TUESDAY]!.ranges).toEqual([afternoon]);
+    const { Autumn } = await seasonIds(v);
+    const [zone] = await scoped((tx) => readZoneClosedTimes(tx, v.cfg, "06:00", Autumn!));
     expect(zone!.week[TUESDAY]!.ranges).toEqual([night]);
   });
 
@@ -610,5 +618,27 @@ describe("season tables only", () => {
     const weeks = await scoped((tx) => readDepartmentSeasonWeeks(tx, v.cfg, [v.departmentId]));
     expect([...weeks.get(v.departmentId)!.keys()]).not.toContain(Winter);
     expect(weeks.get(v.departmentId)!.size).toBe(3);
+  });
+
+  it("a week written with no season named leaves no weekday row in the old tables", async () => {
+    const v = await venue();
+    const lunch = { periodId: v.lunch, startsAt: "13:00", endsAt: "16:00" };
+    const night = { startsAt: "23:00", endsAt: "02:00" };
+    await scoped((tx) => replaceMenuWeek(tx, v.cfg, v.departmentId, menuWeek([lunch]), AT, 0));
+    await scoped((tx) => replaceZoneClosedWeek(tx, v.cfg, v.zoneId, closedWeek([night]), 0, AT));
+    expect(await departmentTuesdays(v)).toEqual(everySeason([lunch]));
+    expect(await zoneTuesdays(v)).toEqual(everySeason([night]));
+    expect(
+      await db
+        .select()
+        .from(menuDayTimetables)
+        .where(eq(menuDayTimetables.departmentId, v.departmentId)),
+    ).toEqual([]);
+    expect(
+      await db.select().from(menuSlots).where(eq(menuSlots.departmentId, v.departmentId)),
+    ).toEqual([]);
+    expect(
+      await db.select().from(zoneClosedTimes).where(eq(zoneClosedTimes.zoneId, v.zoneId)),
+    ).toEqual([]);
   });
 });

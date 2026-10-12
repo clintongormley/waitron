@@ -29,10 +29,15 @@ import {
   createServiceZone,
   departments,
   departmentTransferRequests,
+  menuDayTimetables,
+  menuPeriods,
+  menuSlots,
   orderServiceContexts,
+  specialDates,
   setProfileServiceScope,
   VENUE_SERVICE_ROUTES,
   VENUE_SERVICE_PERMISSIONS,
+  zoneClosedTimes,
   zoneServicePolicies,
 } from "@waitron/venue-service";
 import { readZonePlan, saveZonePlan } from "./floor-plan.js";
@@ -116,6 +121,44 @@ async function target() {
       name: "Garden",
       departmentId: department.id,
     });
+    // The department's opening week lives in the season tables alone; a named day with its own
+    // hours is what still writes the old tables the preview counts.
+    expect(
+      await tx
+        .select()
+        .from(menuDayTimetables)
+        .where(eq(menuDayTimetables.departmentId, department.id)),
+    ).toEqual([]);
+    const [named] = await tx
+      .insert(specialDates)
+      .values({ locationId: v.cfg.locationId, date: "2030-01-08", name: "Party", ownHours: true })
+      .returning();
+    const [timetable] = await tx
+      .insert(menuDayTimetables)
+      .values({ departmentId: department.id, specialDateId: named!.id })
+      .returning();
+    const [period] = await tx
+      .select()
+      .from(menuPeriods)
+      .where(eq(menuPeriods.departmentId, department.id));
+    await tx.insert(menuSlots).values(
+      [
+        ["09:00:00", "11:00:00"],
+        ["13:00:00", "16:00:00"],
+      ].map(([startsAt, endsAt]) => ({
+        timetableId: timetable!.id,
+        departmentId: department.id,
+        periodId: period!.id,
+        startsAt: startsAt!,
+        endsAt: endsAt!,
+      })),
+    );
+    await tx.insert(zoneClosedTimes).values({
+      zoneId: zone.id,
+      specialDateId: named!.id,
+      startsAt: "22:00:00",
+      endsAt: "23:30:00",
+    });
     return { departmentId: department.id, zoneId: zone.id };
   });
 }
@@ -178,11 +221,12 @@ describe("permanent service delete HTTP contracts", () => {
         ends: [],
         removes: [
           { key: "zone_policies", count: 2, targets: [] },
+          { key: "zone_closed_times", count: 1, targets: [] },
           ...(kind === "department"
             ? [
                 { key: "department_periods", count: 1, targets: [] },
-                { key: "timetables", count: 5, targets: [] },
-                { key: "slots", count: 5, targets: [] },
+                { key: "timetables", count: 1, targets: [] },
+                { key: "slots", count: 2, targets: [] },
                 { key: "seasons", count: 4, targets: [] },
                 { key: "department_policy", count: 1, targets: [] },
                 { key: "zones", count: 1, targets: [{ id: f.zoneId, name: "Garden" }] },

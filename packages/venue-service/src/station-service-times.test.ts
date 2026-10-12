@@ -28,6 +28,7 @@ import { saveSpecialDate } from "./hours.js";
 import { replaceZoneClosedWeek, saveZoneClosedDate } from "./zone-closed-times.js";
 import { closeStationForToday } from "./station-times.js";
 import { stationServiceTimes } from "./station-service-times.js";
+import { readSeasons } from "./seasons.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
@@ -546,4 +547,76 @@ it("clamps a station forecast to the following dated start", async () =>
         { date: "2026-10-13", departments: [] },
       ],
     });
+  }));
+
+const seasonDates = [
+  "2030-11-25",
+  "2030-11-26",
+  "2030-11-27",
+  "2030-11-28",
+  "2030-11-29",
+  "2030-11-30",
+  "2030-12-01",
+  "2030-12-02",
+];
+async function seasonIds(db: Transaction, f: Awaited<ReturnType<typeof fixture>>) {
+  const seasons = await readSeasons(db, f.cfg);
+  return (name: string) => seasons.find((season) => season.name === name)!.id;
+}
+async function winterLunchOnly(db: Transaction, f: Awaited<ReturnType<typeof fixture>>) {
+  const seasonId = await seasonIds(db, f);
+  await replaceMenuWeek(db, f.cfg, f.department, week("slots", [f.lunchRange]), at, 0, {
+    seasonId: seasonId("Winter"),
+  });
+  await replaceMenuWeek(db, f.cfg, f.department, week("slots", []), at, 0, {
+    seasonId: seasonId("Autumn"),
+  });
+}
+const lunchOn =
+  (f: Awaited<ReturnType<typeof fixture>>, dates: readonly string[]) => (date: string) => ({
+    date,
+    departments: dates.includes(date)
+      ? [{ departmentId: f.department, ranges: [f.lunchRange] }]
+      : [],
+  });
+
+it("shows Winter's Monday Lunch on 2 December only, reading each date's own season", async () =>
+  tx(async (db) => {
+    const f = await fixture(db);
+    await winterLunchOnly(db, f);
+    expect(await stationServiceTimes(db, f.cfg, f.station, "2030-11-25", "2030-12-02")).toEqual({
+      always: null,
+      days: seasonDates.map(lunchOn(f, ["2030-12-02"])),
+    });
+  }));
+
+it("cuts Lunch by the zone's closure in each date's own season", async () =>
+  tx(async (db) => {
+    const f = await fixture(db);
+    const seasonId = await seasonIds(db, f);
+    await replaceZoneClosedWeek(
+      db,
+      f.cfg,
+      f.terrace,
+      week("ranges", [{ startsAt: "12:00", endsAt: "16:00" }]),
+      0,
+      at,
+      { seasonId: seasonId("Winter") },
+    );
+    expect(await stationServiceTimes(db, f.cfg, f.station, "2030-11-25", "2030-12-02")).toEqual({
+      always: null,
+      days: seasonDates.map(lunchOn(f, ["2030-11-25"])),
+    });
+  }));
+
+it("in normal mode shows, on every date, the week of the season holding the first requested date", async () =>
+  tx(async (db) => {
+    const f = await fixture(db);
+    await winterLunchOnly(db, f);
+    expect(
+      await stationServiceTimes(db, f.cfg, f.station, "2030-11-25", "2030-12-02", "normal"),
+    ).toEqual({ always: null, days: seasonDates.map(lunchOn(f, [])) });
+    expect(
+      await stationServiceTimes(db, f.cfg, f.station, "2030-12-01", "2030-12-02", "normal"),
+    ).toEqual({ always: null, days: seasonDates.slice(6).map(lunchOn(f, ["2030-12-02"])) });
   }));

@@ -20,10 +20,18 @@ export function seasonOn<T extends { startsOn: string }>(
   seasons: readonly T[],
   businessDay: string,
 ): T | null {
-  const sorted = byStart(seasons);
+  return seasonOnSorted(byStart(seasons), businessDay);
+}
+
+/** `seasonOn` over seasons already sorted by start. */
+export function seasonOnSorted<T extends { startsOn: string }>(
+  sorted: readonly T[],
+  businessDay: string,
+): T | null {
   const monthDay = businessDay.slice(5);
-  const started = sorted.filter((season) => season.startsOn <= monthDay);
-  return started.at(-1) ?? sorted.at(-1) ?? null;
+  let held: T | null = sorted.at(-1) ?? null;
+  for (const season of sorted) if (season.startsOn <= monthDay) held = season;
+  return held;
 }
 
 /** The MM-DD before the next season's start, for showing a season's range. */

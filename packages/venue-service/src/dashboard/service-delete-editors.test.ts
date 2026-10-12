@@ -123,13 +123,17 @@ function hoursFixture(): OpeningHoursModel {
     timeZone: "Europe/Madrid",
     clockReadable: true,
     dayCutover: "06:00",
+    seasons: [],
+    currentSeasonId: null,
     namedDays: [],
     menus: [{ id: "m1", name: "Menu", active: true, includes: [] }],
     departments: ["d1", "d2"].map((id, index) => ({
       id,
       name: id,
       active: true,
-      zones: [{ id: `z${index + 1}`, name: `Zone ${index + 1}`, week: [], dates: [] }],
+      zones: [
+        { id: `z${index + 1}`, name: `Zone ${index + 1}`, seasonWeeks: [], week: [], dates: [] },
+      ],
       periods: [
         {
           id: `p${index + 1}`,
@@ -142,6 +146,7 @@ function hoursFixture(): OpeningHoursModel {
           routingUses: [],
         },
       ],
+      seasonWeeks: [],
       week: [
         { weekday: 1, slots: [{ periodId: `p${index + 1}`, startsAt: "10:00", endsAt: "14:00" }] },
       ],

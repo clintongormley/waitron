@@ -1,17 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { CORE_MIGRATIONS, catalogues, locations, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant, seedNode } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { locationId } from "@waitron/shared";
 import {
+  departmentDayRanges,
+  departmentDays,
   departments,
   menuPeriods,
-  menuSlots,
-  menuDayTimetables,
+  readOpeningHoursModel,
   replaceMenuWeek,
   saveMenuPeriod,
+  seasons,
   VENUE_SERVICE_PROVISIONING,
 } from "@waitron/venue-service";
 import { readSetupOpeningHours } from "./setup-opening-hours.js";
@@ -123,21 +125,66 @@ describe("setup's saved first opening hours", () => {
     expect(await readSetupOpeningHours(suite.db, cfg)).toBeUndefined();
   });
 
+  it("has no summary when one season other than the current one differs", async () => {
+    const { cfg, department } = await seed();
+    const [period] = await suite.db
+      .select()
+      .from(menuPeriods)
+      .where(eq(menuPeriods.departmentId, department.id));
+    const model = await readOpeningHoursModel(suite.db, cfg, new Date());
+    // Not the current season, so a check reading only the current week would still match.
+    const other = model.seasons.find((season) => season.id !== model.currentSeasonId)!;
+    await withTransaction(suite.db, (tx) =>
+      replaceMenuWeek(
+        tx,
+        cfg,
+        department.id,
+        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+          weekday,
+          slots:
+            weekday === 0 || weekday === 6
+              ? []
+              : [
+                  {
+                    periodId: period!.id,
+                    startsAt: "09:00",
+                    endsAt: weekday === 3 ? "16:00" : "17:00",
+                  },
+                ],
+        })),
+        new Date(),
+        0,
+        { seasonId: other.id },
+      ),
+    );
+    expect(await readSetupOpeningHours(suite.db, cfg)).toBeUndefined();
+  });
+
+  it("has no summary for a venue with no seasons", async () => {
+    const { cfg } = await seed();
+    await suite.db.delete(seasons).where(eq(seasons.locationId, cfg.locationId));
+    expect(await readSetupOpeningHours(suite.db, cfg)).toBeUndefined();
+  });
+
   it("has no full-week summary when a weekday has no range", async () => {
     const { cfg, department } = await seed();
-    const [tuesday] = await suite.db
-      .select()
-      .from(menuDayTimetables)
-      .where(
-        and(eq(menuDayTimetables.departmentId, department.id), eq(menuDayTimetables.weekday, 2)),
-      );
-    await suite.db.delete(menuSlots).where(eq(menuSlots.timetableId, tuesday!.id));
+    const tuesdays = await suite.db
+      .select({ id: departmentDays.id })
+      .from(departmentDays)
+      .where(and(eq(departmentDays.departmentId, department.id), eq(departmentDays.weekday, 2)));
+    expect(tuesdays.length).toBeGreaterThan(0);
+    await suite.db.delete(departmentDayRanges).where(
+      inArray(
+        departmentDayRanges.dayId,
+        tuesdays.map((day) => day.id),
+      ),
+    );
     expect(await readSetupOpeningHours(suite.db, cfg)).toBeUndefined();
   });
 
   it("does not describe an authored shorter week as the first weekday schedule", async () => {
     const { cfg } = await seed();
-    await suite.db.update(menuSlots).set({ endsAt: "16:00:00" });
+    await suite.db.update(departmentDayRanges).set({ endsAt: "16:00:00" });
     expect(await readSetupOpeningHours(suite.db, cfg)).toBeUndefined();
   });
 });

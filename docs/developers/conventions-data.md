@@ -410,9 +410,8 @@ On an own-hours day, a department without a dated timetable row follows its seas
 that weekday; a dated row with no ranges closes that department. `resolveDepartmentDays` in
 `packages/venue-service/src/day-resolver.ts` selects the dated row only for own-hours days,
 then falls back to the business day's season week when there is no row. Whole-venue closure closes departments.
-Switching to own hours copies the old weekday rows' department ranges and zone closed times
-(until A506-2 moves it to the season week);
-switching back removes the dated schedules (`switchNamedDayHours` in `hours.ts`).
+Switching to own hours copies that weekday's department ranges and zone closed times from the
+season holding the date; switching back removes the dated schedules (`switchNamedDayHours` in `hours.ts`).
 The individual department's Follow the normal week DELETE route is retired (`routes.ts` and
 `dashboard/opening-hours-client.ts`); change the named day's hours choice instead.
 
@@ -552,9 +551,9 @@ A fresh request during grace is accepted without checking when you selected its 
 the server receives no trusted selection timestamp.
 
 An offset is bounded to −1439…1439 minutes. Each placement must keep a nonempty sending window;
-a positive offset must stop strictly before the same department's next placement starts. The
-normal week and dated overrides are checked when you edit periods, timetables, dates or the venue
-clock, and during configuration import. Yesterday's grace can reach a closed business day only
+a positive offset must stop strictly before the same department's next placement starts. Each
+season's week, each season boundary and the dated overrides are checked when you edit periods,
+timetables, dates or the venue clock, and during configuration import. Yesterday's grace can reach a closed business day only
 until its own cutoff. Selection and sending remain separate from the department's actual open state.
 The [A432 plan](../superpowers/plans/2026-10-08-a432-period-end-offset.md) records the decisions.
 `apps/server/src/till-api.service-periods.test.ts` exercises the request boundary.
@@ -571,11 +570,13 @@ A different authored or demo schedule is not described as that first weekday sch
 ### Zone closed times
 
 You subtract a zone's closed times from its department's service day, rather than writing another
-opening schedule. `zone_closed_times` in `packages/venue-service/src/schema/zone-closed-times.ts`
-links each range to a zone and either a weekday or a named day. The writers `replaceZoneClosedWeek`
-and `saveZoneClosedDate` in `zone-closed-times.ts` validate the ranges against the business-day
-changeover, on quarter-hour boundaries. A date must have own hours before you can save its closed
-times. `closedZoneIdsAt` uses that named day's dated ranges, including repeats, or the business day's
+opening schedule. A zone's week of closed times is in the season tables (see "Seasons and season
+weeks" below). `zone_closed_times` in `packages/venue-service/src/schema/zone-closed-times.ts` holds
+a zone's closed ranges for a named day. `saveZoneClosedDate` in `zone-closed-times.ts` writes them,
+validated against the business-day changeover, on quarter-hour boundaries; `switchNamedDayHours`
+(`hours.ts`) copies the season's day into them when a named day takes own hours, and the
+special-date copy (`MENU_TIMETABLE_CALENDAR_PARTICIPANT`, `menu-timetable.ts`) copies a named day's
+ranges to its duplicate. A date must have own hours before you can save its closed times. `closedZoneIdsAt` uses that named day's dated ranges, including repeats, or the business day's
 season week (`zone_days`, through `resolveZoneClosedDays` in `day-resolver.ts`) otherwise. No dated closed ranges means no zone-specific closure on an own-hours day;
 it does not inherit the zone's normal-week closure. The start is closed and the end is open.
 When the venue clock is unreadable, this zone check reports no closed zone; department checks
@@ -612,10 +613,13 @@ provisioning and, for a venue with none, by `targetSeasons` before a week write
 
 A week saved with no season named goes into every season; a week saved with a season named
 changes that season alone (`replaceMenuWeek` in `packages/venue-service/src/menu-timetable.ts`,
-`replaceZoneClosedWeek` in `packages/venue-service/src/zone-closed-times.ts`). Until A506-2, a
-week saved with no season named also writes the old weekday rows, `menu_day_timetables` with
-`menu_slots` and `zone_closed_times`, beside them (the "keeping the old weekday rows" cases in
-`packages/venue-service/src/season-weeks.test.ts`).
+`replaceZoneClosedWeek` in `packages/venue-service/src/zone-closed-times.ts`). The old tables,
+`menu_day_timetables` with `menu_slots` and `zone_closed_times`, get no weekday row from any
+writer (the case "a week written with no season named leaves no weekday row in the old tables" in
+`packages/venue-service/src/season-weeks.test.ts`). A venue database that ran #1577 (A506-1) and
+was not reset still holds the weekday rows written then. No opening-hours reader uses them; the
+department and zone delete previews still count them, and the venue's configuration export still
+carries them.
 
 A configuration transfer carries the five tables (`VENUE_SERVICE_CONFIGURATION_TRANSFER` in
 `packages/venue-service/src/configuration-transfer.ts`). `importConfigurationTables`
@@ -624,23 +628,35 @@ inserting the bundle's, so the target's four provisioned seasons give way to the
 the case "arrives as exactly the exported seasons, and the imported venue sells and closes by
 them" in `apps/server/src/configuration-transfer.test.ts` renames and moves one season before
 export, finds the target holding the exported four, and asks `resolveDepartmentService` and
-`closedZoneIdsAt` about one Saturday in each of two seasons.
+`closedZoneIdsAt` about one Saturday in each of two seasons. The import keeps no old weekday row:
+the transfer's `afterImport` deletes the `menu_day_timetables` and `zone_closed_times` rows that
+name a weekday, and named-day rows stay. The import inserts such a row before deleting it, so it
+is checked as far as the insert needs: its own fields, the ids it names, one timetable per department
+and weekday, and quarter-hour times (`menu_slots_step_ck` and `zone_closed_times_step_ck` refuse
+an off-step insert at once; the foreign keys wait for commit). Its range is not checked, so a
+stale range crossing the bundle's changeover, empty or overlapping is no refusal (the cases
+"leaves a bundle's old weekday rows behind (%s), keeps its named-day rows, and serves the week
+from its seasons" and "refuses an old weekday %s row off the quarter-hour at %s as a bad request,
+not a database error" in the same file).
 
 `validateSeasonWeeks` (`packages/venue-service/src/configuration-transfer.ts`) refuses, among
 others: a season start that is not a common year's date or is `02-29`; a range off the
 quarter-hour or overlapping another on the same day; a department range with no period (Closed)
-and a zone range of any kind but `closed`; and a period end offset reaching the next placement in
-the same season's week. It accepts a season with fewer than seven day rows, compares no
-placements across a season boundary, and checks no skipped clock hour, as a season week has no
-date. A season day naming a special-day date is refused, because the bundle carries no
-`special_days` or `special_day_dates`. The cases are under "season weeks in a configuration
-bundle" in `packages/venue-service/src/configuration-transfer.test.ts`.
+and a zone range of any kind but `closed`. It accepts a season with fewer than seven day rows, and
+checks no skipped clock hour, as a season week has no date. A season day naming a special-day date
+is refused, because the bundle carries no `special_days` or `special_day_dates`.
+`validateEndOffsets`, beside it, refuses a period end offset reaching the next placement: within a
+season's week, from each season's last day to the next season's first on every weekday, and
+between each named day and the days either side of it, a day without hours of its own read from
+the season that holds it. It reads no old weekday row. The cases are under "season weeks in a
+configuration bundle" in `packages/venue-service/src/configuration-transfer.test.ts`, and the
+named-day grace case under "named days in configuration transfer".
 
 ### Earlier W98 menu timetable model
 
 W98 keeps each department's menu timetable in four venue-service tables, all classified `state`
 (`packages/venue-service/src/schema/menus.ts`): `menu_periods` (a named period such as "Mañanas"
-and its menu), `menu_day_timetables` (one weekday of the department's week, or one special date),
+and its menu), `menu_day_timetables` (one department's timetable for one special date),
 `menu_slots` (a named period placed on that day, wall-clock times) and `zone_period_menus` (a
 zone's own menu for one named period). They are not opening-hours rows: a menu period has its own
 boundaries and a menu, and opening hours never stop a sale. What they share with Hours is the
@@ -657,9 +673,8 @@ calendar.
   that would leave a slot overlapping a neighbouring day's across a midnight (`overlap`), or a copied
   or moved slot opening or closing at a minute the clock skips there (`clock_skips`). A duplicate's
   copies are checked together, after every target exists.
-- "No row" carries meaning twice, as for hours: a weekday with no `menu_day_timetables` row has no
-  slots (the all-day menu all day), and a special date with no row for a department follows that
-  department's week. A row with no slots on a special date replaces the week with the all-day menu.
+- A special date with no `menu_day_timetables` row for a department follows that department's
+  week. A row with no slots on a special date replaces the week with the all-day menu.
 - A zone's override names a named period, not a slot, so it holds on every day and special date
   that places the period. Deleting a period is refused `menu_period.in_use` while any slot places
   it, past special dates included; once none does, its zones' overrides and the routing cells'
@@ -1425,13 +1440,17 @@ Measured 2026-10-08 with `pnpm --filter @waitron/venue-service exec vitest run
 src/configuration-transfer.test.ts` and `pnpm --filter @waitron/server exec vitest run
 src/configuration-transfer.test.ts`: period colours and ordered staff-menu rows travelled to a
 second real venue under new period, department and menu IDs. The server roundtrip uses 04:30:
-21:00–03:00 imports, 21:00–05:00 is refused with `setup.request_invalid`, field `menu_slots`.
-Replacing the export's changeover with 06:00 in an installed disposable checkout made that
-refusal assertion fail. The callback context now carries `createdAt`, `timeZone`, and
-`dayCutover` (`packages/module/src/module.ts`, `apps/server/src/configuration-transfer.ts`).
+21:00–03:00 imports, and a `department_day_ranges` range ending 05:00 is refused with
+`setup.request_invalid`, field `department_day_ranges`. Measured 2026-10-12: with the source
+venue's changeover set to 06:00 instead of 04:30, `pnpm --filter @waitron/server exec vitest run
+src/configuration-transfer.test.ts -t "round-trips service periods with end offset"` failed both
+cases at that refusal assertion ("expected function to throw an error, but it didn't"); with
+04:30 restored both passed. The callback context now carries `createdAt`,
+`timeZone`, and `dayCutover` (`packages/module/src/module.ts`, `apps/server/src/configuration-transfer.ts`).
 
-The menu validator uses `parseServiceDay`, so ranges stop at the business-day boundary and
-use quarter-hours. Special-date endpoints below changeover are checked on the next calendar
+The menu validator puts a named day's slots through `parseServiceDay`, so they stop at the
+business-day boundary and use quarter-hours; an old weekday row's slots are checked only for what
+inserting them needs, quarter-hours included. Special-date endpoints below changeover are checked on the next calendar
 morning; an end exactly at changeover is next morning and a start there is the business date.
 Removing each endpoint-date branch in the disposable checkout failed its skipped-time
 assertion. Unlike station hours, the menu writer and import check skipped endpoints on past
