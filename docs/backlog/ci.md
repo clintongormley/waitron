@@ -283,14 +283,19 @@ the Vitest config loads — the same class as `src/test-helpers.ts`, `src/a11y-h
 
 ## Why the side file's growth per sale differs so much between runs is not tested
 
-**The pause test and the bucket's error reports — what is still open (left by #668, #686, A57, A60
-and #723).**
+The cause remains open after A529. Main run `38203241435`, at A514's merge `27ce4acbc`,
+reported 3,897 sales in 180,380 ms, from 5,047,032 to 15,499,472 bytes. Its log cannot
+separate file reuse from request or measurement-wait time. The next three main runs passed
+with 328, 1,044 and 2,607 fill sales; all four started at 5,047,032 bytes.
 
-- **Why the side file's growth per sale differs so much between runs is not tested.** The pause
-  test's fill to 16 MiB took about 13 KB a sale on one CI run, about 41.6 KB a sale on its own
-  runner, and about 79 KB a sale locally, one run each and all on disk, before CI's stream step
-  moved these files into memory (A130). Litestream's own checkpoints reusing the file is the
-  guess. If the test turns unreliable on CI, that margin is where to look.
+Read `stream pause sellers` in the next failed job: elapsed time, sales, request-time sums,
+slowest request, summed measurement waits and read-only WAL header samples. Read
+`stream pause failure context` for stream events and the synthetic bucket process's log.
+The field definitions and limits are in
+[testing-guide.md](../developers/testing-guide.md), "If the fill times out, read the progress samples first".
+These samples do not identify a checkpoint's owner or provide an atomic database view.
+The deadline, file limit and existing behavioral assertions remain unchanged.
+
 
 ## P7's leftovers (#533)
 

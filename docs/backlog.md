@@ -4677,9 +4677,12 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   the Waitron servers' own ports in the loop and pause tests are drawn the same way, and a lost one
   fails the boot loudly (`server.listen_failed`) rather than silently; not changed.
 
-- **Why the side file's growth per sale differs so much between runs is not tested.** If the test
-  turns unreliable on CI, that margin is where to look. Left open by #668, #686, A57, A60 and #723
-  (the pause test and the bucket's error reports).
+- **Why the stream pause test's file growth differs between runs remains unexplained (A529).**
+  Main run `38203241435` timed out after 3,897 sales below the 16 MiB limit; the next three passed.
+  The test now logs request and gate timings, file size and WAL header identity during each phase,
+  plus stream/S3 context on failure. Next: use a failing run's samples to distinguish repeated file
+  reuse from slow requests or waits around a measurement. No deadline, limit or existing assertion
+  was relaxed.
   [Detail](backlog/ci.md#why-the-side-files-growth-per-sale-differs-so-much-between-runs-is-not-tested)
 
 - **The case "refused while the run is stopping" catches a removed stop check only through the order
