@@ -310,7 +310,7 @@ Three packages carry `"thresholds": { "high": 95, "low": 90, "break": 90 }` —
 `packages/shared` since July 2026, `packages/fiscal` under the owner's 2026-09-19 decision that the
 target is 90 everywhere, and `packages/ui-core` since its extraction (#519, 2026-09-23).
 `packages/db` and `packages/ui` carry no `break` in their own configs, deliberately: CI splits each
-run into shards (ten for db, twenty for ui), each passed its own `--mutate` list, so a
+run into shards (ten for db, thirty for ui), each passed its own `--mutate` list, so a
 `thresholds.break` there would gate one slice rather than the package. Their bars live in the
 `mutation-db-aggregate` and `mutation-ui-aggregate` jobs instead, each of which merges its package's
 shard reports and scores them once. ui held its bar in its own config from 2026-09-19 until A539
@@ -322,7 +322,7 @@ Where each failure arrives differs, which is the part a session gets wrong:
 | --- | --- | --- |
 | `shared` | `mutation-shared` in `.github/workflows/ci.yml` | a pull request whose resolved scope contains the package; on `main` the scope is `global`, so always |
 | `ui-core` | the `mutation` matrix in `.github/workflows/mutation.yml` | the weekly Monday run only — a branch that thins a UI test goes green and reddens on Monday |
-| `ui` | the sharded `mutation-ui` matrix plus `mutation-ui-aggregate`, both in `.github/workflows/mutation.yml` | the weekly Monday run only, on the merged score of the twenty shards — a single shard's own slice is never gated, and a LOCAL `pnpm --filter @waitron/ui mutation` prints a score and gates nothing |
+| `ui` | the sharded `mutation-ui` matrix plus `mutation-ui-aggregate`, both in `.github/workflows/mutation.yml` | the weekly Monday run only, on the merged score of the thirty shards — a single shard's own slice is never gated, and a LOCAL `pnpm --filter @waitron/ui mutation` prints a score and gates nothing |
 | `fiscal` | nothing in CI | only a local `pnpm --filter @waitron/fiscal mutation` |
 | `db` | the sharded `mutation-db` matrix plus `mutation-db-aggregate`, both in `.github/workflows/mutation.yml` | the weekly Monday run only, on the merged score of the ten shards — a single shard's own slice is never gated, and a LOCAL `pnpm --filter @waitron/db mutation` prints a score and gates nothing |
 
@@ -450,7 +450,8 @@ find packages/db/src -name '*.ts' ! -name '*.test.ts' -exec wc -lc {} + | sort -
 That matters because `sales.ts` is db's single entry in `scripts/mutation-shard.mjs`'s `HEAVY_FILES`
 — the list of files split into line ranges so one file's cost spreads across several parallel jobs
 instead of dominating one — and the reason recorded beside it is that it "alone ran 186min while
-every other N=10 shard finished <=90min". The shard packer weights a file by its size in bytes.
+every other N=10 shard finished <=90min". Each range of a split file runs in a shard of its own,
+and the packer spreads the other files over the remaining shards by their size in bytes.
 
 **The new file's runtime under mutation was NOT measured, and no `HEAVY_FILES` entry was added.**
 Read that as a hedge, not as a reassurance. Size alone does not settle it either way: what dominated

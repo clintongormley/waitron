@@ -180,10 +180,14 @@ describe("the selection follows each package's own stryker config", () => {
 });
 
 describe("HEAVY_FILES", () => {
-  it("splits db's sales schema in three and ui's data table in four", () => {
+  it("splits db's sales schema in three and ui's combobox, data table and dialog", () => {
     expect(HEAVY_FILES).toEqual({
       db: { "src/schema/sales.ts": 3 },
-      ui: { "src/components/wt-data-table.ts": 4 },
+      ui: {
+        "src/components/wt-combobox.ts": 4,
+        "src/components/wt-data-table.ts": 12,
+        "src/components/wt-dialog.ts": 6,
+      },
     });
   });
 
@@ -218,62 +222,129 @@ describe("shardFiles", () => {
 
   it("splits a heavy file into line ranges over distinct shards", () => {
     const dir = fixturePackage(
-      ["packages/ui/src/components/wt-data-table.ts", "packages/ui/src/a.ts"],
-      "line\n".repeat(99),
+      ["packages/db/src/schema/sales.ts", "packages/db/src/a.ts"],
+      "line\n".repeat(98),
     );
+    writeFileSync(
+      join(dir, "packages", "db", "stryker.config.json"),
+      JSON.stringify({ mutate: ["src/**/*.ts"] }),
+    );
+    writeFileSync(join(dir, "packages", "db", "src", "a.ts"), "export const a = 1;\n");
+    const shards = [1, 2, 3, 4].map((shard) => shardFilesOf("db", shard, 4, dir));
+    expect(shards.slice(0, 3).map((s) => s.filter((p) => p.includes(":")))).toEqual([
+      ["src/schema/sales.ts:1-33"],
+      ["src/schema/sales.ts:34-66"],
+      ["src/schema/sales.ts:67-99"],
+    ]);
+    expect(shards.flat()).toContain("src/a.ts");
+  });
+
+  /**
+   * A db fixture: `sales.ts`, 99 lines in 495 bytes (three ranges of 33), beside `others`, each
+   * 600 bytes, so a packer weighing by bytes would place them first and the ranges beside them.
+   */
+  function dbFixture(others) {
+    const dir = fixturePackage(["packages/db/src/schema/sales.ts"], "line\n".repeat(98));
+    for (const path of others) {
+      mkdirSync(dirname(join(dir, "packages", "db", path)), { recursive: true });
+      writeFileSync(join(dir, "packages", "db", path), "export const a = 1;\n".repeat(30));
+    }
+    writeFileSync(
+      join(dir, "packages", "db", "stryker.config.json"),
+      JSON.stringify({ mutate: ["src/**/*.ts"] }),
+    );
+    return dir;
+  }
+
+  it("gives each heavy range a shard of its own and packs the other files into the rest", () => {
+    const others = ["src/a.ts", "src/b.ts", "src/c.ts", "src/d.ts", "src/e.ts"];
+    const dir = dbFixture(others);
+    const shards = [1, 2, 3, 4, 5, 6].map((shard) => shardFilesOf("db", shard, 6, dir));
+    expect(shards.slice(0, 3)).toEqual([
+      ["src/schema/sales.ts:1-33"],
+      ["src/schema/sales.ts:34-66"],
+      ["src/schema/sales.ts:67-99"],
+    ]);
+    expect(shards.slice(3)).toEqual([
+      ["src/a.ts", "src/d.ts"],
+      ["src/b.ts", "src/e.ts"],
+      ["src/c.ts"],
+    ]);
+  });
+
+  it("gives every range of every heavy file a shard of its own, files by path, ranges by line", () => {
+    const heavy = Object.keys(HEAVY_FILES.ui);
+    const dir = fixturePackage(
+      heavy.map((path) => `packages/ui/${path}`),
+      "line\n".repeat(119),
+    );
+    for (const path of ["src/a.ts", "src/b.ts"])
+      writeFileSync(join(dir, "packages", "ui", path), "export const a = 1;\n");
     writeFileSync(
       join(dir, "packages", "ui", "stryker.config.json"),
       JSON.stringify({ mutate: ["src/**/*.ts"] }),
     );
-    writeFileSync(join(dir, "packages", "ui", "src", "a.ts"), "export const a = 1;\n");
-    const shards = [1, 2, 3, 4, 5].map((shard) => shardFilesOf("ui", shard, 5, dir));
-    expect(shards.slice(0, 4).map((s) => s.filter((p) => p.includes(":")))).toEqual([
-      ["src/components/wt-data-table.ts:1-25"],
-      ["src/components/wt-data-table.ts:26-50"],
-      ["src/components/wt-data-table.ts:51-75"],
-      ["src/components/wt-data-table.ts:76-100"],
-    ]);
-    expect(shards.flat()).toContain("src/a.ts");
+    const ranges = heavy.sort().flatMap((path) => splitRanges(path, 120, HEAVY_FILES.ui[path]));
+    expect(ranges).toHaveLength(22);
+    const total = ranges.length + 2;
+    const shards = Array.from({ length: total }, (_, i) => shardFilesOf("ui", i + 1, total, dir));
+    expect(shards).toEqual([...ranges.map((range) => [range]), ["src/a.ts"], ["src/b.ts"]]);
+  });
+
+  it("refuses a shard count that cannot hold the heavy ranges plus the other files", () => {
+    const dir = dbFixture(["src/a.ts"]);
+    expect(() => shardFilesOf("db", 1, 3, dir)).toThrow(
+      /3 shards cannot hold the 3 heavy ranges plus the other files — raise the shard count/,
+    );
+    expect(() => shardFilesOf("db", 1, 2, dir)).toThrow(/2 shards cannot hold the 3 heavy ranges/);
+    expect(shardFilesOf("db", 4, 4, dir)).toEqual(["src/a.ts"]);
   });
 });
 
-for (const [pkg, heavy, parts] of [
-  ["db", "src/schema/sales.ts", 3],
-  ["ui", "src/components/wt-data-table.ts", 4],
+for (const [pkg, heavy, total] of [
+  ["db", { "src/schema/sales.ts": 3 }, 10],
+  [
+    "ui",
+    {
+      "src/components/wt-combobox.ts": 4,
+      "src/components/wt-data-table.ts": 12,
+      "src/components/wt-dialog.ts": 6,
+    },
+    30,
+  ],
 ]) {
-  describe(`the CLI over the real @waitron/${pkg} tree`, () => {
+  describe(`the CLI over the real @waitron/${pkg} tree at the workflow's ${total} shards`, () => {
     const fileOf = (entry) => entry.replace(/:\d+-\d+$/, "");
+    const isRange = (entry) => /:\d+-\d+$/.test(entry);
     const config = JSON.parse(readFileSync(join(packageDir(pkg), "stryker.config.json"), "utf8"));
+    const rangeCount = Object.values(heavy).reduce((sum, parts) => sum + parts, 0);
+    const shards = Array.from({ length: total }, (_, i) => shardFiles(i + 1, total, pkg));
+
+    it("fills every shard", () => {
+      expect(shards.filter((shard) => shard.length === 0)).toEqual([]);
+    });
 
     it("covers every mutate-eligible file exactly once — whole, or as ranges for a split file", () => {
-      const total = 6;
-      const collected = [];
-      for (let shard = 1; shard <= total; shard++) collected.push(...shardFiles(shard, total, pkg));
-
+      const collected = shards.flat();
       expect([...new Set(collected.map(fileOf))].sort()).toEqual(
         mutateFiles(packageDir(pkg), config.mutate),
       );
-
-      const ranges = collected.filter((e) => /:\d+-\d+$/.test(e));
-      const wholes = collected.filter((e) => !/:\d+-\d+$/.test(e));
+      const wholes = collected.filter((e) => !isRange(e));
       expect(new Set(wholes).size).toBe(wholes.length);
-      expect([...new Set(ranges.map(fileOf))]).toEqual([heavy]);
-      expect(ranges).toHaveLength(parts);
-      expect([...new Set(collected.map(fileOf))]).not.toContain("");
+      expect(wholes.filter((e) => Object.hasOwn(heavy, e))).toEqual([]);
+      const ranges = collected.filter(isRange);
+      expect([...new Set(ranges.map(fileOf))].sort()).toEqual(Object.keys(heavy).sort());
+      expect(ranges).toHaveLength(rangeCount);
     });
 
-    it("splits the heavy file across distinct shards (not clustered in one)", () => {
-      const total = 10;
-      const shardOf = {};
-      for (let shard = 1; shard <= total; shard++)
-        for (const entry of shardFiles(shard, total, pkg))
-          if (fileOf(entry) === heavy) shardOf[entry] = shard;
-      expect(new Set(Object.values(shardOf)).size).toBe(parts);
+    it("gives each heavy range a shard of its own", () => {
+      const withRange = shards.filter((shard) => shard.some(isRange));
+      expect(withRange).toHaveLength(rangeCount);
+      for (const shard of withRange) expect(shard).toHaveLength(1);
     });
 
     it("emits src/-relative .ts paths (optionally line-ranged) a stryker run can consume", () => {
-      const files = shardFiles(1, 6, pkg);
-      expect(files.length).toBeGreaterThan(0);
+      const files = shards.flat();
       expect(files.every((p) => /^src\/.+\.ts(:\d+-\d+)?$/.test(p))).toBe(true);
       expect(files.some((p) => p.includes(".test.ts"))).toBe(false);
     });
@@ -306,12 +377,15 @@ describe("the CLI rejects bad input loudly", () => {
   });
 
   it("fails when a shard would select no files (more shards than slices)", () => {
-    // Derive the shard count from the LIVE slice count (shard 1 of 1 emits every slice) rather than
-    // hard-coding it — `@waitron/db` grows, and a fixed number silently stops exceeding the slice
-    // count once it does. One more shard than there are slices guarantees the HIGHEST-index shard
-    // is empty (greedy packs slices into the lowest-index shards), so requesting it must fail
-    // loudly, never print an empty --mutate list that would make stryker a confusing no-op.
-    const n = String(shardFiles(1, 1).length + 1);
+    // Derive the shard count from the LIVE slice count (at one shard past db's three ranges, the
+    // last shard holds every other file) rather than hard-coding it — `@waitron/db` grows, and a
+    // fixed number silently stops exceeding the slice count once it does. One more shard than there
+    // are slices guarantees the HIGHEST-index shard is empty (greedy packs slices into the
+    // lowest-index shards), so requesting it must fail loudly, never print an empty --mutate list
+    // that would make stryker a confusing no-op.
+    const ranges = 3;
+    const slices = shardFiles(ranges + 1, ranges + 1).length + ranges;
+    const n = String(slices + 1);
     const r = run("db", n, n);
     expect(r.status).not.toBe(0);
     expect(r.stderr).toMatch(/no files/i);

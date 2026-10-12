@@ -84,13 +84,16 @@ jobs:
   # packages/ui, sharded the same way as packages/db below, and gated the same way: no
   # thresholds.break in packages/ui/stryker.config.json, one bar on the merged score in
   # `mutation-ui-aggregate`. scripts/mutation-shard.mjs picks ui's files from that config's `mutate`
-  # list and splits src/components/wt-data-table.ts, which held 1943 of the package's 4897 scored
-  # mutants on run 37267389722, across several shards.
+  # list, cuts wt-combobox.ts, wt-data-table.ts and wt-dialog.ts into line ranges, and runs each
+  # range in a shard of its own. Why, on run 38233718266 at 20 shards: wt-combobox.ts and
+  # wt-dialog.ts, each alone in a shard, hit the 30-minute limit (716 of 780 and 325 of 382 mutants
+  # tested), and one of wt-data-table.ts's four ranges took 28.7 minutes.
   mutation-ui:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+        # prettier-ignore
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -165,7 +168,7 @@ jobs:
           path: mutation-reports
 
       - name: Score the package
-        run: node scripts/mutation-aggregate.mjs mutation-reports --package ui --shards 20 --break 90
+        run: node scripts/mutation-aggregate.mjs mutation-reports --package ui --shards 30 --break 90
 
   # packages/db, SHARDED across a matrix. Stryker over @waitron/db mutates thousands of
   # database-backed mutants (every suite here opens a venue database and applies a schema), which on
@@ -184,8 +187,9 @@ jobs:
   # working), but the mutation phase's own ETA was ~10h and it was cancelled at the wall.
   #
   # The fix is parallelism, not a faster suite: mutation cost is mutants ÷ concurrency, and a matrix
-  # gives each shard its OWN 2-vCPU runner. scripts/mutation-shard.mjs bin-packs the package's source
-  # files by size into one `--mutate` slice per shard; `strategy.job-total` feeds the COUNT to the script,
+  # gives each shard its OWN 2-vCPU runner. scripts/mutation-shard.mjs gives each range of a file it
+  # splits a shard of its own and bin-packs the other source files by size into the rest, one
+  # `--mutate` slice per shard; `strategy.job-total` feeds the COUNT to the script,
   # so N is defined once — here in the matrix list — and the two cannot drift.
   #
   # TEN shards, not fewer, because the per-mutant cost is WILDLY uneven and clusters. Measured on run
@@ -193,10 +197,9 @@ jobs:
   # file — the core-table schema (orders/tenants/sales/daily-closes/incidents), exercised by nearly
   # every test — reruns a huge covering set, while a
   # leaf-file mutant is cheap. Byte size is a rough proxy that at N=6 unluckily put orders+tenants in
-  # one shard (the 4h50 one). At N=10 the bin-packing isolates each expensive file in its OWN shard
-  # (verified: sales/orders/tenants/daily-closes/incidents each land alone), so the
-  # slowest shard is bounded by the single priciest FILE. More shards past that don't lower the floor
-  # (a file isn't split), which is why 10 is the knee rather than an arbitrary bump.
+  # one shard (the 4h50 one). At N=10 each of sales.ts's three ranges runs alone and the other files
+  # share the remaining seven shards: printed with `node scripts/mutation-shard.mjs db <n> 10` on
+  # 2026-10-12, orders, tenants, daily-closes and incidents each share a shard with 13 or 14 others.
   #
   # Each shard re-pays the ~7min dry run: Stryker maps per-test coverage over the WHOLE suite before
   # it mutates anything, and that map cannot be shared across independent jobs. Cheap for a weekly,

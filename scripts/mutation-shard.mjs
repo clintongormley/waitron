@@ -7,25 +7,33 @@ import { fileURLToPath } from "node:url";
  *
  * What is mutated comes from the package's own `stryker.config.json` `mutate` list, so a CI shard
  * and a local `pnpm --filter <package> mutation` measure the same files. The unit of a slice is
- * usually a whole file, but a file whose mutants are covered by nearly the whole suite can dominate
- * a shard alone, so HEAVY_FILES names such files and `splitRanges` cuts each into Stryker
- * `file.ts:startLine-endLine` ranges.
+ * usually a whole file; HEAVY_FILES names the files cut into Stryker `file.ts:startLine-endLine`
+ * ranges by `splitRanges`.
  */
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 /**
- * Per package, the files cut into that many line ranges. A mutant whose span crosses a range
- * boundary is in neither range, so a split drops a few mutants (instrumenter 10.0.0).
+ * Per package, the files cut into that many line ranges, each range run in a shard of its own. A
+ * file's bytes do not predict its cost: what costs is how many tests cover each mutant. A mutant
+ * whose span crosses a range boundary is in neither range, so a split drops a few mutants
+ * (instrumenter 10.0.0).
  *
  * db: `src/schema/sales.ts` alone ran 186min while every other N=10 shard finished <=90min
  * (run 32384997149).
+ * ui, run 38233718266 (30-minute limit): wt-combobox.ts alone hit the limit at 716 of 780 mutants;
+ * wt-data-table.ts in 4 ranges took 4.4, 28.7, 10.3 and 19.5min; wt-dialog.ts alone hit the
+ * limit at 325 of 382, 21% of its mutants static and 42 timed out.
  *
  * @type {Record<string, Record<string, number>>}
  */
 export const HEAVY_FILES = {
   db: { "src/schema/sales.ts": 3 },
-  ui: { "src/components/wt-data-table.ts": 4 },
+  ui: {
+    "src/components/wt-combobox.ts": 4,
+    "src/components/wt-data-table.ts": 12,
+    "src/components/wt-dialog.ts": 6,
+  },
 };
 
 /**
@@ -87,23 +95,30 @@ export function shardFiles(pkg, shard, total, root = REPO_ROOT) {
       `HEAVY_FILES names "${missing[0]}" but no such mutate-eligible file exists — renamed or removed?`,
     );
 
-  const files = [];
-  for (const path of paths) {
-    const full = join(packageDir, path);
-    const size = statSync(full).size;
-    const parts = heavy[path];
-    if (parts) {
-      const lineCount = readFileSync(full, "utf8").split("\n").length;
-      // Weight each range by the WHOLE file's size, not its share, so the packer places the
-      // ranges early, while shards are still near-empty, and each lands in a distinct shard.
-      for (const range of splitRanges(path, lineCount, parts)) files.push({ path: range, size });
-    } else files.push({ path, size });
-  }
+  // Shards 1..ranges.length are the heavy files' ranges, files by path and ranges by line; the
+  // other files are packed by bytes into the shards after them.
+  const ranges = Object.keys(heavy)
+    .sort()
+    .flatMap((path) => {
+      const lineCount = readFileSync(join(packageDir, path), "utf8").split("\n").length;
+      return splitRanges(path, lineCount, heavy[path]);
+    });
+  const others = paths
+    .filter((path) => !Object.hasOwn(heavy, path))
+    .map((path) => ({ path, size: statSync(join(packageDir, path)).size }));
+  if (total < ranges.length || (total === ranges.length && others.length > 0))
+    throw new Error(
+      `${total} shards cannot hold the ${ranges.length} heavy ranges plus the other files — raise the shard count`,
+    );
 
-  const selected = assignShards(files, total)[shard - 1];
+  const shards = [
+    ...ranges.map((range) => [range]),
+    ...assignShards(others, total - ranges.length),
+  ];
+  const selected = shards[shard - 1];
   if (selected.length === 0)
     throw new Error(
-      `shard ${shard}/${total} selected no files — more shards than the ${files.length} mutate slices?`,
+      `shard ${shard}/${total} selected no files — more shards than the ${ranges.length + others.length} mutate slices?`,
     );
   return selected;
 }

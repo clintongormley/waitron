@@ -91,7 +91,7 @@ describe("every mutation-tested package declares the bar it fails at", () => {
     // `high` and `low` only colour the report; `break` is the one key that would gate a shard.
     expect(config.thresholds?.break).toBeUndefined();
     expect(runLines()).toContain(
-      `run: node scripts/mutation-aggregate.mjs mutation-reports --package ui --shards 20 --break ${BAR}`,
+      `run: node scripts/mutation-aggregate.mjs mutation-reports --package ui --shards 30 --break ${BAR}`,
     );
   });
 });
