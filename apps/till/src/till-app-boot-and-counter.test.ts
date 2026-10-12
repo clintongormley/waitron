@@ -12,6 +12,7 @@ import {
 import indexHtml from "../index.html?raw";
 import { productUnit } from "./widgets/product-name.js";
 import { TillApp } from "./till-app.js";
+import { SessionActivity } from "./session-activity.js";
 import { ServerRouter } from "./api/server-router.js";
 import { TillApi as TillClient } from "./api/client.js";
 import { setLocale, t } from "./i18n/t.js";
@@ -5204,5 +5205,216 @@ describe("till-app when a box update meets a box reset or a refused device", () 
     await flush(el);
     expect(updateBar(el)).toBeNull();
     expect(reload).not.toHaveBeenCalled();
+  });
+});
+
+describe("own card payment and idle sign-out (A532)", () => {
+  afterEach(() => vi.useRealTimers());
+
+  async function waiting(pay: unknown, overrides: Record<string, unknown> = {}) {
+    const { el } = await mountApp(
+      {
+        getTill: vi.fn().mockResolvedValue({
+          ...till,
+          inactivityTimeoutSeconds: 300,
+          cardProvider: "simulator",
+          activeReaders: [{ id: "demo", name: "Demo", provider: "simulator" }],
+        }),
+        pay,
+        ...overrides,
+      },
+      { sessionActivity: new SessionActivity() },
+    );
+    const c = await toCounter(el);
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+    emit(c, "pointerdown");
+    c.store.addProduct(c.products[0]!, "1");
+    await el.updateComplete;
+    emit(c, "collect-card", { readerId: "demo" });
+    await vi.advanceTimersByTimeAsync(0);
+    return { el, c };
+  }
+
+  it("restarts idle sign-out after a confirmed cancellation even if the original request never answers", async () => {
+    const cancel = vi.fn().mockResolvedValue(true);
+    const pay = vi.fn(() => new Promise(() => {}));
+    const { el, c } = await waiting(pay, { cancelDemoReaderPayment: cancel });
+    expect(pay).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(100_000);
+    emit(c, "cancel-demo-reader");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(cancel).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(299_999);
+    expect(privateState<string>(el, "operatorName")).toBe("Ana");
+    await vi.advanceTimersByTimeAsync(1);
+    expect(privateState<string>(el, "operatorName")).toBe("");
+  });
+
+  it.each(["declined", "network_unavailable", "timeout"])(
+    "restarts the full idle time after %s",
+    async (outcome) => {
+      let answer!: (value: unknown) => void;
+      const { el } = await waiting(
+        vi.fn(
+          () =>
+            new Promise((resolve) => {
+              answer = resolve;
+            }),
+        ),
+      );
+      await vi.advanceTimersByTimeAsync(300_001);
+      expect(privateState<string>(el, "operatorName")).toBe("Ana");
+      answer({ outcome });
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(299_999);
+      expect(privateState<string>(el, "operatorName")).toBe("Ana");
+      await vi.advanceTimersByTimeAsync(1);
+      expect(privateState<string>(el, "operatorName")).toBe("");
+    },
+  );
+
+  it("locks after ten minutes of a stuck own reader request and ignores its late capture", async () => {
+    let answer!: (value: unknown) => void;
+    const { el, c } = await waiting(
+      vi.fn(
+        () =>
+          new Promise((resolve) => {
+            answer = resolve;
+          }),
+      ),
+    );
+    await vi.advanceTimersByTimeAsync(599_999);
+    emit(c, "pointerdown");
+    expect(privateState<string>(el, "operatorName")).toBe("Ana");
+    await vi.advanceTimersByTimeAsync(1);
+    expect(privateState<string>(el, "operatorName")).toBe("");
+    answer({
+      outcome: "captured",
+      ticket: {
+        ...saleResult,
+        tender: { method: "card", charged: "3.00", tip: "0.00", reference: null },
+      },
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(ticket(el)).toBeNull();
+    expect(lock(el)).not.toBeNull();
+  });
+
+  it("does not reset a new operator's idle time when the departed operator's card answer arrives", async () => {
+    let answer!: (value: unknown) => void;
+    const { el } = await waiting(
+      vi.fn(
+        () =>
+          new Promise((resolve) => {
+            answer = resolve;
+          }),
+      ),
+    );
+    await vi.advanceTimersByTimeAsync(600_000);
+    expect(privateState<string>(el, "operatorName")).toBe("");
+    emit(lock(el)!, "logged-in", { personId: "p2", displayName: "Bea", permissions: [] });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(privateState<string>(el, "operatorName")).toBe("Bea");
+    await vi.advanceTimersByTimeAsync(200_000);
+    answer({
+      outcome: "captured",
+      ticket: {
+        ...saleResult,
+        tender: { method: "card", charged: "3.00", tip: "0.00", reference: null },
+      },
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(ticket(el)).toBeNull();
+    await vi.advanceTimersByTimeAsync(100_000);
+    expect(privateState<string>(el, "operatorName")).toBe("");
+  });
+
+  it("restarts idle sign-out when the reader request throws", async () => {
+    let refuse!: (error: unknown) => void;
+    const { el } = await waiting(
+      vi.fn(
+        () =>
+          new Promise((_resolve, reject) => {
+            refuse = reject;
+          }),
+      ),
+    );
+    await vi.advanceTimersByTimeAsync(300_001);
+    expect(privateState<string>(el, "operatorName")).toBe("Ana");
+    refuse({ code: "device.forbidden_action", status: 403 });
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(300_000);
+    expect(privateState<string>(el, "operatorName")).toBe("");
+  });
+
+  it("keeps reader protection when cancellation was refused", async () => {
+    const cancel = vi.fn().mockResolvedValue(false);
+    const { el, c } = await waiting(
+      vi.fn(() => new Promise(() => {})),
+      { cancelDemoReaderPayment: cancel },
+    );
+    await vi.advanceTimersByTimeAsync(100_000);
+    emit(c, "cancel-demo-reader");
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(300_000);
+    expect(privateState<string>(el, "operatorName")).toBe("Ana");
+    await vi.advanceTimersByTimeAsync(200_000);
+    expect(privateState<string>(el, "operatorName")).toBe("");
+  });
+
+  it("locks normally while no card request is running", async () => {
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({ ...till, inactivityTimeoutSeconds: 300 }),
+    });
+    const c = await toCounter(el);
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+    emit(c, "pointerdown");
+    await vi.advanceTimersByTimeAsync(300_000);
+    expect(privateState<string>(el, "operatorName")).toBe("");
+    expect(lock(el)).not.toBeNull();
+  });
+
+  it("retains the signed-in operator and shows the captured receipt after the idle time passes at the reader", async () => {
+    let answer!: (result: unknown) => void;
+    const pay = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+    );
+    const { el } = await mountApp(
+      {
+        getTill: vi
+          .fn()
+          .mockResolvedValue({ ...till, inactivityTimeoutSeconds: 300, cardProvider: "simulator" }),
+        pay,
+      },
+      { sessionActivity: new SessionActivity() },
+    );
+    const c = await toCounter(el);
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+    // Start a fresh idle period on the same clock that the reader wait advances.
+    emit(c, "pointerdown");
+    c.store.addProduct(c.products[0]!, "1");
+    await el.updateComplete;
+    emit(c, "collect-card", {});
+    await vi.waitFor(() => expect(pay).toHaveBeenCalledOnce());
+    await vi.advanceTimersByTimeAsync(300_001);
+    expect(privateState<string>(el, "operatorName")).toBe("Ana");
+    expect(lock(el)).toBeNull();
+    answer({
+      outcome: "captured",
+      ticket: {
+        ...saleResult,
+        tender: { method: "card", charged: "3.00", tip: "0.00", reference: null },
+      },
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    await el.updateComplete;
+    expect(ticket(el)).not.toBeNull();
+    await vi.advanceTimersByTimeAsync(299_999);
+    expect(privateState<string>(el, "operatorName")).toBe("Ana");
+    await vi.advanceTimersByTimeAsync(1);
+    expect(privateState<string>(el, "operatorName")).toBe("");
   });
 });

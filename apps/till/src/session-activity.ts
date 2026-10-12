@@ -26,6 +26,7 @@ interface SessionActivityConfig {
   /** Seconds of no interaction before {@link SessionActivityConfig.onIdle}; `null` disables idle logout. */
   timeoutSeconds: number | null;
   onIdle: () => void;
+  readerPaymentPending?: boolean;
 }
 
 function detectWakeLock(): WakeLockLike | undefined {
@@ -60,6 +61,7 @@ export class SessionActivity {
   #wakeGeneration = 0;
   /** When the idle logout is due; a timer that fires before it re-arms for the remainder. */
   #deadline = 0;
+  #readerPaymentStarted: number | undefined;
 
   constructor(deps: SessionActivityDeps = {}) {
     this.#wakeLock = deps.wakeLock ?? detectWakeLock();
@@ -70,6 +72,11 @@ export class SessionActivity {
 
   /** Update who/what the device is; re-applies the wake lock and idle timer immediately when active. */
   configure(config: SessionActivityConfig): void {
+    if (config.readerPaymentPending) {
+      this.#readerPaymentStarted ??= this.#now();
+    } else {
+      this.#readerPaymentStarted = undefined;
+    }
     this.#config = config;
     if (this.#active) {
       void this.#applyWakeLock();
@@ -160,8 +167,13 @@ export class SessionActivity {
     this.#clearIdleTimer();
     if (!this.#shouldRunIdleTimer()) return;
     const ms = this.#config.timeoutSeconds! * 1000;
-    this.#deadline = this.#now() + ms;
-    this.#timer = this.#setTimer(this.#onTimer, ms);
+    const now = this.#now();
+    // A stuck request cannot renew its protection through taps or configuration refreshes.
+    this.#deadline =
+      this.#readerPaymentStarted === undefined
+        ? now + ms
+        : this.#readerPaymentStarted + Math.max(ms, 600_000);
+    this.#timer = this.#setTimer(this.#onTimer, Math.max(0, this.#deadline - now));
   }
 
   #clearIdleTimer(): void {

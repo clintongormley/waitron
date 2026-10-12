@@ -2758,6 +2758,68 @@ describe("till-app: a bill payment on the card reader", () => {
     return el;
   }
 
+  it("A532 leaves cash payment waits subject to the ordinary idle sign-out", async () => {
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({ ...till, inactivityTimeoutSeconds: 30 }),
+      takeBillPayment: vi.fn(() => new Promise(() => {})),
+    });
+    await openTable(el);
+    await openDialog(el, "contribution");
+    await type(el, "amount", "40");
+    await type(el, "tendered", "50");
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    expect(api.takeBillPayment).toHaveBeenCalledOnce();
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+    try {
+      emit(el, "pointerdown");
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect((el as unknown as { operatorName: string }).operatorName).toBe("");
+      expect(dialog(el)).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("A532 keeps its own reader payment signed in beyond the idle time, then restarts the full idle period", async () => {
+    let answer!: (value: BillPaymentResult) => void;
+    const take = vi.fn(
+      () =>
+        new Promise<BillPaymentResult>((resolve) => {
+          answer = resolve;
+        }),
+    );
+    const el = await takeOnReader(take, {
+      getTill: vi.fn().mockResolvedValue({
+        ...till,
+        cardProvider: "stripe_terminal",
+        capabilities: ["print-receipt", "integrated-card-payment"],
+        activeReaders: readers,
+        defaultReaderId: readers[0]!.id,
+        inactivityTimeoutSeconds: 30,
+      }),
+    });
+    expect(take).toHaveBeenCalledOnce();
+    const operator = (el as unknown as { operatorName: string }).operatorName;
+    expect(operator).not.toBe("");
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+    try {
+      emit(el, "pointerdown");
+      await vi.advanceTimersByTimeAsync(30_001);
+      expect((el as unknown as { operatorName: string }).operatorName).toBe(operator);
+      answer(onReader("received", "received", { received: "40.00", outstanding: "80.00" }));
+      await vi.advanceTimersByTimeAsync(0);
+      await el.updateComplete;
+      expect(text(inDialog(el, "[data-pay-taken]"))).toBe(t("bill_pay.taken"));
+      await vi.advanceTimersByTimeAsync(29_999);
+      expect((el as unknown as { operatorName: string }).operatorName).toBe(operator);
+      await vi.advanceTimersByTimeAsync(1);
+      expect((el as unknown as { operatorName: string }).operatorName).toBe("");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("charges the card on the reader picked, and shows the bill's new balance", async () => {
     const takeBillPayment = vi
       .fn()
