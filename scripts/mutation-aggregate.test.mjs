@@ -238,11 +238,33 @@ describe("the command", () => {
       report("src/b.ts", { status: "Killed" }, { status: "Survived" }),
     ]);
 
-    const result = run(root, "--shards", "2", "--break", "70");
+    const result = run(root, "--package", "db", "--shards", "2", "--break", "70");
 
     expect(result.stderr).toBe("");
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("75.00%");
+  });
+
+  it("names the package it was given in the score line", () => {
+    const root = shardDirectory([report("src/a.ts", { status: "Killed" })]);
+
+    const result = run(root, "--package", "ui", "--shards", "1", "--break", "50");
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("@waitron/ui mutation score 100.00%");
+    expect(result.stdout).not.toContain("@waitron/db");
+  });
+
+  it("refuses to score without a --package, saying how to call it", () => {
+    const root = shardDirectory([report("src/a.ts", { status: "Killed" })]);
+
+    const result = run(root, "--shards", "1", "--break", "50");
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "usage: mutation-aggregate.mjs <dir> --package <name> --shards <n> --break <score>",
+    );
+    expect(result.stdout).toBe("");
   });
 
   it("refuses when a shard is missing, however many json files are lying around", () => {
@@ -252,7 +274,7 @@ describe("the command", () => {
     ]);
     writeFileSync(join(root, "mutation-report-db-shard-1", "second.json"), JSON.stringify({}));
 
-    const result = run(root, "--shards", "3", "--break", "50");
+    const result = run(root, "--package", "db", "--shards", "3", "--break", "50");
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("expected 3 shard reports");
@@ -261,7 +283,7 @@ describe("the command", () => {
   it("fails when the package is below the bar", () => {
     const root = shardDirectory([report("src/a.ts", { status: "Killed" }, { status: "Survived" })]);
 
-    const result = run(root, "--shards", "1", "--break", "90");
+    const result = run(root, "--package", "db", "--shards", "1", "--break", "90");
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("50.00%");
@@ -271,7 +293,7 @@ describe("the command", () => {
   it("refuses to score a run that is missing a shard's report", () => {
     const root = shardDirectory([report("src/a.ts", { status: "Killed" })]);
 
-    const result = run(root, "--shards", "10", "--break", "90");
+    const result = run(root, "--package", "db", "--shards", "10", "--break", "90");
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("found 1 in 1 file(s)");
@@ -285,7 +307,7 @@ describe("the command", () => {
     ]);
 
     // The package as a whole clears 60 (two of three mutants detected); one file does not.
-    const result = run(root, "--shards", "2", "--break", "60");
+    const result = run(root, "--package", "db", "--shards", "2", "--break", "60");
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("src/bad.ts");
@@ -305,7 +327,7 @@ describe("the command", () => {
       report("src/good.ts", { status: "Killed" }),
     ]);
 
-    const result = run(root, "--shards", "2", "--break", "90");
+    const result = run(root, "--package", "db", "--shards", "2", "--break", "90");
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain(
@@ -320,7 +342,7 @@ describe("the command", () => {
       report("src/good.ts", { status: "Killed" }),
     ]);
 
-    const result = run(root, "--shards", "2", "--break", "0");
+    const result = run(root, "--package", "db", "--shards", "2", "--break", "0");
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("not measured — 1 Ignored  src/unmeasured.ts");
@@ -332,7 +354,7 @@ describe("the command", () => {
       report("src/good.ts", { status: "Killed" }),
     ]);
 
-    const result = run(root, "--shards", "2", "--break", "90");
+    const result = run(root, "--package", "db", "--shards", "2", "--break", "90");
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("not measured — no mutants  src/empty.ts");
@@ -344,7 +366,7 @@ describe("the command", () => {
       report("src/good.ts", { status: "Killed" }, { status: "Killed" }, { status: "Killed" }),
     ]);
 
-    const result = run(root, "--shards", "2", "--break", "50");
+    const result = run(root, "--package", "db", "--shards", "2", "--break", "50");
 
     expect(result.status).toBe(0);
     expect(result.stdout).toMatch(/ 0\.00%\s+0\/2\s+src\/dead\.ts/);
