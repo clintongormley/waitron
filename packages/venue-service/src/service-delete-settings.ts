@@ -15,6 +15,7 @@ import { menuPeriods, menuPeriodStaffMenus, menuDayTimetables, menuSlots } from 
 import { zoneClosedTimes } from "./schema/zone-closed-times.js";
 import { zoneExtensions } from "./schema/zone-extensions.js";
 import { periodExtensions } from "./schema/period-extensions.js";
+import { departmentDays } from "./schema/seasons.js";
 import {
   departmentTransferDesks,
   departmentTransferDestinations,
@@ -390,6 +391,7 @@ export async function clearServiceDeleteSettings(
     await tx
       .delete(menuDayTimetables)
       .where(eq(menuDayTimetables.departmentId, selected.departmentId));
+    await tx.delete(departmentDays).where(eq(departmentDays.departmentId, selected.departmentId));
     await tx.delete(menuPeriods).where(eq(menuPeriods.departmentId, selected.departmentId));
     await tx
       .delete(departmentSalePolicies)

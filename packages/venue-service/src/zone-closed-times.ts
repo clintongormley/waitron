@@ -13,6 +13,12 @@ import {
   serviceMomentAt,
 } from "./service-day.js";
 import { namedDaysOn } from "./named-days.js";
+import {
+  joinTouching,
+  readZoneSeasonWeeks,
+  targetSeasons,
+  writeZoneSeasonWeek,
+} from "./season-weeks.js";
 import { specialDates } from "./schema/hours.js";
 import { zoneExtensions } from "./schema/zone-extensions.js";
 import { zoneClosedTimes } from "./schema/zone-closed-times.js";
@@ -26,6 +32,7 @@ export async function replaceZoneClosedWeek(
   days: unknown,
   expectedClockRevision: number,
   at: Date = new Date(),
+  options: { seasonId?: string } = {},
 ): Promise<void> {
   await resolveZoneContext(tx, cfg, zoneId);
   const clock = await readLocationClock(tx, cfg.locationId);
@@ -49,17 +56,31 @@ export async function replaceZoneClosedWeek(
     );
     week.set(weekday, parsed[0]!);
   }
-  const current = await tx
-    .select()
-    .from(zoneClosedTimes)
-    .where(and(eq(zoneClosedTimes.zoneId, zoneId), isNotNull(zoneClosedTimes.weekday)));
-  const changed = [...week].some(
-    ([weekday, ranges]) =>
-      !sameScheduleRanges(
-        current.filter((row) => row.weekday === weekday),
-        ranges,
-      ),
+  const targets = await targetSeasons(tx, cfg, options.seasonId);
+  const seasonWeek = [0, 1, 2, 3, 4, 5, 6].map((weekday) =>
+    joinTouching(week.get(weekday)!, () => true),
   );
+  let changed: boolean;
+  if (options.seasonId === undefined) {
+    const current = await tx
+      .select()
+      .from(zoneClosedTimes)
+      .where(and(eq(zoneClosedTimes.zoneId, zoneId), isNotNull(zoneClosedTimes.weekday)));
+    changed = [...week].some(
+      ([weekday, ranges]) =>
+        !sameScheduleRanges(
+          current.filter((row) => row.weekday === weekday),
+          ranges,
+        ),
+    );
+  } else {
+    const current = (await readZoneSeasonWeeks(tx, cfg, [zoneId]))
+      .get(zoneId)
+      ?.get(options.seasonId);
+    changed = seasonWeek.some(
+      (ranges, weekday) => !sameScheduleRanges(current?.[weekday] ?? [], ranges),
+    );
+  }
   await assertBusinessDayScheduleWrite(
     tx,
     cfg,
@@ -68,20 +89,23 @@ export async function replaceZoneClosedWeek(
     expectedClockRevision,
     clock,
   );
-  await tx
-    .delete(zoneClosedTimes)
-    .where(and(eq(zoneClosedTimes.zoneId, zoneId), isNotNull(zoneClosedTimes.weekday)));
-  for (const [weekday, ranges] of week) {
-    if (ranges.length > 0)
-      await tx.insert(zoneClosedTimes).values(
-        ranges.map((range) => ({
-          zoneId,
-          weekday,
-          startsAt: storedTime(range.startsAt),
-          endsAt: storedTime(range.endsAt),
-        })),
-      );
+  if (options.seasonId === undefined) {
+    await tx
+      .delete(zoneClosedTimes)
+      .where(and(eq(zoneClosedTimes.zoneId, zoneId), isNotNull(zoneClosedTimes.weekday)));
+    for (const [weekday, ranges] of week) {
+      if (ranges.length > 0)
+        await tx.insert(zoneClosedTimes).values(
+          ranges.map((range) => ({
+            zoneId,
+            weekday,
+            startsAt: storedTime(range.startsAt),
+            endsAt: storedTime(range.endsAt),
+          })),
+        );
+    }
   }
+  for (const season of targets) await writeZoneSeasonWeek(tx, zoneId, season.id, seasonWeek);
 }
 
 export async function saveZoneClosedDate(
