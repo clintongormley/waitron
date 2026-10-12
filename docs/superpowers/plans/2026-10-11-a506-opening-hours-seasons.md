@@ -1735,7 +1735,7 @@ at `view=week&department=all`, both still drawn by `opening-hours-screen.ts` wit
 `opening-hours-station.ts`, `opening-hours-all.ts` and `service-grid.ts`, showing the current
 season's week.
 
-### Task 8.0: Re-check on the base, A493 and A435-6 for `department-zones.ts`.
+### Task 8.0: Re-check on the base, A493 and A435-6 for `zone-closed-week.ts` and `zone-edit-dialog.ts`.
 
 ### Task 8.1: Saving a season's weeks in one request
 

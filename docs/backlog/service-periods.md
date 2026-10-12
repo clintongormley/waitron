@@ -98,7 +98,7 @@ A506-3b landed in #1599: the zone editor's closed-times summary reads the curren
 and names the season; a zone's single `week` left the Opening hours model.
 
 **Left open by A506-1, for the later parts.**
-- No test yet gives a second department its own week on the same named day.
+- No test yet gives a second department its own paint on the same special day.
 
 **Left open by A506-2, for the later parts.**
 - A506-6: when seasons become editable, adding, deleting or moving one must re-check end offsets
@@ -130,13 +130,13 @@ and names the season; a zone's single `week` left the Opening hours model.
   slot by its sorted position, not its position in the request (read in the code, not run).
 - The clock-skip check runs before touching ranges are joined: two halves of one period meeting at a
   skipped 02:30 are refused, while the joined range is accepted.
-- A506-5, when named days go: the rule "special day, then named day, then season" is written out in
-  `day-resolver.ts` (twice), `business-day-schedule.ts` and `period-end-offset.ts`, and the end-offset
-  check relies on list order for it; special-day paint is read by four separately written queries in
-  `special-days.ts` and `business-day-schedule.ts`; `specialDateIn` and `sharedSpecialDate` live in the
-  database module `special-days.ts` rather than the browser-safe repeat rules, which leaves import
-  loops with `business-day-schedule.ts` and `menu-timetable.ts`. Removing named days is the moment to
-  collapse each to one place.
+- With named days gone (A506-5), the rule "special day, then season" is still written out in
+  `day-resolver.ts` (twice, for departments and for zones), `business-day-schedule.ts` and
+  `period-end-offset.ts`, and the end-offset check relies on list order for it; special-day paint is
+  read by four separately written queries in `special-days.ts` and `business-day-schedule.ts`;
+  `specialDateIn` and `sharedSpecialDate` live in the database module `special-days.ts` rather than
+  the browser-safe repeat rules, which leaves import loops with `business-day-schedule.ts` and
+  `menu-timetable.ts`. Each could collapse to one place.
 - `business-day-schedule.ts` copies the changeover lookup of `packages/shared/src/business-day-clock.ts`
   (`oldCutoverOn`) to avoid validating the clock on every day; a lookup exported from `shared` that
   validates once would remove the copy.
@@ -148,6 +148,14 @@ and names the season; a zone's single `week` left the Opening hours model.
   (`packages/venue-service/src/dashboard/zone-closed-week.ts`) picks them when neither the current
   season nor a first season exists. Provisioning gives every venue four seasons, so this is
   believed unreachable — read in the code, not run; no test names those keys.
+- A department or zone delete's preview never counts a special day's painted hours, yet the delete
+  removes them: `readServiceDeleteSettings` (`packages/venue-service/src/service-delete-settings.ts`) counts
+  only `department_days` and `zone_days` rows that have a season, while
+  `clearServiceDeleteSettings` deletes all of the department's `department_days` and the zones'
+  `zone_days`, special-day rows included. The season-only count predates A506-5 (it came with A506-1,
+  #1577; special-day paint was first written in A506-4); until A506-5 the preview's timetable, slot and
+  closed-time lines at least counted the old named-day hours, so now it discloses no dated hours at
+  all.
 
 **Why.** One standard week does not fit a venue whose hours change with the season, and copying a
 week into future dates would bury the special days among ordinary ones.
