@@ -147,6 +147,22 @@ describe.each(["light", "dark"] as const)("floor-plan-editor a11y (%s theme)", (
     await expectNoA11yViolations(host);
   });
 
+  it("shows Add joined table refused with fields missing, accessibly", async () => {
+    const locale = currentLocale();
+    setLocale("en-GB");
+    onTestFinished(() => setLocale(locale));
+    const { el, host } = await open(stubApi(vi.fn().mockResolvedValue(offPlan)), theme);
+    const { panel, dialog } = await openAddJoinedTable(el);
+    await chooseOption(dialog.querySelector("[name=table-name]")!, "Long table");
+    await panel.updateComplete;
+    dialog.querySelector<HTMLElement>("wt-button[data-action=add-confirm]")!.click();
+    await panel.updateComplete;
+    expect((dialog.querySelector("[name=made-of]") as HTMLElement & { error: string }).error).toBe(
+      "Choose at least 2 tables.",
+    );
+    await expectNoA11yViolations(host);
+  });
+
   it("shows Add tables open, automatic, accessibly", async () => {
     const locale = currentLocale();
     setLocale("en-GB");
