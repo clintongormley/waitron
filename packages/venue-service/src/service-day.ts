@@ -45,8 +45,8 @@ export interface ClosedRange {
   startsAt: string;
   endsAt: string;
 }
-type RangeReason = "empty" | "order" | "step" | "overlap";
-function parseRanges<T extends ClosedRange>(
+export type RangeReason = "empty" | "order" | "step" | "overlap";
+export function parseRanges<T extends ClosedRange>(
   value: unknown,
   field: string,
   cutover: string,

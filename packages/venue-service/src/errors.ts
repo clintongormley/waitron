@@ -159,6 +159,17 @@ declare module "@waitron/shared" {
     "special_date.not_found": { specialDateId: string };
     "special_date.date_taken": { date: string };
     "season.not_found": { seasonId: string };
+    "special_day.invalid": {
+      field: string;
+      date?: string;
+      reason?: "empty" | "order" | "step" | "overlap" | "clock_skips" | "end_offset";
+      departmentId?: string;
+      zoneId?: string;
+      periodId?: string;
+    };
+    "special_day.not_found": { specialDayId: string };
+    /** Another special day already holds `date` (the first day the two would share). */
+    "special_day.date_taken": { date: string; specialDayId: string; name: string };
     "zone_closed_time.invalid": { field: string; reason?: "empty" | "order" | "step" | "overlap" };
     "special_date.keeps_week": { specialDateId: string };
     "station.always_open": { stationId: string };
