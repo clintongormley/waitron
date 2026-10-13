@@ -12,7 +12,8 @@ export interface StoredObject {
 /** The caller's way to stop one call. */
 export type StorageCall = FileCall;
 
-/** The most `put` sends or `get` holds. Archives travel by `putFile` and `getFile`, never these. */
+/** The most a bucket destination's `put` sends, and the most any destination's `get` holds.
+ * Archives travel by `putFile` and `getFile`, never these. */
 export const SMALL_OBJECT_MAX_BYTES = 16 * 1024 * 1024;
 
 export function objectTooLarge(): AppError {

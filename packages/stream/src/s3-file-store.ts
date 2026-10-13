@@ -68,8 +68,9 @@ export interface S3FileStore {
   /** The object's body, destroyed when the signal is cancelled. */
   readStream(key: string, call: FileCall): Promise<Readable>;
   /**
-   * Every object under `prefix`, across every page. A listed key outside `prefix` refuses the whole
-   * listing; a key inside it is returned whatever its shape, for the caller's own naming rules.
+   * Every object under `prefix`, across every page. A listed key outside `prefix`, a key listed
+   * twice, or a size that is not a whole, non-negative number refuses the whole listing; a key
+   * inside it is returned whatever its shape, for the caller's own naming rules.
    */
   list(prefix: string, call: FileCall): Promise<ListedFile[]>;
   /** As `ObjectStore.deleteMany`; a key the bucket answers `NoSuchKey` counts as deleted. */

@@ -4159,10 +4159,13 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   holding them in memory (A538-2). Tasks 3 to 10 and the real-AWS evidence are open; Task 3 owns
   the per-destination time limit. Points left for Task 3 by A538-2: `StorageBackend` has no
   `close()`, so a bucket client would never be disposed; the sweep's stop signal does not reach
-  destination calls yet; and the folder destination reports a cancelled call as Node's own
-  `AbortError` where the bucket destination reports `backup.destination_request_failed`.
+  destination calls yet; and the folder destination reports a cancelled call as an uncoded error (the
+  signal's reason, or Node's `AbortError`) where the bucket destination reports
+  `backup.destination_request_failed`.
   `S3FileStore`'s listing and batch delete repeat `S3ObjectStore`'s (`packages/stream/src/s3-store.ts`)
-  with different error codes; share them.
+  with different error codes, and only the file store's refuses a repeated key or bad size and
+  counts `NoSuchKey` as deleted; share them, deciding whether the bucket stream takes those checks
+  too.
 
 - **Whole-state-volume capture** (its own §5-reviewed slice): capture the whole state directory EXCEPT
   an explicit exclusion set, with a completeness guard that fails when a new top-level entry is
