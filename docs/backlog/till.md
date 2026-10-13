@@ -1375,6 +1375,9 @@ From **Variants as products (#511–#556) — what is left open.** How the model
 - **The floor plan editor's header runs Undo, Redo, Cancel, Save (A502, owner, 2026-10-11).**
   Cancel sits beside Save, after Undo and Redo, as the owner's [mockup 1](mockups/a502-a503-floor-plan-editor/1-editor-table-selected.png) puts it: an
   exception to Cancel on the left ([design-system.md](../developers/design-system.md)).
+- **A turned table's size dots stay on its own sides (A548, owner, 2026-10-12).** At every angle the
+  dots sit on the table's own sides, diagonal on a 30° table; only each dot's cursor follows the way
+  it drags on screen.
 - **Individual tables keep the later floor contract (A435 step 6, 2026-10-11).** Delete is a master
   draft edit with Undo until Save; today's release remains deferred. There is no table active flag
   or immediate table write route. Labels remain unique across the location. Hierarchy Delete is
