@@ -624,7 +624,9 @@ its weeks go with it. A blank or taken name, a malformed or taken start, and del
 season are refused `season.invalid` naming the `field`; an add, a move or a delete re-checks every
 department's end offsets and refuses a clash with `season.invalid`, reason `end_offset`. Every write
 must send `expectedClockRevision`; a stale one refuses an add, a move or a delete with
-`hours.clock_changed`, but not a rename.
+`hours.clock_changed`, but not a rename. An unknown or another venue's `seasonId` is refused
+`season.not_found`, and while a day-cutover change is pending an add, a move or a delete is refused
+`hours.clock_change_pending`.
 
 A configuration transfer carries the five season tables (`VENUE_SERVICE_CONFIGURATION_TRANSFER` in
 `packages/venue-service/src/configuration-transfer.ts`). `importConfigurationTables`
