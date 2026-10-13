@@ -7436,23 +7436,15 @@ async function readTodayTables(
     .leftJoin(floorTodayJoinTables, eq(floorTodayJoinTables.tableId, floorTodayTables.tableId))
     .leftJoin(floorTodayJoins, eq(floorTodayJoins.id, floorTodayJoinTables.joinId))
     .where(eq(diningTables.locationId, locationId));
-  const parts = await tx.execute<{ table_id: string; label: string }>(sql`
-    select part_row.table_id, joined_table.label
-    from floor_reset_table_parts joined_part
-    inner join floor_reset_tables part_row on part_row.id = joined_part.part_reset_table_id
-    inner join floor_reset_tables joined_row on joined_row.id = joined_part.joined_reset_table_id
-    inner join dining_tables joined_table on joined_table.id = joined_row.table_id
-    where joined_table.location_id = ${locationId}
-      and ${stillJoinedPart(sql`part_row.table_id`)}
-  `);
-  const joinedName = new Map(parts.rows.map((part) => [part.table_id, part.label]));
   const copyParts = await tx.execute<{
     joined_id: string;
+    joined_label: string;
     part_id: string;
     label: string;
     still: number;
   }>(sql`
-    select joined_row.table_id as joined_id, part_table.id as part_id, part_table.label,
+    select joined_row.table_id as joined_id, joined_table.label as joined_label,
+      part_table.id as part_id, part_table.label,
       ${stillJoinedPart(sql`part_table.id`)} as still
     from floor_reset_table_parts joined_part
     inner join floor_reset_tables part_row on part_row.id = joined_part.part_reset_table_id
@@ -7481,9 +7473,12 @@ async function readTodayTables(
     }
     return entry;
   };
+  const joinedName = new Map<string, string>();
   for (const part of copyParts.rows) {
     const entry = entryOf(part.joined_id);
-    if (part.still) entry.parts.push({ id: part.part_id, label: part.label });
+    if (!part.still) continue;
+    entry.parts.push({ id: part.part_id, label: part.label });
+    joinedName.set(part.part_id, part.joined_label);
   }
   const splitOffFrom = new Map<string, string>();
   for (const split of splits.rows) {
