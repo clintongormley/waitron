@@ -119,7 +119,7 @@ export class PainterFrame extends LitElement {
   @property({ attribute: false }) coordinator?: LeaveCoordinator;
   /** A save is in flight: Save shows it, and nothing closes the frame. */
   @property({ type: Boolean }) busy = false;
-  /** A refusal naming no field, shown beside Save. */
+  /** The message shown beside Save: a refused save, or a notice from the host. */
   @property() refusal = "";
 
   private readonly beforeClose = async (reason: LeaveReason): Promise<boolean> => {

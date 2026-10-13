@@ -1,5 +1,6 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
+import { ifDefined } from "lit/directives/if-defined.js";
 import { styleMap } from "lit/directives/style-map.js";
 import { capturePointer, releasePointer } from "@waitron/dashboard-kit";
 import "@waitron/ui/src/components/wt-button.js";
@@ -111,6 +112,18 @@ export class PaintGrid extends LitElement {
         font-size: var(--wt-font-size-sm);
         font-weight: var(--wt-font-weight-bold);
         border-block-end: 1px solid var(--wt-color-border);
+      }
+      .heading[data-error] {
+        color: var(--wt-color-danger);
+        border-block-end: var(--wt-field-line-width-active) solid var(--wt-color-danger);
+      }
+      .column-error {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
       }
       .heading.corner {
         left: 0;
@@ -288,6 +301,8 @@ export class PaintGrid extends LitElement {
   @property({ attribute: false }) chosen: string | null | undefined = undefined;
   @property() cutover = "06:00";
   @property({ type: Boolean }) closedErases = true;
+  /** A refused save's message per column key: the heading is marked and the day described by it. */
+  @property({ attribute: false }) columnErrors: ReadonlyMap<string, string> = new Map();
   /** What a selected block may change to; every period and Closed when unset. */
   @property({ attribute: false }) paintable: readonly (string | null)[] | undefined = undefined;
 
@@ -762,8 +777,18 @@ export class PaintGrid extends LitElement {
           <div class="heading corner"></div>
           ${this.columns.map(
             (column) =>
-              html`<div class="heading" data-column=${column.key}>
-                <span>${column.label}</span
+              html`<div
+                class="heading"
+                data-column=${column.key}
+                ?data-error=${this.columnErrors.has(column.key)}
+              >
+                <span>${column.label}</span>${
+                  this.columnErrors.has(column.key)
+                    ? html`<span class="column-error" id=${`column-error-${column.key}`}
+                        >${this.columnErrors.get(column.key)}</span
+                      >`
+                    : nothing
+                }
                 ><slot name=${`column-menu-${column.key}`}
                   ><wt-row-actions
                     icon="kebab"
@@ -798,6 +823,9 @@ export class PaintGrid extends LitElement {
               class="day"
               role="group"
               aria-label=${column.label}
+              aria-describedby=${ifDefined(
+                this.columnErrors.has(column.key) ? `column-error-${column.key}` : undefined,
+              )}
               data-column=${column.key}
               tabindex="-1"
               @lostpointercapture=${this.#abort}

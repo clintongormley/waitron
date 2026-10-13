@@ -34,6 +34,13 @@ type Period = Department["periods"][number];
 type Week = Map<string, Paint[]>;
 /** One week per department (`d:<id>`) and per zone (`z:<id>`) of the season being painted. */
 type Draft = Map<string, Week>;
+/** A refused save: its message beside Save, and the department or zone and day it named. */
+interface Refused {
+  message: string;
+  owner?: string;
+  column?: string;
+  reason?: string;
+}
 export interface PainterNavigation {
   seasonId: string;
   departmentId: string;
@@ -85,6 +92,28 @@ function ownerName(model: Model, key: string): string {
   return (
     model.departments.flatMap(({ zones }) => zones).find((entry) => entry.id === id)?.name ?? ""
   );
+}
+/** The department, active or not, whose week holds `key`'s, when it is still in the model. */
+function departmentOf(model: Model, key: string): Department | undefined {
+  const id = key.slice(2);
+  return model.departments.find((department) =>
+    key.startsWith("d:") ? department.id === id : department.zones.some((zone) => zone.id === id),
+  );
+}
+function shownIn(model: Model, departmentId: string, zoneId: string) {
+  const active = model.departments.filter(({ active }) => active);
+  const department = active.find(({ id }) => id === departmentId) ?? active[0];
+  return {
+    departmentId: department?.id ?? "",
+    zoneId: department?.zones.find(({ id }) => id === zoneId)?.id ?? "",
+  };
+}
+function refusalReason(code: string, reason: unknown): string {
+  if (reason === "end_offset") return t("menu.offset_timetable");
+  if (reason === "clock_skips") return t("menu.time_skipped");
+  if (code === "zone_closed_time.invalid") return t("opening.closed_invalid");
+  if (code === "menu_timetable.invalid") return t("opening.check_day");
+  return t("menu.save_error");
 }
 function seed(model: Model, seasonId: string): Draft {
   const draft: Draft = new Map();
@@ -233,6 +262,12 @@ export class SeasonPainter extends LitElement {
   private created?: { id: string; departmentId: string };
   /** Edits a refresh dropped because what they belonged to is gone; shown beside Save. */
   @state() private notice = "";
+  @state() private refused?: Refused;
+  @state() private saving = false;
+  /** The clock revision the draft was seeded with; followed only while nothing is edited. */
+  private revision = 0;
+  /** Replaced whenever a save's answer would land on a draft it no longer belongs to. */
+  private generation = {};
   private scope?: DraftScope<Draft>;
   private coordinator?: LeaveCoordinator;
 
@@ -240,6 +275,7 @@ export class SeasonPainter extends LitElement {
     this.scope?.dispose();
     this.scope = undefined;
     this.coordinator = undefined;
+    this.forget();
     super.disconnectedCallback();
   }
 
@@ -257,7 +293,16 @@ export class SeasonPainter extends LitElement {
       }
     }
     if (this.seededSeason !== this.seasonId) this.reseed();
-    else if (changes.has("model")) this.refresh(previous);
+    else if (changes.has("model")) {
+      const before = shownIn(previous, this.departmentId, this.zoneId);
+      this.refresh(previous);
+      const after = shownIn(this.model, this.departmentId, this.zoneId);
+      if (before.departmentId !== after.departmentId || before.zoneId !== after.zoneId) {
+        this.departmentId = after.departmentId;
+        this.zoneId = after.zoneId;
+        this.navigate();
+      }
+    }
     if (
       this.created &&
       this.model.departments.some(
@@ -274,6 +319,8 @@ export class SeasonPainter extends LitElement {
         equal: sameDraft,
         restore: (value) => {
           this.draft = copyDraft(value);
+          this.notice = "";
+          this.refused = undefined;
         },
       });
       this.scope = scope;
@@ -306,7 +353,14 @@ export class SeasonPainter extends LitElement {
     this.baseline = baseline;
     this.scope?.commit(copyDraft(baseline));
   }
+  private forget() {
+    this.generation = {};
+    this.saving = false;
+  }
   private reseed() {
+    this.forget();
+    this.refused = undefined;
+    this.revision = this.model.clockRevision;
     this.seededSeason = this.seasonId;
     const fresh = seed(this.model, this.seasonId);
     this.draft = copyDraft(fresh);
@@ -315,14 +369,18 @@ export class SeasonPainter extends LitElement {
   /** Weeks not edited follow the fresh model; an edited week, and its baseline, stay — unless
    *  its department or zone is gone or inactive, when its edits are dropped with a notice. */
   private refresh(previous: Model) {
+    if (!this.anyEdited()) this.revision = this.model.clockRevision;
     const fresh = seed(this.model, this.seasonId);
     const draft: Draft = new Map();
     const baseline: Draft = new Map();
     const gone: string[] = [];
+    const inactive = new Set<string>();
     for (const [key, week] of this.draft) {
       if (sameWeek(week, this.baseline.get(key))) continue;
       if (!fresh.has(key)) {
-        gone.push(ownerName(previous, key));
+        const owner = departmentOf(this.model, key);
+        if (owner && !owner.active) inactive.add(owner.name);
+        else gone.push(ownerName(previous, key));
         continue;
       }
       draft.set(key, week);
@@ -335,7 +393,15 @@ export class SeasonPainter extends LitElement {
     }
     this.draft = draft;
     this.commitBaseline(baseline);
-    if (gone.length) this.notice = this.removed(gone);
+    const notices = [
+      gone.length ? this.removed(gone) : "",
+      inactive.size
+        ? format(inactive.size === 1 ? "painter.inactive_one" : "painter.inactive_many", {
+            names: listOf([...inactive]),
+          })
+        : "",
+    ].filter(Boolean);
+    if (notices.length) this.notice = notices.join(" ");
   }
 
   private department(): Department | undefined {
@@ -385,6 +451,7 @@ export class SeasonPainter extends LitElement {
     else proceed();
   }
   private pick(value: string) {
+    this.notice = "";
     if (value.startsWith("zone:")) {
       const id = value.slice(5);
       const owner = this.model.departments.find(
@@ -407,11 +474,94 @@ export class SeasonPainter extends LitElement {
     const week = copyWeek(this.draft.get(key) ?? new Map());
     week.set(event.detail.key, event.detail.day);
     this.notice = "";
+    if (this.refused?.owner === key && this.refused.column === event.detail.key)
+      this.refused = undefined;
     this.draft = new Map(this.draft).set(key, week);
     this.scope?.changed();
   }
-  private save() {
-    if (saveActionState(this.scope).unchanged) return;
+  private async save() {
+    if (this.saving || saveActionState(this.scope).unchanged) return;
+    const { departments, zones } = this.edited();
+    const sent: Draft = new Map(
+      [...departments.map(departmentKey), ...zones.map(zoneKey)].map((key) => [
+        key,
+        copyWeek(this.draft.get(key)!),
+      ]),
+    );
+    const days = (key: string) =>
+      WEEKDAYS.map((weekday) => ({ weekday, paint: sent.get(key)!.get(String(weekday))! }));
+    const generation = this.generation;
+    this.saving = true;
+    this.notice = "";
+    this.refused = undefined;
+    try {
+      await this.api.saveSeasonWeeks(
+        this.seasonId,
+        {
+          departments: departments.map((departmentId) => ({
+            departmentId,
+            days: days(departmentKey(departmentId)).map(({ weekday, paint }) => ({
+              weekday,
+              slots: paint.map(({ periodId, startsAt, endsAt }) => ({
+                periodId: periodId as string,
+                startsAt,
+                endsAt,
+              })),
+            })),
+          })),
+          zones: zones.map((zoneId) => ({
+            zoneId,
+            days: days(zoneKey(zoneId)).map(({ weekday, paint }) => ({
+              weekday,
+              ranges: paint.map(({ startsAt, endsAt }) => ({ startsAt, endsAt })),
+            })),
+          })),
+        },
+        this.revision,
+      );
+    } catch (error) {
+      if (generation === this.generation) this.refuse(error, departments, zones);
+      return;
+    } finally {
+      if (generation === this.generation) this.saving = false;
+    }
+    if (generation !== this.generation) return;
+    const baseline = copyDraft(this.baseline);
+    for (const [key, week] of sent) if (baseline.has(key)) baseline.set(key, week);
+    this.commitBaseline(baseline);
+    this.api.rereadWatches();
+  }
+  /** A refusal naming `departments.<i>` or `zones.<i>` shows that week, marking the day it names. */
+  private refuse(error: unknown, departments: string[], zones: string[]) {
+    const code = codeOf(error);
+    const params = (error as { params?: { field?: unknown; reason?: unknown } } | null)?.params;
+    if (code === "hours.clock_changed") {
+      this.refused = { message: t("hours.clock_changed") };
+      return;
+    }
+    const match = /^(departments|zones)\.(\d+)(?=\.|$)(?:\.days\.(\d+)(?=\.|$))?/.exec(
+      typeof params?.field === "string" ? params.field : "",
+    );
+    const zoned = match?.[1] === "zones";
+    const id = match ? (zoned ? zones : departments)[Number(match[2])] : undefined;
+    if (!match || id === undefined) {
+      this.refused = { message: t("menu.save_error") };
+      return;
+    }
+    const owner = zoned ? zoneKey(id) : departmentKey(id);
+    const weekday = match[3] === undefined ? undefined : WEEKDAYS[Number(match[3])];
+    const name = ownerName(this.model, owner);
+    const reason = refusalReason(code, params?.reason);
+    this.refused = {
+      message: format("painter.refused_in", {
+        where: weekday === undefined ? name : `${name}, ${weekdayLabel(weekday)}`,
+        message: reason,
+      }),
+      owner,
+      column: weekday === undefined ? undefined : String(weekday),
+      reason,
+    };
+    this.pick(zoned ? `zone:${id}` : id);
   }
 
   private openPeriod(department: Department, period?: Period) {
@@ -615,10 +765,14 @@ export class SeasonPainter extends LitElement {
         .scope=${this.scope}
         .coordinator=${this.coordinator}
         .dirty=${this.scope?.isDirty() ?? false}
-        .refusal=${this.notice}
-        @painter-save=${() => this.save()}
+        .busy=${this.saving}
+        .refusal=${this.refused?.message ?? this.notice}
+        @painter-save=${() => void this.save()}
         @painter-close=${() => {
           this.open = false;
+          this.notice = "";
+          this.refused = undefined;
+          this.forget();
         }}
       >
         <span slot="picker" class="season">${this.seasonChip()}${this.picker(department)}</span>
@@ -638,6 +792,11 @@ export class SeasonPainter extends LitElement {
           .cutover=${this.model.dayCutover}
           .closedErases=${zone === undefined}
           .paintable=${zone ? [null] : undefined}
+          .columnErrors=${
+            this.refused?.owner === key && this.refused.column !== undefined
+              ? new Map([[this.refused.column, this.refused.reason!]])
+              : new Map()
+          }
           @paint-change=${(event: CustomEvent<PaintChange>) => this.paint(key, event)}
         ></paint-grid>
       </painter-frame>

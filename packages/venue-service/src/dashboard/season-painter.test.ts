@@ -368,7 +368,7 @@ it("a refresh that makes an edited department inactive drops its edits, and noth
     ),
   };
   await settle(painter);
-  expect(frame(painter).refusal).toBe("Bar was removed; its changes were dropped.");
+  expect(frame(painter).refusal).toBe("Bar is no longer active; its changes were dropped.");
   expect(painter.edited()).toEqual({ departments: [], zones: [] });
   expect(frame(painter).dirty).toBe(false);
   expect(frame(painter).heading).toBe("Winter week");

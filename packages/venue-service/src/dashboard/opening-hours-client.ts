@@ -197,6 +197,22 @@ export class OpeningHoursApi {
       expectedClockRevision,
     });
   }
+  saveSeasonWeeks(
+    seasonId: string,
+    weeks: {
+      departments: readonly { departmentId: string; days: readonly MenuWeekDay[] }[];
+      zones: readonly {
+        zoneId: string;
+        days: readonly { weekday: number; ranges: readonly ClosedRange[] }[];
+      }[];
+    },
+    expectedClockRevision: number,
+  ): Promise<void> {
+    return this.request(`${BASE}/seasons/${at(seasonId)}/weeks`, "PUT", {
+      ...weeks,
+      expectedClockRevision,
+    });
+  }
   saveSeason(id: string, input: SeasonInput, expectedClockRevision: number): Promise<Season> {
     return this.request(`${BASE}/seasons/${at(id)}`, "PUT", { ...input, expectedClockRevision });
   }

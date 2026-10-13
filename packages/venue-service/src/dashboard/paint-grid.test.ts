@@ -1032,3 +1032,25 @@ test("the heading row is as compact as the ⋮'s touch size allows", async () =>
   const heading = el.shadowRoot!.querySelector<HTMLElement>('.heading[data-column="thu"]')!;
   expect(heading.getBoundingClientRect().height).toBeLessThanOrEqual(46);
 });
+
+test("a column named in columnErrors marks its heading and describes its day with the message", async () => {
+  const el = await grid();
+  el.columnErrors = new Map([["thu", "Check this day's time ranges and periods."]]);
+  await el.updateComplete;
+  const heading = (key: string) =>
+    el.shadowRoot!.querySelector<HTMLElement>(`.heading[data-column="${key}"]`)!;
+  const day = (key: string) =>
+    el.shadowRoot!.querySelector<HTMLElement>(`.day[data-column="${key}"]`)!;
+  expect(heading("thu").hasAttribute("data-error")).toBe(true);
+  expect(heading("mon").hasAttribute("data-error")).toBe(false);
+  expect(getComputedStyle(heading("thu")).color).not.toBe(getComputedStyle(heading("mon")).color);
+  const described = day("thu").getAttribute("aria-describedby")!;
+  expect(el.shadowRoot!.getElementById(described)!.textContent!.trim()).toBe(
+    "Check this day's time ranges and periods.",
+  );
+  expect(day("mon").hasAttribute("aria-describedby")).toBe(false);
+  el.columnErrors = new Map();
+  await el.updateComplete;
+  expect(heading("thu").hasAttribute("data-error")).toBe(false);
+  expect(day("thu").hasAttribute("aria-describedby")).toBe(false);
+});

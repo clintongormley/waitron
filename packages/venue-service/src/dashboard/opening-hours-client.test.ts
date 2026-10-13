@@ -440,3 +440,21 @@ it.each(["sections", "section_members", "catalogues"])(
     }
   },
 );
+
+it("sends a season's edited department and zone weeks in one request with the clock revision", async () => {
+  const request = vi.fn(async () => undefined);
+  const api = new OpeningHoursApi(request as DashboardRequest);
+  const departments = [
+    {
+      departmentId: "d1",
+      days: [{ weekday: 1, slots: [{ periodId: "p1", startsAt: "13:00", endsAt: "16:00" }] }],
+    },
+  ];
+  const zones = [
+    { zoneId: "z1", days: [{ weekday: 2, ranges: [{ startsAt: "15:00", endsAt: "17:00" }] }] },
+  ];
+  await api.saveSeasonWeeks("s/1", { departments, zones }, 6);
+  expect(request.mock.calls).toEqual([
+    [`${base}/seasons/s%2F1/weeks`, "PUT", { departments, zones, expectedClockRevision: 6 }],
+  ]);
+});
