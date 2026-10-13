@@ -1842,10 +1842,16 @@ describe("backup admin routes", () => {
     it("disable stores the settings switched off under a new revision, and runs no sweep", async () => {
       const { post, sup } = await primaryApp();
       const dir = makeDestDir();
-      expect((await post("/api/backup/apply", applyBody({ kind: "local-fs", dir }))).status).toBe(
-        200,
-      );
+      // None of these is what a Save without them would store.
+      const saved = await post("/api/backup/apply", {
+        ...applyBody({ kind: "local-fs", dir }),
+        schedule: { kind: "wall-clock", days: [1, 4], at: { hour: 2, minute: 15 } },
+        retention: { count: 3, days: 10 },
+        destinationTimeoutMs: 60_000,
+      });
+      expect(saved.status).toBe(200);
       const before = (await readSealed())!;
+      expect(before.enabled).toBe(true);
       const res = await post("/api/backup/disable");
       expect(res.status).toBe(200);
       expect(await res.json()).toMatchObject({ enabled: false, storedDisabled: true });
@@ -1853,7 +1859,43 @@ describe("backup admin routes", () => {
       expect(after.enabled).toBe(false);
       expect(after.revision).not.toBe(before.revision);
       expect(after.destinations).toEqual(before.destinations);
+      expect({ ...after, revision: before.revision, enabled: true }).toEqual(before);
       expect(sup.current().enabled).toBe(false);
+    }, 60_000);
+
+    it("a disable queued behind another write is refused if the node stopped being primary while it waited", async () => {
+      const inner = createTurns();
+      let joined: (() => void) | undefined;
+      const turns: Turns = (body) => {
+        joined?.();
+        return inner(body);
+      };
+      const { sc, post } = await primaryApp({ turns });
+      expect(
+        (await post("/api/backup/apply", applyBody({ kind: "local-fs", dir: makeDestDir() })))
+          .status,
+      ).toBe(200);
+      const before = await readSealed();
+      let release!: () => void;
+      const holding = inner(
+        () =>
+          new Promise<void>((r) => {
+            release = r;
+          }),
+      );
+      const queued = new Promise<void>((r) => {
+        joined = r;
+      });
+      const disabled = post("/api/backup/disable");
+      // Past its arrival check, which passed while the node was still primary.
+      await queued;
+      sc.role = "secondary";
+      release();
+      await holding;
+      const res = await disabled;
+      expect(res.status).toBe(409);
+      expect(await res.json()).toMatchObject({ error: { code: "backup.not_primary" } });
+      expect(await readSealed()).toEqual(before);
     }, 60_000);
 
     it("disable with nothing stored is refused", async () => {
