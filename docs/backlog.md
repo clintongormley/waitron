@@ -1887,10 +1887,33 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **A503. Joined tables replace saved joins (owner, 2026-10-11).** A table made of other tables
   is set up in the editor and starts the day as one table; the till can split it. Part 1 (#1598)
-  removed saved joins; part 2 (#1601) added joined tables in the editor, the till and bookings. The
-  till's Split and Join again remain; Split starts by deciding how a part keeps its size off the
-  plan (the owner answered: it keeps its width and height).
+  removed saved joins; part 2 (#1601) added joined tables in the editor, the till and bookings; part
+  3 (#1604) added the till's Split tables…. Join again (part 4) remains, with Back and Take off on a
+  split-off table.
   [Detail](backlog/till.md#a503-joined-tables-replace-saved-joins)
+
+- **A561. A 2 × 2 table's name is cut short on the till map (2026-10-13).** It shows "Cou…".
+  [Detail](backlog/till.md#a561-a-2--2-tables-name-is-cut-short-on-the-till-map)
+
+- **A562. A 2 × 2 table shows no name in the floor plan editor (2026-10-13).** Its handles cover
+  it when selected; seen more since tables come back at their kept size (#1604).
+  [Detail](backlog/till.md#a562-a-2--2-table-shows-no-name-in-the-floor-plan-editor)
+
+- **A563. The till says "part of a joined table" for a joined table that has come apart
+  (2026-10-13).** `table.in_joined_table` covers both cases since #1604.
+  [Detail](backlog/till.md#a563-the-till-says-part-of-a-joined-table-for-a-joined-table-that-has-come-apart)
+
+- **A564. A second till with an out-of-date read can split a joined table down to one
+  (2026-10-13).** The seats it sent are ignored. Left open by #1604.
+  [Detail](backlog/till.md#a564-a-second-till-with-an-out-of-date-read-can-split-a-joined-table-down-to-one)
+
+- **A565. "Reset to saved plan" does not wait for food on its way to an ordinary table
+  (2026-10-13).** Dates from floor plans slice 1; #1604 made only split groups wait.
+  [Detail](backlog/till.md#a565-reset-to-saved-plan-does-not-wait-for-food-on-its-way-to-an-ordinary-table)
+
+- **A566. An open order with nothing sent yet does not hold a split group back at a reset
+  (2026-10-13).** Left open by #1604.
+  [Detail](backlog/till.md#a566-an-open-order-with-nothing-sent-yet-does-not-hold-a-split-group-back-at-a-reset)
 
 - **A550. Making a booked table part of a joined table is not refused (2026-10-12).** The floor
   plan editor's save refuses deleting a booked table (`table.booked`) but not making one a part; the

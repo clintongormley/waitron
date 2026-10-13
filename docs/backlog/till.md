@@ -263,23 +263,70 @@ seats now come only from the waiter, whose seats prompt opens empty
 ([design](../superpowers/specs/2026-10-12-a503-joined-tables-design.md)). Part 2 (#1601) added
 joined tables: the editor's Add joined table and Made of, the till's copy at each reset, a part
 still joined refused `table.in_joined_table` and hidden from the till's pickers, and bookings
-refusing a part. What remains is below.
+refusing a part. Part 3 (#1604) added the till's **Split tables…**: split-off tables stand side by
+side inside the joined table's outline at their kept size (a table keeps its width and height off
+the plan, in `floor_plan_table_sizes`), splitting down to one table ends the joined table and moves
+its guests, a joined table with fewer than two tables still joined is refused
+`table.in_joined_table`, and a reset puts a split joined table back whole once none of its tables
+has guests, food on its way or a guest-holding merge. What remains is below.
 
-- **On the till a joined table can be split.** Its parts go side by side inside the outline the
-  joined table took up, each with its own seats. First: a table keeps its width and height when it
-  is taken off the plan (owner's answer to the design's question 5), which today's placement check
-  on `floor_plan_tables` does not allow — measure what drizzle-kit generates before choosing the
-  storage (part 2's plan, "Left for part 3").
-- **A joined table with fewer than two parts still joined is not refused yet** — for example two
-  of its three parts still held by parties at the reset, or a part in a service merge. The split's
-  record is where that refusal belongs (#1601, design gap 1).
+- **Join again** (part 4): today the only way to put a split joined table back is the reset.
+- **Back to its saved place** and **Take off for today** on a table that was split off (design
+  gap 2); the till hides both for now.
+- **An edit to the saved plan that changes the tables of a joined table waiting to be put back**
+  can shift where later tables land (#1604, "Accepted for now").
 - **A part placed on today's map** while its joined table waited, and free when the joined table
-  went live, keeps its place on today's map until the next reset; the till hides it, and the split's
-  layout must expect it.
-- **Join again**, and a reset waiting for free parts.
+  went live, keeps its place on today's map until the next reset; the till hides it.
 - The Made of picker is a dropdown, not mockup 5's inline list (no inline multi-pick primitive
   exists); and at 1280 px the tables list's Made of column wraps to two lines, and in Spanish the
   two Add buttons stack.
+
+## A561. A 2 × 2 table's name is cut short on the till map
+
+**A561 (2026-10-13).** On the till's floor map a 2 × 2 table shows its name cut to "Cou…" (seen
+for Counter 4 after a split, A503 part 3's look, `~/waitron-campaign-c/a503-3-shots`, shots
+`7-map-after-counter4-*`). Small tables are more common now that a split-off table keeps its own
+size. Next: decide how a small table shows its name (smaller type, number only, or a label outside).
+
+## A562. A 2 × 2 table shows no name in the floor plan editor
+
+**A562 (2026-10-13).** In the dashboard floor plan editor a 2 × 2 table, for example one put back
+on the plan at its kept size, shows no visible name, and when selected its resize handles cover it
+(A503 part 3's look, shots `8-counter3-put-back-*`). Since #1604 a table comes back at its kept size
+rather than 8 × 8, so this is seen more. Next: the same decision as A561, in `wt-floor-plan-canvas`.
+
+## A563. The till says "part of a joined table" for a joined table that has come apart
+
+**A563 (2026-10-13).** Since #1604 `table.in_joined_table` also refuses a joined table with fewer
+than two tables still joined, and the till shows the same sentence ("That table is part of a joined
+table") for it, which is not accurate. Next: give that case its own wording, or its own code if the
+server should say which case it is.
+
+## A564. A second till with an out-of-date read can split a joined table down to one
+
+**A564 (2026-10-13).** Two tills show Long table (Counter 3, 4 and 5). One splits off Counter 5;
+the other, not yet refreshed, splits off Counter 4 with a seat count for the two it believes stay.
+The server applies it as a split down to one table and ignores the seats sent (review of A503 part
+3's tasks 5–9, M2, accepted in #1604). Next: decide whether a split names the tables it expects to
+stay and is refused when they differ.
+
+## A565. "Reset to saved plan" does not wait for food on its way to an ordinary table
+
+**A565 (2026-10-13).** A reset applies a free table's saved place without asking about food on its
+way: a plain table the saved plan turns into a part of a joined table, or drops, loses its place on
+today's map while a kitchen order still names it. #1604 made a split joined table's group wait for
+food on its way (`foodComingTo`, `apps/server/src/floor-today-store.ts`); ordinary tables were left
+as they were. It was reproduced with a throwaway test in #1604's finish run; the behaviour dates from
+`29801d74a` (floor plans, slice 1). Next: decide whether a reset holds such a table back, as it now
+holds a split group.
+
+## A566. An open order with nothing sent yet does not hold a split group back at a reset
+
+**A566 (2026-10-13).** A split joined table's group waits at a reset while one of its tables has
+guests, food on its way or a guest-holding merge (#1604); an open order at a split-off table with no
+food sent yet does not count, so the reset can put the joined table back whole over it. Noted by the
+fix worker in #1604's finish run and not changed. Next: decide whether an open order counts as busy
+here, and check what the reset does with that order's table.
 
 ## A504. Floor plans published for a future date, and one per service period
 
