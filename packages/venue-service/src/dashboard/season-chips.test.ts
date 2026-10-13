@@ -500,7 +500,9 @@ it("keeps a save busy when an earlier save, sent before the chips were moved, an
   const api = fakeApi({
     saveSeason: vi.fn(
       (id: string, input: { name: string; startsOn: string }) =>
-        new Promise((resolve) => answers.push(() => resolve({ id, ...input }))),
+        new Promise<{ id: string; name: string; startsOn: string }>((resolve) =>
+          answers.push(() => resolve({ id, ...input })),
+        ),
     ),
   });
   await mount(four, api);
