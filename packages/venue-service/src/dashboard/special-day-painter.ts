@@ -350,6 +350,8 @@ export class SpecialDayPainter extends LitElement {
   @property({ attribute: false }) specialDayId: string | null = null;
   /** A new special day's first date. */
   @property({ attribute: false }) date: LocalDate | null = null;
+  /** A date added to the stored day's draft, as an unsaved change, when it is first read. */
+  @property({ attribute: false }) addDate: LocalDate | null = null;
   /** The public holidays the host knows of on the dates in view, for the Every year note. */
   @property({ attribute: false }) holidays: readonly HolidayFact[] = [];
   @property({ type: Boolean }) readOnly = false;
@@ -482,9 +484,9 @@ export class SpecialDayPainter extends LitElement {
       if (name) this.offerExisting(name);
       return;
     }
-    this.read(id);
+    this.read(id, this.addDate && isLocalDate(this.addDate) ? this.addDate : undefined);
   }
-  private read(id: string, addDate?: LocalDate) {
+  private read(id: string, addDate?: LocalDate, announce = false) {
     this.loading = true;
     this.adopt(undefined, []);
     const generation = this.generation;
@@ -499,13 +501,14 @@ export class SpecialDayPainter extends LitElement {
             ...this.draft,
             dates: [...this.draft.dates, { date: addDate, closedAllDay: false }].sort(byDate),
           });
-        this.dispatchEvent(
-          new CustomEvent("special-day-navigate", {
-            detail: { specialDayId: id },
-            bubbles: true,
-            composed: true,
-          }),
-        );
+        if (announce)
+          this.dispatchEvent(
+            new CustomEvent("special-day-navigate", {
+              detail: { specialDayId: id },
+              bubbles: true,
+              composed: true,
+            }),
+          );
       },
       () => {
         if (generation !== this.generation) return;
@@ -527,7 +530,7 @@ export class SpecialDayPainter extends LitElement {
     this.offered = undefined;
     this.specialDayId = id;
     this.seeded = id;
-    this.read(id, date);
+    this.read(id, date, true);
   }
   /** `kept` is paint made since the save that answered `detail` was sent; it stays unsaved. */
   private adopt(

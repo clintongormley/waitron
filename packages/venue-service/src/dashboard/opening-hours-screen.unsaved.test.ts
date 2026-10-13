@@ -6,6 +6,8 @@ import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { applyTokens, LeaveController } from "@waitron/ui";
 import { OpeningHoursApi } from "./opening-hours-client.js";
 import type { PeriodEditor } from "./period-editor.js";
+import type { SpecialDayPainter } from "./special-day-painter.js";
+import { frame, settle } from "../testing/special-day-painter-fixture.js";
 import "./opening-hours-screen.js";
 
 class OpeningLeaveApp extends LitElement {
@@ -17,6 +19,13 @@ class OpeningLeaveApp extends LitElement {
         this.writes.push([path, method, body]);
         return;
       }
+      if (path.includes("/opening-hours/season-days?"))
+        return {
+          days: new URL(path, "http://x").searchParams
+            .get("dates")!
+            .split(",")
+            .map((date) => ({ date, seasonId: null, dayCutover: "06:00", departments: [] })),
+        };
       if (path.endsWith("/special-days/own"))
         return {
           id: "own",
@@ -304,10 +313,17 @@ describe.each(["en", "es"])("Year discard (%s)", (locale) => {
     cal.shadowRoot!.querySelector<HTMLElement>("td[data-date='2026-10-13'] button")!.click();
     await cal.updateComplete;
     cal.shadowRoot!.querySelector<HTMLElement>("[data-test=special-edit]")!.click();
-    await expect.poll(() => screen.shadowRoot!.querySelector("special-day-dialog")).not.toBeNull();
-    const form = screen.shadowRoot!.querySelector<LitElement>("special-day-dialog")!;
-    await form.updateComplete;
-    const input = form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!;
+    await expect
+      .poll(() =>
+        screen
+          .shadowRoot!.querySelector("special-day-painter")
+          ?.shadowRoot?.querySelector("wt-input[name=name]"),
+      )
+      .toBeTruthy();
+    const form = screen.shadowRoot!.querySelector<SpecialDayPainter>("special-day-painter")!;
+    await settle(form);
+    const input =
+      form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=name]")!;
     expect(unload()).toBe(false);
     input.dispatchEvent(
       new CustomEvent("wt-change", {
@@ -316,16 +332,17 @@ describe.each(["en", "es"])("Year discard (%s)", (locale) => {
         composed: true,
       }),
     );
-    await form.updateComplete;
+    await settle(form);
     expect(unload()).toBe(true);
     const parent = screen.parentNode!;
     screen.remove();
     expect(unload()).toBe(false);
     parent.appendChild(screen);
     await screen.updateComplete;
-    await form.updateComplete;
+    await settle(form);
     expect(unload()).toBe(true);
-    const modal = form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>("wt-modal")!;
+    const modal =
+      frame(form).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>("wt-modal")!;
     const keeping = modal.requestClose("cancel");
     await choose("keep");
     expect(await keeping).toBe(false);
@@ -333,50 +350,8 @@ describe.each(["en", "es"])("Year discard (%s)", (locale) => {
     const discarding = modal.requestClose("escape");
     await choose("discard");
     expect(await discarding).toBe(true);
-    await expect.poll(() => screen.shadowRoot!.querySelector("special-day-dialog")).toBeNull();
+    await expect.poll(() => screen.shadowRoot!.querySelector("special-day-painter")).toBeNull();
     expect(unload()).toBe(false);
     expect(app.writes).toEqual([]);
   });
-});
-
-it("asks before Edit hours on this date leaves a changed special day, staying on keep", async () => {
-  history.replaceState(null, "", "/manage/opening-hours/view/year/year/2026");
-  app = document.createElement("opening-leave-test-app") as OpeningLeaveApp;
-  applyTokens(app);
-  document.body.append(app);
-  await app.updateComplete;
-  const screen = app.shadowRoot!.querySelector("dashboard-opening-hours-screen")!;
-  await expect.poll(() => screen.shadowRoot!.querySelector("opening-hours-year")).not.toBeNull();
-  const cal = screen.shadowRoot!.querySelector("opening-hours-year")!;
-  await expect
-    .poll(() => cal.shadowRoot!.querySelector("td[data-date='2026-10-13'] button"))
-    .not.toBeNull();
-  cal.shadowRoot!.querySelector<HTMLElement>("td[data-date='2026-10-13'] button")!.click();
-  await cal.updateComplete;
-  cal.shadowRoot!.querySelector<HTMLElement>("[data-test=special-edit]")!.click();
-  await expect.poll(() => screen.shadowRoot!.querySelector("special-day-dialog")).not.toBeNull();
-  const form = screen.shadowRoot!.querySelector<LitElement>("special-day-dialog")!;
-  await form.updateComplete;
-  form.shadowRoot!.querySelector("[name=name]")!.dispatchEvent(
-    new CustomEvent("wt-change", {
-      detail: { value: "New anniversary" },
-      bubbles: true,
-      composed: true,
-    }),
-  );
-  await form.updateComplete;
-  const editDate = () =>
-    form.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-date-hours]")!.click();
-  editDate();
-  await choose("keep");
-  expect(location.pathname).toBe("/manage/opening-hours/view/year/year/2026");
-  expect(screen.shadowRoot!.querySelector("special-day-dialog")).toBe(form);
-  editDate();
-  await choose("discard");
-  await expect
-    .poll(() => location.pathname)
-    .toBe("/manage/opening-hours/view/date/date/2026-10-13");
-  await expect.poll(() => screen.shadowRoot!.querySelector("special-day-dialog")).toBeNull();
-  expect(screen.shadowRoot!.querySelector("opening-hours-day")).not.toBeNull();
-  expect(app.writes).toEqual([]);
 });

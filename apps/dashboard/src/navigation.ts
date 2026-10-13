@@ -12,6 +12,7 @@ export const dashboardPath: UrlPathConfig = {
       department: "department",
       zone: "zone",
       station: "station",
+      "special-day": "special-day",
       date: "date",
       year: "year",
       month: "month",

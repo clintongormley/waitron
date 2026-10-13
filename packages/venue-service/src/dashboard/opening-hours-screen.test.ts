@@ -7,9 +7,12 @@ import { applyTokens, NavigationGuard, type WtDataTable } from "@waitron/ui";
 import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import type { OpeningHoursYear } from "../opening-hours-calendar.js";
-import type { SpecialDayDetail } from "../special-days.js";
+import type { SpecialDayDetail, SpecialDayInput } from "../special-days.js";
 import { OpeningHoursApi } from "./opening-hours-client.js";
 import type { PeriodEditor } from "./period-editor.js";
+import type { SpecialDayPainter } from "./special-day-painter.js";
+import { frame, settle } from "../testing/special-day-painter-fixture.js";
+import { t } from "./strings.js";
 
 import "./opening-hours-screen.js";
 
@@ -76,6 +79,50 @@ function model(): OpeningHoursModel {
   };
 }
 
+/** Answers the special-day painter's season read with no season hours; the rest goes to `request`. */
+function withSeasonDays(request: DashboardRequest): DashboardRequest {
+  return (async (path, method, body, options) =>
+    method === "GET" && path.includes("/opening-hours/season-days?")
+      ? {
+          days: new URL(path, "http://x").searchParams
+            .get("dates")!
+            .split(",")
+            .map((date) => ({ date, seasonId: null, dayCutover: "06:00", departments: [] })),
+        }
+      : request(path, method, body, options)) as DashboardRequest;
+}
+/** A special-day write's answer as the server gives it: the stored day the request describes. */
+function savedDay(path: string, method: string, body: unknown): SpecialDayDetail {
+  const input = body as SpecialDayInput;
+  return {
+    id: method === "POST" ? "new" : decodeURIComponent(path.split("/").pop()!),
+    name: input.name,
+    repeatsYearly: input.repeatsYearly,
+    dates: [...input.dates],
+    paint: [],
+    zonePaint: [],
+  };
+}
+async function specialPainter(el: Screen) {
+  await expect
+    .poll(() =>
+      el
+        .shadowRoot!.querySelector("special-day-painter")
+        ?.shadowRoot?.querySelector("painter-frame"),
+    )
+    .toBeTruthy();
+  const form = el.shadowRoot!.querySelector<SpecialDayPainter>("special-day-painter")!;
+  await expect.poll(() => form.shadowRoot!.querySelector("[data-test=loading]")).toBeNull();
+  await settle(form);
+  return form;
+}
+const painterSave = (form: SpecialDayPainter) =>
+  frame(form).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save]")!;
+const painterChips = (form: SpecialDayPainter) =>
+  [...form.shadowRoot!.querySelectorAll<HTMLElement>("[data-test=date-chip]")].map(
+    (chip) => chip.dataset.date,
+  );
+
 async function mount(request?: DashboardRequest, readOnly = false) {
   expect(
     customElements.get("dashboard-opening-hours-screen"),
@@ -83,12 +130,14 @@ async function mount(request?: DashboardRequest, readOnly = false) {
   ).toBeDefined();
   const el = document.createElement("dashboard-opening-hours-screen") as Screen;
   el.api = new OpeningHoursApi(
-    withOpeningStations(
-      request ??
-        ((async (path: string) =>
-          path.includes("/opening-hours/year?")
-            ? yearRead(2026)
-            : structuredClone(model())) as DashboardRequest),
+    withSeasonDays(
+      withOpeningStations(
+        request ??
+          ((async (path: string) =>
+            path.includes("/opening-hours/year?")
+              ? yearRead(2026)
+              : structuredClone(model())) as DashboardRequest),
+      ),
     ),
   );
   el.readOnly = readOnly;
@@ -1466,9 +1515,10 @@ describe("Year special-day actions", () => {
       if (method !== "GET") {
         writes.push([path, method, body]);
         if (refuse) throw refuse;
-        return { id: "new" };
+        return method === "DELETE" ? undefined : savedDay(path, method, body);
       }
       if (path.includes("/hours?")) stationReads++;
+      if (path.includes("/opening-hours/month?")) return { days: [] };
       if (path.endsWith("/special-days") && listFails) throw { code: "connection.failed" };
       if (path.endsWith("/special-days"))
         return withFeast
@@ -1533,33 +1583,24 @@ describe("Year special-day actions", () => {
     expect(button, `${kind} offered for ${date}`).not.toBeNull();
     button!.click();
   }
-  async function dialog(el: Screen) {
-    await expect.poll(() => el.shadowRoot!.querySelector("special-day-dialog")).not.toBeNull();
-    const form = el.shadowRoot!.querySelector("special-day-dialog")!;
-    await form.updateComplete;
-    return form;
+  function field(form: SpecialDayPainter, name: string) {
+    return form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+      `wt-input[name=${name}]`,
+    )!;
   }
-  function field(form: HTMLElementTagNameMap["special-day-dialog"], name: string) {
-    return form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(`[name=${name}]`)!;
-  }
-  async function change(
-    form: HTMLElementTagNameMap["special-day-dialog"],
-    name: string,
-    value: string,
-  ) {
+  async function change(form: SpecialDayPainter, name: string, value: string) {
     field(form, name).dispatchEvent(
       new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
     );
-    await form.updateComplete;
+    await settle(form);
   }
-  const save = (form: HTMLElementTagNameMap["special-day-dialog"]) =>
-    form.shadowRoot!.querySelector<HTMLElement>("[data-test=save-special-day]")!.click();
+  const save = (form: SpecialDayPainter) => painterSave(form).click();
 
-  it("Edit opens the stored special day and a name change sends its dates unchanged and no paint", async () => {
+  it("Edit opens the stored special day in the painter and a name change sends its dates unchanged and no paint", async () => {
     const { el, cal, writes, reads, stationReads } = await yearMount();
     await action(cal, "2026-10-13", "edit");
-    const form = await dialog(el);
-    expect(form.specialDay?.id).toBe("annual/day");
+    const form = await specialPainter(el);
+    expect(form.specialDayId).toBe("annual/day");
     expect(field(form, "name").value).toBe("Anniversary");
     await change(form, "name", "New anniversary");
     save(form);
@@ -1577,14 +1618,14 @@ describe("Year special-day actions", () => {
           },
         ],
       ]);
-    await expect.poll(() => el.shadowRoot!.querySelector("special-day-dialog")).toBeNull();
+    await expect.poll(() => painterSave(form).disabled).toBe(true);
     await expect.poll(reads).toBe(2);
     expect(stationReads()).toBe(0);
   });
-  it("a public holiday opens pre-filled with its name and date and creates a special day", async () => {
+  it("a public holiday opens the painter pre-filled with its name and date and creates a special day", async () => {
     const { el, cal, writes, reads } = await yearMount();
     await action(cal, "2026-10-12", "add");
-    const form = await dialog(el);
+    const form = await specialPainter(el);
     expect(form.shadowRoot!.querySelector("[data-test=add-to]")).toBeNull();
     expect(field(form, "name").value).toBe("Public feast");
     save(form);
@@ -1604,15 +1645,22 @@ describe("Year special-day actions", () => {
       ]);
     await expect.poll(reads).toBe(2);
   });
-  it("Add to <name> saves the venue's latest same-named special day with the date added and nothing else changed", async () => {
+  it("Add to <name> opens the venue's latest same-named special day with the date added, written only on Save", async () => {
     const { el, cal, writes, reads } = await yearMount({ withFeast: true });
     await action(cal, "2026-10-12", "add");
-    const form = await dialog(el);
+    let form = await specialPainter(el);
     await expect.poll(() => form.shadowRoot!.querySelector("[data-test=add-to]")).not.toBeNull();
     expect(form.shadowRoot!.querySelector("[data-test=add-to]")!.textContent).toContain(
       "Add to Public feast",
     );
     form.shadowRoot!.querySelector<HTMLElement>("[data-test=add-to]")!.click();
+    await expect
+      .poll(() => location.pathname)
+      .toBe("/manage/opening-hours/view/special-day/special-day/feast%2F2025");
+    form = await specialPainter(el);
+    await expect.poll(() => painterChips(form)).toEqual(["2025-10-12", "2026-10-12"]);
+    expect(writes).toEqual([]);
+    save(form);
     await expect
       .poll(() => writes)
       .toEqual([
@@ -1630,51 +1678,63 @@ describe("Year special-day actions", () => {
           },
         ],
       ]);
-    await expect.poll(() => el.shadowRoot!.querySelector("special-day-dialog")).toBeNull();
     await expect.poll(reads).toBe(2);
   });
-  it("opens a public holiday's dialog with no offer when the special-day list cannot be read", async () => {
+  it("opens a public holiday's painter with no offer when the special-day list cannot be read", async () => {
     const { el, cal } = await yearMount({ withFeast: true, listFails: true });
     await action(cal, "2026-10-12", "add");
-    const form = await dialog(el);
+    const form = await specialPainter(el);
     expect(form.shadowRoot!.querySelector("[data-test=add-to]")).toBeNull();
     expect(field(form, "name").value).toBe("Public feast");
     expect(el.shadowRoot!.querySelector("[data-test=special-read-error]")).toBeNull();
   });
-  it("shows a refused Add to in the offer, keeping the dialog open", async () => {
+  it("shows a refused save of the date Add to added beside Save, keeping the painter open", async () => {
     const { el, cal, writes } = await yearMount({
       withFeast: true,
       refuse: { code: "hours.clock_changed" },
     });
     await action(cal, "2026-10-12", "add");
-    const form = await dialog(el);
+    let form = await specialPainter(el);
     await expect.poll(() => form.shadowRoot!.querySelector("[data-test=add-to]")).not.toBeNull();
     form.shadowRoot!.querySelector<HTMLElement>("[data-test=add-to]")!.click();
+    await expect.poll(() => painterChips(form)).toEqual(["2025-10-12", "2026-10-12"]);
+    form = await specialPainter(el);
+    save(form);
     await expect.poll(() => writes.length).toBe(1);
-    await expect
-      .poll(() => form.shadowRoot!.querySelector("[data-error=offer]")?.textContent)
-      .toBe("The change could not be saved.");
-    expect(el.shadowRoot!.querySelector("special-day-dialog")).toBe(form);
+    await expect.poll(() => frame(form).refusal).toBe(t("hours.clock_changed"));
+    expect(el.shadowRoot!.querySelector("special-day-painter")).toBe(form);
   });
-  it("shows the holiday-name note when a date added in the dialog is a holiday the year shows", async () => {
+  it("shows the holiday-name note when a date added in the painter is a holiday the year shows", async () => {
     const { el, cal } = await yearMount();
     await action(cal, "2026-10-11", "add");
-    const form = await dialog(el);
+    const form = await specialPainter(el);
     expect(form.shadowRoot!.querySelector("[data-test=holiday-note]")).toBeNull();
     form.shadowRoot!.querySelector<HTMLElement>("[data-test=add-dates]")!.click();
-    await form.updateComplete;
-    await change(form, "addFrom", "2026-10-12");
-    form.shadowRoot!.querySelector<HTMLElement>("[data-test=add-dates-confirm]")!.click();
-    await form.updateComplete;
+    await settle(form);
+    form.shadowRoot!.querySelector("add-dates-calendar")!.dispatchEvent(
+      new CustomEvent("add-dates", {
+        detail: { dates: ["2026-10-12"] },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await settle(form);
     expect(form.shadowRoot!.querySelector("[data-test=holiday-note]")).not.toBeNull();
   });
-  it("says when the special day cannot be read, and clears it on another tab", async () => {
+  it("says in the painter when the special day cannot be read", async () => {
     const { el, cal } = await yearMount({ readFails: true });
     await action(cal, "2026-10-13", "edit");
+    const form = await specialPainter(el);
+    expect(frame(form).refusal).toBe(t("special.load_error"));
+    expect(el.shadowRoot!.querySelector("[data-test=special-read-error]")).toBeNull();
+  });
+  it("says when the special day to delete cannot be read, and clears it on another tab", async () => {
+    const { el, cal } = await yearMount({ readFails: true });
+    await action(cal, "2026-10-13", "delete");
     await expect
       .poll(() => el.shadowRoot!.querySelector("[data-test=special-read-error]")?.textContent)
       .toContain("Opening hours could not be loaded.");
-    expect(el.shadowRoot!.querySelector("special-day-dialog")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=delete-special-day]")).toBeNull();
     el.shadowRoot!.querySelector("wt-tabs")!.dispatchEvent(
       new CustomEvent("wt-tab-change", { detail: { value: "periods" } }),
     );
@@ -1682,10 +1742,10 @@ describe("Year special-day actions", () => {
       .poll(() => el.shadowRoot!.querySelector("[data-test=special-read-error]"))
       .toBeNull();
   });
-  it("Make on a plain date creates a special day and refreshes the year", async () => {
+  it("Make on a plain date creates a special day in the painter and refreshes the year", async () => {
     const { el, cal, writes, reads } = await yearMount();
     await action(cal, "2026-10-16", "add");
-    const form = await dialog(el);
+    const form = await specialPainter(el);
     await change(form, "name", "World cup final");
     save(form);
     await expect
@@ -1790,7 +1850,7 @@ it("an opened period keeps its revision through a passive replacement and submit
   expect(writes[0]).toMatchObject({ endOffsetMinutes: 15, expectedClockRevision: 7 });
   await expect.poll(() => editor.refusal?.code).toBe("hours.clock_changed");
 });
-it("pre-fills the holiday's name when the sender names only the date's own holidays, as the per-date editor does", async () => {
+it("pre-fills the holiday's name when the sender names only the date's own holidays", async () => {
   history.replaceState(null, "", "/manage/opening-hours/view/year");
   const el = await mount((async (path, method) => {
     if (method !== "GET") throw new Error(`unexpected ${method} ${path}`);
@@ -1819,14 +1879,13 @@ it("pre-fills the holiday's name when the sender names only the date's own holid
       composed: true,
     }),
   );
-  await expect.poll(() => el.shadowRoot!.querySelector("special-day-dialog")).not.toBeNull();
-  const editor = el.shadowRoot!.querySelector("special-day-dialog")!;
-  await editor.updateComplete;
+  const editor = await specialPainter(el);
   expect(
-    editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!.value,
+    editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=name]")!
+      .value,
   ).toBe("Town feast");
 });
-it("a special-day editor opened from the Year keeps its revision through a passive replacement", async () => {
+it("a special-day painter opened from the Year keeps its revision through a passive replacement", async () => {
   const data = model();
   data.clockRevision = 7;
   const calendar = { clockRevision: 7 };
@@ -1852,31 +1911,30 @@ it("a special-day editor opened from the Year keeps its revision through a passi
       composed: true,
     }),
   );
-  await el.updateComplete;
-  const editor = el.shadowRoot!.querySelector("special-day-dialog")!;
-  await editor.updateComplete;
-  editor.shadowRoot!.querySelector("[name=name]")!.dispatchEvent(
+  const editor = await specialPainter(el);
+  editor.shadowRoot!.querySelector("wt-input[name=name]")!.dispatchEvent(
     new CustomEvent("wt-change", {
       detail: { value: "Festival" },
       bubbles: true,
       composed: true,
     }),
   );
-  await editor.updateComplete;
+  await settle(editor);
   data.clockRevision = 8;
   calendar.clockRevision = 8;
   data.departments[0]!.name = "Updated Restaurant";
   el.api.rereadWatches();
   await expect.poll(() => openingReads).toBe(2);
   await el.updateComplete;
-  editor.shadowRoot!.querySelector<HTMLElement>("[data-test=save-special-day]")!.click();
+  await expect.poll(() => editor.model.departments[0]!.name).toBe("Updated Restaurant");
+  painterSave(editor).click();
   await expect.poll(() => writes.length).toBe(1);
   expect(writes[0]).toMatchObject({
     name: "Festival",
     dates: [{ date: "2026-11-04", closedAllDay: false }],
     expectedClockRevision: 7,
   });
-  await expect.poll(() => editor.refusal?.code).toBe("hours.clock_changed");
+  await expect.poll(() => frame(editor).refusal).toBe(t("hours.clock_changed"));
 });
 
 describe("Year view", () => {
@@ -2239,17 +2297,16 @@ describe("Year view", () => {
     expect(alert()).toBeUndefined();
   });
 
-  it("+ Special day opens an empty special-day dialog", async () => {
+  it("+ Special day opens an empty special-day painter", async () => {
     const { el, view, writes } = await yearMount("/manage/opening-hours/view/year");
     await expect.poll(() => view()?.model?.year).toBe(2026);
     view()!.shadowRoot!.querySelector<HTMLElement>("[data-test=add-special-day]")!.click();
-    await expect.poll(() => el.shadowRoot!.querySelector("special-day-dialog")).not.toBeNull();
-    const form = el.shadowRoot!.querySelector("special-day-dialog")!;
-    await form.updateComplete;
-    expect(form.specialDay).toBeUndefined();
-    expect(form.date).toBe("");
+    const form = await specialPainter(el);
+    expect(form.specialDayId).toBeNull();
+    expect(form.date).toBeNull();
     expect(
-      form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!.value,
+      form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=name]")!
+        .value,
     ).toBe("");
     expect(writes).toEqual([]);
   });
@@ -2281,7 +2338,7 @@ describe("Month view", () => {
       (async (path: string, method: string, body: unknown) => {
         if (method !== "GET") {
           writes.push([path, method, body]);
-          return { id: "new" };
+          return savedDay(path, method, body);
         }
         const asked = /\/opening-hours\/month\?month=([\d-]+)$/.exec(path);
         if (asked) {
@@ -2328,12 +2385,6 @@ describe("Month view", () => {
     const dialog = el.shadowRoot!.querySelector("ordinary-date-dialog")!;
     await dialog.updateComplete;
     return dialog;
-  }
-  async function specialDialog(el: Screen) {
-    await expect.poll(() => el.shadowRoot!.querySelector("special-day-dialog")).not.toBeNull();
-    const form = el.shadowRoot!.querySelector("special-day-dialog")!;
-    await form.updateComplete;
-    return form;
   }
 
   it("draws the month the address names from that month's read, under the Year tab", async () => {
@@ -2474,7 +2525,7 @@ describe("Month view", () => {
       await sent;
       await el.updateComplete;
       expect(location.pathname).toBe("/manage/opening-hours/view/month/month/2026-12");
-      expect(el.shadowRoot!.querySelector("special-day-dialog")).toBeNull();
+      expect(el.shadowRoot!.querySelector("special-day-painter")).toBeNull();
       expect(writes).toEqual([]);
     },
   );
@@ -2498,7 +2549,8 @@ describe("Month view", () => {
     el.remove();
     await sent;
     await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("special-day-dialog")).toBeNull();
+    expect(el.shadowRoot!.querySelector("special-day-painter")).toBeNull();
+    expect(location.pathname).toBe("/manage/opening-hours/view/month/month/2026-12");
     expect(writes).toEqual([]);
   });
 
@@ -2583,8 +2635,8 @@ describe("Month view", () => {
     const { el, view, writes } = await monthMount("/manage/opening-hours/view/month/month/2026-12");
     const dialog = await ordinary(el, await shown(view));
     dialog.shadowRoot!.querySelector<HTMLElement>("[data-test=make-special]")!.click();
-    const form = await specialDialog(el);
-    expect(form.specialDay).toBeUndefined();
+    const form = await specialPainter(el);
+    expect(form.specialDayId).toBeNull();
     expect(form.date).toBe("2026-12-10");
     expect(writes).toEqual([]);
   });
@@ -2602,16 +2654,10 @@ describe("Month view", () => {
     );
     await dialog.updateComplete;
     dialog.shadowRoot!.querySelector<HTMLElement>("[data-test=add-to-special]")!.click();
-    const form = await specialDialog(el);
-    expect(form.specialDay?.id).toBe("company");
-    const dates = () =>
-      [...form.shadowRoot!.querySelectorAll<HTMLElement>("[data-date]")].map(
-        (row) => row.dataset.date,
-      );
-    expect(dates()).toEqual(["2026-12-10", "2026-12-14"]);
-    const save = form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
-      "[data-test=save-special-day]",
-    )!;
+    const form = await specialPainter(el);
+    expect(form.specialDayId).toBe("company");
+    await expect.poll(() => painterChips(form)).toEqual(["2026-12-10", "2026-12-14"]);
+    const save = painterSave(form);
     expect(save.disabled).toBe(false);
     expect(writes).toEqual([]);
     save.click();
@@ -2632,109 +2678,28 @@ describe("Month view", () => {
           },
         ],
       ]);
-    await expect.poll(() => el.shadowRoot!.querySelector("special-day-dialog")).toBeNull();
+    await expect.poll(() => painterSave(form).disabled).toBe(true);
   });
 
-  it("a special date opens its special day, whose Edit hours on this date opens the per-date editor", async () => {
+  it("a special date opens the painter on its special day, over the month", async () => {
     const { el, view } = await monthMount("/manage/opening-hours/view/month/month/2026-12");
     dateButton(await shown(view), "2026-12-14").click();
-    const form = await specialDialog(el);
-    expect(form.specialDay?.id).toBe("company");
-    expect(form.offerEditDate).toBe(true);
-    form.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-date-hours]")!.click();
-    await expect
-      .poll(() => location.pathname)
-      .toBe("/manage/opening-hours/view/date/date/2026-12-14");
-    await expect.poll(() => el.shadowRoot!.querySelector("special-day-dialog")).toBeNull();
-    const day = el.shadowRoot!.querySelector<HTMLElementTagNameMap["opening-hours-day"]>(
-      "[slot=year] opening-hours-day",
-    )!;
-    expect(day.date).toBe("2026-12-14");
-    expect(view()).toBeNull();
+    const form = await specialPainter(el);
+    expect(form.specialDayId).toBe("company");
+    expect(location.pathname).toBe("/manage/opening-hours/view/special-day/special-day/company");
+    expect(view()?.model?.month).toBe("2026-12");
     expect(tabs(el).value).toBe("year");
-  });
-
-  it("offers no Edit hours on this date from the per-date editor itself", async () => {
-    const { el } = await monthMount("/manage/opening-hours/view/date/date/2026-12-14");
-    await expect.poll(() => el.shadowRoot!.querySelector("opening-hours-day")).not.toBeNull();
-    const day = el.shadowRoot!.querySelector("opening-hours-day")!;
-    day.dispatchEvent(
-      new CustomEvent("special-day-action", {
-        detail: {
-          kind: "open",
-          date: "2026-12-14",
-          specialDay: { id: "company", name: "Company dinners" },
-          holidays: [],
-          returnTo: () => day,
-        },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    const form = await specialDialog(el);
-    expect(form.specialDay?.id).toBe("company");
-    expect(form.offerEditDate).toBe(false);
-    expect(form.shadowRoot!.querySelector("[data-test=edit-date-hours]")).toBeNull();
   });
 
   it.each([
     ["names no date", "/manage/opening-hours/view/date"],
     ["names a date that is not one", "/manage/opening-hours/view/date/date/2026-02-30"],
-  ])(
-    "opens the per-date editor on the venue's business day when the date view %s",
-    async (_, address) => {
-      const { el, view, months } = await monthMount(address);
-      await expect.poll(() => el.shadowRoot!.querySelector("opening-hours-day")).not.toBeNull();
-      await expect
-        .poll(() => el.shadowRoot!.querySelector("opening-hours-day")!.date)
-        .toBe("2026-10-12");
-      expect(view()).toBeNull();
-      expect(months).toEqual([]);
-    },
-  );
-
-  it.each([
-    ["en", "/manage/opening-hours/view/date/date/2026-12-14", "‹ December 2026", "2026-12"],
-    ["es", "/manage/opening-hours/view/date/date/2026-12-14", "‹ diciembre 2026", "2026-12"],
-    ["en", "/manage/opening-hours/view/date", "‹ October 2026", "2026-10"],
-  ])("the date view in %s links back to its month (%s)", async (locale, address, text, month) => {
-    setLocale(locale);
-    const { el, view } = await monthMount(address);
-    await expect
-      .poll(() => el.shadowRoot!.querySelector<HTMLElement>("[data-test=month-back]"))
-      .not.toBeNull();
-    const back = el.shadowRoot!.querySelector<HTMLElement>("[data-test=month-back]")!;
-    expect(back.textContent!.replace(/\s+/g, " ").trim()).toBe(text);
-    expect(back.getAttribute("aria-label")).toBe(
-      `${locale === "es" ? "Volver a" : "Back to"} ${text.slice(2)}`,
-    );
-    back.click();
-    await expect
-      .poll(() => location.pathname)
-      .toBe(`/manage/opening-hours/view/month/month/${month}`);
-    await expect.poll(() => view()?.model?.month).toBe(month);
+  ])("opens the Month of the venue's business day when an old date view %s", async (_, address) => {
+    const { el, view, months } = await monthMount(address);
+    await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/month");
+    await expect.poll(() => view()?.month).toBe("2026-10");
+    expect(months).toEqual(["2026-10"]);
     expect(el.shadowRoot!.querySelector("opening-hours-day")).toBeNull();
-  });
-
-  it("links back to the month of the date the per-date editor has stepped to", async () => {
-    const { el, view } = await monthMount("/manage/opening-hours/view/date/date/2026-12-31");
-    const back = () =>
-      el
-        .shadowRoot!.querySelector<HTMLElement>("[data-test=month-back]")
-        ?.textContent!.replace(/\s+/g, " ")
-        .trim();
-    await expect.poll(back).toBe("‹ December 2026");
-    const day = el.shadowRoot!.querySelector("opening-hours-day")!;
-    await day.updateComplete;
-    day.shadowRoot!.querySelector<HTMLElement>("[data-test=next-day]")!.click();
-    await expect.poll(() => day.date).toBe("2027-01-01");
-    await expect.poll(back).toBe("‹ January 2027");
-    expect(location.pathname).toBe("/manage/opening-hours/view/date/date/2027-01-01");
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=month-back]")!.click();
-    await expect
-      .poll(() => location.pathname)
-      .toBe("/manage/opening-hours/view/month/month/2027-01");
-    await expect.poll(() => view()?.model?.month).toBe("2027-01");
   });
 
   it("passes read-only to the month and opens nothing from it", async () => {
@@ -2763,7 +2728,8 @@ describe("Month view", () => {
     );
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("ordinary-date-dialog")?.open ?? false).toBe(false);
-    expect(el.shadowRoot!.querySelector("special-day-dialog")).toBeNull();
+    expect(el.shadowRoot!.querySelector("special-day-painter")).toBeNull();
+    expect(location.pathname).toBe("/manage/opening-hours/view/month/month/2026-12");
   });
 });
 
