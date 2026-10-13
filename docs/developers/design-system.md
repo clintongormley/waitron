@@ -3595,10 +3595,11 @@ Opening hours' Year.
 - **Month.** `/view/month/month/<yyyy-mm>` (`opening-hours-month.ts`); with no month, the month
   holding the venue's today. It draws the whole Monday-to-Sunday weeks covering the month, the
   neighbouring months' dates faint, and each date heading carries only the day's number (the
-  column heading names the weekday) and a Today marker. Each date shows its special day's or
-  public holiday's name and a bar of hours per active department, or, with one department picked,
+  column heading names the weekday) and a Today marker. Each date shows its special day's name
+  and its public holiday's name, the holiday's in red and given once when the two are the same,
+  and a bar of hours per active department, or, with one department picked,
   a bar for it and one per zone with the zone's closed time drawn as a gap. A row with no hours
-  that day says "<name> closed". A date closed all day also shows its name with Closed, and at phone width it shows that name alone. ‹ and the year go back to the Year, ‹ › step months, and the month has the
+  that day says "<name> closed". A date closed all day adds Closed to its first name, or reads Closed with none, draws its names in the closed date's colour, and at phone width shows its names alone. ‹ and the year go back to the Year, ‹ › step months, and the month has the
   department picker, + Special day, the season chips and a Rows legend. Arrow keys move between
   dates, with one Tab stop. A special-day or public-holiday date opens the special-day dialog as
   the Year does. An ordinary date opens the ordinary-date dialog (`ordinary-date-dialog.ts`): it

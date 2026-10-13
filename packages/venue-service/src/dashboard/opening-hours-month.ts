@@ -285,7 +285,8 @@ export class OpeningHoursMonthView extends LitElement {
   /** The month as the server reads it; the host fetches a new one on `month-change`. */
   @property({ attribute: false }) model?: OpeningHoursMonth;
   /** The `YYYY-MM` the host asked for, ahead of `model` while its read is pending; ‹ › step from it
-   *  so presses during the wait add up. "" steps from `model`. */
+   *  so presses during the wait add up, and only its heading is drawn until `model` is of this
+   *  month. "" steps from `model`. */
   @property() month = "";
   /** The chosen department; "" draws every department. */
   @property() departmentId = "";
@@ -413,17 +414,19 @@ export class OpeningHoursMonthView extends LitElement {
     const rows = this.#rows(day, chosen, names);
     const place = this.#placer(day);
     const holidayName = holidayDateName(day.holidays, day.date, "");
-    const named = day.specialDay?.name ?? holidayName;
+    const special = day.specialDay?.name ?? "";
     const isToday = day.date === model.today;
-    const nameLine = day.closedAllDay
-      ? html`<span class="name" data-test="name"
-          >${named ? format("hours.calendar.special_closed", { name: named }) : t("hours.closed")}</span
-        >`
-      : named
-        ? html`<span class="name ${day.specialDay ? "special" : "holiday"}" data-test="name"
-            >${named}</span
-          >`
-        : nothing;
+    const lines = [
+      ...(special && special !== holidayName ? [{ name: special, kind: "special" }] : []),
+      ...(holidayName ? [{ name: holidayName, kind: "holiday" }] : []),
+    ];
+    if (day.closedAllDay)
+      lines[0] = lines[0]
+        ? { ...lines[0], name: format("hours.calendar.special_closed", { name: lines[0].name }) }
+        : { name: t("hours.closed"), kind: "" };
+    const nameLines = lines.map(
+      (line) => html`<span class="name ${line.kind}" data-test="name">${line.name}</span>`,
+    );
     const label = [
       formatLongDate(day.date),
       day.specialDay?.name,
@@ -438,7 +441,7 @@ export class OpeningHoursMonthView extends LitElement {
         <span class="date" data-test="date-heading">${Number(day.date.slice(8))}</span>
         ${isToday ? html`<span class="today" data-test="today">${t("hours.today")}</span>` : nothing}
       </span>
-      ${nameLine}
+      ${nameLines}
       ${rows.map((row) =>
         !row.ranges.length
           ? html`<span
@@ -535,29 +538,9 @@ export class OpeningHoursMonthView extends LitElement {
   }
 
   override render() {
-    const model = this.model;
-    if (!model) return nothing;
-    const current = this.month || model.month;
-    const chosen = this.#chosen(model);
-    const tints = seasonTints(model.seasons);
-    const named = new Map<string, string>(
-      this.departments.flatMap((d) => [
-        [d.id, d.name] as const,
-        ...d.zones.map((z) => [z.id, z.name] as const),
-      ]),
-    );
-    const periods = new Map(
-      this.departments.flatMap((d) => d.periods.map((p) => [p.id, p] as const)),
-    );
-    const names: Names = {
-      name: (id) => named.get(id) ?? "",
-      period: (id) => periods.get(id) ?? { name: "" },
-    };
-    const stop =
-      [this.focusDate, model.today].find(
-        (date): date is LocalDate => date != null && model.days.some((day) => day.date === date),
-      ) ?? model.days.find((day) => day.inMonth)!.date;
-    const legend = this.#rows(model.days[0]!, chosen, names).map((row) => row.name);
+    const current = this.month || this.model?.month;
+    if (!current) return nothing;
+    const model = this.model?.month === current ? this.model : undefined;
     const step = (by: number, test: string, label: Parameters<typeof t>[0], glyph: string) => {
       const target = stepMonth(current, by);
       const blocked = target < FIRST_MONTH || target > LAST_MONTH;
@@ -573,9 +556,6 @@ export class OpeningHoursMonthView extends LitElement {
       >`;
     };
     const year = Number(current.slice(0, 4));
-    const weeks = Array.from({ length: model.days.length / 7 }, (_, row) =>
-      model.days.slice(row * 7, row * 7 + 7),
-    );
     return html`<button
         type="button"
         class="year-back"
@@ -590,21 +570,56 @@ export class OpeningHoursMonthView extends LitElement {
         <h2 data-test="month" aria-live="polite">
           ${formatMonthName(Number(current.slice(5, 7)))} ${year}
         </h2>
-        ${step(1, "next-month", "month.next", "›")} ${this.#picker(model, chosen, names)}
-        ${
-          this.readOnly
-            ? nothing
-            : html`<wt-button
-                class="add"
-                variant="secondary"
-                data-test="add-special-day"
-                @click=${(event: Event) =>
-                  this.#action("", undefined, event.currentTarget as HTMLElement)}
-                >${t("year.add_special")}</wt-button
-              >`
-        }
+        ${step(1, "next-month", "month.next", "›")} ${model ? this.#tools(model) : nothing}
       </div>
-      <div class="sub">
+      ${model ? this.#grid(model) : nothing}`;
+  }
+
+  #names(): Names {
+    const named = new Map<string, string>(
+      this.departments.flatMap((d) => [
+        [d.id, d.name] as const,
+        ...d.zones.map((z) => [z.id, z.name] as const),
+      ]),
+    );
+    const periods = new Map(
+      this.departments.flatMap((d) => d.periods.map((p) => [p.id, p] as const)),
+    );
+    return {
+      name: (id) => named.get(id) ?? "",
+      period: (id) => periods.get(id) ?? { name: "" },
+    };
+  }
+
+  #tools(model: OpeningHoursMonth) {
+    return html`${this.#picker(model, this.#chosen(model), this.#names())}
+    ${
+      this.readOnly
+        ? nothing
+        : html`<wt-button
+            class="add"
+            variant="secondary"
+            data-test="add-special-day"
+            @click=${(event: Event) =>
+              this.#action("", undefined, event.currentTarget as HTMLElement)}
+            >${t("year.add_special")}</wt-button
+          >`
+    }`;
+  }
+
+  #grid(model: OpeningHoursMonth) {
+    const chosen = this.#chosen(model);
+    const tints = seasonTints(model.seasons);
+    const names = this.#names();
+    const stop =
+      [this.focusDate, model.today].find(
+        (date): date is LocalDate => date != null && model.days.some((day) => day.date === date),
+      ) ?? model.days.find((day) => day.inMonth)!.date;
+    const legend = this.#rows(model.days[0]!, chosen, names).map((row) => row.name);
+    const weeks = Array.from({ length: model.days.length / 7 }, (_, row) =>
+      model.days.slice(row * 7, row * 7 + 7),
+    );
+    return html`<div class="sub">
         <season-chips
           .seasons=${model.seasons}
           .clockRevision=${model.clockRevision}

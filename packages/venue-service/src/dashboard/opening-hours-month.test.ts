@@ -117,6 +117,65 @@ describe("Opening hours month", () => {
     expect(text(cell(el, "2026-12-09").querySelector('[data-test="name"]'))).toBe("");
   });
 
+  it("keeps a public holiday's name in the holiday's style on a special day of another name", async () => {
+    const model = monthModel();
+    const days = model.days.map((day) =>
+      day.date === "2026-12-08"
+        ? { ...day, specialDay: { id: "dinner", name: "Company dinner" } }
+        : day.date === "2026-12-25"
+          ? { ...day, specialDay: { id: "staff", name: "Staff party" } }
+          : day,
+    );
+    const el = await mount({ ...model, days });
+    const names = (date: LocalDate) =>
+      [...cell(el, date).querySelectorAll('[data-test="name"]')].map((name) => [
+        text(name),
+        name.classList.contains("special")
+          ? "special"
+          : name.classList.contains("holiday")
+            ? "holiday"
+            : "",
+      ]);
+    expect(names("2026-12-08")).toEqual([
+      ["Company dinner", "special"],
+      ["Immaculate Conception", "holiday"],
+    ]);
+    expect(names("2026-12-25")).toEqual([
+      ["Staff party · Closed", "special"],
+      ["Christmas Day", "holiday"],
+    ]);
+    applyTokens(el);
+    const colours = (date: LocalDate) => ({
+      day: getComputedStyle(dayButton(el, date)).color,
+      lines: [...cell(el, date).querySelectorAll('[data-test="name"]')].map(
+        (name) => getComputedStyle(name).color,
+      ),
+    });
+    const open = colours("2026-12-08");
+    expect(new Set([open.day, ...open.lines]).size).toBe(3);
+    const closed = colours("2026-12-25");
+    expect(closed.lines).toEqual([closed.day, closed.day]);
+  });
+
+  it("names a special day once, in the holiday's style, when its public holiday has the same name", async () => {
+    const model = monthModel();
+    const days = model.days.map((day) =>
+      day.date === "2026-12-08"
+        ? { ...day, specialDay: { id: "immaculate", name: "Immaculate Conception" } }
+        : day,
+    );
+    const el = await mount({ ...model, days });
+    for (const [date, line] of [
+      ["2026-12-08", "Immaculate Conception"],
+      ["2026-12-25", "Christmas Day · Closed"],
+    ] as const) {
+      const names = cell(el, date).querySelectorAll('[data-test="name"]');
+      expect(names, date).toHaveLength(1);
+      expect(text(names[0])).toBe(line);
+      expect(names[0]!.classList.contains("holiday"), date).toBe(true);
+    }
+  });
+
   it('draws a closed day with no name as "Closed"', async () => {
     const model = monthModel();
     const days = model.days.map((day) =>
@@ -232,6 +291,32 @@ describe("Opening hours month", () => {
     expect(text(testId(el, "year-back"))).toBe("‹ 2027");
     testId(el, "year-back")!.click();
     expect(years).toEqual([{ year: 2027 }]);
+  });
+
+  it("draws no dates under a requested month whose read is pending, keeping ‹ › and focus", async () => {
+    const el = await mount();
+    testId(el, "next-month")!.focus();
+    el.month = "2027-01";
+    await el.updateComplete;
+    expect(text(testId(el, "month"))).toBe("January 2027");
+    expect(root(el).querySelector("td[data-date]")).toBeNull();
+    expect(root(el).activeElement).toBe(testId(el, "next-month"));
+    const months = events<{ month: string }>(el, "month-change");
+    testId(el, "next-month")!.click();
+    expect(months).toEqual([{ month: "2027-02" }]);
+    el.model = monthModel({ month: "2027-01" });
+    await el.updateComplete;
+    expect(root(el).querySelector("td[data-date]")).not.toBeNull();
+    expect(root(el).activeElement).toBe(testId(el, "next-month"));
+  });
+
+  it("draws the heading and ‹ › of a requested month with no read yet", async () => {
+    const el = await mount(undefined, { month: "2027-01" });
+    el.model = undefined;
+    await el.updateComplete;
+    expect(text(testId(el, "month"))).toBe("January 2027");
+    expect(text(testId(el, "year-back"))).toBe("‹ 2027");
+    expect(root(el).querySelector("table, wt-combobox, season-chips")).toBeNull();
   });
 
   it("steps across a year from December and January", async () => {
