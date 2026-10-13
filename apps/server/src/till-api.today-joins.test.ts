@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { saveZonePlan } from "./floor-plan.js";
 import {
   diningTables,
   floorTodayJoins,
@@ -19,7 +20,7 @@ import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import { partyRevision } from "./floor-today-merges.js";
-import { inTx, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
+import { inTx, setupPartyVenue, tableRow, type PartyVenue } from "./testing/party-venue.js";
 import { mergeOf, plannedZone, todayRow } from "./testing/floor-today-venue.js";
 import { seedSessionDevice } from "./testing/session-device.js";
 import "./errors.js";
@@ -716,6 +717,95 @@ describe("a party change that changes a room answers its revision", () => {
     expect(await roomRevision(zoneId)).toBe(read);
   });
 
+  it("a join sent from the read before a catch-up that changes the room is refused, and the catch-up rolled back", async () => {
+    const {
+      zoneId,
+      table,
+      master,
+      revision: planRevision,
+    } = await plannedZone(v, [
+      { key: "a", place: { x: 0, y: 0 } },
+      { key: "b", place: { x: 20, y: 0 } },
+      { key: "c", place: { x: 40, y: 0 } },
+    ]);
+    const [a, b, c] = [table.a!, table.b!, table.c!];
+    const p = await seat(a);
+    const q = await seat(c);
+    const labels = [(await tableRow(v, a)).label, (await tableRow(v, b)).label];
+    const label = (await tableRow(v, c)).label;
+    const entry = (key: string, name: string, x: number) => ({
+      id: master[key]!,
+      key,
+      label: name,
+      seats: 4,
+      fixed: false,
+      placement: { x, y: 0, width: 8, height: 8, shape: "rect" as const, rotation: 0 },
+      partKeys: [],
+    });
+    await inTx(v, (tx) =>
+      saveZonePlan(tx, v.cfg, REMOVALS, zoneId, {
+        revision: planRevision,
+        tables: [
+          entry("a", labels[0]!, 0),
+          entry("b", labels[1]!, 20),
+          entry("c", `${label} b`, 40),
+        ],
+      }),
+    );
+    await ok(post(`/api/zones/${zoneId}/today/reset`, {}));
+    expect((await tableRow(v, c)).label).toBe(label);
+    await ok(post(`/api/parties/${q}/finish`, { expectedPartyRevision: await revision(q) }));
+    const read = await roomRevision(zoneId);
+    const before = await everything();
+    const partyBefore = await revision(p);
+
+    expect(
+      await refusal(
+        join(p, {
+          tableId: b,
+          expectedPartyRevision: partyBefore,
+          otherPartyId: null,
+          merge: { moving: b, target: a, side: "right", seats: 8 },
+          zoneRevision: read,
+        }),
+      ),
+    ).toEqual({
+      status: 409,
+      body: { error: { code: "floor_today.out_of_date", params: { zoneId, revision: read + 1 } } },
+    });
+    expect((await tableRow(v, c)).label).toBe(label);
+    expect(await everything()).toEqual(before);
+    expect(await revision(p)).toBe(partyBefore);
+    expect(await roomRevision(zoneId)).toBe(read);
+  });
+
+  it("a join without a merge sent from an old revision is refused and writes nothing", async () => {
+    const { zoneId, a, b, c } = await room();
+    const p = await seat(a);
+    const read = await roomRevision(zoneId);
+    await ok(post(`/api/tables/${c}/today/move`, { x: 60, y: 0 }));
+    const before = await everything();
+    const partyBefore = await revision(p);
+
+    expect(
+      await refusal(
+        join(p, {
+          tableId: b,
+          expectedPartyRevision: partyBefore,
+          otherPartyId: null,
+          zoneRevision: read,
+        }),
+      ),
+    ).toEqual({
+      status: 409,
+      body: { error: { code: "floor_today.out_of_date", params: { zoneId, revision: read + 1 } } },
+    });
+    expect(await everything()).toEqual(before);
+    expect(await revision(p)).toBe(partyBefore);
+    expect(await holders(a, b, c)).toEqual([p, null, null]);
+    expect(await roomRevision(zoneId)).toBe(read + 1);
+  });
+
   it("a join with a malformed revision is refused", async () => {
     const { zoneId, a, b, c } = await room();
     const p = await seat(a);
@@ -805,7 +895,7 @@ describe("a party change that changes a room answers its revision", () => {
 
     expect(split).toEqual({
       partyId: split.partyId,
-      mainBillId: split.mainBillId,
+      mainBillId: await mainBill(split.partyId),
       zoneRevisions: { [zoneId]: read + 1 },
     });
     expect(split.partyId).not.toBe(p);

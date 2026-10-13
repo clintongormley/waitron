@@ -1087,11 +1087,18 @@ function refuseKitchenSignIn(device: DeviceBinding): void {
     throw new AppError("device.forbidden_action", { action: "sign_in" });
 }
 
-/** `result`, with `zoneRevisions` only when a room moved. */
-function withMovedRooms<T extends object>(
-  result: T,
-  moved: ReadonlyMap<string, number>,
-): T | (T & { zoneRevisions: Record<string, number> }) {
+async function movingRooms<T extends object>(
+  tx: Transaction,
+  cfg: TillConfig,
+  tableIds: readonly string[],
+  write: () => Promise<T>,
+): Promise<T | (T & { zoneRevisions: Record<string, number> })> {
+  const rooms = await zonesOf(tx, cfg, tableIds);
+  const revisions = await roomRevisions(tx, rooms);
+  const before = await roomPrints(tx, cfg, rooms);
+  const result = await write();
+  const after = await roomPrints(tx, cfg, rooms);
+  const moved = await moveChangedRooms(tx, revisions, before, after);
   return moved.size === 0 ? result : { ...result, zoneRevisions: Object.fromEntries(moved) };
 }
 
@@ -2651,34 +2658,32 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
             }
           }
           const heldBefore = await memberTables(tx, partyId);
-          const rooms = await zonesOf(tx, deps.cfg, [...heldBefore, tableId]);
-          const revisions = await roomRevisions(tx, rooms);
-          const before = await roomPrints(tx, deps.cfg, rooms);
-          const acted = await act(tx, sendCfg, partyId, tableId, command);
-          if (path === "move") {
-            // Only a party staying on part of its merge breaks it up; a merge left whole stays, free.
-            const merged = await mergeMembers(tx, tableId);
-            await leaveMergesRestoring(
-              tx,
-              heldBefore.filter((id) => id !== tableId && merged.includes(id)),
-            );
-          }
-          await joinMergeMembers(tx, sendCfg, acted.partyId, tableId, personId);
-          if (merge !== null) {
-            const held = merge.moving === tableId ? merge.target : merge.moving;
-            if (!heldBefore.includes(held)) throw invalid("merge");
-            await writeMerge(tx, cfg, {
-              movingId: merge.moving,
-              targetId: merge.target,
-              side: merge.side,
-              seats: merge.seats,
-              free: false,
-            });
-          }
-          // Last, so the route's own refusals answer first.
-          await refuseTakenOff(tx, [tableId]);
-          const after = await roomPrints(tx, deps.cfg, rooms);
-          return withMovedRooms(acted, await moveChangedRooms(tx, revisions, before, after));
+          return movingRooms(tx, deps.cfg, [...heldBefore, tableId], async () => {
+            const acted = await act(tx, sendCfg, partyId, tableId, command);
+            if (path === "move") {
+              // Only a party staying on part of its merge breaks it up; a merge left whole stays, free.
+              const merged = await mergeMembers(tx, tableId);
+              await leaveMergesRestoring(
+                tx,
+                heldBefore.filter((id) => id !== tableId && merged.includes(id)),
+              );
+            }
+            await joinMergeMembers(tx, sendCfg, acted.partyId, tableId, personId);
+            if (merge !== null) {
+              const held = merge.moving === tableId ? merge.target : merge.moving;
+              if (!heldBefore.includes(held)) throw invalid("merge");
+              await writeMerge(tx, cfg, {
+                movingId: merge.moving,
+                targetId: merge.target,
+                side: merge.side,
+                seats: merge.seats,
+                free: false,
+              });
+            }
+            // Last, so the route's own refusals answer first.
+            await refuseTakenOff(tx, [tableId]);
+            return acted;
+          });
         });
         return c.json(result);
       }),
@@ -2708,19 +2713,15 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const result = await withTransaction(deps.db, async (tx) => {
         await catchUpFloor(tx);
         await checkZones(tx, deps.cfg, session, [{ partyId }]);
-        const rooms = await zonesOf(tx, deps.cfg, [
-          ...(await memberTables(tx, partyId)),
-          tableId.toLowerCase(),
-        ]);
-        const revisions = await roomRevisions(tx, rooms);
-        const before = await roomPrints(tx, deps.cfg, rooms);
-        const split = await splitTable(tx, sendCfg, partyId, tableId.toLowerCase(), billId, {
-          expectedPartyRevision,
-          operatorId: personId,
+        const held = [...(await memberTables(tx, partyId)), tableId.toLowerCase()];
+        return movingRooms(tx, deps.cfg, held, async () => {
+          const split = await splitTable(tx, sendCfg, partyId, tableId.toLowerCase(), billId, {
+            expectedPartyRevision,
+            operatorId: personId,
+          });
+          await leaveMergesRestoring(tx, [tableId.toLowerCase()]);
+          return split;
         });
-        await leaveMergesRestoring(tx, [tableId.toLowerCase()]);
-        const after = await roomPrints(tx, deps.cfg, rooms);
-        return withMovedRooms(split, await moveChangedRooms(tx, revisions, before, after));
       });
       return c.json(result);
     }),

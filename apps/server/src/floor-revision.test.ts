@@ -270,6 +270,32 @@ describe("moving rooms", () => {
     expect(await revisionOf(two.zoneId)).toBe(1);
   });
 
+  it("moveChangedRooms leaves out a changed zone that has no today's plan to move", async () => {
+    const { zoneId } = await LONG_TABLE();
+    const bare = v.tables.zoneId;
+    const moved = await inTx(v, (tx) =>
+      moveChangedRooms(
+        tx,
+        new Map([
+          [zoneId, 1],
+          [bare, 0],
+        ]),
+        new Map([
+          [zoneId, "before"],
+          [bare, "before"],
+        ]),
+        new Map([
+          [zoneId, "after"],
+          [bare, "after"],
+        ]),
+      ),
+    );
+
+    expect(moved).toEqual(new Map([[zoneId, 2]]));
+    expect(await revisionOf(zoneId)).toBe(2);
+    expect(await revisionOf(bare)).toBe(0);
+  });
+
   it("moveRoom sets the revision one past where the request found it, once", async () => {
     const { zoneId } = await LONG_TABLE();
     expect(await inTx(v, (tx) => moveRoom(tx, zoneId, 1))).toBe(2);

@@ -96,7 +96,10 @@ export async function moveRoom(tx: Transaction, zoneId: string, from: number): P
   return moved.length === 0 ? from : from + 1;
 }
 
-/** Every zone whose print differs between `before` and `after`, moved by one from `revisions`. */
+/**
+ * Every zone whose print differs between `before` and `after`, moved by one from `revisions`; a
+ * zone with no today's plan has nothing to move and is left out.
+ */
 export async function moveChangedRooms(
   tx: Transaction,
   revisions: ReadonlyMap<string, number>,
@@ -106,7 +109,9 @@ export async function moveChangedRooms(
   const moved = new Map<string, number>();
   for (const [zoneId, print] of after) {
     if (before.get(zoneId) === print) continue;
-    moved.set(zoneId, await moveRoom(tx, zoneId, revisions.get(zoneId) ?? 0));
+    const from = revisions.get(zoneId) ?? 0;
+    const revision = await moveRoom(tx, zoneId, from);
+    if (revision !== from) moved.set(zoneId, revision);
   }
   return moved;
 }
