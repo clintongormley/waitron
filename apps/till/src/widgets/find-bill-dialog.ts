@@ -244,7 +244,7 @@ export class TillFindBillDialog extends LitElement {
       workingOrderId: bill.workingOrderId,
       tender:
         this.method === "cash"
-          ? { method: "cash", amount: this.cash }
+          ? { method: "cash", amount: typedAmount(this.cash)! }
           : {
               method: "card",
               amount: bill.stillOwed,
