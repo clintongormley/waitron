@@ -20,7 +20,7 @@ beforeEach(() => {
   setLocale("en");
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-10-12T12:00:00Z"));
-  history.replaceState(null, "", "/manage/opening-hours/view/day");
+  history.replaceState(null, "", "/manage/opening-hours/view/date");
 });
 afterEach(() => {
   screen?.remove();

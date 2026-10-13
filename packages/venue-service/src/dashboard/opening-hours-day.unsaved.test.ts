@@ -84,7 +84,7 @@ customElements.define("day-leave-test-app", DayLeaveApp);
 let app: DayLeaveApp;
 const originalUrl = location.href;
 beforeEach(() => {
-  history.replaceState(null, "", "/manage/opening-hours/view/day");
+  history.replaceState(null, "", "/manage/opening-hours/view/date");
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-10-12T10:00:00Z"));
 });

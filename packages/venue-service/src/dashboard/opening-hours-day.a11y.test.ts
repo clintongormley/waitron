@@ -29,7 +29,7 @@ describe.each(["light", "dark"] as const)("Opening Day (%s)", (theme) => {
     "zone-range",
   ])("%s", async (state) => {
     setLocale("en");
-    history.replaceState(null, "", "/manage/opening-hours/view/day");
+    history.replaceState(null, "", "/manage/opening-hours/view/date");
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-10-12T10:00:00Z"));
     const wrapper = await mountThemed("<div></div>", theme);

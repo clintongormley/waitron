@@ -98,7 +98,7 @@ export function dayFixture(): OpeningHoursModel {
 }
 beforeEach(() => {
   setLocale("en");
-  history.replaceState(null, "", "/manage/opening-hours/view/day");
+  history.replaceState(null, "", "/manage/opening-hours/view/date");
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-10-13T01:00:00Z"));
 });
