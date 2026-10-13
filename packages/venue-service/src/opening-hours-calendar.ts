@@ -1,7 +1,12 @@
 import type { Transaction } from "@waitron/db";
 import { readLocationClock } from "@waitron/reporting";
 import { readBusinessDayScheduleStatus } from "./business-day-schedule.js";
-import { readDayPlan, resolveDepartmentsDays, resolveZoneClosedDays } from "./day-resolver.js";
+import {
+  readDayPlan,
+  resolveDepartmentsDays,
+  resolveZoneClosedDays,
+  type DayPlan,
+} from "./day-resolver.js";
 import type { HolidayCoverage, SpecialDaysModel } from "./holiday-types.js";
 import { readHolidayFacts, readHolidayYear } from "./holidays.js";
 import { isReadableZone, venueLocalMoment } from "./hours-clock.js";
@@ -11,7 +16,7 @@ import { calendarDays } from "./hours.js";
 import { readActiveDepartments } from "./menu-timetable.js";
 import { holidayAreaSummary } from "./named-days.js";
 import type { VenueScope } from "./operations.js";
-import type { Season } from "./season-rules.js";
+import { seasonOn, type Season } from "./season-rules.js";
 import { readSeasons } from "./seasons.js";
 import type { ClosedRange, ServiceRange } from "./service-day.js";
 import { serviceDayWallContext, type BusinessDayScheduleStatus } from "./service-day-context.js";
@@ -193,5 +198,67 @@ export async function readOpeningHoursMonth(
         })),
       };
     }),
+  };
+}
+
+/** Each date's season week alone: what stands on it when no special day does. */
+export interface SeasonDays {
+  days: readonly {
+    date: LocalDate;
+    seasonId: string | null;
+    dayCutover: string;
+    departments: readonly {
+      departmentId: string;
+      ranges: readonly ServiceRange[];
+      zones: readonly { zoneId: string; closed: readonly ClosedRange[] }[];
+    }[];
+  }[];
+}
+
+/** `dates` are dates the caller has checked; the answer keeps their order, each date once. */
+export async function readSeasonDays(
+  tx: Transaction,
+  cfg: VenueScope,
+  dates: readonly LocalDate[],
+): Promise<SeasonDays> {
+  const days = [...new Set(dates)];
+  const stored = await readLocationClock(tx, cfg.locationId);
+  const clock = isReadableZone(stored.timeZone) ? stored : { ...stored, timeZone: "UTC" };
+  const seasons = await readSeasons(tx, cfg);
+  const plan: DayPlan = {
+    seasonIdOn: new Map(days.map((day) => [day, seasonOn(seasons, day)?.id ?? null])),
+    special: new Map(days.map((day) => [day, null])),
+  };
+  const departments = await readActiveDepartments(tx, cfg);
+  const zones = await readServiceZones(tx, cfg);
+  const hours = await resolveDepartmentsDays(
+    tx,
+    cfg,
+    departments.map(({ id }) => id),
+    days,
+    clock,
+    plan,
+  );
+  const closures = await resolveZoneClosedDays(
+    tx,
+    cfg,
+    zones.map(({ id }) => id),
+    days,
+    clock,
+    plan,
+  );
+  return {
+    days: days.map((date) => ({
+      date,
+      seasonId: plan.seasonIdOn.get(date)!,
+      dayCutover: serviceDayWallContext(clock, date).dayCutover,
+      departments: departments.map(({ id }) => ({
+        departmentId: id,
+        ranges: hours.get(id)!.get(date)!.ranges,
+        zones: zones
+          .filter(({ departmentId }) => departmentId === id)
+          .map((zone) => ({ zoneId: zone.id, closed: closures.get(zone.id)!.get(date)! })),
+      })),
+    })),
   };
 }

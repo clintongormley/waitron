@@ -21,7 +21,11 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId } from "@waitron/shared";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import { readOpeningHoursMonth, readOpeningHoursYear } from "./opening-hours-calendar.js";
+import {
+  readOpeningHoursMonth,
+  readOpeningHoursYear,
+  readSeasonDays,
+} from "./opening-hours-calendar.js";
 import { configureZone, createDepartment, type VenueScope } from "./operations.js";
 import { ensureDefaultSeasons, readSeasons } from "./seasons.js";
 import { missingHolidaysIn, saveSpecialDay } from "./special-days.js";
@@ -580,5 +584,107 @@ describe("the Opening hours month read", () => {
     const one = await statementsFor(await venue([[1]]));
     expect(await statementsFor(await venue([[1], [1], [1]]))).toBe(one);
     expect(one).toBeLessThan(40);
+  });
+});
+
+describe("the season days read", () => {
+  it("gives each asked date its season's hours and closures by value, under a special day's paint and Closed tick", async () => {
+    const v = await monthVenue();
+    await special(v, {
+      name: "Nochebuena",
+      repeatsYearly: false,
+      dates: [
+        { date: "2030-12-24", closedAllDay: false },
+        { date: "2030-11-30", closedAllDay: true },
+      ],
+      paint: [
+        {
+          departmentId: v.sala,
+          date: "2030-12-24",
+          ranges: [{ periodId: v.lunch, startsAt: "19:00", endsAt: "20:30" }],
+        },
+      ],
+      zonePaint: [
+        {
+          zoneId: v.bar,
+          date: "2030-12-24",
+          ranges: [{ kind: "closed", startsAt: "19:00", endsAt: "20:00" }],
+        },
+      ],
+    });
+    const read = await run((tx) =>
+      readSeasonDays(tx, v.cfg, ["2030-12-24", "2030-11-30", "2030-12-01", "2030-12-24"]),
+    );
+    const barra = {
+      departmentId: v.barra,
+      ranges: [{ periodId: v.barLunch, startsAt: "13:00", endsAt: "15:00" }],
+      zones: [{ zoneId: v.counter, closed: [] }],
+    };
+    expect(read).toEqual({
+      days: [
+        {
+          date: "2030-12-24",
+          seasonId: v.seasons.Winter,
+          dayCutover: "06:00",
+          departments: [
+            barra,
+            {
+              departmentId: v.sala,
+              ranges: [{ periodId: v.dinner, startsAt: "20:00", endsAt: "23:30" }],
+              zones: [
+                { zoneId: v.terrace, closed: [] },
+                { zoneId: v.bar, closed: [] },
+              ],
+            },
+          ],
+        },
+        {
+          date: "2030-11-30",
+          seasonId: v.seasons.Autumn,
+          dayCutover: "06:00",
+          departments: [
+            barra,
+            {
+              departmentId: v.sala,
+              ranges: [{ periodId: v.lunch, startsAt: "12:00", endsAt: "16:00" }],
+              zones: [
+                { zoneId: v.terrace, closed: [] },
+                { zoneId: v.bar, closed: [] },
+              ],
+            },
+          ],
+        },
+        {
+          date: "2030-12-01",
+          seasonId: v.seasons.Winter,
+          dayCutover: "06:00",
+          departments: [
+            barra,
+            {
+              departmentId: v.sala,
+              ranges: [{ periodId: v.dinner, startsAt: "20:00", endsAt: "23:30" }],
+              zones: [
+                { zoneId: v.terrace, closed: [{ startsAt: "20:00", endsAt: "22:00" }] },
+                { zoneId: v.bar, closed: [] },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+  });
+
+  it("gives each date its own changeover across a pending changeover change", async () => {
+    const v = await venue([]);
+    await suite.db.insert(locationDayCutoverChanges).values({
+      locationId: v.cfg.locationId,
+      effectiveBusinessDay: "2030-12-10",
+      dayCutover: "07:00:00",
+    });
+    const read = await run((tx) => readSeasonDays(tx, v.cfg, ["2030-12-09", "2030-12-10"]));
+    expect(read.days.map(({ date, dayCutover }) => ({ date, dayCutover }))).toEqual([
+      { date: "2030-12-09", dayCutover: "06:00" },
+      { date: "2030-12-10", dayCutover: "07:00" },
+    ]);
   });
 });

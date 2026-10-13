@@ -34,6 +34,9 @@ export const HOURS_RANGE_MAX_DAYS = 366;
 export const CALENDAR_YEAR_MIN = 100;
 export const CALENDAR_YEAR_MAX = 9998;
 
+/** The most dates one season-days read serves; the dashboard splits a longer list. */
+export const SEASON_DAYS_MAX_DATES = 62;
+
 /** The order a week is shown in, Monday first. It never relabels a stored weekday. */
 export const WEEK_DISPLAY_ORDER = [1, 2, 3, 4, 5, 6, 0] as const;
 

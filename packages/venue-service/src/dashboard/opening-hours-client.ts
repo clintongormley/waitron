@@ -1,5 +1,6 @@
 import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
-import type { OpeningHoursMonth, OpeningHoursYear } from "../opening-hours-calendar.js";
+import { SEASON_DAYS_MAX_DATES, type LocalDate } from "../hours-types.js";
+import type { OpeningHoursMonth, OpeningHoursYear, SeasonDays } from "../opening-hours-calendar.js";
 import type { MenuPeriodInput, MenuWeekDay, OpeningHoursModel } from "../menu-timetable-types.js";
 import type { Season } from "../season-rules.js";
 import type { ClosedRange } from "../service-day.js";
@@ -100,6 +101,24 @@ export class OpeningHoursApi {
       failed,
       recovered,
     );
+  }
+  /** Each date's season hours without special-day paint, in `dates`' order, one read per
+   *  `SEASON_DAYS_MAX_DATES` dates. */
+  async readSeasonDays(dates: readonly LocalDate[]): Promise<SeasonDays> {
+    const chunks: LocalDate[][] = [];
+    for (let i = 0; i < dates.length; i += SEASON_DAYS_MAX_DATES)
+      chunks.push(dates.slice(i, i + SEASON_DAYS_MAX_DATES));
+    const reads = await Promise.all(
+      chunks.map((chunk) =>
+        this.request<SeasonDays>(
+          `${BASE}/opening-hours/season-days?${new URLSearchParams({ dates: chunk.join(",") })}`,
+          "GET",
+          undefined,
+          { passive: true },
+        ),
+      ),
+    );
+    return { days: reads.flatMap(({ days }) => days) };
   }
   watchStations(
     apply: (stations: OpeningStation[]) => void,
