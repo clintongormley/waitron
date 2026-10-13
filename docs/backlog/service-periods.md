@@ -202,12 +202,15 @@ tab, and setup's Done link opens it.
   (`GET …/special-days`) to show a name and a latest date.
 
 **Left open by A506-6, for the later parts.**
-- A season delete's confirmation names only departments (`seasonDeleteImpact`,
-  `packages/venue-service/src/seasons.ts`), yet the delete also removes the zones' closed times for
-  that season, so a zone closed all winter quietly takes the previous season's closed times. Shown by
-  the A506-6 finish-branch review: a zone's Winter Saturday closure was gone after deleting Winter,
-  and the impact named one department. The spec promises departments only; whether to name zones
-  too is the owner's call.
+- A season dialog whose season another session deletes says "This season no longer exists." but
+  stays open with Save and Delete still live (`season-dialog.ts`, #1616); the zone and department
+  dialogs close instead and say so on the page. Pressing either is refused by the server with the
+  same message, so nothing breaks; closing it like the others is the open choice.
+- `isLocalDate` (`packages/venue-service/src/hours-rules.ts`) and `addMonths`
+  (`packages/venue-service/src/dashboard/calendar-grid.ts`) still build dates with `Date.UTC`, which
+  reads years 0–99 as 1900–1999 (#1616 fixed `addDays` and `weekdayOf`). Unreachable from the screens,
+  which start at year 100; changing `isLocalDate` would change which dates the server accepts from
+  outside (menu publication dates, imports), so it needs a decision.
 
 **Why.** One standard week does not fit a venue whose hours change with the season, and copying a
 week into future dates would bury the special days among ordinary ones.
@@ -320,6 +323,10 @@ period order — spec section 2).
   midnight.
 
 ## Decisions and deliberate limits
+
+- A season delete's confirmation names only the departments with hours in it, though the delete
+  also removes the zones' closed times for that season (`seasonDeleteImpact`,
+  `packages/venue-service/src/seasons.ts`). Owner, 2026-10-13 ~08:42: keep as built.
 
 - **Business-day changes are dated (A495, 2026-10-11).** You schedule one future start, from
   two to 366 business-calendar dates ahead. You can replace or cancel it before the preceding
