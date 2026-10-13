@@ -98,6 +98,9 @@ export function createAgent(opts: AgentOptions): Agent {
   let approved = false;
   let halted = false;
   let running = false;
+  // Set by stop() and cleared by start(): a job still out then reports, but nothing new is claimed.
+  // Not `running`, which is false before start(), when runOnce() must still claim.
+  let stopped = false;
   let outOfTouch = false;
   let resetAt: number | undefined;
   let operation = Promise.resolve();
@@ -486,7 +489,7 @@ export function createAgent(opts: AgentOptions): Agent {
       if (fromPull) await resendPageReports(url, token);
       do {
         claimAgain = false;
-        for (;;) {
+        while (!stopped) {
           const claimed = await client.claimPageJob(url, token);
           if (!claimed.ok || claimed.value === null) break;
           void runPageJob(
@@ -784,6 +787,7 @@ export function createAgent(opts: AgentOptions): Agent {
     },
     async start() {
       running = true;
+      stopped = false;
       while (running) {
         const busy = await runSerialized();
         if (!running) break;
@@ -795,6 +799,7 @@ export function createAgent(opts: AgentOptions): Agent {
     },
     stop() {
       running = false;
+      stopped = true;
       wake();
     },
     configure(input) {

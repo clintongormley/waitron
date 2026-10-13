@@ -2697,6 +2697,70 @@ describe("createAgent — A4 page jobs", () => {
     expect(vi.mocked(c.claimPageJob).mock.invocationCallOrder.at(-1)).toBeGreaterThan(reported!);
   });
 
+  it("a job that finishes after stop() still reports, and claims no other", async () => {
+    const printing = deferred<PagePrintOutcome>();
+    const printPage = vi.fn(() => printing.promise);
+    const { host } = pageHost(printPage);
+    const c = client({
+      claimPageJob: vi
+        .fn()
+        .mockResolvedValueOnce(okR(PAGE_JOB))
+        .mockResolvedValueOnce(okR(null))
+        .mockResolvedValueOnce(okR({ ...PAGE_JOB, id: "a5b8e2c4-6d1f-4e3a-9b7c-2f0d8e6a4c13" }))
+        .mockResolvedValue(okR(null)),
+    });
+    const agent = createAgent({ host, client: c });
+    await agent.runOnce();
+    await settle();
+    expect(c.claimPageJob).toHaveBeenCalledTimes(2);
+
+    agent.stop();
+    printing.resolve(SENT);
+    await settle();
+    expect(c.reportPageJob).toHaveBeenCalledExactlyOnceWith(A, "a1.s", PAGE_JOB, {
+      status: "sent",
+    });
+    expect(c.claimPageJob).toHaveBeenCalledTimes(2);
+    expect(printPage).toHaveBeenCalledTimes(1);
+  });
+
+  it("a claim answered after stop() still prints its job, and the loop claims no other", async () => {
+    const answer = deferred<Result<PageJob | null>>();
+    const printPage = vi.fn(async () => SENT);
+    const { host } = pageHost(printPage);
+    const c = client({
+      claimPageJob: vi
+        .fn()
+        .mockReturnValueOnce(answer.promise)
+        .mockResolvedValueOnce(okR({ ...PAGE_JOB, id: "a5b8e2c4-6d1f-4e3a-9b7c-2f0d8e6a4c13" }))
+        .mockResolvedValue(okR(null)),
+    });
+    const agent = createAgent({ host, client: c });
+    await agent.runOnce();
+    await settle();
+    agent.stop();
+    answer.resolve(okR(PAGE_JOB));
+    await settle();
+    expect(c.claimPageJob).toHaveBeenCalledTimes(1);
+    expect(printPage).toHaveBeenCalledTimes(1);
+    expect(c.reportPageJob).toHaveBeenCalledExactlyOnceWith(A, "a1.s", PAGE_JOB, {
+      status: "sent",
+    });
+  });
+
+  it("start() after stop() claims again", async () => {
+    const { host } = pageHost(vi.fn(async () => SENT));
+    const c = client();
+    const agent = createAgent({ host, client: c });
+    agent.stop();
+    vi.mocked(c.claimPageJob).mockImplementation(async () => {
+      agent.stop();
+      return okR(null);
+    });
+    await agent.start();
+    expect(c.claimPageJob).toHaveBeenCalledTimes(1);
+  });
+
   it("hands the printer the paper the server chose for the job", async () => {
     const letter: PageJob = {
       ...PAGE_JOB,
