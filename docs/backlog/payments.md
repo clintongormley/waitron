@@ -127,12 +127,19 @@ their full text.
   request; a row's Scan arms just that row. If NFC is allowed or awaiting permission, you choose Scan QR code to open
   the camera, which pauses NFC until you return. Printers have a server-side pick-up role set
   (receipt and payment slip by default); an unnamed authenticated scan applies that set in one
-  transaction, while a scan for a named row changes only that row. Reading on every till screen,
-  writing/locking stickers and venue-printer label printing remain open. What the probe settles for the build: the sticker holds a
+  transaction, while a scan for a named row changes only that row. You can write the code as a text record from the dashboard equipment label, beside Print,
+  and then confirm a permanent sticker lock. On browsers without Web NFC, the write action is
+  disabled with an Android Chrome hint; Copy code remains available. Browser tests use simulated
+  writers and do not establish hardware writing or locking. Reading on every till screen and
+  venue-printer label printing remain open. What the probe settles for the build: the sticker holds a
   **text record** of `formatEquipmentCode`'s text (owner, 2026-10-12); the till scans whenever it is
   in front, or a tap brings up Android's own tag viewer; opening the camera stops NFC, so the QR
   scanner and NFC take turns; a lost tap reaches the page as nothing at all. Still to check during
   the build: the first permission grant on the box's own `https://waitron.local` address.
+  On the OnePlus 13, open a reader or portable printer's Equipment label there, write a spare
+  unlocked sticker, and check its text with the till dialog. Write again after moving the sticker
+  away to check the retry message; lock only a disposable sticker after reading the permanent
+  warning, then try rewriting it. These box-address write/read/lock checks remain unverified.
 
 ## A guest paying from their own phone
 

@@ -5,10 +5,22 @@ import { baseStyles, type WtModal } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-modal.js";
+import "@waitron/ui/src/components/wt-dialog.js";
 import { formatEquipmentCode, type EquipmentKind } from "@waitron/shared";
 import { fill, t } from "../i18n/t.js";
+import type { StringKey } from "../i18n/strings.js";
 
-/** What a printed label carries. */
+interface NfcWriter {
+  write(
+    message: { records: { recordType: "text"; data: string }[] },
+    options: { signal: AbortSignal },
+  ): Promise<void>;
+  makeReadOnly(options: { signal: AbortSignal }): Promise<void>;
+}
+function nfcWriter(): (new () => NfcWriter) | undefined {
+  return (window as Window & { NDEFReader?: new () => NfcWriter }).NDEFReader;
+}
+
 export interface EquipmentLabelContent {
   qr: string;
   code: string;
@@ -55,7 +67,6 @@ export function printEquipmentLabel(
   document.body.append(frame);
 }
 
-/** A portable printer's or card reader's label: its QR code, the code's text and its name. */
 @customElement("dashboard-equipment-label")
 export class EquipmentLabel extends LitElement {
   static override styles = [
@@ -86,6 +97,15 @@ export class EquipmentLabel extends LitElement {
         margin: 0 0 var(--wt-space-3);
         color: var(--wt-color-text-muted);
       }
+      .copy {
+        display: flex;
+        justify-content: center;
+        margin-block: var(--wt-space-2);
+      }
+      .message {
+        margin-block: var(--wt-space-3) 0;
+        color: var(--wt-color-text);
+      }
     `,
   ];
 
@@ -102,6 +122,76 @@ export class EquipmentLabel extends LitElement {
     toDataURL(code, { margin: 2, width: 320 });
 
   @state() private qr = "";
+  @state() private nfcBusy: "write" | "lock" | "" = "";
+  @state() private nfcMessage: StringKey | null = null;
+  @state() private nfcWritten = false;
+  @state() private confirmLock = false;
+  #nfcOperation: AbortController | undefined;
+  #generation = 0;
+
+  #resetNfc(): void {
+    this.#generation++;
+    this.#nfcOperation?.abort();
+    this.#nfcOperation = undefined;
+    this.nfcBusy = "";
+    this.nfcMessage = null;
+    this.nfcWritten = false;
+    this.confirmLock = false;
+  }
+
+  override disconnectedCallback(): void {
+    this.#resetNfc();
+    super.disconnectedCallback();
+  }
+
+  async #copy(): Promise<void> {
+    const code = this.#code();
+    const generation = this.#generation;
+    try {
+      await navigator.clipboard.writeText(code);
+      if (this.#generation === generation && this.isConnected && this.#code() === code)
+        this.nfcMessage = "equipment.code_copied";
+    } catch {
+      if (this.#generation === generation && this.isConnected && this.#code() === code)
+        this.nfcMessage = "equipment.copy_failed";
+    }
+  }
+
+  async #nfc(operation: "write" | "lock"): Promise<void> {
+    const Writer = nfcWriter();
+    if (
+      !Writer ||
+      this.nfcBusy !== "" ||
+      (operation === "write" && this.confirmLock) ||
+      (operation === "lock" && (!this.nfcWritten || !this.confirmLock))
+    )
+      return;
+    this.confirmLock = false;
+    this.nfcBusy = operation;
+    this.nfcMessage = "equipment.nfc_hold";
+    if (operation === "write") this.nfcWritten = false;
+    const controller = new AbortController();
+    this.#nfcOperation = controller;
+    try {
+      const writer = new Writer();
+      if (operation === "write")
+        await writer.write(
+          { records: [{ recordType: "text", data: this.#code() }] },
+          { signal: controller.signal },
+        );
+      else await writer.makeReadOnly({ signal: controller.signal });
+      if (controller.signal.aborted) return;
+      this.nfcWritten = operation === "write";
+      this.nfcMessage = operation === "write" ? "equipment.nfc_written" : "equipment.nfc_locked";
+    } catch {
+      if (!controller.signal.aborted) this.nfcMessage = "equipment.nfc_failed";
+    } finally {
+      if (this.#nfcOperation === controller) {
+        this.#nfcOperation = undefined;
+        this.nfcBusy = "";
+      }
+    }
+  }
 
   #code(): string {
     return formatEquipmentCode(this.kind, this.itemId);
@@ -109,6 +199,7 @@ export class EquipmentLabel extends LitElement {
 
   protected override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("kind") || changed.has("itemId")) {
+      this.#resetNfc();
       this.qr = "";
       const code = this.#code();
       void this.drawQr(code).then((qr) => {
@@ -119,46 +210,110 @@ export class EquipmentLabel extends LitElement {
 
   /** Closes the dialog; `wt-close` follows once it has. */
   #close(): void {
+    this.#resetNfc();
     this.renderRoot.querySelector<WtModal>("wt-modal")!.open = false;
   }
 
   override render(): TemplateResult {
     const code = this.#code();
     return html`<wt-modal
-      size="compact"
-      data-test="equipment-label-modal"
-      heading=${fill("equipment.label_title", { name: this.name })}
-      .open=${true}
-      .opener=${this.opener}
-    >
-      <p class="hint">${t("equipment.label_hint")}</p>
-      <figure>
-        ${
-          this.qr === ""
-            ? nothing
-            : html`<img
-                class="qr"
-                data-test="equipment-label-qr"
-                src=${this.qr}
-                alt=${t("equipment.label_qr_alt")}
-              />`
-        }
-        <p class="name" data-test="equipment-label-name">${this.name}</p>
-        <code data-test="equipment-label-code">${code}</code>
-      </figure>
-      <wt-form-actions slot="footer">
-        <wt-button slot="cancel" data-test="close-equipment-label" @click=${() => this.#close()}
-          >${t("action.close")}</wt-button
-        >
-        <wt-button
-          variant=${this.qr === "" ? "secondary" : "primary"}
-          data-test="print-equipment-label"
-          ?disabled=${this.qr === ""}
-          @click=${() => this.print({ qr: this.qr, code, name: this.name })}
-          >${t("equipment.print")}</wt-button
-        >
-      </wt-form-actions>
-    </wt-modal>`;
+        size="compact"
+        data-test="equipment-label-modal"
+        heading=${fill("equipment.label_title", { name: this.name })}
+        .open=${true}
+        .opener=${this.opener}
+        @wt-close=${() => this.#resetNfc()}
+      >
+        <p class="hint">${t("equipment.label_hint")}</p>
+        <figure>
+          ${
+            this.qr === ""
+              ? nothing
+              : html`<img
+                  class="qr"
+                  data-test="equipment-label-qr"
+                  src=${this.qr}
+                  alt=${t("equipment.label_qr_alt")}
+                />`
+          }
+          <p class="name" data-test="equipment-label-name">${this.name}</p>
+          <code data-test="equipment-label-code">${code}</code>
+        </figure>
+        <div class="copy">
+          <wt-button data-test="copy-equipment-code" @click=${() => void this.#copy()}
+            >${t("equipment.copy_code")}</wt-button
+          >
+        </div>
+        ${nfcWriter() ? nothing : html`<p class="hint" data-test="equipment-nfc-unavailable">${t("equipment.nfc_android")}</p>`}
+        ${this.nfcMessage === null ? nothing : html`<p class="message" role="status" data-test="equipment-nfc-message">${t(this.nfcMessage)}</p>`}
+        <wt-form-actions slot="footer">
+          <wt-button slot="cancel" data-test="close-equipment-label" @click=${() => this.#close()}
+            >${t("action.close")}</wt-button
+          >
+          <wt-button
+            variant=${this.qr === "" ? "secondary" : "primary"}
+            data-test="print-equipment-label"
+            ?disabled=${this.qr === ""}
+            @click=${() => this.print({ qr: this.qr, code, name: this.name })}
+            >${t("equipment.print")}</wt-button
+          >
+          <wt-button
+            variant=${nfcWriter() ? "primary" : "secondary"}
+            data-test="write-equipment-nfc"
+            ?disabled=${!nfcWriter() || this.nfcBusy !== "" || this.confirmLock}
+            .loading=${this.nfcBusy === "write"}
+            @click=${() => void this.#nfc("write")}
+            >${t("equipment.nfc_write")}</wt-button
+          >
+          ${
+            this.nfcWritten
+              ? html`<wt-button
+                  variant="danger"
+                  data-test="lock-equipment-nfc"
+                  ?disabled=${this.nfcBusy !== "" || this.confirmLock}
+                  .loading=${this.nfcBusy === "lock"}
+                  @click=${() => {
+                    if (this.nfcBusy === "") this.confirmLock = true;
+                  }}
+                  >${t("equipment.nfc_lock")}</wt-button
+                >`
+              : nothing
+          }
+        </wt-form-actions>
+      </wt-modal>
+      ${
+        this.confirmLock
+          ? html`<wt-dialog
+              data-test="lock-equipment-nfc-confirmation"
+              heading=${t("equipment.nfc_lock")}
+              .open=${true}
+              @wt-close=${(event: Event) => {
+                event.stopPropagation();
+                this.confirmLock = false;
+              }}
+            >
+              <p>${t("equipment.nfc_lock_confirmation")}</p>
+              <wt-form-actions slot="footer">
+                <wt-button
+                  slot="cancel"
+                  data-test="cancel-lock-equipment-nfc"
+                  @click=${() => {
+                    this.renderRoot.querySelector<HTMLElementTagNameMap["wt-dialog"]>(
+                      "wt-dialog",
+                    )!.open = false;
+                  }}
+                  >${t("action.cancel")}</wt-button
+                >
+                <wt-button
+                  variant="danger"
+                  data-test="confirm-lock-equipment-nfc"
+                  @click=${() => void this.#nfc("lock")}
+                  >${t("equipment.nfc_lock")}</wt-button
+                >
+              </wt-form-actions>
+            </wt-dialog>`
+          : nothing
+      }`;
   }
 }
 
