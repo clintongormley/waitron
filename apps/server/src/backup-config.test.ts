@@ -402,6 +402,24 @@ describe("loadBackupConfig bucket destinations", () => {
     expect(JSON.stringify(r)).not.toContain(SECRET);
   });
 
+  it("refuses two entries naming the same bucket place, however the endpoint and prefix are spelled", () => {
+    const again = {
+      ...s3,
+      id: "offsite-2",
+      endpoint: "https://s3.example.test/",
+      prefix: "/waitron/",
+      accessKeyId: "AKIAOTHER",
+    };
+    expect(() => loadWithVenue(withEntries([s3, again]), VENUE)).toThrow(
+      new AppError("backup.destinations_invalid", { reason: "duplicate_bucket" }),
+    );
+  });
+
+  it("accepts two entries in different buckets", () => {
+    const other = { ...s3, id: "offsite-2", bucket: "second-bucket" };
+    expect(loadWithVenue(withEntries([s3, other]), VENUE)!.destinations).toHaveLength(2);
+  });
+
   it("refuses an id shared by a folder and a bucket", () => {
     expect(() =>
       loadWithVenue(withEntries([{ kind: "local-fs", id: "offsite", dir: "/mnt/a" }, s3]), VENUE),

@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { resolve } from "node:path";
 import { codeOf } from "@waitron/server-kit";
 import { AppError, isAppError } from "@waitron/shared";
-import { readBucketConfig } from "@waitron/stream";
+import { normalisePrefix, readBucketConfig, type BucketConfig } from "@waitron/stream";
 import { archiveNamespace, type ArchiveSettings } from "./archive-settings.js";
 import { isUnset } from "./env-value.js";
 import { positiveInt } from "./config.js";
@@ -162,6 +162,12 @@ function parseEntry(raw: unknown, venueId: string): BackupDestination {
   }
 }
 
+/** `readBucketConfig` has already refused an endpoint that is not a URL. */
+function bucketPlace(b: BucketConfig): string {
+  const endpoint = b.endpoint === undefined ? "" : new URL(b.endpoint).href;
+  return JSON.stringify([endpoint, b.region, b.bucket, normalisePrefix(b.prefix)]);
+}
+
 function parseDestinations(env: Env, venueId: string): BackupDestination[] {
   const out: BackupDestination[] = [];
   const dir = env.WAITRON_BACKUP_DIR;
@@ -184,12 +190,20 @@ function parseDestinations(env: Env, venueId: string): BackupDestination[] {
   // Compared after `resolve`, so `/mnt/a` and `/mnt/a/` collide.
   const seenIds = new Set<string>();
   const seenDirs = new Set<string>();
+  const seenBuckets = new Set<string>();
   for (const d of out) {
     if (seenIds.has(d.id)) {
       throw new AppError("backup.destinations_invalid", { reason: "duplicate_id" });
     }
     seenIds.add(d.id);
-    if (d.kind !== "local-fs") continue;
+    if (d.kind === "s3") {
+      const place = bucketPlace(d.bucket);
+      if (seenBuckets.has(place)) {
+        throw new AppError("backup.destinations_invalid", { reason: "duplicate_bucket" });
+      }
+      seenBuckets.add(place);
+      continue;
+    }
     if (seenDirs.has(d.dir)) {
       throw new AppError("backup.destinations_invalid", { reason: "duplicate_dir" });
     }
