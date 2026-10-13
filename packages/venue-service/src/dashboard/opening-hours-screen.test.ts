@@ -1779,6 +1779,42 @@ it("an opened period keeps its revision through a passive replacement and submit
   expect(writes[0]).toMatchObject({ endOffsetMinutes: 15, expectedClockRevision: 7 });
   await expect.poll(() => editor.refusal?.code).toBe("hours.clock_changed");
 });
+it("pre-fills the holiday's name when the sender names only the date's own holidays, as the Day view does", async () => {
+  const { namedWeekModel } = await import("../testing/real-week-model.js");
+  history.replaceState(null, "", "/manage/opening-hours/view/calendar");
+  const el = await mount((async (path, method) => {
+    if (method !== "GET") throw new Error(`unexpected ${method} ${path}`);
+    if (path.endsWith("/special-days")) return [];
+    return structuredClone(path.includes("named-days?") ? namedWeekModel() : model());
+  }) as DashboardRequest);
+  const child = el.shadowRoot!.querySelector("hours-calendar")!;
+  child.dispatchEvent(
+    new CustomEvent("special-day-action", {
+      detail: {
+        kind: "open",
+        date: "2026-11-04",
+        holidays: [
+          {
+            id: "h",
+            date: "2026-11-04",
+            name: "Town feast",
+            scope: "local",
+            sourceId: "official",
+          },
+        ],
+        returnTo: () => child,
+      },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await expect.poll(() => el.shadowRoot!.querySelector("special-day-dialog")).not.toBeNull();
+  const editor = el.shadowRoot!.querySelector("special-day-dialog")!;
+  await editor.updateComplete;
+  expect(
+    editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!.value,
+  ).toBe("Town feast");
+});
 it("an opened Calendar editor keeps its revision through a passive replacement", async () => {
   const { namedWeekModel } = await import("../testing/real-week-model.js");
   const data = model();
