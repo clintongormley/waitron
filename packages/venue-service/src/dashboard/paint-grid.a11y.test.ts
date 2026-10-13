@@ -85,10 +85,10 @@ describe.each(["light", "dark"] as const)("paint grid (%s)", (theme) => {
           await el.updateComplete;
           const chooser = el.shadowRoot!.querySelector(".chooser")!;
           expect(chooser.matches(":popover-open")).toBe(true);
-          const toggle = chooser.querySelector<HTMLElementTagNameMap["wt-switch"]>("wt-switch")!;
-          toggle.shadowRoot!.querySelector("input")!.click();
+          const tick = chooser.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+          tick.click();
           await el.updateComplete;
-          expect(toggle.checked).toBe(true);
+          expect(tick.checked).toBe(true);
         }
       }
       await expectNoA11yViolations(host);

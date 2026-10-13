@@ -4,7 +4,6 @@ import { styleMap } from "lit/directives/style-map.js";
 import { capturePointer, releasePointer } from "@waitron/dashboard-kit";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
-import "@waitron/ui/src/components/wt-switch.js";
 import { t } from "./strings.js";
 import { clockAt, stepSpan } from "../day-paint.js";
 import type { CalendarColour } from "../hours-types.js";
@@ -47,6 +46,27 @@ const ROWS = 96;
 /** The most an autoscroll moves in one frame, in pixels. */
 const MAX_SCROLL_STEP = 24;
 
+/** Delete or Backspace with no Cmd, Ctrl or Alt held. */
+function isDeleteKey(event: KeyboardEvent): boolean {
+  return (
+    (event.key === "Delete" || event.key === "Backspace") &&
+    !event.metaKey &&
+    !event.ctrlKey &&
+    !event.altKey
+  );
+}
+function samePaint(a: readonly Paint[], b: readonly Paint[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every(
+      (paint, i) =>
+        paint.periodId === b[i]!.periodId &&
+        paint.startsAt === b[i]!.startsAt &&
+        paint.endsAt === b[i]!.endsAt,
+    )
+  );
+}
+
 function clockMinutes(time: string): number {
   return Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
 }
@@ -80,7 +100,7 @@ export class PaintGrid extends LitElement {
       gap: var(--wt-space-1);
       white-space: nowrap;
       background: var(--wt-color-surface);
-      padding: var(--wt-space-1) var(--wt-space-2);
+      padding: 0 var(--wt-space-2);
       font-size: var(--wt-font-size-sm);
       font-weight: var(--wt-font-weight-bold);
       border-block-end: 1px solid var(--wt-color-border);
@@ -256,8 +276,15 @@ export class PaintGrid extends LitElement {
       font-size: var(--wt-font-size-md);
       font-weight: var(--wt-font-weight-bold);
     }
-    .chooser wt-switch {
-      align-self: flex-start;
+    .chooser label {
+      display: flex;
+      align-items: center;
+      gap: var(--wt-space-2);
+      min-height: var(--wt-tap-min);
+      cursor: pointer;
+    }
+    .chooser input[type="checkbox"] {
+      accent-color: var(--wt-color-primary);
     }
     .chooser .actions {
       display: flex;
@@ -362,23 +389,25 @@ export class PaintGrid extends LitElement {
     const minute = this.#minuteAtY(clientY, gesture.key);
     // Captured only once it moves: a captured click lands on the column, not the block clicked.
     if (minute !== gesture.anchor) capturePointer(gesture.column, gesture.pointerId);
-    this.preview =
-      minute === gesture.anchor
-        ? null
-        : {
-            key: gesture.key,
-            start: Math.min(gesture.anchor, minute),
-            end: Math.max(gesture.anchor, minute),
-          };
+    const start = Math.min(gesture.anchor, minute);
+    const end = Math.max(gesture.anchor, minute);
+    const preview = this.preview;
+    if (minute === gesture.anchor) this.preview = null;
+    else if (preview?.key !== gesture.key || preview.start !== start || preview.end !== end)
+      this.preview = { key: gesture.key, start, end };
   }
-  /** Pixels to scroll this frame: negative above the column headings, positive below the grid. */
+  /** Pixels to scroll this frame: negative near or above the column headings, positive near or
+   *  below the bottom. The band inside each edge, an hour of rows, lets a grid that runs to the
+   *  edge of the screen scroll. */
   #scrollStep(): number {
     const scroll = this.renderRoot.querySelector<HTMLElement>(".scroll");
-    if (scroll === null) return 0;
+    const day = this.renderRoot.querySelector<HTMLElement>(".day");
+    if (scroll === null || day === null) return 0;
+    const band = day.getBoundingClientRect().height / 24;
     const top =
-      this.renderRoot.querySelector<HTMLElement>(".heading")?.getBoundingClientRect().bottom ??
-      scroll.getBoundingClientRect().top;
-    const bottom = scroll.getBoundingClientRect().bottom;
+      (this.renderRoot.querySelector<HTMLElement>(".heading")?.getBoundingClientRect().bottom ??
+        scroll.getBoundingClientRect().top) + band;
+    const bottom = scroll.getBoundingClientRect().bottom - band;
     const beyond =
       this.#pointerY < top ? this.#pointerY - top : Math.max(this.#pointerY - bottom, 0);
     return Math.sign(beyond) * Math.min(Math.ceil(Math.abs(beyond) / 2), MAX_SCROLL_STEP);
@@ -462,7 +491,17 @@ export class PaintGrid extends LitElement {
   }
   #onMenuKeydown(event: KeyboardEvent): void {
     const selected = this.selected;
-    if (event.key !== "Escape" || selected === null) return;
+    if (selected === null) return;
+    const target = event.composedPath()[0];
+    if (
+      isDeleteKey(event) &&
+      !(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)
+    ) {
+      event.preventDefault();
+      this.#delete();
+      return;
+    }
+    if (event.key !== "Escape") return;
     event.preventDefault();
     event.stopPropagation();
     this.#closeMenu();
@@ -501,7 +540,7 @@ export class PaintGrid extends LitElement {
     void this.#focusAfter(key, (day[index] ?? day[index - 1])?.startsAt);
   }
   #onBlockKeydown(event: KeyboardEvent, key: string, startsAt: string): void {
-    if (event.key !== "Delete" && event.key !== "Backspace") return;
+    if (!isDeleteKey(event)) return;
     event.preventDefault();
     const index = this.#day(key).findIndex((paint) => paint.startsAt === startsAt);
     if (index < 0) return;
@@ -523,7 +562,7 @@ export class PaintGrid extends LitElement {
     const popup = this.chooser.getBoundingClientRect();
     this.chooser.style.left = `${Math.max(8, Math.min(anchor.right - popup.width, innerWidth - popup.width - 8))}px`;
     this.chooser.style.top = `${Math.max(8, Math.min(anchor.bottom, innerHeight - popup.height - 8))}px`;
-    this.chooser.querySelector<HTMLElement>("wt-switch")?.focus();
+    this.chooser.querySelector<HTMLElement>('input[type="checkbox"]')?.focus();
   }
   #closeChooser(refocus: boolean): void {
     const key = this.copying?.key;
@@ -545,10 +584,11 @@ export class PaintGrid extends LitElement {
     const to = this.columns.map(({ key }) => key).filter((key) => copying.ticked.has(key));
     const copied = copyDay(this.days, copying.key, to);
     this.#closeChooser(true);
-    for (const key of to) this.#emit(key, copied.get(key)!);
+    for (const key of to)
+      if (!samePaint(copied.get(key)!, this.#day(key))) this.#emit(key, copied.get(key)!);
   }
   #clear(key: string): void {
-    this.#emit(key, []);
+    if (this.#day(key).length > 0) this.#emit(key, []);
   }
   #onChooserKeydown(event: KeyboardEvent): void {
     if (event.key !== "Escape" || this.copying === null) return;
@@ -684,12 +724,15 @@ export class PaintGrid extends LitElement {
                 .filter(({ key }) => key !== copying.key)
                 .map(
                   ({ key, label }) =>
-                    html`<wt-switch
-                      label=${label}
-                      .checked=${copying.ticked.has(key)}
-                      @wt-change=${(event: CustomEvent<{ checked: boolean }>) =>
-                        this.#tick(key, event.detail.checked)}
-                    ></wt-switch>`,
+                    html`<label
+                      ><input
+                        type="checkbox"
+                        name=${`copyTo-${key}`}
+                        .checked=${copying.ticked.has(key)}
+                        @change=${(event: Event) =>
+                          this.#tick(key, (event.target as HTMLInputElement).checked)}
+                      />${label}</label
+                    >`,
                 )}
               <div class="actions">
                 <wt-button variant="secondary" @click=${() => this.#closeChooser(true)}

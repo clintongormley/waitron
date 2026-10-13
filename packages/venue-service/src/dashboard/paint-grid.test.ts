@@ -531,10 +531,13 @@ function columnAction(el: PaintGrid, key: string, label: string) {
 function chooser(el: PaintGrid) {
   return el.shadowRoot!.querySelector<HTMLElement>(".chooser")!;
 }
-function choice(el: PaintGrid, label: string) {
-  return [...chooser(el).querySelectorAll<HTMLElementTagNameMap["wt-switch"]>("wt-switch")].find(
-    (toggle) => toggle.label === label,
+function choiceLabel(el: PaintGrid, label: string) {
+  return [...chooser(el).querySelectorAll<HTMLLabelElement>("label")].find(
+    (row) => row.textContent!.trim() === label,
   )!;
+}
+function choice(el: PaintGrid, label: string) {
+  return choiceLabel(el, label).querySelector<HTMLInputElement>('input[type="checkbox"]')!;
 }
 function chooserButton(el: PaintGrid, label: string) {
   return [...chooser(el).querySelectorAll<HTMLElementTagNameMap["wt-button"]>("wt-button")].find(
@@ -576,10 +579,11 @@ test("Copy to… lists the other days; Copy stays quiet and disabled until one i
   expect(chooser(el).matches(":popover-open")).toBe(true);
   expect(chooser(el).getAttribute("role")).toBe("dialog");
   expect(chooser(el).textContent).toContain("Copy Monday to");
-  const labels = [...chooser(el).querySelectorAll("wt-switch")].map(
-    (toggle) => (toggle as HTMLElementTagNameMap["wt-switch"]).label,
-  );
+  const labels = [...chooser(el).querySelectorAll("label")].map((row) => row.textContent!.trim());
   expect(labels).toEqual(["Tuesday", "Wednesday", "Thursday"]);
+  expect(chooser(el).querySelectorAll('input[type="checkbox"]')).toHaveLength(3);
+  expect(chooser(el).querySelector("wt-switch")).toBeNull();
+  expect(choice(el, "Tuesday").name).toBe("copyTo-tue");
   expect(chooserButton(el, "Copy").disabled).toBe(true);
   expect(chooserButton(el, "Copy").variant).toBe("secondary");
   await userEvent.click(choice(el, "Wednesday"));
@@ -777,4 +781,138 @@ test("a drag held above the top edge scrolls up, and releasing stops it", async 
   await frame();
   await frame();
   expect(scroll.scrollTop).toBe(held);
+});
+
+test("a day's label ticks its checkbox", async () => {
+  const el = await grid(week);
+  await openChooser(el, "mon");
+  await userEvent.click(choiceLabel(el, "tue"));
+  await el.updateComplete;
+  expect(choice(el, "tue").checked).toBe(true);
+  expect(chooserButton(el, "Copy").disabled).toBe(false);
+});
+
+test.each(["Delete", "Backspace"])("clicking a block then pressing %s deletes it", async (key) => {
+  const el = await grid({ thu: [lunch, dinner] });
+  hostUpdates(el);
+  const seen = changes(el);
+  await userEvent.click(block(el, "thu", 0));
+  expect(menu(el).matches(":popover-open")).toBe(true);
+  await userEvent.keyboard(`{${key}}`);
+  await el.updateComplete;
+  expect(seen).toEqual([{ key: "thu", day: [dinner] }]);
+  expect(menu(el).matches(":popover-open")).toBe(false);
+  expect(deepActive()).toBe(block(el, "thu", 0));
+});
+
+test.each(["Control", "Meta", "Alt"])(
+  "Delete and Backspace with %s held delete nothing",
+  async (modifier) => {
+    const el = await grid({ thu: [lunch, dinner] });
+    const seen = changes(el);
+    block(el, "thu", 0).focus();
+    await userEvent.keyboard(`{${modifier}>}{Delete}{Backspace}{/${modifier}}`);
+    await userEvent.click(block(el, "thu", 0));
+    await userEvent.keyboard(`{${modifier}>}{Delete}{Backspace}{/${modifier}}`);
+    expect(seen).toEqual([]);
+  },
+);
+
+test("Clear on an empty day and Copy to a day that already matches send no change for it", async () => {
+  const el = await grid({ mon: [lunch], tue: [lunch], wed: [], thu: [] });
+  const seen = changes(el);
+  await userEvent.click(columnMenu(el, "wed"));
+  await userEvent.click(columnAction(el, "wed", "Clear"));
+  expect(seen).toEqual([]);
+  await openChooser(el, "mon");
+  await userEvent.click(choice(el, "tue"));
+  await userEvent.click(choice(el, "Thursday"));
+  await userEvent.click(chooserButton(el, "Copy"));
+  expect(seen).toEqual([{ key: "thu", day: [lunch] }]);
+});
+
+async function scrollingDown(el: PaintGrid, scroll: HTMLElement) {
+  const box = scroll.getBoundingClientRect();
+  point(el, "mon", 60, "pointerdown");
+  pointAt(box.bottom + 30);
+  await vi.waitFor(() => expect(scroll.scrollTop).toBeGreaterThan(20));
+}
+async function staysStill(scroll: HTMLElement) {
+  const held = scroll.scrollTop;
+  await frame();
+  await frame();
+  await frame();
+  expect(scroll.scrollTop).toBe(held);
+}
+
+test("pointercancel ends an autoscroll", async () => {
+  const { el, scroll } = await tallGrid();
+  await scrollingDown(el, scroll);
+  pointAt(scroll.getBoundingClientRect().bottom + 30, "pointercancel");
+  await staysStill(scroll);
+});
+
+test("losing the pointer capture ends an autoscroll", async () => {
+  const { el, scroll } = await tallGrid();
+  await scrollingDown(el, scroll);
+  point(el, "mon", 60, "lostpointercapture", el.shadowRoot!.querySelector(".day")!);
+  await staysStill(scroll);
+});
+
+test("taking the grid off the page ends an autoscroll", async () => {
+  const { el, scroll } = await tallGrid();
+  await scrollingDown(el, scroll);
+  const parent = el.parentNode!;
+  el.remove();
+  parent.appendChild(el);
+  await el.updateComplete;
+  const again = el.shadowRoot!.querySelector<HTMLElement>(".scroll")!;
+  again.scrollTop = 40;
+  await staysStill(again);
+  expect(el.shadowRoot!.querySelector(".preview")).toBeNull();
+});
+
+test("autoscroll starts inside a band about an hour deep at each edge, for a grid that fills the screen", async () => {
+  const { el, scroll } = await tallGrid();
+  const box = scroll.getBoundingClientRect();
+  point(el, "mon", 60, "pointerdown");
+  pointAt(box.bottom - 6);
+  await vi.waitFor(() => expect(scroll.scrollTop).toBeGreaterThan(20));
+  const heading = el.shadowRoot!.querySelector<HTMLElement>('.heading[data-column="mon"]')!;
+  pointAt(heading.getBoundingClientRect().bottom + 6);
+  const down = scroll.scrollTop;
+  await vi.waitFor(() => expect(scroll.scrollTop).toBeLessThan(down - 10));
+  pointAt(heading.getBoundingClientRect().bottom + 6, "pointerup");
+});
+
+test("a drag held past the edge at the end of the scroll stops redrawing", async () => {
+  const { el, scroll } = await tallGrid();
+  scroll.scrollTop = scroll.scrollHeight;
+  await frame();
+  const box = scroll.getBoundingClientRect();
+  point(el, "mon", 1200, "pointerdown");
+  pointAt(box.bottom + 30);
+  await frame();
+  await frame();
+  await el.updateComplete;
+  let renders = 0;
+  const render = el.render.bind(el);
+  el.render = () => {
+    renders++;
+    return render();
+  };
+  await frame();
+  await frame();
+  await frame();
+  await frame();
+  await el.updateComplete;
+  expect(renders).toBe(0);
+  expect(el.shadowRoot!.querySelector(".preview")).not.toBeNull();
+  pointAt(box.bottom + 30, "pointerup");
+});
+
+test("the heading row is as compact as the ⋮'s touch size allows", async () => {
+  const el = await grid();
+  const heading = el.shadowRoot!.querySelector<HTMLElement>('.heading[data-column="thu"]')!;
+  expect(heading.getBoundingClientRect().height).toBeLessThanOrEqual(46);
 });
