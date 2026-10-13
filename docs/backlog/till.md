@@ -254,33 +254,6 @@ screen is designed.
     tables' labels overlap while they line up mid-drag.
   - The new floor test files repeat their setup; shared helpers were left out to avoid churn.
 
-## A503. Joined tables replace saved joins
-
-**A503 (owner, 2026-10-11) — OPEN.** It changes what is stored
-for joins and how the till merges and splits tables. Until A503 part 1 a saved join was a seat
-count for tables each placed on their own; part 1 removed saved joins and their copy, and a merge's
-seats now come only from the waiter, whose seats prompt opens empty
-([design](../superpowers/specs/2026-10-12-a503-joined-tables-design.md)). Part 2 (#1601) added
-joined tables: the editor's Add joined table and Made of, the till's copy at each reset, a part
-still joined refused `table.in_joined_table` and hidden from the till's pickers, and bookings
-refusing a part. Part 3 (#1604) added the till's **Split tables…**: split-off tables stand side by
-side inside the joined table's outline at their kept size (a table keeps its width and height off
-the plan, in `floor_plan_table_sizes`), splitting down to one table ends the joined table and moves
-its guests, a joined table with fewer than two tables still joined is refused
-`table.in_joined_table`, and a reset puts a split joined table back whole once none of its tables
-has guests, food on its way or a guest-holding merge. What remains is below.
-
-- **Join again** (part 4): today the only way to put a split joined table back is the reset.
-- **Back to its saved place** and **Take off for today** on a table that was split off (design
-  gap 2); the till hides both for now.
-- **An edit to the saved plan that changes the tables of a joined table waiting to be put back**
-  can shift where later tables land (#1604, "Accepted for now").
-- **A part placed on today's map** while its joined table waited, and free when the joined table
-  went live, keeps its place on today's map until the next reset; the till hides it.
-- The Made of picker is a dropdown, not mockup 5's inline list (no inline multi-pick primitive
-  exists); and at 1280 px the tables list's Made of column wraps to two lines, and in Spanish the
-  two Add buttons stack.
-
 ## A561. A 2 × 2 table's name is cut short on the till map
 
 **A561 (2026-10-13).** On the till's floor map a 2 × 2 table shows its name cut to "Cou…" (seen
@@ -309,6 +282,8 @@ the other, not yet refreshed, splits off Counter 4 with a seat count for the two
 The server applies it as a split down to one table and ignores the seats sent (review of A503 part
 3's tasks 5–9, M2, accepted in #1604). Next: decide whether a split names the tables it expects to
 stay and is refused when they differ.
+Join again already names the tables it expects (`joined_table.out_of_date`, #1608); Split does not
+yet.
 
 ## A565. "Reset to saved plan" does not wait for food on its way to an ordinary table
 
@@ -327,6 +302,89 @@ guests, food on its way or a guest-holding merge (#1604); an open order at a spl
 food sent yet does not count, so the reset can put the joined table back whole over it. Noted by the
 fix worker in #1604's finish run and not changed. Next: decide whether an open order counts as busy
 here, and check what the reset does with that order's table.
+
+## A567. A saved-plan edit to a waiting joined table can shift where its tables land
+
+**A567 (2026-10-13).** A split joined table waits for the reset while one of its tables is busy.
+An edit to the saved plan that changes its tables meanwhile can shift where later tables land when
+it is split or joined again. #1604 accepted it for now; #1608's plan notes that Join again lays
+out from the same slots (`slotStart`, `apps/server/src/joined-split-layout.ts`). Left open by A503
+(#1604, #1608). Next: decide whether such an edit waits for the reset, or the layout keeps the
+tables it split from.
+
+## A568. A part placed on today's map while its joined table waited keeps its place
+
+**A568 (2026-10-13).** A table placed on today's map while its joined table waited for the
+reset, and free when the joined table went live, keeps its place on today's map until the next
+reset; the till hides it (`outOfServiceJoined`, `apps/till/src/state/floor-today.ts`). Left open by
+A503 part 2 (#1601). Next: decide whether putting the joined table back also takes the table off
+today's map.
+
+## A569. The floor plan editor's Made of picker and two wraps
+
+**A569 (2026-10-13).** The Add joined table window's Made of is a dropdown (`wt-combobox
+multiple`, `apps/dashboard/src/screens/floor-plan-add-joined-table.ts`), not mockup 5's inline
+list, because no inline multi-pick primitive exists. #1601's look also saw, at 1280 px, the tables
+list's Made of column wrap to two lines, and in Spanish the two Add buttons stack. Left open by
+A503 part 2 (#1601). Next: an inline multi-pick primitive, and the owner's call on the two wraps.
+
+## A570. A table split off a joined table whose removal was refused cannot be moved
+
+**A570 (2026-10-13).** When a joined table's removal is refused, its split rows stay
+(`deleteWithItsSplit`, `apps/server/src/table-removal.ts`), so a table split off it is refused
+Back and Take off (`table.split_off`), and Join again has no joined table on today's plan to join.
+Review M1 of #1608's tasks 1a–4 found it reached only through a party record left by an older
+version. Left open by A503 part 4 (#1608). Next: decide whether a refused removal also ends the
+split for the tables split off it.
+
+## A571. A joined table that came apart cannot reach Join again when its free tables are off the map
+
+**A571 (2026-10-13).** A joined table that has come apart is hidden from the till's map
+(`outOfServiceJoined`), and a split-off table that is taken off or has no place is offered no
+action (`sheetActions`; both in `apps/till/src/state/floor-today.ts`). When those are its only
+free split-off tables, Join again is offered nowhere; the reset still puts it back. #1608's plan
+found this state made by Back or Take off on a split-off table, which #1608 now refuses (design gap
+7). Left open by A503 part 4 (#1608). Next: decide whether the zone menu offers Join again.
+
+## A572. Join again counts a joined table whole while a table added to it still has guests
+
+**A572 (2026-10-13).** A table the saved plan adds to a joined table while guests sit at it is left
+separate by the reset, with no split record. Join again then counts the joined table whole: it
+gives it its full saved seats and asks for none, while that table still holds its guests — the
+same state the reset produces. The case "brings Long table back at its saved place when it came
+apart around a part guests held since the reset" (`apps/server/src/floor-today-join-again.test.ts`)
+expects those 10 seats. #1608's first Codex review found it again (design gap 8). Left open by A503
+part 4 (#1608). Next: decide whether that table counts as staying apart.
+
+## A573. The reset takes back a split-off table that needs clearing
+
+**A573 (2026-10-13).** Join again leaves a split-off table that needs clearing apart, but "Reset to
+saved plan" does not wait for the mark: it takes the table back and puts the joined table back
+whole. The mark stays on the table (`dining_tables.needs_clearing_since`), which the till no longer
+shows, and shows again if the table is split off later. The reset's behaviour came with #1604.
+Owner question open in `~/waitron-campaign-c/questions.md` ("A503 part 4 … needs clearing"); the
+default built is to leave it. Next: the owner's answer — leave it, the reset waits, or the reset
+clears the mark.
+
+## A574. `joined_table.parts_split_off` could say what to do
+
+**A574 (2026-10-13).** The till says "Some of its tables are split off" (`apps/till/src/i18n/codes.ts`);
+since #1608 it could add "Join its tables again first". The sentence is pinned in
+`apps/till/src/i18n/codes.test.ts`, so #1608 left it. Next: the new wording in English and Spanish,
+and the pinned test with it.
+
+## A575. Join again: three things seen in #1608's look
+
+**A575 (2026-10-13).** Wording and layout calls for the owner, seen in #1608's screenshots
+(`~/waitron-campaign-c/a503-4-shots`), none a defect:
+
+- The Spanish `joined_table.out_of_date` sentence ("Sus mesas han cambiado. Revísalo e inténtalo de
+  nuevo", `apps/till/src/i18n/codes.ts`) wraps to two lines at 390 px.
+- In the Join again window the lines naming each table that stays apart sit below the Seats field
+  (`apps/till/src/widgets/join-again-dialog.ts`), so the reason is read after the field it explains.
+- A joined table's details sheet still offers Take off for today while one of its tables is split
+  off (`sheetActions`, `apps/till/src/state/floor-today.ts`); the design speaks only of the
+  split-off table.
 
 ## A504. Floor plans published for a future date, and one per service period
 
@@ -1300,6 +1358,10 @@ From **Variants as products (#511–#556) — what is left open.** How the model
 
 ## Decisions and deliberate limits
 
+- **A joined table replaces a saved join (A503, owner 2026-10-11).** A table made of other tables
+  is set up in the floor plan editor and starts each day as one table; the till splits it and joins
+  it again, and the reset puts it back whole once its tables are free
+  ([design](../superpowers/specs/2026-10-12-a503-joined-tables-design.md)).
 - **The floor plan editor's booked reason stays in the dashboard's own strings (owner,
   2026-10-10).** "Booked 12 Oct, 21:00" is worded in the dashboard's core strings, not the bookings
   module's, because the module code-message route takes no parameters.

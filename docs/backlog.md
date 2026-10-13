@@ -1885,13 +1885,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   smaller gaps. Left open by A429 slice 4 (#1526).
   [Detail](backlog/till.md#a474--todays-floor-changes-on-the-till-follow-ups)
 
-- **A503. Joined tables replace saved joins (owner, 2026-10-11).** A table made of other tables
-  is set up in the editor and starts the day as one table; the till can split it. Part 1 (#1598)
-  removed saved joins; part 2 (#1601) added joined tables in the editor, the till and bookings; part
-  3 (#1604) added the till's Split tables…. Join again (part 4) remains, with Back and Take off on a
-  split-off table.
-  [Detail](backlog/till.md#a503-joined-tables-replace-saved-joins)
-
 - **A561. A 2 × 2 table's name is cut short on the till map (2026-10-13).** It shows "Cou…".
   [Detail](backlog/till.md#a561-a-2--2-tables-name-is-cut-short-on-the-till-map)
 
@@ -1914,6 +1907,42 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 - **A566. An open order with nothing sent yet does not hold a split group back at a reset
   (2026-10-13).** Left open by #1604.
   [Detail](backlog/till.md#a566-an-open-order-with-nothing-sent-yet-does-not-hold-a-split-group-back-at-a-reset)
+
+- **A567. A saved-plan edit to a waiting joined table can shift where its tables land
+  (2026-10-13).** Accepted for now in #1604; Join again (#1608) lays out from the same slots.
+  [Detail](backlog/till.md#a567-a-saved-plan-edit-to-a-waiting-joined-table-can-shift-where-its-tables-land)
+
+- **A568. A part placed on today's map while its joined table waited keeps its place
+  (2026-10-13).** Until the next reset; the till hides it. Left open by A503 part 2 (#1601).
+  [Detail](backlog/till.md#a568-a-part-placed-on-todays-map-while-its-joined-table-waited-keeps-its-place)
+
+- **A569. The floor plan editor's Made of picker and two wraps (2026-10-13).** A dropdown, not
+  the mockup's inline list; two wraps seen in #1601's look.
+  [Detail](backlog/till.md#a569-the-floor-plan-editors-made-of-picker-and-two-wraps)
+
+- **A570. A table split off a joined table whose removal was refused cannot be moved
+  (2026-10-13).** Refused Back, Take off and Join again. Left open by A503 part 4 (#1608).
+  [Detail](backlog/till.md#a570-a-table-split-off-a-joined-table-whose-removal-was-refused-cannot-be-moved)
+
+- **A571. A joined table that came apart cannot reach Join again when its free tables are off the
+  map (2026-10-13).** The reset still puts it back. Left open by #1608.
+  [Detail](backlog/till.md#a571-a-joined-table-that-came-apart-cannot-reach-join-again-when-its-free-tables-are-off-the-map)
+
+- **A572. Join again counts a joined table whole while a table added to it still has guests
+  (2026-10-13).** Full saved seats, none asked. Left open by #1608.
+  [Detail](backlog/till.md#a572-join-again-counts-a-joined-table-whole-while-a-table-added-to-it-still-has-guests)
+
+- **A573. The reset takes back a split-off table that needs clearing (2026-10-13).** Join again
+  leaves it apart. Owner question open; the default built leaves it.
+  [Detail](backlog/till.md#a573-the-reset-takes-back-a-split-off-table-that-needs-clearing)
+
+- **A574. `joined_table.parts_split_off` could say what to do (2026-10-13).** "Join its tables
+  again first"; the sentence is pinned by a test.
+  [Detail](backlog/till.md#a574-joined_tableparts_split_off-could-say-what-to-do)
+
+- **A575. Join again: three things seen in #1608's look (2026-10-13).** A Spanish wrap, where the
+  stays-apart lines sit, and Take off on the joined table itself.
+  [Detail](backlog/till.md#a575-join-again-three-things-seen-in-1608s-look)
 
 - **A550. Making a booked table part of a joined table is not refused (2026-10-12).** The floor
   plan editor's save refuses deleting a booked table (`table.booked`) but not making one a part; the
