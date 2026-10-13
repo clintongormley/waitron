@@ -234,7 +234,7 @@ export const floorTodayZones = table(
     id: id("id").primaryKey().$defaultFn(newId),
     zoneId: id("zone_id").notNull(),
     businessDay: day("business_day").notNull(),
-    generation: count("generation").notNull().default(0),
+    revision: count("generation").notNull().default(0),
   },
   (t) => [
     unique("floor_today_zones_zone_key").on(t.zoneId),

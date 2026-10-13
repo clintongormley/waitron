@@ -28,6 +28,7 @@ import {
   type Target,
 } from "./floor-reset-plan.js";
 import { foodOnItsWay } from "./delivery-release.js";
+import { moveRoom, roomPrints, roomRevision } from "./floor-revision.js";
 import { leaveMerges } from "./floor-today-merges.js";
 import { holdersOf } from "./parties.js";
 import {
@@ -105,15 +106,15 @@ async function resetZoneFor(
   now: Date,
 ): Promise<void> {
   const [today] = await tx
-    .select({ id: floorTodayZones.id, generation: floorTodayZones.generation })
+    .select({ id: floorTodayZones.id, revision: floorTodayZones.revision })
     .from(floorTodayZones)
     .where(eq(floorTodayZones.zoneId, zoneId));
   if (today === undefined) {
-    await tx.insert(floorTodayZones).values({ zoneId, businessDay, generation: 1 });
+    await tx.insert(floorTodayZones).values({ zoneId, businessDay, revision: 1 });
   } else {
     await tx
       .update(floorTodayZones)
-      .set({ businessDay, generation: today.generation + 1 })
+      .set({ businessDay, revision: today.revision + 1 })
       .where(eq(floorTodayZones.id, today.id));
   }
 
@@ -549,8 +550,13 @@ export async function ensureToday(
   for (const { zoneId, businessDay } of zones) {
     if (businessDay === null || businessDay < day) {
       await resetZoneFor(tx, cfg, removals, zoneId, day, now);
-    } else {
-      await catchUpZone(tx, cfg, removals, zoneId, now);
+      continue;
+    }
+    const from = await roomRevision(tx, zoneId);
+    const before = (await roomPrints(tx, cfg, [zoneId])).get(zoneId);
+    await catchUpZone(tx, cfg, removals, zoneId, now);
+    if ((await roomPrints(tx, cfg, [zoneId])).get(zoneId) !== before) {
+      await moveRoom(tx, zoneId, from);
     }
   }
 }

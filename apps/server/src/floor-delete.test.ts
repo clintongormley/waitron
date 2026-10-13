@@ -166,7 +166,7 @@ async function planned(z: string, prefix: string, locationId = v.cfg.locationId 
       .returning();
     const [todayZone] = await tx
       .insert(floorTodayZones)
-      .values({ zoneId: z, businessDay: "2026-10-11", generation: 7 })
+      .values({ zoneId: z, businessDay: "2026-10-11", revision: 7 })
       .returning();
     const [noToday] = await tx
       .insert(diningTables)

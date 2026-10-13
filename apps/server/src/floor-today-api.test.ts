@@ -136,11 +136,11 @@ async function everything() {
   return { today, split };
 }
 
-async function generationOf(zoneId: string): Promise<number | undefined> {
+async function zoneRevisionOf(zoneId: string): Promise<number | undefined> {
   const [row] = await inTx(v, (tx) =>
     tx.select().from(floorTodayZones).where(eq(floorTodayZones.zoneId, zoneId)),
   );
-  return row?.generation;
+  return row?.revision;
 }
 
 describe("today's routes", () => {
@@ -246,13 +246,13 @@ describe("today's routes", () => {
       tx.execute(sql`update floor_zones set active = false where id = ${zoneId}`),
     );
     expect(await inService(table.a!)).toBe(false);
-    const generation = await generationOf(zoneId);
-    expect(generation).toBe(1);
+    const zoneRevision = await zoneRevisionOf(zoneId);
+    expect(zoneRevision).toBe(1);
 
     await expect204(send("POST", `/api/zones/${zoneId}/today/reset`, {}));
 
     expect(await inService(table.a!)).toBe(false);
-    expect(await generationOf(zoneId)).toBe(generation);
+    expect(await zoneRevisionOf(zoneId)).toBe(zoneRevision);
   });
 
   it("answers a refusal with its code and status", async () => {
@@ -340,14 +340,14 @@ describe("today's routes", () => {
       });
       await tx.insert(floorZones).values({ id: zoneId, locationId: elsewhere, name: "Elsewhere" });
       await tx.insert(floorPlans).values({ zoneId, savedAt: "2026-01-01T00:00:00.000Z" });
-      await tx.insert(floorTodayZones).values({ zoneId, businessDay: "2026-01-01", generation: 1 });
+      await tx.insert(floorTodayZones).values({ zoneId, businessDay: "2026-01-01", revision: 1 });
     });
 
     const answer = await send("POST", `/api/zones/${zoneId}/today/reset`, {});
     const [row] = await inTx(v, (tx) =>
       tx.select().from(floorTodayZones).where(eq(floorTodayZones.zoneId, zoneId)),
     );
-    expect(row).toMatchObject({ businessDay: "2026-01-01", generation: 1 });
+    expect(row).toMatchObject({ businessDay: "2026-01-01", revision: 1 });
     expect(answer.status).toBe(404);
     expect(await answer.json()).toEqual({
       error: { code: "zone.not_found", params: { zoneId } },
@@ -360,7 +360,7 @@ describe("today's routes", () => {
 
     await expect204(send("POST", `/api/zones/${zoneId}/today/reset`, {}));
 
-    expect(await generationOf(zoneId)).toBeUndefined();
+    expect(await zoneRevisionOf(zoneId)).toBeUndefined();
   });
 });
 

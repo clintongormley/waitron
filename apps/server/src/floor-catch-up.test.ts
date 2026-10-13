@@ -162,11 +162,11 @@ async function tableExists(tableId: string): Promise<boolean> {
   return rows.length > 0;
 }
 
-async function generationOf(zoneId: string): Promise<number | undefined> {
+async function zoneRevisionOf(zoneId: string): Promise<number | undefined> {
   const [row] = await inTx(v, (tx) =>
     tx.select().from(floorTodayZones).where(eq(floorTodayZones.zoneId, zoneId)),
   );
-  return row?.generation;
+  return row?.revision;
 }
 
 /** A zone whose first saved master holds one live table; answers both ids. */
@@ -426,7 +426,7 @@ describe("the till's floor routes catch today's plan up", () => {
 
   it("does nothing when no reset happened while the table was taken", async () => {
     const { zoneId, tableId } = await plannedTable(fresh("Kept"));
-    const generation = await generationOf(zoneId);
+    const zoneRevision = await zoneRevisionOf(zoneId);
     const partyId = await seatAt(tableId);
     await moveToday(tableId, 30);
 
@@ -434,7 +434,7 @@ describe("the till's floor routes catch today's plan up", () => {
     await readFloor();
 
     expect(await todayRow(tableId)).toMatchObject({ x: 30 });
-    expect(await generationOf(zoneId)).toBe(generation);
+    expect(await zoneRevisionOf(zoneId)).toBe(zoneRevision);
   });
 });
 
@@ -477,7 +477,7 @@ async function renamedInMaster() {
   const renamed = fresh("Day b");
   const planned = await plannedTable(label);
   await save(planned.zoneId, planned.revision, [entry("t", renamed, { id: planned.masterId })]);
-  return { ...planned, label, renamed, generation: (await generationOf(planned.zoneId))! };
+  return { ...planned, label, renamed, zoneRevision: (await zoneRevisionOf(planned.zoneId))! };
 }
 
 /** Seats `tableId`'s party at a second free table of the venue's tables zone too. */
@@ -493,12 +493,12 @@ async function joinSecond(partyId: string): Promise<string> {
 
 describe("on a new business day, the till's floor routes reset today's plan before acting", () => {
   it("resets before seating", async () => {
-    const { zoneId, tableId, renamed, generation } = await renamedInMaster();
+    const { zoneId, tableId, renamed, zoneRevision } = await renamedInMaster();
 
     await onNextDay(async () => {
       await seatAt(tableId);
 
-      expect(await generationOf(zoneId)).toBe(generation + 1);
+      expect(await zoneRevisionOf(zoneId)).toBe(zoneRevision + 1);
       expect((await tableRow(v, tableId)).label).toBe(renamed);
     });
   });
@@ -517,7 +517,7 @@ describe("on a new business day, the till's floor routes reset today's plan befo
   ];
 
   it.each(routes)("resets before %s", async (_, path, bodyFor) => {
-    const { zoneId, tableId, renamed, generation } = await renamedInMaster();
+    const { zoneId, tableId, renamed, zoneRevision } = await renamedInMaster();
     const partyId = await seatAt(await v.table(fresh("Seated")));
     const body = await bodyFor(partyId);
 
@@ -528,7 +528,7 @@ describe("on a new business day, the till's floor routes reset today's plan befo
       });
 
       expect(answer.status).toBe(200);
-      expect(await generationOf(zoneId)).toBe(generation + 1);
+      expect(await zoneRevisionOf(zoneId)).toBe(zoneRevision + 1);
       expect((await tableRow(v, tableId)).label).toBe(renamed);
     });
   });
