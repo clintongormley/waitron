@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
@@ -8,8 +8,29 @@ import {
   type ListedFile,
   type S3FileStore,
 } from "@waitron/stream";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { S3Backend, SMALL_OBJECT_MAX_BYTES } from "./s3-backend.js";
+
+// Pass-through, recording each folder `mkdtemp` makes; `beforeWrite` runs as `writeFile` is called.
+const fsHooks = vi.hoisted(() => ({
+  made: [] as string[],
+  beforeWrite: undefined as (() => void) | undefined,
+}));
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+  return {
+    ...actual,
+    mkdtemp: async (...args: Parameters<typeof actual.mkdtemp>) => {
+      const made = await actual.mkdtemp(...args);
+      fsHooks.made.push(String(made));
+      return made;
+    },
+    writeFile: (...args: Parameters<typeof actual.writeFile>) => {
+      fsHooks.beforeWrite?.();
+      return actual.writeFile(...args);
+    },
+  };
+});
 
 // `@waitron/stream` does not export its loopback bucket to other packages, so this drives the adapter
 // through an in-memory object with the file store's shape; the file store's own requests are
@@ -79,6 +100,8 @@ describe("S3Backend", () => {
   const call = { signal: new AbortController().signal };
   beforeEach(async () => {
     dir = await mkdtemp(join(tmpdir(), "s3-backend-"));
+    fsHooks.made = [];
+    fsHooks.beforeWrite = undefined;
     objects = new Map();
     record = { calls: [], streamed: 0, closed: false };
     backend = new S3Backend("bucket", fakeStore(objects, record));
@@ -125,6 +148,60 @@ describe("S3Backend", () => {
     await expect(failing.put("small.json", Buffer.from("{}"), call)).rejects.toThrow("refused");
     const staged = record.calls[0]!.args[1] as string;
     await expect(readFile(staged)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it.each(["waitron-a/b", "waitron-a\\b", "", ".", "..", "waitron-\u0000", "waitron-\u009f"])(
+    "refuses the key %j in every call, as the folder destination does, before any file or request",
+    async (bad) => {
+      const input = join(dir, "input");
+      const refused = { code: "backup.destination_key_invalid", params: { field: "key" } };
+      await expect(backend.put(bad, Buffer.from("{}"), call)).rejects.toMatchObject(refused);
+      await expect(backend.putFile(bad, input, call)).rejects.toMatchObject(refused);
+      await expect(backend.getFile(bad, join(dir, "out"), call)).rejects.toMatchObject(refused);
+      await expect(backend.get(bad, call)).rejects.toMatchObject(refused);
+      await expect(backend.delete(bad, call)).rejects.toMatchObject(refused);
+      await expect(backend.deleteMany(["waitron-ok", bad], call)).rejects.toMatchObject(refused);
+      expect(record.calls).toEqual([]);
+      expect(fsHooks.made).toEqual([]);
+    },
+  );
+
+  it("a put already cancelled makes no file and reports the cancellation", async () => {
+    const stopped = new AbortController();
+    stopped.abort();
+    await expect(
+      backend.put("small.json", Buffer.from("{}"), { signal: stopped.signal }),
+    ).rejects.toMatchObject({
+      code: "backup.destination_request_failed",
+      params: { operation: "put", key: "small.json", status: null, name: "AbortError" },
+    });
+    expect(fsHooks.made).toEqual([]);
+    expect(record.calls).toEqual([]);
+  });
+
+  it("a put cancelled as its private file is written reports the cancellation and leaves no file", async () => {
+    const stopping = new AbortController();
+    fsHooks.beforeWrite = () => stopping.abort();
+    await expect(
+      backend.put("small.json", Buffer.from("{}"), { signal: stopping.signal }),
+    ).rejects.toMatchObject({
+      code: "backup.destination_request_failed",
+      params: { operation: "put", key: "small.json", status: null, name: "AbortError" },
+    });
+    expect(fsHooks.made).toHaveLength(1);
+    await expect(readdir(fsHooks.made[0]!)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(record.calls).toEqual([]);
+  });
+
+  it("a put whose private file cannot be written passes the file system's error on", async () => {
+    fsHooks.beforeWrite = () => {
+      throw Object.assign(new Error("disk full"), { code: "ENOSPC" });
+    };
+    await expect(backend.put("small.json", Buffer.from("{}"), call)).rejects.toMatchObject({
+      code: "ENOSPC",
+    });
+    await expect(readdir(fsHooks.made[0]!)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(record.calls).toEqual([]);
   });
 
   it("refuses to put more than the small-object bound before any request", async () => {

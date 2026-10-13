@@ -12,7 +12,7 @@ import type { StorageBackend, StorageCall, StoredObject } from "./storage-backen
 const CONTROL = /[\u0000-\u001f\u007f-\u009f]/;
 
 /** One plain file name inside the destination folder, so no key reaches outside it. */
-function checkedKey(key: string): string {
+export function checkedKey(key: string): string {
   if (key === "" || key === "." || key === ".." || /[/\\]/.test(key) || CONTROL.test(key)) {
     throw new AppError("backup.destination_key_invalid", { field: "key" });
   }
