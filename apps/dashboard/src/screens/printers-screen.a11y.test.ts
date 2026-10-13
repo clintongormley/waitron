@@ -53,6 +53,7 @@ const printers: Printer[] = [
     resolution: "180dpi",
     hasCashDrawer: false,
     portable: false,
+    pickupRoles: ["receipt", "payment_slip"],
     holder: null,
     pendingJobs: 0,
     lastPrintAt: null,
@@ -71,6 +72,7 @@ const printers: Printer[] = [
     resolution: "180dpi",
     hasCashDrawer: false,
     portable: false,
+    pickupRoles: ["receipt", "payment_slip"],
     holder: null,
     pendingJobs: 0,
     lastPrintAt: null,
@@ -89,6 +91,7 @@ const printers: Printer[] = [
     resolution: "180dpi",
     hasCashDrawer: false,
     portable: false,
+    pickupRoles: ["receipt", "payment_slip"],
     holder: null,
     pendingJobs: 0,
     lastPrintAt: null,
@@ -654,6 +657,71 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
       await page.viewport(1280, 900);
     }
   });
+  it.each([
+    ["en-GB", 390],
+    ["en-GB", 1280],
+    ["es-ES", 390],
+    ["es-ES", 1280],
+  ] as const)("pick-up roles render and change accessibly in %s at %ipx", async (locale, width) => {
+    const before = currentLocale();
+    setLocale(locale);
+    await page.viewport(width, 900);
+    try {
+      const { el, host } = await mountWidget<PrintersScreen>(
+        "dashboard-printers-screen",
+        { api: stubApi() },
+        theme,
+      );
+      await flush(el);
+      await openPrinter(el);
+      await openCalibration(el);
+      q(el, "[data-test=calibration-next]")!.click();
+      await flush(el);
+      q(el, "[data-test=calibration-next]")!.click();
+      await flush(el);
+      const field = q(el, '[name="printer-pickup-roles"]')! as HTMLElementTagNameMap["wt-combobox"];
+      await field.updateComplete;
+      expect(field.values).toEqual(["receipt", "payment_slip"]);
+      expect(field.label).toBe(locale === "en-GB" ? "When picked up" : "Al recogerla");
+      const rect = field.getBoundingClientRect();
+      const modal = q(el, '[data-test="edit-printer-modal"]')!
+        .shadowRoot!.querySelector("dialog")!
+        .getBoundingClientRect();
+      expect(rect.left).toBeGreaterThanOrEqual(modal.left);
+      expect(rect.right).toBeLessThanOrEqual(modal.right);
+      await expectNoA11yViolations(host);
+      await page.screenshot({
+        path: `__screenshots__/pickup-roles-${theme}-${locale}-${width}.png`,
+      });
+      await userEvent.click(field.shadowRoot!.querySelector<HTMLButtonElement>("button.trigger")!);
+      await flush(el);
+      expect(field.shadowRoot!.querySelector<HTMLInputElement>("input.search")!.placeholder).toBe(
+        locale === "en-GB" ? "Search" : "Buscar",
+      );
+      const receipt = [...field.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')].find(
+        (row) => row.textContent!.trim() === t("devices.receipt_printer_now"),
+      )!;
+      expect(receipt).not.toBeNull();
+      await userEvent.click(receipt);
+      await flush(el);
+      expect(field.values).toEqual(["payment_slip"]);
+      await expectNoA11yViolations(host);
+      await page.screenshot({
+        path: `__screenshots__/pickup-roles-menu-${theme}-${locale}-${width}.png`,
+      });
+      const slip = [...field.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')].find(
+        (row) => row.textContent!.trim() === t("devices.slip_printer_now"),
+      )!;
+      await userEvent.click(slip);
+      await flush(el);
+      expect(field.values).toEqual([]);
+      await expectNoA11yViolations(host);
+    } finally {
+      setLocale(before);
+      await page.viewport(1280, 900);
+    }
+  });
+
   it("renders each calibration step and the drawer result accessibly", async () => {
     const { el, host } = await mountWidget<PrintersScreen>(
       "dashboard-printers-screen",

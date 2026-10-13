@@ -2931,6 +2931,140 @@ describe("a device's current printers", () => {
       ]),
     );
 
+  it("an unnamed printer scan fills both default pick-up roles and leaves the drawer alone", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const t = await listedTill(venue, app);
+
+    const [drawer] = await suite.db
+      .insert(printers)
+      .values({
+        locationId: venue.cfg.locationId,
+        name: "Separate drawer",
+        transport: "network_tcp",
+        host: "10.0.0.99",
+        hasCashDrawer: true,
+      })
+      .returning({ id: printers.id });
+    const [device] = await suite.db
+      .select({ profileId: devices.deviceProfileId })
+      .from(devices)
+      .where(eq(devices.id, t.deviceId));
+    await withTransaction(suite.db, (tx) =>
+      setProfilePrinterLists(tx, device!.profileId, {
+        ...emptyPrinterLists(),
+        receiptPrinterIds: [t.counter, t.bar],
+        paymentSlipPrinterIds: [t.portable, t.bar],
+        cashDrawerPrinterIds: [drawer!.id],
+      }),
+    );
+    const selectedDrawer = await send(app, "PUT", "/api/device/equipment", {
+      cookie: `${t.jar}; ${t.session}`,
+      body: { role: "cash_drawer", selection: { id: drawer!.id }, via: "list" },
+    });
+    expect(selectedDrawer.status).toBe(200);
+    const res = await send(app, "PUT", "/api/device/equipment", {
+      cookie: `${t.jar}; ${t.session}`,
+      body: { kind: "printer", selection: { id: t.bar }, via: "scan" },
+    });
+    expect(res.status).toBe(200);
+    expect(await chosenIds(res)).toMatchObject({
+      receipt: t.bar,
+      payment_slip: t.bar,
+      cash_drawer: drawer!.id,
+    });
+  });
+
+  it("a named row ignores the printer's pick-up setting; an unnamed scan uses the saved set", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const t = await listedTill(venue, app);
+    await suite.db
+      .update(printers)
+      .set({ pickupRoles: ["receipt"] })
+      .where(eq(printers.id, t.bar));
+    const scan = (body: unknown) =>
+      send(app, "PUT", "/api/device/equipment", {
+        cookie: `${t.jar}; ${t.session}`,
+        body,
+      });
+    const named = await scan({ role: "payment_slip", selection: { id: t.bar }, via: "scan" });
+    expect(named.status).toBe(200);
+    expect(await chosenIds(named)).toMatchObject({ receipt: t.counter, payment_slip: t.bar });
+    await choose(app, `${t.jar}; ${t.session}`, "payment_slip", { id: t.portable });
+    const unnamed = await scan({ kind: "printer", selection: { id: t.bar }, via: "scan" });
+    expect(unnamed.status).toBe(200);
+    expect(await chosenIds(unnamed)).toMatchObject({ receipt: t.bar, payment_slip: t.portable });
+  });
+
+  it("an unnamed scan rolls back the first role when the second role is not permitted", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const t = await listedTill(venue, app);
+    await choose(app, `${t.jar}; ${t.session}`, "receipt", { id: t.bar });
+    const res = await send(app, "PUT", "/api/device/equipment", {
+      cookie: `${t.jar}; ${t.session}`,
+      body: { kind: "printer", selection: { id: t.counter }, via: "scan" },
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "device.binding_invalid", params: { field: "paymentSlipPrinterId" } },
+    });
+    const after = await send(app, "GET", "/api/device/equipment", { cookie: t.jar });
+    expect(await chosenIds(after)).toMatchObject({ receipt: t.bar, payment_slip: t.portable });
+  });
+
+  it("unnamed pick-up still needs a staff session and refuses invalid scan shapes", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const t = await listedTill(venue, app);
+    const body = { kind: "printer", selection: { id: t.bar }, via: "scan" };
+    const unsigned = await send(app, "PUT", "/api/device/equipment", { cookie: t.jar, body });
+    expect(unsigned.status).toBe(401);
+    expect(await unsigned.json()).toMatchObject({ error: { code: "session.required" } });
+    for (const [patch, field] of [
+      [{ kind: "cash_drawer" }, "kind"],
+      [{ via: "list" }, "via"],
+      [{ selection: "default" }, "selection"],
+      [{ role: null }, "role"],
+      [{ selection: { id: "invalid" } }, "selection"],
+    ] as const) {
+      const res = await send(app, "PUT", "/api/device/equipment", {
+        cookie: `${t.jar}; ${t.session}`,
+        body: { ...body, ...patch },
+      });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field } },
+      });
+    }
+    const after = await send(app, "GET", "/api/device/equipment", { cookie: t.jar });
+    expect(await chosenIds(after)).toMatchObject({ receipt: t.counter, payment_slip: t.portable });
+  });
+
+  it("a reader scan of a printer id keeps the named reader refusal and changes no assignments", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const t = await listedTill(venue, app);
+    for (const target of [{ kind: "reader" }, { role: "card_terminal" }]) {
+      const res = await send(app, "PUT", "/api/device/equipment", {
+        cookie: `${t.jar}; ${t.session}`,
+        body: { ...target, selection: { id: t.bar }, via: "scan" },
+      });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: { code: "device.binding_invalid", params: { field: "cardReaderId" } },
+      });
+    }
+    const after = await send(app, "GET", "/api/device/equipment", { cookie: t.jar });
+    expect(await chosenIds(after)).toEqual({
+      receipt: t.counter,
+      payment_slip: t.portable,
+      card_terminal: null,
+      cash_drawer: null,
+    });
+  });
+
   it("switches the slip printer to another listed one", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);

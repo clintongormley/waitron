@@ -1068,6 +1068,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       if (hasCashDrawer !== undefined) input.hasCashDrawer = hasCashDrawer;
       const portable = optionalBool(body.portable, "portable");
       if (portable !== undefined) input.portable = portable;
+      if (body.pickupRoles !== undefined) input.pickupRoles = requirePickupRoles(body.pickupRoles);
       const created = await gated(sessionId, (tx) => {
         // Weaker than its name: it matches only the host text (ignoring case) and port an agent
         // reported recently; a different port, a name instead of an address, or an edit through
@@ -1154,6 +1155,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       }
       const hasCashDrawer = optionalBool(body.hasCashDrawer, "hasCashDrawer");
       if (hasCashDrawer !== undefined) patch.hasCashDrawer = hasCashDrawer;
+      if (body.pickupRoles !== undefined) patch.pickupRoles = requirePickupRoles(body.pickupRoles);
       const active = optionalBool(body.active, "active");
       if (active !== undefined) patch.active = active;
       const portable = optionalBool(body.portable, "portable");
@@ -1524,4 +1526,16 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       return c.json(rows);
     }),
   );
+}
+
+function requirePickupRoles(value: unknown): ("receipt" | "payment_slip")[] {
+  if (
+    !Array.isArray(value) ||
+    value.some(
+      (role) => typeof role !== "string" || (role !== "receipt" && role !== "payment_slip"),
+    )
+  ) {
+    throw new AppError("management.request_invalid", { field: "pickupRoles" });
+  }
+  return [...new Set(value)] as ("receipt" | "payment_slip")[];
 }

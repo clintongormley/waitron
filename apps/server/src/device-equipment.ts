@@ -1,7 +1,7 @@
 import "./errors.js";
 import type { EquipmentField } from "./errors.js";
 import { and, desc, eq, inArray, isNull } from "drizzle-orm";
-import { devices, printerHolders } from "@waitron/db";
+import { devices, deviceProfilePrinters, printerHolders, printers } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { persons, sessions } from "@waitron/identity";
 import {
@@ -316,16 +316,59 @@ export type EquipmentSelection = {
   takeOver?: boolean;
 };
 
-/**
- * Sets one of the device's roles to Use default or to an item, taking it over from another device
- * only by a scan or a confirmed list choice. Refuses, writing nothing, an item the device may not
- * newly choose, a deleted reader (`reader.not_found`), a reader another device has a payment in
- * progress on, and a held item otherwise.
- */
+export type EquipmentPickup = {
+  deviceId: string;
+  role?: undefined;
+  kind: "printer" | "reader";
+  selection: { id: string };
+  via: "scan";
+};
+
 export async function selectDeviceEquipment(
   tx: Transaction,
-  input: EquipmentSelection,
+  input: EquipmentSelection | EquipmentPickup,
 ): Promise<void> {
+  if (input.role === undefined) {
+    if (input.kind === "reader") {
+      await selectDeviceEquipment(tx, { ...input, role: "card_terminal" });
+      return;
+    }
+    const [printer] = await tx
+      .select({
+        pickupRoles: printers.pickupRoles,
+        active: printers.active,
+        locationId: printers.locationId,
+      })
+      .from(printers)
+      .where(and(eq(printers.id, input.selection.id), isNull(printers.deletedAt)));
+    if (printer === undefined) throw new AppError("printer.not_found", { id: input.selection.id });
+    const [device] = await tx
+      .select({ locationId: devices.locationId, profileId: devices.deviceProfileId })
+      .from(devices)
+      .where(eq(devices.id, input.deviceId));
+    const field = FIELD[printer.pickupRoles[0] ?? "receipt"];
+    if (!printer.active || device?.locationId !== printer.locationId) {
+      throw new AppError("device.binding_invalid", { field });
+    }
+    if (printer.pickupRoles.length === 0) {
+      const [listed] = await tx
+        .select({ id: deviceProfilePrinters.printerId })
+        .from(deviceProfilePrinters)
+        .where(
+          and(
+            eq(deviceProfilePrinters.deviceProfileId, device.profileId),
+            eq(deviceProfilePrinters.printerId, input.selection.id),
+            inArray(deviceProfilePrinters.role, ["receipt", "payment_slip"]),
+          ),
+        );
+      if (listed === undefined) throw new AppError("device.binding_invalid", { field });
+    }
+
+    for (const role of printer.pickupRoles) {
+      await selectDeviceEquipment(tx, { ...input, role });
+    }
+    return;
+  }
   const { deviceId, role, selection, via } = input;
   const takeOver = input.takeOver === true;
   const result =

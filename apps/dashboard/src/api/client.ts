@@ -1148,6 +1148,7 @@ export interface Printer {
   hasCashDrawer: boolean;
   /** Carried by one device at a time, which `holder` names. */
   portable: boolean;
+  pickupRoles: ("receipt" | "payment_slip")[];
   holder: EquipmentHolder | null;
   active: boolean;
 }
@@ -1300,6 +1301,7 @@ export interface PrinterPatch {
   resolution?: PrintResolution;
   hasCashDrawer?: boolean;
   portable?: boolean;
+  pickupRoles?: ("receipt" | "payment_slip")[];
   active?: boolean;
 }
 

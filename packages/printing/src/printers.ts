@@ -42,6 +42,7 @@ export interface CreatePrinterInput {
   resolution?: Resolution;
   hasCashDrawer?: boolean;
   portable?: boolean;
+  pickupRoles?: ("receipt" | "payment_slip")[];
 }
 
 /**
@@ -83,6 +84,7 @@ export async function createPrinter(
         resolution: input.resolution,
         hasCashDrawer: input.hasCashDrawer,
         portable: input.portable,
+        pickupRoles: input.pickupRoles,
       })
       .returning({ id: printers.id });
     return { id: row!.id };
@@ -103,6 +105,7 @@ export interface UpdatePrinterInput {
   resolution?: Resolution;
   hasCashDrawer?: boolean;
   active?: boolean;
+  pickupRoles?: ("receipt" | "payment_slip")[];
 }
 
 export interface PrinterRow {
@@ -117,6 +120,7 @@ export interface PrinterRow {
   resolution: Resolution;
   hasCashDrawer: boolean;
   portable: boolean;
+  pickupRoles: ("receipt" | "payment_slip")[];
   active: boolean;
 }
 
@@ -171,7 +175,7 @@ export async function deactivatePrinter(
 /** Includes deactivated printers, so the dashboard can show and reactivate them; never deleted ones. */
 export async function listPrinters(tx: Transaction, cfg: PrintConfig): Promise<PrinterRow[]> {
   void cfg;
-  return tx
+  const rows = await tx
     .select({
       id: printers.id,
       name: printers.name,
@@ -184,9 +188,11 @@ export async function listPrinters(tx: Transaction, cfg: PrintConfig): Promise<P
       resolution: printers.resolution,
       hasCashDrawer: printers.hasCashDrawer,
       portable: printers.portable,
+      pickupRoles: printers.pickupRoles,
       active: printers.active,
     })
     .from(printers)
     .where(isNull(printers.deletedAt))
     .orderBy(printers.name);
+  return rows.map((row) => ({ ...row, pickupRoles: [...new Set(row.pickupRoles)] }));
 }

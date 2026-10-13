@@ -16,6 +16,33 @@ function status(color?: unknown): Record<string, unknown> {
 }
 
 describe("validateCoreConfiguration", () => {
+  it.each([
+    null,
+    1,
+    [],
+    "{not json",
+    "null",
+    "{}",
+    '"receipt"',
+    "[null]",
+    '[["receipt"]]',
+    '["cash_drawer"]',
+  ])("refuses malformed printer pick-up roles %j", (pickup_roles) => {
+    expect(() => validateCoreConfiguration({ printers: [{ pickup_roles }] })).toThrowError(
+      expect.objectContaining({
+        code: "setup.request_invalid",
+        params: { field: "printers.pickup_roles" },
+      }),
+    );
+  });
+
+  it.each(["[]", '["receipt"]', '["payment_slip"]', '["payment_slip","receipt"]'])(
+    "accepts a stored printer pick-up set %s",
+    (pickup_roles) => {
+      expect(() => validateCoreConfiguration({ printers: [{ pickup_roles }] })).not.toThrow();
+    },
+  );
+
   it("refuses a status colour a save would refuse", () => {
     expect(() =>
       validateCoreConfiguration({ table_service_statuses: [status("red;position:fixed")] }),

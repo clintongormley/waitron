@@ -198,6 +198,7 @@ const printers: Printer[] = [
     resolution: "180dpi",
     hasCashDrawer: false,
     portable: false,
+    pickupRoles: ["receipt", "payment_slip"],
     holder: null,
     active: true,
   },

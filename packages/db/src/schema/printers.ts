@@ -1,6 +1,17 @@
 import { sql } from "drizzle-orm";
 import { check, uniqueIndex } from "drizzle-orm/sqlite-core";
-import { count, enumCheck, enumType, flag, id, label, newId, table, tsString } from "./columns.js";
+import {
+  count,
+  enumCheck,
+  enumType,
+  flag,
+  id,
+  json,
+  label,
+  newId,
+  table,
+  tsString,
+} from "./columns.js";
 import { locations } from "./tenants.js";
 
 /**
@@ -46,6 +57,9 @@ export const printers = table(
     hasCashDrawer: flag("has_cash_drawer").notNull().default(false),
     // A portable printer is used by one device at a time, its holder in `printer_holders`.
     portable: flag("portable").notNull().default(false),
+    pickupRoles: json<("receipt" | "payment_slip")[]>("pickup_roles")
+      .notNull()
+      .default(["receipt", "payment_slip"]),
     // Disable clears `active`; Delete also sets `deleted_at`; print_jobs keep the row either way.
     active: flag("active").notNull().default(true),
     deletedAt: tsString("deleted_at"),

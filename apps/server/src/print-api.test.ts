@@ -1582,6 +1582,95 @@ describe("mountPrintApi — management: printers CRUD", () => {
     for (const row of rows) expect(row).not.toHaveProperty("watcherId");
     expect(rows.find((row) => row.id === printerId)).not.toHaveProperty("ticketScope");
   });
+  it("stores a printer's pick-up roles and keeps them on unrelated edits", async () => {
+    const app = mountApp();
+    const { agentId } = await joinAndAccept(app);
+    const printerId = await createPrinterVia(app, agentId, "Portable");
+    const listed = async () => {
+      const res = await send(app, "GET", "/management-api/printers", { cookie: managerCookie });
+      expect(res.status).toBe(200);
+      return ((await res.json()) as { id: string; pickupRoles: string[] }[]).find(
+        (p) => p.id === printerId,
+      )!;
+    };
+    expect((await listed()).pickupRoles).toEqual(["receipt", "payment_slip"]);
+    expect(
+      (
+        await send(app, "PATCH", `/management-api/printers/${printerId}`, {
+          cookie: managerCookie,
+          body: { pickupRoles: ["payment_slip"] },
+        })
+      ).status,
+    ).toBe(204);
+    expect((await listed()).pickupRoles).toEqual(["payment_slip"]);
+    expect(
+      (
+        await send(app, "PATCH", `/management-api/printers/${printerId}`, {
+          cookie: managerCookie,
+          body: { name: "Renamed" },
+        })
+      ).status,
+    ).toBe(204);
+    expect((await listed()).pickupRoles).toEqual(["payment_slip"]);
+  });
+
+  it("refuses malformed pick-up sets without changing the stored setting", async () => {
+    const app = mountApp();
+    const { agentId } = await joinAndAccept(app);
+    const printerId = await createPrinterVia(app, agentId, "Portable");
+    for (const pickupRoles of [
+      null,
+      "receipt",
+      ["cash_drawer"],
+      [null],
+      [["receipt"]],
+      {},
+      ["receipt", 1],
+    ]) {
+      const res = await send(app, "PATCH", `/management-api/printers/${printerId}`, {
+        cookie: managerCookie,
+        body: { pickupRoles },
+      });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "pickupRoles" } },
+      });
+    }
+    const [stored] = await suite.db
+      .select({ pickupRoles: printers.pickupRoles })
+      .from(printers)
+      .where(eq(printers.id, printerId));
+    expect(stored!.pickupRoles).toEqual(["receipt", "payment_slip"]);
+  });
+
+  it("creates a printer with a custom pick-up set and treats repeated roles as one choice", async () => {
+    const app = mountApp();
+    const created = await send(app, "POST", "/management-api/printers", {
+      cookie: managerCookie,
+      body: {
+        name: "Slip only",
+        transport: "network_tcp",
+        host: "10.0.0.64",
+        pickupRoles: ["payment_slip", "payment_slip"],
+      },
+    });
+    expect(created.status).toBe(201);
+    const { id } = (await created.json()) as { id: string };
+    const [stored] = await suite.db
+      .select({ pickupRoles: printers.pickupRoles })
+      .from(printers)
+      .where(eq(printers.id, id));
+    expect(stored!.pickupRoles).toEqual(["payment_slip"]);
+    const invalid = await send(app, "POST", "/management-api/printers", {
+      cookie: managerCookie,
+      body: { name: "Invalid", transport: "network_tcp", host: "10.0.0.65", pickupRoles: null },
+    });
+    expect(invalid.status).toBe(400);
+    expect(await invalid.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "pickupRoles" } },
+    });
+  });
+
   it("creates, lists, updates and deactivates a printer", async () => {
     const app = mountApp();
     const { agentId } = await joinAndAccept(app);

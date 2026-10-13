@@ -41,6 +41,7 @@ const printer: Printer = {
   resolution: "203dpi",
   hasCashDrawer: false,
   portable: false,
+  pickupRoles: ["receipt", "payment_slip"],
   holder: null,
   active: true,
   lastPrintAgentId: null,
