@@ -7,7 +7,7 @@ import type { PaintRange, ZonePaint } from "./day-paint.js";
 import { isReadableClock, venueLocalMoment } from "./hours-clock.js";
 import { isLocalDate } from "./hours-rules.js";
 import type { LocalDate } from "./hours-types.js";
-import { nextOccurrence, occurrenceIn, repeatKey } from "./repeat-rules.js";
+import { nextOccurrence, occurrenceIn, repeatKey, standingInYear } from "./repeat-rules.js";
 import { storedTime, wireTime, type VenueScope } from "./operations.js";
 import {
   departmentDayRanges,
@@ -98,6 +98,26 @@ export function specialDateIn(
 ): LocalDate | null {
   if (!followsHoliday(rule) || year <= yearOf(rule.date)) return occurrenceIn(rule, year);
   return holidays.get(year)?.get(rule.holidayName!) ?? null;
+}
+
+/** Whether a date's place in `year` comes from its holiday's name, not its month and day: every
+ *  year after its first, for a repeating date saved on a public holiday. */
+export function followsHolidayIn(rule: SpecialDayDateRule, year: number): boolean {
+  return followsHoliday(rule) && year > yearOf(rule.date);
+}
+
+/** Which special-day date stands on each day of `year`, by `standingInYear`. */
+export function specialDatesStandingIn<T extends SpecialDayDateRule>(
+  rules: readonly T[],
+  year: number,
+  holidays: HolidayDates,
+): Map<LocalDate, T> {
+  return standingInYear(
+    rules,
+    year,
+    (rule, at) => specialDateIn(rule, at, holidays),
+    followsHolidayIn,
+  );
 }
 
 /** The first day two special-day dates would both stand on, or null when they never meet. A date
@@ -207,8 +227,14 @@ export async function specialDaysOn(
     yearOf(ordered[ordered.length - 1]!),
   ]);
   const matched = new Map<LocalDate, (typeof dates)[number]>();
+  const standingByYear = new Map<number, Map<LocalDate, (typeof dates)[number]>>();
   for (const day of ordered) {
-    const row = dates.find((row) => specialDateIn(row, yearOf(day), holidays) === day);
+    let standing = standingByYear.get(yearOf(day));
+    if (standing === undefined) {
+      standing = specialDatesStandingIn(dates, yearOf(day), holidays);
+      standingByYear.set(yearOf(day), standing);
+    }
+    const row = standing.get(day);
     if (row !== undefined) matched.set(day, row);
   }
   if (matched.size === 0) return found;

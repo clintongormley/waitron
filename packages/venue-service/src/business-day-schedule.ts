@@ -25,7 +25,12 @@ import {
 import { seasonOnSorted } from "./season-rules.js";
 import { addDays, weekdayOf } from "./hours-rules.js";
 import { layerPaint, type PaintRange } from "./day-paint.js";
-import { holidayDatesFor, holidayHorizon, specialDateIn } from "./special-days.js";
+import {
+  holidayDatesFor,
+  holidayHorizon,
+  specialDateIn,
+  specialDatesStandingIn,
+} from "./special-days.js";
 import { parseClosedRanges, rangeSpan, type ClosedRange } from "./service-day.js";
 import "./errors.js";
 
@@ -264,26 +269,16 @@ export async function businessDayClockConflicts(
   }
   const seasonPeriodsOn = (departmentId: string, seasonId: string | null, weekday: number) =>
     seasonId === null ? [] : (periodsOn.get(`${departmentId}|season:${seasonId}|${weekday}`) ?? []);
-  // Each lookup indexes a whole year at a time; the first row in read order wins a date, as `find` would.
-  const yearIndex = <T>(
-    rows: readonly T[],
-    datesIn: (row: T, year: number) => (string | null)[],
-  ): ((date: string) => T | undefined) => {
-    const years = new Map<number, Map<string, T>>();
-    return (date) => {
-      const year = Number(date.slice(0, 4));
-      let index = years.get(year);
-      if (index === undefined) {
-        index = new Map();
-        for (const row of rows)
-          for (const day of datesIn(row, year))
-            if (day !== null && !index.has(day)) index.set(day, row);
-        years.set(year, index);
-      }
-      return index.get(date);
-    };
+  const standingByYear = new Map<number, Map<string, (typeof specialDayList)[number]>>();
+  const specialOn = (date: string) => {
+    const year = Number(date.slice(0, 4));
+    let standing = standingByYear.get(year);
+    if (standing === undefined) {
+      standing = specialDatesStandingIn(specialDayList, year, holidays);
+      standingByYear.set(year, standing);
+    }
+    return standing.get(date);
   };
-  const specialOn = yearIndex(specialDayList, (day, year) => [specialDateIn(day, year, holidays)]);
   // `cutoverForBusinessDay` validates the clock and the day on every call; here the clock is validated once.
   let validated = false;
   const oldCutoverOn = (date: string) => {

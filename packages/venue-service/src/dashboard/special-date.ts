@@ -1,15 +1,15 @@
 import { layerPaint, layerZonePaint } from "../day-paint.js";
 import type { CalendarDay } from "../hours-types.js";
-import { occursOn } from "../repeat-rules.js";
+import { occursOn, standingInYear } from "../repeat-rules.js";
 import type { ClosedRange, ServiceRange } from "../service-day.js";
-import type { SpecialDayDetail } from "../special-days.js";
+import type { SpecialDayDetail, StoredSpecialDayDate } from "../special-days.js";
 
 /** The special day standing on a date, `date` being the stored date its paint is keyed by. */
 export type DatedSpecial = { detail: SpecialDayDetail; date: string; closed: boolean };
 
 /** `detail` on `date` when the calendar's `day` names it: the stored date itself, or for a
  *  repeating day the date that falls on it — on the same month and day, or on the public holiday
- *  of its name. */
+ *  of its name — ranked by `standingInYear`. */
 export function specialOn(
   day: CalendarDay | undefined,
   detail: SpecialDayDetail | undefined,
@@ -17,14 +17,16 @@ export function specialOn(
 ): DatedSpecial | undefined {
   if (!day?.specialDay || detail?.id !== day.specialDay.id) return undefined;
   const year = Number(date.slice(0, 4));
+  const follows = (row: StoredSpecialDayDate) =>
+    row.holidayName !== undefined && year > Number(row.date.slice(0, 4));
+  const fallsOn = (row: StoredSpecialDayDate) =>
+    follows(row)
+      ? day.holidays.some((holiday) => holiday.name === row.holidayName)
+      : occursOn({ date: row.date, repeats: true }, date);
   const entry =
     detail.dates.find((row) => row.date === date) ??
     (detail.repeatsYearly
-      ? detail.dates.find((row) =>
-          row.holidayName !== undefined && year > Number(row.date.slice(0, 4))
-            ? day.holidays.some((holiday) => holiday.name === row.holidayName)
-            : occursOn({ date: row.date, repeats: true }, date),
-        )
+      ? standingInYear(detail.dates, year, (row) => (fallsOn(row) ? date : null), follows).get(date)
       : undefined);
   return entry && { detail, date: entry.date, closed: entry.closedAllDay };
 }

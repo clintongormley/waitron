@@ -20,7 +20,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { businessDayClockConflicts } from "./business-day-schedule.js";
-import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
+import { replaceMenuWeek, saveMenuPeriod, updateMenuPeriod } from "./menu-timetable.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { createDepartment, listVenueReadiness, type VenueScope } from "./operations.js";
 import { menuPeriods } from "./schema/menus.js";
@@ -168,6 +168,21 @@ const standing = async (v: Venue, days: readonly string[]) => {
   const found = await scoped((tx) => specialDaysOn(tx, v.cfg, days));
   return Object.fromEntries(days.map((day) => [day, found.get(day)?.specialDayId ?? null]));
 };
+
+/** A Closed all day date written raw, as when a later year's holiday list ships after it was saved
+ *  and moves a repeating holiday date onto it, which the special-day writer refuses once that list
+ *  is present, as it is in this suite. */
+const rawDay = (v: Venue, name: string, date: string, repeatsYearly = false) =>
+  scoped(async (tx) => {
+    const [day] = await tx
+      .insert(specialDays)
+      .values({ locationId: v.cfg.locationId, name, repeatsYearly })
+      .returning({ id: specialDays.id });
+    await tx
+      .insert(specialDayDates)
+      .values({ specialDayId: day!.id, locationId: v.cfg.locationId, date, closedAllDay: true });
+    return { id: day!.id };
+  });
 
 describe("a special-day date records the public holiday it was saved on", () => {
   it("stores the holiday's official name on a holiday, and none on an ordinary date", async () => {
@@ -357,6 +372,33 @@ describe("a repeating holiday date follows the holiday's name", () => {
   });
 });
 
+describe("a date saved on a day beats a holiday date that moved onto it", () => {
+  it("gives the day to the one-off date, not to the repeating holiday that later followed its name there", async () => {
+    const v = await venue();
+    await yearly(v, "Viernes Santo", "2026-04-03");
+    const dinner = await rawDay(v, "Company dinner", "2027-03-26");
+    const found = await scoped((tx) => specialDaysOn(tx, v.cfg, ["2027-03-26"]));
+    expect(found.get("2027-03-26")).toMatchObject({ specialDayId: dinner.id, closedAllDay: true });
+  });
+
+  it("gives the day to a repeating month and day standing there, not to the holiday that moved there", async () => {
+    const v = await venue();
+    await yearly(v, "Viernes Santo", "2026-04-03");
+    const anniversary = await rawDay(v, "Aniversario", "2027-03-26", true);
+    expect(await standing(v, ["2027-03-26"])).toEqual({ "2027-03-26": anniversary.id });
+  });
+
+  it("still stands the moved holiday date on its new day when nothing else is there", async () => {
+    const v = await venue();
+    const friday = await yearly(v, "Viernes Santo", "2026-04-03");
+    const dinner = await rawDay(v, "Company dinner", "2027-03-27");
+    expect(await standing(v, ["2027-03-26", "2027-03-27"])).toEqual({
+      "2027-03-26": friday.id,
+      "2027-03-27": dinner.id,
+    });
+  });
+});
+
 describe("the date-taken check uses each year's resolved date", () => {
   it("refuses a one-off date where a repeating holiday falls in a later year, and allows the old month and day", async () => {
     const v = await venue();
@@ -469,6 +511,53 @@ describe("the end-offset check uses each year's resolved date", () => {
   });
 });
 
+describe("the end-offset check gives a day to a date saved there over a holiday that moved onto it", () => {
+  it("accepts an offset whose clash would fall only on the moved holiday's paint, under a one-off Closed all day", async () => {
+    const v = await venue();
+    await scoped((tx) =>
+      replaceMenuWeek(
+        tx,
+        v.cfg,
+        v.restaurant,
+        Array.from({ length: 7 }, (_, weekday) => ({
+          weekday,
+          slots: [{ periodId: v.lunch, startsAt: "06:30", endsAt: "09:00" }],
+        })),
+        AT,
+        0,
+      ),
+    );
+    await save(v, {
+      name: "Sábado Santo",
+      repeatsYearly: false,
+      dates: dates(["2026-04-04"]),
+      paint: [
+        {
+          departmentId: v.restaurant,
+          date: "2026-04-04",
+          ranges: [{ periodId: null, startsAt: "06:30", endsAt: "09:00" }],
+        },
+      ],
+    });
+    await save(v, {
+      name: "Viernes Santo",
+      repeatsYearly: true,
+      dates: dates(["2026-04-03"]),
+      paint: [
+        {
+          departmentId: v.restaurant,
+          date: "2026-04-03",
+          ranges: [{ periodId: v.dinner, startsAt: "22:00", endsAt: "05:30" }],
+        },
+      ],
+    });
+    await rawDay(v, "Cierre", "2027-03-26");
+    await expect(
+      scoped((tx) => updateMenuPeriod(tx, v.cfg, v.dinner, { endOffsetMinutes: 60 }, 0, AT)),
+    ).resolves.toBeUndefined();
+  });
+});
+
 describe("the readiness list warns when a later year has no holiday of the name", () => {
   const warnings = async (v: Venue, at: Date) =>
     (await scoped((tx) => listVenueReadiness(tx, v.cfg, at))).filter(
@@ -569,5 +658,11 @@ describe("the clock-change check follows a repeating holiday date to each year's
 
   it("checks no later Thursday when no later list names the holiday", async () => {
     expect(await reasons(await thursdayLunch("2026-10-01", "Fiesta de 2026"))).toEqual([]);
+  });
+
+  it("checks the Thursday a one-off Closed all day holds, not the holiday that moved onto it", async () => {
+    const v = await thursdayLunch("2026-04-02", "Jueves Santo");
+    await rawDay(v, "Cierre", "2027-03-25");
+    expect(await reasons(v)).toEqual([]);
   });
 });
