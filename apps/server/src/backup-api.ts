@@ -58,7 +58,7 @@ export interface BackupApiDeps {
   /** The recovery key from the box env, read afresh each call. Answers with no archive destination
    * configured, which the supervisor's `current()` cannot. */
   readRecoveryKey: () => Promise<string | undefined>;
-  /** The box env as a reload reads it: status reports the key file's key and rotation time. */
+  /** The box env as a reload reads it: status reads the held key and its rotation time from it. */
   readBoxEnv: () => Promise<Record<string, string | undefined>>;
   /** Rewrites this node's sealed state row, which carries `backup.env` and is locked with the recovery
    * key. */
@@ -342,19 +342,18 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
   // replace it. `GET recovery-key` keeps refusing such a key.
   const keyPresent = async (): Promise<boolean> => (await readHeldKey(heldKey)).held;
 
-  const keyFileFields = async () => {
+  // One read of the box env gives the held key, its fingerprint and its rotation time. With no key
+  // there, the key is the supervisor's and so are its fingerprint and rotation time.
+  const statusBody = async () => {
     const env = await deps.readBoxEnv();
-    const { key } = await readHeldKey(async () => loadRecoveryKey(env));
-    return key === undefined
-      ? {}
-      : { keyFingerprint: keyFingerprint(key), keyRotatedAt: loadKeyRotatedAt(env) };
-  };
-
-  const statusBody = async (known?: { held: boolean; key: string | undefined }) => {
-    const { held, key } = known ?? (await readHeldKey(heldKey));
+    const fileKey = await readHeldKey(async () => loadRecoveryKey(env));
+    const loadedKey = deps.supervisor.current().recoveryKey;
+    const { held, key } = fileKey.held ? fileKey : { held: loadedKey !== undefined, key: loadedKey };
     return {
       ...projectStatus(await deps.supervisor.status()),
-      ...(await keyFileFields()),
+      ...(fileKey.key === undefined
+        ? {}
+        : { keyFingerprint: keyFingerprint(fileKey.key), keyRotatedAt: loadKeyRotatedAt(env) }),
       recoveryKeySet: held,
       recoveryKeyTooShort: held && key === undefined,
       stream: deps.readStream(),
@@ -531,7 +530,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
             throw new AppError("backup.effective_mismatch", {});
           }
           return c.json({
-            ...(await statusBody({ held: true, key: recoveryKey })),
+            ...(await statusBody()),
             ...(unreadableCode === undefined ? {} : { loadErrorCode: unreadableCode }),
           });
         }

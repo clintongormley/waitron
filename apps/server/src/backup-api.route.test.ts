@@ -394,6 +394,50 @@ describe("backup admin routes", () => {
     expect((await plain.json()).stream).toEqual({ state: "off" });
   });
 
+  it("status reads the box env once, and a Save's answer once after the read its key check needs", async () => {
+    const sc: Scenario = { stateDir: await makeStateDir(), base: {}, role: "primary" };
+    const reads: string[] = [];
+    const app = buildApp(
+      makeSupervisor(sc),
+      sc.stateDir,
+      {},
+      async () => {
+        reads.push("recovery-key");
+        return loadRecoveryKey(await loadBoxEnv({}, sc.stateDir));
+      },
+      undefined,
+      undefined,
+      undefined,
+      {
+        readBoxEnv: () => {
+          reads.push("box-env");
+          return loadBoxEnv({}, sc.stateDir);
+        },
+      },
+    );
+    const cookie = await login(app);
+    const status = await app.request("/api/backup/status", { headers: { cookie } });
+    expect(status.status).toBe(200);
+    expect(reads).toHaveLength(1);
+    reads.length = 0;
+    const res = await app.request("/api/backup/apply", {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({
+        destination: { kind: "local-fs", dir: makeDestDir() },
+        recoveryKey: KEY_1,
+        schedule: DAILY_AT_0330,
+        retention: RETENTION,
+      }),
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      recoveryKeySet: true,
+      keyFingerprint: keyFingerprint(KEY_1),
+    });
+    expect(reads).toHaveLength(2);
+  }, 60_000);
+
   // The dashboard replaces its status with a write's answer, so that answer carries the copy too.
   it("apply's answer carries the bucket copy's state", async () => {
     const sc: Scenario = { stateDir: await makeStateDir(), base: {}, role: "primary" };
