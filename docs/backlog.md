@@ -1360,6 +1360,19 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   [docs/backlog/mockups/a506-opening-hours-seasons/](backlog/mockups/a506-opening-hours-seasons/).
   [Detail](backlog/service-periods.md#a506-opening-hours-rebuilt-around-seasons-and-special-days)
 
+- **Two special days can land on one date after saving, and the venue is not told** (retro review
+  of #1603). A holiday-area change, or a later year's holiday list, can move an "every year" date
+  that follows a holiday's name onto a date another special day holds; the save's check cannot see
+  it. Every reader now gives the date to the one saved there on its own terms (`standingInYear`,
+  `packages/venue-service/src/repeat-rules.ts`). Decide whether the readiness list should warn.
+
+- **Two holidays with one name in one year's list** (retro review of #1603). A save records only
+  the first date of each name (`readHolidayDates`, `packages/venue-service/src/holidays.ts`), so a
+  date on the second is saved with no holiday name and repeats on its month and day; following a
+  name with two dates in a later year has no rule. No shipped list has one: a probe over every
+  province and area of 2026 read 729 holidays in 61 lists and found no name twice. Re-check when
+  a new year's list is added.
+
 - **Some Departments screen test stubs answer a floor-plan read with a non-plan.** Check the
   relocated zone editor tests and `apps/dashboard/src/dashboard-app.test.ts` for stubs answering
   every request with one body. The zone editor's floor-plan read
