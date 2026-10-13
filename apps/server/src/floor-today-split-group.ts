@@ -6,6 +6,7 @@ import {
   floorTodayJoins,
   floorTodaySplitParts,
   floorTodayTables,
+  nowIso,
   type Transaction,
 } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
@@ -14,7 +15,9 @@ import { leaveMergesRestoring } from "./floor-today-merges.js";
 import { partsOf, type Part } from "./floor-today-parts.js";
 import { splitJoinedTable } from "./floor-today-split.js";
 import { catchUpZone, foodComingTo, placementColumns, placementOf } from "./floor-today-store.js";
-import { refuseHeld, todayOf, type Today } from "./floor-today-table.js";
+import { todayOf, type Today } from "./floor-today-table.js";
+import { enqueueMovedSlipsFor, readPartiesSentWork } from "./kitchen-print.js";
+import { checkAndBumpParty, holdersOf, leaveForClearing, partyRevision } from "./parties.js";
 import type { Placement } from "./floor-reset-plan.js";
 import { joinedPlaceOver, partPlaces } from "./joined-split-layout.js";
 import type { TillConfig } from "./till-config.js";
@@ -61,6 +64,7 @@ interface Rejoin {
  * joined table none of whose tables is still joined, next to each other in its order and each
  * standing where its layout from the first of them puts it, with nobody seated and no food on its
  * way to them, the joined table is put back over them; otherwise they stay a group of `seats`.
+ * Guests at the group leave the ticked tables, as Move guests leaves tables, and the kitchen is told.
  */
 async function splitGroup(
   tx: Transaction,
@@ -79,15 +83,25 @@ async function splitGroup(
   const ticked = new Set(partIds);
   const staying = merge.members.filter((member) => !ticked.has(member.tableId));
   if (staying.length === 0) throw new AppError("merge.split_all", { tableId, field: "partIds" });
-  await refuseHeld(tx, members);
+  const holders = await holdersOf(tx, members);
+  if (holders.size > 0) {
+    if (staying.length >= 2 && seats === null) throw new AppError("merge.seats_required", {});
+    const leaving = partIds.filter((id) => holders.has(id));
+    const losing = [...new Set(leaving.map((id) => holders.get(id)!))];
+    const before = await readPartiesSentWork(tx, cfg, losing);
+    for (const partyId of losing) {
+      await checkAndBumpParty(tx, partyId, await partyRevision(tx, partyId), "open");
+    }
+    await leaveForClearing(tx, leaving, nowIso());
+    await leaveAsGroup(tx, merge.joinId, partIds, staying.length >= 2 ? seats : null);
+    await enqueueMovedSlipsFor(tx, cfg, before);
+    return;
+  }
 
   const rejoin = staying.length >= 2 ? await rejoining(tx, staying) : null;
   if (rejoin === null) {
-    if (staying.length < 2) return leaveMergesRestoring(tx, partIds);
-    if (seats === null) throw new AppError("merge.seats_required", {});
-    await leaveMergesRestoring(tx, partIds);
-    await tx.update(floorTodayJoins).set({ seats }).where(eq(floorTodayJoins.id, merge.joinId));
-    return;
+    if (staying.length >= 2 && seats === null) throw new AppError("merge.seats_required", {});
+    return leaveAsGroup(tx, merge.joinId, partIds, staying.length >= 2 ? seats : null);
   }
   if (!rejoin.whole && seats === null) throw new AppError("joined_table.seats_required", {});
 
@@ -128,6 +142,19 @@ async function splitGroup(
   await catchUpZone(tx, cfg, removals, zoneId, now);
 }
 
+/** `partIds` leave the group; with `seats`, what stays is still a group of that many seats. */
+async function leaveAsGroup(
+  tx: Transaction,
+  joinId: string,
+  partIds: readonly string[],
+  seats: number | null,
+): Promise<void> {
+  await leaveMergesRestoring(tx, partIds);
+  if (seats !== null) {
+    await tx.update(floorTodayJoins).set({ seats }).where(eq(floorTodayJoins.id, joinId));
+  }
+}
+
 /**
  * Within one square: places are rounded to whole squares, so on a turned table the slot worked out
  * from the anchor's rounded place can be a square off where the joined table's own layout, or a merge
@@ -136,7 +163,7 @@ async function splitGroup(
 const standsIn = (at: Placement, slot: Placement): boolean =>
   Math.abs(at.x - slot.x) <= 1 && Math.abs(at.y - slot.y) <= 1 && at.rotation === slot.rotation;
 
-/** The joined table `staying` were all split off, when it may be put back over them; else null. The caller has refused a seated group. */
+/** The joined table `staying` were all split off, when it may be put back over them; else null. Nobody sits at the group. */
 async function rejoining(tx: Transaction, staying: readonly Row[]): Promise<Rejoin | null> {
   const ids = staying.map((member) => member.tableId);
   const rows = await tx

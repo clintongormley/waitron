@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -15,6 +15,8 @@ import {
   workingOrders,
 } from "@waitron/db";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
+import { partyTablesName } from "@waitron/shared";
+import { writeClearingWorkflow } from "@waitron/venue-service";
 import { foodOnItsWay } from "./delivery-release.js";
 import { saveZonePlan, type ZonePlanSave } from "./floor-plan.js";
 import { resetZone } from "./floor-today-store.js";
@@ -22,9 +24,15 @@ import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import {
+  activeTablesOf,
+  billRow,
   counterOrder,
   inTx,
+  linesOf,
+  order,
+  partyAt,
   pay,
+  revisionOf,
   seat,
   setupPartyVenue,
   tableRow,
@@ -660,16 +668,134 @@ describe("Split tables… on a group with nobody seated", () => {
     expect(await splitRowsOf(table.long!)).toEqual([]);
     expect(await placeOf(table.bar!)).toEqual({ x: 40, y: 0, width: 2, height: 2 });
   });
+});
 
-  it("guests at the group: refused for now, nothing written", async () => {
-    const { table } = await barOnLong();
-    await seat(v, table.bar!);
-    const before = await everything();
-    const first = [table.bar!, table.c3!, table.c4!, table.c5!].sort()[0]!;
+async function withClearing<T>(fn: () => Promise<T>): Promise<T> {
+  await inTx(v, (tx) => writeClearingWorkflow(tx, true));
+  try {
+    return await fn();
+  } finally {
+    await inTx(v, (tx) => writeClearingWorkflow(tx, false));
+  }
+}
 
-    await refused(splitOff(table.bar!, [table.bar!]), 409, "tab.already_open", {
-      tableId: first,
+/** The party's name from its tables, in the order it holds them. */
+async function partyNameOf(partyId: string): Promise<string> {
+  const labels: string[] = [];
+  for (const id of await activeTablesOf(v, partyId)) labels.push((await tableRow(v, id)).label);
+  return partyTablesName(labels);
+}
+
+function noticesOn(billIds: string[]) {
+  return v.db.all<{ working_order_id: string; kind: string; moved_to: string }>(
+    sql`
+      select working_order_id, kind, moved_to from kitchen_notices
+      where working_order_id in (${sql.join(
+        billIds.map((id) => sql`${id}`),
+        sql`, `,
+      )})
+      order by rowid`,
+  );
+}
+
+/** Guests seated at Long table's group (Bar pushed onto Long table, seats 12), a Burger sent to the kitchen. */
+async function guestsAtGroup() {
+  const zone = await barOnLong();
+  const guests = await seat(v, zone.table.bar!);
+  await order(v, guests.tabId, "Burger");
+  const { table } = zone;
+  expect(await activeTablesOf(v, guests.partyId)).toEqual(
+    expect.arrayContaining([table.bar!, table.c3!, table.c4!, table.c5!]),
+  );
+  return { ...zone, guests };
+}
+
+describe("Split tables… on a group with guests seated", () => {
+  it("Bar ticked: Bar comes off without guests, needs clearing, and goes back by the bar counter; the party stays at Counter 3, 4 and 5, a group with the seats sent", async () => {
+    await withClearing(async () => {
+      const { table, zoneId, guests } = await guestsAtGroup();
+      const revision = await revisionOf(v, guests.partyId);
+
+      await settles(() => splitOff(table.bar!, [table.bar!], 10), zoneId);
+
+      expect(await placeOf(table.bar!)).toEqual({ x: 40, y: 0, width: 2, height: 2 });
+      expect(await groupOf(table.bar!)).toBeNull();
+      expect(await partyAt(v, table.bar!)).toBeNull();
+      expect((await tableRow(v, table.bar!)).needsClearingSince).not.toBeNull();
+      expect((await activeTablesOf(v, guests.partyId)).sort()).toEqual(
+        [table.c3!, table.c4!, table.c5!].sort(),
+      );
+      expect(await groupOf(table.c3!)).toEqual({
+        seats: 10,
+        members: [table.c3!, table.c4!, table.c5!].sort(),
+      });
+      expect(await splitRowsOf(table.long!)).toEqual([table.c3!, table.c4!, table.c5!].sort());
+      expect(await placeOf(table.c3!)).toEqual({ x: 10, y: 20, width: 2, height: 2 });
+      for (const key of ["c3", "c4", "c5"] as const) {
+        expect((await tableRow(v, table[key]!)).needsClearingSince).toBeNull();
+      }
+      expect(await revisionOf(v, guests.partyId)).toBe(revision + 1);
     });
+  });
+
+  it("the kitchen gets one moved notice", async () => {
+    const { table, guests } = await guestsAtGroup();
+
+    await ok(splitOff(table.bar!, [table.bar!], 10));
+
+    expect((await activeTablesOf(v, guests.partyId)).sort()).toEqual(
+      [table.c3!, table.c4!, table.c5!].sort(),
+    );
+    expect(await noticesOn([guests.tabId])).toEqual([
+      {
+        working_order_id: guests.tabId,
+        kind: "moved",
+        moved_to: await partyNameOf(guests.partyId),
+      },
+    ]);
+  });
+
+  it("Counter 4 and 5 ticked: the guests stay at Bar and Counter 3", async () => {
+    const { table, guests } = await guestsAtGroup();
+
+    await ok(splitOff(table.bar!, [table.c4!, table.c5!], 6));
+
+    expect((await activeTablesOf(v, guests.partyId)).sort()).toEqual(
+      [table.bar!, table.c3!].sort(),
+    );
+    expect(await groupOf(table.bar!)).toEqual({
+      seats: 6,
+      members: [table.bar!, table.c3!].sort(),
+    });
+    expect(await partyAt(v, table.c4!)).toBeNull();
+    expect(await partyAt(v, table.c5!)).toBeNull();
+  });
+
+  it("with clearing off, Bar needs no clearing", async () => {
+    const { table } = await guestsAtGroup();
+
+    await ok(splitOff(table.bar!, [table.bar!], 10));
+
+    expect(await partyAt(v, table.bar!)).toBeNull();
+    expect((await tableRow(v, table.bar!)).needsClearingSince).toBeNull();
+  });
+
+  it("the bill keeps its lines and its party", async () => {
+    const { table, guests } = await guestsAtGroup();
+    const lines = await linesOf(v, guests.tabId);
+    expect(lines).toHaveLength(1);
+
+    await ok(splitOff(table.bar!, [table.bar!], 10));
+
+    expect((await billRow(v, guests.tabId)).partyId).toBe(guests.partyId);
+    expect(await linesOf(v, guests.tabId)).toEqual(lines);
+  });
+
+  it("Bar ticked with seats missing is refused merge.seats_required, nothing written", async () => {
+    const { table } = await guestsAtGroup();
+    const before = await everything();
+
+    await refused(splitOff(table.bar!, [table.bar!]), 400, "merge.seats_required", {});
     expect(await everything()).toEqual(before);
   });
 });
