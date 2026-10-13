@@ -22,6 +22,7 @@ import type { Season } from "../season-rules.js";
 import type { SeasonInput } from "./opening-hours-client.js";
 import { format, formatDate, formatMonthName } from "./hours-view.js";
 import { t } from "./strings.js";
+import { currentLocale } from "@waitron/dashboard-kit";
 
 export type SeasonChip = Season & { lastDay: string };
 type Draft = { name: string; day: string; month: string };
@@ -75,13 +76,21 @@ export class SeasonDialog extends LitElement {
       p {
         margin: 0;
       }
-      .error {
+      .error,
+      .required {
         color: var(--wt-color-danger);
+      }
+      .required {
+        margin-inline-start: var(--wt-space-1);
       }
     `,
   ];
   @property({ type: Boolean }) open = false;
   @property({ type: Boolean }) busy = false;
+  /** The request in flight, so only the action that sent it shows it is busy. */
+  @property() pending: "save" | "impact" | "delete" | "" = "";
+  /** Reading the delete impact failed. */
+  @property({ type: Boolean }) impactFailed = false;
   /** The season being edited; absent for a new one. */
   @property({ attribute: false }) season?: SeasonChip;
   /** Every season, for Delete's availability and for naming a season in a refusal. */
@@ -177,6 +186,7 @@ export class SeasonDialog extends LitElement {
   /** A refusal that names no field on this form, worded for beside the action. */
   private refusalText(): string {
     const refusal = this.refusal;
+    if (this.impactFailed) return t("venue.delete_load_error");
     if (!refusal || this.refusalField() !== undefined) return "";
     const params = refusal.params ?? {};
     if (refusal.code === "hours.clock_changed") return t("hours.clock_changed");
@@ -238,7 +248,16 @@ export class SeasonDialog extends LitElement {
     return html`<div class="form">
         <p data-test="delete-confirm-text">
           ${format("season.delete_question", { name: season.name, previous: this.previous(season).name })}
-          ${departments.length ? format("season.delete_loses", { departments: departments.join(", ") }) : t("season.delete_loses_none")}
+          ${
+            departments.length
+              ? format("season.delete_loses", {
+                  departments: new Intl.ListFormat(currentLocale(), {
+                    style: "long",
+                    type: "conjunction",
+                  }).format(departments),
+                })
+              : t("season.delete_loses_none")
+          }
         </p>
         ${refused ? html`<p class="error" role="alert" data-error="delete">${refused}</p>` : nothing}
       </div>
@@ -257,11 +276,11 @@ export class SeasonDialog extends LitElement {
           data-test="confirm-delete-season"
           variant="danger"
           ?disabled=${this.busy}
-          ?loading=${this.busy}
+          ?loading=${this.pending === "delete"}
           @click=${() => {
             if (current()) this.emit("season-delete-confirm", { id: season.id });
           }}
-          >${t("hours.delete")}</wt-button
+          >${t("prep.delete")}</wt-button
         >
       </wt-form-actions>`;
   }
@@ -288,14 +307,13 @@ export class SeasonDialog extends LitElement {
             if (current()) this.change({ ...this.draft, name: event.detail.value }, "name");
           }}
         ></wt-input>
-        <fieldset>
-          <legend>${t("season.starts")} *</legend>
+        <fieldset aria-describedby=${startError ? "start-error" : nothing}>
+          <legend>${t("season.starts")}<span class="required" aria-hidden="true">*</span></legend>
           <div class="start">
             <wt-combobox
               name="startDay"
               label=${t("season.day")}
               search="never"
-              required
               ?invalid=${startError !== ""}
               .value=${this.draft.day}
               .options=${this.dayOptions()}
@@ -309,7 +327,6 @@ export class SeasonDialog extends LitElement {
               name="startMonth"
               label=${t("season.month")}
               search="never"
-              required
               ?invalid=${startError !== ""}
               .value=${this.draft.month}
               .options=${MONTHS.map((month) => ({ value: month, label: formatMonthName(Number(month)) }))}
@@ -326,7 +343,7 @@ export class SeasonDialog extends LitElement {
               }}
             ></wt-combobox>
           </div>
-          ${startError ? html`<p class="error" role="alert" data-error="startsOn">${startError}</p>` : nothing}
+          ${startError ? html`<p class="error" role="alert" id="start-error" data-error="startsOn">${startError}</p>` : nothing}
         </fieldset>
         ${
           this.season && this.seasons.length > 1
@@ -335,6 +352,7 @@ export class SeasonDialog extends LitElement {
                   data-test="delete-season"
                   variant="secondary"
                   ?disabled=${this.busy}
+                  ?loading=${this.pending === "impact"}
                   @click=${() => {
                     if (current()) this.emit("season-delete", { id: this.season!.id });
                   }}
@@ -361,7 +379,7 @@ export class SeasonDialog extends LitElement {
           data-test="save-season"
           variant=${action.variant}
           ?disabled=${action.unchanged || this.busy || (this.attempted && Object.keys(this.ownErrors).length > 0)}
-          ?loading=${this.busy}
+          ?loading=${this.pending === "save"}
           @click=${() => {
             if (current()) this.save();
           }}

@@ -100,7 +100,7 @@ const en = {
   "season.offset_season": "A period’s end offset would run into {season} on {weekday}.",
   "season.delete": "Delete season",
   "season.delete_question": "Delete {name}? Its days join {previous}.",
-  "season.delete_loses": "The hours {departments} set in it are lost.",
+  "season.delete_loses": "The hours of {departments} in it are lost.",
   "season.delete_loses_none": "No department has hours in it.",
   "season.back": "Back",
 

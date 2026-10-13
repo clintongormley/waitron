@@ -171,10 +171,10 @@ it("confirms a delete naming the departments that lose hours, then deletes with 
   await click("[data-test=delete-season]");
   await expect
     .poll(() => dq("[data-test=delete-confirm-text]")?.textContent ?? "")
-    .toContain("Bar, Kitchen");
+    .toContain("Bar and Kitchen");
   expect(api.readSeasonDeleteImpact).toHaveBeenCalledWith("sp");
   expect(dq("[data-test=delete-confirm-text]")!.textContent!.replace(/\s+/g, " ").trim()).toBe(
-    "Delete Spring? Its days join Winter. The hours Bar, Kitchen set in it are lost.",
+    "Delete Spring? Its days join Winter. The hours of Bar and Kitchen in it are lost.",
   );
   expect(api.deleteSeason).not.toHaveBeenCalled();
   await click("[data-test=confirm-delete-season]");
@@ -226,6 +226,11 @@ it.each([
     "A period’s end offset would run into Christmas dinners on Thu, 24 Dec 2026.",
   ],
   [{ seasonId: "a", weekday: 5 }, "A period’s end offset would run into Autumn on Friday."],
+  [
+    { date: "2031-12-24", specialDayId: "other" },
+    "A period’s end offset would run into Wed, 24 Dec 2031.",
+  ],
+  [{ date: "2026-12-24" }, "A period’s end offset would run into Thu, 24 Dec 2026."],
 ])("shows an end-offset refusal %o beside Save and keeps the draft", async (clash, message) => {
   const api = fakeApi({
     saveSeason: vi.fn(async () => {
@@ -293,4 +298,85 @@ it("offers no editing when read-only", async () => {
   expect(chips().map((chip) => chip.tagName)).toEqual(["SPAN", "SPAN", "SPAN", "SPAN"]);
   expect(el.shadowRoot!.querySelector("[data-test=add-season]")).toBeNull();
   expect(el.shadowRoot!.textContent).not.toContain("✎");
+});
+
+it("keeps Save enabled after a server refusal until the draft changes", async () => {
+  const api = fakeApi({
+    saveSeason: vi.fn(async () => {
+      throw { code: "hours.clock_changed" };
+    }),
+  });
+  await mount(four, api);
+  await openChip("Winter");
+  await change("name", "Cold");
+  await click("[data-test=save-season]");
+  await expect.poll(() => footerError()).not.toBe("");
+  expect(save().disabled).toBe(false);
+  expect(save().variant).toBe("primary");
+});
+
+it("says the impact could not be loaded when reading it fails, and keeps the form", async () => {
+  const api = fakeApi({
+    readSeasonDeleteImpact: vi.fn(async () => {
+      throw { code: "network.unavailable" };
+    }),
+  });
+  await mount(four, api);
+  await openChip("Spring");
+  await click("[data-test=delete-season]");
+  await expect
+    .poll(() => footerError())
+    .toBe("The deletion impact could not be loaded. Try again.");
+  expect(dq("[data-test=delete-confirm-text]")).toBeNull();
+});
+
+it("shows only Delete as busy while the impact is read, and only the confirm while deleting", async () => {
+  let release!: () => void;
+  const waiting = new Promise<void>((resolve) => (release = resolve));
+  const api = fakeApi({
+    readSeasonDeleteImpact: vi.fn(async () => {
+      await waiting;
+      return { departments: [] };
+    }),
+    deleteSeason: vi.fn(() => new Promise<void>(() => {})),
+  });
+  await mount(four, api);
+  await openChip("Spring");
+  await click("[data-test=delete-season]");
+  const button = (test: string) => dq<HTMLElementTagNameMap["wt-button"]>(`[data-test=${test}]`)!;
+  expect(button("delete-season").loading).toBe(true);
+  expect(save().loading).toBe(false);
+  release();
+  await expect.poll(() => dq("[data-test=confirm-delete-season]")).not.toBeNull();
+  await click("[data-test=confirm-delete-season]");
+  expect(button("confirm-delete-season").loading).toBe(true);
+  expect(button("cancel-delete-season").loading).toBe(false);
+});
+
+it("marks the start once, describes the group by its error, and asks no field of its own", async () => {
+  await mount();
+  await openAdd();
+  const legend = dq("legend")!;
+  expect(legend.textContent!.replace(/\s+/g, " ").trim()).toBe("Starts on*");
+  expect(legend.querySelector("[aria-hidden=true]")!.textContent).toBe("*");
+  for (const name of ["startDay", "startMonth"])
+    expect(dq<HTMLElementTagNameMap["wt-combobox"]>(`[name=${name}]`)!.required).toBe(false);
+  await change("name", "Mid autumn");
+  await click("[data-test=save-season]");
+  const error = dq("[data-error=startsOn]")!;
+  expect(dq("fieldset")!.getAttribute("aria-describedby")).toBe(error.id);
+  expect(error.id).not.toBe("");
+});
+
+it("uses one verb for delete in Spanish", async () => {
+  setLocale("es");
+  await mount();
+  await openChip("Spring");
+  expect(dq("[data-test=delete-season]")!.textContent!.trim()).toBe("Eliminar temporada");
+  await click("[data-test=delete-season]");
+  await expect.poll(() => dq("[data-test=confirm-delete-season]")).not.toBeNull();
+  expect(dq("[data-test=confirm-delete-season]")!.textContent!.trim()).toBe("Eliminar");
+  expect(dq("[data-test=delete-confirm-text]")!.textContent).toContain(
+    "Se pierden los horarios de Bar y Kitchen en ella.",
+  );
 });

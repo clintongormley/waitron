@@ -96,17 +96,18 @@ export class SeasonChips extends LitElement {
   @property({ attribute: false }) specialDays: readonly { id: string; name: string }[] = [];
   @property({ type: Boolean }) readOnly = false;
   @state() private opening?: Opening;
-  @state() private busy = false;
+  @state() private pending: "save" | "impact" | "delete" | "" = "";
+  @state() private impactFailed = false;
   @state() private refusal?: Refusal;
   @state() private impact?: SeasonDeleteImpact;
 
   override disconnectedCallback() {
     this.opening = undefined;
-    this.busy = false;
+    this.pending = "";
     super.disconnectedCallback();
   }
   private open(season: SeasonChip | undefined, event: Event) {
-    if (this.readOnly || this.busy || this.opening || !this.api) return;
+    if (this.readOnly || this.pending || this.opening || !this.api) return;
     this.refusal = undefined;
     this.impact = undefined;
     this.opening = { season, returnTo: event.currentTarget as HTMLElement };
@@ -116,26 +117,36 @@ export class SeasonChips extends LitElement {
     this.opening = undefined;
     this.impact = undefined;
     this.refusal = undefined;
+    this.impactFailed = false;
     void this.updateComplete.then(() => opening.returnTo?.focus());
   }
   /** Runs one request for `opening`, keeping a refusal on the dialog; the result once it is still current. */
   private async run<T>(
     opening: Opening,
+    pending: "save" | "impact" | "delete",
     request: () => Promise<T>,
   ): Promise<{ value: T } | undefined> {
-    this.busy = true;
+    this.pending = pending;
     this.refusal = undefined;
+    this.impactFailed = false;
     try {
       return { value: await request() };
     } catch (error) {
-      if (this.opening === opening) this.refusal = refusalOf(error);
+      if (this.opening === opening) {
+        if (pending === "impact") this.impactFailed = true;
+        else this.refusal = refusalOf(error);
+      }
       return undefined;
     } finally {
-      this.busy = false;
+      this.pending = "";
     }
   }
-  private async written(opening: Opening, request: () => Promise<unknown>) {
-    const done = await this.run(opening, request);
+  private async written(
+    opening: Opening,
+    pending: "save" | "delete",
+    request: () => Promise<unknown>,
+  ) {
+    const done = await this.run(opening, pending, request);
     if (!done || this.opening !== opening || !this.isConnected) return;
     this.close(opening);
     this.dispatchEvent(new CustomEvent("season-changed", { bubbles: true, composed: true }));
@@ -144,10 +155,10 @@ export class SeasonChips extends LitElement {
     event.stopPropagation();
     const opening = this.opening;
     const api = this.api;
-    if (!opening || !api || this.busy) return;
+    if (!opening || !api || this.pending) return;
     const { id, input } = event.detail;
     const revision = this.clockRevision;
-    await this.written(opening, () =>
+    await this.written(opening, "save", () =>
       id === null ? api.addSeason(input, revision) : api.saveSeason(id, input, revision),
     );
   }
@@ -155,17 +166,19 @@ export class SeasonChips extends LitElement {
     event.stopPropagation();
     const opening = this.opening;
     const api = this.api;
-    if (!opening || !api || this.busy) return;
-    const done = await this.run(opening, () => api.readSeasonDeleteImpact(event.detail.id));
+    if (!opening || !api || this.pending) return;
+    const done = await this.run(opening, "impact", () =>
+      api.readSeasonDeleteImpact(event.detail.id),
+    );
     if (done && this.opening === opening) this.impact = done.value;
   }
   private async onConfirmDelete(event: CustomEvent<{ id: string }>) {
     event.stopPropagation();
     const opening = this.opening;
     const api = this.api;
-    if (!opening || !api || this.busy || !this.impact) return;
+    if (!opening || !api || this.pending || !this.impact) return;
     const revision = this.clockRevision;
-    await this.written(opening, () => api.deleteSeason(event.detail.id, revision));
+    await this.written(opening, "delete", () => api.deleteSeason(event.detail.id, revision));
   }
   private dialog() {
     const opening = this.opening;
@@ -177,7 +190,9 @@ export class SeasonChips extends LitElement {
         .season=${opening.season}
         .seasons=${this.seasons}
         .specialDays=${this.specialDays}
-        .busy=${this.busy}
+        .busy=${this.pending !== ""}
+        .pending=${this.pending}
+        .impactFailed=${this.impactFailed}
         .refusal=${this.refusal}
         .confirmDelete=${this.impact}
         @season-save=${this.onSave}
@@ -185,7 +200,7 @@ export class SeasonChips extends LitElement {
         @season-delete-confirm=${this.onConfirmDelete}
         @season-delete-cancel=${(event: Event) => {
           event.stopPropagation();
-          if (this.opening === opening && !this.busy) {
+          if (this.opening === opening && !this.pending) {
             this.impact = undefined;
             this.refusal = undefined;
           }
