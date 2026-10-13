@@ -638,10 +638,14 @@ export class TillTicketView extends LitElement {
     const notQueued = this.originalReceiptPrint?.status === "not_queued";
     const failedReceipt = this.originalReceiptPrint?.status === "failed";
     const failedButDelivered = failedReceipt && this.deliveries?.originalCompleted === true;
-    // The server refuses to resend the receipt original beside an active or completed delivery.
+    // The server refuses to resend the receipt original beside any active delivery or once an original
+    // completed; only an A4 or email one replaces the receipt's own failure line.
     const failedButSuperseded =
       failedButDelivered ||
-      (failedReceipt && (attempt?.status === "queued" || attempt?.status === "sending"));
+      (failedReceipt &&
+        attempt != null &&
+        attempt.medium !== "receipt" &&
+        (attempt.status === "queued" || attempt.status === "sending"));
     const receiptBusy = this.originalReceiptBusy || this.deliveryBusy;
     const orderGroup = `${r.orderLabel === null ? "" : `${r.orderLabel} · `}${labels.order} ${r.orderNumber}`;
     return html`

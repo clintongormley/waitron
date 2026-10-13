@@ -2193,6 +2193,18 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
     },
   );
 
+  it("keeps the receipt original's failure line while that receipt waits for its automatic retry", async () => {
+    const current = attempt({ id: null, medium: "receipt", status: "queued" });
+    const { el } = await mountF1({
+      deliveries: { current, originalCompleted: false, actions: noActions, history: [current] },
+      originalReceiptPrint: { status: "failed", jobId: "original", canRetry: false },
+    });
+    const section = button(el, "original-delivery")!.textContent!;
+    expect(section).toContain("Full invoice not delivered");
+    expect(section).toContain("Printing failed. Automatic retry is pending.");
+    expect(button(el, "retry-receipt")).toBeNull();
+  });
+
   it.each([
     ["an A4", {}],
     ["an email", { medium: "email" }],
