@@ -23,7 +23,7 @@ function luminance(colour: string): number {
 }
 /** axe does not judge the faded blocks' names, so the zone state measures them itself. */
 function expectReadableUnderlay(el: PaintGrid) {
-  const names = [...el.shadowRoot!.querySelectorAll<HTMLElement>(".underlay span")];
+  const names = [...el.shadowRoot!.querySelectorAll<HTMLElement>(".underlay > span")];
   expect(names).toHaveLength(CALENDAR_COLOURS.length);
   for (const name of names) {
     const style = getComputedStyle(name);

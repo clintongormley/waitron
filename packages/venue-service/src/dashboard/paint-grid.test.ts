@@ -1312,7 +1312,7 @@ test("a Closed stretch in the underlay is drawn hatched, named Closed, with no p
   );
   expect(first!.classList.contains("closed")).toBe(true);
   expect(first!.hasAttribute("data-colour")).toBe(false);
-  expect(first!.textContent!.trim()).toBe("Closed");
+  expect(first!.textContent!.replace(/\s+/g, " ").trim()).toBe("Closed 06:00–09:00");
   expect(second!.classList.contains("closed")).toBe(false);
   expect(second!.getAttribute("data-colour")).toBe("green");
 });
@@ -1416,4 +1416,103 @@ test("a marked heading leaves what is slotted under it in the text colour", asyn
   const heading = el.shadowRoot!.querySelector<HTMLElement>('.heading[data-column="thu"]')!;
   expect(getComputedStyle(heading).color).not.toBe(getComputedStyle(marked).color);
   expect(getComputedStyle(marked).color).toBe(getComputedStyle(plain).color);
+});
+
+test("hour labels are evenly spaced, the changeover's first label included", async () => {
+  const el = await grid();
+  const tops = [...el.shadowRoot!.querySelectorAll<HTMLElement>(".hour")].map(
+    (hour) => hour.getBoundingClientRect().top,
+  );
+  expect(tops[0]).toBeGreaterThanOrEqual(
+    el.shadowRoot!.querySelector<HTMLElement>(".times")!.getBoundingClientRect().top,
+  );
+  const gaps = tops.slice(1).map((top, i) => top - tops[i]!);
+  for (const [i, gap] of gaps.entries())
+    expect(gap, `gap after label ${i}`).toBeCloseTo(gaps[1]!, 0);
+});
+
+test("the underlay names each stretch with its period and its times, like a painted block", async () => {
+  const el = await grid(
+    { zone: [] },
+    {
+      closedErases: false,
+      underlay: new Map([
+        ["zone", [{ periodId: "breakfast", startsAt: "08:00", endsAt: "12:00" }]],
+      ]),
+    },
+  );
+  const faded = el.shadowRoot!.querySelector<HTMLElement>('.day[data-column="zone"] .underlay')!;
+  expect(faded.textContent!.replace(/\s+/g, " ").trim()).toBe("Breakfast 08:00–12:00");
+  const name = faded.querySelector<HTMLElement>("b")!;
+  expect(name.textContent).toBe("Breakfast");
+  const when = faded.querySelector<HTMLElement>(".when")!;
+  expect(when.textContent).toBe("08:00–12:00");
+  expect(Number(getComputedStyle(name).fontWeight)).toBeGreaterThan(
+    Number(getComputedStyle(when).fontWeight),
+  );
+  expect(getComputedStyle(when).whiteSpace).toBe("nowrap");
+});
+
+const tenDays = () =>
+  Object.fromEntries(Array.from({ length: 10 }, (_, i) => [`d${i + 14}`, [] as Paint[]]));
+const overflow = (el: PaintGrid) => el.getAttribute("data-overflow");
+
+test("columns hidden to one side fade the grid's edge on that side, and only then", async () => {
+  const el = await grid(tenDays());
+  host.style.width = "880px";
+  const scroll = el.shadowRoot!.querySelector<HTMLElement>(".scroll")!;
+  await expect.poll(() => overflow(el)).toBe("end");
+  expect(scroll.scrollWidth).toBeGreaterThan(scroll.clientWidth);
+  expect(getComputedStyle(scroll).maskImage).toContain("linear-gradient");
+  scroll.scrollLeft = 100;
+  await expect.poll(() => overflow(el)).toBe("both");
+  scroll.scrollLeft = scroll.scrollWidth;
+  await expect.poll(() => overflow(el)).toBe("start");
+  host.style.width = "2000px";
+  await expect.poll(() => overflow(el)).toBeNull();
+  expect(getComputedStyle(scroll).maskImage).toBe("none");
+});
+
+test("the start fade begins after the pinned time column, which stays solid", async () => {
+  const el = await grid(tenDays());
+  host.style.width = "880px";
+  const scroll = el.shadowRoot!.querySelector<HTMLElement>(".scroll")!;
+  scroll.scrollLeft = 100;
+  await expect.poll(() => overflow(el)).toBe("both");
+  const times = el.shadowRoot!.querySelector<HTMLElement>(".times")!;
+  const solid = getComputedStyle(scroll).getPropertyValue("--fade-from").trim();
+  const box = document.createElement("div");
+  box.style.width = solid;
+  el.shadowRoot!.append(box);
+  expect(box.getBoundingClientRect().width).toBeCloseTo(
+    times.getBoundingClientRect().right - scroll.getBoundingClientRect().left,
+    0,
+  );
+  box.remove();
+});
+
+test("seven columns at 1280px fit, with no fade; new columns that overflow bring it", async () => {
+  const el = await grid(sevenDays());
+  host.style.width = "1280px";
+  const scroll = el.shadowRoot!.querySelector<HTMLElement>(".scroll")!;
+  await frame();
+  await frame();
+  expect(scroll.scrollWidth).toBeLessThanOrEqual(scroll.clientWidth);
+  expect(overflow(el)).toBeNull();
+  expect(getComputedStyle(scroll).maskImage).toBe("none");
+  el.columns = Object.keys(tenDays())
+    .concat(Object.keys(sevenDays()))
+    .map((key) => ({ key, label: key }));
+  await el.updateComplete;
+  await expect.poll(() => overflow(el)).toBe("end");
+});
+
+test("a grid taken off the page and put back still marks the side with hidden columns", async () => {
+  const el = await grid(tenDays());
+  host.style.width = "2000px";
+  await expect.poll(() => overflow(el)).toBeNull();
+  el.remove();
+  host.append(el);
+  host.style.width = "880px";
+  await expect.poll(() => overflow(el)).toBe("end");
 });

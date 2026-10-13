@@ -213,6 +213,11 @@ saves only the paint the draft changed. An old `/view/date` address opens the mo
   per-date editor went; server suites still pin it. Remove it, or keep it with a stated reason.
 - `range-dialog.ts` (`<range-dialog>`, with its repeated-time note) has no caller since the
   per-date editor went; only its own tests and `dated-clock-grid.test.ts` load it.
+- The end-offset check accepts a period whose cutoff runs past the changeover: A506-9's LOOK saved
+  Late 00:30–03:00 with a 180-minute offset, a cutoff of 06:00 past a 05:00 changeover. The check
+  compares a cutoff only with the start of the next period (`findEndOffsetClash`,
+  `period-end-offset.ts`, reached from the "runs into what follows it" checks in
+  `menu-timetable.ts`). Decide whether a cutoff past the changeover is refused.
 
 **Left open by A506-8, for the later parts.**
 - The painter cannot resize a block by dragging its edge (ruling R1 of A506-8); mockup 3's hint

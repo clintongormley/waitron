@@ -681,6 +681,17 @@ describe("Delete", () => {
     expect(painter.open).toBe(false);
   });
 
+  it("in Spanish the bar's button, the heading, the question and the confirm button share one verb", async () => {
+    setLocale("es");
+    const { painter } = await mount();
+    expect(part(painter, "delete")!.textContent!.trim()).toBe("Eliminar");
+    part(painter, "delete")!.click();
+    await settle(painter);
+    expect(dialog(painter)!.heading).toBe("Eliminar");
+    expect(dialog(painter)!.textContent).toContain("¿Eliminar Christmas dinners?");
+    expect(part(painter, "confirm-delete")!.textContent!.trim()).toBe("Eliminar");
+  });
+
   it("a repeating day's question says it goes every year", async () => {
     const { painter } = await mount({ days: { sd1: storedDay({ repeatsYearly: true }) } });
     part(painter, "delete")!.click();

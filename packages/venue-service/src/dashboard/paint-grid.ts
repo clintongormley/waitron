@@ -76,6 +76,11 @@ export class PaintGrid extends LitElement {
         font-family: var(--wt-font-family);
       }
       .scroll {
+        --times-width: calc(var(--wt-space-6) * 2);
+        /* The pinned time column, with the box's border before it, is never faded. */
+        --fade-from: calc(var(--times-width) + 1px);
+        --fade-start: 0px;
+        --fade-end: 0px;
         box-sizing: border-box;
         overflow: auto;
         max-block-size: 100%;
@@ -83,12 +88,32 @@ export class PaintGrid extends LitElement {
         border-radius: var(--wt-radius-md);
         background: var(--wt-color-bg);
       }
+      :host([data-overflow="start"]) .scroll,
+      :host([data-overflow="both"]) .scroll {
+        --fade-start: calc(var(--wt-space-6) * 2);
+      }
+      :host([data-overflow="end"]) .scroll,
+      :host([data-overflow="both"]) .scroll {
+        --fade-end: calc(var(--wt-space-6) * 2);
+      }
+      /* Fades the edge that has columns beyond it. A mask reads only alpha, and the background token
+         is opaque in every theme. */
+      :host([data-overflow]) .scroll {
+        mask-image: linear-gradient(
+          to right,
+          var(--wt-color-bg) var(--fade-from),
+          transparent var(--fade-from),
+          var(--wt-color-bg) calc(var(--fade-from) + var(--fade-start)),
+          var(--wt-color-bg) calc(100% - var(--fade-end)),
+          transparent 100%
+        );
+      }
       .layout {
         display: grid;
         /* As wide as its columns, not the scroll box, so the pinned time column has room to stay. */
         width: max-content;
         min-width: 100%;
-        grid-template-columns: calc(var(--wt-space-6) * 2) var(--column-tracks);
+        grid-template-columns: var(--times-width) var(--column-tracks);
       }
       .heading {
         position: sticky;
@@ -142,16 +167,15 @@ export class PaintGrid extends LitElement {
         background: var(--wt-color-bg);
         border-inline-end: 1px solid var(--wt-color-border);
       }
+      /* Each label hangs just under its hour line, as a block's label does, so the changeover's
+         label at the very top is spaced like the rest. */
       .hour {
         position: absolute;
         inset-inline-start: var(--wt-space-1);
-        transform: translateY(-50%);
+        padding-block-start: calc(var(--wt-space-1) / 2);
         font-size: var(--wt-font-size-sm);
         line-height: 1;
         color: var(--wt-color-text-muted);
-      }
-      .hour:first-child {
-        transform: none;
       }
       .day {
         border-inline-start: 1px solid var(--wt-color-border);
@@ -226,11 +250,19 @@ export class PaintGrid extends LitElement {
         pointer-events: none;
       }
       /* Its own background: the faded fill under it would leave any text colour unreadable on some palette colour. */
-      .underlay span {
+      .underlay > span {
         border-radius: var(--wt-radius-sm);
         padding-inline: var(--wt-space-1);
         background: var(--wt-color-bg);
         color: var(--wt-color-text);
+        font-weight: var(--wt-font-weight-normal);
+      }
+      .underlay b {
+        font-weight: var(--wt-font-weight-bold);
+      }
+      .underlay .when {
+        font-weight: var(--wt-font-weight-normal);
+        white-space: nowrap;
       }
       .underlay::before {
         content: "";
@@ -336,9 +368,33 @@ export class PaintGrid extends LitElement {
    *  so moving on inside the band keeps scrolling. */
   #edge: { side: number; since: number | null; y: number } = { side: 0, since: null, y: 0 };
 
+  readonly #sizes = new ResizeObserver(() => this.#showOverflow());
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    if (this.hasUpdated) this.#observeSizes();
+  }
   override disconnectedCallback(): void {
     this.#stop();
+    this.#sizes.disconnect();
     super.disconnectedCallback();
+  }
+  protected override firstUpdated(): void {
+    this.#observeSizes();
+  }
+  #observeSizes(): void {
+    for (const part of this.renderRoot.querySelectorAll(".scroll, .layout"))
+      this.#sizes.observe(part);
+  }
+  /** Marks the host with the sides that have columns scrolled out of sight. */
+  #showOverflow(): void {
+    const scroll = this.renderRoot.querySelector<HTMLElement>(".scroll");
+    if (scroll === null) return;
+    const start = scroll.scrollLeft >= 1;
+    const end = scroll.scrollWidth - scroll.clientWidth - scroll.scrollLeft >= 1;
+    const overflow = start && end ? "both" : start ? "start" : end ? "end" : undefined;
+    if (overflow === undefined) delete this.dataset.overflow;
+    else if (this.dataset.overflow !== overflow) this.dataset.overflow = overflow;
   }
   protected override willUpdate(changes: PropertyValues<this>): void {
     if (changes.has("days") && this.selected !== null && this.#selectedIndex() < 0)
@@ -679,7 +735,10 @@ export class PaintGrid extends LitElement {
       data-colour=${this.#colour(paint.periodId) ?? nothing}
       style=${this.#position(start, end)}
     >
-      <span>${this.#name(paint.periodId)}</span>
+      <span
+        ><b>${this.#name(paint.periodId)}</b>
+        <span class="when">${paint.startsAt}–${paint.endsAt}</span></span
+      >
     </div>`;
   }
   #preview(column: PaintColumn) {
@@ -808,6 +867,7 @@ export class PaintGrid extends LitElement {
         role="region"
         aria-label=${t("paint.grid")}
         tabindex=${ifDefined(this.readOnly ? "0" : undefined)}
+        @scroll=${() => this.#showOverflow()}
       >
         <div
           class="layout"

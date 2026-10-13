@@ -184,6 +184,57 @@ describe("Add-dates calendar", () => {
     expect(sent).toEqual([["2026-12-25"]]);
   });
 
+  it("a real shift-click range in a modal dialog leaves no text selected", async () => {
+    // Inside a modal dialog, as the painter shows it, Chromium leaves a caret on the first date.
+    const dialog = document.createElement("dialog");
+    document.body.append(dialog);
+    hosts.push(dialog);
+    dialog.showModal();
+    const el = await mount();
+    dialog.append(el);
+    const sent = added(el);
+    await userEvent.click(day(el, "2026-12-01"));
+    await userEvent.keyboard("{Shift>}");
+    await userEvent.click(day(el, "2026-12-04"));
+    await userEvent.keyboard("{/Shift}");
+    expect(sent.at(-1)).toEqual(["2026-12-01", "2026-12-02", "2026-12-03", "2026-12-04"]);
+    expect(document.getSelection()!.toString()).toBe("");
+  });
+
+  it.each([
+    ["en", "Held by another special day", "Christmas holds this date."],
+    ["es", "Ocupada por otro día especial", "Christmas ya tiene esta fecha."],
+  ] as const)(
+    "explains the mark on a held date in a legend, and names the holder when it is picked (%s)",
+    async (locale, legend, holds) => {
+      setLocale(locale);
+      const el = await mount({ taken: new Map([["2026-12-25", "Christmas"]]) });
+      expect(text(testId(el, "legend"))).toBe(legend);
+      expect(text(testId(el, "held"))).toBe("");
+      await userEvent.click(day(el, "2026-12-25"));
+      expect(text(testId(el, "held"))).toBe(holds);
+      await userEvent.click(day(el, "2026-12-24"));
+      expect(text(testId(el, "held"))).toBe("");
+    },
+  );
+
+  it("names the holder of a held date reached with the arrow keys, and drops it on leaving the month", async () => {
+    const el = await mount({ taken: new Map([["2026-12-25", "Christmas"]]) });
+    day(el, "2026-12-24").focus();
+    await userEvent.keyboard("{ArrowRight}");
+    await el.updateComplete;
+    expect(text(testId(el, "held"))).toBe("Christmas holds this date.");
+    testId(el, "next-month").click();
+    await el.updateComplete;
+    expect(text(testId(el, "held"))).toBe("");
+    expect(root(el).querySelector('[data-test="legend"]')).toBeNull();
+  });
+
+  it("shows no legend in a month with no held date", async () => {
+    const el = await mount({ taken: new Map([["2027-01-06", "Reyes"]]) });
+    expect(root(el).querySelector('[data-test="legend"]')).toBeNull();
+  });
+
   it("steps months with ‹ ›, sending month-change and drawing the new month", async () => {
     const el = await mount();
     const months: string[] = [];

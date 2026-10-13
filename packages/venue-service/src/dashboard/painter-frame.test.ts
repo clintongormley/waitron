@@ -294,7 +294,7 @@ function brokenWords(el: Element): string[] {
 }
 describe.each([
   ["en", "Delete"],
-  ["es", "Borrar"],
+  ["es", "Eliminar"],
 ] as const)("a heading beside an action in the bar (%s)", (locale, action) => {
   test.each([390, 1280])(
     "at %i px breaks between words only, and keeps every button on screen",

@@ -4,7 +4,7 @@ import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import { HOURS_RANGE_MAX_DAYS, type LocalDate } from "../hours-types.js";
 import { addDays, weekdayOf } from "../hours-rules.js";
-import { formatLongDate, formatMonthName, formatWeekday } from "./hours-view.js";
+import { format, formatLongDate, formatMonthName, formatWeekday } from "./hours-view.js";
 import { t } from "./strings.js";
 
 /** What `add-dates` carries: the dates to add, in order, none of them already chosen. */
@@ -55,7 +55,10 @@ export class AddDatesCalendar extends LitElement {
       .head h3::first-letter {
         text-transform: uppercase;
       }
+      /* Inside a modal dialog Chromium leaves a caret on a clicked date, and a shift-click would
+         then select the dates' numbers. */
       table {
+        user-select: none;
         width: 100%;
         border-collapse: separate;
         border-spacing: calc(var(--wt-space-1) / 2);
@@ -81,11 +84,13 @@ export class AddDatesCalendar extends LitElement {
         font: inherit;
         cursor: pointer;
       }
-      td[data-taken] button {
+      td[data-taken] button,
+      .mark {
         border-color: var(--wt-color-palette-purple);
         border-style: dashed;
       }
-      td[data-taken] button::after {
+      td[data-taken] button::after,
+      .mark::after {
         content: "";
         position: absolute;
         inset-block-end: var(--wt-space-1);
@@ -130,10 +135,31 @@ export class AddDatesCalendar extends LitElement {
         border-color: var(--wt-color-primary);
         font-weight: var(--wt-font-weight-bold);
       }
-      .message {
+      .message,
+      .legend,
+      .held {
         margin: 0;
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
+      }
+      .legend {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-2);
+        margin-block-start: var(--wt-space-2);
+      }
+      /* A small copy of a held date's dashed outline and dot. */
+      .mark {
+        position: relative;
+        flex: none;
+        box-sizing: border-box;
+        inline-size: var(--wt-space-5);
+        block-size: var(--wt-space-5);
+        border-width: 1px;
+        border-radius: var(--wt-radius-sm);
+      }
+      .held:empty {
+        display: none;
       }
     `,
   ];
@@ -150,6 +176,8 @@ export class AddDatesCalendar extends LitElement {
   @state() private ranging = false;
   @state() private message = "";
   @state() private focusDate: LocalDate | null = null;
+  /** The date last clicked or focused, whose holder is named under the month. */
+  @state() private pointed: LocalDate | null = null;
 
   #emit<T>(name: string, detail: T): void {
     this.dispatchEvent(new CustomEvent<T>(name, { detail, bubbles: true, composed: true }));
@@ -179,6 +207,7 @@ export class AddDatesCalendar extends LitElement {
 
   /** A refused range keeps its first date, so a nearer last date can follow. */
   #click(date: LocalDate, event: MouseEvent): void {
+    this.pointed = date;
     if (this.ranging) {
       if (this.anchor === null) {
         this.anchor = date;
@@ -244,6 +273,7 @@ export class AddDatesCalendar extends LitElement {
       cells.slice(row * 7, row * 7 + 7),
     );
     const chosen = new Set(this.selected);
+    const holder = dates.includes(this.pointed ?? "") ? this.taken.get(this.pointed!) : undefined;
     return html`<div class="head">
         ${step(-1, "previous-month", "month.previous", "‹")}
         <h3 data-test="month" aria-live="polite">
@@ -282,7 +312,17 @@ export class AddDatesCalendar extends LitElement {
           ${t("special.range")}
         </button>
         <p class="message" data-test="message" role="status">${this.message}</p>
-      </div>`;
+      </div>
+      ${
+        dates.some((date) => this.taken.has(date))
+          ? html`<p class="legend" data-test="legend">
+              <span class="mark" aria-hidden="true"></span>${t("special.taken_legend")}
+            </p>`
+          : nothing
+      }
+      <p class="held" data-test="held" role="status">
+        ${holder === undefined ? "" : format("special.taken_by", { name: holder })}
+      </p>`;
   }
 
   #cell(date: LocalDate, chosen: ReadonlySet<LocalDate>, stop: LocalDate) {
@@ -301,6 +341,7 @@ export class AddDatesCalendar extends LitElement {
         @click=${(event: MouseEvent) => this.#click(date, event)}
         @focus=${() => {
           this.focusDate = date;
+          this.pointed = date;
         }}
       >
         ${Number(date.slice(8))}
