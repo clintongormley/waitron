@@ -20,6 +20,7 @@ import type {
   WireJob,
 } from "./client.js";
 import type { DiscoveredDevice, Host, PagePrintOutcome } from "./host.js";
+import { createClient } from "./client.js";
 import { fakeHost } from "./testing/fake-host.js";
 import { FakeSink, type PrinterTarget } from "./transport.js";
 
@@ -2800,6 +2801,102 @@ describe("createAgent — A4 page jobs", () => {
     expect(c.reportPageJob).toHaveBeenCalledWith(A, "a1.s", PAGE_JOB, { status: "sent" });
   });
 
+  describe("log lines name the failure's kind and the job, never a server's or socket's words", () => {
+    const RAW = "RAW-TRANSPORT-TEXT socket hang up at 10.0.0.9";
+    /** A client whose every request fails as a dropped connection carrying `RAW`. */
+    const severed = () =>
+      createClient({
+        fetch: async () => {
+          throw new Error(RAW);
+        },
+      });
+
+    /** Claims PAGE_JOB, lets one renewal run while it prints, then finishes it as sent. */
+    async function printWithOneRenewal(over: Partial<AgentClient>) {
+      const printing = deferred<PagePrintOutcome>();
+      const { host, renewals } = pageHost(() => printing.promise);
+      const c = client({
+        claimPageJob: vi.fn().mockResolvedValueOnce(okR(PAGE_JOB)).mockResolvedValue(okR(null)),
+        ...over,
+      });
+      await createAgent({ host, client: c }).runOnce();
+      await settle();
+      renewals[0]!.resolve();
+      await settle();
+      printing.resolve(SENT);
+      await settle();
+      expect(c.reportPageJob).toHaveBeenCalled();
+      return host.logs;
+    }
+
+    async function printOnce(over: Partial<AgentClient>) {
+      const { host } = pageHost(vi.fn(async () => SENT));
+      const c = client({
+        claimPageJob: vi.fn().mockResolvedValueOnce(okR(PAGE_JOB)).mockResolvedValue(okR(null)),
+        ...over,
+      });
+      await createAgent({ host, client: c }).runOnce();
+      await settle();
+      return host.logs;
+    }
+
+    it("a renewal that does not get through", async () => {
+      const logs = await printWithOneRenewal({ renewPageJob: severed().renewPageJob });
+      expect(logs.join("\n")).not.toContain(RAW);
+      expect(logs).toContain(
+        `warn page job renewal failed {"job":"${PAGE_JOB.id}","failure":"unreachable"}`,
+      );
+    });
+
+    it("a renewal that throws", async () => {
+      const logs = await printWithOneRenewal({
+        renewPageJob: vi.fn(async () => {
+          throw new Error(RAW);
+        }),
+      });
+      expect(logs.join("\n")).not.toContain(RAW);
+      expect(logs).toContain(`warn page job renewal stopped {"job":"${PAGE_JOB.id}"}`);
+    });
+
+    it("a report that may not have reached the server", async () => {
+      const logs = await printOnce({ reportPageJob: severed().reportPageJob });
+      expect(logs.join("\n")).not.toContain(RAW);
+      expect(logs).toContain(
+        `warn page job report dropped {"job":"${PAGE_JOB.id}","failure":"unreachable"}`,
+      );
+    });
+
+    it("a report the server refuses", async () => {
+      const logs = await printOnce({
+        reportPageJob: vi.fn(async () => failR({ kind: "bad_reply", detail: RAW })),
+      });
+      expect(logs.join("\n")).not.toContain(RAW);
+      expect(logs).toContain(
+        `warn page job report refused {"job":"${PAGE_JOB.id}","failure":"bad_reply"}`,
+      );
+    });
+
+    it("a job that throws", async () => {
+      const logs = await printOnce({
+        reportPageJob: vi.fn(async () => {
+          throw new Error(RAW);
+        }),
+      });
+      expect(logs.join("\n")).not.toContain(RAW);
+      expect(logs).toContain(`error page job failed {"job":"${PAGE_JOB.id}"}`);
+    });
+
+    it("a claim loop that throws", async () => {
+      const logs = await printOnce({
+        claimPageJob: vi.fn(async () => {
+          throw new Error(RAW);
+        }),
+      });
+      expect(logs.join("\n")).not.toContain(RAW);
+      expect(logs).toContain("error page job runner failed");
+    });
+  });
+
   it("a lost renewal stops the polling and still reports the outcome once", async () => {
     const printing = deferred<PagePrintOutcome>();
     let signal: AbortSignal | undefined;
@@ -2995,9 +3092,7 @@ describe("createAgent — A4 page jobs", () => {
     expect(c.reportPageJob).toHaveBeenCalledExactlyOnceWith(A, "a1.s", PAGE_JOB, {
       status: "sent",
     });
-    expect(host.logs).toContain(
-      `warn page job renewal stopped {"job":"${PAGE_JOB.id}","error":"no timers"}`,
-    );
+    expect(host.logs).toContain(`warn page job renewal stopped {"job":"${PAGE_JOB.id}"}`);
   });
 
   it("still reports when the renewal wait rejects and logging that throws too", async () => {
@@ -3095,7 +3190,7 @@ describe("createAgent — A4 page jobs", () => {
     const agent = createAgent({ host, client: c });
     await agent.runOnce();
     await settle();
-    expect(host.logs).toContain('error page job runner failed {"error":"client bug"}');
+    expect(host.logs).toContain("error page job runner failed");
     await agent.runOnce();
     await settle();
     expect(c.claimPageJob).toHaveBeenCalledTimes(2);
@@ -3385,9 +3480,7 @@ describe("createAgent — A4 page jobs", () => {
       const c = client({ claimPageJob, fetchPageDocument });
       await createAgent({ host, client: c }).runOnce();
       await settle();
-      expect(host.logs).toContain(
-        `error page job failed {"job":"${PAGE_JOB.id}","error":"client bug"}`,
-      );
+      expect(host.logs).toContain(`error page job failed {"job":"${PAGE_JOB.id}"}`);
       expect(reportedIds(c.reportPageJob)).toEqual([JOB_Y.id]);
     });
 

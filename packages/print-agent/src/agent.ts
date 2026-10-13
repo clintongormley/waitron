@@ -351,6 +351,9 @@ export function createAgent(opts: AgentOptions): Agent {
     }
   }
 
+  // An A4 log line names the job and at most a failure's `kind`: a failure's `detail` and a thrown
+  // message can carry a server's or a socket's own words.
+
   /** Renews until `ended` is set; a lost claim aborts `lost`. */
   async function keepClaim(
     url: string,
@@ -370,7 +373,10 @@ export function createAgent(opts: AgentOptions): Agent {
           lost.abort();
           return;
         }
-        host.log.warn("page job renewal failed", { job: held.job.id, failure: renewed.failure });
+        host.log.warn("page job renewal failed", {
+          job: held.job.id,
+          failure: renewed.failure.kind,
+        });
       }
     }
   }
@@ -385,9 +391,9 @@ export function createAgent(opts: AgentOptions): Agent {
     const lost = new AbortController();
     let end!: () => void;
     const ended = { now: false, signal: new Promise<void>((resolve) => (end = resolve)) };
-    const renewing = keepClaim(url, token, held, ended, lost).catch((error: unknown) => {
+    const renewing = keepClaim(url, token, held, ended, lost).catch(() => {
       try {
-        host.log.warn("page job renewal stopped", { job: job.id, error: describeRejection(error) });
+        host.log.warn("page job renewal stopped", { job: job.id });
       } catch {
         // A throw here would skip the report.
       }
@@ -423,12 +429,12 @@ export function createAgent(opts: AgentOptions): Agent {
     const sent = await client.reportPageJob(url, token, report.job, report.outcome);
     if (!sent.ok && REPORT_RETRIED.has(sent.failure.kind)) {
       if (!unsentPageReports.includes(report)) unsentPageReports = [...unsentPageReports, report];
-      host.log.warn("page job report dropped", { job: report.job.id, failure: sent.failure });
+      host.log.warn("page job report dropped", { job: report.job.id, failure: sent.failure.kind });
       return;
     }
     unsentPageReports = unsentPageReports.filter((kept) => kept !== report);
     if (!sent.ok) {
-      host.log.warn("page job report refused", { job: report.job.id, failure: sent.failure });
+      host.log.warn("page job report refused", { job: report.job.id, failure: sent.failure.kind });
     }
   }
 
@@ -453,9 +459,9 @@ export function createAgent(opts: AgentOptions): Agent {
     try {
       const outcome = await printClaimed(url, token, held, printPage);
       await sendPageReport(url, token, { ...held, outcome });
-    } catch (error) {
+    } catch {
       try {
-        host.log.error("page job failed", { job: held.job.id, error: describeRejection(error) });
+        host.log.error("page job failed", { job: held.job.id });
       } catch {
         // A throw here would be an unhandled rejection.
       }
@@ -491,9 +497,9 @@ export function createAgent(opts: AgentOptions): Agent {
           );
         }
       } while (claimAgain);
-    } catch (error) {
+    } catch {
       try {
-        host.log.error("page job runner failed", { error: describeRejection(error) });
+        host.log.error("page job runner failed");
       } catch {
         // Nothing awaits this runner, so a throw here would be an unhandled rejection.
       }
