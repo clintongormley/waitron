@@ -8,7 +8,7 @@ export interface LaidPart {
 
 const held = (value: number): number => Math.min(Math.max(Math.round(value), 0), 999);
 
-/** The joined table's width check allows 1–99 (`floor_plan_tables`). */
+/** Every placed table's width check allows 1–99 (`placementChecks`, `packages/db/src/schema/floor-plans.ts`). */
 const MAX_WIDTH = 99;
 
 const slotStart = (parts: readonly LaidPart[], index: number): number =>

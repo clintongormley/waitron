@@ -1603,7 +1603,7 @@ That test does not exclude a table taken off today. There is no active column on
 A part of a joined table that the reset has applied, while the joined table has a live table, the
 part holds no open party and it is in none of today's merges, is refused `table.in_joined_table` on
 the paths that seat a party at it, move guests or a bill to it, join it to a party, merge it on
-today's map, put it on the map as a spare, name it as an order's table or accept a department
+today's map, put it on the map as a spare, take it off for today, name it as an order's table or accept a department
 transfer to it (`stillJoinedPart`, `packages/db/src/joined-parts.ts:9`); bookings refuse a part of
 the saved plan (`savedPart`, `packages/db/src/joined-parts.ts:52`, used at
 `packages/bookings/src/bookings.ts:55`).

@@ -276,6 +276,8 @@ The four questions this design first raised, answered in the campaign's question
    put it back. Alternative: the joined table's Made of list gives each part a Width and a Height of
    its own, set in the dialog and the form. Parts 1 and 2 of the build do not depend on the answer;
    the split (part 3) does.
+   > Added 2026-10-13 by A503 part 3: the owner chose the default; the saved plan keeps a table's size
+   > in `floor_plan_table_sizes` when it leaves the plan, and the editor puts it back at that size.
 
 ## Path, migrations and testing
 

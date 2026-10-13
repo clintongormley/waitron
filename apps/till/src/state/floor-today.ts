@@ -188,7 +188,6 @@ export function outOfServiceJoined(table: TableState): boolean {
   );
 }
 
-/** A still-joined part can keep a place on today's map, and is drawn as its joined table only. */
 export function onTodaysPlan(table: TableState): boolean {
   return (
     table.today !== null &&
