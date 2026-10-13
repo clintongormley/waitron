@@ -662,7 +662,7 @@ describe("a joined table split today", () => {
         today: today({ placement: place(40, 30), joinId: "g" }),
       });
 
-      it("keeps Counter 5 apart for guests while Counter 4 comes back", () => {
+      it("keeps Counter 5 apart for guests in its group while Counter 4 comes back", () => {
         const standing = table("long", "Long table", {
           today: today({
             placement: place(10, 20, { width: 6, height: 2 }),

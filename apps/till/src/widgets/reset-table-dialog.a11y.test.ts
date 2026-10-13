@@ -46,7 +46,7 @@ function table(id: string, label: string, todayRow: TableToday): TableState {
 const joined = table(
   "long",
   "Long table",
-  today(2, { joined: { parts: ["c3"], splitOff: ["c4", "c5"], apart: true } }),
+  today(2, { joined: { parts: ["c3"], splitOff: ["c4", "c5", "c6"], apart: true } }),
 );
 const apart = [
   {
