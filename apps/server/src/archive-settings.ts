@@ -256,6 +256,30 @@ export async function readArchiveSettings(
   return parseArchiveSettings(credentialField(value, ARCHIVE_PURPOSE, "settings"));
 }
 
+/** What reading a stored archive record answers when the record itself cannot be read. */
+const UNREADABLE_SETTINGS = new Set([
+  "backup.archive_settings_invalid",
+  "credentials.decrypt_failed",
+  "credentials.malformed_payload",
+  "credentials.key_version_unknown",
+  "server.credential_unusable",
+]);
+
+/** The stored archive settings, or the code that says the stored record cannot be read. */
+export async function readHeldArchiveSettings(
+  db: Database,
+  ring: KeyRing,
+): Promise<{ settings: ArchiveSettings | null } | { unreadable: string }> {
+  try {
+    return { settings: await readArchiveSettings(db, ring) };
+  } catch (error) {
+    if (isAppError(error) && UNREADABLE_SETTINGS.has(error.code)) {
+      return { unreadable: error.code };
+    }
+    throw error;
+  }
+}
+
 /** Stores the settings under a new revision; what is stored is what a read will accept. */
 export async function writeArchiveSettings(
   tx: Transaction,

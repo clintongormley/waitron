@@ -1,3 +1,4 @@
+import { createCipheriv, randomBytes } from "node:crypto";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it, vi, type Mock } from "vitest";
 import { eq, sql } from "drizzle-orm";
@@ -7,6 +8,7 @@ import {
   deleteCredential,
   loadKeyRing,
   putCredential,
+  tenantCredentials,
   tryGetCredential,
   type KeyRing,
 } from "@waitron/credentials";
@@ -21,7 +23,7 @@ import {
   type ProbeFailure,
   type StreamStatus,
 } from "@waitron/stream";
-import { ARCHIVE_PURPOSE, writeArchiveSettings } from "./archive-settings.js";
+import { ARCHIVE_PURPOSE, readArchiveSettings, writeArchiveSettings } from "./archive-settings.js";
 import { destinationView, keyFingerprint } from "./backup-supervisor.js";
 import { createTurns, type Turns } from "./backup-turns.js";
 import { mountManagementApi } from "./management-api.js";
@@ -50,8 +52,9 @@ vi.mock("@waitron/credentials", async (importOriginal) => {
   };
 });
 
+const RING_KEY = Buffer.alloc(32, 7);
 const RING: KeyRing = loadKeyRing({
-  WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64"),
+  WAITRON_CREDENTIALS_KEY: RING_KEY.toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
 });
 const suite = useVenueDb({
@@ -952,28 +955,73 @@ describe("stream settings routes", () => {
       }
     });
 
-    it("a dashboard record that cannot be read refuses Save with the backup routes' status", async () => {
-      await clearBucket();
+    /** Seals `plaintext` as the whole archive record under the ring's own key, as no writer here
+     * would: `putCredential` refuses a payload that is not the purpose's fields. */
+    async function storeRawArchive(plaintext: string): Promise<void> {
       await withTransaction(suite.db, (tx) =>
         putCredential(tx, RING, { purpose: ARCHIVE_PURPOSE, value: { settings: "{}" } }),
       );
-      try {
-        const { app, reload } = harness({}, "recovery-key-one-strong");
-        const cookie = await login(app);
-        const res = await app.request("/api/backup/stream", {
-          method: "PUT",
-          ...json(cookie, BODY),
-        });
-        expect(res.status).toBe(500);
-        expect(await res.json()).toMatchObject({
-          error: { code: "backup.archive_settings_invalid" },
-        });
-        expect(reload).not.toHaveBeenCalled();
-        expect(await storedBucket()).toBeNull();
-      } finally {
-        await dropArchive();
+      const iv = randomBytes(12);
+      const cipher = createCipheriv("aes-256-gcm", RING_KEY, iv);
+      cipher.setAAD(Buffer.from(ARCHIVE_PURPOSE, "utf8"));
+      const ciphertext = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
+      await withTransaction(suite.db, (tx) =>
+        tx
+          .update(tenantCredentials)
+          .set({ ciphertext, iv, authTag: cipher.getAuthTag() })
+          .where(eq(tenantCredentials.purpose, ARCHIVE_PURPOSE)),
+      );
+    }
+
+    const sealedUnder = (version: string) => async () => {
+      const other = loadKeyRing({
+        WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 9).toString("base64"),
+        WAITRON_CREDENTIALS_KEY_VERSION: version,
+      });
+      await withTransaction(suite.db, (tx) =>
+        putCredential(tx, other, { purpose: ARCHIVE_PURPOSE, value: { settings: "{}" } }),
+      );
+    };
+
+    // Each stored archive record this server cannot read, and the code a read of it answers.
+    const UNREADABLE: [string, () => Promise<void>][] = [
+      [
+        "backup.archive_settings_invalid",
+        () =>
+          withTransaction(suite.db, (tx) =>
+            putCredential(tx, RING, { purpose: ARCHIVE_PURPOSE, value: { settings: "{}" } }),
+          ),
+      ],
+      ["credentials.decrypt_failed", sealedUnder("1")],
+      ["credentials.key_version_unknown", sealedUnder("2")],
+      ["credentials.malformed_payload", () => storeRawArchive("not json")],
+      ["server.credential_unusable", () => storeRawArchive("{}")],
+    ];
+
+    for (const [code, store] of UNREADABLE) {
+      it(`a dashboard record that cannot be read refuses Save with the backup routes' status (${code})`, async () => {
         await clearBucket();
-      }
-    });
+        await store();
+        try {
+          await expect(readArchiveSettings(suite.db, RING)).rejects.toMatchObject({ code });
+          const { app, deps, reload } = harness({}, "recovery-key-one-strong");
+          const cookie = await login(app);
+          const res = await app.request("/api/backup/stream", {
+            method: "PUT",
+            ...json(cookie, BODY),
+          });
+          expect(res.status).toBe(409);
+          expect(await res.json()).toMatchObject({
+            error: { code: "backup.archive_settings_unreadable", params: { reason: code } },
+          });
+          expect(deps.probe).not.toHaveBeenCalled();
+          expect(reload).not.toHaveBeenCalled();
+          expect(await storedBucket()).toBeNull();
+        } finally {
+          await dropArchive();
+          await clearBucket();
+        }
+      });
+    }
   });
 });

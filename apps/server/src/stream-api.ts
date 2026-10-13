@@ -19,7 +19,7 @@ import {
 } from "@waitron/stream";
 import {
   archivePlace,
-  readArchiveSettings,
+  readHeldArchiveSettings,
   refuseStreamOverlap,
   type ArchivePlace,
 } from "./archive-settings.js";
@@ -92,6 +92,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "backup.stream_not_configured": 409,
   "backup.archive_namespace_overlap": 400,
   "backup.archive_settings_invalid": 500,
+  "backup.archive_settings_unreadable": 409,
   "backup.stream_signer_missing": 409,
   "backup.recovery_key_missing": 409,
   // The bucket gave no answer at all: not a refusal of the owner's settings, so not 422.
@@ -140,8 +141,12 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
           : [],
       );
     }
-    const archives = await readArchiveSettings(deps.db, deps.ring);
-    return (archives?.destinations ?? []).flatMap((d) =>
+    // An unreadable record refuses Save: read as none held, it would skip the overlap check.
+    const read = await readHeldArchiveSettings(deps.db, deps.ring);
+    if ("unreadable" in read) {
+      throw new AppError("backup.archive_settings_unreadable", { reason: read.unreadable });
+    }
+    return (read.settings?.destinations ?? []).flatMap((d) =>
       d.kind === "s3" ? [archivePlace(d.bucket, d.venueId)] : [],
     );
   };

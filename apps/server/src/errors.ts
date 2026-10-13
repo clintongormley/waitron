@@ -1186,8 +1186,9 @@ declare module "@waitron/shared" {
     /** The stored archive settings (`backup.archive`) are not a record this server wrote.
      * `reason` names the part that failed, never its value, which could be a secret. */
     "backup.archive_settings_invalid": { reason: string };
-    /** `disable` found a stored archive record it cannot read, so it has no settings to keep
-     * switched off; a Save replaces the record. `reason` is the read's error code, never the
+    /** A stored archive record could not be read. `disable` has no settings to keep switched off,
+     * and the bucket copy's Save (`PUT /api/backup/stream`) cannot check its folder against the
+     * archive's; an archive Save replaces the record. `reason` is the read's error code, never the
      * record. */
     "backup.archive_settings_unreadable": { reason: string };
     /** An archive bucket's folder for this venue would sit inside, or contain, the stream's venue

@@ -14,7 +14,7 @@ import {
 } from "@waitron/server-kit";
 import {
   parseArchiveSettings,
-  readArchiveSettings,
+  readHeldArchiveSettings,
   resolveArchiveChoice,
   writeArchiveSettings,
   type ArchiveSettings,
@@ -94,15 +94,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "backup.rotation_metadata_failed": 500,
   "backup.archive_settings_unreadable": 409,
 };
-
-/** What reading a stored archive record answers when the record itself cannot be read. */
-const UNREADABLE_SETTINGS = new Set([
-  "backup.archive_settings_invalid",
-  "credentials.decrypt_failed",
-  "credentials.malformed_payload",
-  "credentials.key_version_unknown",
-  "server.credential_unusable",
-]);
 
 /** The destination choices `resolveArchiveChoice` resolves against the bucket copy's settings. */
 const BUCKET_CHOICES = new Set<unknown>(["stream-bucket", "custom-s3"]);
@@ -340,19 +331,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
     }
   };
 
-  /** The stored archive settings, or the code that says the stored record cannot be read. */
-  const readHeldSettings = async (): Promise<
-    { settings: ArchiveSettings | null } | { unreadable: string }
-  > => {
-    try {
-      return { settings: await readArchiveSettings(deps.db, deps.ring) };
-    } catch (error) {
-      if (isAppError(error) && UNREADABLE_SETTINGS.has(error.code)) {
-        return { unreadable: error.code };
-      }
-      throw error;
-    }
-  };
+  const readHeldSettings = () => readHeldArchiveSettings(deps.db, deps.ring);
 
   // The box env (`backup.env` under the raw environment, as a reload reads it) is authoritative: after
   // a failed reload the supervisor still holds the key it loaded before the key file changed.
