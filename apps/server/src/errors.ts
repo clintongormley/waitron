@@ -1137,13 +1137,13 @@ declare module "@waitron/shared" {
      */
     "backup.source_kind_unsupported": { kind: string };
     /**
-     * A backup admin route (`apply`/`rotate`), or the bucket copy's Save on a box holding no
+     * A backup admin route (`apply`/`disable`/`rotate`), or the bucket copy's Save on a box holding no
      * recovery key, was refused because a variable `BACKUP_ENV_KEYS` (`backup-config.ts`) lists is
      * set in the environment. The environment then owns this box's backup settings, and the server
      * does not write `backup.env` beside it. No params: an env var could hold the recovery key. */
     "backup.managed_by_environment": Record<string, never>;
     /**
-     * A backup admin route (`apply`/`rotate`) or the bucket copy's Save or switch-off was refused
+     * A backup admin route (`apply`/`disable`/`rotate`) or the bucket copy's Save or switch-off was refused
      * because this node is not the primary; only the primary runs the backup duty. */
     "backup.not_primary": Record<string, never>;
     /**
@@ -1173,7 +1173,8 @@ declare module "@waitron/shared" {
     };
     /**
      * A backup admin route body failed shape validation before any write; or `field: "config"` when
-     * `rotate` finds no readable archive record, no destination loaded and no key held. `field`
+     * `disable` finds no stored archive record, or `rotate` finds no readable archive record, no
+     * destination loaded and no key held. `field`
      * names the offending field, never the value, which could be the recovery key. */
     "backup.request_invalid": { field: string };
     /** The stream settings' Test, or the same check Save runs first, refused the owner's bucket.
@@ -1247,6 +1248,9 @@ declare module "@waitron/shared" {
     /** Neither an archive destination nor a bucket copy that is on and current: no copy of the data
      * is being kept. Built as data by the backups alert source, never thrown. */
     "backup.disabled": Record<string, never>;
+    /** The dashboard's stored archive settings could not be read or used, so archives are off.
+     * Built as data by the backups alert source, never thrown. */
+    "backup.archive_settings_unusable": Record<string, never>;
     /** The bucket copy's oldest change not yet in the bucket has waited `STREAM_BEHIND_AFTER_MS`
      * (`alert-sources.ts`) or more. `minutes` is that wait, whole. Built as data by the backups
      * alert source, never thrown. */

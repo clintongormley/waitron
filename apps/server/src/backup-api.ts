@@ -291,10 +291,9 @@ async function probeArchive(
 
 /**
  * `apply` checks what it will store the way boot would read it before writing anything, and after
- * a reload that loads the settings asserts the EFFECTIVE key equals the one it chose (the guard
- * against a partial env override silently orphaning archives). A reload that throws after `apply`
- * or `disable` committed, or that leaves `apply`'s stored settings unusable, is answered 200 with
- * `reloadErrorCode`: the write stands.
+ * a reload that loads the settings asserts the EFFECTIVE key equals the one it chose. A reload that
+ * throws after `apply` or `disable` committed, or that leaves `apply`'s stored settings unusable, is
+ * answered 200 with `reloadErrorCode`: the write stands.
  */
 export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): void {
   const run = createErrorBoundary(STATUS, "backup.failed");

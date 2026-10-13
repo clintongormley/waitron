@@ -444,7 +444,7 @@ describe("backup admin routes", () => {
     // fields' presence is asserted here; the poll below covers the first dump.
     expect(body.backupStatus.configured).toBe(true);
     expect(typeof body.archiveUnderCurrentKey).toBe("boolean");
-    // `apply` wrote backup.env verbatim (no restart needed) and the effective config picked it up.
+    // `apply` stored the settings and reloaded (no restart needed), and the effective config picked them up.
     expect(sup.current().recoveryKey).toBe(KEY_1);
     // The immediate first tick stores an archive under the current key.
     await poll(async () => {

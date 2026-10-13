@@ -4180,8 +4180,10 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   proposed defaults on 2026-10-12. Plan Task 1, which makes the bucket stream's calls cancellable,
   is built (A538-1), and so is Task 2, which moves archive files to and from a bucket without
   holding them in memory (A538-2), and Task 3, which gives each destination's calls their own time
-  limit, stops them with the sweep and reports what each destination did (A538-3). Tasks 4 to 10
-  and the real-AWS evidence are open.
+  limit, stops them with the sweep and reports what each destination did (A538-3), and Task 4,
+  which stores the archive choice sealed in the vault, lets the environment or the backup routes
+  name a bucket, and keeps every destination across a key rotation (A538-4). Tasks 5 to 10 and the
+  real-AWS evidence are open.
   `S3FileStore`'s listing and batch delete repeat `S3ObjectStore`'s (`packages/stream/src/s3-store.ts`)
   with different error codes, and only the file store's refuses a repeated key or bad size and
   counts `NoSuchKey` as deleted; share them, deciding whether the bucket stream takes those checks
@@ -4189,12 +4191,14 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 
 - **The Backups screen does not yet read what A538-4 added to the backup routes** (plan Task 6).
   It needs English and Spanish wording for `backup.archive_namespace_overlap`,
-  `backup.archive_settings_invalid`, `backup.archive_test_failed` and
-  `backup.rotation_metadata_failed`; `backup.archive_settings_unusable` is worded only as an alert
+  `backup.archive_settings_invalid`, `backup.archive_settings_unreadable`,
+  `backup.archive_test_failed` and `backup.rotation_metadata_failed`; `backup.archive_settings_unusable` is worded only as an alert
   (`alert-messages.ts`). It must show a write's `reloadErrorCode` (the settings were saved, but the
   box could not load them) and the status's `loadErrorCode` (archives are off because the stored
   settings cannot be used), and on `backup.rotation_metadata_failed` it must replace a displayed
-  recovery key or fingerprint with the new one, which is already in effect. Left open by A538-4.
+  recovery key or fingerprint with the new one, which is already in effect. It offers no control for
+  `POST /api/backup/disable` and does not show `storedDisabled` (archives stored switched off).
+  Left open by A538-4.
 
 - **A backup that fails before reaching any destination tells the owner nothing about why.** When
   a run stops early, for example on `backup.staging_space_low` or `recovery.state_incomplete`, it is

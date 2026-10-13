@@ -112,7 +112,7 @@ export interface BackupSupervisorDeps {
   /** Re-reads the box-env files from DISK each reload — closing over a boot-time value would make
    * hot-reload a no-op. */
   buildConfig: () => Promise<BackupConfig | BackupConfigUnusable | undefined>;
-  /** True iff any `WAITRON_BACKUP_*` var is non-empty in the RAW base env. */
+  /** True iff a variable `BACKUP_ENV_KEYS` (`backup-config.ts`) lists is non-empty in the RAW base env. */
   isManagedByEnvironment: () => boolean;
   /** The live singleton role, read fresh each reload/status so a promotion is followed. */
   readSingletonRole: () => SingletonRole;

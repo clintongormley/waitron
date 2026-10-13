@@ -44,8 +44,9 @@ export const PURPOSES = {
     "accessKeyId",
     "secretAccessKey",
   ],
-  /** The venue's archive configuration as one validated JSON document, bucket credentials
-   * included. */
+  /** The venue's archive configuration as one JSON document, bucket credentials included;
+   * validated by its reader (`parseArchiveSettings`, `apps/server/src/archive-settings.ts`), not
+   * here. */
   "backup.archive": ["settings"],
 } as const satisfies Record<string, readonly string[]>;
 
