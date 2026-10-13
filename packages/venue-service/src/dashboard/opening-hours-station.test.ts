@@ -157,6 +157,25 @@ it("a bookmarked switched-off station shows its sentence instead of a grid", asy
   await expect.poll(() => stationView(screen)?.shadowRoot?.textContent).toContain("Switched off");
   expect(grid(screen)).toBeNull();
 });
+it("reads the week holding the venue's business day, from its Monday", async () => {
+  vi.setSystemTime(new Date("2026-10-15T03:00:00Z"));
+  const { screen, calls } = await mount();
+  await expect.poll(() => grid(screen)?.columns.length).toBe(7);
+  expect(
+    calls.filter(([path]) => String(path).includes("service-times")).map(([path]) => path),
+  ).toEqual([
+    "/management-api/venue-service/stations/bar/service-times?from=2026-10-12&to=2026-10-18&week=normal",
+  ]);
+  expect(grid(screen)!.columns.map((column) => column.label)).toEqual([
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+  ]);
+});
 it("reloads the same station view when reattached without changing its properties", async () => {
   let startsAt = "12:00";
   const { screen } = await mount("bar", () => ({
