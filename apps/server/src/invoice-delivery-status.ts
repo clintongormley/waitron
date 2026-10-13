@@ -64,7 +64,7 @@ export type InvoiceDeliveryReadOptions = { emailAvailable: boolean };
 export type InvoiceDeliverySale = { id: string; locationId: string };
 
 /** For one sale, `emailAvailable` may be asked of it once it is known to be a full invoice. */
-export type SaleReadOptions = {
+export type InvoiceDeliverySaleReadOptions = {
   emailAvailable: boolean | ((sale: InvoiceDeliverySale) => Promise<boolean>);
 };
 
@@ -80,7 +80,7 @@ export interface InvoiceDeliveryState {
 export async function readInvoiceDeliveries(
   tx: Transaction,
   saleId: string,
-  options: SaleReadOptions,
+  options: InvoiceDeliverySaleReadOptions,
 ): Promise<InvoiceDeliveryStatus | null> {
   return (await readInvoiceDeliveryState(tx, saleId, options))?.status ?? null;
 }
@@ -89,7 +89,7 @@ export async function readInvoiceDeliveries(
 export async function readInvoiceDeliveryState(
   tx: Transaction,
   saleId: string,
-  options: SaleReadOptions,
+  options: InvoiceDeliverySaleReadOptions,
 ): Promise<InvoiceDeliveryState | null> {
   const state = (await readStates(tx, [saleId], options.emailAvailable)).get(saleId);
   if (state === undefined) throw new AppError("invoice_delivery.not_found", {});

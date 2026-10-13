@@ -468,8 +468,7 @@ The seven field elements' label, hint and error are inside the element, so the c
 Outside a `wt-modal`, `--wt-field-max-width` is the theme root's `none`, so a field on a page, or in a `wt-dialog`
 that is not inside a `wt-modal`, is as wide as its container, as before; a `wt-dialog` placed
 inside a modal's body inherits the cap. Page forms are bounded by their screen's own column instead
-(the setup wizard's raised column, the `max-width` of screens such as backup and sign-in, and the
-receipts screen's form column),
+(the setup wizard's raised column, and the `max-width` of screens such as backup and sign-in),
 so they were left alone. At 390px wide a modal's body is narrower than the token, so a field there
 still takes the body's whole width.
 
