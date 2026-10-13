@@ -210,7 +210,35 @@ it("a typed bucket secret alone warns on leave, and Discard empties it", async (
   await choose(app, "discard");
   expect(await discarded).toBe("proceeded");
   await screen.updateComplete;
+  expect(field(screen, "archive-bucket-secret-access-key").value).toBe("");
   expect(unload()).toBe(false);
+});
+it("a secret typed before the form's draft is taken again is not restored by Discard", async () => {
+  let status: BackupStatusView = off;
+  const { app, screen, api } = await mount(off, {
+    getBackupStatus: async () => status,
+  });
+  await change(screen, "archive-destination", "custom-s3");
+  await change(screen, "archive-bucket-secret-access-key", "SECRET-1");
+  await change(screen, "archive-destination", "local-fs");
+  status = { ...off, isPrimary: false };
+  api.liveData.invalidate([{ type: "backup_status" }]);
+  await expect
+    .poll(() => screen.shadowRoot!.querySelector("[data-test=archive-destination]"))
+    .toBeNull();
+  status = off;
+  api.liveData.invalidate([{ type: "backup_status" }]);
+  await expect
+    .poll(() => screen.shadowRoot!.querySelector("[data-test=archive-destination]"))
+    .not.toBeNull();
+  await change(screen, "destination", "/mnt/changed");
+  expect(unload()).toBe(true);
+  const discarded = leave(app);
+  await choose(app, "discard");
+  expect(await discarded).toBe("proceeded");
+  await screen.updateComplete;
+  await change(screen, "archive-destination", "custom-s3");
+  expect(field(screen, "archive-bucket-secret-access-key").value).toBe("");
 });
 it("settings Cancel protects changed values but normalized retention and weekday reverts close directly", async () => {
   const { app, screen } = await mount(on);

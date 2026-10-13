@@ -39,6 +39,18 @@ export function normalisePrefix(prefix: string): string {
   return trimmed === "" ? "" : `${trimmed}/`;
 }
 
+/** An empty, `.` or `..` folder once the ends' slashes are trimmed. */
+export function hasUnusableFolder(prefix: string): boolean {
+  const root = normalisePrefix(prefix);
+  return (
+    root !== "" &&
+    root
+      .slice(0, -1)
+      .split("/")
+      .some((segment) => segment === "" || segment === "." || segment === "..")
+  );
+}
+
 /** Where the server's `archiveNamespace` puts archives in a bucket. */
 export function streamLocation(place: { bucket: string; prefix: string }, venueId: string): string {
   return `${place.bucket}/${normalisePrefix(place.prefix)}archives/${venueId}/`;
@@ -48,8 +60,6 @@ export function heldBucket(status: BackupStatusView | undefined): HeldBucket | n
   return status?.destinations.find((d): d is HeldBucket => d.kind === "s3") ?? null;
 }
 
-/** Mirrors `customBucket` in `apps/server/src/archive-settings.ts`: an empty secret is accepted only
- * for the held bucket's own place and access key. */
 export function keepsHeldSecret(custom: CustomBucket, held: HeldBucket | null): boolean {
   return (
     held !== null &&

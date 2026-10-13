@@ -792,9 +792,11 @@ describe("another S3-compatible bucket", () => {
     ).toEqual([false, true, true, false, true, true]);
     const secret = customField(el, "secret-access-key");
     expect(secret.type).toBe("password");
-    expect(secret.autocomplete).toBe("off");
+    expect(secret.autocomplete).toBe("new-password");
     const reveal = secret.querySelector<Button>("wt-button[slot=end]")!;
     expect(reveal.getAttribute("aria-label")).toBe(t("stream.form.show_secret"));
+    expect(reveal.querySelector("svg[aria-hidden=true]")).not.toBeNull();
+    expect(text(reveal).trim()).toBe("");
     reveal.click();
     await el.updateComplete;
     expect(customField(el, "secret-access-key").type).toBe("text");
@@ -836,11 +838,12 @@ describe("another S3-compatible bucket", () => {
     expect(customField(el, "endpoint").error).toBe("");
   });
 
-  it("sends only this kind's fields, as strings, with the folder trimmed of spaces", async () => {
+  it("sends only this kind's fields, as strings, with the endpoint and folder trimmed of spaces", async () => {
     const { el, api } = await openConfigure();
     await choose(el, "custom-s3");
     await fillCustom(el, "SECRET-1");
     await typeCustom(el, "endpoint", " https://s3.example.test ");
+    await typeCustom(el, "prefix", " /shop/ ");
     q(el, "[data-test=apply]")!.click();
     await vi.waitFor(() => expect(api.applyBackup).toHaveBeenCalledOnce());
     expect(vi.mocked(api.applyBackup).mock.calls[0]![0].destination).toEqual({
@@ -935,7 +938,7 @@ describe("another S3-compatible bucket", () => {
     expect(await bottomOf(el, "settings-actions")).toBe(t("form.fix_fields"));
   });
 
-  it("the server asking for the secret puts the refusal under the secret, and Save stays enabled", async () => {
+  it("the server asking for the secret puts the refusal under the secret, and Save waits for one", async () => {
     const { el } = await openEdit(ON_CUSTOM, {
       applyBackup: vi.fn().mockRejectedValue({
         code: "backup.request_invalid",
@@ -946,38 +949,42 @@ describe("another S3-compatible bucket", () => {
     q(el, "[data-test=save-settings]")!.click();
     await vi.waitFor(() =>
       expect(customField(el, "secret-access-key").error).toBe(
-        t("backup.destination.secret_needed"),
+        t("stream.form.secret_access_key_required"),
       ),
     );
+    expect(customField(el, "secret-access-key").required).toBe(true);
+    expect(customField(el, "secret-access-key").hint).toBe("");
     expect(await bottomOf(el, "settings-actions")).toBe(t("form.fix_fields"));
-    expect(await buttonState(el, "save-settings")).toEqual(["primary", false]);
+    expect(await buttonState(el, "save-settings")).toEqual(["primary", true]);
     expect(banner(el)).toBeNull();
     await typeCustom(el, "secret-access-key", "SECRET-2");
     expect(customField(el, "secret-access-key").error).toBe("");
+    expect(await buttonState(el, "save-settings")).toEqual(["primary", false]);
   });
 
   it.each([
-    ["endpoint", "endpoint"],
-    ["region", "region"],
-    ["bucket", "name"],
-    ["prefix", "prefix"],
-    ["accessKeyId", "access-key-id"],
-  ])("the server refusing %s puts the refusal under that field", async (field, name) => {
-    const { el } = await openConfigure({
-      applyBackup: vi.fn().mockRejectedValue({ code: "backup.request_invalid", params: { field } }),
-    });
-    await choose(el, "custom-s3");
-    await fillCustom(el, "SECRET-1");
-    q(el, "[data-test=apply]")!.click();
-    await vi.waitFor(() =>
-      expect(customField(el, name).error).toBe(
-        field === "endpoint" ? t("stream.form.endpoint_invalid") : t("stream.field.check"),
-      ),
-    );
-    expect(await bottomOf(el, "apply-actions")).toBe(t("form.fix_fields"));
-    expect(await buttonState(el, "apply")).toEqual(["primary", false]);
-    expect(banner(el)).toBeNull();
-  });
+    ["endpoint", "endpoint", "stream.form.endpoint_invalid"],
+    ["region", "region", "stream.field.check"],
+    ["bucket", "name", "stream.field.bucket_characters"],
+    ["prefix", "prefix", "stream.field.check"],
+    ["accessKeyId", "access-key-id", "stream.field.key_characters"],
+  ] as const)(
+    "the server refusing %s puts the refusal under that field",
+    async (field, name, key) => {
+      const { el } = await openConfigure({
+        applyBackup: vi
+          .fn()
+          .mockRejectedValue({ code: "backup.request_invalid", params: { field } }),
+      });
+      await choose(el, "custom-s3");
+      await fillCustom(el, "SECRET-1");
+      q(el, "[data-test=apply]")!.click();
+      await vi.waitFor(() => expect(customField(el, name).error).toBe(t(key)));
+      expect(await bottomOf(el, "apply-actions")).toBe(t("form.fix_fields"));
+      expect(await buttonState(el, "apply")).toEqual(["primary", false]);
+      expect(banner(el)).toBeNull();
+    },
+  );
 
   it("a failed bucket test for another bucket says why in the bottom message", async () => {
     const { el } = await openConfigure({
@@ -1038,5 +1045,167 @@ describe("another S3-compatible bucket", () => {
       expect(await buttonState(el, "save-settings")).toEqual(["primary", false]),
     );
     expect(customField(el, "secret-access-key").value).toBe("");
+  });
+
+  it('a refused folder holding an empty, "." or ".." folder says those cannot be used', async () => {
+    const { el } = await openConfigure({
+      applyBackup: vi
+        .fn()
+        .mockRejectedValue({ code: "backup.request_invalid", params: { field: "prefix" } }),
+    });
+    await choose(el, "custom-s3");
+    await fillCustom(el, "SECRET-1");
+    await typeCustom(el, "prefix", "shop//daily");
+    q(el, "[data-test=apply]")!.click();
+    await vi.waitFor(() =>
+      expect(customField(el, "prefix").error).toBe(t("stream.field.prefix_folders")),
+    );
+  });
+
+  it("a refused typed secret for the stored bucket says which characters work, sent as typed, with no keep hint", async () => {
+    const { el, api } = await openEdit(ON_CUSTOM, {
+      applyBackup: vi.fn().mockRejectedValue({
+        code: "backup.request_invalid",
+        params: { field: "secretAccessKey" },
+      }),
+    });
+    await typeCustom(el, "secret-access-key", "SECRET-1 ");
+    q(el, "[data-test=save-settings]")!.click();
+    await vi.waitFor(() =>
+      expect(customField(el, "secret-access-key").error).toBe(
+        t("backup.destination.secret_characters"),
+      ),
+    );
+    expect(vi.mocked(api.applyBackup).mock.calls[0]![0].destination).toMatchObject({
+      secretAccessKey: "SECRET-1 ",
+    });
+    expect(customField(el, "secret-access-key").hint).toBe("");
+    expect(await bottomOf(el, "settings-actions")).toBe(t("form.fix_fields"));
+  });
+
+  it("a refused typed secret on a first save says which characters work", async () => {
+    const { el, api } = await openConfigure({
+      applyBackup: vi.fn().mockRejectedValue({
+        code: "backup.request_invalid",
+        params: { field: "secretAccessKey" },
+      }),
+    });
+    await choose(el, "custom-s3");
+    await fillCustom(el, "SECRET-1 ");
+    q(el, "[data-test=apply]")!.click();
+    await vi.waitFor(() =>
+      expect(customField(el, "secret-access-key").error).toBe(
+        t("backup.destination.secret_characters"),
+      ),
+    );
+    expect(vi.mocked(api.applyBackup).mock.calls[0]![0].destination).toMatchObject({
+      secretAccessKey: "SECRET-1 ",
+    });
+  });
+
+  it("after the server refuses to keep the saved secret, the secret stays required until the bucket's place changes", async () => {
+    const { el, api } = await openEdit(ON_CUSTOM, {
+      applyBackup: vi.fn().mockRejectedValue({
+        code: "backup.request_invalid",
+        params: { field: "secretAccessKey" },
+      }),
+    });
+    await setRetainCount(el, "9");
+    q(el, "[data-test=save-settings]")!.click();
+    await vi.waitFor(() => expect(customField(el, "secret-access-key").error).not.toBe(""));
+    q(el, "[data-test=save-settings]")!.click();
+    await el.updateComplete;
+    await settle();
+    expect(api.applyBackup).toHaveBeenCalledOnce();
+    const secret = customField(el, "secret-access-key");
+    expect(secret.required).toBe(true);
+    expect(secret.hint).toBe("");
+    expect(secret.error).toBe(t("stream.form.secret_access_key_required"));
+    await typeCustom(el, "region", "eu-west-1");
+    await typeCustom(el, "region", "eu-north-1");
+    expect(customField(el, "secret-access-key").required).toBe(false);
+    expect(customField(el, "secret-access-key").hint).toBe(t("backup.destination.secret_keep"));
+    expect(customField(el, "secret-access-key").error).toBe("");
+  });
+
+  it("a first save with a new secret moves past set-up, and the form shown again later holds no secret, with Apply quiet", async () => {
+    const SAVED: BackupStatusView = {
+      ...ON_CUSTOM,
+      destinations: [
+        {
+          id: "bucket",
+          kind: "s3",
+          endpoint: null,
+          region: "eu-west-3",
+          bucket: "my-bucket",
+          prefix: "shop",
+          accessKeyId: "AKIAMINE",
+          namespace: `shop/archives/${VENUE}/`,
+          credentialPresent: true,
+        },
+      ],
+    };
+    const { el, api } = await openConfigure();
+    vi.mocked(api.applyBackup).mockImplementation(async () => {
+      vi.mocked(api.getBackupStatus).mockResolvedValue(SAVED);
+      return SAVED;
+    });
+    await choose(el, "custom-s3");
+    await fillCustom(el, "SECRET-1");
+    q(el, "[data-test=apply]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=apply]")).toBeNull());
+    expect(vi.mocked(api.applyBackup).mock.calls[0]![0].destination).toMatchObject({
+      secretAccessKey: "SECRET-1",
+    });
+    vi.mocked(api.getBackupStatus).mockResolvedValue(OFF_WITH_KEY);
+    api.liveData.invalidate([{ type: "backup_status" }]);
+    await vi.waitFor(() => expect(q(el, "[data-test=apply]")).not.toBeNull());
+    await el.updateComplete;
+    expect(choice(el)!.value).toBe("custom-s3");
+    expect(customField(el, "secret-access-key").value).toBe("");
+    expect(await buttonState(el, "apply")).toEqual(["secondary", true]);
+  });
+
+  it("reopening the editor after the server refused to keep the saved secret lets it be kept again", async () => {
+    const { el } = await openEdit(ON_CUSTOM, {
+      applyBackup: vi.fn().mockRejectedValue({
+        code: "backup.request_invalid",
+        params: { field: "secretAccessKey" },
+      }),
+    });
+    await setRetainCount(el, "9");
+    q(el, "[data-test=save-settings]")!.click();
+    await vi.waitFor(() => expect(customField(el, "secret-access-key").required).toBe(true));
+    q(el, "[data-test=cancel-edit]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=save-settings]")).toBeNull());
+    q(el, "[data-test=edit-settings]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=save-settings]")).not.toBeNull());
+    expect(customField(el, "secret-access-key").required).toBe(false);
+    expect(customField(el, "secret-access-key").hint).toBe(t("backup.destination.secret_keep"));
+  });
+
+  it("once a secret the server asked for is saved, the next save may keep it", async () => {
+    let answer!: (value: BackupWriteAnswer) => void;
+    const applyBackup = vi
+      .fn()
+      .mockRejectedValueOnce({
+        code: "backup.request_invalid",
+        params: { field: "secretAccessKey" },
+      })
+      .mockReturnValueOnce(new Promise((resolve) => (answer = resolve)));
+    const { el } = await openEdit(ON_CUSTOM, { applyBackup });
+    await setRetainCount(el, "9");
+    q(el, "[data-test=save-settings]")!.click();
+    await vi.waitFor(() => expect(customField(el, "secret-access-key").required).toBe(true));
+    await typeCustom(el, "secret-access-key", "SECRET-NEW");
+    q(el, "[data-test=save-settings]")!.click();
+    await settle();
+    await setRetainCount(el, "10");
+    answer(ON_CUSTOM);
+    await vi.waitFor(async () =>
+      expect(await buttonState(el, "save-settings")).toEqual(["primary", false]),
+    );
+    expect(customField(el, "secret-access-key").required).toBe(false);
+    expect(customField(el, "secret-access-key").hint).toBe(t("backup.destination.secret_keep"));
   });
 });

@@ -1,5 +1,5 @@
 import { DashboardQueries } from "../api/query-controller.js";
-import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
+import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing, svg } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
@@ -31,6 +31,7 @@ import type {
 import {
   EMPTY_CUSTOM,
   destinationBody,
+  hasUnusableFolder,
   heldBucket,
   keepsHeldSecret,
   openingDestination,
@@ -157,6 +158,13 @@ export class BackupScreen extends LitElement {
     css`
       :host {
         display: block;
+      }
+      .secret-toggle svg {
+        display: block;
+        width: var(--wt-font-size-lg);
+        height: var(--wt-font-size-lg);
+        fill: none;
+        stroke: currentColor;
       }
       .title {
         margin: 0 0 var(--wt-space-4);
@@ -305,6 +313,11 @@ export class BackupScreen extends LitElement {
   @state() private custom: CustomBucket = { ...EMPTY_CUSTOM };
   /** The bucket field the server refused, until that field changes. */
   @state() private customRefused: CustomField | null = null;
+  /** Whether the request whose secret was refused carried one. */
+  @state() private secretSentRefused = false;
+  /** The server refused to keep the saved secret for this place. The dashboard cannot see why; a
+   * bucket saved for another venue is one reason (`customBucket`, apps/server/src/archive-settings.ts). */
+  @state() private secretDemanded = false;
   @state() private secretVisible = false;
   /** A refusal naming no field the form shows, for the bottom message until the next submission;
    * `sentence` replaces the code's own message. */
@@ -410,9 +423,10 @@ export class BackupScreen extends LitElement {
     this.#archiveScope = draftScopeFor<ArchiveDraft>(this, {
       id: this,
       current: () => this.#archiveValue(),
+      // A secret is never a baseline: a saved one is held by the box, and Discard never restores one.
       snapshot: (value) => ({
         ...value,
-        custom: { ...value.custom },
+        custom: { ...value.custom, secretAccessKey: "" },
         weekdays: [...value.weekdays],
       }),
       equal: (a, b) => sameValue(archivePayload(a), archivePayload(b)),
@@ -582,7 +596,7 @@ export class BackupScreen extends LitElement {
   }
 
   get #secretRequired(): boolean {
-    return !keepsHeldSecret(this.custom, heldBucket(this.status));
+    return this.secretDemanded || !keepsHeldSecret(this.custom, heldBucket(this.status));
   }
 
   #customMissing(field: CustomField): boolean {
@@ -663,6 +677,10 @@ export class BackupScreen extends LitElement {
       isCustomField(field)
     ) {
       this.customRefused = field;
+      if (field === "secretAccessKey") {
+        this.secretSentRefused = sent.secretAccessKey !== undefined;
+        if (!this.secretSentRefused) this.secretDemanded = true;
+      }
       this.#focusFirstInvalidBox();
     } else if (code === "backup.request_invalid" && field === "dir") {
       this.folderRefused = true;
@@ -717,13 +735,14 @@ export class BackupScreen extends LitElement {
       schedule: this.#buildSchedule(),
       retention: this.#retention(),
     };
-    const submitted = this.#withoutSecret(this.#archiveValue());
+    const submitted = this.#archiveValue();
     const generation = this.#generation;
     const scope = this.#archiveScope;
     try {
       const status = await this.api.applyBackup(body);
       if (generation !== this.#generation) return;
       this.custom = { ...this.custom, secretAccessKey: "" };
+      this.secretDemanded = false;
       this.reloadErrorCode = status.reloadErrorCode ?? null;
       scope?.commit(submitted);
       this.configureAfterApply = scope?.isDirty() ?? false;
@@ -742,11 +761,6 @@ export class BackupScreen extends LitElement {
     } finally {
       if (generation === this.#generation) this.submitting = false;
     }
-  }
-
-  /** A saved secret is held by the box, so the draft it is committed as carries none. */
-  #withoutSecret(value: ArchiveDraft): ArchiveDraft {
-    return { ...value, custom: { ...value.custom, secretAccessKey: "" } };
   }
 
   async #rotate(): Promise<void> {
@@ -844,13 +858,14 @@ export class BackupScreen extends LitElement {
       schedule: this.#buildSchedule(),
       retention: this.#retention(),
     };
-    const submitted = this.#withoutSecret(this.#archiveValue());
+    const submitted = this.#archiveValue();
     const generation = this.#generation;
     const scope = this.#archiveScope;
     try {
       const status = await this.api.applyBackup(body);
       if (generation !== this.#generation) return;
       this.custom = { ...this.custom, secretAccessKey: "" };
+      this.secretDemanded = false;
       this.reloadErrorCode = status.reloadErrorCode ?? null;
       this.status = status;
       scope?.commit(submitted);
@@ -885,6 +900,7 @@ export class BackupScreen extends LitElement {
     this.choice = opening.choice;
     this.folder = opening.folder;
     this.custom = opening.custom;
+    this.secretDemanded = false;
     if (s.schedule?.kind === "wall-clock") {
       this.daysMode = s.schedule.days === "daily" ? "daily" : "weekdays";
       if (Array.isArray(s.schedule.days)) this.weekdays = [...s.schedule.days];
@@ -1324,15 +1340,36 @@ export class BackupScreen extends LitElement {
     `;
   }
 
-  #customMessage(field: CustomField): string {
-    if (this.customRefused === field) {
-      if (field === "endpoint") return t("stream.form.endpoint_invalid");
-      if (field === "secretAccessKey") return t("backup.destination.secret_needed");
-      return t("stream.field.check");
+  #refusalMessage(field: CustomField): string {
+    switch (field) {
+      case "endpoint":
+        return t("stream.form.endpoint_invalid");
+      case "bucket":
+        return t("stream.field.bucket_characters");
+      case "accessKeyId":
+        return t("stream.field.key_characters");
+      case "prefix":
+        return t(
+          hasUnusableFolder(this.custom.prefix.trim())
+            ? "stream.field.prefix_folders"
+            : "stream.field.check",
+        );
+      case "secretAccessKey":
+        return t(
+          this.secretSentRefused
+            ? "backup.destination.secret_characters"
+            : "stream.form.secret_access_key_required",
+        );
+      default:
+        return t("stream.field.check");
     }
+  }
+
+  #customMessage(field: CustomField): string {
+    if (this.customRefused === field) return this.#refusalMessage(field);
     if (!this.folderAttempted || !this.#customMissing(field)) return "";
     if (field === "secretAccessKey")
-      return heldBucket(this.status) === null
+      return heldBucket(this.status) === null || this.secretDemanded
         ? t("stream.form.secret_access_key_required")
         : t("backup.destination.secret_needed");
     return t(CUSTOM_FIELDS.find((f) => f.field === field)!.requiredKey!);
@@ -1350,24 +1387,37 @@ export class BackupScreen extends LitElement {
       label=${t(f.labelKey)}
       .required=${required}
       type=${secret && !this.secretVisible ? "password" : "text"}
-      autocomplete="off"
-      hint=${secret && !required ? t("backup.destination.secret_keep") : ""}
+      autocomplete=${secret ? "new-password" : "off"}
+      hint=${
+        secret && !required && this.customRefused !== "secretAccessKey"
+          ? t("backup.destination.secret_keep")
+          : ""
+      }
       .value=${this.custom[f.field]}
       .error=${this.#customMessage(f.field)}
       @wt-change=${(event: CustomEvent<{ value: string }>) => {
         event.stopPropagation();
         this.custom = { ...this.custom, [f.field]: event.detail.value };
         if (this.customRefused === f.field) this.customRefused = null;
+        if (!secret && this.secretDemanded) {
+          this.secretDemanded = false;
+          if (this.customRefused === "secretAccessKey") this.customRefused = null;
+        }
       }}
       >${
         secret
           ? html`<wt-button
               slot="end"
               variant="ghost"
+              class="secret-toggle"
               data-test="toggle-archive-secret"
               aria-label=${toggleLabel}
               @click=${() => (this.secretVisible = !this.secretVisible)}
-              >${toggleLabel}</wt-button
+              ><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                <path d="M1 8s2.5-4 7-4 7 4 7 4-2.5 4-7 4-7-4-7-4Z"></path>
+                <circle cx="8" cy="8" r="2"></circle>
+                ${this.secretVisible ? svg`<path d="m2 2 12 12"></path>` : nothing}
+              </svg></wt-button
             >`
           : nothing
       }</wt-input

@@ -1504,6 +1504,8 @@ export const en = {
   "backup.destination.secret_keep": "Leave empty to keep the saved secret.",
   "backup.destination.secret_needed":
     "The bucket or access key changed, so enter the secret access key.",
+  "backup.destination.secret_characters":
+    "Use only unaccented letters, digits, spaces and basic keyboard symbols, with no space at the start or end. A single quote (') cannot be used.",
   "backup.destination.stream_unavailable": "Set up the bucket copy below to use its bucket.",
   "backup.destination.stream_unread":
     "The bucket copy's settings could not be read, so its bucket cannot be chosen now.",
@@ -4334,6 +4336,8 @@ export const es: Record<StringKey, string> = {
   "backup.destination.secret_keep": "Déjala vacía para conservar la clave guardada.",
   "backup.destination.secret_needed":
     "El bucket o la clave de acceso han cambiado: escribe la clave de acceso secreta.",
+  "backup.destination.secret_characters":
+    "Usa solo letras sin tilde, cifras, espacios y símbolos básicos del teclado, sin espacios al principio ni al final. No se puede usar la comilla simple (').",
   "backup.destination.stream_unavailable":
     "Configura abajo la copia en el bucket para usar su bucket.",
   "backup.destination.stream_unread":
