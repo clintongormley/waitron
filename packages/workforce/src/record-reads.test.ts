@@ -94,14 +94,12 @@ async function freezeJanuary() {
       countedAutomaticEntryIds: [],
     },
   };
-  await suite.db
-    .insert(payPeriodClosures)
-    .values({
-      ...row,
-      periodStart: january.start,
-      periodEnd: january.end,
-      closureHash: computeClosureHash(row),
-    });
+  await suite.db.insert(payPeriodClosures).values({
+    ...row,
+    periodStart: january.start,
+    periodEnd: january.end,
+    closureHash: computeClosureHash(row),
+  });
   return row.id;
 }
 it("returns a worker-scoped frozen snapshot without the other worker's entries or summaries", async () => {
