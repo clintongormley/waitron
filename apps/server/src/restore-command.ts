@@ -27,6 +27,10 @@ import {
 } from "./restore.js";
 import { confirmsVenue, refuseIfArchiveSourceLive, restoreFromStream } from "./restore-stream.js";
 import "./errors.js";
+import {
+  createRecoveryRestoreRunner,
+  readRecoveryOperationFile,
+} from "./recovery-module-operation.js";
 
 type Env = NodeJS.ProcessEnv;
 type RestoreStream = (deps: Parameters<typeof restoreFromStream>[0]) => Promise<void>;
@@ -110,7 +114,7 @@ export async function runRestore(deps: CommandDeps): Promise<number> {
     return 1;
   }
 
-  const target = resolveRestoreTarget(deps);
+  const target = await resolveRestoreTarget(deps);
   if (typeof target === "number") return target;
   deps.out(COLD_RESTORE_NOTICE);
   const restored = await restoreArtifact(deps, target, artifactPath, recoveryKey, oldBoxGone, {
@@ -243,10 +247,19 @@ type RestoreTarget = Pick<
  * `modules` is every module, never an enabled subset: a restore hook must run for every module
  * whose tables are in the backup.
  */
-function resolveRestoreTarget(deps: CommandDeps): RestoreTarget | number {
+async function resolveRestoreTarget(deps: CommandDeps): Promise<RestoreTarget | number> {
   let environment: DeploymentEnvironment;
+  let withModuleOperations = deps.withModuleOperations;
   try {
     environment = deploymentEnvironment(deps.env);
+    const path = deps.env.WAITRON_RECOVERY_OPERATION_FILE;
+    if (!isUnset(path)) {
+      withModuleOperations = createRecoveryRestoreRunner(
+        ALL_MODULES,
+        await readRecoveryOperationFile(path),
+        deps.env.WAITRON_NODE_RECOVERY_KEY,
+      );
+    }
   } catch (err) {
     deps.out(`restore failed: ${(err as AppError).code}`);
     return 1;
@@ -261,9 +274,7 @@ function resolveRestoreTarget(deps: CommandDeps): RestoreTarget | number {
     migrationsRoot: isUnset(migrationsDir) ? DEFAULT_MIGRATIONS_ROOT : migrationsDir,
     modules: ALL_MODULES,
     environment,
-    ...(deps.withModuleOperations === undefined
-      ? {}
-      : { withModuleOperations: deps.withModuleOperations }),
+    ...(withModuleOperations === undefined ? {} : { withModuleOperations }),
     log: createLogger(
       (line) => deps.out(line.trimEnd()),
       () => new Date(),
@@ -289,6 +300,8 @@ function sourceLiveRefusal(err: AppError, subject: string): string | null {
  */
 function sharedRefusal(err: unknown): string {
   if (!(err instanceof AppError)) return "restore failed";
+  if (err.code === "promotion.break_glass_invalid")
+    return "restore failed: promotion.break_glass_invalid — use the selected backup's node recovery key";
   if (err.code === "provisioning.database_in_use") {
     return "restore failed: provisioning.database_in_use — another process, usually the Waitron server, is using this venue folder; stop it first (docker compose stop app)";
   }
@@ -374,7 +387,7 @@ async function runBucketRestore(
     );
     return 1;
   }
-  const target = resolveRestoreTarget(deps);
+  const target = await resolveRestoreTarget(deps);
   if (typeof target === "number") return target;
   deps.out(
     "cold restore from the bucket: use only when the old server is gone — two servers selling from one database cannot be reconciled",

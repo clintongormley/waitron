@@ -827,6 +827,23 @@ Finish the configured entry points, seed/restore/dormant seats and complete text
 transition before regeneration, populated upgrade, Cloud binding sync, both full reviews and the
 normal hook/current-head CI. This checkpoint does not complete Task 4 and must not be published.
 
+**2026-10-13 public recovery-input checkpoint:** re-registration and both cold-restore commands
+accept the detached generic operation file and separate node key. Staged archive/stream restore
+reconstructs the runner after restart from marker input or the entry process's operation-file path;
+the marker takes precedence and carries no authentication authority or node key. The parser refuses
+input whose JSON round trip changes it before staging replaces an earlier request. Key verification
+precedes outside collection, and key recheck and every seed/hook write share the transaction.
+
+New focused cases qualify current-key refusal, action/target/module binding, snapshots before awaits,
+location changes during collection, later-seed rollback and committed re-registration retry. Real
+fiscal command cases use signed paper evidence and the supplied `P000042` identity, preserve old
+SIF/series rows, and activate the complete purpose set. Those cases inject allocated hooks and
+source-tree migrations; the bucket case injects the downloaded database, not an S3 download.
+
+The default descriptors, readiness and standby public consumers, coupled text SIF/counter retirement,
+current-main schema regeneration/populated upgrade, Cloud contract and both full reviews plus
+hook/current-head CI remain. Task 4 is incomplete; do not publish this checkpoint.
+
 
 **2026-10-13 allocated-standby checkpoint:** the fiscal contribution now implements reserve,
 establish and activate with attempt-local prepared input. Reserve returns only the signed

@@ -784,3 +784,30 @@ The host tests explicitly supply the allocated seed; the production descriptor s
 old seed, restore and standby hooks. Selecting those hooks, text SIF/counter retirement, remaining
 public authentication/input paths, current-main regeneration/populated upgrade, Cloud binding and
 both reviews plus hook/current-head CI remain. Do not publish this incomplete Task 4 checkpoint.
+
+### W41s-4 re-registration and cold-restore input, 2026-10-13
+
+The branch accepts a detached generic operation file in `register-till` and both cold-restore
+command forms. It obtains the node key separately, checks it before collecting outside evidence,
+and runs the prepared seeds or restore hooks inside the authentication transaction. Re-registration
+rechecks the node's location before its seeds. Committed re-registration retains series IDs and
+counters; a later seed refusal rolls back the local allocation while the outside consumption stays.
+
+Staged archive and stream requests may retain public operation input. The entry process reconstructs
+the runner after restart from that marker or its operation file and obtains its key from the
+process environment. The marker's input takes precedence over the environment file. Malformed or
+non-round-trippable JSON input refuses staging before replacing an earlier request. The marker
+stores no node key or authentication authority.
+
+Command: `pnpm --filter @waitron/server exec vitest run src/provision-node-operation.test.ts
+src/recovery-operation-input.test.ts src/recovery-restore-input.test.ts
+scripts/register-till-allocation.test.ts` (the final focused set also includes their legacy consumer
+suites). The new real fiscal command cases run encrypted archive validation and stream placement
+with signed paper evidence, create exactly `P000042` and its three series, and compare the retained
+old SIF and every old series row. They inject source-tree migrations and the allocated fiscal hooks;
+the bucket case supplies an already downloaded database and does not exercise an S3 download.
+
+The public initial setup path was qualified in the previous checkpoint. Default fiscal descriptors,
+readiness, standby HTTP/boot consumers, text SIF/counter retirement, current-main schema regeneration,
+populated upgrade, Cloud binding and both full reviews/hook/current-head CI remain. Task 4 is
+incomplete; do not publish this candidate.

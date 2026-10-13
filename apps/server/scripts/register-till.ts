@@ -20,6 +20,8 @@ import type { SeedReport } from "@waitron/module";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import { ALL_MODULES } from "../src/modules.js";
 import { provisionNode } from "../src/provision-till.js";
+import { readRecoveryOperationFile } from "../src/recovery-module-operation.js";
+import { isUnset } from "../src/env-value.js";
 import { resolveScriptVenueDir } from "./venue-dir.js";
 
 function usageError(message: string): never {
@@ -33,9 +35,23 @@ export async function registerTill(
   nodeArg: string,
   env: NodeJS.ProcessEnv,
 ): Promise<readonly SeedReport[]> {
+  const path = env.WAITRON_RECOVERY_OPERATION_FILE;
+  const recovery = isUnset(path)
+    ? undefined
+    : {
+        ...(await readRecoveryOperationFile(path)),
+        secret: env.WAITRON_NODE_RECOVERY_KEY,
+      };
   const store = await openVenueDatabase(await resolveScriptVenueDir(env));
   try {
-    return await provisionNode(store.venue, { nodeId: brandNodeId(nodeArg) }, ALL_MODULES);
+    return await provisionNode(
+      store.venue,
+      {
+        nodeId: brandNodeId(nodeArg),
+        ...(recovery === undefined ? {} : { recovery }),
+      },
+      ALL_MODULES,
+    );
   } finally {
     await store.close();
   }

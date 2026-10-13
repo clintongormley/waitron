@@ -293,3 +293,48 @@ An unreadable, malformed or oversized file, or an input for an unselected seed, 
 The default fiscal seed/restore/standby hooks and text identity schema remain unfinished on this
 branch. The new host tests supply the allocated seed explicitly; this checkpoint is not a complete
 setup or recovery procedure. Finish the coupled transition before using it for a venue.
+
+## Supply a recovery operation to the host
+
+The Task 4 branch accepts a public operation file for re-registration and cold restore. Keep its
+signed allocation and approval separate from the node recovery key. The file binds the module,
+action, event, source and target node; the host authenticates the key against the database it uses
+for that operation before collecting the current outside evidence.
+
+Build the file from the signed allocation and its matching approval:
+
+```sh
+node --input-type=module <<'JS'
+import { readFileSync, writeFileSync } from "node:fs";
+const allocation = JSON.parse(readFileSync("allocation.json", "utf8"));
+const approval = JSON.parse(readFileSync("approval.json", "utf8"));
+writeFileSync("recovery-operation.json", JSON.stringify({
+  binding: {
+    module: "fiscal-verifactu",
+    action: "restore",
+    eventId: approval.eventId,
+    sourceId: approval.sourceId,
+    targetNodeId: approval.targetNodeId
+  },
+  input: { allocation, approval }
+}), { mode: 0o600 });
+JS
+export WAITRON_RECOVERY_OPERATION_FILE="$PWD/recovery-operation.json"
+```
+
+Use `re-register` for `register-till`, and `restore` for either `waitron-restore` source.
+Supply the node key through `WAITRON_NODE_RECOVERY_KEY`, never a command argument or either JSON
+file. The command reads at most 128 KiB of operation input. An unreadable, malformed or oversized
+file returns `server.config_invalid` with the variable name and `invalid_operation`; its contents
+are not included in that refusal.
+
+For a staged restore, the entry process reads the same environment settings after restart. A
+request may instead carry `recoveryOperation` in its marker. That marker takes precedence over the
+environment's operation file, but it supplies no authentication authority: the entry process must
+still receive the node key and reread the current outside evidence. The key is not copied into
+the marker. Inputs that would change when saved as JSON are refused before replacing a staged
+request.
+
+The host qualification uses the allocated hooks explicitly and source-tree migrations. Default
+fiscal hooks, packaged boot, text schema/counter retirement and the complete setup screen remain
+unfinished. This is branch development guidance, not a qualified venue recovery procedure.

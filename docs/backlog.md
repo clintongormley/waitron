@@ -314,6 +314,11 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   New keys now have stored issue-date/four-character names, shown in the handover language
   with the secret and in canonical form in selected-copy restore
   output. Printed recovery packs and the backup chooser's name display remain Task 6 work.
+  **Task 4 host input, 2026-10-13:** re-registration and both cold-restore command sources now
+  accept an operation file and a separate node key on the branch. Staged restore reconstructs
+  authentication after restart from marker or file input. Qualification supplies the allocated
+  hooks explicitly; default hooks, text schema/counter retirement and the remaining consumers
+  still precede a publication candidate.
   **Update, 2026-10-12: queued again in Lane E.** The owner authorised landing after green
   checks and resolved findings; an important unresolved decision still goes to the owner. Q5(f)
   and Q33–Q40 in the adviser document are revised, and Q41 covers issued invoices missing from the
