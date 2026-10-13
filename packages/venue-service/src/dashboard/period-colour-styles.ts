@@ -1,7 +1,7 @@
 import { css } from "lit";
 
 /** Sets `--period-fill` and `--period-on-fill` on each `[data-colour]` element from its
- *  `CALENDAR_COLOURS` (src/hours-types.ts) colour; this list and that one change together. */
+ *  `CALENDAR_COLOURS` (src/hours-types.ts) colour. */
 export const periodColourStyles = css`
   [data-colour="red"] {
     --period-fill: var(--wt-color-palette-red);

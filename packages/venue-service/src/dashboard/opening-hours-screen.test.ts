@@ -2526,7 +2526,7 @@ describe("Month view", () => {
     ];
     data.currentSeasonId = "autumn";
   };
-  it("Edit the Winter week goes to the Week with that season, keeping the month's department", async () => {
+  it("Edit the Winter week opens the season painter on that season, keeping the month's department", async () => {
     const { el, view } = await monthMount(
       "/manage/opening-hours/view/month/department/bar/month/2026-12",
       false,

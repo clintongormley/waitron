@@ -13,7 +13,7 @@ import "@waitron/ui/src/components/wt-icon.js";
 import { t } from "./strings.js";
 
 /**
- * The full-screen frame both painters share: one bar (close, heading, the `picker` and `link`
+ * A painter's full-screen frame: one bar (close, heading, the `picker` and `link`
  * slots, Cancel and Save) over the `row` slot and the default slot, which fills the rest of the
  * screen so what it holds scrolls inside itself and the bar stays put.
  *

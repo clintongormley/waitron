@@ -142,7 +142,7 @@ function seed(model: Model, seasonId: string): Draft {
 }
 
 /**
- * Mockup 3: one season's week, per department and per zone, painted in a full-screen frame. One
+ * One season's week, per department and per zone, painted in a full-screen frame. One
  * draft holds every department and zone of the season, so the picker keeps edits; stepping to
  * another season asks first, then starts again from what is saved.
  */

@@ -1932,7 +1932,8 @@ title and to the button that opens a create dialog. The owner kept Add on a disc
 Add, the home shortcut picker and the till's Add bill (owner, 2026-10-12, A546). A546 also kept it,
 without an owner decision, on a discovered card reader's Add, the Add products and Add to menus
 pickers, the Add under the special-day dialog's + Add dates…, the till's modifier picker when
-adding a dish, and a weighed item's Add. Nothing guards it across screens.
+adding a dish, and a weighed item's Add. The period dialog opened from a painter's + New period says "Add and
+paint with it" (the opening-hours seasons spec, mockup 9). Nothing guards it across screens.
 
 The season painter (`season-painter.ts`, under `packages/venue-service/src/dashboard/`) edits one
 season's week for every active department and zone, in a full-screen frame (`painter-frame.ts`, a
@@ -3591,7 +3592,7 @@ Opening hours' Year.
 - **Year.** Pick a date: a plain date offers Make this a special day…, and a special-day date
   Edit and Delete; + Special day opens an empty dialog. ‹ › step years, a month's name opens that
   month (below), and the season chips rename, move, add and delete seasons
-  (`season-chips.ts`). Make and Edit open the special-day dialog (`special-day-dialog.ts`, hosted by
+  (`season-chips.ts`), and a chip's name opens the season painter. Make and Edit open the special-day dialog (`special-day-dialog.ts`, hosted by
   `opening-hours-screen.ts`, under `packages/venue-service/src/dashboard/`): a required name;
   Dates, one row each with its own Closed all day switch and a remove button, with + Add dates…
   taking a first and an optional last date, at most 366 dates at a time; and an Every year switch.
@@ -3622,8 +3623,8 @@ Opening hours' Year.
 - **Seasons.** The Year's season chips (`season-chips.ts`) list the venue's seasons in start
   order, each written as its name and first and last day. A chip's name opens the season
   painter on that season's week, its ✎ opens the season dialog (`season-dialog.ts`) on that
-  season, and + Season opens the dialog empty; on a read-only page the chips are plain labels and
-  + Season is not offered. A new season starts with a copy of the department and zone weeks of the
+  season, and + Season opens the dialog empty; on a read-only page a chip's name opens the season's
+  week read-only, there is no ✎, and + Season is not offered. A new season starts with a copy of the department and zone weeks of the
   season it starts inside. The dialog has a required Name and a Starts on day and month, each
   picked from a list; Save stays quiet and disabled until the draft changes. A name or start
   another season already holds is refused under its field. A move or a deletion that would make a

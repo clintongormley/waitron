@@ -222,7 +222,8 @@ export class OpeningHoursScreen extends LitElement {
     this.dayDate = isLocalDate(date) ? date : "";
     this.resolveSeason();
   }
-  /** Whether an address with no view opens the Week rather than the Year (ruling R3). */
+  /** Whether an address with no view names a week (the painter's, a station's or All departments')
+   *  rather than the Year (ruling R3). */
   private namesWeek(url: URL) {
     return (
       ["department", "zone", "station", "season"].some((key) => this.url.read(key) !== null) ||
