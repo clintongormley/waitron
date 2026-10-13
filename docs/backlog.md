@@ -1943,6 +1943,11 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   holds part of the group. Found by A579 part 3b's review.
   [Detail](backlog/till.md#a594-moving-a-bill-to-a-free-table-in-a-group-seats-only-that-table)
 
+- **A596. Two helpers work out where a joined table comes back (2026-10-13).** `joinedPlaceOver` and
+  `joinedPlaceAfter` (`apps/server/src/joined-split-layout.ts`) agreed on 20,000 random inputs in
+  A579 part 3b's simplify review (#1627), which kept both. Next: keep one once part 4b removes Join
+  again.
+
 - **A565. "Reset to saved plan" does not wait for food on its way to an ordinary table
   (2026-10-13).** Dates from floor plans slice 1; #1604 made only split groups wait.
   [Detail](backlog/till.md#a565-reset-to-saved-plan-does-not-wait-for-food-on-its-way-to-an-ordinary-table)
