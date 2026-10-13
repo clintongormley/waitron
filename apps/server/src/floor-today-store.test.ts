@@ -515,11 +515,23 @@ describe("building today's plan from a zone's master plan", () => {
     const { partyId } = await seat(v, t1);
     await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, NOW));
     await finish(partyId);
+    const resetRowIds = async () =>
+      (
+        await inTx(v, (tx) =>
+          tx
+            .select({ id: floorResetTables.id })
+            .from(floorResetTables)
+            .where(eq(floorResetTables.zoneId, z)),
+        )
+      ).map((row) => row.id);
+    const copied = await resetRowIds();
 
     await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, NOW));
 
     expect((await tableRow(v, t1)).label).toBe("Wait 1b");
-    expect(await todayZone(z)).toMatchObject({ revision: 1 });
+    // A reset rewrites the zone's copy of the saved plan under new ids; a catch-up keeps them.
+    expect(await resetRowIds()).toEqual(copied);
+    expect(await todayZone(z)).toMatchObject({ revision: 2 });
   });
 
   it("leaves today's plan as it is when the venue's clock cannot be read", async () => {
