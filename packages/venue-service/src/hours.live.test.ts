@@ -176,6 +176,7 @@ it("refreshes Calendar, holiday coverage and the operations readiness after ever
     ),
   );
   expect(both(named)).toEqual([["special_days", "special_day_dates"], []]);
+  expect(reaches(named, operations)).toEqual(["special_days", "special_day_dates"]);
   const area = await announced((tx) => saveHolidayArea(tx, cfg, { areaKey: "aran" }));
   expect(both(area)).toEqual([["holiday_geographies"], ["holiday_geographies"]]);
   expect(reaches(area, operations)).toEqual(["holiday_geographies"]);
@@ -183,6 +184,7 @@ it("refreshes Calendar, holiday coverage and the operations readiness after ever
     tx.update(locations).set({ city: "Lleida" }).where(eq(locations.id, cfg.locationId)),
   );
   expect(both(moved)).toEqual([["locations"], ["locations"]]);
+  expect(reaches(moved, operations)).toEqual(["locations"]);
   const country = await announced((tx) => tx.update(tenants).set({ country: "PT" }));
   expect(both(country)).toEqual([["tenants"], ["tenants"]]);
   expect(reaches(country, operations)).toEqual(["tenants"]);

@@ -163,7 +163,7 @@ These steps assume Spain; another country follows the same shape with its own of
    pnpm --filter @waitron/country exec vitest run src/country.test.ts
    pnpm --filter @waitron/country-es exec vitest run src/holidays.test.ts
    pnpm --filter @waitron/country-packs exec vitest run src/registry.test.ts
-   pnpm --filter @waitron/venue-service exec vitest run --project node src/holidays.test.ts src/holiday-naming.test.ts src/special-days.holiday-name.test.ts
+   pnpm --filter @waitron/venue-service exec vitest run --project node src/holidays.test.ts src/holiday-naming.test.ts
    ```
 
    Read each `Tests` count. Check that the ordinary-working-day case still reads `complete` with no
@@ -176,10 +176,9 @@ These steps assume Spain; another country follows the same shape with its own of
    calendar alone, and returns facts and coverage. It can move a special day, though: a repeating
    date saved on a public holiday falls wherever the shipped data puts that holiday's name
    (`specialDateIn`, `packages/venue-service/src/special-days.ts`), so renaming a holiday or
-   moving its date in the data moves or drops that date in the years it covers. Compare the new data's holiday names with the
-   shipped year's: a renamed holiday drops every repeating special-day date saved on it, in the years
-   the new data covers. Run the holiday
-   suites above to check the current reader; the earlier local-table receipt below is historical.
+   moving its date in the data moves or drops that date in the years it covers after the year the
+   date was saved in. Run the holiday suites above to check the current reader; the earlier
+   local-table receipt below is historical.
 
 ### Earlier data-revision receipt
 

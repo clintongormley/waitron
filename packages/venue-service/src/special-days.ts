@@ -77,7 +77,7 @@ function holidayNameOn(holidays: HolidayDates, date: LocalDate): string | null {
 }
 
 /** The years a check over every future occurrence walks, from the earliest date: 400 from it, or
- *  from `walkFrom` when that is later, as `findSeasonEndOffsetClash` does. No years without rules. */
+ *  from `walkFrom` when that is later. No years without rules. */
 export function holidayHorizon(
   rules: readonly { date: LocalDate }[],
   walkFrom = -Infinity,

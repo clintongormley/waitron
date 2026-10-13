@@ -164,7 +164,8 @@ days, the venue as a holiday source and the four old hours tables (`special_date
   public holiday) and "Fair" (every year, 26 March) both save while only 2026's list ships; when
   2027's list puts Viernes Santo on 26 March, the till uses whichever stored date sorts first
   (`specialDaysOn`, `packages/venue-service/src/special-days.ts`), the readiness list says nothing,
-  and every later save of either day is refused with `special_day.date_taken`. Shown by the
+  and every later save of either day that keeps its clashing date is refused with
+  `special_day.date_taken`. Shown by the
   A506-5 finish-branch review with the two rows inserted as a 2026-only save stores them. A
   configuration import reaches the same state another way: it compares a holiday-following date
   in its first year only (`NO_HOLIDAY_DATES`, `packages/venue-service/src/configuration-transfer.ts`).
@@ -176,7 +177,7 @@ days, the venue as a holiday source and the four old hours tables (`special_date
 - Once a stored holiday date's year has passed, each order's service-state read (`readServiceDayPlan`)
   also reads the tenant, location and holiday area to find that year's holiday: about 100 µs of
   roughly 860 µs per call, measured over 2000 calls on a Madrid test venue during the A506-5
-  finish-branch review. Removing it needs a cache that outlives the transaction.
+  finish-branch review. One way to remove it is a cache that outlives the transaction.
 - The Calendar model drops each date's stored special-day date, so the dashboard re-derives which
   stored date applies (`specialOn`, `packages/venue-service/src/dashboard/special-date.ts`) and the
   week views fetch each special day's detail separately; returning the stored date in the model
