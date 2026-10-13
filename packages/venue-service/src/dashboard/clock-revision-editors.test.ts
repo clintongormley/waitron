@@ -1,144 +1,77 @@
-import { LitElement } from "lit";
 import { afterEach, expect, it } from "vitest";
 import { applyTokens } from "@waitron/ui";
-import type { DashboardRequest } from "@waitron/dashboard-kit";
-import { OpeningHoursApi } from "./opening-hours-client.js";
-import "./opening-hours-week.js";
-import "./opening-hours-zone-week.js";
+import type { SeasonPainter } from "./season-painter.js";
+import {
+  drag,
+  frame,
+  painterApi,
+  painterModel,
+  pick,
+  settle,
+  type Write,
+} from "../testing/season-painter-fixture.js";
+import "./season-painter.js";
+
 const hosts: HTMLElement[] = [];
 afterEach(() => {
   for (const el of hosts.splice(0)) el.remove();
 });
-const department = {
-  id: "dept",
-  name: "Restaurant",
-  active: true,
-  periods: [
-    {
-      id: "period",
-      name: "Lunch",
-      colour: "green" as const,
-      menuId: "menu",
-      staffMenuIds: [],
-      endOffsetMinutes: 0,
-      weekdays: [1],
-      routingUses: [],
-    },
-  ],
-  seasonWeeks: [
-    {
-      seasonId: "season",
-      week: Array.from({ length: 7 }, (_, weekday) => ({
-        weekday,
-        slots: weekday === 1 ? [{ periodId: "period", startsAt: "10:00", endsAt: "14:00" }] : [],
-      })),
-    },
-  ],
-};
-const zone = {
-  id: "zone",
-  name: "Terrace",
-  seasonWeeks: [
-    {
-      seasonId: "season",
-      week: [{ weekday: 1, ranges: [{ startsAt: "10:00", endsAt: "11:00" }] }],
-    },
-  ],
-  week: [{ weekday: 1, ranges: [{ startsAt: "10:00", endsAt: "11:00" }] }],
-};
+const at = (clockRevision: number) => ({ ...painterModel(), clockRevision });
+async function mount(kind: "department" | "zone") {
+  const writes: Write[] = [];
+  const el = document.createElement("season-painter");
+  el.api = painterApi(writes);
+  el.model = at(7);
+  el.seasonId = "winter";
+  el.departmentId = "d1";
+  el.open = true;
+  applyTokens(el);
+  hosts.push(el);
+  document.body.append(el);
+  await settle(el);
+  if (kind === "zone") await pick(el, "zone:z1");
+  return { el, writes };
+}
+/** Paints Wednesday 07:00–09:00: Lunch in Restaurant's week, Closed in Dining room's. */
+const paint = (el: SeasonPainter) => drag(el, "3", 60, 3 * 60);
+async function save(el: SeasonPainter, writes: Write[]) {
+  frame(el).shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+  await expect.poll(() => writes.length).toBe(1);
+  return writes[0]!.body as {
+    expectedClockRevision: number;
+    departments: { days: unknown[] }[];
+    zones: { days: unknown[] }[];
+  };
+}
+const painted = (kind: "department" | "zone") =>
+  kind === "department"
+    ? { weekday: 3, slots: [{ periodId: "p1", startsAt: "07:00", endsAt: "09:00" }] }
+    : { weekday: 3, ranges: [{ startsAt: "07:00", endsAt: "09:00" }] };
+
 for (const kind of ["department", "zone"] as const) {
   it(`${kind} keeps a dirty draft's opening clock revision through a live model replacement`, async () => {
-    const writes: unknown[] = [];
-    const api = new OpeningHoursApi((async (_path, _method, body) => {
-      writes.push(body);
-    }) as DashboardRequest);
-    const el = document.createElement(
-      kind === "department" ? "opening-hours-week" : "opening-hours-zone-week",
-    ) as unknown as LitElement & {
-      api: OpeningHoursApi;
-      department: typeof department;
-      zone: typeof zone;
-      clockRevision: number;
-    };
-    Object.assign(el, {
-      api,
-      department: structuredClone(department),
-      zone: structuredClone(zone),
-      seasonId: "season",
-      clockRevision: 7,
-    });
-    applyTokens(el);
-    hosts.push(el);
-    document.body.append(el);
-    await el.updateComplete;
-    const grid = el.shadowRoot!.querySelector("service-grid")!;
-    grid.dispatchEvent(
-      new CustomEvent("grid-block-change", {
-        detail: {
-          columnKey: "1",
-          index: 0,
-          startsAt: "10:00",
-          endsAt: kind === "department" ? "15:00" : "12:00",
-        },
-        bubbles: true,
-        composed: true,
-      }),
+    const { el, writes } = await mount(kind);
+    await paint(el);
+    el.model = at(8);
+    await settle(el);
+    const body = await save(el, writes);
+    expect(body.expectedClockRevision).toBe(7);
+    expect((kind === "department" ? body.departments : body.zones)[0]!.days).toContainEqual(
+      painted(kind),
     );
-    await el.updateComplete;
-    el.clockRevision = 8;
-    el.department = structuredClone(department);
-    if (kind === "zone") el.zone = structuredClone(zone);
-    await el.updateComplete;
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=save-week]")!.click();
-    await expect.poll(() => writes.length).toBe(1);
-    expect(writes[0]).toMatchObject({
-      expectedClockRevision: 7,
-      days: expect.arrayContaining([
-        kind === "department"
-          ? { weekday: 1, slots: [{ periodId: "period", startsAt: "10:00", endsAt: "15:00" }] }
-          : { weekday: 1, ranges: [{ startsAt: "10:00", endsAt: "12:00" }] },
-      ]),
-    });
   });
 }
 
 for (const kind of ["department", "zone"] as const) {
   it(`${kind} adopts a clock-only refresh while clean before the next edit`, async () => {
-    const writes: unknown[] = [];
-    const api = new OpeningHoursApi((async (_path, _method, body) => {
-      writes.push(body);
-    }) as DashboardRequest);
-    const el = document.createElement(
-      kind === "department" ? "opening-hours-week" : "opening-hours-zone-week",
+    const { el, writes } = await mount(kind);
+    el.model = at(8);
+    await settle(el);
+    await paint(el);
+    const body = await save(el, writes);
+    expect(body.expectedClockRevision).toBe(8);
+    expect((kind === "department" ? body.departments : body.zones)[0]!.days).toContainEqual(
+      painted(kind),
     );
-    Object.assign(el, {
-      api,
-      department: structuredClone(department),
-      zone: structuredClone(zone),
-      seasonId: "season",
-      clockRevision: 7,
-    });
-    applyTokens(el);
-    hosts.push(el);
-    document.body.append(el);
-    await el.updateComplete;
-    el.clockRevision = 8;
-    await el.updateComplete;
-    el.shadowRoot!.querySelector("service-grid")!.dispatchEvent(
-      new CustomEvent("grid-block-change", {
-        detail: {
-          columnKey: "1",
-          index: 0,
-          startsAt: "10:00",
-          endsAt: kind === "department" ? "15:00" : "12:00",
-        },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    await el.updateComplete;
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=save-week]")!.click();
-    await expect.poll(() => writes.length).toBe(1);
-    expect(writes[0]).toMatchObject({ expectedClockRevision: 8 });
   });
 }
