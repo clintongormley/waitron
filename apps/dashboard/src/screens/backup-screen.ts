@@ -131,7 +131,7 @@ export class BackupScreen extends LitElement {
       .stale {
         color: var(--wt-color-danger);
       }
-      .destination {
+      .status > div {
         display: contents;
       }
       .line {
@@ -945,53 +945,63 @@ export class BackupScreen extends LitElement {
   #renderStatus(s: BackupStatusView): TemplateResult {
     return html`
       <dl class="status" data-test="status">
-        <dt>${t("backup.status.state")}</dt>
-        <dd>
-          ${
-            s.enabled
-              ? html`<span class="on">${t("backup.status.on")}</span>`
-              : html`<span class="off"
-                  >${s.storedDisabled ? t("backup.status.stored_off") : t("backup.status.off")}</span
-                >`
-          }
-          ${
-            s.loadErrorCode === null
-              ? nothing
-              : html`<span class="line stale" data-test="load-failed"
-                  >${t("backup.status.load_failed")} ${codeMessage(s.loadErrorCode)}</span
-                >`
-          }
-        </dd>
+        <div>
+          <dt>${t("backup.status.state")}</dt>
+          <dd>
+            ${
+              s.enabled
+                ? html`<span class="on">${t("backup.status.on")}</span>`
+                : html`<span class="off"
+                    >${s.storedDisabled ? t("backup.status.stored_off") : t("backup.status.off")}</span
+                  >`
+            }
+            ${
+              s.loadErrorCode
+                ? html`<span class="line stale" data-test="load-failed"
+                    >${t("backup.status.load_failed")} ${codeMessage(s.loadErrorCode)}</span
+                  >`
+                : nothing
+            }
+          </dd>
+        </div>
         ${
           s.destinations.length > 0
             ? s.destinations.map((d) => this.#renderDestinationRow(s, d))
-            : html`<dt>${t("backup.status.last")}</dt>
-                <dd>${t("backup.status.never")}</dd>`
+            : html`<div>
+                <dt>${t("backup.status.last")}</dt>
+                <dd>${t("backup.status.never")}</dd>
+              </div>`
         }
         ${
           s.keyFingerprint
-            ? html`<dt>${t("backup.status.fingerprint")}</dt>
-                <dd>${s.keyFingerprint}</dd>`
+            ? html`<div>
+                <dt>${t("backup.status.fingerprint")}</dt>
+                <dd>${s.keyFingerprint}</dd>
+              </div>`
             : nothing
         }
         ${
           s.keyRotatedAt
-            ? html`<dt>${t("backup.status.rotated")}</dt>
+            ? html`<div>
+                <dt>${t("backup.status.rotated")}</dt>
                 <dd data-test="key-rotated">
                   ${new Date(s.keyRotatedAt).toLocaleString(currentLocale())}
-                </dd>`
+                </dd>
+              </div>`
             : nothing
         }
         ${
           s.enabled
-            ? html`<dt>${t("backup.status.archive_current")}</dt>
+            ? html`<div>
+                <dt>${t("backup.status.archive_current")}</dt>
                 <dd data-test="archive-current">
                   ${
                     s.archiveUnderCurrentKey
                       ? t("backup.status.archive_yes")
                       : t("backup.status.archive_no")
                   }
-                </dd>`
+                </dd>
+              </div>`
             : nothing
         }
       </dl>

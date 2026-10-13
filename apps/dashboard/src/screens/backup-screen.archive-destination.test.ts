@@ -157,6 +157,40 @@ describe("what each destination did", () => {
     expect(text(bucket)).not.toContain(t("backup.status.fresh"));
   });
 
+  it("says the bucket failed when a later upload failed after an earlier one was stored", async () => {
+    const { el } = await mount(
+      withOutcomes(
+        {},
+        {
+          storedUnderCurrentKey: true,
+          uploadErrorCode: "storage.upload_failed",
+          lastBackupAt: "2026-10-12T02:00:00Z",
+          ageSeconds: 60,
+        },
+      ),
+    );
+    const bucket = row(el, "bucket");
+    expect(text(bucket)).toContain(t("backup.destination.failed"));
+    expect(text(bucket)).not.toContain(t("backup.destination.stored"));
+  });
+
+  it("does not call a failed bucket up to date because its last stored backup is recent", async () => {
+    const { el } = await mount(
+      withOutcomes(
+        {},
+        {
+          uploadErrorCode: "storage.upload_failed",
+          lastBackupAt: "2026-10-12T02:00:00Z",
+          ageSeconds: 60,
+          stale: false,
+        },
+      ),
+    );
+    const bucket = row(el, "bucket");
+    expect(text(bucket)).toContain(t("backup.destination.failed"));
+    expect(text(bucket)).not.toContain(t("backup.status.fresh"));
+  });
+
   it("does not call a bucket stored because another destination stored one", async () => {
     const { el } = await mount({
       ...withOutcomes({ storedUnderCurrentKey: true }, {}),
@@ -276,5 +310,71 @@ describe("a write whose reload failed", () => {
     );
     expect(q(el, "[data-test=apply]")).toBeNull();
     expect(q(el, "[role=alert]:not([data-test])")).toBeNull();
+  });
+
+  it("when the saved settings can't be used, shows no refusal and leaves Apply quiet", async () => {
+    const off: BackupStatusView = {
+      ...LOCAL_ONLY,
+      enabled: false,
+      source: null,
+      revision: null,
+      destinations: [],
+      backupStatus: { configured: false },
+    };
+    const unusable: BackupWriteAnswer = {
+      ...off,
+      loadErrorCode: "backup.archive_settings_invalid",
+      backupStatus: { configured: false, loadErrorCode: "backup.archive_settings_invalid" },
+      reloadErrorCode: "backup.archive_settings_invalid",
+    };
+    const { el } = await mount(off, { applyBackup: vi.fn().mockResolvedValue(unusable) });
+    await vi.waitFor(() => expect(q(el, "[data-test=apply]")).not.toBeNull());
+    q(el, "[data-test=destination]")!.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "/mnt/usb/waitron" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await el.updateComplete;
+    q(el, "[data-test=apply]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=reload-failed]")).not.toBeNull());
+    expect(q(el, "[role=alert]:not([data-test])")).toBeNull();
+    const apply = q(el, "[data-test=apply]") as HTMLElementTagNameMap["wt-button"];
+    expect(apply).not.toBeNull();
+    await apply.updateComplete;
+    expect([apply.variant, apply.disabled]).toEqual(["secondary", true]);
+  });
+
+  it("after saving settings that can't be used, closes the editor and leaves Apply quiet with the folder kept", async () => {
+    const unusable: BackupWriteAnswer = {
+      ...LOCAL_ONLY,
+      enabled: false,
+      destinations: [],
+      loadErrorCode: "backup.archive_settings_invalid",
+      backupStatus: { configured: false, loadErrorCode: "backup.archive_settings_invalid" },
+      reloadErrorCode: "backup.archive_settings_invalid",
+    };
+    const { el } = await mount(LOCAL_ONLY, { applyBackup: vi.fn().mockResolvedValue(unusable) });
+    q(el, "[data-test=edit-settings]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=save-settings]")).not.toBeNull());
+    q(el, "[data-test=destination]")!.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "/mnt/usb/other" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await el.updateComplete;
+    q(el, "[data-test=save-settings]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=save-settings]")).toBeNull());
+    await vi.waitFor(() => expect(q(el, "[data-test=apply]")).not.toBeNull());
+    expect(q(el, "[role=alert]:not([data-test])")).toBeNull();
+    const apply = q(el, "[data-test=apply]") as HTMLElementTagNameMap["wt-button"];
+    await apply.updateComplete;
+    expect([apply.variant, apply.disabled]).toEqual(["secondary", true]);
+    expect((q(el, "[data-test=destination]") as HTMLElementTagNameMap["wt-input"]).value).toBe(
+      "/mnt/usb/other",
+    );
   });
 });

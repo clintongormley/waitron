@@ -238,6 +238,19 @@ it("has English and Spanish copy for a failed archive bucket test and a key chan
   }
 });
 
+it("has English and Spanish copy for each way one backup destination's call can fail", () => {
+  for (const code of [
+    "backup.destination_timed_out",
+    "backup.destination_cancelled",
+    "backup.destination_key_invalid",
+    "backup.destination_object_too_large",
+  ]) {
+    expect(codeMessage(code, "en"), code).not.toBe(codeMessage("test.unmapped_code", "en"));
+    expect(codeMessage(code, "es"), code).not.toBe(codeMessage("test.unmapped_code", "es"));
+    expect(codeMessage(code, "es"), code).not.toBe(codeMessage(code, "en"));
+  }
+});
+
 it("has English and Spanish copy for the two refusals that keep variants out of extras lists", () => {
   for (const code of ["extras.product_has_variants", "product.offered_as_extra"]) {
     expect(codeMessage(code, "en")).not.toBe(codeMessage("test.unmapped_code", "en"));
