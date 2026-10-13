@@ -34,7 +34,7 @@ export interface LiveTable {
   hasToday: boolean;
   /** It is in a today's merge holding a waiting table: held, refused, or in a waiting split group. */
   mergedWithHeld: boolean;
-  /** It is in a split group, a joined table and the parts split off it today, one of whose members waits. */
+  /** It is in a split group, a joined table and the parts split off it today, one of whose members waits or has food on its way. */
   splitWithBusy: boolean;
 }
 

@@ -294,7 +294,11 @@ async function catchUpPass(
   const waiting = new Set([...held, ...refused]);
   const merges = await mergesOf(tx, ids);
   const merged = new Set(merges.map((m) => m.tableId));
-  const { mergedWithHeld, splitBusy } = waitingTogether(inZone, merges, waiting);
+  const foodComing = await foodComingTo(
+    tx,
+    inZone.flatMap((table) => (table.splitOffFrom === null ? [] : [table.id, table.splitOffFrom])),
+  );
+  const { mergedWithHeld, splitBusy } = waitingTogether(inZone, merges, waiting, foodComing);
   const removing = new Set(targets.filter((target) => target.remove).map((t) => t.tableId));
   const tied = await tablesTied(
     tx,
@@ -454,17 +458,22 @@ function mergesOf(
 
 /**
  * Grows `waiting` until it is closed under both ties: a merge with a waiting table waits whole, and
- * so does a split group with a waiting member. Applying any table of either would move a waiting one.
+ * so does a split group with a waiting member or a member in `foodComing`. Applying any table of
+ * either would move a waiting one.
  */
 function waitingTogether(
   tables: readonly { id: string; splitOffFrom: string | null }[],
   merges: readonly { joinId: string; tableId: string }[],
   waiting: ReadonlySet<string>,
+  foodComing: ReadonlySet<string>,
 ): { mergedWithHeld: Set<string>; splitBusy: Set<string> } {
   let all = new Set(waiting);
   for (;;) {
     const mergedWithHeld = mergedWith(merges, all);
-    const splitBusy = busySplitGroups(tables, (id) => all.has(id) || mergedWithHeld.has(id));
+    const splitBusy = busySplitGroups(
+      tables,
+      (id) => all.has(id) || mergedWithHeld.has(id) || foodComing.has(id),
+    );
     const grown = new Set([...all, ...mergedWithHeld, ...splitBusy]);
     if (grown.size === all.size) return { mergedWithHeld, splitBusy };
     all = grown;
@@ -584,6 +593,16 @@ export async function placeSpareToday(
       rotation: 0,
     })
     .where(eq(floorTodayTables.id, row.id));
+}
+
+/** Those of `tableIds` an order with food on its way is delivered to. */
+async function foodComingTo(tx: Transaction, tableIds: readonly string[]): Promise<Set<string>> {
+  if (tableIds.length === 0) return new Set();
+  const rows = await tx
+    .selectDistinct({ tableId: workingOrders.deliveryTableId })
+    .from(workingOrders)
+    .where(and(inArray(workingOrders.deliveryTableId, [...tableIds]), foodOnItsWay()));
+  return new Set(rows.map((row) => row.tableId!));
 }
 
 /** An order with food on its way to the table. */

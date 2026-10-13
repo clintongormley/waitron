@@ -229,7 +229,8 @@ split today. A split decides only who sits where today.
   waits today (`planReset`, `apps/server/src/floor-reset-plan.ts:80-96`).
   > Added 2026-10-13 by A503 part 3 (review 5–9): a merge holds the group back only while one of its
   > tables waits (guests seated, or a module refusing); a merge nobody sits at is ended by the reset
-  > as any free merge is, and the joined table is put back whole.
+  > as any free merge is, and the joined table is put back whole. Food on its way to any table of the
+  > group holds it back too, until the food is collected.
 
 ### Service merges ask for seats
 

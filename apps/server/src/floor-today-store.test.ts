@@ -19,6 +19,7 @@ import {
   locationDayCutoverChanges,
   joinedTableApart,
   stillJoinedPart,
+  workingOrders,
 } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
 import { AppError } from "@waitron/shared";
@@ -38,15 +39,17 @@ import { finishTable } from "./parties.js";
 import { updateZone } from "./tables.js";
 import {
   commandFor,
+  counterOrder,
   inTx,
   join,
+  pay,
   seat,
   setupPartyVenue,
   tableRow,
   type PartyVenue,
 } from "./testing/party-venue.js";
 import { giveKeptSize, mergeOf, plannedZone } from "./testing/floor-today-venue.js";
-import { listTablesWithState } from "./working-order.js";
+import { handOverOrder, listTablesWithState } from "./working-order.js";
 import "./errors.js";
 
 let v: PartyVenue;
@@ -1356,6 +1359,54 @@ describe("a reset over a joined table split today", () => {
 
     expect(await todayRow(table.long!)).toMatchObject(WHOLE);
     expect(await splitRowsOf(table.long!)).toEqual([]);
+  });
+
+  it("a reset while food is on its way to a part split off moves nothing in the group, until it is collected", async () => {
+    const { zoneId, table } = await longTable();
+    await split(table.long!, [table.c5!], 6);
+    const c5Before = await todayRow(table.c5!);
+    const order = await counterOrder(v, "Paella");
+    await inTx(v, (tx) =>
+      tx
+        .update(workingOrders)
+        .set({ deliveryTableId: table.c5! })
+        .where(eq(workingOrders.id, order)),
+    );
+    await pay(v, order, "20.00");
+
+    await reset(zoneId);
+
+    expect(await todayRow(table.c5!)).toEqual(c5Before);
+    expect(await splitRowsOf(table.long!)).toEqual([table.c5!]);
+    expect(await todayRow(table.long!)).toMatchObject({ x: 10, width: 4, seats: 6 });
+    expect(await flags(table.c5!)).toMatchObject({ joined: false });
+
+    await inTx(v, (tx) => handOverOrder(tx, v.cfg, order));
+    await catchUp(zoneId);
+
+    expect(await todayRow(table.long!)).toMatchObject(WHOLE);
+    expect(await splitRowsOf(table.long!)).toEqual([]);
+    expect(await flags(table.c5!)).toMatchObject({ joined: true });
+  });
+
+  it("a reset while food is on its way to Long table leaves its split parts standing", async () => {
+    const { zoneId, table } = await longTable();
+    await split(table.long!, [table.c5!], 6);
+    const c5Before = await todayRow(table.c5!);
+    const order = await counterOrder(v, "Paella");
+    await inTx(v, (tx) =>
+      tx
+        .update(workingOrders)
+        .set({ deliveryTableId: table.long! })
+        .where(eq(workingOrders.id, order)),
+    );
+    await pay(v, order, "20.00");
+
+    await reset(zoneId);
+
+    expect(await todayRow(table.c5!)).toEqual(c5Before);
+    expect(await splitRowsOf(table.long!)).toEqual([table.c5!]);
+    expect(await todayRow(table.long!)).toMatchObject({ x: 10, width: 4, seats: 6 });
   });
 
   const mergeC5WithBar = (table: Record<string, string>) =>

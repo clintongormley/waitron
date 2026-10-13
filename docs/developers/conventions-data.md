@@ -1582,14 +1582,14 @@ Edit the master plan on the dashboard; work from today's plan on the till. Savin
 master does not rearrange tables during service. The first save builds today's plan immediately
 (`apps/server/src/floor-plan.ts:412`). Thereafter `ensureToday` resets a live zone at the first
 floor read or change that sees a new business day, or catches up its pending reset rows
-(`apps/server/src/floor-today-store.ts:484`). Reset to saved plan takes a fresh copy explicitly.
+(`apps/server/src/floor-today-store.ts:493`). Reset to saved plan takes a fresh copy explicitly.
 
 A reset copies the master's tables into `floor_reset_tables`
 (`apps/server/src/floor-today-store.ts:149`), and each joined table's parts into
 `floor_reset_table_parts` (`apps/server/src/floor-today-store.ts:167`). Occupied tables wait.
 After their tab closes, the next floor read or change can apply the pending rows; closing the tab
 itself does not run that catch-up. New live tables are created from those reset rows, including
-rows that had to wait for a name (`apps/server/src/floor-today-store.ts:342`). This separation keeps
+rows that had to wait for a name (`apps/server/src/floor-today-store.ts:346`). This separation keeps
 a later master edit from changing the copy a reset is still applying.
 
 A closing party keeps its table names as text and releases its `party_tables` rows
@@ -1611,10 +1611,11 @@ A part split off today (a `floor_today_split_parts` row) stands alone and is not
 joined table with fewer than two parts still joined, that no party holds and no merge takes in, is
 refused `table.in_joined_table` on the same paths (`joinedOutOfService`,
 `packages/db/src/joined-parts.ts:47`). The reset keeps a joined table and the parts split off it
-waiting together while any of them is held by a party, refused by a module, or merged with a waiting
-table; a merge nobody sits at is ended as any free merge is. Its parts not split off stay joined
-meanwhile, and the split ends when the reset puts the joined table back (`splitWithBusy`,
-`apps/server/src/floor-reset-plan.ts:38`; `waitingTogether`, `apps/server/src/floor-today-store.ts:459`).
+waiting together while any of them is held by a party, refused by a module, merged with a waiting
+table, or has food on its way to it; a merge nobody sits at is ended as any free merge is. Its parts
+not split off stay joined meanwhile, and the split ends when the reset puts the joined table back
+(`splitWithBusy`, `apps/server/src/floor-reset-plan.ts:38`; `waitingTogether`,
+`apps/server/src/floor-today-store.ts:464`).
 When deleting a table is refused, `removeLiveTables` deletes the split rows naming it and tries again,
 and puts them back if that is refused too (`apps/server/src/table-removal.ts:115`).
 
