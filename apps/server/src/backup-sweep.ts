@@ -20,7 +20,7 @@ import {
   backupArchiveTimestamp,
   dumpFileName,
 } from "./backup-keys.js";
-import type { StorageBackend, StorageCall } from "./storage-backend.js";
+import { isPlainKey, type StorageBackend, type StorageCall } from "./storage-backend.js";
 import "./errors.js";
 
 export type ManifestBuilder = (deps: {
@@ -153,7 +153,8 @@ export async function runOnce(
 }
 
 /** Deletes an artifact past EITHER cap: beyond the `retain` newest (`list` is newest-first), or older
- * than `retainDays` by the stamp in its key, never the file's mtime. */
+ * than `retainDays` by the stamp in its key, never the file's mtime. A listed name the destination
+ * cannot address is left where it is, so it cannot stop the rest being pruned. */
 export async function pruneBackend(
   backend: StorageBackend,
   retain: number,
@@ -161,7 +162,9 @@ export async function pruneBackend(
   nowMs: number,
   call: StorageCall,
 ): Promise<void> {
-  const objects = await backend.list(BACKUP_KEY_PREFIX, call);
+  const objects = (await backend.list(BACKUP_KEY_PREFIX, call)).filter((obj) =>
+    isPlainKey(obj.key),
+  );
   const maxAgeMs = retainDays * 24 * 60 * 60 * 1000;
   const toDelete = objects.filter(
     (obj, i) => i >= retain || nowMs - backupArchiveTimestamp(obj.key).getTime() > maxAgeMs,

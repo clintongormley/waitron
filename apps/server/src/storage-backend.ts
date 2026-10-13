@@ -25,10 +25,12 @@ export function objectTooLarge(): AppError {
 const CONTROL = /[\u0000-\u001f\u007f-\u009f]/;
 
 /** One plain name directly inside the destination, so no key reaches outside it. */
+export function isPlainKey(key: string): boolean {
+  return key !== "" && key !== "." && key !== ".." && !/[/\\]/.test(key) && !CONTROL.test(key);
+}
+
 export function checkedKey(key: string): string {
-  if (key === "" || key === "." || key === ".." || /[/\\]/.test(key) || CONTROL.test(key)) {
-    throw new AppError("backup.destination_key_invalid", { field: "key" });
-  }
+  if (!isPlainKey(key)) throw new AppError("backup.destination_key_invalid", { field: "key" });
   return key;
 }
 

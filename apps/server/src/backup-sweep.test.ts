@@ -1,5 +1,5 @@
 // Every case injects the archive step, which the supervisor binds to the venue store's `archiveTo`.
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -21,6 +21,7 @@ import {
 } from "./backup-sweep.js";
 import type { BackupOutcomeHolder } from "./alert-sources.js";
 import { backupArchiveKey } from "./backup-keys.js";
+import { LocalFsBackend } from "./local-fs-backend.js";
 import { ALL_MODULES } from "./modules.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
 import type { StorageBackend, StoredObject } from "./storage-backend.js";
@@ -362,7 +363,6 @@ describe("runOnce (fan-out)", () => {
   it("leaves no staging file behind", async () => {
     const a = new FakeBackend("a");
     await runOnce(deps([a]));
-    const { readdir } = await import("node:fs/promises");
     expect(await readdir(staging)).toEqual([]);
   });
 });
@@ -831,6 +831,25 @@ describe("pruneBackend (dual count + age retention)", () => {
     backend.objects.set(freshKey, Buffer.from("fresh"));
     await pruneBackend(backend, 7, 1, nowMs, { signal: new AbortController().signal });
     expect(backend.objects.has(freshKey)).toBe(true);
+  });
+
+  it("leaves a listed name the destination cannot address and prunes the rest", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "backup-prune-odd-"));
+    try {
+      const nowMs = Date.UTC(2026, 9, 13);
+      const fresh = backupArchiveKey(new Date(Date.UTC(2026, 9, 12)));
+      const oldPlain = backupArchiveKey(new Date(Date.UTC(2025, 0, 2)));
+      const oldOdd = "waitron-20250101T000000Z-a\\b.backup.enc";
+      for (const name of [fresh, oldPlain, oldOdd]) await writeFile(join(dir, name), "x");
+
+      await pruneBackend(new LocalFsBackend("odd", dir), 5, 30, nowMs, {
+        signal: new AbortController().signal,
+      });
+
+      expect((await readdir(dir)).sort()).toEqual([fresh, oldOdd].sort());
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });
 // The default manifest builder, which every case above replaces, against a real migrated venue.
