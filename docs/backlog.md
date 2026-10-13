@@ -1949,11 +1949,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   A579 part 3b's simplify review (#1627), which kept both. Next: keep one once part 4b removes Join
   again.
 
-- **A597. Split tables… on a group that would leave a party with no table says another party is
-  seated (2026-10-13).** The refusal is `tab.already_open`, whose words are wrong here, and the window
-  gives no warning first. Found by A579 part 3c's review.
-  [Detail](backlog/till.md#a597-split-tables-on-a-group-that-would-leave-a-party-with-no-table-says-another-party-is-seated)
-
 - **A598. A table held by guests when its joined table went live is neither joined nor split off
   (2026-10-13).** So the till cannot see that the rest will not rejoin; it asks Seats only after the
   server refuses. Found by A579 part 3c's review.

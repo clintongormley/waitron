@@ -736,6 +736,23 @@ describe("Split tables… on a group", () => {
       expect(groupSplitOf(bar, zone)!.guestsMoveTo(["bar"])).toEqual([]);
     });
 
+    it("says a ticked set strands guests when it holds every table one party holds", () => {
+      const alone = groupSplitOf(bar, seatedAt("bar"))!.strandsGuests;
+      expect(alone(["bar"])).toBe(true);
+      expect(alone(["bar", "c3"])).toBe(true);
+      expect(alone(["c3", "c4"])).toBe(false);
+      const two = groupSplitOf(bar, seatedAt("bar", "c3"))!.strandsGuests;
+      expect(two(["bar"])).toBe(false);
+      expect(two(["bar", "c3"])).toBe(true);
+      expect(groupSplitOf(bar, zone)!.strandsGuests(["bar"])).toBe(false);
+    });
+
+    it("strands no party that keeps a table off this zone's tables", () => {
+      const p = party("p", ["bar", "elsewhere"]);
+      const seated = zone.map((each) => (each.id === "bar" ? { ...each, ...seatedBy(p) } : each));
+      expect(groupSplitOf(bar, seated)!.strandsGuests(["bar"])).toBe(false);
+    });
+
     it("names nothing for a party that keeps a table off this zone's tables", () => {
       const p = party("p", ["bar", "elsewhere"]);
       const seated = zone.map((each) => (each.id === "bar" ? { ...each, ...seatedBy(p) } : each));

@@ -495,6 +495,32 @@ const groupFloor = (members = ["bar", "c3", "c4", "c5"]) =>
     7,
   );
 
+/** `tables` with one party seated at the tables `ids`. */
+const seatedAt = (tables: TableState[], ...ids: string[]) =>
+  tables.map((each) =>
+    ids.includes(each.id)
+      ? {
+          ...each,
+          condition: "held" as const,
+          state: "open-tab" as const,
+          party: {
+            id: "p1",
+            revision: 1,
+            guestCount: 4,
+            state: "open" as const,
+            name: null,
+            displayName: "Bar+Counter 3",
+            mainBillId: null,
+            outstanding: "0.00",
+            billCount: 1,
+            tableIds: ids,
+            unsentDrafts: [],
+            reminder: null,
+          },
+        }
+      : each,
+  );
+
 describe("till-floor-screen: Split tables… on a group", () => {
   it("opens the window on Bar listing the group's four tables under the group's name", async () => {
     const el = await mount(groupFloor(), stubApi());
@@ -600,33 +626,31 @@ describe("till-floor-screen: Split tables… on a group", () => {
   });
 
   it("tells the window where the guests go when a ticked table holds them", async () => {
-    const seated = groupFloor().map((each) =>
-      each.id === "bar" || each.id === "c3"
-        ? {
-            ...each,
-            condition: "held" as const,
-            state: "open-tab" as const,
-            party: {
-              id: "p1",
-              revision: 1,
-              guestCount: 4,
-              state: "open" as const,
-              name: null,
-              displayName: "Bar+Counter 3",
-              mainBillId: null,
-              outstanding: "0.00",
-              billCount: 1,
-              tableIds: ["bar", "c3"],
-              unsentDrafts: [],
-              reminder: null,
-            },
-          }
-        : each,
-    );
-    const el = await mount(seated, stubApi());
+    const el = await mount(seatedAt(groupFloor(), "bar", "c3"), stubApi());
     const opened = await openSplit(el, "c4");
     expect(opened.guestsMoveTo(["bar"])).toEqual(["Counter 3"]);
     expect(opened.guestsMoveTo(["c4"])).toEqual([]);
+  });
+
+  it("tells the window when a ticked set holds every table one party holds", async () => {
+    const el = await mount(seatedAt(groupFloor(), "bar"), stubApi());
+    const opened = await openSplit(el, "c4");
+    expect(opened.strandsGuests(["bar"])).toBe(true);
+    expect(opened.strandsGuests(["c4"])).toBe(false);
+  });
+
+  it("a tab.already_open refusal shows under the list as the guests' tables, not as another party", async () => {
+    const api = stubApi();
+    api.splitOffToday.mockRejectedValueOnce({ code: "tab.already_open", tableId: "bar" });
+    const el = await mount(groupFloor(), api);
+    const opened = await openSplit(el, "bar");
+    send(opened, "split-joined-confirm", { partIds: ["bar"], seats: null });
+    await settle(el);
+    expect(windowOf(el)).toBe(opened);
+    await opened.updateComplete;
+    expect(pickError(el)).toBe("Leave one of the guests' tables.");
+    expect(footError(el)).toBe("Correct the highlighted fields to continue.");
+    expect(floorRefusal(el)).toBeNull();
   });
 
   it("on a joined table in a group with tables still joined, opens the joined table's window", async () => {

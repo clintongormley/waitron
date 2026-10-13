@@ -65,6 +65,9 @@ export class TillSplitJoinedDialog extends LitElement {
     staying.length >= 2;
   /** In a group's window, where the guests go for the tables ticked, one name per party. */
   @property({ attribute: false }) guestsMoveTo: (ticked: readonly string[]) => string[] = () => [];
+  /** In a group's window, whether the tables ticked hold every table some party holds. */
+  @property({ attribute: false }) strandsGuests: (ticked: readonly string[]) => boolean = () =>
+    false;
   /** Asks the seats while two or more tables are left, as when the server refused a split for want
    * of them. */
   @property({ type: Boolean }) seatsRequired = false;
@@ -143,6 +146,7 @@ export class TillSplitJoinedDialog extends LitElement {
     if (!this.attempted) return "";
     if (this.#chosen().length === 0) return t("floor.split_none");
     if (this.#left().length === 0) return t("floor.split_all");
+    if (this.strandsGuests(this.#chosen())) return t("floor.split_strands");
     return "";
   }
 
@@ -152,18 +156,28 @@ export class TillSplitJoinedDialog extends LitElement {
       : "";
   }
 
-  /** A refusal naming a field not shown goes to the foot, so it is never silent. */
+  /** A refusal naming a field not shown goes to the foot, so it is never silent. In a group's
+   * window `tab.already_open` means the ticks would leave a party no table (`splitGroup`), not that
+   * another party sits there, so it goes under the list. */
   #shownRefusal(): { code: string; field?: string } | null {
     if (this.refusal === null || this.refusalDismissed) return null;
     if (this.refusal.field === "seats" && !this.#asksSeats()) return { code: this.refusal.code };
+    if (this.refusal.code === "tab.already_open" && splitsGroup(this.joined))
+      return { code: this.refusal.code, field: "partIds" };
     return this.refusal;
+  }
+
+  #refusalText(refusal: { code: string; field?: string }): string {
+    return refusal.code === "tab.already_open" && refusal.field === "partIds"
+      ? t("floor.split_strands")
+      : codeMessage(refusal.code);
   }
 
   #onChoose(event: CustomEvent<{ values: string[] }>): void {
     event.stopPropagation();
     if (!this.isConnected || !this.active || this.busy) return;
     this.chosen = [...event.detail.values];
-    if (this.refusal?.field === "partIds") this.refusalDismissed = true;
+    if (this.#shownRefusal()?.field === "partIds") this.refusalDismissed = true;
     this.#scope?.changed();
   }
 
@@ -214,7 +228,7 @@ export class TillSplitJoinedDialog extends LitElement {
     const partsError = this.#partsError();
     const seatsError = this.#seatsError();
     const refusal = this.#shownRefusal();
-    const refusalText = refusal === null ? "" : codeMessage(refusal.code);
+    const refusalText = refusal === null ? "" : this.#refusalText(refusal);
     const partsMessage = partsError || (refusal?.field === "partIds" ? refusalText : "");
     const seatsMessage = seatsError || (refusal?.field === "seats" ? refusalText : "");
     const invalid = partsError !== "" || seatsError !== "";

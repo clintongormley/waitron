@@ -320,15 +320,6 @@ Found by A579 part 3b's review: Split tables… ticking that table would have le
 no table; it is now refused `tab.already_open`. Next: decide whether the moved bill's party takes the
 whole group, as seating at one of its tables does.
 
-## A597. Split tables… on a group that would leave a party with no table says another party is seated
-
-**A597 (2026-10-13).** Ticking every table a party holds in a group's Split tables… window is refused
-`tab.already_open` (`splitGroup`, `apps/server/src/floor-today-split-group.ts`), and the till shows
-that code's sentence about another party already seated at the table (`apps/till/src/i18n/codes.ts`),
-which does not fit. The window does not warn before Split is pressed. Found by A579 part 3c's
-review, by reading. Next: a sentence for this case, or a refusal code of its own, and a warning in
-the window.
-
 ## A598. A table held by guests when its joined table went live is neither joined nor split off
 
 **A598 (2026-10-13).** Split tables… on a joined table leaves a table that a party held when the

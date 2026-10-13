@@ -479,6 +479,76 @@ describe("on a group", () => {
     expect(text(el)).not.toContain("Guests move");
   });
 
+  const seatedAt = (...ids: string[]) =>
+    zone.map((each) =>
+      ids.includes(each.id)
+        ? { ...each, condition: "held" as const, party: { ...party, tableIds: ids } }
+        : each,
+    );
+  const mountSeated = (...ids: string[]) => {
+    const tables = seatedAt(...ids);
+    const seated = groupSplitOf(
+      tables.find((each) => each.id === "bar")!,
+      tables,
+    )!;
+    return mountGroup({
+      joined: seated.members[0],
+      parts: seated.members,
+      asksSeats: seated.asksSeats,
+      guestsMoveTo: seated.guestsMoveTo,
+      strandsGuests: seated.strandsGuests,
+    });
+  };
+
+  it("explains a Split ticking every table the guests hold, beside the field and at the foot, and keeps Split disabled until fixed", async () => {
+    const el = await mountSeated("bar");
+    const seen = captured(el);
+    await choose(el, ["bar"]);
+    expect(pick(el).error).toBe("");
+    await press(el);
+    expect(seen.confirmed).toEqual([]);
+    expect(pick(el).error).toBe("Leave one of the guests' tables.");
+    expect(foot(el).error).toBe("Correct the highlighted fields to continue.");
+    expect(action(el).disabled).toBe(true);
+    await choose(el, ["c3"]);
+    expect(pick(el).error).toBe("");
+    await typeSeats(el, "8");
+    expect(foot(el).error).toBe("");
+    expect(action(el).disabled).toBe(false);
+  });
+
+  it("lets Bar go when its guests also hold Counter 3", async () => {
+    const el = await mountSeated("bar", "c3");
+    const seen = captured(el);
+    await choose(el, ["bar"]);
+    await typeSeats(el, "8");
+    await press(el);
+    expect(pick(el).error).toBe("");
+    expect(seen.confirmed).toEqual([{ partIds: ["bar"], seats: 8 }]);
+  });
+
+  it("shows a tab.already_open refusal under the list as the guests' tables, until the choice changes, without disabling Split", async () => {
+    const el = await mountGroup();
+    await choose(el, ["bar"]);
+    el.refusal = { code: "tab.already_open" };
+    await el.updateComplete;
+    expect(pick(el).error).toBe("Leave one of the guests' tables.");
+    expect(foot(el).error).toBe("Correct the highlighted fields to continue.");
+    expect(action(el).disabled).toBe(false);
+    await choose(el, ["c3"]);
+    expect(pick(el).error).toBe("");
+    expect(foot(el).error).toBe("");
+  });
+
+  it("keeps a tab.already_open refusal's own words in a joined table's window", async () => {
+    const el = await mount();
+    await choose(el, ["c5"]);
+    el.refusal = { code: "tab.already_open" };
+    await el.updateComplete;
+    expect(foot(el).error).toBe(codeMessage("tab.already_open"));
+    expect(pick(el).error).toBe("");
+  });
+
   it("labels Seats as a joined table's when the joined table in a group still has tables joined", async () => {
     const el = await mount({
       joined: longTable({
@@ -497,5 +567,8 @@ describe("on a group", () => {
     const el = await mountGroup();
     await choose(el, ["c5"]);
     expect(seatsField(el)!.label).toBe("Plazas de lo que queda");
+    el.refusal = { code: "tab.already_open" };
+    await el.updateComplete;
+    expect(pick(el).error).toBe("Deja una de las mesas de los clientes.");
   });
 });

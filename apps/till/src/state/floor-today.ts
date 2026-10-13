@@ -335,6 +335,9 @@ export interface GroupSplit {
    * that would keep none is refused by the server, and one keeping a table off `zoneTables` is left
    * out rather than named wrongly. */
   guestsMoveTo(ticked: readonly string[]): string[];
+  /** Whether a party a ticked table holds would keep none of its tables, which the server refuses
+   * `tab.already_open`. */
+  strandsGuests(ticked: readonly string[]): boolean;
 }
 
 /** Split tables… on a table in a group: its members in number order, its name, and whether the
@@ -362,22 +365,27 @@ export function groupSplitOf(
       joined.splitOff.every((id) => staying.includes(id))
     );
   };
-  const guestsMoveTo = (ticked: readonly string[]): string[] => {
+  /** For each party a ticked table holds, the ids of the tables it keeps. */
+  const keptBy = (ticked: readonly string[]): string[][] => {
     const parties = new Map<string, TableParty>();
     for (const each of members) {
       if (ticked.includes(each.id) && each.party !== null) parties.set(each.party.id, each.party);
     }
-    return [...parties.values()].flatMap((party) => {
-      const kept = party.tableIds.filter((id) => !ticked.includes(id));
+    return [...parties.values()].map((party) =>
+      party.tableIds.filter((id) => !ticked.includes(id)),
+    );
+  };
+  const guestsMoveTo = (ticked: readonly string[]): string[] =>
+    keptBy(ticked).flatMap((kept) => {
       const tables = zoneTables.filter((each) => kept.includes(each.id));
       if (kept.length === 0 || tables.length !== kept.length) return [];
       return [mergeLabel(tables.map((each) => each.label).sort(inNumberOrder))];
     });
-  };
   return {
     members,
     name: mergeLabel(members.map((each) => each.label)),
     asksSeats: (staying) => staying.length >= 2 && !rejoins(staying),
     guestsMoveTo,
+    strandsGuests: (ticked) => keptBy(ticked).some((kept) => kept.length === 0),
   };
 }

@@ -110,6 +110,29 @@ describe.each(["light", "dark"] as const)("till-split-joined-dialog a11y (%s the
     await expectNoA11yViolations(host);
   });
 
+  it("has no violations on a group with every table the guests hold ticked", async () => {
+    setLocale("es-ES");
+    const bar = table("bar", "Bar", today(4, { joinId: "g" }));
+    const c3 = table("c3", "Counter 3", today(2, { joinId: "g", splitOffFrom: "long" }));
+    const { el, host } = await mountWidget<TillSplitJoinedDialog>(
+      "till-split-joined-dialog",
+      {
+        joined: bar,
+        parts: [bar, c3],
+        name: "Bar+Counter 3",
+        strandsGuests: (ticked: readonly string[]) => ticked.includes("bar"),
+      },
+      theme,
+    );
+    await choose(el, ["bar"]);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-split-action]")!.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("wt-combobox")!.error).toBe(
+      "Deja una de las mesas de los clientes.",
+    );
+    await expectNoA11yViolations(host);
+  });
+
   it("has no violations empty, and with two chosen and Seats shown", async () => {
     const { el, host } = await mount();
     await expectNoA11yViolations(host);
