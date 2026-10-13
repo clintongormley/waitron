@@ -1,94 +1,13 @@
-import { aliasedTable, eq, exists, sql } from "drizzle-orm";
-import {
-  diningTables,
-  floorPlanTableSizes,
-  floorPlanTables,
-  floorResetTableParts,
-  floorResetTables,
-  floorTodaySplitParts,
-  floorTodayTables,
-  partyTables,
-  stillJoinedPart,
-  type Transaction,
-} from "@waitron/db";
-import { AppError, NEW_TABLE_SIZE, compareLabels } from "@waitron/shared";
+import { eq } from "drizzle-orm";
+import { floorTodaySplitParts, floorTodayTables, type Transaction } from "@waitron/db";
+import { AppError } from "@waitron/shared";
 import { refuseHeld, refuseInJoinedTable, todayOf } from "./floor-today-table.js";
-import { leaveMergesRestoring, partyRevision } from "./floor-today-merges.js";
-import { enqueueMovedSlipsFor, readPartiesSentWork } from "./kitchen-print.js";
-import { checkAndBumpParty, holderOf, leaveTables } from "./parties.js";
+import { leaveMergesRestoring } from "./floor-today-merges.js";
 import { placementColumns, placementOf, refuseDeliveryPending } from "./floor-today-store.js";
-import { partPlaces, remainingPlace, type LaidPart } from "./joined-split-layout.js";
+import { partPlaces, remainingPlace } from "./joined-split-layout.js";
+import { partsOf, passGuests } from "./floor-today-parts.js";
 import type { TillConfig } from "./till-config.js";
 import "./errors.js";
-
-export interface Part extends LaidPart {
-  label: string;
-  stillJoined: boolean;
-  splitOff: boolean;
-  savedSeats: number | null;
-}
-
-const joinedRow = aliasedTable(floorResetTables, "joined_row");
-const partRow = aliasedTable(floorResetTables, "part_row");
-
-/** Every part of the joined table in today's copy that has a live table, in number order. */
-export async function partsOf(tx: Transaction, tableId: string): Promise<Part[]> {
-  const rows = await tx
-    .select({
-      tableId: diningTables.id,
-      label: diningTables.label,
-      placedWidth: floorPlanTables.width,
-      placedHeight: floorPlanTables.height,
-      keptWidth: floorPlanTableSizes.width,
-      keptHeight: floorPlanTableSizes.height,
-      savedSeats: partRow.seats,
-      stillJoined: sql<number>`${stillJoinedPart(diningTables.id)}`,
-      splitOff: sql<number>`${exists(
-        tx
-          .select({ one: sql`1` })
-          .from(floorTodaySplitParts)
-          .where(eq(floorTodaySplitParts.partTableId, diningTables.id)),
-      )}`,
-    })
-    .from(floorResetTableParts)
-    .innerJoin(joinedRow, eq(joinedRow.id, floorResetTableParts.joinedResetTableId))
-    .innerJoin(partRow, eq(partRow.id, floorResetTableParts.partResetTableId))
-    .innerJoin(diningTables, eq(diningTables.id, partRow.tableId))
-    .leftJoin(floorPlanTables, eq(floorPlanTables.id, diningTables.planTableId))
-    .leftJoin(floorPlanTableSizes, eq(floorPlanTableSizes.planTableId, diningTables.planTableId))
-    .where(eq(joinedRow.tableId, tableId));
-  return rows
-    .map((row) => ({
-      tableId: row.tableId,
-      label: row.label,
-      width: row.placedWidth ?? row.keptWidth ?? NEW_TABLE_SIZE,
-      height: row.placedHeight ?? row.keptHeight ?? NEW_TABLE_SIZE,
-      stillJoined: Boolean(row.stillJoined),
-      splitOff: Boolean(row.splitOff),
-      savedSeats: row.savedSeats,
-    }))
-    .sort((a, b) => compareLabels(a.label, b.label));
-}
-
-/** The party holding the joined table, if any, sits at `lastPartId` instead: not a turnover, so its status stays. */
-async function passGuestsTo(
-  tx: Transaction,
-  cfg: TillConfig,
-  tableId: string,
-  lastPartId: string,
-): Promise<void> {
-  const partyId = await holderOf(tx, tableId);
-  if (partyId === null) return;
-  await tx
-    .update(diningTables)
-    .set({ needsClearingSince: null })
-    .where(eq(diningTables.id, lastPartId));
-  const before = await readPartiesSentWork(tx, cfg, [partyId]);
-  await checkAndBumpParty(tx, partyId, await partyRevision(tx, partyId), "open");
-  await leaveTables(tx, [tableId]);
-  await tx.insert(partyTables).values({ partyId, tableId: lastPartId });
-  await enqueueMovedSlipsFor(tx, cfg, before);
-}
 
 /** Splits `partIds` off the joined table: they stand side by side in its place, and it keeps the rest. */
 export async function splitJoinedTable(
@@ -121,6 +40,7 @@ export async function splitJoinedTable(
   const toOne = left.length === 1;
   if (toOne) {
     await refuseDeliveryPending(tx, tableId);
+    // A reset can leave a joined table in a group it kept waiting (`waitingTogether`).
     if (today.merge !== null) {
       const members = today.merge.members.map((member) => member.tableId);
       await refuseHeld(tx, members);
@@ -143,7 +63,7 @@ export async function splitJoinedTable(
       .where(eq(floorTodayTables.tableId, part.tableId));
   }
   if (toOne) {
-    await passGuestsTo(tx, cfg, tableId, left[0]!);
+    await passGuests(tx, cfg, tableId, [left[0]!], "now");
     return;
   }
 

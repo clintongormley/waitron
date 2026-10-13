@@ -101,6 +101,8 @@ table taken back gets its saved seats; one tap, no confirming window, when every
    leaves one (`passGuestsTo`, `floor-today-split.ts:74-91`), and the group's guests then hold all
    four tables.
 
+   > Changed 2026-10-13 by A579 part 3a: now `passGuests`, `apps/server/src/floor-today-parts.ts`.
+
 Dragging Long table onto Bar does the same, except that the three counters move together, keeping
 their places side by side, until the nearest touches Bar. A joined table with tables already split
 off brings only the tables still joined to it: Long table with Counter 5 split off brings Counter 3
@@ -459,6 +461,10 @@ their party check, move the room's revision when they end a group, and answer wi
 - **A group stores real tables only.** A joined table is never a member of a group. Pushing it splits
   every table still joined to it, recorded in the existing `floor_today_split_parts`, and puts those
   tables in the group (existing `floor_today_join_tables`). No new table or column.
+
+  > Corrected 2026-10-13 by part 3a's review: a push never puts a joined table in a group, but a
+  > group the reset keeps waiting can still hold one; see the note under "A group that already holds
+  > a joined table".
 - **The revision** reuses `floor_today_zones.generation`; no migration (see above). Before go-live no
   data is carried over (CLAUDE.md §3, last data rule).
 - **A group that already holds a joined table when this ships** (made by today's code) is a shape the
@@ -466,6 +472,11 @@ their party check, move the room's revision when they end a group, and answer wi
   reset ends it (`floor-today-store.ts:364`), and Long table comes back whole. Only a group with
   guests seated at ship time stays. **Default:** a venue reset all the same, said in that PR's first
   line. That is acceptable before go-live, and simpler than teaching the new code the old shape.
+
+  > Corrected 2026-10-13 by part 3a's review: the reset still makes this shape. A group the reset
+  > keeps waiting can hold a table the saved plan has made a joined table; a split down to one then
+  > refuses or ends the group (`splitJoinedTable`), and a table pushed onto it joins with the joined
+  > table whole (`writeMerge`).
 - **A till still showing the old page** sends no revision. The server accepts a missing revision until
   the till part lands (see "Build"), so nothing breaks in between.
 
@@ -477,6 +488,10 @@ From the A503 design and its owner answers:
    table in a service merge** (A503 design, "The till": parts split off while the merge is untouched;
    a split down to one first undoes the merge, refused while seated). Pushing a joined table now
    splits it, and the group holds its real tables.
+
+   > Corrected 2026-10-13 by part 3a's review: a push never puts a joined table in a group, but a
+   > group the reset keeps waiting can still hold one; see the note under "A group that already holds
+   > a joined table".
 2. **Two actions on a joined table in a group** (A503 part 3 question 1's default: "Split tables…"
    beside the group's "Split"). It becomes one Split tables… over the group's real tables, and the
    group's Split goes. The floor plan spec §6.2's "Split on a free merge separates it; with a party

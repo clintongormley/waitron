@@ -37,7 +37,7 @@ import {
   setupPartyVenue,
   type PartyVenue,
 } from "./testing/party-venue.js";
-import { giveKeptSize, mergeOf, plannedZone, todayRow } from "./testing/floor-today-venue.js";
+import { giveKeptSize, plannedZone, todayRow } from "./testing/floor-today-venue.js";
 import "./errors.js";
 
 let v: PartyVenue;
@@ -599,27 +599,16 @@ describe("joining split-off tables again while some stay apart", () => {
     expect(await splitRowsOf(table.long!)).toEqual([table.c3!]);
   });
 
-  it("keeps the guests and the merge at Long table", async () => {
+  it("keeps the guests at Long table and their party's revision", async () => {
     const { table } = await LONG_PLUS_BAR();
-    await inTx(v, (tx) =>
-      writeMerge(tx, v.cfg, {
-        movingId: table.long!,
-        targetId: table.bar!,
-        side: "right",
-        seats: 14,
-        free: true,
-      }),
-    );
     const { partyId } = await seat(v, table.long!);
     await split(table.long!, [table.c5!], 6);
     const revision = await revisionOf(v, partyId);
-    const merge = await mergeOf(v, table.long!);
 
     await join(table.long!, [table.c5!]);
 
     expect(await partyAt(v, table.long!)).toBe(partyId);
     expect(await revisionOf(v, partyId)).toBe(revision);
-    expect(await mergeOf(v, table.long!)).toEqual(merge);
   });
 
   it("the second of two tills is refused once guests sit at a table it expected back", async () => {

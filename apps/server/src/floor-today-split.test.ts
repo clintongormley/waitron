@@ -38,13 +38,7 @@ import {
   tableRow,
   type PartyVenue,
 } from "./testing/party-venue.js";
-import {
-  giveKeptSize,
-  mergeOf,
-  plannedZone,
-  splitOffRow,
-  todayRow,
-} from "./testing/floor-today-venue.js";
+import { giveKeptSize, plannedZone, splitOffRow, todayRow } from "./testing/floor-today-venue.js";
 import "./errors.js";
 
 let v: PartyVenue;
@@ -402,66 +396,7 @@ async function refusalOf(work: Promise<unknown>): Promise<AppError | null> {
   )) as AppError | null;
 }
 
-const mergeLongOntoBar = (table: Record<string, string>) =>
-  inTx(v, (tx) =>
-    writeMerge(tx, v.cfg, {
-      movingId: table.long!,
-      targetId: table.bar!,
-      side: "right",
-      seats: 14,
-      free: true,
-    }),
-  );
-
 describe("splitting a joined table down to one part", () => {
-  it("a split down to one ends Long table's merge first, putting both tables back where they stood", async () => {
-    const { table } = await LONG_PLUS_BAR();
-    const barBefore = await todayRow(v, table.bar!);
-    await mergeLongOntoBar(table);
-    expect(await todayRow(v, table.long!)).not.toMatchObject({ x: 10, y: 20 });
-
-    await split(table.long!, [table.c4!, table.c5!], null);
-
-    expect(await mergeOf(v, table.long!)).toBeNull();
-    expect(await mergeOf(v, table.bar!)).toBeNull();
-    expect(await todayRow(v, table.long!)).toMatchObject({ x: 10, y: 20, rotation: 0 });
-    expect(await todayRow(v, table.bar!)).toEqual(barBefore);
-    expect(await todayRow(v, table.c3!)).toMatchObject({ x: 10, y: 20, width: 2, height: 2 });
-    expect(await splitRowsOf(table.long!)).toEqual([table.c3!, table.c4!, table.c5!].sort());
-    expect(await apart(table.long!)).toBe(1);
-  });
-
-  it("refuses a split down to one while a party holds Long table's merge", async () => {
-    const { table } = await LONG_PLUS_BAR();
-    await mergeLongOntoBar(table);
-    await seat(v, table.long!);
-    const before = { ...(await everything()), merge: await mergeOf(v, table.long!) };
-
-    const error = await refusalOf(split(table.long!, [table.c4!, table.c5!], null));
-
-    expect(error?.code).toBe("tab.already_open");
-    expect(error?.params).toEqual({ tableId: [table.long!, table.bar!].sort()[0] });
-    expect({ ...(await everything()), merge: await mergeOf(v, table.long!) }).toEqual(before);
-  });
-
-  it("splits parts off a merged Long table while two stay, leaving the merge as it is", async () => {
-    const { table } = await LONG_PLUS_BAR();
-    await mergeLongOntoBar(table);
-    const mergeBefore = await mergeOf(v, table.long!);
-    const longBefore = await todayRow(v, table.long!);
-
-    await split(table.long!, [table.c5!], 6);
-
-    expect(await mergeOf(v, table.long!)).toEqual(mergeBefore);
-    expect(await todayRow(v, table.long!)).toMatchObject({
-      x: longBefore!.x,
-      y: longBefore!.y,
-      width: 4,
-      height: 2,
-      seats: 6,
-    });
-  });
-
   it("refuses a split down to one while food is on its way to Long table", async () => {
     const { table } = await LONG_PLUS_BAR();
     const order = await counterOrder(v, "Paella");

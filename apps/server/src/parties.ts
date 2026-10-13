@@ -347,6 +347,15 @@ export async function guardParty(
   await checkAndBumpParty(tx, partyId, command.expectedPartyRevision, "open");
 }
 
+/** The party's revision as it stands in the transaction now. */
+export async function partyRevision(tx: Transaction, partyId: string): Promise<number> {
+  const [party] = await tx
+    .select({ revision: parties.revision })
+    .from(parties)
+    .where(eq(parties.id, partyId));
+  return party!.revision;
+}
+
 /**
  * Compare a command's party revision with the party's and move it on, in the caller's transaction,
  * so a command prepared from a stale copy of the party writes nothing. A party not in

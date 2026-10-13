@@ -1656,6 +1656,17 @@ or, for the tables it takes back, when Join again does
 rows, puts a split joined table back whole, it clears the "needs clearing" mark of each table split
 off it that the reset's copy of the saved plan still makes one of its parts; a table that copy
 stands apart or leaves out keeps its mark (`catchUpPass`, `apps/server/src/floor-today-store.ts`).
+Pushing a joined table into a merge, or a table onto a joined table in none, never puts the joined table in one: it writes a split row for
+each of its tables still joined and puts those tables in the merge, writes a split row for a table
+of it in use since the reset without moving it, and passes the guests at the joined table to its
+tables (`writeMerge`, `apps/server/src/floor-today-merges.ts`; `passGuests`,
+`apps/server/src/floor-today-parts.ts`). The push is refused while food is on its way to the joined table
+(`table.delivery_pending`), and a free push also while one of its tables still joined needs clearing
+(`table.needs_clearing`). A merge the reset keeps waiting can still hold a table that reset makes a
+joined table. A table pushed onto it joins the merge with the joined table whole (`writeMerge`), and a
+split down to one is refused `tab.already_open` while a party holds a table of the merge, and
+otherwise ends the merge first, putting its tables back where they stood (`splitJoinedTable`,
+`apps/server/src/floor-today-split.ts`).
 When deleting a table is refused, `removeLiveTables` deletes the split rows naming it and tries again,
 and puts them back if that is refused too (`apps/server/src/table-removal.ts:115`).
 

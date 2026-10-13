@@ -1926,6 +1926,14 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   (2026-10-13).** Left open by A579 part 2b (#1624); the floor re-reads straight after.
   [Detail](backlog/till.md#a590-splitting-a-table-from-the-order-screen-drops-the-rooms-new-revision)
 
+- **A591. A split down to one loses a table that had guests when its joined table went live
+  (2026-10-13).** It is off the map once they leave. Found by A579 part 3a's review.
+  [Detail](backlog/till.md#a591-a-split-down-to-one-loses-a-table-that-had-guests-when-its-joined-table-went-live)
+
+- **A592. A party that joins a group's table names the group's other tables in random order
+  (2026-10-13).** Same-millisecond joins tie on a random id. Seen in A579 part 3a's tests.
+  [Detail](backlog/till.md#a592-a-party-that-joins-a-groups-table-names-the-groups-other-tables-in-random-order)
+
 - **A565. "Reset to saved plan" does not wait for food on its way to an ordinary table
   (2026-10-13).** Dates from floor plans slice 1; #1604 made only split groups wait.
   [Detail](backlog/till.md#a565-reset-to-saved-plan-does-not-wait-for-food-on-its-way-to-an-ordinary-table)
