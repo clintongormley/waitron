@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it } from "vitest";
+import { sql } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
   invoiceSeries,
@@ -160,6 +161,30 @@ it("refuses a wrong node key before hooks or restored identity are published", a
   await expect(readFile(join(f.deps.stateDir, "trading.env"))).rejects.toMatchObject({
     code: "ENOENT",
   });
+});
+
+it("identifies the chosen backup's paper key before authentication can refuse it", async () => {
+  const f = await fixture(regime(async () => ({ report: "restored" })));
+  const archivedName = await suite.db.execute<Record<string, unknown>>(
+    sql`select * from node_roles where node_id = ${NODE}`,
+  );
+  await mintBreakGlassSecret(suite.db, NODE);
+  const entries: { code: string; params: Record<string, unknown> | undefined }[] = [];
+  f.deps = {
+    ...f.deps,
+    log: (_level, code, params) => {
+      entries.push({ code, params });
+    },
+  };
+  nodeKey = "wrong";
+  await expect(writeValidated(f.validated, f.deps)).rejects.toMatchObject({
+    code: "promotion.break_glass_invalid",
+  });
+  expect(entries).toContainEqual({
+    code: "restore.recovery_key_selected",
+    params: { name: archivedName.rows[0]!.break_glass_key_name },
+  });
+  expect(JSON.stringify(entries)).not.toContain(nodeKey);
 });
 
 it("rolls authentication and earlier hook writes back together when a later module refuses", async () => {

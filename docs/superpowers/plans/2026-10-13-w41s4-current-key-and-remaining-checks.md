@@ -1,5 +1,14 @@
 # W41s-4: current recovery key and remaining test changes
 
+**Owner answers, 2026-10-13 10:40–10:55:** Decision 1 is B: cold restore accepts the selected
+backup's node key, with a warning to retain older paper keys until no older backup remains.
+Decision 2 is A: exactly the nine rows below, retaining every stated assertion. Name each newly
+issued key beside its verifier and on its paper handover; Task 4 supplies the stored name and
+handover-screen/restore output, and Task 6 supplies physical paper and backup-chooser display.
+No outside current-key record is authorised. The proposals and experiment below record the
+checkpoint at which the questions were asked.
+
+
 When you recover an older backup, its saved record for checking the node key can be older too. The owner's
 2026-10-12 22:55 decision requires the **current** node recovery key, with no account or
 password. The present internal helper checks the verifier in the database you recovered.

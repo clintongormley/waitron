@@ -81,6 +81,7 @@ export class SetupDoneScreen extends LitElement {
   /** The server keeps only a verifier of this secret (`mintBreakGlassSecret`), so this screen is the
    * operator's only chance to record it. */
   @property({ attribute: false }) breakGlassSecret?: string;
+  @property({ attribute: false }) breakGlassKeyName?: string;
 
   /**
    * True after a successful adopt, where the box does not come back trading (why:
@@ -156,9 +157,11 @@ export class SetupDoneScreen extends LitElement {
         ${t("done.break_glass.warning")}
         ${t(this.mirrorJoin ? "done.break_glass.join_stalled" : "done.break_glass.promote")}
       </p>
+      ${this.breakGlassKeyName === undefined ? nothing : html`<p data-test="break-glass-key-name">${this.breakGlassKeyName}</p>`}
       <code class="break-glass-secret" data-test="break-glass-secret"
         >${this.breakGlassSecret}</code
       >
+      <p data-test="break-glass-backup-warning">${t("done.break_glass.backups")}</p>
     </div>`;
   }
 

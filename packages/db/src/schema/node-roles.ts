@@ -28,6 +28,7 @@ export const nodeRoles = table(
       .default("primary"),
     // A scrypt verifier of the offline break-glass secret, set at adopt. Never the secret itself.
     breakGlassVerifier: label("break_glass_verifier"),
+    breakGlassKeyName: label("break_glass_key_name"),
     updatedAt: ts("updated_at").notNull().$defaultFn(now),
   },
   /* v8 ignore start */

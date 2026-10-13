@@ -183,10 +183,25 @@ path is connected to trading.
 
 ## Recovery authorised by a node key
 
-When you recover with the current node recovery key, the consumption event names that
-authentication rather than an account (owner decision, 2026-10-12 22:55). Replace the example's
+When you recover with a node recovery key, the consumption event names that
+authentication rather than an account. Live takeover checks the live database; cold restore
+checks the selected backup (owner decisions, 2026-10-12 22:55 and 2026-10-13 10:40). Replace the example's
 `operatorId` with `{"kind":"recovery-key","nodeId":"replacement-node","eventId":"recovery-event"}`.
 Use the same target node and event in the enclosing consumption and local approval. The signing
 command refuses a mismatched node or event and any extra field in this object. Enter no recovery
 key or password into the consumption JSON. This authority grants recovery only; it creates no
 management session and changes no password. Administrator-led operations keep their person ID.
+
+
+## Keep the paper key for older backups
+
+Restoring an older backup brings back the recovery key that was current when you made that
+backup. A key you replaced on the live box can work again on the restored box, and its
+replacement can be refused. Keep the older paper key until you have deleted every backup
+made before you replaced it.
+
+Write the displayed key name beside the secret on your paper. The box stores the name and a
+verifier, a value used to check the secret. It cannot print an old secret from a backup. The
+restore output names the selected backup's key when that backup contains a name. Fetch the
+paper with that name. The backup encryption key is a separate secret; it opens the backup
+file and does not authenticate the node's recovery operation.

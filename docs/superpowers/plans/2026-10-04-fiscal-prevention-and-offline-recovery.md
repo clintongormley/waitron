@@ -421,6 +421,15 @@ explicitly through a transaction and keeps the SIF unchanged.
 
 ## Task 6: recovery pack and offline administrator procedure
 
+**Owner addition, 2026-10-13 10:55:** include the node recovery key's stored name in the printed
+paper handover and the backup chooser. Read the name from the selected backup's database,
+never the live box or a manifest assembled before its archive snapshot. Warn that restoring
+an older backup reinstates its older key; keep that paper until no older backup remains.
+Task 4 establishes names, handover-screen forwarding and selected-copy restore output; this
+Task 6 owns physical recovery-pack printing and the chooser's name display. Keep the backup
+file's encryption key separate from the node's recovery credential.
+
+
 **Create:** `apps/server/src/fiscal-recovery.ts`, `fiscal-recovery.test.ts`,
 `recovery-pack.ts`, `recovery-pack.test.ts`, and a setup recovery-allocation screen with browser
 and accessibility suites. **Modify:** `restore.ts`, `restore-request.ts`, `restore-command.ts`,
@@ -673,3 +682,24 @@ new inputs. Boot/HTTP allocation collection and fiscal-seat wiring, text SIF/cou
 all setup/seed/restore/bundle/adoption/promotion consumers, current-main migration regeneration,
 populated upgrade, Cloud binding sync, and two full reviews plus hook/current-head CI remain.
 Task 4 is still incomplete; do not publish this candidate.
+
+
+**2026-10-13 named-key qualification:** the owner selected the chosen backup's verifier for
+cold restore and retained the live verifier for takeover. A new core column stores a non-secret
+name with each newly minted key's verifier. The adoption response and setup handover carry that
+name with the one-time secret. The placed-database restore path reads its own key name before
+invoking authentication, including when a wrong key refuses the callback. No key name is
+computed from the current live box, and a name does not authenticate an operation.
+
+New cases first failed on the absent stored name, handover forwarding and selected-copy log.
+A real archive made before replacement retains the old name and accepts the old key, while
+the live database refuses it and accepts the replacement. A refused key replacement retains
+the old verifier and name. The eight handover views were inspected in English and Spanish,
+light and dark, at requested widths 390 and 1280; the accessibility cases passed. Migration
+`0144_recovery_key_name.sql` adds one nullable core column without rebuilding a table or changing
+shipped SQL. Physical paper output and the backup chooser's names belong to Task 6 under the
+owner's explicit permission to place them in the next recovery part.
+
+The coupled production collectors/fiscal seats/text-SIF/counter/all-consumer transition, current-main
+schema regeneration and populated upgrade, Cloud operator binding, and two full reviews plus hook/
+current-head CI still remain. Task 4 is incomplete; do not publish this checkpoint.

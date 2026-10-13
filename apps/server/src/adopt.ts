@@ -14,7 +14,7 @@ import {
 import { parseModuleOverrides, type ModuleConfig } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
-import { mintBreakGlassSecret } from "./break-glass.js";
+import { mintBreakGlassKey } from "./break-glass.js";
 import type { DeploymentEnvironment } from "./config.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
 import { generateStandbyIdentity } from "./reserved-identity.js";
@@ -81,7 +81,7 @@ export async function adoptFromPrimary(
   deps: AdoptDeps,
   req: AdoptRequest,
   hooks: AdoptHooks,
-): Promise<{ breakGlassSecret: string }> {
+): Promise<{ breakGlassSecret: string; breakGlassKeyName: string }> {
   const standby = generateStandbyIdentity();
   const bundle = await deps.fetchBundle(req.primaryUrl, req.credential, {
     nodeId: standby.nodeId,
@@ -148,7 +148,7 @@ export async function adoptFromPrimary(
     accountKey: bundle.accountKey,
   });
   // Returned exactly once and never logged; only its verifier is stored.
-  const breakGlassSecret = await mintBreakGlassSecret(deps.ownerDb, standby.nodeId);
+  const key = await mintBreakGlassKey(deps.ownerDb, standby.nodeId);
 
-  return { breakGlassSecret };
+  return { breakGlassSecret: key.secret, breakGlassKeyName: key.name };
 }

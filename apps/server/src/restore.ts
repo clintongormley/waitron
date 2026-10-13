@@ -23,6 +23,7 @@ import {
 import {
   insertNodeSeriesTx,
   readLiveSeriesIdTx,
+  readBreakGlassKeyName,
   lockVenueDatabase,
   nodes,
   openVenueDatabase,
@@ -267,6 +268,8 @@ async function placeValidated(validated: ValidatedArtifact, deps: PlacementDeps)
   const identity = readArtifactIdentity(validated.secretEntries);
   const opened = await (deps.openDb ?? openVenue)(deps.venueDir);
   try {
+    const name = await readBreakGlassKeyName(opened.db, identity.node.nodeId);
+    if (name !== null) log("info", "restore.recovery_key_selected", { name });
     await runRestoreHooks({
       db: opened.db,
       modules: deps.modules,

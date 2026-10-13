@@ -390,6 +390,26 @@ describe("setup-done-screen", () => {
     expect(q(el, "[data-test=reload]")).toBeNull();
   });
 
+  it.each([
+    ["en-GB", "Older backups need the key from that time"],
+    ["es-ES", "Las copias antiguas necesitan la clave de entonces"],
+  ] as const)(
+    "shows the paper key name and the old-backup warning in %s",
+    async (locale, warning) => {
+      setLocale(locale);
+      const el = await mountDone(() => new Promise(() => {}), {
+        mirrorJoin: true,
+        breakGlassSecret: "key-on-paper",
+        breakGlassKeyName: "Recovery key b7XeE2bVU_cZ7M6r",
+      } as Partial<SetupDoneScreen>);
+      expect(q(el, "[data-test=break-glass-key-name]")?.textContent?.trim()).toBe(
+        "Recovery key b7XeE2bVU_cZ7M6r",
+      );
+      expect(q(el, "[data-test=break-glass-backup-warning]")?.textContent).toContain(warning);
+      expect(q(el, "[data-test=break-glass-secret]")?.textContent).toBe("key-on-paper");
+    },
+  );
+
   it("sets the break-glass secret in the design system's monospace font", async () => {
     const { el, host } = await mountWidget<SetupDoneScreen>("setup-done-screen", {
       api: apiWith(() => new Promise(() => {})),

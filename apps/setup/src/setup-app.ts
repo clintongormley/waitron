@@ -582,6 +582,7 @@ export class SetupApp extends LitElement {
    * record it before the box restarts.
    */
   @state() private breakGlassSecret?: string;
+  @state() private breakGlassKeyName?: string;
 
   /**
    * Kept apart from {@link SetupApp.breakGlassSecret}, which is also set only by an adopt, because
@@ -958,6 +959,7 @@ export class SetupApp extends LitElement {
       const outcome = await this.api.adopt(event.detail.body);
       if (!this.isConnected) return;
       this.breakGlassSecret = outcome.breakGlassSecret;
+      this.breakGlassKeyName = outcome.breakGlassKeyName;
       this.mirrorJoin = true;
       this.screen = "done";
     } catch (error) {
@@ -1586,6 +1588,7 @@ export class SetupApp extends LitElement {
           data-test="screen-done"
           .api=${this.api}
           .breakGlassSecret=${this.breakGlassSecret}
+          .breakGlassKeyName=${this.breakGlassKeyName}
           .mirrorJoin=${this.mirrorJoin}
           .onboardingIntent=${this.draft.mode}
           .rebuilt=${this.rebuilt}

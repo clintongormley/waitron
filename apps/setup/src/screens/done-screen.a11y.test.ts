@@ -1,3 +1,5 @@
+import { page } from "vitest/browser";
+import { setLocale } from "../i18n/t.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./done-screen.js";
@@ -10,9 +12,45 @@ function apiWith(getStatus: () => Promise<unknown>): SetupApi {
 
 const q = (el: SetupDoneScreen, sel: string) => el.shadowRoot!.querySelector<HTMLElement>(sel);
 
-afterEach(cleanupWidgets);
+afterEach(() => {
+  setLocale("en-GB");
+  cleanupWidgets();
+});
 
 describe.each(["light", "dark"] as const)("setup-done-screen a11y (%s theme)", (theme) => {
+  it("shows the named paper key at phone and desktop widths in both languages", async () => {
+    const { host, el } = await mountWidget<SetupDoneScreen>(
+      "setup-done-screen",
+      {
+        api: apiWith(() => new Promise(() => {})),
+        startDelayMs: 100000,
+        mirrorJoin: true,
+        breakGlassSecret: "synthetic-key-for-visual-check",
+        breakGlassKeyName: "Recovery key b7XeE2bVU_cZ7M6r",
+      },
+      theme,
+    );
+    try {
+      for (const locale of ["en-GB", "es-ES"] as const) {
+        setLocale(locale);
+        await el.updateComplete;
+        for (const width of [390, 1280]) {
+          await page.viewport(width, 1100);
+          expect(q(el, "[data-test=break-glass-key-name]")?.textContent?.trim()).toBe(
+            "Recovery key b7XeE2bVU_cZ7M6r",
+          );
+          await expectNoA11yViolations(host);
+          if (import.meta.env.VITE_W41S_VISUAL === "1")
+            await page.screenshot({
+              path: `__screenshots__/w41s-key-name-${theme}-${locale}-${width}.png`,
+            });
+        }
+      }
+    } finally {
+      await page.viewport(1280, 720);
+    }
+  });
+
   it("has no violations showing the first hours and their link", async () => {
     const { host } = await mountWidget<SetupDoneScreen>(
       "setup-done-screen",

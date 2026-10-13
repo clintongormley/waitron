@@ -2273,6 +2273,24 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
     }
   });
 
+  it("returns the minted recovery key name with its handover secret", async () => {
+    const app = new Hono();
+    const { deps } = makeAdoptDeps();
+    deps.adopt = async () => ({
+      breakGlassSecret: BREAK_GLASS_SECRET,
+      breakGlassKeyName: "Recovery key b7XeE2bVU_cZ7M6r",
+    });
+    mountSetup(app, deps, noopLog);
+    const response = await postAdopt(app, adoptBody());
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      adopted: true,
+      restarting: true,
+      breakGlassSecret: BREAK_GLASS_SECRET,
+      breakGlassKeyName: "Recovery key b7XeE2bVU_cZ7M6r",
+    });
+  });
+
   it("adopts a venue: 200, passes the body through to adopt, defers the restart", async () => {
     const app = new Hono();
     const { deps, adopt, adoptRequests, requestRestart } = makeAdoptDeps();

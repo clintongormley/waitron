@@ -209,13 +209,14 @@ Statements below that a conflict holds its chain, that a cancellation of a rejec
 held or holds its chain, or that the brake reads the three records immediately before a record,
 describe the earlier behaviour.
 
-**2026-10-13, old-backup authentication:** a disposable real archive taken before key
-replacement accepted the replaced node key and refused the replacement. The live database
-refused the old key and accepted the replacement. The internal helper reads the verifier in
-the supplied database; the signed consumption identifies its node/event but supplies no
-current-key verifier. The [decision and remaining test inventory](../superpowers/plans/2026-10-13-w41s4-current-key-and-remaining-checks.md)
-proposes an outside current-key record, with its missing-record limit stated. This requires
-the owner's choice before cold-restore wiring. No public restore path has been changed.
+**2026-10-13, old-backup authentication:** the owner chose the verifier in the selected
+backup for cold restore; live takeover keeps the live verifier. The key name is now stored
+beside each newly minted verifier, shown with the handover secret, and read from the placed
+backup before the restore authentication callback. The runbooks warn you to keep older paper
+keys until no backup from before their replacement remains. A real archive taken before
+replacement retained its name and accepted its old key; the live database refused that key
+and accepted its replacement. Physical recovery-pack output and the backup selection screen's
+key-name display remain Task 6 work. No outside current-key record is planned.
 
 **2026-10-12, standby decision:** the owner selected dormant reservation at join and activation at
 takeover. The Task 4 branch signs a dedicated paper-reservation receipt for the named spare and
