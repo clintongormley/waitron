@@ -1,6 +1,6 @@
 import { writeSync } from "node:fs";
 import { clearTimeout, setTimeout } from "node:timers";
-import { Worker } from "node:worker_threads";
+import { receiveMessageOnPort, Worker } from "node:worker_threads";
 
 // Both threads read this clock, not the wall clock, because a wall-clock step would move when the
 // watchdog fires.
@@ -73,29 +73,41 @@ export function createStepWatch({
 export function watchFromAnotherThread(
   port,
   { dueAt, ms, graceMs, answered, reportTo },
-  { write = writeSync, now = monotonicMs, setTimer = setTimeout } = {},
+  {
+    write = writeSync,
+    now = monotonicMs,
+    setTimer = setTimeout,
+    receive = receiveMessageOnPort,
+  } = {},
 ) {
   const finished = [];
   let current;
-  port.on("message", (event) => {
+  const read = (event) => {
     if (event.finished) {
       finished.push(event.finished);
       current = undefined;
     } else {
       current = { label: event.started, at: event.at };
     }
-  });
-  setTimer(() => {
-    if (Atomics.load(answered, 0) === 1) return;
-    const stall = describeStall({
-      current: current && { label: current.label, ms: now() - current.at },
-      finished,
-    });
-    write(
-      reportTo,
-      `The test's thread has not run its ${ms} ms deadline timer ${graceMs} ms after it fell due: something synchronous is holding it. ${stall}\n`,
-    );
-  }, dueAt - now());
+  };
+  port.on("message", read);
+  setTimer(
+    () => {
+      if (Atomics.load(answered, 0) === 1) return;
+      // A thread that started late finds this timer already due, and it can fire before the
+      // messages the test's thread sent are delivered.
+      for (let queued = receive(port); queued; queued = receive(port)) read(queued.message);
+      const stall = describeStall({
+        current: current && { label: current.label, ms: now() - current.at },
+        finished,
+      });
+      write(
+        reportTo,
+        `The test's thread has not run its ${ms} ms deadline timer ${graceMs} ms after it fell due: something synchronous is holding it. ${stall}\n`,
+      );
+    },
+    Math.max(0, dueAt - now()),
+  );
 }
 
 // The eval'd source is parsed as a module or a script depending on the parent's flags, so it reaches

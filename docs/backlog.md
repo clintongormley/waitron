@@ -4617,11 +4617,14 @@ the tree. What remains, largest first:
 
 ### CI, tests and developer tooling
 
-- **A544. `scripts/step-watch.test.mjs` failed once under the pre-push root suite (2026-10-12).**
-  The case "reports the phase a synchronous call holds the thread in…" failed in one push of
-  A503 part 1 (#1598), which did not touch the file (last changed in #807); it passed 3 of 3 alone
-  and in the next push's 5,915-test run. Next: run it under load until it fails, read what it
-  waited on, and fix it at the cause.
+- **The step-watch case's one pre-push failure (A544) is fixed at a likely cause, not a confirmed
+  one.** The failure's message was not kept. A worker that starts late could report
+  `Stalled between phases` with no finished phases although phases had already been sent, which
+  the fix closes
+  ([receipt](developers/ci-and-gates.md#the-upgrade-test-names-the-phase-it-stalled-in)); a worker
+  that writes nothing within the held case's 5 s wait, so that the case reads an empty report, was
+  not reproduced and is unchanged. Next: if "reports the phase a synchronous call holds the thread in…"
+  fails again, keep its message and compare it with those two shapes.
 
 - **Venue-service browser startup remains unexplained (#1557).** CI run `38170156450`
   attempt 1 timed out before any browser test started; attempt 2 passed on the same commit. A527

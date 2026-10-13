@@ -1671,6 +1671,14 @@ the same run,
 with `core/0007_node_roles: change feed: 6130 ms` in the list. Whether SQLite's own lock-wait sleep
 holds the thread the same way was not measured.
 
+A worker that starts after its report fell due could have its timer fire before it had read the
+phase messages already waiting for it, and report `Stalled between phases` with no finished phases:
+measured 2026-10-13 in a standalone Node v26.7.0 script with `reportStallAfter`'s `helper` option
+pointing at a module that busy-waits 400 ms while loading, one run in 23 did (A544). It now reads
+those messages before it writes (`receiveMessageOnPort`). The case "reads the phases the test's
+thread already sent when its timer fires before they are delivered" (`scripts/step-watch.test.mjs`)
+fires the timer before delivery, and failed without that read.
+
 A healthy run prints the number of timed phases, their summed time, the five slowest, and the
 step count and deadline. Measured
 2026-09-28 with `CI=true`: `224 phases, 4976 ms in all; the slowest:`, then five lines, the first
