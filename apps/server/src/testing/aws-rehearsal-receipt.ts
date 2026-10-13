@@ -1,0 +1,346 @@
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+
+export interface AwsReceiptEvent {
+  scenario: string;
+  phase: string;
+  api?: string;
+  objectRole?: string;
+  count?: number;
+  bytes?: number;
+  httpStatus?: number | null;
+  errorName?: string;
+  attempts?: number;
+  elapsedMs?: number;
+  outcome: "ok" | "failed" | "refused" | "skipped";
+}
+
+export interface TeardownEntry {
+  step:
+    | "stop-child"
+    | "abort-upload"
+    | "remove-policy"
+    | "delete-objects"
+    | "delete-bucket"
+    | "inventory";
+  outcome: "ok" | "failed" | "skipped";
+  count?: number;
+  errorName?: string;
+  httpStatus?: number | null;
+}
+
+export type ActionStatus = "observed" | "source-only" | "not-exercised";
+
+export interface ActionRow {
+  api: string;
+  status: ActionStatus;
+}
+
+export interface AwsReceiptHeader {
+  runId: string;
+  commit: string;
+  node: string;
+  sdkVersion: string;
+  litestreamVersion: string;
+  region: string;
+  startedAt: string;
+  finishedAt: string;
+  limits: Record<string, number>;
+}
+
+export interface AwsReceiptOwnership {
+  bucket: string | null;
+  state: "owned" | "not-created" | "collision" | "unowned-candidate";
+  candidate?: string;
+}
+
+export interface AwsReceiptRemaining {
+  bucket: string | null;
+  uploadIds: string[];
+}
+
+export interface AwsReceipt {
+  header: AwsReceiptHeader;
+  ownership: AwsReceiptOwnership;
+  events: AwsReceiptEvent[];
+  teardown: TeardownEntry[];
+  actions: ActionRow[];
+  remaining: AwsReceiptRemaining;
+  cleanupCommand: string | null;
+}
+
+export interface ReceiptFinishParts {
+  finishedAt: string;
+  ownership: AwsReceiptOwnership;
+  remaining: AwsReceiptRemaining;
+  cleanupCommand: string | null;
+  sourceOnly?: readonly string[];
+}
+
+export interface ReceiptLog {
+  record(event: unknown): void;
+  teardown(entry: TeardownEntry): void;
+  finish(parts: ReceiptFinishParts): AwsReceipt;
+}
+
+export const RECEIPT_APIS = [
+  "GetObject",
+  "PutObject",
+  "ListObjectsV2",
+  "DeleteObject",
+  "DeleteObjects",
+  "HeadObject",
+  "GetBucketLocation",
+  "CreateMultipartUpload",
+  "UploadPart",
+  "CompleteMultipartUpload",
+  "AbortMultipartUpload",
+  "CreateBucket",
+  "DeleteBucket",
+  "GetBucketPolicy",
+  "PutBucketPolicy",
+  "DeleteBucketPolicy",
+  "ListMultipartUploads",
+  "GetBucketEncryption",
+  "GetBucketVersioning",
+] as const;
+
+export const REHEARSAL_BUCKET_PATTERN = /^waitron-rehearsal-waitron-[a-z0-9]{12}$/;
+
+const TOKEN = /^[A-Za-z0-9._:-]{1,64}$/;
+// An access key id fits the token alphabet, so it is refused by shape as well.
+const ACCESS_KEY_ID = /(?:AKIA|ASIA|AIDA|AROA)[A-Z0-9]{12,}/;
+const ERROR_NAME = /^[A-Z][A-Za-z0-9]{0,63}$/;
+const UPLOAD_ID = /^[A-Za-z0-9._~-]{1,1024}$/;
+const CLEANUP_COMMAND = /^[A-Za-z0-9 ._:/@=-]{1,512}$/;
+const EVENT_OUTCOMES = ["ok", "failed", "refused", "skipped"] as const;
+const TEARDOWN_OUTCOMES = ["ok", "failed", "skipped"] as const;
+const TEARDOWN_STEPS = [
+  "stop-child",
+  "abort-upload",
+  "remove-policy",
+  "delete-objects",
+  "delete-bucket",
+  "inventory",
+] as const;
+const OWNERSHIP_STATES = ["owned", "not-created", "collision", "unowned-candidate"] as const;
+
+function refused(key: string): Error {
+  return new Error(`receipt field refused: ${key}`);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    !(value instanceof Error)
+  );
+}
+
+function token(value: unknown, key: string): string {
+  if (typeof value !== "string" || !TOKEN.test(value) || ACCESS_KEY_ID.test(value))
+    throw refused(key);
+  return value;
+}
+
+function oneOf<T extends string>(value: unknown, allowed: readonly T[], key: string): T {
+  if (typeof value !== "string" || !(allowed as readonly string[]).includes(value))
+    throw refused(key);
+  return value as T;
+}
+
+function integer(value: unknown, min: number, key: string): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < min) throw refused(key);
+  return value;
+}
+
+function httpStatus(value: unknown, key: string): number | null {
+  if (value === null) return null;
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 100 || value > 599)
+    throw refused(key);
+  return value;
+}
+
+function errorName(value: unknown, key: string): string {
+  if (typeof value !== "string") throw refused(key);
+  return ERROR_NAME.test(value) && !ACCESS_KEY_ID.test(value) ? value : "Unlisted";
+}
+
+function bucketName(value: unknown, key: string): string | null {
+  if (value === null) return null;
+  if (typeof value !== "string" || !REHEARSAL_BUCKET_PATTERN.test(value)) throw refused(key);
+  return value;
+}
+
+function onlyKeys(input: Record<string, unknown>, allowed: readonly string[], prefix = ""): void {
+  for (const key of Object.keys(input))
+    if (!allowed.includes(key)) throw refused(`${prefix}${key}`);
+}
+
+const EVENT_KEYS = [
+  "scenario",
+  "phase",
+  "api",
+  "objectRole",
+  "count",
+  "bytes",
+  "httpStatus",
+  "errorName",
+  "attempts",
+  "elapsedMs",
+  "outcome",
+] as const;
+
+export function sanitizeEvent(input: unknown): AwsReceiptEvent {
+  if (!isRecord(input)) throw refused("event");
+  onlyKeys(input, EVENT_KEYS);
+  const event: AwsReceiptEvent = {
+    scenario: token(input.scenario, "scenario"),
+    phase: token(input.phase, "phase"),
+    outcome: oneOf(input.outcome, EVENT_OUTCOMES, "outcome"),
+  };
+  if (input.api !== undefined) event.api = token(input.api, "api");
+  if (input.objectRole !== undefined) event.objectRole = token(input.objectRole, "objectRole");
+  if (input.count !== undefined) event.count = integer(input.count, 0, "count");
+  if (input.bytes !== undefined) event.bytes = integer(input.bytes, 0, "bytes");
+  if (input.httpStatus !== undefined) event.httpStatus = httpStatus(input.httpStatus, "httpStatus");
+  if (input.errorName !== undefined) event.errorName = errorName(input.errorName, "errorName");
+  if (input.attempts !== undefined) event.attempts = integer(input.attempts, 1, "attempts");
+  if (input.elapsedMs !== undefined) {
+    const value = input.elapsedMs;
+    if (typeof value !== "number" || !Number.isFinite(value) || value < 0)
+      throw refused("elapsedMs");
+    event.elapsedMs = value;
+  }
+  return event;
+}
+
+function sanitizeTeardown(input: unknown): TeardownEntry {
+  if (!isRecord(input)) throw refused("teardown");
+  onlyKeys(input, ["step", "outcome", "count", "errorName", "httpStatus"]);
+  const entry: TeardownEntry = {
+    step: oneOf(input.step, TEARDOWN_STEPS, "step"),
+    outcome: oneOf(input.outcome, TEARDOWN_OUTCOMES, "outcome"),
+  };
+  if (input.count !== undefined) entry.count = integer(input.count, 0, "count");
+  if (input.errorName !== undefined) entry.errorName = errorName(input.errorName, "errorName");
+  if (input.httpStatus !== undefined) entry.httpStatus = httpStatus(input.httpStatus, "httpStatus");
+  return entry;
+}
+
+function sanitizeHeader(
+  input: Omit<AwsReceiptHeader, "finishedAt">,
+): Omit<AwsReceiptHeader, "finishedAt"> {
+  if (!isRecord(input)) throw refused("header");
+  const keys = [
+    "runId",
+    "commit",
+    "node",
+    "sdkVersion",
+    "litestreamVersion",
+    "region",
+    "startedAt",
+  ] as const;
+  onlyKeys(input, [...keys, "limits"], "header.");
+  const limits = input.limits;
+  if (!isRecord(limits)) throw refused("header.limits");
+  const cleanLimits: Record<string, number> = {};
+  for (const [name, value] of Object.entries(limits)) {
+    if (!TOKEN.test(name) || typeof value !== "number" || !Number.isFinite(value))
+      throw refused("header.limits");
+    cleanLimits[name] = value;
+  }
+  const header = { limits: cleanLimits } as Omit<AwsReceiptHeader, "finishedAt">;
+  for (const key of keys) header[key] = token(input[key], `header.${key}`);
+  return header;
+}
+
+function sanitizeOwnership(input: unknown): AwsReceiptOwnership {
+  if (!isRecord(input)) throw refused("ownership");
+  onlyKeys(input, ["bucket", "state", "candidate"], "ownership.");
+  const ownership: AwsReceiptOwnership = {
+    bucket: bucketName(input.bucket, "ownership.bucket"),
+    state: oneOf(input.state, OWNERSHIP_STATES, "ownership.state"),
+  };
+  if (input.candidate !== undefined) {
+    ownership.candidate = bucketName(input.candidate, "ownership.candidate") ?? undefined;
+    if (ownership.candidate === undefined) throw refused("ownership.candidate");
+  }
+  return ownership;
+}
+
+function sanitizeRemaining(input: unknown): AwsReceiptRemaining {
+  if (!isRecord(input)) throw refused("remaining");
+  onlyKeys(input, ["bucket", "uploadIds"], "remaining.");
+  const uploadIds = input.uploadIds;
+  if (
+    !Array.isArray(uploadIds) ||
+    !uploadIds.every((id) => typeof id === "string" && UPLOAD_ID.test(id))
+  ) {
+    throw refused("remaining.uploadIds");
+  }
+  return {
+    bucket: bucketName(input.bucket, "remaining.bucket"),
+    uploadIds: [...(uploadIds as string[])],
+  };
+}
+
+export function actionTable(
+  events: readonly AwsReceiptEvent[],
+  sourceOnly: readonly string[],
+): ActionRow[] {
+  for (const api of sourceOnly) {
+    if (!(RECEIPT_APIS as readonly string[]).includes(api)) throw refused("sourceOnly");
+  }
+  const answered = new Set(
+    events.filter((event) => typeof event.httpStatus === "number").map((event) => event.api),
+  );
+  return RECEIPT_APIS.map((api) => ({
+    api,
+    status: answered.has(api)
+      ? "observed"
+      : sourceOnly.includes(api)
+        ? "source-only"
+        : "not-exercised",
+  }));
+}
+
+export function createReceiptLog(header: Omit<AwsReceiptHeader, "finishedAt">): ReceiptLog {
+  const cleanHeader = sanitizeHeader(header);
+  const events: AwsReceiptEvent[] = [];
+  const teardown: TeardownEntry[] = [];
+  return {
+    record(event) {
+      events.push(sanitizeEvent(event));
+    },
+    teardown(entry) {
+      teardown.push(sanitizeTeardown(entry));
+    },
+    finish(parts) {
+      const cleanupCommand = parts.cleanupCommand;
+      if (
+        cleanupCommand !== null &&
+        (typeof cleanupCommand !== "string" || !CLEANUP_COMMAND.test(cleanupCommand))
+      ) {
+        throw refused("cleanupCommand");
+      }
+      return {
+        header: { ...cleanHeader, finishedAt: token(parts.finishedAt, "header.finishedAt") },
+        ownership: sanitizeOwnership(parts.ownership),
+        events: [...events],
+        teardown: [...teardown],
+        actions: actionTable(events, parts.sourceOnly ?? []),
+        remaining: sanitizeRemaining(parts.remaining),
+        cleanupCommand,
+      };
+    },
+  };
+}
+
+export async function writeReceipt(dir: string, receipt: AwsReceipt): Promise<string> {
+  await mkdir(dir, { recursive: true });
+  const path = join(dir, `aws-rehearsal-${token(receipt.header.runId, "header.runId")}.json`);
+  await writeFile(path, `${JSON.stringify(receipt, null, 2)}\n`);
+  return path;
+}

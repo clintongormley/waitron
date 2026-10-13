@@ -10,7 +10,12 @@ export default defineConfig({
     // per-test reset and close, and any hook a test file writes for itself.
     testTimeout: 120_000,
     hookTimeout: 180_000,
-    exclude: [...configDefaults.exclude, "**/.stryker-tmp/**", "src/**/*.preprod.test.ts"],
+    exclude: [
+      ...configDefaults.exclude,
+      "**/.stryker-tmp/**",
+      "src/**/*.preprod.test.ts",
+      "src/**/*.aws-rehearsal.test.ts",
+    ],
     // Multi-fork, capped at the CI runner's 4 vCPUs. The coverage-v8 branch under-merge that holds
     // some packages to one worker comes from `pnpm -r` contention, and apps/server never runs under
     // it: nothing depends on it, so `pnpm -r` runs it last, and ci.yml's `--no-sort` light shards
