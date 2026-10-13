@@ -1,6 +1,7 @@
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 import { styleMap } from "lit/directives/style-map.js";
+import { capturePointer, releasePointer } from "@waitron/dashboard-kit";
 import "@waitron/ui/src/components/wt-button.js";
 import { t } from "./strings.js";
 import { clockAt, stepSpan } from "../day-paint.js";
@@ -29,6 +30,7 @@ export interface PaintChange {
 interface Gesture {
   pointerId: number;
   key: string;
+  column: HTMLElement;
   anchor: number;
 }
 interface Stretch {
@@ -137,8 +139,8 @@ export class PaintGrid extends LitElement {
     }
     button.block:focus-visible,
     button.block[aria-expanded="true"] {
-      outline: 2px solid var(--wt-color-focus);
-      outline-offset: 1px;
+      outline: var(--wt-focus-ring);
+      outline-offset: var(--wt-focus-offset);
       z-index: 2;
     }
     .block span {
@@ -252,7 +254,7 @@ export class PaintGrid extends LitElement {
   @property({ attribute: false }) paintable: readonly (string | null)[] | undefined = undefined;
 
   @state() private preview: Stretch | null = null;
-  @state() private selected: { key: string; index: number } | null = null;
+  @state() private selected: { key: string; startsAt: string } | null = null;
   @query(".menu") private menu!: HTMLElement;
   #gesture: Gesture | null = null;
   #dragged = false;
@@ -261,9 +263,18 @@ export class PaintGrid extends LitElement {
     this.#stop();
     super.disconnectedCallback();
   }
+  protected override willUpdate(changes: PropertyValues<this>): void {
+    if (changes.has("days") && this.selected !== null && this.#selectedIndex() < 0)
+      this.#closeMenu();
+  }
 
   #day(key: string): readonly Paint[] {
     return this.days.get(key) ?? [];
+  }
+  #selectedIndex(): number {
+    const selected = this.selected;
+    if (selected === null) return -1;
+    return this.#day(selected.key).findIndex(({ startsAt }) => startsAt === selected.startsAt);
   }
   #emit(key: string, day: Paint[]): void {
     this.dispatchEvent(
@@ -297,9 +308,15 @@ export class PaintGrid extends LitElement {
   }
 
   #start(event: PointerEvent, key: string): void {
-    if (event.button !== 0 || this.chosen === undefined || this.#gesture !== null) return;
     this.#dragged = false;
-    this.#gesture = { pointerId: event.pointerId, key, anchor: this.#offsetMinute(event, key) };
+    if (event.button !== 0 || this.chosen === undefined || this.#gesture !== null) return;
+    const column = event.currentTarget as HTMLElement;
+    this.#gesture = {
+      pointerId: event.pointerId,
+      key,
+      column,
+      anchor: this.#offsetMinute(event, key),
+    };
     window.addEventListener("pointermove", this.#move);
     window.addEventListener("pointerup", this.#release);
     window.addEventListener("pointercancel", this.#abort);
@@ -308,6 +325,8 @@ export class PaintGrid extends LitElement {
     const gesture = this.#gesture;
     if (gesture === null || event.pointerId !== gesture.pointerId) return;
     const minute = this.#offsetMinute(event, gesture.key);
+    // Captured only once it moves: a captured click lands on the column, not the block clicked.
+    if (minute !== gesture.anchor) capturePointer(gesture.column, gesture.pointerId);
     this.preview =
       minute === gesture.anchor
         ? null
@@ -324,7 +343,11 @@ export class PaintGrid extends LitElement {
     const stretch = this.preview;
     this.#stop();
     if (stretch === null || this.chosen === undefined) return;
+    // The click a drag ends with comes in the same task as its pointerup; a later one is a real click.
     this.#dragged = true;
+    setTimeout(() => {
+      this.#dragged = false;
+    });
     this.#emit(
       stretch.key,
       paintStretch(
@@ -346,18 +369,20 @@ export class PaintGrid extends LitElement {
     window.removeEventListener("pointermove", this.#move);
     window.removeEventListener("pointerup", this.#release);
     window.removeEventListener("pointercancel", this.#abort);
+    const gesture = this.#gesture;
     this.#gesture = null;
     this.preview = null;
+    if (gesture !== null) releasePointer(gesture.column, gesture.pointerId);
   }
 
-  async #select(key: string, index: number, trigger: HTMLElement): Promise<void> {
+  async #select(key: string, startsAt: string, trigger: HTMLElement): Promise<void> {
     if (this.#dragged) {
       this.#dragged = false;
       return;
     }
-    this.selected = { key, index };
+    this.selected = { key, startsAt };
     await this.updateComplete;
-    if (!this.menu.matches(":popover-open")) this.menu.showPopover();
+    if (!this.menu.matches(":popover-open")) this.menu.showPopover({ source: trigger });
     const anchor = trigger.getBoundingClientRect();
     const popup = this.menu.getBoundingClientRect();
     this.menu.style.left = `${Math.max(8, Math.min(anchor.left, innerWidth - popup.width - 8))}px`;
@@ -365,29 +390,55 @@ export class PaintGrid extends LitElement {
     this.menu.querySelector<HTMLElement>("wt-button:not([disabled])")?.focus();
   }
   #closeMenu(): void {
-    if (this.menu.matches(":popover-open")) this.menu.hidePopover();
+    if (this.menu?.matches(":popover-open")) this.menu.hidePopover();
     this.selected = null;
+  }
+  /** Focuses the block starting at `startsAt` once the host has redrawn, else the column. */
+  async #focusAfter(key: string, startsAt: string | undefined): Promise<void> {
+    await this.updateComplete;
+    const column = this.renderRoot.querySelector<HTMLElement>(`.day[data-column="${key}"]`);
+    const target =
+      startsAt === undefined
+        ? null
+        : (column?.querySelector<HTMLElement>(`button.block[data-starts="${startsAt}"]`) ?? null);
+    (target ?? column)?.focus();
+  }
+  #onMenuKeydown(event: KeyboardEvent): void {
+    const selected = this.selected;
+    if (event.key !== "Escape" || selected === null) return;
+    event.preventDefault();
+    event.stopPropagation();
+    this.#closeMenu();
+    void this.#focusAfter(selected.key, selected.startsAt);
   }
   #change(periodId: string | null): void {
     const selected = this.selected;
-    if (selected === null) return;
+    const index = this.#selectedIndex();
+    if (selected === null || index < 0) return;
     this.#closeMenu();
-    this.#emit(
-      selected.key,
-      changeBlockPeriod(
-        this.#day(selected.key),
-        selected.index,
-        periodId,
-        this.cutover,
-        this.closedErases,
-      ),
+    const day = changeBlockPeriod(
+      this.#day(selected.key),
+      index,
+      periodId,
+      this.cutover,
+      this.closedErases,
     );
+    const [from] = stepSpan(this.#day(selected.key)[index]!, this.cutover);
+    const covering = day.find((paint) => {
+      const [start, end] = stepSpan(paint, this.cutover);
+      return start <= from && from < end;
+    });
+    this.#emit(selected.key, day);
+    void this.#focusAfter(selected.key, covering?.startsAt);
   }
   #delete(): void {
     const selected = this.selected;
-    if (selected === null) return;
+    const index = this.#selectedIndex();
+    if (selected === null || index < 0) return;
     this.#closeMenu();
-    this.#emit(selected.key, deleteBlock(this.#day(selected.key), selected.index));
+    const day = deleteBlock(this.#day(selected.key), index);
+    this.#emit(selected.key, day);
+    void this.#focusAfter(selected.key, (day[index] ?? day[index - 1])?.startsAt);
   }
 
   #position(start: number, end: number) {
@@ -396,18 +447,20 @@ export class PaintGrid extends LitElement {
   #block(column: PaintColumn, paint: Paint, index: number) {
     const [start, end] = stepSpan(paint, this.cutover);
     const name = this.#name(paint.periodId);
-    const expanded = this.selected?.key === column.key && this.selected.index === index;
+    const expanded = this.selected?.key === column.key && this.selected.startsAt === paint.startsAt;
     return html`<button
       type="button"
       class=${paint.periodId === null ? "block closed" : "block"}
       data-index=${index}
+      data-starts=${paint.startsAt}
       data-colour=${this.#colour(paint.periodId) ?? nothing}
       aria-label=${`${column.label}, ${name} ${paint.startsAt}–${paint.endsAt}`}
-      aria-haspopup="true"
+      aria-haspopup="dialog"
+      aria-controls="block-menu"
       aria-expanded=${expanded ? "true" : "false"}
       style=${this.#position(start, end)}
       @click=${(event: Event) =>
-        void this.#select(column.key, index, event.currentTarget as HTMLElement)}
+        void this.#select(column.key, paint.startsAt, event.currentTarget as HTMLElement)}
     >
       <span>${name}</span> ${paint.startsAt}–${paint.endsAt}
     </button>`;
@@ -438,7 +491,6 @@ export class PaintGrid extends LitElement {
     const colour = this.#colour(this.chosen);
     return html`<div
       class=${colour === undefined ? "preview closed" : "preview block"}
-      role="status"
       data-colour=${colour ?? nothing}
       style=${this.#position(stretch.start, stretch.end)}
     >
@@ -453,17 +505,19 @@ export class PaintGrid extends LitElement {
   }
   #menu() {
     const selected = this.selected;
-    const paint = selected === null ? undefined : this.#day(selected.key)[selected.index];
+    const paint = selected === null ? undefined : this.#day(selected.key)[this.#selectedIndex()];
     const choices = this.paintable ?? [...this.periods.map(({ id }) => id), null];
     return html`<div
       class="menu"
+      id="block-menu"
       popover
-      role="group"
+      role="dialog"
       aria-label=${
         paint === undefined
           ? t("paint.change_to")
           : `${this.#name(paint.periodId)} ${paint.startsAt}–${paint.endsAt}`
       }
+      @keydown=${(event: KeyboardEvent) => this.#onMenuKeydown(event)}
       @toggle=${(event: ToggleEvent) => {
         if (event.newState === "closed") this.selected = null;
       }}
@@ -521,6 +575,8 @@ export class PaintGrid extends LitElement {
               role="group"
               aria-label=${column.label}
               data-column=${column.key}
+              tabindex="-1"
+              @lostpointercapture=${this.#abort}
               @pointerdown=${(event: PointerEvent) => this.#start(event, column.key)}
               @keydown=${() => {
                 this.#dragged = false;

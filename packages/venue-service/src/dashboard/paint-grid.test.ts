@@ -5,6 +5,7 @@ import { cleanup, host, mount } from "@waitron/ui/src/test-helpers.js";
 import type { Paint } from "../paint-model.js";
 import type { PaintGrid, PaintChange } from "./paint-grid.js";
 import "./paint-grid.js";
+import "@waitron/ui/src/components/wt-modal.js";
 
 afterEach(() => {
   cleanup();
@@ -331,4 +332,187 @@ test("the click that ends a drag inside a block does not select it; the next cli
   block(el, "thu").click();
   await el.updateComplete;
   expect(menu(el).matches(":popover-open")).toBe(true);
+});
+
+function deepActive(): Element | null {
+  let active = document.activeElement;
+  while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
+  return active;
+}
+const dinner: Paint = { periodId: "dinner", startsAt: "20:00", endsAt: "23:00" };
+function hostUpdates(el: PaintGrid) {
+  el.addEventListener("paint-change", (event) => {
+    el.days = new Map([...el.days, [event.detail.key, event.detail.day]]);
+  });
+}
+const tick = () => new Promise((resolve) => setTimeout(resolve));
+
+test("Escape in a block's menu inside a guarded modal closes the menu only and refocuses the block", async () => {
+  const modal = (await mount(
+    `<wt-modal size="full" heading="Winter week"><paint-grid></paint-grid></wt-modal>`,
+  )) as HTMLElementTagNameMap["wt-modal"];
+  let asked = 0;
+  modal.beforeClose = async () => {
+    asked++;
+    return false;
+  };
+  modal.open = true;
+  await modal.updateComplete;
+  const el = modal.querySelector("paint-grid")!;
+  el.columns = [{ key: "thu", label: "Thursday" }];
+  el.periods = periods;
+  el.days = new Map([["thu", [lunch]]]);
+  el.chosen = "afternoon";
+  await el.updateComplete;
+  block(el, "thu").focus();
+  await userEvent.keyboard("{Enter}");
+  await el.updateComplete;
+  expect(menu(el).matches(":popover-open")).toBe(true);
+  await userEvent.keyboard("{Escape}");
+  await el.updateComplete;
+  await tick();
+  expect(asked).toBe(0);
+  expect(modal.open).toBe(true);
+  expect(menu(el).matches(":popover-open")).toBe(false);
+  expect(block(el, "thu").getAttribute("aria-expanded")).toBe("false");
+  expect(deepActive()).toBe(block(el, "thu"));
+});
+
+test("choosing a period returns focus to the changed block", async () => {
+  const el = await grid({ thu: [lunch] });
+  hostUpdates(el);
+  await userEvent.click(block(el, "thu"));
+  await userEvent.click(menuButton(el, "Afternoon"));
+  await el.updateComplete;
+  expect(block(el, "thu").textContent).toContain("Afternoon");
+  expect(deepActive()).toBe(block(el, "thu"));
+});
+
+test("Delete moves focus to the next block, else the previous, else the column", async () => {
+  const el = await grid({ thu: [lunch, dinner] });
+  hostUpdates(el);
+  await userEvent.click(block(el, "thu", 0));
+  await userEvent.click(menuButton(el, "Delete"));
+  await el.updateComplete;
+  expect(deepActive()).toBe(block(el, "thu", 0));
+  expect(block(el, "thu", 0).textContent).toContain("Dinner");
+  await userEvent.click(block(el, "thu", 0));
+  await userEvent.click(menuButton(el, "Delete"));
+  await el.updateComplete;
+  expect(deepActive()).toBe(el.shadowRoot!.querySelector('.day[data-column="thu"]'));
+
+  el.days = new Map([["thu", [lunch, dinner]]]);
+  await el.updateComplete;
+  await userEvent.click(block(el, "thu", 1));
+  await userEvent.click(menuButton(el, "Delete"));
+  await el.updateComplete;
+  expect(deepActive()).toBe(block(el, "thu", 0));
+  expect(block(el, "thu", 0).textContent).toContain("Lunch");
+});
+
+test("pointercancel ends a drag without painting and the next drag paints", async () => {
+  const el = await grid({ mon: [] }, { chosen: "dinner" });
+  const seen = changes(el);
+  point(el, "mon", 840, "pointerdown");
+  point(el, "mon", 1050, "pointermove");
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector(".preview")).not.toBeNull();
+  point(el, "mon", 1050, "pointercancel");
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector(".preview")).toBeNull();
+  point(el, "mon", 1050, "pointerup");
+  expect(seen).toEqual([]);
+  await drag(el, "mon", 840, 960);
+  expect(seen).toEqual([
+    { key: "mon", day: [{ periodId: "dinner", startsAt: "20:00", endsAt: "22:00" }] },
+  ]);
+});
+
+test("losing the pointer capture ends a drag without painting", async () => {
+  const el = await grid({ mon: [] }, { chosen: "dinner" });
+  const seen = changes(el);
+  point(el, "mon", 840, "pointerdown");
+  point(el, "mon", 1050, "pointermove");
+  await el.updateComplete;
+  point(el, "mon", 1050, "lostpointercapture", el.shadowRoot!.querySelector(".day")!);
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector(".preview")).toBeNull();
+  point(el, "mon", 1050, "pointerup");
+  expect(seen).toEqual([]);
+});
+
+test("clicking elsewhere dismisses the menu and clears the selection", async () => {
+  const el = await grid({ thu: [lunch] });
+  await userEvent.click(block(el, "thu"));
+  expect(menu(el).matches(":popover-open")).toBe(true);
+  await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>('.heading[data-column="thu"]')!);
+  await el.updateComplete;
+  expect(menu(el).matches(":popover-open")).toBe(false);
+  expect(block(el, "thu").getAttribute("aria-expanded")).toBe("false");
+});
+
+test("after a drag that ends off any block, a later click with no pointerdown opens the menu", async () => {
+  const el = await grid({ thu: [lunch] }, { chosen: "dinner" });
+  await drag(el, "thu", 840, 960);
+  await tick();
+  block(el, "thu").click();
+  await el.updateComplete;
+  expect(menu(el).matches(":popover-open")).toBe(true);
+});
+
+test("the menu is a dialog the block controls, and Tab from its last choice reaches the next block", async () => {
+  const el = await grid({ thu: [lunch, dinner] });
+  expect(block(el, "thu").getAttribute("aria-haspopup")).toBe("dialog");
+  expect(menu(el).getAttribute("role")).toBe("dialog");
+  expect(block(el, "thu").getAttribute("aria-controls")).toBe(menu(el).id);
+  block(el, "thu").focus();
+  await userEvent.keyboard("{Enter}");
+  await el.updateComplete;
+  menuButton(el, "Delete").focus();
+  await userEvent.tab();
+  expect(deepActive()).toBe(block(el, "thu", 1));
+});
+
+test("the selected block's outline reads the focus-ring tokens", async () => {
+  const el = await grid({ thu: [lunch] });
+  host.style.setProperty("--wt-focus-ring", "3px dashed rgb(1, 2, 3)");
+  host.style.setProperty("--wt-focus-offset", "5px");
+  await userEvent.click(block(el, "thu"));
+  const style = getComputedStyle(block(el, "thu"));
+  expect(style.outlineStyle).toBe("dashed");
+  expect(style.outlineWidth).toBe("3px");
+  expect(style.outlineColor).toBe("rgb(1, 2, 3)");
+  expect(style.outlineOffset).toBe("5px");
+});
+
+test("the menu acts on the block it opened on after the host inserts one before it", async () => {
+  const el = await grid({ thu: [lunch] });
+  const seen = changes(el);
+  await userEvent.click(block(el, "thu"));
+  const breakfast: Paint = { periodId: "breakfast", startsAt: "08:00", endsAt: "12:00" };
+  el.days = new Map([["thu", [breakfast, lunch]]]);
+  await el.updateComplete;
+  await userEvent.click(menuButton(el, "Afternoon"));
+  expect(seen).toEqual([
+    { key: "thu", day: [breakfast, { periodId: "afternoon", startsAt: "13:00", endsAt: "16:00" }] },
+  ]);
+});
+
+test("the menu closes when the host removes its block", async () => {
+  const el = await grid({ thu: [lunch] });
+  await userEvent.click(block(el, "thu"));
+  el.days = new Map([["thu", [dinner]]]);
+  await el.updateComplete;
+  expect(menu(el).matches(":popover-open")).toBe(false);
+});
+
+test("the drag preview is not a live region", async () => {
+  const el = await grid({ mon: [] }, { chosen: "dinner" });
+  point(el, "mon", 840, "pointerdown");
+  point(el, "mon", 1050, "pointermove");
+  await el.updateComplete;
+  const preview = el.shadowRoot!.querySelector(".preview")!;
+  expect(preview.getAttribute("role")).toBeNull();
+  expect(preview.getAttribute("aria-live")).toBeNull();
+  point(el, "mon", 1050, "pointerup");
 });
