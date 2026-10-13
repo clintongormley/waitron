@@ -54,12 +54,16 @@ const stations = [
   { id: "kitchen", name: "Kitchen", active: true, isDefault: true },
   { id: "off", name: "Off", active: false, isDefault: false },
 ];
-async function mount(station = "bar", answer?: (path: string) => unknown | Promise<unknown>) {
+async function mount(
+  station = "bar",
+  answer?: (path: string) => unknown | Promise<unknown>,
+  opening: object = model,
+) {
   history.replaceState(null, "", `/manage/opening-hours?view=week&station=${station}`);
   const calls: unknown[][] = [];
   const request = (async (path: string, method: string, body: unknown, options: unknown) => {
     calls.push([path, method, body, options]);
-    if (path === "/management-api/venue-service/opening-hours") return structuredClone(model);
+    if (path === "/management-api/venue-service/opening-hours") return structuredClone(opening);
     if (path === "/management-api/stations") return structuredClone(stations);
     if (path.includes("/service-times?"))
       return (
@@ -175,6 +179,43 @@ it("reads the week holding the venue's business day, from its Monday", async () 
     "Saturday",
     "Sunday",
   ]);
+});
+it("reads the week of 5 January 2026 when the venue's clock cannot be read", async () => {
+  const { screen, calls } = await mount("bar", undefined, { ...model, clockReadable: false });
+  await expect.poll(() => grid(screen)?.columns.length).toBe(7);
+  expect(
+    calls.filter(([path]) => String(path).includes("service-times")).map(([path]) => path),
+  ).toEqual([
+    "/management-api/venue-service/stations/bar/service-times?from=2026-01-05&to=2026-01-11&week=normal",
+  ]);
+});
+it("says the week could not be read, and draws it once a reread succeeds", async () => {
+  let fail = true;
+  const { screen } = await mount("bar", () => {
+    if (fail) throw new Error("read refused");
+    return {
+      always: null,
+      days: [
+        {
+          date: "2026-10-12",
+          departments: [
+            {
+              departmentId: "dining",
+              ranges: [{ periodId: "lunch", startsAt: "12:00", endsAt: "16:00" }],
+            },
+          ],
+        },
+      ],
+    };
+  });
+  await expect
+    .poll(() => stationView(screen)?.shadowRoot?.querySelector("[role=alert]")?.textContent)
+    .toBeTruthy();
+  expect(grid(screen)).toBeNull();
+  fail = false;
+  screen.api.rereadWatches();
+  await expect.poll(() => grid(screen)?.columns[0]?.slots[0]?.startsAt).toBe("12:00");
+  expect(stationView(screen)!.shadowRoot!.querySelector("[role=alert]")).toBeNull();
 });
 it("reloads the same station view when reattached without changing its properties", async () => {
   let startsAt = "12:00";
