@@ -85,8 +85,6 @@ Decisions 1–8 came from the lane runner; where this plan changes one it says *
    `/health` was rejected: neither app reads it. The live stream was rejected: `EventSource` exposes
    no response headers, and the till does not open one.
    - **CHANGED — the header is set AFTER the handler runs**, not before like `x-request-id`.
-     _2026-10-13 (A537): `requestIdMiddleware` now sets its response header after the handler too;
-     its route-created-response cases are in `apps/server/src/request-id.test.ts`._
      Measured 2026-10-11 by the plan reviewer with a Node script against the installed
      `hono@4.13.9` (`node_modules/.pnpm/hono@4.13.9`), one `app.use("*")` middleware, `app.request`:
      set BEFORE `next()`, `c.json`, `c.body`, a thrown error (500, with and without `onError`) and an
@@ -95,6 +93,10 @@ Decisions 1–8 came from the lane runner; where this plan changes one it says *
      AFTER `next()`, all six carried it, including `/raw`, and so did a `Response.redirect(...)`
      (immutable headers) and a `fetch()` response passed straight through (its own `x-up` kept).
      Task 1's `/raw` case is the committed test of it.
+
+     _2026-10-13 (A537): `requestIdMiddleware` now sets its response header after the handler too;
+     its route-created-response cases are in `apps/server/src/request-id.test.ts`._
+
    - **Exposure, for the owner (FYI default: accepted).** Today no HTTP surface names the build
      (`grep -rn "applicationVersion\|WAITRON_BUILD_ID" apps/server/src` outside tests finds only the
      fiscal-readiness record and boot's own calls). With this header every response after `/health`
