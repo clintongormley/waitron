@@ -96,7 +96,10 @@ const suite = useVenueDb({
 });
 
 const scratches: string[] = [];
+/** Set while `bootAndTrade`'s server runs; see `beforeServerStarts`. */
+let serverRunning = false;
 afterEach(async () => {
+  serverRunning = false;
   stall.on = false;
   stall.started = [];
   await withTransaction(venue.db, (tx) => deleteCredential(tx, { purpose: ARCHIVE_PURPOSE }));
@@ -170,7 +173,9 @@ async function bootAndTrade(
   await withCapturedStdout(async (lines) => {
     let server: StartedServer | undefined;
     try {
-      server = await startServer(env, await backupBase(scratch));
+      const raw = await backupBase(scratch);
+      serverRunning = true;
+      server = await startServer(env, raw);
       const afterTrading = await whileStarted(lines, { base, via });
       const orderId = randomUUID();
       const sale = await cashSale(base, via, orderId);
@@ -180,13 +185,28 @@ async function bootAndTrade(
       await afterTrading?.();
     } finally {
       stall.release();
-      if (server !== undefined) await server.close();
+      try {
+        if (server !== undefined) await server.close();
+      } finally {
+        serverRunning = false;
+      }
       await close();
     }
   });
 }
 
+/**
+ * Refuses a write from this file's own connection while the server runs. The server shares this
+ * process, and this engine waits for a lock synchronously: a write here while one of the server's
+ * transactions is open stops the event loop, so that transaction cannot commit, and the write fails
+ * with `database is locked` after the busy wait (main run 38430159396).
+ */
+function beforeServerStarts(): void {
+  if (serverRunning) throw new Error("write to the venue database before the server starts");
+}
+
 async function managerCookie(): Promise<string> {
+  beforeServerStarts();
   const session = await withTransaction(venue.db, (tx) =>
     startManagementSession(tx, { personId: venue.adminId }),
   );
@@ -213,17 +233,18 @@ describe("trading with an archive destination the box cannot use", () => {
   // Unavailability: a test seam stands in for a destination where no call ever answers.
   it("starts, sells and answers /health while every call to a destination hangs, a status read included", async () => {
     stall.on = true;
+    let cookie = "";
     await bootAndTrade(
-      async (scratch) => ({
-        WAITRON_BACKUP_DIR: join(scratch, "backups"),
-        WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!",
-      }),
+      async (scratch) => {
+        cookie = await managerCookie();
+        return {
+          WAITRON_BACKUP_DIR: join(scratch, "backups"),
+          WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!",
+        };
+      },
       async (_lines, { base, via }) => {
         await vi.waitFor(() => expect(stall.started).toEqual(["putFile"]), { timeout: 30_000 });
-        const statusRead = fetch(`${base}/api/backup/status`, {
-          ...via,
-          headers: { cookie: await managerCookie() },
-        });
+        const statusRead = fetch(`${base}/api/backup/status`, { ...via, headers: { cookie } });
         await vi.waitFor(() => expect(stall.started).toEqual(["putFile", "list"]), {
           timeout: 30_000,
         });
@@ -240,6 +261,7 @@ describe("trading with an archive destination the box cannot use", () => {
 
 /** Seals an archive record into the venue database under `ring`. */
 async function storeArchiveRecord(ring: KeyRing, dir: string): Promise<void> {
+  beforeServerStarts();
   await withTransaction(venue.db, (tx) =>
     writeArchiveSettings(tx, ring, {
       enabled: true,
@@ -288,8 +310,6 @@ async function expectArchivesOffFor(
 }
 
 describe("trading with dashboard archive settings the box cannot use", () => {
-  // The session is written before the server starts: written from here while the server ran, it
-  // failed with `database is locked`.
   it("starts, sells and answers /health with archives off when the record will not decrypt", async () => {
     let cookie = "";
     await bootAndTrade(

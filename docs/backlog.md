@@ -4168,14 +4168,6 @@ _Formerly entries spread across the old sections._ Detail: [backlog/back-office.
 
 _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 
-- **The hanging-archive boot test raised `database is locked` on main.** CI run
-  [38430159396](https://github.com/clintongormley/waitron/actions/runs/38430159396),
-  at `1c9978735b9b995b6bcb16f1c28f54d761701cb9`, failed `test-server (2)` in
-  `apps/server/src/boot.backup-network.test.ts`'s "starts, sells and answers /health while every
-  call to a destination hangs, a status read included" at `packages/store/src/write-queue.ts:53`.
-  Cause unverified; reproduce and diagnose the lock before treating a later pass as a repair.
-  Recorded while finishing A537; no backup code changed there.
-
 - **A branch install fetches compose and support files before resolving the image commit.**
   A push between those operations could give them different source commits; inferred from
   `deploy/waitron.sh`'s call order, not reproduced. Pin file downloads to the resolved commit
@@ -4379,9 +4371,11 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 - **`apps/server/README.md` (near line 230, the `WAITRON_SKIP_RETRY_MS` row) says the sleep clamp
   can round a value "past" a bound, which it cannot** — found by #653 while pruning comments. Two
   notes #653's prune deleted and nothing else recorded: nobody knows why the 5-second busy timeout
-  did not absorb a `database is locked` in the pending-payment sweep; and nothing proves
-  `startServer` itself survives a backup duty that cannot start — only `backup-supervisor.test.ts`
-  covers that, at the supervisor.
+  did not absorb a `database is locked` in the pending-payment sweep (a candidate cause, not
+  verified for the sweep: a busy wait on the server's own thread,
+  [testing-guide.md](developers/testing-guide.md#a-test-that-runs-the-server-in-its-own-process-writes-to-the-database-only-while-the-server-is-down));
+  and nothing proves `startServer` itself survives a backup duty that cannot start — only
+  `backup-supervisor.test.ts` covers that, at the supervisor.
   [Detail](backlog/box.md#appsserverreadmemd-near-line-230-the-waitron_skip_retry_ms-row-says-the-sleep-clamp-can-round-a-value-past-a-bound-which-it-cannot)
 
 - **The empty-venue-directory reason #561 deleted from `packages/provisioning` … is false there** —
@@ -4801,6 +4795,14 @@ the tree. What remains, largest first:
   open by SQLite slice 1 (#490 and the preparation tasks).
 
 ### CI, tests and developer tooling
+
+- **Server suites write to the venue database while their in-process server runs (found by
+  A538-5f).** Nine suites, as of 2026-10-13. Each can fail `database is locked` whenever the write
+  meets one of the server's open transactions
+  ([why](developers/testing-guide.md#a-test-that-runs-the-server-in-its-own-process-writes-to-the-database-only-while-the-server-is-down)).
+  Found by reading, none reproduced. Next: move each write before `startServer` or after
+  `close()`, or make it through the server's API.
+  [Detail](backlog/ci.md#server-suites-write-to-the-venue-database-while-their-in-process-server-runs-found-by-a538-5f)
 
 - **The step-watch case's one pre-push failure (A544) is fixed at a likely cause, not a confirmed
   one.** The failure's message was not kept. A worker that starts late could report

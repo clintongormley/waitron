@@ -236,9 +236,11 @@ unpack`'s destination refusals (a symbolic link, another user's folder, not a fo
   past the floor" where it means "to the floor". The restore question A38 (#669) raised about
   `readNodeMembership`'s callers trusting the row is open under Task 9a. Two notes #653's prune
   deleted and nothing else recorded: nobody knows why the 5-second busy timeout did not absorb a
-  `database is locked` in the pending-payment sweep; and nothing proves `startServer` itself
-  survives a backup duty that cannot start — only `backup-supervisor.test.ts` covers that, at the
-  supervisor. Left open by A39 (#671): each stop is written twice, once in the failed-start unwind
+  `database is locked` in the pending-payment sweep (a candidate cause, not verified for the sweep:
+  a busy wait on the server's own thread,
+  [testing-guide.md](../developers/testing-guide.md#a-test-that-runs-the-server-in-its-own-process-writes-to-the-database-only-while-the-server-is-down));
+  and nothing proves `startServer` itself survives a backup duty that cannot start — only
+  `backup-supervisor.test.ts` covers that, at the supervisor. Left open by A39 (#671): each stop is written twice, once in the failed-start unwind
   list and once in the mode's `stopWork`; sharing one list was declined because it would change
   the normal shutdown order, which no test pins either.
   Test titles #653 could not touch in `boot.test.ts` carry the history tags
