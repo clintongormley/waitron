@@ -99,7 +99,7 @@ and names the season; a zone's single `week` left the Opening hours model.
 A506-5 landed in #1603: the Calendar edits special days through the special-day dialog; named
 days, the venue as a holiday source and the four old hours tables (`special_dates`,
 `menu_day_timetables`, `menu_slots`, `zone_closed_times`) are gone.
-A506-10 landed in #NNNN: a period in use can be deleted through the API, with another period of
+A506-10 landed in #1607: a period in use can be deleted through the API, with another period of
 its department taking over its paint, routing lines and keep-open extensions, or with none; two
 reads list where each period is painted and what the delete dialog shows (one-off special days with
 no date still to come left out). The Periods page that uses
