@@ -4209,7 +4209,16 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   environment management the pack route answers no `revision`, so a bucket changed in the
   environment marks no pack stale. The pack file's explanatory text is written by the server in
   English only (`encodeArchiveRecoveryPack`); the recovery kit's file text is built by the dashboard
-  in English and Spanish. Decide which owns it when the button lands. Left open by A538-5.
+  in English and Spanish. Decide which owns it when the button lands. Left open by A538-5. When
+  the button lands, remove deploy/README.md's line saying the Backups screen does not offer the
+  pack yet.
+
+- **A recovery kit can carry a recovery key its own restore refuses.** `parseRecoveryKit`
+  (`packages/stream/src/kit.ts`) refuses a recovery key holding a C0 control character or DEL, which
+  the box's key rules (`checkedRecoveryKey`) accept, so a box with such a key hands out a kit whose
+  restore calls it damaged; the archive recovery pack accepts such keys. Predates A538-5 (kit.ts
+  last changed in #627). `bench/sqlite-failover/src/probes/restore-time.ts` still computes free
+  space as `bavail * bsize`, where the server multiplies by `frsize` (`free-bytes.ts`).
 
 - **A restore that fails while writing the secrets has already replaced the venue database.**
   `placeValidated` (`apps/server/src/restore.ts`) puts the database in place and runs the restore

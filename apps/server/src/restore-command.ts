@@ -55,8 +55,8 @@ const VALUED_FLAGS: ReadonlySet<string> = new Set([
 const clock = (): Date => new Date();
 
 /**
- * The codes `decryptArtifact`/`unpackArchive` throw. Each restore path (the archive and the
- * bucket) collapses them into one message of its own: telling "wrong recovery key" from "corrupt
+ * The codes `decryptArtifact`/`unpackArchive` throw. Each restore form collapses them into one
+ * message of its own: telling "wrong recovery key" from "corrupt
  * artifact" would hand someone holding a stolen artifact an oracle to guess the recovery key against.
  */
 const DECRYPT_PHASE_CODES: ReadonlySet<string> = new Set([
@@ -405,9 +405,9 @@ function packRefusal(err: AppError): string | null {
 const PACK_KEY_DOES_NOT_OPEN =
   "restore failed: the recovery key in this pack does not open the archive, or the archive is damaged";
 
-/** Names the folder the way deploy/README.md does: the error would name the path and its cause. */
+/** Fixed words: the error would name the path and its cause. */
 const DOWNLOAD_LEFT_BEHIND =
-  "the downloaded archive could not be removed: once no restore is running, delete the archive-download-* folder inside the restore-staging folder of the state volume (/var/lib/waitron/state inside the container) by hand";
+  "the downloaded archive could not be removed: once no restore is running, delete the archive-download-* folder inside the state folder's restore-staging folder by hand";
 
 /**
  * The recovery key and the bucket's secret come from the pack, never the environment; no printed
@@ -429,11 +429,15 @@ async function runPackRestore(
   try {
     pack = decodeArchiveRecoveryPack(packText);
   } catch (err) {
+    const reason = hasCode(err as AppError, "backup.archive_recovery_pack_invalid")
+      ? (err as AppError<"backup.archive_recovery_pack_invalid">).params.reason
+      : undefined;
     deps.out(
-      hasCode(err as AppError, "backup.archive_recovery_pack_invalid") &&
-        (err as AppError<"backup.archive_recovery_pack_invalid">).params.reason === "not_found"
+      reason === "not_found"
         ? "restore failed: backup.archive_recovery_pack_invalid — the file holds no archive recovery pack; give the archive recovery pack file saved for this venue"
-        : "restore failed: backup.archive_recovery_pack_invalid — the archive recovery pack in the file is incomplete or damaged, perhaps cut short when it was copied; use the whole pack file as it was saved",
+        : reason === "several"
+          ? "restore failed: backup.archive_recovery_pack_invalid — the file holds more than one archive recovery pack; give a file holding only the pack for the archive you want"
+          : "restore failed: backup.archive_recovery_pack_invalid — the archive recovery pack in the file is incomplete or damaged, perhaps cut short when it was copied; use the whole pack file as it was saved",
     );
     return 1;
   }

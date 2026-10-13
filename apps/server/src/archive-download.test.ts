@@ -167,7 +167,7 @@ describe("downloadArchive", () => {
   });
 
   it("refuses before downloading when the staging disk has too little space", async () => {
-    // Free space is counted in fragments (`frsize`); the preferred block size can be far larger.
+    // `bavail * bsize` would let the download go ahead.
     const statfs = async () => ({ bavail: 1, bsize: BODY.length * 1000, frsize: BODY.length - 1 });
     await expect(run({ statfs })).rejects.toMatchObject({ code: "restore.archive_disk_full" });
     expect(fake.calls).toEqual([`list:${KEY}`]);

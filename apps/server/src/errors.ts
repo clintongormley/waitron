@@ -1200,10 +1200,13 @@ declare module "@waitron/shared" {
     /** An archive bucket's folder for this venue would sit inside, or contain, the stream's venue
      * folder in the same bucket. No params: they would be the owner's bucket settings. */
     "backup.archive_namespace_overlap": Record<string, never>;
-    /** An archive recovery pack (`archive-recovery-pack.ts`) held no token (`not_found`), a token
-     * that is not base64url JSON (`encoding`), or not exactly a pack this server issues (`shape`).
-     * Never carries a field's value: the pack holds the bucket's secret key and the recovery key. */
-    "backup.archive_recovery_pack_invalid": { reason: "not_found" | "encoding" | "shape" };
+    /** An archive recovery pack (`archive-recovery-pack.ts`) held no token (`not_found`), more
+     * than one token (`several`), a token that is not base64url JSON (`encoding`), or not exactly a
+     * pack this server issues (`shape`). Never carries a field's value: the pack holds the bucket's
+     * secret key and the recovery key. */
+    "backup.archive_recovery_pack_invalid": {
+      reason: "not_found" | "encoding" | "shape" | "several";
+    };
     /** An archive recovery pack was asked for while the archive settings name no bucket: no
      * dashboard record is stored, the stored one names only a local folder, or the environment owns
      * the settings and names no bucket. */

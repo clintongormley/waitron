@@ -1,4 +1,4 @@
-import { AppError } from "@waitron/shared";
+import { AppError, isAppError } from "@waitron/shared";
 import { readBucketConfig, type BucketConfig } from "@waitron/stream";
 import { archiveNamespace, hasExactKeys, isRecord, isText } from "./archive-settings.js";
 import { checkedRecoveryKey } from "./backup-config.js";
@@ -36,14 +36,16 @@ const BUCKET_FIELDS = ["region", "bucket", "prefix", "accessKeyId", "secretAcces
 const BASE64URL = /^[A-Za-z0-9_-]+$/;
 
 function usableKey(value: unknown): value is string {
+  if (typeof value !== "string") return false;
   try {
-    return typeof value === "string" && checkedRecoveryKey(value) !== undefined;
-  } catch {
-    return false;
+    return checkedRecoveryKey(value) !== undefined;
+  } catch (error) {
+    if (isAppError(error) && error.code === "backup.recovery_key_too_short") return false;
+    throw error;
   }
 }
 
-function refuse(reason: "not_found" | "encoding" | "shape"): never {
+function refuse(reason: "not_found" | "encoding" | "shape" | "several"): never {
   throw new AppError("backup.archive_recovery_pack_invalid", { reason });
 }
 
@@ -58,7 +60,7 @@ export function encodeArchiveRecoveryPack(pack: ArchiveRecoveryPack): string {
   return [
     "Waitron archive recovery pack.",
     "Keep this file secret: it opens this venue's archived backups made under its recovery key.",
-    "Keep the previous pack until the older archives have expired.",
+    "Keep the previous pack while you still want to restore archives made before it was replaced.",
     "Save it somewhere off the box, such as a password manager or a USB stick kept safe.",
     'To restore an archive on a new box, follow "A restore takes one of three sources" in deploy/README.md.',
     "",
@@ -70,7 +72,7 @@ export function encodeArchiveRecoveryPack(pack: ArchiveRecoveryPack): string {
 /** Accepts the bare token or the downloaded file, whose explanatory lines surround it. */
 export function decodeArchiveRecoveryPack(input: string): ArchiveRecoveryPack {
   const tokens = input.split(/\s+/).filter((part) => part.startsWith(ARCHIVE_PACK_PREFIX));
-  if (tokens.length > 1) refuse("shape");
+  if (tokens.length > 1) refuse("several");
   const found = tokens[0];
   if (found === undefined) refuse("not_found");
   const body = found.slice(ARCHIVE_PACK_PREFIX.length);

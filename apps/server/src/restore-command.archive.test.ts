@@ -65,7 +65,7 @@ const COLD_RESTORE_NOTICE =
 const WRONG_KEY_LINE =
   "restore failed: the recovery key in this pack does not open the archive, or the archive is damaged";
 const LEFT_DOWNLOAD_LINE =
-  "the downloaded archive could not be removed: once no restore is running, delete the archive-download-* folder inside the restore-staging folder of the state volume (/var/lib/waitron/state inside the container) by hand";
+  "the downloaded archive could not be removed: once no restore is running, delete the archive-download-* folder inside the state folder's restore-staging folder by hand";
 const DISK_FULL_LINE =
   "restore failed: the disk filled during the restore; free some space and run it again";
 const HUELLA = "A".repeat(64);
@@ -545,6 +545,11 @@ describe("waitron-restore restore --from-archive", () => {
       "a damaged pack",
       "WAITRON-ARCHIVE-PACK-1:e30\n",
       "restore failed: backup.archive_recovery_pack_invalid — the archive recovery pack in the file is incomplete or damaged, perhaps cut short when it was copied; use the whole pack file as it was saved",
+    ],
+    [
+      "two packs in it",
+      "WAITRON-ARCHIVE-PACK-1:e30\nWAITRON-ARCHIVE-PACK-1:e30\n",
+      "restore failed: backup.archive_recovery_pack_invalid — the file holds more than one archive recovery pack; give a file holding only the pack for the archive you want",
     ],
   ])("refuses a pack file with %s, without printing it", async (_label, text, line) => {
     const f = await fixture();

@@ -46,7 +46,7 @@ function refusal(run: () => unknown): { code: string; message: string; params: u
   throw new Error("expected a refusal");
 }
 
-function expectRefused(run: () => unknown, reason: "not_found" | "encoding" | "shape") {
+function expectRefused(run: () => unknown, reason: "not_found" | "encoding" | "shape" | "several") {
   const error = refusal(run);
   expect(error).toMatchObject({ code: "backup.archive_recovery_pack_invalid", params: { reason } });
   const shown = `${error.message} ${JSON.stringify(error.params)}`;
@@ -68,7 +68,9 @@ describe("archive recovery pack", () => {
     expect(prose).toContain(
       "Keep this file secret: it opens this venue's archived backups made under its recovery key.",
     );
-    expect(prose).toContain("Keep the previous pack until the older archives have expired.");
+    expect(prose).toContain(
+      "Keep the previous pack while you still want to restore archives made before it was replaced.",
+    );
     expect(prose).toContain('follow "A restore takes one of three sources" in deploy/README.md');
     expect(prose).not.toContain(SECRET);
     expect(prose).not.toContain(RECOVERY);
@@ -116,7 +118,7 @@ describe("archive recovery pack", () => {
       archivePrefix: "waitron/archives/venue-2/",
     };
     const text = encodeArchiveRecoveryPack(pack()) + encodeArchiveRecoveryPack(other);
-    expectRefused(() => decodeArchiveRecoveryPack(text), "shape");
+    expectRefused(() => decodeArchiveRecoveryPack(text), "several");
   });
 
   it("refuses text holding no token", () => {

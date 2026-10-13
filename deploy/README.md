@@ -474,10 +474,10 @@ command against it treat that entrypoint differently:
   and the next run does not remove it. Once no restore is running, you can delete a leftover
   `stream-restore-*` or `archive-source-check-*` folder from the top of the `state` volume
   (`/var/lib/waitron/state` inside the container), or an `archive-download-*` folder from the
-  `restore-staging` folder there. A `--from-archive` run that cannot remove its own
-  `archive-download-*` folder prints its result and then a line saying so; delete that folder the
-  same way. Break-glass is the exception by design: it runs beside the
-  server and takes no lock. Whatever holds the folder keeps a small file beside it,
+  `restore-staging` folder there. A `--from-archive` run that downloaded the archive but cannot
+  remove its `archive-download-*` folder afterwards prints its result and then a line saying so;
+  delete that folder the same way. Break-glass is the exception by design: it runs beside the server
+  and takes no lock. Whatever holds the folder keeps a small file beside it,
   `venue.holder.json`, naming what kind of program it is and rewriting a heartbeat time every five
   seconds. A server start refused while that heartbeat is under 30 seconds old — a second copy of
   the app beside the running one — does not count toward the three failed starts that put the box
