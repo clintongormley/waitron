@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { setLocale } from "@waitron/dashboard-kit";
 import { cleanup, host, mount } from "@waitron/ui/src/test-helpers.js";
@@ -515,4 +515,266 @@ test("the drag preview is not a live region", async () => {
   expect(preview.getAttribute("role")).toBeNull();
   expect(preview.getAttribute("aria-live")).toBeNull();
   point(el, "mon", 1050, "pointerup");
+});
+
+const breakfast: Paint = { periodId: "breakfast", startsAt: "08:00", endsAt: "12:00" };
+function columnMenu(el: PaintGrid, key: string) {
+  return el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+    `.heading[data-column="${key}"] wt-row-actions`,
+  )!;
+}
+function columnAction(el: PaintGrid, key: string, label: string) {
+  return [...columnMenu(el, key).querySelectorAll<HTMLElement>("wt-button")].find(
+    (button) => button.textContent!.trim() === label,
+  )!;
+}
+function chooser(el: PaintGrid) {
+  return el.shadowRoot!.querySelector<HTMLElement>(".chooser")!;
+}
+function choice(el: PaintGrid, label: string) {
+  return [...chooser(el).querySelectorAll<HTMLElementTagNameMap["wt-switch"]>("wt-switch")].find(
+    (toggle) => toggle.label === label,
+  )!;
+}
+function chooserButton(el: PaintGrid, label: string) {
+  return [...chooser(el).querySelectorAll<HTMLElementTagNameMap["wt-button"]>("wt-button")].find(
+    (button) => button.textContent!.trim() === label,
+  )!;
+}
+async function openChooser(el: PaintGrid, key: string) {
+  await userEvent.click(columnMenu(el, key));
+  await userEvent.click(columnAction(el, key, "Copy to…"));
+  await el.updateComplete;
+}
+const week = { mon: [breakfast, lunch], tue: [dinner], wed: [], thu: [] as Paint[] };
+
+test("each day's ⋮ sits on its heading line and offers Copy to… and Clear", async () => {
+  const el = await grid({ mon: [lunch], thu: [] });
+  const heading = el.shadowRoot!.querySelector<HTMLElement>('.heading[data-column="thu"]')!;
+  const trigger = columnMenu(el, "thu");
+  expect(trigger.label).toBe("Thursday options");
+  expect(trigger.icon).toBe("kebab");
+  const name = heading.querySelector("span")!.getBoundingClientRect();
+  const kebab = trigger.getBoundingClientRect();
+  expect(kebab.top).toBeLessThan(name.bottom);
+  expect(kebab.bottom).toBeGreaterThan(name.top);
+  await userEvent.click(trigger);
+  expect(columnAction(el, "thu", "Copy to…")).toBeDefined();
+  expect(columnAction(el, "thu", "Clear")).toBeDefined();
+});
+
+test("Copy to… lists the other days; Copy stays quiet and disabled until one is ticked", async () => {
+  const el = await grid(week);
+  el.columns = [
+    { key: "mon", label: "Monday" },
+    { key: "tue", label: "Tuesday" },
+    { key: "wed", label: "Wednesday" },
+    { key: "thu", label: "Thursday" },
+  ];
+  await el.updateComplete;
+  await openChooser(el, "mon");
+  expect(chooser(el).matches(":popover-open")).toBe(true);
+  expect(chooser(el).getAttribute("role")).toBe("dialog");
+  expect(chooser(el).textContent).toContain("Copy Monday to");
+  const labels = [...chooser(el).querySelectorAll("wt-switch")].map(
+    (toggle) => (toggle as HTMLElementTagNameMap["wt-switch"]).label,
+  );
+  expect(labels).toEqual(["Tuesday", "Wednesday", "Thursday"]);
+  expect(chooserButton(el, "Copy").disabled).toBe(true);
+  expect(chooserButton(el, "Copy").variant).toBe("secondary");
+  await userEvent.click(choice(el, "Wednesday"));
+  await el.updateComplete;
+  expect(chooserButton(el, "Copy").disabled).toBe(false);
+  expect(chooserButton(el, "Copy").variant).toBe("primary");
+});
+
+test("Copy copies the day by value to every ticked day, one change per day", async () => {
+  const el = await grid(week);
+  const seen = changes(el);
+  await openChooser(el, "mon");
+  await userEvent.click(choice(el, "tue"));
+  await userEvent.click(choice(el, "Thursday"));
+  await el.updateComplete;
+  await userEvent.click(chooserButton(el, "Copy"));
+  await el.updateComplete;
+  expect(seen).toEqual([
+    { key: "tue", day: [breakfast, lunch] },
+    { key: "thu", day: [breakfast, lunch] },
+  ]);
+  expect(seen[0]!.day[0]).not.toBe(breakfast);
+  expect(seen[0]!.day[0]).not.toBe(seen[1]!.day[0]);
+  expect(chooser(el).matches(":popover-open")).toBe(false);
+});
+
+test("Cancel closes the chooser and copies nothing; reopening starts with nothing ticked", async () => {
+  const el = await grid(week);
+  const seen = changes(el);
+  await openChooser(el, "mon");
+  await userEvent.click(choice(el, "tue"));
+  await userEvent.click(chooserButton(el, "Cancel"));
+  await el.updateComplete;
+  expect(chooser(el).matches(":popover-open")).toBe(false);
+  expect(seen).toEqual([]);
+  await openChooser(el, "mon");
+  expect(choice(el, "tue").checked).toBe(false);
+  expect(chooserButton(el, "Copy").disabled).toBe(true);
+});
+
+test("Clear empties the day", async () => {
+  const el = await grid(week);
+  const seen = changes(el);
+  await userEvent.click(columnMenu(el, "mon"));
+  await userEvent.click(columnAction(el, "mon", "Clear"));
+  expect(seen).toEqual([{ key: "mon", day: [] }]);
+});
+
+test("the ⋮ menu and the chooser work from the keyboard; Escape in a guarded modal closes only the chooser", async () => {
+  const modal = (await mount(
+    `<wt-modal size="full" heading="Winter week"><paint-grid></paint-grid></wt-modal>`,
+  )) as HTMLElementTagNameMap["wt-modal"];
+  let asked = 0;
+  modal.beforeClose = async () => {
+    asked++;
+    return false;
+  };
+  modal.open = true;
+  await modal.updateComplete;
+  const el = modal.querySelector("paint-grid")!;
+  el.columns = [
+    { key: "mon", label: "Monday" },
+    { key: "tue", label: "Tuesday" },
+  ];
+  el.periods = periods;
+  el.days = new Map([
+    ["mon", [lunch]],
+    ["tue", []],
+  ]);
+  await el.updateComplete;
+  const seen = changes(el);
+  columnMenu(el, "mon").focus();
+  await userEvent.keyboard("{Enter}");
+  columnAction(el, "mon", "Copy to…").focus();
+  await userEvent.keyboard("{Enter}");
+  await el.updateComplete;
+  expect(chooser(el).matches(":popover-open")).toBe(true);
+  expect(chooser(el).contains(deepActive()) || choice(el, "Tuesday").matches(":focus")).toBe(true);
+  await userEvent.keyboard(" ");
+  await el.updateComplete;
+  expect(choice(el, "Tuesday").checked).toBe(true);
+  await userEvent.keyboard("{Escape}");
+  await el.updateComplete;
+  await tick();
+  expect(asked).toBe(0);
+  expect(modal.open).toBe(true);
+  expect(chooser(el).matches(":popover-open")).toBe(false);
+  expect(seen).toEqual([]);
+  expect(columnMenu(el, "mon").matches(":focus")).toBe(true);
+  await openChooser(el, "mon");
+  await userEvent.click(choice(el, "Tuesday"));
+  chooserButton(el, "Copy").focus();
+  await userEvent.keyboard("{Enter}");
+  expect(seen).toEqual([{ key: "tue", day: [lunch] }]);
+});
+
+test.each(["Delete", "Backspace"])(
+  "a focused block answers %s as the menu's Delete does",
+  async (key) => {
+    const el = await grid({ thu: [lunch, dinner] });
+    hostUpdates(el);
+    const seen = changes(el);
+    block(el, "thu", 0).focus();
+    await userEvent.keyboard(`{${key}}`);
+    await el.updateComplete;
+    expect(seen).toEqual([{ key: "thu", day: [dinner] }]);
+    expect(deepActive()).toBe(block(el, "thu", 0));
+    expect(block(el, "thu", 0).textContent).toContain("Dinner");
+    expect(menu(el).matches(":popover-open")).toBe(false);
+  },
+);
+
+test("the column focused after a Delete shows the focus-ring tokens", async () => {
+  const el = await grid({ thu: [lunch] });
+  hostUpdates(el);
+  host.style.setProperty("--wt-focus-ring", "3px dashed rgb(1, 2, 3)");
+  host.style.setProperty("--wt-focus-offset", "5px");
+  block(el, "thu").focus();
+  await userEvent.keyboard("{Delete}");
+  await el.updateComplete;
+  const column = el.shadowRoot!.querySelector<HTMLElement>('.day[data-column="thu"]')!;
+  expect(deepActive()).toBe(column);
+  const style = getComputedStyle(column);
+  expect(style.outlineStyle).toBe("dashed");
+  expect(style.outlineColor).toBe("rgb(1, 2, 3)");
+  expect(style.outlineOffset).toBe("5px");
+});
+
+const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+async function tallGrid() {
+  const el = await grid({ mon: [] }, { chosen: "dinner" });
+  el.style.height = "200px";
+  await el.updateComplete;
+  const scroll = el.shadowRoot!.querySelector<HTMLElement>(".scroll")!;
+  return { el, scroll };
+}
+function pointAt(clientY: number, type = "pointermove") {
+  window.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 7, button: 0, clientY }));
+}
+function previewEnd(el: PaintGrid) {
+  return el.shadowRoot!.querySelector(".preview")?.textContent?.match(/–(\d\d:\d\d)/)?.[1];
+}
+
+test("the grid scrolls itself inside the height its host gives it, headings pinned", async () => {
+  const { el, scroll } = await tallGrid();
+  expect(scroll.clientHeight).toBeLessThanOrEqual(200);
+  expect(scroll.scrollHeight).toBeGreaterThan(scroll.clientHeight);
+  const heading = el.shadowRoot!.querySelector<HTMLElement>('.heading[data-column="mon"]')!;
+  const top = heading.getBoundingClientRect().top;
+  scroll.scrollTop = 150;
+  expect(heading.getBoundingClientRect().top).toBeCloseTo(top, 0);
+});
+
+test("a drag held below the bottom edge scrolls and keeps stretching, and stops when the pointer comes back", async () => {
+  const { el, scroll } = await tallGrid();
+  const box = scroll.getBoundingClientRect();
+  point(el, "mon", 60, "pointerdown");
+  pointAt(box.bottom + 30);
+  await el.updateComplete;
+  const firstEnd = previewEnd(el);
+  await vi.waitFor(() => expect(scroll.scrollTop).toBeGreaterThan(60));
+  await el.updateComplete;
+  expect(previewEnd(el)! > firstEnd!).toBe(true);
+  pointAt(box.bottom - 30);
+  await frame();
+  const held = scroll.scrollTop;
+  await frame();
+  await frame();
+  await frame();
+  expect(scroll.scrollTop).toBe(held);
+  pointAt(box.bottom - 30, "pointerup");
+});
+
+test("a drag held above the top edge scrolls up, and releasing stops it", async () => {
+  const { el, scroll } = await tallGrid();
+  scroll.scrollTop = 300;
+  await frame();
+  const heading = el.shadowRoot!.querySelector<HTMLElement>('.heading[data-column="mon"]')!;
+  const box = scroll.getBoundingClientRect();
+  const seen = changes(el);
+  el.shadowRoot!.querySelector('.day[data-column="mon"]')!.dispatchEvent(
+    new PointerEvent("pointerdown", {
+      bubbles: true,
+      composed: true,
+      pointerId: 7,
+      button: 0,
+      clientY: box.bottom - 20,
+    }),
+  );
+  pointAt(heading.getBoundingClientRect().top - 10);
+  await vi.waitFor(() => expect(scroll.scrollTop).toBeLessThan(250));
+  pointAt(heading.getBoundingClientRect().top - 10, "pointerup");
+  expect(seen).toHaveLength(1);
+  const held = scroll.scrollTop;
+  await frame();
+  await frame();
+  expect(scroll.scrollTop).toBe(held);
 });
