@@ -23,7 +23,7 @@ import "@waitron/ui/src/components/wt-disclosure.js";
 import type { DashboardApi, LanguageTranslationGaps } from "../api/client.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 import "../widgets/add-content-language.js";
 import "../widgets/content-translations-dialog.js";
 import { receiptLanguageWarning } from "../widgets/receipt-language.js";
@@ -317,7 +317,7 @@ export class ContentLanguagesScreen extends LitElement {
             : report.gaps.length === 0
               ? t("content_gaps.none")
               : html`${t("content_gaps.count").replace("{count}", String(report.gaps.length))}
-                ${rules.required.includes(code) ? html`<span part="language-meta" role="note" data-test=${`required-gaps-${code}`}>${(report.gaps.length === 1 ? t("content_gaps.required_warning_one") : t("content_gaps.required_warning").replace("{count}", String(report.gaps.length))).replace("{language}", languageDisplayName(code, currentLocale(), false))}</span>` : nothing}`;
+                ${rules.required.includes(code) ? html`<span part="language-meta" role="note" data-test=${`required-gaps-${code}`}>${fill(report.gaps.length === 1 ? "content_gaps.required_warning_one" : "content_gaps.required_warning", { count: String(report.gaps.length), language: languageDisplayName(code, currentLocale(), false) })}</span>` : nothing}`;
         },
       },
       {
