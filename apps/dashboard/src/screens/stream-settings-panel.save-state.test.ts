@@ -19,6 +19,7 @@ const OFF: StreamSettingsView = {
   status: { state: "off" },
   recoveryKeySet: false,
   keyFingerprint: null,
+  revision: null,
 };
 // Every bucket field holds something, so a field that rewrites its value on first draw shows as a change.
 const ON: StreamSettingsView = {
@@ -42,6 +43,7 @@ const ON: StreamSettingsView = {
   },
   recoveryKeySet: true,
   keyFingerprint: "ab12cd34",
+  revision: "0123456789abcdef",
 };
 const SECRET = "not-a-real-secret-0123456789";
 

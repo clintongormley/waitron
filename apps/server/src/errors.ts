@@ -1137,13 +1137,13 @@ declare module "@waitron/shared" {
      */
     "backup.source_kind_unsupported": { kind: string };
     /**
-     * A backup admin route (`apply`/`rotate`), or the bucket copy's Save on a box holding no
-     * recovery key, was refused because a variable `BACKUP_ENV_KEYS` (`boot.ts`) lists is set in the
-     * environment. The environment then owns this box's backup settings, and the server
+     * A backup admin route (`apply`/`disable`/`rotate`), or the bucket copy's Save on a box holding no
+     * recovery key, was refused because a variable `BACKUP_ENV_KEYS` (`backup-config.ts`) lists is
+     * set in the environment. The environment then owns this box's backup settings, and the server
      * does not write `backup.env` beside it. No params: an env var could hold the recovery key. */
     "backup.managed_by_environment": Record<string, never>;
     /**
-     * A backup admin route (`apply`/`rotate`) or the bucket copy's Save or switch-off was refused
+     * A backup admin route (`apply`/`disable`/`rotate`) or the bucket copy's Save or switch-off was refused
      * because this node is not the primary; only the primary runs the backup duty. */
     "backup.not_primary": Record<string, never>;
     /**
@@ -1159,15 +1159,49 @@ declare module "@waitron/shared" {
      * box will not use. No params — the keys are secrets. */
     "backup.effective_mismatch": Record<string, never>;
     /**
+     * `rotate` wrote the new key to `backup.env`, then failed to store the archive settings' new
+     * revision. The new key is in effect and is never put back; only the revision is stale, and the
+     * rotation time and fingerprint still tell an old recovery pack apart. `keyFingerprint` is the
+     * key's 8-hex fingerprint, never the key. `reloadErrorCode` is set when the reload that followed
+     * failed too, and `sealedState` when re-locking this node's state did not seal. */
+    "backup.rotation_metadata_failed": {
+      effectiveKeyChanged: true;
+      keyFingerprint: string;
+      keyRotatedAt: string;
+      reloadErrorCode?: string;
+      sealedState?: "no_key" | "failed";
+    };
+    /**
      * A backup admin route body failed shape validation before any write; or `field: "config"` when
-     * `rotate` finds no destination loaded and no key held. `field` names the offending field, never
-     * the value, which could be the recovery key. */
+     * `disable` finds no stored archive record, or `rotate` finds no readable archive record, no
+     * destination loaded and no key held. `field`
+     * names the offending field, never the value, which could be the recovery key. */
     "backup.request_invalid": { field: string };
     /** The stream settings' Test, or the same check Save runs first, refused the owner's bucket.
      * `reason` is `probeBucket`'s short reason (`@waitron/stream`), naming which check failed. */
     "backup.stream_test_failed": { reason: ProbeFailure };
-    /** A recovery kit was asked for while no bucket is configured. */
+    /** A recovery kit, or archives in the stream's bucket, were asked for while no bucket is
+     * configured. */
     "backup.stream_not_configured": Record<string, never>;
+    /** The stored archive settings (`backup.archive`) are not a record this server wrote.
+     * `reason` names the part that failed, never its value, which could be a secret. */
+    "backup.archive_settings_invalid": { reason: string };
+    /** A stored archive record could not be read. `disable` has no settings to keep switched off,
+     * and the bucket copy's Save (`PUT /api/backup/stream`) cannot check its folder against the
+     * archive's; an archive Save replaces the record. `reason` is the read's error code, never the
+     * record. */
+    "backup.archive_settings_unreadable": { reason: string };
+    /** The bucket copy's stored settings (`backup.stream`) could not be read, so an archive Save
+     * choosing a bucket cannot check or reuse them; `PUT /api/backup/stream` replaces the record.
+     * `reason` is the read's error code, never the record. */
+    "backup.stream_settings_unreadable": { reason: string };
+    /** An archive bucket's folder for this venue would sit inside, or contain, the stream's venue
+     * folder in the same bucket. No params: they would be the owner's bucket settings. */
+    "backup.archive_namespace_overlap": Record<string, never>;
+    /** Save's test of an archive bucket — write, read back, list and delete one object — failed or
+     * ran out of time. `reason` is a code, or `timed_out`, `read_mismatch` or `not_listed`; never
+     * the provider's message. */
+    "backup.archive_test_failed": { reason: string };
     /** A recovery kit was asked for on a node with no membership public key (`nodes.public_key`),
      * so a rebuild could not verify the pointer this node signs. */
     "backup.stream_signer_missing": Record<string, never>;
@@ -1219,6 +1253,9 @@ declare module "@waitron/shared" {
     /** Neither an archive destination nor a bucket copy that is on and current: no copy of the data
      * is being kept. Built as data by the backups alert source, never thrown. */
     "backup.disabled": Record<string, never>;
+    /** The dashboard's stored archive settings could not be read or used, so archives are off.
+     * Built as data by the backups alert source, never thrown. */
+    "backup.archive_settings_unusable": Record<string, never>;
     /** The bucket copy's oldest change not yet in the bucket has waited `STREAM_BEHIND_AFTER_MS`
      * (`alert-sources.ts`) or more. `minutes` is that wait, whole. Built as data by the backups
      * alert source, never thrown. */

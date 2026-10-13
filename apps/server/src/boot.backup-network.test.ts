@@ -4,12 +4,14 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { deleteCredential, loadKeyRing, type KeyRing } from "@waitron/credentials";
 import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { emptyDrainResult } from "@waitron/fiscal";
 import { startManagementSession } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { ARCHIVE_PURPOSE, writeArchiveSettings } from "./archive-settings.js";
 import { startServer, type StartedServer } from "./boot.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import type { StorageBackend, StorageCall } from "./storage-backend.js";
@@ -97,6 +99,7 @@ const scratches: string[] = [];
 afterEach(async () => {
   stall.on = false;
   stall.started = [];
+  await withTransaction(venue.db, (tx) => deleteCredential(tx, { purpose: ARCHIVE_PURPOSE }));
   await Promise.all(scratches.splice(0).map((d) => rm(d, { recursive: true, force: true })));
 });
 
@@ -230,6 +233,158 @@ describe("trading with an archive destination the box cannot use", () => {
           const answered = await statusRead;
           expect(answered.status, await answered.text()).toBe(200);
         };
+      },
+    );
+  }, 60_000);
+});
+
+/** Seals an archive record into the venue database under `ring`. */
+async function storeArchiveRecord(ring: KeyRing, dir: string): Promise<void> {
+  await withTransaction(venue.db, (tx) =>
+    writeArchiveSettings(tx, ring, {
+      enabled: true,
+      destinations: [{ kind: "local-fs", id: "primary", dir }],
+      schedule: { kind: "interval", ms: 60 * 60 * 1000 },
+      retention: { count: 7, days: 30 },
+      destinationTimeoutMs: 15 * 60 * 1000,
+    }),
+  );
+}
+
+/** The box's own key ring: `tradingEnv`'s `WAITRON_CREDENTIALS_KEY`. */
+const boxRing = (): KeyRing =>
+  loadKeyRing({
+    WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
+    WAITRON_CREDENTIALS_KEY_VERSION: "1",
+  });
+
+async function expectArchivesOffFor(
+  errorCode: string,
+  cookie: string,
+  lines: readonly string[],
+  http: { base: string; via: RequestInit },
+): Promise<void> {
+  expect(await waitForEvent(lines, "backup.archive_settings_unusable")).toMatchObject({
+    errorCode,
+  });
+  const status = await fetch(`${http.base}/api/backup/status`, {
+    ...http.via,
+    headers: { cookie },
+  });
+  expect(status.status).toBe(200);
+  expect(await status.json()).toMatchObject({
+    enabled: false,
+    loadErrorCode: errorCode,
+    backupStatus: { configured: false, loadErrorCode: errorCode },
+  });
+  const alerts = await fetch(`${http.base}/management-api/alerts`, {
+    ...http.via,
+    headers: { cookie },
+  });
+  const body = (await alerts.json()) as { alerts: { code: string; area: string }[] };
+  expect(body.alerts).toContainEqual(
+    expect.objectContaining({ code: "backup.archive_settings_unusable", area: "backup" }),
+  );
+}
+
+describe("trading with dashboard archive settings the box cannot use", () => {
+  // The session is written before the server starts: written from here while the server ran, it
+  // failed with `database is locked`.
+  it("starts, sells and answers /health with archives off when the record will not decrypt", async () => {
+    let cookie = "";
+    await bootAndTrade(
+      async (scratch) => {
+        const otherRing = loadKeyRing({
+          WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 6).toString("base64"),
+          WAITRON_CREDENTIALS_KEY_VERSION: "1",
+        });
+        await storeArchiveRecord(otherRing, join(scratch, "backups"));
+        cookie = await managerCookie();
+        return {};
+      },
+      (lines, http) => expectArchivesOffFor("credentials.decrypt_failed", cookie, lines, http),
+    );
+  }, 60_000);
+
+  it("starts, sells and answers /health with archives off when an enabled record has no recovery key", async () => {
+    let cookie = "";
+    await bootAndTrade(
+      async (scratch) => {
+        await storeArchiveRecord(boxRing(), join(scratch, "backups"));
+        cookie = await managerCookie();
+        return {};
+      },
+      (lines, http) => expectArchivesOffFor("backup.recovery_key_missing", cookie, lines, http),
+    );
+  }, 60_000);
+});
+
+describe("trading with environment backup settings beside a sealed record", () => {
+  it("takes the environment's settings and never reads a sealed record that would not decrypt", async () => {
+    let cookie = "";
+    await bootAndTrade(
+      async (scratch) => {
+        const otherRing = loadKeyRing({
+          WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 6).toString("base64"),
+          WAITRON_CREDENTIALS_KEY_VERSION: "1",
+        });
+        await storeArchiveRecord(otherRing, join(scratch, "sealed-backups"));
+        cookie = await managerCookie();
+        return {
+          WAITRON_BACKUP_DIR: join(scratch, "env-backups"),
+          WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!",
+        };
+      },
+      async (lines, { base, via }) => {
+        expect(await waitForEvent(lines, "backup.destination_completed")).toMatchObject({
+          destination: "primary",
+        });
+        const status = await fetch(`${base}/api/backup/status`, { ...via, headers: { cookie } });
+        expect(await status.json()).toMatchObject({
+          enabled: true,
+          source: "environment",
+          loadErrorCode: null,
+        });
+      },
+    );
+  }, 60_000);
+
+  it("refuses a stream folder overlapping the environment's archive bucket", async () => {
+    stall.on = true;
+    const place = { endpoint: "https://s3.example.test", region: "eu-north-1", bucket: "owner" };
+    let cookie = "";
+    await bootAndTrade(
+      async () => {
+        cookie = await managerCookie();
+        return {
+          WAITRON_BACKUP_DESTINATIONS: JSON.stringify([
+            {
+              kind: "s3",
+              id: "offsite",
+              ...place,
+              accessKeyId: "AKIAENV",
+              secretAccessKey: "env-secret-access-key",
+            },
+          ]),
+          WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!",
+        };
+      },
+      async (_lines, { base, via }) => {
+        const res = await fetch(`${base}/api/backup/stream`, {
+          ...via,
+          method: "PUT",
+          headers: { cookie, "content-type": "application/json" },
+          body: JSON.stringify({
+            ...place,
+            prefix: `archives/${venue.cfg.locationId}`,
+            accessKeyId: "AKIASTREAM",
+            secretAccessKey: "stream-secret-0123456789",
+          }),
+        });
+        expect(res.status).toBe(400);
+        expect(await res.json()).toMatchObject({
+          error: { code: "backup.archive_namespace_overlap" },
+        });
       },
     );
   }, 60_000);

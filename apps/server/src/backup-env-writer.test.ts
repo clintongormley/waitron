@@ -4,13 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { assertStorableKey } from "./backup-api.js";
-import {
-  assertStorableRecord,
-  backupEnvRecord,
-  readBackupKeyRotatedAt,
-  writeBackupEnv,
-  writeRecoveryKey,
-} from "./backup-env-writer.js";
+import { assertStorableRecord, writeRecoveryKey } from "./backup-env-writer.js";
 import { formatEnvFile, parseEnvFile } from "./env-file.js";
 
 const tempDirs: string[] = [];
@@ -39,79 +33,13 @@ describe("assertStorableKey", () => {
   });
 });
 
-describe("writeBackupEnv", () => {
-  it("writes only per-venue config (never the DB url) and round-trips", async () => {
-    const dir = tempDir();
-    await writeBackupEnv(dir, {
-      destinationDir: "/srv/backups",
-      recoveryKey: "abcDEF-_1234567890",
-      schedule: { kind: "wall-clock", days: "daily", at: { hour: 3, minute: 30 } },
-      retention: { count: 7, days: 30 },
-      keyRotatedAt: "2026-09-09T00:00:00.000Z",
-    });
-    const parsed = parseEnvFile(await readFile(join(dir, "backup.env"), "utf8"));
-    expect(parsed).toEqual({
-      WAITRON_BACKUP_DIR: "/srv/backups",
-      WAITRON_BACKUP_RECOVERY_KEY: "abcDEF-_1234567890",
-      WAITRON_BACKUP_SCHEDULE_DAYS: "daily",
-      WAITRON_BACKUP_AT: "03:30",
-      WAITRON_BACKUP_RETAIN: "7",
-      WAITRON_BACKUP_RETAIN_DAYS: "30",
-      WAITRON_BACKUP_KEY_ROTATED_AT: "2026-09-09T00:00:00.000Z",
-    });
-    // Owner-only perms, like the other secret writers.
-    expect((await stat(join(dir, "backup.env"))).mode & 0o777).toBe(0o600);
-  });
-
-  it("writes an interval schedule and omits the wall-clock keys", async () => {
-    const dir = tempDir();
-    await writeBackupEnv(dir, {
-      destinationDir: "/srv/backups",
-      recoveryKey: "abcDEF-_1234567890",
-      schedule: { kind: "interval", ms: 3_600_000 },
-      retention: { count: 3, days: 10 },
-      keyRotatedAt: undefined,
-    });
-    const parsed = parseEnvFile(await readFile(join(dir, "backup.env"), "utf8"));
-    expect(parsed.WAITRON_BACKUP_INTERVAL_MS).toBe("3600000");
-    expect(parsed.WAITRON_BACKUP_SCHEDULE_DAYS).toBeUndefined();
-    expect(parsed.WAITRON_BACKUP_AT).toBeUndefined();
-    expect(parsed.WAITRON_BACKUP_KEY_ROTATED_AT).toBeUndefined();
-  });
-
-  it("rejects a destinationDir with an embedded newline and injects NOTHING", async () => {
-    // Security: every free string is guarded, not only the recovery key — a newline in destinationDir
-    // would inject a second line that parses back as a REAL env var. What is asserted is that NO file
-    // is written at all.
-    const dir = tempDir();
-    await expect(
-      writeBackupEnv(dir, {
-        destinationDir: "/mnt/usb\nWAITRON_BACKUP_DATABASE_URL=postgresql://wrong-host/wrong-db",
-        recoveryKey: "abcDEF-_1234567890",
-        schedule: { kind: "interval", ms: 3_600_000 },
-        retention: { count: 7, days: 30 },
-        keyRotatedAt: undefined,
-      }),
-    ).rejects.toMatchObject({ code: "backup.destinations_invalid" });
-    await expect(readFile(join(dir, "backup.env"), "utf8")).rejects.toThrow();
-  });
-});
-
-it("reads an empty stored rotation date as never rotated", async () => {
-  const dir = tempDir();
-  await writeFile(join(dir, "backup.env"), "WAITRON_BACKUP_KEY_ROTATED_AT=\n");
-  expect(await readBackupKeyRotatedAt(dir)).toBeUndefined();
-});
-
 describe("assertStorableRecord", () => {
   it("passes a clean record and rejects any value carrying a control char / newline", () => {
-    const clean = backupEnvRecord({
-      destinationDir: "/srv/backups",
-      recoveryKey: "abcDEF-_1234567890",
-      schedule: { kind: "interval", ms: 3_600_000 },
-      retention: { count: 7, days: 30 },
-      keyRotatedAt: undefined,
-    });
+    const clean = {
+      WAITRON_BACKUP_DIR: "/srv/backups",
+      WAITRON_BACKUP_RECOVERY_KEY: "abcDEF-_1234567890",
+      WAITRON_BACKUP_INTERVAL_MS: "3600000",
+    };
     expect(() => assertStorableRecord(clean)).not.toThrow();
     // A newline in ANY value injects a second KEY=value line on the round-trip.
     expect(() => assertStorableRecord({ ...clean, WAITRON_BACKUP_DIR: "/srv\nEVIL=1" })).toThrow(
@@ -147,25 +75,6 @@ describe("assertStorableRecord — values the env file would read back different
       params: { reason: "round_trip" },
     });
   });
-
-  it("does not write backup.env for a directory that would not read back unchanged", async () => {
-    const dir = tempDir();
-    await expect(
-      writeBackupEnv(dir, {
-        destinationDir: "/mnt/usb ",
-        recoveryKey: "abcDEF-_1234567890",
-        schedule: { kind: "interval", ms: 3_600_000 },
-        retention: { count: 7, days: 30 },
-        keyRotatedAt: undefined,
-      }),
-    ).rejects.toMatchObject({
-      code: "backup.destinations_invalid",
-      params: { reason: "round_trip" },
-    });
-    await expect(readFile(join(dir, "backup.env"), "utf8")).rejects.toMatchObject({
-      code: "ENOENT",
-    });
-  });
 });
 
 describe("writeRecoveryKey", () => {
@@ -181,13 +90,16 @@ describe("writeRecoveryKey", () => {
 
   it("changes the key and the rotation stamp and keeps every other setting", async () => {
     const dir = tempDir();
-    await writeBackupEnv(dir, {
-      destinationDir: "/srv/backups",
-      recoveryKey: "old-key-0123456789",
-      schedule: { kind: "interval", ms: 3_600_000 },
-      retention: { count: 7, days: 30 },
-      keyRotatedAt: undefined,
-    });
+    await writeFile(
+      join(dir, "backup.env"),
+      formatEnvFile({
+        WAITRON_BACKUP_DIR: "/srv/backups",
+        WAITRON_BACKUP_RECOVERY_KEY: "old-key-0123456789",
+        WAITRON_BACKUP_INTERVAL_MS: "3600000",
+        WAITRON_BACKUP_RETAIN: "7",
+        WAITRON_BACKUP_RETAIN_DAYS: "30",
+      }),
+    );
     await writeRecoveryKey(dir, {
       recoveryKey: "new-key-0123456789",
       keyRotatedAt: "2026-09-23T00:00:00.000Z",

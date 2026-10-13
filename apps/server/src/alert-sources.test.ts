@@ -139,6 +139,27 @@ describe("backupAlertSource", () => {
     expect(alerts[0].screen).toBe("backup");
   });
 
+  it("raises archive_settings_unusable in place of backup.disabled when the stored settings could not be used", async () => {
+    const unusable: BackupStatus = {
+      configured: false,
+      loadErrorCode: "credentials.decrypt_failed",
+    };
+    expect(await src(unusable, { failed: new Map() }).read(ctx)).toEqual([
+      {
+        key: "backup.archive_settings_unusable",
+        code: "backup.archive_settings_unusable",
+        params: {},
+        severity: "error",
+        since: null,
+        screen: "backup",
+      },
+    ]);
+    const current = () => stream({ lagMs: 0 });
+    expect(
+      (await src(unusable, { failed: new Map() }, current).read(ctx)).map((a) => a.code),
+    ).toEqual(["backup.archive_settings_unusable"]);
+  });
+
   it("raises destination_overdue for a stale destination, with the last good backup as since", async () => {
     const status: BackupStatus = {
       configured: true,

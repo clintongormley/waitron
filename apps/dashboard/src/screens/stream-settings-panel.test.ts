@@ -19,6 +19,7 @@ const OFF: StreamSettingsView = {
   status: { state: "off" },
   recoveryKeySet: false,
   keyFingerprint: null,
+  revision: null,
 };
 const STREAMING = {
   state: "streaming",
@@ -42,6 +43,7 @@ const ON: StreamSettingsView = {
   status: STREAMING,
   recoveryKeySet: true,
   keyFingerprint: "ab12cd34",
+  revision: "0123456789abcdef",
 };
 // A realistic kit is one long token with no spaces — the width case below depends on that.
 const KIT = `WAITRON-RECOVERY-KIT-1:${"eyJ2ZXJzaW9uIjoxLCJ2ZW51ZUlkIjoi".repeat(12)}`;
@@ -1372,6 +1374,32 @@ describe("stream-settings-panel: which kit is on screen", () => {
       expect(api.getRecoveryKit).toHaveBeenCalledOnce();
     },
   );
+
+  // The kit carries the bucket's secret access key, which no read shows; only the revision says
+  // that another tab replaced it.
+  it("takes the kit and its download away, without fetching another, when a read finds only the stored settings' revision changed", async () => {
+    const api = stubApi({}, ON);
+    const { el } = await mount(api);
+    await press(el, "show-kit");
+    expect(text(el, "[data-test=kit]")).toBe(KIT);
+    await refresh(el, api, { ...ON, revision: "fedcba9876543210" });
+    expect(q(el, "[data-test=kit]")).toBeNull();
+    expect(q(el, "[data-test=download-kit]")).toBeNull();
+    expect(q(el, "[data-test=show-kit]")).not.toBeNull();
+    expect(api.getRecoveryKit).toHaveBeenCalledOnce();
+  });
+
+  it("shows nothing of a Show recovery kit answer requested before a read found the revision changed", async () => {
+    const held = heldKit();
+    const api = stubApi({ getRecoveryKit: vi.fn(held.read) }, ON);
+    const { el } = await mount(api);
+    await press(el, "show-kit");
+    await refresh(el, api, { ...ON, revision: "fedcba9876543210" });
+    held.answer({ kit: KIT, keyFingerprint: "ab12cd34" });
+    await flush(el);
+    expect(q(el, "[data-test=kit]")).toBeNull();
+    expect(q(el, "[data-test=show-kit]")).not.toBeNull();
+  });
 
   it("keeps the kit across a read that finds the same bucket", async () => {
     const api = stubApi({}, ON);

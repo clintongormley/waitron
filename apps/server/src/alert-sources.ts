@@ -167,7 +167,16 @@ export function backupAlertSource(deps: {
       const streamCurrent =
         "lagMs" in stream && stream.state === "streaming" && stream.lagMs < STREAM_BEHIND_AFTER_MS;
       if (!status.configured) {
-        if (!streamCurrent) {
+        if (status.loadErrorCode !== undefined) {
+          alerts.push({
+            key: "backup.archive_settings_unusable",
+            code: "backup.archive_settings_unusable",
+            params: {},
+            severity: "error",
+            since: null,
+            screen: BACKUP_SCREEN,
+          });
+        } else if (!streamCurrent) {
           alerts.push({
             key: "backup.disabled",
             code: "backup.disabled",

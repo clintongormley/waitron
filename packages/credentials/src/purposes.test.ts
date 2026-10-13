@@ -6,6 +6,7 @@ import { capturedSync as captured } from "./testing/captured.js";
 describe("PURPOSES", () => {
   it("declares the host credential purposes", () => {
     expect(Object.keys(PURPOSES).sort()).toEqual([
+      "backup.archive",
       "backup.stream",
       "email.smtp",
       "fiscal.aeat",
@@ -54,6 +55,13 @@ describe("backup.stream purpose", () => {
       "secretAccessKey",
       "venueId",
     ]);
+  });
+});
+
+describe("backup.archive purpose", () => {
+  it("holds the whole archive configuration as one settings document", () => {
+    expect(PURPOSES["backup.archive"]).toEqual(["settings"]);
+    expect(() => validatePayload("backup.archive", { settings: "{}" })).not.toThrow();
   });
 });
 

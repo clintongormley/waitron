@@ -1536,7 +1536,8 @@ export type BackupDestinationStatus = {
 };
 
 export type BackupFreshness =
-  { configured: false } | { configured: true; destinations: BackupDestinationStatus[] };
+  | { configured: false; loadErrorCode?: string }
+  | { configured: true; destinations: BackupDestinationStatus[] };
 
 export interface CloudConnectionStatus {
   replacementEligible?: boolean;
@@ -1611,13 +1612,32 @@ export interface ServerListing {
   nodes: ServerRow[];
 }
 
+/** LOCAL copy of the server's `DestinationView` (`apps/server/src/backup-supervisor.ts`). */
+export type BackupDestinationView =
+  | { id: string; kind: "local-fs"; dir: string }
+  | {
+      id: string;
+      kind: "s3";
+      endpoint: string | null;
+      region: string;
+      bucket: string;
+      namespace: string;
+      credentialPresent: true;
+    };
+
 /** Never carries the recovery key: the server strips it (`projectStatus`,
  * `apps/server/src/backup-api.ts`). */
 export interface BackupStatusView {
   enabled: boolean;
   isPrimary: boolean;
   managedByEnvironment: boolean;
-  destinations: { id: string; dir: string }[];
+  source: "environment" | "dashboard" | null;
+  revision: string | null;
+  /** A dashboard record is stored switched off. */
+  storedDisabled: boolean;
+  /** Why the stored settings could not be used, which leaves archives off. */
+  loadErrorCode: string | null;
+  destinations: BackupDestinationView[];
   schedule?: BackupSchedule;
   retention?: { count: number; days: number };
   keyFingerprint?: string;
@@ -1693,6 +1713,8 @@ export interface StreamSettingsView {
   /** True for a key under the length floor too, which has no fingerprint. */
   recoveryKeySet: boolean;
   keyFingerprint: string | null;
+  /** Changes on every stored change, a secret-only one included; null when nothing is stored. */
+  revision: string | null;
 }
 
 /** The bucket form's body: a blank `endpoint` means an Amazon bucket, a blank `prefix` the bucket
@@ -4011,7 +4033,11 @@ export class DashboardApi {
   }
 
   applyBackup(body: BackupApplyBody): Promise<BackupStatusView> {
-    return this.#request<BackupStatusView>("/api/backup/apply", "POST", body);
+    const { destinationDir, ...rest } = body;
+    return this.#request<BackupStatusView>("/api/backup/apply", "POST", {
+      ...rest,
+      destination: { kind: "local-fs", dir: destinationDir },
+    });
   }
 
   getBackupRecoveryKey(): Promise<{ key: string | null }> {

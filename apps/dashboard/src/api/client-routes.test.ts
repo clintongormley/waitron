@@ -500,7 +500,16 @@ describe("DashboardApi routes", () => {
     expect(callsOf(fetchImpl)).toEqual([
       ["/api/backup/status", "GET", undefined],
       ["/api/backup/mint-key", "POST", undefined],
-      ["/api/backup/apply", "POST", body],
+      [
+        "/api/backup/apply",
+        "POST",
+        {
+          destination: { kind: "local-fs", dir: "/mnt/usb" },
+          recoveryKey: body.recoveryKey,
+          schedule: body.schedule,
+          retention: body.retention,
+        },
+      ],
       ["/api/backup/recovery-key", "GET", undefined],
       ["/api/backup/rotate", "POST", { recoveryKey: "a fresh key" }],
     ]);

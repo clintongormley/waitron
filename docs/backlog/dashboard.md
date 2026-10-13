@@ -237,7 +237,7 @@ classification entry — never an enum, CLAUDE.md §2); names (built-ins are tra
   type,
   `provisioning.duplicate_series_code` and `territory_country_mismatch` on the setup venue screen;
   (4) on the backup screen: a refusal naming
-  `destinationDir` or `schedule` still shows in the page banner rather than under the folder field
+  the folder (`destinationDir` then; `dir` or `destination` since A538-4) or `schedule` still shows in the page banner rather than under the folder field
   or above the button (both seen by running, in the Codex run-it review of C63), and so, read and
   not run, does every other refusal; the backup folder is required but not marked, and Turn on
   backups stays disabled before the first press until the folder is filled and the key is saved —

@@ -353,6 +353,31 @@ the public Google button can identify their Waitron account. Waitron stores Goog
 identifier and does not retain Google access or refresh tokens. Password, passkey and PIN login keep
 working when Google is unavailable.
 
+## Backup archive settings
+
+Encrypted backup archives take their settings from exactly one place.
+
+- **The environment**, when the process environment sets any variable `BACKUP_ENV_KEYS`
+  (`src/backup-config.ts`) lists, `WAITRON_BACKUP_DESTINATION_TIMEOUT_MS` among them. Only the
+  process environment makes the environment the owner: the same names in the box's env files
+  (`secrets.env`, `trading.env` and `backup.env` under `WAITRON_STATE_DIR`) do not. Once the
+  process environment owns the settings, though, those files are merged in beneath it, so a name it
+  leaves unset still takes a value written there. The environment then owns every archive setting,
+  and the dashboard's backup routes refuse to change any of them with
+  `backup.managed_by_environment`. `WAITRON_BACKUP_DIR` names a local folder, and
+  `WAITRON_BACKUP_DESTINATIONS` is a JSON array that may name local folders and S3 buckets.
+- **The dashboard**, otherwise. Save stores the destinations, schedule, retention and time limit
+  sealed in the credential vault under the `backup.archive` purpose, inside the venue database.
+  The dashboard writes only the recovery key and its rotation time to `backup.env` under
+  `WAITRON_STATE_DIR`. With nothing stored, no archive runs.
+
+Rotating the recovery key from the dashboard writes the new key and rotation time to `backup.env`,
+then stores the same archive settings again under a new revision, so every destination and the
+schedule are kept. If that second write fails, the new key is already in effect: the route answers
+`backup.rotation_metadata_failed` and the old key is not put back. A stored record that cannot be
+read is never rewritten: rotation then changes only the key, and answers the read's error code as
+`loadErrorCode`.
+
 ## What `/health` means
 
 `GET /health` is unauthenticated — no metrics, no auth, no readiness/liveness split. It is

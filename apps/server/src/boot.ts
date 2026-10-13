@@ -222,11 +222,15 @@ import { withRecoveryLock } from "./recovery-lock.js";
 import { readRecoveryState, writeRecoveryState } from "./recovery-state.js";
 import { mountBackupApi } from "./backup-api.js";
 import { createSealedStateRefresher, type SealedStateStatus } from "./sealed-state.js";
-import { loadBackupConfig, loadRecoveryKey } from "./backup-config.js";
+import {
+  isBackupManagedByEnvironment as backupKeysInEnv,
+  loadBackupSettings,
+  loadRecoveryKey,
+} from "./backup-config.js";
+import { readArchiveSettings } from "./archive-settings.js";
 import { BackupSupervisor } from "./backup-supervisor.js";
 import { schemaVersionsByModule } from "./backup-manifest.js";
 import { loadBoxEnv } from "./box-env.js";
-import { isUnset } from "./env-value.js";
 import { readOnlyGate } from "./read-only-gate.js";
 import { isFenced } from "./membership-fence.js";
 import { endMirrorViewer, ensureMirrorViewer, mirrorSession } from "./mirror-session.js";
@@ -300,19 +304,6 @@ export const DEFAULT_MIGRATIONS_ROOT = fileURLToPath(new URL("drizzle", import.m
  * SECRETS.
  */
 export const DEFAULT_STATE_ROOT = fileURLToPath(new URL("state", import.meta.url));
-
-/** The `WAITRON_BACKUP_*` env vars whose presence in the RAW base env marks the backup config as
- * env-injected rather than written by the wizard (`isManagedByEnvironment`). */
-const BACKUP_ENV_KEYS = [
-  "WAITRON_BACKUP_DIR",
-  "WAITRON_BACKUP_DESTINATIONS",
-  "WAITRON_BACKUP_RECOVERY_KEY",
-  "WAITRON_BACKUP_SCHEDULE_DAYS",
-  "WAITRON_BACKUP_AT",
-  "WAITRON_BACKUP_INTERVAL_MS",
-  "WAITRON_BACKUP_RETAIN",
-  "WAITRON_BACKUP_RETAIN_DAYS",
-] as const;
 
 /**
  * The box's mDNS hostname: the name the responder answers for, discovery advertises and the leaf's
@@ -1737,10 +1728,15 @@ async function bootServer(
   const backupOutcomes: BackupOutcomeHolder = { failed: new Map() };
   const readRecoveryKey = async (): Promise<string | undefined> =>
     loadRecoveryKey(await loadBoxEnv(base, config.stateDir));
-  const isBackupManagedByEnvironment = (): boolean =>
-    BACKUP_ENV_KEYS.some((k) => !isUnset(base[k]));
+  const isBackupManagedByEnvironment = (): boolean => backupKeysInEnv(base);
   const backupSupervisor = new BackupSupervisor({
-    buildConfig: async () => loadBackupConfig(await loadBoxEnv(base, config.stateDir)),
+    buildConfig: async () =>
+      loadBackupSettings({
+        managedByEnvironment: isBackupManagedByEnvironment(),
+        env: await loadBoxEnv(base, config.stateDir),
+        readSealed: () => readArchiveSettings(db, ring),
+        venueId: till.locationId,
+      }),
     isManagedByEnvironment: isBackupManagedByEnvironment,
     readSingletonRole: () => holders.singletonRole.current,
     venueDir: config.venueDir,
@@ -1922,8 +1918,11 @@ async function bootServer(
     {
       supervisor: backupSupervisor,
       db,
+      ring,
+      venueId: till.locationId,
       stateDir: config.stateDir,
       readRecoveryKey,
+      readBoxEnv: () => loadBoxEnv(base, config.stateDir),
       sealedState,
       readStream: () => streamHost.status(),
       turns: backupTurns,
@@ -1940,6 +1939,7 @@ async function bootServer(
       venueId: till.locationId,
       isPrimary: () => holders.singletonRole.current === "primary",
       isManagedByEnvironment: isBackupManagedByEnvironment,
+      loadedArchives: () => backupSupervisor.current().destinations,
       readRecoveryKey,
       writeRecoveryKey: (recoveryKey) =>
         writeRecoveryKey(config.stateDir, { recoveryKey, keyRotatedAt: undefined }),

@@ -1036,6 +1036,22 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Set up the bucket copy first.",
     es: "Configura primero la copia en el bucket.",
   },
+  "backup.archive_namespace_overlap": {
+    en: "The bucket copy and the scheduled backups would write into each other's folder in this bucket. Choose a different folder for one of them.",
+    es: "La copia en el bucket y las copias programadas escribirían una en la carpeta de la otra en este bucket. Elige otra carpeta para una de ellas.",
+  },
+  "backup.archive_settings_invalid": {
+    en: "The saved settings for scheduled backups are not valid. Save them again on the Backups screen.",
+    es: "Los ajustes guardados de las copias programadas no son válidos. Vuelve a guardarlos en la pantalla Copias de seguridad.",
+  },
+  "backup.archive_settings_unreadable": {
+    en: "The saved settings for scheduled backups can't be read. Save them again on the Backups screen to replace them.",
+    es: "No se pueden leer los ajustes guardados de las copias programadas. Vuelve a guardarlos en la pantalla Copias de seguridad para sustituirlos.",
+  },
+  "backup.stream_settings_unreadable": {
+    en: "The saved settings for the bucket copy can't be read.",
+    es: "No se pueden leer los ajustes guardados de la copia en el bucket.",
+  },
   "backup.stream_signer_missing": {
     en: "This server has no signing key, so it cannot issue a recovery kit.",
     es: "Este servidor no tiene clave de firma, así que no puede emitir un kit de recuperación.",

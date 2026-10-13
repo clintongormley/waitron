@@ -11,6 +11,7 @@ export type { KeyEntry, KeyRing } from "./keyring.js";
 // cipher.ts is not exported: using its primitives directly would bypass the store.
 export {
   credentialProvisioned,
+  credentialRevision,
   deleteCredential,
   getCredential,
   listCredentials,

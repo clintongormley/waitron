@@ -692,7 +692,8 @@ export class BackupScreen extends LitElement {
    * the schedule controls at their defaults. */
   #prefillFromStatus(s: BackupStatusView): void {
     this.#policyReplaced = s.schedule?.kind !== "wall-clock" || !s.retention;
-    this.destinationDir = s.destinations[0]?.dir ?? "";
+    const first = s.destinations[0];
+    this.destinationDir = first?.kind === "local-fs" ? first.dir : "";
     if (s.schedule?.kind === "wall-clock") {
       this.daysMode = s.schedule.days === "daily" ? "daily" : "weekdays";
       if (Array.isArray(s.schedule.days)) this.weekdays = [...s.schedule.days];
@@ -938,7 +939,11 @@ export class BackupScreen extends LitElement {
         ${
           s.destinations.length > 0
             ? html`<dt>${t("backup.status.where")}</dt>
-                <dd>${s.destinations.map((d) => d.dir).join(", ")}</dd>`
+                <dd>
+                  ${s.destinations
+                    .map((d) => (d.kind === "local-fs" ? d.dir : `${d.bucket}/${d.namespace}`))
+                    .join(", ")}
+                </dd>`
             : nothing
         }
         <dt>${t("backup.status.last")}</dt>

@@ -18,8 +18,9 @@ import type { WaitronModule } from "@waitron/module";
 import { VENUE_FILE } from "@waitron/store";
 import { AppError } from "@waitron/shared";
 import { codeOf } from "@waitron/server-kit";
-import { buildBackupBackend, type ResolvedBackupDestination } from "./backup-backends.js";
-import type { BackupConfig, BackupSchedule } from "./backup-config.js";
+import { archiveNamespace } from "./archive-settings.js";
+import { buildBackupBackend } from "./backup-backends.js";
+import type { BackupConfig, BackupConfigUnusable, BackupSchedule } from "./backup-config.js";
 import type { ScheduleClock } from "./backup-schedule.js";
 import {
   readDestinationStatus,
@@ -28,11 +29,37 @@ import {
 } from "./backup-status.js";
 import { runBackupSweep, type DestinationResult } from "./backup-sweep.js";
 import type { BackupOutcomeHolder } from "./alert-sources.js";
-import type { StorageBackend } from "./storage-backend.js";
+import type { BackupDestination, StorageBackend } from "./storage-backend.js";
 import type { DeploymentEnvironment } from "./config.js";
 import { realSleep } from "./loop.js";
 import type { Logger } from "./logger.js";
 import "./errors.js";
+
+/** Where a destination is, never what opens it: a bucket's keys stay on the box. */
+export type DestinationView =
+  | { id: string; kind: "local-fs"; dir: string }
+  | {
+      id: string;
+      kind: "s3";
+      endpoint: string | null;
+      region: string;
+      bucket: string;
+      namespace: string;
+      credentialPresent: true;
+    };
+
+export function destinationView(d: BackupDestination): DestinationView {
+  if (d.kind === "local-fs") return { id: d.id, kind: "local-fs", dir: d.dir };
+  return {
+    id: d.id,
+    kind: "s3",
+    endpoint: d.bucket.endpoint ?? null,
+    region: d.bucket.region,
+    bucket: d.bucket.bucket,
+    namespace: archiveNamespace(d.bucket.prefix, d.venueId),
+    credentialPresent: true,
+  };
+}
 
 /** A SYNC, config-derived snapshot of the backup duty — no I/O. The routes and the box-status shell
  * read this; `status()` layers the async freshness on top. */
@@ -40,7 +67,14 @@ export interface BackupRuntimeStatus {
   enabled: boolean;
   isPrimary: boolean;
   managedByEnvironment: boolean;
-  destinations: { id: string; dir: string }[];
+  source: "environment" | "dashboard" | null;
+  revision: string | null;
+  /** A dashboard record is stored switched off. */
+  storedDisabled: boolean;
+  /** Why the dashboard's stored settings could not be used, which leaves archives off; the error's
+   * code, never its message. */
+  loadErrorCode: string | null;
+  destinations: DestinationView[];
   schedule: BackupSchedule | undefined;
   retention: { count: number; days: number } | undefined;
   /** Short hash PREFIX of the running recovery key — NEVER the key itself. */
@@ -59,7 +93,8 @@ export type SupervisedDestinationStatus = DestinationStatus & {
 };
 
 export type SupervisedBackupStatus =
-  { configured: false } | { configured: true; destinations: SupervisedDestinationStatus[] };
+  | { configured: false; loadErrorCode?: string }
+  | { configured: true; destinations: SupervisedDestinationStatus[] };
 
 type SweepRecord = Omit<SupervisedDestinationStatus, keyof DestinationStatus>;
 
@@ -76,8 +111,8 @@ const NO_RECORD: SweepRecord = {
 export interface BackupSupervisorDeps {
   /** Re-reads the box-env files from DISK each reload — closing over a boot-time value would make
    * hot-reload a no-op. */
-  buildConfig: () => Promise<BackupConfig | undefined>;
-  /** True iff any `WAITRON_BACKUP_*` var is non-empty in the RAW base env. */
+  buildConfig: () => Promise<BackupConfig | BackupConfigUnusable | undefined>;
+  /** True iff a variable `BACKUP_ENV_KEYS` (`backup-config.ts`) lists is non-empty in the RAW base env. */
   isManagedByEnvironment: () => boolean;
   /** The live singleton role, read fresh each reload/status so a promotion is followed. */
   readSingletonRole: () => SingletonRole;
@@ -98,7 +133,7 @@ export interface BackupSupervisorDeps {
   openVenue?: (directory: string) => Promise<VenueDatabase>;
   onScheduled?: (at: number | null) => void;
   /** DI for tests; defaults to `buildBackupBackend`. */
-  buildBackend?: (dest: ResolvedBackupDestination) => StorageBackend;
+  buildBackend?: (dest: BackupDestination) => StorageBackend;
   /** DI for tests; defaults to `readDestinationStatus`'s own limit. */
   statusReadTimeoutMs?: number;
   now?: () => Date;
@@ -122,12 +157,13 @@ export function keyFingerprint(key: string): string {
 
 export class BackupSupervisor {
   readonly #deps: BackupSupervisorDeps;
-  readonly #buildBackend: (dest: ResolvedBackupDestination) => StorageBackend;
+  readonly #buildBackend: (dest: BackupDestination) => StorageBackend;
   #controller: AbortController | undefined;
   #worker: Promise<void> | undefined;
   #backends: StorageBackend[] = [];
   #db: VenueDatabase | undefined;
   #config: BackupConfig | undefined;
+  #loadErrorCode: string | null = null;
   #reloading = false;
   /** Set once by `stop()` (shutdown is terminal). `reload()` checks it after every `await` and bails —
    * tearing down anything it opened — rather than start (or leave) a worker after a stop. */
@@ -148,11 +184,27 @@ export class BackupSupervisor {
       await this.#teardown();
       // A `stop()` may have run while we awaited the teardown, which already left no worker/handle.
       if (this.#stopped) return;
-      const cfg = await this.#deps.buildConfig();
+      const loaded = await this.#deps.buildConfig();
       if (this.#stopped) return; // a stop() landed during buildConfig — don't adopt this config
+      let cfg: BackupConfig | undefined;
+      if (loaded !== undefined && "loadErrorCode" in loaded) {
+        this.#deps.log("error", "backup.archive_settings_unusable", {
+          errorCode: loaded.loadErrorCode,
+        });
+        this.#loadErrorCode = loaded.loadErrorCode;
+        cfg = undefined;
+      } else {
+        this.#loadErrorCode = null;
+        cfg = loaded;
+      }
       this.#config = cfg;
       this.#sweep = new Map();
-      if (cfg === undefined || this.#deps.readSingletonRole() !== "primary") {
+      if (
+        cfg === undefined ||
+        !cfg.enabled ||
+        cfg.recoveryKey === undefined ||
+        this.#deps.readSingletonRole() !== "primary"
+      ) {
         // #config is kept so `current()` can report the destinations/schedule; enabled stays false
         // because `#db` is undefined (nothing was opened) — a non-primary reads disabled.
         this.#deps.log("info", "backup.disabled", {});
@@ -179,7 +231,7 @@ export class BackupSupervisor {
       this.#db = venue;
       const controller = new AbortController();
       this.#controller = controller;
-      this.#backends = cfg.destinations.map(this.#buildBackend);
+      this.#backends = cfg.destinations.map((dest) => this.#buildBackend(dest));
       this.#worker = runBackupSweep({
         backends: this.#backends,
         db: venue.venue,
@@ -228,10 +280,14 @@ export class BackupSupervisor {
       enabled: cfg !== undefined && isPrimary && this.#db !== undefined,
       isPrimary,
       managedByEnvironment: this.#deps.isManagedByEnvironment(),
-      destinations: cfg?.destinations.map((d) => ({ id: d.id, dir: d.dir })) ?? [],
+      source: cfg?.source ?? null,
+      revision: cfg?.revision ?? null,
+      storedDisabled: cfg !== undefined && cfg.source === "dashboard" && !cfg.enabled,
+      loadErrorCode: this.#loadErrorCode,
+      destinations: cfg?.destinations.map(destinationView) ?? [],
       schedule: cfg?.schedule,
       retention: cfg === undefined ? undefined : { count: cfg.retain, days: cfg.retainDays },
-      keyFingerprint: cfg === undefined ? undefined : keyFingerprint(cfg.recoveryKey),
+      keyFingerprint: cfg?.recoveryKey === undefined ? undefined : keyFingerprint(cfg.recoveryKey),
       keyRotatedAt: cfg?.keyRotatedAt,
       recoveryKey: cfg?.recoveryKey,
     };
@@ -246,10 +302,13 @@ export class BackupSupervisor {
     // Taken with the settings: a reload during the read replaces `#sweep`, not this one.
     const sweep = this.#sweep;
     const archiveUnderCurrentKey = () => [...sweep.values()].some((r) => r.storedUnderCurrentKey);
-    if (cfg === undefined || cfg.destinations.length === 0)
+    if (cfg === undefined || !cfg.enabled || cfg.destinations.length === 0)
       return {
         ...base,
-        backupStatus: { configured: false },
+        backupStatus:
+          base.loadErrorCode === null
+            ? { configured: false }
+            : { configured: false, loadErrorCode: base.loadErrorCode },
         archiveUnderCurrentKey: archiveUnderCurrentKey(),
       };
     const now = this.#now();
@@ -268,7 +327,7 @@ export class BackupSupervisor {
 
   /** Answers by the read limit; the backend is closed only once its listing has settled. */
   #readDestination(
-    dest: ResolvedBackupDestination,
+    dest: BackupDestination,
     staleAfterMs: number,
     now: Date,
   ): Promise<DestinationStatus> {

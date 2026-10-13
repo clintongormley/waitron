@@ -71,6 +71,10 @@ export const ALERT_MESSAGES: Readonly<
     en: "No copy of your data is being kept: there are no scheduled backups, and the bucket copy is off or not up to date. Set one up on the Backups page.",
     es: "No se está guardando ninguna copia de tus datos: no hay copias de seguridad programadas, y la copia en el bucket está desactivada o no está al día. Configura una en la página de Copias.",
   },
+  "backup.archive_settings_unusable": {
+    en: "Scheduled backups are off: this box could not use their saved settings. Sales continue. Save the backup settings again on the Backups page; if this message stays, contact support.",
+    es: "Las copias de seguridad programadas están desactivadas: este equipo no ha podido usar sus ajustes guardados. Las ventas continúan. Vuelve a guardar los ajustes de copia en la página de Copias; si el mensaje sigue, contacta con soporte.",
+  },
   "backup.stream_behind": {
     en: "The bucket copy is {minutes} minutes behind: your most recent sales are not in it yet. Sales continue. Check the box's internet connection, and the bucket on the Backups page.",
     es: "La copia en el bucket lleva {minutes} minutos de retraso: tus ventas más recientes aún no están en ella. Las ventas continúan. Revisa la conexión a internet del equipo y el bucket en la página de Copias.",

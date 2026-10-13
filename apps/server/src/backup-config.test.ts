@@ -1,6 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
-import { loadBackupConfig, loadRecoveryKey } from "./backup-config.js";
+import type { ArchiveSettings } from "./archive-settings.js";
+import {
+  BACKUP_ENV_KEYS,
+  isBackupManagedByEnvironment,
+  loadBackupConfig as loadWithVenue,
+  loadBackupSettings,
+  loadRecoveryKey,
+  resolveBackupConfig,
+} from "./backup-config.js";
+
+const VENUE = "c0000000-0000-4000-8000-000000000002";
+const loadBackupConfig = (env: Record<string, string | undefined>) => loadWithVenue(env, VENUE);
 
 describe("loadBackupConfig", () => {
   it("returns undefined when WAITRON_BACKUP_DIR is unset (backup off)", () => {
@@ -30,7 +41,7 @@ describe("loadBackupConfig", () => {
       staleAfterMs: expect.any(Number),
     });
     expect(c!.schedule).toEqual({ kind: "interval", ms: expect.any(Number) });
-    expect(c!.destinations[0].dir).toMatch(/^\//); // resolved absolute
+    expect((c!.destinations[0] as { dir: string }).dir).toMatch(/^\//); // resolved absolute
   });
   it("rejects a non-positive retain count", () => {
     expect(() =>
@@ -305,5 +316,306 @@ describe("loadBackupConfig destination time limit", () => {
         loadBackupConfig({ ...base, WAITRON_BACKUP_DESTINATION_TIMEOUT_MS: raw }),
       ).toThrow(refusal("not_a_positive_integer"));
     }
+  });
+});
+
+describe("loadBackupConfig bucket destinations", () => {
+  const SECRET = "env-secret-access-key";
+  const s3 = {
+    kind: "s3",
+    id: "offsite",
+    endpoint: "https://s3.example.test",
+    region: "eu-north-1",
+    bucket: "owner-bucket",
+    prefix: "waitron",
+    accessKeyId: "AKIAENV",
+    secretAccessKey: SECRET,
+  };
+  const withEntries = (entries: unknown[]) => ({
+    ...base,
+    WAITRON_BACKUP_DESTINATIONS: JSON.stringify(entries),
+  });
+  const refusalOf = (run: () => unknown): { code: string; params: unknown } => {
+    try {
+      run();
+    } catch (e) {
+      const err = e as AppError;
+      return { code: err.code, params: err.params };
+    }
+    throw new Error("expected a refusal");
+  };
+
+  it("reads a bucket entry and stamps the venue id on it", () => {
+    const cfg = loadWithVenue(withEntries([s3]), VENUE)!;
+    expect(cfg.destinations).toEqual([
+      {
+        kind: "s3",
+        id: "offsite",
+        venueId: VENUE,
+        bucket: {
+          endpoint: "https://s3.example.test",
+          region: "eu-north-1",
+          bucket: "owner-bucket",
+          prefix: "waitron",
+          accessKeyId: "AKIAENV",
+          secretAccessKey: SECRET,
+        },
+      },
+    ]);
+    expect(cfg).toMatchObject({ source: "environment", revision: undefined, enabled: true });
+  });
+
+  it("reads a bucket entry with no endpoint or prefix", () => {
+    const bare = { ...s3 } as Partial<typeof s3>;
+    delete bare.endpoint;
+    delete bare.prefix;
+    const cfg = loadWithVenue(withEntries([bare]), VENUE)!;
+    expect(cfg.destinations[0]).toEqual({
+      kind: "s3",
+      id: "offsite",
+      venueId: VENUE,
+      bucket: {
+        region: "eu-north-1",
+        bucket: "owner-bucket",
+        prefix: "",
+        accessKeyId: "AKIAENV",
+        secretAccessKey: SECRET,
+      },
+    });
+  });
+
+  it.each([
+    ["a number for the bucket", { ...s3, bucket: 7 }],
+    ["a null region", { ...s3, region: null }],
+    ["an array for the access key id", { ...s3, accessKeyId: ["AKIAENV"] }],
+    ["no secret", { ...s3, secretAccessKey: undefined }],
+    ["an empty secret", { ...s3, secretAccessKey: "" }],
+    ["an unknown field", { ...s3, sessionToken: "x" }],
+    ["an unknown kind", { ...s3, kind: "gcs" }],
+    ["a null entry", null],
+    ["an array entry", [s3]],
+    ["a bad endpoint", { ...s3, endpoint: "ftp://x" }],
+    ["a prefix with a parent segment", { ...s3, prefix: "a/../b" }],
+  ])("refuses %s with no value in the refusal", (_name, entry) => {
+    const r = refusalOf(() => loadWithVenue(withEntries([entry]), VENUE));
+    expect(r).toEqual({ code: "backup.destinations_invalid", params: { reason: "bad_entry" } });
+    expect(JSON.stringify(r)).not.toContain(SECRET);
+  });
+
+  it("refuses two entries naming the same bucket place, however the endpoint and prefix are spelled", () => {
+    const again = {
+      ...s3,
+      id: "offsite-2",
+      endpoint: "https://s3.example.test/",
+      prefix: "/waitron/",
+      accessKeyId: "AKIAOTHER",
+    };
+    expect(() => loadWithVenue(withEntries([s3, again]), VENUE)).toThrow(
+      new AppError("backup.destinations_invalid", { reason: "duplicate_bucket" }),
+    );
+  });
+
+  it("accepts two entries in different buckets", () => {
+    const other = { ...s3, id: "offsite-2", bucket: "second-bucket" };
+    expect(loadWithVenue(withEntries([s3, other]), VENUE)!.destinations).toHaveLength(2);
+  });
+
+  it("refuses a folder entry carrying a field a folder does not take", () => {
+    expect(
+      refusalOf(() =>
+        loadWithVenue(
+          withEntries([{ kind: "local-fs", id: "usb", dir: "/mnt/usb", bucket: "x" }]),
+          VENUE,
+        ),
+      ),
+    ).toEqual({ code: "backup.destinations_invalid", params: { reason: "bad_entry" } });
+  });
+
+  it("refuses an id shared by a folder and a bucket", () => {
+    expect(() =>
+      loadWithVenue(withEntries([{ kind: "local-fs", id: "offsite", dir: "/mnt/a" }, s3]), VENUE),
+    ).toThrow(new AppError("backup.destinations_invalid", { reason: "duplicate_id" }));
+  });
+});
+
+describe("isBackupManagedByEnvironment", () => {
+  it("counts the destination time limit as an environment setting", () => {
+    expect(BACKUP_ENV_KEYS).toContain("WAITRON_BACKUP_DESTINATION_TIMEOUT_MS");
+    expect(isBackupManagedByEnvironment({ WAITRON_BACKUP_DESTINATION_TIMEOUT_MS: "60000" })).toBe(
+      true,
+    );
+  });
+
+  it("is false with every backup variable unset or empty", () => {
+    expect(isBackupManagedByEnvironment({})).toBe(false);
+    expect(isBackupManagedByEnvironment({ WAITRON_BACKUP_DESTINATION_TIMEOUT_MS: "" })).toBe(false);
+  });
+});
+
+describe("resolveBackupConfig", () => {
+  const KEY = "held-recovery-key-0123";
+  const sealed: ArchiveSettings = {
+    revision: "6f1c2a43-8a49-4d0f-9b51-4d4f4c7c2a10",
+    enabled: true,
+    destinations: [{ kind: "local-fs", id: "primary", dir: "/mnt/sealed" }],
+    schedule: { kind: "wall-clock", days: [1, 3], at: { hour: 4, minute: 15 } },
+    retention: { count: 5, days: 12 },
+    destinationTimeoutMs: 120_000,
+  };
+
+  it("ignores a sealed record when the environment owns the settings", () => {
+    const cfg = resolveBackupConfig({
+      managedByEnvironment: true,
+      env: { WAITRON_BACKUP_DIR: "/mnt/env", WAITRON_BACKUP_RECOVERY_KEY: KEY },
+      sealed,
+      venueId: VENUE,
+    })!;
+    expect(cfg.destinations).toEqual([{ kind: "local-fs", id: "primary", dir: "/mnt/env" }]);
+    expect(cfg).toMatchObject({ source: "environment", revision: undefined, enabled: true });
+  });
+
+  it("is undefined with no sealed record, even when backup.env still names a folder", () => {
+    expect(
+      resolveBackupConfig({
+        managedByEnvironment: false,
+        env: { WAITRON_BACKUP_DIR: "/mnt/leftover", WAITRON_BACKUP_RECOVERY_KEY: KEY },
+        sealed: null,
+        venueId: VENUE,
+      }),
+    ).toBeUndefined();
+  });
+
+  it("builds the config from an enabled sealed record", () => {
+    const cfg = resolveBackupConfig({
+      managedByEnvironment: false,
+      env: {
+        WAITRON_BACKUP_RECOVERY_KEY: KEY,
+        WAITRON_BACKUP_KEY_ROTATED_AT: "2026-10-01T00:00:00.000Z",
+        // Not read on this path: the record carries its own time limit.
+        WAITRON_BACKUP_DESTINATION_TIMEOUT_MS: "60000",
+      },
+      sealed,
+      venueId: VENUE,
+    });
+    expect(cfg).toEqual({
+      source: "dashboard",
+      revision: sealed.revision,
+      enabled: true,
+      destinations: sealed.destinations,
+      recoveryKey: KEY,
+      schedule: sealed.schedule,
+      retain: 5,
+      retainDays: 12,
+      staleAfterMs: 2 * 24 * 60 * 60 * 1000,
+      destinationTimeoutMs: 120_000,
+      keyRotatedAt: "2026-10-01T00:00:00.000Z",
+    });
+  });
+
+  it("carries a stored switch-off", () => {
+    const cfg = resolveBackupConfig({
+      managedByEnvironment: false,
+      env: { WAITRON_BACKUP_RECOVERY_KEY: KEY },
+      sealed: { ...sealed, enabled: false },
+      venueId: VENUE,
+    });
+    expect(cfg).toMatchObject({ enabled: false, source: "dashboard", revision: sealed.revision });
+  });
+
+  it("refuses an enabled record when no recovery key is held", () => {
+    expect(() =>
+      resolveBackupConfig({ managedByEnvironment: false, env: {}, sealed, venueId: VENUE }),
+    ).toThrow(new AppError("backup.recovery_key_missing", {}));
+  });
+
+  it("reports a switched-off record with no held key, without throwing", () => {
+    const cfg = resolveBackupConfig({
+      managedByEnvironment: false,
+      env: {},
+      sealed: { ...sealed, enabled: false },
+      venueId: VENUE,
+    });
+    expect(cfg).toMatchObject({ enabled: false, recoveryKey: undefined });
+  });
+});
+
+describe("resolveBackupConfig with a held key under the length floor", () => {
+  it("reports a switched-off record without throwing", () => {
+    const cfg = resolveBackupConfig({
+      managedByEnvironment: false,
+      env: { WAITRON_BACKUP_RECOVERY_KEY: "short" },
+      sealed: {
+        revision: "6f1c2a43-8a49-4d0f-9b51-4d4f4c7c2a10",
+        enabled: false,
+        destinations: [{ kind: "local-fs", id: "primary", dir: "/mnt/sealed" }],
+        schedule: { kind: "interval", ms: 86_400_000 },
+        retention: { count: 7, days: 30 },
+        destinationTimeoutMs: 900_000,
+      },
+      venueId: VENUE,
+    });
+    expect(cfg).toMatchObject({ enabled: false, recoveryKey: undefined });
+  });
+});
+
+describe("loadBackupSettings", () => {
+  const sealed: ArchiveSettings = {
+    revision: "6f1c2a43-8a49-4d0f-9b51-4d4f4c7c2a10",
+    enabled: true,
+    destinations: [{ kind: "local-fs", id: "primary", dir: "/mnt/sealed" }],
+    schedule: { kind: "interval", ms: 86_400_000 },
+    retention: { count: 7, days: 30 },
+    destinationTimeoutMs: 900_000,
+  };
+  const unreadable = () =>
+    Promise.reject(new AppError("credentials.decrypt_failed", { purpose: "backup.archive" }));
+
+  it("still refuses an environment the box cannot use, and never reads the sealed record", async () => {
+    let read = false;
+    await expect(
+      loadBackupSettings({
+        managedByEnvironment: true,
+        env: { WAITRON_BACKUP_DESTINATIONS: "not json" },
+        readSealed: async () => {
+          read = true;
+          return sealed;
+        },
+        venueId: VENUE,
+      }),
+    ).rejects.toMatchObject({ code: "backup.destinations_invalid" });
+    expect(read).toBe(false);
+  });
+
+  it("leaves archives off with the code when the dashboard record will not decrypt", async () => {
+    expect(
+      await loadBackupSettings({
+        managedByEnvironment: false,
+        env: { WAITRON_BACKUP_RECOVERY_KEY: "held-recovery-key-0123" },
+        readSealed: unreadable,
+        venueId: VENUE,
+      }),
+    ).toEqual({ loadErrorCode: "credentials.decrypt_failed" });
+  });
+
+  it("leaves archives off with the code when an enabled dashboard record has no recovery key", async () => {
+    expect(
+      await loadBackupSettings({
+        managedByEnvironment: false,
+        env: {},
+        readSealed: async () => sealed,
+        venueId: VENUE,
+      }),
+    ).toEqual({ loadErrorCode: "backup.recovery_key_missing" });
+  });
+
+  it("names a failure that carries no code as unknown, never by its message", async () => {
+    expect(
+      await loadBackupSettings({
+        managedByEnvironment: false,
+        env: {},
+        readSealed: () => Promise.reject(new Error("secret-bearing message")),
+        venueId: VENUE,
+      }),
+    ).toEqual({ loadErrorCode: "unknown" });
   });
 });

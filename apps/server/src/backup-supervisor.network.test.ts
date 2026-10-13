@@ -69,6 +69,9 @@ function config(
   overrides: Partial<BackupConfig> = {},
 ): BackupConfig {
   return {
+    source: "environment",
+    revision: undefined,
+    enabled: true,
     destinations: destinations.map((d) => ({ kind: "local-fs", ...d })),
     recoveryKey: "recovery-key-one-strong",
     schedule: { kind: "interval", ms: 60 * 60 * 1000 },
@@ -520,7 +523,7 @@ describe("BackupSupervisor status, one destination at a time", () => {
         usb: byId(overlapped.backupStatus.destinations, "usb"),
       }).toEqual({
         fingerprint: keyFingerprint(keyOne),
-        folders: [{ id: "usb", dir: dirA }],
+        folders: [{ id: "usb", kind: "local-fs", dir: dirA }],
         archive: false,
         usb: {
           id: "usb",

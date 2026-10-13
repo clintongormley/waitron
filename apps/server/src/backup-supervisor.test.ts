@@ -10,12 +10,14 @@ import {
   type VenueDatabase,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { backupAlertSource } from "./alert-sources.js";
 import { decryptArtifact } from "./artifact-cipher.js";
 import { unpackArchive } from "./backup-archive.js";
 import type { BackupConfig } from "./backup-config.js";
 import { backupArchiveKey } from "./backup-keys.js";
 import { BackupSupervisor, keyFingerprint } from "./backup-supervisor.js";
 import { LocalFsBackend } from "./local-fs-backend.js";
+import type { BackupDestination } from "./storage-backend.js";
 import { ALL_MODULES } from "./modules.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
 import { AppError } from "@waitron/shared";
@@ -76,6 +78,9 @@ async function makeDestDir(): Promise<string> {
 
 function localFsConfig(dirs: string[], recoveryKey: string): BackupConfig {
   return {
+    source: "environment",
+    revision: undefined,
+    enabled: true,
     destinations: dirs.map((dir, i) => ({
       kind: "local-fs",
       id: i === 0 ? "primary" : `d${i}`,
@@ -238,7 +243,9 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
       await waitForArchive(destB);
       expect((await listArchives(destA)).length).toBe(aCount);
       expect((await listArchives(destB)).length).toBeGreaterThan(0);
-      expect(sup.current().destinations.map((d) => d.dir)).toEqual([destB]);
+      expect(sup.current().destinations.map((d) => (d.kind === "local-fs" ? d.dir : d.id))).toEqual(
+        [destB],
+      );
     } finally {
       await sup.stop();
     }
@@ -794,6 +801,224 @@ describe("BackupSupervisor closes the sweep's destinations", () => {
       });
     } finally {
       close.mockRestore();
+    }
+  });
+});
+
+describe("BackupSupervisor with a switched-off record or a bucket destination", () => {
+  const SECRET = "bucket-secret-access-key";
+  const VENUE = "c0000000-0000-4000-8000-000000000002";
+  const REVISION = "6f1c2a43-8a49-4d0f-9b51-4d4f4c7c2a10";
+
+  function supervisorFor(config: BackupConfig, built: BackupDestination[], venueDir: string) {
+    return new BackupSupervisor({
+      buildConfig: async () => config,
+      isManagedByEnvironment: () => false,
+      readSingletonRole: () => "primary",
+      venueDir,
+      modules: ALL_MODULES,
+      environment: "production",
+      stateDir: venueDir,
+      jitterSeed: "seed",
+      readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] }),
+      log: () => {},
+      buildBackend: (dest) => {
+        built.push(dest);
+        return new LocalFsBackend(dest.id, venueDir);
+      },
+    });
+  }
+
+  it("runs no sweep for a switched-off record, yet reports it", async () => {
+    const dest = await makeDestDir();
+    const built: BackupDestination[] = [];
+    const sup = supervisorFor(
+      {
+        ...localFsConfig([dest], STRONG_KEY_1),
+        source: "dashboard",
+        revision: REVISION,
+        enabled: false,
+      },
+      built,
+      await makeStateDir(),
+    );
+    try {
+      await sup.reload();
+      expect(built).toEqual([]);
+      expect(await listArchives(dest)).toEqual([]);
+      expect(sup.current()).toMatchObject({
+        enabled: false,
+        storedDisabled: true,
+        source: "dashboard",
+        revision: REVISION,
+        destinations: [{ id: "primary", kind: "local-fs", dir: dest }],
+      });
+    } finally {
+      await sup.stop();
+    }
+  });
+
+  it("reads a switched-off record as archives off: no destination is opened, no alert is overdue", async () => {
+    const dest = await makeDestDir();
+    const built: BackupDestination[] = [];
+    const sup = supervisorFor(
+      {
+        ...localFsConfig([dest], STRONG_KEY_1),
+        source: "dashboard",
+        revision: REVISION,
+        enabled: false,
+      },
+      built,
+      await makeStateDir(),
+    );
+    try {
+      await sup.reload();
+      const status = await sup.status();
+      expect(built).toEqual([]);
+      expect(status.backupStatus).toEqual({ configured: false });
+      expect(status.destinations).toEqual([{ id: "primary", kind: "local-fs", dir: dest }]);
+      const streaming = () => ({
+        state: "streaming" as const,
+        generation: "gen-0-node-a-20260915T110000Z",
+        reason: null,
+        stateSince: new Date().toISOString(),
+        bucketProblem: null,
+        lagMs: 0,
+        lastConfirmedUploadAt: new Date().toISOString(),
+      });
+      const alerts = backupAlertSource({
+        listStatus: async () => (await sup.status()).backupStatus,
+        outcomes: { failed: new Map() },
+        now: () => new Date(),
+        readStream: streaming,
+      });
+      expect(await alerts.read({ tx: {} as never, now: new Date() })).toEqual([]);
+    } finally {
+      await sup.stop();
+    }
+  });
+
+  it("keeps archives off and reports the code when the settings could not be loaded", async () => {
+    const dest = await makeDestDir();
+    const built: BackupDestination[] = [];
+    const logs: { level: string; event: string; fields: unknown }[] = [];
+    let load: BackupConfig | { loadErrorCode: string } = {
+      loadErrorCode: "credentials.decrypt_failed",
+    };
+    const sup = new BackupSupervisor({
+      buildConfig: async () => load,
+      isManagedByEnvironment: () => false,
+      readSingletonRole: () => "primary",
+      venueDir: await makeVenueDir(),
+      modules: ALL_MODULES,
+      environment: "production",
+      stateDir: await makeStateDir(),
+      jitterSeed: "seed",
+      readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] }),
+      log: (level, event, fields) => logs.push({ level, event, fields }),
+      buildBackend: (dest) => {
+        built.push(dest);
+        return new LocalFsBackend(dest.id, dest.kind === "local-fs" ? dest.dir : "/");
+      },
+    });
+    try {
+      await sup.reload();
+      expect(logs).toContainEqual({
+        level: "error",
+        event: "backup.archive_settings_unusable",
+        fields: { errorCode: "credentials.decrypt_failed" },
+      });
+      expect(sup.current()).toMatchObject({
+        enabled: false,
+        source: null,
+        destinations: [],
+        loadErrorCode: "credentials.decrypt_failed",
+      });
+      expect((await sup.status()).backupStatus).toEqual({
+        configured: false,
+        loadErrorCode: "credentials.decrypt_failed",
+      });
+      expect(built).toEqual([]);
+
+      load = localFsConfig([dest], STRONG_KEY_1);
+      await sup.reload();
+      expect(sup.current()).toMatchObject({ enabled: true, loadErrorCode: null });
+    } finally {
+      await sup.stop();
+    }
+  });
+
+  it("reports an enabled environment config as not stored switched off", async () => {
+    const dest = await makeDestDir();
+    const sup = supervisorFor(localFsConfig([dest], STRONG_KEY_1), [], await makeStateDir());
+    try {
+      await sup.reload();
+      expect(sup.current()).toMatchObject({
+        storedDisabled: false,
+        source: "environment",
+        revision: null,
+      });
+    } finally {
+      await sup.stop();
+    }
+  });
+
+  it("reports nothing configured as no source", async () => {
+    const refs: Refs = {
+      config: undefined,
+      role: "primary",
+      venueDir: await makeVenueDir(),
+      logs: [],
+      managed: false,
+    };
+    const sup = makeSupervisor(refs, await makeStateDir());
+    await sup.reload();
+    expect(sup.current()).toMatchObject({ source: null, revision: null, storedDisabled: false });
+  });
+
+  it("shows a bucket destination's place, never its secret", async () => {
+    const sup = supervisorFor(
+      {
+        ...localFsConfig([], STRONG_KEY_1),
+        enabled: false,
+        source: "dashboard",
+        revision: REVISION,
+        destinations: [
+          {
+            kind: "s3",
+            id: "bucket",
+            venueId: VENUE,
+            bucket: {
+              endpoint: "https://s3.example.test",
+              region: "eu-north-1",
+              bucket: "owner-bucket",
+              prefix: "waitron",
+              accessKeyId: "AKIAVIEW",
+              secretAccessKey: SECRET,
+            },
+          },
+        ],
+      },
+      [],
+      await makeStateDir(),
+    );
+    try {
+      await sup.reload();
+      const destinations = sup.current().destinations;
+      expect(destinations).toEqual([
+        {
+          id: "bucket",
+          kind: "s3",
+          endpoint: "https://s3.example.test",
+          region: "eu-north-1",
+          bucket: "owner-bucket",
+          namespace: `waitron/archives/${VENUE}/`,
+          credentialPresent: true,
+        },
+      ]);
+      expect(JSON.stringify(destinations)).not.toContain(SECRET);
+    } finally {
+      await sup.stop();
     }
   });
 });

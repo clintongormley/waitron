@@ -1,7 +1,12 @@
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { readMembershipTrustSet, withTransaction, type Database } from "@waitron/db";
-import { deleteCredential, putCredential, type KeyRing } from "@waitron/credentials";
+import {
+  credentialRevision,
+  deleteCredential,
+  putCredential,
+  type KeyRing,
+} from "@waitron/credentials";
 import { authorizeManager } from "@waitron/identity";
 import { AppError, hasCode, isAppError } from "@waitron/shared";
 import { createErrorBoundary, readJsonBody, requireManagementSession } from "@waitron/server-kit";
@@ -12,14 +17,21 @@ import {
   type ProbeResult,
   type StreamView,
 } from "@waitron/stream";
+import {
+  archivePlace,
+  readHeldArchiveSettings,
+  refuseStreamOverlap,
+  type ArchivePlace,
+} from "./archive-settings.js";
 import { mintRecoveryKey, readHeldKey } from "./backup-config.js";
-import { keyFingerprint } from "./backup-supervisor.js";
+import { keyFingerprint, type DestinationView } from "./backup-supervisor.js";
 import type { Logger } from "./logger.js";
 import type { SealedStateRefresher } from "./sealed-state.js";
 import type { Turns } from "./backup-turns.js";
 import {
   STREAM_PURPOSE,
   readStreamSettings,
+  readStreamSettingsIn,
   streamSettingsPayload,
   type StreamHost,
 } from "./stream-host.js";
@@ -33,8 +45,10 @@ export interface StreamApiDeps {
   /** The venue the stream writes under; Save stores it with the settings. */
   venueId: string;
   isPrimary: () => boolean;
-  /** True when the environment sets a variable `BACKUP_ENV_KEYS` (`boot.ts`) lists. */
+  /** True when the environment sets a variable `BACKUP_ENV_KEYS` (`backup-config.ts`) lists. */
   isManagedByEnvironment: () => boolean;
+  /** The archive destinations the backup duty has loaded (`BackupSupervisor.current()`). */
+  loadedArchives: () => readonly DestinationView[];
   readRecoveryKey: () => Promise<string | undefined>;
   writeRecoveryKey: (key: string) => Promise<void>;
   /** Re-locks this node's secrets row under the current recovery key. Never throws. */
@@ -60,6 +74,8 @@ export interface StreamSettingsView {
   /** True for a key under the length floor too, which has no fingerprint here. */
   recoveryKeySet: boolean;
   keyFingerprint: string | null;
+  /** Changes on every stored change, a secret-only one included; null when nothing is stored. */
+  revision: string | null;
 }
 
 const STATUS: Record<string, ContentfulStatusCode> = {
@@ -75,6 +91,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "backup.reload_in_progress": 409,
   "backup.stream_test_failed": 422,
   "backup.stream_not_configured": 409,
+  "backup.archive_namespace_overlap": 400,
+  "backup.archive_settings_unreadable": 409,
   "backup.stream_signer_missing": 409,
   "backup.recovery_key_missing": 409,
   // The bucket gave no answer at all: not a refusal of the owner's settings, so not 422.
@@ -106,6 +124,39 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
     if (!result.ok) throw new AppError("backup.stream_test_failed", { reason: result.reason });
   };
 
+  const archivePlaces = async (): Promise<ArchivePlace[]> => {
+    // A leftover dashboard record is not checked: boot never reads one while the environment owns
+    // the settings (`loadBackupSettings`).
+    if (deps.isManagedByEnvironment()) {
+      return deps.loadedArchives().flatMap((d) =>
+        d.kind === "s3"
+          ? [
+              {
+                ...(d.endpoint === null ? {} : { endpoint: d.endpoint }),
+                region: d.region,
+                bucket: d.bucket,
+                namespace: d.namespace,
+              },
+            ]
+          : [],
+      );
+    }
+    // An unreadable record refuses Save: read as none held, it would skip the overlap check.
+    const read = await readHeldArchiveSettings(deps.db, deps.ring);
+    if ("unreadable" in read) {
+      throw new AppError("backup.archive_settings_unreadable", { reason: read.unreadable });
+    }
+    return (read.settings?.destinations ?? []).flatMap((d) =>
+      d.kind === "s3" ? [archivePlace(d.bucket, d.venueId)] : [],
+    );
+  };
+
+  const refuseArchiveOverlap = async (bucket: BucketConfig): Promise<void> => {
+    for (const place of await archivePlaces()) {
+      refuseStreamOverlap(place, { venueId: deps.venueId, bucket });
+    }
+  };
+
   const heldKeyOrRefuse = async (): Promise<string | undefined> => {
     const held = await deps.readRecoveryKey();
     if (held === undefined && deps.isManagedByEnvironment()) {
@@ -114,17 +165,29 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
     return held;
   };
 
+  // One transaction, so the revision is the one of the settings shown.
+  const readStored = (): Promise<{
+    bucket: BucketConfig | null;
+    configured: boolean;
+    revision: string | null;
+  }> =>
+    withTransaction(deps.db, async (tx) => {
+      let bucket: BucketConfig | null;
+      let configured: boolean;
+      try {
+        bucket = (await readStreamSettingsIn(tx, deps.ring))?.bucket ?? null;
+        configured = bucket !== null;
+      } catch (error) {
+        if (!isAppError(error) || !hasCode(error, "server.credential_unusable")) throw error;
+        bucket = null;
+        configured = true;
+      }
+      const revision = await credentialRevision(tx, { purpose: STREAM_PURPOSE });
+      return { bucket, configured, revision };
+    });
+
   const view = async (): Promise<StreamSettingsView> => {
-    let bucket: BucketConfig | null;
-    let configured: boolean;
-    try {
-      bucket = (await readStreamSettings(deps.db, deps.ring))?.bucket ?? null;
-      configured = bucket !== null;
-    } catch (error) {
-      if (!isAppError(error) || !hasCode(error, "server.credential_unusable")) throw error;
-      bucket = null;
-      configured = true;
-    }
+    const { bucket, configured, revision } = await readStored();
     const { held: recoveryKeySet, key } = await readHeldKey(deps.readRecoveryKey);
     return {
       isPrimary: deps.isPrimary(),
@@ -142,6 +205,7 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
       status: deps.stream.status(),
       recoveryKeySet,
       keyFingerprint: key === undefined ? null : keyFingerprint(key),
+      revision,
     };
   };
 
@@ -171,9 +235,11 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
       guardPrimary();
       await heldKeyOrRefuse();
       const bucket = await readBucketBody(c);
+      await refuseArchiveOverlap(bucket);
       await probeOrRefuse(bucket);
       return deps.turns(async () => {
         guardPrimary();
+        await refuseArchiveOverlap(bucket); // Again: archive settings may have changed meanwhile.
         if ((await heldKeyOrRefuse()) === undefined) {
           await deps.writeRecoveryKey(mintRecoveryKey());
         }

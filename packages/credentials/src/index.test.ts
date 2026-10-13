@@ -14,6 +14,7 @@ describe("the public surface", () => {
         "validatePayload",
         "loadKeyRing",
         "credentialProvisioned",
+        "credentialRevision",
         "deleteCredential",
         "getCredential",
         "listCredentials",

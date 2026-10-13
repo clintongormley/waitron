@@ -18,6 +18,14 @@ export function readCredential(
   return withTransaction(db, (tx) => getCredential(tx, ring, { purpose }));
 }
 
+/** The codes a read of a stored credential answers when the stored row itself cannot be read. */
+export const UNREADABLE_CREDENTIAL: ReadonlySet<string> = new Set([
+  "credentials.decrypt_failed",
+  "credentials.malformed_payload",
+  "credentials.key_version_unknown",
+  "server.credential_unusable",
+]);
+
 /**
  * One field of a decrypted credential, refused when absent. A read does not re-check the payload
  * against `PURPOSES`, so a row sealed under an older field list decrypts without the field. An

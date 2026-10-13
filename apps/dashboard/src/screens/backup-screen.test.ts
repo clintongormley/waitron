@@ -15,6 +15,10 @@ const OFF: BackupStatusView = {
   enabled: false,
   isPrimary: true,
   managedByEnvironment: false,
+  source: null,
+  revision: null,
+  storedDisabled: false,
+  loadErrorCode: null,
   destinations: [],
   backupStatus: { configured: false },
   archiveUnderCurrentKey: false,
@@ -26,7 +30,11 @@ const ENABLED: BackupStatusView = {
   enabled: true,
   isPrimary: true,
   managedByEnvironment: false,
-  destinations: [{ id: "primary", dir: "/mnt/usb/waitron" }],
+  source: "dashboard",
+  revision: "6f1c2a43-8a49-4d0f-9b51-4d4f4c7c2a10",
+  storedDisabled: false,
+  loadErrorCode: null,
+  destinations: [{ id: "primary", kind: "local-fs", dir: "/mnt/usb/waitron" }],
   schedule: { kind: "wall-clock", days: "daily", at: "auto" },
   retention: { count: 7, days: 30 },
   keyFingerprint: "ab12cd34",
@@ -65,6 +73,7 @@ const STREAM_ON: StreamSettingsView = {
   status: { state: "off" },
   recoveryKeySet: true,
   keyFingerprint: "ab12cd34",
+  revision: "0123456789abcdef",
 };
 
 function stubApi(
@@ -450,6 +459,31 @@ describe("backup-screen", () => {
     await flush(on);
     // The on state names where and how fresh.
     expect(on.shadowRoot!.textContent).toContain("/mnt/usb/waitron");
+  });
+
+  it("names a bucket destination by its bucket and archive folder, and leaves the folder field empty", async () => {
+    const bucket: BackupStatusView = {
+      ...ENABLED,
+      destinations: [
+        {
+          id: "bucket",
+          kind: "s3",
+          endpoint: null,
+          region: "eu-north-1",
+          bucket: "owner-bucket",
+          namespace: "waitron/archives/c0000000-0000-4000-8000-000000000002/",
+          credentialPresent: true,
+        },
+      ],
+    };
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", {
+      api: stubApi({}, bucket),
+    });
+    await flush(el);
+    expect(el.shadowRoot!.textContent).toContain(
+      "owner-bucket/waitron/archives/c0000000-0000-4000-8000-000000000002/",
+    );
+    expect((q(el, "[data-test=destination]") as { value?: string } | null)?.value ?? "").toBe("");
   });
 
   it("shows the destination and policy fields when configurable", async () => {

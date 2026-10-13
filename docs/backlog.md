@@ -106,8 +106,9 @@ spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
 
 4. **What a standalone box still lacks before a real venue runs it** (under _The box: backups,
    upgrades and recovery_, except the certificate, under _Fiscal records, invoices and the asesor_):
-   - an off-box home for the backup archive — the bucket stream of `venue.db` is built, but
-     archives can only be saved on the box itself (`LocalFsBackend`);
+   - an off-box home for the backup archive on the Backups screen — the environment and the
+     authenticated backup routes can name an S3 bucket (A538), but the screen still offers only a
+     local folder;
    - installing or renewing the AEAT certificate after setup — today only the setup wizard can
      set it, and nothing watches when it expires;
    - upgrade testing with rows the product itself writes and a real older database —
@@ -4171,19 +4172,40 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   in a separate deployment change. A490 pins both image builds only.
 
 - **S3-compatible bucket, then Google Drive.** The bucket stream of `venue.db` is built (slice 2).
-  The archive's bucket destination (`S3Backend` over `S3FileStore`) is built but nothing can
-  configure it yet, so `LocalFsBackend` is still the only archive destination in use.
+  The archive's bucket destination (`S3Backend` over `S3FileStore`) is built, and the
+  environment or the authenticated backup routes can name one; the Backups screen still offers only
+  a local folder (plan Task 6).
   A538's [draft design](superpowers/specs/2026-10-12-a538-archive-s3-design.md) and
   [implementation plan](superpowers/plans/2026-10-12-a538-archive-s3.md): the owner approved the
   proposed defaults on 2026-10-12. Plan Task 1, which makes the bucket stream's calls cancellable,
   is built (A538-1), and so is Task 2, which moves archive files to and from a bucket without
   holding them in memory (A538-2), and Task 3, which gives each destination's calls their own time
-  limit, stops them with the sweep and reports what each destination did (A538-3). Tasks 4 to 10
-  and the real-AWS evidence are open.
+  limit, stops them with the sweep and reports what each destination did (A538-3), and Task 4,
+  which stores the archive choice sealed in the vault, lets the environment or the backup routes
+  name a bucket, and keeps every destination across a key rotation (A538-4). Tasks 5 to 10 and the
+  real-AWS evidence are open.
   `S3FileStore`'s listing and batch delete repeat `S3ObjectStore`'s (`packages/stream/src/s3-store.ts`)
   with different error codes, and only the file store's refuses a repeated key or bad size and
   counts `NoSuchKey` as deleted; share them, deciding whether the bucket stream takes those checks
   too.
+
+- **The Backups screen does not yet read what A538-4 added to the backup routes** (plan Task 6).
+  It needs English and Spanish wording for `backup.archive_test_failed` and
+  `backup.rotation_metadata_failed`; `backup.archive_settings_unusable` is worded only as an alert
+  (`alert-messages.ts`). It must show a write's `reloadErrorCode` (the settings were saved, but the
+  box could not load them) and the status's `loadErrorCode` (archives are off because the stored
+  settings cannot be used), and on `backup.rotation_metadata_failed` it must replace a displayed
+  recovery key or fingerprint with the new one, which is already in effect. It offers no control for
+  `POST /api/backup/disable` and does not show `storedDisabled` (archives stored switched off).
+  Left open by A538-4.
+
+- **The bucket copy's settings screen cannot repair a stored record that cannot be decrypted.**
+  `GET /api/backup/stream` (`readStored`, called by `view`, in `apps/server/src/stream-api.ts`) tolerates only
+  `server.credential_unusable`; `credentials.decrypt_failed`, `credentials.malformed_payload` and
+  `credentials.key_version_unknown` fail the read (400 with the raw code), so the panel shows an
+  error and no form, although the bucket copy's Save would replace the record. Treat all four the
+  way `UNREADABLE_CREDENTIAL` (`apps/server/src/credentials.ts`) groups them. Predates A538-4; found
+  by its review.
 
 - **A backup that fails before reaching any destination tells the owner nothing about why.** When
   a run stops early, for example on `backup.staging_space_low` or `recovery.state_incomplete`, it is
@@ -4345,11 +4367,6 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 - **The edit-settings form can meet `backup.recovery_key_exists`** when a rotate (from another tab
   or admin) lands after it fetched the key. Left open by SQLite slice 2 Task 2a (#557, a recovery
   key that does not need an archive destination).
-
-- **The owner's call: `rotate` with a destination loaded rebuilds `backup.env`** from the running
-  settings rather than keeping the file's other lines, so a destination added to the file by hand
-  and not yet loaded is dropped. Left open by SQLite slice 2 Task 2a (#557, a recovery key that does
-  not need an archive destination).
 
 - **From #608: the recovery level is read before `recovery.lock`,** so the pre-boot count another
   start writes can still push a server restarting at that moment onto the recovery page. Left open
