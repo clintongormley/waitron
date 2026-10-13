@@ -105,9 +105,9 @@ layer's own specificity). Never patch component styles.
 This works whether or not `#app` also carries `data-theme` — see "Themes" above.
 
 Overriding `--wt-color-primary` leaves every token that holds Waitron's blue as its own value at
-that blue — among them `--wt-color-primary-text`, `--wt-color-primary-hover`, `--wt-color-focus` and
-`--wt-color-field-label-focus` — and overriding `--wt-color-danger` leaves `--wt-color-danger-hover`
-at Waitron's red. Set each one too, with a light and a dark value (see Tokens → Colour).
+that blue — among them `--wt-color-primary-text`, `--wt-color-primary-hover`, `--wt-color-focus`,
+`--wt-color-field-label-focus` and `--wt-color-primary-disabled` — and overriding `--wt-color-danger` leaves `--wt-color-danger-hover`
+and `--wt-color-danger-disabled` at Waitron's red. Set each one too, with a light and a dark value (see Tokens → Colour).
 
 ## Tokens
 
@@ -116,7 +116,9 @@ at Waitron's red. Set each one too, with a light and a dark value (see Tokens �
 `--wt-color-bg`, `--wt-color-surface`, `--wt-color-surface-raised`, `--wt-color-surface-lifted`,
 `--wt-color-surface-sunken`, `--wt-color-text`, `--wt-color-text-muted`, `--wt-color-primary`,
 `--wt-color-on-primary`, `--wt-color-primary-text`, `--wt-color-primary-hover`, `--wt-color-danger`,
-`--wt-color-on-danger`, `--wt-color-danger-hover`, `--wt-color-success`, `--wt-color-warning`, `--wt-color-on-warning`,
+`--wt-color-on-danger`, `--wt-color-danger-hover`, `--wt-color-primary-disabled`,
+`--wt-color-on-primary-disabled`, `--wt-color-danger-disabled`, `--wt-color-on-danger-disabled`,
+`--wt-color-success`, `--wt-color-warning`, `--wt-color-on-warning`,
 `--wt-color-border`, `--wt-color-focus`, `--wt-color-scrim`, `--wt-color-field-fill`,
 `--wt-color-field-line`, `--wt-color-field-label-focus`, `--wt-color-field-fill-disabled`,
 `--wt-color-field-value`, `--wt-color-google-button-fill`, `--wt-color-google-button-line`,
@@ -176,6 +178,14 @@ in `colors.test.ts`). Like `--wt-color-primary-text` they hold
 their own values, so a deployment rule that overrides `--wt-color-primary` or `--wt-color-danger`
 must set the matching hover token too, in both
 themes; and `THEMEABLE_TOKENS` does not list them either, so a tenant theme cannot set them.
+
+`--wt-color-primary-disabled` / `--wt-color-on-primary-disabled` and `--wt-color-danger-disabled` /
+`--wt-color-on-danger-disabled` are the fill and text of a disabled, not loading, primary and danger
+`wt-button`: `#8fb7f5`/`#ffffff` and `#d9928e`/`#ffffff` light, `#28344a`/`#93a0ba` and
+`#3d2828`/`#c09894` dark. In dark each fill is within 1.5:1 of `--wt-color-surface` and
+`--wt-color-surface-raised`, and each text reads at 4.5:1 or more on its fill (the "disabled button
+colours" cases in `colors.test.ts`). Like the hover tokens they hold their own values, and
+`THEMEABLE_TOKENS` does not list them, so a tenant theme cannot set them.
 
 Opening hours → Year (`packages/venue-service/src/dashboard/opening-hours-year.ts`) fills a day
 with its season's tint (`--wt-color-season-1` to `--wt-color-season-4`, given by start order and
@@ -831,6 +841,15 @@ and a hovered row, or one holding focus, paints `--wt-color-bg`. Guard: the "att
 one icon with its own `aria-label` rather than a text label — the floor plan editor's Undo and
 Redo, for one. It replaces the button's own padding and border radius; it does not change what
 `variant` paints.
+
+A disabled `primary` or `danger` `wt-button` paints its own disabled colour pair
+(`--wt-color-primary-disabled` and `--wt-color-on-primary-disabled`, and the danger twins; see
+Tokens → Colour): in dark a dim fill close to the surface, so it stays the blue or red button
+without looking pressable; in light, within one step per colour channel of what the old half fade
+gave over a white surface. A `loading` one keeps its colour, faded. A primary or danger button
+switched off with `?disabled=${busy}` while its own request is sent is not `loading`, so it takes
+the disabled pair — the till's Cash and Card while a payment is sent among them
+(`apps/till/src/widgets/tender-pay.ts`).
 
 `wt-button` has no `type` property — see "Forms" below. `wt-button loading` is how a button shows an
 action in progress: it disables the button, sets `aria-busy`, and leads the label with a decorative
@@ -2035,7 +2054,8 @@ written per screen (one stated exception, the till's profile dialog, is in the b
   editing one it is a save); and Cash and Card on the pay card, while the basket or bill has no
   lines, or while the basket's pay controls are held for a line not yet saved that cannot be sold
   as it stands or is stale, or for a part-paid order, keeping blue through a payment being sent,
-  through an order being placed from the counter tab, and when only an invalid tip disables Card.
+  through an order being placed from the counter tab, and when only an invalid tip disables Card
+  (in dark, while switched off in those cases, the dim disabled blue, A535).
   Not covered: a button disabled only while a request is being sent, an action blocked by its own
   field checks, the sign-in screens, and the canvas editor's Delete on a canvas's last tab
   (canvases are being retired, A182). Nothing guards it across screens.

@@ -49,6 +49,10 @@ test("defines the core colour contract", () => {
     "--wt-color-on-danger",
     "--wt-color-primary-hover",
     "--wt-color-danger-hover",
+    "--wt-color-primary-disabled",
+    "--wt-color-on-primary-disabled",
+    "--wt-color-danger-disabled",
+    "--wt-color-on-danger-disabled",
     "--wt-color-warning",
     "--wt-color-on-warning",
     "--wt-color-border",
@@ -304,6 +308,48 @@ describe.each(["light", "dark"] as const)("hover fills (%s)", (theme) => {
     const explicit = mount(theme);
     expect(fromPreference).toEqual(HOVER_FILLS.map(([hover]) => token(explicit, hover)));
   });
+});
+
+const DISABLED_PAIRS = [
+  ["--wt-color-primary-disabled", "--wt-color-on-primary-disabled"],
+  ["--wt-color-danger-disabled", "--wt-color-on-danger-disabled"],
+] as const;
+
+describe("disabled button colours", () => {
+  test("in dark, each fill stands within 1.5:1 of the surfaces a button sits on", () => {
+    const el = mount("dark");
+    for (const [fill] of DISABLED_PAIRS) {
+      for (const surface of ["--wt-color-surface", "--wt-color-surface-raised"]) {
+        expect(
+          ratio(token(el, fill), token(el, surface)),
+          `dark: ${fill} vs ${surface}`,
+        ).toBeLessThanOrEqual(1.5);
+      }
+    }
+  });
+
+  test("in dark, each text reads at 4.5:1 or more on its fill", () => {
+    const el = mount("dark");
+    for (const [fill, text] of DISABLED_PAIRS) {
+      expect(
+        ratio(token(el, text), token(el, fill)),
+        `dark: ${text} on ${fill}`,
+      ).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  test.each(["light", "dark"] as const)(
+    "the OS preference gives them the same values as the explicit %s theme",
+    async (theme) => {
+      const names = DISABLED_PAIRS.flat();
+      await commands.emulateColorScheme(theme);
+      const byPreference = mount();
+      const fromPreference = names.map((name) => token(byPreference, name));
+      byPreference.remove();
+      expect(fromPreference).not.toContain("");
+      expect(fromPreference).toEqual(names.map((name) => token(mount(theme), name)));
+    },
+  );
 });
 
 // Google's sign-in branding guidelines give the custom button's fill, stroke and text per theme.

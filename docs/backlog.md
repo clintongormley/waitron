@@ -3368,12 +3368,6 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   screen height (`packages/ui/src/components/wt-modal.ts:17`), so at 1280 wide most of it is blank.
   Decide whether a wide dialog should shrink to fit its content.
 
-- **A disabled primary button reads as clickable in dark** (found by A507's look). `wt-button` only
-  fades a disabled button (`packages/ui-core/src/components/wt-button.ts:44-45`, opacity
-  `--wt-opacity-disabled`), and on a dark surface a faded primary stays a solid mid-blue, so a Save
-  held back by an invalid field looks pressable (station editor, dark, 390 and 1280). Fix: a
-  disabled colour pair in the tokens, or a quiet style while disabled, plus a dark contrast test.
-
 - **`wt-combobox` without a search box never exposes `aria-required`**, so a screen reader is not
   told a required dropdown is required. Found by A506-6's review: a probe showed `required` set gave
   `aria-required` on nothing, while a combobox with a search box set it on its input. Every screen
@@ -3847,10 +3841,12 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
 - **`--wt-color-primary-text` has fixed light and dark values that do not follow
   `--wt-color-primary`, and a tenant theme cannot set it** — left open by A218 (#1082):
   (`THEMEABLE_TOKENS`, `packages/layouts/src/theme.ts`) — no screen applies a stored tenant theme
-  yet. The same holds for `--wt-color-primary-hover` and `--wt-color-danger-hover` (A306), which
+  yet. The same holds for `--wt-color-primary-hover` and `--wt-color-danger-hover` (A306), and the
+  disabled colours `--wt-color-primary-disabled`, `--wt-color-on-primary-disabled`,
+  `--wt-color-danger-disabled` and `--wt-color-on-danger-disabled` (A535), which
   do not follow `--wt-color-primary` and `--wt-color-danger`, so a tenant or deployment that sets
-  only `--wt-color-primary` or `--wt-color-danger` gets Waitron's default blue or red on a hovered
-  primary or danger `wt-button`.
+  only `--wt-color-primary` or `--wt-color-danger` gets Waitron's default blue or red on a hovered or
+  disabled primary or danger `wt-button`.
 
 - **The printers screen and the receipt-language text still put names into translated text with
   `.replace`, so a name holding `$&`, or one holding a later placeholder's `{…}` text where two
