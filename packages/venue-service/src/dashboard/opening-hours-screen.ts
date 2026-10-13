@@ -64,6 +64,7 @@ type OpenSpecialDay = Omit<SpecialDayAction, "specialDay"> & {
 type Deletion = { period: Period };
 /** What a painter address names, as written; `painterTarget` resolves it against the model. */
 type PainterAddress = { seasonId: string; departmentId: string; zoneId: string };
+const painterEntryKey = "openingHoursPainter";
 
 @customElement("dashboard-opening-hours-screen")
 export class OpeningHoursScreen extends LitElement {
@@ -155,6 +156,9 @@ export class OpeningHoursScreen extends LitElement {
   @state() private painter?: PainterAddress;
   /** The address of the view the painter opened over, or none on a direct load. */
   private baseHref?: string;
+  /** The history entry this screen pushed the painter into over `base`: only from that entry
+   *  does closing go back, because only there is the entry below known to be the base view. */
+  private pushedPainter?: { entry: string; base: string | undefined };
   private readonly url = new UrlStateController(this, () => this.followUrl(), {
     basePath: "/manage",
     primary: "dashboard",
@@ -312,6 +316,7 @@ export class OpeningHoursScreen extends LitElement {
   }
   private async chooseDepartment(value: string) {
     if (!this.isConnected) return;
+    const wasOpen = this.painter !== undefined;
     if (value.startsWith("station:") && this.view === "week") {
       const stationId = value.slice(8);
       if (!this.stations.some((station) => station.active && station.id === stationId)) return;
@@ -363,6 +368,7 @@ export class OpeningHoursScreen extends LitElement {
       );
     }
     this.followUrl();
+    this.markPushedPainter(wasOpen);
   }
   /** The picker, and so the address's season, governs only the standard week. */
   private resolveSeason() {
@@ -551,15 +557,42 @@ export class OpeningHoursScreen extends LitElement {
     return url;
   }
   /** Opens the painter on `seasonId` for the department the screen shows, over the current view. */
-  private openPainter(seasonId: string) {
+  private async openPainter(seasonId: string) {
     const department = this.department();
-    void this.writeAddress(
+    const wasOpen = this.painter !== undefined;
+    await this.writeAddress(
       this.painterUrl({
         seasonId,
         departmentId: department?.active ? department.id : "",
         zoneId: "",
       }),
     );
+    this.markPushedPainter(wasOpen);
+  }
+  private markPushedPainter(wasOpen: boolean) {
+    if (wasOpen || !this.isConnected || this.painter === undefined) return;
+    const guard = navigationGuardFor(window);
+    let entry: string;
+    if (guard) {
+      const { epoch, index } = guard.position;
+      entry = `${epoch}:${index}`;
+    } else {
+      entry = crypto.randomUUID();
+      history.replaceState(
+        { ...Object(history.state), [painterEntryKey]: entry },
+        "",
+        location.href,
+      );
+    }
+    this.pushedPainter = { entry, base: this.baseHref };
+  }
+  private atPushedPainter() {
+    const pushed = this.pushedPainter;
+    if (!pushed || pushed.base !== this.baseHref) return false;
+    const guard = navigationGuardFor(window);
+    if (!guard) return Object(history.state)[painterEntryKey] === pushed.entry;
+    const { epoch, index } = guard.position;
+    return `${epoch}:${index}` === pushed.entry;
   }
   private painterTarget(model: OpeningHoursModel, named: PainterAddress) {
     const active = model.departments.filter((department) => department.active);
@@ -611,10 +644,13 @@ export class OpeningHoursScreen extends LitElement {
       @painter-close=${(event: Event) => {
         event.stopPropagation();
         if (!this.currentPainter(event)) return;
-        // Opened over a view this screen drew, the painter's entry sits on top of that view's,
-        // and replacing it would leave the view's address in history twice.
-        if (this.baseHref !== undefined) history.back();
-        else this.replaceAddress(new URL("/manage/opening-hours/view/year", location.href));
+        const pushed = this.atPushedPainter();
+        this.pushedPainter = undefined;
+        if (pushed) history.back();
+        else
+          this.replaceAddress(
+            new URL(this.baseHref ?? "/manage/opening-hours/view/year", location.href),
+          );
       }}
       @click=${(event: MouseEvent) => {
         const link = event
@@ -1030,7 +1066,7 @@ export class OpeningHoursScreen extends LitElement {
   private openSeasonWeek(event: CustomEvent<{ seasonId: string }>) {
     event.stopPropagation();
     if (!this.isConnected || this.readOnly || this.painter) return;
-    this.openPainter(event.detail.seasonId);
+    void this.openPainter(event.detail.seasonId);
   }
   private openOrdinary(event: CustomEvent<OrdinaryDateOpen>) {
     event.stopPropagation();
@@ -1071,7 +1107,7 @@ export class OpeningHoursScreen extends LitElement {
         @ordinary-date-close=${leave}
         @ordinary-date-edit-week=${(event: CustomEvent<{ seasonId: string }>) => {
           if (!leave(event)) return;
-          this.openPainter(event.detail.seasonId);
+          void this.openPainter(event.detail.seasonId);
         }}
         @ordinary-date-make-special=${(event: CustomEvent<{ date: string }>) => {
           if (!leave(event)) return;

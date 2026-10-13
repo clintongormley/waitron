@@ -500,3 +500,15 @@ it("rewrite answers busy while a leave question is open, and stale once disposed
   expect(location.pathname).toBe("/guarded/a");
   expect(f.routes).toEqual([]);
 });
+
+it("position names the accepted entry's place in history, kept by rewrite and a replacing write", async () => {
+  fixture();
+  const first = guard.position;
+  await guard.write("/guarded/b");
+  const pushed = guard.position;
+  expect(pushed).toEqual({ epoch: first.epoch, index: first.index + 1 });
+  guard.rewrite("/guarded/b2");
+  await guard.write("/guarded/b3", true);
+  expect(guard.position).toEqual(pushed);
+  expect(history.state.__wtNavigation).toEqual(pushed);
+});

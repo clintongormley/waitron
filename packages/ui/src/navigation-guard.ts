@@ -78,6 +78,11 @@ export class NavigationGuard {
     return this.accepted.href;
   }
 
+  /** The accepted entry's place in history: a new epoch after `reset()` or an unknown entry. */
+  get position(): Readonly<Position> {
+    return { ...this.accepted.position! };
+  }
+
   private read(): Entry {
     const state: unknown = this.target.history.state;
     return { href: this.target.location.href, state, position: position(state) };
