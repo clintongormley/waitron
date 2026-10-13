@@ -33,6 +33,9 @@ import {
 } from "./pointer.js";
 import { probeBucket } from "./probe.js";
 import { createS3ObjectStore, type BucketConfig } from "./s3-store.js";
+import { abortableSleep } from "./store-call.js";
+
+export { abortableSleep };
 
 export type StreamLog = (
   level: "info" | "warn" | "error",
@@ -227,15 +230,6 @@ function failureFields(error: unknown): FailureFields {
  * clock drift" (`doc/api/process.md`, v26.x).
  */
 export const steadyMs = (): number => Number(process.hrtime.bigint()) / 1e6;
-
-/** A sleep that ends early, and quietly, when `signal` aborts. */
-export async function abortableSleep(ms: number, signal: AbortSignal): Promise<void> {
-  try {
-    await delay(ms, undefined, { signal });
-  } catch (error) {
-    if (!signal.aborted) throw error;
-  }
-}
 
 interface Keeper {
   stop(): Promise<void>;

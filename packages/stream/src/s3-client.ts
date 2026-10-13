@@ -20,7 +20,7 @@ export interface S3ObjectStoreOptions {
   /** Replaces the network, and with it {@link BUCKET_IDLE_MS}. Tests only. */
   requestHandler?: S3ClientConfig["requestHandler"];
   /** Replaces the wait between conflict retries. Tests only. */
-  sleep?: (ms: number) => Promise<void>;
+  sleep?: (ms: number, signal: AbortSignal | undefined) => Promise<void>;
   /** Replaces {@link BUCKET_IDLE_MS}. Tests only. */
   idleMs?: number;
 }

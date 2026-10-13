@@ -1,9 +1,12 @@
 import { setTimeout as delay } from "node:timers/promises";
 import { describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
-import { cancellableWait, eachUntilFailure, throwIfCancelled } from "./store-call.js";
-
-const never = () => new Promise<void>(() => {});
+import {
+  abortableSleep,
+  eachUntilFailure,
+  sendUnlessCancelled,
+  throwIfCancelled,
+} from "./store-call.js";
 
 describe("throwIfCancelled", () => {
   it("throws the cancellation error for the operation and key once the signal is cancelled", () => {
@@ -29,59 +32,68 @@ describe("throwIfCancelled", () => {
   });
 });
 
-describe("cancellableWait", () => {
-  it("waits the whole time when nothing cancels it", async () => {
-    const waited: number[] = [];
-    await cancellableWait(
-      async (ms) => {
-        waited.push(ms);
-      },
-      200,
-      new AbortController().signal,
-    );
-    expect(waited).toEqual([200]);
+// Its cases with a signal are in supervisor.test.ts, which uses it.
+describe("abortableSleep with no signal", () => {
+  it("sleeps the whole time", async () => {
+    const started = performance.now();
+    await abortableSleep(30, undefined);
+    expect(performance.now() - started).toBeGreaterThanOrEqual(25);
   });
+});
 
-  it("waits with no signal at all", async () => {
-    let done = false;
-    await cancellableWait(
-      async () => {
-        done = true;
-      },
-      200,
-      undefined,
-    );
-    expect(done).toBe(true);
-  });
+describe("sendUnlessCancelled", () => {
+  const params = (error: unknown) => (error as AppError).params;
+  const CANCELLED = { operation: "get", key: "k", status: null, name: "AbortError" };
 
-  it("ends a wait that would never end when the signal is cancelled", async () => {
+  it("answers the cancellation at once, while the work is still pending", async () => {
     const controller = new AbortController();
-    const waiting = cancellableWait(never, 200, controller.signal);
-    setTimeout(() => controller.abort(), 10);
-    await expect(waiting).resolves.toBeUndefined();
-  });
-
-  it("does not wait at all on a signal already cancelled", async () => {
-    let asked = false;
-    await cancellableWait(
-      () => {
-        asked = true;
-        return never();
-      },
-      200,
-      AbortSignal.abort(),
+    const pending = sendUnlessCancelled(
+      () => new Promise<never>(() => {}),
+      controller.signal,
+      "get",
+      "k",
     );
-    expect(asked).toBe(false);
+    controller.abort();
+    expect(params(await pending.catch((error: unknown) => error))).toEqual(CANCELLED);
   });
 
-  it("passes on a wait that fails", async () => {
+  it("does not start the work on a signal already cancelled", async () => {
+    let started = false;
+    const answered = sendUnlessCancelled(
+      async () => {
+        started = true;
+      },
+      AbortSignal.abort(),
+      "get",
+      "k",
+    );
+    expect(params(await answered.catch((error: unknown) => error))).toEqual(CANCELLED);
+    expect(started).toBe(false);
+  });
+
+  it("passes on the work's own answer or failure when nothing cancels it", async () => {
+    const open = new AbortController().signal;
+    await expect(sendUnlessCancelled(async () => 1, open, "get", "k")).resolves.toBe(1);
     await expect(
-      cancellableWait(
-        () => Promise.reject(new Error("broken clock")),
-        200,
-        new AbortController().signal,
-      ),
-    ).rejects.toThrow("broken clock");
+      sendUnlessCancelled(() => Promise.reject(new Error("refused")), open, "get", "k"),
+    ).rejects.toThrow("refused");
+    await expect(sendUnlessCancelled(async () => 2, undefined, "get", "k")).resolves.toBe(2);
+  });
+
+  it("leaves no unhandled failure when the work fails after the cancellation", async () => {
+    const controller = new AbortController();
+    let fail!: (error: Error) => void;
+    const work = new Promise<never>((_resolve, reject) => (fail = reject));
+    const pending = sendUnlessCancelled(() => work, controller.signal, "get", "k");
+    controller.abort();
+    await pending.catch(() => {});
+    const unhandled: unknown[] = [];
+    const record = (reason: unknown) => unhandled.push(reason);
+    process.on("unhandledRejection", record);
+    fail(new Error("late"));
+    await delay(20);
+    process.off("unhandledRejection", record);
+    expect(unhandled).toEqual([]);
   });
 });
 

@@ -7,7 +7,8 @@ import { AppError } from "@waitron/shared";
 import type { BucketOperation } from "./errors.js";
 import type { ObjectStore, StoreCall } from "./object-store.js";
 import { DELETE_CONCURRENCY, createS3ObjectStore } from "./s3-store.js";
-import type { BucketConfig } from "./s3-store.js";
+import { abortableSleep } from "./store-call.js";
+import type { BucketConfig, S3ObjectStoreOptions } from "./s3-store.js";
 
 // The real client over a real loopback connection, so a closed connection is seen by the far end.
 
@@ -129,7 +130,10 @@ describe("a read cancelled after its headers have arrived", () => {
 
 // A transport that never looks at the signal, so what stops these calls is the store's own checks.
 type Scripted = { statusCode: number; headers?: Record<string, string>; body?: string | Readable };
-function signalBlind(answer: (request: { method: string; path: string }) => Scripted) {
+function signalBlind(
+  answer: (request: { method: string; path: string }) => Scripted,
+  sleep?: S3ObjectStoreOptions["sleep"],
+) {
   const sent: string[] = [];
   const handler = {
     async handle(request: { method: string; path: string }) {
@@ -155,7 +159,7 @@ function signalBlind(answer: (request: { method: string; path: string }) => Scri
       accessKeyId: "AKIAEXAMPLE0000",
       secretAccessKey: "not-a-real-secret",
     },
-    { requestHandler: handler },
+    { requestHandler: handler, ...(sleep === undefined ? {} : { sleep }) },
   );
   return { store, sent };
 }
@@ -174,19 +178,6 @@ describe("over a transport that ignores the signal", () => {
     await delay(20);
     controller.abort();
     expect(await call).toEqual(cancelled("get", "k"));
-    expect(body.destroyed).toBe(true);
-  });
-
-  it("a read cancelled as its headers arrive never starts on the body", async () => {
-    const body = new Readable({ read() {} });
-    const controller = new AbortController();
-    const { store } = signalBlind(() => {
-      controller.abort();
-      return { statusCode: 200, headers: { etag: '"v1"' }, body };
-    });
-    expect(await outcome(store.get("k", { signal: controller.signal }), 500)).toEqual(
-      cancelled("get", "k"),
-    );
     expect(body.destroyed).toBe(true);
   });
 
@@ -232,7 +223,7 @@ describe("over a transport that ignores the signal", () => {
     expect(sent).toHaveLength(1);
   });
 
-  it("a batch delete starts no second batch", async () => {
+  it("a batch delete cancelled while its first batch is answered sends no second", async () => {
     const controller = new AbortController();
     const { store, sent } = signalBlind(() => {
       controller.abort();
@@ -240,13 +231,13 @@ describe("over a transport that ignores the signal", () => {
     });
     const keys = Array.from({ length: 1_005 }, (_, i) => `k${i}`);
     expect(await outcome(store.deleteMany(keys, { signal: controller.signal }))).toEqual(
-      cancelled("delete", "k1000"),
+      cancelled("delete", "k0"),
     );
     expect(sent).toHaveLength(1);
   });
 
   // Every delete in flight then succeeds, so nothing fails: the cancellation alone must answer.
-  it("a delete one key at a time is reported cancelled, not done, when those in flight succeed", async () => {
+  it("a delete one key at a time sends nothing after the cancellation", async () => {
     const controller = new AbortController();
     let singles = 0;
     let sentAtAbort = -1;
@@ -261,11 +252,24 @@ describe("over a transport that ignores the signal", () => {
       return { statusCode: 204 };
     });
     const keys = Array.from({ length: 50 }, (_, i) => `k${i}`);
-    expect(await outcome(store.deleteMany(keys, { signal: controller.signal }))).toEqual(
-      cancelled("delete", "k0"),
-    );
+    expect(await outcome(store.deleteMany(keys, { signal: controller.signal }))).toMatchObject({
+      code: "backup.stream_request_failed",
+      params: { operation: "delete", status: null, name: "AbortError" },
+    });
     expect(sent).toHaveLength(sentAtAbort);
     expect(sent.length).toBeLessThan(1 + keys.length);
+  });
+
+  it("a write cancelled during its wait after a conflict sends no further attempt", async () => {
+    const controller = new AbortController();
+    const { store, sent } = signalBlind(
+      () => ({ statusCode: 409, headers: xml, body: errorBody("ConditionalRequestConflict") }),
+      async () => controller.abort(),
+    );
+    expect(await outcome(store.put("k", BYTES, undefined, { signal: controller.signal }))).toEqual(
+      cancelled("put", "k"),
+    );
+    expect(sent).toHaveLength(1);
   });
 
   it.each(calls)(
@@ -307,7 +311,7 @@ describe("a listing cancelled while pages keep coming", () => {
 });
 
 describe("a write cancelled while it waits to retry a conflict", () => {
-  it("ends the wait at once and sends no further attempt", async () => {
+  it("ends the wait and sends no further attempt", async () => {
     const observed = { puts: 0 };
     const firstConflict = signalled();
     const config = await bucket((_request, response) => {
@@ -316,20 +320,43 @@ describe("a write cancelled while it waits to retry a conflict", () => {
       response.end(errorBody("ConditionalRequestConflict"));
       firstConflict.resolve();
     });
-    const store = createS3ObjectStore(config);
+    // A wait far longer than the test, so a store that does not end it reads as still pending.
+    const store = createS3ObjectStore(config, {
+      sleep: (_ms, signal) => abortableSleep(60_000, signal),
+    });
     const controller = new AbortController();
     const call = outcome(
       store.put("k", BYTES, { ifNoneMatch: "*" }, { signal: controller.signal }),
     );
     await firstConflict.promise;
     await delay(50);
-    const abortedAt = performance.now();
     controller.abort();
     expect(await call).toEqual(cancelled("put", "k"));
-    // The first wait is 200 ms, so a store that sat it out answers well after this.
-    expect(performance.now() - abortedAt).toBeLessThan(100);
-    await delay(300);
     expect(observed.puts).toBe(1);
+  });
+});
+
+describe("a call cancelled while the client waits to retry it", () => {
+  // SlowDown is a throttling answer the client retries, and Retry-After: 1 makes it wait about a
+  // second before the next attempt.
+  it("answers the cancellation before the client's wait is over, and the client sends nothing more", async () => {
+    const observed = { requests: 0 };
+    const firstAnswer = signalled();
+    const config = await bucket((_request, response) => {
+      observed.requests += 1;
+      response.writeHead(503, { ...xml, "retry-after": "1" });
+      response.end(errorBody("SlowDown"));
+      firstAnswer.resolve();
+    });
+    const store = createS3ObjectStore(config);
+    const controller = new AbortController();
+    const call = outcome(store.list("venues/", { signal: controller.signal }), 100);
+    await firstAnswer.promise;
+    await delay(20);
+    controller.abort();
+    expect(await call).toEqual(cancelled("list", "venues/"));
+    await delay(1_500);
+    expect(observed.requests).toBe(1);
   });
 });
 

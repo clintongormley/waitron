@@ -1,3 +1,4 @@
+import { setTimeout as delay } from "node:timers/promises";
 import type { AppError } from "@waitron/shared";
 import type { BucketOperation } from "./errors.js";
 import { requestFailed } from "./s3-client.js";
@@ -14,20 +15,35 @@ export function throwIfCancelled(
   if (signal?.aborted) throw callCancelled(operation, key);
 }
 
-/** `wait(ms)`, ended early, without error, when the signal is cancelled. */
-export function cancellableWait(
-  wait: (ms: number) => Promise<void>,
-  ms: number,
+/** A sleep that ends early, and quietly, when `signal` aborts. */
+export async function abortableSleep(ms: number, signal: AbortSignal | undefined): Promise<void> {
+  try {
+    await delay(ms, undefined, { signal });
+  } catch (error) {
+    if (!signal?.aborted) throw error;
+  }
+}
+
+/**
+ * Starts `send` unless `signal` is already cancelled, then answers its outcome, or the cancellation
+ * as soon as `signal` aborts, whichever comes first.
+ * The client's own wait between attempts can outlive a cancelled call by up to its backoff plus
+ * Retry-After, and sends nothing.
+ */
+export function sendUnlessCancelled<T>(
+  send: () => Promise<T>,
   signal: AbortSignal | undefined,
-): Promise<void> {
-  if (signal === undefined) return wait(ms);
-  if (signal.aborted) return Promise.resolve();
-  return new Promise<void>((resolve, reject) => {
-    const stop = () => resolve();
+  operation: BucketOperation,
+  key: string,
+): Promise<T> {
+  if (signal?.aborted) return Promise.reject(callCancelled(operation, key));
+  const work = send();
+  if (signal === undefined) return work;
+  return new Promise<T>((resolve, reject) => {
+    const stop = () => reject(callCancelled(operation, key));
     signal.addEventListener("abort", stop, { once: true });
-    wait(ms)
-      .then(resolve, reject)
-      .finally(() => signal.removeEventListener("abort", stop));
+    // Also settles a call already answered as cancelled, so its later failure is not unhandled.
+    void work.then(resolve, reject).finally(() => signal.removeEventListener("abort", stop));
   });
 }
 

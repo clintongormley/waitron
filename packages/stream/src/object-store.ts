@@ -1,7 +1,7 @@
 /** "Only if absent" (`If-None-Match: *`) or "only if unchanged since this version" (`If-Match`). */
 export type PutCondition = { ifNoneMatch: "*" } | { ifMatch: string };
 
-/** A caller's hold on one call: cancelling `signal` stops it, the answer's body included. */
+/** The caller's way to cancel one call. The S3 store honours it; the in-memory test stores do not. */
 export interface StoreCall {
   signal?: AbortSignal;
 }

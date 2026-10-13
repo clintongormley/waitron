@@ -11,7 +11,6 @@ import type {
   ListObjectsV2CommandOutput,
   PutObjectCommandOutput,
 } from "@aws-sdk/client-s3";
-import { setTimeout as sleep } from "node:timers/promises";
 import { AppError } from "@waitron/shared";
 import type { AnswerRefusal } from "./bucket-error-names.js";
 import "./errors.js";
@@ -28,9 +27,10 @@ import {
   type S3ObjectStoreOptions,
 } from "./s3-client.js";
 import {
+  abortableSleep,
   callCancelled,
-  cancellableWait,
   eachUntilFailure,
+  sendUnlessCancelled,
   throwIfCancelled,
 } from "./store-call.js";
 
@@ -71,17 +71,22 @@ export function createS3ObjectStore(
   options: S3ObjectStoreOptions = {},
 ): ObjectStore {
   const client = createBucketClient(config, options);
-  const wait = options.sleep ?? sleep;
+  const wait = options.sleep ?? abortableSleep;
   const bucket = config.bucket;
   const root = normalisePrefix(config.prefix);
   const at = (key: string) => root + key;
 
   async function deleteOne(key: string, signal: AbortSignal | undefined): Promise<void> {
-    throwIfCancelled(signal, "delete", key);
     try {
-      await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: at(key) }), {
-        abortSignal: signal,
-      });
+      await sendUnlessCancelled(
+        () =>
+          client.send(new DeleteObjectCommand({ Bucket: bucket, Key: at(key) }), {
+            abortSignal: signal,
+          }),
+        signal,
+        "delete",
+        key,
+      );
     } catch (error) {
       throw failure(signal, "delete", key, error);
     }
@@ -90,12 +95,17 @@ export function createS3ObjectStore(
   return {
     async get(key, call) {
       const signal = call?.signal;
-      throwIfCancelled(signal, "get", key);
       let out: GetObjectCommandOutput;
       try {
-        out = await client.send(new GetObjectCommand({ Bucket: bucket, Key: at(key) }), {
-          abortSignal: signal,
-        });
+        out = await sendUnlessCancelled(
+          () =>
+            client.send(new GetObjectCommand({ Bucket: bucket, Key: at(key) }), {
+              abortSignal: signal,
+            }),
+          signal,
+          "get",
+          key,
+        );
       } catch (error) {
         if (signal?.aborted) throw callCancelled("get", key);
         // By name: a missing bucket also answers 404, and must never read as "nothing written yet".
@@ -128,17 +138,22 @@ export function createS3ObjectStore(
     async put(key, body, condition, call) {
       const signal = call?.signal;
       for (let attempt = 1; ; attempt += 1) {
-        throwIfCancelled(signal, "put", key);
         let out: PutObjectCommandOutput;
         try {
-          out = await client.send(
-            new PutObjectCommand({
-              Bucket: bucket,
-              Key: at(key),
-              Body: body,
-              ...conditionHeaders(condition),
-            }),
-            { abortSignal: signal },
+          out = await sendUnlessCancelled(
+            () =>
+              client.send(
+                new PutObjectCommand({
+                  Bucket: bucket,
+                  Key: at(key),
+                  Body: body,
+                  ...conditionHeaders(condition),
+                }),
+                { abortSignal: signal },
+              ),
+            signal,
+            "put",
+            key,
           );
         } catch (error) {
           if (signal?.aborted) throw callCancelled("put", key);
@@ -148,7 +163,7 @@ export function createS3ObjectStore(
           // with the caller's condition unchanged. Re-reading the version first would turn
           // "only if unchanged since I read it" into "whatever is there now".
           if (status === 409 && attempt < CONFLICT_ATTEMPTS) {
-            await cancellableWait(wait, CONFLICT_BACKOFF_MS * attempt, signal);
+            await wait(CONFLICT_BACKOFF_MS * attempt, signal);
             continue;
           }
           throw requestFailed("put", key, status, nameOf(error));
@@ -168,16 +183,21 @@ export function createS3ObjectStore(
       const followed = new Set<string>();
       let token: string | undefined;
       do {
-        throwIfCancelled(signal, "list", prefix);
         let page: ListObjectsV2CommandOutput;
         try {
-          page = await client.send(
-            new ListObjectsV2Command({
-              Bucket: bucket,
-              Prefix: wanted,
-              ContinuationToken: token,
-            }),
-            { abortSignal: signal },
+          page = await sendUnlessCancelled(
+            () =>
+              client.send(
+                new ListObjectsV2Command({
+                  Bucket: bucket,
+                  Prefix: wanted,
+                  ContinuationToken: token,
+                }),
+                { abortSignal: signal },
+              ),
+            signal,
+            "list",
+            prefix,
           );
         } catch (error) {
           throw failure(signal, "list", prefix, error);
@@ -208,15 +228,20 @@ export function createS3ObjectStore(
       const signal = call?.signal;
       for (let start = 0; start < keys.length; start += DELETE_BATCH_KEYS) {
         const batch = keys.slice(start, start + DELETE_BATCH_KEYS);
-        throwIfCancelled(signal, "delete", batch[0]!);
         let out: DeleteObjectsCommandOutput;
         try {
-          out = await client.send(
-            new DeleteObjectsCommand({
-              Bucket: bucket,
-              Delete: { Objects: batch.map((key) => ({ Key: at(key) })), Quiet: true },
-            }),
-            { abortSignal: signal },
+          out = await sendUnlessCancelled(
+            () =>
+              client.send(
+                new DeleteObjectsCommand({
+                  Bucket: bucket,
+                  Delete: { Objects: batch.map((key) => ({ Key: at(key) })), Quiet: true },
+                }),
+                { abortSignal: signal },
+              ),
+            signal,
+            "delete",
+            batch[0]!,
           );
         } catch (error) {
           // 501 is HTTP's "does not support the functionality required" (RFC 9110 §15.6.2). Any other
