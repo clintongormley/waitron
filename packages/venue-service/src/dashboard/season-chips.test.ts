@@ -471,3 +471,68 @@ it("says when its dialog opens, so the host can read the special days a refusal 
     document.body.removeEventListener("season-dialog-open", listen);
   }
 });
+
+it("saves with the clock revision the dialog opened at, though a newer one arrived while editing", async () => {
+  const { api, changed } = await mount(four, fakeApi(), 7);
+  await openChip("Spring");
+  await change("startDay", "2");
+  el.clockRevision = 8;
+  await settle();
+  await click("[data-test=save-season]");
+  await expect.poll(() => changed.length).toBe(1);
+  expect(api.saveSeason).toHaveBeenCalledWith("sp", { name: "Spring", startsOn: "03-02" }, 7);
+});
+
+it("deletes with the clock revision the dialog opened at, though a newer one arrived while confirming", async () => {
+  const { api, changed } = await mount(four, fakeApi(), 7);
+  await openChip("Spring");
+  await click("[data-test=delete-season]");
+  await expect.poll(() => dq("[data-test=confirm-delete-season]")).not.toBeNull();
+  el.clockRevision = 8;
+  await settle();
+  await click("[data-test=confirm-delete-season]");
+  await expect.poll(() => changed.length).toBe(1);
+  expect(api.deleteSeason).toHaveBeenCalledWith("sp", 7);
+});
+
+it("keeps a save busy when an earlier save, sent before the chips were moved, answers first", async () => {
+  const answers: (() => void)[] = [];
+  const api = fakeApi({
+    saveSeason: vi.fn(
+      (id: string, input: { name: string; startsOn: string }) =>
+        new Promise<{ id: string; name: string; startsOn: string }>((resolve) =>
+          answers.push(() => resolve({ id, ...input })),
+        ),
+    ),
+  });
+  await mount(four, api);
+  await openChip("Winter");
+  await change("name", "Cold");
+  await click("[data-test=save-season]");
+  el.remove();
+  document.body.append(el);
+  await settle();
+  await openChip("Winter");
+  await change("name", "Colder");
+  await click("[data-test=save-season]");
+  expect(save().loading).toBe(true);
+  answers[0]!();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await settle();
+  expect(save().loading).toBe(true);
+  expect(api.saveSeason).toHaveBeenCalledTimes(2);
+});
+
+it("withdraws a delete confirmation and says so when another session deletes its season", async () => {
+  const { api, changed } = await mount([spring, winter]);
+  await openChip("Winter");
+  await click("[data-test=delete-season]");
+  await expect.poll(() => dq("[data-test=confirm-delete-season]")).not.toBeNull();
+  el.seasons = [{ ...spring, startsOn: "01-01", lastDay: "12-31" }];
+  await settle();
+  expect(dq("[data-test=delete-confirm-text]")).toBeNull();
+  expect(dq("[data-test=confirm-delete-season]")).toBeNull();
+  expect(footerError()).toBe("This season no longer exists.");
+  expect(api.deleteSeason).not.toHaveBeenCalled();
+  expect(changed).toEqual([]);
+});

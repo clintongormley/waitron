@@ -101,6 +101,21 @@ describe("OpeningHoursApi", () => {
     }
   });
 
+  it("asks for a year below 1000 with the four digits the server reads", async () => {
+    const request = vi.fn(async () => ({ year: 100, days: [] }));
+    const api = new OpeningHoursApi(request as DashboardRequest);
+    const apply = vi.fn();
+    const stop = api.watchYear(100, apply, vi.fn(), vi.fn());
+    try {
+      await vi.waitFor(() => expect(apply).toHaveBeenCalledTimes(1));
+      expect(request.mock.calls).toEqual([
+        [`${base}/opening-hours/year?year=0100`, "GET", undefined, { passive: true }],
+      ]);
+    } finally {
+      stop();
+    }
+  });
+
   it("re-reads a watched year with the special days when there is no live data", async () => {
     const request = vi.fn(async (path: string) =>
       path.includes("/year?") ? { year: 2027, days: [] } : model,

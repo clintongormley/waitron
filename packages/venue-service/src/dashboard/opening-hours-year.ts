@@ -37,6 +37,9 @@ function listLacksLocalHolidays(local: HolidayCoverage["local"]): boolean {
 }
 export type HolidayAreaWrites = Pick<SpecialDaysApi, "saveHolidayArea" | "rereadWatches">;
 
+/** The year as it begins a date: four digits, so year 100 is `0100`. */
+const yearKey = (year: number) => String(year).padStart(4, "0");
+
 /** A Monday, so its week names the columns Monday first. */
 const A_MONDAY = "2024-01-01";
 
@@ -233,6 +236,9 @@ export class OpeningHoursYearView extends LitElement {
 
   /** The year as the server reads it; the host fetches a new one on `year-change`. */
   @property({ attribute: false }) model?: OpeningHoursYear;
+  /** The year the host asked for, ahead of `model` while its read is pending; ‹ › step from it so
+   *  presses during the wait add up. 0 steps from `model`. */
+  @property({ type: Number }) year = 0;
   /** The season writes the chips send. */
   @property({ attribute: false }) api?: SeasonWrites;
   @property({ attribute: false }) areaApi?: HolidayAreaWrites;
@@ -257,9 +263,9 @@ export class OpeningHoursYearView extends LitElement {
 
   protected override willUpdate(changes: PropertyValues<this>): void {
     if (!changes.has("model")) return;
-    const year = String(this.model?.year ?? "");
-    if (this.selected !== null && !this.selected.startsWith(year)) this.selected = null;
-    if (this.focusDate !== null && !this.focusDate.startsWith(year)) this.focusDate = null;
+    const prefix = this.model ? `${yearKey(this.model.year)}-` : "";
+    if (this.selected !== null && !this.selected.startsWith(prefix)) this.selected = null;
+    if (this.focusDate !== null && !this.focusDate.startsWith(prefix)) this.focusDate = null;
     const before = changes.get("model") as OpeningHoursYear | undefined;
     if (before?.area.addressKey !== this.model?.area.addressKey) {
       this.#areaRequest = {};
@@ -356,7 +362,7 @@ export class OpeningHoursYearView extends LitElement {
     stop: LocalDate,
     header: TemplateResult,
   ) {
-    const key = `${model.year}-${month}`;
+    const key = `${yearKey(model.year)}-${month}`;
     const grid = monthGrid(key);
     const headingId = `month-${month}`;
     return html`<section class="month" data-month=${key}>
@@ -543,7 +549,7 @@ export class OpeningHoursYearView extends LitElement {
         </th>`;
       })}
     </tr>`;
-    const prefix = `${model.year}-`;
+    const prefix = `${yearKey(model.year)}-`;
     const stop =
       [this.focusDate, this.selected, model.today].find(
         (date): date is LocalDate => date != null && date.startsWith(prefix),
@@ -553,7 +559,7 @@ export class OpeningHoursYearView extends LitElement {
         variant="secondary"
         data-test=${test}
         aria-label=${t(label)}
-        @click=${() => this.#emit("year-change", { year: model.year + by })}
+        @click=${() => this.#emit("year-change", { year: (this.year || model.year) + by })}
         >${glyph}</wt-button
       >`;
     return html`<div class="head">

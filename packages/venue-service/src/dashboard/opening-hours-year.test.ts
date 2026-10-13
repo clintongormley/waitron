@@ -161,6 +161,40 @@ describe("Opening hours year", () => {
     ]);
   });
 
+  it("draws every date of a year below 1000, whose dates carry four year digits", async () => {
+    const days: OpeningHoursYearDay[] = [];
+    for (let date = "0100-01-01"; date <= "0100-12-31"; date = addDays(date, 1))
+      days.push({
+        date,
+        seasonId: "w",
+        specialDay: null,
+        holidays: [],
+        tone: "standard",
+        closed: false,
+      });
+    const el = await mount(
+      yearModel({
+        year: 100,
+        days,
+        today: "2027-03-10",
+        holidayCoverage: [],
+      }),
+    );
+    expect(root(el).querySelectorAll("td[data-date]")).toHaveLength(365);
+    expect(cell(el, "0100-01-01")).not.toBeNull();
+    expect(root(el).querySelector('[data-month="0100-02"]')).not.toBeNull();
+    expect(root(el).querySelector("[tabindex='0']")?.closest("td")?.dataset.date).toBe(
+      "0100-01-01",
+    );
+    dayButton(el, "0100-03-02").click();
+    await el.updateComplete;
+    expect(panel(el)).not.toBeNull();
+    el.model = { ...el.model!, days: [...days] };
+    await el.updateComplete;
+    expect(panel(el)).not.toBeNull();
+    expect(dayButton(el, "0100-03-02").getAttribute("aria-pressed")).toBe("true");
+  });
+
   it("tints each day by its season's place in start order, cycling past the fourth", async () => {
     const el = await mount();
     expect(

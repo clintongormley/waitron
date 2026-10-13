@@ -69,7 +69,7 @@ export class OpeningHoursApi {
       QUERY_DEPENDENCIES["named-days"],
       () =>
         this.request<OpeningHoursYear>(
-          `${BASE}/opening-hours/year?${new URLSearchParams({ year: String(year) })}`,
+          `${BASE}/opening-hours/year?${new URLSearchParams({ year: String(year).padStart(4, "0") })}`,
           "GET",
           undefined,
           { passive: true },
