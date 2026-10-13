@@ -488,9 +488,9 @@ export class TillTenderPay extends LitElement {
         this.#startCard();
         return;
       }
-      const tip = this.tipEntry.trim();
+      const tip = typedAmount(this.tipEntry);
       this.#collectCard({
-        ...(this.tipsEnabled && tip !== "" ? { tip } : {}),
+        ...(this.tipsEnabled && tip !== null ? { tip } : {}),
         ...(this.cardProvider === "stripe_on_device" && this.allowOffline
           ? { allowOffline: true }
           : {}),

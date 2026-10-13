@@ -2808,12 +2808,11 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   them to `loading` so they keep their full colour with a spinner. Question in the lane C questions
   file, "A535 (#1617)".
 
-- **Till payment and refund amounts still pass leading zeros to the strict decimal reader.**
-  `typedAmount("05,50")` returns `"05.50"` (`apps/till/src/state/bill-payment.ts`); calling
-  `decimal` on that result raises `shared.invalid_decimal`. A531’s temporary browser probe ran
-  both calls and asserted the code. The part-refund dialog’s `#partAmount` calls them in turn
-  (`apps/till/src/widgets/bill-refund-dialog.ts`). Next: reproduce through the payment/refund
-  forms and normalise valid input before comparison and request conversion, keeping their limits.
+- **Check leading-zero tip drafts on the counter payment screen.** The draft comparator in
+  `apps/till/src/widgets/tender-pay.ts` calls the strict decimal reader on raw text and falls back
+  to text equality when that refuses it. A599's review probe observed `shared.invalid_decimal`
+  for `"00"` and `"05.50"`; the effect on the form's unsaved-change prompt is unverified.
+  Next: reproduce through the form whether equivalent tip spellings ask to discard a change.
 
 - **Reopening a held order still removes a sold-out extra on the first edit.** The till now keeps
   such a line marked "Not offered now"; a line with no stored snapshot whose product the till no

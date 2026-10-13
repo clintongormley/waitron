@@ -44,7 +44,7 @@ const TYPED_AMOUNT = /^\d{1,9}(\.\d{1,2})?$/;
 
 export function typedAmount(value: string): string | null {
   const typed = parseDecimalInput(value);
-  return typed !== null && TYPED_AMOUNT.test(typed) ? typed : null;
+  return typed !== null && TYPED_AMOUNT.test(typed) ? typed.replace(/^0+(?=\d)/, "") : null;
 }
 
 /** Two amounts added, at the money scale. */
