@@ -29,6 +29,7 @@ import type {
   BackupDestinationView,
   BackupSchedule,
   BackupStatusView,
+  BackupWriteAnswer,
   DashboardApi,
   StreamSettingsView,
 } from "../api/client.js";
@@ -99,13 +100,15 @@ const FORM_REFUSALS = new Set([
 
 type CustomField = keyof CustomBucket;
 
-/** The server names a refused bucket setting by its `custom-s3` key, which is also this form's key. */
-const CUSTOM_FIELDS: {
+interface CustomFieldRow {
   field: CustomField;
   name: string;
   labelKey: Parameters<typeof t>[0];
   requiredKey?: Parameters<typeof t>[0];
-}[] = [
+}
+
+/** The server names a refused bucket setting by its `custom-s3` key, which is also this form's key. */
+const CUSTOM_FIELDS: CustomFieldRow[] = [
   { field: "endpoint", name: "endpoint", labelKey: "stream.form.endpoint" },
   {
     field: "region",
@@ -320,17 +323,14 @@ export class BackupScreen extends LitElement {
   // The configure and rotate forms share this draft: only ONE of them renders at a time.
   @state() private choice: DestinationChoice = "local-fs";
   @state() private folder = "";
-  @state() private folderAttempted = false;
   /** The server refused the folder, and it has not changed since. */
   @state() private folderRefused = false;
   /** Another bucket's fields. The secret lives in memory only, and is cleared once saved. */
   @state() private custom: CustomBucket = { ...EMPTY_CUSTOM };
   /** The bucket field the server refused, until that field changes. */
   @state() private customRefused: CustomField | null = null;
-  /** Whether the request whose secret was refused carried one. */
   @state() private secretSentRefused = false;
-  /** The server refused to keep the saved secret for this place. The dashboard cannot see why; a
-   * bucket saved for another venue is one reason (`customBucket`, apps/server/src/archive-settings.ts). */
+  /** The server refused to keep the saved secret for this place. */
   @state() private secretDemanded = false;
   @state() private secretVisible = false;
   /** A refusal naming no field the form shows, for the bottom message until the next submission;
@@ -353,7 +353,7 @@ export class BackupScreen extends LitElement {
   @state() private atTime = "03:00";
   @state() private retainCount = "7";
   @state() private retainDays = "30";
-  @state() private policyAttempted = false;
+  @state() private attempted = false;
   /** The server refused the retention the boxes hold, and neither box has changed since. */
   @state() private retentionRefused = false;
 
@@ -637,7 +637,7 @@ export class BackupScreen extends LitElement {
   }
 
   get #policyHeld(): boolean {
-    return this.policyAttempted && this.#retentionInvalid;
+    return this.attempted && this.#retentionInvalid;
   }
 
   get #folderMissing(): boolean {
@@ -648,39 +648,37 @@ export class BackupScreen extends LitElement {
     return this.secretDemanded || !keepsHeldSecret(this.custom, heldBucket(this.status));
   }
 
-  #customMissing(field: CustomField): boolean {
-    if (this.choice !== "custom-s3") return false;
-    const required =
-      field === "secretAccessKey"
-        ? this.#secretRequired
-        : CUSTOM_FIELDS.some((f) => f.field === field && f.requiredKey !== undefined);
-    return required && this.custom[field].trim() === "";
+  #customRequired(f: CustomFieldRow): boolean {
+    return f.field === "secretAccessKey" ? this.#secretRequired : f.requiredKey !== undefined;
   }
 
-  /** The stream's bucket was chosen, and has gone since. */
+  #customMissing(f: CustomFieldRow): boolean {
+    return (
+      this.choice === "custom-s3" && this.#customRequired(f) && this.custom[f.field].trim() === ""
+    );
+  }
+
   get #streamGone(): boolean {
     return this.choice === "stream-bucket" && (this.stream?.bucket ?? null) === null;
   }
 
   get #destinationMissing(): boolean {
     return (
-      this.#folderMissing ||
-      this.#streamGone ||
-      CUSTOM_FIELDS.some((f) => this.#customMissing(f.field))
+      this.#folderMissing || this.#streamGone || CUSTOM_FIELDS.some((f) => this.#customMissing(f))
     );
   }
 
-  get #folderHeld(): boolean {
-    return this.folderAttempted && this.#destinationMissing;
+  get #destinationHeld(): boolean {
+    return this.attempted && this.#destinationMissing;
   }
 
   get #applyDisabled(): boolean {
-    if (this.#reusesHeldKey) return this.submitting || this.#folderHeld || this.#policyHeld;
+    if (this.#reusesHeldKey) return this.submitting || this.#destinationHeld || this.#policyHeld;
     return (
       this.submitting ||
       this.#policyHeld ||
       !this.savedIt ||
-      this.#folderHeld ||
+      this.#destinationHeld ||
       this.#effectiveKey === ""
     );
   }
@@ -696,13 +694,12 @@ export class BackupScreen extends LitElement {
   }
 
   get #saveSettingsDisabled(): boolean {
-    return this.submitting || this.#folderHeld || this.#reuseKey === null || this.#policyHeld;
+    return this.submitting || this.#destinationHeld || this.#reuseKey === null || this.#policyHeld;
   }
 
   /** Marks the form as submitted; `false` when a field fails the form's own check. */
-  #checkPolicy(): boolean {
-    this.policyAttempted = true;
-    this.folderAttempted = true;
+  #checkForm(): boolean {
+    this.attempted = true;
     this.retentionRefused = false;
     this.folderRefused = false;
     this.customRefused = null;
@@ -726,38 +723,30 @@ export class BackupScreen extends LitElement {
   #onApplyRefused(error: unknown, sent: BackupApplyBody["destination"]): void {
     const code = codeOf(error);
     const field = (error as { params?: { field?: unknown } } | null)?.params?.field;
-    if (code === "backup.request_invalid" && field === "retention") {
-      this.retentionRefused = true;
-      this.#focusFirstInvalidBox();
-    } else if (
-      code === "backup.request_invalid" &&
-      sent.kind === "custom-s3" &&
-      isCustomField(field)
-    ) {
-      this.customRefused = field;
-      if (field === "secretAccessKey") {
-        this.secretSentRefused = sent.secretAccessKey !== undefined;
-        if (!this.secretSentRefused) this.secretDemanded = true;
-      }
-      this.#focusFirstInvalidBox();
-    } else if (code === "backup.request_invalid" && field === "dir") {
-      this.folderRefused = true;
-      this.#focusFirstInvalidBox();
-    } else if (
-      code === "backup.request_invalid" &&
-      field === "prefix" &&
-      sent.kind === "stream-bucket"
-    ) {
-      this.formRefusal = {
-        code,
-        reason: null,
-        sentence: "backup.destination.stream_prefix_refused",
-      };
+    if (code === "backup.request_invalid") {
+      if (field === "retention") {
+        this.retentionRefused = true;
+        this.#focusFirstInvalidBox();
+      } else if (sent.kind === "custom-s3" && isCustomField(field)) {
+        this.customRefused = field;
+        if (field === "secretAccessKey") {
+          this.secretSentRefused = sent.secretAccessKey !== undefined;
+          if (!this.secretSentRefused) this.secretDemanded = true;
+        }
+        this.#focusFirstInvalidBox();
+      } else if (field === "dir") {
+        this.folderRefused = true;
+        this.#focusFirstInvalidBox();
+      } else if (field === "prefix" && sent.kind === "stream-bucket") {
+        this.formRefusal = {
+          code,
+          reason: null,
+          sentence: "backup.destination.stream_prefix_refused",
+        };
+      } else this.formRefusal = { code, reason: null };
     } else if (FORM_REFUSALS.has(code)) {
       const reason = (error as { params?: { reason?: unknown } }).params?.reason;
       this.formRefusal = { code, reason: typeof reason === "string" ? reason : null };
-    } else if (code === "backup.request_invalid") {
-      this.formRefusal = { code, reason: null };
     } else this.errorKey = code;
   }
 
@@ -781,30 +770,38 @@ export class BackupScreen extends LitElement {
     return false;
   }
 
+  #applyBody(recoveryKey?: string): BackupApplyBody {
+    return {
+      destination: destinationBody(this.choice, this.folder, this.custom),
+      ...(recoveryKey === undefined ? {} : { recoveryKey }),
+      schedule: this.#buildSchedule(),
+      retention: this.#retention(),
+    };
+  }
+
+  #afterApply(status: BackupWriteAnswer): void {
+    this.custom = { ...this.custom, secretAccessKey: "" };
+    this.secretVisible = false;
+    this.secretDemanded = false;
+    this.reloadErrorCode = status.reloadErrorCode ?? null;
+  }
+
   async #apply(): Promise<void> {
     const sendsKey = !this.#reusesHeldKey;
     if (this.#applyAction().unchanged) return;
     if (this.#applyDisabled || (sendsKey && this.#pastedKeyTooShort())) return;
-    if (!this.#checkPolicy()) return;
+    if (!this.#checkForm()) return;
     this.errorKey = null;
     this.refreshErrorKey = null;
     this.submitting = true;
-    const body: BackupApplyBody = {
-      destination: destinationBody(this.choice, this.folder, this.custom),
-      ...(sendsKey ? { recoveryKey: this.#effectiveKey } : {}),
-      schedule: this.#buildSchedule(),
-      retention: this.#retention(),
-    };
+    const body = this.#applyBody(sendsKey ? this.#effectiveKey : undefined);
     const submitted = this.#archiveValue();
     const generation = this.#generation;
     const scope = this.#archiveScope;
     try {
       const status = await this.api.applyBackup(body);
       if (generation !== this.#generation) return;
-      this.custom = { ...this.custom, secretAccessKey: "" };
-      this.secretVisible = false;
-      this.secretDemanded = false;
-      this.reloadErrorCode = status.reloadErrorCode ?? null;
+      this.#afterApply(status);
       scope?.commit(submitted);
       this.configureAfterApply = scope?.isDirty() ?? false;
       this.#configureUsesHeldKey = this.configureAfterApply && !sendsKey;
@@ -912,8 +909,7 @@ export class BackupScreen extends LitElement {
       if (this.#archiveScope?.isDirty()) return;
       if (sameValue(this.#fieldsFrom(s), this.#fields())) return;
     }
-    this.#prefillFromStatus(s);
-    this.#archiveScope?.commit(this.#archiveValue());
+    this.#prefillAndCommit(s);
   }
 
   /** The stream's bucket changed under a prefilled form nobody has changed: open it again as a fresh
@@ -925,6 +921,10 @@ export class BackupScreen extends LitElement {
       void this.#openStoredOff(false);
       return;
     }
+    this.#prefillAndCommit(s);
+  }
+
+  #prefillAndCommit(s: BackupStatusView): void {
     this.#prefillFromStatus(s);
     this.#archiveScope?.commit(this.#archiveValue());
   }
@@ -1051,9 +1051,8 @@ export class BackupScreen extends LitElement {
         return;
       }
       this.#reuseKey = key;
-      this.policyAttempted = false;
+      this.attempted = false;
       this.retentionRefused = false;
-      this.folderAttempted = false;
       this.folderRefused = false;
       this.customRefused = null;
       this.formRefusal = null;
@@ -1068,26 +1067,18 @@ export class BackupScreen extends LitElement {
   async #saveSettings(): Promise<void> {
     if (this.#settingsAction().unchanged) return;
     if (this.#saveSettingsDisabled || this.#reuseKey === null) return;
-    if (!this.#checkPolicy()) return;
+    if (!this.#checkForm()) return;
     this.errorKey = null;
     this.refreshErrorKey = null;
     this.submitting = true;
-    const body: BackupApplyBody = {
-      destination: destinationBody(this.choice, this.folder, this.custom),
-      recoveryKey: this.#reuseKey,
-      schedule: this.#buildSchedule(),
-      retention: this.#retention(),
-    };
+    const body = this.#applyBody(this.#reuseKey);
     const submitted = this.#archiveValue();
     const generation = this.#generation;
     const scope = this.#archiveScope;
     try {
       const status = await this.api.applyBackup(body);
       if (generation !== this.#generation) return;
-      this.custom = { ...this.custom, secretAccessKey: "" };
-      this.secretVisible = false;
-      this.secretDemanded = false;
-      this.reloadErrorCode = status.reloadErrorCode ?? null;
+      this.#afterApply(status);
       this.#takeWriteAnswer(status);
       scope?.commit(submitted);
       this.#policyReplaced = false;
@@ -1197,7 +1188,6 @@ export class BackupScreen extends LitElement {
     });
   }
 
-  /** Enter in a destination field presses the shown form's own Apply or Save. */
   #submitOnEnter(event: KeyboardEvent): void {
     const action = this.editSettings ? "save-settings" : "apply";
     submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>(`[data-test=${action}]`));
@@ -1517,10 +1507,10 @@ export class BackupScreen extends LitElement {
       : this.stream !== undefined && bucket === null
         ? t("backup.destination.stream_unavailable")
         : null;
-    const streamMarked = this.folderAttempted && this.#streamGone;
+    const streamMarked = this.attempted && this.#streamGone;
     const folderMessage = this.folderRefused
       ? t("backup.destination.folder_refused")
-      : this.#folderHeld
+      : this.#destinationHeld
         ? t("backup.destination.folder_required")
         : "";
     return html`
@@ -1562,16 +1552,16 @@ export class BackupScreen extends LitElement {
       ${
         this.choice === "local-fs"
           ? html`<wt-input
-                data-test="destination"
-                name="backup-folder"
-                required
-                label=${t("backup.destination.label")}
-                error=${folderMessage}
-                .value=${this.folder}
-                @keydown=${(e: KeyboardEvent) => this.#submitOnEnter(e)}
-                @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onDestination(e)}
-              ></wt-input>
-              <p class="hint">${t("backup.destination.hint")}</p>`
+              data-test="destination"
+              name="backup-folder"
+              required
+              label=${t("backup.destination.label")}
+              hint=${t("backup.destination.hint")}
+              error=${folderMessage}
+              .value=${this.folder}
+              @keydown=${(e: KeyboardEvent) => this.#submitOnEnter(e)}
+              @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onDestination(e)}
+            ></wt-input>`
           : this.choice === "stream-bucket"
             ? this.#renderStreamChoice(bucket)
             : this.#renderCustomChoice()
@@ -1619,19 +1609,19 @@ export class BackupScreen extends LitElement {
     }
   }
 
-  #customMessage(field: CustomField): string {
-    if (this.customRefused === field) return this.#refusalMessage(field);
-    if (!this.folderAttempted || !this.#customMissing(field)) return "";
-    if (field === "secretAccessKey")
+  #customMessage(f: CustomFieldRow): string {
+    if (this.customRefused === f.field) return this.#refusalMessage(f.field);
+    if (!this.attempted || !this.#customMissing(f)) return "";
+    if (f.field === "secretAccessKey")
       return heldBucket(this.status) === null || this.secretDemanded
         ? t("stream.form.secret_access_key_required")
         : t("backup.destination.secret_needed");
-    return t(CUSTOM_FIELDS.find((f) => f.field === field)!.requiredKey!);
+    return f.requiredKey === undefined ? "" : t(f.requiredKey);
   }
 
-  #renderCustomField(f: (typeof CUSTOM_FIELDS)[number]): TemplateResult {
+  #renderCustomField(f: CustomFieldRow): TemplateResult {
     const secret = f.field === "secretAccessKey";
-    const required = secret ? this.#secretRequired : f.requiredKey !== undefined;
+    const required = this.#customRequired(f);
     const toggleLabel = t(
       this.secretVisible ? "stream.form.hide_secret" : "stream.form.show_secret",
     );
@@ -1648,7 +1638,7 @@ export class BackupScreen extends LitElement {
           : ""
       }
       .value=${this.custom[f.field]}
-      .error=${this.#customMessage(f.field)}
+      .error=${this.#customMessage(f)}
       @keydown=${(event: KeyboardEvent) => this.#submitOnEnter(event)}
       @wt-change=${(event: CustomEvent<{ value: string }>) => {
         event.stopPropagation();
@@ -1885,7 +1875,7 @@ export class BackupScreen extends LitElement {
   }
 
   #retentionMessage(text: string): string | null {
-    const invalid = this.policyAttempted && parseRetention(text) === null;
+    const invalid = this.attempted && parseRetention(text) === null;
     return invalid || this.retentionRefused ? t("backup.retention_invalid") : null;
   }
 
@@ -1893,7 +1883,7 @@ export class BackupScreen extends LitElement {
     const marked =
       this.#policyHeld ||
       this.retentionRefused ||
-      this.#folderHeld ||
+      this.#destinationHeld ||
       this.folderRefused ||
       this.customRefused !== null;
     const refusal = this.formRefusal;

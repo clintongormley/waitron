@@ -39,7 +39,6 @@ export function normalisePrefix(prefix: string): string {
   return trimmed === "" ? "" : `${trimmed}/`;
 }
 
-/** An empty, `.` or `..` folder once the ends' slashes are trimmed. */
 export function hasUnusableFolder(prefix: string): boolean {
   const root = normalisePrefix(prefix);
   return (
@@ -60,31 +59,15 @@ export function heldBucket(status: BackupStatusView | undefined): HeldBucket | n
   return status?.destinations.find((d): d is HeldBucket => d.kind === "s3") ?? null;
 }
 
-export function keepsHeldSecret(custom: CustomBucket, held: HeldBucket | null): boolean {
-  return (
-    held !== null &&
-    (held.endpoint ?? "") === custom.endpoint.trim() &&
-    held.region === custom.region.trim() &&
-    held.bucket === custom.bucket.trim() &&
-    normalisePrefix(held.prefix) === normalisePrefix(custom.prefix.trim()) &&
-    held.accessKeyId === custom.accessKeyId.trim()
-  );
+interface Place {
+  endpoint: string | null;
+  region: string;
+  bucket: string;
+  prefix: string;
+  accessKeyId: string;
 }
 
-export function matchesStream(d: BackupDestinationView, stream: StreamBucket | null): boolean {
-  return (
-    stream !== null &&
-    d.kind === "s3" &&
-    d.endpoint === stream.endpoint &&
-    d.region === stream.region &&
-    d.bucket === stream.bucket &&
-    normalisePrefix(d.prefix) === normalisePrefix(stream.prefix) &&
-    d.accessKeyId === stream.accessKeyId
-  );
-}
-
-export function sameStreamBucket(a: StreamBucket | null, b: StreamBucket | null): boolean {
-  if (a === null || b === null) return a === b;
+function samePlace(a: Place, b: Place): boolean {
   return (
     a.endpoint === b.endpoint &&
     a.region === b.region &&
@@ -92,6 +75,31 @@ export function sameStreamBucket(a: StreamBucket | null, b: StreamBucket | null)
     normalisePrefix(a.prefix) === normalisePrefix(b.prefix) &&
     a.accessKeyId === b.accessKeyId
   );
+}
+
+export function keepsHeldSecret(custom: CustomBucket, held: HeldBucket | null): boolean {
+  return (
+    held !== null &&
+    samePlace(
+      { ...held, endpoint: held.endpoint ?? "" },
+      {
+        endpoint: custom.endpoint.trim(),
+        region: custom.region.trim(),
+        bucket: custom.bucket.trim(),
+        prefix: custom.prefix.trim(),
+        accessKeyId: custom.accessKeyId.trim(),
+      },
+    )
+  );
+}
+
+export function matchesStream(d: BackupDestinationView, stream: StreamBucket | null): boolean {
+  return stream !== null && d.kind === "s3" && samePlace(d, stream);
+}
+
+export function sameStreamBucket(a: StreamBucket | null, b: StreamBucket | null): boolean {
+  if (a === null || b === null) return a === b;
+  return samePlace(a, b);
 }
 
 export function openingDestination(
