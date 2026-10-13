@@ -580,3 +580,33 @@ it("ignores the offer's buttons while a save is in flight", async () => {
   expect(added).toEqual([]);
   expect(q("[data-test=add-to]")).not.toBeNull();
 });
+
+it("offers a same-named special day with a date over those with none, and the lowest id among those with none", async () => {
+  const offered = async (existing: SpecialDayDialog["existing"]) => {
+    await mount((dialog) => {
+      dialog.date = "2026-12-25";
+      dialog.holidays = [navidad];
+      dialog.existing = existing;
+    });
+    const added: { id: string }[] = [];
+    el.addEventListener("special-day-add-to", (event) => added.push((event as CustomEvent).detail));
+    await click("[data-test=add-to]");
+    el.remove();
+    return added.map(({ id }) => id);
+  };
+  expect(
+    await offered([
+      { id: "q", name: "Navidad" },
+      { id: "p", name: "Navidad" },
+      { id: "m", name: "Navidad", latest: "2024-12-25" },
+      { id: "r", name: "Navidad" },
+    ]),
+  ).toEqual(["m"]);
+  expect(
+    await offered([
+      { id: "q", name: "Navidad" },
+      { id: "p", name: "Navidad" },
+      { id: "r", name: "Navidad" },
+    ]),
+  ).toEqual(["p"]);
+});

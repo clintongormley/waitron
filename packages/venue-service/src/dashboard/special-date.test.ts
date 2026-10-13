@@ -49,3 +49,11 @@ it("hands back the stored detail itself rather than a copy, since every render a
   const detail = goodFriday([{ date: "2027-04-03", closedAllDay: false }]);
   expect(specialOn(calendarDay("2027-04-03"), detail, "2027-04-03")?.detail).toBe(detail);
 });
+
+it("places nothing when a one-off special day's dates do not hold the date", () => {
+  const detail = {
+    ...goodFriday([{ date: "2026-04-03", closedAllDay: false }]),
+    repeatsYearly: false,
+  };
+  expect(specialOn(calendarDay("2027-04-03"), detail, "2027-04-03")).toBeUndefined();
+});

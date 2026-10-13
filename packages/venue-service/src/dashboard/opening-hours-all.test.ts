@@ -236,3 +236,24 @@ it("in the real week from Monday 25 Nov 2030, shows Autumn's Monday to Saturday 
     "17:00",
   ]);
 });
+it("leaves a modified or non-primary click on a heading to the browser", async () => {
+  const el = await mount();
+  const events: unknown[] = [];
+  el.addEventListener("department-open", (e) => events.push((e as CustomEvent).detail));
+  const link = el.shadowRoot!.querySelector<HTMLAnchorElement>("[data-department=bar]")!;
+  const handled: boolean[] = [];
+  link.addEventListener("click", (event) => {
+    handled.push(event.defaultPrevented);
+    event.preventDefault();
+  });
+  for (const init of [
+    { ctrlKey: true },
+    { metaKey: true },
+    { shiftKey: true },
+    { altKey: true },
+    { button: 1 },
+  ])
+    link.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, ...init }));
+  expect(events).toEqual([]);
+  expect(handled).toEqual([false, false, false, false, false]);
+});
