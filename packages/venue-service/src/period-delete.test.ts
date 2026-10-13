@@ -691,6 +691,77 @@ describe("deleting a period", () => {
 
       expect((await stored(v)).extensions).toEqual(["2026-10-01 Dinner 23:00-23:30"]);
     });
+
+    it("leaves no day row on a special day whose only paint was the period, so the day reads as its season's", async () => {
+      const v = await deleteVenue();
+      const date = "2026-10-14";
+      const plainWednesday = "2026-10-21";
+      await specialDay(v, "Verbena", [date], [slot(v.lunch, "18:00", "23:00")]);
+
+      await remove(v, v.lunch, null);
+
+      const dayRows = await db
+        .select({ id: departmentDays.id })
+        .from(departmentDays)
+        .innerJoin(specialDayDates, eq(specialDayDates.id, departmentDays.specialDayDateId))
+        .where(eq(departmentDays.departmentId, v.restaurant));
+      expect(dayRows).toEqual([]);
+      const resolved = await scoped(async (tx) =>
+        resolveDepartmentDays(
+          tx,
+          v.cfg,
+          v.restaurant,
+          [date, plainWednesday],
+          await readLocationClock(tx, v.locationId),
+        ),
+      );
+      expect(resolved.get(date)!.ranges).toEqual([slot(v.dinner, "20:00", "23:00")]);
+      expect(resolved.get(date)!.ranges).toEqual(resolved.get(plainWednesday)!.ranges);
+    });
+
+    it("takes the period's paint off a past one-off special day too", async () => {
+      const v = await deleteVenue();
+      await specialDay(
+        v,
+        "Fiesta pasada",
+        ["2026-09-01"],
+        [slot(v.lunch, "13:00", "16:00"), slot(v.afternoon, "16:00", "17:00")],
+      );
+
+      await remove(v, v.lunch, null);
+
+      expect((await stored(v)).specialDays).toEqual(["2026-09-01 Afternoon 16:00-17:00"]);
+    });
+
+    it("is not refused for a sending cutoff clash stored in another department", async () => {
+      const v = await deleteVenue();
+      await scoped((tx) =>
+        replaceMenuWeek(
+          tx,
+          v.cfg,
+          v.deli,
+          [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+            weekday,
+            slots: weekday === 3 ? [slot(v.deliLunch, "12:00", "16:00")] : [],
+          })),
+          WRITE_AT,
+          0,
+        ),
+      );
+      // Written past the writers' check: Deli lunch would stop sending at 11:00, before it starts.
+      await db
+        .update(menuPeriods)
+        .set({ endOffsetMinutes: -300 })
+        .where(eq(menuPeriods.id, v.deliLunch));
+      expect(await scoped((tx) => scheduleEndOffsetClash(tx, v.cfg))).toMatchObject({
+        periodId: v.deliLunch,
+        departmentId: v.deli,
+      });
+
+      await remove(v, v.lunch, null);
+
+      expect((await stored(v)).periods).toEqual(["Afternoon", "Dinner"]);
+    });
   });
 
   describe("refusals", () => {

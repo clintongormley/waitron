@@ -1,10 +1,10 @@
-import { and, asc, eq, inArray, isNotNull, ne } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, ne, notExists } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { readLocationClock } from "@waitron/reporting";
 import { AppError, cutoverForBusinessDay, type BusinessDayClock } from "@waitron/shared";
 import { assertBusinessDayScheduleWrite } from "./business-day-schedule.js";
 import type { LocalDate } from "./hours-types.js";
-import { readRoutingUses, requirePeriod, scheduleEndOffsetClash } from "./menu-timetable.js";
+import { departmentEndOffsetClash, readRoutingUses, requirePeriod } from "./menu-timetable.js";
 import { invalidTimetable } from "./menu-timetable-rules.js";
 import type { PeriodRoutingUse } from "./menu-timetable-types.js";
 import type { VenueScope } from "./operations.js";
@@ -185,8 +185,31 @@ export async function deletePeriod(
   }
   const clock = await readLocationClock(tx, cfg.locationId);
   await assertBusinessDayScheduleWrite(tx, cfg, "time", at, expectedClockRevision, clock);
+  const dayIds = (
+    await tx
+      .selectDistinct({ dayId: departmentDayRanges.dayId })
+      .from(departmentDayRanges)
+      .where(eq(departmentDayRanges.periodId, periodId))
+  ).map((row) => row.dayId);
   if (replacementId === null) {
     await tx.delete(departmentDayRanges).where(eq(departmentDayRanges.periodId, periodId));
+    // A special-day date's row exists only while it holds paint, as saveSpecialDay writes it; a
+    // season's row stands for its weekday even when empty.
+    if (dayIds.length > 0)
+      await tx
+        .delete(departmentDays)
+        .where(
+          and(
+            inArray(departmentDays.id, dayIds),
+            isNotNull(departmentDays.specialDayDateId),
+            notExists(
+              tx
+                .select({ id: departmentDayRanges.id })
+                .from(departmentDayRanges)
+                .where(eq(departmentDayRanges.dayId, departmentDays.id)),
+            ),
+          ),
+        );
   } else {
     // A cell holds one line per period (routing_cell_periods_cell_period_key), so the period's
     // line goes where the replacement already has one before the rest are renamed.
@@ -206,12 +229,6 @@ export async function deletePeriod(
       .update(routingCellPeriods)
       .set({ periodId: replacementId })
       .where(eq(routingCellPeriods.periodId, periodId));
-    const dayIds = (
-      await tx
-        .selectDistinct({ dayId: departmentDayRanges.dayId })
-        .from(departmentDayRanges)
-        .where(eq(departmentDayRanges.periodId, periodId))
-    ).map((row) => row.dayId);
     await tx
       .update(departmentDayRanges)
       .set({ periodId: replacementId })
@@ -223,7 +240,7 @@ export async function deletePeriod(
       .where(eq(periodExtensions.periodId, periodId));
   }
   await tx.delete(menuPeriods).where(eq(menuPeriods.id, periodId));
-  const clash = await scheduleEndOffsetClash(tx, cfg, clock);
+  const clash = await departmentEndOffsetClash(tx, cfg, period.departmentId, clock);
   if (clash !== null)
     invalidTimetable(replacementId === null ? "periodId" : "replacementPeriodId", {
       reason: "end_offset",
@@ -253,7 +270,11 @@ async function joinTouchingRanges(
     .leftJoin(specialDayDates, eq(specialDayDates.id, departmentDays.specialDayDateId))
     .where(inArray(departmentDayRanges.dayId, [...dayIds]));
   const byDay = new Map<string, typeof rows>();
-  for (const row of rows) byDay.set(row.dayId, [...(byDay.get(row.dayId) ?? []), row]);
+  for (const row of rows) {
+    const day = byDay.get(row.dayId);
+    if (day === undefined) byDay.set(row.dayId, [row]);
+    else day.push(row);
+  }
   for (const ranges of byDay.values()) {
     const date = ranges[0]!.date;
     const cutover = date === null ? clock.dayCutover : cutoverForBusinessDay(clock, date);

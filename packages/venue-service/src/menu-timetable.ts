@@ -206,6 +206,16 @@ export function scheduleEndOffsetClash(tx: Transaction, cfg: VenueScope, clock?:
   return endOffsetClash(tx, cfg, undefined, false, clock);
 }
 
+/** The first sending cutoff in one department's schedule that runs into what follows it. */
+export function departmentEndOffsetClash(
+  tx: Transaction,
+  cfg: VenueScope,
+  departmentId: string,
+  clock?: BusinessDayClock,
+) {
+  return endOffsetClash(tx, cfg, departmentId, false, clock);
+}
+
 export async function assertPeriodEndOffsets(tx: Transaction, cfg: VenueScope): Promise<void> {
   const clash = await endOffsetClash(tx, cfg, undefined, true);
   if (clash !== null) invalidTimetable("dayCutover", { reason: "end_offset", ...clash });
