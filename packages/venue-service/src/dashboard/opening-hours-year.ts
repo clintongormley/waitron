@@ -37,6 +37,9 @@ function listLacksLocalHolidays(local: HolidayCoverage["local"]): boolean {
 }
 export type HolidayAreaWrites = Pick<SpecialDaysApi, "saveHolidayArea" | "rereadWatches">;
 
+/** The year as it begins a date: four digits, so year 100 is `0100`. */
+const yearKey = (year: number) => String(year).padStart(4, "0");
+
 /** A Monday, so its week names the columns Monday first. */
 const A_MONDAY = "2024-01-01";
 
@@ -260,9 +263,9 @@ export class OpeningHoursYearView extends LitElement {
 
   protected override willUpdate(changes: PropertyValues<this>): void {
     if (!changes.has("model")) return;
-    const year = String(this.model?.year ?? "");
-    if (this.selected !== null && !this.selected.startsWith(year)) this.selected = null;
-    if (this.focusDate !== null && !this.focusDate.startsWith(year)) this.focusDate = null;
+    const prefix = this.model ? `${yearKey(this.model.year)}-` : "";
+    if (this.selected !== null && !this.selected.startsWith(prefix)) this.selected = null;
+    if (this.focusDate !== null && !this.focusDate.startsWith(prefix)) this.focusDate = null;
     const before = changes.get("model") as OpeningHoursYear | undefined;
     if (before?.area.addressKey !== this.model?.area.addressKey) {
       this.#areaRequest = {};
@@ -359,7 +362,7 @@ export class OpeningHoursYearView extends LitElement {
     stop: LocalDate,
     header: TemplateResult,
   ) {
-    const key = `${model.year}-${month}`;
+    const key = `${yearKey(model.year)}-${month}`;
     const grid = monthGrid(key);
     const headingId = `month-${month}`;
     return html`<section class="month" data-month=${key}>
@@ -546,7 +549,7 @@ export class OpeningHoursYearView extends LitElement {
         </th>`;
       })}
     </tr>`;
-    const prefix = `${model.year}-`;
+    const prefix = `${yearKey(model.year)}-`;
     const stop =
       [this.focusDate, this.selected, model.today].find(
         (date): date is LocalDate => date != null && date.startsWith(prefix),
