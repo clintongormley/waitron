@@ -78,7 +78,7 @@ export async function joinAgain(
     throw new AppError("joined_table.out_of_date", { tableId });
   }
   const whole = back.length === splitOff.length;
-  if (!whole) throw new AppError("joined_table.nothing_to_join", { tableId });
+  if (!whole && seats === null) throw new AppError("joined_table.seats_required", {});
   const [{ apart }] = await tx
     .select({ apart: joinedTableApart(diningTables.id).mapWith(Boolean) })
     .from(diningTables)

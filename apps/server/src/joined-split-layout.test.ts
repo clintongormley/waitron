@@ -171,6 +171,7 @@ describe("where a joined table stands after Join again", () => {
     staying: [0, 1, 2],
     whole: true,
   };
+  const apartSome = { ...whole, standing: false, staying: [1, 2], whole: false };
 
   it.each<[string, Parameters<typeof joinedPlaceAfter>[0], Placement | null]>([
     ["whole and standing", { ...whole, row: at(10, 20, 4, 2) }, at(10, 20, 6, 2)],
@@ -187,6 +188,27 @@ describe("where a joined table stands after Join again", () => {
       at(10, 17, 8, 8),
     ],
     ["whole, standing but covered -1", { ...whole, row: at(15, 25, 4, 2), covered: -1 }, LONG],
+    [
+      "some apart, not standing: from its saved place",
+      { ...apartSome, row: at(15, 25, 4, 2) },
+      at(12, 20, 10, 2),
+    ],
+    [
+      "some apart, not standing, turned 90°: from its saved place",
+      { ...apartSome, row: at(15, 25, 4, 2), saved: { ...LONG, rotation: 90 } },
+      at(8, 24, 10, 2, 90),
+    ],
+    [
+      "some apart, a table left apart between two coming back",
+      { ...apartSome, row: at(15, 25, 4, 2), staying: [0, 2] },
+      at(10, 20, 12, 2),
+    ],
+    [
+      "some apart, not standing, no saved place: from its today's place",
+      { ...apartSome, row: at(10, 20, 4, 2), saved: null },
+      at(12, 20, 10, 2),
+    ],
+    ["some apart, no place at all", { ...apartSome, row: null, saved: null }, null],
   ])("%s", (_name, args, expected) => {
     expect(joinedPlaceAfter(args)).toEqual(expected);
   });

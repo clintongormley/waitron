@@ -668,7 +668,10 @@ declare module "@waitron/shared" {
     "joined_table.part_invalid": { tableId: string; field: "partIds" };
     /** The split names every part still joined, which would leave the joined table with none. */
     "joined_table.split_all": { tableId: string; field: "partIds" };
-    /** A split that leaves two or more parts joined must say the joined table's seats. */
+    /**
+     * A split that leaves two or more parts joined, or a Join again that leaves some apart, must say the joined
+     * table's seats.
+     */
     "joined_table.seats_required": Record<string, never>;
     /** Back to its saved place is refused for a joined table while any of its parts is split off. */
     "joined_table.parts_split_off": { tableId: string };

@@ -13,19 +13,21 @@ import {
 import type { AppError } from "@waitron/shared";
 import { writeMerge } from "./floor-today-merges.js";
 import { foodOnItsWay } from "./delivery-release.js";
-import { moveToday, seatsToday, takeOffToday } from "./floor-today-store.js";
+import { moveToday, resetZone, seatsToday, takeOffToday } from "./floor-today-store.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { splitJoinedTable } from "./floor-today-split.js";
 import { joinAgain } from "./floor-today-join-again.js";
 import {
   counterOrder,
   inTx,
+  partyAt,
   pay,
+  revisionOf,
   seat,
   setupPartyVenue,
   type PartyVenue,
 } from "./testing/party-venue.js";
-import { giveKeptSize, plannedZone, todayRow } from "./testing/floor-today-venue.js";
+import { giveKeptSize, mergeOf, plannedZone, todayRow } from "./testing/floor-today-venue.js";
 import "./errors.js";
 
 let v: PartyVenue;
@@ -267,7 +269,18 @@ describe("joining split-off tables again when every one is free", () => {
     expect(await todayRow(v, table.bar!)).toEqual(bar);
   });
 
-  it.each<[string, () => Promise<{ target: string; partIds: string[]; seats?: number }>, string]>([
+  it.each<
+    [
+      string,
+      () => Promise<{
+        target: string;
+        partIds: string[];
+        seats?: number;
+        params?: Record<string, unknown>;
+      }>,
+      string,
+    ]
+  >([
     [
       "a table that is not a joined table",
       async () => {
@@ -364,22 +377,31 @@ describe("joining split-off tables again when every one is free", () => {
       "joined_table.out_of_date",
     ],
     [
-      "some tables staying apart",
+      "some staying apart and no seats",
       async () => {
         const table = await cameApart();
         await seat(v, table.c3!);
-        return { target: table.long!, partIds: [table.c4!, table.c5!], seats: 8 };
+        return { target: table.long!, partIds: [table.c4!, table.c5!], params: {} };
       },
-      "joined_table.nothing_to_join",
+      "joined_table.seats_required",
+    ],
+    [
+      "the guests' table named as coming back",
+      async () => {
+        const table = await cameApart();
+        await seat(v, table.c3!);
+        return { target: table.long!, partIds: [table.c3!, table.c4!, table.c5!], seats: 8 };
+      },
+      "joined_table.out_of_date",
     ],
   ])("refuses %s, writing nothing", async (_name, setup, code) => {
-    const { target, partIds, seats } = await setup();
+    const { target, partIds, seats, params } = await setup();
     const before = await everything();
 
     const error = await refusalOf(join(target, partIds, seats ?? null));
 
     expect(error?.code).toBe(code);
-    expect(error?.params).toEqual({ tableId: target });
+    expect(error?.params).toEqual(params ?? { tableId: target });
     expect(await everything()).toEqual(before);
   });
 
@@ -393,5 +415,166 @@ describe("joining split-off tables again when every one is free", () => {
     expect(error?.code).toBe("joined_table.nothing_to_join");
     expect(error?.params).toEqual({ tableId: table.long! });
     expect(await everything()).toEqual(before);
+  });
+});
+
+/** Long table (8 seats, 8 × 2 at 10, 20) made of Counter 3, 4, 5 and 6, each 2 seats kept 2 × 2. */
+async function LONG4() {
+  const zone = await plannedZone(
+    v,
+    [
+      { key: "c3", label: "Counter 3", seats: 2, place: null },
+      { key: "c4", label: "Counter 4", seats: 2, place: null },
+      { key: "c5", label: "Counter 5", seats: 2, place: null },
+      { key: "c6", label: "Counter 6", seats: 2, place: null },
+      {
+        key: "long",
+        label: "Long table",
+        seats: 8,
+        place: { x: 10, y: 20, width: 8, height: 2 },
+        partKeys: ["c3", "c4", "c5", "c6"],
+      },
+    ],
+    NOW,
+  );
+  for (const key of ["c3", "c4", "c5", "c6"]) {
+    await giveKeptSize(v, zone.master[key]!, { width: 2, height: 2 });
+  }
+  return zone;
+}
+
+describe("joining split-off tables again while some stay apart", () => {
+  it("brings Long table back over Counter 4 and 5 while the guests passed to Counter 3 stay", async () => {
+    const { table } = await LONG_PLUS_BAR();
+    const { partyId } = await seat(v, table.long!);
+    await split(table.long!, [table.c4!, table.c5!], null);
+    const c3Before = await todayRow(v, table.c3!);
+
+    await join(table.long!, [table.c4!, table.c5!], 8);
+
+    expect(await todayRow(v, table.long!)).toMatchObject({
+      x: 12,
+      y: 20,
+      width: 10,
+      height: 2,
+      seats: 8,
+      takenOff: false,
+    });
+    expect(await apart(table.long!)).toBe(0);
+    expect(await out(table.long!)).toBe(0);
+    for (const id of [table.c4!, table.c5!]) {
+      expect(await todayRow(v, id)).toMatchObject(UNPLACED);
+      expect(await out(id)).toBe(1);
+    }
+    expect(await todayRow(v, table.c3!)).toEqual(c3Before);
+    expect(await partyAt(v, table.c3!)).toBe(partyId);
+    expect(await splitRowsOf(table.long!)).toEqual([table.c3!]);
+  });
+
+  it("spans a table left apart between two that come back", async () => {
+    const table = await cameApart();
+    const { partyId } = await seat(v, table.c4!);
+    const c4Before = await todayRow(v, table.c4!);
+
+    await join(table.long!, [table.c3!, table.c5!], 8);
+
+    expect(await todayRow(v, table.long!)).toMatchObject({
+      x: 10,
+      y: 20,
+      width: 12,
+      height: 2,
+      seats: 8,
+    });
+    expect(await todayRow(v, table.c4!)).toEqual(c4Before);
+    expect(await splitRowsOf(table.long!)).toEqual([table.c4!]);
+    expect(await partyAt(v, table.c4!)).toBe(partyId);
+  });
+
+  it("brings back the tables free while Long table still stands", async () => {
+    const { table } = await LONG4();
+    await split(table.long!, [table.c6!], 6);
+    expect(await todayRow(v, table.long!)).toMatchObject({ x: 10, y: 20, width: 6, height: 2 });
+    await split(table.long!, [table.c5!], 4);
+    expect(await todayRow(v, table.long!)).toMatchObject({ x: 10, y: 20, width: 4, height: 2 });
+    expect(await todayRow(v, table.c5!)).toMatchObject({ x: 14, y: 20 });
+    const { partyId } = await seat(v, table.c5!);
+    await inTx(v, (tx) => moveToday(tx, v.cfg, table.long!, { x: 15, y: 25 }));
+    const c5Before = await todayRow(v, table.c5!);
+
+    await join(table.long!, [table.c6!], 8);
+
+    expect(await todayRow(v, table.long!)).toMatchObject({
+      x: 15,
+      y: 25,
+      width: 8,
+      height: 2,
+      seats: 8,
+    });
+    expect(await todayRow(v, table.c6!)).toMatchObject(UNPLACED);
+    expect(await todayRow(v, table.c5!)).toEqual(c5Before);
+    expect(c5Before).toMatchObject({ x: 14, y: 20 });
+    expect(await splitRowsOf(table.long!)).toEqual([table.c5!]);
+    expect(await partyAt(v, table.c5!)).toBe(partyId);
+  });
+
+  it("Join again after Reset to saved plan leaves the tables taken back joined and Long table in service", async () => {
+    const { table, zoneId } = await LONG_PLUS_BAR();
+    await seat(v, table.long!);
+    await split(table.long!, [table.c4!, table.c5!], null);
+    await inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, NOW));
+
+    await join(table.long!, [table.c4!, table.c5!], 8);
+
+    expect(await out(table.c4!)).toBe(1);
+    expect(await out(table.c5!)).toBe(1);
+    expect(await apart(table.long!)).toBe(0);
+    expect(await todayRow(v, table.long!)).toMatchObject({
+      x: 12,
+      y: 20,
+      width: 10,
+      height: 2,
+      seats: 8,
+    });
+    expect(await splitRowsOf(table.long!)).toEqual([table.c3!]);
+  });
+
+  it("keeps the guests and the merge at Long table", async () => {
+    const { table } = await LONG_PLUS_BAR();
+    await inTx(v, (tx) =>
+      writeMerge(tx, v.cfg, {
+        movingId: table.long!,
+        targetId: table.bar!,
+        side: "right",
+        seats: 14,
+        free: true,
+      }),
+    );
+    const { partyId } = await seat(v, table.long!);
+    await split(table.long!, [table.c5!], 6);
+    const revision = await revisionOf(v, partyId);
+    const merge = await mergeOf(v, table.long!);
+
+    await join(table.long!, [table.c5!]);
+
+    expect(await partyAt(v, table.long!)).toBe(partyId);
+    expect(await revisionOf(v, partyId)).toBe(revision);
+    expect(await mergeOf(v, table.long!)).toEqual(merge);
+  });
+
+  it("the second of two tills is refused once guests sit at a table it expected back", async () => {
+    const table = await cameApart();
+    await seat(v, table.c5!);
+    const before = await everything();
+
+    const error = await refusalOf(join(table.long!, [table.c3!, table.c4!, table.c5!]));
+
+    expect(error?.code).toBe("joined_table.out_of_date");
+    expect(error?.params).toEqual({ tableId: table.long! });
+    expect(await everything()).toEqual(before);
+
+    await join(table.long!, [table.c3!, table.c4!], 6);
+
+    expect(await splitRowsOf(table.long!)).toEqual([table.c5!]);
+    expect(await todayRow(v, table.long!)).toMatchObject({ seats: 6 });
   });
 });
