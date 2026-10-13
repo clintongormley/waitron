@@ -321,7 +321,7 @@ export class IngredientForm extends LitElement {
             data-test="confirm"
             ?disabled=${saveAction.unchanged || this.busy || invalidName !== ""}
             @click=${(e: Event) => this.#confirm(e)}
-            >${this.ingredient ? t("action.save") : t("action.create")}</wt-button
+            >${t("action.save")}</wt-button
           >
         </wt-form-actions>
       </wt-dialog>

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import type { Shift } from "../api/client.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { ShiftDialog } from "./shift-dialog.js";
 
@@ -40,6 +40,24 @@ const capture = (el: ShiftDialog, type: string) => {
 afterEach(cleanupWidgets);
 
 describe("shift-dialog", () => {
+  it("submits a new shift with Save", async () => {
+    const before = currentLocale();
+    setLocale("en-GB");
+    try {
+      const { el } = await mountWidget<ShiftDialog>("dashboard-shift-dialog", {
+        open: true,
+        day: "2026-03-02",
+        personId: "p1",
+        shift: null,
+      });
+      expect(
+        el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!.textContent!.trim(),
+      ).toBe("Save");
+    } finally {
+      setLocale(before);
+    }
+  });
+
   it("emits add-shift with instants composed from the day + entered times (offset 0)", async () => {
     const { el } = await mountWidget<ShiftDialog>("dashboard-shift-dialog", {
       open: true,

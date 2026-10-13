@@ -76,12 +76,12 @@ const EDIT_BOOKING: Booking = {
 };
 
 describe("booking-form", () => {
-  it("heads a create Añadir reserva and confirms it with Añadir", async () => {
+  it("heads a create Añadir reserva and confirms it with Guardar", async () => {
     const { el } = await mountWidget<BookingForm>("dashboard-booking-form", baseProps());
     expect([
       el.shadowRoot!.querySelector("wt-dialog")!.getAttribute("heading"),
       el.shadowRoot!.querySelector("[data-test=confirm]")!.textContent!.trim(),
-    ]).toEqual(["Añadir reserva", "Añadir"]);
+    ]).toEqual(["Añadir reserva", "Guardar"]);
   });
 
   it("seeds a create's date to defaultDate and starts otherwise blank", async () => {

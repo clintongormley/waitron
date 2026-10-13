@@ -321,7 +321,7 @@ export class PersonForm extends LitElement {
               (this.attempted && Object.keys(this.#validate()).length > 0)
             }
             @click=${(event: Event) => this.#confirm(event)}
-            >${t("action.create")}</wt-button
+            >${t("action.save")}</wt-button
           >
         </wt-form-actions>
       </wt-modal>

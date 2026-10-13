@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { IngredientForm, ingredientRefusalErrors } from "./ingredient-form.js";
 import type { AllergenDeclaration, DietaryOrigin, Ingredient } from "../api/client.js";
 
@@ -77,6 +77,17 @@ describe("ingredient-form", () => {
   it("opens the dialog when open is set", async () => {
     const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", baseProps());
     expect((await openedDialog(el)).open).toBe(true);
+  });
+
+  it("submits a new ingredient with Save", async () => {
+    const before = currentLocale();
+    setLocale("en-GB");
+    try {
+      const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", baseProps());
+      expect(confirmOf(el).textContent!.trim()).toBe("Save");
+    } finally {
+      setLocale(before);
+    }
   });
 
   it("emits create-ingredient with the name and the reviewed allergen map", async () => {
@@ -181,7 +192,7 @@ describe("ingredient-form", () => {
     expect(name.getAttribute("name")).toBe("name");
   });
 
-  it("says nothing about errors before the first submission, and Create works", async () => {
+  it("says nothing about errors before the first submission, and Save works", async () => {
     const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", baseProps());
     await setInput(el, "name", "   ");
     expect(nameErrorOf(el)).toBe("");
@@ -189,7 +200,7 @@ describe("ingredient-form", () => {
     expect(confirmOf(el).hasAttribute("disabled")).toBe(false);
   });
 
-  it("on an invalid submission focuses the name and disables Create until it is fixed", async () => {
+  it("on an invalid submission focuses the name and disables Save until it is fixed", async () => {
     const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", baseProps());
     await setInput(el, "name", " ");
     confirm(el);
@@ -210,7 +221,7 @@ describe("ingredient-form", () => {
     expect((await created).detail).toEqual({ name: "Sal" });
   });
 
-  it("starts again when reopened: no messages, Create quiet, and working after an edit", async () => {
+  it("starts again when reopened: no messages, Save quiet, and working after an edit", async () => {
     const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", baseProps());
     await setInput(el, "name", "   ");
     confirm(el);
@@ -454,7 +465,7 @@ describe("ingredient-form — a server refusal", () => {
     expect(ingredientRefusalErrors({})).toEqual({ _form: codeMessage("server.internal") });
   });
 
-  it("shows a refused name under it, focuses it, and leaves Create working", async () => {
+  it("shows a refused name under it, focuses it, and leaves Save working", async () => {
     const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", baseProps());
     await setInput(el, "name", "Sal");
     el.fieldErrors = { name: "Refused name" };
@@ -473,7 +484,7 @@ describe("ingredient-form — a server refusal", () => {
     expect(confirmOf(el).hasAttribute("disabled")).toBe(false);
   });
 
-  it("says a refusal naming no field in the bottom message, leaves Create working, and drops it on the next submit", async () => {
+  it("says a refusal naming no field in the bottom message, leaves Save working, and drops it on the next submit", async () => {
     const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", baseProps());
     await setInput(el, "name", "Sal");
     el.fieldErrors = { _form: codeMessage("server.internal") };

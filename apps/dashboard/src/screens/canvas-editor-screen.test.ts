@@ -7,7 +7,7 @@ import "./canvas-editor-screen.js";
 import type { CanvasEditorScreen } from "./canvas-editor-screen.js";
 import type { Canvas, DashboardApi } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 
 const originalUrl = location.href;
 afterEach(() => {
@@ -148,6 +148,26 @@ describe("canvas-editor-screen list mode", () => {
       "[data-test=duplicate-name]",
     )!;
     expect(input.value).toBe(`Counter till${t("canvas_editor.copy_suffix", "es-ES")}`);
+  });
+
+  it("labels the new canvas dialog's submit Save", async () => {
+    const before = currentLocale();
+    setLocale("en-GB");
+    try {
+      const { el } = await mountWidget<CanvasEditorScreen>("dashboard-canvas-editor-screen", {
+        api: stubApi(),
+      });
+      await flush(el);
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=create]")!.click();
+      await el.updateComplete;
+      expect(
+        el
+          .shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-create]")!
+          .textContent!.trim(),
+      ).toBe("Save");
+    } finally {
+      setLocale(before);
+    }
   });
 
   it("Crear seeds a draft from the default canvas and enters editor mode", async () => {

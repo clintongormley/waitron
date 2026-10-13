@@ -3,7 +3,7 @@ import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
-import { setLocale } from "../i18n/t.js";
+import { currentLocale, setLocale } from "../i18n/t.js";
 import type { DashboardApi, ServiceStatus } from "../api/client.js";
 import { ServiceStatusScreen } from "./service-status-screen.js";
 
@@ -76,6 +76,20 @@ describe("service-status-screen", () => {
     expect(api.listStatuses).toHaveBeenCalledTimes(1);
     expect(q(el, "[data-test=row-s1]")).not.toBeNull();
     expect(el.shadowRoot!.querySelectorAll("h1").length).toBe(0);
+  });
+
+  it("submits a new status with Save", async () => {
+    const before = currentLocale();
+    setLocale("en-GB");
+    try {
+      const { el } = await mountWidget<ServiceStatusScreen>("dashboard-service-status-screen", {
+        api: stubApi(),
+      });
+      await flush(el);
+      expect(q(el, "[data-test=add]")!.textContent!.trim()).toBe("Save");
+    } finally {
+      setLocale(before);
+    }
   });
 
   it("creates a status from the new-status form, then reloads", async () => {

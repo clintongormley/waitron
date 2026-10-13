@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
-import { codeMessage, registerCodeMessages, type DashboardRequest } from "@waitron/dashboard-kit";
+import {
+  codeMessage,
+  currentLocale,
+  registerCodeMessages,
+  setLocale,
+  type DashboardRequest,
+} from "@waitron/dashboard-kit";
 import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { t } from "./strings.js";
@@ -114,6 +120,18 @@ describe("stripe-add-reader", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it("submits a new reader with Save", async () => {
+    const before = currentLocale();
+    setLocale("en-GB");
+    try {
+      const request = vi.fn() as unknown as DashboardRequest;
+      const { el } = await mountWidget<StripeAddReader>("stripe-add-reader", { request });
+      expect(q(el, "[data-test=add]")!.textContent!.trim()).toBe("Save");
+    } finally {
+      setLocale(before);
+    }
+  });
+
   it("blocks the add until the name and reference are filled", async () => {
     const request = vi.fn() as unknown as DashboardRequest;
     const { el } = await mountWidget<StripeAddReader>("stripe-add-reader", { request });
@@ -136,7 +154,7 @@ describe("stripe-add-reader", () => {
     expect(input.placeholder).toBe(t("payments.stripe.reader_id_hint"));
   });
 
-  it("puts a reader id Stripe does not know under the Reader ID field, leaving Add working", async () => {
+  it("puts a reader id Stripe does not know under the Reader ID field, leaving Save working", async () => {
     const request = vi.fn(async () => {
       throw {
         code: "reader.reference_unknown",
@@ -320,7 +338,7 @@ describe("stripe-add-reader", () => {
     expect(request).not.toHaveBeenCalled();
   });
 
-  it("sends one add request when Add is pressed twice before the first answers", async () => {
+  it("sends one add request when Save is pressed twice before the first answers", async () => {
     const pending = deferred<{ id: string; status: string }>();
     const request = vi.fn(() => pending.promise) as unknown as DashboardRequest;
     const onAdded = vi.fn();
@@ -354,7 +372,7 @@ describe("stripe-add-reader", () => {
     expect((q(el, "[data-test=add]") as unknown as { loading: boolean }).loading).toBe(false);
   });
 
-  it("calls onClose once when Cancel is pressed while Add is pending, and still reports the added reader", async () => {
+  it("calls onClose once when Cancel is pressed while Save is pending, and still reports the added reader", async () => {
     const pending = deferred<{ id: string; status: string }>();
     const request = vi.fn(() => pending.promise) as unknown as DashboardRequest;
     const onAdded = vi.fn();
@@ -377,7 +395,7 @@ describe("stripe-add-reader", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it("does not call onClose when the dialog was detached while Add was pending", async () => {
+  it("does not call onClose when the dialog was detached while Save was pending", async () => {
     const pending = deferred<{ id: string; status: string }>();
     const request = vi.fn(() => pending.promise) as unknown as DashboardRequest;
     const onAdded = vi.fn();
@@ -436,7 +454,7 @@ describe("stripe-add-reader", () => {
     expect(onAdded).not.toHaveBeenCalled();
   });
 
-  it("says nothing about errors before the first press, and Add works", async () => {
+  it("says nothing about errors before the first press, and Save works", async () => {
     const request = vi.fn() as unknown as DashboardRequest;
     const { el } = await mountWidget<StripeAddReader>("stripe-add-reader", { request });
 
@@ -449,7 +467,7 @@ describe("stripe-add-reader", () => {
     expect(addDisabled(el)).toBe(false);
   });
 
-  it("on an invalid press marks the fields, says so above Add, focuses the first and disables Add", async () => {
+  it("on an invalid press marks the fields, says so above Save, focuses the first and disables Save", async () => {
     const request = vi.fn() as unknown as DashboardRequest;
     const { el } = await mountWidget<StripeAddReader>("stripe-add-reader", { request });
 
@@ -467,7 +485,7 @@ describe("stripe-add-reader", () => {
     );
   });
 
-  it("re-checks every change after a failed press, and Add works again once both are filled", async () => {
+  it("re-checks every change after a failed press, and Save works again once both are filled", async () => {
     const request = vi.fn() as unknown as DashboardRequest;
     const { el } = await mountWidget<StripeAddReader>("stripe-add-reader", { request });
 
@@ -487,7 +505,7 @@ describe("stripe-add-reader", () => {
     expect(addDisabled(el)).toBe(true);
   });
 
-  it("leaves Add working after a refusal that names no field, and drops it on the next press", async () => {
+  it("leaves Save working after a refusal that names no field, and drops it on the next press", async () => {
     const request = vi
       .fn()
       .mockImplementationOnce(async () => {
@@ -509,7 +527,7 @@ describe("stripe-add-reader", () => {
     expect(await bottomOf(el)).toBe("");
   });
 
-  it("ends in one action row with Cancel on the left and Add as the primary action", async () => {
+  it("ends in one action row with Cancel on the left and Save as the primary action", async () => {
     const request = vi.fn() as unknown as DashboardRequest;
     const { el } = await mountWidget<StripeAddReader>("stripe-add-reader", { request });
 

@@ -1028,7 +1028,7 @@ export class CanvasEditorScreen extends LitElement {
         variant="primary"
         data-test="confirm-create"
         @click=${() => this.#confirmCreate()}
-        >${t("action.create")}</wt-button
+        >${t("action.save")}</wt-button
       >
     </wt-dialog>`;
   }

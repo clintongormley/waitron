@@ -388,7 +388,7 @@ export class BookingForm extends LitElement {
             data-test="confirm"
             ?disabled=${save.unchanged || this.busy}
             @click=${(e: Event) => this.#confirm(e, opening)}
-            >${this.booking ? t("action.save") : t("action.create")}</wt-button
+            >${t("action.save")}</wt-button
           >
         </wt-dialog>
       `,

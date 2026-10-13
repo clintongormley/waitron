@@ -3,7 +3,7 @@ import { page } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
-import { setLocale, t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { regimeName, vatKindName } from "../i18n/domain.js";
 import { PurchaseForm, purchaseRefusalErrors } from "./purchase-form.js";
 import type { PurchaseInvoice } from "../api/client.js";
@@ -115,6 +115,17 @@ async function shownIn(el: PurchaseForm, name: string): Promise<string | undefin
 }
 
 describe("purchase-form", () => {
+  it("submits a new invoice with Save", async () => {
+    const before = currentLocale();
+    setLocale("en-GB");
+    try {
+      const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
+      expect(confirmOf(el).textContent!.trim()).toBe("Save");
+    } finally {
+      setLocale(before);
+    }
+  });
+
   it("picks the VAT regime and each line's VAT kind from shared dropdowns", async () => {
     const { el } = await mountWidget<PurchaseForm>(
       "dashboard-purchase-form",
@@ -415,7 +426,7 @@ describe("purchase-form", () => {
     expect(errorOf(el, "line-rate-0")).toBe("");
   });
 
-  it("says nothing about errors before the first submission, and Create works", async () => {
+  it("says nothing about errors before the first submission, and Save works", async () => {
     const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
     await setInput(el, "total", "abc");
     expect(errorOf(el, "total")).toBe("");
@@ -442,7 +453,7 @@ describe("purchase-form", () => {
     ]);
   });
 
-  it("on an invalid submission focuses the first invalid field and keeps Create disabled until every field is fixed", async () => {
+  it("on an invalid submission focuses the first invalid field and keeps Save disabled until every field is fixed", async () => {
     const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
     await setInput(el, "supplier-tax-id", "B12345678");
     await click(el, "confirm");
@@ -464,7 +475,7 @@ describe("purchase-form", () => {
     expect((await created).type).toBe("create-purchase");
   });
 
-  it("starts again when reopened: no messages, Create quiet until an edit and then working", async () => {
+  it("starts again when reopened: no messages, Save quiet until an edit and then working", async () => {
     const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
     await setInput(el, "supplier-name", "   ");
     await click(el, "confirm");
@@ -804,7 +815,7 @@ describe("purchase-form — a server refusal", () => {
     expect(purchaseRefusalErrors({})).toEqual({ _form: codeMessage("server.internal") });
   });
 
-  it("shows a refused field's message under it, focuses it, and leaves Create working", async () => {
+  it("shows a refused field's message under it, focuses it, and leaves Save working", async () => {
     const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
     await fillValid(el);
     el.fieldErrors = { "deductible-proportion": "Refused proportion" };
@@ -861,7 +872,7 @@ describe("purchase-form — a server refusal", () => {
     expect(el.shadowRoot!.querySelector("[data-test=lines-error]")).toBeNull();
   });
 
-  it("says a refusal naming no field in the bottom message, leaves Create working, and drops it on the next submit", async () => {
+  it("says a refusal naming no field in the bottom message, leaves Save working, and drops it on the next submit", async () => {
     const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
     await fillValid(el);
     el.fieldErrors = { _form: codeMessage("purchase.duplicate") };

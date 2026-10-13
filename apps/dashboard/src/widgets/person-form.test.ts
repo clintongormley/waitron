@@ -69,13 +69,13 @@ async function shownRole(el: PersonForm): Promise<string | undefined> {
 }
 
 describe("person-form", () => {
-  it("is headed Añadir usuario and confirms with Añadir", async () => {
+  it("is headed Añadir usuario and confirms with Guardar", async () => {
     const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
     await openedDialog(el);
     expect([
       el.shadowRoot!.querySelector("wt-modal")!.getAttribute("heading"),
       confirmOf(el).textContent!.trim(),
-    ]).toEqual(["Añadir usuario", "Añadir"]);
+    ]).toEqual(["Añadir usuario", "Guardar"]);
   });
 
   it("picks the role from a required shared dropdown, starting on staff", async () => {
@@ -226,7 +226,7 @@ describe("person-form", () => {
     expect(displayName(el)).toBe("Alexandra Soler");
   });
 
-  it("rejects a malformed telephone beside the field and blocks Create, then submits a valid one", async () => {
+  it("rejects a malformed telephone beside the field and blocks Save, then submits a valid one", async () => {
     const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
     change(el, "first-names", "Ada");
     change(el, "last-names", "Lovelace");
@@ -252,7 +252,7 @@ describe("person-form", () => {
     expect(event.detail.telephone).toBe("+44 20 7946 0958");
   });
 
-  it("explains every missing required field under it, with one message at the bottom of the form and Create disabled", async () => {
+  it("explains every missing required field under it, with one message at the bottom of the form and Save disabled", async () => {
     const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
     change(el, "telephone", "+34 600 000 000");
     await el.updateComplete;
@@ -315,7 +315,7 @@ describe("person-form", () => {
 });
 
 describe("person-form server refusals", () => {
-  it("puts a taken display name beside its field, leaving Create working, until it is edited", async () => {
+  it("puts a taken display name beside its field, leaving Save working, until it is edited", async () => {
     const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
     await fillRequired(el);
     el.error = "person.display_name_taken";
@@ -332,7 +332,7 @@ describe("person-form server refusals", () => {
     expect(confirmOf(el).hasAttribute("disabled")).toBe(false);
   });
 
-  it("keeps any other server refusal in the bottom message alone, leaving Create working", async () => {
+  it("keeps any other server refusal in the bottom message alone, leaving Save working", async () => {
     const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
     await fillRequired(el);
     el.error = "connection.failed";
@@ -367,7 +367,7 @@ describe("person-form server refusals", () => {
     },
   );
 
-  it("puts a refusal whose params name a shown field under that field, leaving Create working", async () => {
+  it("puts a refusal whose params name a shown field under that field, leaving Save working", async () => {
     const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
     await fillRequired(el);
     el.errorField = "lastNames";

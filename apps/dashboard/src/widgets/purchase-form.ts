@@ -697,7 +697,7 @@ export class PurchaseForm extends LitElement {
             data-test="confirm"
             ?disabled=${s.unchanged || this.busy || Object.keys(validation).length > 0}
             @click=${(e: Event) => this.#confirm(e)}
-            >${this.invoice ? t("action.save") : t("action.create")}</wt-button
+            >${t("action.save")}</wt-button
           >
         </wt-form-actions>
       </wt-dialog>
