@@ -596,7 +596,10 @@ export async function placeSpareToday(
 }
 
 /** Those of `tableIds` an order with food on its way is delivered to. */
-async function foodComingTo(tx: Transaction, tableIds: readonly string[]): Promise<Set<string>> {
+export async function foodComingTo(
+  tx: Transaction,
+  tableIds: readonly string[],
+): Promise<Set<string>> {
   if (tableIds.length === 0) return new Set();
   const rows = await tx
     .selectDistinct({ tableId: workingOrders.deliveryTableId })
