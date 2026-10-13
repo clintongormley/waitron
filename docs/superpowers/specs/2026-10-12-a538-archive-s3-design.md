@@ -259,3 +259,5 @@ The audit below covers every entry in the backup section mentioning real/bucket/
 | “A venue preparing to go live sends real email through SMTP” | Exclude real-email configuration/delivery; unrelated to archive storage or AWS evidence. |
 
 A529's “Why the stream pause test's file growth differs between runs remains unexplained” is in the testing backlog, outside this source section. Reuse its diagnostics; AWS success does not identify that cause. No backlog gap closes in this docs-only change.
+
+> 2026-10-13: A549 found the cause (Litestream's own checkpoints restarting the side file) and deleted that entry; the pause test now kills Litestream after the freeze and checks the side file is held ([testing-guide.md](../../developers/testing-guide.md), "Why the fill used to time out").

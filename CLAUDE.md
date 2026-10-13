@@ -801,9 +801,10 @@ browser test** — most of these rules exist because a test passed while proving
   can wait behind Litestream's own local checkpoint, for as long as that checkpoint holds the write
   lock** (measured up to 831 ms on a slowed disk). A copy fifteen minutes behind raises
   `backup.stream_behind`, unless a stopped, refused or unusable-settings alert already explains it
-  (`apps/server/src/alert-sources.ts`). The side file is bounded by stopping Litestream at a size limit
-  (`backup.stream_paused`) and folding the file back in the write queue
-  (`checkpointTruncate`, `packages/store/src/index.ts`). Guards, narrower than the rule:
+  (`apps/server/src/alert-sources.ts`). While Litestream runs, its own checkpoints restart the side
+  file; when that does not hold it under a size limit, stopping Litestream (`backup.stream_paused`)
+  and folding the file back in the write queue (`checkpointTruncate`, `packages/store/src/index.ts`)
+  bounds it. Guards, narrower than the rule:
   `apps/server/src/stream-pause.e2e.test.ts`, `apps/server/src/stream-loop.e2e.test.ts` (both
   skipped locally without their binaries) and the bucket-copy cases in
   `apps/server/src/health.test.ts`. Receipt:

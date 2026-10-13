@@ -553,7 +553,9 @@ Two design decisions this measurement hands to slice 2:
   the thing risk 9 exists to forbid, so bounding that log is a design question slice 2 inherits open.
   **2026-09-25 (slice 2):** the offline side file is bounded by stopping Litestream at a 256 MiB limit
   and then folding the file back with a checkpoint that does not wait on a busy database
-  (`StreamSupervisor`, `packages/stream/src/supervisor.ts`, #590).
+  (`StreamSupervisor`, `packages/stream/src/supervisor.ts`, #590). **2026-10-13 (A549):** while
+  Litestream runs, its own checkpoints restart the side file; the pause bounds it when they do not
+  ([testing-guide.md](../developers/testing-guide.md), "A copy behind, the side file's bound, and the guards").
 - **The fence-before-ship rule removes S2's failing sequences** — an argument from the design, since
   nothing here fences a sender — so whichever slice turns promotion on owns it, together with the
   restart reset above. **2026-09-23:** the restart reset is built — `resetInFlightClaims` (`packages/fiscal-verifactu/src/drain.ts`), see `docs/backlog.md`.

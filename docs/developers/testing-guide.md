@@ -641,19 +641,28 @@ third argument, a test seam, setting the side-file limit to 16 MiB; a 1 MiB limi
 while its generation was still opening, from boot's own writes (measured 2026-09-26). One till
 session has three sellers posting sales at once to `/api/sales` over the box's TLS. At least ten
 sales with the bucket up set the bound, as in the frozen-server stage. The bucket is frozen with
-`SIGSTOP`, and a listing sent to it is checked to be still unanswered at the bound. The sellers post
-until the side file passes the limit, stop, start again three seconds before the supervisor's next
-once-a-minute measurement, and post until one of them sees the file folded back; at least ten more
-sales follow during the pause. While filling, the sellers post nothing from the bound plus three
-seconds before a measurement until three seconds after it: with the test held past a measurement
-between the fill and the restart, the stream read `paused` before the sellers started again
-(measured 2026-09-26). Every frozen sale must beat the bound, the stream must read `paused`,
-and each seller must have exactly one sale whose side-file readings straddle the fold-back: the size
-measured before it was posted at or over the limit, the size after its answer under it. Nothing else
-in the server's own code shrinks that file: the stream host is `checkpointTruncate`'s only caller,
-and no `journal_size_limit` is set. Then the bucket is let run: the stream must read `streaming` on
-the same generation, a sale from the pause must be in a restore of that generation, and the server's
-log must hold exactly one `stream.paused`, at this limit, followed by `stream.resumed`.
+`SIGSTOP`, and a listing sent to it is checked to be still unanswered at the bound. Then the test
+kills Litestream (`SIGKILL`, by the PID the supervisor records in
+`<stateDir>/stream/litestream.pid`) and waits until the supervisor has started another and logged
+`stream.litestream_exited`. The new Litestream takes its read transaction and then waits on the
+frozen bucket in its start-up check (`init` in Litestream 0.5.17's `db.go`), so nothing can restart the side file and every sale grows it. A
+Litestream left running keeps checkpointing locally without the bucket and restarts the side file
+every second or so at CI's sale rate (below, "Why the fill used to time out"). Once 2,000 frames are
+written under one header with no restart — SQLite's automatic checkpoint restarts a side file no
+reader holds at about 1,000 — the fill records the header's checkpoint sequence and salt, and fails
+at once, naming the cause, if they change. The sellers post until the side file passes the limit,
+stop, start again three seconds before the supervisor's next once-a-minute measurement, and post
+until one of them sees the file folded back; at least ten more sales follow during the pause. While
+filling, the sellers post nothing from the bound plus three seconds before a measurement until three
+seconds after it: with the test held past a measurement between the fill and the restart, the stream
+read `paused` before the sellers started again (measured 2026-09-26). Every frozen sale must beat
+the bound, the stream must read `paused`, and each seller must have exactly one sale whose side-file
+readings straddle the fold-back: the size measured before it was posted at or over the limit, the
+size after its answer under it. Nothing else in the server's own code shrinks that file: the stream
+host is `checkpointTruncate`'s only caller, and no `journal_size_limit` is set. Then the bucket is
+let run: the stream must read `streaming` on the same generation, a sale from the pause must be in a
+restore of that generation, and the server's log must hold exactly one `stream.paused`, at this
+limit, followed by `stream.resumed`, and, from the kill on, one `stream.litestream_exited`, the kill's.
 
 What it does not show: whether a straddling sale's own write waited in the write queue behind the
 fold-back rather than landing before it — in each of two runs on 2026-09-26, one of the three
@@ -666,31 +675,46 @@ the supervisor's measurement; the slowest sale 123 ms with the bucket up, 129 ms
 pause, 53 to 56 ms for the three straddling sales and 78 ms during the pause, against a bound of
 1,000 ms; streaming again 253 ms after the bucket was let run. The fill's deadline was 30 seconds
 until CI run 36210908359 (2026-09-26) found the side file at 15,697,232 bytes when it expired; it
-is now 180 seconds, and the case's timeout, the sum of its waits and budgets, 526 seconds. Locally
-the fill from 5,879,272 bytes took 3,819 ms plain, and under coverage 5,087 ms beside 18 busy loops
-and 14,907 ms beside 72, on the owner's Mac, which reports 18 CPUs (2026-09-26). With `...seams.stream` deleted from
-`apps/server/src/boot.ts`, so the default 256 MiB limit applied, the same run failed with `timed out
+is now 180 seconds, and the case's timeout, the sum of its waits and budgets, 536 seconds. Since
+the fill starts against a restarted Litestream, it took 1,353 to 1,791 ms (125 to 161 sales) in
+three runs on the owner's Mac, and 3,196 ms (89 sales) with an 80 ms wait added before each fill
+sale, about CI's rate (2026-10-13). In two earlier runs of the same change with a 10 ms sampler
+added, one of them with the 80 ms wait, the side file restarted after 1,035 to 1,038 frames each
+time until the replacement held it. With `...seams.stream` deleted from `apps/server/src/boot.ts`,
+so the default 256 MiB limit applied, a run on 2026-09-26 failed with `timed out
 waiting for the fold-back: the stream reads {"state":"streaming",…}, the side file 27558712 bytes`.
 
-**If the fill times out, read the progress samples first (A529).** The pause test logs
+**If the fill fails, read the progress samples first (A529).** The pause test logs
 `stream pause sellers` at each seller phase's start and finish, every ten seconds while it runs,
 and when a seller fails. You get the elapsed time, completed sales, summed request times, slowest
 request, summed waits around the supervisor's measurement, file size and the first 32 bytes'
-page size, checkpoint sequence and salt pair. The sums cover three concurrent sellers, so they
+page size, checkpoint sequence and salt pair, and the line `stream pause: the side file is held`
+records the header the fill checks against. The sums cover three concurrent sellers, so they
 can exceed elapsed time. On failure, `stream pause failure context` also keeps the last twenty
 stream events and the synthetic S3 server's log before teardown resumes that server. An unreadable
 context does not replace the original failure.
 
 These are observations, not a consistent database snapshot: Litestream can change the file between
 its size and header reads. The helper opens the file read-only and checks its header length, magic
-and version; it does not check the header checksum or read transaction frames. A changed salt pair
-at the same file size is evidence to investigate reuse, not evidence about which process caused it.
+and version; it does not check the header checksum, and `framesUnderHeader` counts the frames
+carrying the header's salt by a binary search, assuming they run unbroken from the first frame, and
+checks no frame's checksum. A changed salt pair at the same file
+size is evidence to investigate reuse, not evidence about which process caused it.
 
-A514's exact-merge run `38203241435` failed after 3,897 sales in 180,380 ms: 5,047,032 bytes became
-15,499,472, short of the 16 MiB limit. The next three main runs passed, filling in 328, 1,044 and
-2,607 sales respectively (`38204208851`, `38205059307`, `38209456913`). Those logs lack header
-samples, so they do not establish why growth differed. A529 leaves that cause open rather than
-raising the deadline or lowering the limit.
+**Why the fill used to time out (A549).** It filled the side file with Litestream still running
+against the frozen bucket. Litestream 0.5.17 checks the file once a second and checkpoints once it
+holds 1,000 pages (`db.go`, `DefaultMonitorInterval` and `DefaultMinCheckpointPageN`) whether or
+not the bucket answers, so the side file kept restarting and its size recorded only the most
+written between two restarts. In main runs `38288894550` (failed, 3,820 sales in 180.7 s) and
+`38342266111` (passed at 51.3 s) the checkpoint sequence rose 6 to 10 every 10 s in both; the pass
+came from one longer gap. A514's run `38203241435` ended in the same shape (3,897 sales,
+15,499,472 bytes) before header samples existed. On the owner's Mac with an 80 ms wait before each fill sale and the fill's deadline cut to 60 s
+(2026-10-13): the fill timed
+out at 9,776,792 bytes with the sequence rising 1 to 54; with Litestream's checkpoints switched off
+it passed with the sequence fixed at 1; with Litestream killed after the freeze it passed twice,
+the sequence fixed from shortly after its replacement started. With the held-file check added and
+no kill, the same run failed 1.5 s into the fill: `the side file was restarted during the fill:
+something is still checkpointing`.
 
 | Source | Source wording | What the diagnostic reads |
 | --- | --- | --- |
@@ -942,18 +966,19 @@ first running A133's probe on the box's own disk, and chose to leave them alone.
 
 **A copy behind, the side file's bound, and the guards.** A copy fifteen minutes behind raises
 `backup.stream_behind`, unless a stopped, refused or unusable-settings alert already explains it
-(`apps/server/src/alert-sources.ts`). The side file is bounded by stopping Litestream at a size
-limit (`backup.stream_paused`) and then folding the file back; that fold-back is the server's own
-checkpoint, and it takes its turn in the write queue with no busy wait (`checkpointTruncate`,
-`packages/store/src/index.ts`), so a sale can queue behind it but never waits on the bucket.
-Guards, narrower than the rule: `apps/server/src/stream-pause.e2e.test.ts` freezes the bucket,
-then times the sales of three concurrent sellers on one till session through the server's own
-route against a bound while the side file passes a 16 MiB limit, the server folds it back and the
-pause holds — it does not observe whether a sale's write waited behind the fold-back rather than
-landing before it, nor time the fold-back of a 256 MiB file; the frozen-server stage of
-`apps/server/src/stream-loop.e2e.test.ts` records its sales through `recordOneSale`, a second
-store with its own write queue; both are skipped locally without their binaries (the stream loop
-test's section above); the bucket-copy cases in `apps/server/src/health.test.ts` hold `/health`.
+(`apps/server/src/alert-sources.ts`). While Litestream runs, its own checkpoints restart the side
+file; when that does not hold it under the size limit, stopping Litestream (`backup.stream_paused`)
+and then folding the file back bounds it; that fold-back is the server's own checkpoint, and it
+takes its turn in the write queue with no busy wait (`checkpointTruncate`,
+`packages/store/src/index.ts`), so a sale can queue behind it but never waits on the bucket. Guards,
+narrower than the rule: `apps/server/src/stream-pause.e2e.test.ts` freezes the bucket and restarts
+Litestream against it, then times the sales of three concurrent sellers on one till session through
+the server's own route against a bound while the side file passes a 16 MiB limit, the server folds
+it back and the pause holds — it does not observe whether a sale's write waited behind the fold-back
+rather than landing before it, nor time the fold-back of a 256 MiB file; the frozen-server stage of
+`apps/server/src/stream-loop.e2e.test.ts` records its sales through `recordOneSale`, a second store
+with its own write queue; both are skipped locally without their binaries (the stream loop test's
+section above); the bucket-copy cases in `apps/server/src/health.test.ts` hold `/health`.
 
 **Printing on real hardware**
 

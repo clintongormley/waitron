@@ -268,22 +268,6 @@ Owner's call.
   OPENS one, so a bundle that builds and renders nothing passes there too. This is the work item
   `CLAUDE.md` §2 and `docs/developers/ci-and-gates.md` point at.
 
-## Why the side file's growth per sale differs so much between runs is not tested
-
-The cause remains open after A529. Main run `38203241435`, at A514's merge `27ce4acbc`,
-reported 3,897 sales in 180,380 ms, from 5,047,032 to 15,499,472 bytes. Its log cannot
-separate file reuse from request or measurement-wait time. The next three main runs passed
-with 328, 1,044 and 2,607 fill sales; all four started at 5,047,032 bytes.
-
-Read `stream pause sellers` in the next failed job: elapsed time, sales, request-time sums,
-slowest request, summed measurement waits and read-only WAL header samples. Read
-`stream pause failure context` for stream events and the synthetic bucket process's log.
-The field definitions and limits are in
-[testing-guide.md](../developers/testing-guide.md), "If the fill times out, read the progress samples first".
-These samples do not identify a checkpoint's owner or provide an atomic database view.
-The deadline, file limit and existing behavioral assertions remain unchanged.
-
-
 ## P7's leftovers (#533)
 
 **What slice 1 left (#490 and the preparation tasks):**
