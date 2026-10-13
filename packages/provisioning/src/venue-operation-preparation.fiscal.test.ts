@@ -9,6 +9,7 @@ import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import {
   createAllocationPreparation,
   activatePreparedModuleAllocation,
+  ALLOCATED_FISCAL_SEED,
 } from "@waitron/fiscal-verifactu";
 import { readModuleAllocationSeries } from "@waitron/fiscal-verifactu/src/allocation-operation.js";
 import { FISCAL_SLOT } from "@waitron/fiscal-verifactu";
@@ -251,4 +252,36 @@ it("rolls back the signed allocation and initial account on a final host refusal
   expect(await suite.db.select().from(nodes)).toEqual([]);
   expect(await suite.db.select().from(tenants)).toEqual([]);
   expect(await suite.db.select().from(persons)).toEqual([]);
+});
+
+it("runs the fiscal seed and its series resolver through initial provisioning and a committed retry", async () => {
+  sourceRead = 0;
+  const module = { ...owner(), provisioning: { seed: ALLOCATED_FISCAL_SEED } };
+  const result = await establish(module);
+  const allSeries = await suite.db.select().from(invoiceSeries);
+  expect(
+    allSeries
+      .map(({ code, purpose, nextNumber }) => ({ code, purpose, nextNumber }))
+      .sort((a, b) => a.code.localeCompare(b.code)),
+  ).toEqual([
+    { code: "A-S000042", purpose: "standard", nextNumber: 1 },
+    { code: "FF-S000042", purpose: "full", nextNumber: 1 },
+    { code: "R-S000042", purpose: "rectificative", nextNumber: 1 },
+  ]);
+  expect(result.seriesIds).toEqual(
+    ["standard", "full", "rectificative"].map(
+      (purpose) => allSeries.find((row) => row.purpose === purpose)!.id,
+    ),
+  );
+  expect(result.seeded).toEqual([
+    { module: "fiscal-verifactu", report: expect.stringContaining("installation S000042") },
+  ]);
+  await suite.db.update(invoiceSeries).set({ nextNumber: 47 });
+  const before = await suite.db.select().from(invoiceSeries);
+  const ledger = await suite.db.select().from(fiscalAllocations);
+  const repeated = await establish(module);
+  expect(repeated.seriesIds).toEqual(result.seriesIds);
+  expect(sourceRead).toBe(1);
+  expect(await suite.db.select().from(invoiceSeries)).toEqual(before);
+  expect(await suite.db.select().from(fiscalAllocations)).toEqual(ledger);
 });

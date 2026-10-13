@@ -67,3 +67,8 @@ export type {
   AllocationEvidenceSource,
   AllocationOperationEvidence,
 } from "./allocation-operation.js";
+export {
+  ALLOCATED_FISCAL_SEED,
+  ALLOCATED_FISCAL_RESTORE,
+  activatePreparedFiscalStandby,
+} from "./allocated-lifecycle.js";

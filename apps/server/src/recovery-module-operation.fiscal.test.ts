@@ -233,3 +233,82 @@ it("rejects a replacement key before the real restore hook can activate anything
     expect(await suite.db.select().from(invoiceSeries)).toEqual(before);
   });
 });
+
+it("uses the fiscal restore hook with node-key authentication without recreating its series", async () => {
+  await withTransaction(suite.db, (tx) =>
+    allocation.registerSif(tx, {
+      nodeId: node.nodeId,
+      nif: "89890001K",
+      idSistemaInformatico: "W1",
+    }),
+  );
+  await suite.db.update(invoiceSeries).set({ nextNumber: 23 });
+  const oldSifs = await suite.db.select().from(registroSif);
+  const oldSeries = await suite.db.select().from(invoiceSeries);
+  await withFiles(async (paths) => {
+    const module = {
+      ...fakeModule(binding.module, {
+        operations: allocation.createPaperAllocationPreparation({
+          ...paths,
+          confirmedFingerprint: fingerprint,
+        }),
+      }),
+      backup: { restore: allocation.ALLOCATED_FISCAL_RESTORE },
+    };
+    const result = await runRestoreHooks({
+      db: suite.db,
+      node,
+      modules: [module],
+      log: () => {},
+      withModuleOperations: (context, run) =>
+        withRecoveryModuleOperation(
+          { ...context, modules: [module] },
+          { binding, input, secret },
+          run,
+        ),
+    });
+    const retained = await suite.db.select().from(fiscalAllocations);
+    expect(retained).toHaveLength(1);
+    expect(retained[0]!.approval).toEqual(approval);
+    const expected = retained[0]!.result;
+    expect(result.seriesId).toBe(expected.series.find((row) => row.purpose === "standard")!.id);
+    expect(result.reports).toEqual([
+      `fiscal-verifactu: SIF ${expected.sifId} (installation P000042); series A-P000042, FF-P000042, R-P000042`,
+    ]);
+    const series = await suite.db.select().from(invoiceSeries);
+    expect(series).toHaveLength(6);
+    for (const old of oldSeries)
+      expect(series.find((row) => row.id === old.id)).toEqual({
+        ...old,
+        retiredAt: expect.any(Date),
+      });
+    expect(
+      series
+        .filter((row) => row.retiredAt === null)
+        .map(({ id, code, purpose }) => ({ id, code, purpose }))
+        .sort((a, b) => a.code.localeCompare(b.code)),
+    ).toEqual(expected.series);
+    expect(
+      series
+        .filter((row) => row.retiredAt === null)
+        .map(({ code, purpose, nextNumber }) => ({ code, purpose, nextNumber }))
+        .sort((a, b) => a.code.localeCompare(b.code)),
+    ).toEqual([
+      { code: "A-P000042", purpose: "standard", nextNumber: 1 },
+      { code: "FF-P000042", purpose: "full", nextNumber: 1 },
+      { code: "R-P000042", purpose: "rectificative", nextNumber: 1 },
+    ]);
+    const sifs = await suite.db.select().from(registroSif);
+    expect(sifs).toHaveLength(2);
+    expect(sifs.find((row) => row.id === oldSifs[0]!.id)).toEqual({
+      ...oldSifs[0]!,
+      revocadoEn: expect.any(Date),
+    });
+    expect(sifs.find((row) => row.id === expected.sifId)).toMatchObject({
+      numeroInstalacion: "P000042",
+      revocadoEn: null,
+    });
+    expect(await suite.db.select().from(persons)).toEqual([]);
+    expect(await suite.db.select().from(managementSessions)).toEqual([]);
+  });
+});

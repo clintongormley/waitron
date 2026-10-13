@@ -446,6 +446,15 @@ transaction; do not treat the short label as a globally unique identifier or a c
 The dated naming checkpoint above describes the earlier random-label format. Physical paper
 output and the backup chooser's selected-copy name remain Task 6 work.
 
+**Implementation checkpoint, 2026-10-13:**
+`packages/fiscal-verifactu/src/allocated-lifecycle.ts` supplies a prepared-allocation seed
+with its active-series resolver, a restore hook that leaves series creation with activation,
+and a dormant-takeover hook. New database cases exercise initial setup, re-registration,
+restore, takeover, committed retries and action refusals. New real setup/restore-host cases
+first failed with the former hooks (unsuffixed setup codes; no restore allocation audit), then
+passed with the allocated hooks. Production composition and all entry-point/schema/counter
+replacement remain coupled work before publication; these exports do not switch the descriptor.
+
 ## Task 5: select active series inside issuance transactions
 
 **Modify:** `apps/server/src/till-config.ts`, `trading-config.ts`, `till-sale.ts`,
