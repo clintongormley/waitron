@@ -506,3 +506,10 @@ it("shows the Spanish offset label, explanation and local validation", async () 
   await el.updateComplete;
   expect(control.error).toBe("Introduce minutos enteros entre -1439 y 1439.");
 });
+it("labels its submit with submitLabel when one is given, else Save", async () => {
+  const el = await mount();
+  expect(save(el).textContent!.trim()).toBe("Save");
+  el.submitLabel = "Add and paint with it";
+  await el.updateComplete;
+  expect(save(el).textContent!.trim()).toBe("Add and paint with it");
+});

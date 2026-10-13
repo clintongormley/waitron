@@ -56,6 +56,8 @@ export class PeriodEditor extends LitElement {
   @property({ type: Boolean }) open = false;
   @property({ type: Boolean }) busy = false;
   @property() departmentName = "";
+  /** The submit button's text; Save when empty. */
+  @property() submitLabel = "";
   @property({ attribute: false })
   period?: OpeningHoursModel["departments"][number]["periods"][number];
   @property({ attribute: false }) menus: OpeningHoursModel["menus"] = [];
@@ -374,7 +376,7 @@ export class PeriodEditor extends LitElement {
             @click=${() => {
               if (current()) this.save();
             }}
-            >${t("menu.save")}</wt-button
+            >${this.submitLabel || t("menu.save")}</wt-button
           >
         </wt-form-actions>
       </wt-modal>`,
