@@ -12,6 +12,7 @@ import "@waitron/ui/src/components/wt-number-stepper.js";
 import type { TableState } from "../api/client.js";
 import { countText, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
+import { splitsGroup } from "../state/floor-today.js";
 
 export interface SplitJoinedDetail {
   partIds: string[];
@@ -57,6 +58,19 @@ export class TillSplitJoinedDialog extends LitElement {
 
   @property({ attribute: false }) joined!: TableState;
   @property({ attribute: false }) parts: TableState[] = [];
+  /** The window's heading names this: the joined table's label, or the group's name. */
+  @property() name = "";
+  /** Whether the tables left would need their seats, given their ids. */
+  @property({ attribute: false }) asksSeats: (staying: readonly string[]) => boolean = (staying) =>
+    staying.length >= 2;
+  /** In a group's window, where the guests go for the tables ticked, one name per party. */
+  @property({ attribute: false }) guestsMoveTo: (ticked: readonly string[]) => string[] = () => [];
+  /** In a group's window, whether the tables ticked hold every table some party holds. */
+  @property({ attribute: false }) strandsGuests: (ticked: readonly string[]) => boolean = () =>
+    false;
+  /** Asks the seats while two or more tables are left, as when the server refused a split for want
+   * of them. */
+  @property({ type: Boolean }) seatsRequired = false;
   @property({ type: Boolean }) busy = false;
   @property({ attribute: false }) refusal: { code: string; field?: string } | null = null;
 
@@ -124,13 +138,15 @@ export class TillSplitJoinedDialog extends LitElement {
   }
 
   #asksSeats(): boolean {
-    return this.#left().length >= 2;
+    const left = this.#left().map((part) => part.id);
+    return (this.seatsRequired && left.length >= 2) || this.asksSeats(left);
   }
 
   #partsError(): string {
     if (!this.attempted) return "";
     if (this.#chosen().length === 0) return t("floor.split_none");
     if (this.#left().length === 0) return t("floor.split_all");
+    if (this.strandsGuests(this.#chosen())) return t("floor.split_strands");
     return "";
   }
 
@@ -151,7 +167,7 @@ export class TillSplitJoinedDialog extends LitElement {
     event.stopPropagation();
     if (!this.isConnected || !this.active || this.busy) return;
     this.chosen = [...event.detail.values];
-    if (this.refusal?.field === "partIds") this.refusalDismissed = true;
+    if (this.#shownRefusal()?.field === "partIds") this.refusalDismissed = true;
     this.#scope?.changed();
   }
 
@@ -210,8 +226,13 @@ export class TillSplitJoinedDialog extends LitElement {
       invalid || partsMessage !== "" || seatsMessage !== "" ? t("form.fix_fields") : refusalText;
     const actionState = saveActionState(this.#scope);
     const left = this.#left();
+    const guestsMove = splitsGroup(this.joined)
+      ? this.guestsMoveTo(this.#chosen())
+      : this.joined.party !== null && left.length === 1
+        ? [left[0]!.label]
+        : [];
     const heading = (key: "floor.split_title" | "floor.seats_title") =>
-      t(key).replace("{table}", () => this.joined.label);
+      t(key).replace("{table}", () => this.name);
     return html`<wt-dialog
       ${trackDialog()}
       .open=${this.active}
@@ -249,7 +270,7 @@ export class TillSplitJoinedDialog extends LitElement {
                 required
                 .min=${1}
                 .max=${SEATS_MAX}
-                .label=${heading("floor.seats_title")}
+                .label=${splitsGroup(this.joined) ? t("floor.seats_staying") : heading("floor.seats_title")}
                 .decreaseLabel=${(label: string) => t("action.decrease").replace("{label}", label)}
                 .increaseLabel=${(label: string) => t("action.increase").replace("{label}", label)}
                 .value=${live(this.seats)}
@@ -264,13 +285,12 @@ export class TillSplitJoinedDialog extends LitElement {
             ? nothing
             : html`<p data-reserved>${t("floor.reserved")} ${this.joined.nextReservation.time}</p>`
         }
-        ${
-          this.joined.party !== null && left.length === 1
-            ? html`<p data-guests-move>
-                ${t("floor.split_guests_move").replace("{table}", () => left[0]!.label)}
-              </p>`
-            : nothing
-        }
+        ${guestsMove.map(
+          (to) =>
+            html`<p data-guests-move>
+              ${t("floor.split_guests_move").replace("{table}", () => to)}
+            </p>`,
+        )}
         <wt-form-actions .error=${footError}>
           <wt-button
             slot="cancel"

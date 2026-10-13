@@ -570,6 +570,11 @@ it("says each refusal of splitting tables off a group in English and Spanish", (
       "Esa mesa ya no está unida a estas mesas",
     ],
     ["merge.split_all", "Leave at least one table joined", "Deja al menos una mesa unida"],
+    [
+      "merge.strands_party",
+      "Leave one of the guests' tables",
+      "Deja una de las mesas de los clientes",
+    ],
   ];
   for (const [code, en, es] of words) {
     expect(codeMessage(code, "en")).toBe(en);

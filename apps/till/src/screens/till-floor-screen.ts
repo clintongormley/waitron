@@ -47,6 +47,7 @@ import {
   type DropAction,
   type SheetAction,
   dropAction,
+  groupSplitOf,
   joinAgainOf,
   type JoinAgainPlan,
   nextFloorMoment,
@@ -104,6 +105,10 @@ interface Room {
 interface SplitShown {
   joined: TableState;
   parts: TableState[];
+  name: string;
+  asksSeats(staying: readonly string[]): boolean;
+  guestsMoveTo(ticked: readonly string[]): string[];
+  strandsGuests(ticked: readonly string[]): boolean;
 }
 
 interface SplittingJoined {
@@ -111,6 +116,8 @@ interface SplittingJoined {
   /** What the window showed when Split was pressed, until its answer arrives. */
   sent: SplitShown | null;
   refusal: { code: string; field?: string } | null;
+  /** The server refused for want of seats, which the till's own `asksSeats` did not foresee. */
+  seatsRequired: boolean;
 }
 
 interface JoiningAgain {
@@ -526,8 +533,8 @@ export class TillFloorScreen extends LitElement {
   } | null = null;
   /** Join with…'s table; closed when the table leaves the map. */
   @state() private joiningWith: { tableId: string } | null = null;
-  /** Split tables…'s joined table, while its window is open; `#splitShown` says when a floor read
-   * closes it. */
+  /** The table Split tables… was opened on, while its window is open; `#splitShown` says when a
+   * floor read closes it. */
   @state() private splittingJoined: SplittingJoined | null = null;
   /** Join again's joined table, while its window is open; `#joinAgainShown` says when a floor read
    * closes it. */
@@ -862,11 +869,8 @@ export class TillFloorScreen extends LitElement {
       case "join-with":
         this.joiningWith = { tableId };
         return;
-      case "split":
-        void this.#settle(this.#split(api, table, revision));
-        return;
       case "split-off":
-        this.splittingJoined = { tableId, sent: null, refusal: null };
+        this.splittingJoined = { tableId, sent: null, refusal: null, seatsRequired: false };
         return;
       case "join-again": {
         const plan = joinAgainOf(table, this.tables);
@@ -896,24 +900,6 @@ export class TillFloorScreen extends LitElement {
         send((sent) => api.takeOffToday(table.id, sent));
         return;
     }
-  }
-
-  /** A seated merge loses the last member of its name, with a new empty bill (slice 4 decision 16). */
-  async #split(
-    api: TillApi,
-    table: TableState,
-    revision: number | null,
-  ): Promise<FloorAnswer | null> {
-    const party = table.party;
-    if (party === null) return this.#send(revision, (sent) => api.splitToday(table.id, sent));
-    const joinId = table.today?.joinId;
-    const last = this.#zone.visible
-      .filter((each) => each.today?.joinId === joinId)
-      .sort((a, b) => inNumberOrder(a.label, b.label))
-      .at(-1)!;
-    const answer = await api.splitTable(party.id, last.id, null, party.revision);
-    const answered = answer.zoneRevisions?.[last.zoneId];
-    return answered === undefined ? null : { zoneId: last.zoneId, revision: answered };
   }
 
   /** The zone's table Join with… was opened for, while the map draws it. */
@@ -1085,27 +1071,39 @@ export class TillFloorScreen extends LitElement {
     ></till-today-seats-dialog>`;
   }
 
-  /** The joined table Split tables… was opened for, while it still offers Split tables…. */
+  /** The table Split tables… was opened on, while it still offers Split tables…. */
   #splitting(tableId: string): TableState | undefined {
     return this.tables.find(
       (each) => each.id === tableId && sheetActions(each).includes("split-off"),
     );
   }
 
-  /** While its split is out, the window keeps what it showed unless its joined table has left the
-   * floor read; otherwise it shows the joined table as the floor reads it now. */
+  /** While its split is out, the window keeps what it showed unless the table it was opened on has
+   * left the floor read; otherwise it shows that table's joined table, or its group, as the floor
+   * reads it now. */
   #splitShown(splitting: SplittingJoined): SplitShown | undefined {
     if (splitting.sent !== null)
       return this.tables.some((each) => each.id === splitting.tableId) ? splitting.sent : undefined;
     const joined = this.#splitting(splitting.tableId);
-    return joined === undefined
-      ? undefined
-      : {
-          joined,
-          parts: joined.today!.joined!.parts.flatMap((id) =>
-            this.tables.filter((each) => each.id === id),
-          ),
-        };
+    if (joined === undefined) return undefined;
+    const group = groupSplitOf(
+      joined,
+      this.tables.filter((each) => each.zoneId === joined.zoneId),
+    );
+    if (group !== null) {
+      const { members, name, asksSeats, guestsMoveTo, strandsGuests } = group;
+      return { joined, parts: members, name, asksSeats, guestsMoveTo, strandsGuests };
+    }
+    return {
+      joined,
+      parts: joined.today!.joined!.parts.flatMap((id) =>
+        this.tables.filter((each) => each.id === id),
+      ),
+      name: joined.label,
+      asksSeats: (staying) => staying.length >= 2,
+      guestsMoveTo: () => [],
+      strandsGuests: () => false,
+    };
   }
 
   #splitJoined(): TemplateResult | typeof nothing {
@@ -1115,6 +1113,11 @@ export class TillFloorScreen extends LitElement {
     return html`<till-split-joined-dialog
       .joined=${shown.joined}
       .parts=${shown.parts}
+      .name=${shown.name}
+      .asksSeats=${shown.asksSeats}
+      .guestsMoveTo=${shown.guestsMoveTo}
+      .strandsGuests=${shown.strandsGuests}
+      .seatsRequired=${splitting.seatsRequired}
       .busy=${splitting.sent !== null}
       .refusal=${splitting.refusal}
       @split-joined-confirm=${(event: CustomEvent<SplitJoinedDetail>) => {
@@ -1130,8 +1133,8 @@ export class TillFloorScreen extends LitElement {
 
   /**
    * The window stays open while the split is sent. The answer is applied only to the window that
-   * sent it: that window closes if its joined table leaves the floor read meanwhile, and another
-   * can open. A refusal shows in the window while the floor still offers Split tables…, and
+   * sent it: that window closes if the table it was opened on leaves the floor read meanwhile, and
+   * another can open. A refusal shows in the window while the floor still offers Split tables…, and
    * otherwise on the floor, unless another Split tables… window has opened.
    */
   async #splitOff(dialog: TillSplitJoinedDialog, detail: SplitJoinedDetail): Promise<void> {
@@ -1168,6 +1171,10 @@ export class TillFloorScreen extends LitElement {
           ...splitting,
           sent: null,
           refusal: typeof refused.field === "string" ? { code, field: refused.field } : { code },
+          seatsRequired:
+            splitting.seatsRequired ||
+            code === "merge.seats_required" ||
+            code === "joined_table.seats_required",
         };
       else if (this.splittingJoined === sending || this.splittingJoined === null) {
         this.splittingJoined = null;

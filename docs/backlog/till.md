@@ -317,8 +317,19 @@ Counter 3, Counter 5" in one run.
 leaves the rest of its group free (`apps/server/src/move-bill.ts`, the `openParty` call), so a party
 can hold some of a group's tables. Seating, the party join and Move guests all treat a group whole.
 Found by A579 part 3b's review: Split tables… ticking that table would have left the party open with
-no table; it is now refused `tab.already_open`. Next: decide whether the moved bill's party takes the
+no table; it is now refused `merge.strands_party`. Next: decide whether the moved bill's party takes the
 whole group, as seating at one of its tables does.
+
+## A598. A table held by guests when its joined table went live is neither joined nor split off
+
+**A598 (2026-10-13).** Split tables… on a joined table leaves a table that a party held when the
+joined table went live out of both its still-joined and its split-off lists, while a merge records
+such a table as split off (`splitInUse`, `apps/server/src/floor-today-merges.ts`). A group of the
+other split-off tables then never rejoins (`rejoining` needs every part split off), but the till's
+data cannot show why, so its Split tables… window asks no Seats and the server refuses
+`merge.seats_required`; the window then asks Seats (A579 part 3c). A reviewer's probe on
+`counter3HeldAsLongGoesLive` (`apps/server/src/floor-catch-up.test.ts`) showed the refusal. Same shape
+as A591. Next: record the held table as split off on that path too, as the merge does.
 
 ## A593. A table the reset turns into a joined table inside a waiting group keeps its old outline
 

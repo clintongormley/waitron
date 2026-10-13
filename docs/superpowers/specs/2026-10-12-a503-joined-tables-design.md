@@ -187,6 +187,7 @@ split today. A split decides only who sits where today.
   `apps/server/src/floor-today-table.ts:63-67`), as a merge's Split is today.
   > Changed 2026-10-13 by A579 part 3a ([design](2026-10-13-a579-flattened-joined-tables-design.md)): pushing a joined table into a group splits it, so this holds only for a joined table a reset leaves in a group.
   > Changed 2026-10-13 by A579 part 3b ([design](2026-10-13-a579-flattened-joined-tables-design.md)): Split tables… also splits tables off a group, and can put a joined table back over those of its tables that stay (floor plan spec §6.2).
+  > Superseded 2026-10-13 by A579 part 3c ([design](2026-10-13-a579-flattened-joined-tables-design.md)): a group has no Split of its own any more; Split tables… on a table of a group lists the group's tables, unless it is a joined table with tables still joined.
 - **A party stays with what remains** (**Owner**). Split is allowed while a party is seated: the party
   and its bills stay at the joined table while two or more parts remain. When one part remains, the
   party's hold on the joined table passes to that part and nothing else changes: any other table the

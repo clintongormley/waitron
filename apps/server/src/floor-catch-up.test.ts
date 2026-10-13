@@ -455,7 +455,7 @@ describe("the till's floor routes catch today's plan up", () => {
     await finish(party);
     expect((await readJoined()).get(z.t3)).toBeNull();
 
-    const split = await send("POST", `/api/tables/${z.bar}/today/split`, {});
+    const split = await send("POST", `/api/tables/${z.bar}/today/split-off`, { partIds: [z.t3] });
     await expectRevision(v, split);
     expect((await readJoined()).get(z.t3)).toBe(z.long);
     expect((await todayRow(z.t3))?.x).not.toBeNull();
@@ -472,7 +472,10 @@ describe("the till's floor routes catch today's plan up", () => {
     await expectRevision(v, merged);
     await finish(z.held);
     await readJoined();
-    await expectRevision(v, send("POST", `/api/tables/${z.bar}/today/split`, {}));
+    await expectRevision(
+      v,
+      send("POST", `/api/tables/${z.bar}/today/split-off`, { partIds: [z.t3] }),
+    );
 
     const answer = await send("GET", "/api/tables/state");
     expect(answer.status).toBe(200);

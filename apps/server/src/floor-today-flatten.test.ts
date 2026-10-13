@@ -14,7 +14,7 @@ import {
 } from "@waitron/db";
 import type { AppError, JoinSide } from "@waitron/shared";
 import { foodOnItsWay } from "./delivery-release.js";
-import { leaveMergesRestoring, splitFreeMerge, writeMerge } from "./floor-today-merges.js";
+import { leaveMergesRestoring, writeMerge } from "./floor-today-merges.js";
 import { splitJoinedTable } from "./floor-today-split.js";
 import { catchUpZone, resetZone } from "./floor-today-store.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
@@ -405,43 +405,13 @@ describe("refusals of a free push with a joined table", () => {
   });
 });
 
-describe("the old till's Split and the floor-wide reset on a flattened group", () => {
+describe("Split a table and the floor-wide reset on a flattened group", () => {
   const counters = (table: Record<string, string>) =>
     [
       [table.c3!, 10],
       [table.c4!, 12],
       [table.c5!, 14],
     ] as const;
-
-  it("the group's Split puts Bar back by the bar counter and the counters where they stood", async () => {
-    const { table } = await LONG_TABLE();
-    await push(table.bar!, table.long!, "left");
-
-    await inTx(v, (tx) => splitFreeMerge(tx, v.cfg, table.c3!));
-
-    expect(await placeOf(table.bar!)).toEqual({ x: 40, y: 0 });
-    for (const [id, x] of counters(table)) {
-      expect(await placeOf(id)).toEqual({ x, y: 20 });
-      expect(await mergeOf(v, id)).toBeNull();
-    }
-    expect(await mergeOf(v, table.bar!)).toBeNull();
-    expect(await splitRowsOf(table.long!)).toEqual(sorted([table.c3!, table.c4!, table.c5!]));
-    expect(await apart(table.long!)).toBe(1);
-  });
-
-  it("the group's Split after Long table was dragged onto Bar puts the counters back where they stood", async () => {
-    const { table } = await LONG_TABLE();
-    await push(table.long!, table.bar!, "right");
-
-    await inTx(v, (tx) => splitFreeMerge(tx, v.cfg, table.bar!));
-
-    expect(await placeOf(table.bar!)).toEqual({ x: 40, y: 0 });
-    for (const [id, x] of counters(table)) {
-      expect(await placeOf(id)).toEqual({ x, y: 20 });
-      expect(await mergeOf(v, id)).toBeNull();
-    }
-    expect(await splitRowsOf(table.long!)).toEqual(sorted([table.c3!, table.c4!, table.c5!]));
-  });
 
   it("Split a table on a seated flattened group takes the last table off with a new bill", async () => {
     const { table } = await LONG_TABLE();

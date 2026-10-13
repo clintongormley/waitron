@@ -1,9 +1,10 @@
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { page } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { TableParty, TableState, TableToday } from "../api/client.js";
+import { groupSplitOf } from "../state/floor-today.js";
 import "./split-joined-dialog.js";
 import type { SplitJoinedDetail, TillSplitJoinedDialog } from "./split-joined-dialog.js";
 
@@ -80,6 +81,7 @@ async function mount(props: Partial<TillSplitJoinedDialog> = {}): Promise<TillSp
   const { el } = await mountWidget<TillSplitJoinedDialog>("till-split-joined-dialog", {
     joined: longTable(),
     parts: parts(),
+    name: "Long table",
     ...props,
   });
   return el;
@@ -371,3 +373,202 @@ for (const [width, height] of [
     }
   });
 }
+
+describe("on a group", () => {
+  const inGroup = (id: string, label: string, seats: number, over: Partial<TableToday> = {}) =>
+    table(id, label, { today: today(seats, { joinId: "g", ...over }) });
+  const splitOff = { splitOffFrom: "long" };
+  const bar = inGroup("bar", "Bar", 4);
+  const zone = [
+    inGroup("c5", "Counter 5", 4, splitOff),
+    table("long", "Long table", {
+      today: today(10, {
+        placement: null,
+        joined: { parts: [], splitOff: ["c3", "c4", "c5"], apart: true },
+      }),
+    }),
+    inGroup("c3", "Counter 3", 2, splitOff),
+    bar,
+    inGroup("c4", "Counter 4", 6, splitOff),
+  ];
+  const group = groupSplitOf(bar, zone)!;
+  const mountGroup = (props: Partial<TillSplitJoinedDialog> = {}) =>
+    mount({
+      joined: bar,
+      parts: group.members,
+      name: group.name,
+      asksSeats: group.asksSeats,
+      ...props,
+    });
+
+  it("lists the group's tables with their seats, under the group's name", async () => {
+    const el = await mountGroup();
+    expect(el.shadowRoot!.querySelector("wt-dialog")!.heading).toBe(
+      "Split Bar+Counter 3+Counter 4+Counter 5",
+    );
+    expect(pick(el).options).toEqual([
+      { value: "bar", label: "Bar", description: "4 seats" },
+      { value: "c3", label: "Counter 3", description: "2 seats" },
+      { value: "c4", label: "Counter 4", description: "6 seats" },
+      { value: "c5", label: "Counter 5", description: "4 seats" },
+    ]);
+  });
+
+  it("asks no seats when Bar is ticked, and sends none", async () => {
+    const el = await mountGroup();
+    const seen = captured(el);
+    await choose(el, ["bar"]);
+    expect(seatsField(el)).toBeNull();
+    await press(el);
+    expect(seen.confirmed).toEqual([{ partIds: ["bar"], seats: null }]);
+  });
+
+  it("asks the seats for what stays when Counter 5 is ticked, and sends them", async () => {
+    const el = await mountGroup();
+    const seen = captured(el);
+    await choose(el, ["c5"]);
+    const seats = seatsField(el)!;
+    expect(seats.required).toBe(true);
+    expect(seats.label).toBe("Seats for what stays");
+    await press(el);
+    expect(seats.error).toBe("Enter 1 to 999");
+    await typeSeats(el, "10");
+    await press(el);
+    expect(seen.confirmed).toEqual([{ partIds: ["c5"], seats: 10 }]);
+  });
+
+  it("asks the seats when its host says they are required, whatever is ticked", async () => {
+    const el = await mountGroup({ seatsRequired: true });
+    const seen = captured(el);
+    await choose(el, ["bar"]);
+    const seats = seatsField(el)!;
+    expect(seats.required).toBe(true);
+    expect(seats.label).toBe("Seats for what stays");
+    await press(el);
+    expect(seen.confirmed).toEqual([]);
+    await typeSeats(el, "10");
+    await press(el);
+    expect(seen.confirmed).toEqual([{ partIds: ["bar"], seats: 10 }]);
+  });
+
+  it("asks no seats when its host says they are required but only one table stays, and sends none", async () => {
+    const el = await mountGroup({ seatsRequired: true });
+    const seen = captured(el);
+    await choose(el, ["c3", "c4", "c5"]);
+    expect(seatsField(el)).toBeNull();
+    await press(el);
+    expect(seen.confirmed).toEqual([{ partIds: ["c3", "c4", "c5"], seats: null }]);
+  });
+
+  it("says where the guests go when a ticked table holds them, as its host names it", async () => {
+    const el = await mountGroup({
+      guestsMoveTo: (ticked) => (ticked.includes("c3") ? ["Counter 4"] : []),
+    });
+    await choose(el, ["c5"]);
+    expect(text(el)).not.toContain("Guests move");
+    await choose(el, ["c3"]);
+    expect(el.shadowRoot!.querySelector("[data-guests-move]")!.textContent!.trim()).toBe(
+      "Guests move to Counter 4",
+    );
+  });
+
+  it("says nothing of guests when Bar's guests keep Bar and the counters are ticked", async () => {
+    const seated = { ...bar, party: { ...party, tableIds: ["bar"] } };
+    const el = await mountGroup({ joined: seated });
+    await choose(el, ["c3", "c4", "c5"]);
+    expect(text(el)).not.toContain("Guests move");
+  });
+
+  const seatedAt = (...ids: string[]) =>
+    zone.map((each) =>
+      ids.includes(each.id)
+        ? { ...each, condition: "held" as const, party: { ...party, tableIds: ids } }
+        : each,
+    );
+  const mountSeated = (...ids: string[]) => {
+    const tables = seatedAt(...ids);
+    const seated = groupSplitOf(
+      tables.find((each) => each.id === "bar")!,
+      tables,
+    )!;
+    return mountGroup({
+      joined: seated.members[0],
+      parts: seated.members,
+      asksSeats: seated.asksSeats,
+      guestsMoveTo: seated.guestsMoveTo,
+      strandsGuests: seated.strandsGuests,
+    });
+  };
+
+  it("explains a Split ticking every table the guests hold, beside the field and at the foot, and keeps Split disabled until fixed", async () => {
+    const el = await mountSeated("bar");
+    const seen = captured(el);
+    await choose(el, ["bar"]);
+    expect(pick(el).error).toBe("");
+    await press(el);
+    expect(seen.confirmed).toEqual([]);
+    expect(pick(el).error).toBe("Leave one of the guests' tables.");
+    expect(foot(el).error).toBe("Correct the highlighted fields to continue.");
+    expect(action(el).disabled).toBe(true);
+    await choose(el, ["c3"]);
+    expect(pick(el).error).toBe("");
+    await typeSeats(el, "8");
+    expect(foot(el).error).toBe("");
+    expect(action(el).disabled).toBe(false);
+  });
+
+  it("lets Bar go when its guests also hold Counter 3", async () => {
+    const el = await mountSeated("bar", "c3");
+    const seen = captured(el);
+    await choose(el, ["bar"]);
+    await typeSeats(el, "8");
+    await press(el);
+    expect(pick(el).error).toBe("");
+    expect(seen.confirmed).toEqual([{ partIds: ["bar"], seats: 8 }]);
+  });
+
+  it("shows a merge.strands_party refusal under the list as the guests' tables, until the choice changes, without disabling Split", async () => {
+    const el = await mountGroup();
+    await choose(el, ["bar"]);
+    el.refusal = { code: "merge.strands_party", field: "partIds" };
+    await el.updateComplete;
+    expect(pick(el).error).toBe("Leave one of the guests' tables");
+    expect(foot(el).error).toBe("Correct the highlighted fields to continue.");
+    expect(action(el).disabled).toBe(false);
+    await choose(el, ["c3"]);
+    expect(pick(el).error).toBe("");
+    expect(foot(el).error).toBe("");
+  });
+
+  it("keeps a tab.already_open refusal's own words in a joined table's window", async () => {
+    const el = await mount();
+    await choose(el, ["c5"]);
+    el.refusal = { code: "tab.already_open" };
+    await el.updateComplete;
+    expect(foot(el).error).toBe(codeMessage("tab.already_open"));
+    expect(pick(el).error).toBe("");
+  });
+
+  it("labels Seats as a joined table's when the joined table in a group still has tables joined", async () => {
+    const el = await mount({
+      joined: longTable({
+        today: today(10, {
+          joinId: "g",
+          joined: { parts: ["c3", "c4", "c5"], splitOff: [], apart: false },
+        }),
+      }),
+    });
+    await choose(el, ["c5"]);
+    expect(seatsField(el)!.label).toBe("Seats for Long table");
+  });
+
+  it("speaks Spanish", async () => {
+    setLocale("es-ES");
+    const el = await mountGroup();
+    await choose(el, ["c5"]);
+    expect(seatsField(el)!.label).toBe("Plazas para lo que queda");
+    el.refusal = { code: "merge.strands_party", field: "partIds" };
+    await el.updateComplete;
+    expect(pick(el).error).toBe("Deja una de las mesas de los clientes");
+  });
+});

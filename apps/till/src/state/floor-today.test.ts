@@ -4,6 +4,7 @@ import { currentLocale, setLocale } from "../i18n/t.js";
 import type { TableParty, TableState, TableToday, TodayPlacement } from "../api/client.js";
 import {
   dropAction,
+  groupSplitOf,
   joinAgainOf,
   onTodaysPlan,
   outOfServiceJoined,
@@ -463,7 +464,7 @@ describe("a joined table split today", () => {
     const merged = sheetActions(
       table("long", "Long table", { today: { ...long.today!, joinId: "m1" } }),
     );
-    expect(merged.indexOf("split-off")).toBe(merged.indexOf("split") + 1);
+    expect(merged.filter((action) => action === "split-off")).toHaveLength(1);
     expect(sheetActions(bar)).not.toContain("split-off");
     const heldWithOnePart = table("long", "Long table", {
       ...seatedBy(party("p1", ["long"])),
@@ -607,6 +608,177 @@ describe("a joined table split today", () => {
       const b1 = barPart("b1", "Bar 1", seatedBy(party("p1", ["b1"])));
       const b2 = barPart("b2", "Bar 2");
       expect(joinAgainOf(b2, [bar2, b1, b2])).toBeNull();
+    });
+  });
+});
+
+describe("Split tables… on a group", () => {
+  const long = table("long", "Long table", {
+    today: today({
+      placement: null,
+      seats: 10,
+      joined: { parts: [], splitOff: ["c3", "c4", "c5"], apart: true },
+    }),
+  });
+  const inGroup = (id: string, label: string, over: Partial<TableState> = {}) =>
+    table(id, label, {
+      ...over,
+      today: today({ placement: place(40, 0), joinId: "g", splitOffFrom: "long", ...over.today }),
+    });
+  const bar = table("bar", "Bar", { today: today({ placement: place(38, 0), joinId: "g" }) });
+  const c3 = inGroup("c3", "Counter 3");
+  const c4 = inGroup("c4", "Counter 4");
+  const c5 = inGroup("c5", "Counter 5");
+  const zone = [c5, long, c3, bar, c4];
+
+  it("offers Split tables… on any table in a group, and never the old Split", () => {
+    expect(sheetActions(bar, zone)).toContain("split-off");
+    expect(sheetActions(c4, zone)).toContain("split-off");
+    expect(sheetActions(bar, zone)).not.toContain("split");
+    const one = table("a", "1", { today: today({ joinId: "m" }) });
+    const two = table("b", "2", { today: today({ joinId: "m", placement: place(4, 0) }) });
+    expect(sheetActions(one, [one, two])).toContain("split-off");
+  });
+
+  it("lists the group's tables in number order and names the group after them", () => {
+    const split = groupSplitOf(c4, zone)!;
+    expect(split.members.map((each) => each.label)).toEqual([
+      "Bar",
+      "Counter 3",
+      "Counter 4",
+      "Counter 5",
+    ]);
+    expect(split.name).toBe("Bar+Counter 3+Counter 4+Counter 5");
+    expect(groupSplitOf(table("t", "1"), zone)).toBeNull();
+  });
+
+  it.each([
+    ["three tables", ["c3", "c4", "c5"]],
+    ["one table", ["c3"]],
+  ])(
+    "splits a joined table in a group with %s still joined as a joined table, not the group",
+    (_, parts) => {
+      const joinedInGroup = table("long", "Long table", {
+        today: today({ joinId: "g", joined: { parts, splitOff: [], apart: false } }),
+      });
+      const free = table("bar", "Bar", { today: today({ placement: place(38, 0), joinId: "g" }) });
+      expect(groupSplitOf(joinedInGroup, [joinedInGroup, free])).toBeNull();
+      expect(groupSplitOf(free, [joinedInGroup, free])).not.toBeNull();
+    },
+  );
+
+  it("asks no seats only when what stays is all of the joined table it was split off, free", () => {
+    const asks = groupSplitOf(bar, zone)!.asksSeats;
+    expect(asks(["c3", "c4", "c5"])).toBe(false);
+    expect(asks(["c3", "c4"])).toBe(true);
+    expect(asks(["bar", "c3", "c4"])).toBe(true);
+    expect(asks(["c3"])).toBe(false);
+  });
+
+  const unfree: [string, TableState[]][] = [
+    ["with guests at the group", [inGroup("c3", "Counter 3", seatedBy(party("p", ["c3"])))]],
+    ["with food on its way to Counter 4", [inGroup("c4", "Counter 4", { pendingDeliveries: 1 })]],
+    [
+      "while Long table still has a table joined",
+      [
+        table("long", "Long table", {
+          today: today({ joined: { parts: ["c6"], splitOff: ["c3", "c4", "c5"], apart: false } }),
+        }),
+      ],
+    ],
+  ];
+
+  it.each(unfree)("asks seats for Counter 3, 4 and 5 %s", (_, replaced) => {
+    const swapped = zone.map((each) => replaced.find((r) => r.id === each.id) ?? each);
+    expect(groupSplitOf(bar, swapped)!.asksSeats(["c3", "c4", "c5"])).toBe(true);
+  });
+
+  it("asks seats for Counter 3, 4 and 5 when the only guests sit at Bar, the table ticked", () => {
+    const seated = table("bar", "Bar", {
+      ...seatedBy(party("p", ["bar"])),
+      today: bar.today!,
+    });
+    const swapped = zone.map((each) => (each.id === "bar" ? seated : each));
+    expect(groupSplitOf(seated, swapped)!.asksSeats(["c3", "c4", "c5"])).toBe(true);
+  });
+
+  it.each([
+    ["split off no joined table", null],
+    ["split off another joined table", "other"],
+  ])("asks seats when a staying table after the counters was %s", (_, from) => {
+    const terrace = table("t9", "Terrace 9", {
+      today: today({ placement: place(44, 0), joinId: "g", splitOffFrom: from }),
+    });
+    const withTerrace = [...zone, terrace];
+    expect(groupSplitOf(bar, withTerrace)!.members.at(-1)!.id).toBe("t9");
+    expect(groupSplitOf(bar, withTerrace)!.asksSeats(["c3", "c4", "c5", "t9"])).toBe(true);
+  });
+
+  describe("where the guests go", () => {
+    const seatedAt = (...ids: string[]) => {
+      const p = party("p", ids);
+      return zone.map((each) =>
+        ids.includes(each.id) ? { ...each, ...seatedBy(p), today: each.today } : each,
+      );
+    };
+
+    it("names the tables a party keeps when a table it holds is ticked", () => {
+      const seated = seatedAt("bar", "c3", "c4");
+      const moves = groupSplitOf(bar, seated)!.guestsMoveTo;
+      expect(moves(["bar"])).toEqual(["Counter 3+4"]);
+      expect(moves(["c3", "c5"])).toEqual(["Bar+Counter 4"]);
+    });
+
+    it("names nothing when no ticked table holds a party, or the party would keep none", () => {
+      const moves = groupSplitOf(bar, seatedAt("bar", "c3"))!.guestsMoveTo;
+      expect(moves(["c4", "c5"])).toEqual([]);
+      expect(moves(["bar", "c3"])).toEqual([]);
+      expect(groupSplitOf(bar, zone)!.guestsMoveTo(["bar"])).toEqual([]);
+    });
+
+    it("says a ticked set strands guests when it holds every table one party holds", () => {
+      const alone = groupSplitOf(bar, seatedAt("bar"))!.strandsGuests;
+      expect(alone(["bar"])).toBe(true);
+      expect(alone(["bar", "c3"])).toBe(true);
+      expect(alone(["c3", "c4"])).toBe(false);
+      const two = groupSplitOf(bar, seatedAt("bar", "c3"))!.strandsGuests;
+      expect(two(["bar"])).toBe(false);
+      expect(two(["bar", "c3"])).toBe(true);
+      expect(groupSplitOf(bar, zone)!.strandsGuests(["bar"])).toBe(false);
+    });
+
+    it("strands no party that keeps a table off this zone's tables", () => {
+      const p = party("p", ["bar", "elsewhere"]);
+      const seated = zone.map((each) => (each.id === "bar" ? { ...each, ...seatedBy(p) } : each));
+      expect(groupSplitOf(bar, seated)!.strandsGuests(["bar"])).toBe(false);
+    });
+
+    it("names nothing for a party that keeps a table off this zone's tables", () => {
+      const p = party("p", ["bar", "elsewhere"]);
+      const seated = zone.map((each) => (each.id === "bar" ? { ...each, ...seatedBy(p) } : each));
+      expect(groupSplitOf(bar, seated)!.guestsMoveTo(["bar"])).toEqual([]);
+    });
+  });
+
+  it("names a joined table by its tables when a table is dropped on it", () => {
+    const whole = table("long", "Long table", {
+      today: today({
+        placement: place(10, 20, { width: 6, height: 2 }),
+        joined: { parts: ["c3", "c4", "c5"], splitOff: [], apart: false },
+      }),
+    });
+    const part = (id: string, label: string) =>
+      table(id, label, { today: today({ placement: null, inJoinedTable: "Long table" }) });
+    const free = table("bar", "Bar", { today: today({ placement: place(40, 0) }) });
+    const tables = [
+      free,
+      whole,
+      part("c3", "Counter 3"),
+      part("c4", "Counter 4"),
+      part("c5", "Counter 5"),
+    ];
+    expect(dropAction(tables, { tableId: "bar", x: 16, y: 20, targetId: "long" })).toMatchObject({
+      heading: "Bar+Counter 3+Counter 4+Counter 5",
     });
   });
 });

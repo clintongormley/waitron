@@ -155,6 +155,8 @@ the details one tap away.
 > Added 2026-10-12 by A503 part 2 ([design](2026-10-12-a503-joined-tables-design.md)): a joined table is a table on the saved plan made of two or more tables not placed on the plan (`floor_plan_table_parts`); each reset copies its parts (`floor_reset_table_parts`), and a part still joined cannot be seated, joined to a party, moved to, given a bill, merged, put on the map as a spare, named as an order's table or chosen for a department transfer (`table.in_joined_table`). It cannot yet be split.
 >
 > Added 2026-10-13 by A503 part 3: Split tables… now splits parts off a joined table for the day (§6.2).
+>
+> Changed 2026-10-13 by A579 part 3c ([design](2026-10-13-a579-flattened-joined-tables-design.md)): the sheet no longer offers **Split**; a table in a group offers **Split tables…** (§6.2).
 
 ## 6. Today's plan
 
@@ -242,6 +244,11 @@ undone at the next reset anyway.
 > it lays them out, every one of its tables split off and no food on its way to them, that joined
 > table is put back over them, clearing their "needs clearing" marks, whole when all its tables stay
 > (owner question 3).
+
+> Superseded 2026-10-13 by A579 part 3c ([design](2026-10-13-a579-flattened-joined-tables-design.md)):
+> the group's **Split** goes. **Split tables…** on a table of a group lists the group's tables, and each
+> ticked one leaves as a table leaves a group; on a joined table with tables still joined it lists those,
+> and splits them off the joined table as it does outside a group.
 
 ### 6.3 Reset
 
@@ -355,6 +362,9 @@ on every screen. The commit adding them states this reason.
 
 > Changed 2026-10-13 by A579 part 3b: split-off also splits tables off a group (§6.2).
 
+> Changed 2026-10-13 by A579 part 3c: `POST /api/tables/:id/today/split` (the group's Split) is
+> removed; split-off does its work.
+
 > Added 2026-10-13 by A503 part 4: and `POST /api/tables/:id/today/join-again` (join a split joined
 > table's free tables again), with the same checks.
 
@@ -394,6 +404,7 @@ Each claim is checked by running something, not by reading.
 - **Joins:** seats from a saved join, and the till asking without one; free + free, seated + free,
   seated + seated; Split puts each table back; a fixed table never moves, including when a move is
   sent straight to the route; a fixed join ends when the party leaves.
+  > Changed 2026-10-13 by A579 part 3c: the group's Split is gone; Split tables… on a group puts each ticked table back.
   > Superseded 2026-10-12 by A503 part 1 ([design](2026-10-12-a503-joined-tables-design.md)): saved joins, the editor's Joins section and the till's copy of them are gone; a service merge's seats come only from the till, whose seats prompt opens empty.
 - **Spares and reset:** a placed spare is unplaced again at reset; an occupied table waits for its
   tab to close.

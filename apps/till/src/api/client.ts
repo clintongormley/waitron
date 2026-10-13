@@ -3821,13 +3821,8 @@ export class TillApi {
     );
   }
 
-  /** End a free merge → `POST /api/tables/:id/today/split`. */
-  splitToday(tableId: string, zoneRevision: number): Promise<FloorAnswer> {
-    return this.#todayChange(tableId, "split", {}, zoneRevision);
-  }
-
-  /** Split parts off a joined table → `POST /api/tables/:id/today/split-off`.
-   * `seats` is left out when unset: the server refuses a null. */
+  /** Split tables… → `POST /api/tables/:id/today/split-off`: parts off a joined table, or tables off
+   * a group. `seats` is left out when unset: the server refuses a null. */
   splitOffToday(
     tableId: string,
     split: { partIds: string[]; seats?: number },

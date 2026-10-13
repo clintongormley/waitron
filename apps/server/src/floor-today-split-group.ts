@@ -69,7 +69,7 @@ interface Rejoin {
  * standing where its layout from the first of them puts it, with nobody seated and no food on its
  * way to them, the joined table is put back over them; otherwise they stay a group of `seats`.
  * Guests at the group leave the ticked tables, as Move guests leaves tables;
- * ticking every table a party holds is refused `tab.already_open`.
+ * ticking every table a party holds is refused `merge.strands_party`.
  */
 async function splitGroup(
   tx: Transaction,
@@ -94,7 +94,9 @@ async function splitGroup(
     const losing = [...new Set(leaving.map((id) => holders.get(id)!))];
     const emptied = await partiesHoldingOnly(tx, losing, partIds);
     const stranding = members.find((id) => ticked.has(id) && emptied.has(holders.get(id)!));
-    if (stranding !== undefined) throw new AppError("tab.already_open", { tableId: stranding });
+    if (stranding !== undefined) {
+      throw new AppError("merge.strands_party", { tableId: stranding, field: "partIds" });
+    }
     if (staying.length >= 2 && seats === null) throw new AppError("merge.seats_required", {});
     const groupSeats = staying.length >= 2 ? seats : null;
     if (leaving.length === 0) return leaveAsGroup(tx, merge.joinId, partIds, groupSeats);

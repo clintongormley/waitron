@@ -6,7 +6,13 @@ import {
   joinSide,
   touchingPlace,
 } from "@waitron/shared";
-import { type FloorMapDrop, clampToGrid, cropToTables, mergeLabel } from "@waitron/ui";
+import {
+  type FloorMapDrop,
+  clampToGrid,
+  cropToTables,
+  inNumberOrder,
+  mergeLabel,
+} from "@waitron/ui";
 import type { TableParty, TableState, TodayPlacement } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
@@ -95,7 +101,7 @@ export function dropAction(zoneTables: readonly TableState[], drop: FloorMapDrop
   if (draggedGroup.members.length > 1) return { kind: "say", message: t("floor.drop_merge") };
 
   const both = [...draggedGroup.members, ...targetGroup.members];
-  const heading = mergeLabel(both.map((table) => table.label));
+  const heading = mergeLabel(both.flatMap((table) => joinedLabels(zoneTables, table)));
   const dropped: TodayPlacement = { ...from, x: drop.x, y: drop.y };
   const nearest = nearestMember(targetGroup.members, centre(dropped));
   const fixedSide = draggedGroup.fixed || targetGroup.fixed;
@@ -130,6 +136,13 @@ export function dropAction(zoneTables: readonly TableState[], drop: FloorMapDrop
     merge,
     heading,
   };
+}
+
+/** A joined table's still-joined tables' labels; any other table's own label. */
+function joinedLabels(zoneTables: readonly TableState[], table: TableState): string[] {
+  const parts = table.today?.joined?.parts ?? [];
+  const labels = parts.flatMap((id) => zoneTables.find((each) => each.id === id)?.label ?? []);
+  return labels.length === 0 ? [table.label] : labels;
 }
 
 /** The placed member whose centre is nearest `point`; the first on a tie. */
@@ -280,7 +293,7 @@ function apartReason(table: TableState): ApartReason | null {
 }
 
 export type SheetAction =
-  "join-with" | "split" | "split-off" | "join-again" | "rotate" | "seats" | "back" | "take-off";
+  "join-with" | "split-off" | "join-again" | "rotate" | "seats" | "back" | "take-off";
 
 /** Slice 4 decisions 12 and 16: the details sheet's changes for today that apply to `table`, in
  * order. Join again is offered only when `zoneTables` holds the joined table and its split-off tables. */
@@ -298,8 +311,7 @@ export function sheetActions(
   const splitOff = today.splitOffFrom !== null;
   const applies: [SheetAction, boolean][] = [
     ["join-with", !merged && !clearing],
-    ["split", merged],
-    ["split-off", joined !== null && joined.parts.length >= 2],
+    ["split-off", merged || (joined !== null && joined.parts.length >= 2)],
     ["join-again", joinAgainOf(table, zoneTables) !== null],
     ["rotate", !today.fixed && !merged],
     ["seats", true],
@@ -307,4 +319,73 @@ export function sheetActions(
     ["take-off", free && !merged && !splitOff],
   ];
   return applies.filter(([, offered]) => offered).map(([action]) => action);
+}
+
+/** Split tables… on `table` splits its group, as the server's `splitOff` decides: a joined table
+ * with a table still joined splits as a joined table even in a group. */
+export function splitsGroup(table: TableState): boolean {
+  return table.today?.joinId != null && (table.today.joined?.parts.length ?? 0) === 0;
+}
+
+export interface GroupSplit {
+  members: TableState[];
+  name: string;
+  asksSeats(staying: readonly string[]): boolean;
+  /** For each party a ticked table holds, the tables it keeps, as `splitGroup` leaves them. A party
+   * that would keep none is refused by the server, and one keeping a table off `zoneTables` is left
+   * out rather than named wrongly. */
+  guestsMoveTo(ticked: readonly string[]): string[];
+  /** Whether a party a ticked table holds would keep none of its tables, which the server refuses
+   * `merge.strands_party`. */
+  strandsGuests(ticked: readonly string[]): boolean;
+}
+
+/** Split tables… on a table in a group: its members in number order, its name, and whether the
+ * tables `staying` need seats. None are asked when no member has a party (as `splitGroup`'s holders
+ * check in apps/server/src/floor-today-split-group.ts) and what stays is every table split off one
+ * joined table with none of its tables still joined, none with food on its way. Left to the server:
+ * a part held by a party when the joined table went live, which the till's tables do not show, and
+ * whether each stands where that joined table's layout puts it. Its seats refusal makes the window
+ * ask Seats. */
+export function groupSplitOf(
+  table: TableState,
+  zoneTables: readonly TableState[],
+): GroupSplit | null {
+  if (!splitsGroup(table)) return null;
+  const members = mergeMembersOf(zoneTables, table).sort((a, b) => inNumberOrder(a.label, b.label));
+  const rejoins = (staying: readonly string[]): boolean => {
+    if (members.some((each) => each.party !== null)) return false;
+    const tables = members.filter((each) => staying.includes(each.id));
+    const from = tables[0]?.today?.splitOffFrom ?? null;
+    const joined = zoneTables.find((each) => each.id === from)?.today?.joined;
+    return (
+      joined != null &&
+      joined.parts.length === 0 &&
+      tables.every((each) => each.today?.splitOffFrom === from && each.pendingDeliveries === 0) &&
+      joined.splitOff.every((id) => staying.includes(id))
+    );
+  };
+  /** For each party a ticked table holds, the ids of the tables it keeps. */
+  const keptBy = (ticked: readonly string[]): string[][] => {
+    const parties = new Map<string, TableParty>();
+    for (const each of members) {
+      if (ticked.includes(each.id) && each.party !== null) parties.set(each.party.id, each.party);
+    }
+    return [...parties.values()].map((party) =>
+      party.tableIds.filter((id) => !ticked.includes(id)),
+    );
+  };
+  const guestsMoveTo = (ticked: readonly string[]): string[] =>
+    keptBy(ticked).flatMap((kept) => {
+      const tables = zoneTables.filter((each) => kept.includes(each.id));
+      if (kept.length === 0 || tables.length !== kept.length) return [];
+      return [mergeLabel(tables.map((each) => each.label).sort(inNumberOrder))];
+    });
+  return {
+    members,
+    name: mergeLabel(members.map((each) => each.label)),
+    asksSeats: (staying) => staying.length >= 2 && !rejoins(staying),
+    guestsMoveTo,
+    strandsGuests: (ticked) => keptBy(ticked).some((kept) => kept.length === 0),
+  };
 }

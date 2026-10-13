@@ -23,7 +23,7 @@ import {
   seatsToday,
   takeOffToday,
 } from "./floor-today-store.js";
-import { splitFreeMerge, writeMerge } from "./floor-today-merges.js";
+import { writeMerge } from "./floor-today-merges.js";
 import { joinAgain } from "./floor-today-join-again.js";
 import { splitOff } from "./floor-today-split-group.js";
 import type { Logger } from "./logger.js";
@@ -186,7 +186,6 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
       others: [targetId],
     };
   });
-  tableRoute("split", () => ({ write: (tx, tableId) => splitFreeMerge(tx, deps.cfg, tableId) }));
   tableRoute("split-off", (body) => {
     const { partIds, seats } = partsBody(body);
     return {

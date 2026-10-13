@@ -1949,6 +1949,11 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   A579 part 3b's simplify review (#1627), which kept both. Next: keep one once part 4b removes Join
   again.
 
+- **A598. A table held by guests when its joined table went live is neither joined nor split off
+  (2026-10-13).** So the till cannot see that the rest will not rejoin; it asks Seats only after the
+  server refuses. Found by A579 part 3c's review.
+  [Detail](backlog/till.md#a598-a-table-held-by-guests-when-its-joined-table-went-live-is-neither-joined-nor-split-off)
+
 - **A565. "Reset to saved plan" does not wait for food on its way to an ordinary table
   (2026-10-13).** Dates from floor plans slice 1; #1604 made only split groups wait.
   [Detail](backlog/till.md#a565-reset-to-saved-plan-does-not-wait-for-food-on-its-way-to-an-ordinary-table)

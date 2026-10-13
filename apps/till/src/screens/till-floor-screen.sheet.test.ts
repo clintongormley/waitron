@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mergeLabel } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -77,14 +76,10 @@ function stubApi() {
   const done = () => Promise.resolve({ zoneId: "z1", revision: 0 });
   return {
     mergeToday: vi.fn<TillApi["mergeToday"]>(done),
-    splitToday: vi.fn<TillApi["splitToday"]>(done),
     rotateToday: vi.fn<TillApi["rotateToday"]>(done),
     setSeatsToday: vi.fn<TillApi["setSeatsToday"]>(done),
     backToSavedToday: vi.fn<TillApi["backToSavedToday"]>(done),
     takeOffToday: vi.fn<TillApi["takeOffToday"]>(done),
-    splitTable: vi.fn<TillApi["splitTable"]>(() =>
-      Promise.resolve({ partyId: "N", mainBillId: null }),
-    ),
     joinTables: vi.fn<TillApi["joinTables"]>(() =>
       Promise.resolve({} as Awaited<ReturnType<TillApi["joinTables"]>>),
     ),
@@ -319,56 +314,6 @@ describe("till-floor-screen: the details sheet's changes for today", () => {
     expect(refreshes.count).toBe(0);
   });
 
-  it("Split ends a free merge, and splits the last table off a seated one", async () => {
-    const free = stubApi();
-    const freeFloor = await mount(
-      [planned("t4", 20, { joinId: "J" }), planned("t5", 22, { joinId: "J" })],
-      free,
-    );
-    await press(freeFloor, "t4", "split");
-    expect(free.splitToday).toHaveBeenCalledExactlyOnceWith("t4", 0);
-    expect(free.splitTable).not.toHaveBeenCalled();
-    cleanupWidgets();
-
-    const P = party("P", 6, ["t5", "t4"]);
-    const seated = stubApi();
-    const seatedFloor = await mount(
-      [planned("t5", 22, { joinId: "J" }, P), planned("t4", 20, { joinId: "J" }, P)],
-      seated,
-    );
-    const refreshes = countRefreshes(seatedFloor);
-    await press(seatedFloor, "t4", "split");
-    expect(seated.splitTable).toHaveBeenCalledExactlyOnceWith("P", "t5", null, 6);
-    expect(seated.splitToday).not.toHaveBeenCalled();
-    expect(refreshes.count).toBe(1);
-  });
-
-  it("a change after Split of a seated merge, before any read, sends the room's revision the split answered", async () => {
-    const P = party("P", 6, ["t5", "t4"]);
-    for (const [answered, sent] of [
-      [{ z1: 8 }, 8],
-      [{ z2: 8 }, 7],
-    ] as const) {
-      const api = stubApi();
-      api.splitTable.mockResolvedValueOnce({
-        partyId: "N",
-        mainBillId: null,
-        zoneRevisions: answered,
-      });
-      const el = await mount(
-        [
-          planned("t5", 22, { joinId: "J", zoneRevision: 7 }, P),
-          planned("t4", 20, { joinId: "J", zoneRevision: 7 }, P),
-        ],
-        api,
-      );
-      await press(el, "t4", "split");
-      await press(el, "t4", "back");
-      expect(api.backToSavedToday).toHaveBeenCalledExactlyOnceWith("t4", sent);
-      cleanupWidgets();
-    }
-  });
-
   it("Rotate, Back and Take off call their routes; Change seats asks first", async () => {
     const api = stubApi();
     const el = await mount([planned("t1", 2, { seats: 6 })], api);
@@ -395,21 +340,6 @@ describe("till-floor-screen: the details sheet's changes for today", () => {
     expect(api.setSeatsToday).toHaveBeenCalledExactlyOnceWith("t1", 8, 0);
     expect(el.shadowRoot!.querySelector("till-today-seats-dialog")).toBeNull();
     expect(refreshes.count).toBe(4);
-  });
-
-  it("Split takes off the table the merge's name ends with", async () => {
-    const P = party("P", 2, ["t1", "t2"]);
-    const api = stubApi();
-    const el = await mount(
-      [
-        { ...planned("t1", 20, { joinId: "J" }, P), label: "1.10" },
-        { ...planned("t2", 22, { joinId: "J" }, P), label: "1.5" },
-      ],
-      api,
-    );
-    await press(el, "t1", "split");
-    expect(mergeLabel(["1.10", "1.5"])).toBe("1.5+1.10");
-    expect(api.splitTable).toHaveBeenCalledExactlyOnceWith("P", "t1", null, 2);
   });
 
   it("Change seats on a table with no seats opens empty", async () => {
@@ -449,7 +379,7 @@ describe("till-floor-screen: the details sheet's changes for today", () => {
 });
 
 describe("till-floor-screen: the sheet's actions and the room's revision", () => {
-  it("Rotate, Back, Take off, Split and Join with… send the read's revision", async () => {
+  it("Rotate, Back, Take off and Join with… send the read's revision", async () => {
     const calls: [string, (api: Stub) => unknown, unknown[]][] = [
       ["rotate", (api) => api.rotateToday, ["t1", 7]],
       ["back", (api) => api.backToSavedToday, ["t1", 7]],
@@ -462,18 +392,6 @@ describe("till-floor-screen: the sheet's actions and the room's revision", () =>
       expect(route(api)).toHaveBeenCalledExactlyOnceWith(...args);
       cleanupWidgets();
     }
-
-    const splitting = stubApi();
-    const merged = await mount(
-      [
-        planned("t4", 20, { joinId: "J", zoneRevision: 7 }),
-        planned("t5", 22, { joinId: "J", zoneRevision: 7 }),
-      ],
-      splitting,
-    );
-    await press(merged, "t4", "split");
-    expect(splitting.splitToday).toHaveBeenCalledExactlyOnceWith("t4", 7);
-    cleanupWidgets();
 
     const joining = stubApi();
     const el = await mount(
