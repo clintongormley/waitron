@@ -46,6 +46,11 @@ export function formatMonthName(month: number): string {
   return dateFormat({ month: "long" }).format(asUtc(`2001-${String(month).padStart(2, "0")}-01`));
 }
 
+/** A date's day, month and year, "12 October 2026", in the dashboard's language. */
+export function formatDayMonthYear(date: LocalDate): string {
+  return dateFormat({ day: "numeric", month: "long", year: "numeric" }).format(asUtc(date));
+}
+
 /** A date written out in full, "Monday, 12 October 2026", for a name read aloud. */
 export function formatLongDate(date: LocalDate): string {
   return dateFormat({ weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(
