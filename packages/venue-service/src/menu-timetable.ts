@@ -773,10 +773,11 @@ function routingRowPlaces(folders: readonly Folder[]) {
 }
 
 /** Each period's routing cells that hold a line for it, in the Routing tab's row order, then by
- * zone (Every zone first). */
+ * zone (Every zone first); `periodId`'s alone when given. */
 export async function readRoutingUses(
   tx: Transaction,
   cfg: VenueScope,
+  periodId?: string,
 ): Promise<Map<string, PeriodRoutingUse[]>> {
   const rows = await tx
     .select({
@@ -793,7 +794,12 @@ export async function readRoutingUses(
     .innerJoin(routingCells, eq(routingCells.id, routingCellPeriods.cellId))
     .leftJoin(products, eq(products.id, routingCells.productId))
     .leftJoin(floorZones, eq(floorZones.id, routingCells.zoneId))
-    .where(eq(routingCells.locationId, cfg.locationId));
+    .where(
+      and(
+        eq(routingCells.locationId, cfg.locationId),
+        periodId === undefined ? undefined : eq(routingCellPeriods.periodId, periodId),
+      ),
+    );
   if (rows.length === 0) return new Map();
   const folders = await tx
     .select({ id: categories.id, name: categories.name, parentId: categoryDetails.parentId })

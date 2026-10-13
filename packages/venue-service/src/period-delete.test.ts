@@ -334,9 +334,19 @@ describe("what deleting a period touches", () => {
       departmentId: v.restaurant,
       stationId: v.stationId,
     });
+    await db.insert(routingCellPeriods).values({
+      cellId: cell!.id,
+      periodId: v.dinner,
+      departmentId: v.restaurant,
+      stationId: v.stationId,
+    });
 
     const impact = await scoped((tx) => periodDeleteImpact(tx, v.cfg, v.lunch, AT));
     const routing = await scoped((tx) => readRoutingUses(tx, v.cfg));
+    const lunchRouting = await scoped((tx) => readRoutingUses(tx, v.cfg, v.lunch));
+
+    expect([...routing.keys()].sort()).toEqual([v.lunch, v.dinner].sort());
+    expect(lunchRouting).toEqual(new Map([[v.lunch, routing.get(v.lunch)]]));
 
     expect(impact).toEqual({
       seasons: 2,

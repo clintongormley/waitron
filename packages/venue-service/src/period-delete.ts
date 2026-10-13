@@ -151,7 +151,7 @@ export async function periodDeleteImpact(
   const period = await requirePeriod(tx, cfg, periodId);
   const today = await businessDayAt(tx, cfg, at);
   const painted = (await paintedIn(tx, cfg, today, periodId)).get(periodId)!;
-  const routingUses = (await readRoutingUses(tx, cfg)).get(periodId) ?? [];
+  const routingUses = (await readRoutingUses(tx, cfg, periodId)).get(periodId) ?? [];
   const kept =
     today === null
       ? []
