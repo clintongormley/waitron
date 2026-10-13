@@ -297,6 +297,18 @@ Long table went live, Counter 4 split off, Counter 3's party finished). Part 3a 
 for a push into a group (`writeMerge` writes a split row for such a table and marks its reset row
 placed). Next: do the same in the split down to one.
 
+## A592. A party that joins a group's table names the group's other tables in random order
+
+**A592 (2026-10-13).** A party's tables are listed by `joined_at`, then by membership id
+(`apps/server/src/parties.ts:207`, `:296`), and `joined_at` defaults to the current millisecond
+(`packages/db/src/schema/parties.ts:82`). When a party joins one table of a group,
+`joinMergeMembers` (`apps/server/src/floor-today-merges.ts`) adds the group's other tables in the
+same millisecond, so their order on the bill falls to the random id. Seen in A579 part 3a: guests
+at Long table, Long table dragged onto a Bar and Stool group, read "Bar, Stool, …" 13 times in 15
+and "Stool, Bar, …" twice. That joinMergeMembers predates part 3a is read from `git log`, not run
+on main. Next: give each table the group adds a later `joined_at` in number order, as `passGuests`
+does (`apps/server/src/floor-today-parts.ts`).
+
 ## A565. "Reset to saved plan" does not wait for food on its way to an ordinary table
 
 **A565 (2026-10-13).** A reset applies a free table's saved place without asking about food on its
