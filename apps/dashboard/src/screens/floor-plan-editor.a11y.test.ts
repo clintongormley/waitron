@@ -28,6 +28,7 @@ const plan: FloorPlan = {
       fixed: false,
       placement: { x: 2, y: 3, width: 8, height: 8, shape: "rect", rotation: 0 },
       partIds: [],
+      keptSize: null,
     },
     {
       id: "m2",
@@ -37,6 +38,7 @@ const plan: FloorPlan = {
       fixed: true,
       placement: { x: 14, y: 3, width: 6, height: 6, shape: "round", rotation: 0 },
       partIds: [],
+      keptSize: null,
     },
   ],
 };
@@ -92,6 +94,7 @@ const offPlan: FloorPlan = {
       fixed: false,
       placement: null,
       partIds: [],
+      keptSize: null,
     })),
   ],
 };
@@ -109,6 +112,7 @@ const joinedPlan: FloorPlan = {
       fixed: false,
       placement: { x: 2, y: 14, width: 12, height: 6, shape: "rect", rotation: 0 },
       partIds: ["m3", "m4", "m5"],
+      keptSize: null,
     },
   ],
 };

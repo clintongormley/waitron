@@ -46,6 +46,7 @@ function plan(m1x = 2): FloorPlan {
         fixed: false,
         placement: { ...m1Placement, x: m1x },
         partIds: [],
+        keptSize: null,
       },
       {
         id: "m2",
@@ -55,6 +56,7 @@ function plan(m1x = 2): FloorPlan {
         fixed: true,
         placement: null,
         partIds: [],
+        keptSize: null,
       },
       {
         id: "m9",
@@ -64,6 +66,7 @@ function plan(m1x = 2): FloorPlan {
         fixed: false,
         placement: null,
         partIds: [],
+        keptSize: null,
       },
     ],
   };
@@ -145,6 +148,7 @@ const afterFirstSave: FloorPlan = {
       fixed: false,
       placement: null,
       partIds: [],
+      keptSize: null,
     },
     {
       id: "m5",
@@ -154,6 +158,7 @@ const afterFirstSave: FloorPlan = {
       fixed: false,
       placement: t5Placement,
       partIds: [],
+      keptSize: null,
     },
   ],
 };
@@ -298,6 +303,7 @@ it("a first save's re-read gives a new table its live table", async () => {
         fixed: false,
         placement: null,
         partIds: [],
+        keptSize: null,
       },
       {
         id: "m5",
@@ -307,6 +313,7 @@ it("a first save's re-read gives a new table its live table", async () => {
         fixed: false,
         placement: t5Placement,
         partIds: [],
+        keptSize: null,
       },
     ],
   };

@@ -639,6 +639,8 @@ export interface FloorPlan {
     placement: PlanPlacement | null;
     /** The ids of a joined table's parts; empty for any other table. */
     partIds: string[];
+    /** The size a table off the plan had when it last left it. */
+    keptSize: { width: number; height: number } | null;
   }[];
 }
 

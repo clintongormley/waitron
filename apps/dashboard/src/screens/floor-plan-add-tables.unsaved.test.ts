@@ -20,6 +20,7 @@ const draft: FloorPlanDraft = {
       fixed: false,
       placement: null,
       parts: null,
+      keptSize: null,
     },
   ],
 };

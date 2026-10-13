@@ -30,7 +30,16 @@ function terrace(revision = 3): FloorPlan {
     revision,
     savedAt: revision === 0 ? null : "2026-10-01T10:00:00.000Z",
     tables: [
-      { id: "m1", liveTableId: "l1", label: "T1", seats: 4, fixed: false, placement, partIds: [] },
+      {
+        id: "m1",
+        liveTableId: "l1",
+        label: "T1",
+        seats: 4,
+        fixed: false,
+        placement,
+        partIds: [],
+        keptSize: null,
+      },
       {
         id: "m2",
         liveTableId: "l2",
@@ -39,6 +48,7 @@ function terrace(revision = 3): FloorPlan {
         fixed: false,
         placement: null,
         partIds: [],
+        keptSize: null,
       },
     ],
   };
@@ -49,7 +59,16 @@ const bar: FloorPlan = {
   revision: 1,
   savedAt: "2026-10-01T10:00:00.000Z",
   tables: [
-    { id: "b1", liveTableId: "l5", label: "B1", seats: 2, fixed: false, placement, partIds: [] },
+    {
+      id: "b1",
+      liveTableId: "l5",
+      label: "B1",
+      seats: 2,
+      fixed: false,
+      placement,
+      partIds: [],
+      keptSize: null,
+    },
   ],
 };
 
@@ -856,6 +875,7 @@ it("gives added tables keys no draft table holds, through saves, undo and redo",
       fixed: false,
       placement: null,
       partIds: [],
+      keptSize: null,
     },
     {
       id: "m6",
@@ -865,6 +885,7 @@ it("gives added tables keys no draft table holds, through saves, undo and redo",
       fixed: false,
       placement: null,
       partIds: [],
+      keptSize: null,
     },
   );
   const getFloorPlan = vi.fn().mockResolvedValueOnce(terrace()).mockResolvedValue(saved);
@@ -908,6 +929,7 @@ it("Add joined table from the list opens the window, and Add puts Long table in 
       fixed: false,
       placement: null,
       partIds: [],
+      keptSize: null,
     })),
   );
   const el = await open(stubApi({ getFloorPlan: vi.fn().mockResolvedValue(counters) }));
@@ -1241,6 +1263,7 @@ function counters(): FloorPlan {
     fixed: false,
     placement: null,
     partIds: [],
+    keptSize: null,
   });
   return {
     zoneId: "z1",

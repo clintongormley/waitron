@@ -39,7 +39,16 @@ function plan(): FloorPlan {
     revision: 3,
     savedAt: "2026-10-01T10:00:00.000Z",
     tables: [
-      { id: "m1", liveTableId: "l1", label: "T1", seats: 4, fixed: false, placement, partIds: [] },
+      {
+        id: "m1",
+        liveTableId: "l1",
+        label: "T1",
+        seats: 4,
+        fixed: false,
+        placement,
+        partIds: [],
+        keptSize: null,
+      },
       {
         id: "m2",
         liveTableId: "l2",
@@ -48,6 +57,7 @@ function plan(): FloorPlan {
         fixed: true,
         placement: null,
         partIds: [],
+        keptSize: null,
       },
       {
         id: "m9",
@@ -57,6 +67,7 @@ function plan(): FloorPlan {
         fixed: false,
         placement: null,
         partIds: [],
+        keptSize: null,
       },
     ],
   };
@@ -550,6 +561,7 @@ function joinedPlan(): FloorPlan {
     fixed: false,
     placement: null,
     partIds: [],
+    keptSize: null,
   });
   return {
     ...plan(),
@@ -565,6 +577,7 @@ function joinedPlan(): FloorPlan {
         fixed: false,
         placement,
         partIds: ["c3", "c4", "c5"],
+        keptSize: null,
       },
     ],
   };
@@ -1062,6 +1075,7 @@ it("a table saved new while other edits were made comes back when its delete is 
         fixed: false,
         placement: null,
         partIds: [],
+        keptSize: null,
       },
       {
         id: "m5",
@@ -1071,6 +1085,7 @@ it("a table saved new while other edits were made comes back when its delete is 
         fixed: false,
         placement: t5,
         partIds: [],
+        keptSize: null,
       },
     ],
   };

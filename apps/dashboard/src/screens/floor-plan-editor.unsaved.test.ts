@@ -39,6 +39,7 @@ const plan = (zoneId: string, id: string): FloorPlan => ({
       fixed: false,
       placement,
       partIds: [],
+      keptSize: null,
     },
   ],
 });

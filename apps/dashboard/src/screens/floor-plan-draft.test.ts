@@ -36,6 +36,7 @@ const plan: FloorPlan = {
       fixed: false,
       placement: m1Placement,
       partIds: [],
+      keptSize: null,
     },
     {
       id: "m2",
@@ -45,6 +46,7 @@ const plan: FloorPlan = {
       fixed: true,
       placement: null,
       partIds: [],
+      keptSize: null,
     },
     {
       id: "m9",
@@ -54,6 +56,7 @@ const plan: FloorPlan = {
       fixed: false,
       placement: null,
       partIds: [],
+      keptSize: null,
     },
   ],
 };
@@ -73,6 +76,7 @@ const joinedPlan: FloorPlan = {
       fixed: false,
       placement: null,
       partIds: [],
+      keptSize: null,
     },
     {
       id: "c4",
@@ -82,6 +86,7 @@ const joinedPlan: FloorPlan = {
       fixed: false,
       placement: null,
       partIds: [],
+      keptSize: null,
     },
     {
       id: "c5",
@@ -91,6 +96,7 @@ const joinedPlan: FloorPlan = {
       fixed: false,
       placement: null,
       partIds: [],
+      keptSize: null,
     },
     {
       id: "long",
@@ -100,6 +106,7 @@ const joinedPlan: FloorPlan = {
       fixed: false,
       placement: m1Placement,
       partIds: ["c3", "c4", "c5"],
+      keptSize: null,
     },
   ],
 };
@@ -130,6 +137,7 @@ describe("floor plan draft", () => {
       fixed: false,
       placement: null,
       parts: null,
+      keptSize: null,
     });
     expect(table(d, "m1")).toEqual({
       key: "m1",
@@ -140,6 +148,7 @@ describe("floor plan draft", () => {
       fixed: false,
       placement: m1Placement,
       parts: null,
+      keptSize: null,
     });
     expect(Object.keys(d)).toEqual(["tables"]);
   });
@@ -425,6 +434,7 @@ describe("floor plan draft", () => {
         fixed: false,
         placement: null,
         parts: null,
+        keptSize: null,
       },
       {
         key: "new:2",
@@ -435,6 +445,7 @@ describe("floor plan draft", () => {
         fixed: true,
         placement: null,
         parts: null,
+        keptSize: null,
       },
     ]);
     expect(d.tables.slice(0, 3).map((t) => t.key)).toEqual(["m1", "m2", "m9"]);
@@ -458,6 +469,50 @@ describe("floor plan draft", () => {
     expect(table(placeTable(open(), "m2", at), "m2").placement).toEqual(at);
   });
 
+  /** T1 at x 5, y 0 leaves a 2 × 3 gap at the plan's corner, and no 8 × 8 one. */
+  function keptSizeDraft(): FloorPlanDraft {
+    const kept = draftFromPlan({
+      ...plan,
+      tables: plan.tables.map((t) =>
+        t.id === "m2" ? { ...t, keptSize: { width: 2, height: 3 } } : t,
+      ),
+    });
+    return patchTable(kept, "m1", { placement: { ...m1Placement, x: 5, y: 0 } });
+  }
+
+  it("reads each table's kept size from the plan", () => {
+    const d = keptSizeDraft();
+    expect(table(d, "m2").keptSize).toEqual({ width: 2, height: 3 });
+    expect(table(d, "m9").keptSize).toBeNull();
+  });
+
+  it("places a table off the plan at the size it kept, at the first spot that fits it", () => {
+    expect(table(placeTable(keptSizeDraft(), "m2"), "m2").placement).toEqual({
+      x: 0,
+      y: 0,
+      width: 2,
+      height: 3,
+      shape: "rect",
+      rotation: 0,
+    });
+  });
+
+  it("places a table that never had a size at the new-table size", () => {
+    expect(table(placeTable(keptSizeDraft(), "m9"), "m9").placement).toEqual({
+      x: 14,
+      y: 0,
+      width: 8,
+      height: 8,
+      shape: "rect",
+      rotation: 0,
+    });
+  });
+
+  it("a remembered place still wins over the kept size", () => {
+    const at = { x: 30, y: 4, width: 5, height: 7, shape: "round" as const, rotation: 45 };
+    expect(table(placeTable(keptSizeDraft(), "m2", at), "m2").placement).toEqual(at);
+  });
+
   it("control: leaves a table unplaced when ten rows of ten 99 × 99 tables fill the grid", () => {
     const tables = Array.from({ length: 100 }, (_, i) => ({
       key: `f${i}`,
@@ -475,6 +530,7 @@ describe("floor plan draft", () => {
         rotation: 0,
       },
       parts: null,
+      keptSize: null,
     }));
     const d = { ...open(), tables: [...open().tables, ...tables] };
     const full = patchTable(d, "m1", { placement: null });
@@ -626,6 +682,7 @@ describe("floor plan draft", () => {
           liveTableId: null,
           label: "Bar",
           parts: ["c5"],
+          keptSize: null,
         },
       ],
     };
@@ -647,6 +704,7 @@ describe("floor plan draft", () => {
           liveTableId: null,
           label: "Bar",
           parts: ["c3"],
+          keptSize: null,
         },
       ],
     };
@@ -685,6 +743,7 @@ describe("floor plan draft", () => {
       fixed: false,
       placement: null,
       parts: ["c3", "c4", "c5"],
+      keptSize: null,
     });
     expect(joinedTableOf(d, "c4")?.key).toBe("new:1");
     expect(d.tables.slice(0, -1).map((t) => t.key)).toEqual(["m1", "c3", "c4", "c5"]);

@@ -469,6 +469,7 @@ export const QUERY_DEPENDENCIES = {
     "floor_plans",
     "floor_plan_tables",
     "floor_plan_table_parts",
+    "floor_plan_table_sizes",
     "dining_tables",
     "floor_zones",
   ],

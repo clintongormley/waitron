@@ -33,6 +33,7 @@ const plan: FloorPlan = {
       fixed: false,
       placement: m1Placement,
       partIds: [],
+      keptSize: null,
     },
     {
       id: "m2",
@@ -42,6 +43,7 @@ const plan: FloorPlan = {
       fixed: true,
       placement: null,
       partIds: [],
+      keptSize: null,
     },
     {
       id: "m9",
@@ -51,6 +53,7 @@ const plan: FloorPlan = {
       fixed: false,
       placement: null,
       partIds: [],
+      keptSize: null,
     },
   ],
 };
@@ -398,6 +401,7 @@ const joined = (): FloorPlanDraft => ({
       fixed: false,
       placement: null,
       parts: null,
+      keptSize: null,
     })),
     {
       key: "long",
@@ -408,6 +412,7 @@ const joined = (): FloorPlanDraft => ({
       fixed: false,
       placement: m1Placement,
       parts: ["c3", "c4", "c5"],
+      keptSize: null,
     },
     {
       key: "bar",
@@ -418,6 +423,7 @@ const joined = (): FloorPlanDraft => ({
       fixed: false,
       placement: null,
       parts: ["c7", "c8"],
+      keptSize: null,
     },
   ],
 });
