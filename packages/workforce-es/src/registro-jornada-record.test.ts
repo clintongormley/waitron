@@ -68,6 +68,19 @@ const close = () =>
       origin,
     }),
   );
+it("exports an unconfirmed automatic end while its session has no counted minutes", async () => {
+  const target = await day(true);
+  const result = exportTimeRecord(await record(), period);
+  expect(result.lineas).toEqual([]);
+  expect(result.entradas).toHaveLength(2);
+  expect(result.entradas!.find((e) => e.entryId === target)).toMatchObject({
+    instante: "2026-01-05T17:00:00+00:00",
+    autor: { kind: "automatic", personId: null },
+    automatica: true,
+    sinConfirmar: true,
+    efectiva: false,
+  });
+});
 async function proposal(target: string, byManager: boolean) {
   return run((tx) =>
     backend.requestCorrection(tx, {

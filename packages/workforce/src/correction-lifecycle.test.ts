@@ -35,6 +35,86 @@ beforeEach(async () => {
   await seedEmployment(suite.db, { personId });
 });
 const event = (at: string) => ({ nodeId, personId, locationId, at, offsetMinutes: 0, origin });
+it("refuses a missing clock-in overlapping the person's completed work at another location", async () => {
+  await day();
+  const second = await seedLocation(suite.db);
+  await expect(
+    run((tx) =>
+      backend.requestCorrection(tx, {
+        nodeId,
+        personId,
+        locationId: second,
+        missingEntryKind: "in",
+        at: "2026-01-05T10:00:00Z",
+        offsetMinutes: 0,
+        reason: "Forgot",
+        actorPersonId: personId,
+        origin,
+      }),
+    ),
+  ).rejects.toMatchObject({ code: "correction.invalid" });
+  expect(
+    (
+      await run((tx) =>
+        backend.timeRecord(tx, { period: { start: "2026-01-01", end: "2026-02-01" }, personId }),
+      )
+    ).sessions.map((s) => s.workedMinutes),
+  ).toEqual([480]);
+});
+it("rechecks other locations before approving a previously nonoverlapping missing clock-in", async () => {
+  const second = await seedLocation(suite.db);
+  const request = await run((tx) =>
+    backend.requestCorrection(tx, {
+      nodeId,
+      personId,
+      locationId: second,
+      missingEntryKind: "in",
+      at: "2026-01-05T10:00:00Z",
+      offsetMinutes: 0,
+      reason: "Forgot",
+      actorPersonId: personId,
+      origin,
+    }),
+  );
+  await day();
+  await expect(
+    run((tx) =>
+      backend.approveCorrection(tx, { nodeId, correctionId: request, approverPersonId: manager }),
+    ),
+  ).rejects.toMatchObject({ code: "correction.invalid" });
+});
+it("accepts a separate-location missing session after the existing shift ends", async () => {
+  await day();
+  const second = await seedLocation(suite.db);
+  for (const [missingEntryKind, at] of [
+    ["in", "2026-01-05T18:00:00Z"],
+    ["out", "2026-01-05T20:00:00Z"],
+  ] as const) {
+    const request = await run((tx) =>
+      backend.requestCorrection(tx, {
+        nodeId,
+        personId,
+        locationId: second,
+        missingEntryKind,
+        at,
+        offsetMinutes: 0,
+        reason: "Forgot",
+        actorPersonId: personId,
+        origin,
+      }),
+    );
+    await run((tx) =>
+      backend.approveCorrection(tx, { nodeId, correctionId: request, approverPersonId: manager }),
+    );
+  }
+  const record = await run((tx) =>
+    backend.timeRecord(tx, { period: { start: "2026-01-01", end: "2026-02-01" }, personId }),
+  );
+  expect(record.sessions.map((s) => [s.locationId, s.workedMinutes])).toEqual([
+    [locationId, 480],
+    [second, 120],
+  ]);
+});
 async function day(end = true) {
   await run((tx) => backend.clockIn(tx, event("2026-01-05T09:00:00Z")));
   if (end) await run((tx) => backend.clockOut(tx, event("2026-01-05T17:00:00Z")));

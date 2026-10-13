@@ -231,7 +231,6 @@ export class WorkforceBackend {
   ): Promise<PlannedVsActual[]> {
     const plannedShifts = await this.plannedShiftsInPeriod(tx, query.locationId, query.period);
     const entries = await this.entriesForLocation(tx, query.locationId);
-    // The ±1-day widened fetch can return a session one local day outside the window.
     const sessions = projectWorkSessions(entries).filter(
       (s) => s.workDate >= query.period.start && s.workDate < query.period.end,
     );

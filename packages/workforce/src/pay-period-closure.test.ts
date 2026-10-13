@@ -57,6 +57,36 @@ const close = (patch: Partial<Parameters<typeof api.closePayPeriod>[1]> = {}) =>
       ...patch,
     }),
   );
+it("counts a next-month local-day automatic end only when that next month closes", async () => {
+  await run((tx) => backend.clockIn(tx, { ...event("2026-10-31T23:30:00Z"), offsetMinutes: 60 }));
+  const openEntryId = (await suite.db.select().from(api.timeEntries))[0]!.id;
+  const entryId = await run((tx) =>
+    backend.recordAutomaticClose(tx, {
+      ...event("2026-11-01T04:00:00Z"),
+      offsetMinutes: 60,
+      openEntryId,
+    }),
+  );
+  const october = await close();
+  expect(october.snapshot.countedAutomaticEntryIds).toEqual([]);
+  expect(october.snapshot.sessions).toEqual([]);
+  expect(
+    (await suite.db.select().from(api.timeEntries)).filter((e) => e.entryKind === "confirmation"),
+  ).toEqual([]);
+  const november = await close({
+    period: { start: "2026-11-01", end: "2026-12-01" },
+    now: "2026-12-01T05:00:00Z",
+  });
+  expect(november.snapshot.countedAutomaticEntryIds).toEqual([entryId]);
+  expect(november.snapshot.sessions.map((s) => [s.workDate, s.workedMinutes])).toEqual([
+    ["2026-11-01", 270],
+  ]);
+  const markers = (await suite.db.select().from(api.timeEntries)).filter(
+    (e) => e.entryKind === "confirmation",
+  );
+  expect(markers).toHaveLength(1);
+  expect(markers[0]).toMatchObject({ respondsToEntryId: entryId, payPeriodClosureId: november.id });
+});
 async function open(personId = worker) {
   await run((tx) => backend.clockIn(tx, event("2026-10-05T09:00:00Z", personId)));
   return (

@@ -121,9 +121,7 @@ function validateChange(
   change: TimeEntryRecord,
   settling: boolean,
 ): void {
-  const effective = effectiveClockEntries(entries).filter(
-    (e) => e.personId === change.personId && e.locationId === change.locationId,
-  );
+  const effective = effectiveClockEntries(entries).filter((e) => e.personId === change.personId);
   if (change.correctsEntryId) {
     const target = effective.find((e) => e.entryId === change.correctsEntryId);
     if (target === undefined)
