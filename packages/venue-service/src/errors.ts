@@ -74,7 +74,7 @@ declare module "@waitron/shared" {
       date?: string;
       specialDayId?: string;
     };
-    /** Deleting a named period that `uses` still place, past special dates and special-day dates included. */
+    /** Deleting a named period that `uses` still place, past special-day dates included. */
     "menu_period.in_use": { periodId: string; uses: MenuPeriodUse[] };
     /** Another of the department's named periods already has `name`, as trimmed. */
     "menu_period.name_taken": { departmentId: string; name: string };

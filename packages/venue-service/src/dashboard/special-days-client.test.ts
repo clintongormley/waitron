@@ -134,7 +134,7 @@ it("a dialog that has left cannot begin a special-day write", async () => {
   expect(methods).toEqual([]);
 });
 
-it("the replacement named-day watch reads passively, reports failure and recovery, and stops when detached", async () => {
+it("the special-days watch reads passively, reports failure and recovery, and stops when detached", async () => {
   const live = new LiveData();
   const updated = { ...model, area: { ...model.area, chosen: "aran" } };
   const answers: (SpecialDaysModel | Error)[] = [model, new Error("offline"), updated];
@@ -175,7 +175,7 @@ it("the replacement named-day watch reads passively, reports failure and recover
   expect(request).toHaveBeenCalledTimes(3);
 });
 
-it("the replacement named-day watch rereads after a write with live data and without it", async () => {
+it("the special-days watch rereads after a write with live data and without it", async () => {
   for (const live of [new LiveData(), undefined]) {
     const request = vi.fn(async () => model);
     const api = new clients.SpecialDaysApi(request as DashboardRequest, live);

@@ -22,7 +22,7 @@ export interface CalendarDay {
   specialDay: { id: string; name: string } | null;
   holidays: HolidayFact[];
   tone: CalendarTone;
-  /** The whole venue is closed all day, or no active department has hours. */
+  /** No active department has hours on the date; a date Closed all day included. */
   closed: boolean;
 }
 

@@ -252,10 +252,6 @@ closed, as today.
 - Real-week headings: a date heading must not repeat the weekday, and the date and Today marker
   stay readable in EN/ES, both themes, at 1280 and 390. Receipt: Lane D
   `receipts/a366-2/task22-review.md` and `receipts/a366-2/finish-visuals`.
-- Dated-save refusals: a refusal naming no field, on an editor saving several dates, shows only
-  beside the action that failed and keeps its retry and draft. The slice 2 Task 22 review saw one
-  general refusal beside unrelated dates' Save actions (`opening-hours-week.ts`,
-  `opening-hours-zone-week.ts`). Receipt: Lane D `receipts/a366-2/task22-review.md`.
 
 **For the spec to settle** (settled in the spec's sections 8, 9, 10.2, 12 and 14; its review found the
 kind has three readers, not one, and that `station-times.ts` reads the week only through routing's

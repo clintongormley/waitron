@@ -29,7 +29,7 @@ describe("VENUE_SERVICE_CLASSIFICATION", () => {
     ).toEqual([["menu_period_staff_menus", "state"]]);
   });
   it("replicates opening hours, station fallbacks and today's state", () => {
-    const timing = ["station_hours", "department_hours", "station_day_states", "special_dates"];
+    const timing = ["station_hours", "department_hours", "station_day_states"];
     expect(
       VENUE_SERVICE_CLASSIFICATION.filter((entry) => timing.includes(entry.table)).map((entry) => [
         entry.table,

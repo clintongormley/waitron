@@ -63,7 +63,7 @@ const formatUtc = (date: LocalDate, options: Intl.DateTimeFormatOptions) =>
     new Date(`${date}T00:00:00Z`),
   );
 
-/** A Monday-first month of named days with the chosen date's actions. */
+/** A Monday-first month of special days and public holidays with the chosen date's actions. */
 @customElement("hours-calendar")
 export class HoursCalendar extends LitElement {
   static override styles = [

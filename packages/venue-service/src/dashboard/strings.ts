@@ -494,7 +494,6 @@ const en = {
   "hours.closes": "Closes",
   "hours.add_period": "Add a period",
   "hours.remove_period": "Remove period {n}",
-  "hours.remove": "Remove",
   "hours.save": "Save",
   "hours.cancel": "Cancel",
   "hours.fix_fields": "Correct the highlighted fields to continue.",
@@ -556,9 +555,6 @@ const en = {
   "hours.duplicate_heading": "Duplicate {name}",
   "hours.duplicate_note":
     "Copies the colour and every cell to each date. A date that is a public holiday, local ones included, takes the holiday's name; any other date keeps this name.",
-  "hours.target_date": "Date {n}",
-  "hours.add_target": "Add another date",
-  "hours.remove_target": "Remove date {n}",
   "hours.date_twice": "This date is listed twice.",
   "hours.delete_heading": "Delete special date",
   "hours.delete_confirm": "Delete {name} on {date}? Its hours go back to the standard week.",
@@ -580,7 +576,6 @@ const en = {
   "hours.calendar.scope.regional": "Regional holiday",
   "hours.calendar.scope.local": "Local holiday",
   "hours.calendar.source": "Source:",
-  "hours.calendar.source_owner": "Entered by you for {city}",
   "hours.calendar.coverage.complete":
     "{year}: official national and regional holidays are included.",
   "hours.calendar.coverage.missing_year":
@@ -1259,7 +1254,6 @@ const es: Record<keyof typeof en, string> = {
   "hours.closes": "Cierra",
   "hours.add_period": "Añadir un periodo",
   "hours.remove_period": "Quitar el periodo {n}",
-  "hours.remove": "Quitar",
   "hours.save": "Guardar",
   "hours.cancel": "Cancelar",
   "hours.fix_fields": "Corrige los campos marcados para continuar.",
@@ -1321,9 +1315,6 @@ const es: Record<keyof typeof en, string> = {
   "hours.duplicate_heading": "Duplicar {name}",
   "hours.duplicate_note":
     "Copia el color y cada celda en cada fecha. Una fecha que es festivo, también local, toma el nombre del festivo; cualquier otra fecha conserva este nombre.",
-  "hours.target_date": "Fecha {n}",
-  "hours.add_target": "Añadir otra fecha",
-  "hours.remove_target": "Quitar la fecha {n}",
   "hours.date_twice": "Esta fecha está dos veces.",
   "hours.delete_heading": "Borrar fecha especial",
   "hours.delete_confirm":
@@ -1346,7 +1337,6 @@ const es: Record<keyof typeof en, string> = {
   "hours.calendar.scope.regional": "Festivo autonómico",
   "hours.calendar.scope.local": "Festivo local",
   "hours.calendar.source": "Fuente:",
-  "hours.calendar.source_owner": "Introducido por ti para {city}",
   "hours.calendar.coverage.complete":
     "{year}: se incluyen los festivos oficiales nacionales y autonómicos.",
   "hours.calendar.coverage.missing_year":
