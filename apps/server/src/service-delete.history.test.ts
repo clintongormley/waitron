@@ -141,7 +141,7 @@ it("deleted department reprints its original receipt configuration and frozen he
     }),
   );
   expect(sent[0]!.summary.sourceDepartmentName).toBe(original!.name);
-  const detail = await run((tx) => readOrderDetail(tx, billId, "all"));
+  const detail = await run((tx) => readOrderDetail(tx, billId, "all", false));
   const grouping = await run((tx) => readReceiptOrder(tx, venue.cfg, billId));
   await run(async (tx) => {
     const profiles = await tx
@@ -184,7 +184,7 @@ it("deleted department reprints its original receipt configuration and frozen he
   expect(decodeTicket(afterPrint.payload)).toBe(beforeText);
   expect(previewPrintJob(afterPrint.payload)).toEqual(previewPrintJob(beforePrint.payload));
   expect(await run((tx) => readReceiptOrder(tx, venue.cfg, billId))).toEqual(grouping);
-  const afterDetail = await run((tx) => readOrderDetail(tx, billId, "all"));
+  const afterDetail = await run((tx) => readOrderDetail(tx, billId, "all", false));
   expect(afterDetail.row).toEqual(detail.row);
   expect(afterDetail.lines).toEqual(detail.lines);
   expect(

@@ -6,6 +6,7 @@ import {
   deviceProfiles,
   floorZones,
   devices,
+  pagePrinters,
   printerHolders,
   printers,
   withTransaction,
@@ -1122,6 +1123,62 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     });
     expect(update.status).toBe(404);
     expect(await update.json()).toMatchObject({ error: { code: "printer.not_found" } });
+  });
+
+  it("refuses an office printer's id on every printer list and default, creating or changing nothing", async () => {
+    const app = mountApp();
+    const [office] = await suite.db
+      .insert(pagePrinters)
+      .values({
+        locationId: venueCfg.locationId,
+        name: uniqueName("Office"),
+        host: `office-${randomUUID()}.local`,
+        port: 631,
+        resourcePath: "/ipp/print",
+        documentFormat: "application/pdf",
+        supportedFormats: ["application/pdf"],
+        media: "iso_a4_210x297mm",
+        resolutionDpi: 600,
+      })
+      .returning({ id: pagePrinters.id });
+    const officeId = office!.id;
+    const base = { formFactor: "till", canvasId: null, capabilities: [], ...ordering };
+    const existing = await app.request("/management-api/device-profiles", {
+      method: "POST",
+      headers: { ...JSON_HEADERS, cookie: managerCookie },
+      body: JSON.stringify({ ...base, name: uniqueName("Office on update") }),
+    });
+    const { id, name: existingName } = (await existing.json()) as ProfileRow;
+    const naming = (role: "receipt" | "paymentSlip" | "cashDrawer") => [
+      { [`${role}PrinterIds`]: [officeId] },
+      { [`${role}PrinterIds`]: [officeId], [`${role}PrinterDefaultId`]: officeId },
+    ];
+    for (const lists of [...naming("receipt"), ...naming("paymentSlip"), ...naming("cashDrawer")]) {
+      const name = uniqueName("Office printer");
+      const created = await app.request("/management-api/device-profiles", {
+        method: "POST",
+        headers: { ...JSON_HEADERS, cookie: managerCookie },
+        body: JSON.stringify({ ...base, name, ...lists }),
+      });
+      expect(created.status, JSON.stringify(lists)).toBe(404);
+      expect(await created.json()).toEqual({
+        error: { code: "printer.not_found", params: { id: officeId } },
+      });
+      const updated = await app.request(`/management-api/device-profiles/${id}`, {
+        method: "PUT",
+        headers: { ...JSON_HEADERS, cookie: managerCookie },
+        body: JSON.stringify({ ...base, name: existingName, ...lists }),
+      });
+      expect(updated.status, JSON.stringify(lists)).toBe(404);
+      expect(await updated.json()).toEqual({
+        error: { code: "printer.not_found", params: { id: officeId } },
+      });
+      const stored = await suite.db
+        .select({ id: deviceProfiles.id })
+        .from(deviceProfiles)
+        .where(eq(deviceProfiles.name, name));
+      expect(stored).toEqual([]);
+    }
   });
 
   it("answers a staff session 403 before looking at the printers it names", async () => {

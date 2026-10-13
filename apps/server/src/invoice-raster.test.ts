@@ -4,6 +4,7 @@ import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { describe, expect, it } from "vitest";
 import { renderInvoicePdf } from "./invoice-pdf.js";
 import { layoutInvoicePages } from "./invoice-page.js";
+import { sampleDocument } from "./sample-receipt.js";
 import { FULL_INVOICE_DOCUMENT_FIXTURE as fixture } from "./testing/full-invoice-fixture.js";
 
 describe("invoice glyph-outline raster", () => {
@@ -33,7 +34,7 @@ describe("invoice glyph-outline raster", () => {
       expect(qr?.data).toBe(fixture.result.qr);
       const modules = qr.version * 4 + 17;
       const pitch = (qr.location.topRightCorner.x - qr.location.topLeftCorner.x) / modules;
-      expect(Math.round(pitch * (modules + 8))).toBeCloseTo(qrDots, -1);
+      expect(Math.round(pitch * modules)).toBeCloseTo(qrDots, -1);
     },
   );
 
@@ -57,8 +58,8 @@ describe("invoice glyph-outline raster", () => {
       const reference = context.getImageData(0, 0, 2480, 3508).data;
       let ink = 0;
       let matched = 0;
-      // The header QR ends above row 650. Compare text only, allowing antialiasing within two dots.
-      for (let y = 650; y < 3506; y++) {
+      // The header QR's black square ends above row 680. Compare text only, allowing antialiasing within two dots.
+      for (let y = 680; y < 3506; y++) {
         for (let x = 2; x < 2478; x++) {
           if (reference[(y * 2480 + x) * 4]! >= 128) continue;
           ink++;
@@ -132,4 +133,31 @@ describe("A4 office raster rule", () => {
       ).toBe(255);
     },
   );
+});
+
+describe("A4 office raster QR black square", () => {
+  it.each([
+    {
+      name: "sample sale",
+      input: sampleDocument({ caption: "QR tributario:", legend: "VERI*FACTU" }),
+      modules: 33,
+    },
+    { name: "AEAT validation URL", input: fixture, modules: 45 },
+  ])("measures 35 mm across at 300 dpi for the $name", async ({ input, modules }) => {
+    const { renderInvoiceRaster } = await import("./invoice-raster.js");
+    const [page] = await renderInvoiceRaster(input, 300);
+    const rgba = new Uint8ClampedArray(page!.width * page!.height * 4);
+    for (let pixel = 0; pixel < page!.pixels.length; pixel++)
+      rgba.set([page!.pixels[pixel]!, page!.pixels[pixel]!, page!.pixels[pixel]!, 255], pixel * 4);
+    const qr = jsQR(rgba, page!.width, page!.height)!;
+    expect(qr.data).toBe(input.result.qr);
+    expect(qr.version * 4 + 17).toBe(modules);
+    const pitch = (qr.location.bottomLeftCorner.y - qr.location.topLeftCorner.y) / modules;
+    const row = Math.floor(qr.location.topLeftCorner.y + 3.5 * pitch);
+    const dark: number[] = [];
+    for (let x = 0; x < page!.width; x++)
+      if (page!.pixels[row * page!.width + x]! < 128) dark.push(x);
+    const millimetres = ((dark.at(-1)! - dark[0]! + 1) / 300) * 25.4;
+    expect(Math.abs(millimetres - 35), `${millimetres} mm`).toBeLessThanOrEqual(35 / modules / 2);
+  });
 });

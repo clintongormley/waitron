@@ -5,6 +5,7 @@ import type { DiscoveredDevice } from "@waitron/print-agent";
  * synthesised, not captured from a real printer.
  */
 export const PDL_SERVICE = "_pdl-datastream._tcp.local";
+export const IPP_SERVICE = "_ipp._tcp.local";
 
 const TYPE_A = 1;
 const TYPE_PTR = 12;
@@ -142,6 +143,13 @@ export function parsePdlResponse(packet: Buffer): DiscoveredDevice[] {
       const attrs = txts.get(key(srv.name));
       const make = attrs?.get("usb_mfg");
       const model = attrs?.get("usb_mdl") ?? attrs?.get("ty");
+      let ipp: DiscoveredDevice["ipp"];
+      if (key(srv.name).endsWith(`.${IPP_SERVICE}`)) {
+        // Skipping a missing or empty `rp` is the A231q plan's choice (task A1), not a protocol rule.
+        const rp = attrs?.get("rp");
+        if (rp === undefined || rp === "") continue;
+        ipp = { port: srv.port, resourcePath: `/${rp.replace(/^\/+/, "")}` };
+      }
       devices.push({
         transport: "network_tcp",
         host,
@@ -150,6 +158,7 @@ export function parsePdlResponse(packet: Buffer): DiscoveredDevice[] {
         name: srv.name.split(".")[0] ?? srv.name,
         ...(make !== undefined ? { make } : {}),
         ...(model !== undefined ? { model } : {}),
+        ...(ipp !== undefined ? { ipp } : {}),
       });
     }
     return devices;

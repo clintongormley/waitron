@@ -1,4 +1,3 @@
-import sharp from "sharp";
 import { invoiceFont } from "./invoice-font.js";
 import { INVOICE_PAGE_WIDTH, INVOICE_PAGE_HEIGHT, layoutInvoicePages } from "./invoice-page.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
@@ -14,6 +13,7 @@ export async function renderInvoiceRaster(
   input: ReceiptDocumentInput,
   resolution: 300 | 600,
 ): Promise<InvoiceRasterPage[]> {
+  const { default: sharp } = await import("sharp");
   const scale = resolution / 300;
   const width = 2480 * scale;
   const height = 3508 * scale;
@@ -53,12 +53,12 @@ export async function renderInvoiceRaster(
           `<rect shape-rendering="crispEdges" x="${element.x}" y="${element.y}" width="${element.width}" height="${element.thickness}"/>`,
         );
       } else if (element.kind === "qr") {
-        const pitch = element.size / (element.modules.length + 8);
+        const pitch = element.moduleSize;
         for (let row = 0; row < element.modules.length; row++) {
           for (let col = 0; col < element.modules.length; col++) {
             if (element.modules[row]![col]) {
               paths.push(
-                `<rect shape-rendering="crispEdges" x="${element.x + (col + 4) * pitch}" y="${element.y + (row + 4) * pitch}" width="${pitch}" height="${pitch}"/>`,
+                `<rect shape-rendering="crispEdges" x="${element.x + col * pitch}" y="${element.y + row * pitch}" width="${pitch}" height="${pitch}"/>`,
               );
             }
           }

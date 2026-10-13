@@ -1438,6 +1438,101 @@ describe("TillApi", () => {
     });
   });
 
+  it("reads a sale's invoice delivery status without asking for anything to be sent", async () => {
+    const status = {
+      current: null,
+      originalCompleted: false,
+      actions: { retryOriginal: null, printOnA4: null, receiptInstead: null },
+      history: [],
+    };
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(status));
+    expect(await new TillApi("", fetchStub).getInvoiceDeliveries("wo1")).toEqual(status);
+    expect(fetchStub).toHaveBeenCalledExactlyOnceWith("/api/sales/wo1/deliveries", {
+      method: "GET",
+      credentials: "include",
+    });
+  });
+
+  it("asks for an A4 print under the request key it is given", async () => {
+    const attempt = { id: "d1", medium: "a4", status: "queued" };
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(attempt));
+    expect(await new TillApi("", fetchStub).requestA4Delivery("wo1", "key-1")).toEqual(attempt);
+    expect(fetchStub).toHaveBeenCalledExactlyOnceWith("/api/sales/wo1/deliveries", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ medium: "a4", requestKey: "key-1" }),
+    });
+  });
+
+  it("asks for a waiting A4 to go to the receipt printer instead, under the request key it is given", async () => {
+    const attempt = { id: "d2", medium: "receipt", status: "queued" };
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(attempt));
+    expect(await new TillApi("", fetchStub).switchA4ToReceipt("wo1", "d1", "key-2")).toEqual(
+      attempt,
+    );
+    expect(fetchStub).toHaveBeenCalledExactlyOnceWith("/api/sales/wo1/deliveries/d1/to-receipt", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ requestKey: "key-2" }),
+    });
+  });
+
+  it("asks for an email to the address it is given, under the request key it is given", async () => {
+    const attempt = { id: "d3", medium: "email", status: "queued" };
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(attempt));
+    expect(
+      await new TillApi("", fetchStub).requestEmailDelivery("wo1", "ana@example.com", "key-3"),
+    ).toEqual(attempt);
+    expect(fetchStub).toHaveBeenCalledExactlyOnceWith("/api/sales/wo1/deliveries", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ medium: "email", recipient: "ana@example.com", requestKey: "key-3" }),
+    });
+  });
+
+  it("asks for an ended email to be sent again, under the request key it is given", async () => {
+    const attempt = { id: "d4", medium: "email", status: "queued" };
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(attempt));
+    expect(await new TillApi("", fetchStub).retryEmailDelivery("wo1", "d3", "key-4")).toEqual(
+      attempt,
+    );
+    expect(fetchStub).toHaveBeenCalledExactlyOnceWith("/api/sales/wo1/deliveries/d3/retry", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ requestKey: "key-4" }),
+    });
+  });
+
+  it("passes on a refused address with the field it names", async () => {
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue(
+        jsonResponse(
+          { error: { code: "management.request_invalid", params: { field: "recipient" } } },
+          400,
+        ),
+      );
+    await expect(
+      new TillApi("", fetchStub).requestEmailDelivery("wo1", "ana@", "key-3"),
+    ).rejects.toEqual({ code: "management.request_invalid", status: 400, field: "recipient" });
+  });
+
+  it("passes on a refused A4 request with its code", async () => {
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue(
+        jsonResponse({ error: { code: "invoice_delivery.active", params: {} } }, 409),
+      );
+    await expect(new TillApi("", fetchStub).requestA4Delivery("wo1", "key-1")).rejects.toEqual({
+      code: "invoice_delivery.active",
+      status: 409,
+    });
+  });
+
   it.each([
     ["printReceipt", "/api/sales/wo1/receipt"],
     ["printPaymentSlip", "/api/sales/wo1/payment-slip"],

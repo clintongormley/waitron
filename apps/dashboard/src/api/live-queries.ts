@@ -108,6 +108,7 @@ export const QUERY_DEPENDENCIES = {
   ],
   listPrinters: ["printers", "print_jobs", "printer_holders"],
   listPrinterProfiles: ["device_profile_printers", "device_profiles"],
+  listPagePrinters: ["page_printers", "print_agents"],
   getPrinterDeleteImpact: [
     "printers",
     "print_jobs",
@@ -264,6 +265,9 @@ export const QUERY_DEPENDENCIES = {
     "receipt_reprints",
     "print_jobs",
     "printers",
+    "invoice_deliveries",
+    "invoice_pdf_downloads",
+    "page_printers",
     "location_business_day_settings",
     "location_day_cutover_changes",
   ],

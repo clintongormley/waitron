@@ -57,6 +57,18 @@ export interface AeatCertDraft {
   certKind: "sello" | "representante";
 }
 
+export interface EmailSettingsDraft {
+  server: string;
+  port: number;
+  encryption: "starttls" | "tls";
+  user: string;
+  password: string;
+  from: string;
+}
+
+export type EmailTestResult =
+  { accepted: true } | { accepted: false; code: "email.test_refused" | "email.test_timeout" };
+
 export interface ProvisionBody {
   mode: "demo" | "prepare" | "live";
   configurationImport?: boolean;
@@ -75,6 +87,7 @@ export interface ProvisionBody {
   };
   /** Omitted, not `null`, when no certificate is expected: the server refuses any value it is sent. */
   aeatCert?: AeatCertDraft;
+  email?: EmailSettingsDraft;
 }
 
 export interface ProvisionResult {
@@ -293,6 +306,14 @@ export class SetupApi {
     });
     if (!res.ok) throw await apiError(res);
     return JSON.parse(await res.text()) as ConfigurationPreview;
+  }
+
+  runEmailTest(email: EmailSettingsDraft, adminEmail: string): Promise<EmailTestResult> {
+    return this.#request<EmailTestResult>("/setup-api/email-test", "POST", {
+      mode: "live",
+      email,
+      venue: { admin: { email: adminEmail } },
+    });
   }
 
   runFiscalTest(body: ProvisionBody): Promise<FiscalReadinessResult> {

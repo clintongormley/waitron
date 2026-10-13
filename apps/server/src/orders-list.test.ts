@@ -7,6 +7,7 @@ import {
   billPaymentRefunds,
   billPayments,
   diningTables,
+  invoicePdfDownloads,
   invoiceSeries,
   partyTables,
   printJobs,
@@ -507,7 +508,7 @@ describe("dates and pages", () => {
 
 describe("rows written within one millisecond, read in the order they were written", () => {
   const AT = "2026-09-26T09:59:00.000Z";
-  const detailOf = (id: string) => inTx(venue, (tx) => readOrderDetail(tx, id, "all"));
+  const detailOf = (id: string) => inTx(venue, (tx) => readOrderDetail(tx, id, "all", false));
   const saleOf = async (billId: string) => {
     const [sale] = await inTx(venue, (tx) =>
       tx.select({ id: sales.id }).from(sales).where(eq(sales.workingOrderId, billId)),
@@ -672,6 +673,21 @@ describe("rows written within one millisecond, read in the order they were writt
     });
     const detail = await detailOf(billId);
     expect(detail.reprints.map((reprint) => reprint.personId)).toEqual(askedBy);
+  });
+
+  it("shows an invoice's PDF downloads in the order they were asked for", async () => {
+    const billId = await placedIssuedBill(venue, "Tarta");
+    const saleId = await saleOf(billId);
+    const id = descendingIds();
+    const askedBy = [venue.operatorId, venue.supervisorId, venue.adminId];
+    await inTx(venue, async (tx) => {
+      for (const personId of askedBy)
+        await tx
+          .insert(invoicePdfDownloads)
+          .values({ id: id(), saleId, personId, requestedAt: AT });
+    });
+    const detail = await detailOf(billId);
+    expect(detail.invoicePdfDownloads.map((download) => download.personId)).toEqual(askedBy);
   });
 });
 

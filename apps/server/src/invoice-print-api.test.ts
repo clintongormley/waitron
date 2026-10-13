@@ -182,6 +182,7 @@ async function setup(bluetooth = false) {
       },
       pairingMode: createPairingMode(),
       readMembership: async () => null,
+      readInvoiceDocument: () => Promise.reject(new Error("No invoice is read here")),
       venueLocale: "es-ES",
       now: () => now,
     },
@@ -888,13 +889,6 @@ async function emailRetry(ctx: Awaited<ReturnType<typeof setup>>) {
       requestKey: randomUUID(),
       personId: "staff",
       recipient: "customer@example.test",
-      consent: {
-        statementVersion: "1",
-        language: "es-ES",
-        recordedAt: ctx.now().toISOString(),
-        personId: "staff",
-        contactEmail: "venue@example.test",
-      },
     }),
   );
 }

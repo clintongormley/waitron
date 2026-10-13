@@ -479,8 +479,9 @@ Still to do, roughly in the order a venue meets them. As each one lands, add the
    `packages/payments-sumup`. #333 changed only their row menus.
 5. **Devices and displays** — `devices-screen.ts`, `device-profiles-screen.ts`, `floor-screen.ts`,
    `kitchen-screen.ts`, `service-status-screen.ts`.
-6. **The two editors** — `canvas-editor-screen.ts`. The receipt one is done: C116 (2026-10-01)
-   rebuilt it under the current forms rules as the Receipts page, `receipts-screen.ts`.
+6. **The two editors** — `canvas-editor-screen.ts`. The receipt one is done: C116 rebuilt it as the Receipts page
+   (2026-10-01), which #1592 replaced with the department Edit receipt dialog,
+   `department-receipt-dialog.ts`.
 7. **Workforce** — `roster-screen.ts`, `my-schedule-screen.ts`, `planned-actual-screen.ts`,
    `approvals-screen.ts`.
 8. **Venue operations and bookings** — `packages/venue-service/src/dashboard/` and
@@ -838,7 +839,7 @@ request per batch: [plan](../superpowers/plans/2026-10-07-a331-save-follows-chan
   the ResizeObserver message. A407 (#1432) fixes the measured currency-field notifications;
   the historical catalogue-only warning was not reproduced.
   A396's disabled-zone profile ruling is
-  done in #1428; A231q's future invoice screens remain a separate task.
+  done in #1428; A231q built the invoice screens separately (2026-10-12).
   **2026-10-11:** A435 step 6 prevents public hierarchy Delete from emptying ordering access.
   Existing invalid stored-scope validation still applies; this earlier A396 receipt remains historical.
 

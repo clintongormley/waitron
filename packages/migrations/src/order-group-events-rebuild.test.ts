@@ -35,7 +35,19 @@ function coreBeforeRebuild(core: VenueMigrationOptions): VenueMigrationOptions {
   expect(journal.entries[columns + 1]?.tag).toMatch(/_order_group_firer_checks$/);
   journal.entries = journal.entries.slice(0, columns + 1);
   writeFileSync(path, JSON.stringify(journal));
-  return { ...core, migrationsFolder: staged };
+  // Today's append-only list names tables later migrations create; keep only the cut's own.
+  const created = new Set(
+    journal.entries.flatMap(({ tag }) =>
+      [...readFileSync(join(staged, `${tag}.sql`), "utf8").matchAll(/CREATE TABLE `(\w+)`/g)].map(
+        (match) => match[1]!,
+      ),
+    ),
+  );
+  return {
+    ...core,
+    migrationsFolder: staged,
+    appendOnlyTables: (core.appendOnlyTables ?? []).filter((table) => created.has(table)),
+  };
 }
 
 async function inVenue<T>(directory: string, body: (db: Database) => Promise<T> | T): Promise<T> {

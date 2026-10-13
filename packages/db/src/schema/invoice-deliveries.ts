@@ -4,8 +4,8 @@ import {
   count,
   enumCheck,
   enumType,
+  flag,
   id,
-  json,
   label,
   newId,
   nowIso,
@@ -17,17 +17,42 @@ import { printJobs } from "./print-jobs.js";
 import { pagePrinters } from "./page-printers.js";
 import { sales } from "./sales.js";
 
-export type InvoiceEmailConsent = {
-  statementVersion: string;
-  language: string;
-  recordedAt: string;
-  personId: string;
-  contactEmail: string;
-  contactPhone?: string;
-};
 export const invoiceDeliveryMedium = enumType(["email", "a4", "receipt"]);
 export const invoiceDeliveryDesignation = enumType(["original", "duplicate"]);
 export const invoiceDeliveryStatus = enumType(["queued", "sending", "sent", "failed", "unknown"]);
+
+/**
+ * Why an A4 delivery ended without a confirmed print. `printer_disabled`: its office printer was
+ * disabled (a waiting delivery fails, one being sent becomes uncertain). `switched`: a waiting one
+ * was replaced by paper before any agent took it; an email original is switched the same way, before
+ * the email worker takes it. `printer_refused` and `printer_unreachable`: it
+ * did not print (failed). `printer_aborted` (stopped after the printer accepted it) and `timeout`:
+ * it may have printed (uncertain). `document_unavailable`: the agent could not get the invoice's pages, so
+ * nothing was sent to the printer (failed).
+ */
+export const a4FailureCodes = [
+  "printer_disabled",
+  "switched",
+  "printer_refused",
+  "printer_unreachable",
+  "printer_aborted",
+  "timeout",
+  "document_unavailable",
+] as const;
+export type A4FailureCode = (typeof a4FailureCodes)[number];
+
+/** Why the printer is holding an A4 job it has not finished, as its agent last renewed it. */
+export const a4HoldCodes = [
+  "paper_jam",
+  "cover_open",
+  "paper_out",
+  "tray_missing",
+  "ink_or_toner_out",
+  "output_full",
+  "paused",
+  "stopped",
+] as const;
+export type A4HoldCode = (typeof a4HoldCodes)[number];
 
 export const invoiceDeliveries = table(
   "invoice_deliveries",
@@ -47,7 +72,8 @@ export const invoiceDeliveries = table(
     generation: count("generation").notNull(),
     attempts: count("attempts").notNull().default(0),
     recipient: label("recipient"),
-    consent: json<InvoiceEmailConsent>("consent"),
+    // A person's "send the email again" made this row: its request key replays only as that action.
+    madeByRetry: flag("made_by_retry").notNull().default(false),
     // Identity owns persons; request actions carry their operator, automatic receipts may lack one.
     personId: id("person_id"),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
@@ -60,10 +86,14 @@ export const invoiceDeliveries = table(
     /* v8 ignore stop */
     claimedAt: tsString("claimed_at"),
     expiredAt: tsString("expired_at"),
-    failureCode: label("failure_code").$type<"transport_failed" | "timeout" | "restart">(),
+    failureCode: label("failure_code").$type<"transport_failed" | "restart" | A4FailureCode>(),
     reportedOutcome: label("reported_outcome").$type<"sent" | "failed" | "unknown">(),
     reportedAt: tsString("reported_at"),
-    reportedFailureCode: label("reported_failure_code").$type<"transport_failed" | "timeout">(),
+    reportedFailureCode: label("reported_failure_code").$type<"transport_failed" | A4FailureCode>(),
+    // Only a renewal writes it, and a report or an expiry leaves it, so an ended attempt keeps its
+    // last hold; the server's `rowAttempt` shows it only on an A4 attempt that is sending or
+    // unknown.
+    printerHold: label("printer_hold").$type<A4HoldCode>(),
   },
   (t) => [
     foreignKey({
@@ -88,7 +118,7 @@ export const invoiceDeliveries = table(
     ),
     check(
       "invoice_deliveries_email_ck",
-      sql`(${t.medium} = 'email') = (${t.recipient} is not null and ${t.consent} is not null)`,
+      sql`(${t.medium} = 'email') = (${t.recipient} is not null)`,
     ),
   ],
 );

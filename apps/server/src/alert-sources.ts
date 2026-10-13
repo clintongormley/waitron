@@ -2,8 +2,33 @@
 // polls. The registry stamps each returned alert's `kind` and `area`; a source only supplies the
 // per-alert facts.
 
-import { and, count, eq, isNull, lt, min, ne, or } from "drizzle-orm";
-import { printAgents, printJobs, printers, type Transaction } from "@waitron/db";
+import {
+  and,
+  count,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  min,
+  ne,
+  notExists,
+  or,
+  sql,
+} from "drizzle-orm";
+import { alias } from "drizzle-orm/sqlite-core";
+import { formatInvoiceNumber } from "@waitron/core";
+import {
+  type A4HoldCode,
+  invoiceDeliveries,
+  invoiceSeries,
+  pagePrinters,
+  printAgents,
+  printJobs,
+  printers,
+  sales,
+  type Transaction,
+} from "@waitron/db";
 import type { AlertSource, OngoingAlert } from "@waitron/module";
 import {
   type CardProviderContribution,
@@ -15,6 +40,8 @@ import {
 import { PRINTER_UNPAIRED } from "@waitron/printing";
 import type { StreamView } from "@waitron/stream";
 import type { BackupStatus } from "./backup-status.js";
+import { type InvoiceDeliveryStatus, readInvoiceDeliveriesFor } from "./invoice-delivery-status.js";
+import type { PageTestPages } from "./page-test-pages.js";
 import type { AwaitingCertStatus } from "./pass.js";
 import type { SealedStateStatus } from "./sealed-state.js";
 import { printJobInTrouble } from "./print-job-trouble.js";
@@ -335,6 +362,247 @@ export function printingAlertSource(): AlertSource {
           since: new Date(r.oldest!).toISOString(),
           screen: "printers",
         });
+      }
+      return alerts;
+    },
+  };
+}
+
+/** An A4 attempt still queued this long after it was due has been taken by no agent. */
+export const A4_UNCLAIMED_AFTER_MS = 2 * 60_000;
+
+/** Why a full invoice's original has not reached its customer. */
+export type UndeliveredInvoice = { since: string } & (
+  | { kind: "failed" | "uncertain" }
+  | { kind: "office_printer_unclaimed" | "uncertain_held"; printer: string }
+  | { kind: "held" | "queued_behind_hold"; printer: string; hold: A4HoldCode }
+);
+
+/** What {@link undeliveredInvoice} needs beyond a sale's delivery status, read once per poll. */
+export interface UndeliveredContext {
+  /** Each A4 attempt's office printer, by delivery id. */
+  officePrinters: ReadonlyMap<string, { id: string; name: string }>;
+  /** What an office printer is holding a job it is sending for, by page printer id. */
+  sendingHolds: ReadonlyMap<string, A4HoldCode>;
+  /** The page printers with an A4 being sent, held or not: their agent is taking their jobs. */
+  sendingPrinters: ReadonlySet<string>;
+  testPages: Pick<PageTestPages, "holdOn">;
+}
+
+/**
+ * Applies the same rules as the till's delivery status (`readInvoiceDeliveries`) about whether a
+ * full invoice's original is still owed, and says why.
+ */
+export function undeliveredInvoice(
+  status: InvoiceDeliveryStatus,
+  now: Date,
+  context: UndeliveredContext,
+): UndeliveredInvoice | null {
+  const current = status.current;
+  if (status.originalCompleted || current === null) return null;
+  const officePrinter = () => context.officePrinters.get(current.id!)!;
+  if (current.status === "failed" || current.status === "unknown") {
+    const since = current.at ?? current.requestedAt;
+    if (current.status === "failed") return { kind: "failed", since };
+    // `rowAttempt` keeps a hold on A4 rows only.
+    return current.printerHold === null
+      ? { kind: "uncertain", since }
+      : { kind: "uncertain_held", since, printer: officePrinter().name };
+  }
+  if (current.status === "sending" && current.printerHold !== null) {
+    // `at` moves with every renewal, so the alert dates from the request.
+    return {
+      kind: "held",
+      since: current.requestedAt,
+      printer: officePrinter().name,
+      hold: current.printerHold,
+    };
+  }
+  if (current.medium !== "a4" || current.status !== "queued") return null;
+  // A queued row's time is its `next_attempt_at`, which is never null.
+  const due = current.at!;
+  if (now.getTime() - Date.parse(due) < A4_UNCLAIMED_AFTER_MS) return null;
+  const printer = officePrinter();
+  const hold = context.sendingHolds.get(printer.id) ?? context.testPages.holdOn(printer.id);
+  if (hold !== null) return { kind: "queued_behind_hold", since: due, printer: printer.name, hold };
+  if (context.sendingPrinters.has(printer.id)) return null;
+  return { kind: "office_printer_unclaimed", since: due, printer: printer.name };
+}
+
+async function readUndeliveredContext(
+  tx: Transaction,
+  saleIds: readonly string[],
+  testPages: Pick<PageTestPages, "holdOn">,
+): Promise<UndeliveredContext> {
+  const attempts = await tx
+    .select({ id: invoiceDeliveries.id, printerId: pagePrinters.id, name: pagePrinters.name })
+    .from(invoiceDeliveries)
+    .innerJoin(pagePrinters, eq(pagePrinters.id, invoiceDeliveries.pagePrinterId))
+    .where(inArray(invoiceDeliveries.saleId, [...saleIds]));
+  const sending = await tx
+    .select({ printerId: invoiceDeliveries.pagePrinterId, hold: invoiceDeliveries.printerHold })
+    .from(invoiceDeliveries)
+    .where(
+      and(eq(invoiceDeliveries.status, "sending"), isNotNull(invoiceDeliveries.pagePrinterId)),
+    );
+  const holds = sending.filter((row) => row.hold !== null);
+  return {
+    officePrinters: new Map(attempts.map((a) => [a.id, { id: a.printerId, name: a.name }])),
+    sendingHolds: new Map(holds.map((h) => [h.printerId!, h.hold!])),
+    sendingPrinters: new Set(sending.map((row) => row.printerId!)),
+    testPages,
+  };
+}
+
+const originalSent = alias(invoiceDeliveries, "undelivered_original_sent");
+const originalPrinted = alias(printJobs, "undelivered_original_printed");
+const originalPrinter = alias(printers, "undelivered_original_printer");
+const anyDelivery = alias(invoiceDeliveries, "undelivered_any_delivery");
+
+/** The `completed original` rule of `readInvoiceDeliveries` (and of `readOriginalReceiptPrint`,
+ * whose receipt jobs are read with their printer), as a filter on `sales`. */
+function noCompletedOriginal(tx: Transaction) {
+  return and(
+    notExists(
+      tx
+        .select({ one: sql`1` })
+        .from(originalSent)
+        .where(
+          and(
+            eq(originalSent.saleId, sales.id),
+            eq(originalSent.designation, "original"),
+            eq(originalSent.status, "sent"),
+          ),
+        ),
+    ),
+    notExists(
+      tx
+        .select({ one: sql`1` })
+        .from(originalPrinted)
+        .innerJoin(originalPrinter, eq(originalPrinter.id, originalPrinted.printerId))
+        .where(
+          and(
+            eq(originalPrinted.saleId, sales.id),
+            eq(originalPrinted.kind, "document"),
+            eq(originalPrinted.receiptCopy, false),
+            eq(originalPrinted.status, "done"),
+          ),
+        ),
+    ),
+  );
+}
+
+/**
+ * The full invoices whose current attempt could be one this source raises for. A narrowing only:
+ * {@link undeliveredInvoice} decides.
+ */
+async function undeliveredCandidates(tx: Transaction) {
+  const invoice = { id: sales.id, code: invoiceSeries.code, number: sales.invoiceNumber };
+  const tracked = await tx
+    .selectDistinct(invoice)
+    .from(invoiceDeliveries)
+    .innerJoin(sales, eq(sales.id, invoiceDeliveries.saleId))
+    .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
+    .where(
+      and(
+        or(
+          inArray(invoiceDeliveries.status, ["failed", "unknown"]),
+          and(eq(invoiceDeliveries.status, "queued"), eq(invoiceDeliveries.medium, "a4")),
+          and(eq(invoiceDeliveries.status, "sending"), isNotNull(invoiceDeliveries.printerHold)),
+        ),
+        isNotNull(sales.counterpartyTaxId),
+        noCompletedOriginal(tx),
+      ),
+    );
+  // A receipt original no delivery row tracks is the current attempt only while the sale has none.
+  const untracked = await tx
+    .selectDistinct(invoice)
+    .from(printers)
+    .innerJoin(printJobs, eq(printJobs.printerId, printers.id))
+    .innerJoin(sales, eq(sales.id, printJobs.saleId))
+    .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
+    .where(
+      and(
+        eq(printJobs.status, "failed"),
+        eq(printJobs.kind, "document"),
+        eq(printJobs.receiptCopy, false),
+        isNotNull(sales.counterpartyTaxId),
+        notExists(
+          tx
+            .select({ one: sql`1` })
+            .from(anyDelivery)
+            .where(eq(anyDelivery.saleId, sales.id)),
+        ),
+        noCompletedOriginal(tx),
+      ),
+    );
+  return [...tracked, ...untracked];
+}
+
+/**
+ * One alert per full invoice whose original has not reached its customer. Its params name the
+ * invoice by number and never its customer.
+ */
+export function invoiceDeliveryAlertSource(deps: {
+  testPages: Pick<PageTestPages, "holdOn">;
+}): AlertSource {
+  return {
+    area: "invoice_delivery",
+    permission: "report.view",
+    async read({ tx, now }): Promise<readonly OngoingAlert[]> {
+      const alerts: OngoingAlert[] = [];
+      const candidates = await undeliveredCandidates(tx);
+      const ids = candidates.map((sale) => sale.id);
+      // An alert reads no offered action.
+      const statuses = await readInvoiceDeliveriesFor(tx, ids, { emailAvailable: false });
+      const context = await readUndeliveredContext(tx, ids, deps.testPages);
+      for (const sale of candidates) {
+        // Null only for a sale with no counterparty, which no candidate is.
+        const found = undeliveredInvoice(statuses.get(sale.id)!, now, context);
+        if (found === null) continue;
+        const invoice = formatInvoiceNumber(sale.code, sale.number);
+        const alert = {
+          key: `invoice_delivery.undelivered:${sale.id}`,
+          severity: "error",
+          since: found.since,
+          screen: "orders",
+        } as const;
+        switch (found.kind) {
+          case "failed":
+            alerts.push({ ...alert, code: "invoice_delivery.failed", params: { invoice } });
+            break;
+          case "uncertain":
+            alerts.push({ ...alert, code: "invoice_delivery.uncertain", params: { invoice } });
+            break;
+          case "office_printer_unclaimed":
+            alerts.push({
+              ...alert,
+              code: "invoice_delivery.office_printer_unclaimed",
+              params: { invoice, printer: found.printer },
+            });
+            break;
+          case "uncertain_held":
+            alerts.push({
+              ...alert,
+              code: "invoice_delivery.uncertain_held",
+              params: { invoice, printer: found.printer },
+            });
+            break;
+          case "held":
+            alerts.push({
+              ...alert,
+              code: "invoice_delivery.held",
+              params: { invoice, printer: found.printer, hold: found.hold },
+            });
+            break;
+          case "queued_behind_hold":
+            alerts.push({
+              ...alert,
+              code: "invoice_delivery.queued_behind_hold",
+              params: { invoice, printer: found.printer, hold: found.hold },
+            });
+            break;
+        }
       }
       return alerts;
     },

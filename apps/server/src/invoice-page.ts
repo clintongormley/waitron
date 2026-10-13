@@ -17,7 +17,7 @@ type PageQr = {
   modules: readonly (readonly boolean[])[];
   x: number;
   y: number;
-  size: number;
+  moduleSize: number;
 };
 type PageLogo = {
   kind: "logo";
@@ -125,17 +125,21 @@ export function layoutInvoicePages(input: ReceiptDocumentInput): InvoicePage[] {
         });
         y += LINE_HEIGHT / 2;
         break;
-      case "qr":
-        room(QR_SIZE);
+      case "qr": {
+        const modules = qrModules(element.text);
+        const moduleSize = QR_SIZE / modules.length;
+        const quietZone = 4 * moduleSize;
+        room(QR_SIZE + 2 * quietZone);
         pages.at(-1)!.elements.push({
           kind: "qr",
-          modules: qrModules(element.text),
+          modules,
           x: (INVOICE_PAGE_WIDTH - QR_SIZE) / 2,
-          y,
-          size: QR_SIZE,
+          y: y + quietZone,
+          moduleSize,
         });
-        y += QR_SIZE + LINE_HEIGHT / 2;
+        y += QR_SIZE + 2 * quietZone + LINE_HEIGHT / 2;
         break;
+      }
       case "text":
       case "amount": {
         const indent = typeof element.indent === "number" ? element.indent * 5 : 0;

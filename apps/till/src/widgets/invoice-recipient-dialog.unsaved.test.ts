@@ -5,6 +5,7 @@ import { LeaveController } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import "./invoice-recipient-dialog.js";
+import type { InvoiceDeliveryOptions } from "../api/client.js";
 import type {
   InvoiceRecipientDetail,
   TillInvoiceRecipientDialog,
@@ -251,4 +252,163 @@ it("a recipient left detached for a moment still asks before discarding once rea
   expect(unload()).toBe(true);
   cancel(form);
   expect((await question(app)).open).toBe(true);
+});
+
+class DeliveryLeaveApp extends LitElement {
+  readonly leave = new LeaveController(this);
+  saved?: InvoiceRecipientDetail["delivery"];
+  options: InvoiceDeliveryOptions = {
+    invoicePrinter: { id: "pp-office", name: "Office HP" },
+    emailAvailable: false,
+  };
+  closes = 0;
+  submitted: InvoiceRecipientDetail[] = [];
+  override render() {
+    return html`<till-invoice-recipient-dialog
+        .deliveryOptions=${this.options}
+        .savedDelivery=${this.saved}
+        @invoice-recipient-cancel=${() => this.closes++}
+        @invoice-recipient-confirm=${(event: CustomEvent<InvoiceRecipientDetail>) => this.submitted.push(event.detail)}
+      ></till-invoice-recipient-dialog
+      >${this.leave.render({ heading: t("unsaved.heading"), message: t("unsaved.message"), keepLabel: t("unsaved.keep"), discardLabel: t("unsaved.discard") })}`;
+  }
+}
+customElements.define("recipient-delivery-leave-test-app", DeliveryLeaveApp);
+
+async function mountDelivery(props: Partial<DeliveryLeaveApp> = {}) {
+  const { el: app } = await mountWidget<DeliveryLeaveApp>(
+    "recipient-delivery-leave-test-app",
+    props,
+  );
+  const form = app.shadowRoot!.querySelector("till-invoice-recipient-dialog")!;
+  await form.updateComplete;
+  await form.shadowRoot!.querySelector("wt-dialog")!.updateComplete;
+  return { app, form };
+}
+function deliveryField(form: TillInvoiceRecipientDialog) {
+  return form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+    "wt-combobox[name=delivery]",
+  )!;
+}
+async function chooseDelivery(form: TillInvoiceRecipientDialog, value: string) {
+  const field = deliveryField(form);
+  field.shadowRoot!.querySelector<HTMLElement>(".trigger")!.click();
+  await field.updateComplete;
+  const index = field.options.findIndex((option) => option.value === value);
+  field.shadowRoot!.querySelectorAll<HTMLElement>("[role=option]")[index]!.click();
+  await form.updateComplete;
+}
+
+it("a changed delivery choice asks before discarding, Keep keeps it, and choosing the receipt again is clean", async () => {
+  const { app, form } = await mountDelivery();
+  expect(unload()).toBe(false);
+  await chooseDelivery(form, "a4");
+  expect(unload()).toBe(true);
+  cancel(form);
+  const q = await question(app);
+  expect(q.open).toBe(true);
+  q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+  await expect.poll(() => q.open).toBe(false);
+  expect(deliveryField(form).value).toBe("a4");
+  expect(app.closes).toBe(0);
+  await chooseDelivery(form, "receipt");
+  expect(unload()).toBe(false);
+  cancel(form);
+  await expect.poll(() => app.closes).toBe(1);
+});
+
+it("discarding a changed delivery choice closes without sending it", async () => {
+  const { app, form } = await mountDelivery();
+  await chooseDelivery(form, "a4");
+  cancel(form);
+  const q = await question(app);
+  q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+  await expect.poll(() => app.closes).toBe(1);
+  expect(app.submitted).toEqual([]);
+  expect(unload()).toBe(false);
+});
+
+it("a refused A4 choice stays dirty and keeps A4 chosen for the retry", async () => {
+  const { app, form } = await mountDelivery();
+  await valid(form);
+  await chooseDelivery(form, "a4");
+  submit(form);
+  form.refusal = "That invoice printer is unavailable";
+  await form.updateComplete;
+  expect(unload()).toBe(true);
+  expect(deliveryField(form).value).toBe("a4");
+  submit(form);
+  expect(app.submitted.map((detail) => detail.delivery)).toEqual([
+    { medium: "a4", pagePrinterId: "pp-office" },
+    { medium: "a4", pagePrinterId: "pp-office" },
+  ]);
+});
+
+it("a saved choice the field does not offer opens clean, and choosing it again after a change is clean", async () => {
+  const { form } = await mountDelivery({
+    saved: { medium: "email", recipient: "ana@example.com" },
+  });
+  expect(deliveryField(form).value).toBe("saved");
+  expect(unload()).toBe(false);
+  await chooseDelivery(form, "receipt");
+  expect(unload()).toBe(true);
+  await chooseDelivery(form, "saved");
+  expect(unload()).toBe(false);
+});
+
+it("a saved A4 opened on the current printer instead counts as a change: Cancel asks first", async () => {
+  const { app, form } = await mountDelivery({
+    saved: { medium: "a4", pagePrinterId: "pp-retired" },
+  });
+  expect(deliveryField(form).value).toBe("a4");
+  expect(unload()).toBe(true);
+  cancel(form);
+  expect((await question(app)).open).toBe(true);
+  expect(app.closes).toBe(0);
+});
+
+const emailOptions = {
+  invoicePrinter: { id: "pp-office", name: "Office HP" },
+  emailAvailable: true,
+};
+
+it("a typed email address asks before discarding, and stops counting once another delivery is chosen", async () => {
+  const { app, form } = await mountDelivery({ options: emailOptions });
+  expect(unload()).toBe(false);
+  await chooseDelivery(form, "email");
+  await fill(form, "email", "ana@example.com");
+  expect(unload()).toBe(true);
+  await chooseDelivery(form, "receipt");
+  expect(unload()).toBe(false);
+  await chooseDelivery(form, "email");
+  expect(unload()).toBe(true);
+  cancel(form);
+  const q = await question(app);
+  expect(q.open).toBe(true);
+  q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+  await expect.poll(() => q.open).toBe(false);
+  expect(
+    form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=email]")!
+      .value,
+  ).toBe("ana@example.com");
+  expect(app.closes).toBe(0);
+});
+
+it("a saved email opens clean on Email, and a changed address asks before discarding", async () => {
+  const { app, form } = await mountDelivery({
+    options: emailOptions,
+    saved: { medium: "email", recipient: "ana@example.com" },
+  });
+  expect(deliveryField(form).value).toBe("email");
+  expect(unload()).toBe(false);
+  await fill(form, "email", "ana@example.org");
+  expect(unload()).toBe(true);
+  await fill(form, "email", " ana@example.com ");
+  expect(unload()).toBe(false);
+  await fill(form, "email", "ana@example.org");
+  cancel(form);
+  const q = await question(app);
+  q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+  await expect.poll(() => app.closes).toBe(1);
+  expect(app.submitted).toEqual([]);
 });

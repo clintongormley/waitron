@@ -173,6 +173,7 @@ function mountApp(
       cfg: { ...cfg, practiceMode: opts.practiceMode },
       pairingMode,
       readMembership: async () => MEMBERSHIP,
+      readInvoiceDocument: () => Promise.reject(new Error("No invoice is read here")),
       enrolRateLimiter: opts.enrolRateLimiter,
       venueLocale: opts.venueLocale ?? "es-ES",
       listIpv4: opts.listIpv4,
@@ -4881,5 +4882,522 @@ describe("a deleted printer's alerts", () => {
     });
     // The job the alert was about stays in history, on the old printer, with its bytes.
     expect(await kept()).toEqual(keptBefore);
+  });
+});
+
+describe("office printers in discovery and the receipt-printer create route", () => {
+  const PRINTABLE = {
+    port: 631,
+    resourcePath: "/ipp/print",
+    printable: true,
+    documentFormat: "application/pdf",
+    media: "iso_a4_210x297mm",
+    resolutionDpi: 300,
+    supportedFormats: ["application/pdf", "image/urf"],
+  } as const;
+  const UNANSWERED = {
+    port: 631,
+    resourcePath: "/ipp/print",
+    printable: false,
+    reason: "invalid_reply",
+    supportedFormats: [],
+  } as const;
+
+  async function discoveredRows(app: Hono): Promise<Record<string, unknown>[]> {
+    const res = await send(app, "GET", "/management-api/discovered-printers", {
+      cookie: managerCookie,
+    });
+    expect(res.status).toBe(200);
+    return (await res.json()) as Record<string, unknown>[];
+  }
+
+  async function printerRows(host: string): Promise<{ id: string }[]> {
+    return suite.db.select({ id: printers.id }).from(printers).where(eq(printers.host, host));
+  }
+
+  it("carries a pulled office report, IPP queue and IPP-only mark to the discovered-printers list", async () => {
+    const app = mountApp();
+    const { agentId, token } = await joinAndAccept(app, "Office agent");
+    const merged = "10.9.240.1";
+    const ippOnly = "10.9.240.2";
+    const urfReport = {
+      port: 8631,
+      resourcePath: "/ipp/printer",
+      printable: true,
+      documentFormat: "image/urf",
+      media: "na_letter_8.5x11in",
+      resolutionDpi: 600,
+      supportedFormats: ["image/urf"],
+    };
+    await pull(app, token, {
+      visible: [],
+      scanned: [
+        {
+          transport: "network_tcp",
+          host: merged,
+          port: 9100,
+          pagePrinter: true,
+          ipp: { port: 631, resourcePath: "/ipp/print" },
+          office: PRINTABLE,
+        },
+        {
+          transport: "network_tcp",
+          host: ippOnly,
+          port: 631,
+          ippOnly: true,
+          ipp: { port: 631, resourcePath: "/ipp/print" },
+          office: UNANSWERED,
+        },
+        {
+          transport: "network_tcp",
+          host: "10.9.240.3",
+          port: 8631,
+          ippOnly: true,
+          pagePrinter: true,
+          office: urfReport,
+        },
+        {
+          transport: "network_tcp",
+          host: "10.9.240.4",
+          port: 9100,
+          pagePrinter: true,
+          office: {
+            port: 631,
+            resourcePath: "/ipp/print",
+            printable: false,
+            reason: "unsupported_document_format",
+            supportedFormats: ["application/postscript"],
+          },
+        },
+      ],
+    });
+
+    const rows = await discoveredRows(app);
+    const at = (host: string) => rows.find((r) => r.host === host);
+    expect(at(merged)).toEqual({
+      agentId,
+      agentName: "Office agent",
+      transport: "network_tcp",
+      host: merged,
+      port: 9100,
+      pagePrinter: true,
+      ipp: { port: 631, resourcePath: "/ipp/print" },
+      office: PRINTABLE,
+      alreadyRegistered: false,
+      printerId: null,
+      lastSeenAt: expect.any(String),
+    });
+    expect(at(ippOnly)).toMatchObject({
+      port: 631,
+      ippOnly: true,
+      ipp: { port: 631, resourcePath: "/ipp/print" },
+      office: UNANSWERED,
+    });
+    expect(at(ippOnly)).not.toHaveProperty("pagePrinter");
+    expect(at("10.9.240.3")).toMatchObject({ ippOnly: true, office: urfReport });
+    expect(at("10.9.240.3")).not.toHaveProperty("ipp");
+    expect(at("10.9.240.4")?.office).toEqual({
+      port: 631,
+      resourcePath: "/ipp/print",
+      printable: false,
+      reason: "unsupported_document_format",
+      supportedFormats: ["application/postscript"],
+    });
+  });
+
+  it("keeps the boundary values of an office report", async () => {
+    const app = mountApp();
+    const { token } = await joinAndAccept(app, "Boundary agent");
+    const formats = Array.from({ length: 32 }, (_, i) => `x/${String(i).padStart(98, "f")}`);
+    const longPath = `/${"p".repeat(254)}`;
+    const reports = [
+      { ...PRINTABLE, port: 1 },
+      { ...PRINTABLE, port: 65535, resourcePath: longPath },
+      { ...PRINTABLE, supportedFormats: formats },
+      { ...UNANSWERED, reason: "unsupported_media" },
+      { ...UNANSWERED, reason: "unsupported_raster" },
+      { ...PRINTABLE, documentFormat: "image/pwg-raster", resolutionDpi: 600 },
+    ];
+    await pull(app, token, {
+      visible: [],
+      scanned: reports.map((office, i) => ({
+        transport: "network_tcp",
+        host: "10.9.241.1",
+        port: 9200 + i,
+        office,
+        ipp: { port: office.port, resourcePath: office.resourcePath },
+      })),
+    });
+
+    const rows = await discoveredRows(app);
+    reports.forEach((office, i) => {
+      const row = rows.find((r) => r.port === 9200 + i);
+      expect(row?.office).toEqual(office);
+      expect(row?.ipp).toEqual({ port: office.port, resourcePath: office.resourcePath });
+    });
+  });
+
+  it("keeps the first 32 formats of a report that advertises more", async () => {
+    const app = mountApp();
+    const { token } = await joinAndAccept(app, "Many formats agent");
+    const formats = Array.from({ length: 33 }, (_, i) => `x/format-${i}`);
+    await pull(app, token, {
+      visible: [],
+      scanned: [
+        {
+          transport: "network_tcp",
+          host: "10.9.241.9",
+          port: 9100,
+          office: { ...PRINTABLE, supportedFormats: formats },
+        },
+      ],
+    });
+
+    const row = (await discoveredRows(app)).find((r) => r.host === "10.9.241.9");
+    expect(row?.office).toEqual({ ...PRINTABLE, supportedFormats: formats.slice(0, 32) });
+  });
+
+  it("drops a malformed office report, IPP queue or IPP-only mark, and keeps the device", async () => {
+    const app = mountApp();
+    const { token } = await joinAndAccept(app, "Screening agent");
+    const host = "10.9.242.1";
+    const malformed: Record<string, unknown>[] = [
+      { office: "yes" },
+      { office: null },
+      { office: [PRINTABLE] },
+      { office: { ...PRINTABLE, printable: "true" } },
+      { office: { ...PRINTABLE, documentFormat: "application/postscript" } },
+      { office: { ...PRINTABLE, media: "iso_a5_148x210mm" } },
+      { office: { ...PRINTABLE, resolutionDpi: 1200 } },
+      { office: { ...PRINTABLE, resolutionDpi: "300" } },
+      { office: { ...PRINTABLE, port: 0 } },
+      { office: { ...PRINTABLE, port: 65536 } },
+      { office: { ...PRINTABLE, port: 631.5 } },
+      { office: { ...PRINTABLE, port: "631" } },
+      { office: { ...PRINTABLE, resourcePath: "ipp/print" } },
+      { office: { ...PRINTABLE, resourcePath: `/${"p".repeat(255)}` } },
+      { office: { ...PRINTABLE, resourcePath: "/ipp/\nprint" } },
+      { office: { ...PRINTABLE, resourcePath: 7 } },
+      { office: { ...PRINTABLE, supportedFormats: "application/pdf" } },
+      { office: { ...PRINTABLE, supportedFormats: [`x/${"f".repeat(99)}`] } },
+      { office: { ...PRINTABLE, supportedFormats: [""] } },
+      { office: { ...PRINTABLE, supportedFormats: [42] } },
+      { office: { ...PRINTABLE, supportedFormats: ["application/pdf\u0007"] } },
+      { office: { ...PRINTABLE, supportedFormats: ["applicación/pdf"] } },
+      { office: { ...UNANSWERED, reason: "on_fire" } },
+      { office: { ...UNANSWERED, reason: undefined } },
+      { office: { ...UNANSWERED, supportedFormats: undefined } },
+      { ippOnly: "true" },
+      { ippOnly: 1 },
+      { ippOnly: false },
+      { ipp: { port: 0, resourcePath: "/ipp/print" } },
+      { ipp: { port: 65536, resourcePath: "/ipp/print" } },
+      { ipp: { port: 631, resourcePath: "ipp" } },
+      { ipp: { port: 631, resourcePath: `/${"p".repeat(255)}` } },
+      { ipp: { port: 631, resourcePath: "/ipp/\u0000" } },
+      { ipp: { port: "631", resourcePath: "/ipp/print" } },
+      { ipp: "631" },
+      { ipp: null },
+    ];
+    await pull(app, token, {
+      visible: [],
+      scanned: malformed.map((fields, i) => ({
+        transport: "network_tcp",
+        host,
+        port: 9300 + i,
+        ...fields,
+      })),
+    });
+
+    const rows = await discoveredRows(app);
+    malformed.forEach((_, i) => {
+      const row = rows.find((r) => r.port === 9300 + i);
+      expect(row, `case ${i}`).toBeDefined();
+      expect(row, `case ${i}`).not.toHaveProperty("office");
+      expect(row, `case ${i}`).not.toHaveProperty("ippOnly");
+      expect(row, `case ${i}`).not.toHaveProperty("ipp");
+    });
+    // A dropped report no longer marks its device for the create route's refusal.
+    const created = await send(app, "POST", "/management-api/printers", {
+      cookie: managerCookie,
+      body: { name: "Raw", transport: "network_tcp", host, port: 9304 },
+    });
+    expect(created.status).toBe(201);
+  });
+
+  it("carries only the report's named fields, never other text the agent sent", async () => {
+    const app = mountApp();
+    const { token } = await joinAndAccept(app, "Chatty agent");
+    await pull(app, token, {
+      visible: [],
+      scanned: [
+        {
+          transport: "network_tcp",
+          host: "10.9.243.1",
+          port: 9100,
+          pagePrinter: true,
+          office: { ...PRINTABLE, printerInfo: "Front desk HP", reason: "invalid_reply" },
+        },
+        {
+          transport: "network_tcp",
+          host: "10.9.243.2",
+          port: 631,
+          ippOnly: true,
+          office: { ...UNANSWERED, documentFormat: "application/pdf", status: "jammed" },
+        },
+      ],
+    });
+
+    const rows = await discoveredRows(app);
+    expect(rows.find((r) => r.host === "10.9.243.1")?.office).toEqual(PRINTABLE);
+    expect(rows.find((r) => r.host === "10.9.243.2")?.office).toEqual(UNANSWERED);
+  });
+
+  it("drops the IPP fields from a device that is not on the network", async () => {
+    const app = mountApp();
+    const { token } = await joinAndAccept(app, "USB agent");
+    const serial = `SN-${randomUUID()}`;
+    await pull(app, token, {
+      visible: [],
+      scanned: [
+        {
+          transport: "usb",
+          localKey: serial,
+          ippOnly: true,
+          ipp: { port: 631, resourcePath: "/ipp/print" },
+          office: PRINTABLE,
+        },
+      ],
+    });
+
+    const row = (await discoveredRows(app)).find((r) => r.localKey === serial);
+    expect(row).toBeDefined();
+    expect(row).not.toHaveProperty("office");
+    expect(row).not.toHaveProperty("ippOnly");
+    expect(row).not.toHaveProperty("ipp");
+  });
+
+  it("gives every agent's entry for an address the printable report one agent's query answered", async () => {
+    const app = mountApp();
+    const first = await joinAndAccept(app, "Kitchen agent");
+    const second = await joinAndAccept(app, "Bar agent");
+    const merged = "10.9.244.1";
+    const ippOnly = "10.9.244.2";
+    await pull(app, first.token, {
+      visible: [],
+      scanned: [
+        {
+          transport: "network_tcp",
+          host: merged,
+          port: 9100,
+          pagePrinter: true,
+          office: PRINTABLE,
+        },
+        { transport: "network_tcp", host: ippOnly, port: 631, ippOnly: true, office: PRINTABLE },
+        { transport: "network_tcp", host: "10.9.244.3", port: 9100 },
+      ],
+    });
+    // The second agent's query failed: the merged device is unmarked, the IPP-only one unreadable.
+    await pull(app, second.token, {
+      visible: [],
+      scanned: [
+        {
+          transport: "network_tcp",
+          host: merged,
+          port: 9100,
+          ipp: { port: 631, resourcePath: "/ipp/print" },
+        },
+        { transport: "network_tcp", host: ippOnly, port: 631, ippOnly: true, office: UNANSWERED },
+        { transport: "network_tcp", host: "10.9.244.3", port: 9100 },
+      ],
+    });
+
+    const rows = await discoveredRows(app);
+    const at = (agentId: string, host: string) =>
+      rows.find((r) => r.agentId === agentId && r.host === host);
+    for (const agentId of [first.agentId, second.agentId]) {
+      expect(at(agentId, merged)).toMatchObject({ pagePrinter: true, office: PRINTABLE });
+      expect(at(agentId, ippOnly)).toMatchObject({ ippOnly: true, office: PRINTABLE });
+      expect(at(agentId, "10.9.244.3")).not.toHaveProperty("office");
+    }
+  });
+
+  it("marks a report lent from another agent's entry, and leaves an agent's own report unmarked", async () => {
+    const app = mountApp();
+    const first = await joinAndAccept(app, "Kitchen agent");
+    const second = await joinAndAccept(app, "Bar agent");
+    const host = "10.9.244.11";
+    await pull(app, first.token, {
+      visible: [],
+      scanned: [{ transport: "network_tcp", host, port: 631, ippOnly: true, office: PRINTABLE }],
+    });
+    await pull(app, second.token, {
+      visible: [],
+      scanned: [{ transport: "network_tcp", host, port: 631, ippOnly: true, office: UNANSWERED }],
+    });
+
+    const rows = await discoveredRows(app);
+    const own = rows.find((r) => r.agentId === first.agentId && r.host === host);
+    const lent = rows.find((r) => r.agentId === second.agentId && r.host === host);
+    expect(own).toMatchObject({ office: PRINTABLE });
+    expect(own).not.toHaveProperty("officeLent");
+    // A6's POST reads only the named agent's own report, so this row cannot be registered.
+    expect(lent).toMatchObject({ office: PRINTABLE, officeLent: true });
+  });
+
+  it("keeps an agent's own unreadable report when no agent's query answered", async () => {
+    const app = mountApp();
+    const first = await joinAndAccept(app, "Kitchen agent");
+    const second = await joinAndAccept(app, "Bar agent");
+    const host = "10.9.245.1";
+    const refused = {
+      ...UNANSWERED,
+      reason: "unsupported_document_format",
+      supportedFormats: ["application/postscript"],
+    };
+    await pull(app, first.token, {
+      visible: [],
+      scanned: [{ transport: "network_tcp", host, port: 631, ippOnly: true, office: refused }],
+    });
+    await pull(app, second.token, {
+      visible: [],
+      scanned: [{ transport: "network_tcp", host, port: 631, ippOnly: true, office: UNANSWERED }],
+    });
+
+    const rows = await discoveredRows(app);
+    expect(rows.find((r) => r.agentId === first.agentId)?.office).toEqual(refused);
+    expect(rows.find((r) => r.agentId === second.agentId)?.office).toEqual(UNANSWERED);
+  });
+
+  it("refuses a receipt printer at an address a fresh discovery entry marks as an office printer", async () => {
+    const app = mountApp();
+    const { token } = await joinAndAccept(app, "Office agent");
+    await pull(app, token, {
+      visible: [],
+      scanned: [
+        // Marked by the paper-size answer alone.
+        { transport: "network_tcp", host: "10.9.246.1", port: 9100, pagePrinter: true },
+        // An IPP-only device whose query failed.
+        { transport: "network_tcp", host: "10.9.246.2", port: 631, ippOnly: true },
+        // A report alone, with no other mark.
+        { transport: "network_tcp", host: "10.9.246.3", port: 9101, office: UNANSWERED },
+        // The queue the report names, on a raw device.
+        {
+          transport: "network_tcp",
+          host: "10.9.246.4",
+          port: 9100,
+          office: { ...PRINTABLE, port: 8631 },
+        },
+        // No port reported: the default 9100.
+        { transport: "network_tcp", host: "10.9.246.5", pagePrinter: true },
+        { transport: "network_tcp", host: "hp-office.local", port: 9100, pagePrinter: true },
+      ],
+    });
+
+    const attempts: { host: string; port?: number }[] = [
+      { host: "10.9.246.1", port: 9100 },
+      { host: "10.9.246.1" },
+      { host: "10.9.246.2", port: 631 },
+      { host: "10.9.246.3", port: 9101 },
+      { host: "10.9.246.4", port: 8631 },
+      { host: "10.9.246.5", port: 9100 },
+      { host: "HP-Office.local", port: 9100 },
+    ];
+    for (const target of attempts) {
+      const res = await send(app, "POST", "/management-api/printers", {
+        cookie: managerCookie,
+        body: { name: "Not a receipt printer", transport: "network_tcp", ...target },
+      });
+      expect(res.status, JSON.stringify(target)).toBe(409);
+      expect(await res.json()).toEqual({ error: { code: "printer.office_printer", params: {} } });
+      expect(await printerRows(target.host)).toEqual([]);
+    }
+  });
+
+  it("still creates a plain receipt printer, and one at a raw and IPP device whose query failed", async () => {
+    const app = mountApp();
+    const first = await joinAndAccept(app, "Kitchen agent");
+    const second = await joinAndAccept(app, "Bar agent");
+    await pull(app, first.token, {
+      visible: [],
+      scanned: [
+        { transport: "network_tcp", host: "10.9.247.1", port: 9100 },
+        {
+          transport: "network_tcp",
+          host: "10.9.247.2",
+          port: 9100,
+          ipp: { port: 631, resourcePath: "/ipp/print" },
+        },
+        // An office printer on another port of the same host as a receipt printer.
+        { transport: "network_tcp", host: "10.9.247.3", port: 9101, pagePrinter: true },
+      ],
+    });
+    // Another agent's office mark on another host does not spill over.
+    await pull(app, second.token, {
+      visible: [],
+      scanned: [{ transport: "network_tcp", host: "10.9.247.9", port: 9100, pagePrinter: true }],
+    });
+
+    for (const target of [
+      { host: "10.9.247.1", port: 9100 },
+      { host: "10.9.247.2", port: 9100 },
+      { host: "10.9.247.2" },
+      { host: "10.9.247.3", port: 9100 },
+      { host: "10.9.247.8", port: 9100 },
+    ]) {
+      const res = await send(app, "POST", "/management-api/printers", {
+        cookie: managerCookie,
+        body: {
+          name: `Receipt ${target.host}:${target.port}`,
+          transport: "network_tcp",
+          ...target,
+        },
+      });
+      expect(res.status, JSON.stringify(target)).toBe(201);
+    }
+    expect(await printerRows("10.9.247.2")).toHaveLength(2);
+  });
+
+  it("accepts a typed-in office printer address once no agent has reported it for fifteen seconds", async () => {
+    const app = mountApp();
+    const { token } = await joinAndAccept(app, "Office agent");
+    const host = "10.9.248.1";
+    await pull(app, token, {
+      visible: [],
+      scanned: [{ transport: "network_tcp", host, port: 9100, pagePrinter: true }],
+    });
+    const [row] = (await discoveredRows(app)).filter((r) => r.host === host);
+    const reportedAt = Date.parse(row!.lastSeenAt as string);
+    const body = { name: "Typed in", transport: "network_tcp", host, port: 9100 };
+
+    vi.spyOn(Date, "now").mockReturnValue(reportedAt + 15_000);
+    const fresh = await send(app, "POST", "/management-api/printers", {
+      cookie: managerCookie,
+      body,
+    });
+    expect(fresh.status).toBe(409);
+    vi.spyOn(Date, "now").mockReturnValue(reportedAt + 15_001);
+    const stale = await send(app, "POST", "/management-api/printers", {
+      cookie: managerCookie,
+      body,
+    });
+    expect(stale.status).toBe(201);
+  });
+
+  it("answers a caller without printer.manage with the permission refusal, not the office mark", async () => {
+    const app = mountApp();
+    const { token } = await joinAndAccept(app, "Office agent");
+    const host = "10.9.249.1";
+    await pull(app, token, {
+      visible: [],
+      scanned: [{ transport: "network_tcp", host, port: 9100, pagePrinter: true }],
+    });
+
+    const res = await send(app, "POST", "/management-api/printers", {
+      cookie: staffCookie,
+      body: { name: "Sneaky", transport: "network_tcp", host, port: 9100 },
+    });
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
   });
 });

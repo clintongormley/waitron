@@ -189,4 +189,68 @@ describe("mergeDiscovered", () => {
       { transport: "network_tcp", host: "192.168.10.247", port: 9100 },
     ]);
   });
+
+  const ippAnnounced = (host: string, port: number, extra: Partial<DiscoveredDevice> = {}) =>
+    ({
+      transport: "network_tcp",
+      host,
+      port,
+      name: "Office HP",
+      ipp: { port, resourcePath: "/ipp/print" },
+      ...extra,
+    }) satisfies DiscoveredDevice;
+
+  it("makes one device of a host announced by IPP and on 9100 in separate packets and swept on 9100", () => {
+    const pdl: DiscoveredDevice = {
+      transport: "network_tcp",
+      host: "192.168.10.56",
+      port: 9100,
+      name: "HP LaserJet",
+      make: "HP",
+    };
+    const merged = mergeDiscovered(
+      [ippAnnounced("192.168.10.56", 631), pdl],
+      [{ transport: "network_tcp", host: "192.168.10.56", port: 9100 }],
+    );
+    expect(merged).toEqual([{ ...pdl, ipp: { port: 631, resourcePath: "/ipp/print" } }]);
+  });
+
+  it("gives a swept 9100 device the IPP announcement's endpoint and, where it has none, its name", () => {
+    const merged = mergeDiscovered(
+      [ippAnnounced("192.168.10.56", 631, { make: "HP", model: "M181fw" })],
+      [{ transport: "network_tcp", host: "192.168.10.56", port: 9100 }],
+    );
+    expect(merged).toEqual([
+      {
+        transport: "network_tcp",
+        host: "192.168.10.56",
+        port: 9100,
+        name: "Office HP",
+        make: "HP",
+        model: "M181fw",
+        ipp: { port: 631, resourcePath: "/ipp/print" },
+      },
+    ]);
+  });
+
+  it("gives an IPP-only host one device on its IPP port, marked ippOnly", () => {
+    const merged = mergeDiscovered(
+      [ippAnnounced("192.168.10.60", 8631), ippAnnounced("192.168.10.60", 8631)],
+      [{ transport: "network_tcp", host: "192.168.10.247", port: 9100 }],
+    );
+    expect(merged).toEqual([
+      { transport: "network_tcp", host: "192.168.10.247", port: 9100 },
+      { ...ippAnnounced("192.168.10.60", 8631), ippOnly: true },
+    ]);
+  });
+
+  it("keeps one device per announced raw host:port when a printer answers twice", () => {
+    const pdl: DiscoveredDevice = {
+      transport: "network_tcp",
+      host: "192.168.10.56",
+      port: 9100,
+      name: "HP LaserJet",
+    };
+    expect(mergeDiscovered([pdl, { ...pdl }], [])).toEqual([pdl]);
+  });
 });

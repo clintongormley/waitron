@@ -107,6 +107,7 @@ import {
   firstStartAlertSource,
   type BackupOutcomeHolder,
   batteryAlertSource,
+  invoiceDeliveryAlertSource,
   passScreenAlertSource,
   printingAlertSource,
   stationOutputAlertSource,
@@ -134,6 +135,7 @@ import { mountDeviceApi } from "./device-api.js";
 import { mountJoinApi } from "./join-api.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { mountPrintApi } from "./print-api.js";
+import { createPageTestPages } from "./page-test-pages.js";
 import { configureDemoPrinter, startDemoPrinterLoop } from "./demo-printer.js";
 import { expireInvoiceDeliveryClaims } from "./invoice-delivery.js";
 import { readInvoiceDocument } from "./invoice-document.js";
@@ -1448,6 +1450,8 @@ async function bootServer(
   });
   const tillClock = systemClock();
   const tableRemovals = enabledTableRemovals(setsToMigrate);
+  const invoiceEmailAvailable = async () =>
+    (await resolveInvoiceEmailDelivery(db, ring, config)).mode !== "unconfigured";
   mountTillApi(
     app,
     {
@@ -1466,8 +1470,7 @@ async function bootServer(
       venueLocale,
       onboardingIntent: config.onboardingIntent,
       devMode: config.devMode,
-      invoiceEmailAvailable: async () =>
-        (await resolveInvoiceEmailDelivery(db, ring, config)).mode !== "unconfigured",
+      invoiceEmailAvailable,
     },
     log,
   );
@@ -1492,6 +1495,8 @@ async function bootServer(
     log,
   );
   let demoPrinterLoop: { stop(): Promise<void> } | undefined;
+  // Outside the block below so the alert sources have it on every node.
+  const testPages = createPageTestPages(now);
   const invoiceEmailController = new AbortController();
   let invoiceEmailLoop: Promise<void> | undefined;
   // The operational surface (print agents, devices, pairing, card readers) is not mounted on a
@@ -1548,6 +1553,8 @@ async function bootServer(
         venueLocale,
         listIpv4: boxAddresses,
         receiptQrText: tillBackend.receiptQrText,
+        readInvoiceDocument: (tx, saleId) => readInvoiceDocument(tillBackend, tx, till, saleId),
+        testPages,
       },
       log,
     );
@@ -1689,7 +1696,14 @@ async function bootServer(
   );
   mountOrdersApi(
     app,
-    { db, backend: tillBackend, cfg: { nodeId: dataNodeId }, till, devMode: config.devMode },
+    {
+      db,
+      backend: tillBackend,
+      cfg: { nodeId: dataNodeId },
+      till,
+      devMode: config.devMode,
+      invoiceEmailAvailable,
+    },
     log,
   );
   mountWorkforceApi(app, { db, cfg: { nodeId: till.nodeId } }, log);
@@ -1809,6 +1823,7 @@ async function bootServer(
     awaitingCertAlertSource(awaitingFiscalCert),
     authorityClockAlertSource(authorityClock.read),
     printingAlertSource(),
+    invoiceDeliveryAlertSource({ testPages }),
     stationOutputAlertSource({
       locationId: till.locationId,
       stationStates: (tx, at) =>

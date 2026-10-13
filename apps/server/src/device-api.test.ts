@@ -10,6 +10,7 @@ import {
   floorZones,
   kitchenStations,
   locations,
+  pagePrinters,
   printJobs,
   printers,
   stationPrinters,
@@ -191,6 +192,25 @@ async function seedNamedPrinters(cfg: TillConfig, names: string[]): Promise<stri
     )
     .returning({ id: printers.id });
   return rows.map((row) => row.id);
+}
+
+/** An office (page) printer at the venue's location; its id is never a receipt printer's. */
+async function seedPagePrinter(cfg: TillConfig): Promise<string> {
+  const [row] = await suite.db
+    .insert(pagePrinters)
+    .values({
+      locationId: cfg.locationId,
+      name: "Oficina",
+      host: "10.0.0.8",
+      port: 631,
+      resourcePath: "/ipp/print",
+      documentFormat: "application/pdf",
+      supportedFormats: ["application/pdf"],
+      media: "iso_a4_210x297mm",
+      resolutionDpi: 600,
+    })
+    .returning({ id: pagePrinters.id });
+  return row!.id;
 }
 
 /** An open till session on `deviceId` for a new staff member, as the cookie the till sends. */
@@ -2051,6 +2071,30 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
     });
   });
 
+  it("refuses an office printer's id for each of the device's printer choices, changing nothing", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const t = await tillOnListedProfile(venue, app);
+    const office = await seedPagePrinter(venue.cfg);
+    for (const field of ["receiptPrinterId", "paymentSlipPrinterId", "cashDrawerPrinterId"]) {
+      const res = await edit(app, venue.managerCookie, t.deviceId, { [field]: office });
+      expect(res.status, field).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: { code: "device.binding_invalid", params: { field } },
+      });
+    }
+    const [row] = await suite.db
+      .select({ cashDrawerPrinterId: devices.cashDrawerPrinterId })
+      .from(devices)
+      .where(eq(devices.id, t.deviceId));
+    expect(row!.cashDrawerPrinterId).toBeNull();
+    expect(await deviceBindings(t.deviceId)).toEqual({
+      deviceProfileId: t.profileId,
+      receiptPrinterId: t.bar,
+      paymentSlipPrinterId: t.bar,
+    });
+  });
+
   it("refuses a profile that names no row as device_profile.not_found, device untouched", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
@@ -2926,6 +2970,31 @@ describe("a device's current printers", () => {
     ] as const) {
       const res = await choose(app, `${t.jar}; ${t.session}`, role, { id });
       expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: { code: "device.binding_invalid", params: { field } },
+      });
+    }
+    expect(await deviceBindings(t.deviceId)).toMatchObject({
+      receiptPrinterId: t.counter,
+      paymentSlipPrinterId: t.portable,
+    });
+  });
+
+  it("refuses an office printer's id for the receipt, the payment slip and the cash drawer", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const t = await listedTill(venue, app);
+    const office = await seedPagePrinter(venue.cfg);
+    for (const [role, field] of [
+      ["receipt", "receiptPrinterId"],
+      ["payment_slip", "paymentSlipPrinterId"],
+      ["cash_drawer", "cashDrawerPrinterId"],
+    ] as const) {
+      const res = await send(app, "PUT", "/api/device/equipment", {
+        cookie: `${t.jar}; ${t.session}`,
+        body: { role, selection: { id: office }, via: "list" },
+      });
+      expect(res.status, role).toBe(400);
       expect(await res.json()).toMatchObject({
         error: { code: "device.binding_invalid", params: { field } },
       });

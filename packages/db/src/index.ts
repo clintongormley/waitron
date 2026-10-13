@@ -142,6 +142,7 @@ export {
 } from "./schema/printers.js";
 export { printJobStatus, printJobs } from "./schema/print-jobs.js";
 export { receiptReprints } from "./schema/receipt-reprints.js";
+export { invoicePdfDownloads } from "./schema/invoice-pdf-downloads.js";
 export { kitchenPrintJobLines } from "./schema/kitchen-print-job-lines.js";
 export { kitchenPrintJobs } from "./schema/kitchen-print-jobs.js";
 export { stationPrinters } from "./schema/station-printers.js";
@@ -305,11 +306,14 @@ export { CORE_CHANGE_SOURCES } from "./classification.js";
 // changes away from the listeners or announce a change that has not committed.
 export { subscribeToChanges } from "./change-log.js";
 export {
+  a4FailureCodes,
+  type A4FailureCode,
+  a4HoldCodes,
+  type A4HoldCode,
   invoiceDeliveries,
   invoiceDeliveryMedium,
   invoiceDeliveryDesignation,
   invoiceDeliveryStatus,
-  type InvoiceEmailConsent,
 } from "./schema/invoice-deliveries.js";
 export { pagePrinters, pagePrinterFormat, pagePrinterMedia } from "./schema/page-printers.js";
 

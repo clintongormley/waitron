@@ -3,6 +3,7 @@ import { invoiceDeliveries, withTransaction, type Database, type Transaction } f
 import {
   claimInvoiceDelivery,
   expireInvoiceDeliveryClaims,
+  INVOICE_DELIVERY_LEASE_MS,
   reportInvoiceEmailDelivery,
   type InvoiceDelivery,
   type InvoiceDeliveryOutcome,
@@ -56,7 +57,10 @@ export async function runInvoiceEmailPass(
         ),
         and(
           eq(invoiceDeliveries.status, "sending"),
-          lte(invoiceDeliveries.claimedAt, new Date(now.getTime() - 60_000).toISOString()),
+          lte(
+            invoiceDeliveries.claimedAt,
+            new Date(now.getTime() - INVOICE_DELIVERY_LEASE_MS).toISOString(),
+          ),
         ),
       ),
     )

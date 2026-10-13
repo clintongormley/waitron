@@ -25,6 +25,7 @@ export async function resendInvoicePrintJob(
   jobId: string,
   personId: string,
   now = new Date(),
+  requestKey?: string,
 ): Promise<{ jobId: string }> {
   const [invoice] = await tx
     .select({ saleId: sales.id, recipient: sales.counterpartyTaxId })
@@ -36,7 +37,7 @@ export async function resendInvoicePrintJob(
   const retry = await resendPrintJob(tx, jobId);
   try {
     await reserveInvoiceDelivery(tx, invoice.saleId, {
-      requestKey: retry.jobId,
+      requestKey: requestKey ?? retry.jobId,
       personId,
       medium: "receipt",
       printJobId: retry.jobId,

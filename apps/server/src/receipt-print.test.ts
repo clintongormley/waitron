@@ -2414,13 +2414,7 @@ describe("automatic F1 receipt delivery enrollment", () => {
           invoiceDelivery: {
             medium: "email",
             recipient: "customer@example.test",
-            consent: {
-              statementVersion: "invoice-email-v1",
-              language: "es-ES",
-              recordedAt: "2026-10-07T17:00:00.000Z",
-              personId: sale!.operatorId!,
-              contactEmail: "venue@example.test",
-            },
+            personId: sale!.operatorId!,
           },
         })
         .where(eq(workingOrders.id, sale!.workingOrderId!));
@@ -2546,14 +2540,6 @@ describe("automatic F1 receipt delivery enrollment", () => {
     async (medium) => {
       const { cfg, saleId, orderId, ticket, personId } = await issued("auto");
       const pagePrinterId = randomUUID();
-      const consent = {
-        statementVersion: "invoice-email-v1",
-        language: LOCALE,
-        recordedAt: "2026-10-07T17:00:00.000Z",
-        personId,
-        contactEmail: "venue@example.test",
-        contactPhone: "910000000",
-      };
       await withTransaction(suite.db, async (tx) => {
         await tx.insert(pagePrinters).values({
           id: pagePrinterId,
@@ -2572,8 +2558,8 @@ describe("automatic F1 receipt delivery enrollment", () => {
           .set({
             invoiceDelivery:
               medium === "email"
-                ? { medium, recipient: "customer@example.test", consent }
-                : { medium, pagePrinterId },
+                ? { medium, recipient: "customer@example.test", personId }
+                : { medium, pagePrinterId, personId },
           })
           .where(eq(workingOrders.id, orderId));
       });
@@ -2591,8 +2577,8 @@ describe("automatic F1 receipt delivery enrollment", () => {
           generation: 1,
           printJobId: null,
           ...(medium === "email"
-            ? { recipient: "customer@example.test", consent, pagePrinterId: null }
-            : { recipient: null, consent: null, pagePrinterId }),
+            ? { recipient: "customer@example.test", pagePrinterId: null }
+            : { recipient: null, pagePrinterId }),
         }),
       ]);
       expect(await suite.db.select().from(printJobs)).toEqual([]);
@@ -2614,45 +2600,120 @@ describe("automatic F1 receipt delivery enrollment", () => {
     },
   );
 
-  it("uses the recorded consent staff for an unattributed synthetic email invoice", async () => {
+  it("attributes an unattributed sale's staged email to the staff member who chose it", async () => {
     const { cfg, saleId, orderId, ticket, personId } = await issued("auto", false);
-    const consent = {
-      statementVersion: "invoice-email-v1",
-      language: LOCALE,
-      recordedAt: "2026-10-07T17:00:00.000Z",
-      personId,
-      contactEmail: "venue@example.test",
-    };
     await withTransaction(suite.db, (tx) =>
       tx
         .update(workingOrders)
         .set({
-          invoiceDelivery: { medium: "email", recipient: "customer@example.test", consent },
+          invoiceDelivery: { medium: "email", recipient: "customer@example.test", personId },
         })
         .where(eq(workingOrders.id, orderId)),
     );
-    await withTransaction(suite.db, (tx) => enqueueSaleReceipt(tx, cfg, ticket, saleId));
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      await withTransaction(suite.db, (tx) => enqueueSaleReceipt(tx, cfg, ticket, saleId));
+      expect(warning.mock.calls).toEqual([]);
+    } finally {
+      warning.mockRestore();
+    }
+    expect((await suite.db.select().from(sales))[0]!.operatorId).toBeNull();
     expect(await suite.db.select().from(invoiceDeliveries)).toEqual([
       expect.objectContaining({
         saleId,
         medium: "email",
+        recipient: "customer@example.test",
         personId,
-        consent,
         designation: "original",
+        status: "queued",
       }),
     ]);
     expect(await suite.db.select().from(printJobs)).toEqual([]);
   });
 
-  it("reports unattributed automatic A4 issuance without inventing an operator", async () => {
+  it("reports an unattributed staged email that names no staff member as a missing operator", async () => {
     const { cfg, saleId, orderId, ticket } = await issued("auto", false);
     await withTransaction(suite.db, (tx) =>
-      tx
+      tx.execute(
+        sql`update working_orders set invoice_delivery = ${JSON.stringify({
+          medium: "email",
+          recipient: "customer@example.test",
+        })} where id = ${orderId}`,
+      ),
+    );
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      await withTransaction(suite.db, (tx) => enqueueSaleReceipt(tx, cfg, ticket, saleId));
+      expect(warning.mock.calls).toEqual([
+        [
+          "receipt.optional_document_failed",
+          {
+            operation: "reserveStagedInvoiceDelivery",
+            saleId,
+            code: "management.request_invalid",
+            field: "operatorId",
+          },
+        ],
+      ]);
+    } finally {
+      warning.mockRestore();
+    }
+    expect(await suite.db.select().from(invoiceDeliveries)).toEqual([]);
+  });
+
+  it("attributes an unattributed sale's staged A4 to the staff member who chose it", async () => {
+    const { cfg, saleId, orderId, ticket, personId } = await issued("auto", false);
+    const pagePrinterId = randomUUID();
+    await withTransaction(suite.db, async (tx) => {
+      await tx.insert(pagePrinters).values({
+        id: pagePrinterId,
+        locationId: cfg.locationId,
+        name: "Invoice A4",
+        host: "127.0.0.1",
+        port: 631,
+        resourcePath: "/ipp/print",
+        documentFormat: "application/pdf",
+        supportedFormats: ["application/pdf"],
+        media: "iso_a4_210x297mm",
+        resolutionDpi: 300,
+        invoiceDefault: true,
+      });
+      await tx
         .update(workingOrders)
-        .set({
-          invoiceDelivery: { medium: "a4", pagePrinterId: randomUUID() },
-        })
-        .where(eq(workingOrders.id, orderId)),
+        .set({ invoiceDelivery: { medium: "a4", pagePrinterId, personId } })
+        .where(eq(workingOrders.id, orderId));
+    });
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      await withTransaction(suite.db, (tx) => enqueueSaleReceipt(tx, cfg, ticket, saleId));
+      expect(warning.mock.calls).toEqual([]);
+    } finally {
+      warning.mockRestore();
+    }
+    expect((await suite.db.select().from(sales))[0]!.operatorId).toBeNull();
+    expect(await suite.db.select().from(invoiceDeliveries)).toEqual([
+      expect.objectContaining({
+        saleId,
+        medium: "a4",
+        pagePrinterId,
+        recipient: null,
+        personId,
+        designation: "original",
+        status: "queued",
+      }),
+    ]);
+    expect(await suite.db.select().from(printJobs)).toEqual([]);
+  });
+
+  it("reports an unattributed staged A4 that names no staff member as a missing operator", async () => {
+    const { cfg, saleId, orderId, ticket } = await issued("auto", false);
+    await withTransaction(suite.db, (tx) =>
+      tx.execute(
+        sql`update working_orders set invoice_delivery = ${JSON.stringify({
+          medium: "a4",
+          pagePrinterId: randomUUID(),
+        })} where id = ${orderId}`,
+      ),
     );
     const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
@@ -2687,13 +2748,7 @@ describe("automatic F1 receipt delivery enrollment", () => {
           invoiceDelivery: {
             medium: "email",
             recipient: "customer@example.test",
-            consent: {
-              statementVersion: "invoice-email-v1",
-              language: LOCALE,
-              recordedAt: "2026-10-07T17:00:00.000Z",
-              personId,
-              contactEmail: "venue@example.test",
-            },
+            personId,
           },
         })
         .where(eq(workingOrders.id, orderId));
@@ -2738,13 +2793,7 @@ describe("automatic F1 receipt delivery enrollment", () => {
           invoiceDelivery: {
             medium: "email",
             recipient: "customer@example.test",
-            consent: {
-              statementVersion: "invoice-email-v1",
-              language: LOCALE,
-              recordedAt: "2026-10-07T17:00:00.000Z",
-              personId,
-              contactEmail: "venue@example.test",
-            },
+            personId,
           },
         })
         .where(eq(workingOrders.id, orderId));
@@ -2766,13 +2815,6 @@ describe("automatic F1 receipt delivery enrollment", () => {
           personId,
           medium: "email",
           recipient: "synthetic@example.test",
-          consent: {
-            statementVersion: "1",
-            language: LOCALE,
-            recordedAt: new Date().toISOString(),
-            personId,
-            contactEmail: "venue@example.test",
-          },
         }),
       ),
     ).rejects.toMatchObject({ code: "invoice_delivery.active" });
@@ -2787,13 +2829,6 @@ describe("automatic F1 receipt delivery enrollment", () => {
         personId,
         medium: "email",
         recipient: "synthetic@example.test",
-        consent: {
-          statementVersion: "1",
-          language: LOCALE,
-          recordedAt: new Date().toISOString(),
-          personId,
-          contactEmail: "venue@example.test",
-        },
       }),
     );
     await expect(

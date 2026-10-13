@@ -1,4 +1,4 @@
-import type { ServerEntry, WireJob } from "./client.js";
+import type { PageFormat, PageHold, PageMedia, ServerEntry, WireJob } from "./client.js";
 import type { PrintTransport, PrinterTarget, Transport, TransportKind } from "./transport.js";
 
 export type { TransportKind } from "./transport.js";
@@ -50,6 +50,32 @@ export interface VisibleDevice {
   model?: string;
 }
 
+/** What an office printer's IPP capability answer allows: the format, paper and resolution an A4
+ * invoice would be sent in, or why there is none. */
+export type OfficePrinterCapabilities =
+  | {
+      printable: true;
+      documentFormat: "application/pdf" | "image/pwg-raster" | "image/urf";
+      media: "iso_a4_210x297mm" | "na_letter_8.5x11in";
+      resolutionDpi: 300 | 600;
+      supportedFormats: string[];
+    }
+  | {
+      printable: false;
+      reason:
+        | "invalid_reply"
+        | "unsupported_media"
+        | "unsupported_document_format"
+        | "unsupported_raster";
+      supportedFormats: string[];
+    };
+
+/** The IPP queue on the device's host that was asked, and what it answered. */
+export type OfficePrinterReport = OfficePrinterCapabilities & {
+  port: number;
+  resourcePath: string;
+};
+
 /** An active scan or address-check result. A reachable TCP address does not establish printer identity. */
 export interface DiscoveredDevice {
   transport: PrintTransport;
@@ -59,9 +85,16 @@ export interface DiscoveredDevice {
   make?: string;
   model?: string;
   name?: string;
-  /** Set when the device answered an IPP paper-size query listing A4 or US letter, so it is an office
+  /** Set when the device answered an IPP capability query listing A4 or US letter, so it is an office
    * printer, not an ESC/POS receipt printer. Absent means unknown or not a page printer. */
   pagePrinter?: true;
+  /** Set on an office printer (`pagePrinter`), and on every `ippOnly` device whatever it answered. */
+  office?: OfficePrinterReport;
+  /** The IPP queue the host announced over mDNS (`_ipp._tcp`). */
+  ipp?: { port: number; resourcePath: string };
+  /** Set when the host announced IPP but no raw queue was announced or swept, so `port` is its IPP
+   * port, not a raw ESC/POS one. */
+  ippOnly?: true;
   /** Set on a Bluetooth device whose `bluetoothctl info` shows a printer icon, an imaging class with
    * the printer bit, or the Serial Port profile. Absent means not inspected or none of the three. */
   printerLike?: true;
@@ -93,6 +126,19 @@ export interface NetworkProbe {
   expiresInMs: number;
 }
 
+/** The IPP queue an A4 job is sent to. */
+export interface PageTarget {
+  host: string;
+  port: number;
+  resourcePath: string;
+}
+
+/** `failed`: the printer did not take the document. `unknown`: it may have printed some or all. */
+export type PagePrintOutcome =
+  | { status: "sent" }
+  | { status: "failed"; failureCode: "printer_refused" | "printer_unreachable" }
+  | { status: "unknown"; failureCode: "printer_aborted" | "timeout" };
+
 export interface Host {
   /** Machine hostname when the host platform exposes it. */
   hostname?(): string;
@@ -116,10 +162,12 @@ export interface Host {
   scan(kinds?: TransportKind[]): Promise<DiscoveredDevice[]>;
   /** Bounded TCP connection checks; send no bytes and return only reachable targets. */
   probeNetwork(targets: NetworkProbe[]): Promise<DiscoveredDevice[]>;
-  /** Asks port 631 of each network device's host one IPP Get-Printer-Attributes query, or reuses a
-   * recent answer, and returns the devices with office printers marked `pagePrinter: true`. A failed
-   * check leaves the device unmarked. The loop calls it at most once per pull, over the merged scan and
-   * probe results, and treats a throw as "nothing marked". */
+  /** Asks each network device's IPP queue (the one its host announced, else port 631) one
+   * Get-Printer-Attributes query, or reuses a recent answer, and returns the devices with office
+   * printers marked `pagePrinter: true` and an `office` report. A failed check leaves a device with a
+   * raw port unmarked. The loop calls it at most once per pull, over the merged scan and probe
+   * results, and treats a throw as "nothing marked"; either way it gives an `ippOnly` device left
+   * without a report an `invalid_reply` one. */
   markPagePrinters?(devices: DiscoveredDevice[]): Promise<DiscoveredDevice[]>;
   /** Turns a claimed job's connection facts into a {@link PrinterTarget} the transport can send to —
    * for a local job, mapping its `localKey` to a device path from the host's device list, which a
@@ -138,4 +186,16 @@ export interface Host {
   /** False when this host cannot print to any paired Bluetooth printer, which the loop tells the
    * server so it can end those printers' jobs rather than leave them waiting. */
   bluetoothPrinting?(): boolean;
+  /** Sends one A4 document to an office printer, as one copy on `media`, and follows it to an
+   * outcome. `signal` aborts when the claim is lost: it stops following the job, never cuts a
+   * submission short. `onHold` hears each change in why the printer is holding the job, and `null`
+   * once it moves on. A host without it never claims an A4 job. */
+  printPage?(
+    target: PageTarget,
+    bytes: Uint8Array,
+    format: PageFormat,
+    media: PageMedia,
+    signal: AbortSignal,
+    onHold: (hold: PageHold | null) => void,
+  ): Promise<PagePrintOutcome>;
 }

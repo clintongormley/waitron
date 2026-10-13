@@ -222,6 +222,23 @@ describe("dashboard Orders", () => {
     expect(el.shadowRoot!.querySelector("dashboard-order-detail-dialog")?.orderId).toBe(ROW.id);
   });
 
+  it.each([false, true])(
+    "tells the bill's detail whether the session may download its PDF (%s)",
+    async (canExport) => {
+      const api = stubApi();
+      const { el } = await mountWidget<OrdersScreen>("dashboard-orders-screen", {
+        api,
+        canExport,
+      });
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector("wt-data-table")?.rows).toHaveLength(1),
+      );
+      expect(el.shadowRoot!.querySelector("dashboard-order-detail-dialog")?.mayExport).toBe(
+        canExport,
+      );
+    },
+  );
+
   it("places a table-filter refusal under Table and says to fix the filter bar", async () => {
     const api = stubApi({
       listOrderPages: vi

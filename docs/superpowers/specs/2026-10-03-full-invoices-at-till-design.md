@@ -5,9 +5,14 @@ Startup and saved trading identity carry node and location, without a cached sta
 The references below to the boot series setting describe the earlier implementation.
 
 
+> **2026-10-12, A231q:** the consent step is gone from the product: tasks C1a and C1b of the [A231q
+> plan](../plans/2026-10-12-a231q-invoice-delivery-part-2.md) removed it from staging, delivery rows
+> and retries, so the consent paths below, and any note calling that removal still open, are
+> history. A448 and the legal research are unchanged.
+
 > **2026-10-10, later product decision:** the owner removed the separate email consent step
 > on 2026-10-09. The email consent-tracking proposal below is historical; follow
-> [the single core rewrite](../../backlog/printers.md#remove-the-consent-step-from-emailed-receipts).
+> [the single core rewrite](../../backlog/printers.md#decisions-and-deliberate-limits).
 > A366 slice 7 retains the current checker and stored evidence. A448 and the dated legal
 > research are unchanged.
 

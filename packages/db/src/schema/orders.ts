@@ -1,4 +1,3 @@
-import type { InvoiceEmailConsent } from "./invoice-deliveries.js";
 import type { OptionSnapshot, SaleLineClassification } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { check, foreignKey, index, unique } from "drizzle-orm/sqlite-core";
@@ -39,8 +38,8 @@ export const workingOrderStatus = enumType([
 
 export type StagedInvoiceDelivery =
   | { medium: "receipt" }
-  | { medium: "a4"; pagePrinterId: string }
-  | { medium: "email"; recipient: string; consent: InvoiceEmailConsent };
+  | { medium: "a4"; pagePrinterId: string; personId: string }
+  | { medium: "email"; recipient: string; personId: string };
 
 /**
  * A working order is MUTABLE — the deliberate opposite of `sales`. Lines are

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
 import "./invoice-recipient-dialog.js";
 import type { TillInvoiceRecipientDialog } from "./invoice-recipient-dialog.js";
 
@@ -11,37 +12,99 @@ const saveButton = (el: TillInvoiceRecipientDialog) =>
   el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-invoice-save]")!;
 
 describe.each(["light", "dark"] as const)("full invoice recipient a11y (%s theme)", (theme) => {
-  it.each(["empty", "invalid", "field-refusal", "network-and-invalid"] as const)(
-    "%s form has no violations",
-    async (state) => {
-      setLocale("es-ES");
-      const { el, host } = await mountWidget<TillInvoiceRecipientDialog>(
-        "till-invoice-recipient-dialog",
-        {},
-        theme,
-      );
-      if (state === "field-refusal") {
-        el.refusal = "Revisa el nombre del cliente";
-        el.refusalField = "legalName";
+  it.each([
+    "empty",
+    "invalid",
+    "field-refusal",
+    "network-and-invalid",
+    "delivery-receipt",
+    "delivery-a4",
+    "printer-refusal",
+    "saved-choice",
+    "delivery-email",
+    "email-invalid",
+  ] as const)("%s form has no violations", async (state) => {
+    setLocale("es-ES");
+    const withEmail = state === "delivery-email" || state === "email-invalid";
+    const withPrinter =
+      state.startsWith("delivery") ||
+      state === "printer-refusal" ||
+      state === "saved-choice" ||
+      withEmail;
+    const { el, host } = await mountWidget<TillInvoiceRecipientDialog>(
+      "till-invoice-recipient-dialog",
+      withPrinter
+        ? {
+            deliveryOptions: {
+              invoicePrinter: { id: "pp-1", name: "HP Oficina" },
+              emailAvailable: withEmail,
+            },
+            ...(state === "saved-choice"
+              ? { savedDelivery: { medium: "email", recipient: "ana@example.com" } as const }
+              : {}),
+          }
+        : {},
+      theme,
+    );
+    if (withPrinter) {
+      const delivery = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+        "wt-combobox[name=delivery]",
+      )!;
+      expect(delivery).not.toBeNull();
+      if (state === "saved-choice") expect(delivery.value).toBe("saved");
+      else if (state !== "delivery-receipt") {
+        const medium = withEmail ? "email" : "a4";
+        delivery.shadowRoot!.querySelector<HTMLElement>(".trigger")!.click();
+        await delivery.updateComplete;
+        delivery
+          .shadowRoot!.querySelectorAll<HTMLElement>("[role=option]")
+          [delivery.options.findIndex((option) => option.value === medium)]!.click();
         await el.updateComplete;
+        expect(delivery.value).toBe(medium);
       }
-      if (state === "network-and-invalid") {
-        el.refusal = "No se ha podido conectar con el servidor";
-        await el.updateComplete;
-      }
-      if (state === "invalid" || state === "network-and-invalid") {
-        const taxId = el.shadowRoot!.querySelector("wt-input[name=taxId]")!;
-        await userEvent.fill(page.elementLocator(taxId.shadowRoot!.querySelector("input")!), "123");
-        await el.updateComplete;
+    }
+    if (withEmail) {
+      const email = el.shadowRoot!.querySelector("wt-input[name=email]")!;
+      if (state === "delivery-email")
+        await userEvent.fill(
+          page.elementLocator(email.shadowRoot!.querySelector("input")!),
+          "ana@ejemplo.com",
+        );
+      else {
         el.shadowRoot!.querySelector<HTMLElement>("[data-invoice-save]")!.click();
         await el.updateComplete;
-        expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toContain(
-          t("form.fix_fields"),
-        );
+        expect(
+          el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=email]")!
+            .error,
+        ).toBe(t("invoice.email_invalid"));
       }
-      await expectNoA11yViolations(host);
-    },
-  );
+    }
+    if (state === "printer-refusal") {
+      el.refusal = codeMessage("invoice_delivery.printer_invalid");
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(el.refusal);
+    }
+    if (state === "field-refusal") {
+      el.refusal = "Revisa el nombre del cliente";
+      el.refusalField = "legalName";
+      await el.updateComplete;
+    }
+    if (state === "network-and-invalid") {
+      el.refusal = "No se ha podido conectar con el servidor";
+      await el.updateComplete;
+    }
+    if (state === "invalid" || state === "network-and-invalid") {
+      const taxId = el.shadowRoot!.querySelector("wt-input[name=taxId]")!;
+      await userEvent.fill(page.elementLocator(taxId.shadowRoot!.querySelector("input")!), "123");
+      await el.updateComplete;
+      el.shadowRoot!.querySelector<HTMLElement>("[data-invoice-save]")!.click();
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toContain(
+        t("form.fix_fields"),
+      );
+    }
+    await expectNoA11yViolations(host);
+  });
 
   it("has no violations when it opens, with Save quiet and disabled", async () => {
     setLocale("es-ES");

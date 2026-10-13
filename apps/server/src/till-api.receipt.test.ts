@@ -3094,13 +3094,6 @@ describe("explicit F1 receipt delivery enrollment", () => {
           personId: operatorId,
           medium: "email",
           recipient: "synthetic@example.test",
-          consent: {
-            statementVersion: "1",
-            language: LOCALE,
-            recordedAt: new Date().toISOString(),
-            personId: operatorId,
-            contactEmail: "venue@example.test",
-          },
         }),
       );
     return { cfg, printerId, sale, orderId, post, email, supervisorId };

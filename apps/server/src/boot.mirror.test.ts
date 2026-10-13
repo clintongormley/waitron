@@ -216,6 +216,9 @@ describe("mirror-mode boot (node_roles.mode = 'mirror')", () => {
       // gate, so a 404 means the route is absent, not gated; the primary control answers 200.
       const printStatus = await fetch(`${base}/print-api/agent/join/status`);
       expect(printStatus.status).toBe(404);
+      const pageClaim = await fetch(`${base}/print-api/agent/page-jobs/claim`, { method: "POST" });
+      expect(pageClaim.status).toBe(403);
+      expect(await pageClaim.json()).toEqual({ error: { code: "node.read_only", params: {} } });
       const deviceStation = await fetch(`${base}/api/device/station-screen`);
       expect(deviceStation.status).toBe(404);
 
@@ -348,6 +351,9 @@ describe("mirror-mode boot (node_roles.mode = 'mirror')", () => {
       expect(printStatus.status).toBe(200);
       const printJobs = await fetch(`${base}/print-api/agent/jobs`, { method: "POST" });
       expect(printJobs.status).not.toBe(404);
+      const pageClaim = await fetch(`${base}/print-api/agent/page-jobs/claim`, { method: "POST" });
+      expect(pageClaim.status).toBe(401);
+      expect(await pageClaim.json()).toEqual({ error: { code: "agent.unauthorized", params: {} } });
       const deviceStation = await fetch(`${base}/api/device/station-screen`);
       expect(deviceStation.status).not.toBe(404);
 

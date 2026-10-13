@@ -98,6 +98,7 @@ export class SetupReviewScreen extends LitElement {
   ];
 
   @property({ attribute: false }) draft: DeepPartial<ProvisionBody> = {};
+  @property() backScreen: "venue" | "email" = "venue";
   @property() errorMessage?: string;
 
   constructor() {
@@ -219,7 +220,7 @@ export class SetupReviewScreen extends LitElement {
           slot="cancel"
           variant="ghost"
           data-test="back"
-          @click=${() => dispatchSetupGoto(this, "venue")}
+          @click=${() => dispatchSetupGoto(this, this.backScreen)}
           >${t("review.back")}</wt-button
         >
         <wt-button

@@ -167,7 +167,14 @@ describe("print-agent end to end", () => {
     pairingMode.open();
     mountPrintApi(
       app,
-      { db: suite.db, cfg, pairingMode, readMembership: async () => null, venueLocale: "es-ES" },
+      {
+        db: suite.db,
+        cfg,
+        pairingMode,
+        readMembership: async () => null,
+        venueLocale: "es-ES",
+        readInvoiceDocument: () => Promise.reject(new Error("No invoice is read here")),
+      },
       noopLog,
     );
     mountJoinApi(
@@ -256,7 +263,14 @@ describe("print-agent end to end", () => {
     pairingMode.open();
     mountPrintApi(
       app,
-      { db: suite.db, cfg, pairingMode, readMembership: async () => null, venueLocale: "es-ES" },
+      {
+        db: suite.db,
+        cfg,
+        pairingMode,
+        readMembership: async () => null,
+        venueLocale: "es-ES",
+        readInvoiceDocument: () => Promise.reject(new Error("No invoice is read here")),
+      },
       noopLog,
     );
     mountJoinApi(
@@ -396,7 +410,14 @@ describe("print-agent end to end", () => {
     pairingMode.open();
     mountPrintApi(
       app,
-      { db: suite.db, cfg, pairingMode, readMembership: async () => null, venueLocale: "es-ES" },
+      {
+        db: suite.db,
+        cfg,
+        pairingMode,
+        readMembership: async () => null,
+        venueLocale: "es-ES",
+        readInvoiceDocument: () => Promise.reject(new Error("No invoice is read here")),
+      },
       noopLog,
     );
     mountJoinApi(
@@ -489,7 +510,14 @@ describe("print-agent end to end", () => {
     pairingMode.open();
     mountPrintApi(
       app,
-      { db: suite.db, cfg, pairingMode, readMembership: async () => null, venueLocale: "es-ES" },
+      {
+        db: suite.db,
+        cfg,
+        pairingMode,
+        readMembership: async () => null,
+        venueLocale: "es-ES",
+        readInvoiceDocument: () => Promise.reject(new Error("No invoice is read here")),
+      },
       noopLog,
     );
     mountJoinApi(
@@ -620,7 +648,14 @@ describe("a printer deleted while its agent is sending", () => {
       pairingMode.open();
       mountPrintApi(
         app,
-        { db: suite.db, cfg, pairingMode, readMembership: async () => null, venueLocale: "es-ES" },
+        {
+          db: suite.db,
+          cfg,
+          pairingMode,
+          readMembership: async () => null,
+          venueLocale: "es-ES",
+          readInvoiceDocument: () => Promise.reject(new Error("No invoice is read here")),
+        },
         noopLog,
       );
       mountJoinApi(
@@ -853,7 +888,14 @@ describe("a printer deleted over real HTTP", () => {
     pairingMode.open();
     mountPrintApi(
       app,
-      { db: suite.db, cfg, pairingMode, readMembership: async () => null, venueLocale: "es-ES" },
+      {
+        db: suite.db,
+        cfg,
+        pairingMode,
+        readMembership: async () => null,
+        venueLocale: "es-ES",
+        readInvoiceDocument: () => Promise.reject(new Error("No invoice is read here")),
+      },
       noopLog,
     );
     mountJoinApi(

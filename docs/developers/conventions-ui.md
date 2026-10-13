@@ -25,8 +25,9 @@ the action until the field is filled. Cost: before C54, many forms outside the t
 profile screens and the catalogue editors among them — disabled their action after a server refusal
 naming a field, until that field changed. Every input has a semantic
 `name` (plus the standard `autocomplete` purpose when one exists), never a generated widget id as
-its identity. Password reveal buttons use the input's `end` slot and an action-specific accessible
-label. An inline confirmation embedded IN a form suspends that form's Save and implicit Enter
+its identity. A customer's details typed on a shared till or office machine take `autocomplete="off"`
+instead, so one customer's details are not offered to the next. Password reveal buttons use the
+input's `end` slot and an action-specific accessible label. An inline confirmation embedded IN a form suspends that form's Save and implicit Enter
 submission until resolved — no current form embeds one (person-edit.ts's own confirmation moved out
 to the row's kebab menu as a separate `wt-dialog`, outside any form, on `ui-overhaul`), so there is
 no live instance to point at, but the shape can recur the next time a confirmation lands inside a

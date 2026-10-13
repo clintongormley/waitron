@@ -97,7 +97,13 @@ describe("dashboard receipt reprint", () => {
     const app = new Hono();
     mountOrdersApi(
       app,
-      { db: venue.db, backend, cfg: { nodeId: venue.cfg.nodeId }, till: venue.cfg },
+      {
+        db: venue.db,
+        backend,
+        cfg: { nodeId: venue.cfg.nodeId },
+        till: venue.cfg,
+        invoiceEmailAvailable: () => Promise.resolve(false),
+      },
       (_level, event) => events.push(event),
     );
     const before = await counts();
@@ -242,6 +248,7 @@ describe("dashboard receipt reprint", () => {
         cfg: { nodeId: venue.cfg.nodeId },
         till: venue.cfg,
         devMode: true,
+        invoiceEmailAvailable: () => Promise.resolve(false),
       },
       () => {},
     );

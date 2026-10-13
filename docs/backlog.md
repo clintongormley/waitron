@@ -166,9 +166,12 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   advance-payment invoice** (LIVA 75.Dos, RD 1619/2012 art. 2.1). The server (#721) holds such money
   with no invoice until the bill is paid. Asked as [S3](compliance/asesor-questions.md#the-shortened-list-2026-10-09); no change until answered.
 
-- **A448. The email consent request for full invoices must say how the invoice will arrive and how
-  consent is withdrawn** (TRLGDCU art. 63.3). A231p's owner decision 2 records only that staff ask.
-  [Detail](backlog/fiscal.md#a231d-full-invoices-by-email-as-a-pdf-and-on-an-office-printer--part-1-landed-1399-part-2-open)
+- **A448. Whether a customer's email address alone satisfies TRLGDCU art. 63.3 for an emailed full
+  invoice.** [Detail](backlog/fiscal.md#decisions-and-deliberate-limits)
+  _2026-10-12: the product no longer asks for consent at all — A231q's tasks C1a and C1b removed it
+  ([plan](superpowers/plans/2026-10-12-a231q-invoice-delivery-part-2.md)) on the owner's 2026-10-09
+  answer. Until 2026-10-12 this entry asked that the consent request say how the invoice will arrive
+  and how consent is withdrawn._
 
 - **A resent cancellation AEAT already holds now counts as accepted when AEAT's stored fingerprint
   matches the cancellation's** (`drain.ts`'s `handleDuplicate`; a mismatch is refused with
@@ -260,29 +263,44 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   (2026-10-06); and **A231. Full invoices at the till** — GATED IMPLEMENTATION LANDED (2026-10-06).
   The two entries name the same open work, public F1. Public F1 issuance remains disabled; no route
   calls `recordSubstitution`. Asesor Q5(d) remains open for F3 and R5. **Next action:** verify
-  physical 58/80 mm paper and QR output, complete A231q's remaining original-delivery choices, obtain
-  the asesor's manual-remedy approval and settle applicable B2B delivery before enabling public F1.
+  physical 58/80 mm paper and QR output, settle what paying at the counter does with an email or A4
+  choice (A555), obtain the asesor's manual-remedy approval and settle applicable B2B delivery
+  before enabling public F1.
   The operation day is the owner's provisional service-start rule, awaiting asesor confirmation.
   [A1e detail](backlog/fiscal.md#a1e-simplified-and-full-invoices-use-separate-series--built-public-f1-disabled-2026-10-06), [A231 detail](backlog/fiscal.md#a231-full-invoices-at-the-till--gated-implementation-landed-2026-10-06)
 
-- **A231d. Full invoices by email as a PDF, and on an office printer** — PART 1 LANDED (#1399); PART
-  2 OPEN. A231q still owes the setup/dashboard and delivery screens, provisioning/restore checks,
-  office-printer discovery/registration/location selection and IPP transport, send-again/download
-  and withdrawal actions, built-image renderer execution, box measurements and physical output.
-  Physical checks require owner presence or arrangement; adviser confirmation and public F1
-  acceptance gates remain separate. **Owner decisions in place of the asesor's answers (2026-10-07,
-  under the plan's Task 0.1), so A231p may be built.** Public F1 stays disabled until A231's own
-  enablement gates are met; the asesor is asked to confirm these as
-  [Q44](compliance/asesor-questions.md#q44-sending-a-full-invoice-as-a-pdf-by-email-or-on-a4--the-owners-interim-answers-added-2026-10-07).
-  [Detail](backlog/fiscal.md#a231d-full-invoices-by-email-as-a-pdf-and-on-an-office-printer--part-1-landed-1399-part-2-open)
+- **A554. Should any screen show the address an invoice email went to?** An owner question, open
+  point 1 of the [A231q plan](superpowers/plans/2026-10-12-a231q-invoice-delivery-part-2.md). Until
+  it is answered none does: the delivery status the till and the dashboard read carries no address,
+  and both email forms open empty. Left open by A231q.
 
-- **When the business e-invoicing regime starts** — recorded in A231d. So from about October 2027,
+- **A555. Paying at the counter drops a full invoice's email or A4 choice.** The till sends the
+  invoice choice with `POST /api/sales` and `/api/pay`, which read no delivery choice and today
+  refuse a full invoice (`sale.full_invoice_unavailable`); a counter choice is staged only when the
+  order is placed. Decide what paying does with the choice before public full invoices are switched
+  on. Left open by A231q.
+
+- **A556. A full invoice that later replaces a bill's simplified one would not be delivered through
+  the bill.** The dashboard's order detail reaches a bill's invoice as the sale carrying that bill's
+  id; a replacing full invoice (an F3) is a separate sale, and whether it would carry the bill's id
+  was not checked (A231q's review, read, not run). Nothing issues an F3 today: no route calls
+  `recordSubstitution`.
+
+- **A557. A success reported after an attempt had ended is not shown.** The delivery status marks
+  such an attempt `lateSuccess` (`apps/server/src/invoice-delivery-status.ts`), but neither the till
+  nor the dashboard shows it, so staff see only the attempt's earlier outcome. Left open by A231q.
+
+- **A558. The `invoice_delivery.*` refusals other than `.active` end without a full stop**, in the
+  till and the dashboard, in English and Spanish (`apps/till/src/i18n/codes.ts`,
+  `apps/dashboard/src/i18n/codes.ts`). A wording decision left open by A231q.
+
+- **When the business e-invoicing regime starts** — found by A231d's research. So from about October 2027,
   or October 2028 for smaller businesses, an invoice to a Spanish business must be a structured
   message, and a PDF alone is not enough (the design's register, RD 238/2026 art. 7.1). The exact
   end day of each period, and whether a restaurant's F1s to businesses fall inside the regime, are
   asked as
   [Q45](compliance/asesor-questions.md#q45-when-does-structured-business-invoicing-reach-a-restaurants-full-invoices-added-2026-10-07).
-  [Detail](backlog/fiscal.md#a231d-full-invoices-by-email-as-a-pdf-and-on-an-office-printer--part-1-landed-1399-part-2-open)
+  [Detail](backlog/fiscal.md#when-the-business-e-invoicing-regime-starts)
 
 - **A275. Invoice a bill paid later by transfer (full or simplified invoice)** — WAITS ON ASESOR Q42
   (2026-10-06).
@@ -1696,6 +1714,12 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 ### The till, devices and table service
 
+- **A559. The till's full-invoice dialog changes width when an error appears.** It takes the width
+  of its content: at 1280 px in English it grew from about 274 to about 348 px when A231q looked at
+  it, and at 390 px the customer's name is cut short. A fixed width for its fields, as the find-bill
+  dialog has (`apps/till/src/widgets/find-bill-dialog.ts`), would widen it to about 576 px — a
+  decision for the whole dialog. Left open by A231q.
+
 - **Investigate a null device identity during profile switching.** A432’s full till coverage run
   on 2026-10-08 passed 5,951 tests and its thresholds, but the browser logged an unhandled
   rejection at `apps/till/src/till-app.ts:4468` through `#readIdentity` / `#enterSwitchedProfile`.
@@ -2813,12 +2837,6 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   is in the server log. Decide how the till should show that outcome and offer another copy.
   [Receipt-branch observation](backlog/printers.md#show-a-failed-automatic-invoice-copy-to-staff)
 
-- **Remove the consent step from emailed receipts** (owner, 2026-10-09). Giving the email
-  address is enough. Slice 7 supplies department/default contact selection; removing current
-  consent schema/checks/staging/reservation/client and future F1 consent flow is separate work.
-  Keep provider/delivery gates and fiscal facts; preserve independent A448 verbatim.
-  [Source inventory and future failing cases](backlog/printers.md#remove-the-consent-step-from-emailed-receipts)
-
 - **What the AppArmor profile (A129, #862; A134, #887) left open:** **`trust` is still refused.** **The setup page's HTML says nothing about Bluetooth availability** — only `/status.json` and the log do. [Detail](backlog/printers.md#what-the-apparmor-profile-a129-862-a134-887-left-open)
 
 - **The office-printer check and the check of addresses typed into the dashboard still run inside the poll** — left open by C117 (#955), so the job pull still waits for them (see "A sweep in flight keeps connecting" below). The agent puts no limit of its own on a scan pass; read, not run: the whole sweep across several networks and the USB reads have no overall limit.
@@ -2828,7 +2846,7 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 - **An agent compares the server's discovery deadline with its own clock** — found in C102, read, not run. An agent on another machine whose clock is out by minutes scans for the wrong span; one on the box shares its clock. [Detail](backlog/printers.md#an-agent-compares-the-servers-discovery-deadline-with-its-own-clock)
 
 - **A sweep in flight keeps connecting after the discovery window closes** (189 of 253 connects on
-  #313 started after expiry). Pass the deadline through `Host.scan`. The office-printer paper-size
+  #313 started after expiry). Pass the deadline through `Host.scan`. The office-printer capability
   queries that follow the scan have no deadline either: at most eight at a time, each up to
   1.5 seconds, and the job pull waits for them, so printing is delayed while they run.
 
@@ -2929,10 +2947,22 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 - **The virtual PDF printer**, and a `print_jobs` retention sweep — nothing deletes a job today.
   [Detail](backlog/printers.md#the-virtual-pdf-printer)
 
-- **Office-printer greying is proven on one office printer only.** The owner's HP Color LaserJet
+- **Office-printer detection is proven on one office printer only.** The owner's HP Color LaserJet
   MFP M181fw's real reply is a test fixture, and the live query marked it from a Mac on the owner's
   network. It has not run from the box's container, and no receipt printer that answers IPP has
   been captured, so "A4 or letter means office printer" is a heuristic with one data point.
+
+- **A552. Invoices on the owner's office printer are unchecked with the committed code.** Owed on
+  the HP Color LaserJet MFP M181fw: a long full invoice sent as PDF through the product, its QR measured
+  with a ruler and scanned with a phone; the same invoice as Apple Raster at 600 dpi; a test page
+  from the Printers tab; and what Waitron reports with the tray empty and when the printer is
+  switched off mid-job. The owner saw the last two once on 2026-10-12 with a local change, before
+  A231q changed how a job the printer is holding is reported. Left open by A231q.
+
+- **A553. How long the box takes to draw one A4 raster page, and its peak memory, at 300 and
+  600 dpi, are not measured.** The server draws each page (`renderInvoicePage`,
+  `apps/server/src/page-print-api.ts`); it has not been timed on the box, in the built image. Left
+  open by A231q.
 
 - **A printer reported by its `.local` name may stay addable.** From a Mac, resolving the HP's
   `.local` name took 5 seconds, past the 1.5-second limit, so it was left unmarked. Not tried from

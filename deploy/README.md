@@ -21,7 +21,7 @@ There is no database server in the app's path, no connection string and no datab
 | `state`       | `/var/lib/waitron/state`       | the box's identity and its database: `venue/`, `secrets.env`, `trading.env`, `backup.env`, `modules.json`, `stream/` (Litestream's configuration and process-id file), the CA and leaf PEMs |
 | `logs`        | `/var/lib/waitron/logs`        | the rotating log file, and `crash-reports/`: one JSON file per process the venue watchdog killed                                                                                            |
 | `backups`     | `/var/lib/waitron/backups`     | local encrypted backup archives, when they are switched on                                                                                                                                  |
-| `mailpit`     | `/data`                        | the local dev/prepare mail inbox (account email captured when no SMTP credential exists)                                                                                                    |
+| `mailpit`     | `/data`                        | the local dev/prepare mail inbox (account and invoice email captured when no SMTP credential exists; a demo's invoice email always)                                                         |
 | `print_agent` | `/var/lib/waitron-print-agent` | the print agent's join token, saved config, and the pinned box CA (`server-ca.crt`)                                                                                                         |
 
 A box installed before the box ran its own database server was retired also carries a `waitron_db`

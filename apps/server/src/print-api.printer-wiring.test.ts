@@ -127,6 +127,7 @@ function mountApp(tenant: Tenant, now?: () => Date): Hono {
       cfg: cfgOf(tenant),
       pairingMode,
       readMembership: async () => null,
+      readInvoiceDocument: () => Promise.reject(new Error("No invoice is read here")),
       venueLocale: "es-ES",
       ...(now === undefined ? {} : { now }),
     },

@@ -523,7 +523,7 @@ jobs:
       # under it, not because the bundle carries that fact itself. scripts/copy-migrations.mjs now
       # also writes dist/package.json so dist/ is portable ALONE — copied into a Docker image with
       # nothing else from this package, say — with one exception: sharp is left out of the bundle,
-      # loaded when a photo is first prepared, and must be installed beside it (the box image puts
+      # loaded when a photo or an A4 invoice is first prepared, and must be installed beside it (the box image puts
       # it in /app/node_modules). Proven here by copying JUST dist/ out to a directory
       # with no ancestor package.json at all (mktemp -d, off the checkout entirely) and running it
       # from there. This runner's own Node (this workflow's .nvmrc) auto-detects ES module syntax
@@ -544,8 +544,8 @@ jobs:
       #
       # Reaching `server.listening` from a directory with no ancestor package.json is also exactly
       # what this step wants to prove — every import boot makes resolved with only `dist/` present.
-      # sharp is not one of them: it is imported on the first photo upload, which this step makes
-      # none of, and the box image puts it in /app/node_modules beside the bundle.
+      # sharp is not one of them: it is imported on the first photo upload or A4 invoice print, which
+      # this step makes none of, and the box image puts it in /app/node_modules beside the bundle.
       - name: Smoke-test dist/ copied out on its own, with no ancestor package.json
         env:
           WAITRON_HTTP_PORT: "18081"

@@ -259,6 +259,30 @@ export const ALERT_MESSAGES: Readonly<
     en: "{count} print job(s) are stuck at “{printer}”. Check the printer on the Printers page.",
     es: "{count} trabajo(s) de impresión atascado(s) en «{printer}». Revisa la impresora en la página de Impresoras.",
   },
+  "invoice_delivery.failed": {
+    en: "Full invoice {invoice} has not reached its customer: the last attempt to send or print it failed. Send it again from the order, on the till or on the Orders page.",
+    es: "La factura completa {invoice} no ha llegado a su cliente: el último intento de enviarla o imprimirla ha fallado. Vuelve a enviarla desde el pedido, en el TPV o en la página de Pedidos.",
+  },
+  "invoice_delivery.uncertain": {
+    en: "Full invoice {invoice} may not have reached its customer. Check before sending it again.",
+    es: "Puede que la factura completa {invoice} no haya llegado a su cliente. Compruébalo antes de volver a enviarla.",
+  },
+  "invoice_delivery.office_printer_unclaimed": {
+    en: "Full invoice {invoice} is waiting for office printer “{printer}”, and no print agent has taken it. A manager can open Add a printer on the Printers page and choose “Use this agent” on the office printer's row.",
+    es: "La factura completa {invoice} está esperando a la impresora de oficina «{printer}» y ningún agente de impresión la ha recogido. Un responsable puede abrir Añadir impresora en la página de Impresoras y elegir «Usar este agente» en la fila de la impresora de oficina.",
+  },
+  "invoice_delivery.held": {
+    en: "Full invoice {invoice} is waiting at office printer “{printer}”. {hold:printer_hold} The invoice will then print by itself: do not print it again.",
+    es: "La factura completa {invoice} está esperando en la impresora de oficina «{printer}». {hold:printer_hold} Después la factura se imprimirá sola: no la vuelvas a imprimir.",
+  },
+  "invoice_delivery.uncertain_held": {
+    en: "Full invoice {invoice} may still print on office printer “{printer}”: the printer was holding it when Waitron lost track of it. Check the printer first; only if it did not print, send it again from the order, on the till or on the Orders page.",
+    es: "Puede que la factura completa {invoice} aún se imprima en la impresora de oficina «{printer}»: la impresora la tenía retenida cuando Waitron perdió su rastro. Comprueba primero la impresora; solo si no se ha imprimido, vuelve a enviarla desde el pedido, en el TPV o en la página de Pedidos.",
+  },
+  "invoice_delivery.queued_behind_hold": {
+    en: "Full invoice {invoice} is waiting for office printer “{printer}”, which is holding an earlier job. {hold:printer_hold} The invoice will then print after it. To give the customer the invoice on the receipt printer instead, open the order on the till.",
+    es: "La factura completa {invoice} está esperando a la impresora de oficina «{printer}», que tiene retenido un trabajo anterior. {hold:printer_hold} Después la factura se imprimirá tras él. Para darle al cliente la factura en la impresora de tickets, abre el pedido en el TPV.",
+  },
   "reader.battery_low": {
     en: "Card reader “{reader}” battery is low ({percent}%). Charge it to avoid interruptions at the till.",
     es: "La batería del lector de tarjetas «{reader}» está baja ({percent} %). Cárgalo para evitar interrupciones en la caja.",
@@ -266,5 +290,56 @@ export const ALERT_MESSAGES: Readonly<
   "reader.status_unavailable": {
     en: "Waitron could not check card reader “{reader}”. Check it on the Payments page.",
     es: "Waitron no ha podido comprobar el lector de tarjetas «{reader}». Revísalo en la página de Pagos.",
+  },
+};
+
+// What an office printer holding a job needs, by the hold code an alert's `hold` param carries
+// (`a4HoldCodes`, `@waitron/db`). The server shows these alerts with `report.view`, which a
+// supervisor holds without `printer.manage`, so each asks only for something done at the printer.
+export const ALERT_WORDS: Readonly<
+  Record<
+    string,
+    {
+      readonly words: Readonly<Record<string, { readonly en: string; readonly es: string }>>;
+      readonly otherwise: { readonly en: string; readonly es: string };
+    }
+  >
+> = {
+  printer_hold: {
+    words: {
+      paper_out: { en: "It is out of paper: load paper.", es: "No tiene papel: carga papel." },
+      paper_jam: {
+        en: "Paper is jammed in it: clear the jam.",
+        es: "Tiene un atasco de papel: retira el papel atascado.",
+      },
+      cover_open: {
+        en: "A cover or door is open: close it.",
+        es: "Tiene una tapa o una puerta abierta: ciérrala.",
+      },
+      tray_missing: {
+        en: "A paper tray is missing: put it back.",
+        es: "Le falta una bandeja de papel: vuelve a colocarla.",
+      },
+      ink_or_toner_out: {
+        en: "It is out of ink or toner: replace the cartridge.",
+        es: "Se ha quedado sin tinta o sin tóner: cambia el cartucho.",
+      },
+      output_full: {
+        en: "Its output tray is full or missing: empty it or put it back.",
+        es: "Su bandeja de salida está llena o no está puesta: vacíala o vuelve a colocarla.",
+      },
+      paused: {
+        en: "It is paused: resume it on the printer itself.",
+        es: "Está en pausa: reanúdala en la propia impresora.",
+      },
+      stopped: {
+        en: "It has stopped: check the printer for what it needs.",
+        es: "Se ha detenido: revisa qué necesita la impresora.",
+      },
+    },
+    otherwise: {
+      en: "It is waiting for something: check the printer for what it needs.",
+      es: "Está esperando algo: revisa qué necesita la impresora.",
+    },
   },
 };

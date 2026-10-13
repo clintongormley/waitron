@@ -72,8 +72,9 @@ services:
         max-size: 10m
         max-file: "5"
 
-  # Demo and Prepare capture account email locally when no SMTP credential exists. Both ports stay
-  # on the box loopback; browsers read the inbox through Waitron's authenticated management API.
+  # Demo, Prepare and development capture account and invoice email here when no SMTP credential
+  # exists, and Demo and development capture invoice email here even when one does
+  # (apps/server/src/email-delivery.ts). Both ports stay on the box loopback; browsers read the inbox through Waitron's authenticated management API.
   # Production starts the small service too because Compose is installed before onboarding selects a
   # mode, but the application never falls back to it for a live installation.
   mailpit:

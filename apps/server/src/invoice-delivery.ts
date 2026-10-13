@@ -8,7 +8,7 @@ import {
   sales,
   nodes,
   pagePrinters,
-  type InvoiceEmailConsent,
+  type A4FailureCode,
   type Transaction,
 } from "@waitron/db";
 import { MAX_DELIVERY_ATTEMPTS, PRINTER_DELETED } from "@waitron/printing";
@@ -20,7 +20,7 @@ export type EmailDeliveryRequest = {
   personId: string;
   medium: "email";
   recipient: string;
-  consent: InvoiceEmailConsent;
+  madeByRetry?: boolean;
 };
 
 export type A4DeliveryRequest = {
@@ -66,9 +66,11 @@ export async function reserveInvoiceDelivery(
       and(eq(invoiceDeliveries.saleId, saleId), eq(invoiceDeliveries.requestKey, input.requestKey)),
     );
   if (replay !== undefined) return replay;
+  // Issuance does not wait for a destination disabled after staging; it records the original failed.
+  let disabledDestination = false;
   if (input.medium === "a4") {
     const [printer] = await tx
-      .select({ id: pagePrinters.id })
+      .select({ active: pagePrinters.active })
       .from(pagePrinters)
       .innerJoin(nodes, eq(nodes.locationId, pagePrinters.locationId))
       .where(
@@ -79,6 +81,7 @@ export async function reserveInvoiceDelivery(
         ),
       );
     if (printer === undefined) throw new AppError("invoice_delivery.printer_invalid", {});
+    disabledDestination = !printer.active;
   }
   const [receiptJob] =
     input.medium === "receipt"
@@ -152,14 +155,9 @@ export async function reserveInvoiceDelivery(
       medium: input.medium,
       designation,
       generation: (history[0]?.generation ?? 0) + 1,
+      ...(disabledDestination ? { status: "failed", failureCode: "printer_disabled" } : {}),
       ...(input.medium === "email"
-        ? {
-            recipient: input.recipient,
-            consent: {
-              ...input.consent,
-              recordedAt: new Date(input.consent.recordedAt).toISOString(),
-            },
-          }
+        ? { recipient: input.recipient, madeByRetry: input.madeByRetry }
         : input.medium === "a4"
           ? { pagePrinterId: input.pagePrinterId }
           : { printJobId: input.printJobId }),
@@ -176,9 +174,12 @@ export type InvoiceDeliveryClaim = {
 };
 export type InvoiceDeliveryOutcome =
   | { status: "sent" }
-  | { status: "failed" | "unknown"; failureCode: "transport_failed" | "timeout" };
+  | { status: "failed" | "unknown"; failureCode: "transport_failed" | A4FailureCode };
 
-function tokenHash(token: string): string {
+/** How long a claim stays current without a renewal or a report. */
+export const INVOICE_DELIVERY_LEASE_MS = 60_000;
+
+export function tokenHash(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
@@ -216,7 +217,7 @@ export async function claimInvoiceDelivery(
       attempts: sql`${invoiceDeliveries.attempts} + 1`,
       claimTokenHash: tokenHash(token),
       claimedBy: holder,
-      claimedAgentId: delivery.medium === "receipt" ? holder : null,
+      claimedAgentId: delivery.medium === "email" ? null : holder,
       claimedAt: now.toISOString(),
     })
     .where(
@@ -247,7 +248,10 @@ export async function expireInvoiceDeliveryClaims(
         eq(invoiceDeliveries.status, "sending"),
         restart
           ? undefined
-          : lte(invoiceDeliveries.claimedAt, new Date(now.getTime() - 60_000).toISOString()),
+          : lte(
+              invoiceDeliveries.claimedAt,
+              new Date(now.getTime() - INVOICE_DELIVERY_LEASE_MS).toISOString(),
+            ),
       ),
     )
     .returning({ id: invoiceDeliveries.id, printJobId: invoiceDeliveries.printJobId });
@@ -389,7 +393,6 @@ export async function reportInvoiceEmailDelivery(
     generation: delivery!.generation + 1,
     attempts: delivery!.attempts,
     recipient: delivery!.recipient,
-    consent: delivery!.consent,
     personId: delivery!.personId,
     createdAt: now.toISOString(),
     nextAttemptAt: new Date(now.getTime() + delays[delivery!.attempts - 1]!).toISOString(),

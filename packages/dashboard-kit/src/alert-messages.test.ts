@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { alertMessage, hasAlertMessage, registerAlertMessages } from "./alert-messages.js";
+import {
+  alertMessage,
+  hasAlertMessage,
+  registerAlertMessages,
+  registerAlertWords,
+} from "./alert-messages.js";
 
 registerAlertMessages({
   // Placeholder non-English text: dashboard-kit's tests are scanned by the english-only guard.
@@ -12,6 +17,35 @@ registerAlertMessages({
     en: "Charged {amount:money}, not {expected:money}; {count} tries",
     es: "ES charged {amount:money}, ES not {expected:money}; {count} ES",
   },
+});
+
+registerAlertWords({
+  test_colour: {
+    words: { red: { en: "It is red.", es: "ES red." } },
+    otherwise: { en: "It has a colour.", es: "ES colour." },
+  },
+});
+registerAlertMessages({
+  "test.colour": { en: "Look. {shade:test_colour} Done.", es: "ES look. {shade:test_colour}" },
+  "test.unlisted": { en: "Shade {shade:no_such_list}.", es: "ES {shade:no_such_list}" },
+});
+
+describe("a word-list placeholder", () => {
+  it("writes the listed words for the param's value, in the alert's language", () => {
+    expect(alertMessage("test.colour", { shade: "red" }, "en-GB")).toBe("Look. It is red. Done.");
+    expect(alertMessage("test.colour", { shade: "red" }, "es-ES")).toBe("ES look. ES red.");
+  });
+
+  it("writes the list's other words for a value it does not name, or no value, never the value", () => {
+    for (const shade of ["teal", "toString", null, undefined, 3]) {
+      expect(alertMessage("test.colour", { shade }, "en")).toBe("Look. It has a colour. Done.");
+    }
+    expect(alertMessage("test.colour", {}, "es")).toBe("ES look. ES colour.");
+  });
+
+  it("shows a dash for a list nobody registered, never the value", () => {
+    expect(alertMessage("test.unlisted", { shade: "red" }, "en")).toBe("Shade —.");
+  });
 });
 
 describe("a money placeholder", () => {

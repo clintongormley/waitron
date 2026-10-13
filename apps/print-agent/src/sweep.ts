@@ -101,11 +101,33 @@ export async function sweepPort(opts: SweepOptions): Promise<DiscoveredDevice[]>
     .map((host) => ({ transport: "network_tcp", host, port: opts.port }));
 }
 
-/** The announced (mDNS) entries win: they carry the printer's own name, make and model. */
+/**
+ * One device per raw `host:port`, announced entries first because they carry the printer's own name,
+ * make and model. An IPP announcement (`ipp` set) is folded into its host's raw devices, filling in a
+ * name, make or model they lack; a host announced only by IPP stays one device, marked `ippOnly`.
+ */
 export function mergeDiscovered(
   announced: DiscoveredDevice[],
   swept: DiscoveredDevice[],
 ): DiscoveredDevice[] {
-  const seen = new Set(announced.map((d) => `${d.host}:${d.port}`));
-  return [...announced, ...swept.filter((d) => !seen.has(`${d.host}:${d.port}`))];
+  const ippByHost = new Map<string | undefined, DiscoveredDevice>();
+  for (const d of announced) {
+    if (d.ipp !== undefined && !ippByHost.has(d.host)) ippByHost.set(d.host, d);
+  }
+  const out: DiscoveredDevice[] = [];
+  const seen = new Set<string>();
+  const rawHosts = new Set<string | undefined>();
+  for (const d of [...announced, ...swept]) {
+    if (d.ipp !== undefined) continue;
+    const at = `${d.host}:${d.port}`;
+    if (seen.has(at)) continue;
+    seen.add(at);
+    rawHosts.add(d.host);
+    const ipp = ippByHost.get(d.host);
+    out.push(ipp === undefined ? d : { ...ipp, ...d });
+  }
+  for (const [host, ipp] of ippByHost) {
+    if (!rawHosts.has(host)) out.push({ ...ipp, ippOnly: true });
+  }
+  return out;
 }

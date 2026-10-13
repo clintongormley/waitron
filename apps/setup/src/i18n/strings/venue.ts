@@ -1,6 +1,39 @@
 // The venue, review and cert screens, and certificate-export-help.ts.
 
 export const venueEn = {
+  "email.required": "Send an accepted test message before completing live setup.",
+  "email.show_password": "Show password",
+  "email.hide_password": "Hide password",
+  "email.heading": "Set up email",
+  "email.intro":
+    "Send a test message to {recipient} before continuing. Use your mail provider’s settings.",
+  "email.server.label": "Mail server",
+  "email.server.hint": "smtp.example.com",
+  "email.server.error": "Enter a mail server hostname.",
+  "email.port.label": "Port",
+  "email.port.hint": "587",
+  "email.port.error": "Enter a whole port number from 1 to 65535.",
+  "email.encryption.label": "Encryption",
+  "email.encryption.error": "Choose STARTTLS or TLS.",
+  "email.user.label": "Username",
+  "email.user.hint": "Leave blank if your server needs no login.",
+  "email.user.error": "Enter the username for this password.",
+  "email.password.label": "Password",
+  "email.password.hint": "Your mail server password",
+  "email.password.error": "Enter the password for this username.",
+  "email.from.label": "Sender email",
+  "email.from.hint": "invoices@example.com",
+  "email.from.error": "Enter a valid sender email address.",
+  "email.fix_fields": "Correct the highlighted fields to continue.",
+  "email.accepted": "The mail server accepted the test message.",
+  "email.refused": "The mail server refused the test message. Check your settings and try again.",
+  "email.timeout": "The mail server did not answer in time. Try again.",
+  "email.failed": "The test could not be completed. Try again.",
+  "email.back": "Back",
+  "email.next": "Continue",
+  "email.test": "Send test message",
+  "email.testing": "Sending test…",
+
   "venue.heading": "Your shop",
   "venue.intro": "Enter the business that issues your invoices and the address of this location.",
   "venue.intro_demo":
@@ -194,6 +227,41 @@ export const venueEn = {
 } as const;
 
 export const venueEs: Record<keyof typeof venueEn, string> = {
+  "email.required":
+    "Envía un mensaje de prueba aceptado antes de completar la configuración en vivo.",
+  "email.show_password": "Mostrar contraseña",
+  "email.hide_password": "Ocultar contraseña",
+  "email.heading": "Configura el correo electrónico",
+  "email.intro":
+    "Envía un mensaje de prueba a {recipient} antes de continuar. Usa los ajustes de tu proveedor de correo.",
+  "email.server.label": "Servidor de correo",
+  "email.server.hint": "smtp.example.com",
+  "email.server.error": "Introduce el nombre del servidor de correo.",
+  "email.port.label": "Puerto",
+  "email.port.hint": "587",
+  "email.port.error": "Introduce un número de puerto entero entre 1 y 65535.",
+  "email.encryption.label": "Cifrado",
+  "email.encryption.error": "Elige STARTTLS o TLS.",
+  "email.user.label": "Nombre de usuario",
+  "email.user.hint": "Déjalo vacío si el servidor no necesita iniciar sesión.",
+  "email.user.error": "Introduce el nombre de usuario para esta contraseña.",
+  "email.password.label": "Contraseña",
+  "email.password.hint": "La contraseña del servidor de correo",
+  "email.password.error": "Introduce la contraseña para este usuario.",
+  "email.from.label": "Correo del remitente",
+  "email.from.hint": "facturas@example.com",
+  "email.from.error": "Introduce una dirección válida para el remitente.",
+  "email.fix_fields": "Corrige los campos marcados para continuar.",
+  "email.accepted": "El servidor de correo ha aceptado el mensaje de prueba.",
+  "email.refused":
+    "El servidor de correo ha rechazado el mensaje de prueba. Comprueba los ajustes y vuelve a intentarlo.",
+  "email.timeout": "El servidor de correo no ha respondido a tiempo. Vuelve a intentarlo.",
+  "email.failed": "No se ha podido completar la prueba. Vuelve a intentarlo.",
+  "email.back": "Atrás",
+  "email.next": "Continuar",
+  "email.test": "Enviar mensaje de prueba",
+  "email.testing": "Enviando la prueba…",
+
   "venue.heading": "Tu tienda",
   "venue.intro":
     "Introduce los datos del negocio que emite tus facturas y la dirección de este local.",

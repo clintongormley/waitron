@@ -6,6 +6,7 @@ import {
   billPayments,
   deviceProfiles,
   kitchenStations,
+  pagePrinters,
   parties,
   workingOrderLines,
   tenants,
@@ -93,6 +94,10 @@ import { offerProducts } from "./testing/zone-offers.js";
  * | GET  /api/sales/:id/receipt                             | order                  | refuses GET /api/sales/:id/receipt                   |
  * | POST /api/sales/:id/receipt/handover                    | order                  | refuses POST .../receipt/handover                    |
  * | POST /api/sales/:id/receipt/retry                       | order                  | refuses POST .../receipt/retry                       |
+ * | GET  /api/sales/:id/deliveries                          | order                  | refuses GET /api/sales/:id/deliveries                |
+ * | POST /api/sales/:id/deliveries                          | order                  | refuses POST /api/sales/:id/deliveries               |
+ * | POST /api/sales/:id/deliveries/:deliveryId/to-receipt   | order                  | refuses POST .../deliveries/:deliveryId/to-receipt   |
+ * | POST /api/sales/:id/deliveries/:deliveryId/retry        | order                  | refuses POST .../deliveries/:deliveryId/retry        |
  * | POST /api/sales/:id/receipt, /payment-slip              | order                  | refuses POST /api/sales/:id/receipt, /payment-slip   |
  * | POST /api/sales/:id/reprint                             | order                  | refuses POST /api/sales/:id/reprint                  |
  * | POST /api/working-orders/:id/collect                    | order                  | refuses POST /api/working-orders/:id/collect         |
@@ -170,8 +175,10 @@ import { offerProducts } from "./testing/zone-offers.js";
  * `/payment-slip`, `/reprint` and the four bill-payment routes — where it reads just before, outside
  * any transaction.
  *
- * Not zone-gated: `GET /api/service-day/authorizers`, `GET /api/stations/:stationId/today` and
- * `PUT /api/stations/:stationId/today` name no zone; the session, staff, till, locale and product
+ * Not zone-gated: `GET /api/service-day/authorizers`, `GET /api/stations/:stationId/today`,
+ * `PUT /api/stations/:stationId/today` and `GET /api/invoice-delivery-options` (the server
+ * location's invoice printer; "reads the location's invoice printer, which names no zone") name no
+ * zone; the session, staff, till, locale and product
  * reads; the kitchen's `/api/device/station-screen`, notice, ticket-item and
  * `/api/device/working-orders/:id/lines/move-station` routes, scoped by the device's station screen
  * ("a kitchen display" below; for the move route, "refuses a dish at a station the screen does not
@@ -638,6 +645,41 @@ const ROUTES: readonly Row[] = [
     "POST",
     (x) => `/api/sales/${x.deliOrder}/receipt/retry`,
     () => ({}),
+    deliOrderZone,
+  ],
+  [
+    "GET /api/sales/:id/deliveries",
+    "GET",
+    (x) => `/api/sales/${x.deliOrder}/deliveries`,
+    undefined,
+    deliOrderZone,
+  ],
+  [
+    "POST /api/sales/:id/deliveries",
+    "POST",
+    (x) => `/api/sales/${x.deliOrder}/deliveries`,
+    () => ({ medium: "a4", requestKey: randomUUID() }),
+    deliOrderZone,
+  ],
+  [
+    "POST /api/sales/:id/deliveries (email)",
+    "POST",
+    (x) => `/api/sales/${x.deliOrder}/deliveries`,
+    () => ({ medium: "email", recipient: "cliente@example.test", requestKey: randomUUID() }),
+    deliOrderZone,
+  ],
+  [
+    "POST /api/sales/:id/deliveries/:deliveryId/to-receipt",
+    "POST",
+    (x) => `/api/sales/${x.deliOrder}/deliveries/${id}/to-receipt`,
+    () => ({ requestKey: randomUUID() }),
+    deliOrderZone,
+  ],
+  [
+    "POST /api/sales/:id/deliveries/:deliveryId/retry",
+    "POST",
+    (x) => `/api/sales/${x.deliOrder}/deliveries/${id}/retry`,
+    () => ({ requestKey: randomUUID() }),
     deliOrderZone,
   ],
   [
@@ -1356,6 +1398,33 @@ describe("a Restaurant profile in its own zones", () => {
     expect(orderIds).toContain(f.restOrder);
     expect(orderIds).not.toContain(f.deliOrder);
     expect(orderIds).not.toContain(f.deliTab);
+  });
+
+  it("reads the location's invoice printer, which names no zone", async () => {
+    const id = randomUUID();
+    await suite.db.insert(pagePrinters).values({
+      id,
+      locationId: v.cfg.locationId,
+      name: "Invoices",
+      host: id,
+      port: 631,
+      resourcePath: "/ipp/print",
+      documentFormat: "application/pdf",
+      supportedFormats: ["application/pdf"],
+      media: "iso_a4_210x297mm",
+      resolutionDpi: 300,
+      invoiceDefault: true,
+    });
+    try {
+      for (const session of [restaurant, deli]) {
+        expect(await send(session, "GET", "/api/invoice-delivery-options")).toEqual({
+          status: 200,
+          body: { invoicePrinter: { id, name: "Invoices" }, emailAvailable: false },
+        });
+      }
+    } finally {
+      await suite.db.delete(pagePrinters).where(eq(pagePrinters.id, id));
+    }
   });
 
   it("lists only the profile's orders waiting at the counter", async () => {

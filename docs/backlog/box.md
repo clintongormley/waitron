@@ -408,6 +408,11 @@ through SMTP instead of capturing them on the box, and the top bar's inbox link 
 demo-only again. Not built.
 (2026-10-03: the owner keeps this item open. A231d's design, below, sends a prepare venue's invoice
 email through its mail server when one is set, and adds no way to set one there.)
+(2026-10-12: A231q lets the till and the dashboard email a full invoice. In a prepare venue it
+still goes through a mail server only when one is set, otherwise to the box's captured inbox
+(`resolveInvoiceEmailDelivery`, `apps/server/src/email-delivery.ts`); the setup wizard and the
+dashboard's Account email page still cannot set one there (`apps/server/src/email-settings-api.ts`), so
+this item stays open.)
 
 ## Decisions and deliberate limits
 

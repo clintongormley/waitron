@@ -68,11 +68,11 @@ function wireJob(over: Partial<WireJob>): WireJob {
 }
 
 describe("buildPdlQuery", () => {
-  it("encodes the exact mDNS PTR query bytes for _pdl-datastream._tcp.local", () => {
+  it("encodes the exact mDNS PTR query bytes for _pdl-datastream._tcp.local and _ipp._tcp.local", () => {
     const q = buildPdlQuery();
-    // Header: 12 bytes, one question, everything else zero.
-    expect(q.readUInt16BE(4)).toBe(1); // qdcount
-    expect([...q.subarray(0, 12)]).toEqual([0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]);
+    // Header: 12 bytes, two questions, everything else zero.
+    expect(q.readUInt16BE(4)).toBe(2); // qdcount
+    expect([...q.subarray(0, 12)]).toEqual([0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0]);
     // QNAME: length-prefixed labels then a zero root.
     expect(q[12]).toBe(15);
     expect(q.toString("ascii", 13, 28)).toBe("_pdl-datastream");
@@ -81,10 +81,20 @@ describe("buildPdlQuery", () => {
     expect(q[33]).toBe(5);
     expect(q.toString("ascii", 34, 39)).toBe("local");
     expect(q[39]).toBe(0); // root label
-    // QTYPE=PTR(12), QCLASS=IN(1), and nothing after.
+    // QTYPE=PTR(12), QCLASS=IN(1).
     expect(q.readUInt16BE(40)).toBe(12);
     expect(q.readUInt16BE(42)).toBe(1);
-    expect(q.length).toBe(44);
+    // The second question, written out in full: _ipp._tcp.local, PTR, IN, and nothing after.
+    expect(q[44]).toBe(4);
+    expect(q.toString("ascii", 45, 49)).toBe("_ipp");
+    expect(q[49]).toBe(4);
+    expect(q.toString("ascii", 50, 54)).toBe("_tcp");
+    expect(q[54]).toBe(5);
+    expect(q.toString("ascii", 55, 60)).toBe("local");
+    expect(q[60]).toBe(0);
+    expect(q.readUInt16BE(61)).toBe(12);
+    expect(q.readUInt16BE(63)).toBe(1);
+    expect(q.length).toBe(65);
   });
 });
 

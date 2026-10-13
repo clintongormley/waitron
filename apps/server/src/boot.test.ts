@@ -1525,7 +1525,15 @@ describe("startServer, against a migrated venue directory", () => {
             ...via,
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify(body),
+            body: JSON.stringify({
+              ...body,
+              email: {
+                server: "smtp.example.test",
+                port: 587,
+                encryption: "starttls",
+                from: "venue@example.test",
+              },
+            }),
           });
           expect(response.status).toBe(200);
           const json = (await response.json()) as { provisioned: boolean };
@@ -1537,6 +1545,10 @@ describe("startServer, against a migrated venue directory", () => {
             sql`select cast(count(*) as int) as n from tenant_credentials where purpose = 'fiscal.aeat'`,
           );
           expect(sealed.rows[0]!.n).toBe(1);
+          const smtp = await check.execute<{ n: number }>(
+            sql`select cast(count(*) as int) as n from tenant_credentials where purpose = 'email.smtp'`,
+          );
+          expect(smtp.rows[0]!.n).toBe(1);
           const provisioned = await check.execute<{ id: string }>(
             sql`select cast(id as text) as id from tenants`,
           );

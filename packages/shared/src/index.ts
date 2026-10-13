@@ -128,6 +128,7 @@ export { perDishOptionQuantity } from "./quantity.js";
 export { draftLineMergeKey, normaliseDraftLines } from "./draft-merge.js";
 export type { MergeableDraftLine } from "./draft-merge.js";
 export { deriveDisplayName } from "./derive-display-name.js";
+export { isValidEmail } from "./email.js";
 export { isValidTelephone } from "./telephone.js";
 export { isValidGuestCount, MAX_GUEST_COUNT } from "./guest-count.js";
 export { MEDIA_FILENAME } from "./media-filename.js";

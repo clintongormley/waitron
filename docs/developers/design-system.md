@@ -468,8 +468,7 @@ The seven field elements' label, hint and error are inside the element, so the c
 Outside a `wt-modal`, `--wt-field-max-width` is the theme root's `none`, so a field on a page, or in a `wt-dialog`
 that is not inside a `wt-modal`, is as wide as its container, as before; a `wt-dialog` placed
 inside a modal's body inherits the cap. Page forms are bounded by their screen's own column instead
-(the setup wizard's raised column, the `max-width` of screens such as backup and sign-in, and the
-receipts screen's form column),
+(the setup wizard's raised column, and the `max-width` of screens such as backup and sign-in),
 so they were left alone. At 390px wide a modal's body is narrower than the token, so a field there
 still takes the body's whole width.
 
@@ -2078,6 +2077,12 @@ and nothing guards it across screens:
   `apps/dashboard/src/screens/floor-plan-add-joined-table.unsaved.test.ts`;
 - A494: Venue details' Change legal name dialog. Its leave cases are in
   `apps/dashboard/src/screens/legal-name-dialog.unsaved.test.ts`;
+- A231q: the mail server settings form (`apps/dashboard/src/widgets/email-settings-form.ts`); the
+  order detail's invoice email form (`apps/dashboard/src/widgets/invoice-email-dialog.ts`); an office
+  printer's Add (`apps/dashboard/src/widgets/page-printer-add.ts`); the office printers panel's
+  invoice printer choice and Rename (`apps/dashboard/src/widgets/page-printers-panel.ts`); and the
+  till's invoice email form (`apps/till/src/widgets/invoice-email-dialog.ts`). Each has a sibling
+  `*.unsaved.test.ts`;
 - batch 4c: the venue-service local holiday Add and Edit (its Remove and Forget stay `danger`
   confirmations, and the holiday area saves on choice); and the
   till's profile dialog, whose Switch waits until another profile is chosen. The profile dialog is
@@ -2172,8 +2177,10 @@ when none are sent" in `packages/catalogue/src/include-folder.db.test.ts`, hold 
 
 Give every field an explicit semantic `name`. Use the standard autocomplete purposes where they
 exist: `username` for a login email, `current-password` for a login password, and `new-password`
-for password creation and confirmation. A generated name such as `wt-input-2` describes the widget,
-not the value, and gives automation nothing useful to work with.
+for password creation and confirmation. A customer's details typed on a shared till or office
+machine take `autocomplete="off"` instead, so one customer's details are not offered to the next. A
+generated name such as `wt-input-2` describes the widget, not the value, and gives automation
+nothing useful to work with.
 
 Put an icon-only password visibility button in the input's `end` slot. Toggle the native input type
 between `password` and `text`, retain the entered value, and give the button a localized accessible

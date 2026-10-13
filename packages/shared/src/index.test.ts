@@ -26,6 +26,7 @@ import {
   isSaleOrigin,
   isSupportedLocale,
   isUuid,
+  isValidEmail,
   isValidGuestCount,
   isValidTelephone,
   isZeroDecimal,
@@ -164,6 +165,7 @@ describe("package public surface (./index.js)", () => {
   it("re-exports the profile helpers", () => {
     expect(deriveDisplayName("", "", "", "Alba", "Ruiz")).toBe("Alba Ruiz");
     expect(isValidTelephone("+34 600 000 000")).toBe(true);
+    expect(isValidEmail("ana@example.com")).toBe(true);
   });
 
   it("re-exports the media library filename pattern", () => {

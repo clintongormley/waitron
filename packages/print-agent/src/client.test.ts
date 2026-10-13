@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import { createClient, isBluetoothAddress, isBluetoothPin } from "./client.js";
+import {
+  createClient,
+  DEFAULT_TIMEOUT_MS,
+  isBluetoothAddress,
+  isBluetoothPin,
+  PAGE_DOCUMENT_TIMEOUT_MS,
+  type PageJob,
+} from "./client.js";
 
 function reply(status: number, body?: unknown): Response {
   return new Response(body === undefined ? null : JSON.stringify(body), {
@@ -678,6 +685,202 @@ describe("createClient — report", () => {
       ok: false,
       failure: { kind: "unreachable" },
     });
+  });
+});
+
+const DELIVERY = "0f8fad5b-d9cb-469f-a165-70867728950e";
+const CLAIM_TOKEN = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
+const PRINTER = {
+  id: "9b2d3c4e-1111-4222-8333-444455556666",
+  host: "192.168.20.40",
+  port: 631,
+  resourcePath: "/ipp/print",
+  documentFormat: "image/pwg-raster",
+  media: "iso_a4_210x297mm",
+  resolutionDpi: 300,
+} as const;
+const PAGE_JOB: PageJob = {
+  id: DELIVERY,
+  generation: 3,
+  token: CLAIM_TOKEN,
+  printer: PRINTER,
+};
+const CLAIM_LOST = { error: { code: "invoice_delivery.claim_lost", params: {} } };
+
+describe("createClient — page jobs", () => {
+  it("claims with the Bearer and reads the claim and its printer", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(
+        reply(200, { id: DELIVERY, generation: 3, token: CLAIM_TOKEN, printer: PRINTER }),
+      );
+    const client = createClient({ fetch: fetchImpl });
+    expect(await client.claimPageJob(URL_A, "a1.s")).toEqual({ ok: true, value: PAGE_JOB });
+    const [url, init] = fetchImpl.mock.calls[0]!;
+    expect(url).toBe(`${URL_A}/print-api/agent/page-jobs/claim`);
+    expect(init.method).toBe("POST");
+    expect(init.headers.authorization).toBe("Bearer a1.s");
+  });
+
+  it("reads a 204 claim answer as nothing to print", async () => {
+    const client = createClient({ fetch: stub(204) });
+    expect(await client.claimPageJob(URL_A, "a1.s")).toEqual({ ok: true, value: null });
+  });
+
+  it.each([
+    ["a non-uuid id", { id: "d1" }],
+    ["a generation below 1", { generation: 0 }],
+    ["a fractional generation", { generation: 1.5 }],
+    ["a non-uuid token", { token: "t" }],
+    ["no printer", { printer: null }],
+    ["a printer port of 0", { printer: { ...PRINTER, port: 0 } }],
+    ["a printer port past 65535", { printer: { ...PRINTER, port: 65_536 } }],
+    ["an empty printer host", { printer: { ...PRINTER, host: "" } }],
+    ["a resource path without a slash", { printer: { ...PRINTER, resourcePath: "ipp" } }],
+    ["an unknown format", { printer: { ...PRINTER, documentFormat: "text/plain" } }],
+    ["an unknown media", { printer: { ...PRINTER, media: "iso_a3" } }],
+    ["a resolution of 0", { printer: { ...PRINTER, resolutionDpi: 0 } }],
+    ["a printer id that is not a string", { printer: { ...PRINTER, id: 7 } }],
+  ])("refuses a claim answer with %s", async (_label, change) => {
+    const client = createClient({
+      fetch: stub(200, {
+        id: DELIVERY,
+        generation: 3,
+        token: CLAIM_TOKEN,
+        printer: PRINTER,
+        ...change,
+      }),
+    });
+    expect(await client.claimPageJob(URL_A, "a1.s")).toMatchObject({
+      ok: false,
+      failure: { kind: "bad_reply" },
+    });
+  });
+
+  it("fetches the document with the claim in the body and returns its bytes", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(new Uint8Array([0x25, 0x50, 0x44, 0x46]), {
+        status: 200,
+        headers: { "content-type": "image/pwg-raster" },
+      }),
+    );
+    const client = createClient({ fetch: fetchImpl });
+    expect(await client.fetchPageDocument(URL_A, "a1.s", PAGE_JOB)).toEqual({
+      ok: true,
+      value: new Uint8Array([0x25, 0x50, 0x44, 0x46]),
+    });
+    const [url, init] = fetchImpl.mock.calls[0]!;
+    expect(url).toBe(`${URL_A}/print-api/agent/page-jobs/${DELIVERY}/document`);
+    expect(init.method).toBe("POST");
+    expect(init.headers.authorization).toBe("Bearer a1.s");
+    expect(init.headers["content-type"]).toBe("application/json");
+    expect(JSON.parse(init.body as string)).toEqual({ generation: 3, token: CLAIM_TOKEN });
+  });
+
+  it("waits longer for the document than for any other call", async () => {
+    vi.useFakeTimers();
+    try {
+      let aborted = false;
+      const fetchImpl = vi.fn(
+        (_url: RequestInfo | URL, init?: RequestInit) =>
+          new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener("abort", () => {
+              aborted = true;
+              reject(new Error("aborted"));
+            });
+          }),
+      );
+      const client = createClient({ fetch: fetchImpl });
+      const fetched = client.fetchPageDocument(URL_A, "a1.s", PAGE_JOB);
+      await vi.advanceTimersByTimeAsync(PAGE_DOCUMENT_TIMEOUT_MS - 1);
+      expect(aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(aborted).toBe(true);
+      expect(await fetched).toMatchObject({ ok: false, failure: { kind: "unreachable" } });
+      expect(PAGE_DOCUMENT_TIMEOUT_MS).toBeGreaterThan(DEFAULT_TIMEOUT_MS);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each(["paper_out", null] as const)(
+    "renews with the claim and the hold %j in the body and resolves on 204",
+    async (hold) => {
+      const fetchImpl = vi.fn().mockResolvedValue(reply(204));
+      const client = createClient({ fetch: fetchImpl });
+      expect(await client.renewPageJob(URL_A, "a1.s", PAGE_JOB, hold)).toEqual({
+        ok: true,
+        value: undefined,
+      });
+      const [url, init] = fetchImpl.mock.calls[0]!;
+      expect(url).toBe(`${URL_A}/print-api/agent/page-jobs/${DELIVERY}/renew`);
+      expect(init.method).toBe("POST");
+      expect(init.headers.authorization).toBe("Bearer a1.s");
+      expect(JSON.parse(init.body as string)).toEqual({ generation: 3, token: CLAIM_TOKEN, hold });
+    },
+  );
+
+  it.each([
+    [{ status: "sent" }],
+    [{ status: "failed", failureCode: "document_unavailable" }],
+    [{ status: "unknown", failureCode: "timeout" }],
+  ] as const)("reports %j with the claim and resolves on 204", async (outcome) => {
+    const fetchImpl = vi.fn().mockResolvedValue(reply(204));
+    const client = createClient({ fetch: fetchImpl });
+    expect(await client.reportPageJob(URL_A, "a1.s", PAGE_JOB, outcome)).toEqual({
+      ok: true,
+      value: undefined,
+    });
+    const [url, init] = fetchImpl.mock.calls[0]!;
+    expect(url).toBe(`${URL_A}/print-api/agent/page-jobs/${DELIVERY}/result`);
+    expect(init.method).toBe("POST");
+    expect(init.headers.authorization).toBe("Bearer a1.s");
+    expect(JSON.parse(init.body as string)).toEqual({
+      generation: 3,
+      token: CLAIM_TOKEN,
+      ...outcome,
+    });
+  });
+
+  it("reads the server's lost-claim answer as claim_lost on document, renew and result", async () => {
+    const client = createClient({ fetch: vi.fn(async () => reply(409, CLAIM_LOST)) });
+    for (const call of [
+      client.fetchPageDocument(URL_A, "a1.s", PAGE_JOB),
+      client.renewPageJob(URL_A, "a1.s", PAGE_JOB, null),
+      client.reportPageJob(URL_A, "a1.s", PAGE_JOB, { status: "sent" }),
+    ]) {
+      expect(await call).toEqual({ ok: false, failure: { kind: "claim_lost" } });
+    }
+  });
+
+  it("reads a 409 with another code, or none, as bad_reply", async () => {
+    const other = createClient({
+      fetch: stub(409, { error: { code: "management.request_invalid" } }),
+    });
+    expect(await other.renewPageJob(URL_A, "a1.s", PAGE_JOB, null)).toMatchObject({
+      ok: false,
+      failure: { kind: "bad_reply" },
+    });
+    const garbled = createClient({ fetch: vi.fn(async () => new Response("no", { status: 409 })) });
+    expect(await garbled.renewPageJob(URL_A, "a1.s", PAGE_JOB, null)).toMatchObject({
+      ok: false,
+      failure: { kind: "bad_reply" },
+    });
+  });
+
+  it("reads a thrown fetch and a 5xx as unreachable on every page-job call", async () => {
+    const thrown = createClient({ fetch: vi.fn().mockRejectedValue(new Error("ECONNRESET")) });
+    const failing = createClient({ fetch: vi.fn(async () => reply(503)) });
+    for (const client of [thrown, failing]) {
+      for (const call of [
+        client.claimPageJob(URL_A, "a1.s"),
+        client.fetchPageDocument(URL_A, "a1.s", PAGE_JOB),
+        client.renewPageJob(URL_A, "a1.s", PAGE_JOB, null),
+        client.reportPageJob(URL_A, "a1.s", PAGE_JOB, { status: "sent" }),
+      ]) {
+        expect(await call).toMatchObject({ ok: false, failure: { kind: "unreachable" } });
+      }
+    }
   });
 });
 

@@ -3,8 +3,9 @@ import jsQR from "jsqr";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { describe, expect, it } from "vitest";
 import { FULL_INVOICE_DOCUMENT_FIXTURE as fixture } from "./testing/full-invoice-fixture.js";
-import { layoutInvoicePages, type InvoicePageElement } from "./invoice-page.js";
+import { INVOICE_PAGE_WIDTH, layoutInvoicePages, type InvoicePageElement } from "./invoice-page.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
+import { sampleDocument } from "./sample-receipt.js";
 
 async function rendered(input: ReceiptDocumentInput = fixture) {
   const { renderInvoicePdf } = await import("./invoice-pdf.js");
@@ -83,7 +84,7 @@ describe("A4 invoice PDF", () => {
     const page = pages[0]!;
     expect(page.qr?.data).toBe(fixture.result.qr);
     const qr = page.qr!;
-    // jsQR's corners bound the modules; the 35mm square also includes four white modules per side.
+    // jsQR's corners bound the modules.
     const modules = qr.version * 4 + 17;
     const dark = (row: number, col: number): boolean => {
       const x = Math.floor(
@@ -104,7 +105,7 @@ describe("A4 invoice PDF", () => {
     expect((format ^ 0b101010000010010) >> 13, "drawn QR correction level M").toBe(0);
 
     const moduleWidth = (qr.location.topRightCorner.x - qr.location.topLeftCorner.x) / modules;
-    expect((moduleWidth * (modules + 8)) / 2).toBeCloseTo((35 * 72) / 25.4, 0);
+    expect((moduleWidth * modules) / 2).toBeCloseTo((35 * 72) / 25.4, 0);
     expect((qr.location.topLeftCorner.x + qr.location.topRightCorner.x) / 2).toBeCloseTo(
       page.viewport.width / 2,
       0,
@@ -358,5 +359,53 @@ describe("A4 line above the total and space around the logo", () => {
     const legend = elements[index - 1]!;
     expect(legend.kind === "text" && legend.text).toBe("VERI*FACTU");
     expect(drawn.y - (legend.y + LINE)).toBeCloseTo(LINE / 2, 5);
+  });
+});
+
+describe("A4 QR black square", () => {
+  const MM = 72 / 25.4;
+  const LINE = 14;
+  const codes = [
+    {
+      name: "sample sale",
+      input: sampleDocument({ caption: "QR tributario:", legend: "VERI*FACTU" }),
+      modules: 33,
+    },
+    { name: "AEAT validation URL", input: fixture, modules: 45 },
+  ];
+
+  it.each(codes)(
+    "lays out a 35 mm square of modules with a four-module quiet zone for the $name",
+    ({ input, modules }) => {
+      const elements = layoutInvoicePages(input)[0]!.elements;
+      const index = elements.findIndex((element) => element.kind === "qr");
+      const qr = elements[index]!;
+      if (qr.kind !== "qr") throw new Error("Missing QR");
+      expect(qr.modules).toHaveLength(modules);
+      const side = qr.modules.length * qr.moduleSize;
+      expect(Math.abs(side - 35 * MM)).toBeLessThanOrEqual(qr.moduleSize / 2);
+      expect(qr.x + side / 2).toBeCloseTo(INVOICE_PAGE_WIDTH / 2, 5);
+      const caption = elements[index - 1]!;
+      const legend = elements[index + 1]!;
+      expect(caption.kind === "text" && caption.text).toBe("QR tributario:");
+      expect(legend.kind === "text" && legend.text).toBe("VERI*FACTU");
+      expect(qr.y - 4 * qr.moduleSize).toBeGreaterThanOrEqual(caption.y + LINE - 1e-9);
+      expect(legend.y).toBeGreaterThanOrEqual(qr.y + side + 4 * qr.moduleSize - 1e-9);
+    },
+  );
+
+  it.each(codes)("draws a 35 mm black square in the PDF for the $name", async ({ input }) => {
+    const { pages } = await rendered(input);
+    const page = pages[0]!;
+    const qr = page.qr!;
+    expect(qr.data).toBe(input.result.qr);
+    const modules = qr.version * 4 + 17;
+    const pitch = (qr.location.bottomLeftCorner.y - qr.location.topLeftCorner.y) / modules;
+    const row = Math.floor(qr.location.topLeftCorner.y + 3.5 * pitch);
+    const dark: number[] = [];
+    for (let x = 0; x < page.pixels.width; x++)
+      if (page.pixels.data[(row * page.pixels.width + x) * 4]! < 128) dark.push(x);
+    const millimetres = (dark.at(-1)! - dark[0]! + 1) / 2 / MM;
+    expect(Math.abs(millimetres - 35), `${millimetres} mm`).toBeLessThanOrEqual(35 / modules / 2);
   });
 });

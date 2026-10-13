@@ -13,6 +13,7 @@ import "./screens/cloud-restore-screen.js";
 import { SetupLiveSourceScreen } from "./screens/live-source-screen.js";
 import "./screens/configuration-preview-screen.js";
 import "./screens/fiscal-test-screen.js";
+import "./screens/email-screen.js";
 import "./screens/mode-screen.js";
 import "./screens/admin-screen.js";
 import "./screens/venue-screen.js";
@@ -60,6 +61,7 @@ export type Screen =
   | "live-source"
   | "configuration-preview"
   | "fiscal-test"
+  | "email"
   | "mode"
   | "admin"
   | "venue"
@@ -139,6 +141,7 @@ export function assembleBody(draft: DeepPartial<ProvisionBody>): ProvisionBody {
   if (!includeCert) {
     delete body.aeatCert;
   }
+  if (draft.mode !== "live") delete body.email;
   return body as ProvisionBody;
 }
 
@@ -572,6 +575,7 @@ export class SetupApp extends LitElement {
   @state() private fiscalTestRunning = false;
   @state() private fiscalTestError?: Message;
   #fiscalTestGeneration = 0;
+  @state() private emailError?: Message;
 
   /**
    * The adopt response carries this once, so the done screen is the operator's only chance to see and
@@ -811,6 +815,7 @@ export class SetupApp extends LitElement {
     this.cloudLiveUnknown = false;
     this.configurationError = undefined;
     this.fiscalTestError = undefined;
+    this.emailError = undefined;
     this.resetBusy = false;
     this.resetOutcome = undefined;
     this.resetCredentialsRejected = false;
@@ -819,7 +824,6 @@ export class SetupApp extends LitElement {
     this.screen = destination;
   }
 
-  /** The venue→`cert`/`review` decision lives in the shell because the shell owns the merged draft. */
   #onAdvance(event: CustomEvent): void {
     event.stopPropagation();
     if (this.screen !== "venue") return;
@@ -831,7 +835,9 @@ export class SetupApp extends LitElement {
       this.draft.venue?.location?.fiscalTerritory === "ES-common" &&
       !this.developmentMode
         ? "cert"
-        : "review";
+        : this.draft.mode === "live" && !this.developmentMode
+          ? "email"
+          : "review";
   }
 
   async #onProvisionRequested(event: CustomEvent): Promise<void> {
@@ -893,6 +899,10 @@ export class SetupApp extends LitElement {
       case "person.email_invalid":
         this.reviewError = say("shell.review.email_invalid");
         this.screen = "review";
+        return;
+      case "setup.email_required":
+        this.emailError = say("email.required");
+        this.screen = "email";
         return;
       case "setup.provisioning_secret_required":
         this.screen = "cert";
@@ -1494,11 +1504,21 @@ export class SetupApp extends LitElement {
       case "fiscal-test":
         return html`<setup-fiscal-test-screen
           data-test="screen-fiscal-test"
+          .nextScreen=${this.draft.mode === "live" && !this.developmentMode ? "email" : "review"}
           .status=${this.fiscalTestStatus}
           .rejections=${this.fiscalTestRejections}
           .running=${this.fiscalTestRunning}
           .errorMessage=${this.fiscalTestError?.()}
         ></setup-fiscal-test-screen>`;
+      case "email":
+        return html`<setup-email-screen
+          data-test="screen-email"
+          .email=${this.draft.email}
+          .adminEmail=${this.draft.venue?.admin?.email ?? ""}
+          .api=${this.api}
+          .errorMessage=${this.emailError?.()}
+          .backScreen=${this.draft.venue?.location?.fiscalTerritory === "ES-common" && !this.developmentMode ? "fiscal-test" : "venue"}
+        ></setup-email-screen>`;
       case "mode":
         return html`<setup-mode-screen
           data-test="screen-mode"
@@ -1538,6 +1558,7 @@ export class SetupApp extends LitElement {
       case "review":
         return html`<setup-review-screen
           data-test="screen-review"
+          .backScreen=${this.draft.mode === "live" && !this.developmentMode ? "email" : "venue"}
           .draft=${this.draft}
           .errorMessage=${this.reviewError?.()}
         ></setup-review-screen>`;

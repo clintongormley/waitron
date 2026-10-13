@@ -1104,7 +1104,7 @@ describe("setup-app", () => {
     ).not.toBeNull();
   });
 
-  it("routes a live non-ES-common draft to review on setup-advance (both operands matter)", async () => {
+  it("routes a live non-ES-common draft to Email on setup-advance (both operands matter)", async () => {
     const el = await mountSetupApp();
     goto(el, "venue");
     patch(el, {
@@ -1113,7 +1113,7 @@ describe("setup-app", () => {
     } as unknown as DeepPartial<ProvisionBody>);
     advance(el);
     await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("[data-test=screen-review]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=screen-email]")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=screen-cert]")).toBeNull();
   });
 
@@ -4745,4 +4745,75 @@ it("routes an internal description refusal to the venue action message", async (
     (venue.shadowRoot!.querySelector("[data-test=next]") as HTMLElement & { disabled: boolean })
       .disabled,
   ).toBe(false);
+});
+
+describe("live email setup journey", () => {
+  const email = {
+    server: "smtp.example.com",
+    port: 587,
+    encryption: "starttls" as const,
+    user: "venue",
+    password: "secret",
+    from: "invoices@example.com",
+  };
+  it("collects email after venue details outside the certificate territory", async () => {
+    const el = await mountSetupApp();
+    goto(el, "venue");
+    patch(el, { mode: "live", venue: { location: { fiscalTerritory: "ES-other" } } });
+    advance(el);
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=screen-email]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=screen-review]")).toBeNull();
+  });
+  it("collects email after the accepted fiscal test", async () => {
+    const el = await mountSetupApp();
+    patch(el, { mode: "live" });
+    goto(el, "fiscal-test");
+    await flush(el);
+    const fiscal = await screenHost(el, "fiscal-test");
+    fiscal.shadowRoot!.querySelector<HTMLElement>("[data-test=run]")!.click();
+    await flush(el);
+    fiscal.shadowRoot!.querySelector<HTMLElement>("[data-test=continue]")!.click();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=screen-email]")).not.toBeNull();
+  });
+  it("tests the current draft and includes it in final live provisioning", async () => {
+    const runEmailTest = vi.fn().mockResolvedValue({ accepted: true }),
+      provision = vi.fn().mockResolvedValue({ provisioned: true, restarting: true });
+    const el = await mountSetupApp(stubApi({ runEmailTest, provision }));
+    patch(el, { mode: "live", email, venue: { admin: { email: "admin@example.com" } } });
+    goto(el, "email" as Screen);
+    await flush(el);
+    const screen = await screenHost(el, "email" as Screen);
+    screen.shadowRoot!.querySelector<HTMLElement>("[data-test=test]")!.click();
+    await flush(el);
+    expect(runEmailTest).toHaveBeenCalledWith(email, "admin@example.com");
+    screen.shadowRoot!.querySelector<HTMLElement>("[data-test=next]")!.click();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=screen-review]")).not.toBeNull();
+    provisionRequest(el);
+    await flush(el);
+    expect(provision.mock.calls[0]![0].email).toEqual(email);
+  });
+  it.each(["demo", "prepare"] as const)("omits stale SMTP settings in %s", (mode) => {
+    expect(assembleBody({ mode, email }).email).toBeUndefined();
+  });
+  it("routes a final required-email refusal back to Email", async () => {
+    const el = await mountSetupApp(
+      stubApi({
+        provision: vi
+          .fn()
+          .mockRejectedValue({ code: "setup.email_required", params: { field: "email" } }),
+      }),
+    );
+    patch(el, { mode: "live" });
+    goto(el, "review");
+    await flush(el);
+    provisionRequest(el);
+    await flush(el);
+    const screen = await screenHost(el, "email" as Screen);
+    expect(screen.shadowRoot!.querySelector("wt-form-actions")!.getAttribute("error")).toContain(
+      "test message",
+    );
+  });
 });

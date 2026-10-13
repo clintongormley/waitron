@@ -48,6 +48,8 @@ import type {
   EquipmentItem,
   FloorZone,
   HeldOrderSummary,
+  InvoiceDeliveryAttempt,
+  InvoiceDeliveryStatus,
   PayOutcome,
   PartyBill,
   ProductCatalogue,
@@ -447,6 +449,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
       .fn()
       .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] }),
     getTill: vi.fn().mockResolvedValue(till),
+    getInvoiceDeliveries: vi.fn().mockResolvedValue(null),
     listStaff: vi.fn().mockResolvedValue([{ personId: "p1", displayName: "Ana" }]),
     login: vi.fn().mockResolvedValue({ personId: "p1", permissions: [], locale: "en-GB" }),
     getLocales: vi.fn().mockResolvedValue({
@@ -465,6 +468,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     cancelDemoReaderPayment: vi.fn().mockResolvedValue(true),
     parkOrder: vi.fn().mockResolvedValue({ id: "wo-1", orderNumber: 5 }),
     setOrderInvoiceChoice: vi.fn().mockResolvedValue({ revision: 1 }),
+    getInvoiceDeliveryOptions: vi.fn().mockResolvedValue({ invoicePrinter: null }),
     listWorkingOrders: vi.fn().mockResolvedValue([]),
     listCounterWaiting: vi.fn().mockResolvedValue([]),
     retrieveWorkingOrder: vi.fn().mockResolvedValue({
@@ -3271,6 +3275,234 @@ describe("till-app", () => {
     );
   });
 
+  it("offers A4 on the location's invoice printer at the counter and stages the chosen A4 before placing", async () => {
+    const placeOrder = vi.fn().mockResolvedValue(placedResult);
+    const officePrinter = { id: "pp-office", name: "Office HP" };
+    const getInvoiceDeliveryOptions = vi.fn().mockResolvedValue({ invoicePrinter: officePrinter });
+    const { el } = await mountApp({
+      zonePolicy: { serviceMode: "ticket_then_pay" },
+      placeOrder,
+      getInvoiceDeliveryOptions,
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    await flush(el);
+    const id = c.store.id;
+    const recipient = {
+      taxId: "12345678Z",
+      legalName: "Ana García",
+      address: "Calle Mayor 1, 28013 Madrid, Madrid, España",
+      countryCode: "ES" as const,
+    };
+
+    emit(c, "choose-invoice");
+    await flush(el);
+    const dialog = el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!;
+    expect(getInvoiceDeliveryOptions).toHaveBeenCalledOnce();
+    expect(dialog.deliveryOptions).toEqual({ invoicePrinter: officePrinter });
+    expect(dialog.savedDelivery).toBeUndefined();
+    emit(dialog, "invoice-recipient-confirm", {
+      invoiceType: "F1",
+      recipient,
+      delivery: { medium: "a4", pagePrinterId: "pp-office" },
+    });
+    await flush(el);
+    emit(c, "place-order");
+    await flush(el);
+
+    expect(currentApi.setOrderInvoiceChoice).toHaveBeenCalledWith(id, {
+      revision: 0,
+      invoiceType: "F1",
+      recipient,
+      delivery: { medium: "a4", pagePrinterId: "pp-office" },
+    });
+  });
+
+  it("keeps the counter's chosen A4 when Full invoice is chosen again and the options read fails", async () => {
+    const placeOrder = vi.fn().mockResolvedValue(placedResult);
+    const getInvoiceDeliveryOptions = vi
+      .fn()
+      .mockResolvedValueOnce({ invoicePrinter: { id: "pp-office", name: "Office HP" } })
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    const { el } = await mountApp({
+      zonePolicy: { serviceMode: "ticket_then_pay" },
+      placeOrder,
+      getInvoiceDeliveryOptions,
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    await flush(el);
+    const id = c.store.id;
+    const recipient = {
+      taxId: "12345678Z",
+      legalName: "Ana García",
+      address: "Calle Mayor 1, 28013 Madrid, Madrid, España",
+      countryCode: "ES" as const,
+    };
+    emit(c, "choose-invoice");
+    await flush(el);
+    emit(
+      el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!,
+      "invoice-recipient-confirm",
+      {
+        invoiceType: "F1",
+        recipient,
+        delivery: { medium: "a4", pagePrinterId: "pp-office" },
+      },
+    );
+    await flush(el);
+    emit(c, "choose-invoice");
+    await flush(el);
+    const form = el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!;
+    expect(form.savedDelivery).toEqual({ medium: "a4", pagePrinterId: "pp-office" });
+    for (const [name, value] of [
+      ["taxId", "12345678Z"],
+      ["legalName", "Ana García López"],
+      ["address", "Calle Mayor 1"],
+      ["postalCode", "28013"],
+      ["locality", "Madrid"],
+      ["province", "Madrid"],
+    ]) {
+      const input = form
+        .shadowRoot!.querySelector(`wt-input[name=${name}]`)!
+        .shadowRoot!.querySelector<HTMLInputElement>("input")!;
+      input.value = value!;
+      input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+      await form.updateComplete;
+    }
+    form.shadowRoot!.querySelector<HTMLElement>("[data-invoice-save]")!.click();
+    await flush(el);
+    emit(c, "place-order");
+    await flush(el);
+    expect(currentApi.setOrderInvoiceChoice).toHaveBeenCalledWith(id, {
+      revision: 0,
+      invoiceType: "F1",
+      recipient: { ...recipient, legalName: "Ana García López" },
+      delivery: { medium: "a4", pagePrinterId: "pp-office" },
+    });
+  });
+
+  it("holds Pay on a bill over the limit while the options are read, releases it at the limit, and ignores a late answer", async () => {
+    let answer!: (value: unknown) => void;
+    const getInvoiceDeliveryOptions = vi.fn().mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+    );
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({
+        ...till,
+        cardProvider: "simulator",
+        capabilities: ["print-receipt", "integrated-card-payment"],
+      }),
+      getInvoiceDeliveryOptions,
+    });
+    const c = await toCounter(el);
+    c.store.loadFrom("large-bill", [{ product: cafe, quantity: "2001" }]);
+    await flush(el);
+    const pay = () =>
+      tenderPay(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(".pay-card")!;
+    expect(pay().disabled).toBe(false);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      pay().click();
+      await vi.advanceTimersByTimeAsync(0);
+      await el.updateComplete;
+      await tenderPay(el).updateComplete;
+      expect(pay().disabled).toBe(true);
+      await vi.advanceTimersByTimeAsync(5_000);
+      await el.updateComplete;
+    } finally {
+      vi.useRealTimers();
+    }
+    await flush(el);
+    const dialog = el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!;
+    expect(dialog.deliveryOptions).toBeNull();
+    expect(pay().disabled).toBe(false);
+    answer({ invoicePrinter: { id: "pp-office", name: "Office HP" } });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).toBe(dialog);
+    expect(dialog.deliveryOptions).toBeNull();
+    expect(currentApi.pay).not.toHaveBeenCalled();
+  });
+
+  it("holds the counter's Full invoice quiet while the delivery options are read", async () => {
+    let answer!: (value: unknown) => void;
+    const getInvoiceDeliveryOptions = vi.fn().mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+    );
+    const { el } = await mountApp({ getInvoiceDeliveryOptions });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    await flush(el);
+    const button = () =>
+      tenderPay(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+        "[data-full-invoice]",
+      )!;
+    expect(button().disabled).toBe(false);
+    button().click();
+    await flush(el);
+    expect(button().disabled).toBe(true);
+    answer({ invoicePrinter: null });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).not.toBeNull();
+    expect(button().disabled).toBe(false);
+  });
+
+  it("opens the counter's full-invoice dialog on the latest ask's options when an earlier read answers last", async () => {
+    const officePrinter = { id: "pp-office", name: "Office HP" };
+    const answers: ((value: unknown) => void)[] = [];
+    const getInvoiceDeliveryOptions = vi.fn().mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          answers.push(resolve);
+        }),
+    );
+    const { el } = await mountApp({ getInvoiceDeliveryOptions });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    await flush(el);
+    emit(c, "choose-invoice");
+    await flush(el);
+    emit(c, "choose-invoice");
+    await flush(el);
+    expect(answers).toHaveLength(2);
+    answers[1]!({ invoicePrinter: officePrinter });
+    await flush(el);
+    const dialog = el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!;
+    expect(dialog.deliveryOptions).toEqual({ invoicePrinter: officePrinter });
+    answers[0]!({ invoicePrinter: null });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).toBe(dialog);
+    expect(dialog.deliveryOptions).toEqual({ invoicePrinter: officePrinter });
+  });
+
+  it("does not open the counter's full-invoice dialog when the operator signed out while its options were read", async () => {
+    let answer!: (value: unknown) => void;
+    const getInvoiceDeliveryOptions = vi.fn().mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+    );
+    const { el } = await mountApp({ getInvoiceDeliveryOptions });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    await flush(el);
+    emit(c, "choose-invoice");
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).toBeNull();
+    emit(c, "logout");
+    await flush(el);
+    answer({ invoicePrinter: null });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).toBeNull();
+  });
+
   it("sends the chosen Spanish recipient with the first walk-up cash sale", async () => {
     const { el } = await mountApp();
     const c = await toCounter(el);
@@ -4457,6 +4689,659 @@ describe("till-app", () => {
     await flush(el);
     expect(getReceiptPrintStatus).not.toHaveBeenCalled();
     expect(ticket(el)!.shadowRoot!.querySelector("[data-test=original-delivery]")).toBeNull();
+  });
+
+  describe("a full invoice's delivery on the sale view (A231q B5)", () => {
+    const none = { retryOriginal: null, printOnA4: null, receiptInstead: null, email: null };
+    const a4Offer = { printer: { id: "p1", name: "Office" }, designation: "original" as const };
+    const attempt = (over: Partial<InvoiceDeliveryAttempt> = {}): InvoiceDeliveryAttempt => ({
+      id: "d1",
+      medium: "a4",
+      designation: "original",
+      status: "queued",
+      failureCode: null,
+      requestedAt: "2026-08-05T12:35:00.000Z",
+      at: null,
+      personId: "p1",
+      printerHold: null,
+      lateSuccess: false,
+      ...over,
+    });
+    const statusOf = (
+      current: InvoiceDeliveryAttempt | null,
+      actions: Partial<InvoiceDeliveryStatus["actions"]> = {},
+    ): InvoiceDeliveryStatus => ({
+      current,
+      originalCompleted: current?.status === "sent",
+      actions: { ...none, ...actions },
+      history: current === null ? [] : [current],
+    });
+    const deliveryLine = (el: TillApp) =>
+      ticket(el)!.shadowRoot!.querySelector("[data-test=delivery-status]")?.textContent?.trim();
+    const part = (el: TillApp, name: string) =>
+      ticket(el)!.shadowRoot!.querySelector<HTMLElement>(`[data-test=${name}]`);
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+    /**
+     * Mounts the app and completes an F1 sale, leaving its sale view open. With `fakeClock`, the
+     * clock is faked just before the sale, as `flush` needs a real one until then.
+     */
+    async function soldF1(overrides: Record<string, unknown>, fakeClock = false) {
+      const { el } = await mountApp({
+        recordSale: vi.fn().mockResolvedValue({ ...saleResult, invoiceType: "F1" }),
+        getReceiptPrintStatus: vi.fn().mockResolvedValue({ status: "not_queued" }),
+        ...overrides,
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      const id = c.store.id;
+      if (fakeClock) vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      emit(c, "confirm-payment", { method: "cash", amount: "5" });
+      return { el, id };
+    }
+
+    /** Lets the fake clock run `ms` and the app redraw. */
+    async function pass(el: TillApp, ms: number): Promise<void> {
+      await vi.advanceTimersByTimeAsync(ms);
+      await el.updateComplete;
+    }
+
+    it("reads the status on opening, and every 5 s while an attempt waits or sends, until it ends", async () => {
+      try {
+        const getInvoiceDeliveries = vi
+          .fn()
+          .mockResolvedValueOnce(statusOf(attempt()))
+          .mockResolvedValueOnce(statusOf(attempt({ status: "sending", printerHold: "paper_out" })))
+          .mockResolvedValue(statusOf(attempt({ status: "sent" })));
+        const { el, id } = await soldF1({ getInvoiceDeliveries }, true);
+        await pass(el, 0);
+        expect(getInvoiceDeliveries.mock.calls).toEqual([[id]]);
+        expect(deliveryLine(el)).toBe("Esperando a la impresora de oficina.");
+        await pass(el, 4_999);
+        expect(getInvoiceDeliveries).toHaveBeenCalledTimes(1);
+        await pass(el, 1);
+        expect(getInvoiceDeliveries).toHaveBeenCalledTimes(2);
+        expect(deliveryLine(el)).toBe("Esperando en la impresora de oficina: sin papel.");
+        await pass(el, 5_000);
+        expect(getInvoiceDeliveries).toHaveBeenCalledTimes(3);
+        expect(deliveryLine(el)).toBe("Impresa en A4.");
+        await pass(el, 30_000);
+        expect(getInvoiceDeliveries).toHaveBeenCalledTimes(3);
+        expect(currentApi.recordSale).toHaveBeenCalledOnce();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("stops re-reading when the sale view closes", async () => {
+      try {
+        const getInvoiceDeliveries = vi.fn().mockResolvedValue(statusOf(attempt()));
+        const { el } = await soldF1({ getInvoiceDeliveries }, true);
+        await pass(el, 0);
+        expect(getInvoiceDeliveries).toHaveBeenCalledOnce();
+        emit(ticket(el)!, "new-sale");
+        await pass(el, 0);
+        expect(ticket(el)).toBeNull();
+        await pass(el, 20_000);
+        expect(getInvoiceDeliveries).toHaveBeenCalledOnce();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("keeps re-reading a waiting attempt through a failed read, which it reports beside the status", async () => {
+      try {
+        const getInvoiceDeliveries = vi
+          .fn()
+          .mockResolvedValueOnce(statusOf(attempt()))
+          .mockRejectedValueOnce({ code: "connection.failed" })
+          .mockResolvedValue(statusOf(attempt()));
+        const { el } = await soldF1({ getInvoiceDeliveries }, true);
+        await pass(el, 5_000);
+        expect(getInvoiceDeliveries).toHaveBeenCalledTimes(2);
+        expect(part(el, "delivery-read-failed")).not.toBeNull();
+        expect(deliveryLine(el)).toBe("Esperando a la impresora de oficina.");
+        expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+        await pass(el, 5_000);
+        expect(getInvoiceDeliveries).toHaveBeenCalledTimes(3);
+        expect(part(el, "delivery-read-failed")).toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("re-reads the status when the print status is checked", async () => {
+      const getInvoiceDeliveries = vi
+        .fn()
+        .mockResolvedValueOnce(statusOf(null))
+        .mockResolvedValue(statusOf(attempt({ status: "failed" })));
+      const { el, id } = await soldF1({ getInvoiceDeliveries });
+      await flush(el);
+      expect(deliveryLine(el)).toBeUndefined();
+      emit(ticket(el)!, "refresh-receipt");
+      await flush(el);
+      expect(getInvoiceDeliveries.mock.calls).toEqual([[id], [id]]);
+      expect(deliveryLine(el)).toBe("No entregada.");
+    });
+
+    it("prints on A4 once per press under a new request key, holding the actions until the status is read again", async () => {
+      let release!: () => void;
+      let requested = 0;
+      const requestA4Delivery = vi.fn(async () => {
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        requested++;
+        return attempt();
+      });
+      const getInvoiceDeliveries = vi.fn(async () =>
+        requested === 0
+          ? statusOf(null, { printOnA4: a4Offer })
+          : statusOf(attempt({ status: "failed" }), {
+              retryOriginal: { medium: "a4" },
+              printOnA4: a4Offer,
+            }),
+      );
+      const { el, id } = await soldF1({ getInvoiceDeliveries, requestA4Delivery });
+      await flush(el);
+      emit(ticket(el)!, "print-a4");
+      emit(ticket(el)!, "print-a4");
+      await flush(el);
+      expect(requestA4Delivery).toHaveBeenCalledOnce();
+      expect(part(el, "print-a4")!.hasAttribute("disabled")).toBe(true);
+      release();
+      await flush(el);
+      expect(part(el, "print-a4")!.hasAttribute("disabled")).toBe(false);
+      expect(deliveryLine(el)).toBe("No entregada.");
+      expect(part(el, "print-a4")!.textContent!.trim()).toBe(
+        "Volver a enviar a la impresora de oficina",
+      );
+      emit(ticket(el)!, "print-a4");
+      await flush(el);
+      release();
+      await flush(el);
+      const [first, second] = requestA4Delivery.mock.calls as unknown as [string, string][];
+      expect(first![0]).toBe(id);
+      expect(first![1]).toMatch(uuid);
+      expect(second![0]).toBe(id);
+      expect(second![1]).toMatch(uuid);
+      expect(second![1]).not.toBe(first![1]);
+      expect(currentApi.recordSale).toHaveBeenCalledOnce();
+    });
+
+    it("keeps the view after a refused action, saying why, and no later status read clears or replaces that", async () => {
+      const getInvoiceDeliveries = vi
+        .fn()
+        .mockResolvedValueOnce(statusOf(attempt(), { receiptInstead: { deliveryId: "d1" } }))
+        .mockResolvedValueOnce(statusOf(attempt({ status: "sending" })))
+        .mockRejectedValueOnce({ code: "connection.failed" })
+        .mockResolvedValue(statusOf(attempt({ status: "sending" })));
+      const switchA4ToReceipt = vi.fn().mockRejectedValue({ code: "invoice_delivery.active" });
+      const { el } = await soldF1({ getInvoiceDeliveries, switchA4ToReceipt });
+      await flush(el);
+      emit(ticket(el)!, "receipt-instead", { deliveryId: "d1" });
+      await flush(el);
+      const refusal = () => part(el, "delivery-refused")?.textContent?.trim();
+      expect(refusal()).toBe(codeMessage("invoice_delivery.active"));
+      expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+      expect(ticket(el)).not.toBeNull();
+      expect(deliveryLine(el)).toBe("Enviando la factura.");
+      expect(part(el, "receipt-instead")).toBeNull();
+      emit(ticket(el)!, "refresh-receipt");
+      await flush(el);
+      expect(part(el, "delivery-read-failed")).not.toBeNull();
+      expect(refusal()).toBe(codeMessage("invoice_delivery.active"));
+      emit(ticket(el)!, "refresh-receipt");
+      await flush(el);
+      expect(part(el, "delivery-read-failed")).toBeNull();
+      expect(refusal()).toBe(codeMessage("invoice_delivery.active"));
+    });
+
+    it("clears a refused action's message once a later action succeeds", async () => {
+      const requestA4Delivery = vi
+        .fn()
+        .mockRejectedValueOnce({ code: "invoice_delivery.printer_invalid" })
+        .mockResolvedValue(attempt());
+      const { el } = await soldF1({
+        getInvoiceDeliveries: vi.fn().mockResolvedValue(statusOf(null, { printOnA4: a4Offer })),
+        requestA4Delivery,
+      });
+      await flush(el);
+      emit(ticket(el)!, "print-a4");
+      await flush(el);
+      expect(part(el, "delivery-refused")?.textContent?.trim()).toBe(
+        codeMessage("invoice_delivery.printer_invalid"),
+      );
+      emit(ticket(el)!, "print-a4");
+      await flush(el);
+      expect(requestA4Delivery).toHaveBeenCalledTimes(2);
+      expect(part(el, "delivery-refused")).toBeNull();
+    });
+
+    it("says a request that got no answer could not send the invoice", async () => {
+      const { el } = await soldF1({
+        getInvoiceDeliveries: vi.fn().mockResolvedValue(statusOf(null, { printOnA4: a4Offer })),
+        requestA4Delivery: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+      });
+      await flush(el);
+      emit(ticket(el)!, "print-a4");
+      await flush(el);
+      expect(part(el, "delivery-refused")?.textContent?.trim()).toBe(
+        "No se pudo enviar la factura, inténtalo de nuevo",
+      );
+      expect(ticket(el)).not.toBeNull();
+    });
+
+    it("moves a waiting A4 to the receipt printer under a new request key, then reads both statuses again", async () => {
+      const getReceiptPrintStatus = vi
+        .fn()
+        .mockResolvedValueOnce({ status: "not_queued" })
+        .mockResolvedValue({ status: "queued", jobId: "original", canRetry: false });
+      const getInvoiceDeliveries = vi
+        .fn()
+        .mockResolvedValueOnce(statusOf(attempt(), { receiptInstead: { deliveryId: "d1" } }))
+        .mockResolvedValue(statusOf(attempt({ id: "d2", medium: "receipt" })));
+      const switchA4ToReceipt = vi.fn().mockResolvedValue(attempt({ id: "d2", medium: "receipt" }));
+      const { el, id } = await soldF1({
+        getReceiptPrintStatus,
+        getInvoiceDeliveries,
+        switchA4ToReceipt,
+      });
+      await flush(el);
+      emit(ticket(el)!, "receipt-instead", { deliveryId: "d1" });
+      await flush(el);
+      expect(switchA4ToReceipt).toHaveBeenCalledOnce();
+      const [order, deliveryId, key] = switchA4ToReceipt.mock.calls[0] as [string, string, string];
+      expect([order, deliveryId]).toEqual([id, "d1"]);
+      expect(key).toMatch(uuid);
+      expect(getReceiptPrintStatus).toHaveBeenCalledTimes(2);
+      expect(getInvoiceDeliveries).toHaveBeenCalledTimes(2);
+      expect(part(el, "original-delivery")!.textContent).toContain(
+        "El original está esperando para imprimirse.",
+      );
+      expect(part(el, "receipt-instead")).toBeNull();
+      expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+    });
+
+    it("reads the status again once the receipt original is sent to print", async () => {
+      const getInvoiceDeliveries = vi
+        .fn()
+        .mockResolvedValueOnce(statusOf(null, { printOnA4: a4Offer }))
+        .mockResolvedValue(statusOf(attempt({ medium: "receipt", status: "queued" })));
+      const { el, id } = await soldF1({ getInvoiceDeliveries });
+      await flush(el);
+      expect(part(el, "print-a4")).not.toBeNull();
+      emit(ticket(el)!, "print-receipt");
+      await flush(el);
+      expect(currentApi.printReceipt).toHaveBeenCalledExactlyOnceWith(id);
+      expect(getInvoiceDeliveries.mock.calls).toEqual([[id], [id]]);
+      expect(part(el, "print-a4")).toBeNull();
+    });
+
+    it("drops a refusal that arrives after the sale view closed, reading nothing more", async () => {
+      let refuse!: (error: unknown) => void;
+      const getInvoiceDeliveries = vi
+        .fn()
+        .mockResolvedValue(statusOf(null, { printOnA4: a4Offer }));
+      const requestA4Delivery = vi.fn(
+        () =>
+          new Promise((_resolve, reject) => {
+            refuse = reject;
+          }),
+      );
+      const { el } = await soldF1({ getInvoiceDeliveries, requestA4Delivery });
+      await flush(el);
+      emit(ticket(el)!, "print-a4");
+      await flush(el);
+      emit(ticket(el)!, "new-sale");
+      await flush(el);
+      refuse({ code: "invoice_delivery.active" });
+      await flush(el);
+      expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+      expect(getInvoiceDeliveries).toHaveBeenCalledOnce();
+    });
+
+    it.each([
+      [
+        "answer",
+        (settle: { resolve: (v: unknown) => void }) => settle.resolve(statusOf(attempt())),
+      ],
+      [
+        "failure",
+        (settle: { reject: (e: unknown) => void }) => settle.reject({ code: "connection.failed" }),
+      ],
+    ] as const)(
+      "drops a status %s that arrives after the sale view closed",
+      async (_kind, finish) => {
+        try {
+          let settle!: { resolve: (v: unknown) => void; reject: (e: unknown) => void };
+          const getInvoiceDeliveries = vi.fn(
+            () =>
+              new Promise((resolve, reject) => {
+                settle = { resolve, reject };
+              }),
+          );
+          const { el } = await soldF1({ getInvoiceDeliveries }, true);
+          await vi.advanceTimersByTimeAsync(0);
+          emit(ticket(el)!, "new-sale");
+          await vi.advanceTimersByTimeAsync(0);
+          finish(settle as never);
+          await vi.advanceTimersByTimeAsync(20_000);
+          expect(getInvoiceDeliveries).toHaveBeenCalledOnce();
+          expect(ticket(el)).toBeNull();
+        } finally {
+          vi.useRealTimers();
+        }
+      },
+    );
+
+    it("re-reads the receipt status on the same 5 s timer, so Confirm handover appears without a Check", async () => {
+      try {
+        const getReceiptPrintStatus = vi
+          .fn()
+          .mockResolvedValueOnce({ status: "queued", jobId: "original", canRetry: false })
+          .mockResolvedValue({ status: "done", jobId: "original", canRetry: false });
+        const getInvoiceDeliveries = vi
+          .fn()
+          .mockResolvedValueOnce(statusOf(attempt({ id: "d2", medium: "receipt" })))
+          .mockResolvedValue(statusOf(attempt({ id: "d2", medium: "receipt", status: "sent" })));
+        const { el, id } = await soldF1({ getReceiptPrintStatus, getInvoiceDeliveries }, true);
+        await pass(el, 0);
+        expect(part(el, "confirm-handover")).toBeNull();
+        await pass(el, 5_000);
+        expect(getReceiptPrintStatus.mock.calls).toEqual([[id], [id]]);
+        expect(getInvoiceDeliveries.mock.calls).toEqual([[id], [id]]);
+        expect(part(el, "confirm-handover")).not.toBeNull();
+        await pass(el, 20_000);
+        expect(getReceiptPrintStatus).toHaveBeenCalledTimes(2);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("holds the receipt's own actions while a delivery request is out", async () => {
+      let release!: () => void;
+      const requestA4Delivery = vi.fn(
+        () =>
+          new Promise((resolve) => {
+            release = () => resolve(attempt());
+          }),
+      );
+      const printReceipt = vi.fn().mockResolvedValue(undefined);
+      const { el } = await soldF1({
+        getInvoiceDeliveries: vi.fn().mockResolvedValue(statusOf(null, { printOnA4: a4Offer })),
+        requestA4Delivery,
+        printReceipt,
+      });
+      await flush(el);
+      expect(part(el, "print-receipt")!.hasAttribute("disabled")).toBe(false);
+      emit(ticket(el)!, "print-a4");
+      await flush(el);
+      expect(part(el, "print-receipt")!.hasAttribute("disabled")).toBe(true);
+      expect(part(el, "refresh-receipt")!.hasAttribute("disabled")).toBe(true);
+      emit(ticket(el)!, "print-receipt");
+      await flush(el);
+      expect(printReceipt).not.toHaveBeenCalled();
+      release();
+      await flush(el);
+      expect(part(el, "print-receipt")!.hasAttribute("disabled")).toBe(false);
+    });
+
+    it("asks for nothing the status does not offer", async () => {
+      const requestA4Delivery = vi.fn();
+      const switchA4ToReceipt = vi.fn();
+      const { el } = await soldF1({
+        getInvoiceDeliveries: vi.fn().mockResolvedValue(statusOf(attempt({ status: "sending" }))),
+        requestA4Delivery,
+        switchA4ToReceipt,
+      });
+      await flush(el);
+      emit(ticket(el)!, "print-a4");
+      emit(ticket(el)!, "receipt-instead", { deliveryId: "d1" });
+      await flush(el);
+      expect(requestA4Delivery).not.toHaveBeenCalled();
+      expect(switchA4ToReceipt).not.toHaveBeenCalled();
+    });
+
+    it("does not read a delivery status for a simplified invoice", async () => {
+      const getInvoiceDeliveries = vi.fn();
+      const { el } = await mountApp({ getInvoiceDeliveries });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      emit(c, "confirm-payment", { method: "cash", amount: "5" });
+      await flush(el);
+      expect(ticket(el)).not.toBeNull();
+      expect(getInvoiceDeliveries).not.toHaveBeenCalled();
+    });
+
+    describe("email (A231q C3b)", () => {
+      const emailOffer = { email: { designation: "original" as const } };
+      const form = (el: TillApp) =>
+        ticket(el)!.shadowRoot!.querySelector("till-invoice-email-dialog");
+      const emailing = attempt({ id: "d5", medium: "email", status: "queued" });
+
+      it("opens the address form, sends the address under a new request key, closes the form and reads both statuses again", async () => {
+        const getReceiptPrintStatus = vi.fn().mockResolvedValue({ status: "not_queued" });
+        const getInvoiceDeliveries = vi
+          .fn()
+          .mockResolvedValueOnce(statusOf(null, emailOffer))
+          .mockResolvedValue(statusOf(emailing, { receiptInstead: { deliveryId: "d5" } }));
+        const requestEmailDelivery = vi.fn().mockResolvedValue(emailing);
+        const { el, id } = await soldF1({
+          getReceiptPrintStatus,
+          getInvoiceDeliveries,
+          requestEmailDelivery,
+        });
+        await flush(el);
+        expect(form(el)).toBeNull();
+        emit(ticket(el)!, "email-invoice");
+        await flush(el);
+        expect(form(el)).not.toBeNull();
+        emit(form(el)!, "invoice-email-send", { recipient: "ana@example.com" });
+        await flush(el);
+        expect(requestEmailDelivery).toHaveBeenCalledOnce();
+        const [order, recipient, key] = requestEmailDelivery.mock.calls[0] as [
+          string,
+          string,
+          string,
+        ];
+        expect([order, recipient]).toEqual([id, "ana@example.com"]);
+        expect(key).toMatch(uuid);
+        expect(form(el)).toBeNull();
+        expect(getReceiptPrintStatus).toHaveBeenCalledTimes(2);
+        expect(getInvoiceDeliveries).toHaveBeenCalledTimes(2);
+        expect(deliveryLine(el)).toBe("Enviando la factura.");
+        expect(part(el, "delivery-refused")).toBeNull();
+        expect(ticket(el)!.shadowRoot!.textContent).not.toContain("ana@example.com");
+      });
+
+      it("sends once while a request is out, holding the form's Send", async () => {
+        let release!: () => void;
+        const requestEmailDelivery = vi.fn(
+          () =>
+            new Promise((resolve) => {
+              release = () => resolve(emailing);
+            }),
+        );
+        const { el } = await soldF1({
+          getInvoiceDeliveries: vi.fn().mockResolvedValue(statusOf(null, emailOffer)),
+          requestEmailDelivery,
+        });
+        await flush(el);
+        emit(ticket(el)!, "email-invoice");
+        await flush(el);
+        emit(form(el)!, "invoice-email-send", { recipient: "ana@example.com" });
+        emit(form(el)!, "invoice-email-send", { recipient: "ana@example.com" });
+        await flush(el);
+        expect(requestEmailDelivery).toHaveBeenCalledOnce();
+        expect(form(el)!.busy).toBe(true);
+        release();
+        await flush(el);
+        expect(form(el)).toBeNull();
+      });
+
+      it("keeps the form open after a refusal: an address under its field, any other at the bottom", async () => {
+        const requestEmailDelivery = vi
+          .fn()
+          .mockRejectedValueOnce({ code: "management.request_invalid", field: "recipient" })
+          .mockRejectedValueOnce({ code: "invoice_delivery.email_unavailable" })
+          .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+          .mockResolvedValue(emailing);
+        const { el } = await soldF1({
+          getInvoiceDeliveries: vi.fn().mockResolvedValue(statusOf(null, emailOffer)),
+          requestEmailDelivery,
+        });
+        await flush(el);
+        emit(ticket(el)!, "email-invoice");
+        await flush(el);
+        const send = async () => {
+          emit(form(el)!, "invoice-email-send", { recipient: "ana@example.com" });
+          await flush(el);
+        };
+        await send();
+        expect(form(el)!.refusal).toEqual({
+          code: "management.request_invalid",
+          field: "recipient",
+        });
+        expect(form(el)!.busy).toBe(false);
+        expect(part(el, "delivery-refused")).toBeNull();
+        expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+        await send();
+        expect(form(el)!.refusal).toEqual({ code: "invoice_delivery.email_unavailable" });
+        await send();
+        expect(form(el)!.refusal).toEqual({});
+        await send();
+        expect(form(el)).toBeNull();
+        expect(part(el, "delivery-refused")).toBeNull();
+      });
+
+      it("clears the form's refusal when the address is sent again", async () => {
+        let release!: () => void;
+        const requestEmailDelivery = vi
+          .fn()
+          .mockRejectedValueOnce({ code: "invoice_delivery.email_unavailable" })
+          .mockImplementation(
+            () =>
+              new Promise((resolve) => {
+                release = () => resolve(emailing);
+              }),
+          );
+        const { el } = await soldF1({
+          getInvoiceDeliveries: vi.fn().mockResolvedValue(statusOf(null, emailOffer)),
+          requestEmailDelivery,
+        });
+        await flush(el);
+        emit(ticket(el)!, "email-invoice");
+        await flush(el);
+        emit(form(el)!, "invoice-email-send", { recipient: "ana@example.com" });
+        await flush(el);
+        expect(form(el)!.refusal).toEqual({ code: "invoice_delivery.email_unavailable" });
+        emit(form(el)!, "invoice-email-send", { recipient: "ana@example.com" });
+        await flush(el);
+        expect(form(el)!.busy).toBe(true);
+        expect(form(el)!.refusal).toBeUndefined();
+        release();
+        await flush(el);
+        expect(form(el)).toBeNull();
+      });
+
+      it("keeps the form open while a send is out, Escape and Cancel included, and puts its refusal in the form", async () => {
+        let reject!: (error: unknown) => void;
+        const requestEmailDelivery = vi.fn(
+          () =>
+            new Promise((_resolve, fail) => {
+              reject = fail;
+            }),
+        );
+        const { el } = await soldF1({
+          getInvoiceDeliveries: vi.fn().mockResolvedValue(statusOf(null, emailOffer)),
+          requestEmailDelivery,
+        });
+        await flush(el);
+        emit(ticket(el)!, "email-invoice");
+        await flush(el);
+        emit(form(el)!, "invoice-email-send", { recipient: "ana@example.com" });
+        await flush(el);
+        const cancel = form(el)!.shadowRoot!.querySelector<HTMLElement>("[data-email-cancel]")!;
+        expect(cancel.hasAttribute("disabled")).toBe(true);
+        cancel.click();
+        await userEvent.keyboard("{Escape}");
+        await flush(el);
+        expect(form(el)!.shadowRoot!.querySelector("wt-dialog")!.open).toBe(true);
+        reject({ code: "invoice_delivery.active" });
+        await flush(el);
+        expect(form(el)!.refusal).toEqual({ code: "invoice_delivery.active" });
+        expect(part(el, "delivery-refused")).toBeNull();
+      });
+
+      it("sends an ended email again by its attempt under a new request key, saying why in the section when refused", async () => {
+        const ended = attempt({ id: "d7", medium: "email", status: "failed" });
+        const offers = { retryOriginal: { medium: "email" as const }, ...emailOffer };
+        const getInvoiceDeliveries = vi.fn().mockResolvedValue(statusOf(ended, offers));
+        const retryEmailDelivery = vi
+          .fn()
+          .mockRejectedValueOnce({ code: "invoice_delivery.email_unavailable" })
+          .mockResolvedValue(emailing);
+        const { el, id } = await soldF1({ getInvoiceDeliveries, retryEmailDelivery });
+        await flush(el);
+        emit(ticket(el)!, "retry-email", { deliveryId: "d7" });
+        await flush(el);
+        expect(part(el, "delivery-refused")?.textContent?.trim()).toBe(
+          codeMessage("invoice_delivery.email_unavailable"),
+        );
+        emit(ticket(el)!, "retry-email", { deliveryId: "d7" });
+        await flush(el);
+        expect(retryEmailDelivery).toHaveBeenCalledTimes(2);
+        const [first, second] = retryEmailDelivery.mock.calls as unknown as [
+          string,
+          string,
+          string,
+        ][];
+        expect([first![0], first![1]]).toEqual([id, "d7"]);
+        expect(first![2]).toMatch(uuid);
+        expect(second![2]).toMatch(uuid);
+        expect(second![2]).not.toBe(first![2]);
+        expect(part(el, "delivery-refused")).toBeNull();
+        expect(getInvoiceDeliveries).toHaveBeenCalledTimes(3);
+      });
+
+      it("asks for no email the status does not offer", async () => {
+        const requestEmailDelivery = vi.fn();
+        const retryEmailDelivery = vi.fn();
+        const { el } = await soldF1({
+          getInvoiceDeliveries: vi
+            .fn()
+            .mockResolvedValue(statusOf(attempt({ id: "d7", medium: "email", status: "sending" }))),
+          requestEmailDelivery,
+          retryEmailDelivery,
+        });
+        await flush(el);
+        emit(ticket(el)!, "email-invoice");
+        emit(ticket(el)!, "retry-email", { deliveryId: "d7" });
+        await flush(el);
+        expect(form(el)).toBeNull();
+        expect(retryEmailDelivery).not.toHaveBeenCalled();
+        expect(requestEmailDelivery).not.toHaveBeenCalled();
+      });
+
+      it("does not carry an open form into the next sale's view", async () => {
+        const { el } = await soldF1({
+          getInvoiceDeliveries: vi.fn().mockResolvedValue(statusOf(null, emailOffer)),
+        });
+        await flush(el);
+        emit(ticket(el)!, "email-invoice");
+        await flush(el);
+        expect(form(el)).not.toBeNull();
+        emit(ticket(el)!, "new-sale");
+        await flush(el);
+        const c = counter(el)!;
+        c.store.addProduct(cafe, "2");
+        emit(c, "confirm-payment", { method: "cash", amount: "5" });
+        await flush(el);
+        expect(ticket(el)).not.toBeNull();
+        expect(form(el)).toBeNull();
+      });
+    });
   });
 
   it.each(["on_request"] as const)(

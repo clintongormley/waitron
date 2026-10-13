@@ -25,6 +25,11 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
     "ledger",
     "who requested a receipt copy and which document job carries it",
   ),
+  appendOnly(
+    "invoice_pdf_downloads",
+    "ledger",
+    "who requested an invoice's PDF from the dashboard, and when; an audit row is never corrected",
+  ),
   classify("ticket_items", "ledger", LEDGER),
   classify("drawer_opens", "ledger", LEDGER),
   appendOnly("daily_closes", "ledger", LEDGER),

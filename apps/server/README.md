@@ -284,7 +284,15 @@ For outgoing mail, the live trading server also accepts manager-authorised setti
 `GET` and `PUT /management-api/email/settings`, with `POST /management-api/email/settings/test`
 sending a test to the signed-in person's address. These routes require `system.manage`; the read
 omits authentication secrets. Demo and Prepare refuse settings changes. The live setup test endpoint
-is `POST /setup-api/email-test`; the wizard and dashboard editors remain A231q work.
+is `POST /setup-api/email-test`. A production Live provision also requires an `email` object with
+`server`, numeric `port`, `encryption` (`starttls` or `tls`), `from`, and optional `user` and
+`password`. Use the same values you tested. The server seals them under `email.smtp` before
+publishing the trading configuration. Missing settings answer `setup.email_required`, naming
+`email`; malformed settings name the offending field. Demo and Prepare refuse supplied settings,
+and development Live provisioning may omit them. You can enter these settings in the live wizard
+or, with `system.manage`, on the dashboard's Account email page (`/manage/email`). The dashboard shows the server and sender
+without returning the saved password; you enter fresh credentials to change an authenticated
+gateway, or explicitly switch authentication off.
 
 ### Account email
 
@@ -299,7 +307,12 @@ worktree launcher also start Mailpit. During local development you can inspect i
 directory the server resolves, and `dev:reset` removes that directory so the next run provisions
 from scratch. Nothing in Compose holds venue data, so no `docker compose` command resets anything.
 
-For a production or on-prem venue, put its SMTP relay in the encrypted credential vault. Write the
+For a new production Live venue, the setup wizard asks for the mail server settings and sends a
+test message to your administrator address. Continue becomes available when the server accepts a
+test of the current settings. Final setup seals them in the credential vault.
+
+The wizard and the Account email page seal these settings in the encrypted credential vault for you. From a
+terminal you can also put a production or on-prem venue's SMTP relay there yourself. Write the
 payload to a permission-restricted file rather than putting its password in a shell argument:
 
 ```json

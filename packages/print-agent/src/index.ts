@@ -1,4 +1,10 @@
-export { POLL_INTERVAL_MS, createAgent } from "./agent.js";
+export {
+  PAGE_RENEW_INTERVAL_MS,
+  PAGE_RENEW_SETTLE_MS,
+  PAGE_REPORT_GIVE_UP_MS,
+  POLL_INTERVAL_MS,
+  createAgent,
+} from "./agent.js";
 export type { Agent, AgentOptions, AgentSetupSnapshot } from "./agent.js";
 export type {
   AgentConfig,
@@ -9,6 +15,10 @@ export type {
   Host,
   HostLog,
   NetworkProbe,
+  OfficePrinterCapabilities,
+  OfficePrinterReport,
+  PagePrintOutcome,
+  PageTarget,
   PairResult,
   PairedBluetoothDevice,
   VisibleDevice,
@@ -17,6 +27,10 @@ export {
   BLUETOOTH_COMMAND_LIMIT,
   DEFAULT_TIMEOUT_MS,
   MAX_OUTCOME_ERROR_LENGTH,
+  PAGE_DOCUMENT_TIMEOUT_MS,
+  PAGE_FORMATS,
+  PAGE_HOLDS,
+  PAGE_MEDIA,
   PIN_WITHHELD,
   createClient,
   isBluetoothAddress,
@@ -35,6 +49,11 @@ export type {
   JoinReply,
   JoinStatus,
   NodeProbe,
+  PageFormat,
+  PageHold,
+  PageJob,
+  PageJobOutcome,
+  PageMedia,
   PullReply,
   Result,
   ServerEntry,

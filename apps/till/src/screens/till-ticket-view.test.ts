@@ -4,7 +4,12 @@ import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { TillTicketView } from "./till-ticket-view.js";
 import type { TicketIssuer } from "./till-ticket-view.js";
-import type { OriginalReceiptPrint, TillSaleResult } from "../api/client.js";
+import type {
+  InvoiceDeliveryAttempt,
+  InvoiceDeliveryStatus,
+  OriginalReceiptPrint,
+  TillSaleResult,
+} from "../api/client.js";
 import type { ReceiptConfig } from "../layout.js";
 
 // es-ES currency formatting separates the amount and € with a non-breaking space (U+00A0, or a
@@ -1827,5 +1832,646 @@ describe("till-ticket-view: the sale's own language", () => {
 
     expect(rows(el, ".vat-row")).toContain("IVE 21.00% 0,52 €");
     expect(rows(el, ".tender .tender-row")).toEqual(["Tarxeta"]);
+  });
+});
+
+describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
+  const noActions: InvoiceDeliveryStatus["actions"] = {
+    retryOriginal: null,
+    printOnA4: null,
+    receiptInstead: null,
+    email: null,
+  };
+  const attempt = (over: Partial<InvoiceDeliveryAttempt>): InvoiceDeliveryAttempt => ({
+    id: "d1",
+    medium: "a4",
+    designation: "original",
+    status: "queued",
+    failureCode: null,
+    requestedAt: "2026-08-05T12:35:00.000Z",
+    at: null,
+    personId: "staff",
+    printerHold: null,
+    lateSuccess: false,
+    ...over,
+  });
+  const statusOf = (
+    current: InvoiceDeliveryAttempt | null,
+    actions: Partial<InvoiceDeliveryStatus["actions"]> = {},
+  ): InvoiceDeliveryStatus => ({
+    current,
+    originalCompleted: current?.status === "sent",
+    actions: { ...noActions, ...actions },
+    history: current === null ? [] : [current],
+  });
+  const a4Offer = { printer: { id: "p1", name: "Office" }, designation: "original" as const };
+  const mountF1 = (props: Record<string, unknown>, over: Partial<TillSaleResult> = {}) =>
+    mountWidget<TillTicketView>("till-ticket-view", {
+      issuer,
+      result: { ...result, invoiceType: "F1", ...over },
+      originalReceiptPrint: { status: "not_queued" },
+      ...props,
+    });
+  const line = (el: TillTicketView) =>
+    el.shadowRoot!.querySelector("[data-test=delivery-status]")?.textContent?.trim();
+  const button = (el: TillTicketView, name: string) =>
+    el.shadowRoot!.querySelector<HTMLElement>(`[data-test=${name}]`);
+
+  it.each([
+    [
+      { status: "queued" },
+      "Waiting for the office printer.",
+      "Esperando a la impresora de oficina.",
+    ],
+    [{ status: "sending" }, "Sending the invoice.", "Enviando la factura."],
+    [{ medium: "email", status: "queued" }, "Sending the invoice.", "Enviando la factura."],
+    [{ medium: "email", status: "sending" }, "Sending the invoice.", "Enviando la factura."],
+    [{ status: "sent" }, "Printed on A4.", "Impresa en A4."],
+    [{ medium: "email", status: "sent" }, "Sent by email.", "Enviada por correo electrónico."],
+    [{ status: "failed" }, "Not delivered.", "No entregada."],
+    [{ medium: "email", status: "failed" }, "Not delivered.", "No entregada."],
+    [{ status: "unknown" }, "May not have been delivered.", "Puede que no se haya entregado."],
+    [
+      { medium: "email", status: "unknown" },
+      "May not have been delivered.",
+      "Puede que no se haya entregado.",
+    ],
+    [
+      { status: "unknown", printerHold: "paper_out" },
+      "May still print: check the printer first.",
+      "Puede que aún se imprima: comprueba primero la impresora.",
+    ],
+  ] as const)("words the current attempt %j in English and Spanish", async (over, en, es) => {
+    const { el } = await mountF1({ deliveries: statusOf(attempt(over)) });
+    expect(line(el)).toBe(en);
+    setLocale("es-ES");
+    el.requestUpdate();
+    await el.updateComplete;
+    expect(line(el)).toBe(es);
+  });
+
+  it.each([
+    ["paper_out", "out of paper", "sin papel"],
+    ["paper_jam", "paper jam", "atasco de papel"],
+    ["cover_open", "a cover is open", "hay una tapa abierta"],
+    ["tray_missing", "a tray is missing", "falta una bandeja"],
+    ["ink_or_toner_out", "out of ink or toner", "sin tinta o tóner"],
+    ["output_full", "the output tray is full", "la bandeja de salida está llena"],
+    ["paused", "paused", "en pausa"],
+    ["stopped", "stopped", "detenida"],
+  ])(
+    "says what the office printer is holding the A4 for (%s), and offers nothing while it does",
+    async (hold, en, es) => {
+      // B1 offers no action while an A4 is sending, held or not.
+      const { el } = await mountF1({
+        deliveries: statusOf(attempt({ status: "sending", printerHold: hold })),
+      });
+      expect(line(el)).toBe(`Waiting at the office printer: ${en}.`);
+      for (const name of ["print-a4", "receipt-instead", "retry-receipt", "print-receipt"])
+        expect(button(el, name)).toBeNull();
+      setLocale("es-ES");
+      el.requestUpdate();
+      await el.updateComplete;
+      expect(line(el)).toBe(`Esperando en la impresora de oficina: ${es}.`);
+    },
+  );
+
+  it("says only that the A4 is waiting at the printer for a hold it has no words for", async () => {
+    const { el } = await mountF1({
+      deliveries: statusOf(attempt({ status: "sending", printerHold: "door_ajar" })),
+    });
+    expect(line(el)).toBe("Waiting at the office printer.");
+    expect(line(el)).not.toContain("{reason}");
+  });
+
+  it("leaves a receipt attempt to the original's print status, as before", async () => {
+    const { el } = await mountF1({
+      deliveries: statusOf(attempt({ medium: "receipt", status: "queued" })),
+      originalReceiptPrint: { status: "queued", jobId: "original", canRetry: false },
+    });
+    expect(button(el, "delivery-status")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=original-delivery]")!.textContent).toContain(
+      "The original is waiting to print.",
+    );
+  });
+
+  it("shows no delivery words before any attempt and while the status is unread", async () => {
+    const { el } = await mountF1({ deliveries: statusOf(null) });
+    expect(button(el, "delivery-status")).toBeNull();
+    el.deliveries = undefined;
+    await el.updateComplete;
+    expect(button(el, "delivery-status")).toBeNull();
+  });
+
+  it("offers Print on A4 only when the status does, and asks for it", async () => {
+    const { el } = await mountF1({ deliveries: statusOf(null) });
+    expect(button(el, "print-a4")).toBeNull();
+    el.deliveries = statusOf(null, { printOnA4: a4Offer });
+    await el.updateComplete;
+    expect(button(el, "print-a4")!.textContent!.trim()).toBe("Print on A4");
+    expect(button(el, "print-a4")!.getAttribute("variant")).toBe("secondary");
+    let event: Event | undefined;
+    el.addEventListener("print-a4", (e) => {
+      event = e;
+    });
+    button(el, "print-a4")!.click();
+    expect(event?.bubbles).toBe(true);
+    expect(event?.composed).toBe(true);
+  });
+
+  it.each(["failed", "unknown"] as const)(
+    "offers one button to send a %s A4 original to the office printer again",
+    async (status) => {
+      const { el } = await mountF1({
+        deliveries: statusOf(attempt({ status }), {
+          retryOriginal: { medium: "a4" },
+          printOnA4: a4Offer,
+        }),
+      });
+      const buttons = el.shadowRoot!.querySelectorAll("[data-test=print-a4]");
+      expect(buttons).toHaveLength(1);
+      expect(buttons[0]!.textContent!.trim()).toBe("Send to the office printer again");
+      setLocale("es-ES");
+      el.requestUpdate();
+      await el.updateComplete;
+      expect(button(el, "print-a4")!.textContent!.trim()).toBe(
+        "Volver a enviar a la impresora de oficina",
+      );
+    },
+  );
+
+  it("shows an email attempt's status only, even when a retry is offered", async () => {
+    const { el } = await mountF1({
+      deliveries: statusOf(attempt({ medium: "email", status: "failed" }), {
+        retryOriginal: { medium: "email" },
+      }),
+    });
+    expect(line(el)).toBe("Not delivered.");
+    for (const name of ["print-a4", "receipt-instead"]) expect(button(el, name)).toBeNull();
+  });
+
+  it("offers the receipt printer instead only while the status does, naming the waiting A4", async () => {
+    const { el } = await mountF1({ deliveries: statusOf(attempt({ status: "queued" })) });
+    expect(button(el, "receipt-instead")).toBeNull();
+    el.deliveries = statusOf(attempt({ status: "queued" }), {
+      receiptInstead: { deliveryId: "d1" },
+    });
+    await el.updateComplete;
+    expect(button(el, "receipt-instead")!.textContent!.trim()).toBe(
+      "Print on the receipt printer instead",
+    );
+    let event: CustomEvent | undefined;
+    el.addEventListener("receipt-instead", (e) => {
+      event = e as CustomEvent;
+    });
+    button(el, "receipt-instead")!.click();
+    expect(event?.detail).toEqual({ deliveryId: "d1" });
+    expect(event?.bubbles).toBe(true);
+    expect(event?.composed).toBe(true);
+    setLocale("es-ES");
+    el.requestUpdate();
+    await el.updateComplete;
+    expect(button(el, "receipt-instead")!.textContent!.trim()).toBe(
+      "Imprimir en la impresora de tickets en su lugar",
+    );
+  });
+
+  it("offers neither action on a device that may not print", async () => {
+    const { el } = await mountF1({
+      canPrintReceipt: false,
+      deliveries: statusOf(attempt({ status: "queued" }), {
+        printOnA4: a4Offer,
+        receiptInstead: { deliveryId: "d1" },
+      }),
+    });
+    expect(line(el)).toBe("Waiting for the office printer.");
+    for (const name of ["print-a4", "receipt-instead"]) expect(button(el, name)).toBeNull();
+  });
+
+  it.each(["deliveryBusy", "originalReceiptBusy"] as const)(
+    "holds both actions while a request is out (%s), keeping their colour",
+    async (busy) => {
+      const { el } = await mountF1({
+        deliveries: statusOf(attempt({ status: "queued" }), {
+          printOnA4: a4Offer,
+          receiptInstead: { deliveryId: "d1" },
+        }),
+      });
+      for (const name of ["print-a4", "receipt-instead"])
+        expect(button(el, name)!.hasAttribute("disabled")).toBe(false);
+      el[busy] = true;
+      await el.updateComplete;
+      for (const name of ["print-a4", "receipt-instead"]) {
+        expect(button(el, name)!.hasAttribute("disabled")).toBe(true);
+        expect(button(el, name)!.getAttribute("variant")).toBe("secondary");
+      }
+    },
+  );
+
+  it("says a status read failed, keeping the last status it read and its actions", async () => {
+    const { el } = await mountF1({
+      deliveries: statusOf(attempt({ status: "queued" }), { receiptInstead: { deliveryId: "d1" } }),
+      deliveriesReadFailed: true,
+    });
+    expect(button(el, "delivery-read-failed")!.textContent!.trim()).toBe(
+      "Could not check the invoice's delivery. Check again.",
+    );
+    expect(line(el)).toBe("Waiting for the office printer.");
+    expect(button(el, "receipt-instead")).not.toBeNull();
+    setLocale("es-ES");
+    el.requestUpdate();
+    await el.updateComplete;
+    expect(button(el, "delivery-read-failed")!.textContent!.trim()).toBe(
+      "No se ha podido comprobar la entrega de la factura. Vuelve a comprobarla.",
+    );
+  });
+
+  it.each([
+    ["an A4 waits", { status: "queued" }],
+    ["an A4 is sending", { status: "sending" }],
+    ["an A4 is held", { status: "sending", printerHold: "paper_out" }],
+    ["an email is sending", { medium: "email", status: "sending" }],
+    ["an A4 has printed", { status: "sent" }],
+    ["an email was sent", { medium: "email", status: "sent" }],
+  ] as const)("offers no Print original while %s", async (_name, over) => {
+    const { el } = await mountF1({ deliveries: statusOf(attempt(over)) });
+    expect(button(el, "print-receipt")).toBeNull();
+  });
+
+  it.each([
+    ["no attempt yet", null],
+    ["an A4 failed", attempt({ status: "failed" })],
+    ["an A4 may not have printed", attempt({ status: "unknown" })],
+    ["an email failed", attempt({ medium: "email", status: "failed" })],
+  ] as const)("still offers Print original when %s", async (_name, current) => {
+    const { el } = await mountF1({ deliveries: statusOf(current) });
+    expect(button(el, "print-receipt")!.textContent!.trim()).toBe("Print original");
+  });
+
+  it("says the full invoice was delivered once an A4 or email original completed", async () => {
+    const { el } = await mountF1({ deliveries: statusOf(attempt({ status: "sent" })) });
+    const section = () => button(el, "original-delivery")!.textContent!;
+    expect(section()).toContain("Full invoice delivered");
+    expect(section()).not.toContain("Full invoice not delivered");
+    setLocale("es-ES");
+    el.requestUpdate();
+    await el.updateComplete;
+    expect(section()).toContain("Factura completa entregada");
+    expect(section()).not.toContain("Factura completa no entregada");
+  });
+
+  it("keeps the handover heading first when the receipt original was handed over", async () => {
+    const { el } = await mountF1({
+      deliveries: statusOf(attempt({ medium: "receipt", status: "sent" })),
+      originalReceiptPrint: {
+        status: "done",
+        jobId: "original",
+        canRetry: false,
+        handover: { personId: "staff", confirmedAt: "2026-08-05T12:40:00.000Z" },
+      },
+    });
+    const section = button(el, "original-delivery")!.textContent!;
+    expect(section).toContain("Customer handover confirmed");
+    expect(section).not.toContain("Full invoice delivered");
+  });
+
+  it.each([
+    ["could be retried", { canRetry: true }],
+    ["its printer was deleted", { canRetry: false, failureCode: "printer.deleted" }],
+  ] as const)(
+    "says delivered, and offers no receipt retry, once an email original completed after the receipt original failed and %s",
+    async (_name, failed) => {
+      const email = attempt({ id: "d2", medium: "email", status: "sent" });
+      const { el } = await mountF1({
+        deliveries: {
+          current: email,
+          originalCompleted: true,
+          actions: noActions,
+          history: [email, attempt({ id: null, medium: "receipt", status: "failed" })],
+        },
+        originalReceiptPrint: { status: "failed", jobId: "original", ...failed },
+      });
+      const section = () => button(el, "original-delivery")!.textContent!;
+      expect(section()).toContain("Full invoice delivered");
+      expect(section()).not.toContain("Full invoice not delivered");
+      expect(section()).not.toContain("Printing failed");
+      expect(section()).not.toContain("The printer was deleted");
+      expect(line(el)).toBe("Sent by email.");
+      expect(button(el, "retry-receipt")).toBeNull();
+      expect(button(el, "print-receipt")).toBeNull();
+    },
+  );
+
+  it.each([
+    [
+      "an email original waits",
+      { medium: "email", status: "queued" },
+      { receiptInstead: { deliveryId: "d2" } },
+    ],
+    ["an email original is sending", { medium: "email", status: "sending" }, {}],
+    ["an A4 original waits", { status: "queued" }, {}],
+    ["an A4 original is sending", { status: "sending" }, {}],
+  ] as const)(
+    "offers no receipt retry, and leaves out its failure line, while %s after the receipt original failed",
+    async (_name, over, actions) => {
+      const current = attempt({ id: "d2", ...over });
+      const { el } = await mountF1({
+        deliveries: {
+          current,
+          originalCompleted: false,
+          actions: { ...noActions, ...actions },
+          history: [current, attempt({ id: null, medium: "receipt", status: "failed" })],
+        },
+        originalReceiptPrint: { status: "failed", jobId: "original", canRetry: true },
+      });
+      const section = button(el, "original-delivery")!.textContent!;
+      expect(section).toContain("Full invoice not delivered");
+      expect(section).not.toContain("Printing failed");
+      expect(button(el, "retry-receipt")).toBeNull();
+      expect(button(el, "print-receipt")).toBeNull();
+      expect(button(el, "receipt-instead") !== null).toBe("receiptInstead" in actions);
+    },
+  );
+
+  it("keeps the receipt original's failure line while that receipt waits for its automatic retry", async () => {
+    const current = attempt({ id: null, medium: "receipt", status: "queued" });
+    const { el } = await mountF1({
+      deliveries: { current, originalCompleted: false, actions: noActions, history: [current] },
+      originalReceiptPrint: { status: "failed", jobId: "original", canRetry: false },
+    });
+    const section = button(el, "original-delivery")!.textContent!;
+    expect(section).toContain("Full invoice not delivered");
+    expect(section).toContain("Printing failed. Automatic retry is pending.");
+    expect(button(el, "retry-receipt")).toBeNull();
+  });
+
+  it.each([
+    ["an A4", {}],
+    ["an email", { medium: "email" }],
+  ] as const)(
+    "leaves out the receipt's not-sent line while %s attempt is current",
+    async (_name, over) => {
+      const { el } = await mountF1({ deliveries: statusOf(attempt(over)) });
+      expect(button(el, "original-delivery")!.textContent).not.toContain(
+        "The original has not been sent to a printer.",
+      );
+      el.deliveries = statusOf(null);
+      await el.updateComplete;
+      expect(button(el, "original-delivery")!.textContent).toContain(
+        "The original has not been sent to a printer.",
+      );
+    },
+  );
+
+  it("holds the receipt's own buttons while a delivery request is out", async () => {
+    const { el } = await mountF1({
+      deliveries: statusOf(attempt({ status: "failed" })),
+      originalReceiptPrint: { status: "not_queued" },
+    });
+    expect(button(el, "print-receipt")!.hasAttribute("disabled")).toBe(false);
+    expect(button(el, "refresh-receipt")!.hasAttribute("disabled")).toBe(false);
+    el.deliveryBusy = true;
+    await el.updateComplete;
+    expect(button(el, "print-receipt")!.hasAttribute("disabled")).toBe(true);
+    expect(button(el, "refresh-receipt")!.hasAttribute("disabled")).toBe(true);
+    el.originalReceiptPrint = { status: "failed", jobId: "original", canRetry: true };
+    await el.updateComplete;
+    expect(button(el, "retry-receipt")!.hasAttribute("disabled")).toBe(true);
+    el.originalReceiptPrint = { status: "done", jobId: "original", canRetry: false };
+    await el.updateComplete;
+    expect(button(el, "confirm-handover")!.hasAttribute("disabled")).toBe(true);
+    el.deliveryBusy = false;
+    await el.updateComplete;
+    expect(button(el, "confirm-handover")!.hasAttribute("disabled")).toBe(false);
+  });
+
+  it("labels the A4 action a copy when the status offers a duplicate", async () => {
+    const { el } = await mountF1({
+      deliveries: statusOf(attempt({ status: "sent" }), {
+        printOnA4: { ...a4Offer, designation: "duplicate" },
+      }),
+    });
+    expect(button(el, "print-a4")!.textContent!.trim()).toBe("Print a copy on A4");
+    setLocale("es-ES");
+    el.requestUpdate();
+    await el.updateComplete;
+    expect(button(el, "print-a4")!.textContent!.trim()).toBe("Imprimir una copia en A4");
+    el.deliveries = statusOf(null, { printOnA4: a4Offer });
+    await el.updateComplete;
+    expect(button(el, "print-a4")!.textContent!.trim()).toBe("Imprimir en A4");
+  });
+
+  it("says why a delivery action was refused inside the section, apart from a failed read", async () => {
+    const { el } = await mountF1({
+      deliveries: statusOf(attempt({}), { receiptInstead: { deliveryId: "d1" } }),
+      deliveryRefusal: { code: "invoice_delivery.active" },
+      deliveriesReadFailed: true,
+    });
+    const section = button(el, "original-delivery")!;
+    expect(section.querySelector("[data-test=delivery-refused]")!.textContent!.trim()).toBe(
+      "This invoice is already waiting for delivery. Check its status before trying again.",
+    );
+    expect(section.querySelector("[data-test=delivery-read-failed]")).not.toBeNull();
+    expect(section.querySelector("[data-test=receipt-instead]")).not.toBeNull();
+    el.deliveryRefusal = {};
+    await el.updateComplete;
+    expect(button(el, "delivery-refused")!.textContent!.trim()).toBe(
+      "Could not send the invoice, try again",
+    );
+    el.deliveryRefusal = undefined;
+    await el.updateComplete;
+    expect(button(el, "delivery-refused")).toBeNull();
+    expect(button(el, "delivery-read-failed")).not.toBeNull();
+  });
+
+  it("shows nothing new on a simplified invoice", async () => {
+    const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
+      issuer,
+      result: { ...result, invoiceType: "F2" },
+      originalReceiptAvailable: true,
+      deliveries: statusOf(attempt({ status: "failed" }), {
+        retryOriginal: { medium: "a4" },
+        printOnA4: a4Offer,
+        receiptInstead: { deliveryId: "d1" },
+      }),
+      deliveriesReadFailed: true,
+      deliveryRefusal: { code: "invoice_delivery.active" },
+    });
+    for (const name of [
+      "delivery-status",
+      "delivery-read-failed",
+      "delivery-refused",
+      "print-a4",
+      "receipt-instead",
+      "original-delivery",
+    ])
+      expect(button(el, name)).toBeNull();
+    expect(button(el, "print-receipt")).not.toBeNull();
+  });
+
+  it("keeps a token's space between the section's buttons when they wrap on a phone", async () => {
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    await page.viewport(390, 844);
+    setLocale("es-ES");
+    try {
+      const { el } = await mountF1({
+        deliveries: statusOf(attempt({}), { receiptInstead: { deliveryId: "d1" } }),
+      });
+      const section = button(el, "original-delivery")!;
+      const probe = document.createElement("div");
+      probe.style.width = "var(--wt-space-2)";
+      section.append(probe);
+      const space = probe.getBoundingClientRect().width;
+      probe.remove();
+      const first = button(el, "receipt-instead")!.getBoundingClientRect();
+      const second = button(el, "refresh-receipt")!.getBoundingClientRect();
+      expect(space).toBeGreaterThan(0);
+      expect(second.top).toBeGreaterThanOrEqual(first.bottom);
+      expect(second.top - first.bottom).toBeGreaterThanOrEqual(space);
+    } finally {
+      await page.viewport(width, height);
+    }
+  });
+
+  describe("email (A231q C3b)", () => {
+    const emailOffer = { designation: "original" as const };
+    const label = (el: TillTicketView, name: string) => button(el, name)?.textContent?.trim();
+    const dialog = (el: TillTicketView) =>
+      el.shadowRoot!.querySelector("till-invoice-email-dialog");
+
+    it("offers Send by email when the status offers email, and asks the app to open the form", async () => {
+      const { el } = await mountF1({ deliveries: statusOf(null, { email: emailOffer }) });
+      expect(label(el, "email-invoice")).toBe("Send by email");
+      expect(button(el, "email-invoice")!.getAttribute("variant")).toBe("secondary");
+      let opened = 0;
+      el.addEventListener("email-invoice", () => opened++);
+      button(el, "email-invoice")!.click();
+      expect(opened).toBe(1);
+      setLocale("es-ES");
+      el.requestUpdate();
+      await el.updateComplete;
+      expect(label(el, "email-invoice")).toBe("Enviar por correo electrónico");
+    });
+
+    it("labels the email action a copy once the invoice was delivered", async () => {
+      const { el } = await mountF1({
+        deliveries: statusOf(attempt({ status: "sent" }), {
+          email: { designation: "duplicate" },
+        }),
+      });
+      expect(label(el, "email-invoice")).toBe("Send a copy by email");
+      setLocale("es-ES");
+      el.requestUpdate();
+      await el.updateComplete;
+      expect(label(el, "email-invoice")).toBe("Enviar una copia por correo electrónico");
+    });
+
+    it("offers to send an ended email again, by its attempt, and the email action to another address", async () => {
+      const { el } = await mountF1({
+        deliveries: statusOf(attempt({ id: "d7", medium: "email", status: "failed" }), {
+          retryOriginal: { medium: "email" },
+          email: emailOffer,
+        }),
+      });
+      expect(line(el)).toBe("Not delivered.");
+      expect(label(el, "email-again")).toBe("Send the email again");
+      expect(button(el, "email-again")!.getAttribute("variant")).toBe("secondary");
+      expect(label(el, "email-invoice")).toBe("Send to another address");
+      const retried: unknown[] = [];
+      el.addEventListener("retry-email", (e) => retried.push((e as CustomEvent).detail));
+      button(el, "email-again")!.click();
+      expect(retried).toEqual([{ deliveryId: "d7" }]);
+      setLocale("es-ES");
+      el.requestUpdate();
+      await el.updateComplete;
+      expect(label(el, "email-again")).toBe("Volver a enviar el correo");
+      expect(label(el, "email-invoice")).toBe("Enviar a otra dirección");
+    });
+
+    it("offers no email again when the retry offered is on paper", async () => {
+      const { el } = await mountF1({
+        deliveries: statusOf(attempt({ status: "failed" }), {
+          retryOriginal: { medium: "a4" },
+          printOnA4: a4Offer,
+        }),
+      });
+      for (const name of ["email-again", "email-invoice"]) expect(button(el, name)).toBeNull();
+    });
+
+    it("offers paper instead of a waiting email, as for a waiting A4", async () => {
+      const { el } = await mountF1({
+        deliveries: statusOf(attempt({ medium: "email", status: "queued" }), {
+          receiptInstead: { deliveryId: "d1" },
+        }),
+      });
+      expect(line(el)).toBe("Sending the invoice.");
+      expect(button(el, "receipt-instead")).not.toBeNull();
+      expect(button(el, "email-invoice")).toBeNull();
+    });
+
+    it("draws no email action on a device without the print-receipt action", async () => {
+      const { el } = await mountF1({
+        canPrintReceipt: false,
+        emailOpen: true,
+        deliveries: statusOf(attempt({ medium: "email", status: "failed" }), {
+          retryOriginal: { medium: "email" },
+          email: emailOffer,
+        }),
+      });
+      for (const name of ["email-again", "email-invoice"]) expect(button(el, name)).toBeNull();
+      expect(dialog(el)).toBeNull();
+    });
+
+    it.each(["deliveryBusy", "originalReceiptBusy"] as const)(
+      "holds both email actions while a request is out (%s), keeping their colour",
+      async (busy) => {
+        const { el } = await mountF1({
+          deliveries: statusOf(attempt({ medium: "email", status: "unknown" }), {
+            retryOriginal: { medium: "email" },
+            email: emailOffer,
+          }),
+        });
+        for (const name of ["email-again", "email-invoice"])
+          expect(button(el, name)!.hasAttribute("disabled")).toBe(false);
+        el[busy] = true;
+        await el.updateComplete;
+        for (const name of ["email-again", "email-invoice"]) {
+          expect(button(el, name)!.hasAttribute("disabled")).toBe(true);
+          expect(button(el, name)!.getAttribute("variant")).toBe("secondary");
+        }
+      },
+    );
+
+    it("shows the address form while the app has it open, headed as the offer reads", async () => {
+      const { el } = await mountF1({ deliveries: statusOf(null, { email: emailOffer }) });
+      expect(dialog(el)).toBeNull();
+      el.emailOpen = true;
+      await el.updateComplete;
+      expect(dialog(el)!.copy).toBe(false);
+      expect(dialog(el)!.closest("[role=status]")).toBeNull();
+      el.deliveries = statusOf(attempt({ status: "sent" }), {
+        email: { designation: "duplicate" },
+      });
+      el.deliveryBusy = true;
+      el.emailRefusal = { code: "invoice_delivery.active" };
+      await el.updateComplete;
+      expect(dialog(el)!.copy).toBe(true);
+      expect(dialog(el)!.busy).toBe(true);
+      expect(dialog(el)!.refusal).toEqual({ code: "invoice_delivery.active" });
+      el.emailOpen = false;
+      await el.updateComplete;
+      expect(dialog(el)).toBeNull();
+    });
+
+    it("never shows the address an email went to", async () => {
+      const { el } = await mountF1({
+        deliveries: statusOf(attempt({ medium: "email", status: "sent" }), {
+          email: { designation: "duplicate" },
+        }),
+      });
+      expect(line(el)).toBe("Sent by email.");
+      expect(text(el)).not.toContain("@");
+    });
   });
 });
