@@ -172,7 +172,7 @@ export function mountPagePrintersApi(app: Hono, deps: PagePrintersApiDeps, log: 
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "PagePrinterId");
-      // A disabled printer is still read: its waiting page reports `printer_disabled`.
+      // A disabled printer is still read: an agent's next claim fails its waiting page as `printer_disabled`.
       await gated(sessionId, async (tx) => {
         const [printer] = await tx
           .select({ id: pagePrinters.id })

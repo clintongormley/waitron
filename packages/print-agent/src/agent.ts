@@ -354,8 +354,8 @@ export function createAgent(opts: AgentOptions): Agent {
     }
   }
 
-  // An A4 log line names the job and at most a failure's `kind`: a failure's `detail` and a thrown
-  // message can carry a server's or a socket's own words.
+  // A page job's log line carries at most the job's id and a failure's `kind`: a failure's `detail`
+  // and a thrown message can carry a server's or a socket's own words.
 
   /** Renews until `ended` is set; a lost claim aborts `lost`. */
   async function keepClaim(

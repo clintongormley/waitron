@@ -610,6 +610,10 @@ abort signal stops polling. It never sends the same job twice. It reads `job-sta
 choose a code; printer text never leaves the function. Job name is a fixed "Waitron invoice", never
 an invoice or customer detail.
 
+_Note, 2026-10-13 (finish-branch review):_ the Print-Job also asks for one copy and the paper size
+the server chose, so a printer's own defaults do not decide either; `Host.printPage` takes that
+paper size after `format` (commit `5c2cefbc9`).
+
 **Failing tests first** (`ipp-print.test.ts`, a fake IPP server started in the test on a free port,
 never 9100, never a real printer): one case per outcome above; abort signal stops polling; exactly
 one Print-Job request in every case. Check where the fake server lives against the package's
