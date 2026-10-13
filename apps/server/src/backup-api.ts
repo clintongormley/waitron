@@ -58,7 +58,7 @@ export interface BackupApiDeps {
   /** The recovery key from the box env, read afresh each call. Answers with no archive destination
    * configured, which the supervisor's `current()` cannot. */
   readRecoveryKey: () => Promise<string | undefined>;
-  /** The box env as a reload reads it, so status can report the key file's key and rotation time. */
+  /** The box env as a reload reads it: status reports the key file's key and rotation time. */
   readBoxEnv: () => Promise<Record<string, string | undefined>>;
   /** Rewrites this node's sealed state row, which carries `backup.env` and is locked with the recovery
    * key. */
@@ -291,9 +291,10 @@ async function probeArchive(
 
 /**
  * `apply` checks what it will store the way boot would read it before writing anything, and after
- * a reload that succeeds asserts the EFFECTIVE key equals the one it chose (the guard against a
- * partial env override silently orphaning archives). A reload that fails after `apply` or `disable` committed
- * is answered 200 with `reloadErrorCode`: the write stands.
+ * a reload that loads the settings asserts the EFFECTIVE key equals the one it chose (the guard
+ * against a partial env override silently orphaning archives). A reload that throws after `apply`
+ * or `disable` committed, or that leaves `apply`'s stored settings unusable, is answered 200 with
+ * `reloadErrorCode`: the write stands.
  */
 export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): void {
   const run = createErrorBoundary(STATUS, "backup.failed");
@@ -472,7 +473,8 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
           );
         }
         await storeSettings(settings);
-        const reloadErrorCode = await reloadAfterWrite();
+        const reloadErrorCode =
+          (await reloadAfterWrite()) ?? deps.supervisor.current().loadErrorCode ?? undefined;
         // The effective key is what the box will actually encrypt under. If a partial env override (or
         // any merge) made it differ from the key chosen above, fail LOUD rather than orphan archives.
         if (

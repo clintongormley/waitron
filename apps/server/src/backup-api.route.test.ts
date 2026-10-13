@@ -1844,6 +1844,24 @@ describe("backup admin routes", () => {
       expect((await readSealed())?.enabled).toBe(true);
     }, 60_000);
 
+    it("a write that commits but whose reload finds the stored settings unusable answers 200 with that code", async () => {
+      const { sc, post } = await primaryApp();
+      sc.readRecord = async () => {
+        throw new AppError("backup.archive_settings_invalid", { reason: "fields" });
+      };
+      const res = await post(
+        "/api/backup/apply",
+        applyBody({ kind: "local-fs", dir: makeDestDir() }),
+      );
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({
+        reloadErrorCode: "backup.archive_settings_invalid",
+        loadErrorCode: "backup.archive_settings_invalid",
+        recoveryKeySet: true,
+      });
+      expect((await readSealed())?.enabled).toBe(true);
+    }, 60_000);
+
     it("disable stores the settings switched off under a new revision, and runs no sweep", async () => {
       const { post, sup } = await primaryApp();
       const dir = makeDestDir();
