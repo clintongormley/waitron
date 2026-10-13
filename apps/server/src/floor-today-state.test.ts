@@ -3,11 +3,18 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { floorTodayJoins, floorTodayJoinTables, floorTodayTables, floorZones } from "@waitron/db";
+import {
+  floorTodayJoins,
+  floorTodayJoinTables,
+  floorTodayTables,
+  floorTodayZones,
+  floorZones,
+} from "@waitron/db";
 import { zoneSalePolicies, zoneServicePolicies } from "@waitron/venue-service";
 import { readZonePlan, saveZonePlan, type ZonePlanSave } from "./floor-plan.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { splitJoinedTable } from "./floor-today-split.js";
+import { ensureToday } from "./floor-today-store.js";
 import { inTx, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
 import { giveKeptSize, plannedZone } from "./testing/floor-today-venue.js";
 import { listTablesWithState, type TableState } from "./working-order.js";
@@ -16,6 +23,7 @@ import "./errors.js";
 let v: PartyVenue;
 
 const NOW = new Date("2026-10-10T12:00:00Z");
+const NEXT_DAY = new Date("2026-10-11T12:00:00Z");
 const REMOVALS = enabledTableRemovals(ALL_MODULES);
 
 useVenueDb({
@@ -113,6 +121,7 @@ describe("the till's table-state answer carries today's plan", () => {
       inJoinedTable: null,
       joined: null,
       splitOffFrom: null,
+      zoneRevision: 1,
     });
     expect(states.get(b)!.today).toEqual({
       placement: place(20, 5, { width: 10, rotation: 45 }),
@@ -124,6 +133,7 @@ describe("the till's table-state answer carries today's plan", () => {
       inJoinedTable: null,
       joined: null,
       splitOffFrom: null,
+      zoneRevision: 1,
     });
     expect(states.get(spare)!.today).toEqual({
       placement: null,
@@ -135,6 +145,7 @@ describe("the till's table-state answer carries today's plan", () => {
       inJoinedTable: null,
       joined: null,
       splitOffFrom: null,
+      zoneRevision: 1,
     });
     expect(states.get(off)!.today).toEqual({
       placement: null,
@@ -146,6 +157,7 @@ describe("the till's table-state answer carries today's plan", () => {
       inJoinedTable: null,
       joined: null,
       splitOffFrom: null,
+      zoneRevision: 1,
     });
   });
 
@@ -280,6 +292,71 @@ describe("the till's table-state answer says what is joined and what is split of
       parts: [],
       splitOff: [table.c3, table.c4, table.c5],
       apart: true,
+    });
+  });
+});
+
+/** Long table (10 seats, 6 × 2 at 10, 20) = Counter 3 (2 seats), 4 (6) and 5 (4), each kept 2 × 2; Bar (4 seats, 2 × 2 at 40, 0). */
+async function LONG_TABLE(now = NOW) {
+  const zone = await plannedZone(
+    v,
+    [
+      { key: "c3", label: "Counter 3", seats: 2, place: null },
+      { key: "c4", label: "Counter 4", seats: 6, place: null },
+      { key: "c5", label: "Counter 5", seats: 4, place: null },
+      {
+        key: "long",
+        label: "Long table",
+        seats: 10,
+        place: { x: 10, y: 20, width: 6, height: 2 },
+        partKeys: ["c3", "c4", "c5"],
+      },
+      { key: "bar", label: "Bar", seats: 4, place: { x: 40, y: 0, width: 2, height: 2 } },
+    ],
+    now,
+  );
+  for (const key of ["c3", "c4", "c5"])
+    await giveKeptSize(v, zone.master[key]!, { width: 2, height: 2 });
+  return zone;
+}
+
+/** Runs `act`, then puts every zone the next day reached back on NOW's business day. */
+async function onNextDay(act: () => Promise<void>): Promise<void> {
+  try {
+    await act();
+  } finally {
+    await inTx(v, (tx) =>
+      tx
+        .update(floorTodayZones)
+        .set({ businessDay: "2026-10-10" })
+        .where(eq(floorTodayZones.businessDay, "2026-10-11")),
+    );
+  }
+}
+
+describe("the till's table-state answer carries the room's revision", () => {
+  it("every table of a room reads the room's revision", async () => {
+    const one = await LONG_TABLE();
+    const unplanned = await v.table(fresh("Unplanned"));
+    const noToday = await v.table(fresh("No today"), v.tables.zoneId, { today: false });
+    const revisionsOf = (states: Map<string, TableState>, tables: Record<string, string>) =>
+      Object.values(tables).map((id) => states.get(id)!.today!.zoneRevision);
+
+    const first = await read();
+    expect(revisionsOf(first, one.table)).toEqual([1, 1, 1, 1, 1]);
+    expect(first.get(unplanned)!.today.zoneRevision).toBe(0);
+    expect(first.has(noToday)).toBe(false);
+
+    await onNextDay(async () => {
+      await inTx(v, (tx) => ensureToday(tx, v.cfg, REMOVALS, NEXT_DAY));
+      const two = await LONG_TABLE(NEXT_DAY);
+      const next = await inTx(v, (tx) =>
+        listTablesWithState(tx, v.cfg, [], undefined, NEXT_DAY),
+      ).then((states) => new Map(states.map((s) => [s.id, s])));
+      expect(revisionsOf(next, one.table)).toEqual([2, 2, 2, 2, 2]);
+      expect(revisionsOf(next, two.table)).toEqual([1, 1, 1, 1, 1]);
+      expect(next.get(unplanned)!.today.zoneRevision).toBe(0);
+      expect(next.has(noToday)).toBe(false);
     });
   });
 });
