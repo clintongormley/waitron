@@ -282,9 +282,13 @@ export function loadBackupConfig(env: Env, venueId: string): BackupConfig | unde
 }
 
 /**
- * Exactly one source: the environment when it owns any backup variable, else the sealed dashboard
- * record. Without a record nothing runs; `WAITRON_BACKUP_DIR` left in `backup.env` is not read,
- * because no installation's data is carried forward before go-live (CLAUDE.md §3).
+ * Exactly one source: the environment when its raw variables set any of {@link BACKUP_ENV_KEYS},
+ * else the sealed dashboard record. `env` is the raw environment merged over the box's env files,
+ * `backup.env` among them (`loadBoxEnv`), so while the raw environment owns the settings a
+ * variable it leaves unset is read from `backup.env`. Otherwise only the recovery key, its rotation
+ * time and `WAITRON_BACKUP_STALE_AFTER_MS` are read from `env`; a destination, schedule or
+ * retention left in `backup.env` is not, and without a record nothing runs: no installation's data
+ * is carried forward before go-live (CLAUDE.md §3).
  */
 export function resolveBackupConfig(input: {
   managedByEnvironment: boolean;
