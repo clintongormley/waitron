@@ -46,6 +46,39 @@ describe("requestIdMiddleware", () => {
     expect(res.headers.get("x-request-id")).toBe("client-abc");
   });
 
+  it.each([undefined, "client-abc", "bad id"])(
+    "keeps the context and logged id on a route-created response with incoming id %s",
+    async (incoming) => {
+      const { a, lines } = app();
+      a.get(
+        "/raw",
+        (c) => new Response(c.get("requestId"), { status: 201, headers: { "x-own": "kept" } }),
+      );
+
+      const res = await a.request("/raw", {
+        headers: incoming === undefined ? {} : { "x-request-id": incoming },
+      });
+      const echoed = res.headers.get("x-request-id");
+      if (incoming === "client-abc") expect(echoed).toBe("client-abc");
+      else expect(echoed).toMatch(/^[A-Za-z0-9._-]+$/);
+      expect(res.status).toBe(201);
+      expect(res.headers.get("x-own")).toBe("kept");
+      expect(await res.text()).toBe(echoed);
+      expect(lines.map((line) => JSON.parse(line))).toEqual([
+        {
+          at: at().toISOString(),
+          level: "debug",
+          event: "http.request",
+          requestId: echoed,
+          method: "GET",
+          routePath: "/raw",
+          status: 201,
+          durationMs: 0,
+        },
+      ]);
+    },
+  );
+
   it("logs http.request with the route pattern, never the concrete path or query or body", async () => {
     const { a, lines } = app();
     await a.request("/api/thing/42?secret=shh", {

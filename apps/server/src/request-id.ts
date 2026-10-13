@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import type { MiddlewareHandler } from "hono";
 import type { Logger } from "./logger.js";
 
-// Make c.get("requestId") / c.set("requestId", …) typed across the whole server.
 declare module "hono" {
   interface ContextVariableMap {
     requestId: string;
@@ -22,9 +21,9 @@ export function requestIdMiddleware(log: Logger, now: () => Date): MiddlewareHan
   return async (c, next) => {
     const id = sanitizeRequestId(c.req.header("x-request-id")) ?? randomUUID();
     c.set("requestId", id);
-    c.header("x-request-id", id);
     const start = now().getTime();
     await next();
+    c.header("x-request-id", id);
     log("debug", "http.request", {
       requestId: id,
       method: c.req.method,

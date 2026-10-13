@@ -4094,11 +4094,6 @@ _Formerly A5, and the logging part of A9._ Detail: [backlog/alerts.md](backlog/a
   source's five-minute cache shares that in-flight call with reads during its lifetime. Left open
   by the A258 follow-up (the alerts list's battery check has its own deadline, W58, #1176).
 
-- **`x-request-id` may be missing from a response a route builds itself.** `requestIdMiddleware`
-  (`apps/server/src/request-id.ts`) sets it before the route runs; for A491's build header, a
-  header set before the route was measured missing on such a response (`build-header.test.ts`'s
-  raw case with the setter moved first). The request-id case was not run. Left open by A491.
-
 ### Working time and staff
 
 _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md).
@@ -4165,6 +4160,14 @@ _Formerly entries spread across the old sections._ Detail: [backlog/back-office.
 ### The box: backups, upgrades and recovery
 
 _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
+
+- **The hanging-archive boot test raised `database is locked` on main.** CI run
+  [38430159396](https://github.com/clintongormley/waitron/actions/runs/38430159396),
+  at `1c9978735b9b995b6bcb16f1c28f54d761701cb9`, failed `test-server (2)` in
+  `apps/server/src/boot.backup-network.test.ts`'s "starts, sells and answers /health while every
+  call to a destination hangs, a status read included" at `packages/store/src/write-queue.ts:53`.
+  Cause unverified; reproduce and diagnose the lock before treating a later pass as a repair.
+  Recorded while finishing A537; no backup code changed there.
 
 - **A branch install fetches compose and support files before resolving the image commit.**
   A push between those operations could give them different source commits; inferred from
