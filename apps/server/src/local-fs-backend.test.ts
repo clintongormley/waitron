@@ -121,7 +121,7 @@ describe("LocalFsBackend", () => {
   it("put leaves no .tmp behind, and list never returns a leftover temp as a backup", async () => {
     const be = new LocalFsBackend("d1", dir);
     await be.put("waitron-a.dump.enc", Buffer.from("x"), call);
-    // `writeFileAtomic` writes to `<key>.tmp` then renames; a crash between the two can leave that
+    // `put` stages `<key>.tmp` with `stageFile`, then renames; a crash between the two can leave that
     // temp behind. It starts with `waitron-` too, so `list()` MUST exclude it — otherwise a
     // half-written temp would read as a finished backup.
     await writeFile(join(dir, "waitron-b.dump.enc.tmp"), Buffer.from("leftover"));
@@ -153,7 +153,7 @@ describe("LocalFsBackend", () => {
 
   it("put surfaces a write failure rather than reporting success", async () => {
     const be = new LocalFsBackend("d1", dir);
-    // Pre-create `writeFileAtomic`'s temp path (`<key>.tmp`) as a directory: the helper's pre-write
+    // Pre-create `stageFile`'s temp path (`<key>.tmp`) as a directory: the helper's pre-write
     // `rm(tmp, { force: true })` — without `recursive` — then fails on that directory
     // (ERR_FS_EISDIR), so the write never lands. `put` must PROPAGATE that, never swallow it and
     // report a backup that isn't there.

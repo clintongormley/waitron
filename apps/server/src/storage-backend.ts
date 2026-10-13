@@ -16,7 +16,8 @@ export interface StorageBackend {
   putFile(key: string, path: string, call: StorageCall): Promise<void>;
   getFile(key: string, outPath: string, call: StorageCall): Promise<void>;
   get(key: string, call: StorageCall): Promise<Buffer>;
-  /** Objects whose key starts with `prefix`, newest-first by mtime. Missing store → []. */
+  /** Objects directly in the destination, never deeper, whose key starts with `prefix`, newest-first
+   * by mtime. Missing store → []. */
   list(prefix: string, call: StorageCall): Promise<StoredObject[]>;
   delete(key: string, call: StorageCall): Promise<void>;
   /** A key that is already absent is not a failure. */

@@ -20,9 +20,8 @@ export function checkedKey(key: string): string {
 }
 
 /**
- * A destination folder. A cancelled call is checked before and after each file-system step that
- * cannot itself be interrupted, and copies stream under the signal; a cancelled write never
- * replaces the object already stored.
+ * A destination folder. Copies stream under the caller's signal, which is checked again just before
+ * each rename, so a write cancelled before then never replaces the object already stored.
  */
 export class LocalFsBackend implements StorageBackend {
   constructor(
@@ -72,7 +71,7 @@ export class LocalFsBackend implements StorageBackend {
     signal.throwIfAborted();
     const out: StoredObject[] = [];
     for (const name of names) {
-      // Exclude `writeFileAtomic`'s in-progress temp (`<target>.tmp`): it starts with `waitron-` too,
+      // Exclude `stageFile`'s in-progress temp (`<target>.tmp`): it starts with `waitron-` too,
       // so a leftover from a crash between write and rename would otherwise read as a finished backup.
       if (!name.startsWith(prefix) || name.endsWith(".tmp")) continue;
       let info;
