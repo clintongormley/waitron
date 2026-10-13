@@ -266,7 +266,7 @@ export class BackupSupervisor {
     };
   }
 
-  /** Answers at the read limit; the backend is closed only once its listing has settled. */
+  /** Answers by the read limit; the backend is closed only once its listing has settled. */
   #readDestination(
     dest: ResolvedBackupDestination,
     staleAfterMs: number,

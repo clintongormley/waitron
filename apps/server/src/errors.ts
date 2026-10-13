@@ -1202,7 +1202,7 @@ declare module "@waitron/shared" {
     /** A small object put to a bucket destination, or read from any destination, is larger than
      * `maxBytes` (`SMALL_OBJECT_MAX_BYTES`, `storage-backend.ts`). */
     "backup.destination_object_too_large": { maxBytes: number };
-    /** A call to one destination did not finish within `timeoutMs` and was stopped: an upload plus
+    /** A call to one destination did not finish within `timeoutMs`: an upload plus
      * its pruning (`WAITRON_BACKUP_DESTINATION_TIMEOUT_MS`), or a status listing
      * (`STATUS_READ_TIMEOUT_MS`, `backup-status.ts`). */
     "backup.destination_timed_out": { timeoutMs: number };

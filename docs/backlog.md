@@ -4169,15 +4169,15 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   destination records an outcome and no alert names the cause; what the owner sees is
   `backup.destination_overdue`, once the last archive is old enough. Left open by A538-3.
 
-- **The Backups page shows "No backup has run yet" for a destination the box could not list, and a
-  pruning failure is shown nowhere.** Backup status now carries `readErrorCode` and
-  `pruneErrorCode` per destination, but the screen reads neither and shows "never" whenever
-  `lastBackupAt` is null (`backup-screen.ts`), and a folder holding
-  only old-format archive names also reads as never backed up. Left open by A538-3; plan Task 6
-  covers the screen.
+- **The Backups page shows only the first destination's freshness, and "No backup has run yet"
+  whenever that destination's `lastBackupAt` is null, including when the box could not list it; a
+  pruning failure is shown nowhere.** Backup status carries `readErrorCode` and `pruneErrorCode`
+  per destination, but the screen reads neither (`backup-screen.ts`). Since A538-3a counts only
+  names `parseBackupArchiveKey` reads, a folder holding only old-format archive names also reads as
+  never backed up. Left open by A538-3; plan Task 6 covers the screen.
 
-- **Every backup status read builds and closes a new client per destination**, a new S3 client for
-  a bucket, even while the running sweep holds live ones. This predates A538-3, which added
+- **Every backup status read builds a new client per destination**, a new S3 client for a bucket,
+  and closes it once its listing settles, even while the running sweep holds live ones. This predates A538-3, which added
   `close()`; reusing the sweep's backends needs `close()` to wait for a status read in flight.
 
 - **Whole-state-volume capture** (its own §5-reviewed slice): capture the whole state directory EXCEPT
