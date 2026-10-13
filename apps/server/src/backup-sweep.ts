@@ -20,7 +20,7 @@ import {
   dumpFileName,
   parseBackupArchiveKey,
 } from "./backup-keys.js";
-import { isPlainKey, type StorageBackend, type StorageCall } from "./storage-backend.js";
+import type { StorageBackend, StorageCall } from "./storage-backend.js";
 import "./errors.js";
 
 export type ManifestBuilder = (deps: {
@@ -131,7 +131,7 @@ export async function runOnce(
           anyStored = true;
           if (deps.outcomes)
             recordBackupOutcome(deps.outcomes, backend.id, true, stamp.toISOString());
-          await pruneBackend(backend, deps.retain, deps.retainDays, nowMs, call);
+          await pruneBackend(backend, deps.retain, deps.retainDays, nowMs, call, key);
           deps.log("info", "backup.destination_completed", { destination: backend.id, key });
         } catch (err) {
           // `codeOf` maps only AppErrors.
@@ -152,27 +152,36 @@ export async function runOnce(
   }
 }
 
-/** S3's multi-object delete takes at most this many keys. */
+/** The limit S3 states for one multi-object delete; quoted at `DELETE_BATCH_KEYS` in
+ * `packages/stream/src/s3-store.ts`. */
 const DELETE_BATCH = 1000;
 
 /** Deletes an archive past EITHER cap: beyond the `retain` newest, or older than `retainDays`, both
  * by the stamp in its key, never the file's mtime. Only a name {@link parseBackupArchiveKey} reads
- * is an archive; any other name is left where it is and does not take a kept slot. */
+ * is an archive; any other name is left where it is and does not take a kept slot. `justStored`,
+ * the archive this run put, ranks first among archives sharing its stamp and is never deleted. */
 export async function pruneBackend(
   backend: StorageBackend,
   retain: number,
   retainDays: number,
   nowMs: number,
   call: StorageCall,
+  justStored?: string,
 ): Promise<void> {
   const archives = (await backend.list(BACKUP_KEY_PREFIX, call)).flatMap(({ key }) => {
-    const parsed = isPlainKey(key) ? parseBackupArchiveKey(key) : null;
+    const parsed = parseBackupArchiveKey(key);
     return parsed === null ? [] : [{ key, ms: parsed.timestamp.getTime() }];
   });
-  archives.sort((a, b) => b.ms - a.ms || (a.key < b.key ? 1 : a.key > b.key ? -1 : 0));
+  const rank = (key: string) => (key === justStored ? 1 : 0);
+  archives.sort(
+    (a, b) =>
+      b.ms - a.ms || rank(b.key) - rank(a.key) || (a.key < b.key ? 1 : a.key > b.key ? -1 : 0),
+  );
   const maxAgeMs = retainDays * 24 * 60 * 60 * 1000;
   const toDelete = archives
-    .filter((archive, i) => i >= retain || nowMs - archive.ms > maxAgeMs)
+    .filter(
+      (archive, i) => archive.key !== justStored && (i >= retain || nowMs - archive.ms > maxAgeMs),
+    )
     .map((archive) => archive.key);
   for (let i = 0; i < toDelete.length; i += DELETE_BATCH)
     await backend.deleteMany(toDelete.slice(i, i + DELETE_BATCH), call);

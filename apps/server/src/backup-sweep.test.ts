@@ -137,6 +137,20 @@ describe("runOnce (fan-out)", () => {
       ),
     );
 
+  it("with one kept, keeps the archive it just stored over an earlier one from the same second", async () => {
+    // The largest nonce a UUID can carry, so the key tie-break alone would keep this one.
+    const earlier = backupArchiveKey(
+      new Date("2026-09-05T00:00:00Z"),
+      "ffffffff-ffff-ffff-ffff-ffffffffffff",
+    );
+    const a = new FakeBackend("a");
+    a.objects.set(earlier, Buffer.from("old"));
+    await runOnce({ ...deps([a]), retain: 1 });
+    expect([...a.objects.keys()]).toHaveLength(1);
+    expect(a.objects.has(earlier)).toBe(false);
+    expect(entriesOf(a).get("db.dump")!.toString()).toBe("DUMP-BYTES");
+  });
+
   it("encrypts the archive once and fans the SAME ciphertext to every backend", async () => {
     const a = new FakeBackend("a");
     const b = new FakeBackend("b");
@@ -813,7 +827,6 @@ describe("pruneBackend (dual count + age retention)", () => {
     const day = 24 * 60 * 60 * 1000;
     const key = (ms: number) =>
       backupArchiveKey(new Date(ms), "00000000-0000-4000-8000-000000000000");
-    // Seeded oldest-first, so `list` returns them newest-first.
     const ages = [20, 10, 2, 1, 0];
     for (const d of ages) backend.objects.set(key(nowMs - d * day), Buffer.from(`age-${d}`));
 
@@ -842,7 +855,7 @@ describe("pruneBackend (dual count + age retention)", () => {
     expect(backend.objects.has(freshKey)).toBe(true);
   });
 
-  it("leaves a listed name the destination cannot address and prunes the rest", async () => {
+  it("leaves a listed name the parser rejects and prunes the rest", async () => {
     const dir = await mkdtemp(join(tmpdir(), "backup-prune-odd-"));
     try {
       const nowMs = Date.UTC(2026, 9, 13);
@@ -861,7 +874,7 @@ describe("pruneBackend (dual count + age retention)", () => {
     }
   });
 
-  it("does not count a name the destination cannot address toward the kept newest", async () => {
+  it("does not count a name the parser rejects toward the kept newest", async () => {
     const dir = await mkdtemp(join(tmpdir(), "backup-prune-odd-slot-"));
     try {
       const nowMs = Date.UTC(2026, 9, 13);
@@ -941,6 +954,28 @@ describe("pruneBackend (which names it reads, in what order, and how it deletes)
       await pruneBackend(backend, 1, 3650, nowMs, call());
       expect(record.batches).toEqual([[low]]);
     }
+  });
+
+  it("keeps the archive this run just stored over a same-second archive with a larger key", async () => {
+    const at = new Date(nowMs - day);
+    const stored = backupArchiveKey(at, nonce(1));
+    const other = backupArchiveKey(at, nonce(2));
+    for (const listed of [
+      [stored, other],
+      [other, stored],
+    ]) {
+      const { backend, record } = recordingBackend(listed);
+      await pruneBackend(backend, 1, 3650, nowMs, call(), stored);
+      expect(record.batches).toEqual([[other]]);
+    }
+  });
+
+  it("never deletes the archive this run just stored, even behind newer stamps", async () => {
+    const stored = backupArchiveKey(new Date(nowMs - 2 * day), nonce(1));
+    const newer = backupArchiveKey(new Date(nowMs - day), nonce(2));
+    const { backend, record } = recordingBackend([newer, stored]);
+    await pruneBackend(backend, 1, 3650, nowMs, call(), stored);
+    expect(record.batches).toEqual([]);
   });
 
   it("orders by the stamp in the name, not by the file's mtime", async () => {

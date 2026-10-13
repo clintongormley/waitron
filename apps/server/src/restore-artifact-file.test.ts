@@ -212,9 +212,11 @@ it("roundtrips real SQLite and state through scheduled capture, local file stora
     now: () => stamp,
     archive: (path) => suite.db.archiveTo(path),
   });
-  const [key] = (await readdir(join(f.root, "store"))).filter(
+  const keys = (await readdir(join(f.root, "store"))).filter(
     (name) => parseBackupArchiveKey(name)?.timestamp.getTime() === stamp.getTime(),
   );
+  expect(keys).toHaveLength(1);
+  const key = keys[0];
   guard.forbidden.add(join(f.root, "store", key));
   await backend.getFile(key, f.artifactPath, {
     signal: new AbortController().signal,

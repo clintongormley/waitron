@@ -56,6 +56,10 @@ describe("parseBackupArchiveKey", () => {
     ["an uppercase nonce", `waitron-20260829T175501Z-${NONCE.toUpperCase()}.backup.enc`],
     ["a trailing suffix", `waitron-20260829T175501Z-${NONCE}.backup.enc.tmp`],
     ["a leading prefix", `old-waitron-20260829T175501Z-${NONCE}.backup.enc`],
+    [
+      "a valid name glued after another stamp",
+      `waitron-20260829T175501Zwaitron-20260829T175501Z-${NONCE}.backup.enc`,
+    ],
     ["the staging dump name", "waitron-20260829T175501Z.dump"],
     ["a nonce that is not a UUID", "waitron-20260829T175501Z-notauuid.backup.enc"],
     [

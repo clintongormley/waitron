@@ -258,16 +258,18 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
 
       refs.config = localFsConfig([dest], STRONG_KEY_2);
       await sup.reload();
+      // Two archives can share a second, so the name does not say which is newer: look for any
+      // archive the new key opens.
       await poll(async () => {
-        const arch = await listArchives(dest);
-        const newest = arch[arch.length - 1];
-        if (newest === undefined) return undefined;
-        try {
-          const plain = decryptArtifact(await readFile(join(dest, newest)), STRONG_KEY_2);
-          return unpackArchive(plain).some((e) => e.name === "manifest.json") ? true : undefined;
-        } catch {
-          return undefined;
+        for (const name of await listArchives(dest)) {
+          try {
+            const plain = decryptArtifact(await readFile(join(dest, name)), STRONG_KEY_2);
+            if (unpackArchive(plain).some((e) => e.name === "manifest.json")) return true;
+          } catch {
+            // Not one the new key opens; try the next.
+          }
         }
+        return undefined;
       });
       expect(sup.current().keyFingerprint).toBe(keyFingerprint(STRONG_KEY_2));
       expect((await sup.status()).archiveUnderCurrentKey).toBe(true);
