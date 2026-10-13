@@ -46,11 +46,12 @@ The owner also asked for labour rules per person and, ideally, a solver that dra
 is too much for one design, so it is four pieces, each with its own spec and plan:
 
 1. **A585 — staffing needs and the rota** (this spec).
-2. **A586 — labour rules per person.** The country module supplies the defaults, as `workforce-es`
-   does today with one `convenio_config` row per location (`resolveWorkTimeRuleset`,
+2. **A586 — labour rules and hours balance per person.** The country module supplies the defaults,
+   as `workforce-es` does today with one `convenio_config` row per location (`resolveWorkTimeRuleset`,
    `packages/workforce-es/src/convenio.ts:39`). The venue keeps named agreements, and each person's
-   contract names the one that applies. Planned together with A10, whose overtime figures read the
-   same rules.
+   contract names the one that applies. Each person gets a running total of hours clocked and
+   rostered against the hours they should have worked, with annual leave counted (open point 6).
+   Planned together with A10, whose overtime figures read the same rules.
 3. **A587 — availability**: "can't work Wednesdays", preferred days. The `availability` table exists
    and nothing uses it.
 4. **A588 — the solver**: fills a draft rota from the open slots, each person's rules, availability,
@@ -320,11 +321,18 @@ on the till; a labour-cost estimate; planned versus actual by staff role; shift 
    always attaches a shift to the week it was filled in. A version's shift whose business day falls
    outside the week is listed under "Not in a slot" on the week's first or last day. The labour
    checks keep grouping by calendar date; that difference is accepted and tested.
-5. **Swaps when a published week is changed.** "Change this week" gives every shift a new id, and a
-   swap request points at the old one. Default: refuse "Change this week" while a swap request on
-   that week is still waiting for a decision; decided swaps stay with the old shifts as history
-   **(default)**.
-6. **The yearly overtime cap** needs a whole year of shifts, so the rota's live warnings do not judge
-   it; the other checks run over the week with a week either side **(default)**.
+5. **Swaps when a published week is changed** (owner, 2026-10-13: "just warn that one exists,
+   because it may still be valid after the change"). "Change this week" moves every swap request
+   still waiting for a decision onto the copy of its shift, and warns that the week has open
+   requests; deleting or moving a shift that has one warns first. Decided swaps stay with the old
+   shifts as history.
+6. **Each person's running total** (owner, 2026-10-13: "we do need to keep a running total compared
+   to the hours they should have worked … we need to incorporate annual leave into this count too").
+   Hours clocked and rostered against the hours the person should have worked so far, with approved
+   annual leave counted, and the yearly overtime cap judged against it. Built with A586, which
+   becomes "Labour rules and hours balance per person", because "should have worked" depends on each
+   person's agreement (yearly hours, reference period, which kinds of leave count) and worked hours
+   come from clocking (A10). Until then the rota shows each person's week against their contract,
+   and the other checks run over the week with a week either side.
 7. **Counting staffing paint in a season's or special day's delete confirmation** needs a seam
    venue-service does not have; not built **(default: no count)**.

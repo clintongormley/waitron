@@ -4098,9 +4098,10 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   and a rota of slots to fill, in a Calendar with Opening hours, Staffing and Rota views. **Designed
   2026-10-13** ([spec](superpowers/specs/2026-10-13-a585-staffing-and-rota-design.md),
   [mockups](backlog/mockups/a585-staffing/)); after the A506 chain, `workforce` changes planned with A10.
-- **A586. Labour rules per person** — today the country module supplies one rule set per location
-  (`convenio_config`); agreements vary, so the venue keeps named agreements and each person's contract
-  names one. The rota's warnings and A10's overtime read the person's rules. After A585; plan with A10.
+- **A586. Labour rules and hours balance per person** — named agreements, one per person's contract
+  (today one `convenio_config` per location); a running total of hours clocked and rostered against
+  hours due, annual leave counted, with the yearly overtime cap. After A585; plan with A10
+  ([spec open point 6](superpowers/specs/2026-10-13-a585-staffing-and-rota-design.md)).
 - **A587. Availability** — "can't work Wednesdays", preferred days; the `availability` table exists
   unused. Shown in A585's picker and warnings. After A586.
 - **A588. A solver drafts the rota** — fills A585's open slots from each person's staff roles, rules

@@ -1109,19 +1109,24 @@ Branch `feat/a585-5-workforce-rota`. Waits for A585-1 and A10-3. Re-read A10-1�
 - Modify: `packages/workforce/src/clocking.ts` (+ `scheduling.test.ts`)
 
 **Interfaces:**
-- Produces: `WorkforceBackend.copyPublishedToDraft(tx, { versionId }): Promise<{ versionId: string; shiftIds: Map<string, string> }>`
-  (old shift id → new shift id).
+- Produces: `WorkforceBackend.copyPublishedToDraft(tx, { versionId }): Promise<{ versionId: string; shiftIds: Map<string, string>; openSwaps: { swapId: string; fromShiftId: string }[] }>`
+  (old shift id → new shift id; the open swap requests now on the copies).
 
 - [ ] **Step 1: Failing tests:** copying a published version creates a draft for the same location
   and period whose shifts equal the published ones field by field except `id` and
   `roster_version_id`; the published version and its shifts are unchanged; copying a draft or a
   superseded version is refused `roster.not_published` (declare the code in workforce's `errors.ts`);
   copying while a draft for the period exists is refused `roster.draft_exists`; publishing the new
-  draft supersedes the old version and staff then see the new shifts only. **Swaps (default, for the
-  owner to confirm):** the copy gives every shift a new id, and `shift_swaps` points at the old ones.
-  So copying is refused `roster.swaps_open { count }` while any swap request on the week's shifts is
-  still waiting for a decision (read `packages/workforce/src/shift-swaps.ts` for the status names);
-  decided swaps stay with the superseded shifts as history. Test both.
+  draft supersedes the old version and staff then see the new shifts only. **Swaps (owner,
+  2026-10-13: "just warn that one exists, because it may still be valid after the change"):**
+  approving a swap only changes the request's status (`decideSwap`, `shift-swaps.ts:95`), so a
+  request survives the copy. In the same transaction, every swap request on the week's shifts still
+  waiting for a decision (`requested` or `accepted`) is re-pointed to the copies
+  (`from_shift_id`, and `to_shift_id` when set, through the id map); decided ones (`approved`,
+  `rejected`) stay with the superseded shifts as history. The answer also carries
+  `openSwaps: { swapId: string; fromShiftId: string }[]` (new ids) so the caller can warn. Test: an
+  open request follows its shift to the copy and can still be accepted and decided there; a decided
+  one stays on the old shift.
 - [ ] **Steps 2–4:** run (FAIL), implement (insert the version, then `insert … select` the shifts
   with new ids, returning the map), run (PASS). **Step 5: Commit** `"A585-5: copy a published week into a draft"`.
 
@@ -1174,8 +1179,8 @@ export async function describeShifts(tx: Transaction, shiftIds: readonly string[
   crosses a week's edge (`roster-validation.ts:58-59,66-68`). Cases: a Sunday-night shift followed
   by a Monday-morning one in the next week gives `rest_too_short` on the Monday; a location with no
   `convenio_config` row answers 409 `convenio.not_found`; a staff session is refused 403; the gate
-  sweep covers the route. The annual overtime cap needs a whole year of shifts and is not judged
-  here; record that in the PR (the spec's open point 6).
+  sweep covers the route. The annual overtime cap and each person's running total arrive with A586
+  (the spec's open point 6); this route does not judge the cap.
 - [ ] **Steps 2–5:** run, implement, run, commit `"A585-5: the rota's warnings route"`.
 
 ### Task 5.5: The roster checks are importable in a browser
@@ -1385,8 +1390,12 @@ Branch `feat/a585-7-rota-by-person`. Waits for A585-6.
 
 - [ ] **Step 1: Failing tests:** `changeRotaWeek` calls `copyPublishedToDraft` and copies every
   `shift_assignments` row onto the new shift ids in the same transaction; the till's own-shift read
-  keeps answering the published shifts until the draft is published; `roster.swaps_open` comes back
-  as 409 with its count and the view shows it; a published week's view shows "Change this week" and
+  keeps answering the published shifts until the draft is published; when the week has open swap
+  requests, the answer lists them and the view warns once ("2 swap requests are open for this week;
+  they stay attached to their shifts"); in the draft, a shift with an open swap request carries a
+  marker, and deleting it asks first and says the request will be cancelled with it (a swap's
+  `from_shift_id` cascades, `schema/shift-swaps.ts:45-49`), while moving it to another person or time
+  warns that the request was made for the old one; a published week's view shows "Change this week" and
   no editing controls, and after it the draft's controls.
 - [ ] **Steps 2–5:** implement, run, commit `"A585-7: changing a published week"`.
 
