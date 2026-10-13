@@ -88,6 +88,30 @@ async function unchangedRefusal(action: () => Promise<unknown>, code: string) {
 }
 
 describe("two-party correction decisions", () => {
+  it("lets a manager request their own hours as the worker while requiring a different manager's approval", async () => {
+    const target = await day();
+    await suite.db.update(persons).set({ role: "manager" }).where(eq(persons.id, personId));
+    const correctionId = await run((tx) => backend.requestCorrection(tx, targeted(target)));
+    expect(
+      (await suite.db.select().from(timeEntries).where(eq(timeEntries.id, correctionId)))[0],
+    ).toMatchObject({
+      authorKind: "worker",
+      correctionDirection: "worker_request",
+      recordedByPersonId: personId,
+    });
+    await unchangedRefusal(
+      () =>
+        run((tx) =>
+          backend.approveCorrection(tx, { nodeId, correctionId, approverPersonId: personId }),
+        ),
+      "correction.not_permitted",
+    );
+    await run((tx) =>
+      backend.approveCorrection(tx, { nodeId, correctionId, approverPersonId: manager }),
+    );
+    expect(await minutes()).toBe(540);
+    await intact();
+  });
   it("does not let staff request a change for someone else", async () => {
     const target = await day();
     await unchangedRefusal(

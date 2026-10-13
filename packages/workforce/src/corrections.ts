@@ -210,12 +210,13 @@ export async function requestCorrection(
   }
   if (
     (!isManager && input.actorPersonId !== personId) ||
-    (isManager && input.actorPersonId === personId)
+    (explicitProposal && input.actorPersonId === personId)
   )
     throw new AppError("correction.not_permitted", { personId: input.actorPersonId });
+  const managerProposal = isManager && input.actorPersonId !== personId;
   const extension: RecordExtension = {
-    authorKind: isManager ? "manager" : "worker",
-    direction: isManager ? "manager_proposal" : "worker_request",
+    authorKind: managerProposal ? "manager" : "worker",
+    direction: managerProposal ? "manager_proposal" : "worker_request",
     missingEntryKind,
     respondsToEntryId: null,
     payPeriodClosureId: null,
