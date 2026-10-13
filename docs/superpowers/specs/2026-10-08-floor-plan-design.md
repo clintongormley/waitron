@@ -237,7 +237,7 @@ undone at the next reset anyway.
 >
 > Added 2026-10-13 by A503 part 3: Split tables… now splits parts off a joined table for the day (§6.2).
 >
-> Added 2026-10-13 by A579 part 1 ([design](2026-10-13-a579-flattened-joined-tables-design.md)): Reset to saved plan also clears the "needs clearing" mark of each table it takes back (owner, "Clear the mark").
+> Added 2026-10-13 by A579 part 1 ([design](2026-10-13-a579-flattened-joined-tables-design.md)): a reset, or a later catch-up of its pending rows, that puts a split joined table back whole also clears the "needs clearing" mark of each table split off it that the reset's copy of the saved plan still makes one of its parts; a table that copy stands apart or leaves out keeps its mark (owner, "Clear the mark").
 
 ## 7. Seats
 

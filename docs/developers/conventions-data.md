@@ -1617,14 +1617,14 @@ Edit the master plan on the dashboard; work from today's plan on the till. Savin
 master does not rearrange tables during service. The first save builds today's plan immediately
 (`apps/server/src/floor-plan.ts:412`). Thereafter `ensureToday` resets a live zone at the first
 floor read or change that sees a new business day, or catches up its pending reset rows
-(`apps/server/src/floor-today-store.ts:501`). Reset to saved plan takes a fresh copy explicitly.
+(`apps/server/src/floor-today-store.ts:515`). Reset to saved plan takes a fresh copy explicitly.
 
 A reset copies the master's tables into `floor_reset_tables`
-(`apps/server/src/floor-today-store.ts:149`), and each joined table's parts into
-`floor_reset_table_parts` (`apps/server/src/floor-today-store.ts:167`). Occupied tables wait.
+(`apps/server/src/floor-today-store.ts:150`), and each joined table's parts into
+`floor_reset_table_parts` (`apps/server/src/floor-today-store.ts:168`). Occupied tables wait.
 After their tab closes, the next floor read or change can apply the pending rows; closing the tab
 itself does not run that catch-up. New live tables are created from those reset rows, including
-rows that had to wait for a name (`apps/server/src/floor-today-store.ts:346`). This separation keeps
+rows that had to wait for a name (`apps/server/src/floor-today-store.ts:350`). This separation keeps
 a later master edit from changing the copy a reset is still applying.
 
 A closing party keeps its table names as text and releases its `party_tables` rows
@@ -1652,8 +1652,10 @@ or in a split group that waits is ended as any free merge is. Its parts
 not split off stay joined meanwhile, and the split ends when the reset puts the joined table back,
 or, for the tables it takes back, when Join again does
 (`splitWithBusy`, `apps/server/src/floor-reset-plan.ts:38`; `waitingTogether`,
-`apps/server/src/floor-today-store.ts:472`). The reset clears the "needs clearing" mark of each
-table it takes back (`catchUpPass`, `apps/server/src/floor-today-store.ts`).
+`apps/server/src/floor-today-store.ts:486`). When the reset, or a later catch-up of its pending
+rows, puts a split joined table back whole, it clears the "needs clearing" mark of each table split
+off it that the reset's copy of the saved plan still makes one of its parts; a table that copy
+stands apart or leaves out keeps its mark (`catchUpPass`, `apps/server/src/floor-today-store.ts`).
 When deleting a table is refused, `removeLiveTables` deletes the split rows naming it and tries again,
 and puts them back if that is refused too (`apps/server/src/table-removal.ts:115`).
 Join again deletes the split rows of the tables split off a joined table that are free (held by no
