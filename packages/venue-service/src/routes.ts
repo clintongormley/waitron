@@ -335,6 +335,17 @@ function requirePreviewChange(body: Record<string, unknown>): RoutingChange {
 
 import { stationServiceTimes } from "./station-service-times.js";
 import { readSpecialDaysModel } from "./named-days.js";
+import { readOpeningHoursYear } from "./opening-hours-calendar.js";
+import { addSeason, deleteSeason, saveSeason, seasonDeleteImpact } from "./seasons.js";
+
+/** Refused as a stale clock, as a missing revision is on every other time-affecting write; a
+ *  season rename changes no times, so its writer never checks the revision itself. */
+function requireClockRevision(body: { expectedClockRevision?: unknown }): number {
+  const revision = body.expectedClockRevision;
+  if (typeof revision !== "number" || !Number.isSafeInteger(revision) || revision < 0)
+    throw new AppError("hours.clock_changed", {});
+  return revision;
+}
 
 export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
   mount(app, ctx: ModuleRouteContext, log: Logger): void {
@@ -391,6 +402,75 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         return c.json(
           await viewed(sessionId, (tx) => readSpecialDaysModel(tx, ctx.cfg, from, to, at)),
         );
+      }),
+    );
+
+    app.get("/management-api/venue-service/opening-hours/year", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const year = c.req.query("year") ?? "";
+        if (!/^\d{4}$/.test(year))
+          throw new AppError("management.request_invalid", { field: "year" });
+        const at = new Date();
+        return c.json(
+          await viewed(sessionId, (tx) => readOpeningHoursYear(tx, ctx.cfg, Number(year), at)),
+        );
+      }),
+    );
+
+    const SEASON_KEYS = ["name", "startsOn", "expectedClockRevision"] as const;
+    const seasonInput = (body: Record<string, unknown>) => {
+      onlyKeys(body, SEASON_KEYS);
+      return {
+        input: { name: body.name as string, startsOn: body.startsOn as string },
+        revision: requireClockRevision(body),
+      };
+    };
+
+    app.post("/management-api/venue-service/seasons", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const body = await readJsonBody<Record<string, unknown>>(c);
+        const added = await gated(sessionId, (tx) => {
+          const { input, revision } = seasonInput(body);
+          return addSeason(tx, ctx.cfg, input, new Date(), revision);
+        });
+        return c.json(added, 201);
+      }),
+    );
+
+    app.put("/management-api/venue-service/seasons/:seasonId", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const id = requireUuidParam(c.req.param("seasonId"), "SeasonId");
+        const body = await readJsonBody<Record<string, unknown>>(c);
+        return c.json(
+          await gated(sessionId, (tx) => {
+            const { input, revision } = seasonInput(body);
+            return saveSeason(tx, ctx.cfg, id, input, new Date(), revision);
+          }),
+        );
+      }),
+    );
+
+    app.delete("/management-api/venue-service/seasons/:seasonId", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const id = requireUuidParam(c.req.param("seasonId"), "SeasonId");
+        const body = await readJsonBody<Record<string, unknown>>(c);
+        await gated(sessionId, (tx) => {
+          onlyKeys(body, ["expectedClockRevision"]);
+          return deleteSeason(tx, ctx.cfg, id, new Date(), requireClockRevision(body));
+        });
+        return c.body(null, 204);
+      }),
+    );
+
+    app.get("/management-api/venue-service/seasons/:seasonId/delete-impact", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const id = requireUuidParam(c.req.param("seasonId"), "SeasonId");
+        return c.json(await viewed(sessionId, (tx) => seasonDeleteImpact(tx, ctx.cfg, id)));
       }),
     );
 

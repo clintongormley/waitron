@@ -12,12 +12,12 @@ import "./errors.js";
 /** Each date's special day, public holidays and tone. A date is closed when its special day closes
  *  it all day or no active department has hours on it; a public holiday's tone wins over a special
  *  day's, and an official local holiday's does not. */
-async function calendarDays(
+export async function calendarDays(
   tx: Transaction,
   cfg: VenueScope,
   dates: readonly LocalDate[],
   holidays: readonly HolidayFact[],
-): Promise<CalendarDay[]> {
+): Promise<{ days: CalendarDay[]; seasonIdOn: ReadonlyMap<LocalDate, string | null> }> {
   const stored = await readLocationClock(tx, cfg.locationId);
   // A business day's cutover never reads the zone (`cutoverAt`, @waitron/shared
   // business-day-clock.ts), so a venue whose zone cannot be read still has its days drawn.
@@ -40,7 +40,7 @@ async function calendarDays(
     for (const [date, day] of days) if (day.ranges.length > 0) open.add(date);
   const factsOn = new Map<LocalDate, HolidayFact[]>();
   for (const fact of holidays) factsOn.set(fact.date, [...(factsOn.get(fact.date) ?? []), fact]);
-  return dates.map((date) => {
+  const days = dates.map((date): CalendarDay => {
     const special = plan.special.get(date) ?? null;
     const dayHolidays = factsOn.get(date) ?? [];
     const closed = !open.has(date);
@@ -58,6 +58,7 @@ async function calendarDays(
       closed,
     };
   });
+  return { days, seasonIdOn: plan.seasonIdOn };
 }
 
 /**
@@ -89,5 +90,5 @@ export async function readCalendarDays(
   holidays?: HolidayReader,
 ): Promise<CalendarDay[]> {
   const dates = rangeDates(from, to);
-  return calendarDays(tx, cfg, dates, await readHolidays(tx, cfg, dates, holidays));
+  return (await calendarDays(tx, cfg, dates, await readHolidays(tx, cfg, dates, holidays))).days;
 }

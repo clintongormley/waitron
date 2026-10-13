@@ -283,9 +283,26 @@ export async function missingHolidays(
   cfg: VenueScope,
   at: Date,
 ): Promise<MissingHoliday[]> {
+  const clock = await readLocationClock(tx, cfg.locationId);
+  const today = venueLocalMoment(at, clock)?.civilDate ?? at.toISOString().slice(0, 10);
+  const missing = await missingHolidaysIn(tx, cfg, [yearOf(today), yearOf(today) + 1]);
+  return missing.map(({ specialDayId, holidayName, year }) => ({
+    specialDayId,
+    holidayName,
+    year,
+  }));
+}
+
+/** `missingHolidays` for the given years, ascending, each naming its special day. */
+export async function missingHolidaysIn(
+  tx: Transaction,
+  cfg: VenueScope,
+  years: readonly number[],
+): Promise<(MissingHoliday & { name: string })[]> {
   const rows = await tx
     .select({
       specialDayId: specialDayDates.specialDayId,
+      name: specialDays.name,
       date: specialDayDates.date,
       holidayName: specialDayDates.holidayName,
     })
@@ -299,18 +316,16 @@ export async function missingHolidays(
       ),
     )
     .orderBy(asc(specialDayDates.date), asc(specialDayDates.id));
-  if (rows.length === 0) return [];
-  const clock = await readLocationClock(tx, cfg.locationId);
-  const today = venueLocalMoment(at, clock)?.civilDate ?? at.toISOString().slice(0, 10);
-  const years = [yearOf(today), yearOf(today) + 1];
+  if (rows.length === 0 || years.length === 0) return [];
   const rules = rows.map((row) => ({ ...row, repeats: true }));
-  const holidays = await holidayDatesFor(tx, cfg, rules, [years[0]!, years[1]!]);
-  const missing = new Map<string, MissingHoliday>();
+  const holidays = await holidayDatesFor(tx, cfg, rules, [years[0]!, years.at(-1)!]);
+  const missing = new Map<string, MissingHoliday & { name: string }>();
   for (const year of years)
     for (const rule of rules)
       if (year > yearOf(rule.date) && specialDateIn(rule, year, holidays) === null)
         missing.set(`${rule.specialDayId}|${rule.holidayName}|${year}`, {
           specialDayId: rule.specialDayId,
+          name: rule.name,
           holidayName: rule.holidayName!,
           year,
         });
