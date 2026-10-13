@@ -32,3 +32,21 @@ export function nextOccurrence(day: RepeatRule, from: LocalDate): LocalDate | nu
   }
   return null;
 }
+
+/** Which of `entries` stands on each day of `year` that any falls on. A date standing there on its
+ *  own terms beats one following a holiday's name there; otherwise the first in `entries` wins. */
+export function standingInYear<T>(
+  entries: readonly T[],
+  year: number,
+  dateIn: (entry: T, year: number) => LocalDate | null,
+  followsIn: (entry: T, year: number) => boolean,
+): Map<LocalDate, T> {
+  const standing = new Map<LocalDate, T>();
+  for (const following of [false, true])
+    for (const entry of entries) {
+      if (followsIn(entry, year) !== following) continue;
+      const date = dateIn(entry, year);
+      if (date !== null && !standing.has(date)) standing.set(date, entry);
+    }
+  return standing;
+}

@@ -4,7 +4,7 @@ import type { LocalDate } from "./hours-types.js";
 import { byStart, seasonOnSorted } from "./season-rules.js";
 import { rangeSpan, type ServiceRange } from "./service-day.js";
 import { scheduleCutovers, serviceDayWallContext } from "./service-day-context.js";
-import { standingInYear } from "./special-days.js";
+import { standingInYear } from "./repeat-rules.js";
 import type { BusinessDayClock } from "@waitron/shared";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
