@@ -525,7 +525,8 @@ describe("backup admin routes", () => {
     };
     const sup = makeSupervisor(sc);
     await sup.reload();
-    const app = buildApp(sup, stateDir);
+    // The key reader merges the raw environment over the file, as boot's does.
+    const app = buildApp(sup, stateDir, sc.base);
     const cookie = await login(app);
 
     const res = await app.request("/api/backup/recovery-key", { headers: { cookie } });
@@ -1982,6 +1983,24 @@ describe("backup admin routes", () => {
         });
         expect(await fileKey(sc.stateDir)).toBe(KEY_2);
         expect(await readSealed()).toEqual(sealed);
+      }, 60_000);
+
+      it("after a revision and a reload that both failed, the recovery key read is the new key", async () => {
+        const { sup, app, cookie, post } = await savedInBucket();
+        vi.spyOn(sup, "reload").mockRejectedValueOnce(
+          new AppError("backup.destinations_invalid", { reason: "bad_entry" }),
+        );
+        const restore = refuseArchiveWrites();
+        let res: Response;
+        try {
+          res = await post("/api/backup/rotate", { recoveryKey: KEY_2 });
+        } finally {
+          restore();
+        }
+        expect((await res.json()).error.code).toBe("backup.rotation_metadata_failed");
+        expect(sup.current().recoveryKey).toBe(KEY_1);
+        const rk = await app.request("/api/backup/recovery-key", { headers: { cookie } });
+        expect((await rk.json()).key).toBe(KEY_2);
       }, 60_000);
 
       it("a reload that fails after the key and revision were written answers 200 with its code", async () => {

@@ -324,8 +324,10 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
     }
   };
 
+  // The box env (`backup.env` under the raw environment, as a reload reads it) is authoritative: after
+  // a failed reload the supervisor still holds the key it loaded before the key file changed.
   const heldKey = async (): Promise<string | undefined> =>
-    deps.supervisor.current().recoveryKey ?? (await deps.readRecoveryKey());
+    (await deps.readRecoveryKey()) ?? deps.supervisor.current().recoveryKey;
 
   // Presence, not validity: a key under the length floor still counts as held, so `rotate` can
   // replace it. `GET recovery-key` keeps refusing such a key.
@@ -463,10 +465,9 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
     }),
   );
 
-  // The EFFECTIVE recovery key (`current().recoveryKey`, what the box encrypts under), or, with no
-  // destination loaded, the key the box env holds, so an operator can re-record it. The body is
-  // never logged: the error boundary logs codes and params, never response bodies, and this route
-  // logs nothing.
+  // The key the box env holds, which the next archive is locked with, so an operator can re-record
+  // it. The body is never logged: the error boundary logs codes and params, never response bodies,
+  // and this route logs nothing.
   app.get("/api/backup/recovery-key", (c) =>
     run(c, log, async () => {
       await authorize(c);
