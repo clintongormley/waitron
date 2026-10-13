@@ -212,11 +212,20 @@ from a season chip, an ordinary date and a zone's Opening hours link.
 **Left open by A506-8, for the later parts.**
 - The painter cannot resize a block by dragging its edge (ruling R1 of A506-8); mockup 3's hint
   mentioned it. Painting over a block lengthens it, and painting Closed shortens it.
-- On a venue whose business day changes over off the quarter hour, the grid ends at the last
-  quarter hour before the changeover, because the server refuses an end at the changeover there.
+- On a venue whose business day changes over off the quarter hour, painting starts at the first
+  quarter hour after the changeover and ends at the last one before it (a 05:50 changeover paints
+  from 06:00 to 05:45, `stepAt` in `paint-model.ts`), so 05:45–06:00 cannot be painted. The reason is that the
+  server refuses a time off the quarter hour (`service-day.ts`, the `step` refusal); that refusal
+  was read in the code, not run.
 - A slow live read started before a save can briefly replace the week just saved; repainting in
-  that moment and saving again undoes the first save. `model-watch.ts` applies a read that started
-  before the save until a later read answers. The old week editors had the same flaw.
+  that moment and saving again undoes the first save. With live data, as on the dashboard, the
+  stale read is delivered by `LiveData`'s read (`packages/dashboard-kit/src/live-data.ts`), which
+  applies whatever answers; without it, `model-watch.ts` applies a read that started before the
+  save until a later read answers. A fix may need both places. The old week editors are believed
+  to have had the same flaw; that was read, not reproduced.
+- The routes `PUT …/departments/:departmentId/menu-week` and `PUT …/zones/:zoneId/closed-week`
+  (`routes.ts`) are called by no client now that the painter saves through
+  `PUT …/seasons/:seasonId/weeks`. Remove them, or keep them with a stated reason.
 - Without a navigation guard, which only test harnesses lack, the painter's history mark is copied
   to later entries, so ✕ can go back to a later entry of the same screen.
 - The navigation guard's `rewrite()` refuses while a leave question is open, so a live refresh that

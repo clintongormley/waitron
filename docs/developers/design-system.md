@@ -1948,8 +1948,9 @@ Delete there gives the time back to the department. One draft holds every depart
 the season, so the picker keeps edits; Save stays quiet until the draft changes and writes the
 edited weeks in one request. ‹ › ask first when there are edits. A refusal that names a department
 or zone switches the picker to it, marks the day's heading and is told beside Save; the draft stays
-for a retry. A live refresh keeps edited weeks; one that removes the season, or a department or
-zone with edits, drops those edits and says so beside Save. The grid fits seven days in 1280 px; at phone
+for a retry. A live refresh keeps edited weeks; one that removes the season, removes a department or
+zone with edits, or makes a department with edits inactive, drops those edits and says so beside
+Save. The grid fits seven days in 1280 px; at phone
 width the grid scrolls sideways with its time column pinned. A venue viewer gets ✕ alone, no paint
 row, and a grid that does not change.
 
@@ -3581,8 +3582,9 @@ The season painter (Forms above) has its own address,
 `/view/season/season/<id>/department/<id>`, with `/zone/<id>` for a zone; it opens over the view
 it was opened from, or the Year on a direct load, and closing it returns there. An unknown season
 gives the current one, a missing department the first active one, and a zone the department does
-not have the department's own week. Any other week address naming a department opens the
-painter in its place. After provisioning, setup's completion screen shows
+not have the department's own week. Any other week address opens the painter in its place
+unless it names a station or All departments: `/view/week`, with or without a department, an
+address with no view naming a season, a department or a zone, and an unknown view. After provisioning, setup's completion screen shows
 the first saved Open schedule, when it is still Monday to Friday, 09:00–17:00, with a link to
 Opening hours' Year.
 
