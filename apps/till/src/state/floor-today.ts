@@ -38,6 +38,14 @@ interface Group {
   party: TableParty | null;
 }
 
+let floorMoments = 0;
+
+/** Numbers a floor read's start and a change's answer in the order they happen: one strictly
+ * increasing sequence for the whole till, so no two can tie. */
+export function nextFloorMoment(): number {
+  return ++floorMoments;
+}
+
 /** `table` and every other member of its merge, in `tables`' order; `table` alone in none. */
 export function mergeMembersOf(tables: readonly TableState[], table: TableState): TableState[] {
   const joinId = table.today?.joinId ?? null;

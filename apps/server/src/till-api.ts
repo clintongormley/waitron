@@ -180,6 +180,7 @@ import { refuseTakenOff, zoneOfTable } from "./floor-today-table.js";
 import {
   moveChangedRooms,
   refuseStale,
+  requiredRevision,
   roomPrints,
   roomRevisions,
   sentRevision,
@@ -2654,7 +2655,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         const tableId = requireTargetTable(body[field], field);
         const command = tableActionCommand(personId, body);
         const merge = path === "join" ? requireMerge(body.merge, tableId) : null;
-        const sent = path === "join" ? sentRevision(body) : undefined;
+        const sent =
+          path === "join" ? (merge === null ? sentRevision : requiredRevision)(body) : undefined;
         const sendCfg = sendingCfg(cfg, c, session.device);
         const result = await withTransaction(deps.db, async (tx) => {
           await catchUpFloor(tx);

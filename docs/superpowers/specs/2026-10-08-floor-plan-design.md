@@ -169,6 +169,10 @@ undone at the next reset anyway.
 > from an older one is refused (`floor_today.out_of_date`). Until part 2b a change that sends none
 > is still applied.
 
+> Added 2026-10-13 by A579 part 2b: the till sends the revision with every table route, the zone
+> reset and a party join that makes a merge, and any of those that sends none is refused
+> (`management.request_invalid`); only the zone reset may send `null`.
+
 ### 6.1 Moving and joining
 
 - **A movable table dropped on empty space** moves there for today.

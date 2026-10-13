@@ -17,6 +17,7 @@ function today(): TableToday {
     inJoinedTable: null,
     joined: null,
     splitOffFrom: null,
+    zoneRevision: 0,
   };
 }
 

@@ -6,6 +6,7 @@ import { codeMessage } from "../i18n/codes.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
 import "./till-floor-screen.js";
 import type { FloorZone, TableParty, TableState, TableToday, TillApi } from "../api/client.js";
+import { nextFloorMoment } from "../state/floor-today.js";
 
 const zone: FloorZone = {
   id: "z1",
@@ -64,6 +65,7 @@ function planned(
       inJoinedTable: null,
       joined: null,
       splitOffFrom: null,
+      zoneRevision: 0,
       ...over,
     },
     signals: [],
@@ -72,7 +74,7 @@ function planned(
 }
 
 function stubApi() {
-  const done = () => Promise.resolve();
+  const done = () => Promise.resolve({ zoneId: "z1", revision: 0 });
   return {
     mergeToday: vi.fn<TillApi["mergeToday"]>(done),
     splitToday: vi.fn<TillApi["splitToday"]>(done),
@@ -197,10 +199,14 @@ describe("till-floor-screen: the details sheet's changes for today", () => {
     await settle(el);
 
     expect(joinDialog(el)).toBeNull();
-    expect(api.mergeToday).toHaveBeenCalledExactlyOnceWith("t1", {
-      targetId: "t2",
-      side: "left",
-    });
+    expect(api.mergeToday).toHaveBeenCalledExactlyOnceWith(
+      "t1",
+      {
+        targetId: "t2",
+        side: "left",
+      },
+      0,
+    );
     expect(refreshes.count).toBe(1);
   });
 
@@ -210,10 +216,14 @@ describe("till-floor-screen: the details sheet's changes for today", () => {
     await press(el, "t1", "join-with");
     send(joinDialog(el)!, "join-with-pick", { tableId: "t1", targetId: "t2" });
     await settle(el);
-    expect(api.mergeToday).toHaveBeenCalledExactlyOnceWith("t1", {
-      targetId: "t2",
-      side: "right",
-    });
+    expect(api.mergeToday).toHaveBeenCalledExactlyOnceWith(
+      "t1",
+      {
+        targetId: "t2",
+        side: "right",
+      },
+      0,
+    );
   });
 
   it("Join with… closes when its table loses its place", async () => {
@@ -316,7 +326,7 @@ describe("till-floor-screen: the details sheet's changes for today", () => {
       free,
     );
     await press(freeFloor, "t4", "split");
-    expect(free.splitToday).toHaveBeenCalledExactlyOnceWith("t4");
+    expect(free.splitToday).toHaveBeenCalledExactlyOnceWith("t4", 0);
     expect(free.splitTable).not.toHaveBeenCalled();
     cleanupWidgets();
 
@@ -333,18 +343,44 @@ describe("till-floor-screen: the details sheet's changes for today", () => {
     expect(refreshes.count).toBe(1);
   });
 
+  it("a change after Split of a seated merge, before any read, sends the room's revision the split answered", async () => {
+    const P = party("P", 6, ["t5", "t4"]);
+    for (const [answered, sent] of [
+      [{ z1: 8 }, 8],
+      [{ z2: 8 }, 7],
+    ] as const) {
+      const api = stubApi();
+      api.splitTable.mockResolvedValueOnce({
+        partyId: "N",
+        mainBillId: null,
+        zoneRevisions: answered,
+      });
+      const el = await mount(
+        [
+          planned("t5", 22, { joinId: "J", zoneRevision: 7 }, P),
+          planned("t4", 20, { joinId: "J", zoneRevision: 7 }, P),
+        ],
+        api,
+      );
+      await press(el, "t4", "split");
+      await press(el, "t4", "back");
+      expect(api.backToSavedToday).toHaveBeenCalledExactlyOnceWith("t4", sent);
+      cleanupWidgets();
+    }
+  });
+
   it("Rotate, Back and Take off call their routes; Change seats asks first", async () => {
     const api = stubApi();
     const el = await mount([planned("t1", 2, { seats: 6 })], api);
     const refreshes = countRefreshes(el);
 
     await press(el, "t1", "rotate");
-    expect(api.rotateToday).toHaveBeenCalledExactlyOnceWith("t1");
+    expect(api.rotateToday).toHaveBeenCalledExactlyOnceWith("t1", 0);
     expect(sheetOf(el)).not.toBeNull();
     await press(el, "t1", "back");
-    expect(api.backToSavedToday).toHaveBeenCalledExactlyOnceWith("t1");
+    expect(api.backToSavedToday).toHaveBeenCalledExactlyOnceWith("t1", 0);
     await press(el, "t1", "take-off");
-    expect(api.takeOffToday).toHaveBeenCalledExactlyOnceWith("t1");
+    expect(api.takeOffToday).toHaveBeenCalledExactlyOnceWith("t1", 0);
     expect(refreshes.count).toBe(3);
 
     await press(el, "t1", "seats");
@@ -356,7 +392,7 @@ describe("till-floor-screen: the details sheet's changes for today", () => {
 
     send(dialog, "today-seats-confirm", { seats: 8 });
     await settle(el);
-    expect(api.setSeatsToday).toHaveBeenCalledExactlyOnceWith("t1", 8);
+    expect(api.setSeatsToday).toHaveBeenCalledExactlyOnceWith("t1", 8, 0);
     expect(el.shadowRoot!.querySelector("till-today-seats-dialog")).toBeNull();
     expect(refreshes.count).toBe(4);
   });
@@ -409,5 +445,64 @@ describe("till-floor-screen: the details sheet's changes for today", () => {
 
     expect(refusal(el)).toBe(codeMessage("tab.already_open"));
     expect(refreshes.count).toBe(1);
+  });
+});
+
+describe("till-floor-screen: the sheet's actions and the room's revision", () => {
+  it("Rotate, Back, Take off, Split and Join with… send the read's revision", async () => {
+    const calls: [string, (api: Stub) => unknown, unknown[]][] = [
+      ["rotate", (api) => api.rotateToday, ["t1", 7]],
+      ["back", (api) => api.backToSavedToday, ["t1", 7]],
+      ["take-off", (api) => api.takeOffToday, ["t1", 7]],
+    ];
+    for (const [action, route, args] of calls) {
+      const api = stubApi();
+      const el = await mount([planned("t1", 2, { zoneRevision: 7 })], api);
+      await press(el, "t1", action);
+      expect(route(api)).toHaveBeenCalledExactlyOnceWith(...args);
+      cleanupWidgets();
+    }
+
+    const splitting = stubApi();
+    const merged = await mount(
+      [
+        planned("t4", 20, { joinId: "J", zoneRevision: 7 }),
+        planned("t5", 22, { joinId: "J", zoneRevision: 7 }),
+      ],
+      splitting,
+    );
+    await press(merged, "t4", "split");
+    expect(splitting.splitToday).toHaveBeenCalledExactlyOnceWith("t4", 7);
+    cleanupWidgets();
+
+    const joining = stubApi();
+    const el = await mount(
+      [planned("t1", 2, { zoneRevision: 7 }), planned("t2", 20, { zoneRevision: 7 })],
+      joining,
+    );
+    await press(el, "t1", "join-with");
+    send(joinDialog(el)!, "join-with-pick", { tableId: "t1", targetId: "t2" });
+    await settle(el);
+    expect(joining.mergeToday).toHaveBeenCalledExactlyOnceWith(
+      "t1",
+      { targetId: "t2", side: "left" },
+      7,
+    );
+  });
+
+  it("Change seats sends the revision read at the press that opened it", async () => {
+    const api = stubApi();
+    const el = await mount([planned("t1", 2, { seats: 6, zoneRevision: 7 })], api);
+    await press(el, "t1", "seats");
+
+    el.tablesReadAt = nextFloorMoment();
+    el.tables = [planned("t1", 2, { seats: 6, zoneRevision: 8 })];
+    await el.updateComplete;
+    send(el.shadowRoot!.querySelector("till-today-seats-dialog")!, "today-seats-confirm", {
+      seats: 8,
+    });
+    await settle(el);
+
+    expect(api.setSeatsToday).toHaveBeenCalledExactlyOnceWith("t1", 8, 7);
   });
 });

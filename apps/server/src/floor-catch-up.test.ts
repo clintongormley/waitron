@@ -28,7 +28,12 @@ import {
   tableRow,
   type PartyVenue,
 } from "./testing/party-venue.js";
-import { expectRevision, tableServiceZone, zoneRevisionOf } from "./testing/floor-today-venue.js";
+import {
+  expectRevision,
+  tableServiceZone,
+  withFloorRevision,
+  zoneRevisionOf,
+} from "./testing/floor-today-venue.js";
 import { seedSessionDevice } from "./testing/session-device.js";
 import { handOverOrder } from "./working-order.js";
 import "./errors.js";
@@ -80,11 +85,12 @@ beforeAll(async () => {
   cookie = `${SESSION_COOKIE}=${session.token}`;
 });
 
+/** A request; a change to today's floor carries the room's revision unless the body names one. */
 async function send(method: string, path: string, body?: unknown): Promise<Response> {
   return app.request(path, {
     method,
     headers: { "content-type": "application/json", cookie },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    ...(body === undefined ? {} : { body: JSON.stringify(await withFloorRevision(v, path, body)) }),
   });
 }
 

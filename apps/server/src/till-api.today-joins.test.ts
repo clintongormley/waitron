@@ -20,7 +20,14 @@ import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import { partyRevision } from "./floor-today-merges.js";
 import { inTx, setupPartyVenue, tableRow, type PartyVenue } from "./testing/party-venue.js";
-import { mergeOf, plannedZone, todayRow, zoneRevisionOf } from "./testing/floor-today-venue.js";
+import {
+  mergeOf,
+  plannedZone,
+  todayRow,
+  withFloorRevision,
+  withRevision,
+  zoneRevisionOf,
+} from "./testing/floor-today-venue.js";
 import { seedSessionDevice } from "./testing/session-device.js";
 import "./errors.js";
 
@@ -65,11 +72,12 @@ beforeAll(async () => {
   cookie = `${SESSION_COOKIE}=${session.token}`;
 });
 
+/** A POST; a change to today's floor carries the room's revision unless the body names one. */
 async function post(path: string, body: unknown): Promise<Response> {
   return app.request(path, {
     method: "POST",
     headers: { "content-type": "application/json", cookie },
-    body: JSON.stringify(body),
+    body: JSON.stringify(await withFloorRevision(v, path, body)),
   });
 }
 
@@ -95,8 +103,13 @@ async function revision(partyId: string): Promise<number> {
   return inTx(v, (tx) => partyRevision(tx, partyId));
 }
 
-function join(partyId: string, body: Record<string, unknown>): Promise<Response> {
-  return post(`/api/parties/${partyId}/join`, body);
+/** A join; one carrying a merge carries the room's revision of `tableId` unless the body names one. */
+async function join(partyId: string, body: Record<string, unknown>): Promise<Response> {
+  const sent =
+    "merge" in body && typeof body.tableId === "string"
+      ? await withRevision(v, body.tableId, body)
+      : body;
+  return post(`/api/parties/${partyId}/join`, sent);
 }
 
 /** The party the floor read shows at each table, in the order asked. */
@@ -818,6 +831,33 @@ describe("a party change that changes a room answers its revision", () => {
           otherPartyId: null,
           merge: { moving: b, target: a, side: "right", seats: 8 },
           zoneRevision: "3",
+        }),
+      ),
+    ).toEqual({
+      status: 400,
+      body: { error: { code: "management.request_invalid", params: { field: "zoneRevision" } } },
+    });
+    expect(await everything()).toEqual(before);
+    expect(await revision(p)).toBe(partyBefore);
+    expect(await holders(a, b, c)).toEqual([p, null, null]);
+    expect((await zoneRevisionOf(v, zoneId))!).toBe(read);
+  });
+
+  it("a join with a merge and no revision is refused and writes nothing", async () => {
+    const { zoneId, a, b, c } = await room();
+    const p = await seat(a);
+    const read = (await zoneRevisionOf(v, zoneId))!;
+    expect(read).toBeTypeOf("number");
+    const before = await everything();
+    const partyBefore = await revision(p);
+
+    expect(
+      await refusal(
+        post(`/api/parties/${p}/join`, {
+          tableId: b,
+          expectedPartyRevision: partyBefore,
+          otherPartyId: null,
+          merge: { moving: b, target: a, side: "right", seats: 8 },
         }),
       ),
     ).toEqual({

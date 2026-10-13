@@ -2055,6 +2055,7 @@ describe("TillApi", () => {
           inJoinedTable: null,
           joined: null,
           splitOffFrom: null,
+          zoneRevision: 0,
         },
         signals: [],
         party: null,
@@ -2626,12 +2627,14 @@ describe("TillApi", () => {
         target: "tbl-1",
         side: "left",
         seats: 6,
+        zoneRevision: 4,
       }),
     ).resolves.toEqual(answer);
     await api.joinTables("v1", "tbl-9", "merge", revisions, {
       moving: "tbl-1",
       target: "tbl-9",
       side: "top",
+      zoneRevision: 5,
     });
     await api.joinTables("v1", "tbl-9", "separate", revisions);
 
@@ -2645,6 +2648,7 @@ describe("TillApi", () => {
         expectedPartyRevision: 3,
         otherPartyId: null,
         merge: { moving: "tbl-9", target: "tbl-1", side: "left", seats: 6 },
+        zoneRevision: 4,
       },
       {
         tableId: "tbl-9",
@@ -2652,82 +2656,131 @@ describe("TillApi", () => {
         expectedPartyRevision: 3,
         otherPartyId: null,
         merge: { moving: "tbl-1", target: "tbl-9", side: "top" },
+        zoneRevision: 5,
       },
       { tableId: "tbl-9", bills: "separate", expectedPartyRevision: 3, otherPartyId: null },
     ]);
   });
 
-  it("sends each of today's changes to its route", async () => {
-    const fetchStub = vi.fn(async () => new Response(null, { status: 204 }));
+  it("sends each of today's changes to its route, with the room's revision, and returns the answer", async () => {
+    const answer = { zoneId: "z1", revision: 8 };
+    const fetchStub = vi.fn(async () => jsonResponse(answer));
     const api = new TillApi("", fetchStub);
 
-    await expect(api.moveToday("t1", { x: 4, y: 12 })).resolves.toBeUndefined();
-    await expect(api.rotateToday("t1")).resolves.toBeUndefined();
-    await expect(api.takeOffToday("t1")).resolves.toBeUndefined();
-    await expect(api.putBackToday("t1")).resolves.toBeUndefined();
-    await expect(api.placeSpareToday("t2", { x: 0, y: 30 })).resolves.toBeUndefined();
-    await expect(api.setSeatsToday("t1", 6)).resolves.toBeUndefined();
-    await expect(api.backToSavedToday("t1")).resolves.toBeUndefined();
+    await expect(api.moveToday("t1", { x: 4, y: 12 }, 7)).resolves.toEqual(answer);
+    await expect(api.rotateToday("t1", 7)).resolves.toEqual(answer);
+    await expect(api.takeOffToday("t1", 7)).resolves.toEqual(answer);
+    await expect(api.putBackToday("t1", 7)).resolves.toEqual(answer);
+    await expect(api.placeSpareToday("t2", { x: 0, y: 30 }, 7)).resolves.toEqual(answer);
+    await expect(api.setSeatsToday("t1", 6, 7)).resolves.toEqual(answer);
+    await expect(api.backToSavedToday("t1", 7)).resolves.toEqual(answer);
     await expect(
-      api.mergeToday("t1", { targetId: "t2", side: "right", seats: 8 }),
-    ).resolves.toBeUndefined();
-    await expect(api.mergeToday("t1", { targetId: "t2", side: "bottom" })).resolves.toBeUndefined();
-    await expect(api.splitToday("t1")).resolves.toBeUndefined();
-    await expect(api.resetZoneToday("z1")).resolves.toBeUndefined();
+      api.mergeToday("t1", { targetId: "t2", side: "right", seats: 8 }, 7),
+    ).resolves.toEqual(answer);
+    await expect(api.mergeToday("t1", { targetId: "t2", side: "bottom" }, 7)).resolves.toEqual(
+      answer,
+    );
+    await expect(api.splitToday("t1", 7)).resolves.toEqual(answer);
+    await expect(api.resetZoneToday("z1", 7)).resolves.toEqual(answer);
+    await expect(api.resetZoneToday("z1", null)).resolves.toEqual(answer);
 
     const sent = fetchStub.mock.calls.map((call) => {
       const [path, init] = call as unknown as [string, RequestInit];
       return [path, init.method, JSON.parse(String(init.body)) as unknown];
     });
     expect(sent).toEqual([
-      ["/api/tables/t1/today/move", "POST", { x: 4, y: 12 }],
-      ["/api/tables/t1/today/rotate", "POST", {}],
-      ["/api/tables/t1/today/take-off", "POST", {}],
-      ["/api/tables/t1/today/put-back", "POST", {}],
-      ["/api/tables/t2/today/place", "POST", { x: 0, y: 30 }],
-      ["/api/tables/t1/today/seats", "POST", { seats: 6 }],
-      ["/api/tables/t1/today/back", "POST", {}],
-      ["/api/tables/t1/today/merge", "POST", { targetId: "t2", side: "right", seats: 8 }],
-      ["/api/tables/t1/today/merge", "POST", { targetId: "t2", side: "bottom" }],
-      ["/api/tables/t1/today/split", "POST", {}],
-      ["/api/zones/z1/today/reset", "POST", {}],
+      ["/api/tables/t1/today/move", "POST", { x: 4, y: 12, zoneRevision: 7 }],
+      ["/api/tables/t1/today/rotate", "POST", { zoneRevision: 7 }],
+      ["/api/tables/t1/today/take-off", "POST", { zoneRevision: 7 }],
+      ["/api/tables/t1/today/put-back", "POST", { zoneRevision: 7 }],
+      ["/api/tables/t2/today/place", "POST", { x: 0, y: 30, zoneRevision: 7 }],
+      ["/api/tables/t1/today/seats", "POST", { seats: 6, zoneRevision: 7 }],
+      ["/api/tables/t1/today/back", "POST", { zoneRevision: 7 }],
+      [
+        "/api/tables/t1/today/merge",
+        "POST",
+        { targetId: "t2", side: "right", seats: 8, zoneRevision: 7 },
+      ],
+      ["/api/tables/t1/today/merge", "POST", { targetId: "t2", side: "bottom", zoneRevision: 7 }],
+      ["/api/tables/t1/today/split", "POST", { zoneRevision: 7 }],
+      ["/api/zones/z1/today/reset", "POST", { zoneRevision: 7 }],
+      ["/api/zones/z1/today/reset", "POST", { zoneRevision: null }],
     ]);
   });
 
   it("sends a split-off with its parts, and seats only when given", async () => {
-    const fetchStub = vi.fn(async () => new Response(null, { status: 204 }));
+    const answer = { zoneId: "z1", revision: 8 };
+    const fetchStub = vi.fn(async () => jsonResponse(answer));
     const api = new TillApi("", fetchStub);
 
-    await expect(api.splitOffToday("long", { partIds: ["c4", "c5"] })).resolves.toBeUndefined();
-    await expect(api.splitOffToday("long", { partIds: ["c5"], seats: 8 })).resolves.toBeUndefined();
+    await expect(api.splitOffToday("long", { partIds: ["c4", "c5"] }, 7)).resolves.toEqual(answer);
+    await expect(api.splitOffToday("long", { partIds: ["c5"], seats: 8 }, 7)).resolves.toEqual(
+      answer,
+    );
 
     const sent = fetchStub.mock.calls.map((call) => {
       const [path, init] = call as unknown as [string, RequestInit];
       return [path, init.method, JSON.parse(String(init.body)) as unknown];
     });
     expect(sent).toEqual([
-      ["/api/tables/long/today/split-off", "POST", { partIds: ["c4", "c5"] }],
-      ["/api/tables/long/today/split-off", "POST", { partIds: ["c5"], seats: 8 }],
+      ["/api/tables/long/today/split-off", "POST", { partIds: ["c4", "c5"], zoneRevision: 7 }],
+      ["/api/tables/long/today/split-off", "POST", { partIds: ["c5"], seats: 8, zoneRevision: 7 }],
     ]);
   });
 
   it("sends a join-again with its tables, and seats only when given", async () => {
-    const fetchStub = vi.fn(async () => new Response(null, { status: 204 }));
+    const answer = { zoneId: "z1", revision: 8 };
+    const fetchStub = vi.fn(async () => jsonResponse(answer));
     const api = new TillApi("", fetchStub);
 
-    await expect(api.joinAgainToday("long", { partIds: ["c5"] })).resolves.toBeUndefined();
+    await expect(api.joinAgainToday("long", { partIds: ["c5"] }, 7)).resolves.toEqual(answer);
     await expect(
-      api.joinAgainToday("long", { partIds: ["c4", "c5"], seats: 8 }),
-    ).resolves.toBeUndefined();
+      api.joinAgainToday("long", { partIds: ["c4", "c5"], seats: 8 }, 7),
+    ).resolves.toEqual(answer);
 
     const sent = fetchStub.mock.calls.map((call) => {
       const [path, init] = call as unknown as [string, RequestInit];
       return [path, init.method, JSON.parse(String(init.body)) as unknown];
     });
     expect(sent).toEqual([
-      ["/api/tables/long/today/join-again", "POST", { partIds: ["c5"] }],
-      ["/api/tables/long/today/join-again", "POST", { partIds: ["c4", "c5"], seats: 8 }],
+      ["/api/tables/long/today/join-again", "POST", { partIds: ["c5"], zoneRevision: 7 }],
+      [
+        "/api/tables/long/today/join-again",
+        "POST",
+        { partIds: ["c4", "c5"], seats: 8, zoneRevision: 7 },
+      ],
     ]);
+  });
+
+  it("joinTables sends a merge's room revision beside the merge, and returns the rooms' revisions", async () => {
+    const answer = {
+      partyId: "v1",
+      mainBillId: "wo-4",
+      merged: true,
+      zoneRevisions: { z1: 5 },
+    };
+    const fetchStub = vi.fn(async () => jsonResponse(answer));
+    const api = new TillApi("", fetchStub);
+
+    await expect(
+      api.joinTables(
+        "v1",
+        "tbl-9",
+        "merge",
+        { expectedPartyRevision: 3, otherPartyId: null },
+        { moving: "tbl-9", target: "tbl-1", side: "left", seats: 6, zoneRevision: 4 },
+      ),
+    ).resolves.toEqual(answer);
+
+    const [, init] = fetchStub.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toEqual({
+      tableId: "tbl-9",
+      bills: "merge",
+      expectedPartyRevision: 3,
+      otherPartyId: null,
+      merge: { moving: "tbl-9", target: "tbl-1", side: "left", seats: 6 },
+      zoneRevision: 4,
+    });
   });
 
   it("splitTable POSTs the table, the chosen bill or null, and the revision to the party's /split-table route", async () => {

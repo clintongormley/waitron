@@ -23,9 +23,16 @@ export function sentRevision(body: Record<string, unknown>): number | undefined 
   return value;
 }
 
+/** The `zoneRevision` a till body must carry; refused as invalid when it carries none. */
+export function requiredRevision(body: Record<string, unknown>): number {
+  const sent = sentRevision(body);
+  if (sent === undefined) throw invalid("zoneRevision");
+  return sent;
+}
+
 /** Refuses `floor_today.out_of_date` when the till sent a revision other than the room's `current`. */
-export function refuseStale(zoneId: string, sent: number | undefined, current: number): void {
-  if (sent !== undefined && sent !== current) {
+export function refuseStale(zoneId: string, sent: number, current: number): void {
+  if (sent !== current) {
     throw new AppError("floor_today.out_of_date", { zoneId, revision: current });
   }
 }

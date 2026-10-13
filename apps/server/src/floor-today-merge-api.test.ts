@@ -10,7 +10,13 @@ import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import { inTx, seat, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
-import { expectRevision, mergeOf, plannedZone, todayRow } from "./testing/floor-today-venue.js";
+import {
+  expectRevision,
+  mergeOf,
+  plannedZone,
+  todayRow,
+  withRevision,
+} from "./testing/floor-today-venue.js";
 import { seedSessionDevice } from "./testing/session-device.js";
 import "./errors.js";
 
@@ -59,7 +65,7 @@ async function today(tableId: string, change: string, body: unknown = {}): Promi
   return app.request(`/api/tables/${tableId}/today/${change}`, {
     method: "POST",
     headers: { "content-type": "application/json", cookie },
-    body: JSON.stringify(body),
+    body: JSON.stringify(await withRevision(v, tableId, body)),
   });
 }
 

@@ -49,6 +49,7 @@ import {
   dropAction,
   joinAgainOf,
   type JoinAgainPlan,
+  nextFloorMoment,
   onTodaysPlan,
   pendingPlaces,
   sheetActions,
@@ -57,7 +58,14 @@ import {
 import { partyPaid, unsentText } from "../widgets/table-details-sheet.js";
 import type { SeatConfirmDetail } from "../widgets/seat-dialog.js";
 import { drawnGroupKey, listedTables, mapTables, seatsFor } from "../state/floor-map.js";
-import type { FloorZone, TableState, TableParty, TillApi, TodayPlacement } from "../api/client.js";
+import type {
+  FloorAnswer,
+  FloorZone,
+  TableState,
+  TableParty,
+  TillApi,
+  TodayPlacement,
+} from "../api/client.js";
 import { delayUntil, reminderDueAt } from "../state/release-reminder.js";
 import { readyByStation, signalOf, type StationReady } from "../state/table-signals.js";
 import { signalChipStyles, signalChips } from "../widgets/signal-chips.js";
@@ -84,6 +92,14 @@ export interface FloorRefreshDetail {
 }
 
 type JoinAction = Extract<DropAction, { kind: "join" }>;
+
+type ZonedTable = TableState & { zoneId: string };
+
+/** A room and its revision as the screen saw it when a change was asked for. */
+interface Room {
+  zoneId: string;
+  revision: number | null;
+}
 
 interface SplitShown {
   joined: TableState;
@@ -119,7 +135,7 @@ interface ZoneOnScreen {
   activeKey: string | undefined;
   planned: boolean;
   /** The active zone's tables as the server last read them, before `#pending` is applied. */
-  visible: TableState[];
+  visible: ZonedTable[];
   view: "map" | "list";
   listed: TableState[];
   onMap: FloorMapTable[];
@@ -461,6 +477,8 @@ export class TillFloorScreen extends LitElement {
 
   @property({ attribute: false }) zones: FloorZone[] = [];
   @property({ attribute: false }) tables: TableState[] = [];
+  /** When the read that drew `tables` started, numbered by `nextFloorMoment`. */
+  @property({ attribute: false }) tablesReadAt = 0;
   @property({ attribute: false }) api?: TillApi;
   @property({ attribute: false }) canExitToCounter = true;
   /** The device's profile allows `take-orders`, which every change to today's plan needs: the map's
@@ -515,7 +533,7 @@ export class TillFloorScreen extends LitElement {
    * closes it. */
   @state() private joiningAgain: JoiningAgain | null = null;
   /** A drop joining two seated parties, waiting for which bills to keep. */
-  @state() private askingBills: { api: TillApi; action: JoinAction } | null = null;
+  @state() private askingBills: { api: TillApi; action: JoinAction; room: Room } | null = null;
 
   readonly #url = new UrlStateController(
     this,
@@ -531,6 +549,8 @@ export class TillFloorScreen extends LitElement {
   #zoneInputs?: readonly unknown[];
   /** Where a dropped group is drawn until the next floor read, a refusal or a cancel. */
   #pending: Map<string, TodayPlacement> | null = null;
+  /** Each room's revision as this screen's last change there answered it, and that answer's `nextFloorMoment`. */
+  #carried = new Map<string | null, { revision: number; answeredAt: number }>();
   #mapCopy = { locale: "", copy: { label: "" } };
 
   /** The clock the last render judged reminders by. */
@@ -758,6 +778,28 @@ export class TillFloorScreen extends LitElement {
     this.requestUpdate();
   }
 
+  /** The room's revision as this screen last saw it: its read, unless its own answer came after that read started. */
+  #revision(zoneId: string | null): number | null {
+    const carried = this.#carried.get(zoneId);
+    if (carried !== undefined && this.tablesReadAt < carried.answeredAt) return carried.revision;
+    return (
+      this.tables.find((each) => each.zoneId === zoneId && each.today !== null)?.today!
+        .zoneRevision ?? null
+    );
+  }
+
+  /** The room of the table a drop acted on, which `dropAction` found in `#zone.visible`. */
+  #dropRoom(tableId: string): Room {
+    const { zoneId } = this.#zone.visible.find((each) => each.id === tableId)!;
+    return { zoneId, revision: this.#revision(zoneId) };
+  }
+
+  /** A null revision is answered here as a stale one is, without being sent: only the zone reset's
+   * route accepts null. */
+  #send<T>(revision: number | null, call: (revision: number) => Promise<T>): Promise<T> {
+    return revision === null ? Promise.reject({ code: "floor_today.out_of_date" }) : call(revision);
+  }
+
   #onDragEnd(event: Event): void {
     event.stopPropagation();
     this.#onDrop((event as CustomEvent<FloorMapDrop>).detail);
@@ -774,25 +816,31 @@ export class TillFloorScreen extends LitElement {
         const api = this.api;
         if (api === undefined) return;
         this.#setPending(pendingPlaces(this.#zone.visible, action));
-        void this.#settle(api.moveToday(action.tableId, { x: action.x, y: action.y }));
+        void this.#settle(
+          this.#send(this.#dropRoom(drop.tableId).revision, (revision) =>
+            api.moveToday(action.tableId, { x: action.x, y: action.y }, revision),
+          ),
+        );
         return;
       }
       case "merge":
         if (this.api === undefined) return;
         this.#setPending(pendingPlaces(this.#zone.visible, action));
-        void this.#merge(this.api, action);
+        void this.#merge(this.api, action, this.#dropRoom(drop.tableId).revision);
         return;
       case "seat": {
         const table = this.#zone.visible.find((each) => each.id === action.tableId)!;
         this.#openTable(table, { heading: action.heading, withTableIds: action.withTableIds });
         return;
       }
-      case "join":
+      case "join": {
         if (this.api === undefined) return;
         this.#setPending(pendingPlaces(this.#zone.visible, action));
-        if (action.other === null) void this.#join(this.api, action, "merge");
-        else this.askingBills = { api: this.api, action };
+        const room = this.#dropRoom(drop.tableId);
+        if (action.other === null) void this.#join(this.api, action, room, "merge");
+        else this.askingBills = { api: this.api, action, room };
         return;
+      }
       default:
         return;
     }
@@ -807,12 +855,15 @@ export class TillFloorScreen extends LitElement {
     const table = this.tables.find((each) => each.id === tableId)!;
     const api = this.api;
     if (api === undefined) return;
+    const revision = this.#revision(table.zoneId);
+    const send = (call: (revision: number) => Promise<FloorAnswer>) =>
+      void this.#settle(this.#send(revision, call));
     switch (action) {
       case "join-with":
         this.joiningWith = { tableId };
         return;
       case "split":
-        void this.#settle(this.#split(api, table));
+        void this.#settle(this.#split(api, table, revision));
         return;
       case "split-off":
         this.splittingJoined = { tableId, sent: null, refusal: null };
@@ -821,48 +872,54 @@ export class TillFloorScreen extends LitElement {
         const plan = joinAgainOf(table, this.tables);
         if (plan === null) return;
         if (plan.whole)
-          void this.#settle(
-            api.joinAgainToday(plan.joined.id, { partIds: plan.back.map((each) => each.id) }),
+          send((sent) =>
+            api.joinAgainToday(plan.joined.id, { partIds: plan.back.map((each) => each.id) }, sent),
           );
         else this.joiningAgain = { tableId: plan.joined.id, sent: null, refusal: null };
         return;
       }
       case "rotate":
-        void this.#settle(api.rotateToday(table.id));
+        send((sent) => api.rotateToday(table.id, sent));
         return;
       case "seats":
         this.askingSeats = {
           heading: this.#mergeName(table) ?? table.label,
           seats: seatsFor(table) ?? 0,
           action: "save",
-          resend: (seats) => void this.#settle(api.setSeatsToday(table.id, seats)),
+          resend: (seats) => send((sent) => api.setSeatsToday(table.id, seats, sent)),
         };
         return;
       case "back":
-        void this.#settle(api.backToSavedToday(table.id));
+        send((sent) => api.backToSavedToday(table.id, sent));
         return;
       case "take-off":
-        void this.#settle(api.takeOffToday(table.id));
+        send((sent) => api.takeOffToday(table.id, sent));
         return;
     }
   }
 
   /** A seated merge loses the last member of its name, with a new empty bill (slice 4 decision 16). */
-  async #split(api: TillApi, table: TableState): Promise<void> {
+  async #split(
+    api: TillApi,
+    table: TableState,
+    revision: number | null,
+  ): Promise<FloorAnswer | null> {
     const party = table.party;
-    if (party === null) return api.splitToday(table.id);
+    if (party === null) return this.#send(revision, (sent) => api.splitToday(table.id, sent));
     const joinId = table.today?.joinId;
     const last = this.#zone.visible
       .filter((each) => each.today?.joinId === joinId)
       .sort((a, b) => inNumberOrder(a.label, b.label))
       .at(-1)!;
-    await api.splitTable(party.id, last.id, null, party.revision);
+    const answer = await api.splitTable(party.id, last.id, null, party.revision);
+    const answered = answer.zoneRevisions?.[last.zoneId];
+    return answered === undefined ? null : { zoneId: last.zoneId, revision: answered };
   }
 
   /** The zone's table Join with… was opened for, while the map draws it. */
-  #joining(tableId: string): (TableState & { today: { placement: TodayPlacement } }) | undefined {
+  #joining(tableId: string): (ZonedTable & { today: { placement: TodayPlacement } }) | undefined {
     return this.#zone.visible.find(
-      (each): each is TableState & { today: { placement: TodayPlacement } } =>
+      (each): each is ZonedTable & { today: { placement: TodayPlacement } } =>
         each.id === tableId && each.today?.placement != null,
     );
   }
@@ -916,6 +973,7 @@ export class TillFloorScreen extends LitElement {
   async #join(
     api: TillApi,
     action: JoinAction,
+    room: Room,
     bills: BillChoiceDetail["bills"],
     seats?: number,
   ): Promise<void> {
@@ -930,58 +988,66 @@ export class TillFloorScreen extends LitElement {
     };
     const call =
       merge === null
-        ? api.joinTables(party.id, tableId, bills, revisions)
-        : api.joinTables(party.id, tableId, bills, revisions, {
-            ...merge,
-            ...(seats === undefined ? {} : { seats }),
+        ? api.joinTables(party.id, tableId, bills, revisions).then(() => null)
+        : this.#send(room.revision, async (zoneRevision) => {
+            const answer = await api.joinTables(party.id, tableId, bills, revisions, {
+              ...merge,
+              ...(seats === undefined ? {} : { seats }),
+              zoneRevision,
+            });
+            const revision = answer.zoneRevisions?.[room.zoneId];
+            return revision === undefined ? null : { zoneId: room.zoneId, revision };
           });
-    await this.#settle(
-      call.then(() => undefined),
-      (refused) => {
-        if (merge === null || seats !== undefined || !asksSeats(refused)) return false;
-        this.askingSeats = {
-          heading: action.heading,
-          seats: null,
-          action: "join",
-          resend: (chosen) => void this.#join(api, action, bills, chosen),
-        };
-        return true;
-      },
-    );
+    await this.#settle(call, (refused) => {
+      if (merge === null || seats !== undefined || !asksSeats(refused)) return false;
+      this.askingSeats = {
+        heading: action.heading,
+        seats: null,
+        action: "join",
+        resend: (chosen) => void this.#join(api, action, room, bills, chosen),
+      };
+      return true;
+    });
   }
 
   /** The server refuses a merge without seats (`merge.seats_required`), which opens the seats prompt. */
   async #merge(
     api: TillApi,
     action: Extract<DropAction, { kind: "merge" }>,
+    revision: number | null,
     seats?: number,
   ): Promise<void> {
     await this.#settle(
-      api.mergeToday(action.tableId, {
-        targetId: action.targetId,
-        side: action.side,
-        ...(seats === undefined ? {} : { seats }),
-      }),
+      this.#send(revision, (sent) =>
+        api.mergeToday(
+          action.tableId,
+          {
+            targetId: action.targetId,
+            side: action.side,
+            ...(seats === undefined ? {} : { seats }),
+          },
+          sent,
+        ),
+      ),
       (refused) => {
         if (seats !== undefined || !asksSeats(refused)) return false;
         this.askingSeats = {
           heading: action.heading,
           seats: null,
           action: "join",
-          resend: (chosen) => void this.#merge(api, action, chosen),
+          resend: (chosen) => void this.#merge(api, action, revision, chosen),
         };
         return true;
       },
     );
   }
 
-  /** Every floor write: a refusal says its words and drops `#pending`, then the floor is re-read. */
   async #settle(
-    call: Promise<void>,
+    call: Promise<FloorAnswer | null>,
     asks: (refused: { code?: string; field?: unknown }) => boolean = () => false,
   ): Promise<void> {
     try {
-      await call;
+      this.#carry(await call);
     } catch (cause) {
       const refused = (cause ?? {}) as { code?: string; field?: unknown };
       if (asks(refused)) return;
@@ -989,6 +1055,14 @@ export class TillFloorScreen extends LitElement {
       this.#setPending(null);
     }
     this.#requestFloorRefresh();
+  }
+
+  #carry(answer: FloorAnswer | null): void {
+    if (answer !== null)
+      this.#carried.set(answer.zoneId, {
+        revision: answer.revision,
+        answeredAt: nextFloorMoment(),
+      });
   }
 
   #seatsPrompt(): TemplateResult | typeof nothing {
@@ -1068,11 +1142,20 @@ export class TillFloorScreen extends LitElement {
       return;
     const sending = { ...splitting, sent: shown, refusal: null };
     this.splittingJoined = sending;
+    const revision = this.#revision(shown.joined.zoneId);
     try {
-      await api.splitOffToday(splitting.tableId, {
-        partIds: detail.partIds,
-        ...(detail.seats === null ? {} : { seats: detail.seats }),
-      });
+      this.#carry(
+        await this.#send(revision, (sent) =>
+          api.splitOffToday(
+            splitting.tableId,
+            {
+              partIds: detail.partIds,
+              ...(detail.seats === null ? {} : { seats: detail.seats }),
+            },
+            sent,
+          ),
+        ),
+      );
       if (this.splittingJoined === sending) {
         dialog.commit();
         this.splittingJoined = null;
@@ -1141,11 +1224,17 @@ export class TillFloorScreen extends LitElement {
       return;
     const sending = { ...joining, sent: plan, refusal: null };
     this.joiningAgain = sending;
+    const revision = this.#revision(plan.joined.zoneId);
     try {
-      await api.joinAgainToday(joining.tableId, {
-        partIds: plan.back.map((each) => each.id),
-        seats: detail.seats,
-      });
+      this.#carry(
+        await this.#send(revision, (sent) =>
+          api.joinAgainToday(
+            joining.tableId,
+            { partIds: plan.back.map((each) => each.id), seats: detail.seats },
+            sent,
+          ),
+        ),
+      );
       if (this.joiningAgain === sending) {
         dialog.commit();
         this.joiningAgain = null;
@@ -1170,7 +1259,7 @@ export class TillFloorScreen extends LitElement {
   #billChoice(): TemplateResult | typeof nothing {
     const asking = this.askingBills;
     if (asking === null) return nothing;
-    const { api, action } = asking;
+    const { api, action, room } = asking;
     const scope = t("table.combine_scope")
       .replace("{from}", () => partyScope(action.other!, this.tables))
       .replace("{into}", () => partyScope(action.party, this.tables));
@@ -1179,7 +1268,7 @@ export class TillFloorScreen extends LitElement {
       @bill-choice-confirm=${(event: Event) => {
         event.stopPropagation();
         this.askingBills = null;
-        void this.#join(api, action, (event as CustomEvent<BillChoiceDetail>).detail.bills);
+        void this.#join(api, action, room, (event as CustomEvent<BillChoiceDetail>).detail.bills);
       }}
       @bill-choice-cancel=${(event: Event) => {
         event.stopPropagation();
@@ -1202,22 +1291,32 @@ export class TillFloorScreen extends LitElement {
       .zone=${zone}
       .tables=${this.#zone.visible}
       @zone-place-spare=${(event: CustomEvent<{ tableId: string }>) =>
-        this.#onZoneChange(event, (api) =>
-          api.placeSpareToday(event.detail.tableId, spareSpot(this.#zone.visible)),
+        this.#onZoneChange(event, zone.id, (api, revision) =>
+          this.#send(revision, (sent) =>
+            api.placeSpareToday(event.detail.tableId, spareSpot(this.#zone.visible), sent),
+          ),
         )}
       @zone-put-back=${(event: CustomEvent<{ tableId: string }>) =>
-        this.#onZoneChange(event, (api) => api.putBackToday(event.detail.tableId))}
+        this.#onZoneChange(event, zone.id, (api, revision) =>
+          this.#send(revision, (sent) => api.putBackToday(event.detail.tableId, sent)),
+        )}
       @zone-reset=${(event: CustomEvent<{ zoneId: string }>) =>
-        this.#onZoneChange(event, (api) => api.resetZoneToday(event.detail.zoneId))}
+        this.#onZoneChange(event, event.detail.zoneId, (api, revision) =>
+          api.resetZoneToday(event.detail.zoneId, revision),
+        )}
     ></till-floor-zone-menu>`;
   }
 
-  #onZoneChange(event: Event, call: (api: TillApi) => Promise<void>): void {
+  #onZoneChange(
+    event: Event,
+    zoneId: string,
+    call: (api: TillApi, revision: number | null) => Promise<FloorAnswer>,
+  ): void {
     event.stopPropagation();
     this.refusal = null;
     const api = this.api;
     if (api === undefined) return;
-    void this.#settle(call(api));
+    void this.#settle(call(api, this.#revision(zoneId)));
   }
 
   #requestFloorRefresh(): void {
@@ -1281,7 +1380,7 @@ export class TillFloorScreen extends LitElement {
     );
     const refusedZone = this.zones.find((zone) => zone.id === this.refusedZoneId && zone.closed);
     const activeKey = resolveActiveTabKey(this.activeZone, tabs);
-    const visible = this.tables.filter((table) => table.zoneId === activeKey);
+    const visible = this.tables.filter((table): table is ZonedTable => table.zoneId === activeKey);
     const planned = visible.some((table) => table.today !== null);
     const listed = listedTables(visible);
     const pending = this.#pending;

@@ -3,7 +3,8 @@ import type { FloorMapDrop, WtFloorMap } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
 import "./till-floor-screen.js";
-import type { FloorZone, TableState, TableToday, TillApi } from "../api/client.js";
+import type { FloorAnswer, FloorZone, TableState, TableToday, TillApi } from "../api/client.js";
+import { nextFloorMoment } from "../state/floor-today.js";
 
 function zone(over: Partial<FloorZone> = {}): FloorZone {
   return {
@@ -29,6 +30,7 @@ function today(x: number, over: Partial<TableToday> = {}): TableToday {
     inJoinedTable: null,
     joined: null,
     splitOffFrom: null,
+    zoneRevision: 0,
     ...over,
   };
 }
@@ -56,9 +58,10 @@ function planned(id: string, x: number, over: Partial<TableToday> = {}): TableSt
 
 /** Each write waits for the test to answer it, so a case can look between the drop and the answer. */
 function stubApi() {
+  const answer = () => Promise.resolve({ zoneId: "z1", revision: 0 });
   return {
-    moveToday: vi.fn<TillApi["moveToday"]>(() => Promise.resolve()),
-    mergeToday: vi.fn<TillApi["mergeToday"]>(() => Promise.resolve()),
+    moveToday: vi.fn<TillApi["moveToday"]>(answer),
+    mergeToday: vi.fn<TillApi["mergeToday"]>(answer),
   };
 }
 
@@ -110,7 +113,12 @@ describe("till-floor-screen: dragging on today's plan", () => {
   it("a drop on empty space moves the table and draws it there until the next read", async () => {
     const api = stubApi();
     let answer!: () => void;
-    api.moveToday.mockImplementation(() => new Promise<void>((resolve) => (answer = resolve)));
+    api.moveToday.mockImplementation(
+      () =>
+        new Promise<FloorAnswer>(
+          (resolve) => (answer = () => resolve({ zoneId: "z1", revision: 1 })),
+        ),
+    );
     const el = await mount([planned("t1", 2), planned("t2", 20)], api);
     const refreshes = countRefreshes(el);
     const escaped: Event[] = [];
@@ -119,7 +127,7 @@ describe("till-floor-screen: dragging on today's plan", () => {
     await drop(el, { tableId: "t1", x: 12, y: 5, targetId: null });
 
     expect(escaped).toEqual([]);
-    expect(api.moveToday).toHaveBeenCalledExactlyOnceWith("t1", { x: 12, y: 5 });
+    expect(api.moveToday).toHaveBeenCalledExactlyOnceWith("t1", { x: 12, y: 5 }, 0);
     expect(drawnAt(el, "t1")).toBe(12);
     expect(refreshes.count).toBe(0);
 
@@ -160,7 +168,11 @@ describe("till-floor-screen: dragging on today's plan", () => {
     const refreshes = countRefreshes(el);
 
     await drop(el, { tableId: "t2", x: 5, y: 3, targetId: "t1" });
-    expect(api.mergeToday).toHaveBeenCalledExactlyOnceWith("t2", { targetId: "t1", side: "right" });
+    expect(api.mergeToday).toHaveBeenCalledExactlyOnceWith(
+      "t2",
+      { targetId: "t1", side: "right" },
+      0,
+    );
     expect(drawnAt(el, "t2")).toBe(4);
     await settle(el);
 
@@ -181,11 +193,15 @@ describe("till-floor-screen: dragging on today's plan", () => {
     );
     await settle(el);
 
-    expect(api.mergeToday).toHaveBeenLastCalledWith("t2", {
-      targetId: "t1",
-      side: "right",
-      seats: 10,
-    });
+    expect(api.mergeToday).toHaveBeenLastCalledWith(
+      "t2",
+      {
+        targetId: "t1",
+        side: "right",
+        seats: 10,
+      },
+      0,
+    );
     expect(api.mergeToday).toHaveBeenCalledTimes(2);
     expect(el.shadowRoot!.querySelector("till-today-seats-dialog")).toBeNull();
     expect(refreshes.count).toBe(1);
@@ -402,5 +418,136 @@ describe("till-floor-screen: dragging on today's plan", () => {
     document.removeEventListener("keydown", listen);
     expect(heard).toEqual([press, key]);
     window.dispatchEvent(new PointerEvent("pointerup", { pointerId: 1, bubbles: true }));
+  });
+});
+
+describe("till-floor-screen: the room's revision on today's plan", () => {
+  const at7 = () => [planned("t1", 2, { zoneRevision: 7 }), planned("t2", 20, { zoneRevision: 7 })];
+
+  it("a drop on empty space sends the read's revision", async () => {
+    const api = stubApi();
+    const el = await mount(at7(), api);
+    await drop(el, { tableId: "t1", x: 12, y: 5, targetId: null });
+    expect(api.moveToday).toHaveBeenCalledExactlyOnceWith("t1", { x: 12, y: 5 }, 7);
+  });
+
+  it("a merge's seats resend sends the revision read at the drop, not a later read's", async () => {
+    const api = stubApi();
+    api.mergeToday.mockRejectedValueOnce({ code: "merge.seats_required", status: 400 });
+    const el = await mount(at7(), api);
+    await drop(el, { tableId: "t2", x: 5, y: 3, targetId: "t1" });
+    await settle(el);
+    expect(api.mergeToday).toHaveBeenCalledExactlyOnceWith(
+      "t2",
+      { targetId: "t1", side: "right" },
+      7,
+    );
+
+    el.tablesReadAt = nextFloorMoment();
+    el.tables = [planned("t1", 2, { zoneRevision: 8 }), planned("t2", 20, { zoneRevision: 8 })];
+    await el.updateComplete;
+    el.shadowRoot!.querySelector("till-today-seats-dialog")!.dispatchEvent(
+      new CustomEvent("today-seats-confirm", {
+        detail: { seats: 10 },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await settle(el);
+
+    expect(api.mergeToday).toHaveBeenLastCalledWith(
+      "t2",
+      { targetId: "t1", side: "right", seats: 10 },
+      7,
+    );
+  });
+
+  /** Moves t1 on a floor read at 7, answered 8, and returns when the read that drew it started. */
+  async function movedTo8() {
+    const api = stubApi();
+    api.moveToday.mockResolvedValueOnce({ zoneId: "z1", revision: 8 });
+    const el = await mount(at7(), api);
+    const readStarted = nextFloorMoment();
+    el.tablesReadAt = readStarted;
+    await drop(el, { tableId: "t1", x: 12, y: 5, targetId: null });
+    await settle(el);
+    return { api, el, readStarted };
+  }
+
+  it("a second drag before any read sends the screen's own answer", async () => {
+    const { api, el } = await movedTo8();
+    await drop(el, { tableId: "t1", x: 14, y: 5, targetId: null });
+    expect(api.moveToday).toHaveBeenLastCalledWith("t1", { x: 14, y: 5 }, 8);
+  });
+
+  it("a read that started before the answer leaves the answer as the revision sent", async () => {
+    const { api, el, readStarted } = await movedTo8();
+    el.tablesReadAt = readStarted;
+    el.tables = at7();
+    await el.updateComplete;
+    await drop(el, { tableId: "t1", x: 14, y: 5, targetId: null });
+    expect(api.moveToday).toHaveBeenLastCalledWith("t1", { x: 14, y: 5 }, 8);
+  });
+
+  it("a read that started after the answer replaces it, higher or lower", async () => {
+    for (const read of [9, 6]) {
+      const { api, el } = await movedTo8();
+      el.tablesReadAt = nextFloorMoment();
+      el.tables = [
+        planned("t1", 2, { zoneRevision: read }),
+        planned("t2", 20, { zoneRevision: read }),
+      ];
+      await el.updateComplete;
+      await drop(el, { tableId: "t1", x: 14, y: 5, targetId: null });
+      expect(api.moveToday).toHaveBeenLastCalledWith("t1", { x: 14, y: 5 }, read);
+      cleanupWidgets();
+    }
+  });
+
+  it("a change in another room keeps the first room's answer as the revision sent", async () => {
+    const api = stubApi();
+    api.moveToday
+      .mockResolvedValueOnce({ zoneId: "z1", revision: 8 })
+      .mockResolvedValueOnce({ zoneId: "z2", revision: 4 });
+    const el = await mount(
+      [
+        planned("t1", 2, { zoneRevision: 7 }),
+        { ...planned("t3", 2, { zoneRevision: 3 }), zoneId: "z2" },
+      ],
+      api,
+      [zone(), zone({ id: "z2", name: "Terrace", displayOrder: 1 })],
+    );
+    await drop(el, { tableId: "t1", x: 12, y: 5, targetId: null });
+    await settle(el);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-zone="z2"]')!.click();
+    await el.updateComplete;
+    await drop(el, { tableId: "t3", x: 12, y: 5, targetId: null });
+    await settle(el);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-zone="z1"]')!.click();
+    await el.updateComplete;
+
+    await drop(el, { tableId: "t1", x: 14, y: 5, targetId: null });
+
+    expect(api.moveToday.mock.calls.map(([tableId, , sent]) => [tableId, sent])).toEqual([
+      ["t1", 7],
+      ["t3", 3],
+      ["t1", 8],
+    ]);
+  });
+
+  it("a change refused as out of date says the floor has changed, drops the drawn drop and re-reads", async () => {
+    const api = stubApi();
+    api.moveToday.mockRejectedValueOnce({
+      code: "floor_today.out_of_date",
+      status: 409,
+      params: { zoneId: "z1", revision: 9 },
+    });
+    const el = await mount(at7(), api);
+    const refreshes = countRefreshes(el);
+    await drop(el, { tableId: "t1", x: 12, y: 5, targetId: null });
+    await settle(el);
+    expect(refusal(el)).toBe("The floor has changed. Check and try again");
+    expect(drawnAt(el, "t1")).toBe(2);
+    expect(refreshes.count).toBe(1);
   });
 });

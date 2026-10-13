@@ -531,6 +531,11 @@ joined-table cases use three tables, not a pair.
    - 2b, till: sends it on every action and window in the table above and carries the answers
      forward; the server then refuses a missing revision. Closes A564.
 
+     > Added 2026-10-13 by A579 part 2b: the till sends the revision with every table route, the
+     > zone reset and a party join that makes a merge; splitting a table off a group with guests
+     > seated (`/api/parties/:id/split-table`) and a party move send none and are not checked
+     > against it.
+
    Tests: for each action, a second till acting from the old revision is refused and nothing is
    written. Control: with the comparison deleted, the stale case is applied.
 3. **The flattened group.**

@@ -3983,6 +3983,7 @@ describe("till-table-order-screen", () => {
         inJoinedTable,
         joined: null,
         splitOffFrom: null,
+        zoneRevision: 0,
       });
       const { el } = await mount({
         lines: [pendingLine],

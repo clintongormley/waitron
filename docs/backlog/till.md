@@ -275,19 +275,6 @@ than two tables still joined, and the till shows the same sentence ("That table 
 table") for it, which is not accurate. Next: give that case its own wording, or its own code if the
 server should say which case it is.
 
-## A564. A second till with an out-of-date read can split a joined table down to one
-
-**A564 (2026-10-13).** Two tills show Long table (Counter 3, 4 and 5). One splits off Counter 5;
-the other, not yet refreshed, splits off Counter 4 with a seat count for the two it believes stay.
-The server applies it as a split down to one table and ignores the seats sent (review of A503 part
-3's tasks 5–9, M2, accepted in #1604). Next: decide whether a split names the tables it expects to
-stay and is refused when they differ.
-Join again already names the tables it expects (`joined_table.out_of_date`, #1608); Split does not
-yet.
-Server half landed with A579 part 2a (#1621): every floor change that sends the room's revision is
-refused `floor_today.out_of_date` when the room changed since. The till does not send it yet; A579
-part 2b makes it send it and closes this entry.
-
 ## A565. "Reset to saved plan" does not wait for food on its way to an ordinary table
 
 **A565 (2026-10-13).** A reset applies a free table's saved place without asking about food on its

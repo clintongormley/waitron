@@ -1922,11 +1922,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   (2026-10-13).** `table.in_joined_table` covers both cases since #1604.
   [Detail](backlog/till.md#a563-the-till-says-part-of-a-joined-table-for-a-joined-table-that-has-come-apart)
 
-- **A564. A second till with an out-of-date read can split a joined table down to one
-  (2026-10-13).** The seats it sent are ignored. Left open by #1604. Server half done (#1621);
-  closes with A579 part 2b, when the till sends the room's revision.
-  [Detail](backlog/till.md#a564-a-second-till-with-an-out-of-date-read-can-split-a-joined-table-down-to-one)
-
 - **A565. "Reset to saved plan" does not wait for food on its way to an ordinary table
   (2026-10-13).** Dates from floor plans slice 1; #1604 made only split groups wait.
   [Detail](backlog/till.md#a565-reset-to-saved-plan-does-not-wait-for-food-on-its-way-to-an-ordinary-table)

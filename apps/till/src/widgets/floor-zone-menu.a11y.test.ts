@@ -33,6 +33,7 @@ function table(id: string, over: Partial<TableToday> = {}): TableState {
       inJoinedTable: null,
       joined: null,
       splitOffFrom: null,
+      zoneRevision: 0,
       ...over,
     },
     signals: [],
