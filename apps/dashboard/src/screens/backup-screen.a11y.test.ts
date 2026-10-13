@@ -34,7 +34,16 @@ const ENABLED: BackupStatusView = {
   backupStatus: {
     configured: true,
     destinations: [
-      { id: "primary", lastBackupAt: "2026-09-09T02:00:00Z", ageSeconds: 3600, stale: false },
+      {
+        id: "primary",
+        lastBackupAt: "2026-09-09T02:00:00Z",
+        ageSeconds: 3600,
+        stale: false,
+        readErrorCode: null,
+        storedUnderCurrentKey: true,
+        uploadErrorCode: null,
+        pruneErrorCode: null,
+      },
     ],
   },
   archiveUnderCurrentKey: true,

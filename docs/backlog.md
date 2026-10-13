@@ -4155,16 +4155,30 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   [implementation plan](superpowers/plans/2026-10-12-a538-archive-s3.md): the owner approved the
   proposed defaults on 2026-10-12. Plan Task 1, which makes the bucket stream's calls cancellable,
   is built (A538-1), and so is Task 2, which moves archive files to and from a bucket without
-  holding them in memory (A538-2). Tasks 3 to 10 and the real-AWS evidence are open; Task 3 owns
-  the per-destination time limit. Points left for Task 3 by A538-2: `StorageBackend` has no
-  `close()`, so a bucket client would never be disposed; the sweep's stop signal does not reach
-  destination calls yet; and the folder destination reports a cancelled call as an uncoded error (the
-  signal's reason, or Node's `AbortError`) where the bucket destination reports
-  `backup.destination_request_failed`.
+  holding them in memory (A538-2), and Task 3, which gives each destination's calls their own time
+  limit, stops them with the sweep and reports what each destination did (A538-3). Tasks 4 to 10
+  and the real-AWS evidence are open.
   `S3FileStore`'s listing and batch delete repeat `S3ObjectStore`'s (`packages/stream/src/s3-store.ts`)
   with different error codes, and only the file store's refuses a repeated key or bad size and
   counts `NoSuchKey` as deleted; share them, deciding whether the bucket stream takes those checks
   too.
+
+- **A backup that fails before reaching any destination tells the owner nothing about why.** When
+  a run stops early, for example on `backup.staging_space_low` or `recovery.state_incomplete`, it is
+  only logged as `backup.failed` with its code. No
+  destination records an outcome and no alert names the cause; what the owner sees is
+  `backup.destination_overdue`, once the last archive is old enough. Left open by A538-3.
+
+- **The Backups page shows only the first destination's freshness, and "No backup has run yet"
+  whenever that destination's `lastBackupAt` is null, including when the box could not list it; a
+  pruning failure is shown nowhere.** Backup status carries `readErrorCode` and `pruneErrorCode`
+  per destination, but the screen reads neither (`backup-screen.ts`). Since A538-3a counts only
+  names `parseBackupArchiveKey` reads, a folder holding only old-format archive names also reads as
+  never backed up. Left open by A538-3; plan Task 6 covers the screen.
+
+- **Every backup status read builds a new client per destination**, a new S3 client for a bucket,
+  and closes it once its listing settles, even while the running sweep holds live ones. This predates A538-3, which added
+  `close()`; reusing the sweep's backends needs `close()` to wait for a status read in flight.
 
 - **Whole-state-volume capture** (its own §5-reviewed slice): capture the whole state directory EXCEPT
   an explicit exclusion set, with a completeness guard that fails when a new top-level entry is

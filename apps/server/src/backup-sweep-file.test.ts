@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import type { Database } from "@waitron/db";
 import { runOnce } from "./backup-sweep.js";
+import { parseBackupArchiveKey } from "./backup-keys.js";
 import { LocalFsBackend } from "./local-fs-backend.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
 import { decryptArtifact } from "./artifact-cipher.js";
@@ -37,7 +38,6 @@ async function fixture() {
   return { root, stateDir, stagingDir: join(root, "staging") };
 }
 const stamp = new Date("2026-10-06T00:00:00Z");
-const key = "waitron-20261006T000000Z.backup.enc";
 const call: StorageCall = { signal: new AbortController().signal };
 const manifest = {
   manifestVersion: 1 as const,
@@ -45,6 +45,14 @@ const manifest = {
   environment: "preproduction" as const,
   modules: { core: 3 },
 };
+/** The one archive this tick stored in `dir`; its nonce is random. */
+async function storedKey(dir: string): Promise<string> {
+  const keys = (await readdir(dir)).filter(
+    (k) => parseBackupArchiveKey(k)?.timestamp.getTime() === stamp.getTime(),
+  );
+  expect(keys).toHaveLength(1);
+  return keys[0];
+}
 function deps(f: Awaited<ReturnType<typeof fixture>>, backends: LocalFsBackend[]) {
   return {
     ...f,
@@ -56,6 +64,7 @@ function deps(f: Awaited<ReturnType<typeof fixture>>, backends: LocalFsBackend[]
     recoveryKey: "key",
     retain: 3,
     retainDays: 30,
+    destinationTimeoutMs: 60_000,
     signal: new AbortController().signal,
     log: vi.fn(),
     now: () => stamp,
@@ -86,6 +95,8 @@ it("streams capture once to independent file destinations and leaves no staging 
   const b = new FileOnly("b", join(f.root, "b"));
   guard.forbidden.add(join(f.stagingDir, "waitron-20261006T000000Z.dump"));
   await runOnce(deps(f, [a, b]));
+  const key = await storedKey(join(f.root, "a"));
+  expect(await storedKey(join(f.root, "b"))).toBe(key);
   const bytes = await a.get(key, call);
   expect(await b.get(key, call)).toEqual(bytes);
   expect(artifactModes).toEqual([0o600, 0o600]);
@@ -112,12 +123,22 @@ it("isolates a failed copy, retains stored success after a prune refusal and cle
   }
   const good = new PruneFailed("good", join(f.root, "good"));
   const outcomes = { failed: new Map<string, { at: string }>() };
-  const onStored = vi.fn();
-  await runOnce({ ...deps(f, [new Failed("bad", join(f.root, "bad")), good]), outcomes, onStored });
-  expect(unpackArchive(decryptArtifact(await good.get(key, call), "key"))[1].name).toBe("db.dump");
+  const stored: string[] = [];
+  await runOnce({
+    ...deps(f, [new Failed("bad", join(f.root, "bad")), good]),
+    outcomes,
+    onDestinationResult: (r) => {
+      if (r.stored) stored.push(r.id);
+    },
+  });
+  expect(
+    unpackArchive(
+      decryptArtifact(await good.get(await storedKey(join(f.root, "good")), call), "key"),
+    )[1].name,
+  ).toBe("db.dump");
   expect(outcomes.failed.has("bad")).toBe(true);
   expect(outcomes.failed.has("good")).toBe(false);
-  expect(onStored).toHaveBeenCalledOnce();
+  expect(stored).toEqual(["good"]);
   expect(await readdir(f.stagingDir)).toEqual([]);
 });
 it("refuses excessive metadata before archiving and publishes no destination", async () => {

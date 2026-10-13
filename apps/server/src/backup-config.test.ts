@@ -265,3 +265,45 @@ describe("loadRecoveryKey", () => {
     );
   });
 });
+
+describe("loadBackupConfig destination time limit", () => {
+  const base = { WAITRON_BACKUP_DIR: "/b", WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!" };
+  const refusal = (reason: string) =>
+    new AppError("server.config_invalid", {
+      variable: "WAITRON_BACKUP_DESTINATION_TIMEOUT_MS",
+      reason,
+    });
+
+  it("defaults to 15 minutes, and reads an empty value as unset", () => {
+    expect(loadBackupConfig(base)!.destinationTimeoutMs).toBe(900_000);
+    expect(
+      loadBackupConfig({ ...base, WAITRON_BACKUP_DESTINATION_TIMEOUT_MS: "" })!
+        .destinationTimeoutMs,
+    ).toBe(900_000);
+  });
+
+  it("accepts whole milliseconds from 30 seconds to 24 hours", () => {
+    for (const ms of [30_000, 120_000, 86_400_000]) {
+      expect(
+        loadBackupConfig({ ...base, WAITRON_BACKUP_DESTINATION_TIMEOUT_MS: String(ms) })!
+          .destinationTimeoutMs,
+      ).toBe(ms);
+    }
+  });
+
+  it("refuses a value outside the range", () => {
+    for (const raw of ["29999", "86400001"]) {
+      expect(() =>
+        loadBackupConfig({ ...base, WAITRON_BACKUP_DESTINATION_TIMEOUT_MS: raw }),
+      ).toThrow(refusal("timeout_out_of_range"));
+    }
+  });
+
+  it("refuses a value that is not a whole number", () => {
+    for (const raw of ["60000.5", "abc", "-60000"]) {
+      expect(() =>
+        loadBackupConfig({ ...base, WAITRON_BACKUP_DESTINATION_TIMEOUT_MS: raw }),
+      ).toThrow(refusal("not_a_positive_integer"));
+    }
+  });
+});

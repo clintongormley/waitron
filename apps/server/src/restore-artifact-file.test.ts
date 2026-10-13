@@ -20,6 +20,7 @@ import { encryptArtifact } from "./artifact-cipher.js";
 import { packArchive } from "./backup-archive.js";
 import { validateArtifactFile, restoreFromArtifactFile, type RestoreFileDeps } from "./restore.js";
 import { runOnce } from "./backup-sweep.js";
+import { parseBackupArchiveKey } from "./backup-keys.js";
 import { LocalFsBackend } from "./local-fs-backend.js";
 import { stageRestoreRequest, runStagedRestore } from "./restore-request.js";
 import { runRestore } from "./restore-command.js";
@@ -207,12 +208,18 @@ it("roundtrips real SQLite and state through scheduled capture, local file stora
     resolvers: {},
     retain: 3,
     retainDays: 30,
+    destinationTimeoutMs: 60_000,
     signal: new AbortController().signal,
     now: () => stamp,
     archive: (path) => suite.db.archiveTo(path),
   });
-  guard.forbidden.add(join(f.root, "store", "waitron-20261006T000000Z.backup.enc"));
-  await backend.getFile("waitron-20261006T000000Z.backup.enc", f.artifactPath, {
+  const keys = (await readdir(join(f.root, "store"))).filter(
+    (name) => parseBackupArchiveKey(name)?.timestamp.getTime() === stamp.getTime(),
+  );
+  expect(keys).toHaveLength(1);
+  const key = keys[0];
+  guard.forbidden.add(join(f.root, "store", key));
+  await backend.getFile(key, f.artifactPath, {
     signal: new AbortController().signal,
   });
   guard.forbidden.add(f.artifactPath);

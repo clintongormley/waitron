@@ -6,22 +6,29 @@
 // It opens its OWN handle on the venue directory rather than reusing boot's, because `reload()` closes
 // it, and boot's handle is the one the server answers requests on.
 //
-// `archiveUnderCurrentKey` is an IN-PROCESS signal, set by the sweep's `onStored` callback (which fires
-// only when ≥1 destination stored on a tick), never inferred from a stored object's mtime: a
-// restored/copied OLD-key archive can carry a fresh mtime, so mtime does not prove the key.
+// `archiveUnderCurrentKey` is an IN-PROCESS signal, true once any destination's upload in the
+// current sweep has stored, never inferred from a stored object's mtime: a restored/copied
+// OLD-key archive can carry a fresh mtime, so mtime does not prove the key.
 
 import { createHash } from "node:crypto";
+import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import { openVenueDatabase, type SingletonRole, type VenueDatabase } from "@waitron/db";
 import type { WaitronModule } from "@waitron/module";
+import { VENUE_FILE } from "@waitron/store";
 import { AppError } from "@waitron/shared";
 import { codeOf } from "@waitron/server-kit";
-import { buildBackupBackend } from "./backup-backends.js";
+import { buildBackupBackend, type ResolvedBackupDestination } from "./backup-backends.js";
 import type { BackupConfig, BackupSchedule } from "./backup-config.js";
 import type { ScheduleClock } from "./backup-schedule.js";
-import { readBackupStatus, type BackupStatus } from "./backup-status.js";
-import { runBackupSweep } from "./backup-sweep.js";
+import {
+  readDestinationStatus,
+  unreadDestination,
+  type DestinationStatus,
+} from "./backup-status.js";
+import { runBackupSweep, type DestinationResult } from "./backup-sweep.js";
 import type { BackupOutcomeHolder } from "./alert-sources.js";
+import type { StorageBackend } from "./storage-backend.js";
 import type { DeploymentEnvironment } from "./config.js";
 import { realSleep } from "./loop.js";
 import type { Logger } from "./logger.js";
@@ -42,6 +49,29 @@ export interface BackupRuntimeStatus {
   /** The effective running recovery key, for `GET recovery-key`. Never logged. */
   recoveryKey: string | undefined;
 }
+
+/** A destination's freshness plus what the sweep under the reported settings did there:
+ * `storedUnderCurrentKey` once it stored, and the latest upload and pruning codes. */
+export type SupervisedDestinationStatus = DestinationStatus & {
+  storedUnderCurrentKey: boolean;
+  uploadErrorCode: string | null;
+  pruneErrorCode: string | null;
+};
+
+export type SupervisedBackupStatus =
+  { configured: false } | { configured: true; destinations: SupervisedDestinationStatus[] };
+
+type SweepRecord = Omit<SupervisedDestinationStatus, keyof DestinationStatus>;
+
+/** What one config's sweep has done, per destination. Replaced, never cleared, when a reload adopts
+ * a config, so a status read holding the old one keeps the settings and the record together. */
+type SweepRecords = Map<string, SweepRecord>;
+
+const NO_RECORD: SweepRecord = {
+  storedUnderCurrentKey: false,
+  uploadErrorCode: null,
+  pruneErrorCode: null,
+};
 
 export interface BackupSupervisorDeps {
   /** Re-reads the box-env files from DISK each reload — closing over a boot-time value would make
@@ -67,8 +97,23 @@ export interface BackupSupervisorDeps {
   /** DI for tests; defaults to `openVenueDatabase`. */
   openVenue?: (directory: string) => Promise<VenueDatabase>;
   onScheduled?: (at: number | null) => void;
+  /** DI for tests; defaults to `buildBackupBackend`. */
+  buildBackend?: (dest: ResolvedBackupDestination) => StorageBackend;
+  /** DI for tests; defaults to `readDestinationStatus`'s own limit. */
+  statusReadTimeoutMs?: number;
   now?: () => Date;
   sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
+}
+
+/** The size of the venue database file, without its write-ahead file; a missing file counts as
+ * empty. */
+export async function venueStagingEstimate(venueDir: string): Promise<number> {
+  try {
+    return (await stat(join(venueDir, VENUE_FILE))).size;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+    return 0;
+  }
 }
 
 export function keyFingerprint(key: string): string {
@@ -77,21 +122,21 @@ export function keyFingerprint(key: string): string {
 
 export class BackupSupervisor {
   readonly #deps: BackupSupervisorDeps;
+  readonly #buildBackend: (dest: ResolvedBackupDestination) => StorageBackend;
   #controller: AbortController | undefined;
   #worker: Promise<void> | undefined;
+  #backends: StorageBackend[] = [];
   #db: VenueDatabase | undefined;
   #config: BackupConfig | undefined;
   #reloading = false;
   /** Set once by `stop()` (shutdown is terminal). `reload()` checks it after every `await` and bails —
    * tearing down anything it opened — rather than start (or leave) a worker after a stop. */
   #stopped = false;
-  /** True once the running sweep has stored an archive to ≥1 destination since the last reload — the
-   * in-process proof that an artifact exists under the CURRENT key. `archiveUnderCurrentKey` is this
-   * flag. */
-  #storedUnderCurrentKey = false;
+  #sweep: SweepRecords = new Map();
 
   constructor(deps: BackupSupervisorDeps) {
     this.#deps = deps;
+    this.#buildBackend = deps.buildBackend ?? buildBackupBackend;
   }
 
   /** Latched: a concurrent reload throws `backup.reload_in_progress` rather than racing two
@@ -100,13 +145,13 @@ export class BackupSupervisor {
     if (this.#reloading) throw new AppError("backup.reload_in_progress", {});
     this.#reloading = true;
     try {
-      this.#storedUnderCurrentKey = false;
       await this.#teardown();
       // A `stop()` may have run while we awaited the teardown, which already left no worker/handle.
       if (this.#stopped) return;
       const cfg = await this.#deps.buildConfig();
       if (this.#stopped) return; // a stop() landed during buildConfig — don't adopt this config
       this.#config = cfg;
+      this.#sweep = new Map();
       if (cfg === undefined || this.#deps.readSingletonRole() !== "primary") {
         // #config is kept so `current()` can report the destinations/schedule; enabled stays false
         // because `#db` is undefined (nothing was opened) — a non-primary reads disabled.
@@ -134,8 +179,9 @@ export class BackupSupervisor {
       this.#db = venue;
       const controller = new AbortController();
       this.#controller = controller;
+      this.#backends = cfg.destinations.map(this.#buildBackend);
       this.#worker = runBackupSweep({
-        backends: cfg.destinations.map(buildBackupBackend),
+        backends: this.#backends,
         db: venue.venue,
         modules: this.#deps.modules,
         environment: this.#deps.environment,
@@ -143,19 +189,24 @@ export class BackupSupervisor {
         stateDir: this.#deps.stateDir,
         stagingDir: join(this.#deps.stateDir, "backup-staging"),
         archive: (outFile) => venue.venue.archiveTo(outFile),
+        stagingEstimateBytes: () => venueStagingEstimate(this.#deps.venueDir),
         recoveryKey: cfg.recoveryKey,
         schedule: cfg.schedule,
         retain: cfg.retain,
         retainDays: cfg.retainDays,
+        destinationTimeoutMs: cfg.destinationTimeoutMs,
         jitterSeed: this.#deps.jitterSeed,
         readClock: this.#deps.readClock,
         outcomes: this.#deps.outcomes,
         signal: controller.signal,
         onScheduled: this.#deps.onScheduled,
-        onStored: () => {
+        onDestinationResult: (result) => {
           // A replaced sweep is aborted before `reload()` waits for it, and its in-flight tick can
-          // still store an archive under the OLD key during that wait.
-          if (!controller.signal.aborted) this.#storedUnderCurrentKey = true;
+          // still report a store under the OLD key during that wait.
+          if (!controller.signal.aborted) this.#recordResult(result);
+        },
+        onUploaded: (id) => {
+          if (!controller.signal.aborted) this.#recordUpload(id);
         },
         sleep: this.#deps.sleep ?? realSleep,
         now: this.#deps.now,
@@ -188,14 +239,69 @@ export class BackupSupervisor {
 
   /** `current()` plus the async per-destination freshness read and the derived `archiveUnderCurrentKey`. */
   async status(): Promise<
-    BackupRuntimeStatus & { backupStatus: BackupStatus; archiveUnderCurrentKey: boolean }
+    BackupRuntimeStatus & { backupStatus: SupervisedBackupStatus; archiveUnderCurrentKey: boolean }
   > {
     const base = this.current();
     const cfg = this.#config;
+    // Taken with the settings: a reload during the read replaces `#sweep`, not this one.
+    const sweep = this.#sweep;
+    const archiveUnderCurrentKey = () => [...sweep.values()].some((r) => r.storedUnderCurrentKey);
+    if (cfg === undefined || cfg.destinations.length === 0)
+      return {
+        ...base,
+        backupStatus: { configured: false },
+        archiveUnderCurrentKey: archiveUnderCurrentKey(),
+      };
     const now = this.#now();
-    const backends = cfg?.destinations.map(buildBackupBackend) ?? [];
-    const backupStatus = await readBackupStatus(backends, cfg?.staleAfterMs ?? 0, now);
-    return { ...base, backupStatus, archiveUnderCurrentKey: this.#storedUnderCurrentKey };
+    const destinations = await Promise.all(
+      cfg.destinations.map(async (dest) => ({
+        ...(await this.#readDestination(dest, cfg.staleAfterMs, now)),
+        ...(sweep.get(dest.id) ?? NO_RECORD),
+      })),
+    );
+    return {
+      ...base,
+      backupStatus: { configured: true, destinations },
+      archiveUnderCurrentKey: archiveUnderCurrentKey(),
+    };
+  }
+
+  /** Answers by the read limit; the backend is closed only once its listing has settled. */
+  #readDestination(
+    dest: ResolvedBackupDestination,
+    staleAfterMs: number,
+    now: Date,
+  ): Promise<DestinationStatus> {
+    let backend: StorageBackend;
+    try {
+      backend = this.#buildBackend(dest);
+    } catch (err) {
+      return Promise.resolve(unreadDestination(dest.id, codeOf(err)));
+    }
+    const read = readDestinationStatus(backend, staleAfterMs, now, this.#deps.statusReadTimeoutMs);
+    void read.settled.then(() => this.#closeBackends([backend]));
+    return read.status;
+  }
+
+  /** Counted as stored before its pruning finishes; the pruning code stands until that pruning's
+   * result arrives. */
+  #recordUpload(id: string): void {
+    this.#sweep.set(id, {
+      storedUnderCurrentKey: true,
+      uploadErrorCode: null,
+      pruneErrorCode: this.#sweep.get(id)?.pruneErrorCode ?? null,
+    });
+  }
+
+  /** A store stays counted for the rest of the sweep; an upload code is cleared only by a later
+   * store, and a pruning code only by a later store whose pruning succeeded. */
+  #recordResult(result: DestinationResult): void {
+    const prev = this.#sweep.get(result.id);
+    this.#sweep.set(result.id, {
+      storedUnderCurrentKey: (prev?.storedUnderCurrentKey ?? false) || result.stored,
+      uploadErrorCode: result.uploadErrorCode,
+      pruneErrorCode: result.stored ? result.pruneErrorCode : (prev?.pruneErrorCode ?? null),
+    });
   }
 
   async stop(): Promise<void> {
@@ -210,10 +316,24 @@ export class BackupSupervisor {
   async #teardown(): Promise<void> {
     this.#controller?.abort();
     if (this.#worker !== undefined) await this.#worker.catch(() => {});
+    this.#closeBackends(this.#backends.splice(0));
     if (this.#db !== undefined) await this.#db.close().catch(() => {});
     this.#controller = undefined;
     this.#worker = undefined;
     this.#db = undefined;
+  }
+
+  #closeBackends(backends: StorageBackend[]): void {
+    for (const backend of backends) {
+      try {
+        backend.close();
+      } catch (err) {
+        this.#deps.log("warn", "backup.destination_close_failed", {
+          destination: backend.id,
+          errorCode: codeOf(err),
+        });
+      }
+    }
   }
 
   #now(): Date {

@@ -143,7 +143,13 @@ describe("backupAlertSource", () => {
     const status: BackupStatus = {
       configured: true,
       destinations: [
-        { id: "local", lastBackupAt: "2026-09-10T00:00:00Z", ageSeconds: 999999, stale: true },
+        {
+          id: "local",
+          lastBackupAt: "2026-09-10T00:00:00Z",
+          ageSeconds: 999999,
+          stale: true,
+          readErrorCode: null,
+        },
       ],
     };
     const alerts = await src(status, { failed: new Map() }).read(ctx);
@@ -157,10 +163,47 @@ describe("backupAlertSource", () => {
     });
   });
 
+  it("raises destination_overdue and destination_failed for a destination whose status read failed", async () => {
+    const outcomes: BackupOutcomeHolder = { failed: new Map() };
+    recordBackupOutcome(outcomes, "bucket", false, "2026-09-15T11:59:00Z");
+    const status: BackupStatus = {
+      configured: true,
+      destinations: [
+        {
+          id: "bucket",
+          lastBackupAt: null,
+          ageSeconds: null,
+          stale: true,
+          readErrorCode: "backup.destination_timed_out",
+        },
+        {
+          id: "local",
+          lastBackupAt: NOW.toISOString(),
+          ageSeconds: 5,
+          stale: false,
+          readErrorCode: null,
+        },
+      ],
+    };
+    const alerts = await src(status, outcomes).read(ctx);
+    expect(alerts.map((a) => [a.key, a.since])).toEqual([
+      ["backup.destination_overdue:bucket", null],
+      ["backup.destination_failed:bucket", "2026-09-15T11:59:00Z"],
+    ]);
+  });
+
   it("raises nothing for a fresh, non-failed destination", async () => {
     const status: BackupStatus = {
       configured: true,
-      destinations: [{ id: "local", lastBackupAt: NOW.toISOString(), ageSeconds: 5, stale: false }],
+      destinations: [
+        {
+          id: "local",
+          lastBackupAt: NOW.toISOString(),
+          ageSeconds: 5,
+          stale: false,
+          readErrorCode: null,
+        },
+      ],
     };
     expect(await src(status, { failed: new Map() }).read(ctx)).toEqual([]);
   });
@@ -170,7 +213,15 @@ describe("backupAlertSource", () => {
     recordBackupOutcome(outcomes, "local", false, "2026-09-15T11:59:00Z");
     const status: BackupStatus = {
       configured: true,
-      destinations: [{ id: "local", lastBackupAt: NOW.toISOString(), ageSeconds: 5, stale: false }],
+      destinations: [
+        {
+          id: "local",
+          lastBackupAt: NOW.toISOString(),
+          ageSeconds: 5,
+          stale: false,
+          readErrorCode: null,
+        },
+      ],
     };
     let alerts = await src(status, outcomes).read(ctx);
     expect(alerts).toMatchObject([
@@ -376,7 +427,13 @@ describe("backupAlertSource and the bucket copy", () => {
     const status: BackupStatus = {
       configured: true,
       destinations: [
-        { id: "local", lastBackupAt: "2026-09-10T00:00:00Z", ageSeconds: 999999, stale: true },
+        {
+          id: "local",
+          lastBackupAt: "2026-09-10T00:00:00Z",
+          ageSeconds: 999999,
+          stale: true,
+          readErrorCode: null,
+        },
       ],
     };
     const alerts = await src(status, none, () =>

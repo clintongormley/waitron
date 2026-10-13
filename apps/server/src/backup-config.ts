@@ -23,6 +23,8 @@ export interface BackupConfig {
   retainDays: number;
   /** How long since the last successful backup before the box reports it stale. */
   staleAfterMs: number;
+  /** How long one destination's upload and its pruning may run before both are stopped. */
+  destinationTimeoutMs: number;
   /** `undefined` when never rotated. Reported in box status only; it gates no behaviour. */
   keyRotatedAt: string | undefined;
 }
@@ -31,6 +33,9 @@ const DEFAULT_BACKUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_BACKUP_RETAIN = 7;
 const DEFAULT_BACKUP_RETAIN_DAYS = 30;
 const DEFAULT_BACKUP_STALE_AFTER_MS = 2 * 24 * 60 * 60 * 1000;
+const DEFAULT_DESTINATION_TIMEOUT_MS = 15 * 60 * 1000;
+const MIN_DESTINATION_TIMEOUT_MS = 30 * 1000;
+const MAX_DESTINATION_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 
 type Env = Record<string, string | undefined>;
 
@@ -78,6 +83,15 @@ function parseAt(raw: string | undefined): { hour: number; minute: number } | "a
   if (hour > 23 || minute > 59)
     throw new AppError("backup.schedule_invalid", { reason: "bad_time" });
   return { hour, minute };
+}
+
+function parseDestinationTimeout(env: Env): number {
+  const variable = "WAITRON_BACKUP_DESTINATION_TIMEOUT_MS";
+  const ms = positiveInt(env, variable, DEFAULT_DESTINATION_TIMEOUT_MS);
+  if (ms < MIN_DESTINATION_TIMEOUT_MS || ms > MAX_DESTINATION_TIMEOUT_MS) {
+    throw new AppError("server.config_invalid", { variable, reason: "timeout_out_of_range" });
+  }
+  return ms;
 }
 
 function parseDestinations(env: Env): BackupDestination[] {
@@ -181,6 +195,7 @@ export function loadBackupConfig(env: Env): BackupConfig | undefined {
     retain: positiveInt(env, "WAITRON_BACKUP_RETAIN", DEFAULT_BACKUP_RETAIN),
     retainDays: positiveInt(env, "WAITRON_BACKUP_RETAIN_DAYS", DEFAULT_BACKUP_RETAIN_DAYS),
     staleAfterMs: positiveInt(env, "WAITRON_BACKUP_STALE_AFTER_MS", DEFAULT_BACKUP_STALE_AFTER_MS),
+    destinationTimeoutMs: parseDestinationTimeout(env),
     keyRotatedAt: isUnset(env.WAITRON_BACKUP_KEY_ROTATED_AT)
       ? undefined
       : env.WAITRON_BACKUP_KEY_ROTATED_AT,

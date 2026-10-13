@@ -1,4 +1,4 @@
-import { chmod, mkdir, mkdtemp, rm } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, stat, statfs as fsStatfs } from "node:fs/promises";
 import { join } from "node:path";
 import type { Database } from "@waitron/db";
 import { recordBackupOutcome, type BackupOutcomeHolder } from "./alert-sources.js";
@@ -13,14 +13,16 @@ import { MAX_SLEEP_MS, nextFireMs, type ScheduleClock } from "./backup-schedule.
 import type { DeploymentEnvironment } from "./config.js";
 import { errnoOf } from "./errno.js";
 import { codeOf } from "@waitron/server-kit";
+import { AppError } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import {
   BACKUP_KEY_PREFIX,
   backupArchiveKey,
-  backupArchiveTimestamp,
   dumpFileName,
+  parseBackupArchiveKey,
 } from "./backup-keys.js";
-import { isPlainKey, type StorageBackend, type StorageCall } from "./storage-backend.js";
+import { withDestinationCall } from "./backup-destination-call.js";
+import type { StorageBackend, StorageCall } from "./storage-backend.js";
 import "./errors.js";
 
 export type ManifestBuilder = (deps: {
@@ -29,6 +31,13 @@ export type ManifestBuilder = (deps: {
   readonly environment: DeploymentEnvironment;
   readonly now: Date;
 }) => Promise<BackupManifest>;
+
+export interface DestinationResult {
+  id: string;
+  stored: boolean;
+  uploadErrorCode: string | null;
+  pruneErrorCode: string | null;
+}
 
 export interface BackupSweepDeps {
   backends: StorageBackend[];
@@ -52,8 +61,19 @@ export interface BackupSweepDeps {
   readClock: () => Promise<ScheduleClock>;
   signal: AbortSignal;
   sleep: (ms: number, signal: AbortSignal) => Promise<void>;
-  /** Fires only on a tick where at least one destination stored the archive. */
-  onStored?: () => void;
+  /**
+   * Each destination's result, as soon as its own call settles; codes only. A destination whose call
+   * finished is reported even when the run is stopped afterwards, so a caller tracking the current
+   * key ignores results from a replaced sweep (as the supervisor does). A call that fails once the
+   * run is stopped is not reported, even when its upload had already stored.
+   */
+  onDestinationResult?: (result: DestinationResult) => void;
+  /** A destination's upload stored, reported at once, before its pruning runs; like
+   * `onDestinationResult`, it can arrive from a run already stopped. That destination's later
+   * `onDestinationResult` carries the pruning's outcome. */
+  onUploaded?: (id: string) => void;
+  /** How long one destination's upload and its pruning may run, together. */
+  destinationTimeoutMs: number;
   onScheduled?: (at: number | null) => void;
   /** Read by the backups alert source, so a failed store shows before the freshness threshold. */
   outcomes?: BackupOutcomeHolder;
@@ -65,6 +85,32 @@ export interface BackupSweepDeps {
   archive: (outFile: string) => Promise<void>;
   buildManifest?: ManifestBuilder;
   now?: () => Date;
+  /**
+   * The venue database's current size. The staged copy and its ciphertext sit side by side in
+   * `stagingDir`, so a tick refuses when free space there is under twice this before the copy, and
+   * under the copy's own size after it. Advisory: nothing is reserved, and without this there is no
+   * check.
+   */
+  stagingEstimateBytes?: () => Promise<number>;
+  /** DI for tests; defaults to `node:fs/promises`'s `statfs`. */
+  statfs?: (path: string) => Promise<{ bavail: number; frsize: number }>;
+}
+
+/** Throws `backup.staging_space_low` when the staging folder's filesystem reports less than
+ * `neededBytes` free; a filesystem that cannot report is let through. */
+async function checkStagingSpace(
+  deps: Pick<BackupSweepDeps, "stagingDir" | "statfs">,
+  neededBytes: number,
+): Promise<void> {
+  let availableBytes: number;
+  try {
+    const fs = await (deps.statfs ?? fsStatfs)(deps.stagingDir);
+    availableBytes = fs.bavail * fs.frsize;
+  } catch {
+    return;
+  }
+  if (availableBytes < neededBytes)
+    throw new AppError("backup.staging_space_low", { neededBytes, availableBytes });
 }
 
 /**
@@ -105,10 +151,13 @@ export async function runOnce(
     budget.addEntry("manifest.json", Buffer.byteLength(JSON.stringify(manifest)));
     budget.addEntry("db.dump", 0);
     await mkdir(deps.stagingDir, { recursive: true, mode: 0o700 });
+    if (deps.stagingEstimateBytes)
+      await checkStagingSpace(deps, 2 * (await deps.stagingEstimateBytes()));
     await deps.archive(staged);
     dumped = true;
     // The whole venue database in plaintext, created under the process umask.
     await chmod(staged, 0o600);
+    if (deps.stagingEstimateBytes) await checkStagingSpace(deps, (await stat(staged)).size);
     const metadata = assembleArchiveEntries(manifest, null, parts);
     const entries: ArchiveInputEntry[] = [
       { kind: "bytes", entry: metadata[0] },
@@ -117,59 +166,89 @@ export async function runOnce(
     ];
     encryptedDir = await mkdtemp(join(deps.stagingDir, "backup-encrypt-"));
     const ciphertext = join(encryptedDir, "artifact");
-    await encryptArtifactFile(packArchiveStream(entries), ciphertext, deps.recoveryKey);
+    await encryptArtifactFile(
+      packArchiveStream(entries),
+      ciphertext,
+      deps.recoveryKey,
+      deps.signal,
+    );
     const key = backupArchiveKey(stamp);
-    const call: StorageCall = { signal: new AbortController().signal };
-    let anyStored = false;
+    // Every destination call has settled before `finally` removes the ciphertext they read.
     await Promise.allSettled(
       deps.backends.map(async (backend) => {
-        // Separate from the whole try: a prune fault must not record a stored archive as failed.
         let stored = false;
+        let errorCode: string | null = null;
         try {
-          await backend.putFile(key, ciphertext, call);
-          stored = true;
-          anyStored = true;
-          if (deps.outcomes)
-            recordBackupOutcome(deps.outcomes, backend.id, true, stamp.toISOString());
-          await pruneBackend(backend, deps.retain, deps.retainDays, nowMs, call);
+          await withDestinationCall(deps.signal, deps.destinationTimeoutMs, async (call) => {
+            await backend.putFile(key, ciphertext, call);
+            stored = true;
+            deps.onUploaded?.(backend.id);
+            if (deps.outcomes)
+              recordBackupOutcome(deps.outcomes, backend.id, true, stamp.toISOString());
+            await pruneBackend(backend, deps.retain, deps.retainDays, nowMs, call, key);
+          });
           deps.log("info", "backup.destination_completed", { destination: backend.id, key });
         } catch (err) {
+          if (deps.signal.aborted) return;
           // `codeOf` maps only AppErrors.
-          deps.log("warn", "backup.destination_failed", {
-            destination: backend.id,
-            errorCode: codeOf(err),
-            errno: errnoOf(err),
-          });
-          if (deps.outcomes && !stored)
-            recordBackupOutcome(deps.outcomes, backend.id, false, stamp.toISOString());
+          errorCode = codeOf(err);
+          const fields = { destination: backend.id, errorCode, errno: errnoOf(err) };
+          if (stored) {
+            deps.log("warn", "backup.destination_prune_failed", fields);
+          } else {
+            deps.log("warn", "backup.destination_failed", fields);
+            if (deps.outcomes)
+              recordBackupOutcome(deps.outcomes, backend.id, false, stamp.toISOString());
+          }
         }
+        deps.onDestinationResult?.({
+          id: backend.id,
+          stored,
+          uploadErrorCode: stored ? null : errorCode,
+          pruneErrorCode: stored ? errorCode : null,
+        });
       }),
     );
-    if (anyStored) deps.onStored?.();
   } finally {
     if (encryptedDir) await rm(encryptedDir, { recursive: true, force: true });
     if (dumped) await rm(staged, { force: true });
   }
 }
 
-/** Deletes an artifact past EITHER cap: beyond the `retain` newest (`list` is newest-first), or older
- * than `retainDays` by the stamp in its key, never the file's mtime. A listed name the destination
- * cannot address is left where it is, so it cannot stop the rest being pruned. */
+/** The limit S3 states for one multi-object delete, quoted at `DELETE_BATCH_KEYS` in
+ * `packages/stream/src/s3-store.ts`; the bucket destination's `s3-file-store.ts` batches by the same
+ * number. */
+const DELETE_BATCH = 1000;
+
+/** Deletes an archive past EITHER cap: beyond the `retain` newest, or older than `retainDays`, both
+ * by the stamp in its key, never the file's mtime. Only a name {@link parseBackupArchiveKey} reads
+ * is an archive; any other name is left where it is and does not take a kept slot. `justStored`,
+ * the archive this run put, ranks first among archives sharing its stamp and is never deleted. */
 export async function pruneBackend(
   backend: StorageBackend,
   retain: number,
   retainDays: number,
   nowMs: number,
   call: StorageCall,
+  justStored?: string,
 ): Promise<void> {
-  const objects = (await backend.list(BACKUP_KEY_PREFIX, call)).filter((obj) =>
-    isPlainKey(obj.key),
+  const archives = (await backend.list(BACKUP_KEY_PREFIX, call)).flatMap(({ key }) => {
+    const parsed = parseBackupArchiveKey(key);
+    return parsed === null ? [] : [{ key, ms: parsed.timestamp.getTime() }];
+  });
+  const rank = (key: string) => (key === justStored ? 1 : 0);
+  archives.sort(
+    (a, b) =>
+      b.ms - a.ms || rank(b.key) - rank(a.key) || (a.key < b.key ? 1 : a.key > b.key ? -1 : 0),
   );
   const maxAgeMs = retainDays * 24 * 60 * 60 * 1000;
-  const toDelete = objects.filter(
-    (obj, i) => i >= retain || nowMs - backupArchiveTimestamp(obj.key).getTime() > maxAgeMs,
-  );
-  await Promise.all(toDelete.map((obj) => backend.delete(obj.key, call)));
+  const toDelete = archives
+    .filter(
+      (archive, i) => archive.key !== justStored && (i >= retain || nowMs - archive.ms > maxAgeMs),
+    )
+    .map((archive) => archive.key);
+  for (let i = 0; i < toDelete.length; i += DELETE_BATCH)
+    await backend.deleteMany(toDelete.slice(i, i + DELETE_BATCH), call);
 }
 
 /**

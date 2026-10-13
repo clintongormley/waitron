@@ -79,16 +79,35 @@ describe("collectBoxStatus", () => {
             lastBackupAt: "2026-08-29T09:00:00.000Z",
             ageSeconds: 3600,
             stale: false,
+            readErrorCode: null,
           },
-          { id: "offsite", lastBackupAt: null, ageSeconds: null, stale: true },
+          {
+            id: "offsite",
+            lastBackupAt: null,
+            ageSeconds: null,
+            stale: true,
+            readErrorCode: "backup.destination_timed_out",
+          },
         ],
       }),
     });
     expect(status.backup).toEqual({
       configured: true,
       destinations: [
-        { id: "primary", lastBackupAt: "2026-08-29T09:00:00.000Z", ageSeconds: 3600, stale: false },
-        { id: "offsite", lastBackupAt: null, ageSeconds: null, stale: true },
+        {
+          id: "primary",
+          lastBackupAt: "2026-08-29T09:00:00.000Z",
+          ageSeconds: 3600,
+          stale: false,
+          readErrorCode: null,
+        },
+        {
+          id: "offsite",
+          lastBackupAt: null,
+          ageSeconds: null,
+          stale: true,
+          readErrorCode: "backup.destination_timed_out",
+        },
       ],
     });
   });

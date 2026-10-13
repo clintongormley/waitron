@@ -92,6 +92,7 @@ if (request.command === "capture") {
           async deleteMany() {
             throw new Error("Capture does not prune Cloud retention");
           },
+          close() {},
         },
       ],
       db: store.venue,
@@ -103,6 +104,7 @@ if (request.command === "capture") {
       stagingDir: validation.stagingDir,
       retain: 100,
       retainDays: 3650,
+      destinationTimeoutMs: 15 * 60 * 1000,
       signal: new AbortController().signal,
       log: () => {},
       archive: (file) => store.venue.archiveTo(file),
