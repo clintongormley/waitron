@@ -30,8 +30,8 @@ export function formatDate(date: LocalDate): string {
   );
 }
 
-/** A date's weekday, "M" or "Monday", in the dashboard's language. */
-export function formatWeekday(date: LocalDate, style: "narrow" | "long"): string {
+/** A date's weekday, "M", "Mon" or "Monday", in the dashboard's language. */
+export function formatWeekday(date: LocalDate, style: "narrow" | "short" | "long"): string {
   return dateFormat({ weekday: style }).format(asUtc(date));
 }
 

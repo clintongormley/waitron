@@ -106,6 +106,13 @@ const en = {
   "year.add_special": "+ Special day",
   "year.holidays_unavailable": "Public holidays for {year} are not available yet",
   "year.town_holidays": "Town holidays are not in the official lists — add them as special days.",
+  "month.previous": "Previous month",
+  "month.next": "Next month",
+  "month.year_back": "Back to {year}",
+  "month.rows": "Rows:",
+  "month.department_closed": "{name} closed",
+  "month.zone_closed": "{name} closed {start}–{end}",
+  "month.range": "{name} {start}–{end}",
 
   "venue.zone_open_with_department": "Open whenever the department is",
   "venue.zone_closed_days": "Closed at some times on {count} days",
@@ -869,6 +876,13 @@ const es: Record<keyof typeof en, string> = {
   "year.holidays_unavailable": "Los festivos oficiales de {year} aún no están disponibles",
   "year.town_holidays":
     "Las fiestas locales no están en las listas oficiales: añádelas como días especiales.",
+  "month.previous": "Mes anterior",
+  "month.next": "Mes siguiente",
+  "month.year_back": "Volver a {year}",
+  "month.rows": "Filas:",
+  "month.department_closed": "{name}: cerrado",
+  "month.zone_closed": "{name}: cerrado {start}–{end}",
+  "month.range": "{name} {start}–{end}",
 
   "venue.zone_open_with_department": "Abierta cuando lo está el departamento",
   "venue.zone_closed_days": "Cerrada en algunas franjas de {count} días",
