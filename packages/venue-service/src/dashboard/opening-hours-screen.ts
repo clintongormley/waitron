@@ -156,7 +156,8 @@ export class OpeningHoursScreen extends LitElement {
     const shown: View =
       view === "year" || view === "periods" || view === "day" || view === "week"
         ? view
-        : view === null && !this.namesWeek(new URL(navigationGuardFor(window)?.href ?? location.href))
+        : view === null &&
+            !this.namesWeek(new URL(navigationGuardFor(window)?.href ?? location.href))
           ? "year"
           : "week";
     if (shown !== this.view) this.specialReadError = "";
@@ -987,9 +988,7 @@ export class OpeningHoursScreen extends LitElement {
         !this.model
           ? nothing
           : html` ${
-                (department || this.view === "week") &&
-                this.view !== "day" &&
-                this.view !== "year"
+                (department || this.view === "week") && this.view !== "day" && this.view !== "year"
                   ? html`<div class="chooser">
                       <wt-combobox
                         name="departmentId"
@@ -1063,29 +1062,29 @@ export class OpeningHoursScreen extends LitElement {
                   ${
                     this.view === "year"
                       ? html`${this.yearReadError ? html`<p role="alert" data-test="year-read-error">${this.yearReadError}</p>` : nothing}
-                        <opening-hours-year
-                          .model=${this.yearModel}
-                          .api=${this.api}
-                          .areaApi=${this.areaWrites}
-                          .specialDays=${this.knownSpecialDays}
-                          .readOnly=${this.readOnly}
-                          @special-day-action=${this.openNamedDay}
-                          @season-changed=${(event: Event) => {
-                            event.stopPropagation();
-                            this.api.rereadWithSpecialDays();
-                          }}
-                          @year-change=${(event: CustomEvent<{ year: number }>) => {
-                            event.stopPropagation();
-                            void Promise.resolve(
-                              this.url.write({
-                                dashboard: "opening-hours",
-                                view: "year",
-                                year: String(event.detail.year),
-                              }),
-                            ).then(() => this.followUrl());
-                          }}
-                          @year-month-open=${this.openDay}
-                        ></opening-hours-year>`
+                          <opening-hours-year
+                            .model=${this.yearModel}
+                            .api=${this.api}
+                            .areaApi=${this.areaWrites}
+                            .specialDays=${this.knownSpecialDays}
+                            .readOnly=${this.readOnly}
+                            @special-day-action=${this.openNamedDay}
+                            @season-changed=${(event: Event) => {
+                              event.stopPropagation();
+                              this.api.rereadWithSpecialDays();
+                            }}
+                            @year-change=${(event: CustomEvent<{ year: number }>) => {
+                              event.stopPropagation();
+                              void Promise.resolve(
+                                this.url.write({
+                                  dashboard: "opening-hours",
+                                  view: "year",
+                                  year: String(event.detail.year),
+                                }),
+                              ).then(() => this.followUrl());
+                            }}
+                            @year-month-open=${this.openDay}
+                          ></opening-hours-year>`
                       : nothing
                   }
                 </div>
