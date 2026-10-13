@@ -2520,9 +2520,39 @@ describe("Month view", () => {
     expect(form.shadowRoot!.querySelector("[data-test=edit-date-hours]")).toBeNull();
   });
 
-  it("shows the month when the date view names no valid date", async () => {
-    const { el, view } = await monthMount("/manage/opening-hours/view/date/date/2026-02-30");
-    await shown(view, "2026-10");
+  it.each([
+    ["names no date", "/manage/opening-hours/view/date"],
+    ["names a date that is not one", "/manage/opening-hours/view/date/date/2026-02-30"],
+  ])(
+    "opens the per-date editor on the venue's business day when the date view %s",
+    async (_, address) => {
+      const { el, view, months } = await monthMount(address);
+      await expect.poll(() => el.shadowRoot!.querySelector("opening-hours-day")).not.toBeNull();
+      await expect
+        .poll(() => el.shadowRoot!.querySelector("opening-hours-day")!.date)
+        .toBe("2026-10-12");
+      expect(view()).toBeNull();
+      expect(months).toEqual([]);
+    },
+  );
+
+  it.each([
+    ["en", "/manage/opening-hours/view/date/date/2026-12-14", "‹ December 2026", "2026-12"],
+    ["es", "/manage/opening-hours/view/date/date/2026-12-14", "‹ diciembre 2026", "2026-12"],
+    ["en", "/manage/opening-hours/view/date", "‹ October 2026", "2026-10"],
+  ])("the date view in %s links back to its month (%s)", async (locale, address, text, month) => {
+    setLocale(locale);
+    const { el, view } = await monthMount(address);
+    await expect
+      .poll(() => el.shadowRoot!.querySelector<HTMLElement>("[data-test=month-back]"))
+      .not.toBeNull();
+    const back = el.shadowRoot!.querySelector<HTMLElement>("[data-test=month-back]")!;
+    expect(back.textContent!.replace(/\s+/g, " ").trim()).toBe(text);
+    back.click();
+    await expect
+      .poll(() => location.pathname)
+      .toBe(`/manage/opening-hours/view/month/month/${month}`);
+    await expect.poll(() => view()?.model?.month).toBe(month);
     expect(el.shadowRoot!.querySelector("opening-hours-day")).toBeNull();
   });
 

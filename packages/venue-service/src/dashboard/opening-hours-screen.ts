@@ -48,7 +48,7 @@ import {
   parseCalendarYear,
   weekdayOf,
 } from "../hours-rules.js";
-import { format, formatDate } from "./hours-view.js";
+import { format, formatDate, formatMonthName } from "./hours-view.js";
 import { t } from "./strings.js";
 import { chosenSeasonId, seasonOptions } from "./season-choice.js";
 
@@ -87,6 +87,20 @@ export class OpeningHoursScreen extends LitElement {
       }
       a {
         color: var(--wt-color-primary-text);
+      }
+      .month-back {
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: var(--wt-color-primary-text);
+        font: inherit;
+        cursor: pointer;
+        min-height: var(--wt-tap-min);
+        text-transform: capitalize;
+      }
+      .month-back:focus-visible {
+        outline: var(--wt-field-line-width-active) solid var(--wt-color-focus);
+        outline-offset: var(--wt-focus-offset);
       }
       .toolbar {
         display: flex;
@@ -414,10 +428,8 @@ export class OpeningHoursScreen extends LitElement {
       },
     );
   }
-  /** The month drawn: the month view's, or the date view's when it names no valid date. */
   private shownMonth() {
-    if (!this.model || !(this.view === "month" || (this.view === "date" && !this.dayDate)))
-      return "";
+    if (!this.model || this.view !== "month") return "";
     return (
       this.requestedMonth ||
       (businessDateToday(this.model) || new Date().toISOString().slice(0, 10)).slice(0, 7)
@@ -972,6 +984,24 @@ export class OpeningHoursScreen extends LitElement {
       ></ordinary-date-dialog>`,
     );
   }
+  /** "‹ December 2026" above the per-date editor, back to the shown date's month. */
+  private monthBack() {
+    const month = (this.dayDate || businessDateToday(this.model!)).slice(0, 7);
+    if (!month) return nothing;
+    const name = `${formatMonthName(Number(month.slice(5, 7)))} ${Number(month.slice(0, 4))}`;
+    return html`<button
+      type="button"
+      class="month-back"
+      data-test="month-back"
+      aria-label=${format("month.year_back", { year: name })}
+      @click=${() =>
+        void Promise.resolve(
+          this.url.write({ dashboard: "opening-hours", view: "month", month, date: null }),
+        ).then(() => this.followUrl())}
+    >
+      ‹ ${name}
+    </button>`;
+  }
   private month() {
     const write = (changes: Record<string, string | null>) =>
       void Promise.resolve(this.url.write({ dashboard: "opening-hours", ...changes })).then(() =>
@@ -1193,14 +1223,14 @@ export class OpeningHoursScreen extends LitElement {
                             }}
                             @year-month-open=${this.openMonth}
                           ></opening-hours-year>`
-                      : this.view === "date" && this.dayDate
-                        ? html`<opening-hours-day
-                            .api=${this.api}
-                            .model=${this.model}
-                            .date=${this.dayDate}
-                            .readOnly=${this.readOnly}
-                            @special-day-action=${this.openNamedDay}
-                          ></opening-hours-day>`
+                      : this.view === "date"
+                        ? html`${this.monthBack()}<opening-hours-day
+                              .api=${this.api}
+                              .model=${this.model}
+                              .date=${this.dayDate}
+                              .readOnly=${this.readOnly}
+                              @special-day-action=${this.openNamedDay}
+                            ></opening-hours-day>`
                         : this.shownMonth()
                           ? this.month()
                           : nothing
