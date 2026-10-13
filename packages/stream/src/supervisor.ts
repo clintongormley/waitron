@@ -137,7 +137,7 @@ export const RESTART_BACKOFF_MS: readonly number[] = [
 export const HEALTHY_RUN_MS = 60_000;
 /** How long `litestream version` may take. */
 const VERSION_TIMEOUT_MS = 10_000;
-/** How long `stop()` waits for a run blocked on a bucket call before leaving it behind. */
+/** How long `stop()` waits for the run to end before leaving it behind. */
 const STOP_WAIT_MS = 1_000;
 /** How often old generations are pruned, at most. */
 export const PRUNE_EVERY_MS = 24 * 60 * 60_000;
@@ -329,10 +329,7 @@ export class StreamSupervisor {
     this.#set("off", "supervisor_failed");
   }
 
-  /**
-   * Stops Litestream and the run. A run blocked on a bucket call that never answers is left behind
-   * after a short wait.
-   */
+  /** Stops Litestream and the run. */
   async stop(): Promise<void> {
     const controller = this.#controller;
     if (controller === undefined) return;

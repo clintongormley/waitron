@@ -27,8 +27,8 @@ export async function abortableSleep(ms: number, signal: AbortSignal | undefined
 /**
  * Starts `send` unless `signal` is already cancelled, then answers its outcome, or the cancellation
  * as soon as `signal` aborts, whichever comes first.
- * The client's own wait between attempts can outlive a cancelled call by up to its backoff plus
- * Retry-After, and sends nothing.
+ * The client's own wait between attempts may outlive a cancelled call; it sends nothing more
+ * (`s3-store.cancel.test.ts`).
  */
 export function sendUnlessCancelled<T>(
   send: () => Promise<T>,
