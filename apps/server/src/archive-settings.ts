@@ -294,7 +294,7 @@ const STREAM_VENUES = "venues/";
  * Two spellings the S3 client sends to one URL compare equal. No endpoint is taken to be AWS's
  * regional or global endpoint: wrongly calling two places one only refuses more.
  */
-function endpointPlace(bucket: BucketConfig): string {
+function endpointPlace(bucket: { endpoint?: string; region: string }): string {
   if (bucket.endpoint === undefined) return AWS;
   const url = new URL(bucket.endpoint);
   const place = `${url.protocol}//${url.host}${url.pathname.replace(/\/$/, "")}`;
@@ -304,25 +304,37 @@ function endpointPlace(bucket: BucketConfig): string {
     : place;
 }
 
+/** An archive folder: its bucket, and the folder's whole key prefix there (`archiveNamespace`). */
+export interface ArchivePlace {
+  endpoint?: string;
+  region: string;
+  bucket: string;
+  namespace: string;
+}
+
+export function archivePlace(bucket: BucketConfig, venueId: string): ArchivePlace {
+  return {
+    ...(bucket.endpoint === undefined ? {} : { endpoint: bucket.endpoint }),
+    region: bucket.region,
+    bucket: bucket.bucket,
+    namespace: archiveNamespace(bucket.prefix, venueId),
+  };
+}
+
 /** Refuses an archive folder and a stream's venue folders that would share keys in one bucket. */
-export function refuseStreamOverlap(
-  bucket: BucketConfig,
-  venueId: string,
-  stream: StreamSettings | null,
-): void {
+export function refuseStreamOverlap(archive: ArchivePlace, stream: StreamSettings | null): void {
   if (stream === null) return;
   const s = stream.bucket;
   if (
-    endpointPlace(s) !== endpointPlace(bucket) ||
-    s.region !== bucket.region ||
-    s.bucket !== bucket.bucket
+    endpointPlace(s) !== endpointPlace(archive) ||
+    s.region !== archive.region ||
+    s.bucket !== archive.bucket
   ) {
     return;
   }
-  const archive = archiveNamespace(bucket.prefix, venueId);
   // Every venue's stream folder sits under one `venues/` folder (`venuePrefix`, @waitron/stream).
   const venues = normalisePrefix(s.prefix) + STREAM_VENUES;
-  if (archive.startsWith(venues) || venues.startsWith(archive)) {
+  if (archive.namespace.startsWith(venues) || venues.startsWith(archive.namespace)) {
     throw new AppError("backup.archive_namespace_overlap", {});
   }
 }
@@ -388,8 +400,7 @@ export function resolveArchiveChoice(
     }
     case "custom-s3": {
       const bucket = customBucket(destination, ctx);
-      archiveNamespace(bucket.prefix, ctx.venueId);
-      refuseStreamOverlap(bucket, ctx.venueId, ctx.stream);
+      refuseStreamOverlap(archivePlace(bucket, ctx.venueId), ctx.stream);
       return { kind: "s3", id: BUCKET_ID, bucket, venueId: ctx.venueId };
     }
     default:

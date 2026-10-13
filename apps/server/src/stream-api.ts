@@ -17,9 +17,14 @@ import {
   type ProbeResult,
   type StreamView,
 } from "@waitron/stream";
-import { readArchiveSettings, refuseStreamOverlap } from "./archive-settings.js";
+import {
+  archivePlace,
+  readArchiveSettings,
+  refuseStreamOverlap,
+  type ArchivePlace,
+} from "./archive-settings.js";
 import { mintRecoveryKey, readHeldKey } from "./backup-config.js";
-import { keyFingerprint } from "./backup-supervisor.js";
+import { keyFingerprint, type DestinationView } from "./backup-supervisor.js";
 import type { Logger } from "./logger.js";
 import type { SealedStateRefresher } from "./sealed-state.js";
 import type { Turns } from "./backup-turns.js";
@@ -41,6 +46,8 @@ export interface StreamApiDeps {
   isPrimary: () => boolean;
   /** True when the environment sets a variable `BACKUP_ENV_KEYS` (`backup-config.ts`) lists. */
   isManagedByEnvironment: () => boolean;
+  /** The archive destinations the backup duty has loaded (`BackupSupervisor.current()`). */
+  loadedArchives: () => readonly DestinationView[];
   readRecoveryKey: () => Promise<string | undefined>;
   writeRecoveryKey: (key: string) => Promise<void>;
   /** Re-locks this node's secrets row under the current recovery key. Never throws. */
@@ -84,6 +91,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "backup.stream_test_failed": 422,
   "backup.stream_not_configured": 409,
   "backup.archive_namespace_overlap": 400,
+  "backup.archive_settings_invalid": 500,
   "backup.stream_signer_missing": 409,
   "backup.recovery_key_missing": 409,
   // The bucket gave no answer at all: not a refusal of the owner's settings, so not 422.
@@ -115,12 +123,32 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
     if (!result.ok) throw new AppError("backup.stream_test_failed", { reason: result.reason });
   };
 
-  const refuseArchiveOverlap = async (bucket: BucketConfig): Promise<void> => {
+  const archivePlaces = async (): Promise<ArchivePlace[]> => {
+    // A leftover dashboard record is not checked: boot never reads one while the environment owns
+    // the settings (`loadBackupSettings`).
+    if (deps.isManagedByEnvironment()) {
+      return deps.loadedArchives().flatMap((d) =>
+        d.kind === "s3"
+          ? [
+              {
+                ...(d.endpoint === null ? {} : { endpoint: d.endpoint }),
+                region: d.region,
+                bucket: d.bucket,
+                namespace: d.namespace,
+              },
+            ]
+          : [],
+      );
+    }
     const archives = await readArchiveSettings(deps.db, deps.ring);
-    for (const d of archives?.destinations ?? []) {
-      if (d.kind === "s3") {
-        refuseStreamOverlap(d.bucket, d.venueId, { venueId: deps.venueId, bucket });
-      }
+    return (archives?.destinations ?? []).flatMap((d) =>
+      d.kind === "s3" ? [archivePlace(d.bucket, d.venueId)] : [],
+    );
+  };
+
+  const refuseArchiveOverlap = async (bucket: BucketConfig): Promise<void> => {
+    for (const place of await archivePlaces()) {
+      refuseStreamOverlap(place, { venueId: deps.venueId, bucket });
     }
   };
 

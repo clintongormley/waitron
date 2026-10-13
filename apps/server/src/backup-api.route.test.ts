@@ -1437,6 +1437,7 @@ describe("backup admin routes", () => {
         venueId: "c0000000-0000-4000-8000-000000000002",
         isPrimary: () => true,
         isManagedByEnvironment: () => false,
+        loadedArchives: () => [],
         readRecoveryKey: readKey,
         writeRecoveryKey: (recoveryKey) =>
           writeRecoveryKey(sc.stateDir, { recoveryKey, keyRotatedAt: undefined }),
@@ -1608,6 +1609,7 @@ describe("backup admin routes", () => {
             venueId: VENUE,
             isPrimary: () => true,
             isManagedByEnvironment: () => false,
+            loadedArchives: () => [],
             readRecoveryKey: async () => loadRecoveryKey(await loadBoxEnv({}, sc.stateDir)),
             writeRecoveryKey: async () => {},
             sealedState: { refresh: async () => "sealed" },

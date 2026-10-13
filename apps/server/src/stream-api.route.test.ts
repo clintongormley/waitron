@@ -22,7 +22,7 @@ import {
   type StreamStatus,
 } from "@waitron/stream";
 import { ARCHIVE_PURPOSE, writeArchiveSettings } from "./archive-settings.js";
-import { keyFingerprint } from "./backup-supervisor.js";
+import { destinationView, keyFingerprint } from "./backup-supervisor.js";
 import { createTurns, type Turns } from "./backup-turns.js";
 import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
@@ -190,6 +190,7 @@ function harness(overrides: Partial<StreamApiDeps> = {}, startKey?: string): Har
     venueId: VENUE_ID,
     isPrimary: () => true,
     isManagedByEnvironment: () => false,
+    loadedArchives: () => [],
     readRecoveryKey: async () => key.value,
     writeRecoveryKey: vi.fn(async (k: string) => {
       order.push("write-key");
@@ -849,6 +850,126 @@ describe("stream settings routes", () => {
           ...json(cookie, BODY),
         });
         expect(apart.status).toBe(200);
+      } finally {
+        await dropArchive();
+        await clearBucket();
+      }
+    });
+
+    const OVERLAPPING = { ...BODY, prefix: `archives/${VENUE_ID}` };
+
+    it("Save refuses a stream folder that an archive stored while Save tested its bucket overlaps", async () => {
+      await clearBucket();
+      let probing!: () => void;
+      const probed = new Promise<void>((resolve) => (probing = resolve));
+      let finishProbe!: () => void;
+      const probeHeld = new Promise<void>((resolve) => (finishProbe = resolve));
+      const { app, reload } = harness(
+        {
+          probe: vi.fn(async () => {
+            probing();
+            await probeHeld;
+            return { ok: true as const };
+          }),
+        },
+        "recovery-key-one-strong",
+      );
+      const cookie = await login(app);
+      try {
+        const pending = app.request("/api/backup/stream", {
+          method: "PUT",
+          ...json(cookie, OVERLAPPING),
+        });
+        await probed;
+        await holdArchive();
+        finishProbe();
+        const res = await pending;
+        expect(res.status).toBe(400);
+        expect(await res.json()).toMatchObject({
+          error: { code: "backup.archive_namespace_overlap" },
+        });
+        expect(reload).not.toHaveBeenCalled();
+        expect(await storedBucket()).toBeNull();
+      } finally {
+        finishProbe();
+        await dropArchive();
+        await clearBucket();
+      }
+    });
+
+    it("while the environment owns backups, a leftover dashboard record does not refuse Save", async () => {
+      await clearBucket();
+      await holdArchive();
+      try {
+        const { app } = harness({ isManagedByEnvironment: () => true }, "recovery-key-one-strong");
+        const cookie = await login(app);
+        const res = await app.request("/api/backup/stream", {
+          method: "PUT",
+          ...json(cookie, OVERLAPPING),
+        });
+        expect(res.status).toBe(200);
+      } finally {
+        await dropArchive();
+        await clearBucket();
+      }
+    });
+
+    it("while the environment owns backups, Save refuses a stream folder overlapping the environment's archive bucket", async () => {
+      await clearBucket();
+      try {
+        const { app, deps } = harness(
+          {
+            isManagedByEnvironment: () => true,
+            loadedArchives: () => [
+              destinationView({
+                kind: "s3",
+                id: "bucket",
+                bucket: archiveBucket,
+                venueId: VENUE_ID,
+              }),
+            ],
+          },
+          "recovery-key-one-strong",
+        );
+        const cookie = await login(app);
+        const res = await app.request("/api/backup/stream", {
+          method: "PUT",
+          ...json(cookie, OVERLAPPING),
+        });
+        expect(res.status).toBe(400);
+        expect(await res.json()).toMatchObject({
+          error: { code: "backup.archive_namespace_overlap" },
+        });
+        expect(deps.probe).not.toHaveBeenCalled();
+        // Control: the same bucket at its root streams under `venues/`, apart from `archives/`.
+        const apart = await app.request("/api/backup/stream", {
+          method: "PUT",
+          ...json(cookie, BODY),
+        });
+        expect(apart.status).toBe(200);
+      } finally {
+        await clearBucket();
+      }
+    });
+
+    it("a dashboard record that cannot be read refuses Save with the backup routes' status", async () => {
+      await clearBucket();
+      await withTransaction(suite.db, (tx) =>
+        putCredential(tx, RING, { purpose: ARCHIVE_PURPOSE, value: { settings: "{}" } }),
+      );
+      try {
+        const { app, reload } = harness({}, "recovery-key-one-strong");
+        const cookie = await login(app);
+        const res = await app.request("/api/backup/stream", {
+          method: "PUT",
+          ...json(cookie, BODY),
+        });
+        expect(res.status).toBe(500);
+        expect(await res.json()).toMatchObject({
+          error: { code: "backup.archive_settings_invalid" },
+        });
+        expect(reload).not.toHaveBeenCalled();
+        expect(await storedBucket()).toBeNull();
       } finally {
         await dropArchive();
         await clearBucket();

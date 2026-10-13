@@ -1938,6 +1938,7 @@ async function bootServer(
       venueId: till.locationId,
       isPrimary: () => holders.singletonRole.current === "primary",
       isManagedByEnvironment: isBackupManagedByEnvironment,
+      loadedArchives: () => backupSupervisor.current().destinations,
       readRecoveryKey,
       writeRecoveryKey: (recoveryKey) =>
         writeRecoveryKey(config.stateDir, { recoveryKey, keyRotatedAt: undefined }),

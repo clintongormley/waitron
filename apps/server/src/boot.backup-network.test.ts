@@ -348,4 +348,44 @@ describe("trading with environment backup settings beside a sealed record", () =
       },
     );
   }, 60_000);
+
+  it("refuses a stream folder overlapping the environment's archive bucket", async () => {
+    stall.on = true;
+    const place = { endpoint: "https://s3.example.test", region: "eu-north-1", bucket: "owner" };
+    let cookie = "";
+    await bootAndTrade(
+      async () => {
+        cookie = await managerCookie();
+        return {
+          WAITRON_BACKUP_DESTINATIONS: JSON.stringify([
+            {
+              kind: "s3",
+              id: "offsite",
+              ...place,
+              accessKeyId: "AKIAENV",
+              secretAccessKey: "env-secret-access-key",
+            },
+          ]),
+          WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!",
+        };
+      },
+      async (_lines, { base, via }) => {
+        const res = await fetch(`${base}/api/backup/stream`, {
+          ...via,
+          method: "PUT",
+          headers: { cookie, "content-type": "application/json" },
+          body: JSON.stringify({
+            ...place,
+            prefix: `archives/${venue.cfg.locationId}`,
+            accessKeyId: "AKIASTREAM",
+            secretAccessKey: "stream-secret-0123456789",
+          }),
+        });
+        expect(res.status).toBe(400);
+        expect(await res.json()).toMatchObject({
+          error: { code: "backup.archive_namespace_overlap" },
+        });
+      },
+    );
+  }, 60_000);
 });
