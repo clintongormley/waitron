@@ -4312,6 +4312,7 @@ export class PrintersScreen extends LitElement {
     const printer = this.printers.find((p) => p.id === this.labelPrinterId);
     if (printer === undefined) return nothing;
     return html`<dashboard-equipment-label
+      .api=${this.api}
       kind="printer"
       .itemId=${printer.id}
       .name=${printer.name}

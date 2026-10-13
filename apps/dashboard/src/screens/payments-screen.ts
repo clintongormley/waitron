@@ -2194,6 +2194,7 @@ export class PaymentsScreen extends LitElement {
         this.labelReader === null
           ? nothing
           : html`<dashboard-equipment-label
+              .api=${this.api}
               kind="reader"
               .itemId=${this.labelReader.id}
               .name=${this.labelReader.name}

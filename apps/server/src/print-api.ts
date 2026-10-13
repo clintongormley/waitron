@@ -1,5 +1,7 @@
 // Load server-owned error codes; imported printing verbs load the printing registry.
 import "./errors.js";
+import { cardReaders } from "@waitron/payments";
+import { formatEquipmentLabel } from "./equipment-label.js";
 import { createPrinterProbes } from "./printer-probes.js";
 import { createPageTestPages, type PageTestPages } from "./page-test-pages.js";
 import { createPrinterBluetoothCommands } from "./printer-bluetooth-commands.js";
@@ -71,7 +73,7 @@ import { createEnrolRateLimiter, type EnrolRateLimiter } from "./enrol-rate-limi
 import type { PairingMode } from "./pairing-mode.js";
 import { isUuid } from "./till-session.js";
 import type { TillConfig } from "./till-config.js";
-import { requireEnum, requireString, requireUuidParam } from "@waitron/server-kit";
+import { requireBodyUuid, requireEnum, requireString, requireUuidParam } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import { previewPrintJob } from "./print-job-preview.js";
 import { formatTestPage } from "./test-page.js";
@@ -125,6 +127,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "device.join_full": 429,
   "device.join_rate_limited": 429,
   "printer.not_found": 404,
+  "reader.not_found": 404,
   "printer.probe_busy": 429,
   "printer.bluetooth_command_busy": 429,
   "printer.bluetooth_not_discovered": 409,
@@ -1227,6 +1230,56 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           reason: "calibration",
         });
         return queued;
+      });
+      return c.json(result, 202);
+    }),
+  );
+
+  app.post("/management-api/printers/:id/equipment-label", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const printerId = requireUuidParam(c.req.param("id"), "PrinterId");
+      const body = await readJsonBody<Record<string, unknown>>(c);
+      const kind = requireEnum(body.kind, "kind", ["printer", "reader"] as const);
+      const id = requireBodyUuid(body.id, "id");
+      const result = await gated(sessionId, async (tx) => {
+        const [target] = await tx
+          .select({ paperWidth: printers.paperWidth, resolution: printers.resolution })
+          .from(printers)
+          .where(
+            and(
+              eq(printers.id, printerId),
+              eq(printers.locationId, deps.cfg.locationId),
+              eq(printers.active, true),
+              isNull(printers.deletedAt),
+            ),
+          );
+        if (target === undefined) throw new AppError("printer.not_found", { id: printerId });
+        const [label] =
+          kind === "printer"
+            ? await tx
+                .select({ name: printers.name })
+                .from(printers)
+                .where(
+                  and(
+                    eq(printers.id, id),
+                    eq(printers.locationId, deps.cfg.locationId),
+                    isNull(printers.deletedAt),
+                  ),
+                )
+            : await tx
+                .select({ name: cardReaders.name })
+                .from(cardReaders)
+                .where(and(eq(cardReaders.id, id), isNull(cardReaders.deletedAt)));
+        if (label === undefined)
+          throw new AppError(kind === "printer" ? "printer.not_found" : "reader.not_found", { id });
+        return enqueuePrintJob(
+          tx,
+          deps.cfg,
+          printerId,
+          formatEquipmentLabel(target, { kind, id, name: label.name }),
+          "document",
+        );
       });
       return c.json(result, 202);
     }),

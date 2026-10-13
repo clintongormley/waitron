@@ -3305,8 +3305,8 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   [Detail](backlog/payments.md#what-m7b2-left-open-a-manager-clearing-a-stuck-card-payment-702)
 
 - **Slice 2 — the handheld NFC/QR link.** Also here: restoring `stripe_on_device` (Tap-to-Pay). NFC
-  (W102; printer pick-up settings, dialog reading and dashboard sticker writing/locking delivered;
-  reading on every screen, venue-printer labels and the box-address hardware check remain) and Tap-to-Pay
+  (W102; printer pick-up settings, dialog reading, dashboard sticker writing/locking and venue-printer labels delivered;
+  reading on every screen and the box-address hardware check remain) and Tap-to-Pay
   are still open. [Detail](backlog/payments.md#slice-2--the-handheld-nfcqr-link)
 
 - **The webhook `recordSale` hand-off** (Mode 3) and the reconcile remediation UI. The hand-off sits
