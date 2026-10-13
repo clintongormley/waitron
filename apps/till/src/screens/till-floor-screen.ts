@@ -1078,9 +1078,11 @@ export class TillFloorScreen extends LitElement {
         const ids = Array.isArray(refused.partIds) ? (refused.partIds as unknown[]) : [];
         const parts = ids.map(tableOf);
         if (parts.length === 0 || parts.some((each) => each === undefined)) return undefined;
-        const group = this.#mergeName(parts[0]!);
-        if (group === null || parts.some((each) => this.#mergeName(each!) !== group))
+        const joinId = parts[0]!.today?.joinId ?? null;
+        if (joinId === null || parts.some((each) => each!.today?.joinId !== joinId))
           return undefined;
+        const group = this.#mergeName(parts[0]!);
+        if (group === null) return undefined;
         const labels = parts.map((each) => each!.label);
         const sentence =
           labels.length === 1

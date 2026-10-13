@@ -5,6 +5,7 @@ import { codeMessage } from "../i18n/codes.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
 import "./till-floor-screen.js";
 import type { FloorAnswer, FloorZone, TableState, TableToday, TillApi } from "../api/client.js";
+import { mergeLabel } from "@waitron/ui";
 import { nextFloorMoment } from "../state/floor-today.js";
 
 const zone: FloorZone = {
@@ -630,6 +631,29 @@ describe("till-floor-screen: Reset table's refusals name the tables", () => {
       each.id === "c4" ? { ...each, today: { ...each.today!, joinId: "h" } } : each,
     );
     tables.push(table("patio", "Patio", 90, { joinId: "h" }, held));
+    const el = await mount(tables, api);
+
+    await pressResetTable(el, "c5");
+    expect(floorRefusal(el)).toBe(codeMessage("joined_table.tables_in_group"));
+  });
+
+  it("names neither the tables nor a group when the tables in the refusal are in different groups drawn with the same name", async () => {
+    const api = stubApi();
+    api.resetTableToday.mockRejectedValueOnce({
+      code: "joined_table.tables_in_group",
+      status: 409,
+      tableId: "long",
+      partIds: ["c3", "c4"],
+    });
+    const tables = [
+      longTable([], ["c3", "c4", "c5"]),
+      table("c3", "A", 50, { splitOffFrom: "long", joinId: "g" }, held),
+      table("c4", "A+B", 60, { splitOffFrom: "long", joinId: "h" }, held),
+      splitOff("c5", "Counter 5", 70),
+      table("bar", "B+C", 80, { joinId: "g" }, held),
+      table("patio", "C", 90, { joinId: "h" }, held),
+    ];
+    expect(mergeLabel(["A", "B+C"])).toBe(mergeLabel(["A+B", "C"]));
     const el = await mount(tables, api);
 
     await pressResetTable(el, "c5");
