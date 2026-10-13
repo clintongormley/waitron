@@ -167,11 +167,7 @@ export function planParts(bytes: number): { partBytes: number; parts: number } {
 
 const READ_CHUNK_BYTES = 64 * 1024;
 
-/**
- * A fresh read of `length` bytes at `start`, leaving the handle open for the next range.
- * `handle.createReadStream` is not used because, on Node v26.7.0, the handle's descriptor was -1
- * after one such stream had been read to its end, `autoClose: false` notwithstanding.
- */
+/** A fresh read of `length` bytes at `start`, leaving the handle open for the next range. */
 function rangeOf(handle: FileHandle, start: number, length: number): Readable {
   const end = start + length;
   let position = start;

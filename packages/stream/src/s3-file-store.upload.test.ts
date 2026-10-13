@@ -197,7 +197,6 @@ describe("a file of at most 8 MiB", () => {
           request.socket.destroy();
           return true;
         }
-        // Some S3-compatible stores answer a delete of a missing key this way.
         response.writeHead(404, xml);
         response.end(errorXml("NoSuchKey"));
         return true;
