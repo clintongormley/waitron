@@ -185,8 +185,11 @@ async function bootAndTrade(
       await afterTrading?.();
     } finally {
       stall.release();
-      if (server !== undefined) await server.close();
-      serverRunning = false;
+      try {
+        if (server !== undefined) await server.close();
+      } finally {
+        serverRunning = false;
+      }
       await close();
     }
   });

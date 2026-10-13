@@ -4366,9 +4366,11 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 - **`apps/server/README.md` (near line 230, the `WAITRON_SKIP_RETRY_MS` row) says the sleep clamp
   can round a value "past" a bound, which it cannot** — found by #653 while pruning comments. Two
   notes #653's prune deleted and nothing else recorded: nobody knows why the 5-second busy timeout
-  did not absorb a `database is locked` in the pending-payment sweep; and nothing proves
-  `startServer` itself survives a backup duty that cannot start — only `backup-supervisor.test.ts`
-  covers that, at the supervisor.
+  did not absorb a `database is locked` in the pending-payment sweep (a candidate cause, not
+  verified for the sweep: a busy wait on the server's own thread,
+  [testing-guide.md](developers/testing-guide.md#a-test-that-runs-the-server-in-its-own-process-writes-to-the-database-only-while-the-server-is-down));
+  and nothing proves `startServer` itself survives a backup duty that cannot start — only
+  `backup-supervisor.test.ts` covers that, at the supervisor.
   [Detail](backlog/box.md#appsserverreadmemd-near-line-230-the-waitron_skip_retry_ms-row-says-the-sleep-clamp-can-round-a-value-past-a-bound-which-it-cannot)
 
 - **The empty-venue-directory reason #561 deleted from `packages/provisioning` … is false there** —
@@ -4789,12 +4791,13 @@ the tree. What remains, largest first:
 
 ### CI, tests and developer tooling
 
-- **Nine server suites write to the venue database while their in-process server runs (found by
-  A538-5f).** Each can fail `database is locked` whenever the write meets one of the server's open
-  transactions ([why](developers/testing-guide.md#a-test-that-runs-the-server-in-its-own-process-writes-to-the-database-only-while-the-server-is-down)).
+- **Server suites write to the venue database while their in-process server runs (found by
+  A538-5f).** Nine suites, as of 2026-10-13. Each can fail `database is locked` whenever the write
+  meets one of the server's open transactions
+  ([why](developers/testing-guide.md#a-test-that-runs-the-server-in-its-own-process-writes-to-the-database-only-while-the-server-is-down)).
   Found by reading, none reproduced. Next: move each write before `startServer` or after
   `close()`, or make it through the server's API.
-  [Detail](backlog/ci.md#nine-server-suites-write-to-the-venue-database-while-their-in-process-server-runs-found-by-a538-5f)
+  [Detail](backlog/ci.md#server-suites-write-to-the-venue-database-while-their-in-process-server-runs-found-by-a538-5f)
 
 - **The step-watch case's one pre-push failure (A544) is fixed at a likely cause, not a confirmed
   one.** The failure's message was not kept. A worker that starts late could report

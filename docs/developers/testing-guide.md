@@ -1548,20 +1548,27 @@ former takes the write queue (`packages/db/src/tenancy.ts` → `db.withWriteLock
 `node:sqlite` waits for a lock on the thread that asked for it. A suite that starts the server with
 `startServer` runs it in the suite's own process, so a write through the suite's own handle while
 one of the server's transactions is open stops the event loop: the server's `commit`, a later turn
-of that loop, cannot run, and the suite's `begin immediate` fails `database is locked` once the busy wait
-(`BUSY_TIMEOUT_MS`, `packages/store/src/index.ts`) runs out.
+of that loop, cannot run, and the suite's `begin immediate` fails `database is locked` once the
+busy wait (`BUSY_TIMEOUT_MS`, `packages/store/src/index.ts`) runs out.
 
 Measured 2026-10-13 on Node v26.7.0, two `DatabaseSync` connections to one file in one process:
 connection B opened `begin immediate` and scheduled its `commit` on a 100 ms timer, then A, with
 `busy_timeout` 5000, asked for the write lock. A was refused `database is locked` after 12,365 ms
 and B's timer fired only after that. The control, letting B commit before A asked, wrote in 1 ms.
+The same stop is why `recovery.lock` polls instead of setting a busy timeout; that measurement,
+with a 1500 ms busy timeout, is in
+[conventions-data.md](conventions-data.md#one-process-per-venue-folder).
 
 Cost: main run 38430159396 failed `boot.backup-network.test.ts`'s hanging-destination case this
 way, where the case minted a manager session while the server ran. In an instrumented local run
 that passed, the server committed 50 ms before the session write began and began its next
-transaction 9 ms after it ended, so whether the two overlap is timing. The fix wrote the session before `startServer`, and the file now refuses a write
-from its own helpers while its server runs (`beforeServerStarts`). Other suites still have the shape;
-the list is in the backlog (CI, tests and developer tooling).
+transaction 9 ms after it ended, so whether the two overlap is timing. The fix wrote the session
+before `startServer`, and the file now refuses a write from its own helpers while its server runs
+(`beforeServerStarts`). A comment in `apps/server/src/boot.test.ts` records the other direction:
+a suite write beside a running server can make the server's pending-card-payment sweep log
+`resolve_pending.failed` with `database is locked`; that direction was not measured here. Other
+suites still have the shape; the list is in
+[the backlog](../backlog/ci.md#server-suites-write-to-the-venue-database-while-their-in-process-server-runs-found-by-a538-5f).
 
 ## Treat "there is a test" as an unfinished sentence
 
