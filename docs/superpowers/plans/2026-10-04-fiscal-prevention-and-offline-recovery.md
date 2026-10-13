@@ -438,6 +438,14 @@ coupled production seats and all consumers, regenerate on current main, rerun th
 upgrade and fiscal qualifications, and complete both whole-branch reviews, hook and CI before
 publication. Task 4 remains incomplete.
 
+**Owner naming override, 2026-10-13 18:00:** mint a UTC issue date plus a four-character
+cryptographic code with no look-alike pairs. Store `YYYY-MM-DD · CODE` beside the verifier,
+then localize the label and date only for display. The handover must not change the stored
+name when its language changes. Redraw an immediate replacement collision inside the verifier
+transaction; do not treat the short label as a globally unique identifier or a credential.
+The dated naming checkpoint above describes the earlier random-label format. Physical paper
+output and the backup chooser's selected-copy name remain Task 6 work.
+
 ## Task 5: select active series inside issuance transactions
 
 **Modify:** `apps/server/src/till-config.ts`, `trading-config.ts`, `till-sale.ts`,

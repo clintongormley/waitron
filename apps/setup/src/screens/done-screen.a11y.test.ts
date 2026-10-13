@@ -26,7 +26,7 @@ describe.each(["light", "dark"] as const)("setup-done-screen a11y (%s theme)", (
         startDelayMs: 100000,
         mirrorJoin: true,
         breakGlassSecret: "synthetic-key-for-visual-check",
-        breakGlassKeyName: "Recovery key b7XeE2bVU_cZ7M6r",
+        breakGlassKeyName: "2026-10-15 · K7QF",
       },
       theme,
     );
@@ -36,14 +36,18 @@ describe.each(["light", "dark"] as const)("setup-done-screen a11y (%s theme)", (
         await el.updateComplete;
         for (const width of [390, 1280]) {
           await page.viewport(width, 1100);
+          expect(window.innerWidth).toBe(width);
           expect(q(el, "[data-test=break-glass-key-name]")?.textContent?.trim()).toBe(
-            "Recovery key b7XeE2bVU_cZ7M6r",
+            locale === "en-GB"
+              ? "Recovery key 15 Oct 2026 · K7QF"
+              : "Clave de recuperación 15 oct 2026 · K7QF",
           );
           await expectNoA11yViolations(host);
-          if (import.meta.env.VITE_W41S_VISUAL === "1")
+          if (import.meta.env.VITE_W41S_VISUAL === "1") {
             await page.screenshot({
               path: `__screenshots__/w41s-key-name-${theme}-${locale}-${width}.png`,
             });
+          }
         }
       }
     } finally {

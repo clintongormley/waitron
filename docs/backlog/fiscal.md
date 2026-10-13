@@ -725,3 +725,19 @@ hosts and an explicitly supplied descriptor, not the default production composit
 Production configuration, fiscal seed/restore/standby seats, text SIF/counter retirement and all
 remaining consumers, current-main regeneration/populated upgrade and the whole-branch gates remain
 open. No independent current-register or remote-writer exclusion result is established.
+
+### W41s-4 recovery-key label, 2026-10-13
+
+The owner's 18:00 naming override replaces the random 16-character label with the UTC issue
+date and four characters from an alphabet without 0/O, 1/I/L, 2/Z, 5/S, 6/G or 8/B pairs. The
+stored spelling is `2026-10-15 · K7QF`; the handover shows `Recovery key 15 Oct 2026 · K7QF`
+or `Clave de recuperación 15 oct 2026 · K7QF`. Switching language keeps the stored spelling
+and secret. A replacement redraws a code matching the current key's name inside the same
+transaction that replaces the verifier. The short name does not promise uniqueness across
+all historical papers and never authenticates an operation.
+
+Real database checks cover issue-day rollover, replacement collisions, snapshot key matching,
+node isolation and rollback. Browser checks cover both languages, live language changes,
+malformed stored labels and eight theme/width views. The lane retains red/green and installed
+removal-control receipts under `receipts/w41s4-short-name-*`. Physical paper output and the
+backup chooser remain Task 6 work; the coupled production allocation transition remains open.

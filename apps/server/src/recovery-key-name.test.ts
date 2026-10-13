@@ -40,7 +40,9 @@ async function readName(db = suite.db, nodeId = NODE): Promise<unknown> {
 it("stores a non-secret name beside each newly minted verifier", async () => {
   const secret = await mintBreakGlassSecret(suite.db, NODE);
   const name = await readName();
-  expect(name).toEqual(expect.stringMatching(/^Recovery key [A-Za-z0-9_-]{16}$/));
+  expect(name).toEqual(
+    expect.stringMatching(/^\d{4}-\d{2}-\d{2} · [34679ACDEFHJKMNPQRTUVWXY]{4}$/),
+  );
   expect(name).not.toContain(secret);
   expect(await verifyBreakGlass(suite.db, NODE, secret)).toBe(true);
   expect(await readName(suite.db, OTHER)).toBeUndefined();

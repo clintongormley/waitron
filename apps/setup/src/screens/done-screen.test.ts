@@ -35,6 +35,41 @@ afterEach(() => {
 });
 
 describe("setup-done-screen", () => {
+  it.each(["key label from copy", "2026-02-30 · K7QF", "2026-99-15 · K7QF"])(
+    "keeps a malformed stored label visible without inventing a date: %s",
+    async (name) => {
+      const el = await mountDone(() => new Promise(() => {}), {
+        breakGlassSecret: "key-on-paper",
+        breakGlassKeyName: name,
+      });
+      expect(q(el, "[data-test=break-glass-key-name]")?.textContent?.trim()).toBe(name);
+      expect(q(el, "[data-test=break-glass-secret]")?.textContent).toBe("key-on-paper");
+    },
+  );
+
+  it.each([
+    ["en-GB", "Recovery key 15 Oct 2026 · K7QF"],
+    ["es-ES", "Clave de recuperación 15 oct 2026 · K7QF"],
+  ] as const)("localizes the issue date and key label in %s", async (locale, name) => {
+    setLocale(locale);
+    const el = await mountDone(() => new Promise(() => {}), {
+      mirrorJoin: true,
+      breakGlassSecret: "key-on-paper",
+      breakGlassKeyName: "2026-10-15 · K7QF",
+    });
+    expect(q(el, "[data-test=break-glass-key-name]")?.textContent?.trim()).toBe(name);
+    expect(el.breakGlassKeyName).toBe("2026-10-15 · K7QF");
+    expect(q(el, "[data-test=break-glass-secret]")?.textContent).toBe("key-on-paper");
+    setLocale(locale === "en-GB" ? "es-ES" : "en-GB");
+    await el.updateComplete;
+    expect(q(el, "[data-test=break-glass-key-name]")?.textContent?.trim()).toBe(
+      locale === "en-GB"
+        ? "Clave de recuperación 15 oct 2026 · K7QF"
+        : "Recovery key 15 Oct 2026 · K7QF",
+    );
+    expect(el.breakGlassKeyName).toBe("2026-10-15 · K7QF");
+  });
+
   it.each([
     ["en-GB", "Opening hours: Monday to Friday, 09:00–17:00", "Change opening hours"],
     [
@@ -391,20 +426,22 @@ describe("setup-done-screen", () => {
   });
 
   it.each([
-    ["en-GB", "Older backups need the key from that time"],
-    ["es-ES", "Las copias antiguas necesitan la clave de entonces"],
+    ["en-GB", "Older backups need the key from that time", "Recovery key 15 Oct 2026 · K7QF"],
+    [
+      "es-ES",
+      "Las copias antiguas necesitan la clave de entonces",
+      "Clave de recuperación 15 oct 2026 · K7QF",
+    ],
   ] as const)(
     "shows the paper key name and the old-backup warning in %s",
-    async (locale, warning) => {
+    async (locale, warning, name) => {
       setLocale(locale);
       const el = await mountDone(() => new Promise(() => {}), {
         mirrorJoin: true,
         breakGlassSecret: "key-on-paper",
-        breakGlassKeyName: "Recovery key b7XeE2bVU_cZ7M6r",
+        breakGlassKeyName: "2026-10-15 · K7QF",
       } as Partial<SetupDoneScreen>);
-      expect(q(el, "[data-test=break-glass-key-name]")?.textContent?.trim()).toBe(
-        "Recovery key b7XeE2bVU_cZ7M6r",
-      );
+      expect(q(el, "[data-test=break-glass-key-name]")?.textContent?.trim()).toBe(name);
       expect(q(el, "[data-test=break-glass-backup-warning]")?.textContent).toContain(warning);
       expect(q(el, "[data-test=break-glass-secret]")?.textContent).toBe("key-on-paper");
     },

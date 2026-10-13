@@ -2278,7 +2278,7 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
     const { deps } = makeAdoptDeps();
     deps.adopt = async () => ({
       breakGlassSecret: BREAK_GLASS_SECRET,
-      breakGlassKeyName: "Recovery key b7XeE2bVU_cZ7M6r",
+      breakGlassKeyName: "2026-10-15 · K7QF",
     });
     mountSetup(app, deps, noopLog);
     const response = await postAdopt(app, adoptBody());
@@ -2287,7 +2287,7 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
       adopted: true,
       restarting: true,
       breakGlassSecret: BREAK_GLASS_SECRET,
-      breakGlassKeyName: "Recovery key b7XeE2bVU_cZ7M6r",
+      breakGlassKeyName: "2026-10-15 · K7QF",
     });
   });
 

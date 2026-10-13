@@ -176,7 +176,7 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     );
     expect(result).toHaveProperty("breakGlassKeyName", stored.rows[0]!.break_glass_key_name);
     expect((result as unknown as { breakGlassKeyName: string }).breakGlassKeyName).toMatch(
-      /^Recovery key [A-Za-z0-9_-]{16}$/,
+      /^\d{4}-\d{2}-\d{2} · [34679ACDEFHJKMNPQRTUVWXY]{4}$/,
     );
     expect(await verifyBreakGlass(suite.db, ownNodeId, result.breakGlassSecret)).toBe(true);
   });

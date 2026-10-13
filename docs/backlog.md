@@ -311,7 +311,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   **2026-10-13, Task 4 decisions settled:** cold restore checks the selected backup's
   node key, and you must keep its older paper key until no older backup remains. The owner
   approved the [nine remaining test ports](superpowers/plans/2026-10-13-w41s4-current-key-and-remaining-checks.md).
-  New keys now have stored names, shown with the handover secret and in selected-copy restore
+  New keys now have stored issue-date/four-character names, shown in the handover language
+  with the secret and in canonical form in selected-copy restore
   output. Printed recovery packs and the backup chooser's name display remain Task 6 work.
   **Update, 2026-10-12: queued again in Lane E.** The owner authorised landing after green
   checks and resolved findings; an important unresolved decision still goes to the owner. Q5(f)
