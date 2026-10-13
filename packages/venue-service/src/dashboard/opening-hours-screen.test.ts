@@ -2100,7 +2100,7 @@ describe("Year view", () => {
           ? []
           : model();
       if (!hold(path)) return answer;
-      return new Promise((release) => held.push({ path, release }));
+      return new Promise<unknown>((release) => held.push({ path, release }));
     }) as DashboardRequest);
     const view = () => el.shadowRoot!.querySelector("opening-hours-year")!;
     return { el, view, held };
