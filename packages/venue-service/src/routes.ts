@@ -53,7 +53,7 @@ import {
   saveMenuPeriod,
   updateMenuPeriod,
 } from "./menu-timetable.js";
-import { parseCalendarYear } from "./hours-rules.js";
+import { parseCalendarMonth, parseCalendarYear } from "./hours-rules.js";
 import { CALENDAR_COLOURS, type CalendarColour } from "./hours-types.js";
 import type { MenuWeekDay } from "./menu-timetable-types.js";
 import { KITCHEN_TICKET_GROUPINGS, type KitchenTicketGrouping } from "./schema/settings.js";
@@ -336,7 +336,7 @@ function requirePreviewChange(body: Record<string, unknown>): RoutingChange {
 
 import { stationServiceTimes } from "./station-service-times.js";
 import { readSpecialDaysModel } from "./named-days.js";
-import { readOpeningHoursYear } from "./opening-hours-calendar.js";
+import { readOpeningHoursMonth, readOpeningHoursYear } from "./opening-hours-calendar.js";
 import { addSeason, deleteSeason, saveSeason, seasonDeleteImpact } from "./seasons.js";
 
 /** Refused as a stale clock, as a missing revision is on every other time-affecting write; a
@@ -413,6 +413,18 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         if (year === null) throw new AppError("management.request_invalid", { field: "year" });
         const at = new Date();
         return c.json(await viewed(sessionId, (tx) => readOpeningHoursYear(tx, ctx.cfg, year, at)));
+      }),
+    );
+
+    app.get("/management-api/venue-service/opening-hours/month", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const month = parseCalendarMonth(c.req.query("month"));
+        if (month === null) throw new AppError("management.request_invalid", { field: "month" });
+        const at = new Date();
+        return c.json(
+          await viewed(sessionId, (tx) => readOpeningHoursMonth(tx, ctx.cfg, month, at)),
+        );
       }),
     );
 

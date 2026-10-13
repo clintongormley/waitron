@@ -1,18 +1,22 @@
 import type { Transaction } from "@waitron/db";
 import { readLocationClock } from "@waitron/reporting";
 import { readBusinessDayScheduleStatus } from "./business-day-schedule.js";
+import { readDayPlan, resolveDepartmentsDays, resolveZoneClosedDays } from "./day-resolver.js";
 import type { HolidayCoverage, SpecialDaysModel } from "./holiday-types.js";
-import { readHolidayYear } from "./holidays.js";
-import { venueLocalMoment } from "./hours-clock.js";
-import { addDays, rangeDates } from "./hours-rules.js";
+import { readHolidayFacts, readHolidayYear } from "./holidays.js";
+import { isReadableZone, venueLocalMoment } from "./hours-clock.js";
+import { addDays, rangeDates, weekdayOf } from "./hours-rules.js";
 import type { CalendarTone, HolidayFact, LocalDate } from "./hours-types.js";
 import { calendarDays } from "./hours.js";
+import { readActiveDepartments } from "./menu-timetable.js";
 import { holidayAreaSummary } from "./named-days.js";
 import type { VenueScope } from "./operations.js";
 import type { Season } from "./season-rules.js";
 import { readSeasons } from "./seasons.js";
+import type { ClosedRange, ServiceRange } from "./service-day.js";
 import type { BusinessDayScheduleStatus } from "./service-day-context.js";
 import { missingHolidaysIn } from "./special-days.js";
+import { readServiceZones } from "./zone-closed-times.js";
 
 export interface OpeningHoursYearDay {
   date: LocalDate;
@@ -85,5 +89,104 @@ export async function readOpeningHoursYear(
     })),
     holidayCoverage: holidays.coverage,
     area: holidayAreaSummary(area),
+  };
+}
+
+export interface OpeningHoursMonth {
+  month: string;
+  today: LocalDate | null;
+  /** The seasons the returned dates touch, in the order they are first touched. */
+  seasons: readonly (Season & { lastDay: string })[];
+  /** The whole Monday-to-Sunday weeks that cover `month`. */
+  days: readonly {
+    date: LocalDate;
+    inMonth: boolean;
+    seasonId: string | null;
+    specialDay: { id: string; name: string } | null;
+    holidays: readonly HolidayFact[];
+    closedAllDay: boolean;
+    departments: readonly {
+      departmentId: string;
+      ranges: readonly ServiceRange[];
+      zones: readonly { zoneId: string; closed: readonly ClosedRange[] }[];
+    }[];
+  }[];
+}
+
+/** The MM-DD before the start that next follows `date` in `season`'s occurrence holding it. */
+function lastDayAfter(date: LocalDate, sorted: readonly Season[], season: Season): string {
+  const next = sorted.find((other) => other.startsOn > season.startsOn) ?? sorted[0]!;
+  const year = Number(date.slice(0, 4));
+  let start = `${String(year).padStart(4, "0")}-${next.startsOn}`;
+  if (start <= date) start = `${String(year + 1).padStart(4, "0")}-${next.startsOn}`;
+  return addDays(start, -1).slice(5);
+}
+
+/** `month` is a `YYYY-MM` the caller has checked. */
+export async function readOpeningHoursMonth(
+  tx: Transaction,
+  cfg: VenueScope,
+  month: string,
+  at: Date,
+): Promise<OpeningHoursMonth> {
+  const first = `${month}-01`;
+  const last = addDays(addDays(first, 32).slice(0, 7) + "-01", -1);
+  const from = addDays(first, -((weekdayOf(first) + 6) % 7));
+  const to = addDays(last, (7 - weekdayOf(last)) % 7);
+  const dates = rangeDates(from, to);
+  const stored = await readLocationClock(tx, cfg.locationId);
+  const clock = isReadableZone(stored.timeZone) ? stored : { ...stored, timeZone: "UTC" };
+  const seasons = await readSeasons(tx, cfg);
+  const plan = await readDayPlan(tx, cfg, dates, seasons);
+  const departments = await readActiveDepartments(tx, cfg);
+  const zones = await readServiceZones(tx, cfg);
+  const hours = await resolveDepartmentsDays(
+    tx,
+    cfg,
+    departments.map(({ id }) => id),
+    dates,
+    clock,
+    plan,
+  );
+  const closures = await resolveZoneClosedDays(
+    tx,
+    cfg,
+    zones.map(({ id }) => id),
+    dates,
+    clock,
+    plan,
+  );
+  const factsOn = new Map<LocalDate, HolidayFact[]>();
+  for (const fact of await readHolidayFacts(tx, cfg, from, to))
+    factsOn.set(fact.date, [...(factsOn.get(fact.date) ?? []), fact]);
+  const sorted = [...seasons].sort((a, b) => (a.startsOn < b.startsOn ? -1 : 1));
+  const touched = new Map<string, Season & { lastDay: string }>();
+  for (const date of dates) {
+    const season = seasons.find(({ id }) => id === plan.seasonIdOn.get(date));
+    if (season !== undefined && !touched.has(season.id))
+      touched.set(season.id, { ...season, lastDay: lastDayAfter(date, sorted, season) });
+  }
+  return {
+    month,
+    today: venueLocalMoment(at, stored)?.civilDate ?? null,
+    seasons: [...touched.values()],
+    days: dates.map((date) => {
+      const special = plan.special.get(date) ?? null;
+      return {
+        date,
+        inMonth: date.startsWith(month),
+        seasonId: plan.seasonIdOn.get(date) ?? null,
+        specialDay: special === null ? null : { id: special.specialDayId, name: special.name },
+        holidays: factsOn.get(date) ?? [],
+        closedAllDay: special?.closedAllDay ?? false,
+        departments: departments.map(({ id }) => ({
+          departmentId: id,
+          ranges: hours.get(id)!.get(date)!.ranges,
+          zones: zones
+            .filter(({ departmentId }) => departmentId === id)
+            .map((zone) => ({ zoneId: zone.id, closed: closures.get(zone.id)!.get(date)! })),
+        })),
+      };
+    }),
   };
 }

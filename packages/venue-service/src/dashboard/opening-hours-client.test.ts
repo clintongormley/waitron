@@ -116,6 +116,44 @@ describe("OpeningHoursApi", () => {
     }
   });
 
+  it("reads a month passively on the calendar's dependencies and its zones, and re-reads it with the special days", async () => {
+    const live = new LiveData();
+    const month = { month: "2030-12", days: [] };
+    const request = vi.fn(async () => month);
+    const api = new OpeningHoursApi(request as DashboardRequest, live);
+    const apply = vi.fn();
+    const stop = api.watchMonth("2030-12", apply, vi.fn(), vi.fn());
+    try {
+      await vi.waitFor(() => expect(apply).toHaveBeenCalledWith(month));
+      expect(request.mock.calls).toEqual([
+        [`${base}/opening-hours/month?month=2030-12`, "GET", undefined, { passive: true }],
+      ]);
+      expect(live.interests).toEqual(
+        [
+          "departments",
+          "tenants",
+          "locations",
+          "location_business_day_settings",
+          "location_day_cutover_changes",
+          "holiday_geographies",
+          "seasons",
+          "department_days",
+          "department_day_ranges",
+          "zone_days",
+          "zone_day_ranges",
+          "special_days",
+          "special_day_dates",
+          "zone_service_policies",
+          "floor_zones",
+        ].map((type) => ({ type })),
+      );
+      api.specialDays.rereadWatches();
+      await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(2));
+    } finally {
+      stop();
+    }
+  });
+
   it("re-reads a watched year with the special days when there is no live data", async () => {
     const request = vi.fn(async (path: string) =>
       path.includes("/year?") ? { year: 2027, days: [] } : model,
