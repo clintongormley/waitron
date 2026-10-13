@@ -50,13 +50,15 @@ describe("the stream loop: stream, rebuild from the bucket, sell under a fresh c
     // A test that hit its time limit is still running: its servers close before versitygw stops.
     stop.abort();
     if (running !== undefined) {
+      const timer = new AbortController();
       const settled = await Promise.race([
         running.then(
           () => true,
           () => true,
         ),
-        delay(ABORT_SETTLE_MS, false),
+        delay(ABORT_SETTLE_MS, false, { signal: timer.signal }).catch(() => false),
       ]);
+      timer.abort();
       if (!settled) {
         failures.push(new Error(`the stream loop did not stop within ${ABORT_SETTLE_MS} ms`));
       }

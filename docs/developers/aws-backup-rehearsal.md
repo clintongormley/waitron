@@ -3,9 +3,11 @@
 Every test that touches a bucket in this repository talks to versitygw, a small S3-compatible server
 started on your machine. That is fast and free, but it cannot tell you how Amazon S3 itself answers.
 The rehearsal is the one place that asks the real service: it runs the same scenarios against Amazon
-S3, in a bucket it creates for the run and deletes afterwards. Two things can leave that bucket
-behind: a Litestream upload still running when teardown starts, and pressing Ctrl-C. The receipt
-and its cleanup command cover the first; the second is described under the limits below.
+S3, in a bucket it creates for the run and then tries to delete. Teardown can fail to delete it: an
+error from AWS, the teardown's two-minute limit running out, or a Litestream upload still running
+when teardown starts. Any failed teardown step fails the run, and when the bucket is left the
+receipt names it and gives a cleanup command. Pressing Ctrl-C also leaves the bucket, with no receipt; that is described
+under the limits below.
 
 As of 2026-10-14 only the loop scenario exists and it has never run against Amazon S3; tasks 8–10 add
 pause/403, delete and archive scenarios and the first live run.
@@ -45,8 +47,9 @@ Two limits matter if something goes wrong:
   `waitron-rehearsal-waitron-` prefix and delete it by hand, after checking that its
   `.waitron-rehearsal-owner` object is from your run. The loop scenario's working folder,
   `waitron-aws-stream-loop-<random>` under your temporary folder (`$TMPDIR` on a Mac), is left
-  behind too. It holds `recovery-kit.txt`, which carries the rehearsal's key pair encoded as
-  base64url, not encrypted, and the rebuilt box's `secrets.env`. Delete that folder as well.
+  behind too. It holds the boxes' `secrets.env` files and, once the loop has written it,
+  `recovery-kit.txt`, which carries the rehearsal's key pair encoded as base64url, not encrypted.
+  Delete that folder as well.
 
 ## Running it
 
@@ -71,7 +74,7 @@ Every variable the run reads:
 | `AWS_CONFIG_FILE`                    | Absolute path to the config file, outside the repository. The profile's region is read from it.                                                                                                                                   |
 | `AWS_PROFILE`                        | Must be `waitron-rehearsal`.                                                                                                                                                                                                       |
 | `AWS_REGION`                         | Must match the profile's region. The bucket is created there.                                                                                                                                                                      |
-| `WAITRON_AWS_REHEARSAL_RECEIPT_DIR`  | Where receipts are written. Unset or empty, they go to `waitron-aws-rehearsal` under your temporary folder. The full path may hold only letters, digits and `. _ @ -` between its slashes, may be at most 301 characters long counting its leading slash, and must be at most 40 folders deep. |
+| `WAITRON_AWS_REHEARSAL_RECEIPT_DIR`  | Where receipts are written. Unset or empty, they go to `waitron-aws-rehearsal` under your temporary folder. The full path may hold only letters, digits and `. _ @ -` between its slashes and must be at most 40 folders deep. The cleanup command naming a receipt in it must fit in 512 characters, which the run checks before any AWS call; with the default run id that allows a folder path of about 150 characters, depending on the region (155 for `eu-north-1`). |
 | `WAITRON_AWS_REHEARSAL_BUCKET`       | Must be unset or empty. Any other value refuses the run (`supplied-bucket`).                                                                                                                                                       |
 | `WAITRON_LITESTREAM_BIN`             | The Litestream binary the loop scenario runs. Unset or empty, it is `.bin/litestream` at the repository root, where `node scripts/setup-litestream.mjs` puts it. It must report the pinned version, or the loop fails.             |
 
