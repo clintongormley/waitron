@@ -1072,7 +1072,7 @@ export const en = {
   "kitchen.fire_waiter": "Waiter",
   "kitchen.fire_kitchen": "Kitchen",
   "kitchen.fire_expo": "Expo",
-  // The `{…}` strings are filled with `.replace` at the render edge; this catalogue has no
+  // The `{…}` strings are filled with `fill` (t.ts) at the render edge; this catalogue has no
   // interpolation.
   "devices.title": "Devices",
   "devices.no_devices": "No devices yet.",
@@ -1155,7 +1155,7 @@ export const en = {
   "devices.join_pick_station": "Choose a station",
   "devices.join_match_prompt": "Tap the number showing on the device",
   "devices.join_choice_label": "Number {number}",
-  // The `{…}` strings are filled with `.replace` at the render edge.
+  // The `{…}` strings are filled with `fill` (t.ts) at the render edge.
   "printers.disable": "Disable",
   "devices.delete_heading": "Delete device?",
   "devices.delete_refusals": "Why it can't be deleted",
