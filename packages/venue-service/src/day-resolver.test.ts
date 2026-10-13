@@ -22,6 +22,7 @@ import {
   readDayPlan,
   readServiceDayPlan,
   resolveDepartmentDays,
+  resolveDepartmentsDays,
   resolveZoneClosedDays,
 } from "./day-resolver.js";
 import {
@@ -252,6 +253,30 @@ describe("resolveDepartmentDays", () => {
       "04:30",
       "20:00",
     ]);
+  });
+
+  it("sorts a later department's days from each day's own changeover too", async () => {
+    const v = await autumnAndWinter();
+    await menuSeason(v, v.seasons.Winter!, {
+      [SUNDAY]: [
+        { periodId: v.lateBar, startsAt: "04:30", endsAt: "05:00" },
+        { periodId: v.dinner, startsAt: "20:00", endsAt: "22:00" },
+      ],
+      [SATURDAY]: [
+        { periodId: v.lateBar, startsAt: "04:30", endsAt: "05:00" },
+        { periodId: v.dinner, startsAt: "20:00", endsAt: "22:00" },
+      ],
+    });
+    const clock: BusinessDayClock = {
+      ...CLOCK,
+      cutoverChanges: [{ effectiveBusinessDay: "2030-12-08", dayCutover: "04:00" }],
+    };
+    const days = ["2030-12-07", "2030-12-08"];
+    const alone = await departmentDays(v, days, clock);
+    const together = await scoped((tx) =>
+      resolveDepartmentsDays(tx, v.cfg, [randomUUID(), v.departmentId], days, clock),
+    );
+    expect(together.get(v.departmentId)).toEqual(alone);
   });
 
   it("answers an empty map for no days", async () => {
