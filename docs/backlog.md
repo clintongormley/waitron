@@ -2532,11 +2532,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   number pad or a choice picker counts as a form under it is open.
   [Detail](backlog/till.md#the-tills-schedule-screen-does-not-follow-the-forms-rule-yet)
 
-- **The till's schedule screen tells the person to try again and gives them no way to** (found
-  2026-10-03 by review of lane C's W14; read, not run). **Next action:** add a retry button the way
-  the dashboard does, and decide whether each failed list gets its own line.
-  [Detail](backlog/till.md#the-tills-schedule-screen-tells-the-person-to-try-again-and-gives-them-no-way-to)
-
 - **Two till controls put `aria-pressed` on a `wt-button`, which does not pass it to its inner
   button** (found 2026-10-03 in review of lane C's W23; read, not run). **Next action:** make them
   native buttons with `aria-pressed`, as the Tab drawer's transfer and split pickers and the draft
