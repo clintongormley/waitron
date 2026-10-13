@@ -35,6 +35,8 @@ import {
   type AwsReceiptOwnership,
   type AwsReceiptRemaining,
   createReceiptLog,
+  isReceiptCleanupCommand,
+  isReceiptUploadId,
   REHEARSAL_BUCKET_PATTERN,
   type TeardownEntry,
   writeReceipt,
@@ -66,7 +68,10 @@ export type AwsRehearsalRefusalReason =
   | "label-refused"
   | "prefix-not-issued"
   | "encryption-not-sse-s3"
-  | "versioning-not-off";
+  | "versioning-not-off"
+  | "upload-id-refused"
+  | "child-pid-refused"
+  | "teardown-started";
 
 /** Its message names a rule and a variable or key, never a value read from the environment or a file. */
 export class AwsRehearsalRefused extends Error {
@@ -291,6 +296,8 @@ export interface TrackedUpload {
 
 export interface TeardownTarget {
   bucket: string;
+  /** The run the bucket's ownership marker names; the marker is put back from it if needed. */
+  runId: string;
   uploads: readonly TrackedUpload[];
   pids: readonly number[];
 }
@@ -565,9 +572,14 @@ async function deleteObjects(
     : failedEntry("delete-objects", failure, deleted);
 }
 
+export function ownershipNonce(runId: string): string {
+  return JSON.stringify({ runId });
+}
+
 async function deleteBucket(
   client: AdminClient,
   bucket: string,
+  runId: string,
   objectsDeleted: boolean,
   deps: TeardownDeps,
   signal: AbortSignal,
@@ -594,9 +606,28 @@ async function deleteBucket(
     {},
     signal,
   );
-  return result.error === undefined || errorNameOf(result.error) === "NoSuchBucket"
-    ? { step: "delete-bucket", outcome: "ok" }
-    : failedEntry("delete-bucket", result.error);
+  if (result.error === undefined || errorNameOf(result.error) === "NoSuchBucket") {
+    return { step: "delete-bucket", outcome: "ok" };
+  }
+  if (objectsDeleted) {
+    // The bucket outlived its marker; put the marker back so the cleanup command can prove ownership.
+    const body = ownershipNonce(runId);
+    await call(
+      client,
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: AWS_REHEARSAL_NONCE_KEY,
+        Body: body,
+        ContentType: "application/json",
+      }),
+      "PutObject",
+      "restore-nonce",
+      deps,
+      { objectRole: "ownership-nonce", bytes: Buffer.byteLength(body) },
+      signal,
+    );
+  }
+  return failedEntry("delete-bucket", result.error);
 }
 
 /** Every command names `target.bucket`; every step runs even when an earlier one failed. */
@@ -613,7 +644,9 @@ export async function teardownOwnedBucket(
   entries.push(await removePolicy(client, bucket, deps, signal));
   const objects = await deleteObjects(client, bucket, deps, signal);
   entries.push(objects);
-  entries.push(await deleteBucket(client, bucket, objects.outcome === "ok", deps, signal));
+  entries.push(
+    await deleteBucket(client, bucket, target.runId, objects.outcome === "ok", deps, signal),
+  );
   const clean = entries.every((entry) => entry.outcome !== "failed");
   return {
     entries,
@@ -696,10 +729,14 @@ type CreateOutcome = AwsReceiptOwnership;
 function classifyCreate(bucket: string, error: unknown): CreateOutcome {
   if (error === undefined) return { state: "owned", bucket };
   const name = errorNameOf(error);
+  const { httpStatus, attempts } = metadata(error);
+  // On a retry, "already owned by you" may answer this run's own lost first attempt.
+  if (name === "BucketAlreadyOwnedByYou" && attempts !== undefined && attempts > 1) {
+    return { state: "unowned-candidate", bucket: null, candidate: bucket };
+  }
   if (name === "BucketAlreadyExists" || name === "BucketAlreadyOwnedByYou") {
     return { state: "collision", bucket: null };
   }
-  const { httpStatus } = metadata(error);
   if (httpStatus !== null && httpStatus >= 400 && httpStatus < 500) {
     return { state: "not-created", bucket: null };
   }
@@ -721,7 +758,7 @@ function createFailure(ownership: CreateOutcome, bucket: string): AwsRehearsalFa
   }
 }
 
-function positiveInteger(value: number, what: string): void {
+function nonNegativeInteger(value: number, what: string): void {
   if (!Number.isSafeInteger(value) || value < 0) {
     throw new AwsRehearsalRefused("fixture-limit", `${what} must be a non-negative integer`);
   }
@@ -797,6 +834,15 @@ export async function withAwsRehearsal<T>(
   }
 }
 
+/** Names only a refused field or an error code, never a value. */
+function receiptFailureCause(error: unknown): string {
+  if (error instanceof Error && error.message.startsWith("receipt field refused: ")) {
+    return error.message;
+  }
+  const code = (error as { code?: unknown } | null)?.code;
+  return typeof code === "string" && /^[A-Z0-9_]{1,32}$/.test(code) ? code : errorNameOf(error);
+}
+
 async function runOwned<T>(
   scenario: (ctx: AwsRehearsal) => Promise<T>,
   deps: AwsRehearsalDeps,
@@ -809,6 +855,13 @@ async function runOwned<T>(
   const bucket = `waitron-rehearsal-waitron-${deps.randomSuffix()}`;
   if (!REHEARSAL_BUCKET_PATTERN.test(bucket)) {
     throw new AwsRehearsalFailed("the generated bucket name does not match the rehearsal pattern");
+  }
+  const receiptPath = join(receiptDir, `aws-rehearsal-${runId}.json`);
+  if (!isReceiptCleanupCommand(cleanupCommandFor(region, receiptPath))) {
+    throw new AwsRehearsalRefused(
+      "receipt-dir-unsupported",
+      "the receipt folder's path is too long for the cleanup command the receipt may carry",
+    );
   }
   const log = createReceiptLog(
     {
@@ -845,6 +898,18 @@ async function runOwned<T>(
   let teardown: TeardownResult | undefined;
   const pids: number[] = [];
   const uploads: TrackedUpload[] = [];
+  let tearingDown = false;
+  const refuseOnceTearingDown = (): void => {
+    if (tearingDown) {
+      throw new AwsRehearsalRefused(
+        "teardown-started",
+        "teardown has started; nothing more is tracked",
+      );
+    }
+  };
+  const loweredKeys = [profile.accessKeyId, profile.secretAccessKey].map((key) =>
+    key.toLowerCase(),
+  );
 
   if (ownership.state !== "owned") {
     failure = createFailure(ownership, bucket);
@@ -852,7 +917,7 @@ async function runOwned<T>(
     let uploaded = 0;
     let objects = 0;
     const reserveUpload = (bytes: number, role: string): void => {
-      positiveInteger(bytes, "bytes");
+      nonNegativeInteger(bytes, "bytes");
       const overTotal = uploaded + bytes > AWS_REHEARSAL_LIMITS.uploadedBytes;
       const overArchive = role === "archive" && bytes > AWS_REHEARSAL_LIMITS.archiveBytes;
       if (overTotal || overArchive) {
@@ -871,7 +936,7 @@ async function runOwned<T>(
       uploaded += bytes;
     };
     try {
-      const nonce = JSON.stringify({ runId });
+      const nonce = ownershipNonce(runId);
       const nonceBytes = Buffer.byteLength(nonce);
       reserveUpload(nonceBytes, "ownership-nonce");
       const put = await call(
@@ -923,7 +988,7 @@ async function runOwned<T>(
         },
         reserveUpload,
         reserveObjects(count) {
-          positiveInteger(count, "count");
+          nonNegativeInteger(count, "count");
           if (objects + count > AWS_REHEARSAL_LIMITS.deleteObjects) {
             record({
               scenario: "lifecycle",
@@ -936,12 +1001,21 @@ async function runOwned<T>(
           objects += count;
         },
         trackChild(pid) {
+          refuseOnceTearingDown();
           if (!Number.isSafeInteger(pid) || pid <= 0) {
-            throw new AwsRehearsalRefused("fixture-limit", "a child pid is a positive integer");
+            throw new AwsRehearsalRefused("child-pid-refused", "a child pid is a positive integer");
           }
           pids.push(pid);
         },
         trackUpload(key, uploadId) {
+          refuseOnceTearingDown();
+          const lowered = typeof uploadId === "string" ? uploadId.toLowerCase() : "";
+          if (!isReceiptUploadId(uploadId) || loweredKeys.some((k) => lowered.includes(k))) {
+            throw new AwsRehearsalRefused(
+              "upload-id-refused",
+              "an upload id the receipt could not carry is not tracked",
+            );
+          }
           uploads.push({ key, uploadId });
         },
         record,
@@ -969,35 +1043,60 @@ async function runOwned<T>(
         result = await Promise.race([running, deadline]);
       } finally {
         clearTimeout(timer);
+        controller.abort();
       }
     } catch (error) {
       failure = error;
     }
-    teardown = await teardownOwnedBucket(client, { bucket, uploads, pids }, { ...deps, record });
+    tearingDown = true;
+    teardown = await teardownOwnedBucket(
+      client,
+      { bucket, runId, uploads, pids },
+      { ...deps, record },
+    );
     for (const entry of teardown.entries) log.teardown(entry);
   }
 
-  const receiptPath = join(receiptDir, `aws-rehearsal-${runId}.json`);
   const remaining = teardown?.remaining ?? { bucket: null, uploadIds: [] };
-  const receipt = log.finish({
-    finishedAt: new Date(deps.now()).toISOString(),
-    ownership,
-    remaining,
-    cleanupCommand: remaining.bucket === null ? null : cleanupCommandFor(region, receiptPath),
-    sourceOnly: SOURCE_ONLY_APIS,
-  });
-  await writeReceipt(receiptDir, receipt, profile);
-  deps.print(receiptPath);
-
   const failedSteps = (teardown?.entries ?? [])
     .filter((entry) => entry.outcome === "failed")
     .map((entry) => entry.step);
+  let receiptFailure: AwsRehearsalFailed | undefined;
+  try {
+    const receipt = log.finish({
+      finishedAt: new Date(deps.now()).toISOString(),
+      ownership,
+      remaining,
+      cleanupCommand: remaining.bucket === null ? null : cleanupCommandFor(region, receiptPath),
+      sourceOnly: SOURCE_ONLY_APIS,
+    });
+    await writeReceipt(receiptDir, receipt, profile);
+    deps.print(receiptPath);
+  } catch (error) {
+    receiptFailure = new AwsRehearsalFailed(
+      `the receipt was not written (${receiptFailureCause(error)})`,
+    );
+  }
+
   const teardownFailure =
     failedSteps.length === 0
       ? undefined
       : new AwsRehearsalFailed(
-          `teardown failed at ${failedSteps.join(", ")}; receipt: ${receiptPath}`,
+          `teardown failed at ${failedSteps.join(", ")}` +
+            (receiptFailure === undefined ? `; receipt: ${receiptPath}` : ""),
         );
+  if (receiptFailure !== undefined) {
+    const left =
+      remaining.bucket ??
+      (ownership.state === "unowned-candidate"
+        ? `${ownership.candidate} (ownership unknown)`
+        : "none");
+    throw new AggregateError(
+      [failure, teardownFailure, receiptFailure].filter((error) => error !== undefined),
+      `the rehearsal's receipt was not written; bucket left: ${left}; ` +
+        `failed teardown steps: ${failedSteps.length === 0 ? "none" : failedSteps.join(", ")}`,
+    );
+  }
   if (failure !== undefined) {
     if (teardownFailure !== undefined) {
       throw new AggregateError(

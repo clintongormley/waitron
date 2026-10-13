@@ -125,6 +125,16 @@ const TEARDOWN_STEPS = [
 ] as const;
 const OWNERSHIP_STATES = ["owned", "not-created", "collision", "unowned-candidate"] as const;
 
+/** The receipt's shape rule for an upload id; the key-pair check is separate. */
+export function isReceiptUploadId(id: unknown): id is string {
+  return typeof id === "string" && UPLOAD_ID.test(id) && !id.includes("://");
+}
+
+/** The receipt's shape rule for a cleanup command; the key-pair check is separate. */
+export function isReceiptCleanupCommand(command: unknown): command is string {
+  return typeof command === "string" && CLEANUP_COMMAND.test(command);
+}
+
 function refused(key: string): Error {
   return new Error(`receipt field refused: ${key}`);
 }
@@ -323,10 +333,7 @@ function sanitizeRemaining(input: unknown, forbidden: Forbidden): AwsReceiptRema
   onlyKeys(input, ["bucket", "uploadIds"], "remaining.");
   refuseKeyPair(input, forbidden, "remaining.");
   const uploadIds = input.uploadIds;
-  if (
-    !Array.isArray(uploadIds) ||
-    !uploadIds.every((id) => typeof id === "string" && UPLOAD_ID.test(id) && !id.includes("://"))
-  ) {
+  if (!Array.isArray(uploadIds) || !uploadIds.every(isReceiptUploadId)) {
     throw refused("remaining.uploadIds");
   }
   return {
@@ -375,10 +382,7 @@ export function createReceiptLog(
       if (carriesKey(parts.finishedAt, forbidden)) throw refused("header.finishedAt");
       const cleanupCommand = parts.cleanupCommand;
       if (carriesKey(cleanupCommand, forbidden)) throw refused("cleanupCommand");
-      if (
-        cleanupCommand !== null &&
-        (typeof cleanupCommand !== "string" || !CLEANUP_COMMAND.test(cleanupCommand))
-      ) {
+      if (cleanupCommand !== null && !isReceiptCleanupCommand(cleanupCommand)) {
         throw refused("cleanupCommand");
       }
       return {
