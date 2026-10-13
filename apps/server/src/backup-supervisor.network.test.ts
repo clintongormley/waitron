@@ -665,6 +665,58 @@ describe("BackupSupervisor status, one destination at a time", () => {
     }
   }, 60_000);
 
+  it("a destination whose upload stored reads stored while its own pruning is stalled, and keeps it when the pruning times out", async () => {
+    const realList = LocalFsBackend.prototype.list;
+    const prune = gate();
+    let lists = 0;
+    vi.spyOn(LocalFsBackend.prototype, "list").mockImplementation(function (
+      this: LocalFsBackend,
+      prefix,
+      call,
+    ) {
+      // The sweep's pruning lists first; the status reads after it list for real.
+      if (lists++ === 0) {
+        prune.entered();
+        return stall(call);
+      }
+      return realList.call(this, prefix, call);
+    });
+    const logs: LogLine[] = [];
+    const dir = await tempDir("waitron-bsupnet-local-");
+    const sup = await supervisor(
+      () => config([{ id: "local", dir }], { destinationTimeoutMs: 1_500 }),
+      logs,
+    );
+    const local = async () => {
+      const { status, destinations: ds } = await destinations(sup);
+      const d = byId(ds, "local");
+      return {
+        archive: status.archiveUnderCurrentKey,
+        stored: d.storedUnderCurrentKey,
+        upload: d.uploadErrorCode,
+        prune: d.pruneErrorCode,
+      };
+    };
+    try {
+      await sup.reload();
+      await prune.reached;
+      expect(await local()).toEqual({ archive: true, stored: true, upload: null, prune: null });
+      expect(count(logs, "backup.destination_prune_failed", "local")).toBe(0);
+
+      await poll(() =>
+        count(logs, "backup.destination_prune_failed", "local") > 0 ? true : undefined,
+      );
+      expect(await local()).toEqual({
+        archive: true,
+        stored: true,
+        upload: null,
+        prune: "backup.destination_timed_out",
+      });
+    } finally {
+      await sup.stop();
+    }
+  }, 60_000);
+
   it("a destination that cannot be built reads stale with its code beside the others, and every one that was built is closed", async () => {
     const closed: string[] = [];
     vi.spyOn(LocalFsBackend.prototype, "close").mockImplementation(function (this: LocalFsBackend) {

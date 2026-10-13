@@ -6,8 +6,8 @@
 // It opens its OWN handle on the venue directory rather than reusing boot's, because `reload()` closes
 // it, and boot's handle is the one the server answers requests on.
 //
-// `archiveUnderCurrentKey` is an IN-PROCESS signal, true once any destination's result in the
-// current sweep says it stored, never inferred from a stored object's mtime: a restored/copied
+// `archiveUnderCurrentKey` is an IN-PROCESS signal, true once any destination's upload in the
+// current sweep has stored, never inferred from a stored object's mtime: a restored/copied
 // OLD-key archive can carry a fresh mtime, so mtime does not prove the key.
 
 import { createHash } from "node:crypto";
@@ -205,6 +205,9 @@ export class BackupSupervisor {
           // still report a store under the OLD key during that wait.
           if (!controller.signal.aborted) this.#recordResult(result);
         },
+        onUploaded: (id) => {
+          if (!controller.signal.aborted) this.#recordUpload(id);
+        },
         sleep: this.#deps.sleep ?? realSleep,
         now: this.#deps.now,
         log: this.#deps.log,
@@ -278,6 +281,16 @@ export class BackupSupervisor {
     const read = readDestinationStatus(backend, staleAfterMs, now, this.#deps.statusReadTimeoutMs);
     void read.settled.then(() => this.#closeBackends([backend]));
     return read.status;
+  }
+
+  /** Counted as stored before its pruning finishes; the pruning code stands until that pruning's
+   * result arrives. */
+  #recordUpload(id: string): void {
+    this.#sweep.set(id, {
+      storedUnderCurrentKey: true,
+      uploadErrorCode: null,
+      pruneErrorCode: this.#sweep.get(id)?.pruneErrorCode ?? null,
+    });
   }
 
   /** A store stays counted for the rest of the sweep; an upload code is cleared only by a later

@@ -68,6 +68,10 @@ export interface BackupSweepDeps {
    * run is stopped is not reported, even when its upload had already stored.
    */
   onDestinationResult?: (result: DestinationResult) => void;
+  /** A destination's upload stored, reported at once, before its pruning runs; like
+   * `onDestinationResult`, it can arrive from a run already stopped. That destination's later
+   * `onDestinationResult` carries the pruning's outcome. */
+  onUploaded?: (id: string) => void;
   /** How long one destination's upload and its pruning may run, together. */
   destinationTimeoutMs: number;
   onScheduled?: (at: number | null) => void;
@@ -178,6 +182,7 @@ export async function runOnce(
           await withDestinationCall(deps.signal, deps.destinationTimeoutMs, async (call) => {
             await backend.putFile(key, ciphertext, call);
             stored = true;
+            deps.onUploaded?.(backend.id);
             if (deps.outcomes)
               recordBackupOutcome(deps.outcomes, backend.id, true, stamp.toISOString());
             await pruneBackend(backend, deps.retain, deps.retainDays, nowMs, call, key);
