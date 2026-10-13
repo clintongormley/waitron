@@ -1506,11 +1506,13 @@ export const en = {
   "backup.destination.stream_snapshot":
     "Saving copies the bucket copy's current bucket settings. Changing or removing the bucket copy later does not move these backups; save this choice again to follow a change.",
   "backup.destination.stream_replaces":
-    "Backups go only to this bucket: the box stops saving them to a folder on this box.",
+    "Backups go only to this bucket, not to a folder on this box.",
   "backup.destination.stream_location": "Backups will be stored in",
   "backup.destination.folder_required": "Enter the folder to save backups in.",
   "backup.destination.folder_refused":
-    "The box cannot use this folder. Enter a full path, such as /mnt/usb/waitron.",
+    "The box cannot use this folder. Remove any tab, line break or other control character.",
+  "backup.destination.stream_prefix_refused":
+    "Backups cannot use the bucket copy's folder inside its bucket. Choose a folder on this box.",
   "backup.archive_test.timed_out": "The bucket took too long to answer.",
   "backup.archive_test.read_mismatch": "The test file read back was not the one written.",
   "backup.archive_test.not_listed": "The test file was written but the bucket did not list it.",
@@ -4331,11 +4333,13 @@ export const es: Record<StringKey, string> = {
   "backup.destination.stream_snapshot":
     "Al guardar se copian los ajustes actuales del bucket de la copia en el bucket. Si después cambias o quitas la copia en el bucket, estas copias no se mueven; vuelve a guardar esta opción para seguir el cambio.",
   "backup.destination.stream_replaces":
-    "Las copias van solo a este bucket: la caja deja de guardarlas en una carpeta de esta caja.",
+    "Las copias van solo a este bucket, no a una carpeta de esta caja.",
   "backup.destination.stream_location": "Las copias se guardarán en",
   "backup.destination.folder_required": "Escribe la carpeta donde guardar las copias.",
   "backup.destination.folder_refused":
-    "La caja no puede usar esta carpeta. Escribe una ruta completa, como /mnt/usb/waitron.",
+    "La caja no puede usar esta carpeta. Quita cualquier tabulador, salto de línea u otro carácter de control.",
+  "backup.destination.stream_prefix_refused":
+    "Las copias no pueden usar la carpeta de la copia en el bucket dentro de su bucket. Elige una carpeta de esta caja.",
   "backup.archive_test.timed_out": "El bucket ha tardado demasiado en responder.",
   "backup.archive_test.read_mismatch": "El archivo de prueba leído no era el que se escribió.",
   "backup.archive_test.not_listed":

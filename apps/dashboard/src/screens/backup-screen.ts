@@ -61,7 +61,7 @@ function archivePayload(value: ArchiveDraft): unknown {
   const pastedKey = value.advancedPaste ? value.pastedKey : "";
   if (value.mode === "rotate") return { pastedKey };
   return {
-    destination: value.choice === "local-fs" ? value.folder.trim() : value.choice,
+    destination: destinationBody(value.choice, value.folder),
     days: value.daysMode === "daily" ? "daily" : [...value.weekdays].sort((a, b) => a - b),
     at: value.timeMode === "auto" ? "auto" : value.atTime,
     count: parseRetention(value.retainCount) ?? value.retainCount,
@@ -238,6 +238,8 @@ export class BackupScreen extends LitElement {
   /** Read only to offer and describe the stream's bucket; it never rewrites a staged draft. */
   @state() private stream?: StreamSettingsView;
   @state() private streamUnread = false;
+  /** Settles once the stream's first read has answered or failed, so Edit prefills from it. */
+  #streamRead: Promise<void> = Promise.resolve();
   readonly #streamQueries = new DashboardQueries(
     this,
     () => this.api,
@@ -255,8 +257,13 @@ export class BackupScreen extends LitElement {
   @state() private folderAttempted = false;
   /** The server refused the folder, and it has not changed since. */
   @state() private folderRefused = false;
-  /** A refusal naming no field the form shows, for the bottom message until the next submission. */
-  @state() private formRefusal: { code: string; reason: string | null } | null = null;
+  /** A refusal naming no field the form shows, for the bottom message until the next submission;
+   * `sentence` replaces the code's own message. */
+  @state() private formRefusal: {
+    code: string;
+    reason: string | null;
+    sentence?: Parameters<typeof t>[0];
+  } | null = null;
   /** A write stood but the box could not load it; kept until the next write. */
   @state() private reloadErrorCode: string | null = null;
   @state() private mintedKey: string | null = null;
@@ -406,7 +413,7 @@ export class BackupScreen extends LitElement {
     });
     this.#trackArchive();
     void this.#load();
-    void this.#streamQueries
+    this.#streamRead = this.#streamQueries
       .watch("getStreamSettings", [], (value) => {
         this.stream = value;
         this.streamUnread = false;
@@ -568,7 +575,7 @@ export class BackupScreen extends LitElement {
     return { count: parseRetention(this.retainCount)!, days: parseRetention(this.retainDays)! };
   }
 
-  #onApplyRefused(error: unknown): void {
+  #onApplyRefused(error: unknown, sent: BackupApplyBody["destination"]): void {
     const code = codeOf(error);
     const field = (error as { params?: { field?: unknown } } | null)?.params?.field;
     if (code === "backup.request_invalid" && field === "retention") {
@@ -577,6 +584,16 @@ export class BackupScreen extends LitElement {
     } else if (code === "backup.request_invalid" && field === "dir") {
       this.folderRefused = true;
       this.#focusFirstInvalidBox();
+    } else if (
+      code === "backup.request_invalid" &&
+      field === "prefix" &&
+      sent.kind === "stream-bucket"
+    ) {
+      this.formRefusal = {
+        code,
+        reason: null,
+        sentence: "backup.destination.stream_prefix_refused",
+      };
     } else if (FORM_REFUSALS.has(code)) {
       const reason = (error as { params?: { reason?: unknown } }).params?.reason;
       this.formRefusal = { code, reason: typeof reason === "string" ? reason : null };
@@ -637,7 +654,7 @@ export class BackupScreen extends LitElement {
         await this.#mint();
       }
     } catch (error) {
-      if (generation === this.#generation) this.#onApplyRefused(error);
+      if (generation === this.#generation) this.#onApplyRefused(error, body.destination);
     } finally {
       if (generation === this.#generation) this.submitting = false;
     }
@@ -701,7 +718,7 @@ export class BackupScreen extends LitElement {
     const opening = archivePayload(this.#archiveValue());
     this.errorKey = null;
     try {
-      const { key } = await this.api.getBackupRecoveryKey();
+      const [{ key }] = await Promise.all([this.api.getBackupRecoveryKey(), this.#streamRead]);
       if (
         generation !== this.#generation ||
         !sameValue(opening, archivePayload(this.#archiveValue()))
@@ -752,7 +769,7 @@ export class BackupScreen extends LitElement {
         this.#reuseKey = null;
       }
     } catch (error) {
-      if (generation === this.#generation) this.#onApplyRefused(error);
+      if (generation === this.#generation) this.#onApplyRefused(error, body.destination);
     } finally {
       if (generation === this.#generation) this.submitting = false;
     }
@@ -1166,6 +1183,7 @@ export class BackupScreen extends LitElement {
         @wt-change=${(e: CustomEvent<{ value: string }>) => {
           e.stopPropagation();
           this.choice = e.detail.value as DestinationChoice;
+          this.folderRefused = false;
         }}
       ></wt-combobox>
       ${
@@ -1401,7 +1419,9 @@ export class BackupScreen extends LitElement {
     const refusal = this.formRefusal;
     const reasonKey = refusal?.reason == null ? undefined : TEST_REASON_KEYS[refusal.reason];
     return [
-      ...(refusal === null ? [] : [codeMessage(refusal.code)]),
+      ...(refusal === null
+        ? []
+        : [refusal.sentence === undefined ? codeMessage(refusal.code) : t(refusal.sentence)]),
       ...(reasonKey === undefined ? [] : [t(reasonKey)]),
       ...(marked ? [t("form.fix_fields")] : []),
     ].join(" ");

@@ -560,6 +560,90 @@ describe("choosing where backups go", () => {
     expect((q(el, "[data-test=destination]") as Field).value).toBe("");
   });
 
+  it.each([
+    ["endpoint", { endpoint: "https://s3.example.test" }],
+    ["region", { region: "eu-west-1" }],
+    ["bucket", { bucket: "other-bucket" }],
+    ["prefix", { prefix: "elsewhere" }],
+    ["accessKeyId", { accessKeyId: "AKIAOTHER" }],
+  ])(
+    "a stored bucket differing from the bucket copy's only in its %s opens on the local folder",
+    async (_field, differs) => {
+      const { el } = await openEdit(ON_STREAM_BUCKET, {
+        getStreamSettings: vi
+          .fn()
+          .mockResolvedValue({ ...STREAM_ON, bucket: { ...STREAM_BUCKET, ...differs } }),
+      });
+      expect(choice(el)!.value).toBe("local-fs");
+    },
+  );
+
+  it("a stored bucket matching the bucket copy opens on that choice when Edit is pressed before the bucket copy's settings arrive", async () => {
+    let answer!: (value: unknown) => void;
+    const { el } = await mount(ON_STREAM_BUCKET, {
+      getStreamSettings: vi.fn().mockReturnValue(new Promise((resolve) => (answer = resolve))),
+    });
+    q(el, "[data-test=edit-settings]")!.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    answer(STREAM_ON);
+    await vi.waitFor(() => expect(q(el, "[data-test=save-settings]")).not.toBeNull());
+    expect(choice(el)!.value).toBe("stream-bucket");
+    expect(await buttonState(el, "save-settings")).toEqual(["secondary", true]);
+  });
+
+  it("a folder typed as the bucket choice's own name is a change from the bucket choice", async () => {
+    const { el } = await openEdit(ON_STREAM_BUCKET);
+    await choose(el, "local-fs");
+    await typeFolder(el, "stream-bucket");
+    expect(await buttonState(el, "save-settings")).toEqual(["primary", false]);
+  });
+
+  it("when the bucket copy's settings cannot be read, its bucket cannot be chosen and the form says why, with no page banner", async () => {
+    const { el } = await mount(OFF_WITH_KEY, {
+      getStreamSettings: vi.fn().mockRejectedValue({ code: "server.unreachable" }),
+    });
+    await vi.waitFor(() => expect(q(el, "[data-test=stream-unread]")).not.toBeNull());
+    const option = choice(el)!.options.find((o) => o.value === "stream-bucket")!;
+    expect(option.disabled).toBe(true);
+    expect(option.description).toBe(t("backup.destination.stream_unread"));
+    expect(text(q(el, "[data-test=stream-unread]")!).trim()).toBe(
+      t("backup.destination.stream_unread"),
+    );
+    expect(banner(el)).toBeNull();
+  });
+
+  it("a refused bucket-copy folder for archives sits in the bottom message, never the page banner, and Apply stays enabled", async () => {
+    const { el } = await openConfigure({
+      applyBackup: vi
+        .fn()
+        .mockRejectedValue({ code: "backup.request_invalid", params: { field: "prefix" } }),
+    });
+    await choose(el, "stream-bucket");
+    q(el, "[data-test=apply]")!.click();
+    await vi.waitFor(async () =>
+      expect(await bottomOf(el, "apply-actions")).toBe(
+        t("backup.destination.stream_prefix_refused"),
+      ),
+    );
+    expect(banner(el)).toBeNull();
+    expect(await buttonState(el, "apply")).toEqual(["primary", false]);
+  });
+
+  it("after a refused folder, choosing the bucket copy's bucket drops the fix-the-fields sentence", async () => {
+    const { el } = await openEdit(LOCAL_ONLY, {
+      applyBackup: vi
+        .fn()
+        .mockRejectedValue({ code: "backup.request_invalid", params: { field: "dir" } }),
+    });
+    await typeFolder(el, "/mnt/usb\tother");
+    q(el, "[data-test=save-settings]")!.click();
+    await vi.waitFor(async () =>
+      expect(await bottomOf(el, "settings-actions")).toBe(t("form.fix_fields")),
+    );
+    await choose(el, "stream-bucket");
+    expect(await bottomOf(el, "settings-actions")).toBeNull();
+  });
+
   it("an empty folder is held by the form's own check: the field says why, no request goes", async () => {
     const { el, api } = await openEdit(LOCAL_ONLY);
     await typeFolder(el, "");
@@ -584,7 +668,7 @@ describe("choosing where backups go", () => {
         .fn()
         .mockRejectedValue({ code: "backup.request_invalid", params: { field: "dir" } }),
     });
-    await typeFolder(el, "relative/path");
+    await typeFolder(el, "/mnt/usb\tother");
     q(el, "[data-test=save-settings]")!.click();
     await vi.waitFor(() =>
       expect((q(el, "[data-test=destination]") as Field).error).toBe(
