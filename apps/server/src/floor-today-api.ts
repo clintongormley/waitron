@@ -30,7 +30,7 @@ import type { Logger } from "./logger.js";
 import type { Run, TillApiDeps } from "./till-api.js";
 import { requireSession } from "./till-session.js";
 import { checkZones } from "./zone-access.js";
-import { moveRoom, roomPrints, roomRevision, sentRevision } from "./floor-revision.js";
+import { moveRoom, refuseStale, roomPrints, roomRevision, sentRevision } from "./floor-revision.js";
 import { zoneOfTable } from "./floor-today-table.js";
 import "./errors.js";
 
@@ -123,9 +123,7 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
     write: () => Promise<void>,
   ): Promise<{ zoneId: string; revision: number }> => {
     const from = await roomRevision(tx, zoneId);
-    if (sent !== undefined && sent !== from) {
-      throw new AppError("floor_today.out_of_date", { zoneId, revision: from });
-    }
+    refuseStale(zoneId, sent, from);
     const before = (await roomPrints(tx, deps.cfg, [zoneId])).get(zoneId);
     await write();
     const after = (await roomPrints(tx, deps.cfg, [zoneId])).get(zoneId);
@@ -222,14 +220,12 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
         const now = deps.clock.now().instant;
         await ensureToday(tx, deps.cfg, removals, now);
         const from = await roomRevision(tx, zoneId);
-        const stale =
-          sent === null
-            ? await hasTodayRow(tx, deps.cfg.locationId, zoneId)
-            : sent !== undefined && sent !== from;
-        if (stale) throw new AppError("floor_today.out_of_date", { zoneId, revision: from });
-        if (zone.active && zone.planId !== null)
-          await resetZone(tx, deps.cfg, removals, zoneId, now);
-        return roomRevision(tx, zoneId);
+        if (sent === null && (await hasTodayRow(tx, deps.cfg.locationId, zoneId))) {
+          throw new AppError("floor_today.out_of_date", { zoneId, revision: from });
+        }
+        refuseStale(zoneId, sent ?? undefined, from);
+        if (!zone.active || zone.planId === null) return from;
+        return (await resetZone(tx, deps.cfg, removals, zoneId, now)) ?? from;
       });
       return c.json({ zoneId, revision });
     }),

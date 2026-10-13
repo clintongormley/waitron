@@ -8,6 +8,7 @@ import {
   floorTodayZones,
   type Transaction,
 } from "@waitron/db";
+import { AppError } from "@waitron/shared";
 import { invalid } from "./bill-allocation.js";
 import type { TillConfig } from "./till-config.js";
 import "./errors.js";
@@ -20,6 +21,13 @@ export function sentRevision(body: Record<string, unknown>): number | undefined 
     throw invalid("zoneRevision");
   }
   return value;
+}
+
+/** Refuses `floor_today.out_of_date` when the till sent a revision other than the room's `current`. */
+export function refuseStale(zoneId: string, sent: number | undefined, current: number): void {
+  if (sent !== undefined && sent !== current) {
+    throw new AppError("floor_today.out_of_date", { zoneId, revision: current });
+  }
 }
 
 /** The room's revision; 0 before its first reset. */

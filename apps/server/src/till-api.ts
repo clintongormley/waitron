@@ -179,8 +179,8 @@ import { ensureToday } from "./floor-today-store.js";
 import { refuseTakenOff, zoneOfTable } from "./floor-today-table.js";
 import {
   moveChangedRooms,
+  refuseStale,
   roomPrints,
-  roomRevision,
   roomRevisions,
   sentRevision,
   zonesOf,
@@ -1087,14 +1087,23 @@ function refuseKitchenSignIn(device: DeviceBinding): void {
     throw new AppError("device.forbidden_action", { action: "sign_in" });
 }
 
+/**
+ * `write`, moving by one each room of `tableIds` it changed; refused before it when `check` names a
+ * table whose room is no longer at the revision sent.
+ */
 async function movingRooms<T extends object>(
   tx: Transaction,
   cfg: TillConfig,
   tableIds: readonly string[],
+  check: { tableId: string; sent: number } | undefined,
   write: () => Promise<T>,
 ): Promise<T | (T & { zoneRevisions: Record<string, number> })> {
   const rooms = await zonesOf(tx, cfg, tableIds);
   const revisions = await roomRevisions(tx, rooms);
+  if (check !== undefined) {
+    const zoneId = await zoneOfTable(tx, cfg, check.tableId);
+    refuseStale(zoneId, check.sent, revisions.get(zoneId)!);
+  }
   const before = await roomPrints(tx, cfg, rooms);
   const result = await write();
   const after = await roomPrints(tx, cfg, rooms);
@@ -2650,15 +2659,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         const result = await withTransaction(deps.db, async (tx) => {
           await catchUpFloor(tx);
           await checkZones(tx, deps.cfg, session, [{ partyId }, { tableId }]);
-          if (sent !== undefined) {
-            const zoneId = await zoneOfTable(tx, deps.cfg, tableId);
-            const revision = await roomRevision(tx, zoneId);
-            if (sent !== revision) {
-              throw new AppError("floor_today.out_of_date", { zoneId, revision });
-            }
-          }
           const heldBefore = await memberTables(tx, partyId);
-          return movingRooms(tx, deps.cfg, [...heldBefore, tableId], async () => {
+          const check = sent === undefined ? undefined : { tableId, sent };
+          return movingRooms(tx, deps.cfg, [...heldBefore, tableId], check, async () => {
             const acted = await act(tx, sendCfg, partyId, tableId, command);
             if (path === "move") {
               // Only a party staying on part of its merge breaks it up; a merge left whole stays, free.
@@ -2714,7 +2717,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         await catchUpFloor(tx);
         await checkZones(tx, deps.cfg, session, [{ partyId }]);
         const held = [...(await memberTables(tx, partyId)), tableId.toLowerCase()];
-        return movingRooms(tx, deps.cfg, held, async () => {
+        return movingRooms(tx, deps.cfg, held, undefined, async () => {
           const split = await splitTable(tx, sendCfg, partyId, tableId.toLowerCase(), billId, {
             expectedPartyRevision,
             operatorId: personId,

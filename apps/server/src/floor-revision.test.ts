@@ -33,6 +33,7 @@ import {
   plannedZone,
   splitOffRow,
   todayRow,
+  zoneRevisionOf,
 } from "./testing/floor-today-venue.js";
 import "./errors.js";
 
@@ -75,7 +76,6 @@ async function LONG_TABLE() {
   return zone;
 }
 
-const revisionOf = (zoneId: string) => inTx(v, (tx) => roomRevision(tx, zoneId));
 const printOf = async (zoneId: string) =>
   (await inTx(v, (tx) => roomPrints(tx, v.cfg, [zoneId]))).get(zoneId);
 const readFloor = (now = NOW) => inTx(v, (tx) => ensureToday(tx, v.cfg, REMOVALS, now));
@@ -131,16 +131,16 @@ async function onNextDay(act: () => Promise<void>): Promise<void> {
 describe("the room's revision", () => {
   it("a new room's first plan save makes its revision 1, and the next day's reset 2", async () => {
     const { zoneId } = await LONG_TABLE();
-    expect(await revisionOf(zoneId)).toBe(1);
+    expect(await zoneRevisionOf(v, zoneId)).toBe(1);
 
     await onNextDay(async () => {
       await readFloor(NEXT_DAY);
-      expect(await revisionOf(zoneId)).toBe(2);
+      expect(await zoneRevisionOf(v, zoneId)).toBe(2);
     });
   });
 
   it("is 0 for a room with no today's plan", async () => {
-    expect(await revisionOf(v.tables.zoneId)).toBe(0);
+    expect(await inTx(v, (tx) => roomRevision(tx, v.tables.zoneId))).toBe(0);
   });
 
   it("consecutive floor reads with a reset still pending leave the revision as it is", async () => {
@@ -150,12 +150,12 @@ describe("the room's revision", () => {
       tables.map((t) => (t.id === master.bar ? { ...t, label: `${t.label} b` } : t)),
     );
     await resetToSaved(zoneId);
-    const revision = await revisionOf(zoneId);
+    const revision = (await zoneRevisionOf(v, zoneId))!;
 
     await readFloor();
-    expect(await revisionOf(zoneId)).toBe(revision);
+    expect(await zoneRevisionOf(v, zoneId)).toBe(revision);
     await readFloor();
-    expect(await revisionOf(zoneId)).toBe(revision);
+    expect(await zoneRevisionOf(v, zoneId)).toBe(revision);
   });
 
   it("a catch-up that only hides a table moves the revision by one", async () => {
@@ -164,13 +164,35 @@ describe("the room's revision", () => {
     await resave(zoneId, (tables) => tables.filter((t) => t.id !== master.bar));
     await resetToSaved(zoneId);
     expect(await todayRow(v, table.bar!)).toBeDefined();
-    const revision = await revisionOf(zoneId);
+    const revision = (await zoneRevisionOf(v, zoneId))!;
     await finish(partyId);
 
     await readFloor();
 
     expect(await todayRow(v, table.bar!)).toBeUndefined();
-    expect(await revisionOf(zoneId)).toBe(revision + 1);
+    expect(await zoneRevisionOf(v, zoneId)).toBe(revision + 1);
+  });
+
+  it("one floor read catching up two rooms moves only the room its catch-up changed, by one", async () => {
+    const held = await LONG_TABLE();
+    await seat(v, held.table.bar!);
+    await resave(held.zoneId, (tables) =>
+      tables.map((t) => (t.id === held.master.bar ? { ...t, label: `${t.label} b` } : t)),
+    );
+    await resetToSaved(held.zoneId);
+    const freed = await LONG_TABLE();
+    const { partyId } = await seat(v, freed.table.bar!);
+    await resave(freed.zoneId, (tables) => tables.filter((t) => t.id !== freed.master.bar));
+    await resetToSaved(freed.zoneId);
+    const heldRevision = (await zoneRevisionOf(v, held.zoneId))!;
+    const freedRevision = (await zoneRevisionOf(v, freed.zoneId))!;
+    await finish(partyId);
+
+    await readFloor();
+
+    expect(await todayRow(v, freed.table.bar!)).toBeUndefined();
+    expect(await zoneRevisionOf(v, freed.zoneId)).toBe(freedRevision + 1);
+    expect(await zoneRevisionOf(v, held.zoneId)).toBe(heldRevision);
   });
 
   it("a new day's reset whose catch-up also renames a table moves the revision by exactly one", async () => {
@@ -180,12 +202,12 @@ describe("the room's revision", () => {
       tables.map((t) => (t.id === master.bar ? { ...t, label: renamed } : t)),
     );
     expect((await tableRow(v, table.bar!)).label).not.toBe(renamed);
-    const revision = await revisionOf(zoneId);
+    const revision = (await zoneRevisionOf(v, zoneId))!;
 
     await onNextDay(async () => {
       await readFloor(NEXT_DAY);
       expect((await tableRow(v, table.bar!)).label).toBe(renamed);
-      expect(await revisionOf(zoneId)).toBe(revision + 1);
+      expect(await zoneRevisionOf(v, zoneId)).toBe(revision + 1);
     });
   });
 });
@@ -266,8 +288,8 @@ describe("moving rooms", () => {
     });
 
     expect(moved).toEqual(new Map([[one.zoneId, 2]]));
-    expect(await revisionOf(one.zoneId)).toBe(2);
-    expect(await revisionOf(two.zoneId)).toBe(1);
+    expect(await zoneRevisionOf(v, one.zoneId)).toBe(2);
+    expect(await zoneRevisionOf(v, two.zoneId)).toBe(1);
   });
 
   it("moveChangedRooms leaves out a changed zone that has no today's plan to move", async () => {
@@ -292,20 +314,20 @@ describe("moving rooms", () => {
     );
 
     expect(moved).toEqual(new Map([[zoneId, 2]]));
-    expect(await revisionOf(zoneId)).toBe(2);
-    expect(await revisionOf(bare)).toBe(0);
+    expect(await zoneRevisionOf(v, zoneId)).toBe(2);
+    expect(await inTx(v, (tx) => roomRevision(tx, bare))).toBe(0);
   });
 
   it("moveRoom sets the revision one past where the request found it, once", async () => {
     const { zoneId } = await LONG_TABLE();
     expect(await inTx(v, (tx) => moveRoom(tx, zoneId, 1))).toBe(2);
     expect(await inTx(v, (tx) => moveRoom(tx, zoneId, 1))).toBe(2);
-    expect(await revisionOf(zoneId)).toBe(2);
+    expect(await zoneRevisionOf(v, zoneId)).toBe(2);
   });
 
   it("moveRoom leaves a room with no today's plan at what it was", async () => {
     expect(await inTx(v, (tx) => moveRoom(tx, v.tables.zoneId, 0))).toBe(0);
-    expect(await revisionOf(v.tables.zoneId)).toBe(0);
+    expect(await inTx(v, (tx) => roomRevision(tx, v.tables.zoneId))).toBe(0);
   });
 
   it("roomRevisions answers each zone asked for, 0 for one with no today's plan", async () => {
