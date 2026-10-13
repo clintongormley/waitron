@@ -1,7 +1,7 @@
 import { type DashboardRequest } from "@waitron/dashboard-kit";
 import { OpeningHoursApi } from "../dashboard/opening-hours-client.js";
 import type { SpecialDayPainter } from "../dashboard/special-day-painter.js";
-import type { SpecialDayDetail } from "../special-days.js";
+import type { SpecialDayDetail, SpecialDaySummary } from "../special-days.js";
 import { painterModel, type Write } from "./season-painter-fixture.js";
 
 export { painterModel, type Write };
@@ -26,6 +26,12 @@ export function storedDay(over: Partial<SpecialDayDetail> = {}): SpecialDayDetai
 export interface SpecialDayAnswers {
   /** The stored special days a read can find, by id. */
   days?: Record<string, SpecialDayDetail>;
+  /** What the list of special days answers; defaults to the stored days above. */
+  list?: readonly SpecialDaySummary[];
+  /** Awaited before the list answers. */
+  listAfter?: Promise<unknown>;
+  /** The list read fails. */
+  failingList?: boolean;
   /** Dates other special days hold, which the month read reports. */
   taken?: readonly { date: string; id: string; name: string }[];
   /** Months whose read fails. */
@@ -51,6 +57,11 @@ function savedFrom(write: Write): SpecialDayDetail {
 export function specialDayApi(writes: Write[] = [], answers: SpecialDayAnswers = {}) {
   return new OpeningHoursApi((async (url, method, body) => {
     if (method === "GET") {
+      if (/\/special-days$/.test(url)) {
+        await answers.listAfter;
+        if (answers.failingList) throw { code: "server.internal" };
+        return structuredClone(answers.list ?? Object.values(answers.days ?? {}));
+      }
       const day = /\/special-days\/([^/?]+)$/.exec(url);
       if (day) {
         const found = answers.days?.[decodeURIComponent(day[1]!)];

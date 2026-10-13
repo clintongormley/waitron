@@ -16,6 +16,7 @@ import {
   type SpecialDayAnswers,
   type Write,
 } from "../testing/special-day-painter-fixture.js";
+import { t } from "./strings.js";
 import "./special-day-painter.js";
 
 let painter: SpecialDayPainter | undefined;
@@ -37,20 +38,32 @@ async function mount(options: Options = {}) {
   const events: { type: string; detail: unknown }[] = [];
   painter = document.createElement("special-day-painter");
   painter.api = specialDayApi(writes, { days: { sd1: storedDay() }, ...options });
+  const lists: Promise<unknown>[] = [];
+  const list = painter.api.specialDays.listSpecialDays.bind(painter.api.specialDays);
+  painter.api.specialDays.listSpecialDays = (...args) => {
+    const answer = list(...args);
+    lists.push(answer);
+    return answer;
+  };
   painter.model = painterModel();
   painter.specialDayId = options.specialDayId === undefined ? "sd1" : options.specialDayId;
   painter.date = options.date ?? null;
   painter.holidays = options.holidays ?? [];
   painter.readOnly = options.readOnly ?? false;
   painter.open = true;
-  for (const type of ["special-day-saved", "special-day-deleted", "painter-close"])
+  for (const type of [
+    "special-day-saved",
+    "special-day-deleted",
+    "special-day-navigate",
+    "painter-close",
+  ])
     painter.addEventListener(type, (event) =>
       events.push({ type, detail: (event as CustomEvent).detail }),
     );
   applyTokens(painter);
   document.body.append(painter);
   await loaded(painter);
-  return { painter, writes, events };
+  return { painter, writes, events, lists };
 }
 async function loaded(el: SpecialDayPainter) {
   await settle(el);
@@ -184,6 +197,271 @@ describe("a new special day", () => {
     const { painter } = await mount({ specialDayId: null });
     expect(chips(painter)).toEqual([]);
     expect(grid(painter).columns).toEqual([]);
+  });
+});
+
+describe("opened on a public holiday", () => {
+  const navidad = [holiday("2026-12-25", "Navidad")];
+  const named = (id: string, name: string, dates: string[]): SpecialDayDetail =>
+    storedDay({
+      id,
+      name,
+      dates: dates.map((date) => ({ date, closedAllDay: date.endsWith("-24") })),
+    });
+  async function listed(el: SpecialDayPainter, lists: Promise<unknown>[]) {
+    await Promise.allSettled(lists);
+    await settle(el);
+  }
+  const nameValue = (el: SpecialDayPainter) =>
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=name]")?.value;
+
+  it("starts on the holiday's name and date, and Save sends exactly that unchanged", async () => {
+    const { painter, writes, lists } = await mount({
+      specialDayId: null,
+      date: "2026-12-25",
+      holidays: navidad,
+    });
+    await listed(painter, lists);
+    expect(lists).toHaveLength(1);
+    expect(part(painter, "offer")).toBeNull();
+    expect(nameValue(painter)).toBe("Navidad");
+    expect(chips(painter)).toEqual(["2026-12-25"]);
+    expect(saveButton(painter).disabled).toBe(false);
+    await save(painter, writes);
+    expect(writes).toEqual([
+      {
+        url: "/management-api/venue-service/special-days",
+        method: "POST",
+        body: {
+          name: "Navidad",
+          repeatsYearly: false,
+          dates: [{ date: "2026-12-25", closedAllDay: false }],
+          expectedClockRevision: 4,
+        },
+      },
+    ]);
+    expect(saveButton(painter).disabled).toBe(true);
+  });
+
+  it("closes at once when nothing was changed from the pre-fill", async () => {
+    const { painter, events } = await mount({
+      specialDayId: null,
+      date: "2026-12-25",
+      holidays: navidad,
+    });
+    frame(painter).shadowRoot!.querySelector<HTMLElement>("[data-test=dismiss]")!.click();
+    await expect.poll(() => painter.open).toBe(false);
+    expect(events.map(({ type }) => type)).toEqual(["painter-close"]);
+  });
+
+  it("first offers the special day of the same name, and only that name", async () => {
+    const days = { sd1: storedDay(), sd2: named("sd2", "Navidad", ["2025-12-25"]) };
+    const offered = await mount({
+      specialDayId: null,
+      date: "2026-12-25",
+      holidays: navidad,
+      days,
+    });
+    await listed(offered.painter, offered.lists);
+    expect(part(offered.painter, "offer")!.textContent).toContain(
+      "A special day called Navidad already exists.",
+    );
+    expect(part(offered.painter, "add-to")!.textContent!.trim()).toBe("Add to Navidad");
+    expect(part(offered.painter, "new-instead")!.textContent!.trim()).toBe("New special day");
+    expect(nameValue(offered.painter)).toBeUndefined();
+    expect(saveButton(offered.painter).disabled).toBe(true);
+    frame(offered.painter).dispatchEvent(new CustomEvent("painter-save"));
+    await settle(offered.painter);
+    expect(offered.writes).toEqual([]);
+    offered.painter.remove();
+
+    const other = await mount({
+      specialDayId: null,
+      date: "2026-12-25",
+      holidays: navidad,
+      days: { sd2: named("sd2", "Navidad dinners", ["2025-12-25"]) },
+    });
+    await listed(other.painter, other.lists);
+    expect(part(other.painter, "offer")).toBeNull();
+    expect(nameValue(other.painter)).toBe("Navidad");
+  });
+
+  it("never offers on an ordinary date or a stored day, and asks for no list there", async () => {
+    const days = { sd1: storedDay({ name: "Navidad" }), sd2: named("sd2", "Navidad", []) };
+    const ordinary = await mount({
+      specialDayId: null,
+      date: "2026-12-24",
+      holidays: navidad,
+      days,
+    });
+    await listed(ordinary.painter, ordinary.lists);
+    expect(ordinary.lists).toHaveLength(0);
+    expect(part(ordinary.painter, "offer")).toBeNull();
+    expect(nameValue(ordinary.painter)).toBe("");
+    ordinary.painter.remove();
+
+    const stored = await mount({ date: "2026-12-25", holidays: navidad, days });
+    await listed(stored.painter, stored.lists);
+    expect(stored.lists).toHaveLength(0);
+    expect(part(stored.painter, "offer")).toBeNull();
+  });
+
+  it("Add to opens that special day with the date added to its draft, and saves nothing", async () => {
+    const days = {
+      sd1: storedDay(),
+      sd2: named("sd2", "Navidad", ["2025-12-24", "2025-12-25"]),
+    };
+    const { painter, writes, events, lists } = await mount({
+      specialDayId: null,
+      date: "2026-12-25",
+      holidays: navidad,
+      days,
+    });
+    await listed(painter, lists);
+    part(painter, "add-to")!.click();
+    await loaded(painter);
+    await expect.poll(() => chips(painter)).toEqual(["2025-12-24", "2025-12-25", "2026-12-25"]);
+    expect(part(painter, "offer")).toBeNull();
+    expect(nameValue(painter)).toBe("Navidad");
+    expect(tick(painter, "2025-12-24").checked).toBe(true);
+    expect(tick(painter, "2025-12-25").checked).toBe(false);
+    expect(tick(painter, "2026-12-25").checked).toBe(false);
+    expect(writes).toEqual([]);
+    expect(events).toEqual([{ type: "special-day-navigate", detail: { specialDayId: "sd2" } }]);
+    expect(saveButton(painter).disabled).toBe(false);
+    expect(part(painter, "delete")).not.toBeNull();
+
+    painter.specialDayId = "sd2";
+    await settle(painter);
+    expect(chips(painter)).toEqual(["2025-12-24", "2025-12-25", "2026-12-25"]);
+
+    await save(painter, writes);
+    expect(writes).toEqual([
+      {
+        url: "/management-api/venue-service/special-days/sd2",
+        method: "PUT",
+        body: {
+          name: "Navidad",
+          repeatsYearly: false,
+          dates: [
+            { date: "2025-12-24", closedAllDay: true },
+            { date: "2025-12-25", closedAllDay: false },
+            { date: "2026-12-25", closedAllDay: false },
+          ],
+          expectedClockRevision: 4,
+        },
+      },
+    ]);
+  });
+
+  it("Add to a day that already holds the date opens it unchanged", async () => {
+    const days = { sd2: named("sd2", "Navidad", ["2026-12-25"]) };
+    const { painter, lists } = await mount({
+      specialDayId: null,
+      date: "2026-12-25",
+      holidays: navidad,
+      days,
+    });
+    await listed(painter, lists);
+    part(painter, "add-to")!.click();
+    await loaded(painter);
+    await expect.poll(() => part(painter, "offer")).toBeNull();
+    expect(chips(painter)).toEqual(["2026-12-25"]);
+    expect(saveButton(painter).disabled).toBe(true);
+  });
+
+  it("offers the same-named day with the latest date, and the lowest id on a tie", async () => {
+    const pick = async (days: Record<string, SpecialDayDetail>) => {
+      const { painter, events, lists } = await mount({
+        specialDayId: null,
+        date: "2026-12-25",
+        holidays: navidad,
+        days,
+      });
+      await listed(painter, lists);
+      part(painter, "add-to")!.click();
+      await expect.poll(() => events.length).toBe(1);
+      painter.remove();
+      return (events[0]!.detail as { specialDayId: string }).specialDayId;
+    };
+    expect(
+      await pick({
+        sd1: named("sd1", "Navidad", []),
+        sd2: named("sd2", "Navidad", ["2023-12-25", "2024-12-25"]),
+        sd3: named("sd3", "Navidad", ["2025-12-25"]),
+      }),
+    ).toBe("sd3");
+    expect(
+      await pick({
+        sd5: named("sd5", "Navidad", ["2025-12-25"]),
+        sd4: named("sd4", "Navidad", ["2025-12-25"]),
+        sd1: named("sd1", "Navidad", []),
+      }),
+    ).toBe("sd4");
+  });
+
+  it("New special day keeps the pre-filled new day", async () => {
+    const days = { sd2: named("sd2", "Navidad", ["2025-12-25"]) };
+    const { painter, writes, events, lists } = await mount({
+      specialDayId: null,
+      date: "2026-12-25",
+      holidays: navidad,
+      days,
+    });
+    await listed(painter, lists);
+    part(painter, "new-instead")!.click();
+    await settle(painter);
+    expect(part(painter, "offer")).toBeNull();
+    expect(nameValue(painter)).toBe("Navidad");
+    expect(chips(painter)).toEqual(["2026-12-25"]);
+    expect(part(painter, "delete")).toBeNull();
+    await save(painter, writes);
+    expect(writes[0]!.method).toBe("POST");
+    expect(events.map(({ type }) => type)).toEqual(["special-day-saved"]);
+  });
+
+  it("a list that fails, or lands after the painter moved on, offers nothing", async () => {
+    const days = { sd1: storedDay(), sd2: named("sd2", "Navidad", ["2025-12-25"]) };
+    const failed = await mount({
+      specialDayId: null,
+      date: "2026-12-25",
+      holidays: navidad,
+      days,
+      failingList: true,
+    });
+    await listed(failed.painter, failed.lists);
+    expect(part(failed.painter, "offer")).toBeNull();
+    expect(nameValue(failed.painter)).toBe("Navidad");
+    failed.painter.remove();
+
+    let release!: () => void;
+    const late = await mount({
+      specialDayId: null,
+      date: "2026-12-25",
+      holidays: navidad,
+      days,
+      listAfter: new Promise<void>((resolve) => (release = resolve)),
+    });
+    late.painter.specialDayId = "sd1";
+    await loaded(late.painter);
+    release();
+    await listed(late.painter, late.lists);
+    expect(part(late.painter, "offer")).toBeNull();
+    expect(nameValue(late.painter)).toBe("Christmas dinners");
+  });
+
+  it("a read of the offered day that fails says so beside Save", async () => {
+    const { painter, events, lists } = await mount({
+      specialDayId: null,
+      date: "2026-12-25",
+      holidays: navidad,
+      days: {},
+      list: [{ id: "sd9", name: "Navidad", repeatsYearly: false, dates: [] }],
+    });
+    await listed(painter, lists);
+    part(painter, "add-to")!.click();
+    await expect.poll(() => frame(painter).refusal).toBe(t("special.load_error"));
+    expect(events).toEqual([]);
   });
 });
 

@@ -13,12 +13,13 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
+import { holidayDateName } from "../holiday-naming.js";
 import type { HolidayFact, LocalDate } from "../hours-types.js";
 import { isLocalDate } from "../hours-rules.js";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import type { Paint } from "../paint-model.js";
 import { samePaint } from "../paint-model.js";
-import type { SpecialDayDetail, SpecialDayInput } from "../special-days.js";
+import type { SpecialDayDetail, SpecialDayInput, SpecialDaySummary } from "../special-days.js";
 import type { AddDates } from "./add-dates-calendar.js";
 import type { OpeningHoursApi } from "./opening-hours-client.js";
 import type { PaintColumn } from "./paint-grid.js";
@@ -90,9 +91,9 @@ const sameDraft = (a: Draft, b: Draft) =>
   ) &&
   samePaintMap(a.paint, b.paint);
 
-function blank(dates: readonly LocalDate[]): Draft {
+function blank(dates: readonly LocalDate[], name = ""): Draft {
   return {
-    name: "",
+    name,
     repeatsYearly: false,
     dates: dates.map((date) => ({ date, closedAllDay: false })),
     paint: new Map(),
@@ -127,6 +128,16 @@ function fromDetail(detail: SpecialDayDetail): Draft {
     dates: detail.dates.map(({ date, closedAllDay }) => ({ date, closedAllDay })).sort(byDate),
     paint,
   };
+}
+/** The same-named special day with the latest date; on a tie, the lowest id. */
+function offerMatch(days: readonly SpecialDaySummary[], name: string): string | undefined {
+  const latest = (day: SpecialDaySummary) =>
+    day.dates.reduce((last, { date }) => (date > last ? date : last), "");
+  return days
+    .filter((day) => day.name === name)
+    .sort((a, b) =>
+      latest(a) !== latest(b) ? (latest(a) < latest(b) ? 1 : -1) : a.id < b.id ? -1 : 1,
+    )[0]?.id;
 }
 const columnLabel = (date: LocalDate) =>
   `${formatWeekday(date, "short")} ${formatMonthDay(date.slice(5))}`;
@@ -315,6 +326,10 @@ export class SpecialDayPainter extends LitElement {
   @state() private month = "";
   @state() private taken: ReadonlyMap<LocalDate, string> = new Map();
   @state() private deleting?: { busy: boolean; message: string };
+  /** The same-named special day offered before a new day on a public holiday, until answered. */
+  @state() private offered?: string;
+  /** A new day pre-filled from a public holiday can be saved as it opened. */
+  private savableAtOpen = false;
   private baseline: Draft = blank([]);
   /** What the draft was seeded from: a special day's id, or `new:<date>`. */
   private seeded?: string;
@@ -369,15 +384,22 @@ export class SpecialDayPainter extends LitElement {
     this.refused = undefined;
     this.deleting = undefined;
     this.adding = false;
+    this.offered = undefined;
     this.closeMonth();
     this.loadFailed = false;
     this.revision = this.model.clockRevision;
     const id = this.specialDayId;
     if (id === null) {
       this.loading = false;
-      this.adopt(undefined, this.date && isLocalDate(this.date) ? [this.date] : []);
+      const date = this.date && isLocalDate(this.date) ? this.date : undefined;
+      const name = date ? holidayDateName(this.holidays, date, "") : "";
+      this.adopt(undefined, date ? [date] : [], name);
+      if (name) this.offerExisting(name);
       return;
     }
+    this.read(id);
+  }
+  private read(id: string, addDate?: LocalDate) {
     this.loading = true;
     this.adopt(undefined, []);
     const generation = this.generation;
@@ -386,6 +408,19 @@ export class SpecialDayPainter extends LitElement {
         if (generation !== this.generation) return;
         this.loading = false;
         this.adopt(detail, []);
+        if (addDate === undefined) return;
+        if (!this.draft.dates.some(({ date }) => date === addDate))
+          this.change({
+            ...this.draft,
+            dates: [...this.draft.dates, { date: addDate, closedAllDay: false }].sort(byDate),
+          });
+        this.dispatchEvent(
+          new CustomEvent("special-day-navigate", {
+            detail: { specialDayId: id },
+            bubbles: true,
+            composed: true,
+          }),
+        );
       },
       () => {
         if (generation !== this.generation) return;
@@ -394,9 +429,25 @@ export class SpecialDayPainter extends LitElement {
       },
     );
   }
-  private adopt(detail: SpecialDayDetail | undefined, dates: readonly LocalDate[]) {
+  /** A list that fails or lands late offers nothing: the pre-filled new day stands. */
+  private offerExisting(name: string) {
+    const generation = this.generation;
+    this.api.specialDays.listSpecialDays().then((days) => {
+      if (generation === this.generation) this.offered = offerMatch(days, name);
+    }, ignore);
+  }
+  private addTo(id: string) {
+    const date = this.draft.dates[0]!.date;
+    this.generation = {};
+    this.offered = undefined;
+    this.specialDayId = id;
+    this.seeded = id;
+    this.read(id, date);
+  }
+  private adopt(detail: SpecialDayDetail | undefined, dates: readonly LocalDate[], name = "") {
     this.stored = new Map(detail?.dates.map(({ date, holidayName }) => [date, holidayName]));
-    const fresh = detail ? fromDetail(detail) : blank(dates);
+    this.savableAtOpen = !detail && name !== "";
+    const fresh = detail ? fromDetail(detail) : blank(dates, name);
     this.draft = copyDraft(fresh);
     this.baseline = fresh;
     this.scope?.commit(copyDraft(fresh));
@@ -418,7 +469,13 @@ export class SpecialDayPainter extends LitElement {
   }
 
   private async save() {
-    if (this.saving || this.loading || saveActionState(this.scope).unchanged) return;
+    if (
+      this.saving ||
+      this.loading ||
+      this.offered ||
+      saveActionState(this.scope, { savableAtOpen: this.savableAtOpen }).unchanged
+    )
+      return;
     this.attempted = true;
     if (this.blocked()) {
       await this.updateComplete;
@@ -705,6 +762,23 @@ export class SpecialDayPainter extends LitElement {
       <p class="explain" data-test="explain">${t("special.explain")}</p>
     </section>`;
   }
+  private offer(id: string) {
+    const name = this.draft.name;
+    return html`<section class="panel" data-test="offer">
+      <p>${format("special.offer", { name })}</p>
+      <wt-button data-test="add-to" @click=${() => this.addTo(id)}
+        >${format("special.add_to", { name })}</wt-button
+      >
+      <wt-button
+        data-test="new-instead"
+        variant="secondary"
+        @click=${() => {
+          this.offered = undefined;
+        }}
+        >${t("special.new")}</wt-button
+      >
+    </section>`;
+  }
   private deleteDialog() {
     const deleting = this.deleting;
     if (!deleting) return nothing;
@@ -753,7 +827,11 @@ export class SpecialDayPainter extends LitElement {
         .heading=${this.heading()}
         .scope=${this.scope}
         .coordinator=${this.coordinator}
-        .dirty=${(this.scope?.isDirty() ?? false) && !this.blocked()}
+        .dirty=${
+          !this.offered &&
+          !saveActionState(this.scope, { savableAtOpen: this.savableAtOpen }).unchanged &&
+          !this.blocked()
+        }
         .busy=${this.saving}
         .refusal=${this.message()}
         .readOnly=${this.readOnly}
@@ -765,6 +843,7 @@ export class SpecialDayPainter extends LitElement {
           this.saving = false;
           this.adding = false;
           this.deleting = undefined;
+          this.offered = undefined;
           this.closeMonth();
         }}
       >
@@ -783,7 +862,7 @@ export class SpecialDayPainter extends LitElement {
             : nothing
         }
         <div class="body">
-          ${this.panel(locked)}
+          ${this.offered ? this.offer(this.offered) : this.panel(locked)}
           <div class="dates">
             <paint-grid
               .target=${this.seeded ?? ""}
