@@ -1007,3 +1007,34 @@ From W69 (#1325, warn before discarding unsaved changes):
 From A334 (#1416, held reorder drags scroll at the list edge):
 
 - Floor and grid placement editors remain outside this change.
+
+## A582. Help mode: a "?" in the top bar marks everything that has help (owner 2026-10-13)
+
+The owner's words (2026-10-13, watcher session): "I want a help interface so that there is a
+question mark with a circle around it up in the top nav bar. And when you click it, it highlights
+lots of things on the page with the circle with a question mark inside. And then if you click any of
+those, it gives you help or it takes you to a page on the documentation. So it's essentially a help
+mode that you can turn on and off. It doesn't obscure the page during the normal use, but you can get
+help about anything you want very quickly."
+
+- **Where.** The dashboard AND the devices: tills and handhelds, and probably the kitchen screens and
+  monitors too (owner, 2026-10-13: "This for the dashboard and the devices, handhelds and tills. And
+  probably the screens, monitors as well."). A monitor is view-only, so its help explains what it
+  shows.
+- **The switch.** A circled "?" in the top bar (on the dashboard, in the banner beside the account
+  menu; on a device, in its own top bar) turns help mode on and off. It shows clearly when it is on.
+- **While on.** Each part of the page that has help — a field, a button, a column, a section, a tab —
+  shows a small circled "?" beside it. Clicking one shows a short help text in a popover, or opens
+  the matching documentation page when the help is longer.
+- **While off.** Nothing is added to the page; normal use is unobstructed.
+- **Open points for the plan:** where the help texts live and how they are translated (EN/ES, like
+  the screens' strings); how a screen declares which of its parts have help, so a shared `wt-*`
+  primitive can carry it rather than every screen drawing its own marker; whether the mode stays on across pages and sessions; keyboard and screen-reader use.
+- **Documentation does not exist yet.** The repository has developer docs only (`docs/developers/`);
+  there is no user documentation for a "?" to link to. Writing it, and deciding where it is
+  published, is part of this work or its own entry.
+- **Relation to A237.** The standing rule (owner 2026-10-03) makes a short explanation the field's
+  hint, never a "?" button. Help mode fits beside it: hints stay where they are, and help mode is the
+  place for the longer explanation. A237's remaining "?" buttons may move into help mode instead of
+  becoming hints; decide in the plan.
+

@@ -3344,6 +3344,13 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 
 _Formerly A7, and the dashboard entries in the opening part of the old Track A (before A1); part of A9._ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
+- **A582. Help mode: a "?" in the top bar marks everything that has help (owner 2026-10-13)** —
+  OPEN, not started. On the dashboard and on every device — tills, handhelds, and probably the
+  kitchen screens and monitors — a circled "?" in the top bar switches help mode on and off; while
+  on, a small circled "?" appears beside each thing on the page that has help, and clicking one shows
+  the help or opens its page in the documentation. Nothing changes on the page while it is off.
+  [Detail](backlog/dashboard.md#a582-help-mode-a--in-the-top-bar-marks-everything-that-has-help-owner-2026-10-13)
+
 - **A form's bottom message in a full-height dialog sits far above its buttons** (found by A507's
   look, owner decision needed). `wt-modal` keeps standard and wide dialogs at full height
   (`packages/ui/src/components/wt-modal.ts:17`) and `wt-dialog` puts the form's message at the end
