@@ -45,7 +45,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const BUCKET_ID = "bucket";
 const LOCAL_ID = "primary";
 
-function requestInvalid(field: string): AppError {
+export function requestInvalid(field: string): AppError {
   return new AppError("backup.request_invalid", { field });
 }
 
@@ -66,11 +66,12 @@ export function archiveNamespace(selectedPrefix: string, venueId: string): strin
   return `${root}archives/${venueId}/`;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function hasExactKeys(
+/** Every `required` key is present, and every key is `required` or `optional`. */
+export function hasExactKeys(
   value: Record<string, unknown>,
   required: readonly string[],
   optional: readonly string[] = [],

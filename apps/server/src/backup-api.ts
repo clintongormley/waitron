@@ -13,8 +13,11 @@ import {
   requireManagementSession,
 } from "@waitron/server-kit";
 import {
+  hasExactKeys,
+  isRecord,
   parseArchiveSettings,
   readHeldArchiveSettings,
+  requestInvalid,
   resolveArchiveChoice,
   writeArchiveSettings,
   type ArchiveSettings,
@@ -130,16 +133,8 @@ function withoutRevision(settings: ArchiveSettings): Omit<ArchiveSettings, "revi
   return rest;
 }
 
-function requestInvalid(field: string): AppError {
-  return new AppError("backup.request_invalid", { field });
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 function onlyKeys(value: Record<string, unknown>, keys: readonly string[], field: string): void {
-  if (!Object.keys(value).every((key) => keys.includes(key))) throw requestInvalid(field);
+  if (!hasExactKeys(value, [], keys)) throw requestInvalid(field);
 }
 
 function isWhole(value: unknown): value is number {
@@ -212,7 +207,7 @@ const APPLY_FIELDS = [
 async function readApplyBody(c: Context): Promise<ApplyBody> {
   const body = await readJsonBody<unknown>(c);
   if (!isRecord(body)) throw requestInvalid("body");
-  if (!Object.keys(body).every((key) => APPLY_FIELDS.includes(key))) throw requestInvalid("body");
+  onlyKeys(body, APPLY_FIELDS, "body");
   if (!isRecord(body.destination)) throw requestInvalid("destination");
   const { recoveryKey, destinationTimeoutMs } = body;
   if ("recoveryKey" in body && (typeof recoveryKey !== "string" || recoveryKey === "")) {
