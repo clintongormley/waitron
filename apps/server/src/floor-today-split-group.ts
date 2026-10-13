@@ -17,7 +17,13 @@ import { splitJoinedTable } from "./floor-today-split.js";
 import { catchUpZone, foodComingTo, placementColumns, placementOf } from "./floor-today-store.js";
 import { todayOf, type Today } from "./floor-today-table.js";
 import { enqueueMovedSlipsFor, readPartiesSentWork } from "./kitchen-print.js";
-import { checkAndBumpParty, holdersOf, leaveForClearing, partyRevision } from "./parties.js";
+import {
+  checkAndBumpParty,
+  holdersOf,
+  leaveForClearing,
+  memberTables,
+  partyRevision,
+} from "./parties.js";
 import type { Placement } from "./floor-reset-plan.js";
 import { joinedPlaceOver, partPlaces } from "./joined-split-layout.js";
 import type { TillConfig } from "./till-config.js";
@@ -64,7 +70,8 @@ interface Rejoin {
  * joined table none of whose tables is still joined, next to each other in its order and each
  * standing where its layout from the first of them puts it, with nobody seated and no food on its
  * way to them, the joined table is put back over them; otherwise they stay a group of `seats`.
- * Guests at the group leave the ticked tables, as Move guests leaves tables, and the kitchen is told.
+ * Guests at the group leave the ticked tables, as Move guests leaves tables, and the kitchen is told;
+ * ticking every table a party holds is refused `tab.already_open`.
  */
 async function splitGroup(
   tx: Transaction,
@@ -85,9 +92,15 @@ async function splitGroup(
   if (staying.length === 0) throw new AppError("merge.split_all", { tableId, field: "partIds" });
   const holders = await holdersOf(tx, members);
   if (holders.size > 0) {
-    if (staying.length >= 2 && seats === null) throw new AppError("merge.seats_required", {});
     const leaving = partIds.filter((id) => holders.has(id));
     const losing = [...new Set(leaving.map((id) => holders.get(id)!))];
+    const emptied = new Set<string>();
+    for (const partyId of losing) {
+      if ((await memberTables(tx, partyId)).every((id) => ticked.has(id))) emptied.add(partyId);
+    }
+    const stranding = members.find((id) => ticked.has(id) && emptied.has(holders.get(id)!));
+    if (stranding !== undefined) throw new AppError("tab.already_open", { tableId: stranding });
+    if (staying.length >= 2 && seats === null) throw new AppError("merge.seats_required", {});
     const before = await readPartiesSentWork(tx, cfg, losing);
     for (const partyId of losing) {
       await checkAndBumpParty(tx, partyId, await partyRevision(tx, partyId), "open");
@@ -156,12 +169,19 @@ async function leaveAsGroup(
 }
 
 /**
- * Within one square: places are rounded to whole squares, so on a turned table the slot worked out
- * from the anchor's rounded place can be a square off where the joined table's own layout, or a merge
- * beside a neighbour, rounded the table.
+ * Within one square for a table 2 or more each way: places are rounded to whole squares, so on a
+ * turned table the slot worked out from the anchor's rounded place can be a square off where the
+ * joined table's own layout, or a merge beside a neighbour, rounded the table. A table 1 square
+ * across a square off stands beside its slot, not in it, so it must stand exactly there.
  */
-const standsIn = (at: Placement, slot: Placement): boolean =>
-  Math.abs(at.x - slot.x) <= 1 && Math.abs(at.y - slot.y) <= 1 && at.rotation === slot.rotation;
+const standsIn = (at: Placement, slot: Placement): boolean => {
+  const slack = at.width >= 2 && at.height >= 2 ? 1 : 0;
+  return (
+    Math.abs(at.x - slot.x) <= slack &&
+    Math.abs(at.y - slot.y) <= slack &&
+    at.rotation === slot.rotation
+  );
+};
 
 /** The joined table `staying` were all split off, when it may be put back over them; else null. Nobody sits at the group. */
 async function rejoining(tx: Transaction, staying: readonly Row[]): Promise<Rejoin | null> {
