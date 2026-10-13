@@ -219,8 +219,8 @@ export async function runOnce(
   }
 }
 
-/** The limit S3 states for one multi-object delete; quoted at `DELETE_BATCH_KEYS` in
- * `packages/stream/src/s3-store.ts`. */
+/** The limit S3 states for one multi-object delete; `DELETE_BATCH_KEYS` in
+ * `packages/stream/src/s3-file-store.ts` holds the same limit. */
 const DELETE_BATCH = 1000;
 
 /** Deletes an archive past EITHER cap: beyond the `retain` newest, or older than `retainDays`, both

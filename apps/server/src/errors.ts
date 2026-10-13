@@ -1192,8 +1192,9 @@ declare module "@waitron/shared" {
     /** An alert source failed while being read. Its alerts are replaced by this one, under the
      * source's own area and permission. Built as data, never thrown. */
     "alert.source_unavailable": { area: string };
-    /** A backup destination's newest good backup is older than the stale threshold. `destination` is
-     * the backend id (never a secret). Built as data by the backups alert source, never thrown. */
+    /** A backup destination's newest good backup is older than the stale threshold, it holds no
+     * archive, or it could not be listed. `destination` is the backend id (never a secret). Built as
+     * data by the backups alert source, never thrown. */
     "backup.destination_overdue": { destination: string };
     /** A backup destination's most recent attempt failed. `destination` is the backend id (never a
      * secret). Built as data by the backups alert source, never thrown. */
@@ -1201,8 +1202,9 @@ declare module "@waitron/shared" {
     /** A small object put to a bucket destination, or read from any destination, is larger than
      * `maxBytes` (`SMALL_OBJECT_MAX_BYTES`, `storage-backend.ts`). */
     "backup.destination_object_too_large": { maxBytes: number };
-    /** One destination's upload and its pruning did not finish within `timeoutMs`
-     * (`WAITRON_BACKUP_DESTINATION_TIMEOUT_MS`), and were stopped. */
+    /** A call to one destination did not finish within `timeoutMs` and was stopped: an upload plus
+     * its pruning (`WAITRON_BACKUP_DESTINATION_TIMEOUT_MS`), or a status listing
+     * (`STATUS_READ_TIMEOUT_MS`, `backup-status.ts`). */
     "backup.destination_timed_out": { timeoutMs: number };
     /** The backup staging folder's filesystem reported fewer than `neededBytes` free, so the tick
      * stopped before writing more there; `availableBytes` is what it reported. */

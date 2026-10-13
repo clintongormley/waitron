@@ -4165,9 +4165,20 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 
 - **A backup that fails before reaching any destination tells the owner nothing about why.** When
   a run stops early, for example on `backup.staging_space_low` or `recovery.state_incomplete`, it is
-  only logged as `backup.failed` with its code (logged this way since #295, 2026-09-09). No
+  only logged as `backup.failed` with its code. No
   destination records an outcome and no alert names the cause; what the owner sees is
   `backup.destination_overdue`, once the last archive is old enough. Left open by A538-3.
+
+- **The Backups page shows "No backup has run yet" for a destination the box could not list, and a
+  pruning failure is shown nowhere.** Backup status now carries `readErrorCode` and
+  `pruneErrorCode` per destination, but the screen reads neither and shows "never" whenever
+  `lastBackupAt` is null (`backup-screen.ts`), and a folder holding
+  only old-format archive names also reads as never backed up. Left open by A538-3; plan Task 6
+  covers the screen.
+
+- **Every backup status read builds and closes a new client per destination**, a new S3 client for
+  a bucket, even while the running sweep holds live ones. This predates A538-3, which added
+  `close()`; reusing the sweep's backends needs `close()` to wait for a status read in flight.
 
 - **Whole-state-volume capture** (its own §5-reviewed slice): capture the whole state directory EXCEPT
   an explicit exclusion set, with a completeness guard that fails when a new top-level entry is

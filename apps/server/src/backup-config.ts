@@ -89,7 +89,7 @@ function parseDestinationTimeout(env: Env): number {
   const variable = "WAITRON_BACKUP_DESTINATION_TIMEOUT_MS";
   const ms = positiveInt(env, variable, DEFAULT_DESTINATION_TIMEOUT_MS);
   if (ms < MIN_DESTINATION_TIMEOUT_MS || ms > MAX_DESTINATION_TIMEOUT_MS) {
-    throw new AppError("server.config_invalid", { variable, reason: "out_of_range" });
+    throw new AppError("server.config_invalid", { variable, reason: "timeout_out_of_range" });
   }
   return ms;
 }

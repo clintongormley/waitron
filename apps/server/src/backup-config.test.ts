@@ -295,7 +295,7 @@ describe("loadBackupConfig destination time limit", () => {
     for (const raw of ["29999", "86400001"]) {
       expect(() =>
         loadBackupConfig({ ...base, WAITRON_BACKUP_DESTINATION_TIMEOUT_MS: raw }),
-      ).toThrow(refusal("out_of_range"));
+      ).toThrow(refusal("timeout_out_of_range"));
     }
   });
 

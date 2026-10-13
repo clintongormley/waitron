@@ -60,8 +60,8 @@ export const ALERT_MESSAGES: Readonly<
     es: "El monitor de pase {device} tiene platos pendientes y lleva más de tres minutos sin conectarse. Revísalo; mientras tanto, usa la vista de pase del TPV.",
   },
   "backup.destination_overdue": {
-    en: "Backups to “{destination}” are overdue — no recent good backup. Check the destination on the Backups page.",
-    es: "Las copias de seguridad en «{destination}» están atrasadas: no hay ninguna correcta reciente. Revisa el destino en la página de Copias.",
+    en: "Backups to “{destination}” are overdue, or the destination could not be checked. Check it on the Backups page.",
+    es: "Las copias de seguridad en «{destination}» están atrasadas o no se ha podido comprobar el destino. Revísalo en la página de Copias.",
   },
   "backup.destination_failed": {
     en: "The last backup to “{destination}” failed. Open the Backups page to retry.",
