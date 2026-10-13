@@ -203,6 +203,15 @@ describe("the Opening hours year read", () => {
     ]);
   });
 
+  it("puts no date in a season for a venue that has none yet", async () => {
+    const v = await venue([]);
+    expect(v.seasons).toEqual({});
+    const year = await read(v, 2030);
+    expect(year.seasons).toEqual([]);
+    expect(year.days).toHaveLength(365);
+    expect(year.days.filter((day) => day.seasonId !== null)).toEqual([]);
+  });
+
   it("ends each season on its true last day in the shown year, 29 February in a leap year", async () => {
     const v = await venue();
     const lastDays = async (year: number) =>

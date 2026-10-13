@@ -289,6 +289,15 @@ describe("the season routes", () => {
       400,
       { error: { code: "season.invalid", params: { field: "startsOn" } } },
     );
+    await answers(
+      await r.send("POST", "/seasons", r.manager, {
+        name: 7,
+        startsOn: "04-10",
+        expectedClockRevision: 0,
+      }),
+      400,
+      { error: { code: "season.invalid", params: { field: "name" } } },
+    );
   });
 
   it("answers season.not_found with 404 for a season it does not hold", async () => {
