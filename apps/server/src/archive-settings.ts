@@ -7,7 +7,6 @@ import {
   isKeySegment,
   normalisePrefix,
   readBucketConfig,
-  venuePrefix,
   type BucketConfig,
 } from "@waitron/stream";
 import {
@@ -284,6 +283,7 @@ function sameBucketPlace(a: BucketConfig, b: BucketConfig): boolean {
 }
 
 const AWS = "aws";
+const STREAM_VENUES = "venues/";
 
 /**
  * Two spellings the S3 client sends to one URL compare equal. No endpoint is taken to be AWS's
@@ -310,8 +310,9 @@ function refuseOverlap(bucket: BucketConfig, venueId: string, stream: StreamSett
     return;
   }
   const archive = archiveNamespace(bucket.prefix, venueId);
-  const live = normalisePrefix(s.prefix) + venuePrefix(stream.venueId);
-  if (archive.startsWith(live) || live.startsWith(archive)) {
+  // Every venue's stream folder sits under one `venues/` folder (`venuePrefix`, @waitron/stream).
+  const venues = normalisePrefix(s.prefix) + STREAM_VENUES;
+  if (archive.startsWith(venues) || venues.startsWith(archive)) {
     throw new AppError("backup.archive_namespace_overlap", {});
   }
 }
