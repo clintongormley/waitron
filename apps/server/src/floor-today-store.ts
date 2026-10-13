@@ -719,7 +719,7 @@ export async function seatsToday(
 
 /**
  * Sets the table's today's row from what the last reset copied for it, after it leaves any merge.
- * Its name is left alone: names change only at a reset or a catch-up.
+ * Its label and its today's name are left alone.
  */
 export async function backToSaved(
   tx: Transaction,

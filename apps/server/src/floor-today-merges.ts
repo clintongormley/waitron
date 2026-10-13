@@ -180,7 +180,8 @@ export async function writeMerge(
   await splitInUse(tx, moving.tableId, movingParts);
   await splitInUse(tx, target.tableId, targetParts);
 
-  // A joined table split into the group gives it its name, the one pushed onto winning.
+  // A joined table split into a group gives it its name if the group has none; in a new group,
+  // the one pushed onto wins.
   const targetGives = targetParts.length > 0 ? target.row.name : null;
   const movingGives = movingParts.length > 0 ? moving.row.name : null;
   let joinId = target.merge?.joinId;

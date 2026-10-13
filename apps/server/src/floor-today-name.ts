@@ -12,12 +12,11 @@ import { refuseInJoinedTable, todayOf } from "./floor-today-table.js";
 import type { TillConfig } from "./till-config.js";
 import "./errors.js";
 
-/** D4's comparison: NFC, then lower case, in JavaScript. */
 export function sameName(a: string, b: string): boolean {
   return a.normalize("NFC").toLowerCase() === b.normalize("NFC").toLowerCase();
 }
 
-/** Today's name for the table, or for its group when it is in one (D2); null clears it (D3, D4). */
+/** Today's name for the table, or for its group when it is in one; null clears it. */
 export async function nameToday(
   tx: Transaction,
   cfg: TillConfig,
@@ -55,7 +54,7 @@ export async function nameToday(
 }
 
 /**
- * D4: any other table's saved name, any other group's today's name, and any other shown table's
+ * Any other table's saved name, any other group's today's name, and any other shown table's
  * today's name — a table the map does not draw because of a joined table is not shown. A group's
  * own members count as other tables.
  */
