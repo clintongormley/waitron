@@ -47,6 +47,7 @@ import {
   dropAction,
   onTodaysPlan,
   pendingPlaces,
+  sheetActions,
   spareSpot,
 } from "../state/floor-today.js";
 import { partyPaid, unsentText } from "../widgets/table-details-sheet.js";
@@ -484,7 +485,8 @@ export class TillFloorScreen extends LitElement {
   } | null = null;
   /** Join with…'s table; closed when the table leaves the map. */
   @state() private joiningWith: { tableId: string } | null = null;
-  /** Split tables…'s joined table, open until the split is sent or cancelled. */
+  /** Split tables…'s joined table; closed when the split is done or cancelled, or when the table no
+   * longer offers Split tables…. */
   @state() private splittingJoined: {
     tableId: string;
     busy: boolean;
@@ -549,6 +551,11 @@ export class TillFloorScreen extends LitElement {
     this.#zone = this.#zoneOnScreen();
     if (this.joiningWith !== null && this.#joining(this.joiningWith.tableId) === undefined)
       this.joiningWith = null;
+    if (
+      this.splittingJoined !== null &&
+      this.#splitting(this.splittingJoined.tableId) === undefined
+    )
+      this.splittingJoined = null;
   }
 
   override updated(): void {
@@ -966,14 +973,22 @@ export class TillFloorScreen extends LitElement {
     ></till-today-seats-dialog>`;
   }
 
+  /** The joined table Split tables… was opened for, while it still offers Split tables…. */
+  #splitting(tableId: string): TableState | undefined {
+    return this.tables.find(
+      (each) => each.id === tableId && sheetActions(each).includes("split-off"),
+    );
+  }
+
   #splitJoined(): TemplateResult | typeof nothing {
     const splitting = this.splittingJoined;
-    const joined = splitting && this.tables.find((each) => each.id === splitting.tableId);
-    const partIds = joined?.today?.joined?.parts;
-    if (!splitting || partIds === undefined) return nothing;
+    const joined = splitting === null ? undefined : this.#splitting(splitting.tableId);
+    if (splitting === null || joined === undefined) return nothing;
     return html`<till-split-joined-dialog
       .joined=${joined}
-      .parts=${partIds.flatMap((id) => this.tables.filter((each) => each.id === id))}
+      .parts=${joined.today!.joined!.parts.flatMap((id) =>
+        this.tables.filter((each) => each.id === id),
+      )}
       .busy=${splitting.busy}
       .refusal=${splitting.refusal}
       @split-joined-confirm=${(event: CustomEvent<SplitJoinedDetail>) => {
@@ -987,27 +1002,35 @@ export class TillFloorScreen extends LitElement {
     ></till-split-joined-dialog>`;
   }
 
-  /** The window stays open while the split is sent, and closes only once it is done. */
+  /**
+   * The window stays open while the split is sent, and closes only once it is done. The answer is
+   * applied only to the window that sent it: that window can close while the request runs, and
+   * another can open.
+   */
   async #splitOff(dialog: TillSplitJoinedDialog, detail: SplitJoinedDetail): Promise<void> {
     const splitting = this.splittingJoined;
     const api = this.api;
     if (splitting === null || splitting.busy || api === undefined) return;
-    this.splittingJoined = { ...splitting, busy: true, refusal: null };
+    const sent = { ...splitting, busy: true, refusal: null };
+    this.splittingJoined = sent;
     try {
       await api.splitOffToday(splitting.tableId, {
         partIds: detail.partIds,
         ...(detail.seats === null ? {} : { seats: detail.seats }),
       });
-      dialog.commit();
-      this.splittingJoined = null;
+      if (this.splittingJoined === sent) {
+        dialog.commit();
+        this.splittingJoined = null;
+      }
     } catch (cause) {
       const refused = (cause ?? {}) as { code?: string; field?: unknown };
       const code = refused.code ?? "server.internal";
-      this.splittingJoined = {
-        ...splitting,
-        busy: false,
-        refusal: typeof refused.field === "string" ? { code, field: refused.field } : { code },
-      };
+      if (this.splittingJoined === sent)
+        this.splittingJoined = {
+          ...splitting,
+          busy: false,
+          refusal: typeof refused.field === "string" ? { code, field: refused.field } : { code },
+        };
     }
     this.#requestFloorRefresh();
   }

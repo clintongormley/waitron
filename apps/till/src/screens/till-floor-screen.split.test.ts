@@ -59,11 +59,38 @@ const floor = () => [
   part("c5", "Counter 5"),
 ];
 
+const barTable = () =>
+  table("bar", "Bar table", 40, {
+    seats: 6,
+    joined: { parts: ["b1", "b2"], splitOff: [], apart: false },
+  });
+const barPart = (id: string, label: string) =>
+  table(id, label, 40, { placement: null, inJoinedTable: "Bar table" });
+const twoJoined = () => [...floor(), barTable(), barPart("b1", "Bar 1"), barPart("b2", "Bar 2")];
+
 function stubApi() {
   return { splitOffToday: vi.fn<TillApi["splitOffToday"]>(() => Promise.resolve()) };
 }
 
 type Stub = ReturnType<typeof stubApi>;
+
+interface Answer {
+  done(): void;
+  refuse(refusal: { code: string; field?: string }): void;
+}
+
+/** The first split's answer waits until the test gives it. */
+function holdAnswer(api: Stub): Answer {
+  const answer = {} as Answer;
+  api.splitOffToday.mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        answer.done = resolve;
+        answer.refuse = reject;
+      }),
+  );
+  return answer;
+}
 
 async function mount(tables: TableState[], api: Stub) {
   const { el } = await mountWidget<TillFloorScreen>("till-floor-screen", {
@@ -84,8 +111,8 @@ async function settle(el: TillFloorScreen): Promise<void> {
   await el.updateComplete;
 }
 
-async function openSplit(el: TillFloorScreen) {
-  send(el.shadowRoot!.querySelector("wt-floor-map")!, "wt-table-details", { tableId: "long" });
+async function openSplit(el: TillFloorScreen, tableId = "long") {
+  send(el.shadowRoot!.querySelector("wt-floor-map")!, "wt-table-details", { tableId });
   await el.updateComplete;
   const sheet = el.shadowRoot!.querySelector("till-table-details-sheet")!;
   await sheet.updateComplete;
@@ -221,6 +248,73 @@ describe("till-floor-screen: splitting tables off a joined table", () => {
     expect(pickError(el)).toBe("");
     expect(floorRefusal(el)).toBeNull();
   });
+
+  it("closes the window when its joined table leaves the floor read, and does not open it again when it comes back", async () => {
+    const el = await mount(floor(), stubApi());
+    await openSplit(el);
+
+    el.tables = floor().filter((each) => each.id !== "long");
+    await settle(el);
+    expect(windowOf(el)).toBeNull();
+
+    el.tables = floor();
+    await settle(el);
+    expect(windowOf(el)).toBeNull();
+  });
+
+  it("closes the window when another till splits its joined table down to one part", async () => {
+    const el = await mount(floor(), stubApi());
+    await openSplit(el);
+
+    el.tables = [
+      table("long", "Long table", 10, {
+        seats: 10,
+        joined: { parts: [], splitOff: ["c3", "c4", "c5"], apart: true },
+      }),
+      table("c3", "Counter 3", 10, { splitOffFrom: "long" }),
+      table("c4", "Counter 4", 20, { splitOffFrom: "long" }),
+      table("c5", "Counter 5", 30, { splitOffFrom: "long" }),
+    ];
+    await settle(el);
+    expect(windowOf(el)).toBeNull();
+  });
+
+  it.each([
+    [
+      "refused",
+      (answer: Answer) => answer.refuse({ code: "joined_table.part_invalid", field: "partIds" }),
+    ],
+    ["done", (answer: Answer) => answer.done()],
+  ])(
+    "an answer that arrives %s after its window has gone leaves the window open now as it is",
+    async (_, arrive) => {
+      const api = stubApi();
+      const answer = holdAnswer(api);
+      const el = await mount(twoJoined(), api);
+
+      send(await openSplit(el), "split-joined-confirm", { partIds: ["c5"], seats: 6 });
+      await settle(el);
+      el.tables = twoJoined().filter((each) => each.id !== "long");
+      await settle(el);
+      expect(windowOf(el)).toBeNull();
+
+      const bar = await openSplit(el, "bar");
+      const pick = bar.shadowRoot!.querySelector("wt-combobox")!;
+      send(pick, "wt-change", { values: ["b1"] });
+      await settle(el);
+      await bar.updateComplete;
+
+      arrive(answer);
+      await settle(el);
+      await bar.updateComplete;
+
+      expect(windowOf(el)).toBe(bar);
+      expect(bar.joined.id).toBe("bar");
+      expect(bar.busy).toBe(false);
+      expect(bar.refusal).toBeNull();
+      expect(pick.values).toEqual(["b1"]);
+    },
+  );
 
   it("Cancel closes the window and sends nothing", async () => {
     const api = stubApi();
