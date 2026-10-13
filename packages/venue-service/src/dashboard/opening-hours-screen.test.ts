@@ -1965,3 +1965,210 @@ it("an opened Calendar editor keeps its revision through a passive replacement",
   });
   await expect.poll(() => editor.refusal?.code).toBe("hours.clock_changed");
 });
+
+describe("Year view", () => {
+  type YearModel = import("../opening-hours-calendar.js").OpeningHoursYear;
+  function yearModel(year: number, overrides: Partial<YearModel> = {}): YearModel {
+    return {
+      businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
+      clockRevision: 4,
+      currentBusinessDay: "2026-10-12",
+      pending: null,
+      year,
+      timeZone: "Europe/Madrid",
+      today: "2026-10-12",
+      seasons: [{ id: "all", name: "All year", startsOn: "01-01", lastDay: "12-31" }],
+      days: [
+        {
+          date: `${year}-10-13`,
+          seasonId: "all",
+          specialDay: { id: "annual/day", name: "Anniversary" },
+          holidays: [],
+          tone: "special_day",
+          closed: false,
+        },
+      ],
+      publicHolidaysAvailable: true,
+      missingHolidays: [],
+      holidayCoverage: [],
+      area: {
+        addressKey: "fixture-address",
+        readiness: "ready",
+        options: [
+          { key: "bcn", name: "Barcelona" },
+          { key: "gir", name: "Girona" },
+        ],
+        required: false,
+        chosen: "bcn",
+      },
+      ...overrides,
+    };
+  }
+  async function yearMount(address: string, readOnly = false, failYear = 0) {
+    vi.setSystemTime(new Date("2026-10-12T12:00:00Z"));
+    history.replaceState(null, "", address);
+    const years: string[] = [];
+    const writes: unknown[][] = [];
+    let openingReads = 0;
+    let listReads: unknown[] = [];
+    let failures = failYear;
+    const el = await mount((async (path: string, method: string, body: unknown, options) => {
+      if (method !== "GET") {
+        writes.push([path, method, body]);
+        return { id: "new" };
+      }
+      const asked = /\/opening-hours\/year\?year=(\d+)$/.exec(path);
+      if (asked) {
+        years.push(asked[1]!);
+        if (failures-- > 0) throw { code: "connection.failed" };
+        return yearModel(Number(asked[1]));
+      }
+      if (path.endsWith("/special-days")) {
+        listReads = [...listReads, options];
+        return [
+          { id: "annual/day", name: "Anniversary", repeatsYearly: true, dates: [] },
+          { id: "later", name: "Later fair", repeatsYearly: true, dates: [] },
+        ];
+      }
+      if (path.endsWith("/opening-hours")) openingReads++;
+      return model();
+    }) as DashboardRequest, readOnly);
+    const view = () => el.shadowRoot!.querySelector("opening-hours-year");
+    return {
+      el,
+      view,
+      years,
+      writes,
+      openingReads: () => openingReads,
+      listReads: () => listReads,
+    };
+  }
+  const tabs = (el: Screen) =>
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-tabs"]>("wt-tabs")!;
+
+  it("opens on the venue's current year when the address names no view and no week parameter", async () => {
+    const { el, view, years } = await yearMount("/manage/opening-hours");
+    expect(tabs(el).value).toBe("year");
+    expect(tabs(el).items.map((item) => item.key)).toEqual(["year", "week", "periods", "day"]);
+    expect(tabs(el).items[0]!.label).toBe("Year");
+    await expect.poll(() => view()?.model?.year).toBe(2026);
+    expect(years).toEqual(["2026"]);
+    expect(el.shadowRoot!.querySelector("[name=departmentId]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("hours-calendar")).toBeNull();
+    expect(location.pathname).toBe("/manage/opening-hours");
+  });
+
+  it.each([
+    ["a department", "/manage/opening-hours/department/restaurant"],
+    ["a season", "/manage/opening-hours/season/winter"],
+    ["a zone", "/manage/opening-hours/zone/z1"],
+    ["a week", "/manage/opening-hours?week=2026-10-12"],
+    ["an unknown view", "/manage/opening-hours/view/calendar"],
+  ])("keeps the Week when the address names %s", async (_, address) => {
+    const { el, years } = await yearMount(address);
+    expect(tabs(el).value).toBe("week");
+    expect(el.shadowRoot!.querySelector("opening-hours-year")).toBeNull();
+    expect(years).toEqual([]);
+  });
+
+  it("hands the year view its model, the season writes, the area writes and every special day", async () => {
+    const { el, view, listReads } = await yearMount("/manage/opening-hours/view/year/year/2027");
+    await expect.poll(() => view()?.model?.year).toBe(2027);
+    expect(view()!.api).toBe(el.api);
+    expect(view()!.readOnly).toBe(false);
+    await expect
+      .poll(() => view()!.specialDays)
+      .toEqual([
+        { id: "annual/day", name: "Anniversary" },
+        { id: "later", name: "Later fair" },
+      ]);
+    expect(listReads()).toEqual([{ passive: true }]);
+    const chips = view()!.shadowRoot!.querySelector("season-chips")!;
+    expect(chips.clockRevision).toBe(4);
+  });
+
+  it("passes read-only to the year view", async () => {
+    const { view } = await yearMount("/manage/opening-hours/view/year", true);
+    await expect.poll(() => view()?.model).toBeDefined();
+    expect(view()!.readOnly).toBe(true);
+  });
+
+  it("steps years through the address, reads each, and falls back to the current year on a bad one", async () => {
+    const { view, years } = await yearMount("/manage/opening-hours/view/year/year/2027?keep=yes");
+    await expect.poll(() => view()?.model?.year).toBe(2027);
+    const shown = view()!;
+    shown.shadowRoot!.querySelector<HTMLElement>("[data-test=next-year]")!.click();
+    await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/year/year/2028");
+    expect(location.search).toBe("?keep=yes");
+    await expect.poll(() => view()?.model?.year).toBe(2028);
+    view()!.shadowRoot!.querySelector<HTMLElement>("[data-test=previous-year]")!.click();
+    await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/year/year/2027");
+    await expect.poll(() => view()?.model?.year).toBe(2027);
+    history.replaceState(null, "", "/manage/opening-hours/view/year/year/20x7");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await expect.poll(() => view()?.model?.year).toBe(2026);
+    expect(view()).toBe(shown);
+    expect(years).toEqual(["2027", "2028", "2027", "2026"]);
+  });
+
+  it("opens the Day tab on a month's first day when its name is chosen", async () => {
+    const { el, view } = await yearMount("/manage/opening-hours/view/year/year/2027");
+    await expect.poll(() => view()?.model?.year).toBe(2027);
+    view()!.shadowRoot!.querySelectorAll<HTMLElement>("[data-test=month-name]")[2]!.click();
+    await expect
+      .poll(() => location.pathname)
+      .toBe("/manage/opening-hours/view/day/date/2027-03-01");
+    await expect.poll(() => tabs(el).value).toBe("day");
+  });
+
+  it("re-reads the year and the opening hours after a season change", async () => {
+    const { view, years, openingReads } = await yearMount("/manage/opening-hours/view/year");
+    await expect.poll(() => view()?.model?.year).toBe(2026);
+    const before = openingReads();
+    view()!
+      .shadowRoot!.querySelector("season-chips")!
+      .dispatchEvent(new CustomEvent("season-changed", { bubbles: true, composed: true }));
+    await expect.poll(() => years).toEqual(["2026", "2026"]);
+    await expect.poll(openingReads).toBe(before + 1);
+  });
+
+  it("re-reads the year after the year view saves the holiday area", async () => {
+    const { view, years, writes } = await yearMount("/manage/opening-hours/view/year");
+    await expect.poll(() => view()?.model?.year).toBe(2026);
+    await view()!.updateComplete;
+    view()!
+      .shadowRoot!.querySelector("[name=holidayArea]")!
+      .dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value: "gir" }, bubbles: true, composed: true }),
+      );
+    await expect
+      .poll(() => writes)
+      .toEqual([["/management-api/venue-service/holiday-area", "PUT", { areaKey: "gir" }]]);
+    await expect.poll(() => years).toEqual(["2026", "2026"]);
+  });
+
+  it("says when the year cannot be read, and clears it once a reread succeeds", async () => {
+    const { el, view } = await yearMount("/manage/opening-hours/view/year", false, 1);
+    const alert = () =>
+      el.shadowRoot!.querySelector("[slot=year] [data-test=year-read-error]")?.textContent;
+    await expect.poll(alert).toBe("Opening hours could not be loaded. It will be tried again.");
+    el.api.rereadWithSpecialDays();
+    await expect.poll(() => view()?.model?.year).toBe(2026);
+    expect(alert()).toBeUndefined();
+  });
+
+  it("+ Special day opens an empty special-day dialog", async () => {
+    const { el, view, writes } = await yearMount("/manage/opening-hours/view/year");
+    await expect.poll(() => view()?.model?.year).toBe(2026);
+    view()!.shadowRoot!.querySelector<HTMLElement>("[data-test=add-special-day]")!.click();
+    await expect.poll(() => el.shadowRoot!.querySelector("special-day-dialog")).not.toBeNull();
+    const form = el.shadowRoot!.querySelector("special-day-dialog")!;
+    await form.updateComplete;
+    expect(form.specialDay).toBeUndefined();
+    expect(form.date).toBe("");
+    expect(
+      form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!.value,
+    ).toBe("");
+    expect(writes).toEqual([]);
+  });
+});
