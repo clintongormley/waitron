@@ -53,6 +53,7 @@ import {
   saveMenuPeriod,
   updateMenuPeriod,
 } from "./menu-timetable.js";
+import { parseCalendarYear } from "./hours-rules.js";
 import { CALENDAR_COLOURS, type CalendarColour } from "./hours-types.js";
 import type { MenuWeekDay } from "./menu-timetable-types.js";
 import { KITCHEN_TICKET_GROUPINGS, type KitchenTicketGrouping } from "./schema/settings.js";
@@ -408,13 +409,10 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
     app.get("/management-api/venue-service/opening-hours/year", (c) =>
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
-        const year = c.req.query("year") ?? "";
-        if (!/^\d{4}$/.test(year))
-          throw new AppError("management.request_invalid", { field: "year" });
+        const year = parseCalendarYear(c.req.query("year"));
+        if (year === null) throw new AppError("management.request_invalid", { field: "year" });
         const at = new Date();
-        return c.json(
-          await viewed(sessionId, (tx) => readOpeningHoursYear(tx, ctx.cfg, Number(year), at)),
-        );
+        return c.json(await viewed(sessionId, (tx) => readOpeningHoursYear(tx, ctx.cfg, year, at)));
       }),
     );
 

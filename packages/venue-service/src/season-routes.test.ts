@@ -169,6 +169,27 @@ describe("the year read route", () => {
       });
     expect((await r.send("GET", "/opening-hours/year?year=2030", "")).status).toBe(401);
   });
+
+  it("refuses a year outside 0100 to 9998 the same way, and serves both ends", async () => {
+    const r = await routed();
+    for (const year of ["0000", "0001", "0099", "9999"])
+      await answers(await r.send("GET", `/opening-hours/year?year=${year}`, r.manager), 400, {
+        error: { code: "management.request_invalid", params: { field: "year" } },
+      });
+    for (const [year, first] of [
+      ["0100", "0100-01-01"],
+      ["9998", "9998-01-01"],
+    ] as const) {
+      const response = await r.send("GET", `/opening-hours/year?year=${year}`, r.manager);
+      expect(response.status).toBe(200);
+      const read = (await response.json()) as { year: number; days: { date: string }[] };
+      expect({ year: read.year, first: read.days[0]!.date, last: read.days.at(-1)!.date }).toEqual({
+        year: Number(year),
+        first,
+        last: `${year}-12-31`,
+      });
+    }
+  });
 });
 
 describe("the season routes", () => {
