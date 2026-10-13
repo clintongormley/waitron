@@ -64,11 +64,7 @@ export interface OrderListFilter {
   after?: OrderCursor;
   only?: string;
   collectable?: boolean;
-  /**
-   * A further condition on `r.id`, applied to sale rows too, where `r.id` is the sale's id rather
-   * than its order's: it filters by order only with `collectable: true`, which keeps bill rows
-   * alone.
-   */
+  /** A further condition on a bill's order id; an invoice with no bill never passes it. */
   orderIn?: (orderId: SQL) => SQL;
   scope: "all" | { today: { from: string; to: string } & BusinessDayClock };
 }
@@ -320,7 +316,8 @@ function filterClauses(filter: OrderListFilter): SQL[] {
       and not exists (select 1 from bill_payments bp
                       where bp.working_order_id = r.id and bp.state in ('pending', 'received'))`);
   }
-  if (filter.orderIn !== undefined) clauses.push(filter.orderIn(sql`r.id`));
+  if (filter.orderIn !== undefined)
+    clauses.push(sql`(r.kind = 'bill' and (${filter.orderIn(sql`r.id`)}))`);
   return clauses;
 }
 
@@ -503,7 +500,7 @@ export async function readPartyTables(
     .from(partyTables)
     .innerJoin(diningTables, eq(diningTables.id, partyTables.tableId))
     .where(inArray(partyTables.partyId, [...partyIds]))
-    .orderBy(partyTables.joinedAt, partyTables.id);
+    .orderBy(partyTables.joinedAt, sql`${partyTables}.rowid`);
   for (const row of rows) {
     const held = tables.get(row.partyId) ?? [];
     if (!held.includes(row.label)) tables.set(row.partyId, [...held, row.label]);
@@ -726,7 +723,7 @@ async function readInvoices(tx: Transaction, saleId: string): Promise<OrderInvoi
     .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
     .leftJoin(persons, eq(persons.id, sales.operatorId))
     .where(eq(sales.correctsSaleId, saleId))
-    .orderBy(sales.issuedAt, sales.id);
+    .orderBy(sales.issuedAt, sql`${sales}.rowid`);
   const substitutes = await tx
     .select({
       id: sales.id,
@@ -789,7 +786,7 @@ async function readTenders(tx: Transaction, saleId: string): Promise<OrderTender
     .select({ method: tenders.method, amount: tenders.amount, tip: tenders.tipAmount })
     .from(tenders)
     .where(eq(tenders.saleId, saleId))
-    .orderBy(tenders.id);
+    .orderBy(tenders.settledAt, sql`${tenders}.rowid`);
   return rows.map((tender) => ({
     method: tender.method,
     amount: centsToDecimal(tender.amount),
@@ -809,7 +806,7 @@ async function readBillPayments(tx: Transaction, billId: string): Promise<OrderB
     })
     .from(billPayments)
     .where(eq(billPayments.workingOrderId, billId))
-    .orderBy(billPayments.createdAt, billPayments.id);
+    .orderBy(billPayments.createdAt, sql`${billPayments}.rowid`);
   if (payments.length === 0) return [];
   const refunds = await tx
     .select({
@@ -827,7 +824,7 @@ async function readBillPayments(tx: Transaction, billId: string): Promise<OrderB
         payments.map((payment) => payment.id),
       ),
     )
-    .orderBy(billPaymentRefunds.createdAt, billPaymentRefunds.id);
+    .orderBy(billPaymentRefunds.createdAt, sql`${billPaymentRefunds}.rowid`);
   return payments.map((payment) => ({
     method: payment.method,
     state: payment.state,
@@ -922,6 +919,6 @@ async function readReprints(tx: Transaction, saleId: string): Promise<OrderRepri
     .innerJoin(printers, eq(printers.id, printJobs.printerId))
     .leftJoin(persons, eq(persons.id, receiptReprints.personId))
     .where(eq(receiptReprints.saleId, saleId))
-    .orderBy(receiptReprints.requestedAt, receiptReprints.id);
+    .orderBy(receiptReprints.requestedAt, sql`${receiptReprints}.rowid`);
   return rows;
 }

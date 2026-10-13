@@ -3,8 +3,22 @@ import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { diningTables, sales, tenders, withTransaction, workingOrderLines } from "@waitron/db";
+import {
+  billPaymentRefunds,
+  billPayments,
+  diningTables,
+  invoiceSeries,
+  partyTables,
+  printJobs,
+  receiptReprints,
+  sales,
+  tenders,
+  withTransaction,
+  workingOrderLines,
+} from "@waitron/db";
 import { inTx, seatedWith, send } from "./testing/bill-venue.js";
+import { descendingIds } from "./testing/descending-ids.js";
+import { createTable } from "./testing/live-table.js";
 import {
   billlessSale,
   collect,
@@ -16,7 +30,12 @@ import {
   voidInvoice,
   type OrderVenue,
 } from "./testing/order-venue.js";
-import { listOrders, type OrderCursor, type OrderListFilter } from "./orders-list.js";
+import {
+  listOrders,
+  readOrderDetail,
+  type OrderCursor,
+  type OrderListFilter,
+} from "./orders-list.js";
 import "./errors.js";
 
 let venue: OrderVenue;
@@ -483,5 +502,207 @@ describe("dates and pages", () => {
     expect(page.from).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(page.to).toBe(page.from);
     expect((await list("anyDate=true")).from).toBeNull();
+  });
+});
+
+describe("rows written within one millisecond, read in the order they were written", () => {
+  const AT = "2026-09-26T09:59:00.000Z";
+  const detailOf = (id: string) => inTx(venue, (tx) => readOrderDetail(tx, id, "all"));
+  const saleOf = async (billId: string) => {
+    const [sale] = await inTx(venue, (tx) =>
+      tx.select({ id: sales.id }).from(sales).where(eq(sales.workingOrderId, billId)),
+    );
+    return sale!.id;
+  };
+
+  it("lists a party's tables joined together in the order they were joined", async () => {
+    const party = await seatedWith(venue, "Caña");
+    const labels = await inTx(venue, async (tx) => {
+      const [seated] = await tx
+        .select({ joinedAt: partyTables.joinedAt })
+        .from(partyTables)
+        .where(eq(partyTables.partyId, party.partyId));
+      const id = descendingIds();
+      const joined: string[] = [];
+      for (const n of [1, 2]) {
+        const label = `Junta ${n} ${randomUUID().slice(0, 8)}`;
+        const table = await createTable(tx, venue.cfg, { label, zoneId: venue.zoneId });
+        await tx.insert(partyTables).values({
+          id: id(),
+          partyId: party.partyId,
+          tableId: table.id,
+          joinedAt: seated!.joinedAt,
+        });
+        joined.push(label);
+      }
+      return joined;
+    });
+    const row = await rowOf(party.tabId);
+    expect((row.tables as string[]).slice(1)).toEqual(labels);
+  });
+
+  it("shows an invoice's tenders in the order they were written", async () => {
+    const billId = await placedIssuedBill(venue, "Tarta");
+    const saleId = await saleOf(billId);
+    const id = descendingIds();
+    await inTx(venue, async (tx) => {
+      for (const amount of [100, 200, 300])
+        await tx
+          .insert(tenders)
+          .values({ id: id(), saleId, method: "cash", amount, settledAt: AT });
+    });
+    const detail = await detailOf(billId);
+    expect(detail.tenders.map((tender) => tender.amount.toString())).toEqual([
+      "1.00",
+      "2.00",
+      "3.00",
+    ]);
+  });
+
+  it("shows a bill's payments, and each payment's refunds, in the order they were taken", async () => {
+    const billId = await parked(venue, "Caña");
+    const paymentId = descendingIds();
+    const refundId = descendingIds();
+    await inTx(venue, async (tx) => {
+      const payments: string[] = [];
+      for (const applied of [100, 200, 300]) {
+        const [payment] = await tx
+          .insert(billPayments)
+          .values({
+            id: paymentId(),
+            workingOrderId: billId,
+            submissionId: randomUUID(),
+            fingerprint: "f",
+            kind: "contribution",
+            method: "card",
+            applied,
+            state: "pending",
+            requestedBy: venue.operatorId,
+            source: "device",
+            deviceId: venue.deviceId,
+            createdAt: AT,
+          })
+          .returning({ id: billPayments.id });
+        payments.push(payment!.id);
+      }
+      for (const appliedAmount of [10, 20, 30])
+        await tx.insert(billPaymentRefunds).values({
+          id: refundId(),
+          billPaymentId: payments[0]!,
+          submissionId: randomUUID(),
+          fingerprint: "f",
+          appliedAmount,
+          reason: "error",
+          authorizedBy: venue.supervisorId,
+          requestedBy: venue.operatorId,
+          source: "device",
+          deviceId: venue.deviceId,
+          state: "pending",
+          createdAt: AT,
+        });
+    });
+    const detail = await detailOf(billId);
+    expect(detail.payments.map((payment) => payment.applied.toString())).toEqual([
+      "1.00",
+      "2.00",
+      "3.00",
+    ]);
+    expect(detail.payments[0]!.refunds.map((refund) => refund.applied.toString())).toEqual([
+      "0.10",
+      "0.20",
+      "0.30",
+    ]);
+  });
+
+  it("shows an invoice's credit notes in the order they were issued", async () => {
+    const billId = await placedIssuedBill(venue, "Tarta");
+    const saleId = await saleOf(billId);
+    const id = descendingIds();
+    await inTx(venue, async (tx) => {
+      const [series] = await tx
+        .select({ id: invoiceSeries.id })
+        .from(invoiceSeries)
+        .where(eq(invoiceSeries.purpose, "rectificative"));
+      for (const invoiceNumber of [900001, 900002, 900003])
+        await tx.insert(sales).values({
+          id: id(),
+          source: "device",
+          deviceId: venue.deviceId,
+          seriesId: series!.id,
+          nodeId: venue.cfg.nodeId,
+          invoiceNumber,
+          issuedAt: AT,
+          issuedOffsetMinutes: 120,
+          total: -100,
+          vatBreakdown: [],
+          locale: venue.cfg.locale,
+          invoiceLocales: [venue.cfg.locale],
+          fiscalBackend: "verifactu",
+          fiscalState: "not_applicable",
+          correctsSaleId: saleId,
+        });
+    });
+    const detail = await detailOf(billId);
+    expect(
+      detail.invoices
+        .filter((invoice) => invoice.kind === "credit_note")
+        .map((invoice) => invoice.number.split("/")[1]),
+    ).toEqual(["900001", "900002", "900003"]);
+  });
+
+  it("shows an invoice's receipt copies in the order they were asked for", async () => {
+    const billId = await placedIssuedBill(venue, "Tarta");
+    const saleId = await saleOf(billId);
+    const id = descendingIds();
+    const askedBy = [venue.operatorId, venue.supervisorId, venue.adminId];
+    await inTx(venue, async (tx) => {
+      for (const personId of askedBy) {
+        const [job] = await tx
+          .insert(printJobs)
+          .values({
+            locationId: venue.cfg.locationId,
+            printerId: venue.printerId,
+            payload: Uint8Array.from([0x01]),
+          })
+          .returning({ id: printJobs.id });
+        await tx
+          .insert(receiptReprints)
+          .values({ id: id(), saleId, printJobId: job!.id, personId, requestedAt: AT });
+      }
+    });
+    const detail = await detailOf(billId);
+    expect(detail.reprints.map((reprint) => reprint.personId)).toEqual(askedBy);
+  });
+});
+
+describe("a filter on the order's id", () => {
+  it("never keeps an invoice with no bill, whose row id is the invoice's own", async () => {
+    const saleId = await billlessSale(venue);
+    const page = await inTx(venue, (tx) =>
+      listOrders(tx, {
+        status: "all",
+        dates: "any",
+        credited: false,
+        limit: 200,
+        scope: "all",
+        orderIn: (orderId) => sql`${orderId} = ${saleId}`,
+      }),
+    );
+    expect(ids(page.rows)).toEqual([]);
+  });
+
+  it("keeps the bill whose order it names", async () => {
+    const billId = await parked(venue, "Caña");
+    const page = await inTx(venue, (tx) =>
+      listOrders(tx, {
+        status: "all",
+        dates: "any",
+        credited: false,
+        limit: 200,
+        scope: "all",
+        orderIn: (orderId) => sql`${orderId} = ${billId}`,
+      }),
+    );
+    expect(ids(page.rows)).toEqual([billId]);
   });
 });
