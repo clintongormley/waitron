@@ -405,7 +405,7 @@ describe("refusals of a free push with a joined table", () => {
   });
 });
 
-describe("the old till's Split and the floor-wide reset on a flattened group", () => {
+describe("Split a table and the floor-wide reset on a flattened group", () => {
   const counters = (table: Record<string, string>) =>
     [
       [table.c3!, 10],

@@ -1070,15 +1070,16 @@ export class TillFloorScreen extends LitElement {
     ></till-today-seats-dialog>`;
   }
 
-  /** The joined table Split tables… was opened for, while it still offers Split tables…. */
+  /** The table Split tables… was opened on, while it still offers Split tables…. */
   #splitting(tableId: string): TableState | undefined {
     return this.tables.find(
       (each) => each.id === tableId && sheetActions(each).includes("split-off"),
     );
   }
 
-  /** While its split is out, the window keeps what it showed unless its joined table has left the
-   * floor read; otherwise it shows the joined table as the floor reads it now. */
+  /** While its split is out, the window keeps what it showed unless the table it was opened on has
+   * left the floor read; otherwise it shows that table's joined table, or its group, as the floor
+   * reads it now. */
   #splitShown(splitting: SplittingJoined): SplitShown | undefined {
     if (splitting.sent !== null)
       return this.tables.some((each) => each.id === splitting.tableId) ? splitting.sent : undefined;
@@ -1129,8 +1130,8 @@ export class TillFloorScreen extends LitElement {
 
   /**
    * The window stays open while the split is sent. The answer is applied only to the window that
-   * sent it: that window closes if its joined table leaves the floor read meanwhile, and another
-   * can open. A refusal shows in the window while the floor still offers Split tables…, and
+   * sent it: that window closes if the table it was opened on leaves the floor read meanwhile, and
+   * another can open. A refusal shows in the window while the floor still offers Split tables…, and
    * otherwise on the floor, unless another Split tables… window has opened.
    */
   async #splitOff(dialog: TillSplitJoinedDialog, detail: SplitJoinedDetail): Promise<void> {

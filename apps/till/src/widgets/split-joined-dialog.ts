@@ -65,7 +65,8 @@ export class TillSplitJoinedDialog extends LitElement {
     staying.length >= 2;
   /** In a group's window, where the guests go for the tables ticked, one name per party. */
   @property({ attribute: false }) guestsMoveTo: (ticked: readonly string[]) => string[] = () => [];
-  /** Asks the seats whatever is ticked, as when the server refused a split for want of them. */
+  /** Asks the seats while two or more tables are left, as when the server refused a split for want
+   * of them. */
   @property({ type: Boolean }) seatsRequired = false;
   @property({ type: Boolean }) busy = false;
   @property({ attribute: false }) refusal: { code: string; field?: string } | null = null;
