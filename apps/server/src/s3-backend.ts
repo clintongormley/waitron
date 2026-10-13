@@ -1,29 +1,14 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import type { S3FileStore } from "@waitron/stream";
 import { AppError } from "@waitron/shared";
 import "@waitron/stream";
-import "./errors.js";
-import { checkedKey } from "./local-fs-backend.js";
-import type { StorageBackend, StorageCall, StoredObject } from "./storage-backend.js";
-
-/** The most `put` sends or `get` holds. Archives travel by `putFile` and `getFile`, never these. */
-export const SMALL_OBJECT_MAX_BYTES = 16 * 1024 * 1024;
-
-function tooLarge(): AppError {
-  return new AppError("backup.destination_object_too_large", { maxBytes: SMALL_OBJECT_MAX_BYTES });
-}
-
-/** As the file store reports a cancelled upload. */
-function putCancelled(key: string): AppError {
-  return new AppError("backup.destination_request_failed", {
-    operation: "put",
-    key,
-    status: null,
-    name: "AbortError",
-  });
-}
+import {
+  checkedKey,
+  objectTooLarge,
+  SMALL_OBJECT_MAX_BYTES,
+  type StorageBackend,
+  type StorageCall,
+  type StoredObject,
+} from "./storage-backend.js";
 
 /**
  * A bucket destination: whole files stream through the file store; `put` and `get` are small-object
@@ -37,21 +22,8 @@ export class S3Backend implements StorageBackend {
 
   async put(key: string, bytes: Uint8Array, call: StorageCall): Promise<void> {
     checkedKey(key);
-    if (bytes.byteLength > SMALL_OBJECT_MAX_BYTES) throw tooLarge();
-    if (call.signal.aborted) throw putCancelled(key);
-    const dir = await mkdtemp(join(tmpdir(), "waitron-s3-put-"));
-    try {
-      const path = join(dir, "object");
-      try {
-        await writeFile(path, bytes, { mode: 0o600, signal: call.signal });
-      } catch (error) {
-        if (call.signal.aborted) throw putCancelled(key);
-        throw error;
-      }
-      await this.files.putFile(key, path, call);
-    } finally {
-      await rm(dir, { recursive: true, force: true });
-    }
+    if (bytes.byteLength > SMALL_OBJECT_MAX_BYTES) throw objectTooLarge();
+    await this.files.putBytes(key, bytes, call);
   }
 
   async putFile(key: string, path: string, call: StorageCall): Promise<void> {
@@ -71,7 +43,7 @@ export class S3Backend implements StorageBackend {
     for await (const chunk of body) {
       const bytes = chunk as Buffer;
       total += bytes.length;
-      if (total > SMALL_OBJECT_MAX_BYTES) throw tooLarge();
+      if (total > SMALL_OBJECT_MAX_BYTES) throw objectTooLarge();
       chunks.push(bytes);
     }
     return Buffer.concat(chunks, total);

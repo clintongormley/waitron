@@ -1,23 +1,16 @@
 import { createReadStream, createWriteStream } from "node:fs";
-import { chmod, mkdir, mkdtemp, readFile, readdir, rename, rm, stat } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, open, readdir, rename, rm, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { pipeline } from "node:stream/promises";
-import { AppError } from "@waitron/shared";
-import "@waitron/stream";
 import { stageFile } from "./fs-atomic.js";
-import type { StorageBackend, StorageCall, StoredObject } from "./storage-backend.js";
-
-// C0 controls, DEL and C1 controls.
-// eslint-disable-next-line no-control-regex
-const CONTROL = /[\u0000-\u001f\u007f-\u009f]/;
-
-/** One plain file name inside the destination folder, so no key reaches outside it. */
-export function checkedKey(key: string): string {
-  if (key === "" || key === "." || key === ".." || /[/\\]/.test(key) || CONTROL.test(key)) {
-    throw new AppError("backup.destination_key_invalid", { field: "key" });
-  }
-  return key;
-}
+import {
+  checkedKey,
+  objectTooLarge,
+  SMALL_OBJECT_MAX_BYTES,
+  type StorageBackend,
+  type StorageCall,
+  type StoredObject,
+} from "./storage-backend.js";
 
 /**
  * A destination folder. Copies stream under the caller's signal, which is checked again just before
@@ -56,7 +49,18 @@ export class LocalFsBackend implements StorageBackend {
   }
 
   async get(key: string, { signal }: StorageCall): Promise<Buffer> {
-    return readFile(this.#path(key), { signal });
+    const path = this.#path(key);
+    signal.throwIfAborted();
+    const handle = await open(path, "r");
+    try {
+      if ((await handle.stat()).size > SMALL_OBJECT_MAX_BYTES) throw objectTooLarge();
+      const bytes = await handle.readFile({ signal });
+      // The file can grow after its size was read.
+      if (bytes.length > SMALL_OBJECT_MAX_BYTES) throw objectTooLarge();
+      return bytes;
+    } finally {
+      await handle.close();
+    }
   }
 
   async list(prefix: string, { signal }: StorageCall): Promise<StoredObject[]> {

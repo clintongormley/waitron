@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
@@ -8,29 +8,11 @@ import {
   type ListedFile,
   type S3FileStore,
 } from "@waitron/stream";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { S3Backend, SMALL_OBJECT_MAX_BYTES } from "./s3-backend.js";
-
-// Pass-through, recording each folder `mkdtemp` makes; `beforeWrite` runs as `writeFile` is called.
-const fsHooks = vi.hoisted(() => ({
-  made: [] as string[],
-  beforeWrite: undefined as (() => void) | undefined,
-}));
-vi.mock("node:fs/promises", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("node:fs/promises")>();
-  return {
-    ...actual,
-    mkdtemp: async (...args: Parameters<typeof actual.mkdtemp>) => {
-      const made = await actual.mkdtemp(...args);
-      fsHooks.made.push(String(made));
-      return made;
-    },
-    writeFile: (...args: Parameters<typeof actual.writeFile>) => {
-      fsHooks.beforeWrite?.();
-      return actual.writeFile(...args);
-    },
-  };
-});
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { backupArchiveKey } from "./backup-keys.js";
+import { pruneBackend } from "./backup-sweep.js";
+import { S3Backend } from "./s3-backend.js";
+import { SMALL_OBJECT_MAX_BYTES } from "./storage-backend.js";
 
 // `@waitron/stream` does not export its loopback bucket to other packages, so this drives the adapter
 // through an in-memory object with the file store's shape; the file store's own requests are
@@ -51,6 +33,10 @@ function fakeStore(objects: Map<string, { body: Buffer; lastModified: Date }>, r
     async putFile(key, path, call) {
       record.calls.push({ method: "putFile", args: [key, path], call });
       objects.set(key, { body: await readFile(path), lastModified: new Date() });
+    },
+    async putBytes(key, bytes, call) {
+      record.calls.push({ method: "putBytes", args: [key, Buffer.from(bytes)], call });
+      objects.set(key, { body: Buffer.from(bytes), lastModified: new Date() });
     },
     async getFile(key, outPath, call) {
       record.calls.push({ method: "getFile", args: [key, outPath], call });
@@ -92,6 +78,42 @@ function fakeStore(objects: Map<string, { body: Buffer; lastModified: Date }>, r
   return store;
 }
 
+interface Asked {
+  method: string;
+  query: Record<string, unknown>;
+}
+
+/** A backend over the real file store, whose transport hands each request to `answer`. */
+function overTransport(answer: (asked: Asked) => { status: number; body?: string }) {
+  const asked: Asked[] = [];
+  const files = createS3FileStore(
+    {
+      endpoint: "https://s3.example.test",
+      region: "us-east-1",
+      bucket: "owner-bucket",
+      prefix: "",
+      accessKeyId: "AKIAEXAMPLE0000",
+      secretAccessKey: "not-a-real-secret",
+    },
+    {
+      requestHandler: {
+        async handle(request: Asked) {
+          asked.push({ method: request.method, query: request.query });
+          const { status, body } = answer(request);
+          return {
+            response: {
+              statusCode: status,
+              headers: { "content-type": "application/xml", etag: '"e"' },
+              body: Readable.from(body === undefined ? [] : [Buffer.from(body)]),
+            },
+          };
+        },
+      } as never,
+    },
+  );
+  return { backend: new S3Backend("bucket", files), asked };
+}
+
 describe("S3Backend", () => {
   let dir: string;
   let objects: Map<string, { body: Buffer; lastModified: Date }>;
@@ -100,8 +122,6 @@ describe("S3Backend", () => {
   const call = { signal: new AbortController().signal };
   beforeEach(async () => {
     dir = await mkdtemp(join(tmpdir(), "s3-backend-"));
-    fsHooks.made = [];
-    fsHooks.beforeWrite = undefined;
     objects = new Map();
     record = { calls: [], streamed: 0, closed: false };
     backend = new S3Backend("bucket", fakeStore(objects, record));
@@ -127,27 +147,50 @@ describe("S3Backend", () => {
     ]);
   });
 
-  it("puts small bytes through a private file that is gone afterwards, and gets them back", async () => {
+  it("puts small bytes through the file store's in-memory upload, and gets them back", async () => {
     await backend.put("small.json", Buffer.from("{}"), call);
-    const staged = record.calls[0]!.args[1] as string;
-    expect(record.calls[0]).toMatchObject({ method: "putFile", args: ["small.json", staged] });
+    expect(record.calls[0]).toMatchObject({
+      method: "putBytes",
+      args: ["small.json", Buffer.from("{}")],
+    });
     expect(record.calls[0]!.call.signal).toBe(call.signal);
-    await expect(readFile(staged)).rejects.toMatchObject({ code: "ENOENT" });
     expect(await backend.get("small.json", call)).toEqual(Buffer.from("{}"));
     expect(record.calls[1]!.call.signal).toBe(call.signal);
   });
 
-  it("removes its private file when the upload fails", async () => {
+  it("passes a failed upload's error on", async () => {
     const failing = new S3Backend("bucket", {
       ...fakeStore(objects, record),
-      async putFile(key, path, c) {
-        record.calls.push({ method: "putFile", args: [key, path], call: c });
+      async putBytes() {
         throw new Error("refused");
       },
     });
     await expect(failing.put("small.json", Buffer.from("{}"), call)).rejects.toThrow("refused");
-    const staged = record.calls[0]!.args[1] as string;
-    await expect(readFile(staged)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("puts small bytes in one request through the real file store", async () => {
+    const { backend: real, asked } = overTransport(() => ({ status: 200 }));
+    try {
+      await real.put("small.json", Buffer.from("{}"), call);
+      expect(asked.map(({ method }) => method)).toEqual(["PUT"]);
+    } finally {
+      real.close();
+    }
+  });
+
+  it("a put already cancelled sends nothing and reports the cancellation", async () => {
+    const { backend: real, asked } = overTransport(() => ({ status: 200 }));
+    try {
+      await expect(
+        real.put("small.json", Buffer.from("{}"), { signal: AbortSignal.abort() }),
+      ).rejects.toMatchObject({
+        code: "backup.destination_request_failed",
+        params: { operation: "put", key: "small.json", status: null, name: "AbortError" },
+      });
+      expect(asked).toEqual([]);
+    } finally {
+      real.close();
+    }
   });
 
   it.each(["waitron-a/b", "waitron-a\\b", "", ".", "..", "waitron-\u0000", "waitron-\u009f"])(
@@ -162,47 +205,8 @@ describe("S3Backend", () => {
       await expect(backend.delete(bad, call)).rejects.toMatchObject(refused);
       await expect(backend.deleteMany(["waitron-ok", bad], call)).rejects.toMatchObject(refused);
       expect(record.calls).toEqual([]);
-      expect(fsHooks.made).toEqual([]);
     },
   );
-
-  it("a put already cancelled makes no file and reports the cancellation", async () => {
-    const stopped = new AbortController();
-    stopped.abort();
-    await expect(
-      backend.put("small.json", Buffer.from("{}"), { signal: stopped.signal }),
-    ).rejects.toMatchObject({
-      code: "backup.destination_request_failed",
-      params: { operation: "put", key: "small.json", status: null, name: "AbortError" },
-    });
-    expect(fsHooks.made).toEqual([]);
-    expect(record.calls).toEqual([]);
-  });
-
-  it("a put cancelled as its private file is written reports the cancellation and leaves no file", async () => {
-    const stopping = new AbortController();
-    fsHooks.beforeWrite = () => stopping.abort();
-    await expect(
-      backend.put("small.json", Buffer.from("{}"), { signal: stopping.signal }),
-    ).rejects.toMatchObject({
-      code: "backup.destination_request_failed",
-      params: { operation: "put", key: "small.json", status: null, name: "AbortError" },
-    });
-    expect(fsHooks.made).toHaveLength(1);
-    await expect(readdir(fsHooks.made[0]!)).rejects.toMatchObject({ code: "ENOENT" });
-    expect(record.calls).toEqual([]);
-  });
-
-  it("a put whose private file cannot be written passes the file system's error on", async () => {
-    fsHooks.beforeWrite = () => {
-      throw Object.assign(new Error("disk full"), { code: "ENOSPC" });
-    };
-    await expect(backend.put("small.json", Buffer.from("{}"), call)).rejects.toMatchObject({
-      code: "ENOSPC",
-    });
-    await expect(readdir(fsHooks.made[0]!)).rejects.toMatchObject({ code: "ENOENT" });
-    expect(record.calls).toEqual([]);
-  });
 
   it("refuses to put more than the small-object bound before any request", async () => {
     await expect(
@@ -307,6 +311,33 @@ describe("S3Backend", () => {
         { key: "waitron-a", size: 1, mtimeMs: Date.parse("2026-10-12T00:00:00.000Z") },
       ]);
       expect(asked).toEqual(["archives/v1/waitron-"]);
+    } finally {
+      real.close();
+    }
+  });
+
+  it("over the real file store, prunes nothing when a listing repeats the only archive on a second page", async () => {
+    const key = backupArchiveKey(new Date("2026-10-12T00:00:00Z"));
+    const page = (more: boolean) =>
+      `<ListBucketResult><Contents><Key>${key}</Key><Size>1</Size>` +
+      "<LastModified>2026-10-12T00:00:00.000Z</LastModified></Contents>" +
+      (more
+        ? "<IsTruncated>true</IsTruncated><NextContinuationToken>t1</NextContinuationToken>"
+        : "<IsTruncated>false</IsTruncated>") +
+      "</ListBucketResult>";
+    const { backend: real, asked } = overTransport(({ method, query }) =>
+      method === "GET"
+        ? { status: 200, body: page(query["continuation-token"] === undefined) }
+        : { status: 200, body: "<DeleteResult></DeleteResult>" },
+    );
+    try {
+      await expect(
+        pruneBackend(real, 1, 3650, Date.parse("2026-10-12T01:00:00Z"), call),
+      ).rejects.toMatchObject({
+        code: "backup.destination_request_failed",
+        params: { operation: "list", name: "RepeatedKey" },
+      });
+      expect(asked.map(({ method }) => method)).toEqual(["GET", "GET"]);
     } finally {
       real.close();
     }

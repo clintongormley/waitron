@@ -1,3 +1,8 @@
+import type { FileCall } from "@waitron/stream";
+import { AppError } from "@waitron/shared";
+import "@waitron/stream";
+import "./errors.js";
+
 export interface StoredObject {
   key: string;
   size: number;
@@ -5,8 +10,25 @@ export interface StoredObject {
 }
 
 /** The caller's way to stop one call. */
-export interface StorageCall {
-  signal: AbortSignal;
+export type StorageCall = FileCall;
+
+/** The most `put` sends or `get` holds. Archives travel by `putFile` and `getFile`, never these. */
+export const SMALL_OBJECT_MAX_BYTES = 16 * 1024 * 1024;
+
+export function objectTooLarge(): AppError {
+  return new AppError("backup.destination_object_too_large", { maxBytes: SMALL_OBJECT_MAX_BYTES });
+}
+
+// C0 controls, DEL and C1 controls.
+// eslint-disable-next-line no-control-regex
+const CONTROL = /[\u0000-\u001f\u007f-\u009f]/;
+
+/** One plain name directly inside the destination, so no key reaches outside it. */
+export function checkedKey(key: string): string {
+  if (key === "" || key === "." || key === ".." || /[/\\]/.test(key) || CONTROL.test(key)) {
+    throw new AppError("backup.destination_key_invalid", { field: "key" });
+  }
+  return key;
 }
 
 /** A backup destination. Fan-out writes one artifact to every configured backend. */
@@ -15,6 +37,8 @@ export interface StorageBackend {
   put(key: string, bytes: Uint8Array, call: StorageCall): Promise<void>;
   putFile(key: string, path: string, call: StorageCall): Promise<void>;
   getFile(key: string, outPath: string, call: StorageCall): Promise<void>;
+  /** An object of at most `SMALL_OBJECT_MAX_BYTES`; a larger one is refused with
+   * `backup.destination_object_too_large`. */
   get(key: string, call: StorageCall): Promise<Buffer>;
   /** Objects directly in the destination, never deeper, whose key starts with `prefix`, newest-first
    * by mtime. Missing store → []. */

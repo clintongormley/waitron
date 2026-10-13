@@ -14,6 +14,7 @@ import { join } from "node:path";
 import type { Readable } from "node:stream";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LocalFsBackend } from "./local-fs-backend.js";
+import { SMALL_OBJECT_MAX_BYTES } from "./storage-backend.js";
 
 // `list()`'s per-entry `stat` is mocked in exactly one test below, to stage a file that vanishes
 // between `readdir` and `stat` (a concurrent prune/delete) deterministically — a real race can't be
@@ -116,6 +117,21 @@ describe("LocalFsBackend", () => {
     expect((await be.get("waitron-20260905T000000Z.dump.enc", call)).toString()).toBe(
       "cipher-bytes",
     );
+  });
+
+  it("get refuses a file over the small-object bound", async () => {
+    const be = new LocalFsBackend("d1", dir);
+    await writeFile(join(dir, "waitron-big"), Buffer.alloc(SMALL_OBJECT_MAX_BYTES + 1));
+    await expect(be.get("waitron-big", call)).rejects.toMatchObject({
+      code: "backup.destination_object_too_large",
+      params: { maxBytes: SMALL_OBJECT_MAX_BYTES },
+    });
+  });
+
+  it("get returns a file exactly at the small-object bound", async () => {
+    const be = new LocalFsBackend("d1", dir);
+    await writeFile(join(dir, "waitron-edge"), Buffer.alloc(SMALL_OBJECT_MAX_BYTES, 7));
+    expect((await be.get("waitron-edge", call)).length).toBe(SMALL_OBJECT_MAX_BYTES);
   });
 
   it("put leaves no .tmp behind, and list never returns a leftover temp as a backup", async () => {
