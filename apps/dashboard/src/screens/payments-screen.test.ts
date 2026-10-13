@@ -1530,6 +1530,24 @@ describe("card payments stuck after a restart", () => {
     expect(api.resolveStuckPayment).not.toHaveBeenCalled();
   });
 
+  it("puts a provider and an order label holding a replacement pattern and later placeholders into the confirmation as written", async () => {
+    const provider = "Pay $& {amount} {order}";
+    const { el } = await mount(
+      stubApi({
+        listStuckPayments: vi
+          .fn()
+          .mockResolvedValue([{ ...STUCK[0]!, provider, label: "Terrace $& {provider}" }]),
+      }),
+    );
+    q(el, "[data-test=resolve-pay-1]")!.click();
+    await flush(el);
+    const dialog = q(el, "[data-test=resolve-dialog]")!;
+    expect(dialog.querySelector("p")!.textContent!.trim()).toBe(
+      `Waitron will ask ${provider} what happened to this €12.50 payment (Order 12 · Terrace $& {provider}). If it went through, the sale is recorded. If it did not, Waitron cancels it at ${provider} where it can still be cancelled, and unlocks the order so it can be paid again, unless another card payment on the order is still unresolved.`,
+    );
+    expect(dialog.getAttribute("heading")).toBe(`Check this payment with ${provider}?`);
+  });
+
   it("closes the confirmation when its dialog is dismissed", async () => {
     const { el, api } = await mount(
       stubApi({ listStuckPayments: vi.fn().mockResolvedValue(STUCK) }),
