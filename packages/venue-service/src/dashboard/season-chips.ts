@@ -87,7 +87,7 @@ export class SeasonChips extends LitElement {
   @state() private refusal?: Refusal;
   @state() private impact?: SeasonDeleteImpact;
   /** The newest request, so only it clears `pending`. */
-  private request = {};
+  private latestRequest = {};
 
   override disconnectedCallback() {
     this.opening = undefined;
@@ -119,7 +119,7 @@ export class SeasonChips extends LitElement {
     pending: "save" | "impact" | "delete",
     request: () => Promise<T>,
   ): Promise<{ value: T } | undefined> {
-    const sent = (this.request = {});
+    const sent = (this.latestRequest = {});
     this.pending = pending;
     this.refusal = undefined;
     this.impactFailed = false;
@@ -132,7 +132,7 @@ export class SeasonChips extends LitElement {
       }
       return undefined;
     } finally {
-      if (this.request === sent) this.pending = "";
+      if (this.latestRequest === sent) this.pending = "";
     }
   }
   private async written(
