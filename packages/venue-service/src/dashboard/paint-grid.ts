@@ -136,7 +136,8 @@ export class PaintGrid extends LitElement {
       .times,
       .day {
         position: relative;
-        height: calc(var(--wt-space-1) * 1.25 * ${ROWS});
+        /* A host may stretch the day to a taller --paint-grid-fill; it is never shorter than this. */
+        height: max(calc(var(--wt-space-1) * 1.25 * ${ROWS}), var(--paint-grid-fill, 0px));
       }
       .times {
         position: sticky;

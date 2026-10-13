@@ -169,8 +169,14 @@ export class SeasonPainter extends LitElement {
         color: var(--season-on-tint);
         border-color: var(--season-tint-line);
       }
+      /* The day fills the grid's slot: less the heading row and its line, and the grid's two borders. */
+      paint-grid {
+        container-type: size;
+        --paint-grid-fill: calc(100cqb - var(--wt-tap-min) - 3px);
+      }
       .follows {
         color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
       }
       a {
         color: var(--wt-color-primary-text);
@@ -186,6 +192,27 @@ export class SeasonPainter extends LitElement {
       }
       .label {
         color: var(--wt-color-text-muted);
+      }
+      .pots {
+        display: contents;
+      }
+      /* On a phone the paint chips scroll sideways in one line, leaving the height to the grid. */
+      @media (width < 720px) {
+        .pots {
+          display: flex;
+          align-items: center;
+          gap: var(--wt-space-2);
+          flex: 1 1 100%;
+          min-width: 0;
+          overflow-x: auto;
+          padding: var(--wt-field-line-width-active);
+        }
+        .pots > * {
+          flex: none;
+        }
+        .hint {
+          margin-inline-start: 0;
+        }
       }
       .pot {
         display: inline-flex;
@@ -624,7 +651,7 @@ export class SeasonPainter extends LitElement {
     const season = seasons.find(({ id }) => id === this.seasonId);
     if (!season) return nothing;
     const single = seasons.length < 2;
-    return html`<span class="season">
+    return html`<span slot="picker" class="season">
       <wt-button
         data-test="previous-season"
         variant="ghost"
@@ -655,6 +682,7 @@ export class SeasonPainter extends LitElement {
     const zones = department.zones.map(({ name }) => name);
     const list = listOf(zones);
     return html`<wt-combobox
+        slot="picker"
         name="department"
         label=${t("painter.department")}
         hide-label
@@ -674,7 +702,7 @@ export class SeasonPainter extends LitElement {
       ></wt-combobox>
       ${
         zones.length
-          ? html`<span class="follows" data-test="follows"
+          ? html`<span slot="picker" class="follows" data-test="follows"
               >${format(zones.length === 1 ? "painter.zone_follows" : "painter.zones_follow", {
                 zones: list,
                 department: department.name,
@@ -688,55 +716,57 @@ export class SeasonPainter extends LitElement {
       this.chosen = id;
     };
     return html`<div slot="row" class="paint">
-      <span class="label">${t("painter.paint")}</span>
-      ${
-        zoned
-          ? nothing
-          : department.periods.map(
-              (period) =>
-                html`<span class="pot">
-                  <button
-                    type="button"
-                    data-test=${`paint-${period.id}`}
-                    aria-pressed=${chosen === period.id ? "true" : "false"}
-                    @click=${() => choose(period.id)}
-                  >
-                    <span class="swatch" data-colour=${period.colour}></span>${period.name}
-                  </button>
-                  <button
-                    type="button"
-                    class="edit"
-                    data-test=${`edit-${period.id}`}
-                    aria-label=${format("painter.edit_period", { name: period.name })}
-                    @click=${() => this.openPeriod(department, period)}
-                  >
-                    ✎
-                  </button>
-                </span>`,
-            )
-      }
-      <span class="pot">
-        <button
-          type="button"
-          data-test="paint-closed"
-          aria-pressed=${chosen === null ? "true" : "false"}
-          @click=${() => choose(null)}
-        >
-          <span class="swatch closed"></span>${t("hours.closed")}
-        </button>
-      </span>
-      ${
-        zoned
-          ? nothing
-          : html`<button
-              type="button"
-              class="new"
-              data-test="new-period"
-              @click=${() => this.openPeriod(department)}
-            >
-              ${t("painter.new_period")}
-            </button>`
-      }
+      <div class="pots">
+        <span class="label">${t("painter.paint")}</span>
+        ${
+          zoned
+            ? nothing
+            : department.periods.map(
+                (period) =>
+                  html`<span class="pot">
+                    <button
+                      type="button"
+                      data-test=${`paint-${period.id}`}
+                      aria-pressed=${chosen === period.id ? "true" : "false"}
+                      @click=${() => choose(period.id)}
+                    >
+                      <span class="swatch" data-colour=${period.colour}></span>${period.name}
+                    </button>
+                    <button
+                      type="button"
+                      class="edit"
+                      data-test=${`edit-${period.id}`}
+                      aria-label=${format("painter.edit_period", { name: period.name })}
+                      @click=${() => this.openPeriod(department, period)}
+                    >
+                      ✎
+                    </button>
+                  </span>`,
+              )
+        }
+        <span class="pot">
+          <button
+            type="button"
+            data-test="paint-closed"
+            aria-pressed=${chosen === null ? "true" : "false"}
+            @click=${() => choose(null)}
+          >
+            <span class="swatch closed"></span>${t("hours.closed")}
+          </button>
+        </span>
+        ${
+          zoned
+            ? nothing
+            : html`<button
+                type="button"
+                class="new"
+                data-test="new-period"
+                @click=${() => this.openPeriod(department)}
+              >
+                ${t("painter.new_period")}
+              </button>`
+        }
+      </div>
       <span class="hint" data-test="hint">${t("painter.hint")}</span>
     </div>`;
   }
@@ -791,7 +821,7 @@ export class SeasonPainter extends LitElement {
           this.forget();
         }}
       >
-        <span slot="picker" class="season">${this.seasonChip()}${this.picker(department)}</span>
+        ${this.seasonChip()}${this.picker(department)}
         <a
           slot="link"
           data-test="periods-link"

@@ -52,7 +52,8 @@ export class PainterFrame extends LitElement {
           grid-template-columns: auto minmax(0, 1fr) auto;
           grid-template-areas:
             "close title actions"
-            "picker picker link";
+            "picker picker picker"
+            "link link link";
           column-gap: var(--wt-space-2);
         }
         /* Room on a phone for the heading beside Cancel and Save. */

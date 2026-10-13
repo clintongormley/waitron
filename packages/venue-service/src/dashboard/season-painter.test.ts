@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { page } from "vitest/browser";
 import { applyTokens } from "@waitron/ui";
 import { setLocale } from "@waitron/dashboard-kit";
 import type { SeasonPainter } from "./season-painter.js";
@@ -511,4 +512,108 @@ it("a refresh that removes the open season of a clean painter moves on without a
   expect(frame(painter).heading).toBe("Spring week");
   expect(frame(painter).refusal).toBe("");
   expect(frame(painter).dirty).toBe(false);
+});
+
+/** Restaurant as the demo venue has it: a long name, four zones and four periods. */
+function busyRestaurant() {
+  const model = painterModel();
+  const restaurant = model.departments[0]!;
+  const zone = restaurant.zones[0]!;
+  const period = restaurant.periods[0]!;
+  return {
+    ...model,
+    departments: [
+      {
+        ...restaurant,
+        name: "Restaurant and bar",
+        zones: [
+          ...restaurant.zones,
+          { ...zone, id: "z3", name: "Downstairs bar" },
+          { ...zone, id: "z4", name: "Upstairs bar" },
+        ],
+        periods: [
+          ...restaurant.periods,
+          { ...period, id: "p3", name: "Breakfast", colour: "amber" as const },
+          { ...period, id: "p4", name: "Afternoon", colour: "blue" as const },
+        ],
+      },
+      ...model.departments.slice(1),
+    ],
+  };
+}
+/** How many lines an element's text runs to. */
+function lines(el: Element): number {
+  const range = document.createRange();
+  range.selectNodeContents(el);
+  return new Set([...range.getClientRects()].map((box) => Math.round(box.top))).size;
+}
+const overlap = (a: DOMRect, b: DOMRect) =>
+  a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+
+describe.each(["en", "es"] as const)("the bar (%s)", (locale) => {
+  it("at 390px fits the screen, keeps ✕, Cancel and Save on it, and leaves most of the height to the grid", async () => {
+    const old = [window.innerWidth, window.innerHeight];
+    try {
+      await page.viewport(390, 844);
+      setLocale(locale);
+      const { painter } = await mount({ model: busyRestaurant() });
+      for (const zone of [undefined, "zone:z2"]) {
+        if (zone) await pick(painter, zone);
+        const bar = frame(painter).shadowRoot!;
+        const body = bar
+          .querySelector("wt-modal")!
+          .shadowRoot!.querySelector<HTMLElement>(".body")!;
+        expect(body.scrollWidth, "nothing in the painter scrolls sideways").toBeLessThanOrEqual(
+          body.clientWidth,
+        );
+        for (const test of ["dismiss", "cancel", "save"]) {
+          const box = bar.querySelector(`[data-test=${test}]`)!.getBoundingClientRect();
+          expect(box.left, test).toBeGreaterThanOrEqual(0);
+          expect(box.right, test).toBeLessThanOrEqual(390);
+        }
+        const shown = [
+          chip(painter, "season")!,
+          picker(painter),
+          chip(painter, "follows")!,
+          chip(painter, "periods-link")!,
+        ].map((el) => el.getBoundingClientRect());
+        for (const [i, box] of shown.entries()) {
+          expect(box.left, `item ${i}`).toBeGreaterThanOrEqual(0);
+          expect(box.right, `item ${i}`).toBeLessThanOrEqual(390);
+          for (const other of shown.slice(i + 1))
+            expect(overlap(box, other), `item ${i} overlaps another`).toBe(false);
+        }
+        expect(grid(painter).getBoundingClientRect().height).toBeGreaterThan(844 / 2);
+      }
+    } finally {
+      await page.viewport(old[0]!, old[1]!);
+    }
+  });
+
+  it("at 1280px the zones' sentence reads on one line", async () => {
+    const old = [window.innerWidth, window.innerHeight];
+    try {
+      await page.viewport(1280, 900);
+      setLocale(locale);
+      const { painter } = await mount({ model: busyRestaurant() });
+      expect(lines(chip(painter, "follows")!)).toBe(1);
+    } finally {
+      await page.viewport(old[0]!, old[1]!);
+    }
+  });
+});
+
+it("at 1280×900 the grid fills the space under the paint row, still showing the whole day", async () => {
+  const old = [window.innerWidth, window.innerHeight];
+  try {
+    await page.viewport(1280, 900);
+    const { painter } = await mount();
+    const slot = grid(painter).getBoundingClientRect();
+    const scroll = grid(painter).shadowRoot!.querySelector<HTMLElement>(".scroll")!;
+    expect(slot.height).toBeGreaterThan(600);
+    expect(Math.abs(scroll.getBoundingClientRect().bottom - slot.bottom)).toBeLessThan(1);
+    expect(scroll.scrollHeight).toBeLessThanOrEqual(scroll.clientHeight);
+  } finally {
+    await page.viewport(old[0]!, old[1]!);
+  }
 });
