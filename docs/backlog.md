@@ -4094,6 +4094,18 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   October 2025 draft. Part 1 (the record's library) lands first, with the owner's sign-off.
   [Detail](backlog/workforce.md#a10-clocking-in-and-out--the-working-time-record)
 
+- **A585. Staffing needs and the rota** — staff roles painted per area and day like opening hours,
+  and a rota of slots to fill, in a Calendar with Opening hours, Staffing and Rota views. **Designed
+  2026-10-13** ([spec](superpowers/specs/2026-10-13-a585-staffing-and-rota-design.md),
+  [mockups](backlog/mockups/a585-staffing/)); after the A506 chain, `workforce` changes planned with A10.
+- **A586. Labour rules per person** — today the country module supplies one rule set per location
+  (`convenio_config`); agreements vary, so the venue keeps named agreements and each person's contract
+  names one. The rota's warnings and A10's overtime read the person's rules. After A585; plan with A10.
+- **A587. Availability** — "can't work Wednesdays", preferred days; the `availability` table exists
+  unused. Shown in A585's picker and warnings. After A586.
+- **A588. A solver drafts the rota** — fills A585's open slots from each person's staff roles, rules
+  (A586), availability (A587) and contracted hours, for the manager to adjust. After A587.
+
 ### Purchasing, recipes, stock and reports
 
 _Formerly entries spread across the old sections._ Detail: [backlog/back-office.md](backlog/back-office.md).
