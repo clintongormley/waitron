@@ -305,7 +305,7 @@ describe("floor plan tables", () => {
         .values({ zoneId: ZONE, tableId: null, label: "T5", ...NO_PLACE, pending: true });
       await tx
         .insert(floorTodayZones)
-        .values({ zoneId: ZONE, businessDay: "2026-10-08", generation: 3 });
+        .values({ zoneId: ZONE, businessDay: "2026-10-08", revision: 3 });
       await tx.insert(floorTodayTables).values({ tableId: TABLE_1, seats: 4, ...PLACED });
       await tx.insert(parties).values({ openedBy: PERSON, tableNames: ["T1", "T2"] });
     });
@@ -372,7 +372,7 @@ describe("floor plan tables", () => {
     const [todayZone] = await inTx((tx) =>
       tx.select().from(floorTodayZones).where(eq(floorTodayZones.zoneId, ZONE)),
     );
-    expect(todayZone).toMatchObject({ businessDay: "2026-10-08", generation: 3 });
+    expect(todayZone).toMatchObject({ businessDay: "2026-10-08", revision: 3 });
     const [todayTable] = await inTx((tx) =>
       tx.select().from(floorTodayTables).where(eq(floorTodayTables.tableId, TABLE_1)),
     );
@@ -784,7 +784,7 @@ describe("floor plan tables", () => {
     expect(names).toEqual([]);
   });
 
-  it("starts a today's zone at generation 0", async () => {
+  it("starts a today's zone at revision 0", async () => {
     const zone = await inTx(async (tx) => {
       const [row] = await tx
         .insert(floorZones)
@@ -798,7 +798,7 @@ describe("floor plan tables", () => {
     const [row] = await inTx((tx) =>
       tx.select().from(floorTodayZones).where(eq(floorTodayZones.zoneId, zone)),
     );
-    expect(row!.generation).toBe(0);
+    expect(row!.revision).toBe(0);
   });
 });
 

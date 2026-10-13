@@ -17,7 +17,7 @@ import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import { inTx, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
-import { mergeOf, plannedZone } from "./testing/floor-today-venue.js";
+import { expectRevision, mergeOf, plannedZone } from "./testing/floor-today-venue.js";
 import { seedSessionDevice } from "./testing/session-device.js";
 import "./errors.js";
 
@@ -72,7 +72,7 @@ async function post(path: string, body: unknown): Promise<Response> {
 
 async function merge(movingId: string, targetId: string, side: string): Promise<void> {
   const answer = await post(`/api/tables/${movingId}/today/merge`, { targetId, side, seats: 8 });
-  expect(answer.status, await answer.clone().text()).toBe(204);
+  await expectRevision(v, answer);
 }
 
 async function refusal(answer: Promise<Response>): Promise<{ status: number; body: unknown }> {
@@ -118,7 +118,7 @@ async function threeTables(fixed = false) {
 
 async function takeOff(tableId: string): Promise<void> {
   const answer = await post(`/api/tables/${tableId}/today/take-off`, {});
-  expect(answer.status, await answer.clone().text()).toBe(204);
+  await expectRevision(v, answer);
 }
 
 describe("seating at a table taken off today", () => {

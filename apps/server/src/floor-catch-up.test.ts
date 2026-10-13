@@ -28,7 +28,7 @@ import {
   tableRow,
   type PartyVenue,
 } from "./testing/party-venue.js";
-import { tableServiceZone } from "./testing/floor-today-venue.js";
+import { expectRevision, tableServiceZone, zoneRevisionOf } from "./testing/floor-today-venue.js";
 import { seedSessionDevice } from "./testing/session-device.js";
 import { handOverOrder } from "./working-order.js";
 import "./errors.js";
@@ -160,13 +160,6 @@ async function tableExists(tableId: string): Promise<boolean> {
     tx.select({ id: diningTables.id }).from(diningTables).where(eq(diningTables.id, tableId)),
   );
   return rows.length > 0;
-}
-
-async function generationOf(zoneId: string): Promise<number | undefined> {
-  const [row] = await inTx(v, (tx) =>
-    tx.select().from(floorTodayZones).where(eq(floorTodayZones.zoneId, zoneId)),
-  );
-  return row?.generation;
 }
 
 /** A zone whose first saved master holds one live table; answers both ids. */
@@ -324,7 +317,10 @@ describe("the till's floor routes catch today's plan up", () => {
       entry("long", long, { seats: 10, placement: place(0, 20), partKeys: ["c3", "c4", "c5"] }),
     ]);
     const answer = await send("POST", `/api/zones/${zoneId}/today/reset`, {});
-    expect(answer.status).toBe(204);
+    expect({ status: answer.status, body: await answer.json() }).toEqual({
+      status: 200,
+      body: { zoneId, revision: (await zoneRevisionOf(v, zoneId))! },
+    });
 
     const before = await readJoined();
     expect(before.get(t3)).toBeNull();
@@ -371,13 +367,13 @@ describe("the till's floor routes catch today's plan up", () => {
   it("a part merged on today's map when its joined table goes live stays usable until the merge ends", async () => {
     const z = await longWaitsForItsName();
     const placed = await send("POST", `/api/tables/${z.t3}/today/place`, { x: 20, y: 40 });
-    expect(placed.status).toBe(204);
+    await expectRevision(v, placed);
     const merged = await send("POST", `/api/tables/${z.t3}/today/merge`, {
       targetId: z.bar,
       side: "right",
       seats: 6,
     });
-    expect(merged.status).toBe(204);
+    await expectRevision(v, merged);
 
     await finish(z.held);
     const live = await readJoined();
@@ -390,25 +386,23 @@ describe("the till's floor routes catch today's plan up", () => {
     expect((await readJoined()).get(z.t3)).toBeNull();
 
     const split = await send("POST", `/api/tables/${z.bar}/today/split`, {});
-    expect(split.status).toBe(204);
+    await expectRevision(v, split);
     expect((await readJoined()).get(z.t3)).toBe(z.long);
     expect((await todayRow(z.t3))?.x).not.toBeNull();
   });
 
   it("a part whose merge is split after its joined table goes live is free, still joined and still placed", async () => {
     const z = await longWaitsForItsName();
-    expect((await send("POST", `/api/tables/${z.t3}/today/place`, { x: 20, y: 40 })).status).toBe(
-      204,
-    );
+    await expectRevision(v, send("POST", `/api/tables/${z.t3}/today/place`, { x: 20, y: 40 }));
     const merged = await send("POST", `/api/tables/${z.t3}/today/merge`, {
       targetId: z.bar,
       side: "right",
       seats: 6,
     });
-    expect(merged.status).toBe(204);
+    await expectRevision(v, merged);
     await finish(z.held);
     await readJoined();
-    expect((await send("POST", `/api/tables/${z.bar}/today/split`, {})).status).toBe(204);
+    await expectRevision(v, send("POST", `/api/tables/${z.bar}/today/split`, {}));
 
     const answer = await send("GET", "/api/tables/state");
     expect(answer.status).toBe(200);
@@ -426,7 +420,7 @@ describe("the till's floor routes catch today's plan up", () => {
 
   it("does nothing when no reset happened while the table was taken", async () => {
     const { zoneId, tableId } = await plannedTable(fresh("Kept"));
-    const generation = await generationOf(zoneId);
+    const zoneRevision = await zoneRevisionOf(v, zoneId);
     const partyId = await seatAt(tableId);
     await moveToday(tableId, 30);
 
@@ -434,7 +428,7 @@ describe("the till's floor routes catch today's plan up", () => {
     await readFloor();
 
     expect(await todayRow(tableId)).toMatchObject({ x: 30 });
-    expect(await generationOf(zoneId)).toBe(generation);
+    expect(await zoneRevisionOf(v, zoneId)).toBe(zoneRevision);
   });
 });
 
@@ -477,7 +471,7 @@ async function renamedInMaster() {
   const renamed = fresh("Day b");
   const planned = await plannedTable(label);
   await save(planned.zoneId, planned.revision, [entry("t", renamed, { id: planned.masterId })]);
-  return { ...planned, label, renamed, generation: (await generationOf(planned.zoneId))! };
+  return { ...planned, label, renamed, zoneRevision: (await zoneRevisionOf(v, planned.zoneId))! };
 }
 
 /** Seats `tableId`'s party at a second free table of the venue's tables zone too. */
@@ -493,12 +487,12 @@ async function joinSecond(partyId: string): Promise<string> {
 
 describe("on a new business day, the till's floor routes reset today's plan before acting", () => {
   it("resets before seating", async () => {
-    const { zoneId, tableId, renamed, generation } = await renamedInMaster();
+    const { zoneId, tableId, renamed, zoneRevision } = await renamedInMaster();
 
     await onNextDay(async () => {
       await seatAt(tableId);
 
-      expect(await generationOf(zoneId)).toBe(generation + 1);
+      expect(await zoneRevisionOf(v, zoneId)).toBe(zoneRevision + 1);
       expect((await tableRow(v, tableId)).label).toBe(renamed);
     });
   });
@@ -517,7 +511,7 @@ describe("on a new business day, the till's floor routes reset today's plan befo
   ];
 
   it.each(routes)("resets before %s", async (_, path, bodyFor) => {
-    const { zoneId, tableId, renamed, generation } = await renamedInMaster();
+    const { zoneId, tableId, renamed, zoneRevision } = await renamedInMaster();
     const partyId = await seatAt(await v.table(fresh("Seated")));
     const body = await bodyFor(partyId);
 
@@ -528,7 +522,7 @@ describe("on a new business day, the till's floor routes reset today's plan befo
       });
 
       expect(answer.status).toBe(200);
-      expect(await generationOf(zoneId)).toBe(generation + 1);
+      expect(await zoneRevisionOf(v, zoneId)).toBe(zoneRevision + 1);
       expect((await tableRow(v, tableId)).label).toBe(renamed);
     });
   });

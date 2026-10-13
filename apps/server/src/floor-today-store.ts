@@ -28,6 +28,7 @@ import {
   type Target,
 } from "./floor-reset-plan.js";
 import { foodOnItsWay } from "./delivery-release.js";
+import { moveChangedRooms, roomPrints, roomRevisions } from "./floor-revision.js";
 import { leaveMerges } from "./floor-today-merges.js";
 import { holdersOf } from "./parties.js";
 import {
@@ -83,19 +84,24 @@ export async function todayBusinessDay(
   return venueMomentAt(now, await readLocationClock(tx, cfg.locationId))?.businessDay ?? null;
 }
 
-/** Copies the zone's master into today's plan: replaces the zone's reset rows with targetsFromMaster, then catches up. */
+/**
+ * Copies the zone's master into today's plan: replaces the zone's reset rows with
+ * targetsFromMaster, then catches up. Answers the room's new revision; null when the venue's clock
+ * names no business day, and nothing was reset.
+ */
 export async function resetZone(
   tx: Transaction,
   cfg: TillConfig,
   removals: readonly TableRemoval[],
   zoneId: string,
   now: Date,
-): Promise<void> {
+): Promise<number | null> {
   await requireZone(tx, cfg, zoneId);
   const day = await todayBusinessDay(tx, cfg, now);
-  if (day !== null) await resetZoneFor(tx, cfg, removals, zoneId, day, now);
+  return day === null ? null : resetZoneFor(tx, cfg, removals, zoneId, day, now);
 }
 
+/** Answers the room's new revision. */
 async function resetZoneFor(
   tx: Transaction,
   cfg: TillConfig,
@@ -103,17 +109,18 @@ async function resetZoneFor(
   zoneId: string,
   businessDay: string,
   now: Date,
-): Promise<void> {
+): Promise<number> {
   const [today] = await tx
-    .select({ id: floorTodayZones.id, generation: floorTodayZones.generation })
+    .select({ id: floorTodayZones.id, revision: floorTodayZones.revision })
     .from(floorTodayZones)
     .where(eq(floorTodayZones.zoneId, zoneId));
+  const revision = (today?.revision ?? 0) + 1;
   if (today === undefined) {
-    await tx.insert(floorTodayZones).values({ zoneId, businessDay, generation: 1 });
+    await tx.insert(floorTodayZones).values({ zoneId, businessDay, revision });
   } else {
     await tx
       .update(floorTodayZones)
-      .set({ businessDay, generation: today.generation + 1 })
+      .set({ businessDay, revision })
       .where(eq(floorTodayZones.id, today.id));
   }
 
@@ -162,6 +169,7 @@ async function resetZoneFor(
     await copyParts(tx, zoneId, written);
   }
   await catchUpZone(tx, cfg, removals, zoneId, now);
+  return revision;
 }
 
 /** Skips a joined table more than one live table follows: its parts would join two copied tables. */
@@ -511,7 +519,11 @@ function mergedWith(
   return new Set(members.filter((m) => joins.has(m.joinId)).map((m) => m.tableId));
 }
 
-/** For each zone with a master plan: resetZone when its today's plan is for an earlier business day (or it has none), else catchUpZone when it has pending rows; one query finds those zones. */
+/**
+ * For each zone with a master plan: resetZone when its today's plan is for an earlier business day
+ * (or it has none), else catchUpZone when it has pending rows; one query finds those zones. A
+ * caught-up zone whose plan changed moves its revision by one.
+ */
 export async function ensureToday(
   tx: Transaction,
   cfg: TillConfig,
@@ -546,13 +558,18 @@ export async function ensureToday(
         ),
       ),
     );
+  const resets = (businessDay: string | null) => businessDay === null || businessDay < day;
+  const catchingUp = zones.flatMap((z) => (resets(z.businessDay) ? [] : [z.zoneId]));
+  const before = catchingUp.length === 0 ? null : await roomPrints(tx, cfg, catchingUp);
   for (const { zoneId, businessDay } of zones) {
-    if (businessDay === null || businessDay < day) {
-      await resetZoneFor(tx, cfg, removals, zoneId, day, now);
-    } else {
-      await catchUpZone(tx, cfg, removals, zoneId, now);
-    }
+    if (resets(businessDay)) await resetZoneFor(tx, cfg, removals, zoneId, day, now);
+    else await catchUpZone(tx, cfg, removals, zoneId, now);
   }
+  if (before === null) return;
+  const after = await roomPrints(tx, cfg, catchingUp);
+  const changed = catchingUp.filter((zoneId) => after.get(zoneId) !== before.get(zoneId));
+  if (changed.length === 0) return;
+  await moveChangedRooms(tx, await roomRevisions(tx, changed), before, after);
 }
 
 /** Moves the table's top-left corner to `at`; a merge's members all move by the same distance. */

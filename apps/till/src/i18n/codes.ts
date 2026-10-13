@@ -124,6 +124,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Its tables have changed. Check and try again",
     es: "Sus mesas han cambiado. Revísalo e inténtalo de nuevo",
   },
+  "floor_today.out_of_date": {
+    en: "The floor has changed. Check and try again",
+    es: "La sala ha cambiado. Revísala y vuelve a intentarlo",
+  },
   "table.split_off": {
     en: "That table was split off. Join it again first",
     es: "Esa mesa está separada. Vuelve a unirla primero",

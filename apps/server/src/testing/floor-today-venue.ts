@@ -1,11 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
+import { expect } from "vitest";
 import {
   floorPlanTableSizes,
   floorTodayJoinTables,
   floorTodayJoins,
   floorTodaySplitParts,
   floorTodayTables,
+  floorTodayZones,
   floorZones,
 } from "@waitron/db";
 import { zoneSalePolicies, zoneServicePolicies } from "@waitron/venue-service";
@@ -149,4 +151,37 @@ export async function mergeOf(
     members.sort((a, b) => a.tableId.localeCompare(b.tableId));
     return { joinId: own.joinId, seats: own.seats, members };
   });
+}
+
+/** The room's stored revision; undefined with no row. */
+export async function zoneRevisionOf(v: PartyVenue, zoneId: string): Promise<number | undefined> {
+  const [row] = await inTx(v, (tx) =>
+    tx.select().from(floorTodayZones).where(eq(floorTodayZones.zoneId, zoneId)),
+  );
+  return row?.revision;
+}
+
+/**
+ * A 200 naming the zone — `zoneId`, or the one the body names — and the revision it now stores (0
+ * with no row), which is `revision` when given.
+ */
+export async function expectRevision(
+  v: PartyVenue,
+  answer: Response | Promise<Response>,
+  zoneId?: string,
+  revision?: number,
+): Promise<void> {
+  const settled = await answer;
+  const body: unknown = await settled
+    .clone()
+    .json()
+    .catch(() => null);
+  const zone = zoneId ?? (body as { zoneId?: unknown } | null)?.zoneId;
+  expect(zone, "the answer names a zone").toBeTypeOf("string");
+  const stored = typeof zone === "string" ? ((await zoneRevisionOf(v, zone)) ?? 0) : undefined;
+  expect({ status: settled.status, body }, await settled.text()).toEqual({
+    status: 200,
+    body: { zoneId: zone, revision: stored },
+  });
+  if (revision !== undefined) expect(stored).toBe(revision);
 }

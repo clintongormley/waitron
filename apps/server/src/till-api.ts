@@ -176,7 +176,15 @@ import { RETAINED_COURSE } from "./retained-course.js";
 import { readDrafts, saveDraft, submitDraft, takeOverDraft } from "./order-drafts.js";
 import { availableStations, findDeadEnds, requireMakeAtStation } from "./dead-ends.js";
 import { ensureToday } from "./floor-today-store.js";
-import { refuseTakenOff } from "./floor-today-table.js";
+import { refuseTakenOff, zoneOfTable } from "./floor-today-table.js";
+import {
+  moveChangedRooms,
+  refuseStale,
+  roomPrints,
+  roomRevisions,
+  sentRevision,
+  zonesOf,
+} from "./floor-revision.js";
 import type { SubmitDraftInput } from "./order-drafts.js";
 import { invalid } from "./bill-allocation.js";
 import { printSalePaymentSlip } from "./payment-slip-print.js";
@@ -519,6 +527,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "joined_table.parts_split_off": 409,
   "joined_table.nothing_to_join": 409,
   "joined_table.out_of_date": 409,
+  "floor_today.out_of_date": 409,
   "zone.not_found": 404,
   "tab.already_open": 409,
   "tab.not_open": 409,
@@ -1076,6 +1085,30 @@ function tillTenderKind(tender: TillTender | undefined): TenderKind | undefined 
 function refuseKitchenSignIn(device: DeviceBinding): void {
   if (kindOfFormFactor(device.formFactor) === "kds_station")
     throw new AppError("device.forbidden_action", { action: "sign_in" });
+}
+
+/**
+ * `write`, moving by one each room of `tableIds` it changed; refused before it when `check` names a
+ * table whose room is no longer at the revision sent.
+ */
+async function movingRooms<T extends object>(
+  tx: Transaction,
+  cfg: TillConfig,
+  tableIds: readonly string[],
+  check: { tableId: string; sent: number } | undefined,
+  write: () => Promise<T>,
+): Promise<T | (T & { zoneRevisions: Record<string, number> })> {
+  const rooms = await zonesOf(tx, cfg, tableIds);
+  const revisions = await roomRevisions(tx, rooms);
+  if (check !== undefined) {
+    const zoneId = await zoneOfTable(tx, cfg, check.tableId);
+    refuseStale(zoneId, check.sent, revisions.get(zoneId)!);
+  }
+  const before = await roomPrints(tx, cfg, rooms);
+  const result = await write();
+  const after = await roomPrints(tx, cfg, rooms);
+  const moved = await moveChangedRooms(tx, revisions, before, after);
+  return moved.size === 0 ? result : { ...result, zoneRevisions: Object.fromEntries(moved) };
 }
 
 /** Mount the till routes with the shared error boundary. */
@@ -2621,35 +2654,39 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         const tableId = requireTargetTable(body[field], field);
         const command = tableActionCommand(personId, body);
         const merge = path === "join" ? requireMerge(body.merge, tableId) : null;
+        const sent = path === "join" ? sentRevision(body) : undefined;
         const sendCfg = sendingCfg(cfg, c, session.device);
         const result = await withTransaction(deps.db, async (tx) => {
           await catchUpFloor(tx);
           await checkZones(tx, deps.cfg, session, [{ partyId }, { tableId }]);
           const heldBefore = await memberTables(tx, partyId);
-          const acted = await act(tx, sendCfg, partyId, tableId, command);
-          if (path === "move") {
-            // Only a party staying on part of its merge breaks it up; a merge left whole stays, free.
-            const merged = await mergeMembers(tx, tableId);
-            await leaveMergesRestoring(
-              tx,
-              heldBefore.filter((id) => id !== tableId && merged.includes(id)),
-            );
-          }
-          await joinMergeMembers(tx, sendCfg, acted.partyId, tableId, personId);
-          if (merge !== null) {
-            const held = merge.moving === tableId ? merge.target : merge.moving;
-            if (!heldBefore.includes(held)) throw invalid("merge");
-            await writeMerge(tx, cfg, {
-              movingId: merge.moving,
-              targetId: merge.target,
-              side: merge.side,
-              seats: merge.seats,
-              free: false,
-            });
-          }
-          // Last, so the route's own refusals answer first.
-          await refuseTakenOff(tx, [tableId]);
-          return acted;
+          const check = sent === undefined ? undefined : { tableId, sent };
+          return movingRooms(tx, deps.cfg, [...heldBefore, tableId], check, async () => {
+            const acted = await act(tx, sendCfg, partyId, tableId, command);
+            if (path === "move") {
+              // Only a party staying on part of its merge breaks it up; a merge left whole stays, free.
+              const merged = await mergeMembers(tx, tableId);
+              await leaveMergesRestoring(
+                tx,
+                heldBefore.filter((id) => id !== tableId && merged.includes(id)),
+              );
+            }
+            await joinMergeMembers(tx, sendCfg, acted.partyId, tableId, personId);
+            if (merge !== null) {
+              const held = merge.moving === tableId ? merge.target : merge.moving;
+              if (!heldBefore.includes(held)) throw invalid("merge");
+              await writeMerge(tx, cfg, {
+                movingId: merge.moving,
+                targetId: merge.target,
+                side: merge.side,
+                seats: merge.seats,
+                free: false,
+              });
+            }
+            // Last, so the route's own refusals answer first.
+            await refuseTakenOff(tx, [tableId]);
+            return acted;
+          });
         });
         return c.json(result);
       }),
@@ -2679,12 +2716,15 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const result = await withTransaction(deps.db, async (tx) => {
         await catchUpFloor(tx);
         await checkZones(tx, deps.cfg, session, [{ partyId }]);
-        const split = await splitTable(tx, sendCfg, partyId, tableId.toLowerCase(), billId, {
-          expectedPartyRevision,
-          operatorId: personId,
+        const held = [...(await memberTables(tx, partyId)), tableId.toLowerCase()];
+        return movingRooms(tx, deps.cfg, held, undefined, async () => {
+          const split = await splitTable(tx, sendCfg, partyId, tableId.toLowerCase(), billId, {
+            expectedPartyRevision,
+            operatorId: personId,
+          });
+          await leaveMergesRestoring(tx, [tableId.toLowerCase()]);
+          return split;
         });
-        await leaveMergesRestoring(tx, [tableId.toLowerCase()]);
-        return split;
       });
       return c.json(result);
     }),

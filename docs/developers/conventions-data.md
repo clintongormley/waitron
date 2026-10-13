@@ -1658,6 +1658,20 @@ off it that the reset's copy of the saved plan still makes one of its parts; a t
 stands apart or leaves out keeps its mark (`catchUpPass`, `apps/server/src/floor-today-store.ts`).
 When deleting a table is refused, `removeLiveTables` deletes the split rows naming it and tries again,
 and puts them back if that is refused too (`apps/server/src/table-removal.ts:115`).
+
+Each room's plan for the day has a revision (`floor_today_zones.generation`, read as `revision`).
+A reset adds one to it (`resetZoneFor`, `apps/server/src/floor-today-store.ts`). Any other request
+moves it by one for its own writes, however many rows they touch, when they change the room: the
+request compares the room's print before and after its writes (`roomPrints`,
+`apps/server/src/floor-revision.ts`: each table's name, today's row, group and split). The
+catch-up in `ensureToday`, which runs first, moves a room it did not reset by one when it changes
+it; a room it resets moves only by the reset's one. The table routes and the zone reset refuse a
+sent revision that is not the room's revision after the catch-up, before their own write, and the
+party join refuses it the same way (`floor_today.out_of_date`, `refuseStale` in
+`apps/server/src/floor-revision.ts`, called by `changeRoom` and the zone reset route in
+`apps/server/src/floor-today-api.ts` and by `movingRooms` in `apps/server/src/till-api.ts`). A
+refusal rolls back the catch-up with everything else.
+
 Join again deletes the split rows of the tables split off a joined table that are free (held by no
 open party, with no clearing mark, in none of today's merges and with no food on its way), gives
 each of them its reset row's seats and no place on today's map, writes no reset row of its own, and

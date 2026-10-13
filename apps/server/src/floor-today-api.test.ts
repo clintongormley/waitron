@@ -8,11 +8,14 @@ import {
   tableInService,
   diningTables,
   floorPlans,
+  floorTodayJoins,
+  floorTodayJoinTables,
   floorTodaySplitParts,
   floorTodayTables,
   floorTodayZones,
   floorZones,
   locations,
+  partyTables,
 } from "@waitron/db";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { saveZonePlan } from "./floor-plan.js";
@@ -28,10 +31,12 @@ import {
   type PartyVenue,
 } from "./testing/party-venue.js";
 import {
+  expectRevision,
   giveKeptSize,
   plannedZone,
   tableServiceZone,
   todayRow,
+  zoneRevisionOf,
 } from "./testing/floor-today-venue.js";
 import { seedSessionDevice } from "./testing/session-device.js";
 import "./errors.js";
@@ -89,11 +94,6 @@ async function today(tableId: string, change: string, body: unknown = {}): Promi
   return send("POST", `/api/tables/${tableId}/today/${change}`, body);
 }
 
-async function expect204(answer: Response | Promise<Response>): Promise<void> {
-  const settled = await answer;
-  expect(settled.status, await settled.clone().text()).toBe(204);
-}
-
 interface FloorToday {
   placement: { x: number; y: number; rotation: number } | null;
   seats: number | null;
@@ -125,7 +125,7 @@ async function refusal(answer: Promise<Response>): Promise<{ status: number; bod
   return { status: settled.status, body: await settled.json() };
 }
 
-/** Every today's row and every split row, to show a refusal wrote nothing. */
+/** Every today's row, split row, group row and party table, to show a refusal wrote nothing. */
 async function everything() {
   const today = await inTx(v, (tx) =>
     tx.select().from(floorTodayTables).orderBy(asc(floorTodayTables.id)),
@@ -133,43 +133,304 @@ async function everything() {
   const split = await inTx(v, (tx) =>
     tx.select().from(floorTodaySplitParts).orderBy(asc(floorTodaySplitParts.id)),
   );
-  return { today, split };
+  const joins = await inTx(v, (tx) =>
+    tx.select().from(floorTodayJoins).orderBy(asc(floorTodayJoins.id)),
+  );
+  const joinTables = await inTx(v, (tx) =>
+    tx.select().from(floorTodayJoinTables).orderBy(asc(floorTodayJoinTables.id)),
+  );
+  const parties = await inTx(v, (tx) => tx.select().from(partyTables).orderBy(asc(partyTables.id)));
+  return { today, split, joins, joinTables, parties };
 }
 
-async function generationOf(zoneId: string): Promise<number | undefined> {
-  const [row] = await inTx(v, (tx) =>
-    tx.select().from(floorTodayZones).where(eq(floorTodayZones.zoneId, zoneId)),
-  );
-  return row?.generation;
+async function resetZoneToday(zoneId: string, body: unknown = {}): Promise<Response> {
+  return send("POST", `/api/zones/${zoneId}/today/reset`, body);
 }
+
+describe("the table routes' revision", () => {
+  const outOfDate = (zoneId: string, revision: number) => ({
+    status: 409,
+    body: { error: { code: "floor_today.out_of_date", params: { zoneId, revision } } },
+  });
+
+  /** A room of two ordinary tables and a spare. */
+  const ROOM = () =>
+    plannedZone(v, [
+      { key: "a", place: { x: 0, y: 0 } },
+      { key: "b", place: { x: 20, y: 0 } },
+      { key: "spare", place: null },
+    ]);
+
+  type Setup = () => Promise<{ zoneId: string; tableId: string; body: Record<string, unknown> }>;
+
+  it.each<[string, Setup]>([
+    [
+      "move",
+      async () => {
+        const { zoneId, table } = await ROOM();
+        return { zoneId, tableId: table.a!, body: { x: 30, y: 30 } };
+      },
+    ],
+    [
+      "rotate",
+      async () => {
+        const { zoneId, table } = await ROOM();
+        return { zoneId, tableId: table.a!, body: {} };
+      },
+    ],
+    [
+      "take-off",
+      async () => {
+        const { zoneId, table } = await LONG();
+        return { zoneId, tableId: table.bar!, body: {} };
+      },
+    ],
+    [
+      "put-back",
+      async () => {
+        const { zoneId, table } = await LONG();
+        await expectRevision(v, today(table.bar!, "take-off"), zoneId);
+        return { zoneId, tableId: table.bar!, body: {} };
+      },
+    ],
+    [
+      "place",
+      async () => {
+        const { zoneId, table } = await ROOM();
+        return { zoneId, tableId: table.spare!, body: { x: 40, y: 40 } };
+      },
+    ],
+    [
+      "seats",
+      async () => {
+        const { zoneId, table } = await ROOM();
+        return { zoneId, tableId: table.a!, body: { seats: 5 } };
+      },
+    ],
+    [
+      "back",
+      async () => {
+        const { zoneId, table } = await ROOM();
+        await expectRevision(v, today(table.a!, "move", { x: 30, y: 30 }), zoneId);
+        return { zoneId, tableId: table.a!, body: {} };
+      },
+    ],
+    [
+      "merge",
+      async () => {
+        const { zoneId, table } = await ROOM();
+        return { zoneId, tableId: table.a!, body: { targetId: table.b!, side: "right", seats: 8 } };
+      },
+    ],
+    [
+      "split",
+      async () => {
+        const { zoneId, table } = await ROOM();
+        await expectRevision(
+          v,
+          today(table.a!, "merge", { targetId: table.b!, side: "right", seats: 8 }),
+          zoneId,
+        );
+        return { zoneId, tableId: table.a!, body: {} };
+      },
+    ],
+    [
+      "split-off",
+      async () => {
+        const { zoneId, table } = await LONG();
+        return { zoneId, tableId: table.long!, body: { partIds: [table.c5!], seats: 6 } };
+      },
+    ],
+    [
+      "join-again",
+      async () => {
+        const { zoneId, table } = await LONG();
+        await expectRevision(
+          v,
+          today(table.long!, "split-off", { partIds: [table.c5!], seats: 6 }),
+          zoneId,
+        );
+        return { zoneId, tableId: table.long!, body: { partIds: [table.c5!] } };
+      },
+    ],
+  ])(
+    "%s refuses a second till acting from the old revision and writes nothing",
+    async (change, setup) => {
+      const { zoneId, tableId, body } = await setup();
+      const read = (await zoneRevisionOf(v, zoneId))!;
+
+      await expectRevision(
+        v,
+        today(tableId, change, { ...body, zoneRevision: read }),
+        zoneId,
+        read + 1,
+      );
+      const before = await everything();
+
+      expect(await refusal(today(tableId, change, { ...body, zoneRevision: read }))).toEqual(
+        outOfDate(zoneId, read + 1),
+      );
+      expect(await everything()).toEqual(before);
+      expect(await zoneRevisionOf(v, zoneId)).toBe(read + 1);
+    },
+  );
+
+  it("the same request sending the current revision is applied and answers the next one", async () => {
+    const { zoneId, table } = await ROOM();
+    const read = (await zoneRevisionOf(v, zoneId))!;
+
+    await expectRevision(
+      v,
+      today(table.a!, "move", { x: 30, y: 30, zoneRevision: read }),
+      zoneId,
+      read + 1,
+    );
+    await expectRevision(
+      v,
+      today(table.a!, "move", { x: 40, y: 40, zoneRevision: read + 1 }),
+      zoneId,
+      read + 2,
+    );
+    expect(await todayRow(v, table.a!)).toMatchObject({ x: 40, y: 40 });
+  });
+
+  it("a request sending no revision is still applied (until the till sends one)", async () => {
+    const { zoneId, table } = await ROOM();
+    const read = (await zoneRevisionOf(v, zoneId))!;
+
+    await expectRevision(v, today(table.a!, "move", { x: 30, y: 30 }), zoneId, read + 1);
+    await expectRevision(v, today(table.a!, "rotate"), zoneId, read + 2);
+    expect(await todayRow(v, table.a!)).toMatchObject({ x: 30, y: 30, rotation: 15 });
+  });
+
+  it("a request that writes nothing answers the revision unchanged", async () => {
+    const { zoneId, table } = await ROOM();
+    const read = (await zoneRevisionOf(v, zoneId))!;
+
+    await expectRevision(v, today(table.a!, "put-back", { zoneRevision: read }), zoneId, read);
+  });
+
+  it("a request sending the current revision still meets the route's own refusal, writing nothing", async () => {
+    const { zoneId, table } = await ROOM();
+    await seatAt(table.a!);
+    const read = (await zoneRevisionOf(v, zoneId))!;
+    const before = await everything();
+
+    expect(await refusal(today(table.a!, "take-off", { zoneRevision: read }))).toEqual({
+      status: 409,
+      body: { error: { code: "tab.already_open", params: { tableId: table.a! } } },
+    });
+    expect(await everything()).toEqual(before);
+    expect(await zoneRevisionOf(v, zoneId)).toBe(read);
+  });
+
+  it("a stale screen is refused when the catch-up changes the room", async () => {
+    const { zoneId, table, master, revision } = await plannedZone(v, [
+      { key: "bar", label: "Bar", place: { x: 40, y: 0 } },
+      { key: "a", place: { x: 0, y: 0 } },
+    ]);
+    const partyId = await seatAt(table.bar!);
+    const label = (await tableRow(v, table.bar!)).label;
+    const other = (await tableRow(v, table.a!)).label;
+    const renamed = `${label} b`;
+    const entry = (key: string, name: string, x: number) => ({
+      id: master[key]!,
+      key,
+      label: name,
+      seats: 4,
+      fixed: false,
+      placement: { x, y: 0, width: 8, height: 8, shape: "rect" as const, rotation: 0 },
+      partKeys: [],
+    });
+    await inTx(v, (tx) =>
+      saveZonePlan(tx, v.cfg, REMOVALS, zoneId, {
+        revision,
+        tables: [entry("bar", renamed, 40), entry("a", other, 0)],
+      }),
+    );
+    await expectRevision(v, resetZoneToday(zoneId), zoneId);
+    expect((await tableRow(v, table.bar!)).label).toBe(label);
+    await finish(partyId);
+    const read = (await zoneRevisionOf(v, zoneId))!;
+    const before = await everything();
+
+    expect(await refusal(today(table.a!, "move", { x: 20, y: 20, zoneRevision: read }))).toEqual(
+      outOfDate(zoneId, read + 1),
+    );
+
+    expect((await tableRow(v, table.bar!)).label).toBe(label);
+    expect(await everything()).toEqual(before);
+    expect(await zoneRevisionOf(v, zoneId)).toBe(read);
+    await floorToday(table.bar!);
+    expect((await tableRow(v, table.bar!)).label).toBe(renamed);
+    expect(await zoneRevisionOf(v, zoneId)).toBe(read + 1);
+  });
+
+  it("refuses a till splitting Counter 4 off Long table from the read before another split Counter 5 off (A564)", async () => {
+    const { zoneId, table } = await LONG();
+    const read = (await zoneRevisionOf(v, zoneId))!;
+    await expectRevision(
+      v,
+      today(table.long!, "split-off", { partIds: [table.c5!], seats: 6, zoneRevision: read }),
+      zoneId,
+      read + 1,
+    );
+    const before = await everything();
+
+    expect(
+      await refusal(
+        today(table.long!, "split-off", { partIds: [table.c4!], seats: 8, zoneRevision: read }),
+      ),
+    ).toEqual(outOfDate(zoneId, read + 1));
+
+    expect(await everything()).toEqual(before);
+    expect(await todayRow(v, table.c4!)).toMatchObject({ x: null });
+  });
+
+  it("refuses a revision that is not a whole number from 0", async () => {
+    const { zoneId, table } = await ROOM();
+    const before = await everything();
+
+    for (const zoneRevision of [-1, 1.5, "3", null]) {
+      expect(await refusal(today(table.a!, "move", { x: 30, y: 30, zoneRevision }))).toEqual({
+        status: 400,
+        body: {
+          error: { code: "management.request_invalid", params: { field: "zoneRevision" } },
+        },
+      });
+    }
+    expect(await everything()).toEqual(before);
+    expect(await zoneRevisionOf(v, zoneId)).toBe(1);
+  });
+});
 
 describe("today's routes", () => {
-  it("moves, turns, takes off, puts back, places and sets seats through the routes, answering 204", async () => {
+  it("moves, turns, takes off, puts back, places and sets seats through the routes, answering the room's revision", async () => {
     const { table } = await plannedZone(v, [
       { key: "a", place: { x: 0, y: 0 } },
       { key: "spare", place: null },
     ]);
 
-    await expect204(today(table.a!, "move", { x: 30, y: 12 }));
+    await expectRevision(v, today(table.a!, "move", { x: 30, y: 12 }));
     expect((await floorToday(table.a!))?.placement).toMatchObject({ x: 30, y: 12, rotation: 0 });
 
-    await expect204(today(table.a!, "rotate"));
+    await expectRevision(v, today(table.a!, "rotate"));
     expect((await floorToday(table.a!))?.placement).toMatchObject({ x: 30, y: 12, rotation: 15 });
 
-    await expect204(today(table.a!, "seats", { seats: 7 }));
+    await expectRevision(v, today(table.a!, "seats", { seats: 7 }));
     expect((await floorToday(table.a!))?.seats).toBe(7);
 
-    await expect204(today(table.a!, "take-off"));
+    await expectRevision(v, today(table.a!, "take-off"));
     expect(await floorToday(table.a!)).toMatchObject({ placement: null, takenOff: true });
 
-    await expect204(today(table.a!, "put-back"));
+    await expectRevision(v, today(table.a!, "put-back"));
     expect(await floorToday(table.a!)).toMatchObject({
       placement: { x: 30, y: 12, rotation: 15 },
       takenOff: false,
     });
 
     expect((await floorToday(table.spare!))?.placement).toBeNull();
-    await expect204(today(table.spare!, "place", { x: 40, y: 50 }));
+    await expectRevision(v, today(table.spare!, "place", { x: 40, y: 50 }));
     expect((await floorToday(table.spare!))?.placement).toMatchObject({
       x: 40,
       y: 50,
@@ -182,10 +443,10 @@ describe("today's routes", () => {
 
   it("sends a table back to its saved place", async () => {
     const { table } = await plannedZone(v, [{ key: "a", seats: 4, place: { x: 10, y: 20 } }]);
-    await expect204(today(table.a!, "move", { x: 60, y: 60 }));
-    await expect204(today(table.a!, "rotate"));
+    await expectRevision(v, today(table.a!, "move", { x: 60, y: 60 }));
+    await expectRevision(v, today(table.a!, "rotate"));
 
-    await expect204(today(table.a!, "back"));
+    await expectRevision(v, today(table.a!, "back"));
 
     expect(await floorToday(table.a!)).toMatchObject({
       placement: { x: 10, y: 20, rotation: 0 },
@@ -200,10 +461,11 @@ describe("today's routes", () => {
       { key: "seated", place: { x: 20, y: 0 } },
     ]);
     await seatAt(table.seated!);
-    await expect204(today(table.free!, "move", { x: 50, y: 50 }));
-    await expect204(today(table.seated!, "move", { x: 70, y: 70 }));
+    await expectRevision(v, today(table.free!, "move", { x: 50, y: 50 }));
+    await expectRevision(v, today(table.seated!, "move", { x: 70, y: 70 }));
 
-    await expect204(send("POST", `/api/zones/${zoneId}/today/reset`, {}));
+    const before = (await zoneRevisionOf(v, zoneId))!;
+    await expectRevision(v, resetZoneToday(zoneId), zoneId, before + 1);
 
     expect((await floorToday(table.free!))?.placement).toMatchObject({ x: 0, y: 0 });
     expect((await floorToday(table.seated!))?.placement).toMatchObject({ x: 70, y: 70 });
@@ -231,11 +493,11 @@ describe("today's routes", () => {
         ],
       }),
     );
-    await expect204(send("POST", `/api/zones/${zoneId}/today/reset`, {}));
+    await expectRevision(v, resetZoneToday(zoneId), zoneId);
     expect((await todayRow(v, table.t!))?.x).toBe(0);
     await finish(partyId);
 
-    await expect204(today(table.t!, "move", { x: 30, y: 0 }));
+    await expectRevision(v, today(table.t!, "move", { x: 30, y: 0 }));
 
     expect((await floorToday(table.t!))?.placement).toMatchObject({ x: 30, y: 0 });
   });
@@ -246,13 +508,13 @@ describe("today's routes", () => {
       tx.execute(sql`update floor_zones set active = false where id = ${zoneId}`),
     );
     expect(await inService(table.a!)).toBe(false);
-    const generation = await generationOf(zoneId);
-    expect(generation).toBe(1);
+    const zoneRevision = await zoneRevisionOf(v, zoneId);
+    expect(zoneRevision).toBe(1);
 
-    await expect204(send("POST", `/api/zones/${zoneId}/today/reset`, {}));
+    await expectRevision(v, resetZoneToday(zoneId), zoneId, 1);
 
     expect(await inService(table.a!)).toBe(false);
-    expect(await generationOf(zoneId)).toBe(generation);
+    expect(await zoneRevisionOf(v, zoneId)).toBe(zoneRevision);
   });
 
   it("answers a refusal with its code and status", async () => {
@@ -261,7 +523,7 @@ describe("today's routes", () => {
       { key: "spare", place: null },
       { key: "off", place: { x: 20, y: 0 } },
     ]);
-    await expect204(today(table.off!, "take-off"));
+    await expectRevision(v, today(table.off!, "take-off"));
 
     expect(await refusal(today(table.fixed!, "move", { x: 5, y: 5 }))).toEqual({
       status: 409,
@@ -340,27 +602,181 @@ describe("today's routes", () => {
       });
       await tx.insert(floorZones).values({ id: zoneId, locationId: elsewhere, name: "Elsewhere" });
       await tx.insert(floorPlans).values({ zoneId, savedAt: "2026-01-01T00:00:00.000Z" });
-      await tx.insert(floorTodayZones).values({ zoneId, businessDay: "2026-01-01", generation: 1 });
+      await tx.insert(floorTodayZones).values({ zoneId, businessDay: "2026-01-01", revision: 1 });
     });
 
-    const answer = await send("POST", `/api/zones/${zoneId}/today/reset`, {});
-    const [row] = await inTx(v, (tx) =>
-      tx.select().from(floorTodayZones).where(eq(floorTodayZones.zoneId, zoneId)),
-    );
-    expect(row).toMatchObject({ businessDay: "2026-01-01", generation: 1 });
-    expect(answer.status).toBe(404);
-    expect(await answer.json()).toEqual({
-      error: { code: "zone.not_found", params: { zoneId } },
-    });
+    try {
+      const answer = await send("POST", `/api/zones/${zoneId}/today/reset`, {});
+      const [row] = await inTx(v, (tx) =>
+        tx.select().from(floorTodayZones).where(eq(floorTodayZones.zoneId, zoneId)),
+      );
+      expect(row).toMatchObject({ businessDay: "2026-01-01", revision: 1 });
+      expect(answer.status).toBe(404);
+      expect(await answer.json()).toEqual({
+        error: { code: "zone.not_found", params: { zoneId } },
+      });
+    } finally {
+      // A location with no kitchen timing fails every later floor read (`station.timing_missing`).
+      await inTx(v, async (tx) => {
+        await tx.delete(floorTodayZones).where(eq(floorTodayZones.zoneId, zoneId));
+        await tx.delete(floorPlans).where(eq(floorPlans.zoneId, zoneId));
+        await tx.delete(floorZones).where(eq(floorZones.id, zoneId));
+        await tx.delete(locations).where(eq(locations.id, elsewhere));
+      });
+    }
   });
 
   it("leaves a zone with no master plan alone on a reset", async () => {
     const zoneId = await tableServiceZone(v);
     await v.table(`Unplanned ${randomUUID().slice(0, 6)}`, zoneId);
 
-    await expect204(send("POST", `/api/zones/${zoneId}/today/reset`, {}));
+    await expectRevision(v, resetZoneToday(zoneId), zoneId, 0);
 
-    expect(await generationOf(zoneId)).toBeUndefined();
+    expect(await zoneRevisionOf(v, zoneId)).toBeUndefined();
+  });
+});
+
+describe("the zone reset's revision", () => {
+  const outOfDate = (zoneId: string, revision: number) => ({
+    status: 409,
+    body: { error: { code: "floor_today.out_of_date", params: { zoneId, revision } } },
+  });
+
+  it("refuses a revision older than the room's and writes nothing", async () => {
+    const { zoneId, table } = await plannedZone(v, [{ key: "a", place: { x: 0, y: 0 } }]);
+    await seatAt(table.a!);
+    await expectRevision(v, today(table.a!, "move", { x: 50, y: 50 }));
+    const from = (await zoneRevisionOf(v, zoneId))!;
+    const before = await everything();
+
+    expect(await refusal(resetZoneToday(zoneId, { zoneRevision: from - 1 }))).toEqual(
+      outOfDate(zoneId, from),
+    );
+
+    expect(await everything()).toEqual(before);
+    expect(await zoneRevisionOf(v, zoneId)).toBe(from);
+  });
+
+  it("refuses a revision newer than the room's", async () => {
+    const { zoneId } = await plannedZone(v, [{ key: "a" }]);
+    const from = (await zoneRevisionOf(v, zoneId))!;
+    const before = await everything();
+
+    expect(await refusal(resetZoneToday(zoneId, { zoneRevision: from + 1 }))).toEqual(
+      outOfDate(zoneId, from),
+    );
+    expect(await everything()).toEqual(before);
+    expect(await zoneRevisionOf(v, zoneId)).toBe(from);
+  });
+
+  it("applies the room's current revision and answers it moved by one", async () => {
+    const { zoneId, table } = await plannedZone(v, [{ key: "a", place: { x: 0, y: 0 } }]);
+    await expectRevision(v, today(table.a!, "move", { x: 50, y: 50 }));
+    const from = (await zoneRevisionOf(v, zoneId))!;
+
+    await expectRevision(v, resetZoneToday(zoneId, { zoneRevision: from }), zoneId, from + 1);
+
+    expect(await todayRow(v, table.a!)).toMatchObject({ x: 0, y: 0 });
+  });
+
+  it("applies a reset that sends no revision", async () => {
+    const { zoneId, table } = await plannedZone(v, [{ key: "a", place: { x: 0, y: 0 } }]);
+    await expectRevision(v, today(table.a!, "move", { x: 50, y: 50 }));
+    const from = (await zoneRevisionOf(v, zoneId))!;
+
+    await expectRevision(
+      v,
+      app.request(`/api/zones/${zoneId}/today/reset`, { method: "POST", headers: { cookie } }),
+      zoneId,
+      from + 1,
+    );
+
+    expect(await todayRow(v, table.a!)).toMatchObject({ x: 0, y: 0 });
+  });
+
+  it("applies null on a room none of whose tables has a today's row", async () => {
+    const { zoneId } = await plannedZone(v, []);
+    expect(await zoneRevisionOf(v, zoneId)).toBe(1);
+
+    await expectRevision(v, resetZoneToday(zoneId, { zoneRevision: null }), zoneId, 2);
+  });
+
+  it("refuses null once a table of the room has a today's row", async () => {
+    const { zoneId, table } = await plannedZone(v, [{ key: "a", place: { x: 0, y: 0 } }]);
+    await expectRevision(v, today(table.a!, "move", { x: 50, y: 50 }));
+    const from = (await zoneRevisionOf(v, zoneId))!;
+    const before = await everything();
+
+    expect(await refusal(resetZoneToday(zoneId, { zoneRevision: null }))).toEqual(
+      outOfDate(zoneId, from),
+    );
+
+    expect(await everything()).toEqual(before);
+    expect(await zoneRevisionOf(v, zoneId)).toBe(from);
+  });
+
+  it("answers a disabled room's revision unchanged when it is current", async () => {
+    const { zoneId } = await plannedZone(v, [{ key: "a" }]);
+    await inTx(v, async (tx) =>
+      tx.execute(sql`update floor_zones set active = false where id = ${zoneId}`),
+    );
+
+    await expectRevision(v, resetZoneToday(zoneId, { zoneRevision: 1 }), zoneId, 1);
+  });
+
+  it("refuses a stale reset when the catch-up changes the room, and rolls the catch-up back", async () => {
+    const { zoneId, table, master, revision } = await plannedZone(v, [
+      { key: "t", label: "T", place: { x: 0, y: 0 } },
+    ]);
+    const partyId = await seatAt(table.t!);
+    const label = (await tableRow(v, table.t!)).label;
+    const renamed = `${label} b`;
+    await inTx(v, (tx) =>
+      saveZonePlan(tx, v.cfg, REMOVALS, zoneId, {
+        revision,
+        tables: [
+          {
+            id: master.t!,
+            key: "t",
+            label: renamed,
+            seats: 4,
+            fixed: false,
+            placement: { x: 0, y: 0, width: 8, height: 8, shape: "rect", rotation: 0 },
+            partKeys: [],
+          },
+        ],
+      }),
+    );
+    await expectRevision(v, resetZoneToday(zoneId), zoneId);
+    expect((await tableRow(v, table.t!)).label).toBe(label);
+    await finish(partyId);
+    expect((await tableRow(v, table.t!)).label).toBe(label);
+    const read = (await zoneRevisionOf(v, zoneId))!;
+    const before = await everything();
+
+    expect(await refusal(resetZoneToday(zoneId, { zoneRevision: read }))).toEqual(
+      outOfDate(zoneId, read + 1),
+    );
+
+    expect((await tableRow(v, table.t!)).label).toBe(label);
+    expect(await everything()).toEqual(before);
+    expect(await zoneRevisionOf(v, zoneId)).toBe(read);
+  });
+
+  it("refuses a revision that is not a whole number from 0", async () => {
+    const { zoneId } = await plannedZone(v, [{ key: "a" }]);
+    const before = await everything();
+
+    for (const zoneRevision of [-1, 1.5, "3"]) {
+      expect(await refusal(resetZoneToday(zoneId, { zoneRevision }))).toEqual({
+        status: 400,
+        body: {
+          error: { code: "management.request_invalid", params: { field: "zoneRevision" } },
+        },
+      });
+    }
+    expect(await everything()).toEqual(before);
+    expect(await zoneRevisionOf(v, zoneId)).toBe(1);
   });
 });
 
@@ -384,10 +800,10 @@ const LONG = async () => {
 };
 
 describe("the split-off route", () => {
-  it("splits parts off over HTTP and answers 204", async () => {
+  it("splits parts off over HTTP and answers the room's revision", async () => {
     const { table } = await LONG();
 
-    await expect204(today(table.long!, "split-off", { partIds: [table.c5!], seats: 6 }));
+    await expectRevision(v, today(table.long!, "split-off", { partIds: [table.c5!], seats: 6 }));
 
     expect(await todayRow(v, table.c5!)).toMatchObject({ x: 14, y: 17, width: 8, height: 8 });
     expect(await todayRow(v, table.long!)).toMatchObject({ width: 4, seats: 6 });
@@ -395,7 +811,7 @@ describe("the split-off route", () => {
 
   it("answers 409 joined_table.parts_split_off to Back on Long table while a part is split off", async () => {
     const { table } = await LONG();
-    await expect204(today(table.long!, "split-off", { partIds: [table.c5!], seats: 6 }));
+    await expectRevision(v, today(table.long!, "split-off", { partIds: [table.c5!], seats: 6 }));
     const longBefore = await todayRow(v, table.long!);
 
     expect(await refusal(today(table.long!, "back"))).toEqual({
@@ -407,7 +823,7 @@ describe("the split-off route", () => {
 
   it("answers 409 table.split_off to Back and to Take off on a part split off", async () => {
     const { table } = await LONG();
-    await expect204(today(table.long!, "split-off", { partIds: [table.c5!], seats: 6 }));
+    await expectRevision(v, today(table.long!, "split-off", { partIds: [table.c5!], seats: 6 }));
     const before = await everything();
 
     for (const change of ["back", "take-off"]) {
@@ -486,11 +902,11 @@ describe("the split-off route", () => {
 });
 
 describe("the join-again route", () => {
-  it("joins Counter 5 again over HTTP and answers 204", async () => {
+  it("joins Counter 5 again over HTTP and answers the room's revision", async () => {
     const { table } = await LONG();
-    await expect204(today(table.long!, "split-off", { partIds: [table.c5!], seats: 6 }));
+    await expectRevision(v, today(table.long!, "split-off", { partIds: [table.c5!], seats: 6 }));
 
-    await expect204(today(table.long!, "join-again", { partIds: [table.c5!] }));
+    await expectRevision(v, today(table.long!, "join-again", { partIds: [table.c5!] }));
 
     expect(await todayRow(v, table.long!)).toMatchObject({ width: 6, seats: 10 });
     expect(await todayRow(v, table.c5!)).toMatchObject({ x: null });
@@ -508,7 +924,7 @@ describe("the join-again route", () => {
       404,
       "joined_table.not_found",
       async (t) => {
-        await expect204(today(t.long!, "split-off", { partIds: [t.c5!], seats: 6 }));
+        await expectRevision(v, today(t.long!, "split-off", { partIds: [t.c5!], seats: 6 }));
         return [t.bar!, { partIds: [t.c5!] }];
       },
       (t) => ({ tableId: t.bar! }),
@@ -523,7 +939,7 @@ describe("the join-again route", () => {
       409,
       "joined_table.out_of_date",
       async (t) => {
-        await expect204(today(t.long!, "split-off", { partIds: [t.c5!], seats: 6 }));
+        await expectRevision(v, today(t.long!, "split-off", { partIds: [t.c5!], seats: 6 }));
         return [t.long!, { partIds: [t.c4!] }];
       },
       (t) => ({ tableId: t.long! }),
@@ -533,7 +949,7 @@ describe("the join-again route", () => {
       "joined_table.seats_required",
       async (t) => {
         await seatAt(t.long!);
-        await expect204(today(t.long!, "split-off", { partIds: [t.c4!, t.c5!] }));
+        await expectRevision(v, today(t.long!, "split-off", { partIds: [t.c4!, t.c5!] }));
         return [t.long!, { partIds: [t.c4!, t.c5!] }];
       },
       () => ({}),
@@ -557,7 +973,7 @@ describe("the join-again route", () => {
     ["a repeated table", (t) => [t.c5!, t.c5!]],
   ])("refuses partIds that is %s", async (_name, partIds) => {
     const { table } = await LONG();
-    await expect204(today(table.long!, "split-off", { partIds: [table.c5!], seats: 6 }));
+    await expectRevision(v, today(table.long!, "split-off", { partIds: [table.c5!], seats: 6 }));
     const before = await everything();
 
     expect(await refusal(today(table.long!, "join-again", { partIds: partIds(table) }))).toEqual({
@@ -569,7 +985,7 @@ describe("the join-again route", () => {
 
   it("refuses seats that are not a whole number from 1", async () => {
     const { table } = await LONG();
-    await expect204(today(table.long!, "split-off", { partIds: [table.c5!], seats: 6 }));
+    await expectRevision(v, today(table.long!, "split-off", { partIds: [table.c5!], seats: 6 }));
     const before = await everything();
 
     expect(

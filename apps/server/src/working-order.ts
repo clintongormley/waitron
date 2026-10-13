@@ -86,6 +86,7 @@ import {
   floorTodayJoins,
   floorTodayJoinTables,
   floorTodayTables,
+  floorTodayZones,
   invoiceSeries,
   isUniqueViolation,
   kitchenCourses,
@@ -7178,6 +7179,8 @@ export interface TableToday {
   joined: { parts: string[]; splitOff: string[]; apart: boolean } | null;
   /** For a part split off today: its joined table's live id. */
   splitOffFrom: string | null;
+  /** The revision of the table's room; 0 for a room with no today's plan. */
+  zoneRevision: number;
 }
 
 /** One row of the occupancy read-model. */
@@ -7430,9 +7433,11 @@ async function readTodayTables(
       rotation: floorTodayTables.rotation,
       joinId: floorTodayJoins.id,
       joinSeats: floorTodayJoins.seats,
+      zoneRevision: floorTodayZones.revision,
     })
     .from(floorTodayTables)
     .innerJoin(diningTables, eq(diningTables.id, floorTodayTables.tableId))
+    .leftJoin(floorTodayZones, eq(floorTodayZones.zoneId, diningTables.zoneId))
     .leftJoin(floorTodayJoinTables, eq(floorTodayJoinTables.tableId, floorTodayTables.tableId))
     .leftJoin(floorTodayJoins, eq(floorTodayJoins.id, floorTodayJoinTables.joinId))
     .where(eq(diningTables.locationId, locationId));
@@ -7505,6 +7510,7 @@ async function readTodayTables(
         inJoinedTable: joinedName.get(row.tableId) ?? null,
         joined: joinedState(row.tableId),
         splitOffFrom: splitOffFrom.get(row.tableId) ?? null,
+        zoneRevision: row.zoneRevision ?? 0,
       },
     ]),
   );

@@ -284,7 +284,7 @@ describe("building today's plan from a zone's master plan", () => {
       shape: null,
       rotation: null,
     });
-    expect(await todayZone(z)).toMatchObject({ businessDay: "2026-10-10", generation: 1 });
+    expect(await todayZone(z)).toMatchObject({ businessDay: "2026-10-10", revision: 1 });
     expect(await pendingRows(z)).toEqual([]);
   });
 
@@ -496,11 +496,11 @@ describe("building today's plan from a zone's master plan", () => {
 
     try {
       await at("2026-10-09T01:30:00Z");
-      expect(await todayZone(z)).toMatchObject({ businessDay: "2026-10-08", generation: 1 });
+      expect(await todayZone(z)).toMatchObject({ businessDay: "2026-10-08", revision: 1 });
       await at("2026-10-09T03:00:00Z");
-      expect(await todayZone(z)).toMatchObject({ businessDay: "2026-10-09", generation: 2 });
+      expect(await todayZone(z)).toMatchObject({ businessDay: "2026-10-09", revision: 2 });
       await at("2026-10-09T04:00:00Z");
-      expect(await todayZone(z)).toMatchObject({ businessDay: "2026-10-09", generation: 2 });
+      expect(await todayZone(z)).toMatchObject({ businessDay: "2026-10-09", revision: 2 });
     } finally {
       await inTx(v, (tx) =>
         tx.update(locations).set({ dayCutover: cutover }).where(eq(locations.id, v.cfg.locationId)),
@@ -515,11 +515,23 @@ describe("building today's plan from a zone's master plan", () => {
     const { partyId } = await seat(v, t1);
     await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, NOW));
     await finish(partyId);
+    const resetRowIds = async () =>
+      (
+        await inTx(v, (tx) =>
+          tx
+            .select({ id: floorResetTables.id })
+            .from(floorResetTables)
+            .where(eq(floorResetTables.zoneId, z)),
+        )
+      ).map((row) => row.id);
+    const copied = await resetRowIds();
 
     await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, NOW));
 
     expect((await tableRow(v, t1)).label).toBe("Wait 1b");
-    expect(await todayZone(z)).toMatchObject({ generation: 1 });
+    // A reset rewrites the zone's copy of the saved plan under new ids; a catch-up keeps them.
+    expect(await resetRowIds()).toEqual(copied);
+    expect(await todayZone(z)).toMatchObject({ revision: 2 });
   });
 
   it("leaves today's plan as it is when the venue's clock cannot be read", async () => {
@@ -842,8 +854,8 @@ describe("a deleted zone", () => {
     await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, nextDay));
 
     expect(await inService(offTable)).toBe(false);
-    expect(await todayZone(off)).toMatchObject({ businessDay: "2026-10-10", generation: 1 });
-    expect(await todayZone(on)).toMatchObject({ businessDay: "2026-10-11", generation: 2 });
+    expect(await todayZone(off)).toMatchObject({ businessDay: "2026-10-10", revision: 1 });
+    expect(await todayZone(on)).toMatchObject({ businessDay: "2026-10-11", revision: 2 });
   });
 
   it("keeps its tables out of service when restoring the deleted zone is refused", async () => {
@@ -1028,7 +1040,7 @@ it.each(["03:00", "07:00"])(
       await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, new Date(`2026-11-04T${cutover}:00Z`)));
       expect(await todayZone(z)).toMatchObject({
         businessDay: "2026-11-04",
-        generation: original!.generation + 1,
+        revision: original!.revision + 1,
       });
     } finally {
       await inTx(v, async (tx) => {

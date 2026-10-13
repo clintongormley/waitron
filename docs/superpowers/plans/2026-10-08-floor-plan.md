@@ -3949,6 +3949,11 @@ if it is wrong.
    order. Cost: a floor join refused `party.out_of_date` says that code's own words
    (`apps/till/src/i18n/codes.ts:47`) and re-reads, not the app's sentence naming what changed
    (`#onPartyOutOfDate`, `till-app.ts:5685`).
+
+   > Changed 2026-10-13 by A579 part 2a: the table routes and the zone reset answer
+   > `200 { zoneId, revision }`, the room's revision after the request, instead of 204 — here and
+   > wherever this plan says 204 for them.
+
 2. **The routes and their bodies.** All are `POST`, `requireSession(deps, c, { action: "take-orders" })`,
    then one `withTransaction` that runs `checkZones` first, then `catchUpFloor`, then the write:
    - `/api/tables/:id/today/move` `{ x, y }`, whole numbers 0–999: the table's new top-left corner.

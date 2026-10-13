@@ -162,6 +162,13 @@ Anyone who may take orders may change today's plan: the device profile's `take-o
 the person's ordering permission, the same checks as joining today, plus the zone check. It is all
 undone at the next reset anyway.
 
+> Added 2026-10-13 by A579 part 2a ([design](2026-10-13-a579-flattened-joined-tables-design.md)):
+> each room has a revision that every reset moves by one, as does each request, or catch-up
+> outside a reset, that changes its plan for the day. The floor read carries it on each table,
+> the table routes and the zone reset answer it as it stands after the change, and a change sent
+> from an older one is refused (`floor_today.out_of_date`). Until part 2b a change that sends none
+> is still applied.
+
 ### 6.1 Moving and joining
 
 - **A movable table dropped on empty space** moves there for today.
@@ -300,6 +307,8 @@ on every screen. The commit adding them states this reason.
 - **Today's tables:** one row per live table: seats, fixed, position, size, shape, rotation, taken
   off, and which reset it last caught up with. Each zone records the business day of its today's
   plan and a count of its resets.
+  > Changed 2026-10-13 by A579 part 2a: that count is now the room's revision, which every reset
+  > moves by one, as does each request, or catch-up outside a reset, that changes the room (§6).
 - **Today's joins:** a zone, its seats, and its member tables, each with where it stood before the
   join.
 - **The reset** copies the saved plan onto every table nobody sits at, adds the tables the saved
@@ -330,6 +339,10 @@ on every screen. The commit adding them states this reason.
 
 > Added 2026-10-13 by A503 part 4: and `POST /api/tables/:id/today/join-again` (join a split joined
 > table's free tables again), with the same checks.
+
+> Added 2026-10-13 by A579 part 2a: the table routes and the zone reset answer
+> `200 { zoneId, revision }` instead of 204, and the party join, move and split-table answers gain
+> `zoneRevisions` when they changed a room.
 
 ## 11. Removed
 
