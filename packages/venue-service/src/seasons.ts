@@ -15,6 +15,7 @@ import {
 import {
   readDepartmentSeasonWeeks,
   readZoneSeasonWeeks,
+  seasonsNaming,
   targetSeasons,
   writeDepartmentSeasonWeeks,
   writeZoneSeasonWeeks,
@@ -60,18 +61,6 @@ function parseSeasonInput(
   if (others.some((season) => season.startsOn === startsOn))
     invalid({ field: "startsOn", reason: "taken" });
   return { name, startsOn };
-}
-
-/** The venue's seasons, and the one `id` names. */
-async function seasonsNaming(
-  tx: Transaction,
-  cfg: VenueScope,
-  id: string,
-): Promise<{ all: Season[]; own: Season }> {
-  const all = await ensureDefaultSeasons(tx, cfg);
-  const own = all.find((season) => season.id === id);
-  if (own === undefined) throw new AppError("season.not_found", { seasonId: id });
-  return { all, own };
 }
 
 /** Every department, since a season change moves days under all of them. */
