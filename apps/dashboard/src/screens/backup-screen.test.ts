@@ -1383,12 +1383,13 @@ describe("backup-screen failures and edit-mode prefill", () => {
     const { el, api } = await enterEdit(ENABLED);
     setInput(el, "[data-test=destination]", "   ");
     await el.updateComplete;
-    expect(q(el, "[data-test=save-settings]")!.hasAttribute("disabled")).toBe(true);
+    expect(q(el, "[data-test=save-settings]")!.hasAttribute("disabled")).toBe(false);
 
     q(el, "[data-test=save-settings]")!.click();
     await el.updateComplete;
 
     expect(api.applyBackup).not.toHaveBeenCalled();
+    expect(q(el, "[data-test=save-settings]")!.hasAttribute("disabled")).toBe(true);
   });
 
   it("cancels edit mode back to the status view, clearing the banner", async () => {

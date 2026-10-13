@@ -95,6 +95,48 @@ const q = (el: BackupScreen, sel: string) => el.shadowRoot!.querySelector<HTMLEl
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("backup-screen a11y (%s theme)", (theme) => {
+  it("renders the destination choice with the bucket copy unavailable accessibly", async () => {
+    const { el, host } = await mountWidget<BackupScreen>(
+      "dashboard-backup-screen",
+      { api: stubApi(OFF) },
+      theme,
+    );
+    await flush(el);
+    expect(q(el, "[data-test=stream-unavailable]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders the bucket copy's bucket chosen, with its location, accessibly", async () => {
+    const { el, host } = await mountWidget<BackupScreen>(
+      "dashboard-backup-screen",
+      {
+        api: stubApi(OFF, {
+          getStreamSettings: vi.fn().mockResolvedValue({
+            isPrimary: true,
+            configured: true,
+            bucket: {
+              endpoint: null,
+              region: "eu-north-1",
+              bucket: "stream-bucket",
+              prefix: "venues",
+              accessKeyId: "AKIASTREAM",
+            },
+            status: { state: "streaming" },
+            recoveryKeySet: true,
+            keyFingerprint: "ab12cd34",
+            revision: "11111111-2222-4333-8444-555555555555",
+          }),
+        }),
+      },
+      theme,
+    );
+    await flush(el);
+    await chooseOption(q(el, "[data-test=archive-destination]")!, "stream-bucket");
+    await el.updateComplete;
+    expect(q(el, "[data-test=stream-location]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   it("renders the configure wizard accessibly", async () => {
     const { el, host } = await mountWidget<BackupScreen>(
       "dashboard-backup-screen",

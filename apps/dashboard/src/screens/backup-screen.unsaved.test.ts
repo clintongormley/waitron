@@ -153,6 +153,34 @@ it("destination edits warn, Keep preserves the native value, and Discard restore
   expect(field(screen, "destination").value).toBe("");
   expect(unload()).toBe(false);
 });
+it("a changed destination choice warns, and Discard restores the opening choice", async () => {
+  const { app, screen } = await mount(off, {
+    getStreamSettings: (async () => ({
+      isPrimary: true,
+      configured: true,
+      bucket: {
+        endpoint: null,
+        region: "eu-north-1",
+        bucket: "stream-bucket",
+        prefix: "venues",
+        accessKeyId: "AKIASTREAM",
+      },
+      status: { state: "off" },
+      recoveryKeySet: true,
+      keyFingerprint: null,
+      revision: "11111111-2222-4333-8444-555555555555",
+    })) as unknown as DashboardApi["getStreamSettings"],
+  });
+  await change(screen, "archive-destination", "stream-bucket");
+  expect(unload()).toBe(true);
+  const discarded = leave(app);
+  await choose(app, "discard");
+  expect(await discarded).toBe("proceeded");
+  await screen.updateComplete;
+  expect(field(screen, "archive-destination").value).toBe("local-fs");
+  expect(field(screen, "destination")).not.toBeNull();
+  expect(unload()).toBe(false);
+});
 it("settings Cancel protects changed values but normalized retention and weekday reverts close directly", async () => {
   const { app, screen } = await mount(on);
   await edit(screen);

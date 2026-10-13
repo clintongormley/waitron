@@ -26,7 +26,14 @@ import type {
   BackupSchedule,
   BackupStatusView,
   DashboardApi,
+  StreamSettingsView,
 } from "../api/client.js";
+import {
+  destinationBody,
+  openingDestination,
+  streamLocation,
+  type DestinationChoice,
+} from "./backup-destination-model.js";
 
 /** Mirrors the server's `MIN_PASSPHRASE_LENGTH` (`apps/server/src/recovery-bundle.ts`) for fast
  * feedback on a PASTED key; the server stays the authority. */
@@ -34,6 +41,7 @@ const MIN_KEY_LENGTH = 12;
 
 interface ArchiveDraft {
   mode: "configure" | "settings" | "rotate";
+  choice: DestinationChoice;
   folder: string;
   daysMode: "daily" | "weekdays";
   weekdays: number[];
@@ -53,7 +61,7 @@ function archivePayload(value: ArchiveDraft): unknown {
   const pastedKey = value.advancedPaste ? value.pastedKey : "";
   if (value.mode === "rotate") return { pastedKey };
   return {
-    folder: value.folder.trim(),
+    destination: value.choice === "local-fs" ? value.folder.trim() : value.choice,
     days: value.daysMode === "daily" ? "daily" : [...value.weekdays].sort((a, b) => a - b),
     at: value.timeMode === "auto" ? "auto" : value.atTime,
     count: parseRetention(value.retainCount) ?? value.retainCount,
@@ -68,6 +76,21 @@ function parseRetention(text: string): number | null {
   const n = Number(text);
   return Number.isSafeInteger(n) && n > 0 ? n : null;
 }
+
+/** Refusals that name nothing the form shows a field for: they go in the form's bottom message. */
+const FORM_REFUSALS = new Set([
+  "backup.stream_not_configured",
+  "backup.archive_namespace_overlap",
+  "backup.archive_test_failed",
+  "backup.stream_settings_unreadable",
+]);
+
+/** Only a probe reason with a sentence of its own is shown, never the param's own text. */
+const TEST_REASON_KEYS: Readonly<Record<string, Parameters<typeof t>[0]>> = {
+  timed_out: "backup.archive_test.timed_out",
+  read_mismatch: "backup.archive_test.read_mismatch",
+  not_listed: "backup.archive_test.not_listed",
+};
 
 const decreaseLabel = (label: string) => fill("action.decrease", { label });
 const increaseLabel = (label: string) => fill("action.increase", { label });
@@ -102,7 +125,7 @@ export class BackupScreen extends LitElement {
         color: var(--wt-color-text);
       }
       .card {
-        max-width: 34rem;
+        max-width: var(--wt-form-max-width);
         display: flex;
         flex-direction: column;
         gap: var(--wt-space-3);
@@ -146,6 +169,11 @@ export class BackupScreen extends LitElement {
       .hint {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
+      }
+      .location {
+        display: block;
+        color: var(--wt-color-text);
+        overflow-wrap: anywhere;
       }
       .weekdays {
         display: flex;
@@ -207,12 +235,28 @@ export class BackupScreen extends LitElement {
   );
 
   @state() private status?: BackupStatusView;
+  /** Read only to offer and describe the stream's bucket; it never rewrites a staged draft. */
+  @state() private stream?: StreamSettingsView;
+  @state() private streamUnread = false;
+  readonly #streamQueries = new DashboardQueries(
+    this,
+    () => this.api,
+    () => {
+      if (this.stream === undefined) this.streamUnread = true;
+    },
+  );
   @state() private errorKey: string | null = null;
   /** Kept apart from `errorKey` so a later good read clears its own failure and never an action's. */
   @state() private refreshErrorKey: string | null = null;
 
   // The configure and rotate forms share this draft: only ONE of them renders at a time.
+  @state() private choice: DestinationChoice = "local-fs";
   @state() private folder = "";
+  @state() private folderAttempted = false;
+  /** The server refused the folder, and it has not changed since. */
+  @state() private folderRefused = false;
+  /** A refusal naming no field the form shows, for the bottom message until the next submission. */
+  @state() private formRefusal: { code: string; reason: string | null } | null = null;
   /** A write stood but the box could not load it; kept until the next write. */
   @state() private reloadErrorCode: string | null = null;
   @state() private mintedKey: string | null = null;
@@ -277,6 +321,7 @@ export class BackupScreen extends LitElement {
         : this.configureAfterApply || !this.status?.enabled
           ? "configure"
           : "rotate",
+      choice: this.choice,
       folder: this.folder,
       daysMode: this.daysMode,
       weekdays: [...this.weekdays],
@@ -311,6 +356,7 @@ export class BackupScreen extends LitElement {
       snapshot: (value) => ({ ...value, weekdays: [...value.weekdays] }),
       equal: (a, b) => sameValue(archivePayload(a), archivePayload(b)),
       restore: (value) => {
+        this.choice = value.choice;
         this.folder = value.folder;
         this.daysMode = value.daysMode;
         this.weekdays = [...value.weekdays];
@@ -328,6 +374,7 @@ export class BackupScreen extends LitElement {
     this.#trackArchive();
     if (
       [
+        "choice",
         "folder",
         "daysMode",
         "weekdays",
@@ -359,6 +406,12 @@ export class BackupScreen extends LitElement {
     });
     this.#trackArchive();
     void this.#load();
+    void this.#streamQueries
+      .watch("getStreamSettings", [], (value) => {
+        this.stream = value;
+        this.streamUnread = false;
+      })
+      .catch(() => undefined);
   }
 
   override disconnectedCallback(): void {
@@ -459,14 +512,21 @@ export class BackupScreen extends LitElement {
     return this.policyAttempted && this.#retentionInvalid;
   }
 
+  get #folderMissing(): boolean {
+    return this.choice === "local-fs" && this.folder.trim() === "";
+  }
+
+  get #folderHeld(): boolean {
+    return this.folderAttempted && this.#folderMissing;
+  }
+
   get #applyDisabled(): boolean {
-    if (this.#reusesHeldKey)
-      return this.submitting || this.folder.trim() === "" || this.#policyHeld;
+    if (this.#reusesHeldKey) return this.submitting || this.#folderHeld || this.#policyHeld;
     return (
       this.submitting ||
       this.#policyHeld ||
       !this.savedIt ||
-      this.folder.trim() === "" ||
+      this.#folderHeld ||
       this.#effectiveKey === ""
     );
   }
@@ -482,16 +542,17 @@ export class BackupScreen extends LitElement {
   }
 
   get #saveSettingsDisabled(): boolean {
-    return (
-      this.submitting || this.folder.trim() === "" || this.#reuseKey === null || this.#policyHeld
-    );
+    return this.submitting || this.#folderHeld || this.#reuseKey === null || this.#policyHeld;
   }
 
-  /** Marks the policy as submitted; `false` when a retention box fails the form's own check. */
+  /** Marks the form as submitted; `false` when a field fails the form's own check. */
   #checkPolicy(): boolean {
     this.policyAttempted = true;
+    this.folderAttempted = true;
     this.retentionRefused = false;
-    if (!this.#retentionInvalid) return true;
+    this.folderRefused = false;
+    this.formRefusal = null;
+    if (!this.#retentionInvalid && !this.#folderMissing) return true;
     this.#focusFirstInvalidBox();
     return false;
   }
@@ -513,6 +574,12 @@ export class BackupScreen extends LitElement {
     if (code === "backup.request_invalid" && field === "retention") {
       this.retentionRefused = true;
       this.#focusFirstInvalidBox();
+    } else if (code === "backup.request_invalid" && field === "dir") {
+      this.folderRefused = true;
+      this.#focusFirstInvalidBox();
+    } else if (FORM_REFUSALS.has(code)) {
+      const reason = (error as { params?: { reason?: unknown } }).params?.reason;
+      this.formRefusal = { code, reason: typeof reason === "string" ? reason : null };
     } else this.errorKey = code;
   }
 
@@ -545,7 +612,7 @@ export class BackupScreen extends LitElement {
     this.refreshErrorKey = null;
     this.submitting = true;
     const body: BackupApplyBody = {
-      destination: { kind: "local-fs", dir: this.folder.trim() },
+      destination: destinationBody(this.choice, this.folder),
       ...(sendsKey ? { recoveryKey: this.#effectiveKey } : {}),
       schedule: this.#buildSchedule(),
       retention: this.#retention(),
@@ -647,6 +714,9 @@ export class BackupScreen extends LitElement {
       this.#reuseKey = key;
       this.policyAttempted = false;
       this.retentionRefused = false;
+      this.folderAttempted = false;
+      this.folderRefused = false;
+      this.formRefusal = null;
       if (this.status) this.#prefillFromStatus(this.status);
       this.editSettings = true;
     } catch (error) {
@@ -662,7 +732,7 @@ export class BackupScreen extends LitElement {
     this.refreshErrorKey = null;
     this.submitting = true;
     const body: BackupApplyBody = {
-      destination: { kind: "local-fs", dir: this.folder.trim() },
+      destination: destinationBody(this.choice, this.folder),
       recoveryKey: this.#reuseKey,
       schedule: this.#buildSchedule(),
       retention: this.#retention(),
@@ -693,6 +763,7 @@ export class BackupScreen extends LitElement {
       this.editSettings = false;
       this.#reuseKey = null;
       this.errorKey = null;
+      this.formRefusal = null;
     };
     if (this.#leave) void this.#leave.request({ scopes: [this], reason: "cancel", proceed });
     else proceed();
@@ -702,8 +773,9 @@ export class BackupScreen extends LitElement {
    * the schedule controls at their defaults. */
   #prefillFromStatus(s: BackupStatusView): void {
     this.#policyReplaced = s.schedule?.kind !== "wall-clock" || !s.retention;
-    const first = s.destinations[0];
-    this.folder = first?.kind === "local-fs" ? first.dir : "";
+    const opening = openingDestination(s, this.stream?.bucket ?? null);
+    this.choice = opening.choice;
+    this.folder = opening.folder;
     if (s.schedule?.kind === "wall-clock") {
       this.daysMode = s.schedule.days === "daily" ? "daily" : "weekdays";
       if (Array.isArray(s.schedule.days)) this.weekdays = [...s.schedule.days];
@@ -767,6 +839,7 @@ export class BackupScreen extends LitElement {
   #onDestination(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     this.folder = event.detail.value;
+    this.folderRefused = false;
   }
 
   #onPaste(event: CustomEvent<{ value: string }>): void {
@@ -1062,15 +1135,78 @@ export class BackupScreen extends LitElement {
   }
 
   #renderDestinationField(): TemplateResult {
+    const bucket = this.stream?.bucket ?? null;
+    const unavailable = this.streamUnread
+      ? t("backup.destination.stream_unread")
+      : this.stream !== undefined && bucket === null
+        ? t("backup.destination.stream_unavailable")
+        : null;
+    const folderMessage = this.folderRefused
+      ? t("backup.destination.folder_refused")
+      : this.#folderHeld
+        ? t("backup.destination.folder_required")
+        : "";
     return html`
       <h2>${t("backup.destination.title")}</h2>
-      <wt-input
-        data-test="destination"
-        label=${t("backup.destination.label")}
-        .value=${this.folder}
-        @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onDestination(e)}
-      ></wt-input>
-      <p class="hint">${t("backup.destination.hint")}</p>
+      <wt-combobox
+        data-test="archive-destination"
+        name="archive-destination"
+        search="never"
+        label=${t("backup.destination.choice")}
+        .options=${[
+          { value: "local-fs", label: t("backup.destination.choice_local") },
+          {
+            value: "stream-bucket",
+            label: t("backup.destination.choice_stream"),
+            disabled: bucket === null,
+            ...(unavailable === null ? {} : { description: unavailable }),
+          },
+        ]}
+        .value=${this.choice}
+        @wt-change=${(e: CustomEvent<{ value: string }>) => {
+          e.stopPropagation();
+          this.choice = e.detail.value as DestinationChoice;
+        }}
+      ></wt-combobox>
+      ${
+        unavailable === null
+          ? nothing
+          : html`<p
+              class="hint"
+              data-test=${this.streamUnread ? "stream-unread" : "stream-unavailable"}
+            >
+              ${unavailable}
+            </p>`
+      }
+      ${
+        this.choice === "local-fs"
+          ? html`<wt-input
+                data-test="destination"
+                name="backup-folder"
+                required
+                label=${t("backup.destination.label")}
+                error=${folderMessage}
+                .value=${this.folder}
+                @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onDestination(e)}
+              ></wt-input>
+              <p class="hint">${t("backup.destination.hint")}</p>`
+          : this.#renderStreamChoice(bucket)
+      }
+    `;
+  }
+
+  #renderStreamChoice(bucket: NonNullable<StreamSettingsView["bucket"]> | null): TemplateResult {
+    return html`
+      <p class="hint" data-test="stream-replaces">${t("backup.destination.stream_replaces")}</p>
+      <p class="hint" data-test="stream-snapshot">${t("backup.destination.stream_snapshot")}</p>
+      ${
+        bucket === null || this.status === undefined
+          ? nothing
+          : html`<p data-test="stream-location">
+              <span class="field-label">${t("backup.destination.stream_location")}</span>
+              <span class="location">${streamLocation(bucket, this.status.venueId)}</span>
+            </p>`
+      }
     `;
   }
 
@@ -1260,7 +1396,15 @@ export class BackupScreen extends LitElement {
   }
 
   #policyBottom(): string {
-    return this.#policyHeld || this.retentionRefused ? t("form.fix_fields") : "";
+    const marked =
+      this.#policyHeld || this.retentionRefused || this.#folderHeld || this.folderRefused;
+    const refusal = this.formRefusal;
+    const reasonKey = refusal?.reason == null ? undefined : TEST_REASON_KEYS[refusal.reason];
+    return [
+      ...(refusal === null ? [] : [codeMessage(refusal.code)]),
+      ...(reasonKey === undefined ? [] : [t(reasonKey)]),
+      ...(marked ? [t("form.fix_fields")] : []),
+    ].join(" ");
   }
 
   #renderRetentionBox(box: "count" | "days"): TemplateResult {

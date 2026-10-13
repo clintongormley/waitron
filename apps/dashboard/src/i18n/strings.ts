@@ -1497,6 +1497,23 @@ export const en = {
   "backup.destination.label": "Backup folder",
   "backup.destination.hint":
     "A full path on this box — for example an attached USB drive or a mounted disk.",
+  "backup.destination.choice": "Save backups to",
+  "backup.destination.choice_local": "A folder on this box",
+  "backup.destination.choice_stream": "The bucket copy's bucket",
+  "backup.destination.stream_unavailable": "Set up the bucket copy below to use its bucket.",
+  "backup.destination.stream_unread":
+    "The bucket copy's settings could not be read, so its bucket cannot be chosen now.",
+  "backup.destination.stream_snapshot":
+    "Saving copies the bucket copy's current bucket settings. Changing or removing the bucket copy later does not move these backups; save this choice again to follow a change.",
+  "backup.destination.stream_replaces":
+    "Backups go only to this bucket: the box stops saving them to a folder on this box.",
+  "backup.destination.stream_location": "Backups will be stored in",
+  "backup.destination.folder_required": "Enter the folder to save backups in.",
+  "backup.destination.folder_refused":
+    "The box cannot use this folder. Enter a full path, such as /mnt/usb/waitron.",
+  "backup.archive_test.timed_out": "The bucket took too long to answer.",
+  "backup.archive_test.read_mismatch": "The test file read back was not the one written.",
+  "backup.archive_test.not_listed": "The test file was written but the bucket did not list it.",
   "backup.key.title": "Recovery key",
   "backup.key.existing":
     "Backups will use the recovery key this box already has. If you set up the bucket copy, it is the key inside your recovery kit. To change it, turn backups on, then use “Change the recovery key”.",
@@ -4304,6 +4321,25 @@ export const es: Record<StringKey, string> = {
   "backup.destination.label": "Carpeta de copias",
   "backup.destination.hint":
     "Una ruta completa en esta caja; por ejemplo, una memoria USB conectada o un disco montado.",
+  "backup.destination.choice": "Guardar las copias en",
+  "backup.destination.choice_local": "Una carpeta de esta caja",
+  "backup.destination.choice_stream": "El bucket de la copia en el bucket",
+  "backup.destination.stream_unavailable":
+    "Configura abajo la copia en el bucket para usar su bucket.",
+  "backup.destination.stream_unread":
+    "No se han podido leer los ajustes de la copia en el bucket, así que ahora no se puede elegir su bucket.",
+  "backup.destination.stream_snapshot":
+    "Al guardar se copian los ajustes actuales del bucket de la copia en el bucket. Si después cambias o quitas la copia en el bucket, estas copias no se mueven; vuelve a guardar esta opción para seguir el cambio.",
+  "backup.destination.stream_replaces":
+    "Las copias van solo a este bucket: la caja deja de guardarlas en una carpeta de esta caja.",
+  "backup.destination.stream_location": "Las copias se guardarán en",
+  "backup.destination.folder_required": "Escribe la carpeta donde guardar las copias.",
+  "backup.destination.folder_refused":
+    "La caja no puede usar esta carpeta. Escribe una ruta completa, como /mnt/usb/waitron.",
+  "backup.archive_test.timed_out": "El bucket ha tardado demasiado en responder.",
+  "backup.archive_test.read_mismatch": "El archivo de prueba leído no era el que se escribió.",
+  "backup.archive_test.not_listed":
+    "El archivo de prueba se escribió, pero el bucket no lo ha listado.",
   "backup.key.title": "Clave de recuperación",
   "backup.key.existing":
     "Las copias usarán la clave de recuperación que este equipo ya tiene. Si has configurado la copia en el bucket, es la clave que va dentro de tu kit de recuperación. Para cambiarla, activa las copias y después usa «Cambiar la clave de recuperación».",
