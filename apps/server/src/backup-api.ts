@@ -200,12 +200,12 @@ const APPLY_FIELDS = [
   "destinationTimeoutMs",
 ];
 
-/** A refusal names the offending field, never its value — it could be the key or a secret. */
+/** A refusal names the offending field, never its value — it could be the key or a secret. An
+ * unknown field is answered as `body`: its name is the caller's text, and could be a secret too. */
 async function readApplyBody(c: Context): Promise<ApplyBody> {
   const body = await readJsonBody<unknown>(c);
   if (!isRecord(body)) throw requestInvalid("body");
-  const unknown = Object.keys(body).find((key) => !APPLY_FIELDS.includes(key));
-  if (unknown !== undefined) throw requestInvalid(unknown);
+  if (!Object.keys(body).every((key) => APPLY_FIELDS.includes(key))) throw requestInvalid("body");
   if (!isRecord(body.destination)) throw requestInvalid("destination");
   const { recoveryKey, destinationTimeoutMs } = body;
   if ("recoveryKey" in body && (typeof recoveryKey !== "string" || recoveryKey === "")) {

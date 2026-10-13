@@ -47,6 +47,7 @@ import { writeRecoveryKey } from "./backup-env-writer.js";
 import { BackupSupervisor, keyFingerprint } from "./backup-supervisor.js";
 import { loadBoxEnv } from "./box-env.js";
 import { parseEnvFile } from "./env-file.js";
+import type { Logger } from "./logger.js";
 import type { SealedStateRefresher } from "./sealed-state.js";
 import { isUnset } from "./env-value.js";
 import { mountManagementApi } from "./management-api.js";
@@ -223,6 +224,7 @@ function buildApp(
   readStream: () => StreamView = () => ({ state: "off" }),
   turns: Turns = createTurns(),
   extra: Partial<BackupApiDeps> = {},
+  log: Logger = () => {},
 ): Hono {
   const app = new Hono();
   mountManagementApi(
@@ -252,7 +254,7 @@ function buildApp(
       turns,
       ...extra,
     },
-    () => {},
+    log,
   );
   return app;
 }
@@ -1518,10 +1520,21 @@ describe("backup admin routes", () => {
     async function primaryApp(
       extra: Partial<BackupApiDeps> = {},
       mount: (app: Hono, sc: Scenario) => void = () => {},
+      log?: Logger,
     ) {
       const sc: Scenario = { stateDir: await makeStateDir(), base: {}, role: "primary" };
       const sup = makeSupervisor(sc);
-      const app = buildApp(sup, sc.stateDir, {}, undefined, undefined, undefined, undefined, extra);
+      const app = buildApp(
+        sup,
+        sc.stateDir,
+        {},
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        extra,
+        log,
+      );
       mount(app, sc);
       const cookie = await login(app);
       const post = (path: string, body?: unknown) =>
@@ -1812,7 +1825,7 @@ describe("backup admin routes", () => {
       const { post } = await primaryApp();
       const good = applyBody({ kind: "local-fs", dir: makeDestDir() });
       for (const [body, field] of [
-        [{ ...good, destinationDir: "/mnt/x" }, "destinationDir"],
+        [{ ...good, destinationDir: "/mnt/x" }, "body"],
         [{ ...good, recoveryKey: null }, "recoveryKey"],
         [{ ...good, destination: null }, "destination"],
         [{ ...good, destinationTimeoutMs: "900000" }, "destinationTimeoutMs"],
@@ -1827,6 +1840,26 @@ describe("backup admin routes", () => {
           error: { code: "backup.request_invalid", params: { field } },
         });
       }
+      expect(await readSealed()).toBeNull();
+    }, 60_000);
+
+    it("an unknown field is refused without its name, which could be a secret", async () => {
+      const lines: string[] = [];
+      const { post } = await primaryApp({}, undefined, (level, event, fields) => {
+        lines.push(JSON.stringify({ level, event, fields }));
+      });
+      const res = await post("/api/backup/apply", {
+        ...applyBody({ kind: "local-fs", dir: makeDestDir() }),
+        [CUSTOM_SECRET]: "x",
+      });
+      expect(res.status).toBe(400);
+      const answered = await res.text();
+      expect(JSON.parse(answered)).toMatchObject({
+        error: { code: "backup.request_invalid", params: { field: "body" } },
+      });
+      expect(lines.some((line) => line.includes("backup.request_invalid"))).toBe(true);
+      expect(answered).not.toContain(CUSTOM_SECRET);
+      expect(lines.join("\n")).not.toContain(CUSTOM_SECRET);
       expect(await readSealed()).toBeNull();
     }, 60_000);
 
