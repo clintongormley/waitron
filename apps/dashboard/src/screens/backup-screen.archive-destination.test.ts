@@ -1677,6 +1677,21 @@ const storedOff = (status: BackupStatusView): BackupStatusView => ({
   backupStatus: { configured: false },
 });
 
+/** A box whose later status reads answer what its turn-off left, as a real box's do. */
+function turnsOff(
+  status: BackupStatusView,
+  answer: Promise<BackupStatusView> = Promise.resolve(storedOff(status)),
+): Partial<DashboardApi> {
+  const getBackupStatus = vi.fn().mockResolvedValue(status);
+  return {
+    getBackupStatus,
+    disableBackup: vi.fn(() => {
+      getBackupStatus.mockResolvedValue(storedOff(status));
+      return answer;
+    }),
+  };
+}
+
 async function press(el: BackupScreen, test: string) {
   q(el, `[data-test=${test}]`)!.click();
   await el.updateComplete;
@@ -1684,9 +1699,7 @@ async function press(el: BackupScreen, test: string) {
 
 describe("switching off", () => {
   it("needs two presses, explaining what happens on the first, and sends one turn-off", async () => {
-    const { el, api } = await mount(LOCAL_ONLY, {
-      disableBackup: vi.fn().mockResolvedValue(storedOff(LOCAL_ONLY)),
-    });
+    const { el, api } = await mount(LOCAL_ONLY, turnsOff(LOCAL_ONLY));
     expect(q(el, "[data-test=turn-off-explain]")).toBeNull();
     await press(el, "turn-off");
     expect(api.disableBackup).toHaveBeenCalledTimes(0);
@@ -1748,11 +1761,10 @@ describe("switching off", () => {
 
   it("an Edit pressed while the turn-off is out does not open the settings editor once backups are back on", async () => {
     let answer!: (value: BackupStatusView) => void;
-    const { el, api } = await mount(LOCAL_ONLY, {
-      disableBackup: vi
-        .fn()
-        .mockReturnValue(new Promise<BackupStatusView>((resolve) => (answer = resolve))),
-    });
+    const { el, api } = await mount(
+      LOCAL_ONLY,
+      turnsOff(LOCAL_ONLY, new Promise<BackupStatusView>((resolve) => (answer = resolve))),
+    );
     await press(el, "turn-off");
     await press(el, "turn-off");
     await press(el, "edit-settings");
@@ -1901,9 +1913,7 @@ describe("turning stored settings back on", () => {
   });
 
   it("after a turn-off, the form opens with the stored folder", async () => {
-    const { el } = await mount(LOCAL_ONLY, {
-      disableBackup: vi.fn().mockResolvedValue(storedOff(LOCAL_ONLY)),
-    });
+    const { el } = await mount(LOCAL_ONLY, turnsOff(LOCAL_ONLY));
     await press(el, "turn-off");
     await press(el, "turn-off");
     await vi.waitFor(() => expect(q(el, "[data-test=apply]")).not.toBeNull());
@@ -1928,6 +1938,16 @@ describe("turning stored settings back on", () => {
       destinations: [{ id: "primary", kind: "local-fs", dir: "/mnt/usb/moved" }],
     });
     expect((q(el, "[data-test=destination]") as Field).value).toBe("/mnt/usb/moved");
+    expect(await buttonState(el, "apply")).toEqual(["primary", false]);
+  });
+
+  it("a later read naming the same stored settings leaves the untouched form as it is, not filled in again", async () => {
+    const { el, api } = await openOff(LOCAL_ONLY);
+    const draft = () => (el as unknown as { custom: object }).custom;
+    const before = draft();
+    await read(el, api, storedOff(LOCAL_ONLY));
+    expect(draft(), "the form's bucket fields, filled in again").toBe(before);
+    expect((q(el, "[data-test=destination]") as Field).value).toBe("/mnt/usb/waitron");
     expect(await buttonState(el, "apply")).toEqual(["primary", false]);
   });
 });
@@ -2092,5 +2112,200 @@ describe("a key change whose settings record failed", () => {
     q(el, "[data-test=rotate-confirm]")!.click();
     await vi.waitFor(() => expect(q(el, "[data-test=old-key]")).toBeNull());
     expect(q(el, "[data-test=pack-failure]")).toBeNull();
+  });
+});
+
+describe("a status read that began before a write answers after it", () => {
+  /** A read the test answers by hand, begun now as the 10-second refresh would begin one. */
+  async function heldRead(api: DashboardApi) {
+    let answer!: (value: BackupStatusView) => void;
+    const reads = vi.mocked(api.getBackupStatus).mock.calls.length;
+    vi.mocked(api.getBackupStatus).mockReturnValueOnce(
+      new Promise<BackupStatusView>((r) => (answer = r)),
+    );
+    api.liveData.invalidate([{ type: "backup_status" }]);
+    await vi.waitFor(() => expect(api.getBackupStatus).toHaveBeenCalledTimes(reads + 1));
+    return (value: BackupStatusView) => answer(value);
+  }
+
+  it("does not undo a Turn off, and the screen asks for a fresh read after the turn-off", async () => {
+    const { el, api } = await mount(LOCAL_ONLY, turnsOff(LOCAL_ONLY));
+    const answerOldRead = await heldRead(api);
+    const getBackupStatus = vi.mocked(api.getBackupStatus);
+    const reads = getBackupStatus.mock.calls.length;
+    await press(el, "turn-off");
+    await press(el, "turn-off");
+    await vi.waitFor(() => expect(q(el, "[data-test=apply]")).not.toBeNull());
+    // The fresh read is still on its way when the old one answers, as on a real network.
+    getBackupStatus.mockReturnValueOnce(new Promise(() => undefined));
+    answerOldRead(LOCAL_ONLY);
+    await arrive(el);
+    expect(text(q(el, "[data-test=status]")!), "the turn-off's answer").toContain(
+      t("backup.status.stored_off"),
+    );
+    expect(q(el, "[data-test=apply]")).not.toBeNull();
+    await vi.waitFor(() => expect(getBackupStatus).toHaveBeenCalledTimes(reads + 1));
+  });
+
+  it("does not replace the answer to Save settings", async () => {
+    const saved: BackupStatusView = {
+      ...LOCAL_ONLY,
+      revision: NEW_REVISION,
+      destinations: [{ id: "primary", kind: "local-fs", dir: "/mnt/usb/new" }],
+    };
+    const { el, api } = await openEdit(LOCAL_ONLY, {
+      applyBackup: vi.fn().mockResolvedValue(saved),
+    });
+    const answerOldRead = await heldRead(api);
+    await typeFolder(el, "/mnt/usb/new");
+    await press(el, "save-settings");
+    await vi.waitFor(() => expect(q(el, "[data-test=edit-settings]")).not.toBeNull());
+    expect(text(row(el, "primary"))).toContain("/mnt/usb/new");
+    answerOldRead(LOCAL_ONLY);
+    await arrive(el);
+    expect(text(row(el, "primary")), "the save's answer").toContain("/mnt/usb/new");
+  });
+});
+
+describe("an Edit whose key arrives while Turn off is out", () => {
+  it("does not open the editor, and the usual actions are back once backups are turned on again", async () => {
+    let answerKey!: (value: { key: string }) => void;
+    let answerOff!: (value: BackupStatusView) => void;
+    const getBackupStatus = vi.fn().mockResolvedValue(LOCAL_ONLY);
+    const { el, api } = await mount(LOCAL_ONLY, {
+      getBackupStatus,
+      getBackupRecoveryKey: vi.fn().mockReturnValue(new Promise((r) => (answerKey = r))),
+      disableBackup: vi.fn().mockReturnValue(new Promise((r) => (answerOff = r))),
+      applyBackup: vi.fn(() => {
+        getBackupStatus.mockResolvedValue(LOCAL_ONLY);
+        return Promise.resolve(LOCAL_ONLY);
+      }),
+    });
+    await press(el, "edit-settings");
+    await vi.waitFor(() => expect(api.getBackupRecoveryKey).toHaveBeenCalledOnce());
+    await press(el, "turn-off");
+    await press(el, "turn-off");
+    await vi.waitFor(() => expect(api.disableBackup).toHaveBeenCalledOnce());
+    answerKey({ key: "OLD-KEY-xyz789012345" });
+    await arrive(el);
+    expect(q(el, "[data-test=edit-title]"), "the editor, while the turn-off is out").toBeNull();
+    getBackupStatus.mockResolvedValue(storedOff(LOCAL_ONLY));
+    answerOff(storedOff(LOCAL_ONLY));
+    await vi.waitFor(() => expect(q(el, "[data-test=apply]")).not.toBeNull());
+    await arrive(el);
+    await press(el, "apply");
+    await vi.waitFor(() => expect(api.applyBackup).toHaveBeenCalledOnce());
+    await arrive(el);
+    expect(q(el, "[data-test=edit-title]")).toBeNull();
+    expect(q(el, "[data-test=edit-settings]"), "Edit settings").not.toBeNull();
+    expect(q(el, "[data-test=turn-off]"), "Turn off").not.toBeNull();
+    expect(q(el, "[data-test=rotate]"), "the key change").not.toBeNull();
+  });
+});
+
+describe("a refusal naming nothing the form shows a field for", () => {
+  for (const [what, params] of [
+    ["the schedule", { field: "schedule" }],
+    ["no field", undefined],
+  ] as const) {
+    it(`naming ${what} sits in the bottom message, never the page banner, and Save stays enabled`, async () => {
+      const { el } = await openEdit(LOCAL_ONLY, {
+        applyBackup: vi.fn().mockRejectedValue({ code: "backup.request_invalid", params }),
+      });
+      await setRetainCount(el, "9");
+      await press(el, "save-settings");
+      await arrive(el);
+      expect(await bottomOf(el, "settings-actions"), "bottom message").toBe(
+        codeMessage("backup.request_invalid"),
+      );
+      expect(banner(el)).toBeNull();
+      expect(await buttonState(el, "save-settings")).toEqual(["primary", false]);
+    });
+  }
+
+  it("on turning backups on, sits in the bottom message", async () => {
+    const { el } = await openConfigure({
+      applyBackup: vi
+        .fn()
+        .mockRejectedValue({ code: "backup.request_invalid", params: { field: "schedule" } }),
+    });
+    await typeFolder(el, "/mnt/usb/waitron");
+    await press(el, "apply");
+    await arrive(el);
+    expect(await bottomOf(el, "apply-actions")).toBe(codeMessage("backup.request_invalid"));
+    expect(banner(el)).toBeNull();
+  });
+});
+
+describe("the secret's reveal button", () => {
+  it("is back to hidden when the editor is opened again after Cancel", async () => {
+    const { el } = await openEdit(ON_CUSTOM);
+    await press(el, "toggle-archive-secret");
+    expect(customField(el, "secret-access-key").type).toBe("text");
+    await press(el, "cancel-edit");
+    await vi.waitFor(() => expect(q(el, "[data-test=edit-settings]")).not.toBeNull());
+    await press(el, "edit-settings");
+    await vi.waitFor(() => expect(q(el, "[data-test=save-settings]")).not.toBeNull());
+    await typeCustom(el, "secret-access-key", "NEW-SECRET-2");
+    expect(customField(el, "secret-access-key").type).toBe("password");
+  });
+
+  it("is back to hidden when the editor is opened again after a save", async () => {
+    const { el, api } = await openEdit(ON_CUSTOM);
+    await press(el, "toggle-archive-secret");
+    await typeCustom(el, "secret-access-key", "NEW-SECRET-1");
+    await press(el, "save-settings");
+    await vi.waitFor(() => expect(api.applyBackup).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(q(el, "[data-test=edit-settings]")).not.toBeNull());
+    await press(el, "edit-settings");
+    await vi.waitFor(() => expect(q(el, "[data-test=save-settings]")).not.toBeNull());
+    await typeCustom(el, "secret-access-key", "NEW-SECRET-2");
+    expect(customField(el, "secret-access-key").type).toBe("password");
+  });
+});
+
+describe("Enter in another bucket's fields", () => {
+  async function enterIn(el: BackupScreen, name: string) {
+    const input = customField(el, name).shadowRoot!.querySelector("input")!;
+    input.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }),
+    );
+    await arrive(el);
+  }
+
+  it("turns backups on, as Apply does", async () => {
+    const { el, api } = await openConfigure();
+    await choose(el, "custom-s3");
+    await fillCustom(el, "SECRET-1");
+    await enterIn(el, "name");
+    await vi.waitFor(() => expect(api.applyBackup).toHaveBeenCalledOnce());
+  });
+
+  it("saves the settings editor, as Save does", async () => {
+    const { el, api } = await openEdit(ON_CUSTOM);
+    await typeCustom(el, "region", "eu-west-3");
+    await typeCustom(el, "secret-access-key", "SECRET-1");
+    await enterIn(el, "secret-access-key");
+    await vi.waitFor(() => expect(api.applyBackup).toHaveBeenCalledOnce());
+  });
+
+  it("in the folder field, saves the settings editor too", async () => {
+    const { el, api } = await openEdit(LOCAL_ONLY);
+    await typeFolder(el, "/mnt/usb/new");
+    const input = q(el, "[data-test=destination]")!.shadowRoot!.querySelector("input")!;
+    input.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }),
+    );
+    await vi.waitFor(() => expect(api.applyBackup).toHaveBeenCalledOnce());
+  });
+});
+
+describe("the first recovery key", () => {
+  it("is asked for while the bucket copy's settings are still being read", async () => {
+    const { api } = await mount(
+      { ...OFF_WITH_KEY, recoveryKeySet: false, keyFingerprint: undefined },
+      { getStreamSettings: vi.fn().mockReturnValue(new Promise(() => undefined)) },
+    );
+    await vi.waitFor(() => expect(api.mintBackupKey).toHaveBeenCalledOnce());
   });
 });

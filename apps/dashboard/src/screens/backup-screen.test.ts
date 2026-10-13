@@ -1869,7 +1869,7 @@ describe("backup-screen retention boxes", () => {
     );
   });
 
-  it("a refusal naming another field stays in the page message, not under the boxes", async () => {
+  it("a refusal naming a field the form does not show goes in the bottom message, not under the boxes", async () => {
     const api = stubApi({
       applyBackup: vi.fn().mockRejectedValue({
         code: "backup.request_invalid",
@@ -1882,7 +1882,8 @@ describe("backup-screen retention boxes", () => {
     q(el, "[data-test=apply]")!.click();
     await flush(el);
 
-    expect(alertText(el)).toBe(codeMessage("backup.request_invalid"));
+    expect(await bottomOf(el, "apply-actions")).toBe(codeMessage("backup.request_invalid"));
+    expect(alertText(el)).toBeUndefined();
     expect(boxError(el, "count")).toBeNull();
     expect(boxError(el, "days")).toBeNull();
   });

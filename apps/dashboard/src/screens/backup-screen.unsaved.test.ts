@@ -101,6 +101,10 @@ async function click(screen: Screen, name: string) {
   field(screen, name).click();
   await screen.updateComplete;
 }
+/** The form's bottom message, inside the named `wt-form-actions`. */
+function bottomMessage(screen: Screen, actions: string) {
+  return field(screen, actions).shadowRoot?.querySelector("[role=alert]") ?? null;
+}
 function unload() {
   const event = new Event("beforeunload", { cancelable: true });
   window.dispatchEvent(event);
@@ -294,7 +298,7 @@ it("a refused settings write keeps the unsaved draft", async () => {
   await edit(screen);
   await change(screen, "destination", "/mnt/changed");
   await click(screen, "save-settings");
-  await expect.poll(() => screen.shadowRoot!.querySelector(".error")).not.toBeNull();
+  await expect.poll(() => bottomMessage(screen, "settings-actions")).not.toBeNull();
   expect(unload()).toBe(true);
   const pending = leave(app);
   await choose(app, "keep");
@@ -406,7 +410,7 @@ it("archive setup commits an accepted write while a refused write still warns", 
   });
   await change(screen, "destination", " /mnt/new ");
   await click(screen, "apply");
-  await expect.poll(() => screen.shadowRoot!.querySelector(".error")).not.toBeNull();
+  await expect.poll(() => bottomMessage(screen, "apply-actions")).not.toBeNull();
   expect(unload()).toBe(true);
   const kept = leave(app);
   await choose(app, "keep");

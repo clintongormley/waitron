@@ -1,4 +1,6 @@
 import { DashboardQueries } from "../api/query-controller.js";
+import { dashboardQuery } from "../api/live-queries.js";
+import { QueryController } from "@waitron/dashboard-kit";
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing, svg } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
@@ -7,6 +9,7 @@ import {
   focusFirstInvalid,
   leaveCoordinatorFor,
   saveActionState,
+  submitOnEnter,
   type DraftScope,
   type LeaveCoordinator,
 } from "@waitron/ui";
@@ -60,6 +63,7 @@ interface ArchiveDraft {
   pastedKey: string;
   advancedPaste: boolean;
 }
+type FormFields = Omit<ArchiveDraft, "mode" | "pastedKey" | "advancedPaste">;
 interface ExportDraft {
   passphrase: string;
   confirm: string;
@@ -286,13 +290,15 @@ export class BackupScreen extends LitElement {
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
-  readonly #queries = new DashboardQueries(
+  readonly #queries = new QueryController(
     this,
-    () => this.api,
+    () => this.api.liveData,
     (error) => {
       this.refreshErrorKey = codeOf(error);
     },
   );
+  /** Counts write answers taken, so a status read that began before one cannot replace it. */
+  #writeAnswers = 0;
 
   @state() private status?: BackupStatusView;
   /** It never rewrites a changed draft. */
@@ -371,6 +377,8 @@ export class BackupScreen extends LitElement {
   #packRequest = 0;
 
   @state() private editSettings = false;
+  /** A Turn off takes the next number, so an editor opening begun before it never opens. */
+  #editOpenings = 0;
   @state() private configureAfterApply = false;
   #configureUsesHeldKey = false;
   /** Fetched on entering edit mode so a settings change re-applies under the SAME key. Held off the
@@ -406,6 +414,14 @@ export class BackupScreen extends LitElement {
         : this.configureAfterApply || !this.status?.enabled
           ? "configure"
           : "rotate",
+      ...this.#fields(),
+      pastedKey: this.pastedKey,
+      advancedPaste: this.advancedPaste,
+    };
+  }
+
+  #fields(): FormFields {
+    return {
       choice: this.choice,
       folder: this.folder,
       custom: { ...this.custom },
@@ -415,8 +431,6 @@ export class BackupScreen extends LitElement {
       atTime: this.atTime,
       retainCount: this.retainCount,
       retainDays: this.retainDays,
-      pastedKey: this.pastedKey,
-      advancedPaste: this.advancedPaste,
     };
   }
 
@@ -544,19 +558,31 @@ export class BackupScreen extends LitElement {
   async #load(): Promise<void> {
     this.refreshErrorKey = null;
     this.errorKey = null;
+    const query = dashboardQuery(this.api, "getBackupStatus", []);
     try {
-      await this.#queries.watch("getBackupStatus", [], async (value) => {
-        if (this.#archiveMode === "configure" && this.#archiveScope?.isDirty() && value.enabled) {
-          this.#configureUsesHeldKey = this.#reusesHeldKey;
-          this.configureAfterApply = true;
-        }
-        this.#dropStalePack(value);
-        this.status = value;
-        this.refreshErrorKey = null;
-        if (!value.enabled) this.turnOffArmed = false;
-        await this.#openStoredOff(false);
-        await this.#mintIfNone();
-      });
+      await this.#queries.watch(
+        "getBackupStatus",
+        {
+          ...query,
+          key: `${query.key}:write-stamped`,
+          read: async () => {
+            const writeAnswers = this.#writeAnswers;
+            return { writeAnswers, value: await query.read() };
+          },
+        },
+        async ({ writeAnswers, value }) => {
+          this.refreshErrorKey = null;
+          if (writeAnswers !== this.#writeAnswers) return;
+          if (this.#archiveMode === "configure" && this.#archiveScope?.isDirty() && value.enabled) {
+            this.#configureUsesHeldKey = this.#reusesHeldKey;
+            this.configureAfterApply = true;
+          }
+          this.#dropStalePack(value);
+          this.status = value;
+          if (!value.enabled) this.turnOffArmed = false;
+          await Promise.all([this.#openStoredOff(false), this.#mintIfNone()]);
+        },
+      );
     } catch (error) {
       this.refreshErrorKey = codeOf(error);
     }
@@ -730,6 +756,8 @@ export class BackupScreen extends LitElement {
     } else if (FORM_REFUSALS.has(code)) {
       const reason = (error as { params?: { reason?: unknown } }).params?.reason;
       this.formRefusal = { code, reason: typeof reason === "string" ? reason : null };
+    } else if (code === "backup.request_invalid") {
+      this.formRefusal = { code, reason: null };
     } else this.errorKey = code;
   }
 
@@ -774,13 +802,13 @@ export class BackupScreen extends LitElement {
       const status = await this.api.applyBackup(body);
       if (generation !== this.#generation) return;
       this.custom = { ...this.custom, secretAccessKey: "" };
+      this.secretVisible = false;
       this.secretDemanded = false;
       this.reloadErrorCode = status.reloadErrorCode ?? null;
       scope?.commit(submitted);
       this.configureAfterApply = scope?.isDirty() ?? false;
       this.#configureUsesHeldKey = this.configureAfterApply && !sendsKey;
-      this.#dropStalePack(status);
-      this.status = status;
+      this.#takeWriteAnswer(status);
       // The bucket copy's panel reads the same key.
       if (sendsKey) this.api.liveData.invalidate([{ type: "backup_status" }]);
       this.savedIt = false;
@@ -810,8 +838,7 @@ export class BackupScreen extends LitElement {
       const status = await this.api.rotateBackupKey({ recoveryKey: this.#effectiveKey });
       if (generation !== this.#generation) return;
       reloadErrorCode = status.reloadErrorCode ?? null;
-      this.#dropStalePack(status);
-      this.status = status;
+      this.#takeWriteAnswer(status);
     } catch (error) {
       if (generation !== this.#generation) return;
       if (codeOf(error) !== "backup.rotation_metadata_failed") {
@@ -852,14 +879,18 @@ export class BackupScreen extends LitElement {
     this.errorKey = null;
     this.refreshErrorKey = null;
     this.submitting = true;
+    this.#editOpenings++;
     const generation = this.#generation;
     try {
       const status = await this.api.disableBackup();
       if (generation !== this.#generation) return;
       this.reloadErrorCode = status.reloadErrorCode ?? null;
-      this.#dropStalePack(status);
-      this.status = status;
+      this.#takeWriteAnswer(status);
+      this.api.liveData.invalidate([{ type: "backup_status" }]);
       this.turnOffArmed = false;
+      this.editSettings = false;
+      this.#reuseKey = null;
+      this.secretVisible = false;
       await this.#openStoredOff(true);
     } catch (error) {
       if (generation !== this.#generation) return;
@@ -877,7 +908,10 @@ export class BackupScreen extends LitElement {
     const s = this.status;
     if (generation !== this.#generation || s === undefined) return;
     if (!s.storedDisabled || s.enabled || !s.isPrimary || s.managedByEnvironment) return;
-    if (!afterTurnOff && this.#archiveScope?.isDirty()) return;
+    if (!afterTurnOff) {
+      if (this.#archiveScope?.isDirty()) return;
+      if (sameValue(this.#fieldsFrom(s), this.#fields())) return;
+    }
     this.#prefillFromStatus(s);
     this.#archiveScope?.commit(this.#archiveValue());
   }
@@ -893,6 +927,13 @@ export class BackupScreen extends LitElement {
     }
     this.#prefillFromStatus(s);
     this.#archiveScope?.commit(this.#archiveValue());
+  }
+
+  /** A write's answer is the box's state after it, newer than any status read still running. */
+  #takeWriteAnswer(status: BackupStatusView): void {
+    this.#writeAnswers++;
+    this.#dropStalePack(status);
+    this.status = status;
   }
 
   /** A pack, or its refusal, is for one key and one stored record, and only while a bucket is
@@ -981,23 +1022,27 @@ export class BackupScreen extends LitElement {
     if (this.submitting) return;
     this.#disarmTurnOff();
     const generation = this.#generation;
+    const openings = this.#editOpenings;
     if (
       this.#leave &&
       (await this.#leave.request({ scopes: [this], reason: "navigation", proceed() {} })) !==
         "proceeded"
     )
       return;
-    if (generation === this.#generation) await this.#openSettings();
+    if (generation === this.#generation && openings === this.#editOpenings)
+      await this.#openSettings();
   }
 
   async #openSettings(): Promise<void> {
     const generation = this.#generation;
+    const openings = this.#editOpenings;
     const opening = archivePayload(this.#archiveValue());
     this.errorKey = null;
     try {
       const [{ key }] = await Promise.all([this.api.getBackupRecoveryKey(), this.#streamRead]);
       if (
         generation !== this.#generation ||
+        openings !== this.#editOpenings ||
         !sameValue(opening, archivePayload(this.#archiveValue()))
       )
         return;
@@ -1012,6 +1057,7 @@ export class BackupScreen extends LitElement {
       this.folderRefused = false;
       this.customRefused = null;
       this.formRefusal = null;
+      this.secretVisible = false;
       if (this.status) this.#prefillFromStatus(this.status);
       this.editSettings = true;
     } catch (error) {
@@ -1039,10 +1085,10 @@ export class BackupScreen extends LitElement {
       const status = await this.api.applyBackup(body);
       if (generation !== this.#generation) return;
       this.custom = { ...this.custom, secretAccessKey: "" };
+      this.secretVisible = false;
       this.secretDemanded = false;
       this.reloadErrorCode = status.reloadErrorCode ?? null;
-      this.#dropStalePack(status);
-      this.status = status;
+      this.#takeWriteAnswer(status);
       scope?.commit(submitted);
       this.#policyReplaced = false;
       if (!scope?.isDirty()) {
@@ -1060,6 +1106,7 @@ export class BackupScreen extends LitElement {
     const proceed = () => {
       this.editSettings = false;
       this.#reuseKey = null;
+      this.secretVisible = false;
       this.errorKey = null;
       this.formRefusal = null;
     };
@@ -1067,30 +1114,44 @@ export class BackupScreen extends LitElement {
     else proceed();
   }
 
-  /** A non-`wall-clock` running schedule (the box-image `interval` form the UI cannot author) leaves
-   * the schedule controls at their defaults. */
   #prefillFromStatus(s: BackupStatusView): void {
     this.#policyReplaced = s.schedule?.kind !== "wall-clock" || !s.retention;
-    const opening = openingDestination(s, this.stream?.bucket ?? null);
-    this.choice = opening.choice;
-    this.folder = opening.folder;
-    this.custom = opening.custom;
     this.secretDemanded = false;
+    const f = this.#fieldsFrom(s);
+    this.choice = f.choice;
+    this.folder = f.folder;
+    this.custom = f.custom;
+    this.daysMode = f.daysMode;
+    this.weekdays = f.weekdays;
+    this.timeMode = f.timeMode;
+    this.atTime = f.atTime;
+    this.retainCount = f.retainCount;
+    this.retainDays = f.retainDays;
+  }
+
+  /** What the form holds once filled from `s`. A non-`wall-clock` running schedule (the box-image
+   * `interval` form the UI cannot author) leaves the schedule controls as they are. */
+  #fieldsFrom(s: BackupStatusView): FormFields {
+    const fields: FormFields = {
+      ...this.#fields(),
+      ...openingDestination(s, this.stream?.bucket ?? null),
+    };
     if (s.schedule?.kind === "wall-clock") {
-      this.daysMode = s.schedule.days === "daily" ? "daily" : "weekdays";
-      if (Array.isArray(s.schedule.days)) this.weekdays = [...s.schedule.days];
+      fields.daysMode = s.schedule.days === "daily" ? "daily" : "weekdays";
+      if (Array.isArray(s.schedule.days)) fields.weekdays = [...s.schedule.days];
       if (s.schedule.at === "auto") {
-        this.timeMode = "auto";
+        fields.timeMode = "auto";
       } else {
-        this.timeMode = "fixed";
+        fields.timeMode = "fixed";
         const pad = (n: number) => String(n).padStart(2, "0");
-        this.atTime = `${pad(s.schedule.at.hour)}:${pad(s.schedule.at.minute)}`;
+        fields.atTime = `${pad(s.schedule.at.hour)}:${pad(s.schedule.at.minute)}`;
       }
     }
     if (s.retention) {
-      this.retainCount = String(s.retention.count);
-      this.retainDays = String(s.retention.days);
+      fields.retainCount = String(s.retention.count);
+      fields.retainDays = String(s.retention.days);
     }
+    return fields;
   }
 
   /** Of the key BEING downloaded, not the running key's server fingerprint: on a rotate the new key's
@@ -1134,6 +1195,12 @@ export class BackupScreen extends LitElement {
     void navigator.clipboard?.writeText(key).catch(() => {
       /* clipboard denied — the download + on-screen key are the fallback */
     });
+  }
+
+  /** Enter in a destination field presses the shown form's own Apply or Save. */
+  #submitOnEnter(event: KeyboardEvent): void {
+    const action = this.editSettings ? "save-settings" : "apply";
+    submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>(`[data-test=${action}]`));
   }
 
   #onDestination(event: CustomEvent<{ value: string }>): void {
@@ -1501,6 +1568,7 @@ export class BackupScreen extends LitElement {
                 label=${t("backup.destination.label")}
                 error=${folderMessage}
                 .value=${this.folder}
+                @keydown=${(e: KeyboardEvent) => this.#submitOnEnter(e)}
                 @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onDestination(e)}
               ></wt-input>
               <p class="hint">${t("backup.destination.hint")}</p>`
@@ -1581,6 +1649,7 @@ export class BackupScreen extends LitElement {
       }
       .value=${this.custom[f.field]}
       .error=${this.#customMessage(f.field)}
+      @keydown=${(event: KeyboardEvent) => this.#submitOnEnter(event)}
       @wt-change=${(event: CustomEvent<{ value: string }>) => {
         event.stopPropagation();
         this.custom = { ...this.custom, [f.field]: event.detail.value };
