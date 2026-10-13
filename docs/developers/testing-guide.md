@@ -755,7 +755,7 @@ the pause asks again on its next tick; the supervisor case "asks the bucket agai
 during the pause goes unanswered, logs it, and resumes once one is answered" fails with the deadline
 taken out of the race (re-run by A44). Since A44 the store also gives a request up when it
 has had no reply 30 seconds after it started (`BUCKET_IDLE_MS`,
-`packages/stream/src/s3-store.ts`), though not an answer whose body stalls after headers that
+`packages/stream/src/s3-client.ts`), though not an answer whose body stalls after headers that
 arrived within its first three seconds; with that default, a listing to such a server failed after
 90,116 ms, three attempts. Against a server that never replies the pause therefore ends each
 question as a refusal, before the deadline. Since A51 a refused question is logged once per pause,
@@ -763,12 +763,18 @@ question as a refusal, before the deadline. Since A51 a refused question is logg
 the code the store's "a bucket that stops answering" cases in `packages/stream/src/s3-store.test.ts`
 assert for a listing — and a refusal that arrives after the deadline or a stop is not logged. The
 supervisor case "logs a question during the pause the bucket refuses once per pause, with its code"
-fails with the log line, the once-per-pause check, or the record shared across the pause taken out;
-"logs nothing more for a question during the pause that is refused after its deadline" fails with
-the deadline check taken out; "logs nothing for a question during the pause that is refused while
-the run is stopping" fails with the stop check taken out; and "logs nothing for a question during
-the pause that is refused after the run was stopped" is held by both checks, failing only with both
-taken out. Since A57 that line, like the supervisor's other lines for a failed bucket request, also
+fails with the log line, the once-per-pause check, or the record shared across the pause taken out.
+Since A538 one check, `!asking.aborted`, decides whether a refusal is logged, where `asking` joins
+the run's signal and the question's own deadline. Three cases were run against changed copies of
+that check: "logs nothing more for a question during the pause that is refused after its deadline",
+"logs nothing for a question during the pause that is refused while the run is stopping" and "logs
+nothing for a question during the pause that is refused after the run was stopped". With the check
+reading only the deadline's signal, "while the run is stopping" failed and the other two passed;
+reading only the run's signal, "after its deadline" failed and the other two passed; with the check
+taken out, all three failed. With `asking` itself built from the deadline's signal alone, "after
+the run was stopped" and "while the run is stopping" failed; from the run's signal alone, "after
+its deadline" failed; from neither, all three failed.
+Since A57 that line, like the supervisor's other lines for a failed bucket request, also
 carries the bucket's HTTP `status` when the bucket answered the refusal (the store's case "a
 refused listing is a request failure" in `packages/stream/src/s3-store.test.ts` has a listing
 answered 403 carry `status: 403`), and only the code when no answer arrived; the cases under "a

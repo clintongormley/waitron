@@ -4151,8 +4151,9 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   the archive's S3 backend is not — only `LocalFsBackend` exists for archives. The abort-aware
   per-destination timeout lands with the first network backend.
   A538's [draft design](superpowers/specs/2026-10-12-a538-archive-s3-design.md) and
-  [implementation plan](superpowers/plans/2026-10-12-a538-archive-s3.md) are **needs-owner-review**
-  before 17 October; build work and real-AWS evidence remain open.
+  [implementation plan](superpowers/plans/2026-10-12-a538-archive-s3.md): the owner approved the
+  proposed defaults on 2026-10-12. Plan Task 1, which makes the bucket stream's calls cancellable,
+  is built (A538-1); the remaining tasks and the real-AWS evidence are open.
 
 - **Whole-state-volume capture** (its own §5-reviewed slice): capture the whole state directory EXCEPT
   an explicit exclusion set, with a completeness guard that fails when a new top-level entry is
@@ -4343,11 +4344,6 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   version,** so the checksum protects fresh downloads only. Left open by SQLite slice 2 Task 6
   (#590, the Litestream supervisor).
 
-- **A bucket read given up after five minutes is not cancelled,** because the bucket client's list
-  takes no way to stop it; what the deadline can still leave running is a listing whose answer keeps
-  arriving, or one whose answer stalls after headers that arrived within the first three seconds.
-  Left open by SQLite slice 2 Task 7 (#619, how current the bucket copy is).
-
 - **A commit that changes no row but writes to the side file,** such as a schema change or a pragma
   such as `user_version`, is not reported, so the lag can read low. Left open by SQLite slice 2 Task
   7 (#619, how current the bucket copy is).
@@ -4431,8 +4427,13 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 
 - **The bucket client's limits (A44, #676) — what is still open.** `createS3ObjectStore` gives a
   request up when it has had no reply 30 seconds after it started (`BUCKET_IDLE_MS`,
-  `packages/stream/src/s3-store.ts`).
+  `packages/stream/src/s3-client.ts`).
   [Detail](backlog/box.md#the-bucket-clients-limits-a44-676--what-is-still-open)
+
+- **The settings screen's Test and Save wait on the bucket with no time limit and no cancel
+  signal** (`probeBucket` in `apps/server/src/boot.ts`, reached from
+  `apps/server/src/stream-api.ts`), so a bucket that sends headers and then stalls holds that
+  request open, though before any backup turn is taken. Left open by A538-1.
 
 - **The wizard route answers `backup.stream_name_invalid` 400, where other bucket failures answer
   502** — the status table in `apps/server/src/setup-api.ts` maps the code as one, and the same code
@@ -4637,10 +4638,6 @@ the tree. What remains, largest first:
   `apps/server/src/boot.reconcile.test.ts`). Recorded, not redesigned. Left open by SQLite slice 2
   Task 9a (#630, the first start after a restore).
   [Detail](backlog/replication-cloud.md#a-restored-box-whose-cloud-peer-does-not-answer-during-its-first-start-signs-the-next-term-and-removes-the-marker)
-
-- **The pointer read gives up after 15 seconds but does not cancel the request:** the bucket
-  interface takes no way to stop one. Left open by SQLite slice 2 Task 9a (#630, the first start
-  after a restore).
 
 - **The pointer's term is taken without checking its signature,** as the supervisor already does, so
   whoever can write the bucket can push a restored box's term up (never down). Left open by SQLite
@@ -4905,9 +4902,9 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   checkpoints; what moved the odds (pages written per sale, runner
   speed) was not measured. Left open by A549.
 
-- **The case "refused while the run is stopping" catches a removed stop check only through the order
-  two pending steps finish in,** so re-run that removal if `#bucketAnswers` is restructured. Left
-  open by #668, #686, A57, A60 and #723 (the pause test and the bucket's error reports).
+- **The case "refused while the run is stopping" catches a log check blind to the stop only by the
+  order two pending steps finish in:** in A538, with that check reading only the deadline, it passed
+  once the refusal arrived one `setImmediate` later. Left open by #668, #686, A57, A60, #723, A538.
 
 - **Every `maxWorkers: 1` config whose comment gives the coverage reason**, apart from `payments`,
   which carries its own measurement, still says the pin is needed without having measured it; the

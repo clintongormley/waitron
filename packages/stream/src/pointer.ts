@@ -4,7 +4,7 @@ import { AppError } from "@waitron/shared";
 import "./errors.js";
 import { putOwnBytes } from "./conditional.js";
 import { isKeySegment, parseGenerationName, venuePrefix } from "./names.js";
-import type { ObjectStore } from "./object-store.js";
+import type { ObjectStore, StoreCall } from "./object-store.js";
 
 export interface StreamPointer {
   venueId: string;
@@ -97,8 +97,9 @@ function encode(pointer: SignedPointer): Uint8Array {
 export async function readPointer(
   store: ObjectStore,
   venueId: string,
+  call?: StoreCall,
 ): Promise<{ pointer: SignedPointer; etag: string } | null> {
-  const stored = await store.get(pointerKey(venueId));
+  const stored = await store.get(pointerKey(venueId), call);
   if (stored === null) return null;
   let parsed: unknown;
   try {
@@ -148,6 +149,7 @@ export async function writePointer(
   pointer: SignedPointer,
   previousEtag: string | null,
   sent?: SentPointers,
+  call?: StoreCall,
 ): Promise<string | undefined> {
   const problem = pointerProblem(pointer);
   if (problem !== null) throw invalid(problem);
@@ -158,6 +160,7 @@ export async function writePointer(
     encode(pointer),
     previousEtag === null ? { ifNoneMatch: "*" } : { ifMatch: previousEtag },
     sent && ((bytes) => sent.includes(bytes)),
+    call,
   );
   return stored.landed ? undefined : stored.etag;
 }

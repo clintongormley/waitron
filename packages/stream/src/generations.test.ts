@@ -290,3 +290,23 @@ describe("pruneGenerations", () => {
     expect(inner.snapshot().has(markerKey(VENUE, gen(3)))).toBe(true);
   });
 });
+
+describe("a call's signal", () => {
+  it("reaches every bucket call claimGeneration and pruneGenerations make", async () => {
+    let now = T0;
+    const store = createMemoryObjectStore({ now: () => now });
+    const { signal } = new AbortController();
+    await claimGeneration(store, VENUE, gen(1), { signal });
+    await store.put(`${generationPrefix(VENUE, gen(1))}0000/a.ltx`, new Uint8Array());
+    now = new Date(T0.getTime() + 2 * WINDOW);
+    const before = store.calls.length;
+    const pruned = await pruneGenerations(store, VENUE, gen(2), now, WINDOW, { signal });
+    expect(pruned).toEqual([gen(1)]);
+    expect(store.calls[0]).toMatchObject({ operation: "put", signal });
+    expect(store.calls.slice(before).map((call) => [call.operation, call.signal])).toEqual([
+      ["list", signal],
+      ["delete", signal],
+      ["delete", signal],
+    ]);
+  });
+});

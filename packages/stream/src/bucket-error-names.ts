@@ -112,10 +112,15 @@ export type AnswerRefusal = (typeof ANSWER_REFUSALS)[number];
  * Fixed names the client gives a failure that carries no bucket error code:
  * `@smithy/node-http-handler` (4.12.1, `dist-cjs/index.js`) names a request that timed out, or whose
  * connection was reset, `TimeoutError`, and passes any other request error, such as a refused
- * connection, on as Node's plain `Error`. A bucket can also send either word as its code; being
- * fixed words, they carry none of its text.
+ * connection, on as Node's plain `Error`. A bucket can also send any of these words as its code;
+ * being fixed words, they carry none of its text.
  */
-const CLIENT_ERROR_NAMES = ["Error", "TimeoutError"] as const;
+const CLIENT_ERROR_NAMES = [
+  "Error",
+  "TimeoutError",
+  // What the same handler names a request whose abort signal was cancelled (`buildAbortError`).
+  "AbortError",
+] as const;
 
 export const UNLISTED_ERROR_NAME = "other";
 

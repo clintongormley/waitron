@@ -1,6 +1,13 @@
-export type { ListedObject, ObjectStore, PutCondition, StoredObject } from "./object-store.js";
+export type {
+  ListedObject,
+  ObjectStore,
+  PutCondition,
+  StoreCall,
+  StoredObject,
+} from "./object-store.js";
 export { CONFLICT_ATTEMPTS, createS3ObjectStore } from "./s3-store.js";
-export type { BucketConfig, S3ObjectStoreOptions } from "./s3-store.js";
+export { createBucketClient } from "./s3-client.js";
+export type { BucketConfig, S3ObjectStoreOptions } from "./s3-client.js";
 export {
   GENERATION_NAME,
   bucketKey,

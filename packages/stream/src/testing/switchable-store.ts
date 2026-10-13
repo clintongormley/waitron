@@ -1,7 +1,14 @@
 import { AppError } from "@waitron/shared";
 import "../errors.js";
 import type { BucketOperation } from "../errors.js";
-import type { ListedObject, ObjectStore, PutCondition, StoredObject } from "../object-store.js";
+import type {
+  ListedObject,
+  ObjectStore,
+  PutCondition,
+  StoreCall,
+  StoredObject,
+} from "../object-store.js";
+import { callCancelled } from "../store-call.js";
 import { createMemoryObjectStore, type Fault, type MemoryObjectStore } from "./memory-store.js";
 
 /**
@@ -15,7 +22,10 @@ import { createMemoryObjectStore, type Fault, type MemoryObjectStore } from "./m
 export class SwitchableStore implements ObjectStore {
   /** `put <key>` for each of this package's writes answered as stored, `upload <key>` for Litestream's, in order. */
   readonly events: string[];
-  /** Every call that reaches the bucket waits forever: a bucket that never answers. */
+  /**
+   * Every call that reaches the bucket never answers, until its signal is cancelled; it then fails
+   * as the S3 store's cancelled call does.
+   */
   hang = false;
   /**
    * Every call that reaches the bucket fails with no answer (a refused connection): unreachable,
@@ -37,32 +47,42 @@ export class SwitchableStore implements ObjectStore {
     this.events = events;
   }
 
-  async get(key: string): Promise<StoredObject | null> {
-    await this.#gate("get", key);
-    return this.#inner.get(key);
+  async get(key: string, call?: StoreCall): Promise<StoredObject | null> {
+    await this.#gate("get", key, call);
+    return this.#inner.get(key, call);
   }
 
-  async put(key: string, body: Uint8Array, cond?: PutCondition): Promise<{ etag: string }> {
-    await this.#gate("put", key);
-    const answer = await this.#inner.put(key, body, this.honoursConditions ? cond : undefined);
+  async put(
+    key: string,
+    body: Uint8Array,
+    cond?: PutCondition,
+    call?: StoreCall,
+  ): Promise<{ etag: string }> {
+    await this.#gate("put", key, call);
+    const answer = await this.#inner.put(
+      key,
+      body,
+      this.honoursConditions ? cond : undefined,
+      call,
+    );
     this.events.push(`put ${key}`);
     return answer;
   }
 
-  async list(prefix: string): Promise<ListedObject[]> {
-    await this.#gate("list", prefix);
-    return this.#inner.list(prefix);
+  async list(prefix: string, call?: StoreCall): Promise<ListedObject[]> {
+    await this.#gate("list", prefix, call);
+    return this.#inner.list(prefix, call);
   }
 
-  async delete(key: string): Promise<void> {
-    await this.#gate("delete", key);
-    await this.#inner.delete(key);
+  async delete(key: string, call?: StoreCall): Promise<void> {
+    await this.#gate("delete", key, call);
+    await this.#inner.delete(key, call);
   }
 
-  async deleteMany(keys: string[]): Promise<void> {
+  async deleteMany(keys: string[], call?: StoreCall): Promise<void> {
     if (keys.length === 0) return;
-    await this.#gate("delete", keys[0]!);
-    await this.#inner.deleteMany(keys);
+    await this.#gate("delete", keys[0]!, call);
+    await this.#inner.deleteMany(keys, call);
   }
 
   /** Litestream's side of the bucket: a file written with no condition, last modified at `at`. */
@@ -83,8 +103,14 @@ export class SwitchableStore implements ObjectStore {
     this.#inner.failNext(fault);
   }
 
-  async #gate(operation: BucketOperation, key: string): Promise<void> {
-    if (this.hang) await new Promise<never>(() => {});
+  async #gate(operation: BucketOperation, key: string, call?: StoreCall): Promise<void> {
+    if (this.hang) {
+      await new Promise<never>((_, reject) => {
+        const cancel = () => reject(callCancelled(operation, key));
+        if (call?.signal?.aborted) cancel();
+        else call?.signal?.addEventListener("abort", cancel, { once: true });
+      });
+    }
     if (this.down) {
       throw new AppError("backup.stream_request_failed", {
         operation,

@@ -1,5 +1,5 @@
 import { generationPrefix } from "./generations.js";
-import type { ListedObject, ObjectStore } from "./object-store.js";
+import type { ListedObject, ObjectStore, StoreCall } from "./object-store.js";
 
 export const levelFolder = (level: number): string => `${level.toString(16).padStart(4, "0")}/`;
 
@@ -20,10 +20,11 @@ export async function newestUpload(
   venueId: string,
   generation: string,
   options: { level?: number; floor?: Date | null } = {},
+  call?: StoreCall,
 ): Promise<Date | null> {
   const prefix = generationPrefix(venueId, generation);
   const folder = options.level === undefined ? prefix : `${prefix}${levelFolder(options.level)}`;
-  return newestOf(await store.list(folder), options.floor ?? null);
+  return newestOf(await store.list(folder, call), options.floor ?? null);
 }
 
 /**
@@ -36,7 +37,8 @@ export async function bucketClockOffset(
   key: string,
   started: number,
   ended: number,
+  call?: StoreCall,
 ): Promise<number | null> {
-  const listed = (await store.list(key)).find((object) => object.key === key);
+  const listed = (await store.list(key, call)).find((object) => object.key === key);
   return listed === undefined ? null : listed.lastModified.getTime() - (started + ended) / 2;
 }

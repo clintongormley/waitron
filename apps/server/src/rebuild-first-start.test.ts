@@ -1,7 +1,9 @@
+import { createHook } from "node:async_hooks";
 import { X509Certificate, createPrivateKey } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { deleteCredential, loadKeyRing, putCredential, type KeyRing } from "@waitron/credentials";
@@ -539,6 +541,63 @@ describe("readBucketPointerTerm", () => {
     await expect(
       readBucketPointerTerm(suite.db, RING, { openStore: () => silent, timeoutMs: 50 }),
     ).rejects.toMatchObject({ code: "restore.pointer_unreadable" });
+  });
+
+  it("cancels a pointer read the bucket has not answered in time, and not one answered in time", async () => {
+    await storeSettings(SETTINGS);
+    const store = createMemoryObjectStore();
+    const signals: (AbortSignal | undefined)[] = [];
+    let answers = false;
+    const recording: ObjectStore = {
+      ...store,
+      get: (key, call) => {
+        signals.push(call?.signal);
+        if (answers) return store.get(key, call);
+        return new Promise<never>((_, reject) => {
+          call?.signal?.addEventListener("abort", () => reject(new Error("cancelled")), {
+            once: true,
+          });
+        });
+      },
+    };
+    await expect(
+      readBucketPointerTerm(suite.db, RING, { openStore: () => recording, timeoutMs: 50 }),
+    ).rejects.toMatchObject({ code: "restore.pointer_unreadable" });
+    answers = true;
+    expect(
+      await readBucketPointerTerm(suite.db, RING, { openStore: () => recording, timeoutMs: 50 }),
+    ).toBeNull();
+    await delay(100);
+    expect(signals.map((signal) => signal?.aborted)).toEqual([true, false]);
+  });
+
+  it("leaves no timer waiting once the bucket has answered in time", async () => {
+    await storeSettings(SETTINGS);
+    const store = createMemoryObjectStore();
+    const bound = 123_457;
+    const live = new Set<number>();
+    let created = 0;
+    const timers = createHook({
+      init(id, type, _trigger, resource) {
+        if (type === "Timeout" && (resource as { _idleTimeout?: number })._idleTimeout === bound) {
+          created += 1;
+          live.add(id);
+        }
+      },
+      destroy(id) {
+        live.delete(id);
+      },
+    }).enable();
+    try {
+      expect(
+        await readBucketPointerTerm(suite.db, RING, { openStore: () => store, timeoutMs: bound }),
+      ).toBeNull();
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(created).toBe(1);
+      expect(live.size).toBe(0);
+    } finally {
+      timers.disable();
+    }
   });
 
   it("refuses when the pointer in the bucket cannot be read", async () => {

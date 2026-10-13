@@ -112,3 +112,48 @@ describe("SwitchableStore", () => {
     expect(store.has("p")).toBe(true);
   });
 });
+
+describe("a hung call", () => {
+  const calls: [
+    string,
+    string,
+    (store: SwitchableStore, signal: AbortSignal) => Promise<unknown>,
+  ][] = [
+    ["get", "g", (store, signal) => store.get("g", { signal })],
+    ["put", "p", (store, signal) => store.put("p", bytes("x"), undefined, { signal })],
+    ["list", "l/", (store, signal) => store.list("l/", { signal })],
+    ["delete", "d", (store, signal) => store.delete("d", { signal })],
+    ["delete", "m1", (store, signal) => store.deleteMany(["m1", "m2"], { signal })],
+  ];
+  const cancelled = (operation: string, key: string) => ({
+    code: "backup.stream_request_failed",
+    params: { operation, key, status: null, name: "AbortError" },
+  });
+
+  it.each(calls)(
+    "%s %s waits until its signal is cancelled, then fails as the S3 store's cancelled call does",
+    async (operation, key, call) => {
+      const store = new SwitchableStore(() => AT);
+      store.hang = true;
+      const controller = new AbortController();
+      const pending = call(store, controller.signal).catch((error: unknown) => error);
+      expect(await settledWithin(pending, 20)).toBe(false);
+      controller.abort();
+      const failure = await pending;
+      expect(failure).toBeInstanceOf(AppError);
+      expect(failure).toMatchObject(cancelled(operation, key));
+      expect(store.has(key)).toBe(false);
+    },
+  );
+
+  it.each(calls)(
+    "%s %s fails at once on a signal already cancelled",
+    async (operation, key, call) => {
+      const store = new SwitchableStore(() => AT);
+      store.hang = true;
+      expect(await call(store, AbortSignal.abort()).catch((error: unknown) => error)).toMatchObject(
+        cancelled(operation, key),
+      );
+    },
+  );
+});

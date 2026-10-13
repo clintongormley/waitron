@@ -33,6 +33,7 @@ import {
 } from "./pointer.js";
 import { probeBucket } from "./probe.js";
 import { createS3ObjectStore, type BucketConfig } from "./s3-store.js";
+import { abortableSleep } from "./store-call.js";
 
 export type StreamLog = (
   level: "info" | "warn" | "error",
@@ -136,7 +137,7 @@ export const RESTART_BACKOFF_MS: readonly number[] = [
 export const HEALTHY_RUN_MS = 60_000;
 /** How long `litestream version` may take. */
 const VERSION_TIMEOUT_MS = 10_000;
-/** How long `stop()` waits for a run blocked on a bucket call before leaving it behind. */
+/** How long `stop()` waits for the run to end before leaving it behind. */
 const STOP_WAIT_MS = 1_000;
 /** How often old generations are pruned, at most. */
 export const PRUNE_EVERY_MS = 24 * 60 * 60_000;
@@ -227,15 +228,6 @@ function failureFields(error: unknown): FailureFields {
  * clock drift" (`doc/api/process.md`, v26.x).
  */
 export const steadyMs = (): number => Number(process.hrtime.bigint()) / 1e6;
-
-/** A sleep that ends early, and quietly, when `signal` aborts. */
-export async function abortableSleep(ms: number, signal: AbortSignal): Promise<void> {
-  try {
-    await delay(ms, undefined, { signal });
-  } catch (error) {
-    if (!signal.aborted) throw error;
-  }
-}
 
 interface Keeper {
   stop(): Promise<void>;
@@ -337,10 +329,7 @@ export class StreamSupervisor {
     this.#set("off", "supervisor_failed");
   }
 
-  /**
-   * Stops Litestream and the run. A run blocked on a bucket call that never answers is left behind
-   * after a short wait.
-   */
+  /** Stops Litestream and the run. */
   async stop(): Promise<void> {
     const controller = this.#controller;
     if (controller === undefined) return;
@@ -421,7 +410,7 @@ export class StreamSupervisor {
       this.#set("opening", null, null);
       let moving: Promise<unknown> = Promise.resolve();
       try {
-        const probe = await probeBucket(this.#store);
+        const probe = await probeBucket(this.#store, undefined, { signal });
         signal.throwIfAborted();
         if (!probe.ok) {
           this.#noteBucketProblem(probe.reason);
@@ -430,7 +419,7 @@ export class StreamSupervisor {
         }
         this.#noteBucketProblem(null);
         this.#lastProbeAt = this.#monotonic();
-        const previous = await readPointer(this.#store, venueId);
+        const previous = await readPointer(this.#store, venueId, { signal });
         signal.throwIfAborted();
         if (previous !== null && previous.pointer.body.term > term) {
           this.#refuse("pointer_newer_term");
@@ -439,7 +428,7 @@ export class StreamSupervisor {
         const generation = generationName(term, nodeId, this.#deps.now());
         const claimStarted = this.#instant();
         try {
-          await claimGeneration(this.#store, venueId, generation);
+          await claimGeneration(this.#store, venueId, generation, { signal });
         } catch (error) {
           if (!isPreconditionFailure(error)) throw error;
           await this.#sleep(1_000, signal);
@@ -448,7 +437,7 @@ export class StreamSupervisor {
         const claimEnded = this.#instant();
         signal.throwIfAborted();
         this.#newestUploadAt = null;
-        await this.#measureSkew(generation, claimStarted, claimEnded);
+        await this.#measureSkew(generation, claimStarted, claimEnded, signal);
         await this.#startChild(generation, true, signal);
         this.#set("opening", null, generation);
         const overLimit = await this.#fullCopyOrLimit(generation, signal);
@@ -492,7 +481,7 @@ export class StreamSupervisor {
 
   /**
    * Null once the first full copy is in the bucket; the side file's size if it reached the limit
-   * first. The wait on the bucket is left behind at the limit: it only reads.
+   * first, when the wait on the bucket is cancelled.
    */
   async #fullCopyOrLimit(generation: string, signal: AbortSignal): Promise<number | null> {
     const attempt = new AbortController();
@@ -512,8 +501,9 @@ export class StreamSupervisor {
     for (;;) {
       let listed: ListedObject[] = [];
       try {
-        listed = await this.#store.list(prefix);
+        listed = await this.#store.list(prefix, { signal });
       } catch (error) {
+        signal.throwIfAborted();
         this.#deps.log("warn", "stream.list_failed", failureFields(error));
       }
       signal.throwIfAborted();
@@ -549,6 +539,7 @@ export class StreamSupervisor {
           pointer,
           expected,
           this.#sentPointers,
+          { signal },
         );
         if (retryAgainst === undefined) return true;
         expected = retryAgainst;
@@ -594,24 +585,30 @@ export class StreamSupervisor {
   }
 
   async #stream(generation: string, signal: AbortSignal): Promise<void> {
-    let reading: { since: number } | undefined;
+    let reading: { since: number; cancel: AbortController } | undefined;
     // Not awaited, like the prune: a bucket that never answers must not hold the tick. One read of
-    // the bucket at a time, until it has gone unanswered past the deadline.
+    // the bucket at a time, until it has gone unanswered past the deadline and is cancelled.
     const readBucket = () => {
       const now = this.#monotonic();
       if (reading !== undefined && now - reading.since < READ_DEADLINE_MS) return;
-      if (reading !== undefined) this.#noteUnreadable({ errorCode: "timeout" });
-      const mine = { since: now };
+      if (reading !== undefined) {
+        reading.cancel.abort();
+        this.#noteUnreadable({ errorCode: "timeout" });
+      }
+      const mine = { since: now, cancel: new AbortController() };
       reading = mine;
-      void this.#readBucket(generation, signal, () => reading === mine).finally(() => {
+      const read = AbortSignal.any([signal, mine.cancel.signal]);
+      void this.#readBucket(generation, signal, read).finally(() => {
         if (reading === mine) reading = undefined;
       });
     };
     for (;;) {
       const walBytes = await this.#untilOverLimit(TICK_MS, signal, () => {
-        this.#pruneDaily(generation);
+        this.#pruneDaily(generation, signal);
         readBucket();
       });
+      // Only these ticks hold a read to its deadline, and a pause stops them.
+      reading?.cancel.abort();
       await this.#pauseAndResume(generation, walBytes, signal);
     }
   }
@@ -619,26 +616,22 @@ export class StreamSupervisor {
   /**
    * Reads the live generation's newest file and forgets the commits it covers, then
    * checks the bucket when that is due: after a failed read, or with a problem named, at most every
-   * ten minutes; otherwise daily. A listing answered once the run has stopped, or once a newer read
-   * has replaced this one, changes nothing and starts no check: it may be older than the newer
-   * read's.
+   * ten minutes; otherwise daily. `read` is cancelled once the run has stopped, once the stream
+   * pauses, or once a newer read has replaced this one; a listing answered after that changes nothing
+   * and starts no check: it may be older than the newer read's.
    */
-  async #readBucket(
-    generation: string,
-    signal: AbortSignal,
-    isCurrent: () => boolean,
-  ): Promise<void> {
-    const read = await this.#newestUpload(generation);
-    if (signal.aborted || !isCurrent()) return;
-    if (read.ok) {
+  async #readBucket(generation: string, signal: AbortSignal, read: AbortSignal): Promise<void> {
+    const answer = await this.#newestUpload(generation, read);
+    if (read.aborted) return;
+    if (answer.ok) {
       this.#unreadableLoggedAt = null;
-      this.#newestUploadAt = read.newest;
+      this.#newestUploadAt = answer.newest;
     } else {
-      this.#noteUnreadable(read.failure);
+      this.#noteUnreadable(answer.failure);
     }
     this.#commits.settle(this.#lagWith(this.#newestUploadAt).coveredUpTo);
     const now = this.#monotonic();
-    if (!read.ok || this.#status.bucketProblem !== null) {
+    if (!answer.ok || this.#status.bucketProblem !== null) {
       await this.#classifyBucket(false, signal);
     } else if (now - this.#lastProbeAt >= PROBE_EVERY_MS) {
       this.#lastProbeAt = now;
@@ -652,15 +645,25 @@ export class StreamSupervisor {
    */
   async #newestUpload(
     generation: string,
+    signal: AbortSignal,
   ): Promise<{ ok: true; newest: Date | null } | { ok: false; failure: FailureFields }> {
     try {
       const { venueId } = this.#deps;
-      let newest = await newestUpload(this.#store, venueId, generation, {
-        level: 0,
-        floor: this.#newestUploadAt,
-      });
+      let newest = await newestUpload(
+        this.#store,
+        venueId,
+        generation,
+        { level: 0, floor: this.#newestUploadAt },
+        { signal },
+      );
       if (this.#lagWith(newest).lagMs > L0_RETENTION_MS) {
-        newest = await newestUpload(this.#store, venueId, generation, { level: 1, floor: newest });
+        newest = await newestUpload(
+          this.#store,
+          venueId,
+          generation,
+          { level: 1, floor: newest },
+          { signal },
+        );
       }
       return { ok: true, newest };
     } catch (error) {
@@ -699,14 +702,18 @@ export class StreamSupervisor {
     generation: string,
     started: { wall: number; steady: number },
     ended: { wall: number; steady: number },
+    signal: AbortSignal,
   ): Promise<void> {
     const steady = (started.steady + ended.steady) / 2;
     this.#skewMs = (started.wall + ended.wall) / 2 - steady;
     const key = markerKey(this.#deps.venueId, generation);
     try {
-      const offset = await bucketClockOffset(this.#store, key, started.steady, ended.steady);
+      const offset = await bucketClockOffset(this.#store, key, started.steady, ended.steady, {
+        signal,
+      });
       if (offset !== null) this.#skewMs = offset;
     } catch (error) {
+      signal.throwIfAborted();
       this.#deps.log("warn", "stream.freshness_unreadable", failureFields(error));
     }
   }
@@ -724,7 +731,7 @@ export class StreamSupervisor {
     const mine = ++this.#checkSeq;
     const wanted = () => !signal.aborted && mine === this.#checkSeq;
     try {
-      const probe = await probeBucket(this.#store);
+      const probe = await probeBucket(this.#store, undefined, { signal });
       if (!wanted()) return;
       this.#noteBucketProblem(probe.ok ? null : probe.reason);
     } catch (error) {
@@ -805,19 +812,19 @@ export class StreamSupervisor {
    * tidies only the generation it writes. Not awaited: a bucket that never answers must
    * not hold the tick, which is where the side-file limit is checked. One prune at a time.
    */
-  #pruneDaily(live: string): void {
+  #pruneDaily(live: string, signal: AbortSignal): void {
     const now = this.#deps.now();
     if (this.#pruning || now.getTime() - this.#lastPruneAt < PRUNE_EVERY_MS) return;
     this.#lastPruneAt = now.getTime();
     this.#pruning = true;
-    void pruneGenerations(this.#store, this.#deps.venueId, live, now, PRUNE_WINDOW_MS)
+    void pruneGenerations(this.#store, this.#deps.venueId, live, now, PRUNE_WINDOW_MS, { signal })
       .then((deleted) => {
         if (deleted.length > 0) {
           this.#deps.log("info", "stream.generations_pruned", { count: deleted.length });
         }
       })
       .catch((error: unknown) => {
-        this.#deps.log("warn", "stream.prune_failed", failureFields(error));
+        if (!signal.aborted) this.#deps.log("warn", "stream.prune_failed", failureFields(error));
       })
       .finally(() => {
         this.#pruning = false;
@@ -877,9 +884,9 @@ export class StreamSupervisor {
 
   /**
    * False when the listing is refused, logged the first time in a pause (`noted`), or unanswered
-   * after {@link READ_DEADLINE_MS}, logged every time. The deadline is still needed because the S3
-   * store's own limit (`BUCKET_IDLE_MS`) does not bound an answer that keeps arriving, or one whose
-   * body stalls after early headers.
+   * after {@link READ_DEADLINE_MS}, logged every time. The deadline bounds what the S3 store's own
+   * limit (`BUCKET_IDLE_MS`) does not, an answer that keeps arriving or a body that stalls after
+   * early headers, and cancels the listing when it passes, as a stop does.
    */
   async #bucketAnswers(
     generation: string,
@@ -887,19 +894,17 @@ export class StreamSupervisor {
     noted: Set<string>,
   ): Promise<boolean> {
     const deadline = new AbortController();
+    const asking = AbortSignal.any([signal, deadline.signal]);
     const listed = async () => {
       try {
         await this.#store.list(
           `${generationPrefix(this.#deps.venueId, generation)}${levelFolder(0)}`,
+          { signal: asking },
         );
         return true;
       } catch (error) {
         // A refusal after the deadline or a stop answers a question nobody is still asking.
-        if (
-          !signal.aborted &&
-          !deadline.signal.aborted &&
-          !noted.has("stream.pause_check_failed")
-        ) {
+        if (!asking.aborted && !noted.has("stream.pause_check_failed")) {
           noted.add("stream.pause_check_failed");
           this.#deps.log("warn", "stream.pause_check_failed", failureFields(error));
         }
@@ -909,9 +914,7 @@ export class StreamSupervisor {
     try {
       const answer = await Promise.race([
         listed(),
-        this.#sleep(READ_DEADLINE_MS, AbortSignal.any([signal, deadline.signal])).then(
-          () => "timeout" as const,
-        ),
+        this.#sleep(READ_DEADLINE_MS, asking).then(() => "timeout" as const),
       ]);
       if (answer !== "timeout") return answer;
       // The sleep also ends when the run is stopped, which is no deadline.

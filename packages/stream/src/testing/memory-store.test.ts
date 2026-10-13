@@ -158,3 +158,26 @@ describe("createMemoryObjectStore", () => {
     ]);
   });
 });
+
+describe("a call's signal", () => {
+  it("is recorded with each call that carries one, once per key for a deleteMany", async () => {
+    const store = createMemoryObjectStore();
+    const { signal } = new AbortController();
+    await store.put("a", bytes("one"), undefined, { signal });
+    await store.get("a", { signal });
+    await store.list("", { signal });
+    await store.deleteMany(["a", "b"], { signal });
+    await store.delete("c", { signal });
+    await store.get("a");
+    expect(store.calls.map((call) => [call.operation, call.key, call.signal])).toEqual([
+      ["put", "a", signal],
+      ["get", "a", signal],
+      ["list", "", signal],
+      ["delete", "a", signal],
+      ["delete", "b", signal],
+      ["delete", "c", signal],
+      ["get", "a", undefined],
+    ]);
+    expect(Object.keys(store.calls.at(-1)!)).toEqual(["operation", "key"]);
+  });
+});
