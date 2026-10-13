@@ -322,6 +322,28 @@ describe("Split tables… on a group with nobody seated", () => {
     expect(await groupOf(table.c3!)).toBeNull();
   });
 
+  it("A pushed onto B's right, B ticked from either table: the group ends and A goes back where it stood", async () => {
+    for (const from of ["a", "b"] as const) {
+      const { table, zoneId } = await plannedZone(
+        v,
+        [
+          { key: "a", place: { x: 0, y: 0 } },
+          { key: "b", place: { x: 20, y: 0 } },
+        ],
+        NOW,
+      );
+      await merge(table.a!, table.b!, "right", 8);
+      expect(await placeOf(table.a!)).toMatchObject({ x: 28, y: 0 });
+      const { joinId } = (await mergeOf(v, table.a!))!;
+
+      await settles(() => splitOff(table[from]!, [table.b!]), zoneId);
+
+      expect(await groupRowsOf(joinId)).toEqual({ joins: [], members: [] });
+      expect(await todayRow(v, table.a!)).toMatchObject({ x: 0, y: 0, rotation: 0 });
+      expect(await todayRow(v, table.b!)).toMatchObject({ x: 20, y: 0, rotation: 0 });
+    }
+  });
+
   it("Counter 5 ticked: Bar, Counter 3 and 4 stay a group with the seats sent (10); Counter 5 stands where it was with 4 seats, still split off", async () => {
     const { table, zoneId } = await barOnLong();
 
