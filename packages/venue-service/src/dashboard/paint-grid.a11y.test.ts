@@ -11,6 +11,30 @@ afterEach(() => {
   setLocale("en");
 });
 
+function channels(colour: string): number[] {
+  return colour.match(/[\d.]+/g)!.map(Number);
+}
+function luminance(colour: string): number {
+  const [r, g, b] = channels(colour).map((value) => {
+    const c = value / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+}
+/** axe does not judge the faded blocks' names, so the zone state measures them itself. */
+function expectReadableUnderlay(el: PaintGrid) {
+  const names = [...el.shadowRoot!.querySelectorAll<HTMLElement>(".underlay span")];
+  expect(names).toHaveLength(CALENDAR_COLOURS.length);
+  for (const name of names) {
+    const style = getComputedStyle(name);
+    expect(channels(style.backgroundColor)[3] ?? 1, "an opaque background").toBe(1);
+    const [light, dark] = [luminance(style.color), luminance(style.backgroundColor)].sort(
+      (a, b) => b - a,
+    );
+    expect((light! + 0.05) / (dark! + 0.05), name.textContent!).toBeGreaterThanOrEqual(4.5);
+  }
+}
+
 describe.each(["light", "dark"] as const)("paint grid (%s)", (theme) => {
   test.each([
     "empty",
@@ -51,7 +75,16 @@ describe.each(["light", "dark"] as const)("paint grid (%s)", (theme) => {
       ],
     ]);
     if (state === "zone")
-      el.underlay = new Map([["mon", [{ periodId: "green", startsAt: "12:00", endsAt: "16:00" }]]]);
+      el.underlay = new Map([
+        [
+          "mon",
+          CALENDAR_COLOURS.map((colour, i) => ({
+            periodId: colour,
+            startsAt: `${String(7 + i * 2).padStart(2, "0")}:00`,
+            endsAt: `${String(9 + i * 2).padStart(2, "0")}:00`,
+          })),
+        ],
+      ]);
     if (state === "refused")
       el.columnErrors = new Map([["tue", "Check this day's time ranges and periods."]]);
     await el.updateComplete;
@@ -104,6 +137,7 @@ describe.each(["light", "dark"] as const)("paint grid (%s)", (theme) => {
         expect(tick.checked).toBe(true);
       }
     }
+    if (state === "zone") expectReadableUnderlay(el);
     await expectNoA11yViolations(host);
   });
 });

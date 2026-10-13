@@ -47,8 +47,8 @@ const DAY = 1440;
 const ROWS = 96;
 /** The most an autoscroll moves in one frame, in pixels. */
 const MAX_SCROLL_STEP = 12;
-/** How long a drag rests inside an edge band before it scrolls, so a short stroke near an edge
- *  paints only what was dragged. */
+/** How long a drag rests still inside an edge band before it scrolls, so a short or slow stroke
+ *  near an edge paints only what was dragged. */
 const BAND_DWELL_MS = 350;
 
 /** Delete or Backspace with no Cmd, Ctrl or Alt held. */
@@ -96,6 +96,9 @@ export class PaintGrid extends LitElement {
       }
       .layout {
         display: grid;
+        /* As wide as its columns, not the scroll box, so the pinned time column has room to stay. */
+        width: max-content;
+        min-width: 100%;
         grid-template-columns: calc(var(--wt-space-6) * 2) var(--column-tracks);
       }
       .heading {
@@ -107,6 +110,7 @@ export class PaintGrid extends LitElement {
         justify-content: space-between;
         gap: var(--wt-space-1);
         white-space: nowrap;
+        min-block-size: var(--wt-tap-min);
         background: var(--wt-color-surface);
         padding: 0 var(--wt-space-2);
         font-size: var(--wt-font-size-sm);
@@ -146,6 +150,7 @@ export class PaintGrid extends LitElement {
         inset-inline-start: var(--wt-space-1);
         transform: translateY(-50%);
         font-size: var(--wt-font-size-sm);
+        line-height: 1;
         color: var(--wt-color-text-muted);
       }
       .hour:first-child {
@@ -221,8 +226,14 @@ export class PaintGrid extends LitElement {
       .underlay {
         isolation: isolate;
         background: transparent;
-        color: var(--wt-color-text);
         pointer-events: none;
+      }
+      /* Its own background: the faded fill under it would leave any text colour unreadable on some palette colour. */
+      .underlay span {
+        border-radius: var(--wt-radius-sm);
+        padding-inline: var(--wt-space-1);
+        background: var(--wt-color-bg);
+        color: var(--wt-color-text);
       }
       .underlay::before {
         content: "";
@@ -317,9 +328,10 @@ export class PaintGrid extends LitElement {
   #dragged = false;
   #pointerY = 0;
   #frame: number | null = null;
-  /** The edge band the pointer is in (-1 top, 1 bottom, 0 neither) and the frame time it entered;
-   *  `-Infinity` once it has been past that edge, so coming back into the band keeps scrolling. */
-  #edge: { side: number; since: number | null } = { side: 0, since: null };
+  /** The edge band the pointer is in (-1 top, 1 bottom, 0 neither), where it last moved to and the
+   *  frame time it has rested there since; `-Infinity` once it has scrolled or been past that edge,
+   *  so moving on inside the band keeps scrolling. */
+  #edge: { side: number; since: number | null; y: number } = { side: 0, since: null, y: 0 };
 
   override disconnectedCallback(): void {
     this.#stop();
@@ -395,7 +407,9 @@ export class PaintGrid extends LitElement {
     this.#pointerY = event.clientY;
     this.#stretchTo(event.clientY);
     const side = Math.sign(this.#edgeDepth().depth);
-    if (side !== this.#edge.side) this.#edge = { side, since: null };
+    const edge = this.#edge;
+    if (side !== edge.side || (edge.since !== -Infinity && event.clientY !== edge.y))
+      this.#edge = { side, since: null, y: event.clientY };
     if (side !== 0 && this.#frame === null) this.#frame = requestAnimationFrame(this.#autoscroll);
   };
   #stretchTo(clientY: number): void {
@@ -436,6 +450,7 @@ export class PaintGrid extends LitElement {
     if (into > band) this.#edge.since = -Infinity;
     this.#edge.since ??= now;
     if (now - this.#edge.since >= BAND_DWELL_MS) {
+      this.#edge.since = -Infinity;
       const step = Math.max(1, Math.round((MAX_SCROLL_STEP * Math.min(into, band)) / band));
       this.renderRoot.querySelector<HTMLElement>(".scroll")!.scrollTop += side * step;
       this.#stretchTo(this.#pointerY);
@@ -477,7 +492,7 @@ export class PaintGrid extends LitElement {
     window.removeEventListener("pointercancel", this.#abort);
     if (this.#frame !== null) cancelAnimationFrame(this.#frame);
     this.#frame = null;
-    this.#edge = { side: 0, since: null };
+    this.#edge = { side: 0, since: null, y: 0 };
     const gesture = this.#gesture;
     this.#gesture = null;
     this.preview = null;
@@ -662,7 +677,7 @@ export class PaintGrid extends LitElement {
       data-colour=${this.#colour(paint.periodId) ?? nothing}
       style=${this.#position(start, end)}
     >
-      ${this.#name(paint.periodId)}
+      <span>${this.#name(paint.periodId)}</span>
     </div>`;
   }
   #preview(column: PaintColumn) {

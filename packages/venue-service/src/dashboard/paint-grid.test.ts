@@ -1116,3 +1116,77 @@ test("read-only: the grid's scrolling region takes the keyboard focus, and only 
   await el.updateComplete;
   expect(region.tabIndex).toBe(0);
 });
+
+const sevenDays = () =>
+  Object.fromEntries(
+    ["mon", "tue", "wed", "thu", "fri", "sat", "sun"].map((key) => [key, [] as Paint[]]),
+  );
+
+test("at 390px the time column stays pinned all the way to the end of the sideways scroll", async () => {
+  const el = await grid(sevenDays());
+  host.style.width = "390px";
+  await el.updateComplete;
+  const scroll = el.shadowRoot!.querySelector<HTMLElement>(".scroll")!;
+  const times = el.shadowRoot!.querySelector<HTMLElement>(".times")!;
+  const pinned = times.getBoundingClientRect().left;
+  for (const left of [300, 600, scroll.scrollWidth]) {
+    scroll.scrollLeft = left;
+    expect(times.getBoundingClientRect().left, `scrolled ${scroll.scrollLeft}px`).toBeCloseTo(
+      pinned,
+      0,
+    );
+  }
+  expect(scroll.scrollLeft).toBeGreaterThan(300);
+  const sunday = el.shadowRoot!.querySelector<HTMLElement>('.day[data-column="sun"]')!;
+  expect(sunday.getBoundingClientRect().right).toBeLessThanOrEqual(
+    scroll.getBoundingClientRect().right,
+  );
+});
+
+test.each([
+  ["bottom", (scroll: HTMLElement) => scroll.getBoundingClientRect().bottom - 15, 1],
+  ["top", (_scroll: HTMLElement, el: PaintGrid) => headingBottom(el) + 15, -1],
+] as const)(
+  "a slow stroke inside the %s band does not scroll; it scrolls once the pointer rests there",
+  async (_edge, start, direction) => {
+    const { el, scroll } = await tallGrid();
+    if (direction < 0) {
+      scroll.scrollTop = 150;
+      await frame();
+    }
+    const frames = controlFrames();
+    const before = scroll.scrollTop;
+    const from = start(scroll, el);
+    pressAt(el, from);
+    // 600 ms in the band, moving a pixel every 96 ms.
+    for (let step = 1; step <= 6; step++) {
+      pointAt(from + direction * step);
+      frames.run(6);
+    }
+    expect(scroll.scrollTop).toBe(before);
+    frames.run(23);
+    expect(Math.sign(scroll.scrollTop - before)).toBe(direction);
+    pointAt(from + direction * 6, "pointerup");
+  },
+);
+
+test("hour labels do not overlap one another", async () => {
+  const el = await grid();
+  const labels = [...el.shadowRoot!.querySelectorAll<HTMLElement>(".hour")].map((hour) =>
+    hour.getBoundingClientRect(),
+  );
+  for (let i = 1; i < labels.length; i++)
+    expect(labels[i]!.top, `label ${i}`).toBeGreaterThanOrEqual(labels[i - 1]!.bottom);
+});
+
+test("read-only, the heading row keeps the height it has with the ⋮", async () => {
+  const el = await grid();
+  const heading = () =>
+    el
+      .shadowRoot!.querySelector<HTMLElement>('.heading[data-column="thu"]')!
+      .getBoundingClientRect().height;
+  const editable = heading();
+  el.readOnly = true;
+  await el.updateComplete;
+  expect(heading()).toBeCloseTo(editable, 0);
+});
