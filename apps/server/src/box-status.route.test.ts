@@ -10,7 +10,7 @@ import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { StreamView } from "@waitron/stream";
 import { createHealthState } from "./health.js";
-import { readBackupStatus, type BackupStatus } from "./backup-status.js";
+import { readDestinationStatus, type BackupStatus } from "./backup-status.js";
 import { mountBoxStatusApi } from "./box-status.js";
 import { buildBackupBackend } from "./backup-backends.js";
 import { backupArchiveKey } from "./backup-keys.js";
@@ -211,7 +211,10 @@ describe("GET /api/box/status", () => {
     const backupApp = buildApp(nodeId, {
       now,
       tlsCertPath: undefined,
-      readBackup: () => readBackupStatus([backend], 60_000, now),
+      readBackup: async () => ({
+        configured: true,
+        destinations: [await readDestinationStatus(backend, 60_000, now).status],
+      }),
     });
     const cookie = await login(backupApp, MANAGER_EMAIL);
     const res = await backupApp.request("/api/box/status", { headers: { cookie } });

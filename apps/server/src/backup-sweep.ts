@@ -61,13 +61,11 @@ export interface BackupSweepDeps {
   readClock: () => Promise<ScheduleClock>;
   signal: AbortSignal;
   sleep: (ms: number, signal: AbortSignal) => Promise<void>;
-  /** Fires only on a tick where at least one destination stored the archive. */
-  onStored?: () => void;
   /**
-   * Each destination's result; codes only. A destination whose call finished is reported even when
-   * the run is stopped afterwards, so a caller tracking the current key ignores results from a
-   * replaced sweep (as the supervisor's `onStored` guard does). A call that fails once the run is
-   * stopped is not reported, even when its upload had already stored.
+   * Each destination's result, as soon as its own call settles; codes only. A destination whose call
+   * finished is reported even when the run is stopped afterwards, so a caller tracking the current
+   * key ignores results from a replaced sweep (as the supervisor does). A call that fails once the
+   * run is stopped is not reported, even when its upload had already stored.
    */
   onDestinationResult?: (result: DestinationResult) => void;
   /** How long one destination's upload and its pruning may run, together. */
@@ -171,31 +169,25 @@ export async function runOnce(
       deps.signal,
     );
     const key = backupArchiveKey(stamp);
-    let anyStored = false;
     // Every destination call has settled before `finally` removes the ciphertext they read.
     await Promise.allSettled(
       deps.backends.map(async (backend) => {
         let stored = false;
+        let errorCode: string | null = null;
         try {
           await withDestinationCall(deps.signal, deps.destinationTimeoutMs, async (call) => {
             await backend.putFile(key, ciphertext, call);
             stored = true;
-            anyStored = true;
             if (deps.outcomes)
               recordBackupOutcome(deps.outcomes, backend.id, true, stamp.toISOString());
             await pruneBackend(backend, deps.retain, deps.retainDays, nowMs, call, key);
           });
           deps.log("info", "backup.destination_completed", { destination: backend.id, key });
-          deps.onDestinationResult?.({
-            id: backend.id,
-            stored: true,
-            uploadErrorCode: null,
-            pruneErrorCode: null,
-          });
         } catch (err) {
           if (deps.signal.aborted) return;
           // `codeOf` maps only AppErrors.
-          const fields = { destination: backend.id, errorCode: codeOf(err), errno: errnoOf(err) };
+          errorCode = codeOf(err);
+          const fields = { destination: backend.id, errorCode, errno: errnoOf(err) };
           if (stored) {
             deps.log("warn", "backup.destination_prune_failed", fields);
           } else {
@@ -203,16 +195,15 @@ export async function runOnce(
             if (deps.outcomes)
               recordBackupOutcome(deps.outcomes, backend.id, false, stamp.toISOString());
           }
-          deps.onDestinationResult?.({
-            id: backend.id,
-            stored,
-            uploadErrorCode: stored ? null : fields.errorCode,
-            pruneErrorCode: stored ? fields.errorCode : null,
-          });
         }
+        deps.onDestinationResult?.({
+          id: backend.id,
+          stored,
+          uploadErrorCode: stored ? null : errorCode,
+          pruneErrorCode: stored ? errorCode : null,
+        });
       }),
     );
-    if (anyStored) deps.onStored?.();
   } finally {
     if (encryptedDir) await rm(encryptedDir, { recursive: true, force: true });
     if (dumped) await rm(staged, { force: true });

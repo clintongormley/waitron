@@ -3,7 +3,7 @@ import { rm, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { readBackupStatus } from "./backup-status.js";
+import { readDestinationStatus } from "./backup-status.js";
 import { buildBackupBackend } from "./backup-backends.js";
 import { backupArchiveKey } from "./backup-keys.js";
 import { AppError } from "@waitron/shared";
@@ -31,9 +31,22 @@ const listing = (id: string, list: StorageBackend["list"]): StorageBackend => ({
 
 const NOW = new Date("2026-09-05T12:00:00Z");
 
-describe("readBackupStatus", () => {
+/** Reads every backend side by side, the way the supervisor does. */
+const readAll = async (
+  backends: StorageBackend[],
+  staleAfterMs: number,
+  now: Date,
+  readTimeoutMs?: number,
+) => ({
+  configured: true,
+  destinations: await Promise.all(
+    backends.map((b) => readDestinationStatus(b, staleAfterMs, now, readTimeoutMs).status),
+  ),
+});
+
+describe("readDestinationStatus", () => {
   it("reports fresh per destination", async () => {
-    const s = await readBackupStatus([backend("a", NOW.getTime() - 1000)], 60_000, NOW);
+    const s = await readAll([backend("a", NOW.getTime() - 1000)], 60_000, NOW);
     expect(s).toMatchObject({
       configured: true,
       destinations: [{ id: "a", ageSeconds: 1, stale: false }],
@@ -41,12 +54,12 @@ describe("readBackupStatus", () => {
   });
 
   it("marks a destination stale past staleAfterMs", async () => {
-    const s = await readBackupStatus([backend("a", NOW.getTime() - 120_000)], 60_000, NOW);
+    const s = await readAll([backend("a", NOW.getTime() - 120_000)], 60_000, NOW);
     expect(s).toMatchObject({ configured: true, destinations: [{ id: "a", stale: true }] });
   });
 
   it("a destination with no backups yet is stale with null age", async () => {
-    const s = await readBackupStatus([backend("a", null)], 60_000, NOW);
+    const s = await readAll([backend("a", null)], 60_000, NOW);
     expect(s).toMatchObject({
       configured: true,
       destinations: [{ id: "a", lastBackupAt: null, ageSeconds: null, stale: true }],
@@ -54,11 +67,7 @@ describe("readBackupStatus", () => {
   });
 
   it("reports one entry per destination, each read independently", async () => {
-    const s = await readBackupStatus(
-      [backend("a", NOW.getTime() - 1000), backend("b", null)],
-      60_000,
-      NOW,
-    );
+    const s = await readAll([backend("a", NOW.getTime() - 1000), backend("b", null)], 60_000, NOW);
     expect(s).toEqual({
       configured: true,
       destinations: [
@@ -75,7 +84,7 @@ describe("readBackupStatus", () => {
   });
 
   it("a destination whose listing fails reads stale with its code, beside a healthy sibling", async () => {
-    const s = await readBackupStatus(
+    const s = await readAll(
       [
         listing("bucket", async () => {
           throw new AppError("backup.destination_object_too_large", { maxBytes: 1 });
@@ -107,7 +116,7 @@ describe("readBackupStatus", () => {
   });
 
   it("an uncoded listing failure reads as unknown, never its message", async () => {
-    const s = await readBackupStatus(
+    const s = await readAll(
       [
         listing("local", async () => {
           throw new Error("EACCES: /secret/path");
@@ -141,12 +150,7 @@ describe("readBackupStatus", () => {
         }),
     );
     const started = Date.now();
-    const s = await readBackupStatus(
-      [stalled, backend("local", NOW.getTime() - 1000)],
-      60_000,
-      NOW,
-      50,
-    );
+    const s = await readAll([stalled, backend("local", NOW.getTime() - 1000)], 60_000, NOW, 50);
     expect(Date.now() - started).toBeLessThan(5_000);
     expect(seen?.aborted).toBe(true);
     expect(s).toMatchObject({
@@ -175,7 +179,7 @@ describe("readBackupStatus", () => {
     try {
       const started = Date.now();
       const answer = await Promise.race([
-        readBackupStatus([stuck, backend("local", NOW.getTime() - 1000)], 60_000, NOW, 100),
+        readAll([stuck, backend("local", NOW.getTime() - 1000)], 60_000, NOW, 100),
         new Promise<"still waiting">((r) => setTimeout(() => r("still waiting"), 2_000)),
       ]);
       expect(answer).not.toBe("still waiting");
@@ -209,6 +213,39 @@ describe("readBackupStatus", () => {
     }
   });
 
+  it("answers at the limit, and reports the listing settled only once it has, however late", async () => {
+    const order: string[] = [];
+    let settleLate!: () => void;
+    const late = listing(
+      "bucket",
+      (_prefix, call) =>
+        new Promise((_resolve, reject) => {
+          call.signal.addEventListener("abort", () => {
+            order.push("aborted");
+            settleLate = () => {
+              order.push("listing failed");
+              reject(new Error("stopped late"));
+            };
+          });
+        }),
+    );
+    const read = readDestinationStatus(late, 60_000, NOW, 50);
+    void read.settled.then(() => order.push("settled"));
+    expect(await read.status).toMatchObject({ readErrorCode: "backup.destination_timed_out" });
+    order.push("answered");
+    await new Promise((r) => setTimeout(r, 20));
+    expect(order).toEqual(["aborted", "answered"]);
+    settleLate();
+    await read.settled;
+    expect(order).toEqual(["aborted", "answered", "listing failed", "settled"]);
+  });
+
+  it("reports a listing that answers within the limit settled", async () => {
+    const read = readDestinationStatus(backend("local", NOW.getTime() - 1000), 60_000, NOW, 50);
+    await expect(read.settled).resolves.toBeUndefined();
+    expect((await read.status).readErrorCode).toBeNull();
+  });
+
   it("gives each status read a thirty-second limit by default", async () => {
     vi.useFakeTimers();
     try {
@@ -227,7 +264,7 @@ describe("readBackupStatus", () => {
             );
           }),
       );
-      const reading = readBackupStatus([stalled], 60_000, NOW);
+      const reading = readAll([stalled], 60_000, NOW);
       await vi.advanceTimersByTimeAsync(29_999);
       expect(aborted).toBe(false);
       await vi.advanceTimersByTimeAsync(1);
@@ -242,7 +279,7 @@ describe("readBackupStatus", () => {
 
   it("counts only names the archive parser reads, so a newer foreign or old-format name is ignored", async () => {
     const archiveMs = NOW.getTime() - 120_000;
-    const s = await readBackupStatus(
+    const s = await readAll(
       [
         listing("local", async () => [
           { key: "waitron-20260905T115959Z.backup.enc", size: 1, mtimeMs: NOW.getTime() - 1000 },
@@ -271,10 +308,6 @@ describe("readBackupStatus", () => {
     });
   });
 
-  it("no backends → configured:false", async () => {
-    expect(await readBackupStatus([], 60_000, NOW)).toEqual({ configured: false });
-  });
-
   // Pins that the reader finds the sweep's real `.backup.enc` key, through the real backend.
   describe("against a real local-fs backend holding an encrypted archive", () => {
     let dir: string;
@@ -289,13 +322,12 @@ describe("readBackupStatus", () => {
       const mtime = new Date(NOW.getTime() - 30_000); // 30s old, well inside the 60s stale window
       await utimes(artifact, mtime, mtime);
       const be = buildBackupBackend({ kind: "local-fs", id: "primary", dir });
-      const s = await readBackupStatus([be], 60_000, NOW);
+      const s = await readAll([be], 60_000, NOW);
       expect(s).toMatchObject({
         configured: true,
         destinations: [{ id: "primary", stale: false }],
       });
-      const configured = s as Extract<typeof s, { configured: true }>;
-      expect(configured.destinations[0]?.lastBackupAt).not.toBeNull();
+      expect(s.destinations[0]?.lastBackupAt).not.toBeNull();
     });
   });
 });

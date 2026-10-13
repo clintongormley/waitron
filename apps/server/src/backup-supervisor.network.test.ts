@@ -573,6 +573,98 @@ describe("BackupSupervisor status, one destination at a time", () => {
     });
   }, 60_000);
 
+  it("answers at the read limit but closes a destination only once its late listing has settled", async () => {
+    const events: string[] = [];
+    const realList = LocalFsBackend.prototype.list;
+    vi.spyOn(LocalFsBackend.prototype, "list").mockImplementation(function (
+      this: LocalFsBackend,
+      prefix,
+      call,
+    ) {
+      if (this.id !== "remote") return realList.call(this, prefix, call);
+      return new Promise((_resolve, reject) => {
+        call.signal.addEventListener(
+          "abort",
+          () => {
+            events.push("listing aborted");
+            setTimeout(() => {
+              events.push("listing settled");
+              reject(new Error("stopped late"));
+            }, 300);
+          },
+          { once: true },
+        );
+      });
+    });
+    vi.spyOn(LocalFsBackend.prototype, "close").mockImplementation(function (this: LocalFsBackend) {
+      events.push(`${this.id} closed`);
+    });
+    const logs: LogLine[] = [];
+    const cfg = config([
+      { id: "local", dir: await tempDir("waitron-bsupnet-local-") },
+      { id: "remote", dir: await tempDir("waitron-bsupnet-remote-") },
+    ]);
+    // Stopped before the read, so every close seen after it is the status read's.
+    const sup = await supervisor(() => cfg, logs, 100);
+    await sup.reload();
+    await sup.stop();
+    events.length = 0;
+
+    const started = Date.now();
+    const s = await sup.status();
+    events.push("status returned");
+    expect(Date.now() - started).toBeLessThan(300);
+    if (!s.backupStatus.configured) throw new Error("not configured");
+    expect(byId(s.backupStatus.destinations, "remote").readErrorCode).toBe(
+      "backup.destination_timed_out",
+    );
+    await poll(() => (events.includes("remote closed") ? true : undefined));
+    expect(events.filter((e) => e !== "local closed")).toEqual([
+      "listing aborted",
+      "status returned",
+      "listing settled",
+      "remote closed",
+    ]);
+    expect(events).toContain("local closed");
+  }, 60_000);
+
+  it("reports an archive under the current key once one destination stored, while a sibling's upload is still stalled", async () => {
+    const realPut = LocalFsBackend.prototype.putFile;
+    const remoteUpload = gate();
+    vi.spyOn(LocalFsBackend.prototype, "putFile").mockImplementation(function (
+      this: LocalFsBackend,
+      key,
+      path,
+      call,
+    ) {
+      if (this.id !== "remote") return realPut.call(this, key, path, call);
+      remoteUpload.entered();
+      return stall(call);
+    });
+    const logs: LogLine[] = [];
+    const cfg = config([
+      { id: "local", dir: await tempDir("waitron-bsupnet-local-") },
+      { id: "remote", dir: await tempDir("waitron-bsupnet-remote-") },
+    ]);
+    const sup = await supervisor(() => cfg, logs);
+    try {
+      await sup.reload();
+      await remoteUpload.reached;
+      await poll(() =>
+        count(logs, "backup.destination_completed", "local") > 0 ? true : undefined,
+      );
+      const { status, destinations: ds } = await destinations(sup);
+      expect(count(logs, "backup.destination_failed", "remote")).toBe(0);
+      expect({
+        archive: status.archiveUnderCurrentKey,
+        local: byId(ds, "local").storedUnderCurrentKey,
+        remote: byId(ds, "remote").storedUnderCurrentKey,
+      }).toEqual({ archive: true, local: true, remote: false });
+    } finally {
+      await sup.stop();
+    }
+  }, 60_000);
+
   it("a destination that cannot be built reads stale with its code beside the others, and every one that was built is closed", async () => {
     const closed: string[] = [];
     vi.spyOn(LocalFsBackend.prototype, "close").mockImplementation(function (this: LocalFsBackend) {

@@ -91,13 +91,11 @@ it("a stalled bucket times out on its own while the folder beside it stores, and
   const folder = new LocalFsBackend("folder", join(f.root, "folder"));
   const results: Result[] = [];
   const outcomes = { failed: new Map<string, { at: string }>() };
-  const onStored = vi.fn();
   const log = vi.fn();
   await runOnce({
     ...deps(f, [bucket, folder]),
     destinationTimeoutMs: 100,
     outcomes,
-    onStored,
     log,
     onDestinationResult: (r: Result) => results.push(r),
   });
@@ -113,7 +111,6 @@ it("a stalled bucket times out on its own while the folder beside it stores, and
   ]);
   expect(outcomes.failed.has("bucket")).toBe(true);
   expect(outcomes.failed.has("folder")).toBe(false);
-  expect(onStored).toHaveBeenCalledOnce();
   expect(log).toHaveBeenCalledWith(
     "warn",
     "backup.destination_failed",

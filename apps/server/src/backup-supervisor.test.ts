@@ -464,6 +464,29 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
     }
   }, 60_000);
 
+  it("reads as not configured, with no archive under the current key, with no config or no destination", async () => {
+    for (const config of [undefined, localFsConfig([], STRONG_KEY_1)]) {
+      const refs: Refs = {
+        config,
+        role: "primary",
+        venueDir: await makeVenueDir(),
+        logs: [],
+        managed: false,
+      };
+      const sup = makeSupervisor(refs, await makeStateDir());
+      try {
+        await sup.reload();
+        const s = await sup.status();
+        expect({ backup: s.backupStatus, archive: s.archiveUnderCurrentKey }).toEqual({
+          backup: { configured: false },
+          archive: false,
+        });
+      } finally {
+        await sup.stop();
+      }
+    }
+  }, 60_000);
+
   it("a non-primary node runs no duty", async () => {
     const dest = await makeDestDir();
     const refs: Refs = {

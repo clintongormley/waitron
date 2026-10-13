@@ -123,8 +123,14 @@ it("isolates a failed copy, retains stored success after a prune refusal and cle
   }
   const good = new PruneFailed("good", join(f.root, "good"));
   const outcomes = { failed: new Map<string, { at: string }>() };
-  const onStored = vi.fn();
-  await runOnce({ ...deps(f, [new Failed("bad", join(f.root, "bad")), good]), outcomes, onStored });
+  const stored: string[] = [];
+  await runOnce({
+    ...deps(f, [new Failed("bad", join(f.root, "bad")), good]),
+    outcomes,
+    onDestinationResult: (r) => {
+      if (r.stored) stored.push(r.id);
+    },
+  });
   expect(
     unpackArchive(
       decryptArtifact(await good.get(await storedKey(join(f.root, "good")), call), "key"),
@@ -132,7 +138,7 @@ it("isolates a failed copy, retains stored success after a prune refusal and cle
   ).toBe("db.dump");
   expect(outcomes.failed.has("bad")).toBe(true);
   expect(outcomes.failed.has("good")).toBe(false);
-  expect(onStored).toHaveBeenCalledOnce();
+  expect(stored).toEqual(["good"]);
   expect(await readdir(f.stagingDir)).toEqual([]);
 });
 it("refuses excessive metadata before archiving and publishes no destination", async () => {
