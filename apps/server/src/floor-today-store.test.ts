@@ -213,6 +213,44 @@ const catchUp = (zoneId: string, removals: readonly TableRemoval[] = NONE) =>
 
 const place = (x: number, y: number) => ({ x, y, width: 8, height: 8 });
 
+const REMOVALS = enabledTableRemovals(ALL_MODULES);
+const placed = (x: number) => ({
+  x,
+  y: 0,
+  width: 8,
+  height: 8,
+  shape: "rect" as const,
+  rotation: 0,
+});
+
+/** Saves the zone's plan again, as read, after `change`. */
+async function resave(
+  zoneId: string,
+  change: (tables: ZonePlanSave["tables"]) => ZonePlanSave["tables"],
+): Promise<Record<string, string>> {
+  const plan = await inTx(v, (tx) => readZonePlan(tx, v.cfg, zoneId));
+  const tables = plan.tables.map((table) => ({
+    id: table.id,
+    key: table.id,
+    label: table.label,
+    seats: table.seats,
+    fixed: table.fixed,
+    placement: table.placement,
+    partKeys: table.partIds,
+  }));
+  const { ids } = await inTx(v, (tx) =>
+    saveZonePlan(
+      tx,
+      v.cfg,
+      REMOVALS,
+      zoneId,
+      { revision: plan.revision, tables: change(tables) },
+      NOW,
+    ),
+  );
+  return ids;
+}
+
 describe("building today's plan from a zone's master plan", () => {
   it("builds today's plan from the master on the first reset", async () => {
     const z = await zone();
@@ -1007,15 +1045,6 @@ it.each(["03:00", "07:00"])(
 );
 
 describe("the parts of joined tables in the till's copy", () => {
-  const REMOVALS = enabledTableRemovals(ALL_MODULES);
-  const placed = (x: number) => ({
-    x,
-    y: 0,
-    width: 8,
-    height: 8,
-    shape: "rect" as const,
-    rotation: 0,
-  });
   const LONG_AND_COUNTERS = [
     { key: "c3", label: "Counter 3", seats: 2, place: null },
     { key: "c4", label: "Counter 4", seats: 6, place: null },
@@ -1049,34 +1078,6 @@ describe("the parts of joined tables in the till's copy", () => {
         .where(inArray(diningTables.id, ids)),
     );
     return Object.fromEntries(rows.map((row) => [row.id, Number(row.joined)]));
-  }
-
-  /** Saves the zone's plan again, as read, after `change`. */
-  async function resave(
-    zoneId: string,
-    change: (tables: ZonePlanSave["tables"]) => ZonePlanSave["tables"],
-  ): Promise<Record<string, string>> {
-    const plan = await inTx(v, (tx) => readZonePlan(tx, v.cfg, zoneId));
-    const tables = plan.tables.map((table) => ({
-      id: table.id,
-      key: table.id,
-      label: table.label,
-      seats: table.seats,
-      fixed: table.fixed,
-      placement: table.placement,
-      partKeys: table.partIds,
-    }));
-    const { ids } = await inTx(v, (tx) =>
-      saveZonePlan(
-        tx,
-        v.cfg,
-        REMOVALS,
-        zoneId,
-        { revision: plan.revision, tables: change(tables) },
-        NOW,
-      ),
-    );
-    return ids;
   }
 
   it("copies Long table's three parts into the till's copy at the reset", async () => {
@@ -1533,16 +1534,6 @@ describe("a reset over a joined table split today", () => {
         .where(eq(diningTables.id, tableId)),
     );
 
-  async function needsClearingSince(tableId: string): Promise<string | null> {
-    const [row] = await inTx(v, (tx) =>
-      tx
-        .select({ since: diningTables.needsClearingSince })
-        .from(diningTables)
-        .where(eq(diningTables.id, tableId)),
-    );
-    return row!.since;
-  }
-
   it("a reset takes back Counter 5 split off and needing clearing, and clears its mark", async () => {
     const { zoneId, table } = await longTable();
     await split(table.long!, [table.c5!], 6);
@@ -1550,7 +1541,7 @@ describe("a reset over a joined table split today", () => {
 
     await reset(zoneId);
 
-    expect(await needsClearingSince(table.c5!)).toBeNull();
+    expect((await tableRow(v, table.c5!)).needsClearingSince).toBeNull();
     expect(await splitRowsOf(table.long!)).toEqual([]);
     expect(await flags(table.c5!)).toMatchObject({ joined: true });
     expect(await todayRow(table.long!)).toMatchObject(WHOLE);
@@ -1564,13 +1555,13 @@ describe("a reset over a joined table split today", () => {
 
     await reset(zoneId);
 
-    expect(await needsClearingSince(table.c4!)).toBeNull();
-    expect(await needsClearingSince(table.c5!)).toBeNull();
+    expect((await tableRow(v, table.c4!)).needsClearingSince).toBeNull();
+    expect((await tableRow(v, table.c5!)).needsClearingSince).toBeNull();
     expect(await splitRowsOf(table.long!)).toEqual([]);
     expect(await todayRow(table.long!)).toMatchObject(WHOLE);
   });
 
-  it("a reset leaves the mark on a table it does not take back", async () => {
+  it("a reset leaves the mark on Bar, a table it puts back that was never split off", async () => {
     const { zoneId, table } = await longTable();
     await split(table.long!, [table.c5!], 6);
     await markNeedsClearing(table.c5!);
@@ -1578,19 +1569,74 @@ describe("a reset over a joined table split today", () => {
 
     await reset(zoneId);
 
-    expect(await needsClearingSince(table.bar!)).toBe(MARKED);
+    expect((await tableRow(v, table.bar!)).needsClearingSince).toBe(MARKED);
   });
 
-  it("a split group that waits keeps its marks", async () => {
+  it("a reset while guests sit at a part split off leaves the mark on the other part, until they leave", async () => {
     const { zoneId, table } = await longTable();
     await split(table.long!, [table.c4!, table.c5!], 2);
     await markNeedsClearing(table.c5!);
-    await seat(v, table.c4!);
+    const { partyId } = await seat(v, table.c4!);
     const splitBefore = await splitRowsOf(table.long!);
 
     await reset(zoneId);
 
-    expect(await needsClearingSince(table.c5!)).toBe(MARKED);
+    expect((await tableRow(v, table.c5!)).needsClearingSince).toBe(MARKED);
     expect(await splitRowsOf(table.long!)).toEqual(splitBefore);
+
+    await finish(partyId);
+    await catchUp(zoneId);
+
+    expect((await tableRow(v, table.c5!)).needsClearingSince).toBeNull();
+    expect(await splitRowsOf(table.long!)).toEqual([]);
+  });
+
+  it("a reset leaves the mark on Counter 5 split off when the saved plan stands it apart from Long table", async () => {
+    const { zoneId, master, table } = await longTable();
+    await split(table.long!, [table.c5!], 6);
+    await markNeedsClearing(table.c5!);
+    await resave(zoneId, (tables) =>
+      tables.map((entry) =>
+        entry.id === master.long
+          ? { ...entry, partKeys: [master.c3!, master.c4!] }
+          : entry.id === master.c5
+            ? { ...entry, placement: placed(60) }
+            : entry,
+      ),
+    );
+
+    await reset(zoneId);
+
+    expect(await splitRowsOf(table.long!)).toEqual([]);
+    expect(await todayRow(table.c5!)).toMatchObject({ x: 60, takenOff: false });
+    expect(await flags(table.c5!)).toMatchObject({ joined: false });
+    expect((await tableRow(v, table.c5!)).needsClearingSince).toBe(MARKED);
+  });
+
+  it("a reset leaves the mark on Counter 5 split off when the saved plan drops it and an unpaid order to it keeps it", async () => {
+    const { zoneId, master, table } = await longTable();
+    await split(table.long!, [table.c5!], 6);
+    await markNeedsClearing(table.c5!);
+    const order = await counterOrder(v, "Paella");
+    await inTx(v, (tx) =>
+      tx
+        .update(workingOrders)
+        .set({ deliveryTableId: table.c5! })
+        .where(eq(workingOrders.id, order)),
+    );
+    await resave(zoneId, (tables) =>
+      tables
+        .filter((entry) => entry.id !== master.c5)
+        .map((entry) =>
+          entry.id === master.long ? { ...entry, partKeys: [master.c3!, master.c4!] } : entry,
+        ),
+    );
+
+    await reset(zoneId);
+
+    expect(await splitRowsOf(table.long!)).toEqual([]);
+    expect((await liveTablesOf(zoneId)).map((t) => t.id)).toContain(table.c5);
+    expect(await todayRow(table.c5!)).toBeUndefined();
+    expect((await tableRow(v, table.c5!)).needsClearingSince).toBe(MARKED);
   });
 });
