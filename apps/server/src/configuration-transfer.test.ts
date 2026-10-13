@@ -1810,15 +1810,13 @@ it("transfers a printer's pick-up set and refuses a drawer role in the uploaded 
     modules: ALL_MODULES,
   });
   await withTransaction(suite.db, async (tx) => {
-    await tx
-      .insert(printers)
-      .values({
-        locationId: source.locationId,
-        name: "Slip pickup",
-        transport: "network_tcp",
-        host: "10.0.0.90",
-        pickupRoles: ["payment_slip"],
-      });
+    await tx.insert(printers).values({
+      locationId: source.locationId,
+      name: "Slip pickup",
+      transport: "network_tcp",
+      host: "10.0.0.90",
+      pickupRoles: ["payment_slip"],
+    });
   });
   const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
