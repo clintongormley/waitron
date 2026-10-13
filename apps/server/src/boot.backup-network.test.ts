@@ -4,12 +4,15 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { emptyDrainResult } from "@waitron/fiscal";
+import { startManagementSession } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { startServer, type StartedServer } from "./boot.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
-import type { StorageBackend } from "./storage-backend.js";
+import type { StorageBackend, StorageCall } from "./storage-backend.js";
 import { provisionBillVenue, registroCount, type BillVenue } from "./testing/bill-venue.js";
 import {
   fetchHealthOk,
@@ -20,10 +23,28 @@ import {
 import { freePorts } from "./testing/free-ports.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 
-/** When set, every archive destination's upload waits until its call is stopped. */
-const stall = vi.hoisted(() => ({ on: false, started: 0 }));
+/** When set, every call to an archive destination waits until it is stopped, or until `release`. */
+const stall = vi.hoisted(() => ({
+  on: false,
+  started: [] as string[],
+  pending: new Set<(reason: unknown) => void>(),
+  release(): void {
+    for (const fail of [...this.pending]) fail(new Error("released by the test"));
+  },
+}));
 vi.mock("./backup-backends.js", async (original) => {
   const actual = await original<typeof import("./backup-backends.js")>();
+  const hang = (operation: string, call: StorageCall): Promise<never> => {
+    stall.started.push(operation);
+    return new Promise((_resolve, reject) => {
+      const fail = (reason: unknown) => {
+        stall.pending.delete(fail);
+        reject(reason);
+      };
+      stall.pending.add(fail);
+      call.signal.addEventListener("abort", () => fail(call.signal.reason), { once: true });
+    });
+  };
   return {
     ...actual,
     buildBackupBackend: (dest: Parameters<typeof actual.buildBackupBackend>[0]) => {
@@ -31,20 +52,13 @@ vi.mock("./backup-backends.js", async (original) => {
       if (!stall.on) return real;
       const stalled: StorageBackend = {
         id: real.id,
-        putFile: (_key, _path, call) => {
-          stall.started += 1;
-          return new Promise((_resolve, reject) =>
-            call.signal.addEventListener("abort", () => reject(call.signal.reason), {
-              once: true,
-            }),
-          );
-        },
-        put: (...args) => real.put(...args),
-        getFile: (...args) => real.getFile(...args),
-        get: (...args) => real.get(...args),
-        list: (...args) => real.list(...args),
-        delete: (...args) => real.delete(...args),
-        deleteMany: (...args) => real.deleteMany(...args),
+        put: (_key, _bytes, call) => hang("put", call),
+        putFile: (_key, _path, call) => hang("putFile", call),
+        getFile: (_key, _outPath, call) => hang("getFile", call),
+        get: (_key, call) => hang("get", call),
+        list: (_prefix, call) => hang("list", call),
+        delete: (_key, call) => hang("delete", call),
+        deleteMany: (_keys, call) => hang("deleteMany", call),
         close: () => real.close(),
       };
       return stalled;
@@ -81,7 +95,7 @@ const suite = useVenueDb({
 const scratches: string[] = [];
 afterEach(async () => {
   stall.on = false;
-  stall.started = 0;
+  stall.started = [];
   await Promise.all(scratches.splice(0).map((d) => rm(d, { recursive: true, force: true })));
 });
 
@@ -140,10 +154,14 @@ async function cashSale(base: string, via: RequestInit, workingOrderId: string):
   });
 }
 
-/** Starts the real server with `backupBase` as its raw base env, then sells and reads `/health`. */
+/** Starts the real server with `backupBase` as its raw base env, runs `whileStarted`, then sells,
+ * reads `/health`, and runs whatever `whileStarted` handed back. */
 async function bootAndTrade(
   backupBase: (scratch: string) => Promise<Record<string, string>>,
-  awaitTickFailed: (lines: readonly string[]) => Promise<void>,
+  whileStarted: (
+    lines: readonly string[],
+    http: { base: string; via: RequestInit },
+  ) => Promise<(() => Promise<void>) | void>,
 ): Promise<void> {
   const { env, scratch } = await tradingEnv();
   const base = `https://127.0.0.1:${env.WAITRON_HTTP_PORT}`;
@@ -152,17 +170,26 @@ async function bootAndTrade(
     let server: StartedServer | undefined;
     try {
       server = await startServer(env, await backupBase(scratch));
-      await awaitTickFailed(lines);
+      const afterTrading = await whileStarted(lines, { base, via });
       const orderId = randomUUID();
       const sale = await cashSale(base, via, orderId);
       expect(sale.status, await sale.text()).toBe(200);
       expect(registroCount(venue, orderId)).toBe(1);
       expect((await fetchHealthOk(`${base}/health`, via)).status).toBe(200);
+      await afterTrading?.();
     } finally {
+      stall.release();
       if (server !== undefined) await server.close();
       await close();
     }
   });
+}
+
+async function managerCookie(): Promise<string> {
+  const session = await withTransaction(venue.db, (tx) =>
+    startManagementSession(tx, { personId: venue.adminId }),
+  );
+  return `${MANAGEMENT_COOKIE}=${session.token}`;
 }
 
 describe("trading with an archive destination the box cannot use", () => {
@@ -182,16 +209,29 @@ describe("trading with an archive destination the box cannot use", () => {
     );
   }, 60_000);
 
-  // Unavailability: a test seam stands in for a destination whose upload never answers.
-  it("starts, sells and answers /health while a destination's upload hangs", async () => {
+  // Unavailability: a test seam stands in for a destination where no call ever answers.
+  it("starts, sells and answers /health while every call to a destination hangs, a status read included", async () => {
     stall.on = true;
     await bootAndTrade(
       async (scratch) => ({
         WAITRON_BACKUP_DIR: join(scratch, "backups"),
         WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!",
       }),
-      async () => {
-        await vi.waitFor(() => expect(stall.started).toBe(1), { timeout: 30_000 });
+      async (_lines, { base, via }) => {
+        await vi.waitFor(() => expect(stall.started).toEqual(["putFile"]), { timeout: 30_000 });
+        const statusRead = fetch(`${base}/api/backup/status`, {
+          ...via,
+          headers: { cookie: await managerCookie() },
+        });
+        await vi.waitFor(() => expect(stall.started).toEqual(["putFile", "list"]), {
+          timeout: 30_000,
+        });
+        // The status read is still waiting on its listing while the sale and /health run.
+        return async () => {
+          stall.release();
+          const answered = await statusRead;
+          expect(answered.status, await answered.text()).toBe(200);
+        };
       },
     );
   }, 60_000);
