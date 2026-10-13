@@ -548,8 +548,8 @@ export class TillFloorScreen extends LitElement {
   #zoneInputs?: readonly unknown[];
   /** Where a dropped group is drawn until the next floor read, a refusal or a cancel. */
   #pending: Map<string, TodayPlacement> | null = null;
-  /** The room this screen's last answered change was sent for, its answer, and when the answer arrived. */
-  #carried: { zoneId: string; revision: number; answeredAt: number } | null = null;
+  /** Each room's revision as this screen's last answered change there answered it, and when it arrived. */
+  #carried = new Map<string | null, { revision: number; answeredAt: number }>();
   #mapCopy = { locale: "", copy: { label: "" } };
 
   /** The clock the last render judged reminders by. */
@@ -779,9 +779,8 @@ export class TillFloorScreen extends LitElement {
 
   /** The room's revision as this screen last saw it: its read, unless its own answer came after that read started. */
   #revision(zoneId: string | null): number | null {
-    const carried = this.#carried;
-    if (carried !== null && carried.zoneId === zoneId && this.tablesReadAt < carried.answeredAt)
-      return carried.revision;
+    const carried = this.#carried.get(zoneId);
+    if (carried !== undefined && this.tablesReadAt < carried.answeredAt) return carried.revision;
     return (
       this.tables.find((each) => each.zoneId === zoneId && each.today !== null)?.today!
         .zoneRevision ?? null
@@ -1057,7 +1056,11 @@ export class TillFloorScreen extends LitElement {
   }
 
   #carry(answer: FloorAnswer | null): void {
-    if (answer !== null) this.#carried = { ...answer, answeredAt: performance.now() };
+    if (answer !== null)
+      this.#carried.set(answer.zoneId, {
+        revision: answer.revision,
+        answeredAt: performance.now(),
+      });
   }
 
   #seatsPrompt(): TemplateResult | typeof nothing {

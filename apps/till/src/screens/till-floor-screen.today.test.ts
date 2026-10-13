@@ -511,6 +511,37 @@ describe("till-floor-screen: the room's revision on today's plan", () => {
     }
   });
 
+  it("a change in another room keeps the first room's answer as the revision sent", async () => {
+    const api = stubApi();
+    api.moveToday
+      .mockResolvedValueOnce({ zoneId: "z1", revision: 8 })
+      .mockResolvedValueOnce({ zoneId: "z2", revision: 4 });
+    const el = await mount(
+      [
+        planned("t1", 2, { zoneRevision: 7 }),
+        { ...planned("t3", 2, { zoneRevision: 3 }), zoneId: "z2" },
+      ],
+      api,
+      [zone(), zone({ id: "z2", name: "Terrace", displayOrder: 1 })],
+    );
+    await drop(el, { tableId: "t1", x: 12, y: 5, targetId: null });
+    await settle(el);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-zone="z2"]')!.click();
+    await el.updateComplete;
+    await drop(el, { tableId: "t3", x: 12, y: 5, targetId: null });
+    await settle(el);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-zone="z1"]')!.click();
+    await el.updateComplete;
+
+    await drop(el, { tableId: "t1", x: 14, y: 5, targetId: null });
+
+    expect(api.moveToday.mock.calls.map(([tableId, , sent]) => [tableId, sent])).toEqual([
+      ["t1", 7],
+      ["t3", 3],
+      ["t1", 8],
+    ]);
+  });
+
   it("a change refused as out of date says the floor has changed, drops the drawn drop and re-reads", async () => {
     const api = stubApi();
     api.moveToday.mockRejectedValueOnce({
