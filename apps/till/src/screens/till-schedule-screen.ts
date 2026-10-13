@@ -36,6 +36,8 @@ const sameAbsence = (a: AbsenceDraft, b: AbsenceDraft) =>
 
 const NONE: ComboboxOption = { value: "", label: "—" };
 
+type ScheduleRead = "shifts" | "swaps" | "absences";
+
 /**
  * `date`'s LOCAL calendar day as `YYYY-MM-DD`. The till sits at the venue, and the server compares the
  * window against each shift's local wall date. Not `toISOString()`, which is UTC and near local
@@ -100,6 +102,26 @@ export class TillScheduleScreen extends LitElement {
         background: var(--wt-color-danger);
         color: var(--wt-color-on-danger);
         font-weight: var(--wt-font-weight-bold);
+      }
+
+      .load-failed {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        column-gap: var(--wt-space-3);
+      }
+
+      .load-failed .notice {
+        flex: 1 1 auto;
+      }
+
+      .retry {
+        margin-bottom: var(--wt-space-3);
+      }
+
+      .list-failed {
+        margin: 0;
+        color: var(--wt-color-danger);
       }
 
       .status {
@@ -168,7 +190,7 @@ export class TillScheduleScreen extends LitElement {
   @state() private shifts?: MyShift[];
   @state() private swaps?: MySwap[];
   @state() private absences?: MyAbsence[];
-  @state() private loadFailed = false;
+  @state() private failed: ReadonlySet<ScheduleRead> = new Set();
   @state() private noticeCode?: string;
   @state() private busy = false;
 
@@ -183,6 +205,7 @@ export class TillScheduleScreen extends LitElement {
   #absenceScope?: DraftScope<AbsenceDraft>;
   #leave?: LeaveCoordinator;
   #connection = 0;
+  #loading?: Promise<void>;
 
   #coverDraft(): CoverDraft {
     return { fromShiftId: this.coverShiftId, toPersonId: this.coverColleagueId, toShiftId: null };
@@ -265,28 +288,65 @@ export class TillScheduleScreen extends LitElement {
     return scheduleWindow(new Date(), WINDOW_DAYS);
   }
 
-  async #reload(): Promise<void> {
+  #retry(): void {
+    if (!this.isConnected || this.#loading) return;
+    this.failed = new Set();
+    void this.#reload();
+  }
+
+  #reload(): Promise<void> {
+    const loading = this.#loadLists().finally(() => {
+      if (this.#loading === loading) this.#loading = undefined;
+    });
+    this.#loading = loading;
+    return loading;
+  }
+
+  async #loadLists(): Promise<void> {
     const connection = this.#connection;
-    const { from, to } = this.#window();
-    try {
-      const [shifts, swaps, absences] = await Promise.all([
-        this.api.listMyShifts(from, to),
-        this.api.listMySwaps(),
-        this.api.listMyAbsences(),
-      ]);
-      if (!this.isConnected || connection !== this.#connection) return;
-      this.shifts = shifts;
-      this.swaps = swaps;
-      this.absences = absences;
-      this.loadFailed = false;
-      if (this.coverShiftId !== "" && !shifts.some((shift) => shift.id === this.coverShiftId)) {
-        this.coverShiftId = "";
-        this.#coverScope?.changed();
+    const current = () => this.isConnected && connection === this.#connection;
+    const read = async <T>(
+      name: ScheduleRead,
+      fetch: () => Promise<T>,
+      apply: (rows: T) => void,
+    ): Promise<void> => {
+      try {
+        const rows = await fetch();
+        if (!current()) return;
+        apply(rows);
+        if (this.failed.has(name)) {
+          const failed = new Set(this.failed);
+          failed.delete(name);
+          this.failed = failed;
+        }
+      } catch {
+        if (current()) this.failed = new Set(this.failed).add(name);
       }
-    } catch {
-      if (!this.isConnected || connection !== this.#connection) return;
-      this.loadFailed = true;
-    }
+    };
+    const { from, to } = this.#window();
+    await Promise.all([
+      read(
+        "shifts",
+        () => this.api.listMyShifts(from, to),
+        (shifts) => {
+          this.shifts = shifts;
+          if (this.coverShiftId !== "" && !shifts.some((shift) => shift.id === this.coverShiftId)) {
+            this.coverShiftId = "";
+            this.#coverScope?.changed();
+          }
+        },
+      ),
+      read(
+        "swaps",
+        () => this.api.listMySwaps(),
+        (swaps) => (this.swaps = swaps),
+      ),
+      read(
+        "absences",
+        () => this.api.listMyAbsences(),
+        (absences) => (this.absences = absences),
+      ),
+    ]);
   }
 
   async #act(fn: () => Promise<void>): Promise<void> {
@@ -391,13 +451,18 @@ export class TillScheduleScreen extends LitElement {
   }
 
   #body() {
-    if (this.shifts === undefined && !this.loadFailed) {
+    if (this.shifts === undefined && this.failed.size === 0) {
       return html`<p class="status" role="status">${t("schedule.loading")}</p>`;
     }
     return html`
       ${
-        this.loadFailed
-          ? html`<p class="notice" role="alert">${t("schedule.load_failed")}</p>`
+        this.failed.size > 0
+          ? html`<div class="load-failed">
+              <p class="notice" role="alert">${t("schedule.load_failed")}</p>
+              <wt-button class="retry" variant="secondary" @click=${() => this.#retry()}>
+                ${t("schedule.retry")}
+              </wt-button>
+            </div>`
           : nothing
       }
       ${this.#shiftsSection()} ${this.#swapsSection()} ${this.#coverSection()}
@@ -405,10 +470,17 @@ export class TillScheduleScreen extends LitElement {
     `;
   }
 
+  #listFailed(read: ScheduleRead, message: string) {
+    return this.failed.has(read)
+      ? html`<p class="list-failed" role="alert">${message}</p>`
+      : nothing;
+  }
+
   #shiftsSection() {
     const shifts = this.shifts;
     return html`<section class="shifts">
       <h2>${t("schedule.shifts_title")}</h2>
+      ${this.#listFailed("shifts", t("schedule.shifts_failed"))}
       ${
         shifts === undefined
           ? nothing
@@ -432,6 +504,7 @@ export class TillScheduleScreen extends LitElement {
     );
     return html`<section class="swaps">
       <h2>${t("schedule.swaps_title")}</h2>
+      ${this.#listFailed("swaps", t("schedule.swaps_failed"))}
       ${
         offered === undefined
           ? nothing
@@ -533,6 +606,7 @@ export class TillScheduleScreen extends LitElement {
     const absences = this.absences;
     return html`<section class="absences">
       <h2>${t("schedule.absences_title")}</h2>
+      ${this.#listFailed("absences", t("schedule.absences_failed"))}
       ${
         absences === undefined
           ? nothing

@@ -1107,22 +1107,6 @@ arriving, but open periods are told apart only by their start time, to the milli
   (`apps/till/src/widgets/supervisor-override-dialog.ts`) keeps Authorize disabled while the PIN is
   empty and shows a refusal as a `role="alert"` paragraph.
 
-## The till's schedule screen tells the person to try again and gives them no way to
-
-- **The till's schedule screen tells the person to try again and gives them no way to** (found
-  2026-10-03 by review of lane C's W14; read, not run). A failed load shows
-  `schedule.load_failed`, "Could not load your schedule, try again" (Spanish: "No se pudo cargar tu
-  horario, inténtalo de nuevo"; `apps/till/src/i18n/strings.ts`), but
-  `apps/till/src/screens/till-schedule-screen.ts` has no retry control. After a failed FIRST load
-  the shifts, swaps and time-off lists show only their headings, and the cover form's shift picker
-  offers only "—", so no cover request can be sent. `#reload` runs only when the screen is attached
-  and after a successful action, and the only action still possible then is a time-off request — so
-  one the server accepts, or leaving the screen and coming back, is the only way to load again. The
-  dashboard's My Schedule screen has a "Try again" button (`#retry`,
-  `apps/dashboard/src/screens/my-schedule-screen.ts`, added in 4bfbf03ea, #876) and also puts a
-  failure line under each failed list's own heading. **Next action:** add a retry button the
-  way the dashboard does, and decide whether each failed list gets its own line.
-
 ## Two till controls put `aria-pressed` on a `wt-button`, which does not pass it to its inner button
 
 - **Two till controls put `aria-pressed` on a `wt-button`, which does not pass it to its inner

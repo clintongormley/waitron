@@ -423,6 +423,73 @@ describe("till-schedule-screen", () => {
     expect(root(el).querySelectorAll(".absence")).toHaveLength(1);
   });
 
+  it("Try again after a failed first load loads the lists and offers the shifts for cover", async () => {
+    const api = stubApi({
+      listMyShifts: vi.fn().mockRejectedValueOnce(new Error("network")).mockResolvedValue(shifts),
+      listMySwaps: vi.fn().mockRejectedValueOnce(new Error("network")).mockResolvedValue(swaps),
+      listMyAbsences: vi
+        .fn()
+        .mockRejectedValueOnce(new Error("network"))
+        .mockResolvedValue(absences),
+    });
+    const { el } = await mount(api);
+    const shiftPicker = () =>
+      root(el).querySelector<WtCombobox>('wt-combobox[name="cover-shift"]')!;
+    expect(shiftPicker().options.map((o) => o.value)).toEqual([""]);
+    const retry = root(el).querySelector<HTMLElement>("wt-button.retry");
+    expect(retry?.textContent?.trim()).toBe(t("schedule.retry"));
+    retry!.click();
+    await flush(el);
+    expect(api.listMyShifts).toHaveBeenCalledTimes(2);
+    expect(root(el).textContent).not.toContain(t("schedule.load_failed"));
+    expect(root(el).querySelector("wt-button.retry")).toBeNull();
+    expect(root(el).querySelectorAll(".shift")).toHaveLength(1);
+    expect(root(el).querySelectorAll(".swap")).toHaveLength(1);
+    expect(root(el).querySelectorAll(".absence")).toHaveLength(1);
+    expect(shiftPicker().options.map((o) => o.value)).toEqual(["", "s1"]);
+  });
+
+  it("shows the lists that loaded, and a failure line under only the list that did not", async () => {
+    const api = stubApi({
+      listMySwaps: vi.fn().mockRejectedValueOnce(new Error("network")).mockResolvedValue(swaps),
+    });
+    const { el } = await mount(api);
+    expect(root(el).querySelectorAll(".shift")).toHaveLength(1);
+    expect(root(el).querySelectorAll(".absence")).toHaveLength(1);
+    expect(root(el).querySelector(".swaps .list-failed")?.textContent?.trim()).toBe(
+      t("schedule.swaps_failed"),
+    );
+    expect(root(el).querySelectorAll(".list-failed")).toHaveLength(1);
+    expect(root(el).textContent).not.toContain(t("schedule.swaps_empty"));
+    root(el).querySelector<HTMLElement>("wt-button.retry")!.click();
+    await flush(el);
+    expect(api.listMySwaps).toHaveBeenCalledTimes(2);
+    expect(root(el).querySelector(".list-failed")).toBeNull();
+    expect(root(el).querySelectorAll(".swap")).toHaveLength(1);
+  });
+
+  it("does not start a second load when Try again is pressed while one is running", async () => {
+    let answer: (rows: MySwap[]) => void = () => {};
+    const listMySwaps = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("network"))
+      .mockReturnValueOnce(new Promise<MySwap[]>((resolve) => (answer = resolve)))
+      .mockResolvedValue(swaps);
+    const api = stubApi({ listMySwaps });
+    const { el } = await mount(api);
+    const retry = root(el).querySelector<HTMLElement>("wt-button.retry")!;
+    retry.click();
+    retry.click();
+    await el.updateComplete;
+    retry.click();
+    expect(listMySwaps).toHaveBeenCalledTimes(2);
+    expect(api.listMyShifts).toHaveBeenCalledTimes(2);
+    answer(swaps);
+    await flush(el);
+    expect(root(el).querySelectorAll(".swap")).toHaveLength(1);
+    expect(listMySwaps).toHaveBeenCalledTimes(2);
+  });
+
   it("announces the loading line as a status while the first load is pending", async () => {
     const api = stubApi({ listMyShifts: vi.fn().mockReturnValue(new Promise(() => {})) });
     const { el } = await mount(api);
