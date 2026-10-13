@@ -322,16 +322,6 @@ joined table apart while a party holds any table of its group, so a group such a
 is not ended under it. Next: decide whether the moved bill's party takes the
 whole group, as seating at one of its tables does.
 
-## A602. Reset table's window says "guests seated" for a free table kept apart by guests elsewhere in its group
-
-**A602 (2026-10-13).** Since A579 part 4b (#1637), Reset table keeps a split-off table apart when
-guests sit at any table of the group it is in, as the floor-wide reset does (`resetTable`,
-`apps/server/src/floor-today-reset-table.ts`; `apartReason`, `apps/till/src/state/floor-today.ts`).
-The Reset table window gives such a table the same reason as one with guests at it, "Counter 5 stays
-apart: guests seated" / "hay clientes", though nobody sits at Counter 5 itself. The case is reached
-when a bill is moved to another table of the group (A594). Next: the owner's wording for a third
-reason, for example "guests in its group" / "hay clientes en su grupo".
-
 ## A603. Reset table does not wait for food on its way to a group's other tables, nor for a table a module refuses to remove
 
 **A603 (2026-10-13).** Reset table keeps a split-off table apart for guests at it or anywhere in its

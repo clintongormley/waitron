@@ -111,6 +111,19 @@ it("heads itself Reset Long table and says which tables stay apart and why", asy
   ]);
 });
 
+it("says a table stays apart for guests in its group when nobody sits at it, and guests seated when they do", async () => {
+  const both = () => [away("c5", "Counter 5", "group"), away("c4", "Counter 4", "guests")];
+  expect(lines(await mount({ apart: both() }))).toEqual([
+    "Counter 5 stays apart: guests in its group",
+    "Counter 4 stays apart: guests seated",
+  ]);
+  setLocale("es-ES");
+  expect(lines(await mount({ apart: both() }))).toEqual([
+    "Counter 5 sigue aparte: hay clientes en su grupo",
+    "Counter 4 sigue aparte: hay clientes",
+  ]);
+});
+
 it("puts a label holding a placeholder's text into its line as written", async () => {
   const el = await mount({ apart: [away("c4", "{reason} $&", "guests")] });
   expect(lines(el)).toEqual(["{reason} $& stays apart: guests seated"]);

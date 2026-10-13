@@ -25,6 +25,7 @@ const SEATS_MAX = 999;
 
 const REASON_KEYS = {
   guests: "floor.apart_guests",
+  group: "floor.apart_group",
   food: "floor.apart_food",
 } as const satisfies Record<ApartReason, string>;
 

@@ -677,7 +677,7 @@ describe("a joined table split today", () => {
         const plan = {
           joined: standing,
           back: [freeC4],
-          apart: [{ table: grouped, reason: "guests" }],
+          apart: [{ table: grouped, reason: "group" }],
           whole: false,
           refusedInGroup: false,
         };
@@ -721,8 +721,8 @@ describe("a joined table split today", () => {
         joined: apartLong,
         back: [freeC5],
         apart: [
-          { table: gc3, reason: "guests" },
-          { table: gc4, reason: "guests" },
+          { table: gc3, reason: "group" },
+          { table: gc4, reason: "group" },
         ],
         whole: false,
         refusedInGroup: true,

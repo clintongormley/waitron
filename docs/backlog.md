@@ -1953,10 +1953,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   server refuses. Found by A579 part 3c's review.
   [Detail](backlog/till.md#a598-a-table-held-by-guests-when-its-joined-table-went-live-is-neither-joined-nor-split-off)
 
-- **A602. Reset table's window says "guests seated" for a free table kept apart by guests elsewhere
-  in its group (2026-10-13).** Wording is the owner's call. Found by A579 part 4b's Codex review.
-  [Detail](backlog/till.md#a602-reset-tables-window-says-guests-seated-for-a-free-table-kept-apart-by-guests-elsewhere-in-its-group)
-
 - **A603. Reset table does not wait for food on its way to a group's other tables, nor for a table a
   module refuses to remove (2026-10-13).** The floor-wide reset waits for the second. Found reading,
   not run, in A579 part 4b's reviews.
