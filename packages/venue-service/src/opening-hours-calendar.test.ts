@@ -30,8 +30,9 @@ const suite = useVenueDb({
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, fn);
 const AT = new Date("2026-10-09T10:00:00Z");
 
-/** A Sevilla venue whose departments serve lunch every day but Monday. */
-async function venue(departmentCount = 1) {
+/** A Sevilla venue with a department per entry of `closedOn`, each serving lunch every day but
+ *  the weekdays its entry lists. */
+async function venue(closedOn: readonly (readonly number[])[] = [[1]]) {
   await suite.db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "B00000000", legalName: "Casa SL" })
@@ -53,7 +54,7 @@ async function venue(departmentCount = 1) {
     const menuId = (await createCatalogue(tx, { name: `Carta ${randomUUID()}` })).id;
     const { document } = await buildMenuDocument(tx, menuId);
     await publishMenu(tx, menuId, menuDocumentHash(document), "person-1");
-    for (let index = 0; index < departmentCount; index++) {
+    for (const [index, closed] of closedOn.entries()) {
       const department = (
         await createDepartment(tx, cfg, { name: `Sala ${index}`, orderStart: "table" })
       ).id;
@@ -66,7 +67,9 @@ async function venue(departmentCount = 1) {
         department,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
           weekday,
-          slots: weekday === 1 ? [] : [{ periodId: lunch, startsAt: "12:00", endsAt: "16:00" }],
+          slots: closed.includes(weekday)
+            ? []
+            : [{ periodId: lunch, startsAt: "12:00", endsAt: "16:00" }],
         })),
         AT,
         0,
@@ -107,6 +110,7 @@ describe("the Opening hours year read", () => {
       seasonId: v.seasons.Winter,
       specialDay: null,
       holidays: [],
+      tone: "standard",
       closed: false,
     });
     expect(dayOf(year, "2030-01-14")).toEqual({
@@ -114,6 +118,7 @@ describe("the Opening hours year read", () => {
       seasonId: v.seasons.Winter,
       specialDay: null,
       holidays: [],
+      tone: "closed",
       closed: true,
     });
     expect(dayOf(year, "2030-07-10")).toEqual({
@@ -121,6 +126,7 @@ describe("the Opening hours year read", () => {
       seasonId: v.seasons.Summer,
       specialDay: { id: cierre.id, name: "Cierre" },
       holidays: [],
+      tone: "special_day",
       closed: true,
     });
     expect(year.seasons).toEqual([
@@ -151,6 +157,7 @@ describe("the Opening hours year read", () => {
           sourceId: "BOE-A-2025-21667",
         },
       ],
+      tone: "public_holiday",
       closed: false,
     });
     expect(year.area.readiness).toBe("ready");
@@ -176,10 +183,36 @@ describe("the Opening hours year read", () => {
   });
 
   it("closes a date only when every active department is closed all day", async () => {
-    const v = await venue(2);
+    const v = await venue([
+      [1, 2],
+      [1, 3],
+    ]);
     const year = await read(v, 2030);
-    expect(dayOf(year, "2030-01-14")!.closed).toBe(true);
-    expect(dayOf(year, "2030-01-15")!.closed).toBe(false);
+    expect(
+      ["2030-01-14", "2030-01-15", "2030-01-16", "2030-01-17"].map((date) => ({
+        date,
+        closed: dayOf(year, date)!.closed,
+      })),
+    ).toEqual([
+      { date: "2030-01-14", closed: true },
+      { date: "2030-01-15", closed: false },
+      { date: "2030-01-16", closed: false },
+      { date: "2030-01-17", closed: false },
+    ]);
+  });
+
+  it("ends each season on its true last day in the shown year, 29 February in a leap year", async () => {
+    const v = await venue();
+    const lastDays = async (year: number) =>
+      (await read(v, year)).seasons.map(({ name, lastDay }) => ({ name, lastDay }));
+    expect(await lastDays(2028)).toEqual([
+      { name: "Spring", lastDay: "05-31" },
+      { name: "Summer", lastDay: "08-31" },
+      { name: "Autumn", lastDay: "11-30" },
+      { name: "Winter", lastDay: "02-29" },
+    ]);
+    expect((await lastDays(2027)).at(-1)).toEqual({ name: "Winter", lastDay: "02-28" });
+    expect(dayOf(await read(v, 2028), "2028-02-29")!.seasonId).toBe(v.seasons.Winter);
   });
 
   it("sends the same statements for one department as for three, not one per day", async () => {
@@ -195,8 +228,8 @@ describe("the Opening hours year read", () => {
           prepared.mockRestore();
         }
       });
-    const one = await statementsFor(await venue(1));
-    expect(await statementsFor(await venue(3))).toBe(one);
+    const one = await statementsFor(await venue([[1]]));
+    expect(await statementsFor(await venue([[1], [1], [1]]))).toBe(one);
     expect(one).toBeLessThan(40);
   });
 });

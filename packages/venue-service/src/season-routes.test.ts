@@ -331,13 +331,22 @@ describe("the season routes", () => {
     expect(await stored(r)).toEqual(before);
   });
 
-  it("refuses a stale clock revision, writing nothing", async () => {
+  it("refuses a stale clock revision on a move, an add and a delete, writing nothing", async () => {
     const r = await routed();
     await scoped((tx) =>
       tx.insert(locationBusinessDaySettings).values({ locationId: r.cfg.locationId, revision: 1 }),
     );
     const before = await stored(r);
     const error = { error: { code: "hours.clock_changed", params: {} } };
+    await answers(
+      await r.send("PUT", `/seasons/${r.seasons.Summer}`, r.manager, {
+        name: "Summer",
+        startsOn: "06-15",
+        expectedClockRevision: 0,
+      }),
+      409,
+      error,
+    );
     await answers(
       await r.send("POST", "/seasons", r.manager, {
         name: "Feria",
