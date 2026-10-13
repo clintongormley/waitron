@@ -17,7 +17,12 @@ import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import { inTx, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
-import { expectRevision, mergeOf, plannedZone } from "./testing/floor-today-venue.js";
+import {
+  expectRevision,
+  mergeOf,
+  plannedZone,
+  withFloorRevision,
+} from "./testing/floor-today-venue.js";
 import { seedSessionDevice } from "./testing/session-device.js";
 import "./errors.js";
 
@@ -62,11 +67,12 @@ beforeAll(async () => {
   cookie = `${SESSION_COOKIE}=${session.token}`;
 });
 
+/** A POST; a change to today's floor carries the room's revision unless the body names one. */
 async function post(path: string, body: unknown): Promise<Response> {
   return app.request(path, {
     method: "POST",
     headers: { "content-type": "application/json", cookie },
-    body: JSON.stringify(body),
+    body: JSON.stringify(await withFloorRevision(v, path, body)),
   });
 }
 

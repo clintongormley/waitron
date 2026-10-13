@@ -36,6 +36,8 @@ import {
   plannedZone,
   tableServiceZone,
   todayRow,
+  withRevision,
+  withZoneRevision,
   zoneRevisionOf,
 } from "./testing/floor-today-venue.js";
 import { seedSessionDevice } from "./testing/session-device.js";
@@ -91,7 +93,11 @@ async function send(method: string, path: string, body?: unknown): Promise<Respo
 }
 
 async function today(tableId: string, change: string, body: unknown = {}): Promise<Response> {
-  return send("POST", `/api/tables/${tableId}/today/${change}`, body);
+  return send(
+    "POST",
+    `/api/tables/${tableId}/today/${change}`,
+    await withRevision(v, tableId, body),
+  );
 }
 
 interface FloorToday {
@@ -144,7 +150,7 @@ async function everything() {
 }
 
 async function resetZoneToday(zoneId: string, body: unknown = {}): Promise<Response> {
-  return send("POST", `/api/zones/${zoneId}/today/reset`, body);
+  return send("POST", `/api/zones/${zoneId}/today/reset`, await withZoneRevision(v, zoneId, body));
 }
 
 describe("the table routes' revision", () => {
@@ -163,7 +169,7 @@ describe("the table routes' revision", () => {
 
   type Setup = () => Promise<{ zoneId: string; tableId: string; body: Record<string, unknown> }>;
 
-  it.each<[string, Setup]>([
+  const ROUTES: [string, Setup][] = [
     [
       "move",
       async () => {
@@ -253,7 +259,22 @@ describe("the table routes' revision", () => {
         return { zoneId, tableId: table.long!, body: { partIds: [table.c5!] } };
       },
     ],
-  ])(
+  ];
+
+  it.each(ROUTES)("%s with no revision is refused and writes nothing", async (change, setup) => {
+    const { zoneId, tableId, body } = await setup();
+    const read = await zoneRevisionOf(v, zoneId);
+    const before = await everything();
+
+    expect(await refusal(send("POST", `/api/tables/${tableId}/today/${change}`, body))).toEqual({
+      status: 400,
+      body: { error: { code: "management.request_invalid", params: { field: "zoneRevision" } } },
+    });
+    expect(await everything()).toEqual(before);
+    expect(await zoneRevisionOf(v, zoneId)).toBe(read);
+  });
+
+  it.each(ROUTES)(
     "%s refuses a second till acting from the old revision and writes nothing",
     async (change, setup) => {
       const { zoneId, tableId, body } = await setup();
@@ -292,15 +313,6 @@ describe("the table routes' revision", () => {
       read + 2,
     );
     expect(await todayRow(v, table.a!)).toMatchObject({ x: 40, y: 40 });
-  });
-
-  it("a request sending no revision is still applied (until the till sends one)", async () => {
-    const { zoneId, table } = await ROOM();
-    const read = (await zoneRevisionOf(v, zoneId))!;
-
-    await expectRevision(v, today(table.a!, "move", { x: 30, y: 30 }), zoneId, read + 1);
-    await expectRevision(v, today(table.a!, "rotate"), zoneId, read + 2);
-    expect(await todayRow(v, table.a!)).toMatchObject({ x: 30, y: 30, rotation: 15 });
   });
 
   it("a request that writes nothing answers the revision unchanged", async () => {
@@ -496,8 +508,9 @@ describe("today's routes", () => {
     await expectRevision(v, resetZoneToday(zoneId), zoneId);
     expect((await todayRow(v, table.t!))?.x).toBe(0);
     await finish(partyId);
+    const caughtUp = (await zoneRevisionOf(v, zoneId))! + 1;
 
-    await expectRevision(v, today(table.t!, "move", { x: 30, y: 0 }));
+    await expectRevision(v, today(table.t!, "move", { x: 30, y: 0, zoneRevision: caughtUp }));
 
     expect((await floorToday(table.t!))?.placement).toMatchObject({ x: 30, y: 0 });
   });
@@ -585,9 +598,9 @@ describe("today's routes", () => {
       status: 404,
       body: { error: { code: "zone.not_found" } },
     });
-    expect(await refusal(send("POST", `/api/zones/${randomUUID()}/today/reset`, {}))).toMatchObject(
-      { status: 404, body: { error: { code: "zone.not_found" } } },
-    );
+    expect(
+      await refusal(send("POST", `/api/zones/${randomUUID()}/today/reset`, { zoneRevision: 0 })),
+    ).toMatchObject({ status: 404, body: { error: { code: "zone.not_found" } } });
   });
 
   it("refuses another venue's zone as not found, and leaves its today's plan alone", async () => {
@@ -606,7 +619,7 @@ describe("today's routes", () => {
     });
 
     try {
-      const answer = await send("POST", `/api/zones/${zoneId}/today/reset`, {});
+      const answer = await send("POST", `/api/zones/${zoneId}/today/reset`, { zoneRevision: 1 });
       const [row] = await inTx(v, (tx) =>
         tx.select().from(floorTodayZones).where(eq(floorTodayZones.zoneId, zoneId)),
       );
@@ -679,19 +692,29 @@ describe("the zone reset's revision", () => {
     expect(await todayRow(v, table.a!)).toMatchObject({ x: 0, y: 0 });
   });
 
-  it("applies a reset that sends no revision", async () => {
+  it.each<[string, RequestInit]>([
+    ["a body with no revision", { body: "{}", headers: { "content-type": "application/json" } }],
+    ["no body", {}],
+    ["a body that is not JSON", { body: "{", headers: { "content-type": "application/json" } }],
+  ])("refuses %s and writes nothing", async (_, init) => {
     const { zoneId, table } = await plannedZone(v, [{ key: "a", place: { x: 0, y: 0 } }]);
     await expectRevision(v, today(table.a!, "move", { x: 50, y: 50 }));
     const from = (await zoneRevisionOf(v, zoneId))!;
+    const before = await everything();
 
-    await expectRevision(
-      v,
-      app.request(`/api/zones/${zoneId}/today/reset`, { method: "POST", headers: { cookie } }),
-      zoneId,
-      from + 1,
+    const answer = Promise.resolve(
+      app.request(`/api/zones/${zoneId}/today/reset`, {
+        ...init,
+        method: "POST",
+        headers: { ...(init.headers as Record<string, string> | undefined), cookie },
+      }),
     );
-
-    expect(await todayRow(v, table.a!)).toMatchObject({ x: 0, y: 0 });
+    expect(await refusal(answer)).toEqual({
+      status: 400,
+      body: { error: { code: "management.request_invalid", params: { field: "zoneRevision" } } },
+    });
+    expect(await everything()).toEqual(before);
+    expect(await zoneRevisionOf(v, zoneId)).toBe(from);
   });
 
   it("applies null on a room none of whose tables has a today's row", async () => {

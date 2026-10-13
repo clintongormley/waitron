@@ -30,7 +30,13 @@ import type { Logger } from "./logger.js";
 import type { Run, TillApiDeps } from "./till-api.js";
 import { requireSession } from "./till-session.js";
 import { checkZones } from "./zone-access.js";
-import { moveRoom, refuseStale, roomPrints, roomRevision, sentRevision } from "./floor-revision.js";
+import {
+  moveRoom,
+  refuseStale,
+  requiredRevision,
+  roomPrints,
+  roomRevision,
+} from "./floor-revision.js";
 import { zoneOfTable } from "./floor-today-table.js";
 import "./errors.js";
 
@@ -88,12 +94,12 @@ function partsBody(body: Record<string, unknown>): { partIds: string[]; seats: n
 }
 
 /**
- * The zone reset's `zoneRevision`: a whole number from 0, `null` for a read that held no table of
- * the zone with a today's row, or undefined when the till sends none.
+ * The zone reset's `zoneRevision`: a whole number from 0, or `null` for a read that held no table
+ * of the zone with a today's row.
  */
-async function resetRevision(c: Context): Promise<number | null | undefined> {
+async function resetRevision(c: Context): Promise<number | null> {
   const body = await bodyOf(c);
-  return body.zoneRevision === null ? null : sentRevision(body);
+  return body.zoneRevision === null ? null : requiredRevision(body);
 }
 
 async function hasTodayRow(tx: Transaction, locationId: string, zoneId: string): Promise<boolean> {
@@ -119,7 +125,7 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
   const changeRoom = async (
     tx: Transaction,
     zoneId: string,
-    sent: number | undefined,
+    sent: number,
     write: () => Promise<void>,
   ): Promise<{ zoneId: string; revision: number }> => {
     const from = await roomRevision(tx, zoneId);
@@ -141,7 +147,7 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
         if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
         const tableId = id.toLowerCase();
         const body = await bodyOf(c);
-        const sent = sentRevision(body);
+        const sent = requiredRevision(body);
         const { write, others = [] } = read(body, tableId);
         const answer = await withTransaction(deps.db, async (tx) => {
           await checkZones(tx, deps.cfg, session, [
@@ -220,10 +226,10 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
         const now = deps.clock.now().instant;
         await ensureToday(tx, deps.cfg, removals, now);
         const from = await roomRevision(tx, zoneId);
-        if (sent === null && (await hasTodayRow(tx, deps.cfg.locationId, zoneId))) {
+        if (sent !== null) refuseStale(zoneId, sent, from);
+        else if (await hasTodayRow(tx, deps.cfg.locationId, zoneId)) {
           throw new AppError("floor_today.out_of_date", { zoneId, revision: from });
         }
-        refuseStale(zoneId, sent ?? undefined, from);
         if (!zone.active || zone.planId === null) return from;
         return (await resetZone(tx, deps.cfg, removals, zoneId, now)) ?? from;
       });

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { expect } from "vitest";
 import {
+  diningTables,
   floorPlanTableSizes,
   floorTodayJoinTables,
   floorTodayJoins,
@@ -159,6 +160,55 @@ export async function zoneRevisionOf(v: PartyVenue, zoneId: string): Promise<num
     tx.select().from(floorTodayZones).where(eq(floorTodayZones.zoneId, zoneId)),
   );
   return row?.revision;
+}
+
+/**
+ * `body` carrying the stored revision of the room holding `tableId` (0 with no row or no such
+ * table) as `zoneRevision`; a body that names one, or is not an object, is answered as given.
+ */
+export async function withRevision(
+  v: PartyVenue,
+  tableId: string,
+  body: unknown,
+): Promise<unknown> {
+  if (!isPlainBody(body) || "zoneRevision" in body) return body;
+  const [row] = await inTx(v, (tx) =>
+    tx
+      .select({ zoneId: diningTables.zoneId })
+      .from(diningTables)
+      .where(eq(diningTables.id, tableId.toLowerCase())),
+  );
+  const zoneRevision = row === undefined ? 0 : ((await zoneRevisionOf(v, row.zoneId)) ?? 0);
+  return { ...body, zoneRevision };
+}
+
+/** `body` carrying `zoneId`'s stored revision (0 with no row), as `withRevision` does for a table. */
+export async function withZoneRevision(
+  v: PartyVenue,
+  zoneId: string,
+  body: unknown,
+): Promise<unknown> {
+  if (!isPlainBody(body) || "zoneRevision" in body) return body;
+  return { ...body, zoneRevision: (await zoneRevisionOf(v, zoneId)) ?? 0 };
+}
+
+/**
+ * `body` for a POST to `path`: a change to today's floor, or a zone reset, carrying the room's
+ * revision as `withRevision` and `withZoneRevision` give it; any other path's body as given.
+ */
+export async function withFloorRevision(
+  v: PartyVenue,
+  path: string,
+  body: unknown,
+): Promise<unknown> {
+  const table = /^\/api\/tables\/([^/]+)\/today\//.exec(path)?.[1];
+  if (table !== undefined) return withRevision(v, table, body);
+  const zone = /^\/api\/zones\/([^/]+)\/today\/reset$/.exec(path)?.[1];
+  return zone === undefined ? body : withZoneRevision(v, zone, body);
+}
+
+function isPlainBody(body: unknown): body is Record<string, unknown> {
+  return typeof body === "object" && body !== null && !Array.isArray(body);
 }
 
 /**
