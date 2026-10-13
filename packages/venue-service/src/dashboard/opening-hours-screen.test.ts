@@ -2056,7 +2056,7 @@ describe("Year view", () => {
     ["a season", "/manage/opening-hours/season/winter"],
     ["a zone", "/manage/opening-hours/zone/z1"],
     ["a week", "/manage/opening-hours?week=2026-10-12"],
-    ["an unknown view", "/manage/opening-hours/view/calendar"],
+    ["an unknown view", "/manage/opening-hours/view/nonsense"],
   ])("keeps the Week when the address names %s", async (_, address) => {
     const { el, years } = await yearMount(address);
     expect(tabs(el).value).toBe("week");
@@ -2064,11 +2064,21 @@ describe("Year view", () => {
     expect(years).toEqual([]);
   });
 
-  it("hands the year view its model, the season writes, the area writes and every special day", async () => {
-    const { el, view, listReads } = await yearMount("/manage/opening-hours/view/year/year/2027");
+  it("hands the year view its model, the season writes and the area writes, and every special day once a season dialog opens", async () => {
+    const { el, view, years, listReads } = await yearMount(
+      "/manage/opening-hours/view/year/year/2027",
+    );
     await expect.poll(() => view()?.model?.year).toBe(2027);
     expect(view()!.api).toBe(el.api);
     expect(view()!.readOnly).toBe(false);
+    const chips = view()!.shadowRoot!.querySelector("season-chips")!;
+    expect(chips.clockRevision).toBe(4);
+    el.api.rereadWithSpecialDays();
+    await expect.poll(() => years).toEqual(["2027", "2027"]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(listReads()).toEqual([]);
+    expect(view()!.specialDays).toEqual([]);
+    chips.shadowRoot!.querySelector<HTMLElement>("[data-season=all]")!.click();
     await expect
       .poll(() => view()!.specialDays)
       .toEqual([
@@ -2076,8 +2086,6 @@ describe("Year view", () => {
         { id: "later", name: "Later fair" },
       ]);
     expect(listReads()).toEqual([{ passive: true }]);
-    const chips = view()!.shadowRoot!.querySelector("season-chips")!;
-    expect(chips.clockRevision).toBe(4);
   });
 
   it("passes read-only to the year view", async () => {
@@ -2145,6 +2153,8 @@ describe("Year view", () => {
     const alert = () =>
       el.shadowRoot!.querySelector("[slot=year] [data-test=year-read-error]")?.textContent;
     await expect.poll(alert).toBe("Opening hours could not be loaded. It will be tried again.");
+    expect(view()!.model).toBeUndefined();
+    expect(view()!.shadowRoot!.querySelector("table, [data-test=year]")).toBeNull();
     el.api.rereadWithSpecialDays();
     await expect.poll(() => view()?.model?.year).toBe(2026);
     expect(alert()).toBeUndefined();
