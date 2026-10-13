@@ -345,12 +345,13 @@ checkpoint".
 
 **The bucket client's limits (A44, #676) — what is still open.** `createS3ObjectStore` gives a
 request up when it has had no reply 30 seconds after it started (`BUCKET_IDLE_MS`,
-`packages/stream/src/s3-store.ts`). An answer whose headers arrive within three seconds and whose
-body then stalls is not bounded; the deadline on the pause and the freshness read cannot cancel a
-listing whose answer keeps arriving; the idle limit is per request, not per call, so a listing of
-many pages, or a bucket answering each request just inside the limit, can take longer; a bucket that
-takes more than 30 seconds to answer a request whose body is already sent, such as a delete of 1,000
-keys, is cut off, and how long real providers take for one was not measured; and the tests run the
+`packages/stream/src/s3-client.ts`). An answer whose headers arrive within three seconds and whose
+body then stalls is not bounded by that limit, only by its caller cancelling the call
+(`packages/stream/src/s3-store.cancel.test.ts`), so a call nobody cancels can still wait on it; for
+such a call the idle limit is per request, not per call, so a listing of many pages, or a bucket
+answering each request just inside the limit, can take longer; a bucket that takes more than 30
+seconds to answer a request whose body is already sent, such as a delete of 1,000 keys, is cut off,
+and how long real providers take for one was not measured; and the idle limit's tests run the
 handler's below-6,000 ms path, while its production path was measured by hand, not by a test.
 
 ## That a real bucket's 403 to the pause's listing reads that code, and the status and `errorName` on each line, were shown by reading

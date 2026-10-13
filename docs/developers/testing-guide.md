@@ -755,7 +755,7 @@ the pause asks again on its next tick; the supervisor case "asks the bucket agai
 during the pause goes unanswered, logs it, and resumes once one is answered" fails with the deadline
 taken out of the race (re-run by A44). Since A44 the store also gives a request up when it
 has had no reply 30 seconds after it started (`BUCKET_IDLE_MS`,
-`packages/stream/src/s3-store.ts`), though not an answer whose body stalls after headers that
+`packages/stream/src/s3-client.ts`), though not an answer whose body stalls after headers that
 arrived within its first three seconds; with that default, a listing to such a server failed after
 90,116 ms, three attempts. Against a server that never replies the pause therefore ends each
 question as a refusal, before the deadline. Since A51 a refused question is logged once per pause,

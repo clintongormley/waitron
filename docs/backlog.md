@@ -4321,11 +4321,6 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   version,** so the checksum protects fresh downloads only. Left open by SQLite slice 2 Task 6
   (#590, the Litestream supervisor).
 
-- **A bucket read given up after five minutes is not cancelled,** because the bucket client's list
-  takes no way to stop it; what the deadline can still leave running is a listing whose answer keeps
-  arriving, or one whose answer stalls after headers that arrived within the first three seconds.
-  Left open by SQLite slice 2 Task 7 (#619, how current the bucket copy is).
-
 - **A commit that changes no row but writes to the side file,** such as a schema change or a pragma
   such as `user_version`, is not reported, so the lag can read low. Left open by SQLite slice 2 Task
   7 (#619, how current the bucket copy is).
@@ -4409,7 +4404,7 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 
 - **The bucket client's limits (A44, #676) — what is still open.** `createS3ObjectStore` gives a
   request up when it has had no reply 30 seconds after it started (`BUCKET_IDLE_MS`,
-  `packages/stream/src/s3-store.ts`).
+  `packages/stream/src/s3-client.ts`).
   [Detail](backlog/box.md#the-bucket-clients-limits-a44-676--what-is-still-open)
 
 - **The wizard route answers `backup.stream_name_invalid` 400, where other bucket failures answer
@@ -4615,10 +4610,6 @@ the tree. What remains, largest first:
   `apps/server/src/boot.reconcile.test.ts`). Recorded, not redesigned. Left open by SQLite slice 2
   Task 9a (#630, the first start after a restore).
   [Detail](backlog/replication-cloud.md#a-restored-box-whose-cloud-peer-does-not-answer-during-its-first-start-signs-the-next-term-and-removes-the-marker)
-
-- **The pointer read gives up after 15 seconds but does not cancel the request:** the bucket
-  interface takes no way to stop one. Left open by SQLite slice 2 Task 9a (#630, the first start
-  after a restore).
 
 - **The pointer's term is taken without checking its signature,** as the supervisor already does, so
   whoever can write the bucket can push a restored box's term up (never down). Left open by SQLite
