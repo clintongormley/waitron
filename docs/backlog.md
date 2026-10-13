@@ -1954,6 +1954,11 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   server refuses. Found by A579 part 3c's review.
   [Detail](backlog/till.md#a598-a-table-held-by-guests-when-its-joined-table-went-live-is-neither-joined-nor-split-off)
 
+- **A600. The floor-wide reset and its catch-up do not look at what stands in a saved place
+  (2026-10-13).** Reset table refuses `table.place_taken`; Reset to saved plan has no such check.
+  Found reading, not run, by the A579 design.
+  [Detail](backlog/till.md#a600-the-floor-wide-reset-and-its-catch-up-do-not-look-at-what-stands-in-a-saved-place)
+
 - **A565. "Reset to saved plan" does not wait for food on its way to an ordinary table
   (2026-10-13).** Dates from floor plans slice 1; #1604 made only split groups wait.
   [Detail](backlog/till.md#a565-reset-to-saved-plan-does-not-wait-for-food-on-its-way-to-an-ordinary-table)

@@ -250,6 +250,13 @@ undone at the next reset anyway.
 > ticked one leaves as a table leaves a group; on a joined table with tables still joined it lists those,
 > and splits them off the joined table as it does outside a group.
 
+> Added 2026-10-13 by A579 part 4a ([design](2026-10-13-a579-flattened-joined-tables-design.md)): the
+> server's **Reset table** takes back every free table split off a joined table (a "needs clearing"
+> mark or a group nobody sits at does not keep one apart) and puts the joined table at its saved
+> place, refused when another table stands in that place (`table.place_taken`, owner question 5) or
+> when the tables it needs are in a group with guests (`joined_table.tables_in_group`). The till
+> offers it from part 4b, in place of Join again.
+
 ### 6.3 Reset
 
 - Today's plan resets automatically at the day cutover, and on Reset to saved plan.
@@ -367,6 +374,9 @@ on every screen. The commit adding them states this reason.
 
 > Added 2026-10-13 by A503 part 4: and `POST /api/tables/:id/today/join-again` (join a split joined
 > table's free tables again), with the same checks.
+
+> Added 2026-10-13 by A579 part 4a: and `POST /api/tables/:id/today/reset` (Reset table), with the
+> same checks; Join again's route stays until part 4b.
 
 > Added 2026-10-13 by A579 part 2a: the table routes and the zone reset answer
 > `200 { zoneId, revision }` instead of 204, and the party join, move and split-table answers gain
