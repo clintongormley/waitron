@@ -284,6 +284,9 @@ The server applies it as a split down to one table and ignores the seats sent (r
 stay and is refused when they differ.
 Join again already names the tables it expects (`joined_table.out_of_date`, #1608); Split does not
 yet.
+Server half landed with A579 part 2a (#1621): every floor change that sends the room's revision is
+refused `floor_today.out_of_date` when the room changed since. The till does not send it yet; A579
+part 2b makes it send it and closes this entry.
 
 ## A565. "Reset to saved plan" does not wait for food on its way to an ordinary table
 
