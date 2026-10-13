@@ -334,19 +334,6 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
     }
   };
 
-  const readRecord = async (): Promise<{
-    held: ArchiveSettings | null;
-    unreadableCode: string | undefined;
-  }> => {
-    try {
-      return { held: await readArchiveSettings(deps.db, deps.ring), unreadableCode: undefined };
-    } catch (error) {
-      return { held: null, unreadableCode: codeOf(error) };
-    }
-  };
-
-  // The box env (`backup.env` under the raw environment, as a reload reads it) is authoritative: after
-  // a failed reload the supervisor still holds the key it loaded before the key file changed.
   /** The stored archive settings, or the code that says the stored record cannot be read. */
   const readHeldSettings = async (): Promise<
     { settings: ArchiveSettings | null } | { unreadable: string }
@@ -361,6 +348,8 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
     }
   };
 
+  // The box env (`backup.env` under the raw environment, as a reload reads it) is authoritative: after
+  // a failed reload the supervisor still holds the key it loaded before the key file changed.
   const heldKey = async (): Promise<string | undefined> =>
     (await deps.readRecoveryKey()) ?? deps.supervisor.current().recoveryKey;
 
@@ -532,7 +521,9 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
         guardWritable(); // Again: role or env ownership may have changed while this write waited.
         const keyRotatedAt = new Date().toISOString();
         loadRecoveryKey({ WAITRON_BACKUP_RECOVERY_KEY: recoveryKey });
-        const { held, unreadableCode } = await readRecord();
+        const read = await readHeldSettings();
+        const held = "unreadable" in read ? null : read.settings;
+        const unreadableCode = "unreadable" in read ? read.unreadable : undefined;
         // An unreadable record is never rewritten, so its key changes the key-only way.
         if (held === null && deps.supervisor.current().destinations.length === 0) {
           if (!(await keyPresent())) throw requestInvalid("config");

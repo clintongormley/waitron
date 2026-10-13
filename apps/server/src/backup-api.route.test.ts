@@ -28,6 +28,7 @@ import {
   putCredential,
   tenantCredentials,
   tryGetCredential,
+  type KeyRing,
 } from "@waitron/credentials";
 import { mountStreamApi } from "./stream-api.js";
 import {
@@ -2336,6 +2337,33 @@ describe("backup admin routes", () => {
         expect({ ...after, revision: sealed.revision }).toEqual(sealed);
         expect(reload).toHaveBeenCalledTimes(2);
         expect(sup.current().recoveryKey).toBe(KEY_2);
+      }, 60_000);
+
+      it("a record read that fails for an unlisted reason stops the rotation before the key file", async () => {
+        const broken = { on: false };
+        const ring: KeyRing = {
+          get current() {
+            if (broken.on) throw new Error("ring unavailable");
+            return RING.current;
+          },
+          get previous() {
+            if (broken.on) throw new Error("ring unavailable");
+            return RING.previous;
+          },
+        };
+        const { sc, sup, post } = await primaryApp({ ring });
+        expect(
+          (await post("/api/backup/apply", applyBody({ kind: "local-fs", dir: makeDestDir() })))
+            .status,
+        ).toBe(200);
+        const sealed = (await readSealed())!;
+        broken.on = true;
+        const res = await post("/api/backup/rotate", { recoveryKey: KEY_2 });
+        expect(res.status).toBe(500);
+        expect(await res.json()).toEqual({ error: { code: "server.internal" } });
+        expect(await fileKey(sc.stateDir)).toBe(KEY_1);
+        expect(sup.current().recoveryKey).toBe(KEY_1);
+        expect(await readSealed()).toEqual(sealed);
       }, 60_000);
 
       it("an unreadable record is left as it is, and its code is reported beside the new key", async () => {
