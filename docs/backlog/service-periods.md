@@ -105,8 +105,8 @@ reads list where each period is painted and what the delete dialog shows (one-of
 no date still to come left out). The Periods page that uses
 them is A506-11, and the old refusing delete stays until then.
 A506-6 landed in #NNNN: seasons are added, renamed, moved and deleted from the season chips and
-their dialog (+ Season), and a move, addition or deletion is refused when a period's end offset
-would run into the next day's hours; Opening hours opens on the Year, which replaced the Calendar
+their dialog (+ Season), and a move or a deletion is refused when a period's end offset would
+run into the next day's hours; Opening hours opens on the Year, which replaced the Calendar
 tab, and setup's Done link opens it.
 
 **Left open by A506-1, for the later parts.**
@@ -185,9 +185,8 @@ tab, and setup's Done link opens it.
 - The dashboard's day models (`CalendarDay` in `packages/venue-service/src/hours-types.ts`, which the
   Day and Week tabs read, and the Year's `OpeningHoursYearDay` in
   `packages/venue-service/src/opening-hours-calendar.ts`) drop each date's stored special-day date,
-  so the dashboard re-derives which
-  stored date applies (`specialOn`, `packages/venue-service/src/dashboard/special-date.ts`) and the
-  week views fetch each special day's detail separately; returning the stored date in the model
+  so the dashboard re-derives which stored date applies (`specialOn`,
+  `packages/venue-service/src/dashboard/special-date.ts`) and the week views fetch each special day's detail separately; returning the stored date in the model
   would leave one copy of the rule. The "Add to" offer reads every special day with every date
   (`GET …/special-days`) to show a name and a latest date.
 

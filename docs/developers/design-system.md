@@ -3561,17 +3561,19 @@ Opening hours' Year.
   grid. On a special day that is also a public holiday, the date panel and the day's accessible
   name give the holiday's name beside the special day's; the grid itself shows only the marks.
 - **Seasons.** The Year's season chips (`season-chips.ts`) list the venue's seasons in start
-  order, each written as its name and first and last day. A chip's ✎ opens the season dialog
-  (`season-dialog.ts`) on that season, and + Season opens it empty; a new season starts with a
-  copy of the department and zone weeks of the season it starts inside. The dialog has a required
-  Name and a Starts on day and month, each picked from a list; Save stays quiet and disabled until
-  the draft changes. A name or start another season already holds is refused under its field.
-  A move, an addition or a deletion that would make a period's end offset run into the next day's
-  hours is refused beside the action, naming the season and weekday, or the date and its special
-  day, it would run into. Delete is offered on an existing season while the venue has more than one; it
-  asks first, says which season the days join (the one before, or the last for the first season),
-  and names the departments whose hours in the season are lost. The page re-reads its hours
-  after every season change.
+  order, each written as its name and first and last day. Each chip is a button that opens the
+  season dialog (`season-dialog.ts`) on that season (its ✎ is decoration, hidden from screen
+  readers), and + Season opens the dialog empty; on a read-only page the chips are plain labels and
+  + Season is not offered. A new season starts with a copy of the department and zone weeks of the
+  season it starts inside. The dialog has a required Name and a Starts on day and month, each
+  picked from a list; Save stays quiet and disabled until the draft changes. A name or start
+  another season already holds is refused under its field. A move or a deletion that would make a
+  period's end offset run into the next day's hours is refused beside the action, naming the
+  season and weekday it would run into, or the date: with its special day's name when the screen
+  knows that special day, else the date alone. Delete is offered on an existing season while the
+  venue has more than one; it asks first, says which season the days join (the one before, or the
+  last for the first season), and names the departments whose hours in the season are lost. The
+  page re-reads its hours after every season change.
 - **Local holidays.** Public holidays come only from the country's shipped calendar; add your
   town's holidays as special days. There is no separate Local holidays editor. The Year reports
   the shown year's official coverage and, when the year has a coverage entry, says Town holidays
