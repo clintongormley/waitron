@@ -24,6 +24,7 @@ import {
   DEFAULT_DESTINATION_TIMEOUT_MS,
   MAX_DESTINATION_TIMEOUT_MS,
   MIN_DESTINATION_TIMEOUT_MS,
+  loadKeyRotatedAt,
   loadRecoveryKey,
   mintRecoveryKey,
   readHeldKey,
@@ -57,6 +58,8 @@ export interface BackupApiDeps {
   /** The recovery key from the box env, read afresh each call. Answers with no archive destination
    * configured, which the supervisor's `current()` cannot. */
   readRecoveryKey: () => Promise<string | undefined>;
+  /** The box env as a reload reads it, so status can report the key file's key and rotation time. */
+  readBoxEnv: () => Promise<Record<string, string | undefined>>;
   /** Rewrites this node's sealed state row, which carries `backup.env` and is locked with the recovery
    * key. */
   sealedState: SealedStateRefresher;
@@ -357,10 +360,19 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
   // replace it. `GET recovery-key` keeps refusing such a key.
   const keyPresent = async (): Promise<boolean> => (await readHeldKey(heldKey)).held;
 
+  const keyFileFields = async () => {
+    const env = await deps.readBoxEnv();
+    const { key } = await readHeldKey(async () => loadRecoveryKey(env));
+    return key === undefined
+      ? {}
+      : { keyFingerprint: keyFingerprint(key), keyRotatedAt: loadKeyRotatedAt(env) };
+  };
+
   const statusBody = async (known?: { held: boolean; key: string | undefined }) => {
     const { held, key } = known ?? (await readHeldKey(heldKey));
     return {
       ...projectStatus(await deps.supervisor.status()),
+      ...(await keyFileFields()),
       recoveryKeySet: held,
       recoveryKeyTooShort: held && key === undefined,
       stream: deps.readStream(),

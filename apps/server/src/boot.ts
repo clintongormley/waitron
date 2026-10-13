@@ -1922,6 +1922,7 @@ async function bootServer(
       venueId: till.locationId,
       stateDir: config.stateDir,
       readRecoveryKey,
+      readBoxEnv: () => loadBoxEnv(base, config.stateDir),
       sealedState,
       readStream: () => streamHost.status(),
       turns: backupTurns,

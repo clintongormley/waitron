@@ -253,6 +253,7 @@ function buildApp(
       venueId: VENUE,
       stateDir,
       readRecoveryKey,
+      readBoxEnv: () => loadBoxEnv(base, stateDir),
       sealedState,
       readStream,
       turns,
@@ -2312,6 +2313,50 @@ describe("backup admin routes", () => {
         });
         expect(await fileKey(sc.stateDir)).toBe(KEY_2);
         expect((await readSealed())!.revision).not.toBe(sealed.revision);
+      }, 60_000);
+
+      const failedReloads: [string, (sc: Scenario, sup: BackupSupervisor) => void][] = [
+        [
+          "throws",
+          (_sc, sup) => {
+            vi.spyOn(sup, "reload").mockRejectedValueOnce(
+              new AppError("backup.destinations_invalid", { reason: "bad_entry" }),
+            );
+          },
+        ],
+        [
+          "finds the stored settings unusable",
+          (sc) => {
+            sc.readRecord = async () => {
+              throw new AppError("backup.archive_settings_invalid", { reason: "fields" });
+            };
+          },
+        ],
+      ];
+
+      for (const [outcome, failReload] of failedReloads) {
+        it(`after a reload that ${outcome}, the answer and the next status read show the key file's key and rotation time`, async () => {
+          const { sc, sup, post, status } = await savedInBucket();
+          failReload(sc, sup);
+          const res = await post("/api/backup/rotate", { recoveryKey: KEY_2 });
+          expect(res.status).toBe(200);
+          const rotatedAt = parseEnvFile(
+            await readFile(join(sc.stateDir, "backup.env"), "utf8"),
+          ).WAITRON_BACKUP_KEY_ROTATED_AT;
+          expect(typeof rotatedAt).toBe("string");
+          expect(sup.current().keyFingerprint).not.toBe(keyFingerprint(KEY_2));
+          for (const shown of [await res.json(), await status()]) {
+            expect(shown.keyFingerprint).toBe(keyFingerprint(KEY_2));
+            expect(shown.keyRotatedAt).toBe(rotatedAt);
+          }
+        }, 60_000);
+      }
+
+      it("with no key in the key file, status reports the key the supervisor loaded", async () => {
+        const { sc, sup, status, saved } = await savedInBucket();
+        await writeFile(join(sc.stateDir, "backup.env"), "");
+        expect(sup.current().keyFingerprint).toBe(keyFingerprint(KEY_1));
+        expect((await status()).keyFingerprint).toBe(saved.keyFingerprint);
       }, 60_000);
 
       it("a record stored while nothing is loaded still gets a new revision and a reload", async () => {

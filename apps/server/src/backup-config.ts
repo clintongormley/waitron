@@ -245,7 +245,8 @@ export async function readHeldKey(
   }
 }
 
-function keyRotatedAt(env: Env): string | undefined {
+/** When the recovery key was last rotated, as the box env records it. */
+export function loadKeyRotatedAt(env: Env): string | undefined {
   return isUnset(env.WAITRON_BACKUP_KEY_ROTATED_AT) ? undefined : env.WAITRON_BACKUP_KEY_ROTATED_AT;
 }
 
@@ -277,7 +278,7 @@ export function loadBackupConfig(env: Env, venueId: string): BackupConfig | unde
     retainDays: positiveInt(env, "WAITRON_BACKUP_RETAIN_DAYS", DEFAULT_BACKUP_RETAIN_DAYS),
     staleAfterMs: positiveInt(env, "WAITRON_BACKUP_STALE_AFTER_MS", DEFAULT_BACKUP_STALE_AFTER_MS),
     destinationTimeoutMs: parseDestinationTimeout(env),
-    keyRotatedAt: keyRotatedAt(env),
+    keyRotatedAt: loadKeyRotatedAt(env),
   };
 }
 
@@ -311,7 +312,7 @@ export function resolveBackupConfig(input: {
     retainDays: sealed.retention.days,
     staleAfterMs: positiveInt(env, "WAITRON_BACKUP_STALE_AFTER_MS", DEFAULT_BACKUP_STALE_AFTER_MS),
     destinationTimeoutMs: sealed.destinationTimeoutMs,
-    keyRotatedAt: keyRotatedAt(env),
+    keyRotatedAt: loadKeyRotatedAt(env),
   };
 }
 
