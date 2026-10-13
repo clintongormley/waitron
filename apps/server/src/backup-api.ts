@@ -287,10 +287,10 @@ async function probeArchive(
 }
 
 /**
- * The write routes run `guardWritable` BEFORE any write, dry-validate what they will store the way
- * boot would read it, write, reload, and assert the EFFECTIVE key equals the expected one (the guard
- * against a partial env override silently orphaning archives). A reload that fails after the
- * settings committed is answered 200 with `reloadErrorCode`: the save stands.
+ * `apply` checks what it will store the way boot would read it before writing anything, and after
+ * a reload that succeeds asserts the EFFECTIVE key equals the one it chose (the guard against a
+ * partial env override silently orphaning archives). A reload that fails after `apply` or `disable` committed
+ * is answered 200 with `reloadErrorCode`: the write stands.
  */
 export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): void {
   const run = createErrorBoundary(STATUS, "backup.failed");
@@ -485,7 +485,6 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
     }),
   );
 
-  // Keeps the stored destinations, schedule and retention, so Save can switch archives back on.
   app.post("/api/backup/disable", (c) =>
     run(c, log, async () => {
       await authorize(c);
