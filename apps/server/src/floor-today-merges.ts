@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import {
   partyTables,
   floorTodayJoins,
@@ -180,11 +180,14 @@ export async function writeMerge(
   await splitInUse(tx, moving.tableId, movingParts);
   await splitInUse(tx, target.tableId, targetParts);
 
+  // A joined table split into the group gives it its name, the one pushed onto winning.
+  const targetGives = targetParts.length > 0 ? target.row.name : null;
+  const movingGives = movingParts.length > 0 ? moving.row.name : null;
   let joinId = target.merge?.joinId;
   if (joinId === undefined) {
     const [join] = await tx
       .insert(floorTodayJoins)
-      .values({ zoneId, seats })
+      .values({ zoneId, seats, name: targetGives ?? movingGives })
       .returning({ id: floorTodayJoins.id });
     joinId = join!.id;
     if (targetParts.length === 0) {
@@ -192,6 +195,22 @@ export async function writeMerge(
     }
   } else {
     await tx.update(floorTodayJoins).set({ seats }).where(eq(floorTodayJoins.id, joinId));
+    if (movingGives !== null) {
+      await tx
+        .update(floorTodayJoins)
+        .set({ name: movingGives })
+        .where(and(eq(floorTodayJoins.id, joinId), isNull(floorTodayJoins.name)));
+    }
+  }
+  for (const joined of [
+    targetParts.length > 0 ? target : null,
+    movingParts.length > 0 ? moving : null,
+  ]) {
+    if (joined === null || joined.row.name === null) continue;
+    await tx
+      .update(floorTodayTables)
+      .set({ name: null })
+      .where(eq(floorTodayTables.id, joined.row.id));
   }
 
   const targetRow = placementOf(target.row)!;

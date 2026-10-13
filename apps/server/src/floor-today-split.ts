@@ -67,6 +67,10 @@ export async function splitJoinedTable(
       .where(eq(floorTodayTables.tableId, part.tableId));
   }
   if (toOne) {
+    await tx
+      .update(floorTodayTables)
+      .set({ name: null })
+      .where(eq(floorTodayTables.id, today.row.id));
     await passGuests(tx, cfg, tableId, [left[0]!], "now");
     return;
   }
