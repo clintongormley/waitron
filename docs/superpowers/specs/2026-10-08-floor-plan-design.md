@@ -263,7 +263,8 @@ undone at the next reset anyway.
 > also on a free table split off a joined table whose other split-off tables are in a group with guests,
 > where the server refuses it (`joined_table.tables_in_group`); when those tables are all in one group,
 > the till's sentence names them and the group; otherwise it shows the plain sentence, which names neither. When every table comes back it is one tap; with some apart, its window
-> names them and asks the seats.
+> names them and asks the seats. It also keeps apart a free table split off whose group has guests at
+> any of its tables, which part 4a took back and whose group it ended.
 
 ### 6.3 Reset
 
