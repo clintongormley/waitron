@@ -610,3 +610,78 @@ it("offers a same-named special day with a date over those with none, and the lo
     ]),
   ).toEqual(["p"]);
 });
+
+it("opens a stored special day with a date already added as an unsaved change, saving it only on Save", async () => {
+  await mount((dialog) => {
+    dialog.specialDay = stored;
+    dialog.addDate = "2026-12-10";
+  });
+  const sent = saves();
+  expect(shownDates()).toEqual(["2026-12-10", "2026-12-14", "2026-12-20"]);
+  expect(save().disabled).toBe(false);
+  expect(save().variant).toBe("primary");
+  expect(sent).toEqual([]);
+  await click("[data-test=save-special-day]");
+  expect(sent).toEqual([
+    {
+      id: "d1",
+      input: {
+        name: "Christmas dinners",
+        repeatsYearly: false,
+        dates: [
+          { date: "2026-12-10", closedAllDay: false },
+          { date: "2026-12-14", closedAllDay: false },
+          { date: "2026-12-20", closedAllDay: true },
+        ],
+      },
+    },
+  ]);
+});
+
+it("adds nothing when the date to add is already one of the special day's dates", async () => {
+  await mount((dialog) => {
+    dialog.specialDay = stored;
+    dialog.addDate = "2026-12-14";
+  });
+  expect(shownDates()).toEqual(["2026-12-14", "2026-12-20"]);
+  expect(save().disabled).toBe(true);
+});
+
+it("offers Edit hours on this date on a saved special day's own date and sends that date", async () => {
+  await mount((dialog) => {
+    dialog.specialDay = stored;
+    dialog.date = "2026-12-14";
+    dialog.offerEditDate = true;
+  });
+  const sent: unknown[] = [];
+  el.addEventListener("special-day-edit-date", (event) => sent.push((event as CustomEvent).detail));
+  const action = q<HTMLElementTagNameMap["wt-button"]>("[data-test=edit-date-hours]")!;
+  expect(action.textContent!.trim()).toBe("Edit hours on this date");
+  expect(action.variant).toBe("secondary");
+  await click("[data-test=edit-date-hours]");
+  expect(sent).toEqual([{ date: "2026-12-14" }]);
+});
+
+it.each([
+  ["the host does not offer it", { specialDay: stored, date: "2026-12-14", offerEditDate: false }],
+  ["the special day is new", { date: "2026-12-14", offerEditDate: true }],
+  [
+    "the date is not one of its dates",
+    { specialDay: stored, date: "2026-12-15", offerEditDate: true },
+  ],
+])("offers no Edit hours on this date when %s", async (_, props) => {
+  await mount((dialog) => Object.assign(dialog, props));
+  expect(q("[data-test=edit-date-hours]")).toBeNull();
+});
+
+it("says Edit hours on this date in Spanish", async () => {
+  setLocale("es");
+  await mount((dialog) => {
+    dialog.specialDay = stored;
+    dialog.date = "2026-12-14";
+    dialog.offerEditDate = true;
+  });
+  expect(q("[data-test=edit-date-hours]")!.textContent!.trim()).toBe(
+    "Editar el horario de esta fecha",
+  );
+});

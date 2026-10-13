@@ -106,8 +106,12 @@ export class SpecialDayDialog extends LitElement {
   @property({ type: Boolean }) busy = false;
   /** The stored special day being edited; absent for a new one. */
   @property({ attribute: false }) specialDay?: SpecialDayDetail;
-  /** A new special day's first date. */
+  /** A new special day's first date; for a stored one, the date it was opened on. */
   @property() date = "";
+  /** A date to add to the stored special day's dates when it opens, as an unsaved change. */
+  @property() addDate = "";
+  /** Whether to offer going to the per-date editor for `date`. */
+  @property({ type: Boolean }) offerEditDate = false;
   /** The public holidays the host knows of, for the pre-fill and the holiday-name note. */
   @property({ attribute: false }) holidays: readonly HolidayFact[] = [];
   /** Special days the host knows of, for the "Add to <name>" offer; `latest` is a day's last date. */
@@ -186,6 +190,15 @@ export class SpecialDayDialog extends LitElement {
       this.savableAtOpen = !this.specialDay && holiday !== "";
       this.offered = holiday !== "" && this.existing.some((day) => day.name === holiday);
       this.baseline = copy(this.draft);
+      if (
+        this.specialDay &&
+        isLocalDate(this.addDate) &&
+        !this.draft.dates.some((entry) => entry.date === this.addDate)
+      )
+        this.draft = {
+          ...this.draft,
+          dates: byDate([...this.draft.dates, { date: this.addDate, closedAllDay: false }]),
+        };
       this.attempted = false;
       this.adding = false;
       this.addFrom = "";
@@ -558,6 +571,29 @@ export class SpecialDayDialog extends LitElement {
                   ${onHoliday ? html`<p class="note" data-test="holiday-note">${t("special.holiday_note")}</p>` : nothing}
                   ${leap ? html`<p class="note">${t("special.leap")}</p>` : nothing}
                 </div>
+                ${
+                  this.offerEditDate &&
+                  this.specialDay?.dates.some((entry) => entry.date === this.date)
+                    ? html`<div>
+                        <wt-button
+                          data-test="edit-date-hours"
+                          variant="secondary"
+                          ?disabled=${this.busy}
+                          @click=${() => {
+                            if (current())
+                              this.dispatchEvent(
+                                new CustomEvent("special-day-edit-date", {
+                                  detail: { date: this.date },
+                                  bubbles: true,
+                                  composed: true,
+                                }),
+                              );
+                          }}
+                          >${t("special.edit_date")}</wt-button
+                        >
+                      </div>`
+                    : nothing
+                }
               </div>`
         }
         ${
