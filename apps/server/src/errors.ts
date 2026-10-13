@@ -1116,7 +1116,8 @@ declare module "@waitron/shared" {
     "backup.archive_invalid": { reason: string };
     /** WAITRON_BACKUP_RECOVERY_KEY is unset where one is needed: a backup destination is configured
      * (refused at load so an unattended backup can never write an unencrypted or box-key-encrypted
-     * artifact), or a recovery kit is asked for (`GET /api/backup/stream/kit`). */
+     * artifact), or a recovery kit or archive recovery pack is asked for
+     * (`GET /api/backup/stream/kit`, `GET /api/backup/archive-recovery-pack`). */
     "backup.recovery_key_missing": Record<string, never>;
     /** WAITRON_BACKUP_RECOVERY_KEY is shorter than `min` characters. */
     "backup.recovery_key_too_short": { min: number };
@@ -1187,8 +1188,9 @@ declare module "@waitron/shared" {
      * `reason` names the part that failed, never its value, which could be a secret. */
     "backup.archive_settings_invalid": { reason: string };
     /** A stored archive record could not be read. `disable` has no settings to keep switched off,
-     * and the bucket copy's Save (`PUT /api/backup/stream`) cannot check its folder against the
-     * archive's; an archive Save replaces the record. `reason` is the read's error code, never the
+     * the bucket copy's Save (`PUT /api/backup/stream`) cannot check its folder against the
+     * archive's, and the archive recovery pack (`GET /api/backup/archive-recovery-pack`) cannot be
+     * built; an archive Save replaces the record. `reason` is the read's error code, never the
      * record. */
     "backup.archive_settings_unreadable": { reason: string };
     /** The bucket copy's stored settings (`backup.stream`) could not be read, so an archive Save
@@ -1198,6 +1200,17 @@ declare module "@waitron/shared" {
     /** An archive bucket's folder for this venue would sit inside, or contain, the stream's venue
      * folder in the same bucket. No params: they would be the owner's bucket settings. */
     "backup.archive_namespace_overlap": Record<string, never>;
+    /** An archive recovery pack (`archive-recovery-pack.ts`) held no token (`not_found`), more
+     * than one token (`several`), a token that is not base64url JSON (`encoding`), or not exactly a
+     * pack this server issues (`shape`). Never carries a field's value: the pack holds the bucket's
+     * secret key and the recovery key. */
+    "backup.archive_recovery_pack_invalid": {
+      reason: "not_found" | "encoding" | "shape" | "several";
+    };
+    /** An archive recovery pack was asked for while the archive settings name no bucket: no
+     * dashboard record is stored, the stored one names only a local folder, or the environment owns
+     * the settings and names no bucket. */
+    "backup.archive_bucket_not_configured": Record<string, never>;
     /** Save's test of an archive bucket — write, read back, list and delete one object — failed or
      * ran out of time. `reason` is a code, or `timed_out`, `read_mismatch` or `not_listed`; never
      * the provider's message. */
@@ -1379,6 +1392,18 @@ declare module "@waitron/shared" {
     "restore.stream_state_missing": { nodeId: string };
     /** The disk filled while the copy was being downloaded from the bucket. */
     "restore.stream_disk_full": Record<string, never>;
+    /** The archive named for a restore is not a name an archive is stored under, so nothing was
+     * asked of the bucket. */
+    "restore.archive_key_invalid": Record<string, never>;
+    /** The pack's archive folder holds no archive by the name given. */
+    "restore.archive_missing": Record<string, never>;
+    /** The staging folder has too little free space for the archive, or the disk filled while it
+     * was being downloaded. */
+    "restore.archive_disk_full": Record<string, never>;
+    /** Downloading the archive did not finish: it was cancelled or ran out of time (`timed_out`),
+     * the bucket refused or failed a request (`request_failed`), or anything else (`failed`).
+     * Carries no key, path or bucket text. */
+    "restore.archive_download_failed": { reason: "timed_out" | "request_failed" | "failed" };
     // The server's working-order paths throw these contributed venue-service codes directly.
     "order.service_context_missing": { workingOrderId: string };
     "service_zone.mode_incompatible": {

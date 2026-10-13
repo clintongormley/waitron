@@ -403,7 +403,7 @@ command against it treat that entrypoint differently:
   The same `--entrypoint node` applies to `docker compose run app /app/bin-rejoin.js …`, to
   `/app/bin-recovery.js unpack …`, and to any bare `docker run` against this image.
 
-- **A restore takes one of two sources.** `restore <backup-file>` restores an encrypted backup
+- **A restore takes one of three sources.** `restore <backup-file>` restores an encrypted backup
   file, with its recovery key in `WAITRON_BACKUP_RECOVERY_KEY`. `restore --from-bucket <kit-file>`
   rebuilds the box from the copy the old box kept in the owner's bucket; the recovery kit file
   holds the bucket's key and the recovery key, so nothing secret goes on the command line. The file
@@ -423,6 +423,25 @@ command against it treat that entrypoint differently:
   same check. Each form takes only its own flags, each once: `--confirm-venue` belongs to the
   bucket form alone, and a backup file given together with `--from-bucket` is refused. Anything
   else prints the usage line and exits 2.
+
+  `restore --from-archive <pack-file> --archive-key <name>` downloads one archive from the bucket
+  named in an archive recovery pack file, and restores it as `restore <backup-file>` does, with
+  the same check on the old box. The pack holds the bucket's key and the recovery key, so it is as
+  secret as the recovery kit: keep it off the box, and make it visible and readable inside the
+  container as the kit is above, or the command stops with `cannot read pack file: <path>`.
+  `<name>` is the archive's file name as the bucket lists it. This form takes neither a backup
+  file, `--from-bucket` nor `--confirm-venue`, and uses the pack's recovery key even when
+  `WAITRON_BACKUP_RECOVERY_KEY` is set. An archive file downloaded from the bucket by hand
+  restores with `restore <backup-file>` and the recovery key alone, in
+  `WAITRON_BACKUP_RECOVERY_KEY`.
+
+  ```bash
+  docker compose run --rm -v "$PWD/pack.txt:/pack.txt:ro" --entrypoint node app \
+    /app/bin-restore.js restore --from-archive /pack.txt --archive-key <name>
+  ```
+
+  The Backups screen does not offer the pack yet: it is served by
+  `GET /api/backup/archive-recovery-pack` (backlog A538, Task 6).
 
   A restore moves the old database into a hidden folder in the venue folder
   (`/var/lib/waitron/state/venue/` inside the container), named `.venue.db-replaced-` and six
@@ -446,15 +465,19 @@ command against it treat that entrypoint differently:
   Restore and rejoin are refused while another process, usually the running server, is using the
   venue folder (`provisioning.database_in_use`): rejoin before it reads or wipes anything, restore
   before it changes the venue folder, the box's identity or its secrets. A restore's earlier steps
-  run in temporary folders under the state folder, and the bucket form downloads the whole copy
-  there first, then is refused only when it comes to place it — so stop the server before either
-  form. A run that downloads from the bucket, or checks a backup's bucket, makes its own folder
-  (`stream-restore-` or `archive-source-check-` and six random characters) and removes it when it
-  ends; a run that is killed leaves it, holding a full copy of the venue's database, and the next
-  run does not remove it. Once no restore is running, you can delete a leftover `stream-restore-*`
-  or `archive-source-check-*` folder from the top of the `state` volume
-  (`/var/lib/waitron/state` inside the container). Break-glass is the exception by design: it runs beside the
-  server and takes no lock. Whatever holds the folder keeps a small file beside it,
+  run in temporary folders under the state folder, and the bucket and archive forms download the
+  whole copy or archive there first, then are refused only when they come to place it — so stop
+  the server before any form. A run that downloads from the bucket, or checks a backup's bucket,
+  makes its own folder (`stream-restore-`, `archive-source-check-` or, inside `restore-staging`,
+  `archive-download-`, each followed by six random characters) and removes it when it ends; a run
+  that is killed leaves it, holding a full copy of the venue's database or the encrypted archive,
+  and the next run does not remove it. Once no restore is running, you can delete a leftover
+  `stream-restore-*` or `archive-source-check-*` folder from the top of the `state` volume
+  (`/var/lib/waitron/state` inside the container), or an `archive-download-*` folder from the
+  `restore-staging` folder there. A `--from-archive` run that downloaded the archive but cannot
+  remove its `archive-download-*` folder afterwards prints its result and then a line saying so;
+  delete that folder the same way. Break-glass is the exception by design: it runs beside the server
+  and takes no lock. Whatever holds the folder keeps a small file beside it,
   `venue.holder.json`, naming what kind of program it is and rewriting a heartbeat time every five
   seconds. A server start refused while that heartbeat is under 30 seconds old — a second copy of
   the app beside the running one — does not count toward the three failed starts that put the box

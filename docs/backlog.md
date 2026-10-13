@@ -4187,8 +4187,10 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   holding them in memory (A538-2), and Task 3, which gives each destination's calls their own time
   limit, stops them with the sweep and reports what each destination did (A538-3), and Task 4,
   which stores the archive choice sealed in the vault, lets the environment or the backup routes
-  name a bucket, and keeps every destination across a key rotation (A538-4). Tasks 5 to 10 and the
-  real-AWS evidence are open.
+  name a bucket, and keeps every destination across a key rotation (A538-4), and Task 5, which
+  restores one archive from the bucket with an archive recovery pack and no stream settings
+  (`waitron-restore restore --from-archive`, `GET /api/backup/archive-recovery-pack`; A538-5).
+  Tasks 6 to 10 and the real-AWS evidence are open.
   `S3FileStore`'s listing and batch delete repeat `S3ObjectStore`'s (`packages/stream/src/s3-store.ts`)
   with different error codes, and only the file store's refuses a repeated key or bad size and
   counts `NoSuchKey` as deleted; share them, deciding whether the bucket stream takes those checks
@@ -4202,7 +4204,34 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   settings cannot be used), and on `backup.rotation_metadata_failed` it must replace a displayed
   recovery key or fingerprint with the new one, which is already in effect. It offers no control for
   `POST /api/backup/disable` and does not show `storedDisabled` (archives stored switched off).
-  Left open by A538-4.
+  Left open by A538-4. It also needs a Download archive recovery pack action over
+  `GET /api/backup/archive-recovery-pack`, which answers `keyFingerprint`, `keyRotatedAt` and
+  `revision` so a displayed pack can be marked stale; that route's `backup.recovery_key_missing`
+  refusal would show the existing "Enter a recovery key" wording, written for the form. Under
+  environment management the pack route answers no `revision`, so a bucket changed in the
+  environment marks no pack stale. The pack file's explanatory text is written by the server in
+  English only (`encodeArchiveRecoveryPack`); the recovery kit's file text is built by the dashboard
+  in English and Spanish. Decide which owns it when the button lands. Left open by A538-5. When
+  the button lands, remove deploy/README.md's line saying the Backups screen does not offer the
+  pack yet.
+
+- **A recovery kit can carry a recovery key its own restore refuses.** `parseRecoveryKit`
+  (`packages/stream/src/kit.ts`) refuses a recovery key holding a C0 control character or DEL, which
+  the box's key rules (`checkedRecoveryKey`) accept, so a box with such a key hands out a kit whose
+  restore calls it damaged; the archive recovery pack accepts such keys. Predates A538-5 (kit.ts
+  last changed in #627). `bench/sqlite-failover/src/probes/restore-time.ts` still computes free
+  space as `bavail * bsize`, where the server multiplies by `frsize` (`free-bytes.ts`).
+
+- **A restore that fails while writing the secrets has already replaced the venue database.**
+  `placeValidated` (`apps/server/src/restore.ts`) puts the database in place and runs the restore
+  hooks before `restoreSecrets`, so a full disk or a write error there leaves the archive's
+  database with the old box's secrets. Measured in A538-5's review with a throwaway case that made
+  the secrets write fail: the command exited 1 and the live venue's name was already the archive's.
+  Predates A538-5. Write the secrets into staging before placement, or put the previous database
+  back on failure. The same step sets `trading.env` aside (as `trading.env.replaced`) before it
+  moves the database into place, so a full disk at that move leaves the old database without its
+  active identity file; found by the finish-branch review's run-it seat with an injected ENOSPC,
+  and it predates A538-5 too (`placeValidated`, `setAsideExistingIdentity`).
 
 - **A backup destination that fails to build leaves archives reported as on.** In
   `BackupSupervisor.reload()` (`apps/server/src/backup-supervisor.ts`) the venue handle is assigned
@@ -4486,9 +4515,10 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   setup wizard ever accepts as confirmed, so it cannot be restored; no dedicated error code names
   that case. Left open by SQLite slice 2 Task 9b (#642, `waitron-restore restore --from-bucket`).
 
-- **An interrupted bucket rebuild or archive check leaves its scratch folder,** a full copy of the
-  venue database, under the state folder; the next run makes a new one and does not remove it. Left
-  open by SQLite slice 2 Task 9b (#642, `waitron-restore restore --from-bucket`).
+- **An interrupted bucket rebuild, archive check or archive download leaves its scratch folder** —
+  a full copy of the venue database, or the encrypted archive (`archive-download-`, inside
+  `restore-staging`) — under the state folder; the next run makes a new one and does not remove it.
+  Left open by SQLite slice 2 Task 9b (#642, `waitron-restore restore --from-bucket`) and A538-5.
 
 - **A `.venue.db-replaced-` folder left in the venue folder is removed by the box's next start**
   (`clearReplacedDatabases`, A31) only from the container's entry: a server started any other way

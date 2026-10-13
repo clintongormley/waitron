@@ -13,6 +13,7 @@ import {
   requireManagementSession,
 } from "@waitron/server-kit";
 import {
+  archiveNamespace,
   hasExactKeys,
   isRecord,
   archiveRecord,
@@ -23,11 +24,13 @@ import {
   writeArchiveSettings,
   type ArchiveSettings,
 } from "./archive-settings.js";
+import { encodeArchiveRecoveryPack } from "./archive-recovery-pack.js";
 import { buildBackupBackend } from "./backup-backends.js";
 import {
   DEFAULT_DESTINATION_TIMEOUT_MS,
   MAX_DESTINATION_TIMEOUT_MS,
   MIN_DESTINATION_TIMEOUT_MS,
+  archiveDestinations,
   loadKeyRotatedAt,
   loadRecoveryKey,
   mintRecoveryKey,
@@ -94,6 +97,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "backup.effective_mismatch": 400,
   "backup.archive_namespace_overlap": 400,
   "backup.stream_not_configured": 409,
+  "backup.archive_bucket_not_configured": 409,
+  "backup.recovery_key_missing": 409,
   "backup.archive_test_failed": 422,
   "backup.archive_settings_invalid": 500,
   "backup.rotation_metadata_failed": 500,
@@ -488,6 +493,62 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
       await authorize(c);
       const key = (await heldKey()) ?? null;
       return c.json({ key });
+    }),
+  );
+
+  // One box env read gives both the key and, under environment management, the bucket, and the
+  // turn keeps a Save or rotation from landing between this read and the record's: either could
+  // pair a bucket with a key its archives were not written under. The bucket is found before the
+  // key is read, so a box with neither is told about the bucket. With several buckets in the
+  // environment, the pack names the first listed. Nothing of the pack is logged: the error boundary
+  // logs a refusal's code and params and a failure's code, and no param here carries a secret.
+  app.get("/api/backup/archive-recovery-pack", (c) =>
+    run(c, log, async () => {
+      await authorize(c);
+      return deps.turns(async () => {
+        const env = await deps.readBoxEnv();
+        const { managedByEnvironment } = deps.supervisor.current();
+        let sealed: ArchiveSettings | null = null;
+        if (!managedByEnvironment) {
+          const read = await readHeldSettings();
+          if ("unreadable" in read) {
+            throw new AppError("backup.archive_settings_unreadable", { reason: read.unreadable });
+          }
+          sealed = read.settings;
+        }
+        const revision = sealed?.revision;
+        const destination = archiveDestinations({
+          managedByEnvironment,
+          env,
+          sealed,
+          venueId: deps.venueId,
+        }).find((d) => d.kind === "s3");
+        if (destination === undefined) {
+          throw new AppError("backup.archive_bucket_not_configured", {});
+        }
+        const { held, key: recoveryKey } = await readHeldKey(async () => loadRecoveryKey(env));
+        if (!held) throw new AppError("backup.recovery_key_missing", {});
+        if (recoveryKey === undefined) {
+          throw new AppError("backup.recovery_key_too_short", { min: MIN_PASSPHRASE_LENGTH });
+        }
+        const { bucket, venueId } = destination;
+        const pack = encodeArchiveRecoveryPack({
+          version: 1,
+          format: "WBK1",
+          venueId,
+          bucket,
+          archivePrefix: archiveNamespace(bucket.prefix, venueId),
+          recoveryKey,
+        });
+        const keyRotatedAt = loadKeyRotatedAt(env);
+        c.header("Cache-Control", "no-store");
+        return c.json({
+          pack,
+          keyFingerprint: keyFingerprint(recoveryKey),
+          ...(keyRotatedAt === undefined ? {} : { keyRotatedAt }),
+          ...(revision === undefined ? {} : { revision }),
+        });
+      });
     }),
   );
 

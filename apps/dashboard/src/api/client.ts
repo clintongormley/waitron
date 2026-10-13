@@ -1697,6 +1697,14 @@ export interface StreamSupervisorStatus {
 export type StreamStatusView =
   StreamSupervisorStatus | { state: "off"; reason: string; stateSince: string } | { state: "off" };
 
+/** `GET /api/backup/archive-recovery-pack`. `pack` is the whole file to save, and secret. */
+export interface ArchiveRecoveryPackAnswer {
+  pack: string;
+  keyFingerprint: string;
+  keyRotatedAt?: string;
+  revision?: string;
+}
+
 /** `GET /api/backup/stream` — LOCAL copy of `apps/server/src/stream-api.ts`'s `StreamSettingsView`.
  * Never carries the secret access key. */
 export interface StreamSettingsView {
@@ -4070,6 +4078,10 @@ export class DashboardApi {
 
   getRecoveryKit(): Promise<{ kit: string; keyFingerprint: string }> {
     return this.#request<{ kit: string; keyFingerprint: string }>("/api/backup/stream/kit", "GET");
+  }
+
+  getArchiveRecoveryPack(): Promise<ArchiveRecoveryPackAnswer> {
+    return this.#request<ArchiveRecoveryPackAnswer>("/api/backup/archive-recovery-pack", "GET");
   }
 
   // ── Card payments (providers + readers) ──────────────────────────────────────────────────────────
