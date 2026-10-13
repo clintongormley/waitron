@@ -2196,6 +2196,24 @@ describe("Year view", () => {
     await expect.poll(() => view()?.model?.year).toBe(2026);
   });
 
+  it("opens the Year from an old Calendar address that names a month", async () => {
+    const { el, view, years } = await yearMount(
+      "/manage/opening-hours/view/calendar/month/2027-02",
+    );
+    expect(tabs(el).value).toBe("year");
+    await expect.poll(() => view()?.model?.year).toBe(2026);
+    expect(years).toEqual(["2026"]);
+  });
+
+  it.each(["0000", "9999"])(
+    "opens the current year when the address names the out-of-range year %s",
+    async (year) => {
+      const { view, years } = await yearMount(`/manage/opening-hours/view/year/year/${year}`);
+      await expect.poll(() => view()?.model?.year).toBe(2026);
+      expect(years).toEqual(["2026"]);
+    },
+  );
+
   it("passes read-only to the year view", async () => {
     const { view } = await yearMount("/manage/opening-hours/view/year", true);
     await expect.poll(() => view()?.model).toBeDefined();

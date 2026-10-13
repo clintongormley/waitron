@@ -37,7 +37,7 @@ import type {
 } from "../menu-timetable-types.js";
 import type { OpeningHoursApi, OpeningStation } from "./opening-hours-client.js";
 import { businessDateToday } from "./opening-hours-day.js";
-import { addDays, isLocalDate, weekdayOf } from "../hours-rules.js";
+import { addDays, isLocalDate, parseCalendarYear, weekdayOf } from "../hours-rules.js";
 import type { SpecialDaysModel } from "../holiday-types.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import { format, formatDate } from "./hours-view.js";
@@ -110,8 +110,8 @@ export class OpeningHoursScreen extends LitElement {
   @state() private stationReadError = "";
   private stationsDetach?: () => void;
   @state() private view: View = "week";
-  /** The address's year, or "" for the venue's current one. */
-  @state() private requestedYear = "";
+  /** The address's year, or 0 for the venue's current one. */
+  @state() private requestedYear = 0;
   @state() private yearModel?: OpeningHoursYear;
   @state() private yearReadError = "";
   @state() private knownSpecialDays: readonly { id: string; name: string }[] = [];
@@ -172,8 +172,7 @@ export class OpeningHoursScreen extends LitElement {
       this.url.read("station") ??
       new URL(navigationGuardFor(window)?.href ?? location.href).searchParams.get("station") ??
       "";
-    const year = this.url.read("year") ?? "";
-    this.requestedYear = /^\d{4}$/.test(year) ? year : "";
+    this.requestedYear = parseCalendarYear(this.url.read("year")) ?? 0;
     const date = this.url.read("date") ?? "";
     this.dayDate = isLocalDate(date) ? date : "";
     const week =
@@ -414,9 +413,9 @@ export class OpeningHoursScreen extends LitElement {
   }
   private shownYear() {
     if (this.view !== "year" || !this.model) return 0;
-    return Number(
+    return (
       this.requestedYear ||
-        (businessDateToday(this.model) || String(new Date().getFullYear())).slice(0, 4),
+      Number((businessDateToday(this.model) || String(new Date().getFullYear())).slice(0, 4))
     );
   }
   private watchYear() {
