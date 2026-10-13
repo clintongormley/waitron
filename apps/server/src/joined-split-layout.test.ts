@@ -321,4 +321,8 @@ describe("standsIn", () => {
     expect(standsIn({ ...LONG, rotation: 45 }, bar(14, 18))).toBe(false);
     expect(standsIn(bar(14, 18), { ...LONG, rotation: 45 })).toBe(false);
   });
+
+  it("a Bar turned 195° with its centre on Long table's corner overlaps it by exactly one square, and does", () => {
+    expect(standsIn(LONG, bar(9, 19, 195))).toBe(true);
+  });
 });

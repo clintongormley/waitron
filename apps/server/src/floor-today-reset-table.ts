@@ -2,6 +2,7 @@ import { and, eq, inArray, isNotNull, not } from "drizzle-orm";
 import {
   diningTables,
   joinedOutOfService,
+  joinedTableApart,
   floorResetTables,
   floorTodayJoinTables,
   floorTodaySplitParts,
@@ -9,7 +10,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
-import { AppError } from "@waitron/shared";
+import { AppError, compareLabels } from "@waitron/shared";
 import { catchUpZone, foodComingTo, placementColumns, placementOf } from "./floor-today-store.js";
 import { leaveMergesRestoring, mergeMembers } from "./floor-today-merges.js";
 import { partsOf } from "./floor-today-parts.js";
@@ -22,8 +23,9 @@ import "./errors.js";
 
 /**
  * Takes back every table split off the joined table that no party holds and no food is on its way
- * to, ending any group one is in, and puts the joined table in its saved place: all of it when
- * whole, else over the slots of the tables joined.
+ * to, ending any group one is in, and puts the joined table back from its saved place: all of it
+ * when whole, else from the first table joined to the last. Saved with no place, it is placed as
+ * Join again places it.
  */
 export async function resetTable(
   tx: Transaction,
@@ -74,21 +76,36 @@ export async function resetTable(
   const staying = parts.flatMap((part, index) =>
     !split.has(part.tableId) || sent.has(part.tableId) ? [index] : [],
   );
-  const place = joinedPlaceAfter({
-    row: placementOf(today.row),
-    standing: false,
-    saved: placementOf(saved!),
-    parts,
-    covered: 0,
-    staying,
-    whole,
-  });
+  const row = placementOf(today.row);
+  const savedPlace = placementOf(saved!);
+  const place =
+    savedPlace !== null
+      ? joinedPlaceAfter({
+          row,
+          standing: false,
+          saved: savedPlace,
+          parts,
+          covered: 0,
+          staying,
+          whole,
+        })
+      : joinedPlaceAfter({
+          row,
+          standing: !(await apartNow(tx, tableId)) && !today.row.takenOff && row !== null,
+          saved: null,
+          parts,
+          covered: parts.findIndex((part) => !split.has(part.tableId)),
+          staying,
+          whole,
+        });
 
   for (const id of backIds) {
     const members = await mergeMembers(tx, id);
     if (members.length > 0) await leaveMergesRestoring(tx, members);
   }
-  await refusePlaceTaken(tx, today.zoneId, tableId, place!, new Set([tableId, ...backIds]));
+  if (place !== null) {
+    await refusePlaceTaken(tx, today.zoneId, tableId, place, new Set([tableId, ...backIds]));
+  }
   await tx
     .update(diningTables)
     .set({ needsClearingSince: null })
@@ -114,7 +131,15 @@ export async function resetTable(
   await catchUpZone(tx, cfg, removals, today.zoneId, now);
 }
 
-/** Refuses when a table drawn on today's map, other than `own`, stands in `place`; the first by label is named. */
+async function apartNow(tx: Transaction, tableId: string): Promise<boolean> {
+  const [{ apart }] = await tx
+    .select({ apart: joinedTableApart(diningTables.id).mapWith(Boolean) })
+    .from(diningTables)
+    .where(eq(diningTables.id, tableId));
+  return apart;
+}
+
+/** Refuses when a table drawn on today's map, other than `own`, stands in `place`; the first in number order is named. */
 async function refusePlaceTaken(
   tx: Transaction,
   zoneId: string,
@@ -145,10 +170,8 @@ async function refusePlaceTaken(
     );
   const standing = rows
     .filter((row) => !own.has(row.id) && standsIn(place, placementOf(row)!))
-    .sort(
-      (a, b) =>
-        a.label.localeCompare(b.label, undefined, { numeric: true }) || a.id.localeCompare(b.id),
-    );
+    // `compareLabels` reads "Table 01" and "Table 1" as equal, so the exact strings break the tie.
+    .sort((a, b) => compareLabels(a.label, b.label) || (a.label < b.label ? -1 : 1));
   if (standing.length > 0) {
     throw new AppError("table.place_taken", { tableId, standingId: standing[0]!.id });
   }

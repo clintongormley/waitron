@@ -173,6 +173,7 @@ export function standsIn(place: Placement, other: Placement): boolean {
     const onB = along(b.corners);
     const overlap =
       Math.min(Math.max(...onA), Math.max(...onB)) - Math.max(Math.min(...onA), Math.min(...onB));
-    return overlap >= 1;
+    // Slack for rounding: an exact one-square overlap at 195° computes as 0.999…98 (standsIn's 195° test).
+    return overlap >= 1 - 1e-9;
   });
 }

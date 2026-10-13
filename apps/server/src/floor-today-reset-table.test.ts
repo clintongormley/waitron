@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { and, asc, eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -14,6 +15,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
+import { compareLabels } from "@waitron/shared";
 import { foodOnItsWay } from "./delivery-release.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
@@ -25,6 +27,7 @@ import {
   pay,
   seat,
   setupPartyVenue,
+  tableRow,
   type PartyVenue,
 } from "./testing/party-venue.js";
 import {
@@ -32,6 +35,7 @@ import {
   giveKeptSize,
   mergeOf,
   plannedZone,
+  type PlannedEntry,
   todayRow,
   zoneRevisionOf,
 } from "./testing/floor-today-venue.js";
@@ -640,6 +644,217 @@ describe("Join again beside Reset table", () => {
 
     expect(await placeOf(table.long!)).toEqual(LONG_SAVED);
     expect(await placeOf(table.c5!)).toEqual(NO_PLACE);
+    expect(await splitRowsOf(table.long!)).toEqual([]);
+  });
+});
+
+const BAR = { key: "bar", label: "Bar", seats: 4, place: { x: 40, y: 0, width: 2, height: 2 } };
+
+/** Long table (10 seats) = Counter 3, 4 and 5, each kept 2 × 2, saved at `long`; `others` beside it, those in `kept` kept 2 × 2 too. */
+async function longTableWith(
+  long: PlannedEntry["place"],
+  others: PlannedEntry[],
+  kept: string[] = [],
+) {
+  const zone = await plannedZone(
+    v,
+    [
+      { key: "c3", label: "Counter 3", seats: 2, place: null },
+      { key: "c4", label: "Counter 4", seats: 6, place: null },
+      { key: "c5", label: "Counter 5", seats: 4, place: null },
+      { key: "long", label: "Long table", seats: 10, place: long, partKeys: ["c3", "c4", "c5"] },
+      ...others,
+    ],
+    NOW,
+  );
+  for (const key of ["c3", "c4", "c5", ...kept])
+    await giveKeptSize(v, zone.master[key]!, { width: 2, height: 2 });
+  return zone;
+}
+
+/** Renames `tableId`; the room's first read after `plannedZone` names its tables as the plan does, so call this after it. */
+async function relabel(tableId: string, label: string): Promise<void> {
+  await inTx(v, (tx) => tx.update(diningTables).set({ label }).where(eq(diningTables.id, tableId)));
+}
+
+describe("Reset table's place check, more cases", () => {
+  it("Bar pushed onto Counter 5's left, inside the saved place, nobody seated: the group ends first, so Bar goes back by the bar counter and Long table is whole at its saved place", async () => {
+    const { table, zoneId } = await c5SplitOff();
+    await moveTo(table.long!, 30, 30);
+    await merge(table.bar!, table.c5!, "left", 8);
+    expect(await placeOf(table.bar!)).toEqual({ x: 12, y: 20, width: 2, height: 2 });
+
+    await settles(() => reset(table.long!, [table.c5!]), zoneId);
+
+    expect(await placeOf(table.long!)).toEqual(LONG_SAVED);
+    expect(await seatsOf(table.long!)).toBe(10);
+    expect(await placeOf(table.bar!)).toEqual({ x: 40, y: 0, width: 2, height: 2 });
+    expect(await groupOf(table.bar!)).toBeNull();
+  });
+
+  it("a joined table come apart does not count though its own row stays placed: Window moved into the saved place, then both its tables split off and moved away", async () => {
+    const { table, zoneId } = await longTableWith(
+      LONG_SAVED,
+      [
+        BAR,
+        { key: "w1", label: "Window 1", seats: 2, place: null },
+        { key: "w2", label: "Window 2", seats: 2, place: null },
+        {
+          key: "window",
+          label: "Window",
+          seats: 4,
+          place: { x: 50, y: 10, width: 4, height: 2 },
+          partKeys: ["w1", "w2"],
+        },
+      ],
+      ["w1", "w2"],
+    );
+    await ok(splitOff(table.long!, [table.c5!], 6));
+    await moveTo(table.long!, 30, 30);
+    await moveTo(table.window!, 10, 20);
+    await ok(splitOff(table.window!, [table.w1!]));
+    expect(await splitRowsOf(table.window!)).toEqual([table.w1!, table.w2!].sort());
+    await moveTo(table.w1!, 60, 0);
+    await moveTo(table.w2!, 64, 0);
+    expect(await placeOf(table.window!)).toEqual({ x: 10, y: 20, width: 4, height: 2 });
+    expect((await todayRow(v, table.window!))!.takenOff).toBe(false);
+
+    await settles(() => reset(table.long!, [table.c5!]), zoneId);
+
+    expect(await placeOf(table.long!)).toEqual(LONG_SAVED);
+  });
+
+  it("Bar saved turned 195°, moved so its centre is on the saved place's corner, overlaps it by exactly one square: refused naming Bar", async () => {
+    const { table } = await longTableWith(LONG_SAVED, [
+      { ...BAR, place: { ...BAR.place, rotation: 195 } },
+    ]);
+    await ok(splitOff(table.long!, [table.c5!], 6));
+    await moveTo(table.long!, 30, 30);
+    await moveTo(table.bar!, 9, 19);
+    const before = await everything();
+
+    await refused(reset(table.long!, [table.c5!]), 409, "table.place_taken", {
+      tableId: table.long!,
+      standingId: table.bar!,
+    });
+    expect(await everything()).toEqual(before);
+  });
+
+  it("Table 2.10, Table 2.9 and Table 10 all in the saved place: Table 2.10 is named, the first in the order the till lists tables", async () => {
+    const { table } = await longTableWith(LONG_SAVED, [
+      { key: "t210", label: "Table 2.10", seats: 2, place: { x: 40, y: 0, width: 2, height: 2 } },
+      { key: "t29", label: "Table 2.9", seats: 2, place: { x: 44, y: 0, width: 2, height: 2 } },
+      { key: "t10", label: "Table 10", seats: 2, place: { x: 48, y: 0, width: 2, height: 2 } },
+    ]);
+    await ok(splitOff(table.long!, [table.c5!], 6));
+    await moveTo(table.long!, 30, 30);
+    await moveTo(table.t10!, 10, 20);
+    await moveTo(table.t29!, 12, 20);
+    await moveTo(table.t210!, 14, 20);
+    const before = await everything();
+
+    await refused(reset(table.long!, [table.c5!]), 409, "table.place_taken", {
+      tableId: table.long!,
+      standingId: table.t210!,
+    });
+    expect(await everything()).toEqual(before);
+  });
+
+  for (const [first, second] of [
+    ["bar", "stool"],
+    ["stool", "bar"],
+  ] as const) {
+    it(`two labels the till lists as equal, "Table 01" on ${first} and "Table 1" on ${second}: ${first} is named`, async () => {
+      const { table } = await LONG_TABLE_AND_STOOL();
+      await ok(splitOff(table.long!, [table.c5!], 6));
+      await moveTo(table.long!, 30, 30);
+      await moveTo(table.bar!, 10, 20);
+      await moveTo(table.stool!, 14, 20);
+      const suffix = randomUUID().slice(0, 6);
+      await relabel(table[first]!, `Table 01 ${suffix}`);
+      await relabel(table[second]!, `Table 1 ${suffix}`);
+      expect(compareLabels(`Table 01 ${suffix}`, `Table 1 ${suffix}`)).toBe(0);
+
+      await refused(reset(table.long!, [table.c5!]), 409, "table.place_taken", {
+        tableId: table.long!,
+        standingId: table[first]!,
+      });
+      expect((await tableRow(v, table[first]!)).label).toBe(`Table 01 ${suffix}`);
+    });
+  }
+
+  it("the place reaches from the first table joined to the last: guests at Counter 4, moved away; Reset table for Counter 3 and 5 puts Long table over all three slots", async () => {
+    const { table, zoneId } = await longApart();
+    await seat(v, table.c4!);
+    await moveTo(table.c4!, 30, 0);
+
+    await settles(() => reset(table.long!, [table.c3!, table.c5!], 6), zoneId);
+
+    expect(await placeOf(table.long!)).toEqual(LONG_SAVED);
+    expect(await seatsOf(table.long!)).toBe(6);
+    expect(await placeOf(table.c4!)).toEqual({ x: 30, y: 0, width: 2, height: 2 });
+  });
+});
+
+describe("Reset table on a joined table saved with no place", () => {
+  /** Long table saved with no place, put out today at 10, 20 (8 × 8, the size a new table gets). */
+  async function longPutOut(others: PlannedEntry[]) {
+    const zone = await longTableWith(null, others);
+    await ok(
+      post(`/api/tables/${zone.table.long!}/today/place`, zone.table.long!, { x: 10, y: 20 }),
+    );
+    expect(await placeOf(zone.table.long!)).toEqual({ x: 10, y: 20, width: 8, height: 8 });
+    return zone;
+  }
+
+  it("Counter 5 split off, Bar on the map: Reset table puts Long table whole where it stands, at the size a new table gets", async () => {
+    const { table, zoneId } = await longPutOut([BAR]);
+    await ok(splitOff(table.long!, [table.c5!], 6));
+    expect(await placeOf(table.long!)).toEqual({ x: 10, y: 20, width: 4, height: 8 });
+
+    await settles(() => reset(table.long!, [table.c5!]), zoneId);
+
+    expect(await placeOf(table.long!)).toEqual({ x: 10, y: 20, width: 8, height: 8 });
+    expect(await seatsOf(table.long!)).toBe(10);
+    expect(await placeOf(table.c5!)).toEqual(NO_PLACE);
+    expect(await placeOf(table.bar!)).toEqual({ x: 40, y: 0, width: 2, height: 2 });
+    expect(await splitRowsOf(table.long!)).toEqual([]);
+  });
+
+  it("Counter 5 split off, no other table on the map: the same", async () => {
+    const { table, zoneId } = await longPutOut([{ ...BAR, place: null }]);
+    await ok(splitOff(table.long!, [table.c5!], 6));
+
+    await settles(() => reset(table.long!, [table.c5!]), zoneId);
+
+    expect(await placeOf(table.long!)).toEqual({ x: 10, y: 20, width: 8, height: 8 });
+    expect(await placeOf(table.c5!)).toEqual(NO_PLACE);
+  });
+
+  it("split apart, guests at Counter 5: Reset table for Counter 3 and 4 puts Long table over their slots from its own row", async () => {
+    const { table, zoneId } = await longPutOut([BAR]);
+    await ok(splitOff(table.long!, [table.c4!, table.c5!]));
+    expect(await splitRowsOf(table.long!)).toEqual([table.c3!, table.c4!, table.c5!].sort());
+    await seat(v, table.c5!);
+
+    await settles(() => reset(table.long!, [table.c3!, table.c4!], 8), zoneId);
+
+    expect(await placeOf(table.long!)).toEqual({ x: 10, y: 20, width: 4, height: 8 });
+    expect(await seatsOf(table.long!)).toBe(8);
+  });
+
+  it("split apart, every table free, Bar on the map: with nowhere to stand Long table comes back whole off the map", async () => {
+    const { table, zoneId } = await longPutOut([BAR]);
+    await ok(splitOff(table.long!, [table.c4!, table.c5!]));
+    expect(await splitRowsOf(table.long!)).toEqual([table.c3!, table.c4!, table.c5!].sort());
+
+    await settles(() => reset(table.long!, [table.c3!, table.c4!, table.c5!]), zoneId);
+
+    expect(await placeOf(table.long!)).toEqual(NO_PLACE);
+    expect(await seatsOf(table.long!)).toBe(10);
+    expect((await todayRow(v, table.long!))!.takenOff).toBe(false);
+    for (const key of ["c3", "c4", "c5"]) expect(await placeOf(table[key]!)).toEqual(NO_PLACE);
+    expect(await placeOf(table.bar!)).toEqual({ x: 40, y: 0, width: 2, height: 2 });
     expect(await splitRowsOf(table.long!)).toEqual([]);
   });
 });
