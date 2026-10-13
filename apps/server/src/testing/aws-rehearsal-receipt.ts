@@ -48,11 +48,10 @@ export interface AwsReceiptHeader {
   limits: Record<string, number>;
 }
 
-export interface AwsReceiptOwnership {
-  bucket: string | null;
-  state: "owned" | "not-created" | "collision" | "unowned-candidate";
-  candidate?: string;
-}
+export type AwsReceiptOwnership =
+  | { state: "owned"; bucket: string; candidate?: undefined }
+  | { state: "unowned-candidate"; bucket: null; candidate: string }
+  | { state: "not-created" | "collision"; bucket: null; candidate?: undefined };
 
 export interface AwsReceiptRemaining {
   bucket: string | null;
@@ -111,8 +110,9 @@ const TOKEN = /^[A-Za-z0-9._:-]{1,64}$/;
 // An access key id fits the token alphabet, so it is refused by shape as well.
 const ACCESS_KEY_ID = /(?:AKIA|ASIA|AIDA|AROA)[A-Z0-9]{12,}/;
 const ERROR_NAME = /^[A-Z][A-Za-z0-9]{0,63}$/;
-const UPLOAD_ID = /^[A-Za-z0-9._~-]{1,1024}$/;
-const CLEANUP_COMMAND = /^[A-Za-z0-9 ._:/@=-]{1,512}$/;
+// AWS calls an upload id opaque: printable ASCII without whitespace, `"` or `\`; never a URL.
+const UPLOAD_ID = /^[!#-[\]-~]{1,1024}$/;
+const CLEANUP_COMMAND = /^[A-Za-z0-9 ._:/@=$"-]{1,512}$/;
 const EVENT_OUTCOMES = ["ok", "failed", "refused", "skipped"] as const;
 const TEARDOWN_OUTCOMES = ["ok", "failed", "skipped"] as const;
 const TEARDOWN_STEPS = [
@@ -296,15 +296,26 @@ function sanitizeOwnership(input: unknown, forbidden: Forbidden): AwsReceiptOwne
   if (!isRecord(input)) throw refused("ownership");
   onlyKeys(input, ["bucket", "state", "candidate"], "ownership.");
   refuseKeyPair(input, forbidden, "ownership.");
-  const ownership: AwsReceiptOwnership = {
-    bucket: bucketName(input.bucket, "ownership.bucket"),
-    state: oneOf(input.state, OWNERSHIP_STATES, "ownership.state"),
-  };
-  if (input.candidate !== undefined) {
-    ownership.candidate = bucketName(input.candidate, "ownership.candidate") ?? undefined;
-    if (ownership.candidate === undefined) throw refused("ownership.candidate");
+  const bucket = bucketName(input.bucket, "ownership.bucket");
+  const state = oneOf(input.state, OWNERSHIP_STATES, "ownership.state");
+  const candidate =
+    input.candidate === undefined
+      ? undefined
+      : (bucketName(input.candidate, "ownership.candidate") ?? undefined);
+  if (input.candidate !== undefined && candidate === undefined)
+    throw refused("ownership.candidate");
+  if (state === "owned") {
+    if (bucket === null) throw refused("ownership.bucket");
+    if (candidate !== undefined) throw refused("ownership.candidate");
+    return { state, bucket };
   }
-  return ownership;
+  if (bucket !== null) throw refused("ownership.bucket");
+  if (state === "unowned-candidate") {
+    if (candidate === undefined) throw refused("ownership.candidate");
+    return { state, bucket, candidate };
+  }
+  if (candidate !== undefined) throw refused("ownership.candidate");
+  return { state, bucket };
 }
 
 function sanitizeRemaining(input: unknown, forbidden: Forbidden): AwsReceiptRemaining {
@@ -314,7 +325,7 @@ function sanitizeRemaining(input: unknown, forbidden: Forbidden): AwsReceiptRema
   const uploadIds = input.uploadIds;
   if (
     !Array.isArray(uploadIds) ||
-    !uploadIds.every((id) => typeof id === "string" && UPLOAD_ID.test(id))
+    !uploadIds.every((id) => typeof id === "string" && UPLOAD_ID.test(id) && !id.includes("://"))
   ) {
     throw refused("remaining.uploadIds");
   }

@@ -1,0 +1,716 @@
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { AwsReceipt } from "./aws-rehearsal-receipt.js";
+import {
+  AWS_REHEARSAL_LIMITS,
+  AwsRehearsalRefused,
+  type AdminClient,
+  type AwsRehearsal,
+  type AwsRehearsalDeps,
+  teardownOwnedBucket,
+  withAwsRehearsal,
+} from "./aws-rehearsal.js";
+
+const KEY_ID = "AKIAFIXTUREKEYID0001";
+const SECRET = "fixtureSecretValueNotReal0123456789abcd";
+const SUFFIX = "abc123def456";
+const BUCKET = `waitron-rehearsal-waitron-${SUFFIX}`;
+const RUN_ID = "run-0001";
+const NONCE = ".waitron-rehearsal-owner";
+const MIB = 1024 * 1024;
+
+interface Call {
+  name: string;
+  input: Record<string, unknown>;
+  signal: AbortSignal | undefined;
+}
+
+type Answer = (input: Record<string, unknown>, fake: FakeAdmin) => unknown;
+
+function sdkError(name: string, status?: number): Error {
+  return Object.assign(new Error(`raw SDK detail ${SECRET}`), {
+    name,
+    $metadata: status === undefined ? {} : { httpStatusCode: status, attempts: 2 },
+  });
+}
+
+const ok = (status = 200) => ({ $metadata: { httpStatusCode: status, attempts: 1 } });
+
+/** An admin client that keeps an in-memory bucket and records every command it is sent. */
+class FakeAdmin implements AdminClient {
+  readonly calls: Call[] = [];
+  readonly objects = new Set<string>();
+  readonly uploads = new Map<string, string>();
+  readonly answers: Record<string, Answer>;
+
+  constructor(overrides: Record<string, Answer> = {}) {
+    this.answers = { ...this.defaults(), ...overrides };
+  }
+
+  async send(command: object, options?: { abortSignal?: AbortSignal }): Promise<unknown> {
+    const name = command.constructor.name.replace(/Command$/, "");
+    const input = (command as { input: Record<string, unknown> }).input;
+    this.calls.push({ name, input, signal: options?.abortSignal });
+    const answer = this.answers[name];
+    if (answer === undefined) throw new Error(`fake has no answer for ${name}`);
+    return answer(input, this);
+  }
+
+  names(): string[] {
+    return this.calls.map((call) => call.name);
+  }
+
+  private defaults(): Record<string, Answer> {
+    return {
+      CreateBucket: () => ok(),
+      PutObject: (input) => {
+        this.objects.add(input.Key as string);
+        return ok();
+      },
+      GetBucketEncryption: () => ({
+        ...ok(),
+        ServerSideEncryptionConfiguration: {
+          Rules: [{ ApplyServerSideEncryptionByDefault: { SSEAlgorithm: "AES256" } }],
+        },
+      }),
+      GetBucketVersioning: () => ok(),
+      ListMultipartUploads: () => ({
+        ...ok(),
+        IsTruncated: false,
+        Uploads: [...this.uploads].map(([UploadId, Key]) => ({ Key, UploadId })),
+      }),
+      AbortMultipartUpload: (input) => {
+        if (!this.uploads.delete(input.UploadId as string)) throw sdkError("NoSuchUpload", 404);
+        return ok(204);
+      },
+      DeleteBucketPolicy: () => ok(204),
+      ListObjectsV2: (input) => {
+        const keys = [...this.objects].sort();
+        const start = input.ContinuationToken === undefined ? 0 : Number(input.ContinuationToken);
+        const page = keys.slice(start, start + 1000);
+        const next = start + 1000;
+        return {
+          ...ok(),
+          Contents: page.map((Key) => ({ Key })),
+          IsTruncated: next < keys.length,
+          ...(next < keys.length ? { NextContinuationToken: String(next) } : {}),
+        };
+      },
+      DeleteObjects: (input) => {
+        const objects = (input.Delete as { Objects: { Key: string }[] }).Objects;
+        for (const { Key } of objects) this.objects.delete(Key);
+        return { ...ok(), Deleted: objects };
+      },
+      DeleteObject: (input) => {
+        this.objects.delete(input.Key as string);
+        return ok(204);
+      },
+      DeleteBucket: () => {
+        if (this.objects.size > 0) throw sdkError("BucketNotEmpty", 409);
+        return ok(204);
+      },
+    };
+  }
+}
+
+let dir: string;
+let receiptDir: string;
+let credentialsFile: string;
+let configFile: string;
+
+beforeEach(async () => {
+  dir = await mkdtemp(join(tmpdir(), "aws-rehearsal-lifecycle-"));
+  receiptDir = join(dir, "receipts");
+  credentialsFile = join(dir, "credentials");
+  configFile = join(dir, "config");
+  await writeFile(
+    credentialsFile,
+    `[waitron-rehearsal]\naws_access_key_id = ${KEY_ID}\naws_secret_access_key = ${SECRET}\n`,
+  );
+  await writeFile(configFile, "[profile waitron-rehearsal]\nregion = eu-north-1\n");
+});
+
+afterEach(async () => {
+  await rm(dir, { recursive: true, force: true });
+});
+
+function env(overrides: Record<string, string | undefined> = {}): NodeJS.ProcessEnv {
+  return {
+    WAITRON_RUN_AWS_REHEARSAL: "1",
+    AWS_PROFILE: "waitron-rehearsal",
+    AWS_SHARED_CREDENTIALS_FILE: credentialsFile,
+    AWS_CONFIG_FILE: configFile,
+    AWS_REGION: "eu-north-1",
+    ...overrides,
+  };
+}
+
+interface Harness {
+  fake: FakeAdmin;
+  deps: Partial<AwsRehearsalDeps>;
+  printed: string[];
+  killed: [number, string][];
+  readFile: ReturnType<typeof vi.fn>;
+  createAdminClient: ReturnType<typeof vi.fn>;
+}
+
+function harness(
+  overrides: Record<string, Answer> = {},
+  extra: Partial<AwsRehearsalDeps> = {},
+): Harness {
+  const fake = new FakeAdmin(overrides);
+  const printed: string[] = [];
+  const killed: [number, string][] = [];
+  const readFileSpy = vi.fn((path: string) => readFile(path, "utf8"));
+  const createAdminClient = vi.fn(() => fake);
+  let clock = Date.parse("2026-10-14T10:00:00.000Z");
+  return {
+    fake,
+    printed,
+    killed,
+    readFile: readFileSpy,
+    createAdminClient,
+    deps: {
+      env: env(),
+      readFile: readFileSpy,
+      createAdminClient,
+      randomSuffix: () => SUFFIX,
+      runId: () => RUN_ID,
+      now: () => (clock += 5),
+      commit: () => "0123456789abcdef",
+      receiptDir,
+      isAlive: () => false,
+      kill: (pid, signal) => {
+        killed.push([pid, signal]);
+      },
+      sleep: async () => {},
+      print: (line) => printed.push(line),
+      ...extra,
+    },
+  };
+}
+
+async function rejection(promise: Promise<unknown>): Promise<Error> {
+  return promise.then(
+    () => {
+      throw new Error("expected a rejection");
+    },
+    (thrown: unknown) => thrown as Error,
+  );
+}
+
+async function receipt(): Promise<{ parsed: AwsReceipt; text: string }> {
+  const text = await readFile(join(receiptDir, `aws-rehearsal-${RUN_ID}.json`), "utf8");
+  return { parsed: JSON.parse(text) as AwsReceipt, text };
+}
+
+const DESTRUCTIVE = [
+  "DeleteBucket",
+  "DeleteObject",
+  "DeleteObjects",
+  "DeleteBucketPolicy",
+  "AbortMultipartUpload",
+];
+
+describe("withAwsRehearsal — before any bucket", () => {
+  it("refuses without opt-in before reading a file or building a client", async () => {
+    const h = harness({}, { env: env({ WAITRON_RUN_AWS_REHEARSAL: undefined }) });
+    const error = await rejection(withAwsRehearsal(async () => "never", h.deps));
+    expect(error).toBeInstanceOf(AwsRehearsalRefused);
+    expect((error as AwsRehearsalRefused).reason).toBe("opt-in-missing");
+    expect(h.readFile).not.toHaveBeenCalled();
+    expect(h.createAdminClient).not.toHaveBeenCalled();
+  });
+
+  it("refuses a supplied bucket before the client exists", async () => {
+    const h = harness({}, { env: env({ WAITRON_AWS_REHEARSAL_BUCKET: "someone-elses" }) });
+    const error = await rejection(withAwsRehearsal(async () => "never", h.deps));
+    expect((error as AwsRehearsalRefused).reason).toBe("supplied-bucket");
+    expect(error.message).not.toContain("someone-elses");
+    expect(h.readFile).not.toHaveBeenCalled();
+    expect(h.createAdminClient).not.toHaveBeenCalled();
+  });
+
+  it("refuses a receipt folder the cleanup command could not name", async () => {
+    const h = harness({}, { receiptDir: join(dir, "has space") });
+    const error = await rejection(withAwsRehearsal(async () => "never", h.deps));
+    expect((error as AwsRehearsalRefused).reason).toBe("receipt-dir-unsupported");
+    expect(h.createAdminClient).not.toHaveBeenCalled();
+  });
+});
+
+describe("withAwsRehearsal — the happy path", () => {
+  it("creates, proves, preflights, runs the scenario and tears the bucket down", async () => {
+    const h = harness();
+    let seen: { bucket: string; config: Record<string, unknown>; callsAtStart: number } | undefined;
+    const result = await withAwsRehearsal(async (ctx: AwsRehearsal) => {
+      const prefix = ctx.prefix("loop");
+      const config = ctx.bucketConfig(prefix);
+      seen = { bucket: ctx.bucket, config: { ...config }, callsAtStart: h.fake.calls.length };
+      ctx.reserveUpload(10, "fixture");
+      h.fake.objects.add(`${prefix}fixture-a`);
+      h.fake.objects.add(`${prefix}fixture-b`);
+      ctx.record({
+        scenario: "loop",
+        phase: "upload",
+        api: "PutObject",
+        httpStatus: 200,
+        outcome: "ok",
+      });
+      return "done";
+    }, h.deps);
+    expect(result).toBe("done");
+
+    expect(h.fake.calls[0]).toMatchObject({
+      name: "CreateBucket",
+      input: { Bucket: BUCKET, CreateBucketConfiguration: { LocationConstraint: "eu-north-1" } },
+    });
+    expect(Object.keys(h.fake.calls[0]!.input).sort()).toEqual([
+      "Bucket",
+      "CreateBucketConfiguration",
+    ]);
+    expect(h.fake.calls[1]).toMatchObject({
+      name: "PutObject",
+      input: { Bucket: BUCKET, Key: NONCE, Body: JSON.stringify({ runId: RUN_ID }) },
+    });
+    expect(h.fake.names().slice(2, 4)).toEqual(["GetBucketEncryption", "GetBucketVersioning"]);
+    expect(seen!.callsAtStart).toBe(4);
+    expect(seen!.bucket).toBe(BUCKET);
+    expect(seen!.config).toEqual({
+      region: "eu-north-1",
+      bucket: BUCKET,
+      prefix: `rehearsal-${RUN_ID}/loop/`,
+      accessKeyId: KEY_ID,
+      secretAccessKey: SECRET,
+    });
+    expect("endpoint" in seen!.config).toBe(false);
+
+    const teardown = h.fake.names().slice(4);
+    expect(teardown).toEqual([
+      "ListMultipartUploads",
+      "DeleteBucketPolicy",
+      "ListObjectsV2",
+      "DeleteObjects",
+      "DeleteObject",
+      "DeleteBucket",
+    ]);
+    for (const call of h.fake.calls) expect(call.input.Bucket).toBe(BUCKET);
+    const deleted = h.fake.calls.find((call) => call.name === "DeleteObjects")!.input as {
+      Delete: { Objects: { Key: string }[]; Quiet: boolean };
+    };
+    expect(deleted.Delete.Quiet).toBe(true);
+    expect(deleted.Delete.Objects.map((object) => object.Key)).not.toContain(NONCE);
+
+    const { parsed, text } = await receipt();
+    expect(h.printed).toEqual([join(receiptDir, `aws-rehearsal-${RUN_ID}.json`)]);
+    expect(parsed.ownership).toEqual({ bucket: BUCKET, state: "owned" });
+    expect(parsed.remaining).toEqual({ bucket: null, uploadIds: [] });
+    expect(parsed.cleanupCommand).toBeNull();
+    expect(parsed.teardown.every((entry) => entry.outcome !== "failed")).toBe(true);
+    expect(parsed.header).toMatchObject({
+      runId: RUN_ID,
+      commit: "0123456789abcdef",
+      node: process.version,
+      sdkVersion: "3.1140.0",
+      litestreamVersion: "0.5.17",
+      region: "eu-north-1",
+      startedAt: "2026-10-14T10:00:00.005Z",
+    });
+    expect(parsed.events.some((event) => event.scenario === "loop")).toBe(true);
+    expect(parsed.events.find((event) => event.api === "CreateBucket")).toMatchObject({
+      httpStatus: 200,
+      attempts: 1,
+      outcome: "ok",
+    });
+    const actions = Object.fromEntries(parsed.actions.map((row) => [row.api, row.status]));
+    expect(actions.CreateBucket).toBe("observed");
+    expect(actions.UploadPart).toBe("source-only");
+    expect(actions.GetObject).toBe("not-exercised");
+    expect(text).not.toContain(KEY_ID);
+    expect(text).not.toContain(SECRET);
+  });
+
+  it("sends no location constraint in us-east-1", async () => {
+    await writeFile(configFile, "[profile waitron-rehearsal]\nregion = us-east-1\n");
+    const h = harness({}, { env: env({ AWS_REGION: "us-east-1" }) });
+    await withAwsRehearsal(async () => undefined, h.deps);
+    expect(h.fake.calls[0]!.input).toEqual({ Bucket: BUCKET });
+  });
+
+  it("gives each label one prefix and a bucket config only for an issued prefix", async () => {
+    const h = harness();
+    await withAwsRehearsal(async (ctx) => {
+      expect(ctx.prefix("a")).toBe(`rehearsal-${RUN_ID}/a/`);
+      expect(() => ctx.prefix("a")).toThrow(AwsRehearsalRefused);
+      expect(() => ctx.prefix("a/b")).toThrow(AwsRehearsalRefused);
+      expect(() => ctx.prefix("")).toThrow(AwsRehearsalRefused);
+      expect(() => ctx.bucketConfig(`rehearsal-${RUN_ID}/b/`)).toThrow(AwsRehearsalRefused);
+      expect(() => ctx.bucketConfig("")).toThrow(AwsRehearsalRefused);
+    }, h.deps);
+  });
+});
+
+describe("withAwsRehearsal — creation outcomes", () => {
+  it.each(["BucketAlreadyExists", "BucketAlreadyOwnedByYou"])(
+    "never owns a %s collision",
+    async (name) => {
+      const h = harness({
+        CreateBucket: () => {
+          throw sdkError(name, 409);
+        },
+      });
+      const scenario = vi.fn(async () => undefined);
+      const error = await rejection(withAwsRehearsal(scenario, h.deps));
+      expect(error.message).not.toContain(SECRET);
+      expect(scenario).not.toHaveBeenCalled();
+      expect(h.fake.names()).toEqual(["CreateBucket"]);
+      expect(h.fake.names().filter((name) => DESTRUCTIVE.includes(name))).toEqual([]);
+      const { parsed } = await receipt();
+      expect(parsed.ownership).toEqual({ bucket: null, state: "collision" });
+      expect(parsed.remaining).toEqual({ bucket: null, uploadIds: [] });
+      expect(parsed.teardown).toEqual([]);
+    },
+  );
+
+  it("reports a refused creation as not created and deletes nothing", async () => {
+    const h = harness({
+      CreateBucket: () => {
+        throw sdkError("AccessDenied", 403);
+      },
+    });
+    const error = await rejection(withAwsRehearsal(async () => undefined, h.deps));
+    expect(error.message).not.toContain(SECRET);
+    expect(h.fake.names()).toEqual(["CreateBucket"]);
+    const { parsed } = await receipt();
+    expect(parsed.ownership).toEqual({ bucket: null, state: "not-created" });
+    expect(parsed.events[0]).toMatchObject({
+      api: "CreateBucket",
+      httpStatus: 403,
+      errorName: "AccessDenied",
+      attempts: 2,
+      outcome: "failed",
+    });
+  });
+
+  it.each([
+    ["a timeout", () => sdkError("TimeoutError")],
+    ["no status", () => sdkError("NetworkingError")],
+    ["a 503", () => sdkError("ServiceUnavailable", 503)],
+    ["an abort", () => sdkError("AbortError")],
+  ])("leaves an unowned candidate after %s", async (_label, error) => {
+    const h = harness({
+      CreateBucket: () => {
+        throw error();
+      },
+    });
+    const scenario = vi.fn(async () => undefined);
+    const thrown = await rejection(withAwsRehearsal(scenario, h.deps));
+    expect(thrown.message).not.toContain(SECRET);
+    expect(scenario).not.toHaveBeenCalled();
+    expect(h.fake.names()).toEqual(["CreateBucket"]);
+    const { parsed } = await receipt();
+    expect(parsed.ownership).toEqual({
+      bucket: null,
+      state: "unowned-candidate",
+      candidate: BUCKET,
+    });
+    expect(parsed.cleanupCommand).toBeNull();
+  });
+});
+
+describe("withAwsRehearsal — preflight", () => {
+  it.each([
+    [
+      "KMS encryption",
+      {
+        GetBucketEncryption: () => ({
+          ...ok(),
+          ServerSideEncryptionConfiguration: {
+            Rules: [{ ApplyServerSideEncryptionByDefault: { SSEAlgorithm: "aws:kms" } }],
+          },
+        }),
+      },
+      "encryption-not-sse-s3",
+    ],
+    [
+      "no encryption rules",
+      {
+        GetBucketEncryption: () => ({ ...ok(), ServerSideEncryptionConfiguration: { Rules: [] } }),
+      },
+      "encryption-not-sse-s3",
+    ],
+    [
+      "versioning Enabled",
+      { GetBucketVersioning: () => ({ ...ok(), Status: "Enabled" }) },
+      "versioning-not-off",
+    ],
+    [
+      "versioning Suspended",
+      { GetBucketVersioning: () => ({ ...ok(), Status: "Suspended" }) },
+      "versioning-not-off",
+    ],
+  ] as [string, Record<string, Answer>, string][])(
+    "refuses %s and still tears the bucket down",
+    async (_label, overrides, reason) => {
+      const h = harness(overrides);
+      const scenario = vi.fn(async () => undefined);
+      const error = await rejection(withAwsRehearsal(scenario, h.deps));
+      expect((error as AwsRehearsalRefused).reason).toBe(reason);
+      expect(scenario).not.toHaveBeenCalled();
+      expect(h.fake.names().at(-1)).toBe("DeleteBucket");
+      expect(h.fake.objects.size).toBe(0);
+      expect((await receipt()).parsed.remaining.bucket).toBeNull();
+    },
+  );
+});
+
+describe("withAwsRehearsal — fixture limits", () => {
+  it("refuses an upload past the total budget before any further command", async () => {
+    const h = harness();
+    let calls = 0;
+    const error = await rejection(
+      withAwsRehearsal(async (ctx) => {
+        ctx.reserveUpload(100 * MIB, "fixture");
+        calls = h.fake.calls.length;
+        ctx.reserveUpload(28 * MIB, "fixture");
+      }, h.deps),
+    );
+    expect((error as AwsRehearsalRefused).reason).toBe("fixture-limit");
+    expect(h.fake.calls[calls]!.name).toBe("ListMultipartUploads");
+    const { parsed } = await receipt();
+    expect(parsed.events.some((event) => event.outcome === "refused")).toBe(true);
+  });
+
+  it("refuses an archive past its own limit", async () => {
+    const h = harness();
+    const error = await rejection(
+      withAwsRehearsal(async (ctx) => {
+        ctx.reserveUpload(AWS_REHEARSAL_LIMITS.archiveBytes, "archive");
+        ctx.reserveUpload(AWS_REHEARSAL_LIMITS.archiveBytes + 1, "archive");
+      }, h.deps),
+    );
+    expect((error as AwsRehearsalRefused).reason).toBe("fixture-limit");
+  });
+
+  it("caps the cumulative object count", async () => {
+    const h = harness();
+    const error = await rejection(
+      withAwsRehearsal(async (ctx) => {
+        ctx.reserveObjects(1000);
+        ctx.reserveObjects(5);
+        ctx.reserveObjects(1);
+      }, h.deps),
+    );
+    expect((error as AwsRehearsalRefused).reason).toBe("fixture-limit");
+  });
+});
+
+describe("withAwsRehearsal — teardown after a failure", () => {
+  it("stops only live tracked children and aborts tracked and listed uploads", async () => {
+    const alive = new Set([4242, 999]);
+    const h = harness(
+      {},
+      {
+        isAlive: (pid) => alive.has(pid),
+        kill: (pid, signal) => {
+          h.killed.push([pid, signal]);
+          if (signal === "SIGKILL") alive.delete(pid);
+        },
+      },
+    );
+    h.fake.uploads.set("tracked-id", "rehearsal-run-0001/a/archive");
+    h.fake.uploads.set("listed-id", "rehearsal-run-0001/a/other");
+    const failure = new Error("scenario failed");
+    const error = await rejection(
+      withAwsRehearsal(async (ctx) => {
+        ctx.trackChild(4242);
+        ctx.trackChild(31337);
+        ctx.trackUpload("rehearsal-run-0001/a/archive", "tracked-id");
+        throw failure;
+      }, h.deps),
+    );
+    expect(error).toBe(failure);
+    expect(h.killed).toEqual([
+      [4242, "SIGTERM"],
+      [4242, "SIGKILL"],
+    ]);
+    const aborts = h.fake.calls.filter((call) => call.name === "AbortMultipartUpload");
+    expect(aborts.map((call) => call.input.UploadId)).toEqual(["tracked-id", "listed-id"]);
+    expect(h.fake.uploads.size).toBe(0);
+    expect(h.fake.names().at(-1)).toBe("DeleteBucket");
+  });
+
+  it("ends a scenario that passes its deadline and still tears down", async () => {
+    const h = harness({}, { deadlineMs: 50 });
+    let signal: AbortSignal | undefined;
+    const error = await rejection(
+      withAwsRehearsal((ctx) => {
+        signal = ctx.signal;
+        return new Promise<never>(() => {});
+      }, h.deps),
+    );
+    expect(error.message).toContain("deadline");
+    expect(signal!.aborted).toBe(true);
+    expect(h.fake.names().at(-1)).toBe("DeleteBucket");
+    const { parsed } = await receipt();
+    expect(parsed.events).toContainEqual(
+      expect.objectContaining({ phase: "deadline", outcome: "failed" }),
+    );
+  });
+
+  it("passes the teardown signal to every teardown command", async () => {
+    const h = harness();
+    await withAwsRehearsal(async () => undefined, h.deps);
+    const teardown = h.fake.calls.slice(4);
+    expect(teardown.length).toBeGreaterThan(0);
+    for (const call of teardown) expect(call.signal).toBeInstanceOf(AbortSignal);
+    expect(new Set(teardown.map((call) => call.signal)).size).toBe(1);
+  });
+});
+
+describe("withAwsRehearsal — a teardown that fails", () => {
+  const cleanup = (path: string) =>
+    'WAITRON_RUN_AWS_REHEARSAL=1 AWS_SHARED_CREDENTIALS_FILE="$HOME/.config/waitron-cloud/aws/credentials" ' +
+    'AWS_CONFIG_FILE="$HOME/.config/waitron-cloud/aws/config" AWS_PROFILE=waitron-rehearsal ' +
+    `AWS_REGION=eu-north-1 pnpm --filter @waitron/server exec tsx scripts/aws-rehearsal-cleanup.ts --receipt ${path}`;
+
+  async function failedRun(
+    h: Harness,
+    scenario: (ctx: AwsRehearsal) => Promise<void> = async () => {},
+  ) {
+    const error = await rejection(withAwsRehearsal(scenario, h.deps));
+    const path = join(receiptDir, `aws-rehearsal-${RUN_ID}.json`);
+    expect(error.message).toContain(path);
+    expect(error.message).not.toContain(SECRET);
+    const { parsed } = await receipt();
+    expect(parsed.remaining.bucket).toBe(BUCKET);
+    expect(parsed.cleanupCommand).toBe(cleanup(path));
+    return { error, parsed };
+  }
+
+  it("fails on a per-key DeleteObjects error even with HTTP 200, and keeps the nonce", async () => {
+    const h = harness({
+      DeleteObjects: (input) => ({
+        ...ok(),
+        Errors: [
+          {
+            Key: (input.Delete as { Objects: { Key: string }[] }).Objects[0]!.Key,
+            Code: "AccessDenied",
+          },
+        ],
+      }),
+    });
+    const { error, parsed } = await failedRun(h, async (ctx) => {
+      h.fake.objects.add(`${ctx.prefix("x")}object`);
+    });
+    expect(error.message).toContain("delete-objects");
+    expect(parsed.teardown.find((entry) => entry.step === "delete-objects")!.outcome).toBe(
+      "failed",
+    );
+    expect(h.fake.objects.has(NONCE)).toBe(true);
+    expect(h.fake.calls.filter((call) => call.name === "DeleteObject")).toEqual([]);
+  });
+
+  it("fails when DeleteBucket fails", async () => {
+    const h = harness({
+      DeleteBucket: () => {
+        throw sdkError("InternalError", 500);
+      },
+    });
+    const { parsed } = await failedRun(h);
+    expect(parsed.teardown.find((entry) => entry.step === "delete-bucket")).toMatchObject({
+      outcome: "failed",
+      errorName: "InternalError",
+      httpStatus: 500,
+    });
+  });
+
+  it("names an upload it could not abort", async () => {
+    const id = "2~Ab+cd/ef=gh";
+    const h = harness({
+      AbortMultipartUpload: () => {
+        throw sdkError("AccessDenied", 403);
+      },
+    });
+    h.fake.uploads.set(id, "rehearsal-run-0001/a/archive");
+    const { parsed } = await failedRun(h);
+    expect(parsed.remaining.uploadIds).toEqual([id]);
+  });
+
+  it("stops a listing that repeats its continuation token", async () => {
+    const h = harness({
+      ListObjectsV2: () => ({
+        ...ok(),
+        Contents: [{ Key: "k" }],
+        IsTruncated: true,
+        NextContinuationToken: "same",
+      }),
+    });
+    const { parsed } = await failedRun(h);
+    expect(h.fake.calls.filter((call) => call.name === "ListObjectsV2").length).toBeLessThanOrEqual(
+      3,
+    );
+    expect(parsed.teardown.find((entry) => entry.step === "delete-objects")!.outcome).toBe(
+      "failed",
+    );
+  });
+
+  it("attaches a teardown failure to the scenario's own error", async () => {
+    const h = harness({
+      DeleteBucket: () => {
+        throw sdkError("InternalError", 500);
+      },
+    });
+    const failure = new Error("scenario failed");
+    const error = await rejection(
+      withAwsRehearsal(async () => {
+        throw failure;
+      }, h.deps),
+    );
+    expect(error).toBeInstanceOf(AggregateError);
+    expect((error as AggregateError).errors[0]).toBe(failure);
+    expect(String((error as AggregateError).errors[1])).toContain("delete-bucket");
+  });
+});
+
+describe("teardownOwnedBucket", () => {
+  it("deletes 1,001 objects in batches of 1,000 and 1, then the nonce, then the bucket", async () => {
+    const fake = new FakeAdmin();
+    for (let index = 0; index < 1001; index += 1)
+      fake.objects.add(`p/${String(index).padStart(4, "0")}`);
+    fake.objects.add(NONCE);
+    const result = await teardownOwnedBucket(
+      fake,
+      { bucket: BUCKET, uploads: [], pids: [] },
+      {
+        isAlive: () => false,
+        kill: () => {},
+        sleep: async () => {},
+        now: () => 0,
+        teardownMs: 1000,
+      },
+    );
+    const batches = fake.calls
+      .filter((call) => call.name === "DeleteObjects")
+      .map((call) =>
+        (call.input.Delete as { Objects: { Key: string }[] }).Objects.map((o) => o.Key),
+      );
+    expect(batches.map((batch) => batch.length)).toEqual([1000, 1]);
+    expect(batches.flat()).not.toContain(NONCE);
+    const names = fake.names();
+    const nonceDelete = names.indexOf("DeleteObject");
+    expect(fake.calls[nonceDelete]!.input.Key).toBe(NONCE);
+    expect(nonceDelete).toBeGreaterThan(names.lastIndexOf("DeleteObjects"));
+    expect(names.at(-1)).toBe("DeleteBucket");
+    expect(result.remaining).toEqual({ bucket: null, uploadIds: [] });
+    expect(result.entries.map((entry) => entry.step)).toEqual([
+      "stop-child",
+      "abort-upload",
+      "remove-policy",
+      "delete-objects",
+      "delete-bucket",
+    ]);
+    expect(await readdir(dir)).not.toContain("receipts");
+  });
+});

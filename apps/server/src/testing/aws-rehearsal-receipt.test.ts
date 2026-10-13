@@ -391,3 +391,71 @@ describe("the loaded key pair never reaches the receipt", () => {
     }
   });
 });
+
+describe("receipt rules widened for slice 7b", () => {
+  it.each([
+    "2~Ab+cd/ef=gh",
+    "x".repeat(1024),
+    "VXBsb2FkIElEIGZvciA2aWWpbmcncyBteS1tb3ZpZS5tMnRzIHVwbG9hZA",
+  ])("keeps the opaque upload id %s", (id) => {
+    const receipt = createReceiptLog(header, KEYS).finish({
+      ...finishParts,
+      remaining: { bucket: BUCKET, uploadIds: [id] },
+    });
+    expect(receipt.remaining.uploadIds).toEqual([id]);
+  });
+
+  it.each(["has space", "has\nnewline", 'has"quote', "has\\slash", "x".repeat(1025), ""])(
+    "refuses the upload id %j",
+    (id) => {
+      const log = createReceiptLog(header, KEYS);
+      expect(() =>
+        log.finish({ ...finishParts, remaining: { bucket: BUCKET, uploadIds: [id] } }),
+      ).toThrow("receipt field refused: remaining.uploadIds");
+    },
+  );
+
+  it("still refuses an upload id carrying a loaded key value", () => {
+    const log = createReceiptLog(header, KEYS);
+    expect(() =>
+      log.finish({
+        ...finishParts,
+        remaining: { bucket: BUCKET, uploadIds: [`2~${PLAIN_SECRET}+`] },
+      }),
+    ).toThrow("receipt field refused: remaining.uploadIds");
+  });
+
+  it.each([
+    ["owned without a bucket", { bucket: null, state: "owned" }],
+    ["owned with a candidate", { bucket: BUCKET, state: "owned", candidate: BUCKET }],
+    ["an unowned candidate without its name", { bucket: null, state: "unowned-candidate" }],
+    [
+      "an unowned candidate claiming a bucket",
+      { bucket: BUCKET, state: "unowned-candidate", candidate: BUCKET },
+    ],
+    ["a collision claiming a bucket", { bucket: BUCKET, state: "collision" }],
+    [
+      "a bucket never created with a candidate",
+      { bucket: null, state: "not-created", candidate: BUCKET },
+    ],
+  ])("refuses an inconsistent ownership block: %s", (_label, ownership) => {
+    const log = createReceiptLog(header, KEYS);
+    expect(() => log.finish({ ...finishParts, ownership } as never)).toThrow(
+      /^receipt field refused: ownership\./,
+    );
+  });
+
+  it("accepts the shape of the cleanup command the runner writes", () => {
+    const command =
+      'WAITRON_RUN_AWS_REHEARSAL=1 AWS_SHARED_CREDENTIALS_FILE="$HOME/.config/waitron-cloud/aws/credentials" ' +
+      'AWS_CONFIG_FILE="$HOME/.config/waitron-cloud/aws/config" AWS_PROFILE=waitron-rehearsal ' +
+      "AWS_REGION=eu-north-1 pnpm --filter @waitron/server exec tsx scripts/aws-rehearsal-cleanup.ts " +
+      "--receipt /var/folders/ab/x_y/T/waitron-aws-rehearsal/aws-rehearsal-run-1.json";
+    const receipt = createReceiptLog(header, KEYS).finish({
+      ...finishParts,
+      remaining: { bucket: BUCKET, uploadIds: [] },
+      cleanupCommand: command,
+    });
+    expect(receipt.cleanupCommand).toBe(command);
+  });
+});
