@@ -820,6 +820,32 @@ describe("adding shortcuts on the Home page tab", () => {
     );
   });
 
+  it("offers an included menu holding a replacement pattern by its name as written", async () => {
+    const before = currentLocale();
+    setLocale("en");
+    onTestFinished(() => setLocale(before));
+    const el = await mountHome(
+      api({
+        getMenuHome: vi.fn().mockResolvedValue(homeWith()),
+        getMenuStructure: vi.fn().mockResolvedValue({
+          ...structureOf("menu-lunch"),
+          nodes: [
+            {
+              memberId: "m-drinks",
+              ref: { kind: "section", sectionId: "included-drinks" },
+              internalName: "Drinks $&",
+              children: [],
+              includedMenuId: "menu-drinks",
+            },
+          ],
+        }),
+      }),
+    );
+    expect((await openAdd(el, "section")).options).toEqual([
+      { value: "included-drinks", label: "Menu: Drinks $&" },
+    ]);
+  });
+
   it("puts a refusal that names no shortcut at the bottom and keeps every choice", async () => {
     const client = api({
       getMenuHome: vi.fn().mockResolvedValue(drinksOnly()),

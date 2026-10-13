@@ -4626,6 +4626,28 @@ describe("the Structure tree", () => {
       ).toEqual(["Burger $& {list}, from Lunch Menu"]);
     });
 
+    it("names an included menu holding a replacement pattern as written", async () => {
+      const el = await mountLunch(
+        includeClient({
+          getMenuStructure: vi
+            .fn()
+            .mockResolvedValue(
+              lunchWith([...lunchNodes(), { ...wines(), internalName: "Wines $&" }]),
+            ),
+        }),
+      );
+      await pressSelect(el);
+      await tick(el, "included-wine");
+      await openRemove(el);
+      expect(
+        [
+          ...modal(el, "remove-selected").querySelectorAll(
+            '[data-test="remove-selected-items"] li',
+          ),
+        ].map(text),
+      ).toEqual(["Menu: Wines $&, from Lunch Menu"]);
+    });
+
     it("asks in Spanish how many items to remove", async () => {
       setLocale("es");
       const el = await mountLunch();
@@ -11160,5 +11182,58 @@ describe("a name put into a sentence", () => {
     const el = await mount(client);
     await inTable(el, "rename-menu-lunch");
     expect(modal(el, "menu-form").heading).toBe("Rename Lunch $&");
+  });
+
+  it("heads the new-section window with a list name holding a replacement pattern as written", async () => {
+    const client = api();
+    renameDrinks(client, "Drinks $&");
+    const el = await mountLunch(client);
+    await rowAction(el, "m-drinks", "new-section");
+    expect(modal(el, "new-section").heading).toBe("Add section to Drinks $&");
+  });
+
+  it("heads the add-products window with a list name holding a replacement pattern as written", async () => {
+    const client = api();
+    renameDrinks(client, "Drinks $&");
+    const el = await mountLunch(client);
+    await rowAction(el, "m-drinks", "open-add-products");
+    expect(modal(el, "add-products").heading).toBe("Add products to Drinks $&");
+  });
+
+  it("says a list holding a replacement pattern was taken away as written", async () => {
+    const live = new LiveData();
+    const client = api({ liveData: live });
+    renameDrinks(client, "Drinks $&");
+    const el = await mountLunch(client);
+    await toggleRow(el, "m-drinks");
+    await vi.waitFor(() => expect(currentPlace(el)).toBe("Lunch Menu › Drinks $&"));
+    await rowAction(el, "m-drinks", "new-section");
+    await takeDrinksOff(el, client, live);
+    await vi.waitFor(() => expect(modal(el, "new-section").open).toBe(false));
+    expect(text(q(el, '[data-test="member-error"]'))).toBe(
+      "Another change took Drinks $& away from where you were editing it, so its window was closed.",
+    );
+  });
+
+  it("says a change was saved to a list holding a replacement pattern that was taken away, as written", async () => {
+    const live = new LiveData();
+    const creating = deferred<SectionDetails>();
+    const client = api({ liveData: live, createSectionIn: vi.fn(() => creating.promise) });
+    renameDrinks(client, "Drinks $&");
+    const el = await mountLunch(client);
+    await toggleRow(el, "m-drinks");
+    await vi.waitFor(() => expect(currentPlace(el)).toBe("Lunch Menu › Drinks $&"));
+    await rowAction(el, "m-drinks", "new-section");
+    type(inModal(el, "new-section", 'wt-input[name="internalName"]'), "Ciders");
+    await el.updateComplete;
+    inModal(el, "new-section", '[data-test="new-section-save"]').click();
+    await vi.waitFor(() => expect(client.createSectionIn).toHaveBeenCalledOnce());
+    await takeDrinksOff(el, client, live);
+    creating.resolve({ ...sections()[3]!, id: "s-ciders", internalName: "Ciders" });
+    await vi.waitFor(() =>
+      expect(text(q(el, '[data-test="member-error"]'))).toBe(
+        "Your change to Drinks $& was saved, but meanwhile another change took it away from where you were editing it.",
+      ),
+    );
   });
 });
