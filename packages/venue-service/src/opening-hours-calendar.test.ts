@@ -16,6 +16,7 @@ import {
   withTransaction,
   type Transaction,
 } from "@waitron/db";
+import { eq } from "drizzle-orm";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId } from "@waitron/shared";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
@@ -521,6 +522,46 @@ describe("the Opening hours month read", () => {
       effectiveBusinessDay: "2030-12-10",
       dayCutover: "07:00",
     });
+  });
+
+  it("still gives the hours, with no today, when the venue's stored time zone cannot be read", async () => {
+    const v = await venue();
+    await suite.db
+      .update(locations)
+      .set({ timeZone: "Not/AZone" })
+      .where(eq(locations.id, v.cfg.locationId));
+    const month = await readMonth(v, "2030-12");
+    expect(month.today).toBeNull();
+    expect(month.days).toHaveLength(42);
+    expect(month.days.find((day) => day.date === "2030-12-10")).toMatchObject({
+      dayCutover: "06:00",
+      endMinute: 1440,
+      seasonId: v.seasons.Winter,
+      departments: [{ ranges: [{ startsAt: "12:00", endsAt: "16:00" }] }],
+    });
+    expect(month.days.find((day) => day.date === "2030-12-09")!.departments[0]!.ranges).toEqual([]);
+    expect((await read(v, 2030)).today).toBeNull();
+  });
+
+  it("gives a venue with no seasons yet every date with no season and no chips", async () => {
+    const [location] = await suite.db
+      .insert(locations)
+      .values({
+        name: `Casa ${randomUUID()}`,
+        invoiceLocales: ["es-ES"],
+        operationDescription: "Hostelería",
+        timeZone: "Europe/Madrid",
+        dayCutover: "06:00",
+        province: "Sevilla",
+        city: "Sevilla",
+      })
+      .returning({ id: locations.id });
+    const month = await readMonth({ cfg: { locationId: locationId(location!.id) } }, "2030-12");
+    expect(month.seasons).toEqual([]);
+    expect(month.days).toHaveLength(42);
+    expect(month.days.map(({ seasonId, departments }) => ({ seasonId, departments }))).toEqual(
+      Array(42).fill({ seasonId: null, departments: [] }),
+    );
   });
 
   it("sends the same statements for one department as for three, not one per day or department", async () => {

@@ -436,21 +436,18 @@ export class OpeningHoursScreen extends LitElement {
       this.monthModel = undefined;
       return;
     }
-    const current = () => this.isConnected && this.watchedMonth === month;
     this.monthDetach = this.api.watchMonth(
       month,
       (model) => {
-        if (!current()) return;
         this.monthModel = model;
         this.monthReadError = "";
       },
       () => {
-        if (!current()) return;
         this.monthReadError = t("opening.load_error");
         if (this.monthModel?.month !== month) this.monthModel = undefined;
       },
       () => {
-        if (current()) this.monthReadError = "";
+        this.monthReadError = "";
       },
     );
   }

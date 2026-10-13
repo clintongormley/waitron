@@ -203,3 +203,57 @@ it("fits a phone's width, its buttons wrapping", async () => {
   const body = modal.querySelector(".body")!;
   expect(body.scrollWidth).toBeLessThanOrEqual(body.clientWidth);
 });
+
+it("names no season and offers no week when the date follows none, keeping the special-day choices", async () => {
+  await mount((dialog) => (dialog.season = undefined));
+  expect(text("[data-test=date]")).toBe("Thursday 10 December 2026");
+  expect(q("[data-test=season]")).toBeNull();
+  expect(q("[data-test=follows]")).toBeNull();
+  expect(q("[data-test=edit-week]")).toBeNull();
+  expect(text("[data-test=make-special]")).toBe("Make this a special day…");
+  expect(q("[data-test=add-row]")).not.toBeNull();
+});
+
+it("draws the season's chip untinted when it is given no tint", async () => {
+  await mount((dialog) => (dialog.tint = ""));
+  expect(q("[data-test=season]")!.textContent!.trim()).toBe("Winter");
+  expect(q("[data-test=season]")!.hasAttribute("data-tint")).toBe(false);
+});
+
+it("sends only the first of two actions clicked before it closes", async () => {
+  await mount();
+  const sent: string[] = [];
+  for (const name of ["ordinary-date-edit-week", "ordinary-date-make-special"])
+    el.addEventListener(name, () => sent.push(name));
+  const first = next("ordinary-date-edit-week");
+  q("[data-test=edit-week]")!.click();
+  q("[data-test=make-special]")!.click();
+  await first;
+  await el.updateComplete;
+  expect(sent).toEqual(["ordinary-date-edit-week"]);
+});
+
+it("sends nothing when Add is clicked with no special day chosen", async () => {
+  await mount();
+  let sent = false;
+  el.addEventListener("ordinary-date-add-to-special", () => (sent = true));
+  q("[data-test=add-to-special]")!.click();
+  await el.updateComplete;
+  expect(sent).toBe(false);
+  expect(el.open).toBe(true);
+});
+
+it("does not take focus back on a close that arrives after an action", async () => {
+  await mount();
+  const modal = q("wt-modal")!;
+  const sent = next("ordinary-date-make-special");
+  q("[data-test=make-special]")!.click();
+  await sent;
+  const elsewhere = document.createElement("button");
+  document.body.append(elsewhere);
+  elsewhere.focus();
+  modal.dispatchEvent(new CustomEvent("wt-close", { detail: { reason: "cancel" } }));
+  await el.updateComplete;
+  expect(document.activeElement).toBe(elsewhere);
+  elsewhere.remove();
+});

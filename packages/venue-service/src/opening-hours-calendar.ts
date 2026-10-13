@@ -163,12 +163,11 @@ export async function readOpeningHoursMonth(
   const factsOn = new Map<LocalDate, HolidayFact[]>();
   for (const fact of await readHolidayFacts(tx, cfg, from, to))
     factsOn.set(fact.date, [...(factsOn.get(fact.date) ?? []), fact]);
-  const sorted = [...seasons].sort((a, b) => (a.startsOn < b.startsOn ? -1 : 1));
   const touched = new Map<string, Season & { lastDay: string }>();
   for (const date of dates) {
     const season = seasons.find(({ id }) => id === plan.seasonIdOn.get(date));
     if (season !== undefined && !touched.has(season.id))
-      touched.set(season.id, { ...season, lastDay: lastDayAfter(date, sorted, season) });
+      touched.set(season.id, { ...season, lastDay: lastDayAfter(date, seasons, season) });
   }
   return {
     ...status,
