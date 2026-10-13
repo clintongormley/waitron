@@ -107,7 +107,7 @@ A506-6 landed in #1609: seasons are added, renamed, moved and deleted from the s
 their dialog (+ Season), and a move or a deletion is refused when a period's end offset would
 run into the next day's hours; Opening hours opens on the Year, which replaced the Calendar
 tab, and setup's Done link opens it.
-A506-7 landed in #NNNN: a month view, reached from the Year, draws each date's hours as a bar per
+A506-7 landed in #1623: a month view, reached from the Year, draws each date's hours as a bar per
 department and opens a dialog on an ordinary date; it replaced the Day tab and the Real week
 switch, and the dashboard's dated week views went.
 
@@ -205,7 +205,7 @@ switch, and the dashboard's dated week views went.
   (`GET …/special-days`) to show a name and a latest date.
 
 **Left open by A506-7, for the later parts.**
-- Public holidays' names show in Spanish in the English interface (seen on the month view, #NNNN):
+- Public holidays' names show in Spanish in the English interface (seen on the month view, #1623):
   the official lists carry one name per holiday. Believed to predate A506-7; not checked against
   the year view's history.
 - At 390 px a long name in a month cell breaks mid-word ("Christ|mas"): the dashboard page declares
