@@ -1934,22 +1934,24 @@ without an owner decision, on a discovered card reader's Add, the Add products a
 pickers, the Add under the special-day dialog's + Add dates…, the till's modifier picker when
 adding a dish, and a weighed item's Add. Nothing guards it across screens.
 
-The zone's normal-week editor draws seven closed-time columns over its department's periods in the same season.
-Dragging stages a closed range; opening a closed block edits its two times or deletes it, with
-no period choice. Copy this day and Clear change only the closed ranges. One Save writes all
-seven weekdays of the picked season; a refusal naming a submitted day appears in that day's header and leaves the
-staged week available to retry. Its Save follows the draft comparison below, including after
-removal and reconnect.
-
-The Opening hours normal-week editor stages its seven days before one Save. A Season picker beside
-the department picker chooses which season's week the tab edits: the address's season when the
-venue has it, else the current season, else the first. Save writes that season alone, and an
-unsaved draft asks before the picker changes season. Each day's menu
-copies its ranges to selected weekdays or clears them locally. A range dialog stages its two
-times and period; Add period… opens the period editor above it, then returns to the same range.
-Save on the week waits while a child chooser is open. A server refusal that names a day sits in
-that day's header, with the form's generic message immediately above Save; the refusal leaves
-Save available for retry. A venue viewer gets the grid without day menus or Save.
+The season painter (`season-painter.ts`, under `packages/venue-service/src/dashboard/`) edits one
+season's week for every active department and zone, in a full-screen frame (`painter-frame.ts`, a
+`wt-modal size="full"`). Its bar holds ✕, the heading "<season> week", ‹ the season chip ›, the
+department-or-zone picker, a Periods link, and Cancel and Save; the bar stays in view while the
+paint grid (`paint-grid.ts`) scrolls in the space under it. A paint row offers the department's
+periods (✎ edits one), Closed and + New period, which saves the period on its own and chooses it.
+Dragging down a day paints the chosen period in the business day's quarter hours; a drag over a
+block replaces what it covers, touching blocks of one period join, and clicking a block offers
+another period or Delete. Each day's ⋮ offers Copy to…, with a tick per day, and Clear. In a
+department, Closed erases; a zone paints Closed only, over its department's week drawn faded, and
+Delete there gives the time back to the department. One draft holds every department and zone of
+the season, so the picker keeps edits; Save stays quiet until the draft changes and writes the
+edited weeks in one request. ‹ › ask first when there are edits. A refusal that names a department
+or zone switches the picker to it, marks the day's heading and is told beside Save; the draft stays
+for a retry. A live refresh keeps edited weeks; one that removes the season, or a department or
+zone with edits, drops those edits and says so beside Save. The grid fits seven days in 1280 px; at phone
+width the grid scrolls sideways with its time column pinned. A venue viewer gets ✕ alone, no paint
+row, and a grid that does not change.
 
 The per-date editor (`opening-hours-day.ts`) paints one date of a special day. A special day's
 Edit hours on this date opens it at `/view/date/date/<yyyy-mm-dd>`; with no date, or one that is
@@ -2080,7 +2082,7 @@ and nothing guards it across screens:
   canvas editor;
 - batch 4a: adjustment reason create/edit and the bill-discount limit; booking create/edit; image
   upload and names edit;
-- Opening hours: the normal week, a day, the period editor, the date range dialog and the season dialog.
+- Opening hours: the season painter, a day, the period editor, the date range dialog and the season dialog.
   A366 slice 4 retires the separate Station hours page and its draft editors;
 - Departments: Add and Rename department, Add and Rename zone, Move and Add to department,
   the Settings form (including transfers) and the selected zone's settings. Their sibling
@@ -3567,13 +3569,20 @@ an active station's drag grip stays before its name. The Routes tab's All catego
 also sets the default station, for someone with `venue.configure`. The page is offered only to
 someone with `venue_service.manage`; a supervisor is not offered it.
 
-Department opening hours belong to `/manage/opening-hours`, with Year, Week and Periods tabs; the
-month (`/view/month`) and the per-date editor (`/view/date`) show under the Year tab. The page
-opens on Year when its address names no view and no department, zone, station or season, and on
-an old `/view/calendar` address; otherwise on Week (`opening-hours-screen.ts`). A `week=` in the
-address is ignored. `/view/year/year/<yyyy>` picks a year, and choosing another tab drops it; `/department/<id>` selects the department and `/view/periods` selects its periods, and on the Week
-tab `/season/<id>` selects the season (in the standard week only; the fallback is in Forms above). The Week
-and per-date editing contract is in Forms above. After provisioning, setup's completion screen shows
+Department opening hours belong to `/manage/opening-hours`, with Year and Periods tabs; the month
+(`/view/month`) and the per-date editor (`/view/date`) show under the Year tab, and a Standard
+week tab shows only a station's or All departments' read-only week (`?station=<id>`,
+`/view/week/department/all`). The page opens on Year when its address names no view and no
+department, zone, station or season, and on an old `/view/calendar` address
+(`opening-hours-screen.ts`). A `week=` in the address is ignored. `/view/year/year/<yyyy>` picks a
+year, and choosing another tab drops it; `/department/<id>` selects the department and
+`/view/periods` selects its periods; on All departments `/season/<id>` picks the season shown.
+The season painter (Forms above) has its own address,
+`/view/season/season/<id>/department/<id>`, with `/zone/<id>` for a zone; it opens over the view
+it was opened from, or the Year on a direct load, and closing it returns there. An unknown season
+gives the current one, a missing department the first active one, and a zone the department does
+not have the department's own week. Any other week address naming a department opens the
+painter in its place. After provisioning, setup's completion screen shows
 the first saved Open schedule, when it is still Monday to Friday, 09:00–17:00, with a link to
 Opening hours' Year.
 
@@ -3603,15 +3612,15 @@ Opening hours' Year.
   department picker, + Special day, the season chips and a Rows legend. Arrow keys move between
   dates, with one Tab stop. A special-day or public-holiday date opens the special-day dialog as
   the Year does. An ordinary date opens the ordinary-date dialog (`ordinary-date-dialog.ts`): it
-  says which season's week the date follows and offers Edit the <season> week (the Week tab on
-  that season), Make this a special day… (the special-day dialog on a new day holding the date)
+  says which season's week the date follows and offers Edit the <season> week (the season
+  painter on that season), Make this a special day… (the special-day dialog on a new day holding the date)
   and a special-day picker with Add, which opens the chosen day's dialog with the date added as an
   unsaved change. A venue viewer gets the month read-only: its dates are not buttons
   and + Special day is not offered.
 - **Seasons.** The Year's season chips (`season-chips.ts`) list the venue's seasons in start
-  order, each written as its name and first and last day. Each chip is a button that opens the
-  season dialog (`season-dialog.ts`) on that season (its ✎ is decoration, hidden from screen
-  readers), and + Season opens the dialog empty; on a read-only page the chips are plain labels and
+  order, each written as its name and first and last day. A chip's name opens the season
+  painter on that season's week, its ✎ opens the season dialog (`season-dialog.ts`) on that
+  season, and + Season opens the dialog empty; on a read-only page the chips are plain labels and
   + Season is not offered. A new season starts with a copy of the department and zone weeks of the
   season it starts inside. The dialog has a required Name and a Starts on day and month, each
   picked from a list; Save stays quiet and disabled until the draft changes. A name or start
@@ -4030,7 +4039,8 @@ languages staff may print in, with the venue's receipt language first. A new dep
 authored receipt content. Venue settings holds the receipt language; there is no venue receipt
 page or live venue fallback for receipt decoration.
 
-The zone editor shows an Opening hours link and the closed times of the current season (the
+The zone editor shows an Opening hours link, which opens the season painter on that zone in the
+current season, and the closed times of the current season (the
 first season when none is current), named first: "Winter: closed from 23:30 Monday to Thursday".
 A venue with no seasons gets the sentence without a name. Identical ranges share a day group; more
 than two groups show a day count. Special days stay in Opening hours. A zone with placed

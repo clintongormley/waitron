@@ -110,6 +110,9 @@ tab, and setup's Done link opens it.
 A506-7 landed in #1623: a month view, reached from the Year, draws each date's hours as a bar per
 department and opens a dialog on an ordinary date; it replaced the Day tab and the Real week
 switch, and the dashboard's dated week views went.
+A506-8 landed in #NNNN: a full-screen season painter edits one season's week for every department
+and zone, saving the edited weeks in one request; it replaced the Week tab's editors, and opens
+from a season chip, an ordinary date and a zone's Opening hours link.
 
 **Left open by A506-1, for the later parts.**
 - No test yet gives a second department its own paint on the same special day.
@@ -119,15 +122,17 @@ switch, and the dashboard's dated week views went.
   editor's draft takes its season when Save is pressed; once a season's start can move, a draft built for one
   season could be saved under the next. Season edits should bump the clock
   revision or refuse a draft built before them.
-- With no season in the address, a Week tab left open across a season change keeps showing the old
-  season (the picker names it) until the address changes.
+- With no season in the address, the All departments week left open across a season change keeps
+  showing the old season (the picker names it) until the address changes. The season painter always
+  writes its season into the address. Read in the code (`resolveSeason`, `opening-hours-screen.ts`),
+  not run since A506-8.
 - The Business day start dialog works out its conflict count by repeating the server's rule for
   counting a conflict once whatever its season (`rangeKey`,
   `apps/dashboard/src/screens/business-day-start-editor.ts`), so a change to that rule on the server
   would make the dialog miscount without any test noticing. The server could return how many conflicts
   it left off its list instead, which adds a field to the shared preview type.
-- A venue with no seasons cannot save a week from the dashboard: the Week tab sends an empty
-  `seasonId`, the route refuses it, and the person sees only the generic save error. Provisioning gives
+- A venue with no seasons cannot edit a week from the dashboard: since A506-8 the season painter
+  draws nothing without a season (read in `season-painter.ts`'s render, not run). Provisioning gives
   every venue four seasons, and deleting the last one is refused (`season.invalid`, reason `last`,
   `deleteSeason` in `packages/venue-service/src/seasons.ts`), so this is believed unreachable — read in
   the code, not run.
@@ -203,6 +208,19 @@ switch, and the dashboard's dated week views went.
   `packages/venue-service/src/dashboard/special-date.ts`) and the per-date editor fetches the special day's detail separately; returning the stored date in the model
   would leave one copy of the rule. The "Add to" offer reads every special day with every date
   (`GET …/special-days`) to show a name and a latest date.
+
+**Left open by A506-8, for the later parts.**
+- The painter cannot resize a block by dragging its edge (ruling R1 of A506-8); mockup 3's hint
+  mentioned it. Painting over a block lengthens it, and painting Closed shortens it.
+- On a venue whose business day changes over off the quarter hour, the grid ends at the last
+  quarter hour before the changeover, because the server refuses an end at the changeover there.
+- A slow live read started before a save can briefly replace the week just saved; repainting in
+  that moment and saving again undoes the first save. `model-watch.ts` applies a read that started
+  before the save until a later read answers. The old week editors had the same flaw.
+- Without a navigation guard, which only test harnesses lack, the painter's history mark is copied
+  to later entries, so ✕ can go back to a later entry of the same screen.
+- The navigation guard's `rewrite()` refuses while a leave question is open, so a live refresh that
+  moves the painter to another season at that moment leaves the address on the old season.
 
 **Left open by A506-7, for the later parts.**
 - Public holidays' names show in Spanish in the English interface (seen on the month view, #1623):
