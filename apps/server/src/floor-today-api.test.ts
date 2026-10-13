@@ -826,6 +826,15 @@ describe("the zone reset's revision", () => {
 describe("today's name route", () => {
   const suffix = () => randomUUID().slice(0, 6);
 
+  it("answers the revision unchanged when a table is renamed to the name it already has", async () => {
+    const { zoneId, table } = await plannedZone(v, [{ key: "bar", label: "Bar" }]);
+    const name = `Window ${suffix()}`;
+    await expectRevision(v, today(table.bar!, "name", { name }), zoneId);
+    const read = (await zoneRevisionOf(v, zoneId))!;
+
+    await expectRevision(v, today(table.bar!, "name", { name, zoneRevision: read }), zoneId, read);
+  });
+
   it("refuses Split tables… and a rename from the read before another till renamed the group", async () => {
     const { zoneId, table } = await plannedZone(v, [
       { key: "a", place: { x: 0, y: 0 } },

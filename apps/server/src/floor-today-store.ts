@@ -403,6 +403,10 @@ async function catchUpPass(
       .set({ needsClearingSince: null })
       .where(inArray(diningTables.id, takenBack));
     await tx
+      .update(floorTodayTables)
+      .set({ name: null })
+      .where(inArray(floorTodayTables.tableId, takenBack));
+    await tx
       .delete(floorTodaySplitParts)
       .where(inArray(floorTodaySplitParts.joinedTableId, putBack));
   }
@@ -431,6 +435,7 @@ function todayColumns(target: Target) {
     fixed: target.fixed,
     ...placementColumns(target.placement),
     takenOff: false,
+    name: null,
   };
 }
 
