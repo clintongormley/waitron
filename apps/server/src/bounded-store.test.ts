@@ -158,13 +158,14 @@ describe("boundObjectStore over the real bucket client", () => {
   });
 
   it("leaves no live request behind when a read's body stalls past the time limit", async () => {
-    const observed = { closed: false };
+    const observed = { closed: false, headersSent: false };
     const server = createServer((request, response) => {
       request.socket.once("close", () => (observed.closed = true));
       request.resume();
       request.on("end", () => {
         response.writeHead(200, { etag: '"v1"', "content-length": "1000" });
         response.write("the first part");
+        observed.headersSent = true;
       });
     });
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -188,6 +189,8 @@ describe("boundObjectStore over the real bucket client", () => {
       code: "backup.stream_request_failed",
       params: { operation: "get", key: "venues/v1/current.json", status: null, name: "TimedOut" },
     });
+    // Else the limit passed while the call still waited for headers, not on a stalled body.
+    expect(observed.headersSent).toBe(true);
     await vi.waitFor(() => expect(observed.closed).toBe(true), { timeout: 2_000 });
   });
 });
