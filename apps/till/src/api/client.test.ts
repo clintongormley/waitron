@@ -2627,12 +2627,14 @@ describe("TillApi", () => {
         target: "tbl-1",
         side: "left",
         seats: 6,
+        zoneRevision: 4,
       }),
     ).resolves.toEqual(answer);
     await api.joinTables("v1", "tbl-9", "merge", revisions, {
       moving: "tbl-1",
       target: "tbl-9",
       side: "top",
+      zoneRevision: 5,
     });
     await api.joinTables("v1", "tbl-9", "separate", revisions);
 
@@ -2646,6 +2648,7 @@ describe("TillApi", () => {
         expectedPartyRevision: 3,
         otherPartyId: null,
         merge: { moving: "tbl-9", target: "tbl-1", side: "left", seats: 6 },
+        zoneRevision: 4,
       },
       {
         tableId: "tbl-9",
@@ -2653,6 +2656,7 @@ describe("TillApi", () => {
         expectedPartyRevision: 3,
         otherPartyId: null,
         merge: { moving: "tbl-1", target: "tbl-9", side: "top" },
+        zoneRevision: 5,
       },
       { tableId: "tbl-9", bills: "separate", expectedPartyRevision: 3, otherPartyId: null },
     ]);
