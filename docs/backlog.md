@@ -2767,6 +2767,12 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 - **The station dialog widens or narrows with the chosen station's name, so its buttons shift a
   little as a station is picked** (it did so before this batch). Left open by A331 batch 5 (#1414).
 
+- **Two untested edges of the reset clearing a "needs clearing" mark** (left open by A579 part 1,
+  #1618; read, not run). When two live tables follow one saved joined table, the reset copies no
+  parts for it, so no mark is cleared there; and no test covers a new plan saved between a reset that
+  waited (guests seated) and its later catch-up (reading `catchUpPass` says the reset's copy still
+  counts the table, so its mark is cleared). Next: a test for each in `floor-today-store.test.ts`.
+
 - **In dark, the till's Cash and Card turn dim blue while a payment is being sent** (owner
   decision needed, left open by A535, #1617). They are switched off with `disabled` while sending,
   not `loading`, so they now take the dark disabled colours (`--wt-color-primary-disabled`) instead of
