@@ -2935,6 +2935,34 @@ describe("a device's current printers", () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const t = await listedTill(venue, app);
+
+    const [drawer] = await suite.db
+      .insert(printers)
+      .values({
+        locationId: venue.cfg.locationId,
+        name: "Separate drawer",
+        transport: "network_tcp",
+        host: "10.0.0.99",
+        hasCashDrawer: true,
+      })
+      .returning({ id: printers.id });
+    const [device] = await suite.db
+      .select({ profileId: devices.deviceProfileId })
+      .from(devices)
+      .where(eq(devices.id, t.deviceId));
+    await withTransaction(suite.db, (tx) =>
+      setProfilePrinterLists(tx, device!.profileId, {
+        ...emptyPrinterLists(),
+        receiptPrinterIds: [t.counter, t.bar],
+        paymentSlipPrinterIds: [t.portable, t.bar],
+        cashDrawerPrinterIds: [drawer!.id],
+      }),
+    );
+    const selectedDrawer = await send(app, "PUT", "/api/device/equipment", {
+      cookie: `${t.jar}; ${t.session}`,
+      body: { role: "cash_drawer", selection: { id: drawer!.id }, via: "list" },
+    });
+    expect(selectedDrawer.status).toBe(200);
     const res = await send(app, "PUT", "/api/device/equipment", {
       cookie: `${t.jar}; ${t.session}`,
       body: { kind: "printer", selection: { id: t.bar }, via: "scan" },
@@ -2943,7 +2971,7 @@ describe("a device's current printers", () => {
     expect(await chosenIds(res)).toMatchObject({
       receipt: t.bar,
       payment_slip: t.bar,
-      cash_drawer: null,
+      cash_drawer: drawer!.id,
     });
   });
 
