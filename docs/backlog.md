@@ -2763,6 +2763,13 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 - **The station dialog widens or narrows with the chosen station's name, so its buttons shift a
   little as a station is picked** (it did so before this batch). Left open by A331 batch 5 (#1414).
 
+- **In dark, the till's Cash and Card turn dim blue while a payment is being sent** (owner
+  decision needed, left open by A535, #1617). They are switched off with `disabled` while sending,
+  not `loading`, so they now take the dark disabled colours (`--wt-color-primary-disabled`) instead of
+  a half-faded full blue; A417 asked for them to keep blue while sending. Keep the dim look, or move
+  them to `loading` so they keep their full colour with a spinner. Question in the lane C questions
+  file, "A535 (#1617)".
+
 - **A separate finding remains: entering `05,50` for an amount discount and pressing Continue raises
   `shared.invalid_decimal` from the existing amount check** (found during W69). W69 leaves the amount
   validation and request conversion unchanged.
