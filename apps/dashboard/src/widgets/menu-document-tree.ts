@@ -14,7 +14,7 @@ import type {
   MenuTarget,
 } from "@waitron/catalogue/src/menu-document-types.js";
 import { indexMenuOccurrences } from "@waitron/catalogue/src/menu-navigation.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { productMedia, productMediaFrame, productMediaStyles } from "./product-media.js";
 import { swatchPartStyles } from "./swatch-styles.js";
@@ -231,7 +231,7 @@ export class MenuDocumentTree extends LitElement {
         .rowParent=${(row: Row) => row.parentKey}
         .rowCollapsible=${(row: Row) => row.member !== null}
         .rowActivation=${(row: Row) => (row.member?.kind === "section" ? "toggle" : "none")}
-        .rowToggleLabel=${(row: Row, expanded: boolean) => t(expanded ? "menus.collapse" : "menus.expand").replace("{name}", row.member === null ? this.#snapshot!.menuName : this.#text(row.member).text)}
+        .rowToggleLabel=${(row: Row, expanded: boolean) => fill(expanded ? "menus.collapse" : "menus.expand", { name: row.member === null ? this.#snapshot!.menuName : this.#text(row.member).text })}
         ><div slot="toolbar-start"><slot name="view"></slot></div
       ></wt-data-table>`,
     );

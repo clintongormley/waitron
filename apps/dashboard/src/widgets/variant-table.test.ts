@@ -113,6 +113,13 @@ it("draws no status dropdown or show/hide toggle for archived variants", async (
   expect(cells(el, 1)).toEqual(["Media", "Doble"]);
 });
 
+it("names a pricing unit holding a replacement pattern in the chooser's label as written", async () => {
+  const el = await mountTable({ unitLabel: "caja $&" });
+  expect(unitButton(el).getAttribute("aria-label")).toBe(
+    t("editor.change_pricing_unit").split("{unit}").join("caja $&"),
+  );
+});
+
 it("asks for the pricing unit chooser from a button in the price heading that names the unit", async () => {
   const el = await mountTable({ unitLabel: "kg" });
   const unit = unitButton(el);

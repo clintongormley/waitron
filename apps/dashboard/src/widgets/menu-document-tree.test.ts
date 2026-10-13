@@ -161,6 +161,19 @@ it("updates interface words with the locale while preserving the chosen content 
   expect(row(el, "drinks")!.textContent).toContain("Sin nombre en inglés");
 });
 
+it("names a section toggle whose name holds a replacement pattern as written", async () => {
+  const el = await mount(
+    menuDocument(
+      [documentSection("drinks", "Bar $&", [documentProduct("mi", "lager")])],
+      { lager: "Counter lager" },
+      "Frozen lunch",
+    ),
+  );
+  expect(row(el, "drinks")!.querySelector(".row-activate")!.getAttribute("aria-label")).toBe(
+    "Show what is in Bar $&",
+  );
+});
+
 it("names section toggles with the content language drawn in their row", async () => {
   const el = await mount();
   el.view = { kind: "customer", language: "es" };

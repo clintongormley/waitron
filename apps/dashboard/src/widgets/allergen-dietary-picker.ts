@@ -4,7 +4,7 @@ import { baseStyles, disabledStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-combobox.js";
 import { ALLERGEN_CODES, allergenName } from "../i18n/domain.js";
 import { DIETARY_SUITABILITY, type DietaryLabel } from "../api/client.js";
-import { t } from "../i18n/t.js";
+import { fill, t } from "../i18n/t.js";
 
 /** The allergens a thing CONTAINS, and the dietary preferences it is SUITABLE FOR. */
 export interface AllergenDietaryValue {
@@ -124,7 +124,7 @@ export class AllergenDietaryPicker extends LitElement {
       class="line"
       data-test=${`${field}-line`}
       ?disabled=${this.busy}
-      aria-label=${t("modifiers.edit_named").replace("{label}", label).replace("{value}", summary)}
+      aria-label=${fill("modifiers.edit_named", { label, value: summary })}
       @click=${(event: Event) => this.#edit(field, event)}
     >
       <span class="label">${label}:</span>
