@@ -1474,7 +1474,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   colour from a larger set than the six menu periods use; a cell takes its station's colour, and each
   period line under it a dot in the colour of the station it sends to. A new dropdown above the grid,
   defaulting to "All periods", shows where everything goes during one period, so each cell has one
-  station and one colour.
+  station and one colour. Design settled with the owner from mock-ups the same day.
   [Detail](backlog/kitchen.md#a584-prep-stations-get-colours-and-the-routes-grid-paints-each-cell-with-its-stations-colour-and-can-show-one-period-at-a-time-owner-2026-10-13)
 
 - **A routing period line naming another location's period is flagged but never drawn** (left open

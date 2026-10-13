@@ -1,0 +1,142 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Station colours</title><style>
+:root{--text:#1d1d1f;--muted:#6b6b70;--line:#e3e3e6;--blue:#1f5fd6;--bg:#fff;--page:#f6f6f7;--note:#8a5a00;--notebg:#fff8e6}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);font:15px/1.35 -apple-system,"Helvetica Neue",Arial,sans-serif;color:var(--text)}
+.board{width:1240px;background:var(--bg);padding:28px 32px 32px;margin:24px}
+.board h2{margin:0 0 4px;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.board .sub{margin:0 0 18px;color:var(--muted);font-size:14px}
+.toolbar{display:flex;gap:10px;margin-bottom:14px;align-items:center}
+.search{flex:0 0 340px;border:1px solid #c9c9ce;border-radius:8px;padding:9px 12px;color:var(--muted)}
+.select{border:1px solid #c9c9ce;border-radius:8px;padding:9px 12px;min-width:200px;display:flex;justify-content:space-between;gap:16px;background:#fff}
+.select.on{border-color:var(--blue);box-shadow:0 0 0 2px #1f5fd633}
+.select .lab{color:var(--muted);font-size:12px;display:block;margin-bottom:2px}
+.fieldlab{font-size:13px;color:var(--muted);margin-right:2px}
+table{border-collapse:separate;border-spacing:0;width:100%;table-layout:fixed}
+th{font-weight:600;font-size:14px;text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:9px 12px;border-bottom:1px solid #fff;border-right:2px solid #fff;vertical-align:top;white-space:nowrap}
+th:first-child,td:first-child{width:280px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);background:#fff}
+.name{display:flex;align-items:center;gap:6px}
+.tw{display:inline-block;width:14px;color:var(--muted);font-size:11px}
+.label{font-weight:500}
+.prod .label{font-weight:400}
+.set{font-weight:700;color:var(--text)}
+.inh{color:#55555a}
+.ln{display:flex;align-items:center;gap:6px;font-size:13px;margin-top:3px}
+.ln.set{font-weight:600}
+.dot{width:10px;height:10px;border-radius:50%;flex:none;border:1px solid #0002}
+.tag{display:inline-block;font-size:12px;color:#55555a;margin-left:6px}
+.other{display:block;font-size:12px;color:#55555a;margin-top:2px}
+.notes{margin-top:18px;background:var(--notebg);border:1px solid #f0d9a8;border-radius:8px;padding:12px 16px;color:var(--note);font-size:14px}
+.notes ol{margin:4px 0 0;padding-left:20px}
+.notes li{margin:3px 0}
+.key{display:flex;gap:18px;font-size:13px;color:var(--muted);margin:12px 0 0;flex-wrap:wrap}
+.key span{display:flex;align-items:center;gap:6px}
+.sw{width:16px;height:16px;border-radius:4px;border:1px solid #0002}
+/* station editor */
+.dialog{width:560px;border:1px solid #c9c9ce;border-radius:12px;padding:22px 24px;box-shadow:0 8px 24px #0001}
+.dialog h3{margin:0 0 16px;font-size:20px}
+.field{margin-bottom:16px}
+.field .flab{font-size:14px;font-weight:600;margin-bottom:6px;display:block}
+.input{border:1px solid #c9c9ce;border-radius:8px;padding:9px 12px}
+.swatches{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.swatch{display:flex;align-items:center;gap:8px;border:1px solid #d6d6da;border-radius:8px;padding:7px 9px;font-size:13px}
+.swatch .chip{width:22px;height:22px;border-radius:6px;border:1px solid #0002}
+.swatch.on{border:2px solid var(--blue);padding:6px 8px;font-weight:600}
+.swatch.used{color:var(--muted)}
+.swatch.used .u{font-size:11px;display:block}
+.btns{display:flex;justify-content:flex-end;gap:10px;margin-top:8px}
+.btn{border:1px solid #c9c9ce;border-radius:8px;padding:9px 16px;font-weight:600;background:#fff}
+.btn.primary{background:var(--blue);color:#fff;border-color:var(--blue)}
+.side{display:flex;gap:28px;align-items:flex-start}
+.side .notes{margin-top:0;flex:1}
+</style></head><body>
+<div id="root"></div>
+<script>
+const C = {
+  red:["#fde2e1","#d64545","Red"], orange:["#fde6cf","#e07b24","Orange"], amber:["#fcefc0","#c99400","Amber"],
+  lime:["#e9f4c9","#7aa51e","Lime"], green:["#d6f0dc","#2f9a4f","Green"], teal:["#d0eeea","#1f9488","Teal"],
+  cyan:["#d3ecf7","#1b8fc2","Cyan"], blue:["#dce6fb","#2f66d6","Blue"], indigo:["#e1e0f8","#5b55d0","Indigo"],
+  purple:["#ecdff8","#8d4fcf","Purple"], pink:["#fbdfec","#d2468c","Pink"], brown:["#eee2d6","#8a5a3c","Brown"],
+};
+const ST = {Kitchen:"orange", Bar:"blue", Coffee:"brown", "Pizza oven":"red", Grill:"purple"};
+const zones = ["Every zone","Counter","Front Bar","Saloon","Terrace"];
+// cell: [station, set|inh, lines[[periods, station, set|inh]]]  ; null = same as row's Every zone (blank)
+const rowsAll = [
+  {n:"All categories", d:0, t:"", c:[["Kitchen","set"],null,null,null,null]},
+  {n:"Santet Deli Co", d:1, t:"▾", c:[["Kitchen","inh"],null,["Bar","set"],null,null]},
+  {n:"CAFÉS", d:2, t:"▸", c:[["Bar","set",[["Breakfast","Coffee"]]],null,null,null,null]},
+  {n:"Café con leche", d:3, p:1, c:[["Bar","inh",[["Breakfast","Coffee"]]],null,null,["Kitchen","set"],null]},
+  {n:"PIZZAS", d:2, t:"▸", c:[["Kitchen","set",[["Lunch, Dinner","Pizza oven"]]],null,null,null,null]},
+  {n:"Margherita", d:3, p:1, c:[["Kitchen","inh",[["Lunch, Dinner","Pizza oven"]]],null,null,null,["Kitchen","set"]]},
+  {n:"POSTRES", d:2, t:"▸", c:[["Kitchen","inh"],null,null,null,["Kitchen","set",[["Lunch","Grill"]]]]},
+];
+// Lunch view: each cell resolved; o = the station outside the period (where it differs)
+const rowsLunch = [
+  {n:"All categories", d:0, t:"", c:[["Kitchen","set"],null,null,null,null]},
+  {n:"Santet Deli Co", d:1, t:"▾", c:[["Kitchen","inh"],null,["Bar","set"],null,null]},
+  {n:"CAFÉS", d:2, t:"▸", c:[["Bar","set"],null,null,null,null]},
+  {n:"Café con leche", d:3, p:1, c:[["Bar","inh"],null,null,["Kitchen","set"],null]},
+  {n:"PIZZAS", d:2, t:"▸", c:[["Pizza oven","set",null,"Kitchen"],null,null,null,null]},
+  {n:"Margherita", d:3, p:1, c:[["Pizza oven","inh",null,"Kitchen"],null,null,null,["Kitchen","set"]]},
+  {n:"POSTRES", d:2, t:"▸", c:[["Kitchen","inh"],null,null,null,["Grill","set",null,"Kitchen"]]},
+];
+const bg = s => C[ST[s]][0], fg = s => C[ST[s]][1];
+function cell(c, row, mode, periodMode){
+  if (c === null){
+    if (mode === "fill"){ const every = row.c[0]; return `<td style="background:${bg(every[0])}"></td>`; }
+    return `<td></td>`;
+  }
+  const [s, k, lines, other] = c;
+  let h = `<span class="${k}">${s}</span>`;
+  if (periodMode === "tag" && other) h += `<span class="other">otherwise ${other}</span>`;
+  for (const [p, ls] of lines || []) h += `<span class="ln ${k}"><span class="dot" style="background:${fg(ls)}"></span>${p}: ${ls}</span>`;
+  return `<td style="background:${bg(s)}">${h}</td>`;
+}
+function grid(rows, mode, period, periodMode){
+  let h = `<div class="toolbar"><div class="search">Search categories and products</div><span class="fieldlab">Period</span><div class="select ${period!=="All periods"?"on":""}"><span>${period}</span><span>▾</span></div></div>`;
+  h += `<table><tr><th>Category or product</th>${zones.map(z=>`<th>${z}</th>`).join("")}</tr>`;
+  for (const r of rows){
+    h += `<tr><td><div class="name ${r.p?"prod":""}" style="padding-left:${[0,12,32,52][r.d]}px"><span class="tw">${r.p?"·":r.t}</span><span class="label">${r.n}</span></div></td>`;
+    h += r.c.map(c=>cell(c,r,mode,periodMode)).join("") + `</tr>`;
+  }
+  h += `</table><div class="key">${Object.keys(ST).map(s=>`<span><span class="sw" style="background:${bg(s)}"></span>${s}</span>`).join("")}</div>`;
+  return h;
+}
+function board(id, title, sub, body, notes){
+  return `<div class="board" id="${id}"><h2>${title}</h2><p class="sub">${sub}</p>${body}${notes?`<div class="notes"><b>What to look at</b><ol>${notes.map(n=>`<li>${n}</li>`).join("")}</ol></div>`:""}</div>`;
+}
+const used = {orange:"Kitchen", blue:"Bar", brown:"Coffee", red:"Pizza oven"};
+const editor = `<div class="side"><div class="dialog"><h3>New prep station</h3>
+<div class="field"><span class="flab">Name *</span><div class="input">Grill</div></div>
+<div class="field"><span class="flab">Colour *</span><div class="swatches">${Object.entries(C).map(([k,[b,f,n]])=>`<div class="swatch ${k==="purple"?"on":""} ${used[k]?"used":""}"><span class="chip" style="background:${b}"></span><span>${n}${used[k]?`<span class="u">${used[k]}</span>`:""}</span></div>`).join("")}</div></div>
+<div class="btns"><span class="btn">Cancel</span><span class="btn primary">Add station</span></div></div>
+<div class="notes"><b>What to look at</b><ol>
+<li>Twelve colours, twice the six a menu period offers.</li>
+<li>A colour another station already has is still offered, with that station's name under it in grey, so a venue with more than twelve stations can repeat one knowingly.</li>
+<li>A new station starts on the first colour no station has yet (here Purple), as a new period does today.</li>
+<li>Each colour gets a matching dark-theme shade; a station's name stays readable on its fill in both themes.</li></ol></div></div>`;
+
+document.getElementById("root").innerHTML =
+ board("p0","The station editor gets a colour","Prep stations → Add or edit a station.", editor) +
+ board("p1","Question 1, option A — blank cells stay blank","All periods. Only cells that name a station are coloured; a zone cell that just follows its row's Every zone stays white, as today.",
+   grid(rowsAll,"blank","All periods"),
+   ["The names that were bold blue (set on this row) are now bold black, and inherited ones are grey: the fill carries the colour, and blue text on a coloured fill is hard to read.",
+    "White cells still say “same as this row's Every zone”, which is how inheritance reads today.",
+    "To see where a zone's dishes go, your eye still has to travel back to the Every zone column.",
+    "CAFÉS goes to Bar (blue) except at Breakfast, shown by the brown dot for Coffee."]) +
+ board("p2","Question 1, option B — every cell is coloured","All periods. A cell that follows its row's Every zone takes that station's colour too, but writes no name.",
+   grid(rowsAll,"fill","All periods"),
+   ["Each row reads across as one colour band, broken only where a zone goes somewhere else (Santet Deli Co's Front Bar, Café con leche's Saloon).",
+    "A cell with no name written still means “same as this row's Every zone” — the name, not the colour, carries that.",
+    "The whole table is coloured, so the grid is busier; scanning for “everything that goes to the Bar” is quickest here."]) +
+ board("p3","Question 2, option A — only the station for that period","Period: Lunch. Each cell shows where it goes during Lunch, and nothing else. Drawn with option B's colouring.",
+   grid(rowsLunch,"fill","Lunch"),
+   ["PIZZAS and Margherita show Pizza oven: that is where they go at Lunch.",
+    "POSTRES on the Terrace shows Grill.",
+    "Nothing says these differ outside Lunch — switch back to All periods to see that."]) +
+ board("p4","Question 2, option B — the period's station, plus what it is otherwise","Period: Lunch. A cell whose Lunch station differs from its normal one says so in small text.",
+   grid(rowsLunch,"fill","Lunch","tag"),
+   ["PIZZAS shows Pizza oven, “otherwise Kitchen”.",
+    "Cells whose station does not change at Lunch look exactly as in option A.",
+    "Rows with a period route grow to two lines."]);
+</script></body></html>
