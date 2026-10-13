@@ -117,7 +117,7 @@ describe("remainingPlace", () => {
   });
 });
 
-describe("where a joined table stands after Join again", () => {
+describe("where a joined table stands after Reset table", () => {
   const SIX_BY_TWO = { width: 6, height: 2 };
   const at = (x: number, y: number, width: number, height: number, rotation = 0): Placement => ({
     x,

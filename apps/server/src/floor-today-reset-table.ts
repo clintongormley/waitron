@@ -24,8 +24,8 @@ import "./errors.js";
 /**
  * Takes back every table split off the joined table that no party holds and no food is on its way
  * to, ending any group one is in, and puts the joined table back from its saved place: all of it
- * when whole, else from the first table joined to the last. Saved with no place, it is placed as
- * Join again places it.
+ * when whole, else from the first table joined to the last. Saved with no place, `joinedPlaceAfter`
+ * places it from its place on today's map, and it is off the map when that gives none.
  */
 export async function resetTable(
   tx: Transaction,

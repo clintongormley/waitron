@@ -902,7 +902,7 @@ describe("Reset table on a joined table saved with no place", () => {
     expect(await splitRowsOf(table.long!)).toEqual([]);
   });
 
-  it("Counter 5 split off, then Long table taken off for today: Reset table leaves Long table off the map, as Join again does", async () => {
+  it("Counter 5 split off, then Long table taken off for today: Reset table leaves Long table off the map", async () => {
     const { table, zoneId } = await longPutOut([BAR]);
     await ok(splitOff(table.long!, [table.c5!], 6));
     await ok(post(`/api/tables/${table.long!}/today/take-off`, table.long!, {}));
@@ -915,7 +915,7 @@ describe("Reset table on a joined table saved with no place", () => {
     expect((await todayRow(v, table.long!))!.takenOff).toBe(false);
   });
 
-  it("Counter 3, the first part, split off with 8 seats: Reset table puts Long table back where it stood before, as Join again does", async () => {
+  it("Counter 3, the first part, split off with 8 seats: Reset table puts Long table back where it stood before", async () => {
     const { table, zoneId } = await longPutOut([BAR]);
     await ok(splitOff(table.long!, [table.c3!], 8));
     expect(await placeOf(table.long!)).toEqual({ x: 12, y: 20, width: 4, height: 8 });
@@ -953,7 +953,7 @@ async function longAroundHeldCounter3(long: PlannedEntry["place"]) {
       { key: "c5", label: "Counter 5", seats: 4, place: null },
       { key: "long", label: "Long table", seats: 10, place: long, partKeys: ["c4", "c5"] },
     ],
-    NOW,
+    v.clock.now().instant,
   );
   const { zoneId, master } = zone;
   await giveKeptSize(v, master.c3!, { width: 2, height: 2 });
@@ -970,9 +970,16 @@ async function longAroundHeldCounter3(long: PlannedEntry["place"]) {
       placement: t.placement,
       partKeys: t.id === master.long ? [master.c3!, master.c4!, master.c5!] : t.partIds,
     }));
-    await saveZonePlan(tx, v.cfg, REMOVALS, zoneId, { revision: plan.revision, tables }, NOW);
+    await saveZonePlan(
+      tx,
+      v.cfg,
+      REMOVALS,
+      zoneId,
+      { revision: plan.revision, tables },
+      v.clock.now().instant,
+    );
   });
-  await inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, NOW));
+  await inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, v.clock.now().instant));
   return zone;
 }
 
@@ -1112,9 +1119,13 @@ describe("Reset table and the room's reset", () => {
     const { table, zoneId } = await LONG_TABLE();
     await seat(v, table.long!);
     await ok(splitOff(table.long!, [table.c4!, table.c5!]));
-    await inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, NOW));
+    const before = (await zoneRevisionOf(v, zoneId))!;
+    await inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, v.clock.now().instant));
+    expect(await zoneRevisionOf(v, zoneId)).toBe(before + 1);
 
-    await ok(reset(table.long!, [table.c4!, table.c5!], 8));
+    await settles(() => reset(table.long!, [table.c4!, table.c5!], 8), zoneId);
+
+    expect(await zoneRevisionOf(v, zoneId)).toBe(before + 2);
 
     expect(await out(table.c4!)).toBe(1);
     expect(await out(table.c5!)).toBe(1);
@@ -1155,5 +1166,47 @@ describe("Reset table and the room's reset", () => {
 
     expect(await placeOf(table.long!)).toEqual(LONG_SAVED);
     expect(await seatsOf(table.long!)).toBe(10);
+  });
+});
+
+describe("Reset table on a joined table still standing", () => {
+  it("Counter 6 free, guests at Counter 5 between it and the tables still joined: refused naming Counter 5, nothing written", async () => {
+    const { table, zoneId } = await plannedZone(
+      v,
+      [
+        { key: "c3", label: "Counter 3", seats: 2, place: null },
+        { key: "c4", label: "Counter 4", seats: 2, place: null },
+        { key: "c5", label: "Counter 5", seats: 2, place: null },
+        { key: "c6", label: "Counter 6", seats: 2, place: null },
+        {
+          key: "long",
+          label: "Long table",
+          seats: 8,
+          place: { x: 10, y: 20, width: 8, height: 2 },
+          partKeys: ["c3", "c4", "c5", "c6"],
+        },
+      ],
+      NOW,
+    ).then(async (zone) => {
+      for (const key of ["c3", "c4", "c5", "c6"])
+        await giveKeptSize(v, zone.master[key]!, { width: 2, height: 2 });
+      return zone;
+    });
+    await ok(splitOff(table.long!, [table.c6!], 6));
+    await ok(splitOff(table.long!, [table.c5!], 4));
+    expect(await placeOf(table.c5!)).toEqual({ x: 14, y: 20, width: 2, height: 2 });
+    await seat(v, table.c5!);
+    await moveTo(table.long!, 15, 25);
+    expect(await apart(table.long!)).toBe(0);
+    expect(await splitRowsOf(table.long!)).toEqual([table.c5!, table.c6!].sort());
+    const revision = await readRevision(table.long!);
+    const before = await everything();
+
+    await refused(reset(table.long!, [table.c6!], 8), 409, "table.place_taken", {
+      tableId: table.long!,
+      standingId: table.c5!,
+    });
+    expect(await everything()).toEqual(before);
+    expect(await zoneRevisionOf(v, zoneId)).toBe(revision);
   });
 });
