@@ -2,6 +2,7 @@
 // lifecycle. The supervisor is pointed at a throwaway venue directory because these tests exercise
 // the ROUTES, not what a backup contains; the supervisor's own lifecycle is covered in
 // `backup-supervisor.test.ts`.
+import { createCipheriv, randomBytes } from "node:crypto";
 import { mkdtempSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -16,7 +17,7 @@ import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { StreamView } from "@waitron/stream";
 import { mountBackupApi, type BackupApiDeps } from "./backup-api.js";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import { backupArchiveKey, parseBackupArchiveKey } from "./backup-keys.js";
 import { readStreamSettings, streamSettingsPayload } from "./stream-host.js";
@@ -25,6 +26,7 @@ import {
   deleteCredential,
   loadKeyRing,
   putCredential,
+  tenantCredentials,
   tryGetCredential,
 } from "@waitron/credentials";
 import { mountStreamApi } from "./stream-api.js";
@@ -74,8 +76,9 @@ const BACKUP_KEYS = [
 const KEY_1 = "recovery-key-one-strong";
 const KEY_2 = "recovery-key-two-different";
 const VENUE = "c0000000-0000-4000-8000-000000000002";
+const RING_KEY = Buffer.alloc(32, 7);
 const RING = loadKeyRing({
-  WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64"),
+  WAITRON_CREDENTIALS_KEY: RING_KEY.toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
 });
 
@@ -1896,6 +1899,112 @@ describe("backup admin routes", () => {
       expect(res.status).toBe(409);
       expect(await res.json()).toMatchObject({ error: { code: "backup.not_primary" } });
       expect(await readSealed()).toEqual(before);
+    }, 60_000);
+
+    /** Seals `plaintext` as the whole archive record under the ring's own key, as no writer here
+     * would: `putCredential` refuses a payload that is not the purpose's fields. */
+    async function storeRawArchive(plaintext: string): Promise<void> {
+      await withTransaction(suite.db, (tx) =>
+        putCredential(tx, RING, { purpose: ARCHIVE_PURPOSE, value: { settings: "{}" } }),
+      );
+      const iv = randomBytes(12);
+      const cipher = createCipheriv("aes-256-gcm", RING_KEY, iv);
+      cipher.setAAD(Buffer.from(ARCHIVE_PURPOSE, "utf8"));
+      const ciphertext = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
+      await withTransaction(suite.db, (tx) =>
+        tx
+          .update(tenantCredentials)
+          .set({ ciphertext, iv, authTag: cipher.getAuthTag() })
+          .where(eq(tenantCredentials.purpose, ARCHIVE_PURPOSE)),
+      );
+    }
+
+    const sealedUnder = (version: string) => async () => {
+      const other = loadKeyRing({
+        WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 9).toString("base64"),
+        WAITRON_CREDENTIALS_KEY_VERSION: version,
+      });
+      await withTransaction(suite.db, (tx) =>
+        putCredential(tx, other, { purpose: ARCHIVE_PURPOSE, value: { settings: "{}" } }),
+      );
+    };
+
+    // Each stored archive record this server cannot read, and the code a read of it answers.
+    const UNREADABLE: [string, () => Promise<void>][] = [
+      [
+        "backup.archive_settings_invalid",
+        () =>
+          withTransaction(suite.db, (tx) =>
+            putCredential(tx, RING, { purpose: ARCHIVE_PURPOSE, value: { settings: "{}" } }),
+          ),
+      ],
+      ["credentials.decrypt_failed", sealedUnder("1")],
+      ["credentials.key_version_unknown", sealedUnder("2")],
+      ["credentials.malformed_payload", () => storeRawArchive("not json")],
+      ["server.credential_unusable", () => storeRawArchive("{}")],
+    ];
+
+    for (const [code, store] of UNREADABLE) {
+      it(`Save replaces a stored record it cannot read (${code})`, async () => {
+        await store();
+        await expect(readSealed()).rejects.toMatchObject({ code });
+        const lines: string[] = [];
+        const { post } = await primaryApp({}, undefined, (level, event, fields) => {
+          lines.push(JSON.stringify({ level, event, fields }));
+        });
+        const dir = makeDestDir();
+        const res = await post("/api/backup/apply", applyBody({ kind: "local-fs", dir }));
+        expect(res.status).toBe(200);
+        expect(await readSealed()).toMatchObject({
+          enabled: true,
+          destinations: [{ kind: "local-fs", dir }],
+        });
+        expect(lines).toContainEqual(
+          JSON.stringify({
+            level: "warn",
+            event: "backup.archive_settings_unreadable",
+            fields: { reason: code },
+          }),
+        );
+      }, 60_000);
+
+      it(`disable refuses a stored record it cannot read, and leaves it (${code})`, async () => {
+        await store();
+        const { post } = await primaryApp();
+        const res = await post("/api/backup/disable");
+        expect(res.status).toBe(409);
+        expect(await res.json()).toMatchObject({
+          error: { code: "backup.archive_settings_unreadable", params: { reason: code } },
+        });
+        await expect(readSealed()).rejects.toMatchObject({ code });
+      }, 60_000);
+    }
+
+    it("Save over a stored record it cannot read reuses none of its secret", async () => {
+      const { post } = await primaryApp();
+      expect(
+        (await post("/api/backup/apply", applyBody({ ...CUSTOM, secretAccessKey: CUSTOM_SECRET })))
+          .status,
+      ).toBe(200);
+      const held = (await readSealed())!;
+      // Readable as a sealed payload, but refused as settings because of its time limit alone.
+      await withTransaction(suite.db, (tx) =>
+        putCredential(tx, RING, {
+          purpose: ARCHIVE_PURPOSE,
+          value: { settings: JSON.stringify({ ...held, destinationTimeoutMs: 1 }) },
+        }),
+      );
+      await expect(readSealed()).rejects.toMatchObject({
+        code: "backup.archive_settings_invalid",
+      });
+      const res = await post(
+        "/api/backup/apply",
+        applyBody({ ...CUSTOM, secretAccessKey: "" }, undefined),
+      );
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: { code: "backup.request_invalid", params: { field: "secretAccessKey" } },
+      });
     }, 60_000);
 
     it("disable with nothing stored is refused", async () => {

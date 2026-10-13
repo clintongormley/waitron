@@ -89,7 +89,17 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "backup.archive_test_failed": 422,
   "backup.archive_settings_invalid": 500,
   "backup.rotation_metadata_failed": 500,
+  "backup.archive_settings_unreadable": 409,
 };
+
+/** What reading a stored archive record answers when the record itself cannot be read. */
+const UNREADABLE_SETTINGS = new Set([
+  "backup.archive_settings_invalid",
+  "credentials.decrypt_failed",
+  "credentials.malformed_payload",
+  "credentials.key_version_unknown",
+  "server.credential_unusable",
+]);
 
 const ARCHIVE_PROBE_TIMEOUT_MS = 30 * 1000;
 const PROBE_CLEANUP_TIMEOUT_MS = 10 * 1000;
@@ -337,6 +347,20 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
 
   // The box env (`backup.env` under the raw environment, as a reload reads it) is authoritative: after
   // a failed reload the supervisor still holds the key it loaded before the key file changed.
+  /** The stored archive settings, or the code that says the stored record cannot be read. */
+  const readHeldSettings = async (): Promise<
+    { settings: ArchiveSettings | null } | { unreadable: string }
+  > => {
+    try {
+      return { settings: await readArchiveSettings(deps.db, deps.ring) };
+    } catch (error) {
+      if (isAppError(error) && UNREADABLE_SETTINGS.has(error.code)) {
+        return { unreadable: error.code };
+      }
+      throw error;
+    }
+  };
+
   const heldKey = async (): Promise<string | undefined> =>
     (await deps.readRecoveryKey()) ?? deps.supervisor.current().recoveryKey;
 
@@ -402,7 +426,13 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
         if (recoveryKey === undefined) throw requestInvalid("recoveryKey");
         assertStorableKey(recoveryKey);
 
-        const heldSettings = await readArchiveSettings(deps.db, deps.ring);
+        // A record that cannot be read is replaced, as if none were held, so nothing in it is
+        // reused; otherwise the owner could never repair it from the dashboard.
+        const read = await readHeldSettings();
+        if ("unreadable" in read) {
+          log("warn", "backup.archive_settings_unreadable", { reason: read.unreadable });
+        }
+        const heldSettings = "unreadable" in read ? null : read.settings;
         const stream = await readStreamSettings(deps.db, deps.ring);
         const destination = resolveArchiveChoice(body.destination, {
           venueId: deps.venueId,
@@ -462,7 +492,11 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
       guardWritable();
       return deps.turns(async () => {
         guardWritable();
-        const held = await readArchiveSettings(deps.db, deps.ring);
+        const read = await readHeldSettings();
+        if ("unreadable" in read) {
+          throw new AppError("backup.archive_settings_unreadable", { reason: read.unreadable });
+        }
+        const held = read.settings;
         if (held === null) throw requestInvalid("config");
         await storeSettings({
           enabled: false,
