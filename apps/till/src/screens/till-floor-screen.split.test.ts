@@ -337,6 +337,23 @@ describe("till-floor-screen: splitting tables off a joined table", () => {
     expect(floorRefusal(el)).toBeNull();
   });
 
+  it("a refusal shown in the window moves to the floor when the next floor read closes the window", async () => {
+    const api = stubApi();
+    api.splitOffToday.mockRejectedValueOnce({ code: "table.in_joined_table" });
+    const el = await mount(floor(), api);
+    const opened = await openSplit(el);
+    send(opened, "split-joined-confirm", { partIds: ["c5"], seats: 6 });
+    await settle(el);
+    expect(windowOf(el)).toBe(opened);
+    expect(opened.refusal).toEqual({ code: "table.in_joined_table" });
+    expect(floorRefusal(el)).toBeNull();
+
+    el.tables = splitDownToNone();
+    await settle(el);
+    expect(windowOf(el)).toBeNull();
+    expect(floorRefusal(el)).toBe(codeMessage("table.in_joined_table"));
+  });
+
   it("a done answer closes a window kept through a floor read that made it obsolete", async () => {
     const api = stubApi();
     const answer = holdAnswer(api);

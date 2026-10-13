@@ -381,6 +381,23 @@ describe("till-floor-screen: joining a joined table again", () => {
     expect(floorRefusal(el)).toBeNull();
   });
 
+  it("a refusal shown in the window moves to the floor when the next floor read closes the window", async () => {
+    const api = stubApi();
+    api.joinAgainToday.mockRejectedValueOnce({ code: "joined_table.out_of_date" });
+    const el = await mount(counter3Busy(), api);
+    const opened = (await pressJoinAgain(el, "c4"))!;
+    send(opened, "join-again-confirm", { seats: 6 });
+    await settle(el);
+    expect(windowOf(el)).toBe(opened);
+    expect(opened.refusal).toEqual({ code: "joined_table.out_of_date" });
+    expect(floorRefusal(el)).toBeNull();
+
+    el.tables = allFree();
+    await settle(el);
+    expect(windowOf(el)).toBeNull();
+    expect(floorRefusal(el)).toBe(codeMessage("joined_table.out_of_date"));
+  });
+
   it("a done answer closes a window kept through a floor read that made it obsolete", async () => {
     const api = stubApi();
     const answer = holdAnswer(api);

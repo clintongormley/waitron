@@ -85,7 +85,6 @@ export interface FloorRefreshDetail {
 
 type JoinAction = Extract<DropAction, { kind: "join" }>;
 
-/** What the Split tables… window shows: the joined table and the tables in it. */
 interface SplitShown {
   joined: TableState;
   parts: TableState[];
@@ -512,7 +511,8 @@ export class TillFloorScreen extends LitElement {
   /** Split tables…'s joined table, while its window is open; `#splitShown` says when a floor read
    * closes it. */
   @state() private splittingJoined: SplittingJoined | null = null;
-  /** Join again's joined table, while some of its tables stay apart. */
+  /** Join again's joined table, while its window is open; `#joinAgainShown` says when a floor read
+   * closes it. */
   @state() private joiningAgain: JoiningAgain | null = null;
   /** A drop joining two seated parties, waiting for which bills to keep. */
   @state() private askingBills: { api: TillApi; action: JoinAction } | null = null;
@@ -573,10 +573,16 @@ export class TillFloorScreen extends LitElement {
     this.#zone = this.#zoneOnScreen();
     if (this.joiningWith !== null && this.#joining(this.joiningWith.tableId) === undefined)
       this.joiningWith = null;
-    if (this.splittingJoined !== null && this.#splitShown(this.splittingJoined) === undefined)
+    if (this.splittingJoined !== null && this.#splitShown(this.splittingJoined) === undefined) {
+      if (this.splittingJoined.refusal !== null)
+        this.refusal = codeMessage(this.splittingJoined.refusal.code);
       this.splittingJoined = null;
-    if (this.joiningAgain !== null && this.#joinAgainShown(this.joiningAgain) === undefined)
+    }
+    if (this.joiningAgain !== null && this.#joinAgainShown(this.joiningAgain) === undefined) {
+      if (this.joiningAgain.refusal !== null)
+        this.refusal = codeMessage(this.joiningAgain.refusal.code);
       this.joiningAgain = null;
+    }
   }
 
   override updated(): void {
@@ -1052,7 +1058,7 @@ export class TillFloorScreen extends LitElement {
    * The window stays open while the split is sent. The answer is applied only to the window that
    * sent it: that window closes if its joined table leaves the floor read meanwhile, and another
    * can open. A refusal shows in the window while the floor still offers Split tables…, and
-   * otherwise on the floor unless another window has opened.
+   * otherwise on the floor, unless another Split tables… window has opened.
    */
   async #splitOff(dialog: TillSplitJoinedDialog, detail: SplitJoinedDetail): Promise<void> {
     const splitting = this.splittingJoined;
