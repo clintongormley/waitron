@@ -153,6 +153,35 @@ list does not exist.
   (`apps/server/src/receipt-ticket.ts`) and the till's ticket view
   (`apps/till/src/screens/till-ticket-view.ts`) still show the Each unit.
 
+## A584. Prep stations get colours, and the Routes grid paints each cell with its station's colour and can show one period at a time (owner 2026-10-13)
+
+The owner's words (2026-10-13): "each prep station should have a colour so that on routing we can
+colour each cell of the table with the colour of the station (what do we do with cells with
+different routes per period?)" and "the routing table should have a dropdown to filter on period, so
+you can see where everything goes during a particular period. defaults to All periods".
+
+- **A station's colour.** Prep stations have no colour today. A menu period picks one of six named
+  colours (`CALENDAR_COLOURS`, `packages/venue-service/src/hours-types.ts`, chosen in
+  `packages/venue-service/src/dashboard/period-editor.ts`, which offers the first one not yet used).
+  A station picks from a **larger set** than that (owner, 2026-10-13, asked whether to require a
+  colour or offer more: "offer a bigger set than the periods use"), so a venue with more than six
+  stations does not have to repeat one. Every colour is a `--wt-*` token in both themes, and a
+  station's name must stay readable on its fill (4.5:1).
+- **Painting the cells.** A cell in the Routes grid
+  (`packages/venue-service/src/dashboard/routing-grid.ts`) takes the colour of its station. A cell
+  that sends nowhere stays plain. A period line under the station (written out one per line since
+  A507, `## Decisions and deliberate limits` below) gets a small dot in the colour of the station it
+  sends to, so a cell that changes during the day shows it under "All periods".
+- **The period dropdown.** Above the grid, defaulting to "All periods". Choosing a period shows each
+  cell's station during that period — the period line's station where the cell has one for it, the
+  plain station otherwise — so every cell has one station and one solid colour, and the period lines
+  are not drawn.
+- **To settle with the owner, with mock-ups, before building:** how colour sits beside the grid's
+  existing cell kinds (set here, inherited, differing from the row's Every zone, and blank because
+  it matches that Every zone — the blank cell is how the owner accepted A507's inheritance rule);
+  whether the plain station of a cell with period lines also shows when one period is chosen; and
+  whether the chosen period is remembered.
+
 ## Decisions and deliberate limits
 
 - After approval the owner ruled that a dish made at the till is never held and the till lists

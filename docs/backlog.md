@@ -1469,6 +1469,14 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 
 _Formerly the kitchen entries in the opening part of the old Track A (before A1), and kitchen entries elsewhere; part of A9._ Detail: [backlog/kitchen.md](backlog/kitchen.md).
 
+- **A584. Prep stations get colours, and the Routes grid paints each cell with its station's colour
+  and can show one period at a time (owner 2026-10-13)** — OPEN, not started. Each station picks a
+  colour from a larger set than the six menu periods use; a cell takes its station's colour, and each
+  period line under it a dot in the colour of the station it sends to. A new dropdown above the grid,
+  defaulting to "All periods", shows where everything goes during one period, so each cell has one
+  station and one colour.
+  [Detail](backlog/kitchen.md#a584-prep-stations-get-colours-and-the-routes-grid-paints-each-cell-with-its-stations-colour-and-can-show-one-period-at-a-time-owner-2026-10-13)
+
 - **A routing period line naming another location's period is flagged but never drawn** (left open
   by A455, #1492): the server marks it `notOffered`, but the grid (`routing-grid-model.ts`) and the
   cell editor (`routing-cell-editor.ts`) drop a line whose period is not in the model's periods, so
