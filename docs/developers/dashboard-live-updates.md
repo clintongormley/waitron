@@ -23,7 +23,10 @@ Keep form drafts separate from query snapshots. Update list rows and report valu
 do not call a loader that resets a modal or performs a mutation. An observer may take one narrow
 action a first load would have taken, when the screen still lacks its result: the Backups screen's
 status watcher asks for a recovery key at most once, only while the screen has made none, and shares
-a key request already in flight, so it never replaces a key the screen made. `DraftRows` helps with
+a key request already in flight, so it never replaces a key the screen made. Its watchers also
+refill a form nobody has changed from the latest read (`#openStoredOff` for switched-off stored
+settings, `#reopenUnchanged` when the stream's bucket changes), and leave a form holding a change
+alone. `DraftRows` helps with
 scalar row editors by replacing clean fields while retaining locally edited fields. Structured
 editors keep their draft until you save or reopen them.
 

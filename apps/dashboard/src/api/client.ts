@@ -1678,8 +1678,7 @@ export interface AlertsResponse {
 }
 
 /** LOCAL copy of the destination kinds `POST /api/backup/apply` reads
- * (`apps/server/src/archive-settings.ts`). An empty or absent secret keeps the held one only for
- * the same bucket place and access key id. */
+ * (`apps/server/src/archive-settings.ts`). */
 export type ArchiveChoice =
   | { kind: "local-fs"; dir: string }
   | { kind: "stream-bucket" }

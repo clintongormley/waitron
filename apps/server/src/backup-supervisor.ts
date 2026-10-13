@@ -35,7 +35,7 @@ import { realSleep } from "./loop.js";
 import type { Logger } from "./logger.js";
 import "./errors.js";
 
-/** Where a destination is, never what opens it: a bucket's keys stay on the box. */
+/** Where a destination is and which access key id it uses, never the secret that opens it. */
 export type DestinationView =
   | { id: string; kind: "local-fs"; dir: string }
   | {

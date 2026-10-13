@@ -295,7 +295,7 @@ export class BackupScreen extends LitElement {
   );
 
   @state() private status?: BackupStatusView;
-  /** Read only to offer and describe the stream's bucket; it never rewrites a changed draft. */
+  /** It never rewrites a changed draft. */
   @state() private stream?: StreamSettingsView;
   @state() private streamUnread = false;
   /** Settles once the stream's first read has answered or failed, so Edit prefills from it. */

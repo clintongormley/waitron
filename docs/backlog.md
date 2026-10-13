@@ -4216,13 +4216,10 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   Backups screen downloads it as written; the kit's heading and note come from the screen's strings
   (`stream.kit.file_heading`, `stream.kit.file_note`). Left open by A538-5.
 
-- **The Backups screen offers one destination, not a bucket and a folder together.** The approved
-  A538 design says the dashboard manages one archive bucket plus optional local copies, but the
-  apply route stores one destination (`apps/server/src/backup-api.ts`), the screen offers a single
-  choice, and turning stored settings back on opens on the first stored destination only
-  (`openingDestination`, `apps/dashboard/src/screens/backup-destination-model.ts`). Whether the
-  dashboard should store both is an open owner question, asked 2026-10-13; until it is answered, a
-  single choice. Left open by A538-6.
+- **The Backups screen offers one destination, not a bucket and a folder together.** The A538
+  design says one archive bucket plus optional local copies; the apply route stores one
+  (`apps/server/src/backup-api.ts`), and turning stored settings back on opens on the first only
+  (`openingDestination`). Open owner question, asked 2026-10-13. Left open by A538-6.
 
 - **A recovery kit can carry a recovery key its own restore refuses.** `parseRecoveryKit`
   (`packages/stream/src/kit.ts`) refuses a recovery key holding a C0 control character or DEL, which
@@ -4414,9 +4411,9 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   [Detail](backlog/box.md#a-too-short-recovery-key-the-refusals-do-not-link-to-the-button-they-name-and-change-the-recovery-key-cannot-finish)
 
 - **A relative backup folder is accepted.** The Backups screen's hint asks for a full path, but
-  the server resolves whatever it is given (`resolve(dir)`, `apps/server/src/backup-config.ts`), so
-  `backups-relative` saved as a folder under the server's working directory (seen on the dev stack
-  during A538-6's visual check). I believe this predates A538-6: the line goes back to #226.
+  the server resolves whatever it is given (`resolveArchiveChoice`, `apps/server/src/archive-settings.ts`),
+  so `backups-relative` saved as a folder under the server's working directory (seen on the dev
+  stack during A538-6's visual check). That line came in with #1628 (A538-4).
 
 - **At phone width the configuration export's passphrase labels overlap "Show password"** on the
   Backups screen (seen at 390 px during A538-6's visual check, both themes). I believe this predates
