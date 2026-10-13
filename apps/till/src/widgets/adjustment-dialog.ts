@@ -112,11 +112,6 @@ const DO: Record<AdjustKind, StringKey> = {
 
 const TYPED_AMOUNT = /^\d{1,9}(\.\d{1,2})?$/;
 
-function typedNumber(value: string): string {
-  const number = parseDecimalInput(value) ?? value.trim();
-  return TYPED_AMOUNT.test(number) ? number.replace(/^0+(?=\d)/, "") : number;
-}
-
 /**
  * Cancels, gives away or discounts one dish, or discounts the whole bill (service plan Task 11).
  * The form offers only the reasons that allow the action, then asks the app for a preview; the
@@ -264,7 +259,7 @@ export class TillAdjustmentDialog extends LitElement {
 
   #comparable(draft: AdjustmentDraft): string {
     const typed = draft.value.trim();
-    const number = typedNumber(typed);
+    const number = parseDecimalInput(typed) ?? typed;
     const percent = Number(number);
     const value =
       this.kind !== "discount"
@@ -375,7 +370,8 @@ export class TillAdjustmentDialog extends LitElement {
   }
 
   #typedNumber(): string {
-    return typedNumber(this.value);
+    const number = parseDecimalInput(this.value) ?? this.value.trim();
+    return TYPED_AMOUNT.test(number) ? number.replace(/^0+(?=\d)/, "") : number;
   }
 
   /** The form's own checks, by field; an empty map when it can be sent. */
