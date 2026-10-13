@@ -202,7 +202,7 @@ undone at the next reset anyway.
 
 > Superseded 2026-10-12 by A503 part 1 ([design](2026-10-12-a503-joined-tables-design.md)): saved joins, the editor's Joins section and the till's copy of them are gone; a service merge's seats come only from the till, whose seats prompt opens empty.
 
-> Superseded 2026-10-13 by A579 part 3a ([design](2026-10-13-a579-flattened-joined-tables-design.md)): pushing a joined table into a group splits it; the group holds its real tables.
+> Changed 2026-10-13 by A579 part 3a ([design](2026-10-13-a579-flattened-joined-tables-design.md)): pushing a joined table into a group splits it, and the group holds that table's real tables instead.
 
 ### 6.2 The other changes
 

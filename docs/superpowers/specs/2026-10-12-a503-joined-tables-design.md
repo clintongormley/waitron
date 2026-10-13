@@ -1,8 +1,9 @@
 # A503: joined tables replace saved joins
 
 > Added 2026-10-13 by A579 ([design](2026-10-13-a579-flattened-joined-tables-design.md)): that
-> design replaces, under "The till", the Default for a joined table in a service merge (pushing a
-> joined table into a group now splits it, and the group holds its real tables), **Join again**
+> design narrows, under "The till", the Default for a joined table in a service merge to a joined
+> table a reset leaves in a group (pushing a joined table into a group now splits it, and the group
+> holds that table's real tables instead), **Join again**
 > (now Reset table, which moves the joined table to its saved place and keeps the check on the
 > tables it expects back, beside a new revision for the room), what Join again counts as free, and
 > the reset's handling of a split-off table that needs clearing; its "What this replaces" lists each.
@@ -175,7 +176,7 @@ split today. A split decides only who sits where today.
 ### The till
 
 - **A joined table is drawn and used as one table**, under its own name, with its own seats.
-  > Superseded 2026-10-13 by A579 part 3a ([design](2026-10-13-a579-flattened-joined-tables-design.md)): pushing a joined table into a group splits it; the group holds its real tables.
+  > Changed 2026-10-13 by A579 part 3a ([design](2026-10-13-a579-flattened-joined-tables-design.md)): pushing a joined table into a group splits it, and the group holds that table's real tables instead.
 - **Split takes tables off a joined table** (**Owner**). It asks which parts to split off, listed in
   number order: one or more, never all. The parts split off become tables of their own, free. The
   rest stay together: two or more stay one joined table under its own name; a single one left is just

@@ -149,11 +149,12 @@ export async function joinMergeMembers(
 }
 
 /**
- * `moving` joins `target`'s merge (or a new one), touching it on `side`; with `free`, neither table
- * nor a table still joined in either may be held or need clearing.
- * A joined table never goes in a merge: its tables still joined are split off it and go in instead,
- * and its guests pass to them; the caller tells the kitchen. A joined `target` a reset left in a
- * merge stays whole in it.
+ * `moving` joins `target`'s merge (or a new one), touching it on `side`; with `free`, neither table,
+ * nor a table still joined in either that goes in the merge, may be held or need clearing.
+ * This never puts a joined table in a merge: its tables still joined are split off it and go in
+ * instead, and its guests pass to them; the caller tells the kitchen. A joined `target` a reset
+ * already left in a merge stays whole in it, and a joined `moving` table in one is refused
+ * `table.merged`.
  */
 export async function writeMerge(
   tx: Transaction,

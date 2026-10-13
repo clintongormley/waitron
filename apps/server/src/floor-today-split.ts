@@ -40,7 +40,7 @@ export async function splitJoinedTable(
   const toOne = left.length === 1;
   if (toOne) {
     await refuseDeliveryPending(tx, tableId);
-    // A reset can leave a joined table in a group that waited for its guests.
+    // A reset can leave a joined table in a group it kept waiting (`waitingTogether`).
     if (today.merge !== null) {
       const members = today.merge.members.map((member) => member.tableId);
       await refuseHeld(tx, members);

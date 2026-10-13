@@ -1656,7 +1656,7 @@ or, for the tables it takes back, when Join again does
 rows, puts a split joined table back whole, it clears the "needs clearing" mark of each table split
 off it that the reset's copy of the saved plan still makes one of its parts; a table that copy
 stands apart or leaves out keeps its mark (`catchUpPass`, `apps/server/src/floor-today-store.ts`).
-Pushing a joined table into a merge never puts it in one: it writes a split row for
+Pushing a joined table into a merge, or a table onto a joined table in none, never puts the joined table in one: it writes a split row for
 each of its tables still joined and puts those tables in the merge, writes a split row for a table
 of it in use since the reset without moving it, and passes the guests at the joined table to its
 tables (`writeMerge`, `apps/server/src/floor-today-merges.ts`; `passGuests`,
