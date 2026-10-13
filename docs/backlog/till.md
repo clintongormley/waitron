@@ -309,6 +309,16 @@ and "Stool, Bar, …" twice. That joinMergeMembers predates part 3a is read from
 on main. Next: give each table the group adds a later `joined_at` in number order, as `passGuests`
 does (`apps/server/src/floor-today-parts.ts`).
 
+## A593. A table the reset turns into a joined table inside a waiting group keeps its old outline
+
+**A593 (2026-10-13).** Bar pushed onto an ordinary Long table, guests seated, then the saved plan makes
+Long table of Counter 3, 4 and 5: the reset makes Long a joined table while the seated group waits, and
+Long keeps today's 8-wide row rather than its joined outline. A split that leaves two counters joined
+then lays them side by side from Long's left edge (the case in `apps/server/src/floor-catch-up.test.ts`
+matched by `-t "the reset leaves in one"` reads Long 16 wide after the split). Seen by A579 part 3a's
+finish-branch worker (#1626) and left as it is. Next: decide whether the reset should apply the joined
+outline when the group ends, or the split should lay out from the saved outline.
+
 ## A565. "Reset to saved plan" does not wait for food on its way to an ordinary table
 
 **A565 (2026-10-13).** A reset applies a free table's saved place without asking about food on its

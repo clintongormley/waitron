@@ -1934,6 +1934,10 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   (2026-10-13).** Same-millisecond joins tie on a random id. Seen in A579 part 3a's tests.
   [Detail](backlog/till.md#a592-a-party-that-joins-a-groups-table-names-the-groups-other-tables-in-random-order)
 
+- **A593. A table the reset turns into a joined table inside a waiting group keeps its old outline
+  (2026-10-13).** Narrower than its tables; a split lays them out from its left edge. Left open by #1626.
+  [Detail](backlog/till.md#a593-a-table-the-reset-turns-into-a-joined-table-inside-a-waiting-group-keeps-its-old-outline)
+
 - **A565. "Reset to saved plan" does not wait for food on its way to an ordinary table
   (2026-10-13).** Dates from floor plans slice 1; #1604 made only split groups wait.
   [Detail](backlog/till.md#a565-reset-to-saved-plan-does-not-wait-for-food-on-its-way-to-an-ordinary-table)
