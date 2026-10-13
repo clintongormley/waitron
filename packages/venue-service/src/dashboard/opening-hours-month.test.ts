@@ -458,6 +458,19 @@ describe("Opening hours month", () => {
     ]);
   });
 
+  it("leaves out a closed date's department lines at a phone's width, where its name says Closed", async () => {
+    const el = await mountAt(PHONE, monthModel(), { departmentId: "rest" });
+    const lines = [
+      ...cell(el, "2026-12-25").querySelectorAll<HTMLElement>('[data-test="department-closed"]'),
+    ];
+    expect(lines).toHaveLength(2);
+    for (const line of lines) expect(line.getBoundingClientRect().height).toBe(0);
+    const open = cell(el, "2026-12-06").querySelector<HTMLElement>(
+      '[data-test="department-closed"]',
+    )!;
+    expect(open.getBoundingClientRect().height).toBeGreaterThan(0);
+  });
+
   it("draws every date of a week row the row's full height", async () => {
     const zones = ["Terrace", "Dining room", "Downstairs", "Upstairs", "Patio"].map((name, i) => ({
       id: i ? `zone-${i}` : "terrace",

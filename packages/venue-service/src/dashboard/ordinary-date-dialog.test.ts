@@ -128,22 +128,21 @@ it("keeps Add secondary and disabled until a special day is chosen, then sends i
   expect(el.open).toBe(false);
 });
 
-it("keeps the picker and Add side by side, beside the sentence on a desktop", async () => {
+it("keeps the picker and Add side by side, at a desktop's width and a phone's", async () => {
   const middle = (node: Element) => {
     const box = node.getBoundingClientRect();
     return box.top + box.height / 2;
   };
-  for (const [width, beside] of [
-    [1280, true],
-    [390, false],
-  ] as const) {
+  for (const width of [1280, 390]) {
     await page.viewport(width, 800);
     await mount();
     await chooseOption(q("wt-combobox[name=specialDayId]")!, "d1");
     await el.updateComplete;
     const box = q("wt-combobox[name=specialDayId]")!;
     expect(middle(q("[data-test=add-to-special]")!), `${width}`).toBeCloseTo(middle(box), 0);
-    if (beside) expect(middle(q("[data-test=add-label]")!)).toBeCloseTo(middle(box), 0);
+    expect(q("[data-test=add-to-special]")!.getBoundingClientRect().right).toBeLessThanOrEqual(
+      q("[data-test=add-row]")!.getBoundingClientRect().right + 0.5,
+    );
     el.remove();
   }
 });

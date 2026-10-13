@@ -251,13 +251,16 @@ export class OpeningHoursMonthView extends LitElement {
         color: inherit;
       }
       /* A phone's width: too narrow for the word "Today" in a date, so the number is marked and the
-         word kept for a screen reader. */
+         word kept for a screen reader; a date closed all day says so in its name alone. */
       @container month (width < 560px) {
         table {
           border-spacing: calc(var(--wt-space-1) / 2);
         }
         .day {
-          padding: var(--wt-space-1) calc(var(--wt-space-1) / 2);
+          padding: var(--wt-space-1) calc(var(--wt-space-1) / 4);
+        }
+        .closed-row[data-all-day] {
+          display: none;
         }
         .top {
           flex-wrap: wrap;
@@ -438,7 +441,10 @@ export class OpeningHoursMonthView extends LitElement {
       ${nameLine}
       ${rows.map((row) =>
         !row.ranges.length
-          ? html`<span class="closed-row" data-test="department-closed"
+          ? html`<span
+              class="closed-row"
+              ?data-all-day=${day.closedAllDay}
+              data-test="department-closed"
               >${format("month.department_closed", { name: row.name })}</span
             >`
           : html`<span class="track" data-row=${row.key}>

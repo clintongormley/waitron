@@ -154,7 +154,7 @@ export class OrdinaryDateDialog extends LitElement {
       this.generation,
       html`<wt-modal
         open
-        size="standard"
+        size="compact"
         aria-label=${title}
         @wt-close=${() => {
           if (!this.open) return;
