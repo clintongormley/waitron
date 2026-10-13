@@ -100,17 +100,25 @@ export function specialDateIn(
   return holidays.get(year)?.get(rule.holidayName!) ?? null;
 }
 
-/** Whether a date stands in `year` only by following its holiday's name there from an earlier year. */
-export const followsHolidayIn = (rule: SpecialDayDateRule, year: number) =>
-  followsHoliday(rule) && year > yearOf(rule.date);
+/** Whether a date's place in `year` comes from its holiday's name, not its month and day: every
+ *  year after its first, for a repeating date saved on a public holiday. */
+export function followsHolidayIn(rule: SpecialDayDateRule, year: number): boolean {
+  return followsHoliday(rule) && year > yearOf(rule.date);
+}
 
 /** Which special-day date stands on each day of `year`, by `standingInYear`. */
-export const specialDatesStandingIn = <T extends SpecialDayDateRule>(
+export function specialDatesStandingIn<T extends SpecialDayDateRule>(
   rules: readonly T[],
   year: number,
   holidays: HolidayDates,
-): Map<LocalDate, T> =>
-  standingInYear(rules, year, (rule, at) => specialDateIn(rule, at, holidays), followsHolidayIn);
+): Map<LocalDate, T> {
+  return standingInYear(
+    rules,
+    year,
+    (rule, at) => specialDateIn(rule, at, holidays),
+    followsHolidayIn,
+  );
+}
 
 /** The first day two special-day dates would both stand on, or null when they never meet. A date
  *  following a holiday's name is compared in every year `holidays` holds as well. */

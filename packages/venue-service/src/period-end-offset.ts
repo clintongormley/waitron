@@ -75,7 +75,8 @@ export interface DatedSchedule {
   date: LocalDate;
   closeWholeVenue: boolean;
   occursIn?: (year: number) => LocalDate | null;
-  /** Whether it stands in a year only by following a holiday's name there; such a date gives way. */
+  /** Whether its place in a year comes from a holiday's name; on a shared date it gives way to
+   *  one that does not. */
   followsHolidayIn?: (year: number) => boolean;
   paint: readonly PaintRange[];
   specialDayId?: string;

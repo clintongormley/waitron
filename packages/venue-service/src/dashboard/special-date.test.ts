@@ -57,3 +57,15 @@ it("places nothing when a one-off special day's dates do not hold the date", () 
   };
   expect(specialOn(calendarDay("2027-04-03"), detail, "2027-04-03")).toBeUndefined();
 });
+
+it("a date on its own month and day beats an earlier-stored one following its holiday onto the day", () => {
+  const detail = goodFriday([
+    { date: "2026-04-06", closedAllDay: true, holidayName: "Lunes de Pascua" },
+    { date: "2026-04-17", closedAllDay: false },
+  ]);
+  expect(specialOn(calendarDay("2028-04-17", "Lunes de Pascua"), detail, "2028-04-17")).toEqual({
+    detail,
+    date: "2026-04-17",
+    closed: false,
+  });
+});
