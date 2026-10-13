@@ -80,6 +80,35 @@ describe("paintStretch", () => {
     ]);
   });
 
+  it("a same-period stretch after midnight joins the block before midnight", () => {
+    const day = [paint(LUNCH, "20:00", "00:30")];
+    expect(paintStretch(day, paint(LUNCH, "00:30", "02:00"), "06:00", true)).toEqual([
+      paint(LUNCH, "20:00", "02:00"),
+    ]);
+  });
+
+  it("blocks of one period at the two ends of the business day stay apart", () => {
+    const day = [paint(LUNCH, "05:00", "06:00")];
+    expect(paintStretch(day, paint(LUNCH, "06:00", "07:00"), "06:00", true)).toEqual([
+      paint(LUNCH, "06:00", "07:00"),
+      paint(LUNCH, "05:00", "06:00"),
+    ]);
+  });
+
+  it("an upward drag paints the same stretch as a downward one", () => {
+    const day = [paint(LUNCH, "13:00", "16:00")];
+    expect(paintStretch(day, paint(AFTERNOON, "14:00", "12:00"), "06:00", true)).toEqual([
+      paint(AFTERNOON, "12:00", "14:00"),
+      paint(LUNCH, "14:00", "16:00"),
+    ]);
+  });
+
+  it("an upward drag ending past midnight is ordered from the changeover", () => {
+    expect(paintStretch([], paint(LUNCH, "01:00", "22:00"), "06:00", true)).toEqual([
+      paint(LUNCH, "22:00", "01:00"),
+    ]);
+  });
+
   it("Closed that erases also removes Closed already stored under it", () => {
     expect(
       paintStretch([paint(null, "10:00", "12:00")], paint(null, "11:00", "13:00"), "06:00", true),
@@ -106,8 +135,10 @@ describe("deleteBlock", () => {
 describe("changeBlockPeriod", () => {
   it("changes a block's period and joins it with a touching block of the new period", () => {
     const day = [paint(LUNCH, "12:00", "14:00"), paint(AFTERNOON, "14:00", "16:00")];
-    expect(changeBlockPeriod(day, 1, LUNCH, "06:00")).toEqual([paint(LUNCH, "12:00", "16:00")]);
-    expect(changeBlockPeriod(day, 0, BREAKFAST, "06:00")).toEqual([
+    expect(changeBlockPeriod(day, 1, LUNCH, "06:00", true)).toEqual([
+      paint(LUNCH, "12:00", "16:00"),
+    ]);
+    expect(changeBlockPeriod(day, 0, BREAKFAST, "06:00", true)).toEqual([
       paint(BREAKFAST, "12:00", "14:00"),
       paint(AFTERNOON, "14:00", "16:00"),
     ]);
@@ -115,13 +146,23 @@ describe("changeBlockPeriod", () => {
 
   it("a block changed to Closed is kept as Closed", () => {
     const day = [paint(LUNCH, "12:00", "14:00"), paint(null, "14:00", "16:00")];
-    expect(changeBlockPeriod(day, 0, null, "06:00")).toEqual([paint(null, "12:00", "16:00")]);
+    expect(changeBlockPeriod(day, 0, null, "06:00", false)).toEqual([
+      paint(null, "12:00", "16:00"),
+    ]);
+  });
+
+  it("in a department column a block changed to Closed is removed", () => {
+    const day = [paint(LUNCH, "12:00", "14:00"), paint(AFTERNOON, "14:00", "16:00")];
+    expect(changeBlockPeriod(day, 0, null, "06:00", true)).toEqual([
+      paint(AFTERNOON, "14:00", "16:00"),
+    ]);
+    expect(changeBlockPeriod([paint(LUNCH, "12:00", "14:00")], 0, null, "06:00", true)).toEqual([]);
   });
 
   it("returns the day unchanged for an index with no block", () => {
     const day = [paint(LUNCH, "12:00", "14:00")];
-    expect(changeBlockPeriod(day, 3, AFTERNOON, "06:00")).toEqual(day);
-    expect(changeBlockPeriod(day, -1, AFTERNOON, "06:00")).toEqual(day);
+    expect(changeBlockPeriod(day, 3, AFTERNOON, "06:00", true)).toEqual(day);
+    expect(changeBlockPeriod(day, -1, AFTERNOON, "06:00", false)).toEqual(day);
   });
 });
 
@@ -174,5 +215,21 @@ describe("stepAt", () => {
     expect(stepAt(96 * 10, 10, "06:00")).toBe("06:00");
     expect(stepAt(5000, 10, "05:30")).toBe("05:30");
     expect(stepAt(95 * 10, 10, "05:30")).toBe("05:15");
+  });
+
+  it("on a changeover off the quarter hour, snaps to the clock's quarter hours inside the day", () => {
+    expect(stepAt(0, 10, "05:50")).toBe("06:00");
+    expect(stepAt(-30, 10, "05:50")).toBe("06:00");
+    expect(stepAt(10, 10, "05:50")).toBe("06:00");
+    expect(stepAt(14, 10, "05:50")).toBe("06:15");
+    expect(stepAt(40, 10, "05:50")).toBe("06:45");
+    expect(stepAt(96 * 10, 10, "05:50")).toBe("05:45");
+    expect(stepAt(5000, 10, "05:50")).toBe("05:45");
+  });
+
+  it("a row with no height answers the first row line", () => {
+    expect(stepAt(40, 0, "06:00")).toBe("06:00");
+    expect(stepAt(40, 0, "05:50")).toBe("06:00");
+    expect(stepAt(40, -10, "06:00")).toBe("06:00");
   });
 });

@@ -22,7 +22,7 @@ function clockMinutes(time: string): number {
   return Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
 }
 
-function stepSpan(range: ClosedRange, cutover: string): [number, number] {
+export function stepSpan(range: ClosedRange, cutover: string): [number, number] {
   const from = clockMinutes(cutover);
   const start = (clockMinutes(range.startsAt) - from + 1440) % 1440;
   // The changeover is the exclusive end, allowing one range to fill the whole day.
@@ -30,7 +30,7 @@ function stepSpan(range: ClosedRange, cutover: string): [number, number] {
   return [start, end];
 }
 
-function clockAt(step: number, cutover: string): string {
+export function clockAt(step: number, cutover: string): string {
   const minute = (clockMinutes(cutover) + step) % 1440;
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${pad(Math.floor(minute / 60))}:${pad(minute % 60)}`;
