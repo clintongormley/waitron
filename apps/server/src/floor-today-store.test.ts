@@ -1572,7 +1572,7 @@ describe("a reset over a joined table split today", () => {
     expect((await tableRow(v, table.bar!)).needsClearingSince).toBe(MARKED);
   });
 
-  it("a reset while guests sit at a part split off leaves the mark on the other part, until they leave", async () => {
+  it("a reset while guests sit at a part split off leaves the mark on the other part, and the catch-up after they leave clears it", async () => {
     const { zoneId, table } = await longTable();
     await split(table.long!, [table.c4!, table.c5!], 2);
     await markNeedsClearing(table.c5!);
