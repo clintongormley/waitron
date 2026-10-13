@@ -116,9 +116,9 @@ describe("till-table-details-sheet's actions for today", () => {
     expect(buttons(el).some((each) => each.getAttribute("slot") === "footer")).toBe(false);
   });
 
-  it("offers a merge Split, seats and back, and no Join with…, Rotate or Take off", async () => {
+  it("offers a merge Split tables…, seats and back, and no Join with…, Rotate or Take off", async () => {
     const el = await mount({ table: table({ today: merged }) });
-    expect(offered(el)).toEqual(["split", "seats", "back"]);
+    expect(offered(el)).toEqual(["split-off", "seats", "back"]);
   });
 
   it("does not offer Rotate for a fixed table, nor Take off for a seated one or one needing clearing, nor Join with… for one needing clearing", async () => {
@@ -159,9 +159,9 @@ describe("till-table-details-sheet's actions for today", () => {
   it("sends the action and asks to close, except after Rotate", async () => {
     const el = await mount({ table: table({ id: "t7", today: merged }) });
     const seen = captureEvents(el);
-    await userEvent.click(button(el, "split"));
+    await userEvent.click(button(el, "split-off"));
     expect(seen).toEqual([
-      `today-action ${JSON.stringify({ action: "split", tableId: "t7" })}`,
+      `today-action ${JSON.stringify({ action: "split-off", tableId: "t7" })}`,
       "details-close",
     ]);
     cleanupWidgets();
@@ -183,7 +183,7 @@ describe("till-table-details-sheet's actions for today", () => {
       "Cambiar plazas",
       "Volver a su sitio",
       "Quitar por hoy",
-      "Separar",
+      "Separar mesas…",
     ]);
   });
 });

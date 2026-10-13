@@ -47,7 +47,6 @@ function kitchenProgress(table: TableState): string {
 
 const ACTION_LABELS = {
   "join-with": "floor.join_with",
-  split: "floor.split",
   "split-off": "floor.split_tables",
   "join-again": "floor.join_again",
   rotate: "floor.rotate",

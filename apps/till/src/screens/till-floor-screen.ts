@@ -862,9 +862,6 @@ export class TillFloorScreen extends LitElement {
       case "join-with":
         this.joiningWith = { tableId };
         return;
-      case "split":
-        void this.#settle(this.#split(api, table, revision));
-        return;
       case "split-off":
         this.splittingJoined = { tableId, sent: null, refusal: null };
         return;
@@ -896,24 +893,6 @@ export class TillFloorScreen extends LitElement {
         send((sent) => api.takeOffToday(table.id, sent));
         return;
     }
-  }
-
-  /** A seated merge loses the last member of its name, with a new empty bill (slice 4 decision 16). */
-  async #split(
-    api: TillApi,
-    table: TableState,
-    revision: number | null,
-  ): Promise<FloorAnswer | null> {
-    const party = table.party;
-    if (party === null) return this.#send(revision, (sent) => api.splitToday(table.id, sent));
-    const joinId = table.today?.joinId;
-    const last = this.#zone.visible
-      .filter((each) => each.today?.joinId === joinId)
-      .sort((a, b) => inNumberOrder(a.label, b.label))
-      .at(-1)!;
-    const answer = await api.splitTable(party.id, last.id, null, party.revision);
-    const answered = answer.zoneRevisions?.[last.zoneId];
-    return answered === undefined ? null : { zoneId: last.zoneId, revision: answered };
   }
 
   /** The zone's table Join with… was opened for, while the map draws it. */
