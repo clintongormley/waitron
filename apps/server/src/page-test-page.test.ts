@@ -351,6 +351,29 @@ describe("requesting a test page", () => {
     expect(await claim(v)).toBeUndefined();
   });
 
+  it("refuses reading a test page once its printer belongs to another location, or for an unknown printer", async () => {
+    const v = await venue();
+    const office = await printer(v, v.agentOne);
+    const page = await requested(v, office);
+    expect(await outcome(v, office)).toEqual({ id: page.id, status: "waiting" });
+    const [elsewhere] = await suite.db
+      .insert(locations)
+      .values({ name: "Terrace", invoiceLocales: ["es-ES"], operationDescription: "Sale" })
+      .returning({ id: locations.id });
+    await suite.db
+      .update(pagePrinters)
+      .set({ locationId: elsewhere!.id })
+      .where(eq(pagePrinters.id, office));
+
+    for (const id of [office, randomUUID()]) {
+      const res = await call(v, "GET", `/management-api/page-printers/${id}/test-page`, {
+        cookie: v.cookies.manager,
+      });
+      expect(res.status).toBe(404);
+      expect(await res.json()).toMatchObject({ error: { code: "page_printer.not_found" } });
+    }
+  });
+
   it("refuses an active printer with no print agent, and queues nothing", async () => {
     const v = await venue();
     const orphan = await printer(v, null);
