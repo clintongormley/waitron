@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { Placement } from "./floor-reset-plan.js";
-import { type LaidPart, partPlaces, remainingPlace } from "./joined-split-layout.js";
+import {
+  joinedPlaceAfter,
+  type LaidPart,
+  partPlaces,
+  remainingPlace,
+  wholePlace,
+} from "./joined-split-layout.js";
 
 const LONG: Placement = { x: 10, y: 20, width: 6, height: 2, shape: "rect", rotation: 0 };
 
@@ -106,5 +112,82 @@ describe("remainingPlace", () => {
       shape: "rect",
       rotation: 0,
     });
+  });
+});
+
+describe("where a joined table stands after Join again", () => {
+  const SIX_BY_TWO = { width: 6, height: 2 };
+  const at = (x: number, y: number, width: number, height: number, rotation = 0): Placement => ({
+    x,
+    y,
+    width,
+    height,
+    shape: "rect",
+    rotation,
+  });
+
+  it("comes back whole at its saved size from where it stands", () => {
+    const row = remainingPlace(LONG, PARTS, 0, 0, 1);
+    expect(row).toEqual(at(10, 20, 4, 2));
+    expect(wholePlace(row, PARTS, 0, SIX_BY_TWO)).toEqual(at(10, 20, 6, 2));
+  });
+
+  it("keeps its left end when the first table was split off", () => {
+    const row = remainingPlace(LONG, PARTS, 0, 1, 2);
+    expect(row).toEqual(at(12, 20, 10, 2));
+    expect(wholePlace(row, PARTS, 1, SIX_BY_TWO)).toEqual(at(10, 20, 6, 2));
+  });
+
+  it("keeps where staff moved it", () => {
+    expect(wholePlace(at(15, 25, 4, 2), PARTS, 0, SIX_BY_TWO)).toEqual(at(15, 25, 6, 2));
+  });
+
+  it("gives it the row's shape", () => {
+    const round: Placement = { ...at(15, 25, 4, 2), shape: "round" };
+    expect(wholePlace(round, PARTS, 0, SIX_BY_TWO)).toEqual({
+      ...at(15, 25, 6, 2),
+      shape: "round",
+    });
+  });
+
+  it("turns with it", () => {
+    const row = remainingPlace({ ...LONG, rotation: 90 }, PARTS, 0, 0, 1);
+    expect(row).toEqual(at(11, 19, 4, 2, 90));
+    expect(wholePlace(row, PARTS, 0, SIX_BY_TWO)).toEqual(at(10, 20, 6, 2, 90));
+    for (let rotation = 0; rotation < 360; rotation += 15) {
+      const turned = remainingPlace({ ...LONG, rotation }, PARTS, 0, 0, 1);
+      const back = wholePlace(turned, PARTS, 0, SIX_BY_TWO);
+      expect(Math.abs(back.x - 10), `x at ${rotation}°`).toBeLessThanOrEqual(1);
+      expect(Math.abs(back.y - 20), `y at ${rotation}°`).toBeLessThanOrEqual(1);
+      expect(back.rotation).toBe(rotation);
+    }
+  });
+
+  const whole = {
+    standing: true,
+    saved: LONG,
+    parts: PARTS,
+    covered: 0,
+    staying: [0, 1, 2],
+    whole: true,
+  };
+
+  it.each<[string, Parameters<typeof joinedPlaceAfter>[0], Placement | null]>([
+    ["whole and standing", { ...whole, row: at(10, 20, 4, 2) }, at(10, 20, 6, 2)],
+    ["whole, standing, moved", { ...whole, row: at(15, 25, 4, 2) }, at(15, 25, 6, 2)],
+    ["whole and not standing", { ...whole, row: at(15, 25, 4, 2), standing: false }, LONG],
+    [
+      "whole, not standing, no saved place",
+      { ...whole, row: at(15, 25, 4, 2), standing: false, saved: null },
+      null,
+    ],
+    [
+      "whole and standing with no saved place",
+      { ...whole, row: at(10, 20, 4, 2), saved: null },
+      at(10, 17, 8, 8),
+    ],
+    ["whole, standing but covered -1", { ...whole, row: at(15, 25, 4, 2), covered: -1 }, LONG],
+  ])("%s", (_name, args, expected) => {
+    expect(joinedPlaceAfter(args)).toEqual(expected);
   });
 });
