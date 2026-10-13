@@ -1242,6 +1242,28 @@ describe("a receipt original that failed before an email original was sent", () 
     });
     expect(await jobsOf(saleId)).toEqual(jobs);
   });
+
+  it("is refused a resend while the email original is still queued", async () => {
+    const v = await venue();
+    const { orderId, saleId } = await invoice(v);
+    const original = await receiptOriginal(v, saleId, { status: "failed", attempts: 5 });
+    expect((await emailIt(v, orderId)).status).toBe(200);
+
+    expect((await send(v, "GET", `/api/sales/${orderId}/receipt`)).body).toMatchObject({
+      status: "failed",
+      canRetry: true,
+    });
+    expect((await send(v, "GET", `/api/sales/${orderId}/deliveries`)).body).toMatchObject({
+      current: { medium: "email", status: "queued" },
+      originalCompleted: false,
+    });
+    const jobs = await jobsOf(saleId);
+    expect(await send(v, "POST", `/api/sales/${orderId}/receipt/retry`)).toEqual({
+      status: 409,
+      body: { error: { code: "print_job.not_resendable", params: { id: original } } },
+    });
+    expect(await jobsOf(saleId)).toEqual(jobs);
+  });
 });
 
 describe("POST /api/sales/:id/deliveries/:deliveryId/retry (email again)", () => {

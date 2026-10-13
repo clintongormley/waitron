@@ -2136,11 +2136,11 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
   });
 
   it.each([
-    ["could be retried", true],
-    ["was waiting for an automatic retry", false],
-  ])(
+    ["could be retried", { canRetry: true }],
+    ["its printer was deleted", { canRetry: false, failureCode: "printer.deleted" }],
+  ] as const)(
     "says delivered, and offers no receipt retry, once an email original completed after the receipt original failed and %s",
-    async (_name, canRetry) => {
+    async (_name, failed) => {
       const email = attempt({ id: "d2", medium: "email", status: "sent" });
       const { el } = await mountF1({
         deliveries: {
@@ -2149,15 +2149,47 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
           actions: noActions,
           history: [email, attempt({ id: null, medium: "receipt", status: "failed" })],
         },
-        originalReceiptPrint: { status: "failed", jobId: "original", canRetry },
+        originalReceiptPrint: { status: "failed", jobId: "original", ...failed },
       });
       const section = () => button(el, "original-delivery")!.textContent!;
       expect(section()).toContain("Full invoice delivered");
       expect(section()).not.toContain("Full invoice not delivered");
       expect(section()).not.toContain("Printing failed");
+      expect(section()).not.toContain("The printer was deleted");
       expect(line(el)).toBe("Sent by email.");
       expect(button(el, "retry-receipt")).toBeNull();
       expect(button(el, "print-receipt")).toBeNull();
+    },
+  );
+
+  it.each([
+    [
+      "an email original waits",
+      { medium: "email", status: "queued" },
+      { receiptInstead: { deliveryId: "d2" } },
+    ],
+    ["an email original is sending", { medium: "email", status: "sending" }, {}],
+    ["an A4 original waits", { status: "queued" }, {}],
+    ["an A4 original is sending", { status: "sending" }, {}],
+  ] as const)(
+    "offers no receipt retry, and leaves out its failure line, while %s after the receipt original failed",
+    async (_name, over, actions) => {
+      const current = attempt({ id: "d2", ...over });
+      const { el } = await mountF1({
+        deliveries: {
+          current,
+          originalCompleted: false,
+          actions: { ...noActions, ...actions },
+          history: [current, attempt({ id: null, medium: "receipt", status: "failed" })],
+        },
+        originalReceiptPrint: { status: "failed", jobId: "original", canRetry: true },
+      });
+      const section = button(el, "original-delivery")!.textContent!;
+      expect(section).toContain("Full invoice not delivered");
+      expect(section).not.toContain("Printing failed");
+      expect(button(el, "retry-receipt")).toBeNull();
+      expect(button(el, "print-receipt")).toBeNull();
+      expect(button(el, "receipt-instead") !== null).toBe("receiptInstead" in actions);
     },
   );
 

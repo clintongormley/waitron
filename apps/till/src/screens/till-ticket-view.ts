@@ -636,9 +636,12 @@ export class TillTicketView extends LitElement {
     const svg = qrSvg(r.qr);
     const attempt = this.deliveries?.current;
     const notQueued = this.originalReceiptPrint?.status === "not_queued";
-    // The server refuses to resend the receipt original once an A4 or email original was sent.
-    const failedButDelivered =
-      this.originalReceiptPrint?.status === "failed" && this.deliveries?.originalCompleted === true;
+    const failedReceipt = this.originalReceiptPrint?.status === "failed";
+    const failedButDelivered = failedReceipt && this.deliveries?.originalCompleted === true;
+    // The server refuses to resend the receipt original beside an active or completed delivery.
+    const failedButSuperseded =
+      failedButDelivered ||
+      (failedReceipt && (attempt?.status === "queued" || attempt?.status === "sending"));
     const receiptBusy = this.originalReceiptBusy || this.deliveryBusy;
     const orderGroup = `${r.orderLabel === null ? "" : `${r.orderLabel} · `}${labels.order} ${r.orderNumber}`;
     return html`
@@ -835,7 +838,7 @@ export class TillTicketView extends LitElement {
                 // receipt failure that no longer matters, would contradict it.
                 !this.originalReceiptReadFailed &&
                 ((notQueued && attempt != null && attempt.medium !== "receipt") ||
-                  failedButDelivered)
+                  failedButSuperseded)
                   ? nothing
                   : html`<p>
                       ${this.originalReceiptReadFailed ? t("invoice.print_status_failed") : this.originalReceiptPrint === undefined ? t("invoice.print_checking") : this.originalReceiptPrint.status === "failed" && this.originalReceiptPrint.failureCode === "printer.deleted" ? codeMessage("printer.deleted") : t(this.originalReceiptPrint.status === "failed" && !this.originalReceiptPrint.canRetry ? "invoice.print_auto_retry" : this.originalReceiptPrint.status === "done" && this.originalReceiptPrint.handover ? "invoice.print_completed" : `invoice.print_${this.originalReceiptPrint.status}`)}
@@ -898,7 +901,7 @@ export class TillTicketView extends LitElement {
               : r.invoiceType === "F1" &&
                   this.originalReceiptPrint?.status === "failed" &&
                   this.originalReceiptPrint.canRetry &&
-                  !failedButDelivered
+                  !failedButSuperseded
                 ? html`<wt-button
                     variant="secondary"
                     size="lg"
