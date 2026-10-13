@@ -46,6 +46,7 @@ describe.each(["light", "dark"] as const)("paint grid (%s)", (theme) => {
     "chooser",
     "refused",
     "read-only",
+    "column-head",
   ])("%s", async (state) => {
     const el = (await mountThemed("<paint-grid></paint-grid>", theme)) as PaintGrid;
     const painted = state !== "empty";
@@ -87,7 +88,14 @@ describe.each(["light", "dark"] as const)("paint grid (%s)", (theme) => {
       ]);
     if (state === "refused")
       el.columnErrors = new Map([["tue", "Check this day's time ranges and periods."]]);
+    if (state === "column-head")
+      el.insertAdjacentHTML(
+        "beforeend",
+        `<label slot="column-head-tue"><input type="checkbox" name="closed-tue" checked /> Closed</label>`,
+      );
     await el.updateComplete;
+    if (state === "column-head")
+      expect(el.querySelector("label")!.getBoundingClientRect().height).toBeGreaterThan(0);
     if (state === "refused")
       expect(
         el.shadowRoot!.querySelector('.heading[data-column="tue"][data-error]'),

@@ -1316,3 +1316,68 @@ test("a Closed stretch in the underlay is drawn hatched, named Closed, with no p
   expect(second!.classList.contains("closed")).toBe(false);
   expect(second!.getAttribute("data-colour")).toBe("green");
 });
+
+async function tickUnder(el: PaintGrid, key: string) {
+  const label = document.createElement("label");
+  label.slot = `column-head-${key}`;
+  label.innerHTML = `<input type="checkbox" name="closed-${key}" /> Closed`;
+  el.append(label);
+  await el.updateComplete;
+  return label;
+}
+
+test("a column-head slot draws under the heading's label line, and the ⋮ still works", async () => {
+  const el = await grid();
+  const label = await tickUnder(el, "thu");
+  const heading = el.shadowRoot!.querySelector<HTMLElement>('.heading[data-column="thu"]')!;
+  expect(label.assignedSlot?.name).toBe("column-head-thu");
+  expect(heading.contains(label.assignedSlot)).toBe(true);
+  const name = heading.querySelector("span")!.getBoundingClientRect();
+  const kebab = columnMenu(el, "thu").getBoundingClientRect();
+  const tick = label.getBoundingClientRect();
+  expect(tick.height).toBeGreaterThan(0);
+  expect(tick.top).toBeGreaterThanOrEqual(Math.max(name.bottom, kebab.bottom) - 1);
+  expect(tick.bottom).toBeLessThanOrEqual(heading.getBoundingClientRect().bottom + 1);
+  expect(kebab.top).toBeLessThan(name.bottom);
+  expect(kebab.bottom).toBeGreaterThan(name.top);
+  await userEvent.click(columnMenu(el, "thu"));
+  await userEvent.click(columnAction(el, "thu", "Copy to…"));
+  await el.updateComplete;
+  expect(chooser(el).matches(":popover-open")).toBe(true);
+});
+
+test("the slotted tick can be clicked and reached by keyboard, and never paints", async () => {
+  const el = await grid({ mon: [], thu: [lunch] }, { chosen: "dinner" });
+  const label = await tickUnder(el, "thu");
+  const box = label.querySelector<HTMLInputElement>("input")!;
+  const seen = changes(el);
+  await userEvent.click(box);
+  expect(box.checked).toBe(true);
+  await el.updateComplete;
+  box.blur();
+  columnMenu(el, "thu").focus();
+  await userEvent.tab();
+  expect(document.activeElement).toBe(box);
+  await userEvent.keyboard(" ");
+  expect(box.checked).toBe(false);
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector(".preview")).toBeNull();
+  expect(seen).toEqual([]);
+});
+
+test("a heading with nothing slotted under it is as tall as before", async () => {
+  const el = await grid();
+  const heading = (key: string) =>
+    el.shadowRoot!.querySelector<HTMLElement>(`.heading[data-column="${key}"]`)!;
+  const plain = heading("mon").getBoundingClientRect().height;
+  const line = parseFloat(getComputedStyle(heading("mon")).borderBlockEndWidth);
+  expect(plain).toBe(columnMenu(el, "mon").getBoundingClientRect().height + line);
+  const label = await tickUnder(el, "thu");
+  expect(label.getBoundingClientRect().height).toBeGreaterThan(0);
+  expect(heading("thu").getBoundingClientRect().height).toBeGreaterThanOrEqual(
+    plain + label.getBoundingClientRect().height,
+  );
+  label.remove();
+  await el.updateComplete;
+  expect(heading("thu").getBoundingClientRect().height).toBe(plain);
+});

@@ -13,7 +13,7 @@ import "@waitron/ui/src/components/wt-icon.js";
 import { t } from "./strings.js";
 
 /**
- * A painter's full-screen frame: one bar (close, heading, the `picker` and `link`
+ * A painter's full-screen frame: one bar (close, heading, the `picker`, `link` and `actions`
  * slots, Cancel and Save) over the `row` slot and the default slot, which fills the rest of the
  * screen so what it holds scrolls inside itself and the bar stays put.
  *
@@ -177,6 +177,7 @@ export class PainterFrame extends LitElement {
               this.readOnly
                 ? nothing
                 : html`<div class="actions">
+                    <slot name="actions"></slot>
                     <wt-button
                       data-test="cancel"
                       variant="secondary"

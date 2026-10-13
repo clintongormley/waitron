@@ -291,3 +291,49 @@ test("read-only: only ✕ is offered, and it closes without asking", async () =>
   await done;
   expect(saves).toEqual([]);
 });
+
+test("an actions slot sits in the bar between the link and Cancel, and stays put while the grid scrolls", async () => {
+  const old = [window.innerWidth, window.innerHeight];
+  try {
+    await page.viewport(1280, 500);
+    const { frame } = await open();
+    const remove = document.createElement("wt-button");
+    remove.slot = "actions";
+    remove.textContent = "Delete";
+    frame.append(remove);
+    await frame.updateComplete;
+    expect(remove.assignedSlot?.name).toBe("actions");
+    const bar = part(frame, ".bar");
+    expect(bar.contains(remove.assignedSlot)).toBe(true);
+    const at = remove.getBoundingClientRect();
+    const link = frame.querySelector("[data-test=link]")!.getBoundingClientRect();
+    const quit = cancel(frame).getBoundingClientRect();
+    expect(at.width).toBeGreaterThan(0);
+    expect(at.left).toBeGreaterThanOrEqual(link.right);
+    expect(at.right).toBeLessThanOrEqual(quit.left);
+    expect(at.top).toBeLessThan(quit.bottom);
+    expect(at.bottom).toBeGreaterThan(quit.top);
+    const content = frame
+      .querySelector<PaintGrid>("paint-grid")!
+      .shadowRoot!.querySelector<HTMLElement>(".scroll")!;
+    content.scrollTop = 150;
+    expect(content.scrollTop).toBe(150);
+    expect(remove.getBoundingClientRect().top).toBe(at.top);
+  } finally {
+    await page.viewport(old[0]!, old[1]!);
+  }
+});
+
+test("read-only: the actions slot is not shown", async () => {
+  const { frame } = await open();
+  const remove = document.createElement("button");
+  remove.slot = "actions";
+  remove.textContent = "Delete";
+  frame.append(remove);
+  await frame.updateComplete;
+  expect(remove.assignedSlot?.name).toBe("actions");
+  frame.readOnly = true;
+  await frame.updateComplete;
+  expect(remove.assignedSlot).toBeNull();
+  expect(remove.getBoundingClientRect().width).toBe(0);
+});

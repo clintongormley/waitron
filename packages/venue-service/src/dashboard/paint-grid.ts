@@ -94,10 +94,11 @@ export class PaintGrid extends LitElement {
         position: sticky;
         top: 0;
         z-index: 3;
-        display: flex;
+        display: grid;
+        grid-template-columns: 1fr auto;
         align-items: center;
-        justify-content: space-between;
-        gap: var(--wt-space-1);
+        align-content: center;
+        column-gap: var(--wt-space-1);
         white-space: nowrap;
         min-block-size: var(--wt-tap-min);
         background: var(--wt-color-surface);
@@ -105,6 +106,11 @@ export class PaintGrid extends LitElement {
         font-size: var(--wt-font-size-sm);
         font-weight: var(--wt-font-weight-bold);
         border-block-end: 1px solid var(--wt-color-border);
+      }
+      .heading ::slotted([slot^="column-head-"]) {
+        grid-column: 1 / -1;
+        padding-block-end: var(--wt-space-1);
+        font-weight: var(--wt-font-weight-normal);
       }
       .heading[data-error] {
         color: var(--wt-color-danger);
@@ -834,7 +840,7 @@ export class PaintGrid extends LitElement {
                           ></wt-row-actions
                         ></slot
                       >`
-                }
+                }<slot name=${`column-head-${column.key}`}></slot>
               </div>`,
           )}
           <div class="times" aria-hidden="true">
