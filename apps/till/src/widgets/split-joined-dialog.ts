@@ -133,9 +133,10 @@ export class TillSplitJoinedDialog extends LitElement {
       : "";
   }
 
+  /** A refusal naming a field not shown goes to the foot, so it is never silent. */
   #shownRefusal(): { code: string; field?: string } | null {
     if (this.refusal === null || this.refusalDismissed) return null;
-    if (this.refusal.field === "seats" && !this.#asksSeats()) return null;
+    if (this.refusal.field === "seats" && !this.#asksSeats()) return { code: this.refusal.code };
     return this.refusal;
   }
 

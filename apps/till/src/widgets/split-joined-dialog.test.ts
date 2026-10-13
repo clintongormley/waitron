@@ -271,6 +271,16 @@ it("shows a refusal naming Seats under Seats until the number changes", async ()
   expect(foot(el).error).toBe("");
 });
 
+it("shows a refusal naming Seats at the foot while Seats is not shown", async () => {
+  const el = await mount();
+  await choose(el, ["c4", "c5"]);
+  el.refusal = { code: "management.request_invalid", field: "seats" };
+  await el.updateComplete;
+  expect(seatsField(el)).toBeNull();
+  expect(foot(el).error).toBe(codeMessage("management.request_invalid"));
+  expect(pick(el).error).toBe("");
+});
+
 it("shows a refusal naming no field at the foot", async () => {
   const el = await mount();
   await choose(el, ["c5"]);
