@@ -1363,8 +1363,9 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 - **Two special days can land on one date after saving, and the venue is not told** (retro review
   of #1603). A holiday-area change, or a later year's holiday list, can move an "every year" date
   that follows a holiday's name onto a date another special day holds; the save's check cannot see
-  it. Every reader now gives the date to the one saved there on its own terms (`standingInYear`,
-  `packages/venue-service/src/repeat-rules.ts`). Decide whether the readiness list should warn.
+  it. The day resolver, the changeover check and the end-offset check now give the date to the one
+  saved there on its own terms (`standingInYear`, `packages/venue-service/src/repeat-rules.ts`).
+  Decide whether the readiness list should warn.
 
 - **Two holidays with one name in one year's list** (retro review of #1603). A save records only
   the first date of each name (`readHolidayDates`, `packages/venue-service/src/holidays.ts`), so a
