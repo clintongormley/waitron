@@ -109,7 +109,7 @@ export class TillTableDetailsSheet extends LitElement {
   @property({ attribute: false }) now?: number;
   /** Today's changes are offered on the floor only; the order screen's status pin leaves this off. */
   @property({ type: Boolean }) actions = false;
-  /** The zone's tables, which Join again reads to find the joined table and its split-off tables. */
+  /** The zone's tables, which Reset table reads to find the joined table and its split-off tables. */
   @property({ attribute: false }) tables: readonly TableState[] = [];
 
   #emit(type: string, detail?: unknown): void {
