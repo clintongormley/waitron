@@ -2402,7 +2402,7 @@ describe("Month view", () => {
   });
 
   it("takes the browser's own month, not UTC's, when the venue's clock cannot be read", async () => {
-    // East of UTC this moment is still February in UTC; at UTC itself both read March.
+    // Fails only in a browser east of UTC: there this moment is still February in UTC; at UTC both read March.
     const { view, months } = await monthMount("/manage/opening-hours/view/month", false, (data) => {
       data.clockReadable = false;
       vi.setSystemTime(new Date(2027, 2, 1, 0, 30));

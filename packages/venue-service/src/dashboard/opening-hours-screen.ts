@@ -42,7 +42,7 @@ import type {
 import type { OpeningHoursApi, OpeningStation } from "./opening-hours-client.js";
 import { businessDateToday } from "./opening-hours-day.js";
 import { isLocalDate, parseCalendarMonth, parseCalendarYear } from "../hours-rules.js";
-import { format, formatDate, formatMonthName } from "./hours-view.js";
+import { browserToday, format, formatDate, formatMonthName } from "./hours-view.js";
 import { t } from "./strings.js";
 import { chosenSeasonId, seasonOptions } from "./season-choice.js";
 
@@ -422,9 +422,7 @@ export class OpeningHoursScreen extends LitElement {
     if (!this.model || this.view !== "month") return "";
     if (this.requestedMonth) return this.requestedMonth;
     const today = businessDateToday(this.model);
-    if (today) return today.slice(0, 7);
-    const now = new Date();
-    return `${String(now.getFullYear()).padStart(4, "0")}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    return (today || browserToday()).slice(0, 7);
   }
   private watchMonth() {
     const month = this.shownMonth();
@@ -1221,6 +1219,7 @@ export class OpeningHoursScreen extends LitElement {
                               @day-date-change=${(event: CustomEvent<{ date: string }>) => {
                                 event.stopPropagation();
                                 this.dayDate = event.detail.date;
+                                // Replaced, not pushed: Back leaves the per-date editor rather than retracing its steps.
                                 void this.url.write({ date: event.detail.date }, true);
                               }}
                             ></opening-hours-day>`

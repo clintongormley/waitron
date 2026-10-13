@@ -117,7 +117,7 @@ describe("Opening hours month", () => {
     expect(text(cell(el, "2026-12-09").querySelector('[data-test="name"]'))).toBe("");
   });
 
-  it("keeps a public holiday's name in the holiday's style on a special day of another name", async () => {
+  it("draws a public holiday's name after a special day of another name, in red unless the date is closed all day", async () => {
     const model = monthModel();
     const days = model.days.map((day) =>
       day.date === "2026-12-08"
@@ -157,7 +157,7 @@ describe("Opening hours month", () => {
     expect(closed.lines).toEqual([closed.day, closed.day]);
   });
 
-  it("names a special day once, in the holiday's style, when its public holiday has the same name", async () => {
+  it("names a special day once, as its public holiday, when the two share a name", async () => {
     const model = monthModel();
     const days = model.days.map((day) =>
       day.date === "2026-12-08"

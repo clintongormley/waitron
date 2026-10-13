@@ -285,8 +285,8 @@ export class OpeningHoursMonthView extends LitElement {
   /** The month as the server reads it; the host fetches a new one on `month-change`. */
   @property({ attribute: false }) model?: OpeningHoursMonth;
   /** The `YYYY-MM` the host asked for, ahead of `model` while its read is pending; ‹ › step from it
-   *  so presses during the wait add up, and only its heading is drawn until `model` is of this
-   *  month. "" steps from `model`. */
+   *  so presses during the wait add up, and only the year link, its heading and ‹ › are drawn until
+   *  `model` is of this month. "" steps from `model`. */
   @property() month = "";
   /** The chosen department; "" draws every department. */
   @property() departmentId = "";
@@ -429,7 +429,7 @@ export class OpeningHoursMonthView extends LitElement {
     );
     const label = [
       formatLongDate(day.date),
-      day.specialDay?.name,
+      special !== holidayName ? special : "",
       holidayName,
       day.closedAllDay ? t("hours.closed") : "",
       isToday ? t("hours.today") : "",
