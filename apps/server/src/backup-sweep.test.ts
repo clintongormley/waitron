@@ -78,6 +78,9 @@ class FakeBackend implements StorageBackend {
   async delete(key: string) {
     this.objects.delete(key);
   }
+  async deleteMany(keys: string[]) {
+    for (const key of keys) this.objects.delete(key);
+  }
 }
 
 describe("runOnce (fan-out)", () => {
@@ -276,11 +279,11 @@ describe("runOnce (fan-out)", () => {
       async put() {
         throw enospc;
       },
-      async putFile(key, path) {
-        await this.put(key, await readFile(path));
+      async putFile(key, path, call) {
+        await this.put(key, await readFile(path), call);
       },
-      async getFile(key, path) {
-        await writeFile(path, await this.get(key));
+      async getFile(key, path, call) {
+        await writeFile(path, await this.get(key, call));
       },
       async get() {
         return Buffer.alloc(0);
@@ -289,6 +292,7 @@ describe("runOnce (fan-out)", () => {
         return [];
       },
       async delete() {},
+      async deleteMany() {},
     };
     const log = vi.fn();
     await runOnce(deps([failing], log));
@@ -331,11 +335,11 @@ describe("runOnce (fan-out)", () => {
       async put() {
         observedMode = (await stat(staged)).mode & 0o777;
       },
-      async putFile(key, path) {
-        await this.put(key, await readFile(path));
+      async putFile(key, path, call) {
+        await this.put(key, await readFile(path), call);
       },
-      async getFile(key, path) {
-        await writeFile(path, await this.get(key));
+      async getFile(key, path, call) {
+        await writeFile(path, await this.get(key, call));
       },
       async get() {
         return Buffer.alloc(0);
@@ -344,6 +348,7 @@ describe("runOnce (fan-out)", () => {
         return [];
       },
       async delete() {},
+      async deleteMany() {},
     };
     await runOnce({
       ...deps([probe]),
@@ -804,7 +809,7 @@ describe("pruneBackend (dual count + age retention)", () => {
       backend.objects.set(backupArchiveKey(new Date(nowMs - d * day)), Buffer.from(`age-${d}`));
 
     // Age 2d is within the count cap of 3 but past the 1-day age cap.
-    await pruneBackend(backend, 3, 1, nowMs);
+    await pruneBackend(backend, 3, 1, nowMs, { signal: new AbortController().signal });
 
     const survivors = [...backend.objects.keys()].sort();
     expect(survivors).toEqual(
@@ -824,7 +829,7 @@ describe("pruneBackend (dual count + age retention)", () => {
     const nowMs = Date.parse("2026-09-20T00:00:00Z");
     const freshKey = backupArchiveKey(new Date(nowMs));
     backend.objects.set(freshKey, Buffer.from("fresh"));
-    await pruneBackend(backend, 7, 1, nowMs);
+    await pruneBackend(backend, 7, 1, nowMs, { signal: new AbortController().signal });
     expect(backend.objects.has(freshKey)).toBe(true);
   });
 });

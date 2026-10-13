@@ -12,7 +12,7 @@ import type { StreamView } from "@waitron/stream";
 import { createHealthState } from "./health.js";
 import { readBackupStatus, type BackupStatus } from "./backup-status.js";
 import { mountBoxStatusApi } from "./box-status.js";
-import { buildBackend } from "./local-fs-backend.js";
+import { buildBackupBackend } from "./backup-backends.js";
 import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
 import { FIXTURE_CERT_PEM } from "./testing/tls-fixture.js";
@@ -204,7 +204,7 @@ describe("GET /api/box/status", () => {
     writeFileSync(artifact, "ciphertext");
     const mtime = new Date(now.getTime() - 30_000); // 30s old — inside the 60s stale window
     utimesSync(artifact, mtime, mtime);
-    const backend = buildBackend({ kind: "local-fs", id: "primary", dir });
+    const backend = buildBackupBackend({ kind: "local-fs", id: "primary", dir });
 
     const { nodeId } = await setupTenant();
     const backupApp = buildApp(nodeId, {

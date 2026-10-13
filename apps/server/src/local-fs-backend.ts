@@ -1,42 +1,67 @@
-import {
-  chmod,
-  copyFile,
-  mkdir,
-  mkdtemp,
-  readFile,
-  readdir,
-  rename,
-  rm,
-  stat,
-} from "node:fs/promises";
+import { createReadStream, createWriteStream } from "node:fs";
+import { chmod, mkdir, mkdtemp, readFile, readdir, rename, rm, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { writeFileAtomic } from "./fs-atomic.js";
-import type { BackupDestination, StorageBackend, StoredObject } from "./storage-backend.js";
+import { pipeline } from "node:stream/promises";
+import { AppError } from "@waitron/shared";
+import "@waitron/stream";
+import { stageFile } from "./fs-atomic.js";
+import type { StorageBackend, StorageCall, StoredObject } from "./storage-backend.js";
 
+// C0 controls, DEL and C1 controls.
+// eslint-disable-next-line no-control-regex
+const CONTROL = /[\u0000-\u001f\u007f-\u009f]/;
+
+/** One plain file name inside the destination folder, so no key reaches outside it. */
+function checkedKey(key: string): string {
+  if (key === "" || key === "." || key === ".." || /[/\\]/.test(key) || CONTROL.test(key)) {
+    throw new AppError("backup.destination_key_invalid", { field: "key" });
+  }
+  return key;
+}
+
+/**
+ * A destination folder. A cancelled call is checked before and after each file-system step that
+ * cannot itself be interrupted, and copies stream under the signal; a cancelled write never
+ * replaces the object already stored.
+ */
 export class LocalFsBackend implements StorageBackend {
   constructor(
     readonly id: string,
     private readonly dir: string,
   ) {}
 
-  async put(key: string, bytes: Uint8Array): Promise<void> {
+  #path(key: string): string {
+    return join(this.dir, checkedKey(key));
+  }
+
+  async put(key: string, bytes: Uint8Array, { signal }: StorageCall): Promise<void> {
+    const target = this.#path(key);
+    signal.throwIfAborted();
     await mkdir(this.dir, { recursive: true });
-    await writeFileAtomic(join(this.dir, key), bytes, 0o600);
+    const staged = await stageFile(target, bytes, 0o600);
+    try {
+      signal.throwIfAborted();
+      await rename(staged, target);
+    } catch (err) {
+      await rm(staged, { force: true });
+      throw err;
+    }
   }
 
-  async putFile(key: string, path: string): Promise<void> {
-    await copyAtomic(path, join(this.dir, key));
+  async putFile(key: string, path: string, { signal }: StorageCall): Promise<void> {
+    await copyAtomic(path, this.#path(key), signal);
   }
 
-  async getFile(key: string, outPath: string): Promise<void> {
-    await copyAtomic(join(this.dir, key), outPath);
+  async getFile(key: string, outPath: string, { signal }: StorageCall): Promise<void> {
+    await copyAtomic(this.#path(key), outPath, signal);
   }
 
-  async get(key: string): Promise<Buffer> {
-    return readFile(join(this.dir, key));
+  async get(key: string, { signal }: StorageCall): Promise<Buffer> {
+    return readFile(this.#path(key), { signal });
   }
 
-  async list(prefix: string): Promise<StoredObject[]> {
+  async list(prefix: string, { signal }: StorageCall): Promise<StoredObject[]> {
+    signal.throwIfAborted();
     let names: string[];
     try {
       names = await readdir(this.dir);
@@ -44,6 +69,7 @@ export class LocalFsBackend implements StorageBackend {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
       throw err;
     }
+    signal.throwIfAborted();
     const out: StoredObject[] = [];
     for (const name of names) {
       // Exclude `writeFileAtomic`'s in-progress temp (`<target>.tmp`): it starts with `waitron-` too,
@@ -58,38 +84,38 @@ export class LocalFsBackend implements StorageBackend {
         if ((err as NodeJS.ErrnoException).code === "ENOENT") continue;
         throw err;
       }
+      signal.throwIfAborted();
       if (info.isFile()) out.push({ key: name, size: info.size, mtimeMs: info.mtimeMs });
     }
     return out.sort((a, b) => b.mtimeMs - a.mtimeMs);
   }
 
-  async delete(key: string): Promise<void> {
-    await rm(join(this.dir, key), { force: true });
+  async delete(key: string, call: StorageCall): Promise<void> {
+    await this.deleteMany([key], call);
   }
-}
 
-export function buildBackend(dest: BackupDestination): StorageBackend {
-  switch (dest.kind) {
-    case "local-fs":
-      return new LocalFsBackend(dest.id, dest.dir);
-    // Compile-time exhaustiveness guard: a `BackupDestination` kind without a case above fails typecheck.
-    /* v8 ignore start */
-    default: {
-      const _never: never = dest.kind;
-      throw new Error(`unknown backup destination kind: ${String(_never)}`);
+  async deleteMany(keys: string[], { signal }: StorageCall): Promise<void> {
+    const paths = keys.map((key) => this.#path(key));
+    for (const path of paths) {
+      signal.throwIfAborted();
+      await rm(path, { force: true });
     }
-    /* v8 ignore stop */
+    signal.throwIfAborted();
   }
 }
 
-async function copyAtomic(source: string, target: string): Promise<void> {
+async function copyAtomic(source: string, target: string, signal: AbortSignal): Promise<void> {
+  signal.throwIfAborted();
   await mkdir(dirname(target), { recursive: true });
-  // copyFile preserves the source mode; the private directory contains it until chmod completes.
+  // The private directory holds the copy until it is whole and protected.
   const scratch = await mkdtemp(join(dirname(target), ".backup-copy-"));
   try {
     const copied = join(scratch, "payload");
-    await copyFile(source, copied);
+    await pipeline(createReadStream(source), createWriteStream(copied, { mode: 0o600 }), {
+      signal,
+    });
     await chmod(copied, 0o600);
+    signal.throwIfAborted();
     await rename(copied, target);
   } finally {
     await rm(scratch, { recursive: true, force: true });

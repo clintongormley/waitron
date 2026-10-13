@@ -20,7 +20,7 @@ import {
   backupArchiveTimestamp,
   dumpFileName,
 } from "./backup-keys.js";
-import type { StorageBackend } from "./storage-backend.js";
+import type { StorageBackend, StorageCall } from "./storage-backend.js";
 import "./errors.js";
 
 export type ManifestBuilder = (deps: {
@@ -119,18 +119,19 @@ export async function runOnce(
     const ciphertext = join(encryptedDir, "artifact");
     await encryptArtifactFile(packArchiveStream(entries), ciphertext, deps.recoveryKey);
     const key = backupArchiveKey(stamp);
+    const call: StorageCall = { signal: new AbortController().signal };
     let anyStored = false;
     await Promise.allSettled(
       deps.backends.map(async (backend) => {
         // Separate from the whole try: a prune fault must not record a stored archive as failed.
         let stored = false;
         try {
-          await backend.putFile(key, ciphertext);
+          await backend.putFile(key, ciphertext, call);
           stored = true;
           anyStored = true;
           if (deps.outcomes)
             recordBackupOutcome(deps.outcomes, backend.id, true, stamp.toISOString());
-          await pruneBackend(backend, deps.retain, deps.retainDays, nowMs);
+          await pruneBackend(backend, deps.retain, deps.retainDays, nowMs, call);
           deps.log("info", "backup.destination_completed", { destination: backend.id, key });
         } catch (err) {
           // `codeOf` maps only AppErrors.
@@ -158,13 +159,14 @@ export async function pruneBackend(
   retain: number,
   retainDays: number,
   nowMs: number,
+  call: StorageCall,
 ): Promise<void> {
-  const objects = await backend.list(BACKUP_KEY_PREFIX);
+  const objects = await backend.list(BACKUP_KEY_PREFIX, call);
   const maxAgeMs = retainDays * 24 * 60 * 60 * 1000;
   const toDelete = objects.filter(
     (obj, i) => i >= retain || nowMs - backupArchiveTimestamp(obj.key).getTime() > maxAgeMs,
   );
-  await Promise.all(toDelete.map((obj) => backend.delete(obj.key)));
+  await Promise.all(toDelete.map((obj) => backend.delete(obj.key, call)));
 }
 
 /**

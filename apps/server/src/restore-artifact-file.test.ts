@@ -212,7 +212,9 @@ it("roundtrips real SQLite and state through scheduled capture, local file stora
     archive: (path) => suite.db.archiveTo(path),
   });
   guard.forbidden.add(join(f.root, "store", "waitron-20261006T000000Z.backup.enc"));
-  await backend.getFile("waitron-20261006T000000Z.backup.enc", f.artifactPath);
+  await backend.getFile("waitron-20261006T000000Z.backup.enc", f.artifactPath, {
+    signal: new AbortController().signal,
+  });
   guard.forbidden.add(f.artifactPath);
   await restoreFromArtifactFile(f);
   const opened = await openVenueDatabase(f.venueDir);

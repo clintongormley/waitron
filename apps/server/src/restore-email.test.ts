@@ -128,7 +128,9 @@ beforeAll(async () => {
       archive: (path) => suite.db.archiveTo(path),
       now: () => NOW,
     });
-    const archives = await backend.list("waitron-");
+    const archives = await backend.list("waitron-", {
+      signal: new AbortController().signal,
+    });
     expect(archives).toHaveLength(1);
     await writeFile(
       join(root, "trading.env"),
@@ -147,7 +149,7 @@ beforeAll(async () => {
     );
     await writeFile(join(root, "trading.env"), identity);
     fixtures.set(configured, {
-      archive: await backend.get(archives[0]!.key),
+      archive: await backend.get(archives[0]!.key, { signal: new AbortController().signal }),
       cloud: cloud.bytes,
       database,
     });
