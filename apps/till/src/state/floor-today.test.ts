@@ -563,7 +563,7 @@ describe("a joined table split today", () => {
 
   describe("Reset table", () => {
     const zone = [long, c3, c4, c5];
-    const whole = { joined: long, back: [c5], apart: [], whole: true };
+    const whole = { joined: long, back: [c5], apart: [], whole: true, refusedInGroup: false };
 
     it("offers Reset table on Long table and on Counter 5 when Counter 5 is free, taking every table back", () => {
       expect(resetTableOf(long, zone)).toEqual(whole);
@@ -575,7 +575,7 @@ describe("a joined table split today", () => {
     it("takes back a table marked needs clearing", () => {
       const marked = table("c5", "Counter 5", { ...c5, condition: "needs_clearing" });
       const markedZone = [long, c3, c4, marked];
-      const plan = { joined: long, back: [marked], apart: [], whole: true };
+      const plan = { joined: long, back: [marked], apart: [], whole: true, refusedInGroup: false };
       expect(resetTableOf(long, markedZone)).toEqual(plan);
       expect(resetTableOf(marked, markedZone)).toEqual(plan);
     });
@@ -586,7 +586,7 @@ describe("a joined table split today", () => {
         today: today({ placement: place(40, 30), joinId: "g" }),
       });
       const groupZone = [long, c3, c4, grouped, groupBar];
-      const plan = { joined: long, back: [grouped], apart: [], whole: true };
+      const plan = { joined: long, back: [grouped], apart: [], whole: true, refusedInGroup: false };
       expect(resetTableOf(long, groupZone)).toEqual(plan);
       expect(resetTableOf(grouped, groupZone)).toEqual(plan);
     });
@@ -609,6 +609,7 @@ describe("a joined table split today", () => {
         back: [freeC4],
         apart: [{ table: seatedC5, reason: "guests" }],
         whole: false,
+        refusedInGroup: false,
       };
       expect(resetTableOf(standing, seatedZone)).toEqual(plan);
       expect(resetTableOf(freeC4, seatedZone)).toEqual(plan);
@@ -647,6 +648,7 @@ describe("a joined table split today", () => {
           { table: gc4, reason: "guests" },
         ],
         whole: false,
+        refusedInGroup: true,
       });
       expect(sheetActions(freeC5, groupZone)).toContain("reset-table");
       expect(resetTableOf(apartLong, groupZone)).toBeNull();
@@ -686,6 +688,7 @@ describe("a joined table split today", () => {
         back: [b2, b3],
         apart: [{ table: b1, reason: "guests" }],
         whole: false,
+        refusedInGroup: false,
       });
       const reasons: [Partial<TableState>, string][] = [
         [{ pendingDeliveries: 1 }, "food"],
@@ -714,6 +717,7 @@ describe("a joined table split today", () => {
           back: [backB1, b2, b3],
           apart: [],
           whole: true,
+          refusedInGroup: false,
         });
       }
       const freeB1 = barPart("b1", "Bar 1");
@@ -722,6 +726,7 @@ describe("a joined table split today", () => {
         back: [freeB1, b2, b3],
         apart: [],
         whole: true,
+        refusedInGroup: false,
       });
     });
 

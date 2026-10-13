@@ -254,11 +254,15 @@ export interface ResetTablePlan {
   back: TableState[];
   apart: { table: TableState; reason: ApartReason }[];
   whole: boolean;
+  /** Offered only to be refused: too few tables would be joined because the rest are in a group
+   * with guests, which the server refuses `joined_table.tables_in_group` whatever the seats. */
+  refusedInGroup: boolean;
 }
 
 /** What Reset table on `table` would take back: `table` is the joined table or a free table split
  * off it. `null` when it offers nothing. Mirrors the server's rule in
- * `apps/server/src/floor-today-reset-table.ts`. */
+ * `apps/server/src/floor-today-reset-table.ts`, and also offers one case that rule refuses
+ * (`refusedInGroup`). */
 export function resetTableOf(
   table: TableState,
   zoneTables: readonly TableState[],
@@ -281,14 +285,14 @@ export function resetTableOf(
     const reason = apartReason(each);
     return reason === null ? [] : [{ table: each, reason }];
   });
-  const plan = { joined, back, apart, whole: apart.length === 0 };
+  const plan = { joined, back, apart, whole: apart.length === 0, refusedInGroup: false };
   if (back.length > 0 && state.parts.length + back.length >= 2) return plan;
   // Offered so that pressing it shows the server's `joined_table.tables_in_group` refusal, which
   // names the tables to split off the group first.
   const blockedByGroup =
     joined !== table &&
     apart.some(({ table: each, reason }) => reason === "guests" && each.today?.joinId != null);
-  return blockedByGroup ? plan : null;
+  return blockedByGroup ? { ...plan, refusedInGroup: true } : null;
 }
 
 function apartReason(table: TableState): ApartReason | null {

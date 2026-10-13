@@ -133,11 +133,9 @@ type Refused = { code?: string; field?: unknown } & Record<string, unknown>;
 
 const asksSeats = (refused: { code?: string }): boolean => refused.code === "merge.seats_required";
 
-/** Sent at once, without asking seats, when every table comes back, and when too few would be joined
- * to make the table: then its fellow tables are in a group with guests, which the server refuses
- * (`joined_table.tables_in_group`) whatever the seats. */
-const resetsAtOnce = (plan: ResetTablePlan): boolean =>
-  plan.whole || plan.joined.today!.joined!.parts.length + plan.back.length < 2;
+/** Sent at once, without asking seats, when every table comes back, and when the server will refuse
+ * it whatever the seats. */
+const resetsAtOnce = (plan: ResetTablePlan): boolean => plan.whole || plan.refusedInGroup;
 
 function placedAt(table: TableState, pending: Map<string, TodayPlacement>): TableState {
   const placement = pending.get(table.id);
@@ -1081,7 +1079,8 @@ export class TillFloorScreen extends LitElement {
         const parts = ids.map(tableOf);
         if (parts.length === 0 || parts.some((each) => each === undefined)) return undefined;
         const group = this.#mergeName(parts[0]!);
-        if (group === null) return undefined;
+        if (group === null || parts.some((each) => this.#mergeName(each!) !== group))
+          return undefined;
         const labels = parts.map((each) => each!.label);
         const sentence =
           labels.length === 1
@@ -1248,7 +1247,7 @@ export class TillFloorScreen extends LitElement {
   #resetPlan(tableId: string): ResetTablePlan | undefined {
     const joined = this.tables.find((each) => each.id === tableId);
     const plan = joined === undefined ? null : resetTableOf(joined, this.tables);
-    return plan === null || resetsAtOnce(plan) ? undefined : plan;
+    return plan === null || plan.whole ? undefined : plan;
   }
 
   /** While its request is out, the window keeps the plan it sent unless its joined table has left

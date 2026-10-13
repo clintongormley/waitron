@@ -618,22 +618,53 @@ describe("till-floor-screen: Reset table's refusals name the tables", () => {
     expect(floorRefusal(el)).toBe(words);
   });
 
+  it("names no group when the tables in the refusal are in different groups", async () => {
+    const api = stubApi();
+    api.resetTableToday.mockRejectedValueOnce({
+      code: "joined_table.tables_in_group",
+      status: 409,
+      tableId: "long",
+      partIds: ["c3", "c4"],
+    });
+    const tables = inBarGroup().map((each) =>
+      each.id === "c4" ? { ...each, today: { ...each.today!, joinId: "h" } } : each,
+    );
+    tables.push(table("patio", "Patio", 90, { joinId: "h" }, held));
+    const el = await mount(tables, api);
+
+    await pressResetTable(el, "c5");
+    expect(floorRefusal(el)).toBe(codeMessage("joined_table.tables_in_group"));
+  });
+
   it.each([
     ["en", "That table was split off. Reset Long table first"],
     ["es", "Esa mesa está separada. Restablece Long table primero"],
-  ])("in %s, a split-off refusal names the table it was split off from", async (locale, words) => {
-    setLocale(locale);
-    const api = stubApi();
-    api.resetTableToday.mockRejectedValueOnce({
-      code: "table.split_off",
-      status: 409,
-      tableId: "c5",
-    });
-    const el = await mount(oneFree(), api);
+  ])(
+    "in %s, Back to saved place on a table another till has split off names the table it was split off from",
+    async (locale, words) => {
+      setLocale(locale);
+      const api = { ...stubApi(), backToSavedToday: vi.fn<TillApi["backToSavedToday"]>() };
+      let refuse!: (refusal: unknown) => void;
+      api.backToSavedToday.mockImplementationOnce(
+        () => new Promise<FloorAnswer>((_, reject) => (refuse = reject)),
+      );
+      const el = await mount([longTable(["c3", "c4"], []), table("c5", "Counter 5", 30)], api);
 
-    await pressResetTable(el);
-    expect(floorRefusal(el)).toBe(words);
-  });
+      send(el.shadowRoot!.querySelector("wt-floor-map")!, "wt-table-details", { tableId: "c5" });
+      await el.updateComplete;
+      const sheet = el.shadowRoot!.querySelector("till-table-details-sheet")!;
+      await sheet.updateComplete;
+      sheet.shadowRoot!.querySelector<HTMLElement>('[data-today-action="back"]')!.click();
+      await settle(el);
+      expect(api.backToSavedToday).toHaveBeenCalledExactlyOnceWith("c5", 0);
+
+      el.tables = oneFree();
+      await settle(el);
+      refuse({ code: "table.split_off", status: 409, tableId: "c5" });
+      await settle(el);
+      expect(floorRefusal(el)).toBe(words);
+    },
+  );
 
   it("a named refusal shows at the window's foot, and moves to the floor when the window closes", async () => {
     const api = stubApi();
@@ -685,8 +716,8 @@ describe("till-floor-screen: Reset table's refusals name the tables", () => {
     ["the split-off table", { code: "table.split_off", tableId: "gone" }, oneFree],
     [
       "what a table was split off from",
-      { code: "table.split_off", tableId: "c3" },
-      () => oneFree(),
+      { code: "table.split_off", tableId: "c9" },
+      () => [...oneFree(), splitOff("c9", "Counter 9", 90, {}, "gone")],
     ],
   ])(
     "falls back to the plain sentence when the read no longer has %s",

@@ -3839,7 +3839,7 @@ export class TillApi {
     );
   }
 
-  /** Take split-off tables back into their joined table and put it at its saved place →
+  /** Take split-off tables back into their joined table →
    * `POST /api/tables/:id/today/reset`. `seats` is left out when unset: the server refuses a null. */
   resetTableToday(
     tableId: string,
