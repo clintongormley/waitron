@@ -181,6 +181,37 @@ it("a changed destination choice warns, and Discard restores the opening choice"
   expect(field(screen, "destination")).not.toBeNull();
   expect(unload()).toBe(false);
 });
+it("a typed bucket secret alone warns on leave, and Discard empties it", async () => {
+  const stored: BackupStatusView = {
+    ...on,
+    destinations: [
+      {
+        id: "bucket",
+        kind: "s3",
+        endpoint: null,
+        region: "eu-north-1",
+        bucket: "owner-bucket",
+        prefix: "waitron",
+        accessKeyId: "AKIAOWNER",
+        namespace: "waitron/archives/c0000000-0000-4000-8000-000000000002/",
+        credentialPresent: true,
+      },
+    ],
+  };
+  const { app, screen } = await mount(stored);
+  await click(screen, "edit-settings");
+  await expect
+    .poll(() => screen.shadowRoot!.querySelector("[data-test=archive-bucket-secret-access-key]"))
+    .not.toBeNull();
+  expect(unload()).toBe(false);
+  await change(screen, "archive-bucket-secret-access-key", "SECRET-1");
+  expect(unload()).toBe(true);
+  const discarded = leave(app);
+  await choose(app, "discard");
+  expect(await discarded).toBe("proceeded");
+  await screen.updateComplete;
+  expect(unload()).toBe(false);
+});
 it("settings Cancel protects changed values but normalized retention and weekday reverts close directly", async () => {
   const { app, screen } = await mount(on);
   await edit(screen);

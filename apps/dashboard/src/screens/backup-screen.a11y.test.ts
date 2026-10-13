@@ -137,6 +137,47 @@ describe.each(["light", "dark"] as const)("backup-screen a11y (%s theme)", (them
     await expectNoA11yViolations(host);
   });
 
+  it("renders another bucket's fields, with the secret refused, accessibly", async () => {
+    const { el, host } = await mountWidget<BackupScreen>(
+      "dashboard-backup-screen",
+      {
+        api: stubApi(
+          { ...OFF, recoveryKeySet: true },
+          {
+            applyBackup: vi.fn().mockRejectedValue({
+              code: "backup.request_invalid",
+              params: { field: "secretAccessKey" },
+            }),
+          },
+        ),
+      },
+      theme,
+    );
+    await flush(el);
+    await chooseOption(q(el, "[data-test=archive-destination]")!, "custom-s3");
+    await el.updateComplete;
+    for (const [name, value] of [
+      ["region", "eu-west-3"],
+      ["name", "my-bucket"],
+      ["access-key-id", "AKIAMINE"],
+      ["secret-access-key", "SECRET-1"],
+    ] as const) {
+      q(el, `[data-test=archive-bucket-${name}]`)!.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+      );
+    }
+    await el.updateComplete;
+    q(el, "[data-test=apply]")!.click();
+    await vi.waitFor(() =>
+      expect(
+        (q(el, "[data-test=archive-bucket-secret-access-key]") as HTMLElementTagNameMap["wt-input"])
+          .error,
+      ).not.toBe(""),
+    );
+    expect(q(el, "[data-test=custom-location]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   it("renders the configure wizard accessibly", async () => {
     const { el, host } = await mountWidget<BackupScreen>(
       "dashboard-backup-screen",

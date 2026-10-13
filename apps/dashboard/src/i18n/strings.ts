@@ -1500,6 +1500,10 @@ export const en = {
   "backup.destination.choice": "Save backups to",
   "backup.destination.choice_local": "A folder on this box",
   "backup.destination.choice_stream": "The bucket copy's bucket",
+  "backup.destination.choice_custom": "Another S3-compatible bucket",
+  "backup.destination.secret_keep": "Leave empty to keep the saved secret.",
+  "backup.destination.secret_needed":
+    "The bucket or access key changed, so enter the secret access key.",
   "backup.destination.stream_unavailable": "Set up the bucket copy below to use its bucket.",
   "backup.destination.stream_unread":
     "The bucket copy's settings could not be read, so its bucket cannot be chosen now.",
@@ -4326,6 +4330,10 @@ export const es: Record<StringKey, string> = {
   "backup.destination.choice": "Guardar las copias en",
   "backup.destination.choice_local": "Una carpeta de esta caja",
   "backup.destination.choice_stream": "El bucket de la copia en el bucket",
+  "backup.destination.choice_custom": "Otro bucket compatible con S3",
+  "backup.destination.secret_keep": "Déjala vacía para conservar la clave guardada.",
+  "backup.destination.secret_needed":
+    "El bucket o la clave de acceso han cambiado: escribe la clave de acceso secreta.",
   "backup.destination.stream_unavailable":
     "Configura abajo la copia en el bucket para usar su bucket.",
   "backup.destination.stream_unread":

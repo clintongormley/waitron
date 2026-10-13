@@ -425,6 +425,9 @@ type Combo = HTMLElementTagNameMap["wt-combobox"];
 type Field = HTMLElementTagNameMap["wt-input"];
 type Button = HTMLElementTagNameMap["wt-button"];
 
+const customField = (el: BackupScreen, name: string) =>
+  q(el, `wt-input[name=archive-bucket-${name}]`) as Field;
+
 const choice = (el: BackupScreen) => q(el, "wt-combobox[name=archive-destination]") as Combo | null;
 
 async function choose(el: BackupScreen, value: string) {
@@ -485,11 +488,11 @@ async function openEdit(status: BackupStatusView, overrides: Partial<DashboardAp
 }
 
 describe("choosing where backups go", () => {
-  it("offers a local folder or the bucket copy's bucket, as a named choice", async () => {
+  it("offers a local folder, the bucket copy's bucket or another bucket, as a named choice", async () => {
     const { el } = await openConfigure();
     const box = choice(el)!;
     expect(box.value).toBe("local-fs");
-    expect(box.options.map((o) => o.value)).toEqual(["local-fs", "stream-bucket"]);
+    expect(box.options.map((o) => o.value)).toEqual(["local-fs", "stream-bucket", "custom-s3"]);
   });
 
   it("with no bucket copy set up, the bucket choice is unavailable and the form says why", async () => {
@@ -549,15 +552,16 @@ describe("choosing where backups go", () => {
     expect(await buttonState(el, "save-settings")).toEqual(["secondary", true]);
   });
 
-  it("a stored bucket that is not the bucket copy's opens on the local folder, empty", async () => {
+  it("a stored bucket that is not the bucket copy's opens on another bucket, its settings filled in", async () => {
     const { el } = await openEdit(ON_STREAM_BUCKET, {
       getStreamSettings: vi.fn().mockResolvedValue({
         ...STREAM_ON,
         bucket: { ...STREAM_BUCKET, accessKeyId: "AKIAOTHER" },
       }),
     });
-    expect(choice(el)!.value).toBe("local-fs");
-    expect((q(el, "[data-test=destination]") as Field).value).toBe("");
+    expect(choice(el)!.value).toBe("custom-s3");
+    expect(customField(el, "access-key-id").value).toBe("AKIASTREAM");
+    expect(customField(el, "secret-access-key").value).toBe("");
   });
 
   it.each([
@@ -567,14 +571,14 @@ describe("choosing where backups go", () => {
     ["prefix", { prefix: "elsewhere" }],
     ["accessKeyId", { accessKeyId: "AKIAOTHER" }],
   ])(
-    "a stored bucket differing from the bucket copy's only in its %s opens on the local folder",
+    "a stored bucket differing from the bucket copy's only in its %s opens on another bucket",
     async (_field, differs) => {
       const { el } = await openEdit(ON_STREAM_BUCKET, {
         getStreamSettings: vi
           .fn()
           .mockResolvedValue({ ...STREAM_ON, bucket: { ...STREAM_BUCKET, ...differs } }),
       });
-      expect(choice(el)!.value).toBe("local-fs");
+      expect(choice(el)!.value).toBe("custom-s3");
     },
   );
 
@@ -732,5 +736,307 @@ describe("choosing where backups go", () => {
     expect(await buttonState(el, "save-settings")).toEqual(["primary", false]);
     await choose(el, "local-fs");
     expect((q(el, "[data-test=destination]") as Field).value).toBe("/mnt/usb/waitron");
+  });
+});
+
+/** Archives on, stored as a bucket of the owner's own, not the bucket copy's. */
+const ON_CUSTOM: BackupStatusView = {
+  ...TWO,
+  destinations: [TWO.destinations[1]!],
+  backupStatus: { configured: true, destinations: [{ ...quiet, id: "bucket" }] },
+};
+
+async function typeCustom(el: BackupScreen, name: string, value: string) {
+  customField(el, name).dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+}
+
+async function fillCustom(el: BackupScreen, secret: string) {
+  await typeCustom(el, "region", "eu-west-3");
+  await typeCustom(el, "name", "my-bucket");
+  await typeCustom(el, "prefix", "/shop/");
+  await typeCustom(el, "access-key-id", "AKIAMINE");
+  await typeCustom(el, "secret-access-key", secret);
+}
+
+async function setRetainCount(el: BackupScreen, value: string) {
+  q(el, "[data-test=retain-count]")!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+}
+
+const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+describe("another S3-compatible bucket", () => {
+  it("names its fields, marks the required ones, and keeps the secret write-only with a reveal button", async () => {
+    const { el } = await openConfigure();
+    await choose(el, "custom-s3");
+    const names = [...el.shadowRoot!.querySelectorAll<Field>("wt-input")]
+      .map((f) => f.getAttribute("name"))
+      .filter((n) => n?.startsWith("archive-bucket-"));
+    expect(names).toEqual([
+      "archive-bucket-endpoint",
+      "archive-bucket-region",
+      "archive-bucket-name",
+      "archive-bucket-prefix",
+      "archive-bucket-access-key-id",
+      "archive-bucket-secret-access-key",
+    ]);
+    expect(
+      ["endpoint", "region", "name", "prefix", "access-key-id", "secret-access-key"].map(
+        (n) => customField(el, n).required,
+      ),
+    ).toEqual([false, true, true, false, true, true]);
+    const secret = customField(el, "secret-access-key");
+    expect(secret.type).toBe("password");
+    expect(secret.autocomplete).toBe("off");
+    const reveal = secret.querySelector<Button>("wt-button[slot=end]")!;
+    expect(reveal.getAttribute("aria-label")).toBe(t("stream.form.show_secret"));
+    reveal.click();
+    await el.updateComplete;
+    expect(customField(el, "secret-access-key").type).toBe("text");
+  });
+
+  it("shows where in the bucket backups will be stored", async () => {
+    const { el } = await openConfigure();
+    await choose(el, "custom-s3");
+    await fillCustom(el, "SECRET-1");
+    expect(text(q(el, "[data-test=custom-location]")!)).toContain(
+      `my-bucket/shop/archives/${VENUE}/`,
+    );
+  });
+
+  it("a first save with no secret is held by the form's own check: the secret is marked, no request goes", async () => {
+    const { el, api } = await openConfigure();
+    await choose(el, "custom-s3");
+    await fillCustom(el, "");
+    q(el, "[data-test=apply]")!.click();
+    await el.updateComplete;
+    await settle();
+    expect(api.applyBackup).not.toHaveBeenCalled();
+    expect(customField(el, "secret-access-key").error).toBe(
+      t("stream.form.secret_access_key_required"),
+    );
+    expect(await bottomOf(el, "apply-actions")).toBe(t("form.fix_fields"));
+  });
+
+  it("a first save with the required fields empty marks each one, and no request goes", async () => {
+    const { el, api } = await openConfigure();
+    await choose(el, "custom-s3");
+    q(el, "[data-test=apply]")!.click();
+    await el.updateComplete;
+    await settle();
+    expect(api.applyBackup).not.toHaveBeenCalled();
+    expect(customField(el, "region").error).toBe(t("stream.form.region_required"));
+    expect(customField(el, "name").error).toBe(t("stream.form.bucket_required"));
+    expect(customField(el, "access-key-id").error).toBe(t("stream.form.access_key_id_required"));
+    expect(customField(el, "endpoint").error).toBe("");
+  });
+
+  it("sends only this kind's fields, as strings, with the folder trimmed of spaces", async () => {
+    const { el, api } = await openConfigure();
+    await choose(el, "custom-s3");
+    await fillCustom(el, "SECRET-1");
+    await typeCustom(el, "endpoint", " https://s3.example.test ");
+    q(el, "[data-test=apply]")!.click();
+    await vi.waitFor(() => expect(api.applyBackup).toHaveBeenCalledOnce());
+    expect(vi.mocked(api.applyBackup).mock.calls[0]![0].destination).toEqual({
+      kind: "custom-s3",
+      endpoint: "https://s3.example.test",
+      region: "eu-west-3",
+      bucket: "my-bucket",
+      prefix: "/shop/",
+      accessKeyId: "AKIAMINE",
+      secretAccessKey: "SECRET-1",
+    });
+  });
+
+  it("bucket fields typed and then left for a folder are not sent", async () => {
+    const { el, api } = await openConfigure();
+    await choose(el, "custom-s3");
+    await fillCustom(el, "SECRET-1");
+    await choose(el, "local-fs");
+    await typeFolder(el, "/mnt/usb/waitron");
+    q(el, "[data-test=apply]")!.click();
+    await vi.waitFor(() => expect(api.applyBackup).toHaveBeenCalledOnce());
+    expect(vi.mocked(api.applyBackup).mock.calls[0]![0].destination).toEqual({
+      kind: "local-fs",
+      dir: "/mnt/usb/waitron",
+    });
+  });
+
+  it("switching to another choice and back keeps the typed bucket fields", async () => {
+    const { el } = await openConfigure();
+    await choose(el, "custom-s3");
+    await fillCustom(el, "SECRET-1");
+    await choose(el, "stream-bucket");
+    await choose(el, "custom-s3");
+    expect(customField(el, "region").value).toBe("eu-west-3");
+    expect(customField(el, "name").value).toBe("my-bucket");
+    expect(customField(el, "secret-access-key").value).toBe("SECRET-1");
+  });
+
+  it("a stored bucket opens filled in, with an empty secret whose hint says it is kept, and Save quiet", async () => {
+    const { el } = await openEdit(ON_CUSTOM);
+    expect(choice(el)!.value).toBe("custom-s3");
+    expect(customField(el, "endpoint").value).toBe("");
+    expect(customField(el, "region").value).toBe("eu-north-1");
+    expect(customField(el, "name").value).toBe("owner-bucket");
+    expect(customField(el, "prefix").value).toBe("waitron");
+    expect(customField(el, "access-key-id").value).toBe("AKIAOWNER");
+    const secret = customField(el, "secret-access-key");
+    expect(secret.value).toBe("");
+    expect(secret.required).toBe(false);
+    expect(secret.hint).toBe(t("backup.destination.secret_keep"));
+    expect(await buttonState(el, "save-settings")).toEqual(["secondary", true]);
+  });
+
+  it("with the stored bucket unchanged, an empty secret keeps the saved one and the save is sent without it", async () => {
+    const { el, api } = await openEdit(ON_CUSTOM);
+    await setRetainCount(el, "9");
+    q(el, "[data-test=save-settings]")!.click();
+    await vi.waitFor(() => expect(api.applyBackup).toHaveBeenCalledOnce());
+    const destination = vi.mocked(api.applyBackup).mock.calls[0]![0].destination;
+    expect(destination).toEqual({
+      kind: "custom-s3",
+      region: "eu-north-1",
+      bucket: "owner-bucket",
+      prefix: "waitron",
+      accessKeyId: "AKIAOWNER",
+    });
+  });
+
+  it("a folder spelled with extra slashes is still the stored bucket's folder, so the secret is kept", async () => {
+    const { el, api } = await openEdit(ON_CUSTOM);
+    await typeCustom(el, "prefix", "/waitron/");
+    q(el, "[data-test=save-settings]")!.click();
+    await vi.waitFor(() => expect(api.applyBackup).toHaveBeenCalledOnce());
+    expect(customField(el, "secret-access-key").error).toBe("");
+  });
+
+  it.each([
+    ["endpoint", "https://s3.example.test"],
+    ["region", "eu-west-1"],
+    ["name", "other-bucket"],
+    ["prefix", "elsewhere"],
+    ["access-key-id", "AKIAOTHER"],
+  ])("changing the stored bucket's %s makes the secret required again", async (name, value) => {
+    const { el, api } = await openEdit(ON_CUSTOM);
+    await typeCustom(el, name, value);
+    expect(customField(el, "secret-access-key").required).toBe(true);
+    q(el, "[data-test=save-settings]")!.click();
+    await el.updateComplete;
+    await settle();
+    expect(api.applyBackup).not.toHaveBeenCalled();
+    expect(customField(el, "secret-access-key").error).toBe(t("backup.destination.secret_needed"));
+    expect(await bottomOf(el, "settings-actions")).toBe(t("form.fix_fields"));
+  });
+
+  it("the server asking for the secret puts the refusal under the secret, and Save stays enabled", async () => {
+    const { el } = await openEdit(ON_CUSTOM, {
+      applyBackup: vi.fn().mockRejectedValue({
+        code: "backup.request_invalid",
+        params: { field: "secretAccessKey" },
+      }),
+    });
+    await setRetainCount(el, "9");
+    q(el, "[data-test=save-settings]")!.click();
+    await vi.waitFor(() =>
+      expect(customField(el, "secret-access-key").error).toBe(
+        t("backup.destination.secret_needed"),
+      ),
+    );
+    expect(await bottomOf(el, "settings-actions")).toBe(t("form.fix_fields"));
+    expect(await buttonState(el, "save-settings")).toEqual(["primary", false]);
+    expect(banner(el)).toBeNull();
+    await typeCustom(el, "secret-access-key", "SECRET-2");
+    expect(customField(el, "secret-access-key").error).toBe("");
+  });
+
+  it.each([
+    ["endpoint", "endpoint"],
+    ["region", "region"],
+    ["bucket", "name"],
+    ["prefix", "prefix"],
+    ["accessKeyId", "access-key-id"],
+  ])("the server refusing %s puts the refusal under that field", async (field, name) => {
+    const { el } = await openConfigure({
+      applyBackup: vi.fn().mockRejectedValue({ code: "backup.request_invalid", params: { field } }),
+    });
+    await choose(el, "custom-s3");
+    await fillCustom(el, "SECRET-1");
+    q(el, "[data-test=apply]")!.click();
+    await vi.waitFor(() =>
+      expect(customField(el, name).error).toBe(
+        field === "endpoint" ? t("stream.form.endpoint_invalid") : t("stream.field.check"),
+      ),
+    );
+    expect(await bottomOf(el, "apply-actions")).toBe(t("form.fix_fields"));
+    expect(await buttonState(el, "apply")).toEqual(["primary", false]);
+    expect(banner(el)).toBeNull();
+  });
+
+  it("a failed bucket test for another bucket says why in the bottom message", async () => {
+    const { el } = await openConfigure({
+      applyBackup: vi
+        .fn()
+        .mockRejectedValue({ code: "backup.archive_test_failed", params: { reason: "timed_out" } }),
+    });
+    await choose(el, "custom-s3");
+    await fillCustom(el, "SECRET-1");
+    q(el, "[data-test=apply]")!.click();
+    await vi.waitFor(async () =>
+      expect(await bottomOf(el, "apply-actions")).toBe(
+        `${codeMessage("backup.archive_test_failed")} ${t("backup.archive_test.timed_out")}`,
+      ),
+    );
+    expect(await buttonState(el, "apply")).toEqual(["primary", false]);
+  });
+
+  it("after a save with a new secret the editor closes clean, and reopening shows the secret empty with Save quiet", async () => {
+    const { el, api } = await openEdit(ON_CUSTOM);
+    await typeCustom(el, "secret-access-key", "SECRET-NEW");
+    expect(await buttonState(el, "save-settings")).toEqual(["primary", false]);
+    q(el, "[data-test=save-settings]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=save-settings]")).toBeNull());
+    expect(vi.mocked(api.applyBackup).mock.calls[0]![0].destination).toMatchObject({
+      secretAccessKey: "SECRET-NEW",
+    });
+    q(el, "[data-test=edit-settings]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=save-settings]")).not.toBeNull());
+    expect(customField(el, "secret-access-key").value).toBe("");
+    expect(await buttonState(el, "save-settings")).toEqual(["secondary", true]);
+  });
+
+  it("leaving the screen forgets a typed secret, but not the other bucket fields", async () => {
+    const { el } = await openConfigure();
+    await choose(el, "custom-s3");
+    await fillCustom(el, "SECRET-1");
+    const parent = el.parentNode!;
+    el.remove();
+    parent.appendChild(el);
+    await vi.waitFor(() => expect(customField(el, "secret-access-key")).not.toBeNull());
+    await el.updateComplete;
+    expect(customField(el, "secret-access-key").value).toBe("");
+    expect(customField(el, "name").value).toBe("my-bucket");
+  });
+
+  it("a save that leaves another change staged clears the secret from the field", async () => {
+    let answer!: (value: BackupWriteAnswer) => void;
+    const { el } = await openEdit(ON_CUSTOM, {
+      applyBackup: vi.fn().mockReturnValue(new Promise((resolve) => (answer = resolve))),
+    });
+    await typeCustom(el, "secret-access-key", "SECRET-NEW");
+    q(el, "[data-test=save-settings]")!.click();
+    await settle();
+    await setRetainCount(el, "9");
+    answer(ON_CUSTOM);
+    await vi.waitFor(async () =>
+      expect(await buttonState(el, "save-settings")).toEqual(["primary", false]),
+    );
+    expect(customField(el, "secret-access-key").value).toBe("");
   });
 });

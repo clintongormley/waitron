@@ -29,9 +29,13 @@ import type {
   StreamSettingsView,
 } from "../api/client.js";
 import {
+  EMPTY_CUSTOM,
   destinationBody,
+  heldBucket,
+  keepsHeldSecret,
   openingDestination,
   streamLocation,
+  type CustomBucket,
   type DestinationChoice,
 } from "./backup-destination-model.js";
 
@@ -43,6 +47,7 @@ interface ArchiveDraft {
   mode: "configure" | "settings" | "rotate";
   choice: DestinationChoice;
   folder: string;
+  custom: CustomBucket;
   daysMode: "daily" | "weekdays";
   weekdays: number[];
   timeMode: "auto" | "fixed";
@@ -61,7 +66,7 @@ function archivePayload(value: ArchiveDraft): unknown {
   const pastedKey = value.advancedPaste ? value.pastedKey : "";
   if (value.mode === "rotate") return { pastedKey };
   return {
-    destination: destinationBody(value.choice, value.folder),
+    destination: destinationBody(value.choice, value.folder, value.custom),
     days: value.daysMode === "daily" ? "daily" : [...value.weekdays].sort((a, b) => a - b),
     at: value.timeMode === "auto" ? "auto" : value.atTime,
     count: parseRetention(value.retainCount) ?? value.retainCount,
@@ -84,6 +89,45 @@ const FORM_REFUSALS = new Set([
   "backup.archive_test_failed",
   "backup.stream_settings_unreadable",
 ]);
+
+type CustomField = keyof CustomBucket;
+
+/** The server names a refused bucket setting by its `custom-s3` key, which is also this form's key. */
+const CUSTOM_FIELDS: {
+  field: CustomField;
+  name: string;
+  labelKey: Parameters<typeof t>[0];
+  requiredKey?: Parameters<typeof t>[0];
+}[] = [
+  { field: "endpoint", name: "endpoint", labelKey: "stream.form.endpoint" },
+  {
+    field: "region",
+    name: "region",
+    labelKey: "stream.form.region",
+    requiredKey: "stream.form.region_required",
+  },
+  {
+    field: "bucket",
+    name: "name",
+    labelKey: "stream.form.bucket",
+    requiredKey: "stream.form.bucket_required",
+  },
+  { field: "prefix", name: "prefix", labelKey: "stream.form.prefix" },
+  {
+    field: "accessKeyId",
+    name: "access-key-id",
+    labelKey: "stream.form.access_key_id",
+    requiredKey: "stream.form.access_key_id_required",
+  },
+  {
+    field: "secretAccessKey",
+    name: "secret-access-key",
+    labelKey: "stream.form.secret_access_key",
+  },
+];
+
+const isCustomField = (value: unknown): value is CustomField =>
+  CUSTOM_FIELDS.some((f) => f.field === value);
 
 /** Only a probe reason with a sentence of its own is shown, never the param's own text. */
 const TEST_REASON_KEYS: Readonly<Record<string, Parameters<typeof t>[0]>> = {
@@ -257,6 +301,11 @@ export class BackupScreen extends LitElement {
   @state() private folderAttempted = false;
   /** The server refused the folder, and it has not changed since. */
   @state() private folderRefused = false;
+  /** Another bucket's fields. The secret lives in memory only, and is cleared once saved. */
+  @state() private custom: CustomBucket = { ...EMPTY_CUSTOM };
+  /** The bucket field the server refused, until that field changes. */
+  @state() private customRefused: CustomField | null = null;
+  @state() private secretVisible = false;
   /** A refusal naming no field the form shows, for the bottom message until the next submission;
    * `sentence` replaces the code's own message. */
   @state() private formRefusal: {
@@ -330,6 +379,7 @@ export class BackupScreen extends LitElement {
           : "rotate",
       choice: this.choice,
       folder: this.folder,
+      custom: { ...this.custom },
       daysMode: this.daysMode,
       weekdays: [...this.weekdays],
       timeMode: this.timeMode,
@@ -360,11 +410,16 @@ export class BackupScreen extends LitElement {
     this.#archiveScope = draftScopeFor<ArchiveDraft>(this, {
       id: this,
       current: () => this.#archiveValue(),
-      snapshot: (value) => ({ ...value, weekdays: [...value.weekdays] }),
+      snapshot: (value) => ({
+        ...value,
+        custom: { ...value.custom },
+        weekdays: [...value.weekdays],
+      }),
       equal: (a, b) => sameValue(archivePayload(a), archivePayload(b)),
       restore: (value) => {
         this.choice = value.choice;
         this.folder = value.folder;
+        this.custom = { ...value.custom };
         this.daysMode = value.daysMode;
         this.weekdays = [...value.weekdays];
         this.timeMode = value.timeMode;
@@ -383,6 +438,7 @@ export class BackupScreen extends LitElement {
       [
         "choice",
         "folder",
+        "custom",
         "daysMode",
         "weekdays",
         "timeMode",
@@ -433,6 +489,8 @@ export class BackupScreen extends LitElement {
     this.configurationConfirm = "";
     this.pastedKey = "";
     this.advancedPaste = false;
+    this.custom = { ...this.custom, secretAccessKey: "" };
+    this.secretVisible = false;
     this.savedIt = false;
     this.#reuseKey = null;
     this.editSettings = false;
@@ -523,8 +581,25 @@ export class BackupScreen extends LitElement {
     return this.choice === "local-fs" && this.folder.trim() === "";
   }
 
+  get #secretRequired(): boolean {
+    return !keepsHeldSecret(this.custom, heldBucket(this.status));
+  }
+
+  #customMissing(field: CustomField): boolean {
+    if (this.choice !== "custom-s3") return false;
+    const required =
+      field === "secretAccessKey"
+        ? this.#secretRequired
+        : CUSTOM_FIELDS.some((f) => f.field === field && f.requiredKey !== undefined);
+    return required && this.custom[field].trim() === "";
+  }
+
+  get #destinationMissing(): boolean {
+    return this.#folderMissing || CUSTOM_FIELDS.some((f) => this.#customMissing(f.field));
+  }
+
   get #folderHeld(): boolean {
-    return this.folderAttempted && this.#folderMissing;
+    return this.folderAttempted && this.#destinationMissing;
   }
 
   get #applyDisabled(): boolean {
@@ -558,8 +633,9 @@ export class BackupScreen extends LitElement {
     this.folderAttempted = true;
     this.retentionRefused = false;
     this.folderRefused = false;
+    this.customRefused = null;
     this.formRefusal = null;
-    if (!this.#retentionInvalid && !this.#folderMissing) return true;
+    if (!this.#retentionInvalid && !this.#destinationMissing) return true;
     this.#focusFirstInvalidBox();
     return false;
   }
@@ -580,6 +656,13 @@ export class BackupScreen extends LitElement {
     const field = (error as { params?: { field?: unknown } } | null)?.params?.field;
     if (code === "backup.request_invalid" && field === "retention") {
       this.retentionRefused = true;
+      this.#focusFirstInvalidBox();
+    } else if (
+      code === "backup.request_invalid" &&
+      sent.kind === "custom-s3" &&
+      isCustomField(field)
+    ) {
+      this.customRefused = field;
       this.#focusFirstInvalidBox();
     } else if (code === "backup.request_invalid" && field === "dir") {
       this.folderRefused = true;
@@ -629,17 +712,18 @@ export class BackupScreen extends LitElement {
     this.refreshErrorKey = null;
     this.submitting = true;
     const body: BackupApplyBody = {
-      destination: destinationBody(this.choice, this.folder),
+      destination: destinationBody(this.choice, this.folder, this.custom),
       ...(sendsKey ? { recoveryKey: this.#effectiveKey } : {}),
       schedule: this.#buildSchedule(),
       retention: this.#retention(),
     };
-    const submitted = this.#archiveValue();
+    const submitted = this.#withoutSecret(this.#archiveValue());
     const generation = this.#generation;
     const scope = this.#archiveScope;
     try {
       const status = await this.api.applyBackup(body);
       if (generation !== this.#generation) return;
+      this.custom = { ...this.custom, secretAccessKey: "" };
       this.reloadErrorCode = status.reloadErrorCode ?? null;
       scope?.commit(submitted);
       this.configureAfterApply = scope?.isDirty() ?? false;
@@ -658,6 +742,11 @@ export class BackupScreen extends LitElement {
     } finally {
       if (generation === this.#generation) this.submitting = false;
     }
+  }
+
+  /** A saved secret is held by the box, so the draft it is committed as carries none. */
+  #withoutSecret(value: ArchiveDraft): ArchiveDraft {
+    return { ...value, custom: { ...value.custom, secretAccessKey: "" } };
   }
 
   async #rotate(): Promise<void> {
@@ -733,6 +822,7 @@ export class BackupScreen extends LitElement {
       this.retentionRefused = false;
       this.folderAttempted = false;
       this.folderRefused = false;
+      this.customRefused = null;
       this.formRefusal = null;
       if (this.status) this.#prefillFromStatus(this.status);
       this.editSettings = true;
@@ -749,17 +839,18 @@ export class BackupScreen extends LitElement {
     this.refreshErrorKey = null;
     this.submitting = true;
     const body: BackupApplyBody = {
-      destination: destinationBody(this.choice, this.folder),
+      destination: destinationBody(this.choice, this.folder, this.custom),
       recoveryKey: this.#reuseKey,
       schedule: this.#buildSchedule(),
       retention: this.#retention(),
     };
-    const submitted = this.#archiveValue();
+    const submitted = this.#withoutSecret(this.#archiveValue());
     const generation = this.#generation;
     const scope = this.#archiveScope;
     try {
       const status = await this.api.applyBackup(body);
       if (generation !== this.#generation) return;
+      this.custom = { ...this.custom, secretAccessKey: "" };
       this.reloadErrorCode = status.reloadErrorCode ?? null;
       this.status = status;
       scope?.commit(submitted);
@@ -793,6 +884,7 @@ export class BackupScreen extends LitElement {
     const opening = openingDestination(s, this.stream?.bucket ?? null);
     this.choice = opening.choice;
     this.folder = opening.folder;
+    this.custom = opening.custom;
     if (s.schedule?.kind === "wall-clock") {
       this.daysMode = s.schedule.days === "daily" ? "daily" : "weekdays";
       if (Array.isArray(s.schedule.days)) this.weekdays = [...s.schedule.days];
@@ -1178,12 +1270,14 @@ export class BackupScreen extends LitElement {
             disabled: bucket === null,
             ...(unavailable === null ? {} : { description: unavailable }),
           },
+          { value: "custom-s3", label: t("backup.destination.choice_custom") },
         ]}
         .value=${this.choice}
         @wt-change=${(e: CustomEvent<{ value: string }>) => {
           e.stopPropagation();
           this.choice = e.detail.value as DestinationChoice;
           this.folderRefused = false;
+          this.customRefused = null;
         }}
       ></wt-combobox>
       ${
@@ -1208,7 +1302,9 @@ export class BackupScreen extends LitElement {
                 @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onDestination(e)}
               ></wt-input>
               <p class="hint">${t("backup.destination.hint")}</p>`
-          : this.#renderStreamChoice(bucket)
+          : this.choice === "stream-bucket"
+            ? this.#renderStreamChoice(bucket)
+            : this.#renderCustomChoice()
       }
     `;
   }
@@ -1223,6 +1319,73 @@ export class BackupScreen extends LitElement {
           : html`<p data-test="stream-location">
               <span class="field-label">${t("backup.destination.stream_location")}</span>
               <span class="location">${streamLocation(bucket, this.status.venueId)}</span>
+            </p>`
+      }
+    `;
+  }
+
+  #customMessage(field: CustomField): string {
+    if (this.customRefused === field) {
+      if (field === "endpoint") return t("stream.form.endpoint_invalid");
+      if (field === "secretAccessKey") return t("backup.destination.secret_needed");
+      return t("stream.field.check");
+    }
+    if (!this.folderAttempted || !this.#customMissing(field)) return "";
+    if (field === "secretAccessKey")
+      return heldBucket(this.status) === null
+        ? t("stream.form.secret_access_key_required")
+        : t("backup.destination.secret_needed");
+    return t(CUSTOM_FIELDS.find((f) => f.field === field)!.requiredKey!);
+  }
+
+  #renderCustomField(f: (typeof CUSTOM_FIELDS)[number]): TemplateResult {
+    const secret = f.field === "secretAccessKey";
+    const required = secret ? this.#secretRequired : f.requiredKey !== undefined;
+    const toggleLabel = t(
+      this.secretVisible ? "stream.form.hide_secret" : "stream.form.show_secret",
+    );
+    return html`<wt-input
+      name="archive-bucket-${f.name}"
+      data-test="archive-bucket-${f.name}"
+      label=${t(f.labelKey)}
+      .required=${required}
+      type=${secret && !this.secretVisible ? "password" : "text"}
+      autocomplete="off"
+      hint=${secret && !required ? t("backup.destination.secret_keep") : ""}
+      .value=${this.custom[f.field]}
+      .error=${this.#customMessage(f.field)}
+      @wt-change=${(event: CustomEvent<{ value: string }>) => {
+        event.stopPropagation();
+        this.custom = { ...this.custom, [f.field]: event.detail.value };
+        if (this.customRefused === f.field) this.customRefused = null;
+      }}
+      >${
+        secret
+          ? html`<wt-button
+              slot="end"
+              variant="ghost"
+              data-test="toggle-archive-secret"
+              aria-label=${toggleLabel}
+              @click=${() => (this.secretVisible = !this.secretVisible)}
+              >${toggleLabel}</wt-button
+            >`
+          : nothing
+      }</wt-input
+    >`;
+  }
+
+  #renderCustomChoice(): TemplateResult {
+    const bucket = this.custom.bucket.trim();
+    return html`
+      ${CUSTOM_FIELDS.map((f) => this.#renderCustomField(f))}
+      ${
+        bucket === "" || this.status === undefined
+          ? nothing
+          : html`<p data-test="custom-location">
+              <span class="field-label">${t("backup.destination.stream_location")}</span>
+              <span class="location"
+                >${streamLocation({ bucket, prefix: this.custom.prefix.trim() }, this.status.venueId)}</span
+              >
             </p>`
       }
     `;
@@ -1415,7 +1578,11 @@ export class BackupScreen extends LitElement {
 
   #policyBottom(): string {
     const marked =
-      this.#policyHeld || this.retentionRefused || this.#folderHeld || this.folderRefused;
+      this.#policyHeld ||
+      this.retentionRefused ||
+      this.#folderHeld ||
+      this.folderRefused ||
+      this.customRefused !== null;
     const refusal = this.formRefusal;
     const reasonKey = refusal?.reason == null ? undefined : TEST_REASON_KEYS[refusal.reason];
     return [
