@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -11,12 +11,22 @@ import {
   floorTodayTables,
   parties,
   partyTables,
+  workingOrders,
 } from "@waitron/db";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
+import { foodOnItsWay } from "./delivery-release.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
-import { inTx, partyAt, seat, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
+import {
+  counterOrder,
+  inTx,
+  partyAt,
+  pay,
+  seat,
+  setupPartyVenue,
+  type PartyVenue,
+} from "./testing/party-venue.js";
 import {
   expectRevision,
   giveKeptSize,
@@ -241,7 +251,7 @@ describe("Reset table", () => {
     const { table, zoneId } = await c5SplitOff();
     await ok(post(`/api/tables/${table.long!}/today/move`, table.long!, { x: 30, y: 30 }));
 
-    await settles(() => reset(table.long!, [table.c5!]), zoneId);
+    await settles(() => reset(table.long!, [table.c5!], 3), zoneId);
 
     expect(await placeOf(table.long!)).toEqual(LONG_SAVED);
     expect(await seatsOf(table.long!)).toBe(10);
@@ -310,7 +320,82 @@ describe("Reset table", () => {
   });
 });
 
+describe("Reset table, more cases", () => {
+  it("gives a table taken back its own saved seats: Counter 5 given 3 seats while split off comes back with 4", async () => {
+    const { table, zoneId } = await c5SplitOff();
+    await ok(post(`/api/tables/${table.c5!}/today/seats`, table.c5!, { seats: 3 }));
+    expect(await seatsOf(table.c5!)).toBe(3);
+
+    await settles(() => reset(table.long!, [table.c5!]), zoneId);
+
+    expect(await seatsOf(table.c5!)).toBe(4);
+  });
+
+  it("Counter 5 in a group with Bar where guests sit, Counter 3 and 4 free: Reset table takes Counter 3 and 4 back and leaves the group as it is", async () => {
+    const { table, zoneId } = await longApart();
+    await merge(table.bar!, table.c5!, "right", 8);
+    const { partyId } = await seat(v, table.bar!);
+    expect(await partyAt(v, table.c5!)).toBe(partyId);
+
+    await settles(() => reset(table.long!, [table.c3!, table.c4!], 8), zoneId);
+
+    expect(await placeOf(table.long!)).toEqual({ x: 10, y: 20, width: 4, height: 2 });
+    expect(await seatsOf(table.long!)).toBe(8);
+    expect(await groupOf(table.c5!)).toEqual({
+      seats: 8,
+      members: [table.bar!, table.c5!].sort(),
+    });
+    expect(await placeOf(table.bar!)).toEqual({ x: 16, y: 20, width: 2, height: 2 });
+    expect(await placeOf(table.c5!)).toEqual({ x: 14, y: 20, width: 2, height: 2 });
+    expect(await splitRowsOf(table.long!)).toEqual([table.c5!]);
+  });
+
+  it("one group holding Counter 4, Counter 5 and Bar, nobody seated: Reset table takes all back, the group ends and Bar goes back by the bar counter", async () => {
+    const { table, zoneId } = await longApart();
+    await merge(table.bar!, table.c5!, "right", 8);
+    await merge(table.c4!, table.bar!, "right", 10);
+    expect(await groupOf(table.bar!)).toEqual({
+      seats: 10,
+      members: [table.bar!, table.c4!, table.c5!].sort(),
+    });
+
+    await settles(() => reset(table.long!, [table.c3!, table.c4!, table.c5!]), zoneId);
+
+    expect(await placeOf(table.long!)).toEqual(LONG_SAVED);
+    expect(await seatsOf(table.long!)).toBe(10);
+    expect(await groupOf(table.bar!)).toBeNull();
+    expect(await groupOf(table.c4!)).toBeNull();
+    expect(await placeOf(table.bar!)).toEqual({ x: 40, y: 0, width: 2, height: 2 });
+    expect(await splitRowsOf(table.long!)).toEqual([]);
+  });
+});
+
 describe("Reset table refused, nothing written", () => {
+  it("nothing to take back: food on its way to the one table split off", async () => {
+    const { table } = await c5SplitOff();
+    const order = await counterOrder(v, "Paella");
+    await inTx(v, (tx) =>
+      tx
+        .update(workingOrders)
+        .set({ deliveryTableId: table.c5! })
+        .where(eq(workingOrders.id, order)),
+    );
+    await pay(v, order, "20.00");
+    const onItsWay = await inTx(v, (tx) =>
+      tx
+        .select({ id: workingOrders.id })
+        .from(workingOrders)
+        .where(and(eq(workingOrders.id, order), foodOnItsWay())),
+    );
+    expect(onItsWay).toHaveLength(1);
+    const before = await everything();
+
+    await refused(reset(table.long!, [table.c5!]), 409, "joined_table.nothing_to_join", {
+      tableId: table.long!,
+    });
+    expect(await everything()).toEqual(before);
+  });
+
   it("Counter 3 and 4 in a group with Bar where guests sit, Counter 5 free: refused naming Counter 3 and 4", async () => {
     const { table } = await LONG_TABLE();
     await merge(table.bar!, table.long!, "left");

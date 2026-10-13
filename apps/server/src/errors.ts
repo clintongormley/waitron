@@ -705,17 +705,20 @@ declare module "@waitron/shared" {
     /** The split names every part still joined, which would leave the joined table with none. */
     "joined_table.split_all": { tableId: string; field: "partIds" };
     /**
-     * A split that leaves two or more parts joined, or a Join again that leaves some apart, must say the joined
-     * table's seats.
+     * A split that leaves two or more parts joined, or a Join again or Reset table that leaves some apart, must
+     * say the joined table's seats.
      */
     "joined_table.seats_required": Record<string, never>;
     /** Back to its saved place is refused for a joined table while any of its parts is split off. */
     "joined_table.parts_split_off": { tableId: string };
-    /** Join again finds no free table split off, or would leave the joined table with fewer than two parts. */
+    /** Join again or Reset table finds no table split off it may take back, or would leave the joined table with fewer than two parts. */
     "joined_table.nothing_to_join": { tableId: string };
-    /** Join again names other tables than the free ones split off: the till read an older floor. */
+    /** Join again or Reset table names other tables than the ones split off it may take back: the till read an older floor. */
     "joined_table.out_of_date": { tableId: string };
-    /** Reset table finds nothing to take back while `partIds`, in number order, are in a group with guests. */
+    /**
+     * Reset table would take back nothing, or leave fewer than two tables joined, while `partIds`
+     * (number order) are in a group with guests.
+     */
     "joined_table.tables_in_group": { tableId: string; partIds: string[] };
     /** A floor-plan zone name already exists in this venue. `name` is the operator's own text. */
     "zone.name_taken": { name: string };

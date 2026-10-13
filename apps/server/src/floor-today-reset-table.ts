@@ -22,7 +22,8 @@ import "./errors.js";
 
 /**
  * Takes back every table split off the joined table that no party holds and no food is on its way
- * to, ending any group one is in, and puts the joined table at its saved place.
+ * to, ending any group one is in, and puts the joined table in its saved place: all of it when
+ * whole, else over the slots of the tables joined.
  */
 export async function resetTable(
   tx: Transaction,
@@ -83,13 +84,9 @@ export async function resetTable(
     whole,
   });
 
-  const ended = new Set<string>();
   for (const id of backIds) {
-    if (ended.has(id)) continue;
     const members = await mergeMembers(tx, id);
-    if (members.length === 0) continue;
-    for (const member of members) ended.add(member);
-    await leaveMergesRestoring(tx, members);
+    if (members.length > 0) await leaveMergesRestoring(tx, members);
   }
   await refusePlaceTaken(tx, today.zoneId, tableId, place!, new Set([tableId, ...backIds]));
   await tx

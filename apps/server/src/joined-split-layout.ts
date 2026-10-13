@@ -104,7 +104,7 @@ export function joinedPlaceOver(
     : remainingPlace(anchor, parts, first, first, staying.at(-1)!);
 }
 
-/** Where a joined table stands after Join again. */
+/** Where a joined table stands after Join again or Reset table takes tables back into it. */
 export function joinedPlaceAfter(args: {
   row: Placement | null;
   standing: boolean;
@@ -163,9 +163,6 @@ function cornersOf(place: Placement): { corners: Point[]; axes: Point[] } {
   };
 }
 
-/** Rounding slack, so a corner that reaches exactly one square in counts. */
-const SLACK = 1e-9;
-
 /** Whether the two turned boxes overlap by at least one square along each of their four sides' directions. */
 export function standsIn(place: Placement, other: Placement): boolean {
   const a = cornersOf(place);
@@ -176,6 +173,6 @@ export function standsIn(place: Placement, other: Placement): boolean {
     const onB = along(b.corners);
     const overlap =
       Math.min(Math.max(...onA), Math.max(...onB)) - Math.max(Math.min(...onA), Math.min(...onB));
-    return overlap >= 1 - SLACK;
+    return overlap >= 1;
   });
 }
