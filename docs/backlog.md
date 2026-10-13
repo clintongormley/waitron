@@ -1360,19 +1360,13 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   [docs/backlog/mockups/a506-opening-hours-seasons/](backlog/mockups/a506-opening-hours-seasons/).
   [Detail](backlog/service-periods.md#a506-opening-hours-rebuilt-around-seasons-and-special-days)
 
-- **Two special days can land on one date after saving, and the venue is not told** (retro review
-  of #1603). A holiday-area change, or a later year's holiday list, can move an "every year" date
-  that follows a holiday's name onto a date another special day holds; the save's check cannot see
-  it. The day resolver, the changeover check and the end-offset check now give the date to the one
-  saved there on its own terms (`standingInYear`, `packages/venue-service/src/repeat-rules.ts`).
-  Decide whether the readiness list should warn.
-
-- **Two holidays with one name in one year's list** (retro review of #1603). A save records only
-  the first date of each name (`readHolidayDates`, `packages/venue-service/src/holidays.ts`), so a
-  date on the second is saved with no holiday name and repeats on its month and day; following a
-  name with two dates in a later year has no rule. No shipped list has one: a probe over every
-  province and area of 2026 read 729 holidays in 61 lists and found no name twice. Re-check when
-  a new year's list is added.
+- **Two holidays with one name in one year's list** (retro review of #1603). The holiday dates a
+  save reads keep only each name's first date in the year (`readHolidayDates`,
+  `packages/venue-service/src/holidays.ts`), so a repeating date saved on the second is stored with
+  no holiday name, unless another holiday shares that day, and repeats on its month and day; in
+  a later year a name with two dates is followed to the first of them, a rule nobody chose. No shipped list has one: a probe on 2026-10-13 over
+  every province and area of `packages/country-es/src/data/es-2026.ts` read 729 holidays in 61
+  lists and found no name twice. Re-check when a new year's list is added.
 
 - **Some Departments screen test stubs answer a floor-plan read with a non-plan.** Check the
   relocated zone editor tests and `apps/dashboard/src/dashboard-app.test.ts` for stubs answering
