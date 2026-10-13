@@ -2763,6 +2763,9 @@ export const en = {
   "equipment.label_qr_alt": "QR code to scan with a device",
   "equipment.print": "Print",
   "printers.portable": "Carried by one device at a time",
+  "printers.pickup_roles": "When picked up",
+  "printers.pickup_both": "Receipt and payment slip",
+  "printers.pickup_none": "None",
   "printers.holder": "Carried by",
   "payments.reader_holder": "Carried by",
 } as const;
@@ -5566,6 +5569,9 @@ export const es: Record<StringKey, string> = {
   "equipment.label_qr_alt": "Código QR para escanear con un dispositivo",
   "equipment.print": "Imprimir",
   "printers.portable": "La lleva un solo dispositivo a la vez",
+  "printers.pickup_roles": "Al recogerla",
+  "printers.pickup_both": "Ticket y justificante de pago",
+  "printers.pickup_none": "Ninguno",
   "printers.holder": "La lleva",
   "payments.reader_holder": "Lo lleva",
 };

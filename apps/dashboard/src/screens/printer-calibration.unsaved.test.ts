@@ -22,6 +22,7 @@ const printer: Printer = {
   resolution: "180dpi",
   hasCashDrawer: false,
   portable: false,
+  pickupRoles: ["receipt", "payment_slip"],
   holder: null,
   pendingJobs: 0,
   lastPrintAt: null,
@@ -561,3 +562,24 @@ for (const command of ["sample", "drawer"] as const) {
     finish({ jobId: command });
   });
 }
+
+it("an unsaved pick-up set survives Keep and returns to the saved set after Discard", async () => {
+  const { app, screen } = await mount();
+  await lastStep(screen);
+  const roles = () =>
+    field(screen, "printer-pickup-roles") as unknown as HTMLElementTagNameMap["wt-combobox"];
+  roles().dispatchEvent(new CustomEvent("wt-change", { detail: { values: ["payment_slip"] } }));
+  await screen.updateComplete;
+  expect(unload()).toBe(true);
+  q(screen, "[data-test=cancel-edit-printer]")!.click();
+  await choose(app, "keep");
+  expect(roles().values).toEqual(["payment_slip"]);
+  q(screen, "[data-test=cancel-edit-printer]")!.click();
+  await choose(app, "discard");
+  await expect.poll(() => modal(screen)).toBeNull();
+  expect(unload()).toBe(false);
+  q(screen, "[data-test=calibrate-printer-details]")!.click();
+  await screen.updateComplete;
+  await lastStep(screen);
+  expect(roles().values).toEqual(["receipt", "payment_slip"]);
+});

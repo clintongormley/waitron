@@ -1,0 +1,1 @@
+ALTER TABLE `printers` ADD `pickup_roles` text DEFAULT '["receipt","payment_slip"]' NOT NULL;

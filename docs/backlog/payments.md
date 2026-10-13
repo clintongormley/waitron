@@ -122,7 +122,10 @@ their full text.
   [equipment plan](../superpowers/plans/2026-10-04-device-equipment-and-independent-drawers.md).
   The hardware probe is done on a OnePlus 13 with Chrome 154 and metal-backed NTAG-type stickers
   ([results](../research/2026-10-12-nfc-probe-oneplus-13.md)), so W102 can be queued: plan Task 5's
-  failing test, then the reader path. What the probe settles for the build: the sticker holds a
+  reader path remains open. Printers now have a server-side pick-up role set (receipt and payment
+  slip by default); an unnamed authenticated scan applies that set in one transaction, while a
+  scan for a named row changes only that row. NFC reading, writing/locking stickers and venue-printer
+  label printing remain open. What the probe settles for the build: the sticker holds a
   **text record** of `formatEquipmentCode`'s text (owner, 2026-10-12); the till scans whenever it is
   in front, or a tap brings up Android's own tag viewer; opening the camera stops NFC, so the QR
   scanner and NFC take turns; a lost tap reaches the page as nothing at all. Still to check during
@@ -208,6 +211,12 @@ that no caller reaches them from inside a transaction body, where waiting for th
 on itself.
 
 ## Decisions and deliberate limits
+
+- **A printer's pick-up roles are a printer setting, never sticker content** (owner, 2026-10-12,
+  W102 part 0). The QR label and NFC text carry only the equipment kind and id. A general pick-up
+  uses the saved set; a scan for one row uses only that row. The default is receipt and payment
+  slip. The cash drawer is outside this set. You can select None to leave assignments alone on a
+  general pick-up; row scans remain available.
 
 - **An equipment NFC sticker holds a text record, not a web address** (owner, 2026-10-12, W102).
   On the OnePlus 13 probe, a web-address sticker tapped while the installed till was not in front

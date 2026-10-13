@@ -2,7 +2,7 @@ import { LitElement, html } from "lit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { LeaveController } from "@waitron/ui";
-import { chooseOption as pickOption } from "@waitron/ui/src/test-helpers.js";
+import { chooseOptions, chooseOption as pickOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { t } from "../i18n/t.js";
 import type { DashboardApi, DiscoveredPrinter, PrintAgentRow, Printer } from "../api/client.js";
@@ -41,6 +41,7 @@ const printer: Printer = {
   resolution: "180dpi",
   hasCashDrawer: false,
   portable: false,
+  pickupRoles: ["receipt", "payment_slip"],
   holder: null,
   pendingJobs: 0,
   lastPrintAt: null,
@@ -450,6 +451,31 @@ function pending() {
 
 describe("the calibration wizard's Save, for a printer already set up", () => {
   const api = () => stubApi({ listPrinters: vi.fn().mockResolvedValue([calibrated]) });
+
+  it("changing pick-up roles stages just those roles, and undoing the set quiets Save", async () => {
+    const { el, api: stub } = await openWizard(api());
+    await go(el, "calibration-next");
+    const field = q<HTMLElementTagNameMap["wt-combobox"]>(el, '[name="printer-pickup-roles"]');
+    expect(field).not.toBeNull();
+    await field!.updateComplete;
+    expect(field!.values).toEqual(["receipt", "payment_slip"]);
+    expect(await state(el, "save-printer-p1")).toEqual(quiet);
+    await chooseOptions(field!, ["payment_slip"]);
+    await el.updateComplete;
+    expect(field!.values).toEqual(["payment_slip"]);
+    expect(await state(el, "save-printer-p1")).toEqual(ready);
+    await chooseOptions(field!, ["payment_slip", "receipt"]);
+    await el.updateComplete;
+    expect(await state(el, "save-printer-p1")).toEqual(quiet);
+    await chooseOptions(field!, ["receipt"]);
+    await el.updateComplete;
+    await press(el, "save-printer-p1");
+    await vi.waitFor(() =>
+      expect(stub.updatePrinter).toHaveBeenCalledExactlyOnceWith("p1", {
+        pickupRoles: ["receipt"],
+      }),
+    );
+  });
 
   it("reaches the last step with Save quiet on the stored settings, and a press sends nothing", async () => {
     const { el, api: stub } = await openWizard(api());

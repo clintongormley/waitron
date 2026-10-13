@@ -52,6 +52,8 @@ import {
   readDevicesEquipment,
   selectDeviceEquipment,
   type EquipmentRole,
+  type EquipmentSelection,
+  type EquipmentPickup,
 } from "./device-equipment.js";
 import { deleteDevice, disableDevice, readDeviceDeleteImpact } from "./device-delete.js";
 import { requestCfg } from "./request-config.js";
@@ -862,12 +864,27 @@ const EQUIPMENT_ROLES: readonly EquipmentRole[] = [
 ];
 
 /** `PUT /api/device/equipment`'s body, each field checked for shape. */
-function parseEquipmentChoice(body: Record<string, unknown>): {
-  role: EquipmentRole;
-  selection: "default" | { id: string };
-  via: "scan" | "list";
-  takeOver: boolean;
-} {
+function parseEquipmentChoice(
+  body: Record<string, unknown>,
+): Omit<EquipmentSelection, "deviceId"> | Omit<EquipmentPickup, "deviceId"> {
+  if (body.role === undefined) {
+    if (body.kind !== "printer" && body.kind !== "reader") {
+      throw new AppError("management.request_invalid", { field: "kind" });
+    }
+    if (body.via !== "scan") throw new AppError("management.request_invalid", { field: "via" });
+    if (
+      typeof body.selection !== "object" ||
+      body.selection === null ||
+      !("id" in body.selection)
+    ) {
+      throw new AppError("management.request_invalid", { field: "selection" });
+    }
+    return {
+      kind: body.kind,
+      selection: { id: requireBodyUuid(body.selection.id, "selection") },
+      via: "scan",
+    };
+  }
   const role = EQUIPMENT_ROLES.find((known) => known === body.role);
   if (role === undefined) throw new AppError("management.request_invalid", { field: "role" });
   const selection = body.selection;

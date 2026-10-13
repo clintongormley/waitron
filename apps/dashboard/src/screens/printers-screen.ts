@@ -175,19 +175,21 @@ interface EditablePrinter {
   resolution: PrintResolution;
   hasCashDrawer: boolean;
   portable: boolean;
+  pickupRoles: Printer["pickupRoles"];
   /** The settings as saved, so a save sends only the ones that changed. */
   saved: {
     paperWidth: PrintPaperWidth;
     resolution: PrintResolution;
     hasCashDrawer: boolean;
     portable: boolean;
+    pickupRoles: Printer["pickupRoles"];
   };
   active: boolean;
 }
 
 type CalibrationSettings = Pick<
   EditablePrinter,
-  "paperWidth" | "resolution" | "hasCashDrawer" | "portable"
+  "paperWidth" | "resolution" | "hasCashDrawer" | "portable" | "pickupRoles"
 >;
 
 /** Discovery reports arrive on later agent polls, so a scan listens beyond its initial read. */
@@ -712,8 +714,8 @@ export class PrintersScreen extends LitElement {
     })) === "proceeded";
 
   #calibrationValues(): CalibrationSettings {
-    const { paperWidth, resolution, hasCashDrawer, portable } = this.editingPrinter!;
-    return { paperWidth, resolution, hasCashDrawer, portable };
+    const { paperWidth, resolution, hasCashDrawer, portable, pickupRoles } = this.editingPrinter!;
+    return { paperWidth, resolution, hasCashDrawer, portable, pickupRoles };
   }
 
   #disposeCalibrationDraft(): void {
@@ -1552,6 +1554,7 @@ export class PrintersScreen extends LitElement {
               resolution: "180dpi",
               hasCashDrawer: false,
               portable: false,
+              pickupRoles: ["receipt", "payment_slip"],
               holder: null,
               pendingJobs: 0,
               lastPrintAt: null,
@@ -1866,6 +1869,8 @@ export class PrintersScreen extends LitElement {
     if (row.resolution !== row.saved.resolution) patch.resolution = row.resolution;
     if (row.hasCashDrawer !== row.saved.hasCashDrawer) patch.hasCashDrawer = row.hasCashDrawer;
     if (row.portable !== row.saved.portable) patch.portable = row.portable;
+    if (!samePickupRoles(row.pickupRoles, row.saved.pickupRoles))
+      patch.pickupRoles = row.pickupRoles;
     const readding = this.#readdingId === id;
     // An in-flight save owns reactivation; closing its wizard must not disable the printer.
     if (readding) this.#readdingId = undefined;
@@ -2401,11 +2406,13 @@ export class PrintersScreen extends LitElement {
       resolution: p.resolution,
       hasCashDrawer: p.hasCashDrawer,
       portable: p.portable,
+      pickupRoles: [...p.pickupRoles],
       saved: {
         paperWidth: p.paperWidth,
         resolution: p.resolution,
         hasCashDrawer: p.hasCashDrawer,
         portable: p.portable,
+        pickupRoles: [...p.pickupRoles],
       },
     };
     const modal = this.renderRoot.querySelector<WtModal>("[data-test=edit-printer-modal]");
@@ -2419,7 +2426,8 @@ export class PrintersScreen extends LitElement {
           a.paperWidth === b.paperWidth &&
           a.resolution === b.resolution &&
           a.hasCashDrawer === b.hasCashDrawer &&
-          a.portable === b.portable,
+          a.portable === b.portable &&
+          samePickupRoles(a.pickupRoles, b.pickupRoles),
         restore: (value) => {
           this.editingPrinter = { ...this.editingPrinter!, ...value };
         },
@@ -3557,6 +3565,25 @@ export class PrintersScreen extends LitElement {
               this.#editPrinter(p.id, { portable: e.detail.checked });
             }}
           ></wt-switch>
+          <wt-combobox
+            name="printer-pickup-roles"
+            searchPlaceholder=${t("categories.combobox_search")}
+            noResultsLabel=${t("categories.combobox_no_results")}
+            label=${t("printers.pickup_roles")}
+            multiple
+            show-empty-option
+            .values=${p.pickupRoles}
+            .countLabel=${() => t("printers.pickup_both")}
+            .options=${[
+              { value: "", label: t("printers.pickup_none") },
+              { value: "receipt", label: t("devices.receipt_printer_now") },
+              { value: "payment_slip", label: t("devices.slip_printer_now") },
+            ]}
+            @wt-change=${(e: CustomEvent<{ values: Printer["pickupRoles"] }>) => {
+              e.stopPropagation();
+              this.#editPrinter(p.id, { pickupRoles: e.detail.values });
+            }}
+          ></wt-combobox>
           ${
             p.hasCashDrawer
               ? html`
@@ -4342,4 +4369,8 @@ declare global {
   interface HTMLElementTagNameMap {
     "dashboard-printers-screen": PrintersScreen;
   }
+}
+
+function samePickupRoles(a: Printer["pickupRoles"], b: Printer["pickupRoles"]): boolean {
+  return a.length === b.length && a.every((role) => b.includes(role));
 }

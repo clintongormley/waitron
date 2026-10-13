@@ -32,6 +32,7 @@ const printer = (id: string, name: string, extra: Partial<Printer> = {}): Printe
   resolution: "180dpi",
   hasCashDrawer: false,
   portable: false,
+  pickupRoles: ["receipt", "payment_slip"],
   holder: null,
   pendingJobs: 0,
   lastPrintAt: null,
