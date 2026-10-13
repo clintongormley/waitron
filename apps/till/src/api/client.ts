@@ -3862,7 +3862,7 @@ export class TillApi {
   }
 
   /** Reset a zone to its saved plan → `POST /api/zones/:id/today/reset`. `zoneRevision` is null when
-   * the floor read held no table of the zone. */
+   * the floor read held no table of the zone with a today's row. */
   resetZoneToday(zoneId: string, zoneRevision: number | null): Promise<FloorAnswer> {
     return this.#request<FloorAnswer>(`/api/zones/${zoneId}/today/reset`, "POST", {
       zoneRevision,
