@@ -43,7 +43,7 @@ describe("setup-done-screen", () => {
       "Cambiar el horario de apertura",
     ],
   ] as const)(
-    "shows the saved first hours and their department link in %s",
+    "shows the saved first hours and a link to the Opening hours year in %s",
     async (locale, hours, link) => {
       setLocale(locale);
       const el = await mountDone(() => new Promise(() => {}), {
@@ -52,9 +52,7 @@ describe("setup-done-screen", () => {
       expect(q(el, "[data-test=opening-hours]")?.textContent).toContain(hours);
       const anchor = q(el, "[data-test=opening-hours] a");
       expect(anchor?.textContent?.trim()).toBe(link);
-      expect(anchor?.getAttribute("href")).toBe(
-        "/manage/opening-hours/department/first-department",
-      );
+      expect(anchor?.getAttribute("href")).toBe("/manage/opening-hours/view/year");
     },
   );
 
