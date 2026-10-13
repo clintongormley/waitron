@@ -124,13 +124,14 @@ export async function resolveDepartmentsDays(
     clock.dayCutover,
     seasonDays(plan, businessDays),
   );
+  const cutovers = new Map(businessDays.map((day) => [day, cutoverForBusinessDay(clock, day)]));
   for (const departmentId of departmentIds) {
     const weeks = allWeeks.get(departmentId) ?? new Map<string, ServiceRange[][]>();
     const days = new Map<LocalDate, ResolvedDepartmentDay>();
     for (const day of businessDays) {
       const special = plan.special.get(day);
       const seasonId = plan.seasonIdOn.get(day) ?? null;
-      const cutover = cutoverForBusinessDay(clock, day);
+      const cutover = cutovers.get(day)!;
       const season = (seasonId === null ? undefined : weeks.get(seasonId)?.[weekdayOf(day)]) ?? [];
       const ranges = special
         ? special.closedAllDay
