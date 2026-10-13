@@ -1,6 +1,7 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, not } from "drizzle-orm";
 import {
   diningTables,
+  joinedOutOfService,
   floorResetTables,
   floorTodayJoinTables,
   floorTodaySplitParts,
@@ -13,8 +14,9 @@ import { catchUpZone, foodComingTo, placementColumns, placementOf } from "./floo
 import { leaveMergesRestoring, mergeMembers } from "./floor-today-merges.js";
 import { partsOf } from "./floor-today-parts.js";
 import { todayOf } from "./floor-today-table.js";
-import { joinedPlaceAfter } from "./joined-split-layout.js";
+import { joinedPlaceAfter, standsIn } from "./joined-split-layout.js";
 import { holdersOf } from "./parties.js";
+import type { Placement } from "./floor-reset-plan.js";
 import type { TillConfig } from "./till-config.js";
 import "./errors.js";
 
@@ -89,7 +91,7 @@ export async function resetTable(
     for (const member of members) ended.add(member);
     await leaveMergesRestoring(tx, members);
   }
-  // Task 4a.3's place check goes here: after the groups end, before any other write.
+  await refusePlaceTaken(tx, today.zoneId, tableId, place!, new Set([tableId, ...backIds]));
   await tx
     .update(diningTables)
     .set({ needsClearingSince: null })
@@ -113,4 +115,44 @@ export async function resetTable(
     .set({ ...placementColumns(place), seats: whole ? saved!.seats : seats, takenOff: false })
     .where(eq(floorTodayTables.id, today.row.id));
   await catchUpZone(tx, cfg, removals, today.zoneId, now);
+}
+
+/** Refuses when a table drawn on today's map, other than `own`, stands in `place`; the first by label is named. */
+async function refusePlaceTaken(
+  tx: Transaction,
+  zoneId: string,
+  tableId: string,
+  place: Placement,
+  own: ReadonlySet<string>,
+): Promise<void> {
+  const rows = await tx
+    .select({
+      id: diningTables.id,
+      label: diningTables.label,
+      x: floorTodayTables.x,
+      y: floorTodayTables.y,
+      width: floorTodayTables.width,
+      height: floorTodayTables.height,
+      shape: floorTodayTables.shape,
+      rotation: floorTodayTables.rotation,
+    })
+    .from(floorTodayTables)
+    .innerJoin(diningTables, eq(diningTables.id, floorTodayTables.tableId))
+    .where(
+      and(
+        eq(diningTables.zoneId, zoneId),
+        isNotNull(floorTodayTables.x),
+        eq(floorTodayTables.takenOff, false),
+        not(joinedOutOfService(diningTables.id)),
+      ),
+    );
+  const standing = rows
+    .filter((row) => !own.has(row.id) && standsIn(place, placementOf(row)!))
+    .sort(
+      (a, b) =>
+        a.label.localeCompare(b.label, undefined, { numeric: true }) || a.id.localeCompare(b.id),
+    );
+  if (standing.length > 0) {
+    throw new AppError("table.place_taken", { tableId, standingId: standing[0]!.id });
+  }
 }

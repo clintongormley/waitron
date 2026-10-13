@@ -403,6 +403,146 @@ describe("Reset table refused, nothing written", () => {
   });
 });
 
+/** LONG_TABLE with a third table, Stool (2 seats, 2 × 2 at 30, 0), off Long table's saved place. */
+async function LONG_TABLE_AND_STOOL() {
+  const zone = await plannedZone(
+    v,
+    [
+      { key: "c3", label: "Counter 3", seats: 2, place: null },
+      { key: "c4", label: "Counter 4", seats: 6, place: null },
+      { key: "c5", label: "Counter 5", seats: 4, place: null },
+      {
+        key: "long",
+        label: "Long table",
+        seats: 10,
+        place: { x: 10, y: 20, width: 6, height: 2 },
+        partKeys: ["c3", "c4", "c5"],
+      },
+      { key: "bar", label: "Bar", seats: 4, place: { x: 40, y: 0, width: 2, height: 2 } },
+      { key: "stool", label: "Stool", seats: 2, place: { x: 30, y: 0, width: 2, height: 2 } },
+    ],
+    NOW,
+  );
+  for (const key of ["c3", "c4", "c5"])
+    await giveKeptSize(v, zone.master[key]!, { width: 2, height: 2 });
+  return zone;
+}
+
+const moveTo = (tableId: string, x: number, y: number) =>
+  ok(post(`/api/tables/${tableId}/today/move`, tableId, { x, y }));
+
+describe("Reset table's place check", () => {
+  it("Bar moved into Long table's saved place: refused naming Bar, and nothing changes", async () => {
+    const { table } = await c5SplitOff();
+    await moveTo(table.long!, 30, 30);
+    await moveTo(table.bar!, 11, 20);
+    const before = await everything();
+
+    await refused(reset(table.long!, [table.c5!]), 409, "table.place_taken", {
+      tableId: table.long!,
+      standingId: table.bar!,
+    });
+    expect(await everything()).toEqual(before);
+    expect(await splitRowsOf(table.long!)).toEqual([table.c5!]);
+    expect(await placeOf(table.long!)).toEqual({ x: 30, y: 30, width: 4, height: 2 });
+  });
+
+  it("a table only touching the saved place's edge does not count", async () => {
+    const { table, zoneId } = await c5SplitOff();
+    await moveTo(table.long!, 30, 30);
+    await moveTo(table.bar!, 16, 20);
+
+    await settles(() => reset(table.long!, [table.c5!]), zoneId);
+
+    expect(await placeOf(table.long!)).toEqual(LONG_SAVED);
+    expect(await placeOf(table.bar!)).toEqual({ x: 16, y: 20, width: 2, height: 2 });
+  });
+
+  it("a table taken off for today does not count", async () => {
+    const { table, zoneId } = await c5SplitOff();
+    await moveTo(table.long!, 30, 30);
+    await moveTo(table.bar!, 11, 20);
+    await ok(post(`/api/tables/${table.bar!}/today/take-off`, table.bar!, {}));
+    expect((await todayRow(v, table.bar!))!.x).toBe(11);
+
+    await settles(() => reset(table.long!, [table.c5!]), zoneId);
+
+    expect(await placeOf(table.long!)).toEqual(LONG_SAVED);
+  });
+
+  it("a table staying apart that overlaps counts: guests at Counter 5, moved to 13, 20; refused naming Counter 5", async () => {
+    const { table } = await longApart();
+    await seat(v, table.c5!);
+    await moveTo(table.c5!, 13, 20);
+    const before = await everything();
+
+    await refused(reset(table.long!, [table.c3!, table.c4!], 8), 409, "table.place_taken", {
+      tableId: table.long!,
+      standingId: table.c5!,
+    });
+    expect(await everything()).toEqual(before);
+  });
+
+  it("the refusal leaves a group it would have ended: Counter 5 pushed together with Bar, Stool moved into the saved place; refused naming Stool", async () => {
+    const { table } = await LONG_TABLE_AND_STOOL();
+    await ok(splitOff(table.long!, [table.c4!, table.c5!]));
+    expect(await placeOf(table.c5!)).toEqual({ x: 14, y: 20, width: 2, height: 2 });
+    await markNeedsClearing(table.c4!);
+    await merge(table.bar!, table.c5!, "right", 8);
+    expect(await placeOf(table.bar!)).toEqual({ x: 16, y: 20, width: 2, height: 2 });
+    await moveTo(table.stool!, 12, 21);
+    const before = await everything();
+
+    await refused(reset(table.long!, [table.c3!, table.c4!, table.c5!]), 409, "table.place_taken", {
+      tableId: table.long!,
+      standingId: table.stool!,
+    });
+    expect(await everything()).toEqual(before);
+    expect(await groupOf(table.bar!)).toEqual({
+      seats: 8,
+      members: [table.bar!, table.c5!].sort(),
+    });
+    expect(await placeOf(table.bar!)).toEqual({ x: 16, y: 20, width: 2, height: 2 });
+  });
+
+  it("two tables in the saved place: the first by label, Bar, is named", async () => {
+    const { table } = await LONG_TABLE_AND_STOOL();
+    await ok(splitOff(table.long!, [table.c5!], 6));
+    await moveTo(table.long!, 30, 30);
+    await moveTo(table.stool!, 10, 20);
+    await moveTo(table.bar!, 14, 20);
+    const before = await everything();
+
+    await refused(reset(table.long!, [table.c5!]), 409, "table.place_taken", {
+      tableId: table.long!,
+      standingId: table.bar!,
+    });
+    expect(await everything()).toEqual(before);
+  });
+
+  it("a table Reset table takes back does not count: Counter 5 free inside the saved place", async () => {
+    const { table, zoneId } = await c5SplitOff();
+    expect(await placeOf(table.c5!)).toEqual({ x: 14, y: 20, width: 2, height: 2 });
+
+    await settles(() => reset(table.long!, [table.c5!]), zoneId);
+
+    expect(await placeOf(table.long!)).toEqual(LONG_SAVED);
+    expect(await placeOf(table.c5!)).toEqual(NO_PLACE);
+  });
+
+  it("the middle table, apart with guests in its own slot, is refused, naming it", async () => {
+    const { table } = await longApart();
+    await seat(v, table.c4!);
+    const before = await everything();
+
+    await refused(reset(table.long!, [table.c3!, table.c5!], 6), 409, "table.place_taken", {
+      tableId: table.long!,
+      standingId: table.c4!,
+    });
+    expect(await everything()).toEqual(before);
+  });
+});
+
 describe("Join again beside Reset table", () => {
   it("still answers the old till: Counter 5 joined again, Long table whole where it stands", async () => {
     const { table, zoneId } = await c5SplitOff();
