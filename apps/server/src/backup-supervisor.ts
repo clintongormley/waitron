@@ -214,7 +214,16 @@ export class BackupSupervisor {
   async #teardown(): Promise<void> {
     this.#controller?.abort();
     if (this.#worker !== undefined) await this.#worker.catch(() => {});
-    for (const backend of this.#backends.splice(0)) backend.close();
+    for (const backend of this.#backends.splice(0)) {
+      try {
+        backend.close();
+      } catch (err) {
+        this.#deps.log("warn", "backup.destination_close_failed", {
+          destination: backend.id,
+          errorCode: codeOf(err),
+        });
+      }
+    }
     if (this.#db !== undefined) await this.#db.close().catch(() => {});
     this.#controller = undefined;
     this.#worker = undefined;

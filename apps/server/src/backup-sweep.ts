@@ -62,7 +62,12 @@ export interface BackupSweepDeps {
   sleep: (ms: number, signal: AbortSignal) => Promise<void>;
   /** Fires only on a tick where at least one destination stored the archive. */
   onStored?: () => void;
-  /** Each destination's result on a tick the sweep was not stopped during; codes only. */
+  /**
+   * Each destination's result; codes only. A destination whose call finished is reported even when
+   * the run is stopped afterwards, so a caller tracking the current key ignores results from a
+   * replaced sweep (as the supervisor's `onStored` guard does). A call that fails once the run is
+   * stopped is not reported, even when its upload had already stored.
+   */
   onDestinationResult?: (result: DestinationResult) => void;
   /** How long one destination's upload and its pruning may run, together. */
   destinationTimeoutMs: number;

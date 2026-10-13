@@ -118,6 +118,34 @@ describe("file artifact cipher", () => {
     expect(written).toBe(33 + 16 + 70000);
     expect(await readdir(dir)).toEqual([]);
   });
+  it("stops before finishing when its signal aborts after the last chunk, and leaves no ciphertext", async () => {
+    const dir = await scratch();
+    const path = join(dir, "out");
+    const controller = new AbortController();
+    async function* abortsAfterLast() {
+      yield Buffer.alloc(100);
+      controller.abort();
+    }
+    await expect(
+      encryptArtifactFile(abortsAfterLast(), path, "right", controller.signal),
+    ).rejects.toMatchObject({ name: "AbortError" });
+    expect(await readdir(dir)).toEqual([]);
+  });
+  it("pulls no plaintext and leaves no file when its signal is already aborted", async () => {
+    const dir = await scratch();
+    const controller = new AbortController();
+    controller.abort();
+    let pulled = false;
+    async function* plaintext() {
+      pulled = true;
+      yield Buffer.alloc(100);
+    }
+    await expect(
+      encryptArtifactFile(plaintext(), join(dir, "out"), "right", controller.signal),
+    ).rejects.toMatchObject({ name: "AbortError" });
+    expect(pulled).toBe(false);
+    expect(await readdir(dir)).toEqual([]);
+  });
   it("cleans partial files on real file read and write refusals without translating I/O errors", async () => {
     const dir = await scratch();
     const artifact = encryptArtifact(Buffer.alloc(150000, 17), "right");

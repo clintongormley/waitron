@@ -214,3 +214,28 @@ it("a stop during encryption reaches no destination and leaves no staged file", 
   expect(putFile).not.toHaveBeenCalled();
   expect(await readdir(f.stagingDir)).toEqual([]);
 });
+
+it("a stop after one destination stored still reports that one, and not the one it stopped", async () => {
+  const f = await fixture();
+  const stop = new AbortController();
+  const folder = new LocalFsBackend("folder", join(f.root, "folder"));
+  const bucket = new LingeringBucket(f.root, 10, "reject");
+  const results: Result[] = [];
+  let folderReported = () => {};
+  const reported = new Promise<void>((resolve) => (folderReported = resolve));
+  const run = runOnce({
+    ...deps(f, [bucket, folder]),
+    signal: stop.signal,
+    onDestinationResult: (r: Result) => {
+      results.push(r);
+      if (r.id === "folder") folderReported();
+    },
+  });
+  await Promise.all([bucket.entered, reported]);
+  stop.abort();
+  await run;
+  expect(bucket.seen.settled).toBe(true);
+  expect(results).toEqual([
+    { id: "folder", stored: true, uploadErrorCode: null, pruneErrorCode: null },
+  ]);
+});

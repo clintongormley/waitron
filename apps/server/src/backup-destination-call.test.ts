@@ -100,6 +100,21 @@ describe("withDestinationCall", () => {
     expect(parent.listeners()).toBe(0);
   });
 
+  it("answers a cancellation when the parent aborts after the time limit fired", async () => {
+    vi.useFakeTimers({ now: 0 });
+    const parent = new AbortController();
+    let fail!: (error: unknown) => void;
+    const outcome = withDestinationCall(
+      parent.signal,
+      1000,
+      () => new Promise<never>((_, reject) => (fail = reject)),
+    ).catch((error: unknown) => error);
+    await vi.advanceTimersByTimeAsync(1000);
+    parent.abort();
+    fail(new Error("aborted"));
+    expect(await outcome).toMatchObject({ code: "backup.destination_cancelled" });
+  });
+
   it("starts no work when the parent is already aborted", async () => {
     const parent = new AbortController();
     parent.abort();

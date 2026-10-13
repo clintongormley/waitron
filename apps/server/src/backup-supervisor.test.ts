@@ -732,4 +732,41 @@ describe("BackupSupervisor closes the sweep's destinations", () => {
       close.mockRestore();
     }
   });
+
+  it("still closes the other destinations when one destination's close throws, and stop() settles", async () => {
+    const closed: string[] = [];
+    const close = vi.spyOn(LocalFsBackend.prototype, "close").mockImplementation(function (
+      this: LocalFsBackend,
+    ) {
+      closed.push(this.id);
+      if (this.id === "primary") throw new AppError("backup.reload_in_progress", {});
+    });
+    try {
+      const [a, b] = [await makeDestDir(), await makeDestDir()];
+      const logs: Array<{ level: string; event: string; fields: unknown }> = [];
+      const sup = new BackupSupervisor({
+        buildConfig: async () => localFsConfig([a, b], STRONG_KEY_1),
+        isManagedByEnvironment: () => false,
+        readSingletonRole: () => "primary",
+        venueDir: await makeVenueDir(),
+        modules: ALL_MODULES,
+        environment: "production",
+        stateDir: await makeStateDir(),
+        jitterSeed: "seed",
+        readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] }),
+        log: (level, event, fields) => logs.push({ level, event, fields }),
+      });
+      await sup.reload();
+      await waitForArchive(b);
+      await expect(sup.stop()).resolves.toBeUndefined();
+      expect(closed).toEqual(["primary", "d1"]);
+      expect(logs).toContainEqual({
+        level: "warn",
+        event: "backup.destination_close_failed",
+        fields: { destination: "primary", errorCode: "backup.reload_in_progress" },
+      });
+    } finally {
+      close.mockRestore();
+    }
+  });
 });
