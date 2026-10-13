@@ -110,7 +110,7 @@ export class SpecialDayDialog extends LitElement {
   @property() date = "";
   /** A date to add to the stored special day's dates when it opens, as an unsaved change. */
   @property() addDate = "";
-  /** Whether to offer going to the per-date editor for `date`. */
+  /** Whether to offer going to the per-date editor for `date`, which holds `specialDay`. */
   @property({ type: Boolean }) offerEditDate = false;
   /** The public holidays the host knows of, for the pre-fill and the holiday-name note. */
   @property({ attribute: false }) holidays: readonly HolidayFact[] = [];
@@ -572,8 +572,7 @@ export class SpecialDayDialog extends LitElement {
                   ${leap ? html`<p class="note">${t("special.leap")}</p>` : nothing}
                 </div>
                 ${
-                  this.offerEditDate &&
-                  this.specialDay?.dates.some((entry) => entry.date === this.date)
+                  this.offerEditDate && this.specialDay && isLocalDate(this.date)
                     ? html`<div>
                         <wt-button
                           data-test="edit-date-hours"

@@ -647,7 +647,7 @@ it("adds nothing when the date to add is already one of the special day's dates"
   expect(save().disabled).toBe(true);
 });
 
-it("offers Edit hours on this date on a saved special day's own date and sends that date", async () => {
+it("offers Edit hours on this date on a date holding a saved special day and sends that date", async () => {
   await mount((dialog) => {
     dialog.specialDay = stored;
     dialog.date = "2026-12-14";
@@ -665,10 +665,7 @@ it("offers Edit hours on this date on a saved special day's own date and sends t
 it.each([
   ["the host does not offer it", { specialDay: stored, date: "2026-12-14", offerEditDate: false }],
   ["the special day is new", { date: "2026-12-14", offerEditDate: true }],
-  [
-    "the date is not one of its dates",
-    { specialDay: stored, date: "2026-12-15", offerEditDate: true },
-  ],
+  ["no date was given", { specialDay: stored, offerEditDate: true }],
 ])("offers no Edit hours on this date when %s", async (_, props) => {
   await mount((dialog) => Object.assign(dialog, props));
   expect(q("[data-test=edit-date-hours]")).toBeNull();
