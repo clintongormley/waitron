@@ -913,7 +913,7 @@ describe("a joined table the reset leaves in one of today's groups", () => {
     expect(await splitRowsOf(z.long)).toEqual([]);
   });
 
-  it("Join again keeps the guests at it, their party's revision and the group", async () => {
+  it("Reset table keeps the guests at it, their party's revision and the group", async () => {
     const z = await longJoinedInSeatedGroup(3);
     await expectRevision(
       v,
@@ -925,7 +925,7 @@ describe("a joined table the reset leaves in one of today's groups", () => {
     const revision = await revisionOf(v, z.partyId);
     const group = await mergeOf(v, z.long);
 
-    const answer = send("POST", `/api/tables/${z.long}/today/join-again`, {
+    const answer = send("POST", `/api/tables/${z.long}/today/reset`, {
       partIds: [z.counter[0]],
     });
 

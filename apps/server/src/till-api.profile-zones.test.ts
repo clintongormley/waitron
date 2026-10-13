@@ -116,7 +116,6 @@ import { offerProducts } from "./testing/zone-offers.js";
  * | POST /api/tables/:id/today/back                         | table                  | refuses POST /api/tables/:id/today/back              |
  * | POST /api/tables/:id/today/merge                        | table; body target     | refuses .../today/merge (table), (target)            |
  * | POST /api/tables/:id/today/split-off                    | table; body parts      | refuses .../today/split-off (table), (part)          |
- * | POST /api/tables/:id/today/join-again                   | table; body parts      | refuses .../today/join-again (table), (part)         |
  * | POST /api/tables/:id/today/reset                        | table; body parts      | refuses .../today/reset (table), (part)              |
  * | POST /api/zones/:id/today/reset                         | path zone              | refuses POST /api/zones/:id/today/reset              |
  * | POST /api/parties/:id/finish                            | party                  | refuses POST /api/parties/:id/finish                 |
@@ -819,20 +818,6 @@ const ROUTES: readonly Row[] = [
     "POST /api/tables/:id/today/split-off (part)",
     "POST",
     (x) => `/api/tables/${x.restFreeTable}/today/split-off`,
-    (x) => ({ partIds: [x.deliTable], zoneRevision: 0 }),
-    deliTableZone,
-  ],
-  [
-    "POST /api/tables/:id/today/join-again (table)",
-    "POST",
-    (x) => `/api/tables/${x.deliTable}/today/join-again`,
-    (x) => ({ partIds: [x.restFreeTable], zoneRevision: 0 }),
-    deliTableZone,
-  ],
-  [
-    "POST /api/tables/:id/today/join-again (part)",
-    "POST",
-    (x) => `/api/tables/${x.restFreeTable}/today/join-again`,
     (x) => ({ partIds: [x.deliTable], zoneRevision: 0 }),
     deliTableZone,
   ],
