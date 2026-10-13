@@ -4185,8 +4185,10 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   holding them in memory (A538-2), and Task 3, which gives each destination's calls their own time
   limit, stops them with the sweep and reports what each destination did (A538-3), and Task 4,
   which stores the archive choice sealed in the vault, lets the environment or the backup routes
-  name a bucket, and keeps every destination across a key rotation (A538-4). Tasks 5 to 10 and the
-  real-AWS evidence are open.
+  name a bucket, and keeps every destination across a key rotation (A538-4), and Task 5, which
+  restores one archive from the bucket with an archive recovery pack and no stream settings
+  (`waitron-restore restore --from-archive`, `GET /api/backup/archive-recovery-pack`; A538-5).
+  Tasks 6 to 10 and the real-AWS evidence are open.
   `S3FileStore`'s listing and batch delete repeat `S3ObjectStore`'s (`packages/stream/src/s3-store.ts`)
   with different error codes, and only the file store's refuses a repeated key or bad size and
   counts `NoSuchKey` as deleted; share them, deciding whether the bucket stream takes those checks
@@ -4200,7 +4202,19 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   settings cannot be used), and on `backup.rotation_metadata_failed` it must replace a displayed
   recovery key or fingerprint with the new one, which is already in effect. It offers no control for
   `POST /api/backup/disable` and does not show `storedDisabled` (archives stored switched off).
-  Left open by A538-4.
+  Left open by A538-4. It also needs a Download archive recovery pack action over
+  `GET /api/backup/archive-recovery-pack`, which answers `keyFingerprint`, `keyRotatedAt` and
+  `revision` so a displayed pack can be marked stale; that route's `backup.recovery_key_missing`
+  refusal would show the existing "Enter a recovery key" wording, written for the form. Left open
+  by A538-5.
+
+- **A restore that fails while writing the secrets has already replaced the venue database.**
+  `placeValidated` (`apps/server/src/restore.ts`) puts the database in place and runs the restore
+  hooks before `restoreSecrets`, so a full disk or a write error there leaves the archive's
+  database with the old box's secrets. Measured in A538-5's review with a throwaway case that made
+  the secrets write fail: the command exited 1 and the live venue's name was already the archive's.
+  Predates A538-5. Write the secrets into staging before placement, or put the previous database
+  back on failure.
 
 - **A backup destination that fails to build leaves archives reported as on.** In
   `BackupSupervisor.reload()` (`apps/server/src/backup-supervisor.ts`) the venue handle is assigned
