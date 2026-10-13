@@ -41,6 +41,13 @@ export class TillSplitJoinedDialog extends LitElement {
         display: flex;
         flex-direction: column;
         gap: var(--wt-space-4);
+        width: min(
+          var(--wt-form-max-width),
+          calc(var(--wt-dialog-max-width) - 2 * var(--wt-space-5))
+        );
+      }
+      wt-number-stepper {
+        --wt-stepper-field-width: 100%;
       }
       p {
         margin: 0;

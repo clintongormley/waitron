@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
+import { page } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -337,3 +338,35 @@ it("speaks Spanish", async () => {
   await press(el);
   expect(pick(el).error).toBe("Elige al menos 1 mesa.");
 });
+
+for (const [width, height] of [
+  [1280, 720],
+  [390, 844],
+] as const) {
+  it(`keeps one width at ${width}px, its fields' right edges aligned and its label whole`, async () => {
+    await page.viewport(width, height);
+    try {
+      for (const locale of ["en", "es"] as const) {
+        setLocale(locale);
+        const el = await mount();
+        const window = el
+          .shadowRoot!.querySelector("wt-dialog")!
+          .shadowRoot!.querySelector("dialog")!;
+        const label = pick(el).shadowRoot!.querySelector<HTMLElement>(".field-label-text")!;
+        const empty = window.getBoundingClientRect().width;
+        expect(label.scrollWidth).toBeLessThanOrEqual(label.clientWidth);
+        const box = (field: HTMLElement) =>
+          field.shadowRoot!.querySelector(".field")!.getBoundingClientRect().right;
+        expect(box(seatsField(el)!)).toBeCloseTo(box(pick(el)), 0);
+        expect(window.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+        await choose(el, ["c3", "c4", "c5"]);
+        await press(el);
+        expect(pick(el).error).not.toBe("");
+        expect(window.getBoundingClientRect().width).toBeCloseTo(empty, 0);
+        cleanupWidgets();
+      }
+    } finally {
+      await page.viewport(1280, 720);
+    }
+  });
+}
