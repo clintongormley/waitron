@@ -22,6 +22,7 @@ import { foodOnItsWay } from "./delivery-release.js";
 import { readZonePlan, saveZonePlan } from "./floor-plan.js";
 import { catchUpZone, resetZone } from "./floor-today-store.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
+import { moveBill } from "./move-bill.js";
 import { finishTable } from "./parties.js";
 import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
@@ -29,6 +30,7 @@ import {
   commandFor,
   counterOrder,
   inTx,
+  OPERATOR,
   partyAt,
   pay,
   revisionOf,
@@ -258,6 +260,24 @@ async function c5SplitOff() {
   return zone;
 }
 
+/** Counter 5 split off, pushed together with Bar, nobody seated: a bill moved to Bar opens its party at Bar alone (backlog A594), so Counter 5 is free in a group with guests. */
+async function guestsAtBarAlone(table: Record<string, string | undefined>): Promise<void> {
+  await merge(table.bar!, table.c5!, "right", 8);
+  const order = await counterOrder(v, "Paella");
+  await inTx(v, (tx) =>
+    moveBill(
+      tx,
+      v.cfg,
+      order,
+      { tableId: table.bar! },
+      { bills: "separate", partyId: null, otherPartyId: null, operatorId: OPERATOR },
+    ),
+  );
+  expect(await partyAt(v, table.bar!)).not.toBeNull();
+  expect(await partyAt(v, table.c5!)).toBeNull();
+  expect(await placeOf(table.bar!)).toEqual({ x: 16, y: 20, width: 2, height: 2 });
+}
+
 describe("Reset table", () => {
   it("every table free: Counter 5 split off, Long table moved to the middle; Reset table puts Long table whole at its saved place with 10 seats and Counter 5 leaves the map", async () => {
     const { table, zoneId } = await c5SplitOff();
@@ -362,6 +382,28 @@ describe("Reset table, more cases", () => {
     expect(await splitRowsOf(table.long!)).toEqual([table.c5!]);
   });
 
+  it("Counter 5 in a group with Bar where guests sit at Bar alone, Counter 3 and 4 free: Reset table asks for seats, then takes Counter 3 and 4 back and leaves the group as it is", async () => {
+    const { table, zoneId } = await longApart();
+    await guestsAtBarAlone(table);
+
+    await refused(
+      reset(table.long!, [table.c3!, table.c4!]),
+      400,
+      "joined_table.seats_required",
+      {},
+    );
+    await settles(() => reset(table.long!, [table.c3!, table.c4!], 8), zoneId);
+
+    expect(await placeOf(table.long!)).toEqual({ x: 10, y: 20, width: 4, height: 2 });
+    expect(await groupOf(table.c5!)).toEqual({
+      seats: 8,
+      members: [table.bar!, table.c5!].sort(),
+    });
+    expect(await placeOf(table.bar!)).toEqual({ x: 16, y: 20, width: 2, height: 2 });
+    expect(await placeOf(table.c5!)).toEqual({ x: 14, y: 20, width: 2, height: 2 });
+    expect(await splitRowsOf(table.long!)).toEqual([table.c5!]);
+  });
+
   it("one group holding Counter 4, Counter 5 and Bar, nobody seated: Reset table takes all back, the group ends and Bar goes back by the bar counter", async () => {
     const { table, zoneId } = await longApart();
     await merge(table.bar!, table.c5!, "right", 8);
@@ -424,6 +466,24 @@ describe("Reset table refused, nothing written", () => {
       partIds: [table.c3!, table.c4!],
     });
     expect(await everything()).toEqual(before);
+  });
+
+  it("Counter 5, the one table split off, in a group with Bar where guests sit at Bar alone: refused naming Counter 5, the group and Bar's place unchanged", async () => {
+    const { table, zoneId } = await c5SplitOff();
+    await guestsAtBarAlone(table);
+    const revision = await zoneRevisionOf(v, zoneId);
+    const before = await everything();
+
+    await refused(reset(table.long!, [table.c5!]), 409, "joined_table.tables_in_group", {
+      tableId: table.long!,
+      partIds: [table.c5!],
+    });
+    expect(await everything()).toEqual(before);
+    expect(await zoneRevisionOf(v, zoneId)).toBe(revision);
+    expect(await groupOf(table.c5!)).toEqual({
+      seats: 8,
+      members: [table.bar!, table.c5!].sort(),
+    });
   });
 
   for (const [first, second] of [

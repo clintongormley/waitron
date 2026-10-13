@@ -317,7 +317,9 @@ Counter 3, Counter 5" in one run.
 leaves the rest of its group free (`apps/server/src/move-bill.ts`, the `openParty` call), so a party
 can hold some of a group's tables. Seating, the party join and Move guests all treat a group whole.
 Found by A579 part 3b's review: Split tables… ticking that table would have left the party open with
-no table; it is now refused `merge.strands_party`. Next: decide whether the moved bill's party takes the
+no table; it is now refused `merge.strands_party`. Reset table (A579 part 4b) keeps a table split off a
+joined table apart while a party holds any table of its group, so a group such a party holds only part of
+is not ended under it. Next: decide whether the moved bill's party takes the
 whole group, as seating at one of its tables does.
 
 ## A600. The floor-wide reset and its catch-up do not look at what stands in a saved place

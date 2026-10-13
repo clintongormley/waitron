@@ -277,12 +277,12 @@ export function resetTableOf(
         : undefined;
   const state = joined?.today?.joined;
   if (joined === undefined || state == null) return null;
-  if (joined !== table && apartReason(table) !== null) return null;
+  if (joined !== table && apartReason(table, zoneTables) !== null) return null;
   const byId = new Map(zoneTables.map((each) => [each.id, each]));
   const splitOff = state.splitOff.flatMap((id) => byId.get(id) ?? []);
-  const back = splitOff.filter((each) => apartReason(each) === null);
+  const back = splitOff.filter((each) => apartReason(each, zoneTables) === null);
   const apart = splitOff.flatMap((each) => {
-    const reason = apartReason(each);
+    const reason = apartReason(each, zoneTables);
     return reason === null ? [] : [{ table: each, reason }];
   });
   const plan = { joined, back, apart, whole: apart.length === 0, refusedInGroup: false };
@@ -295,8 +295,9 @@ export function resetTableOf(
   return blockedByGroup ? { ...plan, refusedInGroup: true } : null;
 }
 
-function apartReason(table: TableState): ApartReason | null {
+function apartReason(table: TableState, zoneTables: readonly TableState[]): ApartReason | null {
   if (table.condition === "held") return "guests";
+  if (mergeMembersOf(zoneTables, table).some((each) => each.condition === "held")) return "guests";
   if (table.pendingDeliveries > 0) return "food";
   return null;
 }

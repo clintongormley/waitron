@@ -1707,8 +1707,8 @@ Back to its saved place and Take off for today refuse a table split off (`table.
 
 Reset table (`POST /api/tables/:id/today/reset`, `resetTable`,
 `apps/server/src/floor-today-reset-table.ts`) takes back every table split off the joined table that
-no party holds and no food is on its way to; a "needs clearing" mark or a group nobody sits at does
-not keep one apart. It ends each group a table it takes back is in, the group's
+no party holds, that is in no group a party holds a table of, and that no food is on its way to; a
+"needs clearing" mark or a group nobody sits at does not keep one apart. It ends each group a table it takes back is in, the group's
 other tables going back where they stood, then clears the marks of the tables it takes back, deletes
 their split rows, gives them their reset row's seats and no place, and puts the joined table at its
 saved place, not where it stands: all of it with its saved seats when every table comes back, else
@@ -1719,8 +1719,8 @@ writes, it refuses `table.place_taken`, naming the first, in number order, of th
 today's map whose box overlaps that place by at least one square along each side's direction of both turned boxes (`standsIn`,
 `apps/server/src/joined-split-layout.ts`); a table that only touches the edge, the joined table and
 the tables it takes back do not count, and a table left apart does. When too few tables would come
-back and a table split off it is held in a group, it refuses `joined_table.tables_in_group`, naming
-those tables; otherwise `joined_table.nothing_to_join`. It writes no reset row of its own and ends
+back and a table split off it is in a group a party holds a table of, itself or another, it refuses
+`joined_table.tables_in_group`, naming those tables; otherwise `joined_table.nothing_to_join`. It writes no reset row of its own and ends
 with the zone's catch-up (`catchUpZone`), so a table it takes back after Reset to saved plan counts
 as a part still joined in the same transaction, and a later reset still holds the tables it left
 apart.

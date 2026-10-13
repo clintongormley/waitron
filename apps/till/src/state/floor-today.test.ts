@@ -655,6 +655,83 @@ describe("a joined table split today", () => {
       expect(resetTableOf(gc3, groupZone)).toBeNull();
     });
 
+    describe("Counter 5 free in a group with Bar, where guests sit at Bar alone", () => {
+      const grouped = table("c5", "Counter 5", { ...c5, today: { ...c5.today!, joinId: "g" } });
+      const heldBar = table("gbar", "Bar", {
+        ...seatedBy(party("p1", ["gbar"])),
+        today: today({ placement: place(40, 30), joinId: "g" }),
+      });
+
+      it("keeps Counter 5 apart for guests while Counter 4 comes back", () => {
+        const standing = table("long", "Long table", {
+          today: today({
+            placement: place(10, 20, { width: 6, height: 2 }),
+            seats: 10,
+            joined: { parts: ["c3"], splitOff: ["c4", "c5"], apart: false },
+          }),
+        });
+        const freeC4 = table("c4", "Counter 4", {
+          today: today({ placement: place(30, 22), splitOffFrom: "long" }),
+        });
+        const zone = [standing, c3, freeC4, grouped, heldBar];
+        const plan = {
+          joined: standing,
+          back: [freeC4],
+          apart: [{ table: grouped, reason: "guests" }],
+          whole: false,
+          refusedInGroup: false,
+        };
+        expect(resetTableOf(standing, zone)).toEqual(plan);
+        expect(resetTableOf(freeC4, zone)).toEqual(plan);
+        expect(resetTableOf(grouped, zone)).toBeNull();
+        expect(sheetActions(grouped, zone)).not.toContain("reset-table");
+      });
+
+      it("offers nothing when Counter 5 is the one table split off", () => {
+        const zone = [long, c3, c4, grouped, heldBar];
+        for (const each of zone) expect(resetTableOf(each, zone)).toBeNull();
+        expect(sheetActions(long, zone)).not.toContain("reset-table");
+        expect(sheetActions(grouped, zone)).not.toContain("reset-table");
+      });
+    });
+
+    it("offers Reset table on a free Counter 5 whose fellow tables are free in a group where guests sit at Bar alone, which the server refuses", () => {
+      const apartLong = table("long", "Long table", {
+        today: today({
+          placement: null,
+          seats: 10,
+          joined: { parts: [], splitOff: ["c3", "c4", "c5"], apart: true },
+        }),
+      });
+      const inGroup = (id: string, label: string) =>
+        table(id, label, {
+          today: today({ placement: place(30, 0), splitOffFrom: "long", joinId: "g" }),
+        });
+      const gc3 = inGroup("c3", "Counter 3");
+      const gc4 = inGroup("c4", "Counter 4");
+      const groupBar = table("gbar", "Bar", {
+        ...seatedBy(party("p1", ["gbar"])),
+        today: today({ placement: place(40, 0), joinId: "g" }),
+      });
+      const freeC5 = table("c5", "Counter 5", {
+        today: today({ placement: place(10, 22), splitOffFrom: "long" }),
+      });
+      const groupZone = [apartLong, gc3, gc4, groupBar, freeC5];
+      expect(resetTableOf(freeC5, groupZone)).toEqual({
+        joined: apartLong,
+        back: [freeC5],
+        apart: [
+          { table: gc3, reason: "guests" },
+          { table: gc4, reason: "guests" },
+        ],
+        whole: false,
+        refusedInGroup: true,
+      });
+      expect(sheetActions(freeC5, groupZone)).toContain("reset-table");
+      expect(resetTableOf(apartLong, groupZone)).toBeNull();
+      expect(resetTableOf(gc3, groupZone)).toBeNull();
+    });
+
     it("offers nothing on Long table's tables when Counter 5, the one table split off, has guests", () => {
       const seatedC5 = table("c5", "Counter 5", { ...c5, ...seatedBy(party("p1", ["c5"])) });
       const seatedZone = [long, c3, c4, seatedC5];
