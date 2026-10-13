@@ -16,6 +16,7 @@ import {
 } from "@waitron/identity";
 import {
   withOperationAuthority,
+  readOperationAuthority,
   type OperationAuthority,
   type OperationBinding,
 } from "@waitron/module";
@@ -27,6 +28,7 @@ export async function withRecoveryKeyOperation<T>(
   operation: OperationBinding,
   secret: unknown,
   run: (tx: Transaction, authority: OperationAuthority) => Promise<T>,
+  collect?: (authority: OperationAuthority, commit: () => Promise<T>) => Promise<T>,
 ): Promise<T> {
   const binding = { ...operation };
   const targetNodeId = deps.nodeId;
@@ -42,14 +44,26 @@ export async function withRecoveryKeyOperation<T>(
     return refuse();
   const verifier = await readBreakGlassVerifier(deps.db, targetNodeId);
   if (verifier === null || !(await verifySecretAsync(secret, verifier))) return refuse();
-  return withTransaction(deps.db, async (tx) => {
-    if ((await readBreakGlassVerifier(tx, targetNodeId)) !== verifier) return refuse();
-    return withOperationAuthority(
-      binding,
-      { kind: "recovery-key", nodeId: targetNodeId, eventId: binding.eventId },
-      (authority) => run(tx, authority),
-    );
-  });
+  return withOperationAuthority(
+    binding,
+    { kind: "recovery-key", nodeId: targetNodeId, eventId: binding.eventId },
+    (authority) => {
+      const authorise = (): void => {
+        if (readOperationAuthority(authority, binding) === undefined) refuse();
+      };
+      const commit = async () => {
+        authorise();
+        return withTransaction(deps.db, async (tx) => {
+          authorise();
+          if ((await readBreakGlassVerifier(tx, targetNodeId)) !== verifier) return refuse();
+          const result = await run(tx, authority);
+          authorise();
+          return result;
+        });
+      };
+      return collect === undefined ? commit() : collect(authority, commit);
+    },
+  );
 }
 
 export async function withAuthenticatedOperation<T>(

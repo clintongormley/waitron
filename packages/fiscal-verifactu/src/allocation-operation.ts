@@ -5,6 +5,8 @@ import { deployment, invoiceSeries, nodes, readTenant, type Transaction } from "
 import {
   readOperationAuthority,
   type ModuleOperationInput,
+  type OperationBinding,
+  type OperationOperator,
   type ProvisionedNode,
 } from "@waitron/module";
 import { AppError } from "@waitron/shared";
@@ -82,6 +84,110 @@ export interface AllocationOperationEvidence {
   readonly requiredBases?: SeriesBases;
 }
 
+export interface AllocationEvidenceRequest {
+  readonly binding: OperationBinding;
+  readonly operatorId: OperationOperator;
+}
+
+export type AllocationEvidenceSource = (
+  request: AllocationEvidenceRequest,
+) => Promise<
+  (AllocationEvidenceRequest & { readonly evidence: AllocationOperationEvidence }) | null
+>;
+
+export async function withCollectedModuleAllocation<T>(
+  operation: ModuleOperationInput,
+  source: AllocationEvidenceSource | undefined,
+  run: (
+    activate: (tx: Transaction, node: ProvisionedNode) => Promise<ActivationResult>,
+  ) => Promise<T>,
+): Promise<T> {
+  const refuse = (reason: string): never => {
+    throw new AppError("sif.allocation_invalid", { reason });
+  };
+  const binding = { ...operation.binding };
+  const authority = operation.authority;
+  const operator = readOperationAuthority(authority, binding);
+  if (
+    operator === undefined ||
+    binding.module !== "fiscal-verifactu" ||
+    !["setup", "restore", "re-register", "promote"].includes(binding.action)
+  )
+    return refuse("reauthentication_required");
+  const input = snapshotAllocationInput(binding, operation.input);
+  if (source === undefined) return refuse("outside_confirmation_missing");
+  const receipt = await source(structuredClone({ binding, operatorId: operator.operatorId }));
+  if (readOperationAuthority(authority, binding) === undefined)
+    return refuse("reauthentication_required");
+  if (receipt == null || !Object.hasOwn(receipt, "evidence") || receipt.evidence == null)
+    return refuse("outside_confirmation_missing");
+  if (
+    !isDeepStrictEqual(receipt.binding, binding) ||
+    !isDeepStrictEqual(receipt.operatorId, operator.operatorId)
+  )
+    return refuse("event_mismatch");
+  const evidence = snapshotAllocationEvidence(receipt.evidence);
+  const heldOperation = { binding, authority, input };
+  let active = true;
+  const authorise = (): void => {
+    if (!active || readOperationAuthority(authority, binding) === undefined)
+      refuse("reauthentication_required");
+  };
+  try {
+    return await run(async (tx, node) => {
+      authorise();
+      const result = await activateModuleAllocation(tx, node, heldOperation, evidence);
+      authorise();
+      return result;
+    });
+  } finally {
+    active = false;
+  }
+}
+
+function snapshotAllocationEvidence(evidence: AllocationOperationEvidence) {
+  return {
+    ...evidence,
+    requiredBases: evidence.requiredBases?.map((base) => ({ ...base })),
+    authority:
+      evidence.authority.kind === "emergency"
+        ? {
+            ...evidence.authority,
+            knownIdentities:
+              evidence.authority.knownIdentities === null
+                ? null
+                : [...evidence.authority.knownIdentities],
+          }
+        : structuredClone(evidence.authority),
+  };
+}
+
+function snapshotAllocationInput(binding: OperationBinding, supplied: unknown) {
+  const refuse = (): never => {
+    throw new AppError("sif.allocation_invalid", { reason: "malformed_allocation" });
+  };
+  if (typeof supplied !== "object" || supplied === null || Array.isArray(supplied)) return refuse();
+  const keys =
+    binding.action === "promote"
+      ? ["allocation", "approval", "reservationEventId"]
+      : ["allocation", "approval"];
+  // Check every own field before cloning can discard symbols and non-enumerable fields.
+  if (
+    !keys.slice(0, 2).every((key) => Object.hasOwn(supplied, key)) ||
+    Reflect.ownKeys(supplied).some((key) => typeof key !== "string" || !keys.includes(key))
+  )
+    return refuse();
+  try {
+    return structuredClone(supplied) as {
+      allocation: unknown;
+      approval: unknown;
+      reservationEventId?: unknown;
+    };
+  } catch {
+    return refuse();
+  }
+}
+
 export async function activateModuleAllocation(
   tx: Transaction,
   node: ProvisionedNode,
@@ -96,39 +202,8 @@ export async function activateModuleAllocation(
   const refuse = (reason: string): never => {
     throw new AppError("sif.allocation_invalid", { reason });
   };
-  const supplied = operation.input;
-  if (typeof supplied !== "object" || supplied === null || Array.isArray(supplied))
-    return refuse("malformed_allocation");
-  const keys =
-    binding.action === "promote"
-      ? ["allocation", "approval", "reservationEventId"]
-      : ["allocation", "approval"];
-  const required = keys.slice(0, 2);
-  if (
-    !required.every((key) => Object.hasOwn(supplied, key)) ||
-    Reflect.ownKeys(supplied).some((key) => typeof key !== "string" || !keys.includes(key))
-  )
-    return refuse("malformed_allocation");
-  let input: { allocation: unknown; approval: unknown; reservationEventId?: unknown };
-  try {
-    input = structuredClone(supplied) as typeof input;
-  } catch {
-    return refuse("malformed_allocation");
-  }
-  const heldEvidence: AllocationOperationEvidence = {
-    ...evidence,
-    requiredBases: evidence.requiredBases?.map((base) => ({ ...base })),
-    authority:
-      evidence.authority.kind === "emergency"
-        ? {
-            ...evidence.authority,
-            knownIdentities:
-              evidence.authority.knownIdentities === null
-                ? null
-                : [...evidence.authority.knownIdentities],
-          }
-        : structuredClone(evidence.authority),
-  };
+  const input = snapshotAllocationInput(binding, operation.input);
+  const heldEvidence = snapshotAllocationEvidence(evidence);
   if (
     binding.action === "promote" &&
     (typeof input.reservationEventId !== "string" || input.reservationEventId.length === 0)

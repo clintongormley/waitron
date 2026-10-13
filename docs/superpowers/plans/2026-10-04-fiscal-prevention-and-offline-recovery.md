@@ -737,3 +737,31 @@ the handoff and resolver's scope checks. Existing assertion expressions and gold
 sources are retained. The production fiscal descriptor has not adopted this contribution;
 independently collected authority, fiscal seats and the coupled text/counter/all-entry-point
 transition still precede publication, schema regeneration and the full finish/land gates.
+
+
+**2026-10-13 outside-collection boundary qualification:** `withCollectedModuleAllocation`
+asks a separately configured source for evidence using only authenticated scope and operator.
+It refuses a missing source or receipt, another event/operator and expired authentication
+before entering the host callback. It detaches the submitted values and returned evidence;
+all submitted own fields are checked before cloning can discard hidden fields. The callback
+contains activation in the caller's transaction and expires when the attempt settles.
+
+New real-database cases exercise the signed complete series set, current-source refusals,
+replay with a fresh source lookup, another writer during collection and rollback after a
+later host failure or authentication expiry during the final audit write. Emergency cases
+retain the host's genuine in-process draw. The source in these cases is supplied by the
+fixture; this does not establish an independent current register or a configured production
+custodian. No public host entry point or fiscal descriptor is connected.
+
+The generic recovery-key helper now has an optional collection callback before its commit
+transaction. It verifies the secret before collection and rechecks the verifier and scoped
+authority in that transaction. Captured, queued and in-flight commits refuse expired
+authority; local failure leaves the separately held outside mark intact. New host tests join
+this helper with the module collector and a genuine emergency draw, and assert all three
+purposes and key-event attribution without a person or management session. Public boot, CLI,
+restore and promotion entry points still have no configured production source.
+
+The configured production sources and authenticated fiscal seats, coupled text-SIF/counter
+retirement and all consumer replacements remain the next Task 4 work. Current-main schema
+regeneration, populated upgrade, Cloud operator-binding synchronisation, two full reviews,
+the normal push hook and current-head CI still precede publication.
