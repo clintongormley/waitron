@@ -270,8 +270,6 @@ export async function deletePeriod(
     });
 }
 
-/** Starts each of `periodId`'s extensions where the replacement's time covering its start now
- *  ends, as keepPeriodOpen would write it for the replacement, and drops one that time covers. */
 async function fitExtensionsToReplacement(
   tx: Transaction,
   cfg: VenueScope,

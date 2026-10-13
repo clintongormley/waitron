@@ -772,6 +772,12 @@ describe("deleting a period", () => {
         }
       });
 
+      it("drops the extension when Afternoon's own time ends exactly where Lunch was kept open to", async () => {
+        const { extensions } = await keptOpenThenReplaced("20:00");
+
+        expect(await extensions()).toEqual([]);
+      });
+
       it("shows Afternoon kept open to 21:00 when Lunch was kept open past Afternoon's end", async () => {
         const { v, till, extensions } = await keptOpenThenReplaced("21:00");
 

@@ -661,10 +661,11 @@ and `deleteMenuPeriod` in `packages/venue-service/src/menu-timetable.ts`).
 **2026-10-13, A506-10.** `POST …/menu-periods/:periodId/delete` deletes a period in use
 (`deletePeriod`, `packages/venue-service/src/period-delete.ts`), taking the clock revision as the
 other hours writes do. `GET …/menu-periods/painted-in` lists where each period is painted, and
-`GET …/menu-periods/:periodId/delete-impact` counts what the delete dialog shows: neither counts a
-past one-off special day, and the impact names only today's keep-open extension, though the delete
-rewrites both. With a replacement, which
-must be another period of the same department, every range painting the period, in season weeks
+`GET …/menu-periods/:periodId/delete-impact` counts what the delete dialog shows: while the
+venue's clock can be read, neither counts a one-off special day with no date today or later, and
+the impact says only whether the period has a keep-open extension today, though the delete changes
+those special days' paint and every day's extension too. With a replacement, which must be another
+period of the same department, every range painting the period, in season weeks
 and on special-day dates past or future, names the replacement, and on each day that held the
 period touching ranges of one period then join; a routing-cell line naming it names the
 replacement, except in a cell that already has a line for the replacement, which keeps that line
