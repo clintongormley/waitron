@@ -217,6 +217,55 @@ async function everything() {
   }));
 }
 
+/** Long table as above plus Window table (4 seats, 4 × 2 at 10, 40) = Counter 6 and 7 (2 seats each), kept 2 × 2; Bar and Stool (1 seat, 2 × 2 at 50, 0) free. */
+async function LONG_WINDOW_STOOL() {
+  const zone = await plannedZone(
+    v,
+    [
+      { key: "c3", label: "Counter 3", seats: 2, place: null },
+      { key: "c4", label: "Counter 4", seats: 6, place: null },
+      { key: "c5", label: "Counter 5", seats: 4, place: null },
+      { key: "c6", label: "Counter 6", seats: 2, place: null },
+      { key: "c7", label: "Counter 7", seats: 2, place: null },
+      {
+        key: "long",
+        label: "Long table",
+        seats: 10,
+        place: { x: 10, y: 20, width: 6, height: 2 },
+        partKeys: ["c3", "c4", "c5"],
+      },
+      {
+        key: "window",
+        label: "Window table",
+        seats: 4,
+        place: { x: 10, y: 40, width: 4, height: 2 },
+        partKeys: ["c6", "c7"],
+      },
+      { key: "bar", label: "Bar", seats: 4, place: { x: 40, y: 0, width: 2, height: 2 } },
+      { key: "stool", label: "Stool", seats: 1, place: { x: 50, y: 0, width: 2, height: 2 } },
+    ],
+    NOW,
+  );
+  for (const key of ["c3", "c4", "c5", "c6", "c7"])
+    await giveKeptSize(v, zone.master[key]!, { width: 2, height: 2 });
+  return zone;
+}
+
+/** Free tables `moving` and `target` merge into a group, with no party involved. */
+async function freeMerge(moving: string, target: string, side: "left" | "right") {
+  const answer = await app.request(`/api/tables/${moving}/today/merge`, {
+    method: "POST",
+    headers: { "content-type": "application/json", cookie },
+    body: JSON.stringify({
+      zoneRevision: await readRevision(moving),
+      targetId: target,
+      side,
+      seats: 5,
+    }),
+  });
+  expect(answer.status, await answer.clone().text()).toBe(200);
+}
+
 describe("guests pass to a joined table's tables when it is pushed into a group", () => {
   it("guests at Long table, Bar pushed on: the party holds Bar, Counter 3, 4 and 5, Long table needs no clearing", async () => {
     await withClearing(async () => {
@@ -384,5 +433,109 @@ describe("guests pass to a joined table's tables when it is pushed into a group"
       body: { error: { code: "table.delivery_pending", params: { tableId: table.long! } } },
     });
     expect(await everything()).toEqual(before);
+  });
+
+  it("guests with food at Long table, Long table dragged onto a Bar and Stool group: one moved notice", async () => {
+    const { table } = await LONG_WINDOW_STOOL();
+    await freeMerge(table.stool!, table.bar!, "right");
+    const guests = await seat(v, table.long!);
+    await order(v, guests.tabId, "Burger");
+
+    await ok(
+      joinMerging(guests.partyId, {
+        tableId: table.bar!,
+        moving: table.long!,
+        target: table.bar!,
+        side: "left",
+      }),
+    );
+
+    // Bar and Stool's order in the party's tables varies between runs, so only the set is pinned.
+    const held = await activeTablesOf(v, guests.partyId);
+    expect([...held].sort()).toEqual(
+      [table.bar!, table.stool!, table.c3!, table.c4!, table.c5!].sort(),
+    );
+    expect(await noticesOn([guests.tabId])).toEqual([
+      { working_order_id: guests.tabId, kind: "moved", moved_to: await namesOf(...held) },
+    ]);
+  });
+
+  it("guests with food at both, Bar pushed onto Long table, bills merged: one moved notice per bill", async () => {
+    const { table } = await LONG_TABLE();
+    const atLong = await seat(v, table.long!);
+    const atBar = await seat(v, table.bar!);
+    await order(v, atLong.tabId, "Burger");
+    await order(v, atBar.tabId, "Burger");
+
+    await ok(
+      joinMerging(atLong.partyId, {
+        tableId: table.bar!,
+        moving: table.bar!,
+        target: table.long!,
+        side: "left",
+        bills: "merge",
+        otherPartyId: atBar.partyId,
+      }),
+    );
+
+    const four = await namesOf(table.bar!, table.c3!, table.c4!, table.c5!);
+    const notices = await noticesOn([atLong.tabId, atBar.tabId]);
+    const byBill = (a: { working_order_id: string }, b: { working_order_id: string }) =>
+      a.working_order_id.localeCompare(b.working_order_id);
+    // Bar's bill merged into Long table's, so its notice is filed on the merged bill.
+    expect(notices.sort(byBill)).toEqual([
+      { working_order_id: atLong.tabId, kind: "moved", moved_to: four },
+      { working_order_id: atLong.tabId, kind: "moved", moved_to: four },
+    ]);
+  });
+
+  it("guests at both, food at Long table only, Bar pushed onto Long table, bills merged: one moved notice", async () => {
+    const { table } = await LONG_TABLE();
+    const atLong = await seat(v, table.long!);
+    const atBar = await seat(v, table.bar!);
+    await order(v, atLong.tabId, "Burger");
+
+    await ok(
+      joinMerging(atBar.partyId, {
+        tableId: table.long!,
+        moving: table.bar!,
+        target: table.long!,
+        side: "left",
+        bills: "merge",
+        otherPartyId: atLong.partyId,
+      }),
+    );
+
+    expect(await noticesOn([atLong.tabId, atBar.tabId])).toEqual([
+      {
+        working_order_id: atBar.tabId,
+        kind: "moved",
+        moved_to: await namesOf(table.bar!, table.c3!, table.c4!, table.c5!),
+      },
+    ]);
+  });
+
+  it("guests at Long table, Window table pushed onto it: the party's tables read Counter 3, 4, 5, 6, 7", async () => {
+    for (let round = 0; round < 10; round++) {
+      const { table } = await LONG_WINDOW_STOOL();
+      const guests = await seat(v, table.long!);
+
+      await ok(
+        joinMerging(guests.partyId, {
+          tableId: table.window!,
+          moving: table.window!,
+          target: table.long!,
+          side: "right",
+        }),
+      );
+
+      const five = [table.c3!, table.c4!, table.c5!, table.c6!, table.c7!];
+      expect(await activeTablesOf(v, guests.partyId), `round ${round}`).toEqual(five);
+      const labels = await inTx(v, (tx) => partyTableLabels(tx, [guests.partyId]));
+      const [first, ...rest] = await Promise.all(five.map(labelOf));
+      expect(partyTablesName(labels.get(guests.partyId)!), `round ${round}`).toBe(
+        [first, ...rest.map((label) => label.replace(/^Counter /, ""))].join(", "),
+      );
+    }
   });
 });
