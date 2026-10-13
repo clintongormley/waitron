@@ -7755,6 +7755,8 @@ describe("mounted public department dialogs", () => {
             seasonWeeks: [],
           })),
         } as never;
+      if (url.startsWith("/management-api/venue-service/opening-hours/year?"))
+        return new Promise(() => {});
       if (url.endsWith("/transfers"))
         return {
           departmentId: "d1",
@@ -8094,7 +8096,9 @@ describe("mounted public department dialogs", () => {
     expect(leaveCoordinatorFor(box)!.isDirty()).toBe(true);
     link.click();
     await choose(app, "discard");
-    await expect.poll(() => location.pathname).toBe("/manage/opening-hours/department/d1");
+    await expect
+      .poll(() => location.pathname)
+      .toBe("/manage/opening-hours/view/season/department/d1");
     expect(new URL(navigationGuardFor(window)!.href).pathname).toBe(location.pathname);
     expect(
       pushed.mock.calls.map((call) => new URL(String(call[2]), location.origin).pathname),
@@ -8106,7 +8110,9 @@ describe("mounted public department dialogs", () => {
     const app = await mountDepartments("/manage/venue-operations/department/d1", undefined, true);
     await expect.poll(() => find(app, '[part="setup-issue"] a')).not.toBeNull();
     find(app, '[part="setup-issue"] a')!.click();
-    await expect.poll(() => location.pathname).toBe("/manage/opening-hours/department/d1");
+    await expect
+      .poll(() => location.pathname)
+      .toBe("/manage/opening-hours/view/season/department/d1");
     const length = history.length;
     history.back();
     await expect.poll(() => location.pathname).toBe("/manage/venue-operations/department/d1");
@@ -8121,7 +8127,9 @@ describe("mounted public department dialogs", () => {
     expect(leaveCoordinatorFor(box)!.isDirty()).toBe(true);
     history.forward();
     await choose(app, "discard");
-    await expect.poll(() => location.pathname).toBe("/manage/opening-hours/department/d1");
+    await expect
+      .poll(() => location.pathname)
+      .toBe("/manage/opening-hours/view/season/department/d1");
     expect(new URL(navigationGuardFor(window)!.href).pathname).toBe(location.pathname);
     expect(history.length).toBe(length);
     expect(leaveCoordinatorFor(app)!.isDirty()).toBe(false);

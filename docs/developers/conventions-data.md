@@ -628,6 +628,16 @@ must send `expectedClockRevision`; a stale one refuses an add, a move or a delet
 `season.not_found`, and while a day-cutover change is pending an add, a move or a delete is refused
 `hours.clock_change_pending`.
 
+**2026-10-13, A506-8.** `saveSeasonWeeks` (`packages/venue-service/src/season-weeks.ts`), behind
+`PUT …/seasons/:seasonId/weeks` (`routes.ts`), saves several departments' weeks and zones' closed
+weeks of one season in one transaction; it is what the season painter calls. The body may hold only
+`departments`, `zones` and `expectedClockRevision`; a department or zone named twice is refused
+`management.request_invalid`, and a refusal that names a field names it by the entry's place in the
+request (`departments.<i>.…`, `zones.<i>.…`); an unknown or inactive department is refused
+`department.not_found` and an unknown zone `service_zone.not_found`, each naming its id.
+`expectedClockRevision` is checked once for the whole request, and the end offsets of the
+departments it names are checked together, once, after every week is written.
+
 A configuration transfer carries the five season tables (`VENUE_SERVICE_CONFIGURATION_TRANSFER` in
 `packages/venue-service/src/configuration-transfer.ts`). `importConfigurationTables`
 (`apps/server/src/configuration-transfer.ts`) deletes every row of a transferred table before

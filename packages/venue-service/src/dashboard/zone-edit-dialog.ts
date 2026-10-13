@@ -410,7 +410,7 @@ export class ZoneEditDialog extends LitElement {
             <p>
               <a
                 data-test="zone-opening-hours"
-                href=${`/manage/opening-hours/view/week/department/${encodeURIComponent(zone.departmentId)}/zone/${encodeURIComponent(zone.id)}`}
+                href=${`/manage/opening-hours/view/season${this.hours?.currentSeasonId ? `/season/${encodeURIComponent(this.hours.currentSeasonId)}` : ""}/department/${encodeURIComponent(zone.departmentId)}/zone/${encodeURIComponent(zone.id)}`}
                 >${t("venue.zone_opening_hours")}</a
               >
             </p>

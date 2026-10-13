@@ -55,6 +55,14 @@ it("summarises the current season's closed times and names the season", async ()
   await mount(twoSeasons("winter"));
   await expect.poll(summary).toBe("Winter: closed from 23:30 Monday to Thursday");
 });
+it("links to the season painter on this zone in the venue's current season", async () => {
+  await mount(twoSeasons("winter"));
+  const href = () =>
+    el.shadowRoot!.querySelector("[data-test=zone-opening-hours]")?.getAttribute("href");
+  await expect
+    .poll(href)
+    .toBe("/manage/opening-hours/view/season/season/winter/department/d1/zone/z1");
+});
 it("names the season in Spanish with the season's stored name", async () => {
   setLocale("es-ES");
   await mount(twoSeasons("winter"));
@@ -129,9 +137,9 @@ it("links to this zone's normal week with encoded department and zone ids", asyn
   };
   await el.updateComplete;
   const link = el.shadowRoot!.querySelector<HTMLAnchorElement>("[data-test=zone-opening-hours]");
-  expect(link?.getAttribute("href")).toBe(
-    "/manage/opening-hours/view/week/department/d%2F1/zone/z%2F1",
-  );
+  await expect
+    .poll(() => link?.getAttribute("href"))
+    .toBe("/manage/opening-hours/view/season/season/autumn/department/d%2F1/zone/z%2F1");
   expect(link?.textContent).toBe("Opening hours (normal week)");
 });
 
@@ -189,7 +197,7 @@ it("selects the current zone instead of retaining the previous zone's summary", 
   await el.updateComplete;
   await expect.poll(summary).toBe("Autumn: open whenever the department is");
   expect(el.shadowRoot!.querySelector("[data-test=zone-opening-hours]")!.getAttribute("href")).toBe(
-    "/manage/opening-hours/view/week/department/d1/zone/z2",
+    "/manage/opening-hours/view/season/season/autumn/department/d1/zone/z2",
   );
 });
 it("does not claim an unknown zone is open and does not show a summary in an empty department", async () => {

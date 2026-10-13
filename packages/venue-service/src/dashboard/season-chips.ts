@@ -1,7 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
-import { codeOf } from "@waitron/dashboard-kit";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import type { OpeningHoursApi, SeasonDeleteImpact, SeasonInput } from "./opening-hours-client.js";
@@ -11,27 +10,20 @@ import "./season-dialog.js";
 import { byStart } from "../season-rules.js";
 import { seasonTints, seasonTintStyles } from "./season-tint.js";
 import { t } from "./strings.js";
+import { refusalOf, type Refusal } from "./refusal.js";
 
 export type { SeasonChip } from "./season-dialog.js";
 export type SeasonWrites = Pick<
   OpeningHoursApi,
   "saveSeason" | "addSeason" | "deleteSeason" | "readSeasonDeleteImpact"
 >;
-type Refusal = { code: string; params?: Record<string, unknown> };
 /** One opening of the dialog: the season it edits, or none for "+ Season", and the clock revision its
  *  writes send, so a newer read arriving mid-edit still lets the server see the clock changed. */
 type Opening = { season?: SeasonChip; clockRevision: number; returnTo: HTMLElement | null };
 
-const refusalOf = (error: unknown): Refusal => ({
-  code: codeOf(error),
-  params:
-    typeof error === "object" && error !== null
-      ? (error as { params?: Record<string, unknown> }).params
-      : undefined,
-});
-
-/** The venue's seasons as tinted chips; a chip and "+ Season" open the season dialog, whose writes this
- *  element sends itself, announcing each with `season-changed` so its host re-reads. */
+/** The venue's seasons as tinted chips. A chip's name asks for its week (`season-week-open`), also
+ *  when read-only; its ✎ and "+ Season" open the season dialog, whose writes this element sends itself, announcing each
+ *  with `season-changed` so its host re-reads. */
 @customElement("season-chips")
 export class SeasonChips extends LitElement {
   static override styles = [
@@ -59,10 +51,15 @@ export class SeasonChips extends LitElement {
         border-radius: var(--wt-radius-full);
         font: inherit;
       }
-      button.chip {
+      .chip button {
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: inherit;
+        font: inherit;
         cursor: pointer;
       }
-      button.chip:focus-visible {
+      .chip button:focus-visible {
         outline: var(--wt-field-line-width-active) solid var(--wt-color-focus);
         outline-offset: var(--wt-focus-offset);
       }
@@ -104,6 +101,15 @@ export class SeasonChips extends LitElement {
       returnTo: event.currentTarget as HTMLElement,
     };
     this.dispatchEvent(new CustomEvent("season-dialog-open", { bubbles: true, composed: true }));
+  }
+  private openWeek(season: SeasonChip) {
+    this.dispatchEvent(
+      new CustomEvent<{ seasonId: string }>("season-week-open", {
+        detail: { seasonId: season.id },
+        bubbles: true,
+        composed: true,
+      }),
+    );
   }
   private close(opening: Opening) {
     if (this.opening !== opening) return;
@@ -217,18 +223,30 @@ export class SeasonChips extends LitElement {
           };
           const label = format("season.chip", { name: season.name, ...range });
           const tint = tints.get(season.id);
+          const week = html`<button
+            type="button"
+            data-test="season-week"
+            aria-label=${format(this.readOnly ? "season.week_shown" : "season.week_named", {
+              name: season.name,
+              ...range,
+            })}
+            @click=${() => this.openWeek(season)}
+          >
+            ${label}
+          </button>`;
           return this.readOnly
-            ? html`<span class="chip" data-season=${season.id} data-tint=${tint}>${label}</span>`
-            : html`<button
-                type="button"
-                class="chip"
-                data-season=${season.id}
-                data-tint=${tint}
-                aria-label=${format("season.edit_named", { name: season.name, ...range })}
-                @click=${(event: Event) => this.open(season, event)}
-              >
-                <span>${label}</span> <span aria-hidden="true">✎</span>
-              </button>`;
+            ? html`<span class="chip" data-season=${season.id} data-tint=${tint}>${week}</span>`
+            : html`<span class="chip" data-season=${season.id} data-tint=${tint}
+                >${week}
+                <button
+                  type="button"
+                  data-test="season-edit"
+                  aria-label=${format("season.edit_named", { name: season.name, ...range })}
+                  @click=${(event: Event) => this.open(season, event)}
+                >
+                  ✎
+                </button></span
+              >`;
         })}
         ${
           this.readOnly

@@ -78,6 +78,11 @@ export class NavigationGuard {
     return this.accepted.href;
   }
 
+  /** The accepted entry's place in history: a new epoch after `reset()` or an unknown entry. */
+  get position(): Readonly<Position> {
+    return { ...this.accepted.position! };
+  }
+
   private read(): Entry {
     const state: unknown = this.target.history.state;
     return { href: this.target.location.href, state, position: position(state) };
@@ -170,6 +175,19 @@ export class NavigationGuard {
       return Promise.resolve("proceeded");
     }
     return this.decide(attempt, () => this.writeAccepted(attempt.destination, replace));
+  }
+
+  /** Changes the current entry's address without the leave question, keeping its history position
+   *  so Back and Forward still measure their distance from it, as `reset()` would not. */
+  rewrite(href: string | URL): LeaveOutcome {
+    if (this.disposed) return "stale";
+    if (this.pending) return "busy";
+    const url = new URL(href, this.accepted.href);
+    if (url.origin !== this.target.location.origin)
+      throw new Error("Navigation must stay in this app");
+    this.target.history.replaceState(this.accepted.state, "", url.href);
+    this.publish({ ...this.accepted, href: url.href });
+    return "proceeded";
   }
 
   private writeAccepted(entry: Entry, replace: boolean): void {

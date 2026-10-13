@@ -110,6 +110,9 @@ tab, and setup's Done link opens it.
 A506-7 landed in #1623: a month view, reached from the Year, draws each date's hours as a bar per
 department and opens a dialog on an ordinary date; it replaced the Day tab and the Real week
 switch, and the dashboard's dated week views went.
+A506-8 landed in #1634: a full-screen season painter edits one season's week for every department
+and zone, saving the edited weeks in one request; it replaced the Week tab's editors, and opens
+from a season chip, an ordinary date and a zone's Opening hours link.
 
 **Left open by A506-1, for the later parts.**
 - No test yet gives a second department its own paint on the same special day.
@@ -119,15 +122,17 @@ switch, and the dashboard's dated week views went.
   editor's draft takes its season when Save is pressed; once a season's start can move, a draft built for one
   season could be saved under the next. Season edits should bump the clock
   revision or refuse a draft built before them.
-- With no season in the address, a Week tab left open across a season change keeps showing the old
-  season (the picker names it) until the address changes.
+- With no season in the address, the All departments week left open across a season change keeps
+  showing the old season (the picker names it) until the address changes. The season painter always
+  writes its season into the address. Read in the code (`resolveSeason`, `opening-hours-screen.ts`),
+  not run since A506-8.
 - The Business day start dialog works out its conflict count by repeating the server's rule for
   counting a conflict once whatever its season (`rangeKey`,
   `apps/dashboard/src/screens/business-day-start-editor.ts`), so a change to that rule on the server
   would make the dialog miscount without any test noticing. The server could return how many conflicts
   it left off its list instead, which adds a field to the shared preview type.
-- A venue with no seasons cannot save a week from the dashboard: the Week tab sends an empty
-  `seasonId`, the route refuses it, and the person sees only the generic save error. Provisioning gives
+- A venue with no seasons cannot edit a week from the dashboard: since A506-8 the season painter
+  draws nothing without a season (read in `season-painter.ts`'s render, not run). Provisioning gives
   every venue four seasons, and deleting the last one is refused (`season.invalid`, reason `last`,
   `deleteSeason` in `packages/venue-service/src/seasons.ts`), so this is believed unreachable — read in
   the code, not run.
@@ -203,6 +208,38 @@ switch, and the dashboard's dated week views went.
   `packages/venue-service/src/dashboard/special-date.ts`) and the per-date editor fetches the special day's detail separately; returning the stored date in the model
   would leave one copy of the rule. The "Add to" offer reads every special day with every date
   (`GET …/special-days`) to show a name and a latest date.
+
+**Left open by A506-8, for the later parts.**
+- The painter cannot resize a block by dragging its edge (ruling R1 of A506-8); mockup 3's hint
+  mentioned it. Painting over a block lengthens it, and painting Closed shortens it.
+- On a venue whose business day changes over off the quarter hour, painting starts at the first
+  quarter hour after the changeover and ends at the last one before it (a 05:50 changeover paints
+  from 06:00 to 05:45, `stepAt` in `paint-model.ts`), so 05:45–06:00 cannot be painted. The reason is that the
+  server refuses a time off the quarter hour (`service-day.ts`, the `step` refusal); that refusal
+  was read in the code, not run.
+- A slow live read started before a save can briefly replace the week just saved; repainting in
+  that moment and saving again undoes the first save. With live data, as on the dashboard, the
+  stale read is delivered by `LiveData`'s read (`packages/dashboard-kit/src/live-data.ts`), which
+  applies whatever answers; without it, `model-watch.ts` applies a read that started before the
+  save until a later read answers. A fix may need both places. The old week editors are believed
+  to have had the same flaw; that was read, not reproduced. The other order fails too: a live read
+  that arrives while a save is in flight is not applied to the weeks being saved, and once the save
+  succeeds the painter keeps showing what it sent, so another manager's change in that read is
+  hidden and a later save sends the older week back (reproduced in the A506-8 finish-branch review
+  with a delayed save reply). Telling the two orders apart needs the read to say whether it saw the
+  save.
+- The routes `PUT …/departments/:departmentId/menu-week` and `PUT …/zones/:zoneId/closed-week`
+  (`routes.ts`) are called by no client now that the painter saves through
+  `PUT …/seasons/:seasonId/weeks`. Remove them, or keep them with a stated reason.
+- Without a navigation guard, which only test harnesses lack, the painter's history mark is copied
+  to later entries, so ✕ can go back to a later entry of the same screen.
+- The navigation guard's `write()` and `rewrite()` both refuse while a leave question is open, so a live refresh that
+  moves the painter to another season at that moment leaves the address on the old season.
+- Closing a painter opened from the zone dialog's "Opening hours (normal week)" link, on
+  Departments and zones, lands on the Opening hours Year, not back on Departments and zones
+  (ruling R20). It does what "else the Year" in ruling R14 says, but a manager loses their place.
+- At 390 px a block too short for both lines, such as a one-hour block, shows its period's name
+  but not its times (ruling R21). Only its spoken label names them (`paint-grid.ts`).
 
 **Left open by A506-7, for the later parts.**
 - Public holidays' names show in Spanish in the English interface (seen on the month view, #1623):

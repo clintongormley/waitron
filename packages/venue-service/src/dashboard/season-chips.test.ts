@@ -64,6 +64,7 @@ async function settle() {
 async function openChip(name: string) {
   chips()
     .find((chip) => chip.textContent!.includes(name))!
+    .querySelector<HTMLElement>("[data-test=season-edit]")!
     .click();
   await settle();
 }
@@ -97,7 +98,9 @@ it("labels each chip from the server's last day and tints it by start order, rep
     "Winter · 1 Dec – 29 Feb ✎",
   ]);
   expect(chips().map((chip) => chip.dataset.tint)).toEqual(["1", "2", "3", "4", "1"]);
-  expect(chips()[0]!.getAttribute("aria-label")).toBe("Edit Spring, 1 Mar – 31 May");
+  expect(chips()[0]!.querySelector("[data-test=season-edit]")!.getAttribute("aria-label")).toBe(
+    "Edit Spring, 1 Mar – 31 May",
+  );
 });
 
 it("paints each chip with its season's colour tokens", async () => {
@@ -535,4 +538,50 @@ it("withdraws a delete confirmation and says so when another session deletes its
   expect(footerError()).toBe("This season no longer exists.");
   expect(api.deleteSeason).not.toHaveBeenCalled();
   expect(changed).toEqual([]);
+});
+
+it("asks for a season's week from the chip's name, naming it, and opens no dialog", async () => {
+  await mount();
+  const asked: CustomEvent<{ seasonId: string }>[] = [];
+  document.body.addEventListener("season-week-open", (event) =>
+    asked.push(event as CustomEvent<{ seasonId: string }>),
+  );
+  const week = chips()[3]!.querySelector<HTMLElement>("[data-test=season-week]")!;
+  expect(week.textContent!.trim()).toBe("Winter · 1 Dec – 29 Feb");
+  expect(week.getAttribute("aria-label")).toBe("Winter · 1 Dec – 29 Feb, edit the week");
+  week.click();
+  await settle();
+  expect(asked.map((event) => [event.detail, event.bubbles, event.composed])).toEqual([
+    [{ seasonId: "w" }, true, true],
+  ]);
+  expect(el.shadowRoot!.querySelector("season-dialog")).toBeNull();
+});
+
+it("names the chip's week in Spanish, starting with what it shows", async () => {
+  setLocale("es");
+  await mount();
+  const week = chips()[3]!.querySelector<HTMLElement>("[data-test=season-week]")!;
+  const shown = week.textContent!.trim();
+  expect(shown).toMatch(/^Winter · /);
+  expect(week.getAttribute("aria-label")).toBe(`${shown}, editar la semana`);
+});
+
+it("read-only, a chip's name still asks for its week, named as showing it", async () => {
+  el = document.createElement("season-chips");
+  el.seasons = four;
+  el.readOnly = true;
+  document.body.append(el);
+  await el.updateComplete;
+  const asked: CustomEvent<{ seasonId: string }>[] = [];
+  document.body.addEventListener("season-week-open", (event) =>
+    asked.push(event as CustomEvent<{ seasonId: string }>),
+  );
+  const week = chips()[3]!.querySelector<HTMLElement>("[data-test=season-week]")!;
+  expect(week.textContent!.trim()).toBe("Winter · 1 Dec – 29 Feb");
+  expect(week.getAttribute("aria-label")).toBe("Winter · 1 Dec – 29 Feb, show the week");
+  expect(chips()[3]!.querySelector("[data-test=season-edit]")).toBeNull();
+  week.click();
+  await el.updateComplete;
+  expect(asked.map((event) => event.detail)).toEqual([{ seasonId: "w" }]);
+  expect(el.shadowRoot!.querySelector("season-dialog")).toBeNull();
 });

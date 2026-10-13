@@ -2,7 +2,9 @@ import { and, eq, inArray } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { readLocationClock } from "@waitron/reporting";
 import { AppError } from "@waitron/shared";
-import { sameScheduleRanges } from "./business-day-schedule.js";
+import { assertBusinessDayScheduleWrite, sameScheduleRanges } from "./business-day-schedule.js";
+import { assertWeekEndOffsets, readDepartmentWeekReads, stageMenuWeek } from "./menu-timetable.js";
+import type { MenuWeekDay } from "./menu-timetable-types.js";
 import { storedTime, wireTime, type VenueScope } from "./operations.js";
 import {
   departmentDayRanges,
@@ -14,6 +16,7 @@ import {
 import type { Season } from "./season-rules.js";
 import { ensureDefaultSeasons } from "./seasons.js";
 import { rangeSpan, type ClosedRange, type ServiceRange } from "./service-day.js";
+import { readServiceZones, stageZoneClosedWeek } from "./zone-closed-times.js";
 import "./errors.js";
 
 const WEEKDAYS = [0, 1, 2, 3, 4, 5, 6] as const;
@@ -280,4 +283,91 @@ export async function readZoneSeasonWeeks(
     })),
     dayCutover,
   );
+}
+
+/** Runs `fn`, naming a refused field by where it sits in the request: `prefix` goes before it. */
+async function within<T>(prefix: string, fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (error) {
+    if (!(error instanceof AppError)) throw error;
+    const field = (error.params as { field?: unknown }).field;
+    if (typeof field !== "string") throw error;
+    throw new AppError(
+      error.code,
+      { ...error.params, field: `${prefix}${field}` },
+      { reason: error.reason },
+    );
+  }
+}
+
+/** Every listed department week and zone week of one season, under one revision check; each
+ *  department's end offsets are checked once every week is written. */
+export async function saveSeasonWeeks(
+  tx: Transaction,
+  cfg: VenueScope,
+  seasonId: string,
+  input: {
+    departments?: readonly { departmentId: string; days: readonly MenuWeekDay[] }[];
+    zones?: readonly {
+      zoneId: string;
+      days: readonly { weekday: number; ranges: readonly ClosedRange[] }[];
+    }[];
+  },
+  at: Date,
+  expectedClockRevision: number,
+): Promise<void> {
+  const season = (await seasonsNaming(tx, cfg, seasonId)).own;
+  const clock = await readLocationClock(tx, cfg.locationId);
+  const departmentEntries = input.departments ?? [];
+  const departmentReads = await readDepartmentWeekReads(
+    tx,
+    cfg,
+    departmentEntries.map((entry) => entry.departmentId),
+    clock,
+  );
+  const departmentWeeks = [];
+  for (const [index, entry] of departmentEntries.entries()) {
+    const prefix = `departments.${index}.`;
+    const staged = await within(prefix, () =>
+      stageMenuWeek(tx, cfg, entry.departmentId, entry.days, clock, season, departmentReads),
+    );
+    departmentWeeks.push({
+      ...staged,
+      departmentId: entry.departmentId,
+      clashField: (clash: Parameters<typeof staged.clashField>[0]) =>
+        `${prefix}${staged.clashField(clash)}`,
+    });
+  }
+  const zoneEntries = input.zones ?? [];
+  const serving =
+    zoneEntries.length === 0
+      ? new Set<string>()
+      : new Set((await readServiceZones(tx, cfg)).map((zone) => zone.id));
+  const zoneSeasonWeeks = await readZoneSeasonWeeks(
+    tx,
+    cfg,
+    zoneEntries.map((entry) => entry.zoneId),
+    clock.dayCutover,
+  );
+  const zoneWeeks = [];
+  for (const [index, entry] of zoneEntries.entries()) {
+    if (!serving.has(entry.zoneId))
+      throw new AppError("service_zone.not_found", { zoneId: entry.zoneId });
+    zoneWeeks.push(
+      await within(`zones.${index}.`, () =>
+        stageZoneClosedWeek(tx, cfg, entry.zoneId, entry.days, clock, season, zoneSeasonWeeks),
+      ),
+    );
+  }
+  await assertBusinessDayScheduleWrite(
+    tx,
+    cfg,
+    [...departmentWeeks, ...zoneWeeks].some((week) => week.changed) ? "time" : "metadata",
+    at,
+    expectedClockRevision,
+    clock,
+  );
+  for (const week of [...departmentWeeks, ...zoneWeeks]) await week.write();
+  await assertWeekEndOffsets(tx, cfg, clock, departmentWeeks);
 }

@@ -928,3 +928,205 @@ describe("week routes name one season", () => {
       await answers(await r.send("PUT", path, r.manager, { days, expectedClockRevision: 1 }), 204);
   });
 });
+
+describe("the season weeks route", () => {
+  const closedWeek = (ranges: { startsAt: string; endsAt: string }[]) =>
+    [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, ranges: weekday === 1 ? ranges : [] }));
+  const otherSeason = (model: OpeningHoursModel, r: Routed) =>
+    model.seasons.find((season) => season.id !== r.season)!.id;
+  const monday = (r: Routed) => [{ periodId: r.mananas, startsAt: "09:00", endsAt: "12:00" }];
+  const closed = [{ startsAt: "23:00", endsAt: "06:00" }];
+  const body = (r: Routed) => ({
+    departments: [{ departmentId: r.restaurant, days: week(monday(r)) }],
+    zones: [{ zoneId: r.barra, days: closedWeek(closed) }],
+  });
+
+  it("saves a department week and a zone week in the season it names and no other", async () => {
+    const r = await routed();
+    const named = otherSeason(await r.model(), r);
+    await answers(await r.send("PUT", `/seasons/${named}/weeks`, r.manager, body(r)), 204);
+    const model = await r.model();
+    expect(restaurantOf(model, r).seasonWeeks).toEqual(
+      model.seasons.map((season) => ({
+        seasonId: season.id,
+        week: week(season.id === named ? monday(r) : []),
+      })),
+    );
+    expect(restaurantOf(model, r).zones[0]!.seasonWeeks).toEqual(
+      model.seasons.map((season) => ({
+        seasonId: season.id,
+        week: closedWeek(season.id === named ? closed : []),
+      })),
+    );
+  });
+
+  it("refuses a malformed season id, or one that is not this venue's, changing nothing", async () => {
+    const r = await routed();
+    const elsewhere = (await routed()).season;
+    const before = await r.model();
+    await answers(await r.send("PUT", `/seasons/x/weeks`, r.manager, body(r)), 400, {
+      code: "shared.invalid_id",
+      params: { kind: "SeasonId", value: "x" },
+    });
+    for (const seasonId of [randomUUID(), elsewhere])
+      await answers(await r.send("PUT", `/seasons/${seasonId}/weeks`, r.manager, body(r)), 404, {
+        code: "season.not_found",
+        params: { seasonId },
+      });
+    expect(await r.model()).toEqual(before);
+  });
+
+  it("refuses a malformed body naming the field, changing nothing", async () => {
+    const r = await routed();
+    const before = await r.model();
+    const days = week(monday(r));
+    const zoneDays = closedWeek(closed);
+    const cases: [Record<string, unknown>, string][] = [
+      [{ seasonId: r.season }, "seasonId"],
+      [{ departments: {} }, "departments"],
+      [{ zones: "x" }, "zones"],
+      [{ departments: [null] }, "departments.0"],
+      [{ zones: [[]] }, "zones.0"],
+      [{ departments: [{ departmentId: "x", days }] }, "departments.0.departmentId"],
+      [{ zones: [{ zoneId: 7, days: zoneDays }] }, "zones.0.zoneId"],
+      [
+        { departments: [{ departmentId: r.restaurant, days, seasonId: r.season }] },
+        "departments.0.seasonId",
+      ],
+      [{ zones: [{ zoneId: r.barra, days: zoneDays, kind: "closed" }] }, "zones.0.kind"],
+      [
+        {
+          departments: [
+            { departmentId: r.restaurant, days },
+            { departmentId: r.restaurant, days },
+          ],
+        },
+        "departments.1.departmentId",
+      ],
+      [
+        {
+          zones: [
+            { zoneId: r.barra, days: zoneDays },
+            { zoneId: r.barra, days: zoneDays },
+          ],
+        },
+        "zones.1.zoneId",
+      ],
+    ];
+    for (const [sent, field] of cases)
+      await answers(await r.send("PUT", `/seasons/${r.season}/weeks`, r.manager, sent), 400, {
+        code: "management.request_invalid",
+        params: { field },
+      });
+    expect(await r.model()).toEqual(before);
+  });
+
+  it("names a refused week by its place in the request, every other param unchanged", async () => {
+    const r = await routed();
+    const before = await r.model();
+    const overlapping = [
+      { periodId: r.mananas, startsAt: "09:00", endsAt: "12:00" },
+      { periodId: r.mananas, startsAt: "11:00", endsAt: "13:00" },
+    ];
+    await answers(
+      await r.send("PUT", `/seasons/${r.season}/weeks`, r.manager, {
+        departments: [{ departmentId: r.restaurant, days: week(overlapping) }],
+      }),
+      400,
+      {
+        code: "menu_timetable.invalid",
+        params: { field: "departments.0.days.1.slots", reason: "overlap" },
+      },
+    );
+    await answers(
+      await r.send("PUT", `/seasons/${r.season}/weeks`, r.manager, {
+        departments: [{ departmentId: r.restaurant, days: week(monday(r)) }],
+        zones: [
+          {
+            zoneId: r.barra,
+            days: closedWeek([
+              { startsAt: "16:00", endsAt: "18:00" },
+              { startsAt: "17:00", endsAt: "19:00" },
+            ]),
+          },
+        ],
+      }),
+      400,
+      {
+        code: "zone_closed_time.invalid",
+        params: { field: "zones.0.days.1.ranges", reason: "overlap" },
+      },
+    );
+    expect(await r.model()).toEqual(before);
+  });
+
+  it("refuses an entry with no days through its week's own code, named by its place", async () => {
+    const r = await routed();
+    const before = await r.model();
+    await answers(
+      await r.send("PUT", `/seasons/${r.season}/weeks`, r.manager, {
+        departments: [{ departmentId: r.restaurant }],
+      }),
+      400,
+      { code: "menu_timetable.invalid", params: { field: "departments.0.days" } },
+    );
+    await answers(
+      await r.send("PUT", `/seasons/${r.season}/weeks`, r.manager, {
+        zones: [{ zoneId: r.barra }],
+      }),
+      400,
+      { code: "zone_closed_time.invalid", params: { field: "zones.0.days" } },
+    );
+    expect(await r.model()).toEqual(before);
+  });
+
+  it("refuses a save with no clock revision or a stale one, changing nothing", async () => {
+    const r = await routed();
+    await scoped((tx) =>
+      tx.insert(locationBusinessDaySettings).values({ locationId: r.cfg.locationId, revision: 1 }),
+    );
+    const before = await r.model();
+    for (const expectedClockRevision of [undefined, 0])
+      await answers(
+        await r.send("PUT", `/seasons/${r.season}/weeks`, r.manager, {
+          ...body(r),
+          expectedClockRevision,
+        }),
+        409,
+        { code: "hours.clock_changed", params: {} },
+      );
+    expect(await r.model()).toEqual(before);
+    await answers(
+      await r.send("PUT", `/seasons/${r.season}/weeks`, r.manager, {
+        ...body(r),
+        expectedClockRevision: 1,
+      }),
+      204,
+    );
+  });
+
+  it("refuses someone who may not manage venue service, changing nothing", async () => {
+    const r = await routed();
+    const before = await r.model();
+    for (const person of [r.supervisor, r.staff])
+      await answers(await r.send("PUT", `/seasons/${r.season}/weeks`, person, body(r)), 403);
+    expect(await r.model()).toEqual(before);
+  });
+
+  it("refuses someone who may not manage venue service before checking the body", async () => {
+    const r = await routed();
+    const before = await r.model();
+    const path = `/seasons/${r.season}/weeks`;
+    const refused = await r.send("PUT", path, r.supervisor, body(r));
+    expect(refused.status).toBe(403);
+    const { error } = (await refused.json()) as { error: Record<string, unknown> };
+    for (const malformed of [
+      { zones: "x" },
+      { departments: [{ departmentId: "x" }] },
+      { ...body(r), stray: true },
+      { ...body(r), expectedClockRevision: "x" },
+    ])
+      await answers(await r.send("PUT", path, r.supervisor, malformed), 403, error);
+    expect(await r.model()).toEqual(before);
+  });
+});

@@ -41,6 +41,7 @@ import {
 } from "./menu-timetable.js";
 import type { MenuSlot, MenuWeekDay } from "./menu-timetable-types.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
+import { saveSeasonWeeks } from "./season-weeks.js";
 import { readSeasons } from "./seasons.js";
 import type { PaintRange } from "./day-paint.js";
 import { deleteSpecialDay, saveSpecialDay } from "./special-days.js";
@@ -3341,6 +3342,71 @@ describe("end offsets across a season boundary", () => {
       code: "menu_timetable.invalid",
       params: {
         field: "days",
+        reason: "end_offset",
+        periodId: v.periods.madrugada,
+        departmentId: v.restaurant,
+        seasonId: autumn.id,
+        weekday: 6,
+      },
+    });
+    expect(await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT))).toEqual(before);
+  });
+});
+
+describe("end offsets across a season boundary, saved with the season's other weeks", () => {
+  it("names the clash by the department's place in the request and its whole week", async () => {
+    const v = await timed();
+    const all = await scoped((tx) => readSeasons(tx, v.cfg));
+    const autumn = all.find((season) => season.name === "Autumn")!;
+    const winter = all.find((season) => season.name === "Winter")!;
+    await scoped((tx) =>
+      replaceMenuWeek(
+        tx,
+        v.cfg,
+        v.restaurant,
+        weekOf(() => []),
+        AT,
+        0,
+      ),
+    );
+    await scoped((tx) =>
+      replaceMenuWeek(
+        tx,
+        v.cfg,
+        v.restaurant,
+        weekOf((w) => (w === 6 ? [slot(v.periods.madrugada, "20:00", "05:45")] : [])),
+        AT,
+        0,
+        { seasonId: autumn.id },
+      ),
+    );
+    await scoped((tx) =>
+      updateMenuPeriod(tx, v.cfg, v.periods.madrugada, { endOffsetMinutes: 30 }, 0),
+    );
+    const before = await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT));
+    await expect(
+      scoped((tx) =>
+        saveSeasonWeeks(
+          tx,
+          v.cfg,
+          winter.id,
+          {
+            departments: [
+              { departmentId: v.deli, days: weekOf(() => []) },
+              {
+                departmentId: v.restaurant,
+                days: weekOf((w) => (w === 0 ? [slot(v.periods.mananas, "06:00", "09:00")] : [])),
+              },
+            ],
+          },
+          AT,
+          0,
+        ),
+      ),
+    ).rejects.toMatchObject({
+      code: "menu_timetable.invalid",
+      params: {
+        field: "departments.1.days",
         reason: "end_offset",
         periodId: v.periods.madrugada,
         departmentId: v.restaurant,

@@ -173,27 +173,19 @@ export class OpeningHoursApi {
   deletePeriod(periodId: string): Promise<void> {
     return this.request(`${BASE}/menu-periods/${at(periodId)}`, "DELETE");
   }
-  saveWeek(
-    departmentId: string,
+  saveSeasonWeeks(
     seasonId: string,
-    days: readonly MenuWeekDay[],
+    weeks: {
+      departments: readonly { departmentId: string; days: readonly MenuWeekDay[] }[];
+      zones: readonly {
+        zoneId: string;
+        days: readonly { weekday: number; ranges: readonly ClosedRange[] }[];
+      }[];
+    },
     expectedClockRevision: number,
   ): Promise<void> {
-    return this.request(`${BASE}/departments/${at(departmentId)}/menu-week`, "PUT", {
-      days,
-      seasonId,
-      expectedClockRevision,
-    });
-  }
-  saveZoneWeek(
-    zoneId: string,
-    seasonId: string,
-    days: readonly { weekday: number; ranges: readonly ClosedRange[] }[],
-    expectedClockRevision: number,
-  ): Promise<void> {
-    return this.request(`${BASE}/zones/${at(zoneId)}/closed-week`, "PUT", {
-      days,
-      seasonId,
+    return this.request(`${BASE}/seasons/${at(seasonId)}/weeks`, "PUT", {
+      ...weeks,
       expectedClockRevision,
     });
   }

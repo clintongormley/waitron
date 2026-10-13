@@ -13,6 +13,7 @@ import "./zone-edit-dialog.js";
 import "./opening-hours-screen.js";
 import { namedWeekModel } from "../testing/hours-models.js";
 import { everyDateSpecial } from "../testing/special-day-fixture.js";
+import { drag, frame, settle } from "../testing/season-painter-fixture.js";
 
 const originalUrl = location.href;
 class App extends LitElement {
@@ -277,30 +278,26 @@ it("zone service deletion invalidates pending discard on the same retained compo
   expect(await outcome).toBe("stale");
 });
 it.each(["week", "zone-week"])(
-  "deletion disconnects the dirty retained %s and rejects its old controls",
+  "deletion drops the dirty painted %s and its Save writes nothing",
   async (kind) => {
-    const { screen, model, replace, writes } = await hours("week");
-    if (kind === "zone-week") {
-      history.replaceState(null, "", "/manage/opening-hours/view/week/department/d1/zone/z1");
-      window.dispatchEvent(new PopStateEvent("popstate"));
-      await screen.updateComplete;
-    }
-    const tag = kind === "week" ? "opening-hours-week" : "opening-hours-zone-week";
-    const owner = screen.shadowRoot!.querySelector<
-      HTMLElementTagNameMap["opening-hours-week"] | HTMLElementTagNameMap["opening-hours-zone-week"]
-    >(tag)!;
-    await owner.updateComplete;
-    const grid = owner.shadowRoot!.querySelector("service-grid")!;
-    await grid.updateComplete;
-    emit(grid, kind === "week" ? "grid-block-change" : "grid-range-select", {
-      columnKey: "1",
-      index: 0,
-      startsAt: "10:00",
-      endsAt: "16:00",
-    });
-    await owner.updateComplete;
+    const { screen, model, replace, writes } = await hours("periods");
+    history.pushState(
+      null,
+      "",
+      kind === "week"
+        ? "/manage/opening-hours/view/season/season/autumn/department/d1"
+        : "/manage/opening-hours/view/season/season/autumn/department/d1/zone/z1",
+    );
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await expect
+      .poll(() =>
+        screen.shadowRoot!.querySelector("season-painter")?.shadowRoot?.querySelector("paint-grid"),
+      )
+      .toBeTruthy();
+    const owner = screen.shadowRoot!.querySelector("season-painter")!;
+    await settle(owner);
+    await drag(owner, "1", 360, 600);
     expect(app.leave.coordinator.isDirty()).toBe(true);
-    const stale = owner.shadowRoot!.querySelector<HTMLElement>("[data-test=save-week]")!;
     await replace(
       kind === "week"
         ? { ...model, departments: model.departments.slice(1) }
@@ -311,16 +308,16 @@ it.each(["week", "zone-week"])(
             ),
           },
     );
-    expect(owner.isConnected).toBe(false);
+    await settle(owner);
     expect(app.leave.coordinator.isDirty()).toBe(false);
-    stale.click();
-    emit(grid, "grid-block-change", {
-      columnKey: "1",
-      index: 0,
-      startsAt: "10:00",
-      endsAt: "18:00",
-    });
-    await owner.updateComplete;
+    expect(owner.edited()).toEqual({ departments: [], zones: [] });
+    expect(frame(owner).refusal).toBe(
+      kind === "week"
+        ? "d1 was removed; its changes were dropped."
+        : "Zone 1 was removed; its changes were dropped.",
+    );
+    frame(owner).shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+    await settle(owner);
     expect(writes).toEqual([]);
   },
 );

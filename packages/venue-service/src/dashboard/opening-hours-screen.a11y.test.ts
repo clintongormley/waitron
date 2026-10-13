@@ -187,7 +187,7 @@ describe.each(["en", "es"] as const)("Signed offset list (%s)", (locale) => {
 describe.each(["light", "dark"] as const)("Week with a season picker (%s)", (theme) => {
   test("standard week", async () => {
     setLocale("en");
-    history.replaceState(null, "", "/manage/opening-hours/view/week");
+    history.replaceState(null, "", "/manage/opening-hours/view/week/department/all");
     const wrapper = await mountThemed("<div></div>", theme);
     const screen = document.createElement("dashboard-opening-hours-screen") as OpeningHoursScreen;
     const seasons = [
@@ -220,10 +220,8 @@ describe.each(["light", "dark"] as const)("Week with a season picker (%s)", (the
     );
     wrapper.appendChild(screen);
     await expect.poll(() => screen.shadowRoot!.querySelector("[name=seasonId]")).not.toBeNull();
-    await expect.poll(() => screen.shadowRoot!.querySelector("opening-hours-week")).not.toBeNull();
-    await screen.shadowRoot!.querySelector<HTMLElementTagNameMap["opening-hours-week"]>(
-      "opening-hours-week",
-    )!.updateComplete;
+    await expect.poll(() => screen.shadowRoot!.querySelector("opening-hours-all")).not.toBeNull();
+    await screen.shadowRoot!.querySelector("opening-hours-all")!.updateComplete;
     await expectNoA11yViolations(host);
   });
 });

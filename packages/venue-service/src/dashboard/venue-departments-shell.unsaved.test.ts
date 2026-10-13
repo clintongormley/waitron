@@ -234,7 +234,7 @@ it("the real zone opening-hours link waits for the draft decision before navigat
   await choose("discard");
   await expect
     .poll(() => location.pathname)
-    .toBe("/manage/opening-hours/view/week/department/d1/zone/z1");
+    .toBe("/manage/opening-hours/view/season/season/autumn/department/d1/zone/z1");
   expect(fields.value).toMatchObject({
     orderStart: null,
     paidWhen: null,

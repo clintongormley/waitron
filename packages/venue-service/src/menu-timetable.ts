@@ -53,7 +53,7 @@ import {
   targetSeasons,
   writeDepartmentSeasonWeeks,
 } from "./season-weeks.js";
-import { seasonOn } from "./season-rules.js";
+import { seasonOn, type Season } from "./season-rules.js";
 import { readSeasons } from "./seasons.js";
 import {
   departmentDayRanges,
@@ -125,31 +125,61 @@ export async function requirePeriod(tx: Transaction, cfg: VenueScope, periodId: 
 }
 
 /** Refuses a slot naming a period that is not the department's own. */
-async function assertOwnPeriods(
-  tx: Transaction,
-  departmentId: string,
+function assertOwnPeriods(
+  own: ReadonlySet<string>,
   days: readonly { field: string; slots: readonly MenuSlot[] }[],
-): Promise<void> {
-  const ids = [...new Set(days.flatMap((day) => day.slots.map((slot) => slot.periodId)))];
-  if (ids.length === 0) return;
-  const own = new Set(
-    (
-      await tx
-        .select({ id: menuPeriods.id })
-        .from(menuPeriods)
-        .where(and(eq(menuPeriods.departmentId, departmentId), inArray(menuPeriods.id, ids)))
-    ).map((row) => row.id),
-  );
+): void {
   for (const { field, slots } of days)
     slots.forEach((slot, index) => {
       if (!own.has(slot.periodId)) invalidTimetable(`${field}.${index}.periodId`);
     });
 }
 
+/** What staging a department week reads, for every listed department at once. */
+export type DepartmentWeekReads = {
+  active: ReadonlySet<string>;
+  periods: ReadonlyMap<string, ReadonlySet<string>>;
+  seasonWeeks: Awaited<ReturnType<typeof readDepartmentSeasonWeeks>>;
+};
+
+export async function readDepartmentWeekReads(
+  tx: Transaction,
+  cfg: VenueScope,
+  departmentIds: readonly string[],
+  clock: BusinessDayClock,
+): Promise<DepartmentWeekReads> {
+  const ids = [...new Set(departmentIds)];
+  if (ids.length === 0) return { active: new Set(), periods: new Map(), seasonWeeks: new Map() };
+  const activeRows = await tx
+    .select({ id: departments.id })
+    .from(departments)
+    .where(
+      and(
+        inArray(departments.id, ids),
+        eq(departments.locationId, cfg.locationId),
+        eq(departments.active, true),
+      ),
+    );
+  const periodRows = await tx
+    .select({ id: menuPeriods.id, departmentId: menuPeriods.departmentId })
+    .from(menuPeriods)
+    .where(inArray(menuPeriods.departmentId, ids));
+  const periods = new Map(ids.map((id) => [id, new Set<string>()]));
+  for (const row of periodRows) periods.get(row.departmentId)!.add(row.id);
+  return {
+    active: new Set(activeRows.map((row) => row.id)),
+    periods,
+    seasonWeeks: await readDepartmentSeasonWeeks(tx, cfg, ids, clock.dayCutover),
+  };
+}
+
+type EndOffsetClash = NonNullable<Awaited<ReturnType<typeof endOffsetClash>>>;
+
+/** With `only`, each listed department is checked as it would be alone, in list order. */
 async function endOffsetClash(
   tx: Transaction,
   cfg: VenueScope,
-  departmentId?: string,
+  only?: readonly string[],
   validateZeroOffsets = false,
   acquiredClock?: BusinessDayClock,
 ) {
@@ -164,13 +194,20 @@ async function endOffsetClash(
     .where(
       and(
         eq(departments.locationId, cfg.locationId),
-        departmentId === undefined ? undefined : eq(departments.id, departmentId),
+        only === undefined ? undefined : inArray(departments.id, [...only]),
       ),
     );
   if (!validateZeroOffsets && periods.every((period) => period.offset === 0)) return null;
   const clock = acquiredClock ?? (await readLocationClock(tx, cfg.locationId));
   const offsets = new Map(periods.map((period) => [period.id, period.offset]));
-  const departmentIds = [...new Set(periods.map((period) => period.departmentId))];
+  const departmentIds =
+    only === undefined
+      ? [...new Set(periods.map((period) => period.departmentId))]
+      : only.filter((id) =>
+          periods.some(
+            (period) => period.departmentId === id && (validateZeroOffsets || period.offset !== 0),
+          ),
+        );
   const specialDays = await readSpecialDaySchedules(tx, cfg, departmentIds);
   const holidays = await holidayDatesFor(tx, cfg, specialDays);
   const allSeasons = await readSeasons(tx, cfg);
@@ -223,7 +260,7 @@ export function departmentEndOffsetClash(
   departmentId: string,
   clock?: BusinessDayClock,
 ) {
-  return endOffsetClash(tx, cfg, departmentId, false, clock);
+  return endOffsetClash(tx, cfg, [departmentId], false, clock);
 }
 
 export async function assertPeriodEndOffsets(tx: Transaction, cfg: VenueScope): Promise<void> {
@@ -559,7 +596,7 @@ async function writeMenuPeriod(
         displayOrder,
       })),
     );
-  const clash = await endOffsetClash(tx, cfg, departmentId);
+  const clash = await endOffsetClash(tx, cfg, [departmentId]);
   if (clash !== null)
     throw new AppError("menu_period.invalid", {
       field: "endOffsetMinutes",
@@ -677,22 +714,70 @@ export async function replaceMenuWeek(
   options: { seasonId?: string } = {},
 ): Promise<void> {
   const clock = await readLocationClock(tx, cfg.locationId);
+  const staged = await stageMenuWeek(tx, cfg, departmentId, days, clock, options.seasonId);
+  await assertBusinessDayScheduleWrite(
+    tx,
+    cfg,
+    staged.changed ? "time" : "metadata",
+    at,
+    expectedClockRevision,
+    clock,
+  );
+  await staged.write();
+  await assertWeekEndOffsets(tx, cfg, clock, [{ departmentId, ...staged }]);
+}
+
+/** Refuses the first sending cutoff in the listed departments that runs into what follows it,
+ *  naming the field through the week that holds it. */
+export async function assertWeekEndOffsets(
+  tx: Transaction,
+  cfg: VenueScope,
+  clock: BusinessDayClock,
+  weeks: readonly { departmentId: string; clashField: (clash: EndOffsetClash) => string }[],
+): Promise<void> {
+  const clash = await endOffsetClash(
+    tx,
+    cfg,
+    weeks.map((week) => week.departmentId),
+    false,
+    clock,
+  );
+  if (clash === null) return;
+  const week = weeks.find((entry) => entry.departmentId === clash.departmentId)!;
+  invalidTimetable(week.clashField(clash), { reason: "end_offset", ...clash });
+}
+
+/** A department week checked and compared with what its seasons hold, written by `write`; its
+ *  end offsets are left to `assertWeekEndOffsets`, which the caller runs once every week of the
+ *  request is written. */
+export async function stageMenuWeek(
+  tx: Transaction,
+  cfg: VenueScope,
+  departmentId: string,
+  days: unknown,
+  clock: BusinessDayClock,
+  season: string | Season | undefined,
+  reads?: DepartmentWeekReads,
+): Promise<{
+  changed: boolean;
+  write: () => Promise<void>;
+  clashField: (clash: EndOffsetClash) => string;
+}> {
   const week = parseMenuWeek(days, (value, field) => {
     const parsed = scheduleCutovers(clock).map((cutover) => parseServiceDay(value, field, cutover));
     return parsed[0]!;
   });
-  await assertDepartment(tx, cfg, departmentId);
-  await assertOwnPeriods(
-    tx,
-    departmentId,
+  const known = reads ?? (await readDepartmentWeekReads(tx, cfg, [departmentId], clock));
+  if (!known.active.has(departmentId)) throw new AppError("department.not_found", { departmentId });
+  assertOwnPeriods(
+    known.periods.get(departmentId)!,
     week.slots.map((slots, weekday) => ({ field: `days.${week.indexOf[weekday]}.slots`, slots })),
   );
-  const targets = await targetSeasons(tx, cfg, options.seasonId);
+  const targets = typeof season === "object" ? [season] : await targetSeasons(tx, cfg, season);
+  const seasonId = typeof season === "object" ? season.id : season;
   const samePeriod = (a: ServiceRange, b: ServiceRange) => a.periodId === b.periodId;
   const seasonWeek = week.slots.map((slots) => joinTouching(slots, samePeriod));
-  const seasonsNow = (
-    await readDepartmentSeasonWeeks(tx, cfg, [departmentId], clock.dayCutover)
-  ).get(departmentId);
+  const seasonsNow = known.seasonWeeks.get(departmentId);
   const changed = targets.some((season) =>
     seasonWeek.some(
       (ranges, weekday) =>
@@ -702,35 +787,26 @@ export async function replaceMenuWeek(
         ),
     ),
   );
-  await assertBusinessDayScheduleWrite(
-    tx,
-    cfg,
-    changed ? "time" : "metadata",
-    at,
-    expectedClockRevision,
-    clock,
-  );
   const holding = seasonsHolding(
     seasonsNow,
     targets.map((season) => season.id),
     seasonWeek,
   );
-  await writeDepartmentSeasonWeeks(
-    tx,
-    departmentId,
-    targets.flatMap((season) => (holding.has(season.id) ? [] : [season.id])),
-    seasonWeek,
-  );
-  const clash = await endOffsetClash(tx, cfg, departmentId, false, clock);
-  if (clash !== null)
-    invalidTimetable(
-      // A boundary clash lies in another season's day, which this request does not hold.
-      clash.weekday === undefined ||
-        (options.seasonId !== undefined && clash.seasonId !== options.seasonId)
+  return {
+    changed,
+    write: () =>
+      writeDepartmentSeasonWeeks(
+        tx,
+        departmentId,
+        targets.flatMap((season) => (holding.has(season.id) ? [] : [season.id])),
+        seasonWeek,
+      ),
+    // A boundary clash lies in another season's day, which this request does not hold.
+    clashField: (clash) =>
+      clash.weekday === undefined || (seasonId !== undefined && clash.seasonId !== seasonId)
         ? "days"
         : `days.${week.indexOf[clash.weekday]}.slots`,
-      { reason: "end_offset", ...clash },
-    );
+  };
 }
 
 type Folder = { id: string; name: string; parentId: string | null };

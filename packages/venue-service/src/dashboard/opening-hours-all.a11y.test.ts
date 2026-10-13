@@ -91,13 +91,7 @@ describe.each(["en", "es"] as const)("Opening hours choices (%s)", (locale) => {
       expect(window.innerWidth).toBe(width);
       const wrapper = await mountThemed("<div></div>", theme);
       for (const choice of ["all", "zone"]) {
-        history.replaceState(
-          null,
-          "",
-          choice === "all"
-            ? "/manage/opening-hours/view/week/department/all"
-            : "/manage/opening-hours/view/week/department/restaurant/zone/terrace",
-        );
+        history.replaceState(null, "", "/manage/opening-hours/view/week/department/all");
         const screen = document.createElement(
           "dashboard-opening-hours-screen",
         ) as OpeningHoursScreen;
@@ -118,17 +112,26 @@ describe.each(["en", "es"] as const)("Opening hours choices (%s)", (locale) => {
           scroll.scrollTop = 400;
           expect(grid.columns).toHaveLength(14);
           expect(grid.columns.flatMap((column) => column.slots)).toHaveLength(2);
-          expect(screen.shadowRoot!.querySelector("opening-hours-week")).toBeNull();
+          expect(screen.shadowRoot!.querySelector("season-painter")).toBeNull();
         } else {
-          const zone = screen.shadowRoot!.querySelector("opening-hours-zone-week")!;
-          expect(zone).not.toBeNull();
-          await zone.updateComplete;
-          const grid = zone.shadowRoot!.querySelector("service-grid")!;
+          screen.shadowRoot!.querySelector("[name=departmentId]")!.dispatchEvent(
+            new CustomEvent("wt-change", {
+              detail: { value: "zone:terrace" },
+              bubbles: true,
+              composed: true,
+            }),
+          );
+          await expect
+            .poll(() => screen.shadowRoot!.querySelector("season-painter")?.zoneId)
+            .toBe("terrace");
+          const painter = screen.shadowRoot!.querySelector("season-painter")!;
+          await painter.updateComplete;
+          const grid = painter.shadowRoot!.querySelector("paint-grid")!;
           expect(grid).not.toBeNull();
           await grid.updateComplete;
           const picker =
-            screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
-              "[name=departmentId]",
+            painter.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+              "[name=department]",
             )!;
           await picker.updateComplete;
           expect(picker.shadowRoot!.querySelector("button .value")!.textContent).toContain(
