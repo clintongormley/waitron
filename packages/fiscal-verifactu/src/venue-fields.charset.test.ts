@@ -4,14 +4,6 @@ import type { AltaInput } from "@waitron/verifactu";
 import { TEST_SISTEMA } from "./testing/seed.js";
 import { validateVenueFiscalFields } from "./venue-fields.js";
 
-/**
- * The drift guard for the three `@waitron/verifactu` rules ./venue-fields.ts restates.
- *
- * It deliberately does NOT pin the series code's LENGTH rule, because the two disagree on purpose:
- * the boundary refuses a base over 38 characters so a cold restore's `-<installation number>`
- * suffix still fits, while the record validator accepts NumSerieFactura up to 60.
- */
-
 /** `F2` and no `TipoImpositivo` keep every other rule satisfied, so the only issues this record can
  * produce are the ones under test. */
 function recordFor(fields: { numSerie?: string; nombre?: string; descripcion?: string }) {

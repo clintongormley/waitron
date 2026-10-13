@@ -5,12 +5,12 @@ import { invoiceSeries, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { registroSif } from "./schema/sif.js";
 
-/** `NumSerieFactura` (`<code>/<counter>`) is capped at 60 characters (`@waitron/verifactu`'s validate). A
- * base must leave room for one `-<installation number>` suffix and the counter, each at most ten
- * digits (`integer`), so it may be at most 38 characters. */
+// Leave room for a 27-character emergency identity and a ten-digit invoice counter.
 const NUM_SERIE_MAX = 60;
 const MAX_INT_DIGITS = 10;
-export const MAX_BASE_CODE_LENGTH = NUM_SERIE_MAX - (1 + MAX_INT_DIGITS) - (1 + MAX_INT_DIGITS);
+const MAX_INSTALLATION_LENGTH = 27;
+export const MAX_BASE_CODE_LENGTH =
+  NUM_SERIE_MAX - (1 + MAX_INSTALLATION_LENGTH) - (1 + MAX_INT_DIGITS);
 
 /**
  * Suffix each base with the installation number, preserving purpose. Given a fresh installation

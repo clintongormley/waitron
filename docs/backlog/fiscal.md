@@ -837,3 +837,14 @@ Adoption still has its existing missing-copy limitation; no new copy mechanism o
 establishment credential is supplied here. Default fiscal descriptors, text SIF/counter retirement,
 current-main regeneration/populated upgrade, Cloud binding and both full reviews/hook/current-head
 CI remain. This is an incomplete Task 4 checkpoint, with no intermediate PR.
+
+
+### W41s-4 series-base boundary, 2026-10-14
+
+Setup field validation and live series-base collection on the Task 4 branch now accept
+21-character bases and refuse 22. The wizard's English and Spanish refusal messages and
+series help state that same limit. It reserves space for the longest emergency installation
+identity and a ten-digit invoice counter.
+
+The default fiscal descriptors, text installation schema and local-counter retirement remain
+incomplete; this checkpoint is not a publication candidate.

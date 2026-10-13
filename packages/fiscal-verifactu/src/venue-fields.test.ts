@@ -39,9 +39,7 @@ describe("validateVenueFiscalFields", () => {
   });
 
   it("refuses a series code too long to survive a restore's installation suffix", () => {
-    // MAX_BASE_CODE_LENGTH reserves room for one `-<installation number>` and the counter, each up
-    // to ten digits, inside NumSerieFactura's 60-character cap.
-    const atLimit = "F".repeat(38);
+    const atLimit = "F".repeat(21);
     expect(() => validateVenueFiscalFields({ ...GOOD, seriesCode: atLimit })).not.toThrow();
     expect(() => validateVenueFiscalFields({ ...GOOD, seriesCode: `${atLimit}F` })).toThrow(
       expect.objectContaining({ params: { field: "seriesCode" } }),

@@ -903,3 +903,10 @@ switch is claimed. Adoption's missing-copy limit remains, without persisted auth
 The coupled default-descriptor/text-SIF/counter/remaining-consumer transition, current-main schema
 regeneration/populated upgrade, Cloud operator union, two FULL reviews and normal hook/current-head
 CI remain. Task 4 is still incomplete and this checkpoint must not be published.
+
+
+**2026-10-14 series-base boundary checkpoint:** setup validation and `liveSeriesBases` accept
+21 characters and refuse 22, with the setup wizard's English and Spanish help/refusal messages
+using that bound. The exact boundary assertion and message changes were approved in the
+2026-10-13 remaining-checks document. Default descriptor/text-SIF/counter replacement and the
+remaining consumers stay coupled; this checkpoint does not complete Task 4.
