@@ -243,6 +243,10 @@ undone at the next reset anyway.
 > table is put back over them, clearing their "needs clearing" marks, whole when all its tables stay
 > (owner question 3).
 
+> Superseded 2026-10-13 by A579 part 3c ([design](2026-10-13-a579-flattened-joined-tables-design.md)):
+> the group's **Split** goes. **Split tables…** on any table of a group lists the group's tables, and
+> each ticked one leaves as a table leaves a group.
+
 ### 6.3 Reset
 
 - Today's plan resets automatically at the day cutover, and on Reset to saved plan.
@@ -354,6 +358,9 @@ on every screen. The commit adding them states this reason.
 > (split parts off a joined table), with the same checks.
 
 > Changed 2026-10-13 by A579 part 3b: split-off also splits tables off a group (§6.2).
+
+> Changed 2026-10-13 by A579 part 3c: `POST /api/tables/:id/today/split` (the group's Split) is
+> removed; split-off does its work.
 
 > Added 2026-10-13 by A503 part 4: and `POST /api/tables/:id/today/join-again` (join a split joined
 > table's free tables again), with the same checks.
