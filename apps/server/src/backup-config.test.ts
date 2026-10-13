@@ -420,6 +420,17 @@ describe("loadBackupConfig bucket destinations", () => {
     expect(loadWithVenue(withEntries([s3, other]), VENUE)!.destinations).toHaveLength(2);
   });
 
+  it("refuses a folder entry carrying a field a folder does not take", () => {
+    expect(
+      refusalOf(() =>
+        loadWithVenue(
+          withEntries([{ kind: "local-fs", id: "usb", dir: "/mnt/usb", bucket: "x" }]),
+          VENUE,
+        ),
+      ),
+    ).toEqual({ code: "backup.destinations_invalid", params: { reason: "bad_entry" } });
+  });
+
   it("refuses an id shared by a folder and a bucket", () => {
     expect(() =>
       loadWithVenue(withEntries([{ kind: "local-fs", id: "offsite", dir: "/mnt/a" }, s3]), VENUE),
