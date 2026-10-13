@@ -1113,7 +1113,7 @@ describe("the season weeks route", () => {
     expect(await r.model()).toEqual(before);
   });
 
-  it("refuses someone who may not manage venue service before reading the body", async () => {
+  it("refuses someone who may not manage venue service before checking the body", async () => {
     const r = await routed();
     const before = await r.model();
     const path = `/seasons/${r.season}/weeks`;

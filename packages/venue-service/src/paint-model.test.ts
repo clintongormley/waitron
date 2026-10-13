@@ -5,6 +5,7 @@ import {
   deleteBlock,
   paintStretch,
   stepAt,
+  stepMinuteAt,
   type Paint,
 } from "./paint-model.js";
 
@@ -193,6 +194,16 @@ describe("copyDay", () => {
   it("copying a day with nothing in it empties the days named", () => {
     const days = new Map<string, readonly Paint[]>([["3", [paint(LUNCH, "12:00", "16:00")]]]);
     expect(copyDay(days, "1", ["3"]).get("3")).toEqual([]);
+  });
+});
+
+describe("stepMinuteAt", () => {
+  it("counts minutes from the changeover, reaching 1440 at the end of a quarter-hour day", () => {
+    expect(stepMinuteAt(0, 10, "06:00")).toBe(0);
+    expect(stepMinuteAt(40, 10, "06:00")).toBe(60);
+    expect(stepMinuteAt(96 * 10, 10, "06:00")).toBe(1440);
+    expect(stepMinuteAt(0, 10, "05:50")).toBe(10);
+    expect(stepMinuteAt(96 * 10, 10, "05:50")).toBe(1435);
   });
 });
 

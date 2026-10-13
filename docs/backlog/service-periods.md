@@ -233,7 +233,7 @@ from a season chip, an ordinary date and a zone's Opening hours link.
   `PUT …/seasons/:seasonId/weeks`. Remove them, or keep them with a stated reason.
 - Without a navigation guard, which only test harnesses lack, the painter's history mark is copied
   to later entries, so ✕ can go back to a later entry of the same screen.
-- The navigation guard's `rewrite()` refuses while a leave question is open, so a live refresh that
+- The navigation guard's `write()` and `rewrite()` both refuse while a leave question is open, so a live refresh that
   moves the painter to another season at that moment leaves the address on the old season.
 - Closing a painter opened from the zone dialog's "Opening hours (normal week)" link, on
   Departments and zones, lands on the Opening hours Year, not back on Departments and zones

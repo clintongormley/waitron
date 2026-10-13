@@ -72,7 +72,7 @@ export function stepAt(offsetPx: number, rowPx: number, cutover: string): string
   return clockAt(stepMinuteAt(offsetPx, rowPx, cutover), cutover);
 }
 
-/** `stepAt` as minutes from the changeover, so the day's end is 1440 rather than the changeover. */
+/** `stepAt` as minutes from the changeover; on a quarter-hour changeover the day's end answers 1440. */
 export function stepMinuteAt(offsetPx: number, rowPx: number, cutover: string): number {
   const minutes = rowPx > 0 ? (offsetPx / rowPx) * STEP_MINUTES : 0;
   const first = (STEP_MINUTES - (Number(cutover.slice(3, 5)) % STEP_MINUTES)) % STEP_MINUTES;
