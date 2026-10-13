@@ -1,10 +1,12 @@
 import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AwsReceipt } from "./aws-rehearsal-receipt.js";
+import { type AwsReceipt, isReceiptCleanupCommand } from "./aws-rehearsal-receipt.js";
 import {
   AWS_REHEARSAL_LIMITS,
+  AWS_REHEARSAL_PROFILE,
   AwsRehearsalRefused,
+  cleanupCommandFor,
   type AdminClient,
   type AwsRehearsal,
   type AwsRehearsalDeps,
@@ -732,6 +734,66 @@ describe("teardownOwnedBucket", () => {
       "delete-bucket",
     ]);
     expect(await readdir(dir)).not.toContain("receipts");
+  });
+});
+
+describe("7c fix round 1", () => {
+  it("refuses, before creating anything, a folder that fits the run's receipt name but not the cleanup's", async () => {
+    const commandFor = (folder: string, name: string) =>
+      cleanupCommandFor("eu-north-1", join(folder, name));
+    const runName = `aws-rehearsal-${RUN_ID}.json`;
+    const cleanupName = `aws-rehearsal-${RUN_ID}-cleanup.json`;
+    const pad = 512 - commandFor(join(dir, "x"), runName).length;
+    const folder = join(dir, "x".repeat(1 + pad));
+    expect(isReceiptCleanupCommand(commandFor(folder, runName))).toBe(true);
+    expect(isReceiptCleanupCommand(commandFor(folder, cleanupName))).toBe(false);
+    const h = harness({}, { receiptDir: folder });
+    const error = await rejection(withAwsRehearsal(async () => undefined, h.deps));
+    expect((error as AwsRehearsalRefused).reason).toBe("receipt-dir-unsupported");
+    expect(h.fake.calls).toEqual([]);
+  });
+
+  it("refuses a run id too long for the cleanup receipt's name, saying so", async () => {
+    const h = harness({}, { runId: () => "r".repeat(60) });
+    const error = await rejection(withAwsRehearsal(async () => undefined, h.deps));
+    expect((error as AwsRehearsalRefused).reason).toBe("run-id-unsupported");
+    expect(h.fake.calls).toEqual([]);
+  });
+
+  it("refuses a region the cleanup command cannot carry, saying so", async () => {
+    await writeFile(configFile, "[profile waitron-rehearsal]\nregion = eusc-de-east-1\n");
+    const h = harness({}, { env: env({ AWS_REGION: "eusc-de-east-1" }) });
+    const error = await rejection(withAwsRehearsal(async () => undefined, h.deps));
+    expect((error as AwsRehearsalRefused).reason).toBe("region-unsupported");
+    expect(h.fake.calls).toEqual([]);
+  });
+
+  it("raises a print failure beside a teardown failure rather than instead of it", async () => {
+    const printFailure = new Error("stdout closed");
+    const h = harness(
+      {
+        DeleteBucket: () => {
+          throw sdkError("InternalError", 500, 1);
+        },
+      },
+      {
+        print: () => {
+          throw printFailure;
+        },
+      },
+    );
+    const error = await rejection(withAwsRehearsal(async () => "done", h.deps));
+    expect(error).toBeInstanceOf(AggregateError);
+    const errors = (error as AggregateError).errors;
+    expect(String(errors[0])).toContain("delete-bucket");
+    expect(errors[1]).toBe(printFailure);
+    expect(error.message).not.toContain(SECRET);
+  });
+
+  it("uses one profile name for the profile check and the cleanup command", () => {
+    expect(cleanupCommandFor("eu-north-1", "/tmp/aws-rehearsal-x.json")).toContain(
+      `AWS_PROFILE=${AWS_REHEARSAL_PROFILE} `,
+    );
   });
 });
 

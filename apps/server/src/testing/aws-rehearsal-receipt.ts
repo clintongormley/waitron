@@ -112,14 +112,16 @@ const ACCESS_KEY_ID = /(?:AKIA|ASIA|AIDA|AROA)[A-Z0-9]{12,}/;
 const ERROR_NAME = /^[A-Z][A-Za-z0-9]{0,63}$/;
 // AWS calls an upload id opaque: printable ASCII without whitespace, `"` or `\`; never a URL.
 const UPLOAD_ID = /^[!#-[\]-~]{1,1024}$/;
+export const AWS_REHEARSAL_PROFILE = "waitron-rehearsal";
+const REGION = "[a-z]{2}(?:-[a-z]+)+-[0-9]{1,2}";
 const CLEANUP_COMMAND_HEAD =
   'WAITRON_RUN_AWS_REHEARSAL=1 AWS_SHARED_CREDENTIALS_FILE="$HOME/.config/waitron-cloud/aws/credentials" ' +
-  'AWS_CONFIG_FILE="$HOME/.config/waitron-cloud/aws/config" AWS_PROFILE=waitron-rehearsal AWS_REGION=';
+  `AWS_CONFIG_FILE="$HOME/.config/waitron-cloud/aws/config" AWS_PROFILE=${AWS_REHEARSAL_PROFILE} AWS_REGION=`;
 const CLEANUP_COMMAND_SCRIPT =
   " pnpm --filter @waitron/server exec tsx scripts/aws-rehearsal-cleanup.ts --receipt ";
 const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
 const CLEANUP_COMMAND = new RegExp(
-  `^${escapeRegExp(CLEANUP_COMMAND_HEAD)}[a-z]{2}(?:-[a-z]+)+-[0-9]{1,2}` +
+  `^${escapeRegExp(CLEANUP_COMMAND_HEAD)}${REGION}` +
     `${escapeRegExp(CLEANUP_COMMAND_SCRIPT)}/(?:[A-Za-z0-9._@-]+/){0,40}aws-rehearsal-[A-Za-z0-9._:-]{1,64}\\.json$`,
 );
 const CLEANUP_COMMAND_MAX = 512;
@@ -138,6 +140,11 @@ const OWNERSHIP_STATES = ["owned", "not-created", "collision", "unowned-candidat
 /** The receipt's shape rule for an upload id; the key-pair check is separate. */
 export function isReceiptUploadId(id: unknown): id is string {
   return typeof id === "string" && UPLOAD_ID.test(id) && !id.includes("://");
+}
+
+/** A region the cleanup command may carry. */
+export function isReceiptRegion(region: unknown): region is string {
+  return typeof region === "string" && new RegExp(`^${REGION}$`).test(region);
 }
 
 export function isReceiptToken(value: unknown): value is string {

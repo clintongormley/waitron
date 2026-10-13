@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -526,5 +526,103 @@ describe("aws-rehearsal-cleanup script", () => {
     expect(named).toBe("scripts/aws-rehearsal-cleanup.ts");
     const serverRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
     expect(existsSync(join(serverRoot, named!))).toBe(true);
+  });
+});
+
+describe("cleanupFromReceipt fix round 1", () => {
+  async function useRegion(region: string): Promise<void> {
+    await writeFile(configFile, `[profile waitron-rehearsal]\nregion = ${region}\n`);
+  }
+
+  it("refuses a region the cleanup command cannot carry, saying so", async () => {
+    await useRegion("eusc-de-east-1");
+    await writeLeft(leftReceipt({ header: { ...leftReceipt().header, region: "eusc-de-east-1" } }));
+    const h = harness({}, { env: env({ AWS_REGION: "eusc-de-east-1" }) });
+    const error = await refusal(cleanupFromReceipt(receiptPath, h.deps));
+    expect((error as AwsRehearsalRefused).reason).toBe("region-unsupported");
+    expect(h.fake.calls).toEqual([]);
+  });
+
+  it("refuses a run id too long for the cleanup receipt's name, saying so", async () => {
+    await writeLeft(leftReceipt({ header: { ...leftReceipt().header, runId: "r".repeat(60) } }));
+    const h = harness();
+    const error = await refusal(cleanupFromReceipt(receiptPath, h.deps));
+    expect((error as AwsRehearsalRefused).reason).toBe("run-id-unsupported");
+    expect(h.fake.calls).toEqual([]);
+  });
+
+  it("refuses a receipt in a folder the cleanup command cannot name", async () => {
+    const folder = join(dir, "has space");
+    await mkdir(folder);
+    receiptPath = join(folder, `aws-rehearsal-${RUN_ID}.json`);
+    await writeLeft(leftReceipt());
+    const h = harness();
+    const error = await refusal(cleanupFromReceipt(receiptPath, h.deps));
+    expect((error as AwsRehearsalRefused).reason).toBe("receipt-dir-unsupported");
+    expect(h.createAdminClient).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      "an owned bucket that is not a rehearsal bucket",
+      {
+        ownership: { state: "owned", bucket: "lane-d" },
+        remaining: { bucket: null, uploadIds: [] },
+      },
+    ],
+    ["an unknown ownership state", { ownership: { state: "adopted", bucket: BUCKET } }],
+    [
+      "an unowned candidate that is not a rehearsal bucket",
+      { ownership: { state: "unowned-candidate", bucket: null, candidate: "x" } },
+    ],
+    ["a remaining block that is not an object", { remaining: [BUCKET] }],
+    [
+      "upload ids that are not a list",
+      { remaining: { bucket: BUCKET, uploadIds: "upload-from-receipt" } },
+    ],
+    ["an upload id with a space", { remaining: { bucket: BUCKET, uploadIds: ["has space"] } }],
+    ["a missing ownership block", { ownership: undefined }],
+    ["a region that is not a token", { header: { ...leftReceipt().header, region: "eu north" } }],
+  ])("refuses %s with zero commands", async (_label, override) => {
+    await writeLeft({ ...leftReceipt(), ...override });
+    const h = harness();
+    const error = await refusal(cleanupFromReceipt(receiptPath, h.deps));
+    expect((error as AwsRehearsalRefused).reason).toBe("receipt-refused");
+    expect(h.fake.calls).toEqual([]);
+  });
+
+  it("refuses when the marker's body cannot be read, deleting nothing", async () => {
+    await writeLeft(leftReceipt());
+    const h = harness({
+      GetObject: () => ({
+        ...ok(),
+        Body: {
+          transformToString: async () => {
+            throw new Error(`stream broke ${SECRET}`);
+          },
+        },
+      }),
+    });
+    const error = await refusal(cleanupFromReceipt(receiptPath, h.deps));
+    expect((error as AwsRehearsalRefused).reason).toBe("ownership-unproven");
+    expect(error.message).not.toContain(SECRET);
+    expect(h.fake.names()).toEqual(["GetObject"]);
+  });
+
+  it("names the bucket left and the failed steps when the cleanup receipt cannot be written", async () => {
+    await writeLeft(leftReceipt());
+    await mkdir(cleanupPath());
+    const h = harness({
+      DeleteBucket: () => {
+        throw sdkError("InternalError", 500);
+      },
+    });
+    const error = await refusal(cleanupFromReceipt(receiptPath, h.deps));
+    expect(error.message).toContain("receipt not written");
+    expect(error.message).toContain(`bucket left: ${BUCKET}`);
+    expect(error.message).toContain("failed teardown steps: delete-bucket");
+    expect(error.message).not.toContain(SECRET);
+    expect(error.message).not.toContain(KEY_ID);
+    expect(h.printed).toEqual([]);
   });
 });

@@ -34,11 +34,13 @@ import {
   AWS_REHEARSAL_SCENARIO_DEADLINE_MS,
 } from "./aws-rehearsal-limits.js";
 import {
+  AWS_REHEARSAL_PROFILE,
   type AwsReceiptOwnership,
   type AwsReceiptRemaining,
   cleanupCommandFor,
   createReceiptLog,
   isReceiptCleanupCommand,
+  isReceiptRegion,
   isReceiptToken,
   isReceiptUploadId,
   receiptFileName,
@@ -47,9 +49,7 @@ import {
   writeReceipt,
 } from "./aws-rehearsal-receipt.js";
 
-export const AWS_REHEARSAL_PROFILE = "waitron-rehearsal";
-
-export { cleanupCommandFor } from "./aws-rehearsal-receipt.js";
+export { AWS_REHEARSAL_PROFILE, cleanupCommandFor } from "./aws-rehearsal-receipt.js";
 
 export {
   AWS_REHEARSAL_LIMITS,
@@ -80,7 +80,9 @@ export type AwsRehearsalRefusalReason =
   | "child-pid-refused"
   | "teardown-started"
   | "receipt-refused"
-  | "ownership-unproven";
+  | "ownership-unproven"
+  | "region-unsupported"
+  | "run-id-unsupported";
 
 /** Its message names a rule and a variable or key, never a value read from the environment or a file. */
 export class AwsRehearsalRefused extends Error {
@@ -663,6 +665,34 @@ export async function teardownOwnedBucket(
   };
 }
 
+/**
+ * Refuses, before any command, a run whose receipt or cleanup receipt could not carry a cleanup
+ * command; the cleanup receipt's name is the longer of the two.
+ */
+function assertCleanupCommandFits(region: string, runId: string, receiptDir: string): void {
+  if (!isReceiptRegion(region)) {
+    throw new AwsRehearsalRefused(
+      "region-unsupported",
+      "AWS_REGION must look like eu-north-1 for the cleanup command to carry it",
+    );
+  }
+  if (!isReceiptToken(runId) || !isReceiptToken(`${runId}-cleanup`)) {
+    throw new AwsRehearsalRefused(
+      "run-id-unsupported",
+      "the run id must be a token of at most 56 characters for the cleanup receipt's name",
+    );
+  }
+  for (const kind of ["run", "cleanup"] as const) {
+    const path = join(receiptDir, receiptFileName(runId, kind));
+    if (!isReceiptCleanupCommand(cleanupCommandFor(region, path))) {
+      throw new AwsRehearsalRefused(
+        "receipt-dir-unsupported",
+        "the receipt folder's path cannot be named in a cleanup command of at most 512 characters",
+      );
+    }
+  }
+}
+
 function randomBucketSuffix(): string {
   const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
   return Array.from({ length: 12 }, () => alphabet[randomInt(alphabet.length)]).join("");
@@ -853,13 +883,8 @@ async function runOwned<T>(
   if (!REHEARSAL_BUCKET_PATTERN.test(bucket)) {
     throw new AwsRehearsalFailed("the generated bucket name does not match the rehearsal pattern");
   }
-  const receiptPath = join(receiptDir, `aws-rehearsal-${runId}.json`);
-  if (!isReceiptCleanupCommand(cleanupCommandFor(region, receiptPath))) {
-    throw new AwsRehearsalRefused(
-      "receipt-dir-unsupported",
-      "the receipt folder's path is too long for the cleanup command the receipt may carry",
-    );
-  }
+  assertCleanupCommandFits(region, runId, receiptDir);
+  const receiptPath = join(receiptDir, receiptFileName(runId));
   const log = createReceiptLog(
     {
       runId,
@@ -1073,7 +1098,14 @@ async function runOwned<T>(
       `the receipt was not written (${receiptFailureCause(error)})`,
     );
   }
-  if (receiptFailure === undefined) deps.print(receiptPath);
+  let printFailure: unknown;
+  if (receiptFailure === undefined) {
+    try {
+      deps.print(receiptPath);
+    } catch (error) {
+      printFailure = error;
+    }
+  }
 
   const teardownFailure =
     failedSteps.length === 0
@@ -1093,6 +1125,11 @@ async function runOwned<T>(
       `the rehearsal's receipt was not written; bucket left: ${left}; ` +
         `failed teardown steps: ${failedSteps.length === 0 ? "none" : failedSteps.join(", ")}`,
     );
+  }
+  if (printFailure !== undefined) {
+    const errors = [failure, teardownFailure, printFailure].filter((error) => error !== undefined);
+    if (errors.length === 1) throw printFailure;
+    throw new AggregateError(errors, `the rehearsal failed; receipt: ${receiptPath}`);
   }
   if (failure !== undefined) {
     if (teardownFailure !== undefined) {
@@ -1229,13 +1266,8 @@ export async function cleanupFromReceipt(
     return { ok: true, receiptPath: null };
   }
   const { runId, region } = left;
+  assertCleanupCommandFits(region, runId, dirname(path));
   const cleanupPath = join(dirname(path), receiptFileName(runId, "cleanup"));
-  if (!isReceiptCleanupCommand(cleanupCommandFor(region, cleanupPath))) {
-    throw new AwsRehearsalRefused(
-      "receipt-dir-unsupported",
-      "the receipt's folder cannot be named in a cleanup command",
-    );
-  }
 
   const client = deps.createAdminClient(profile);
   try {
@@ -1293,7 +1325,17 @@ export async function cleanupFromReceipt(
       cleanupCommand:
         teardown.remaining.bucket === null ? null : cleanupCommandFor(region, cleanupPath),
     });
-    const written = await writeReceipt(dirname(path), receipt, profile, "cleanup");
+    let written: string;
+    try {
+      written = await writeReceipt(dirname(path), receipt, profile, "cleanup");
+    } catch (error) {
+      const failed = teardown.entries.filter((entry) => entry.outcome === "failed");
+      throw new AwsRehearsalFailed(
+        `cleanup receipt not written (${receiptFailureCause(error)}); ` +
+          `bucket left: ${teardown.remaining.bucket ?? "none"}; failed teardown steps: ` +
+          (failed.length === 0 ? "none" : failed.map((entry) => entry.step).join(", ")),
+      );
+    }
     deps.print(written);
     return { ok: teardown.remaining.bucket === null, receiptPath: written };
   } finally {
