@@ -15,7 +15,7 @@ import {
 import {
   hasExactKeys,
   isRecord,
-  parseArchiveSettings,
+  archiveRecord,
   parseSchedule,
   readHeldArchiveSettings,
   requestInvalid,
@@ -413,7 +413,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
         resolveBackupConfig({
           managedByEnvironment: false,
           env: { WAITRON_BACKUP_RECOVERY_KEY: recoveryKey },
-          sealed: parseArchiveSettings(JSON.stringify({ ...settings, revision: randomUUID() })),
+          sealed: archiveRecord(settings).stored,
           venueId: deps.venueId,
         });
         if (destination.kind === "s3") {

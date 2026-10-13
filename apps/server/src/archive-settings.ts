@@ -282,14 +282,23 @@ export async function readHeldArchiveSettings(
   }
 }
 
+/** The record `writeArchiveSettings` would store, under a new revision, as a read would return
+ * it; throws what that read would. */
+export function archiveRecord(settings: Omit<ArchiveSettings, "revision">): {
+  json: string;
+  stored: ArchiveSettings;
+} {
+  const json = JSON.stringify({ ...settings, revision: randomUUID() });
+  return { json, stored: parseArchiveSettings(json) };
+}
+
 /** Stores the settings under a new revision; what is stored is what a read will accept. */
 export async function writeArchiveSettings(
   tx: Transaction,
   ring: KeyRing,
   settings: Omit<ArchiveSettings, "revision">,
 ): Promise<ArchiveSettings> {
-  const json = JSON.stringify({ ...settings, revision: randomUUID() });
-  const stored = parseArchiveSettings(json);
+  const { json, stored } = archiveRecord(settings);
   await putCredential(tx, ring, { purpose: ARCHIVE_PURPOSE, value: { settings: json } });
   return stored;
 }
