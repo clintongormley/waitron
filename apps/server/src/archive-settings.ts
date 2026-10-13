@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { isAbsolute, resolve } from "node:path";
+import { resolve } from "node:path";
 import { putCredential, tryGetCredential, type KeyRing } from "@waitron/credentials";
 import { withTransaction, type Database, type Transaction } from "@waitron/db";
 import { AppError, hasCode, isAppError } from "@waitron/shared";
@@ -153,14 +153,14 @@ function parseStoredBucket(raw: unknown): BucketConfig {
   ) {
     throw invalid();
   }
-  return {
-    ...(endpoint === undefined ? {} : { endpoint }),
-    region,
-    bucket,
-    prefix,
-    accessKeyId,
-    secretAccessKey,
-  };
+  try {
+    return readBucketConfig(raw, () => {
+      throw invalid();
+    });
+  } catch (error) {
+    if (isAppError(error) && hasCode(error, "backup.stream_config_unsafe")) throw invalid();
+    throw error;
+  }
 }
 
 function parseStoredDestination(raw: unknown): BackupDestination {
@@ -169,7 +169,7 @@ function parseStoredDestination(raw: unknown): BackupDestination {
   if (raw.kind === "local-fs") {
     const { id, dir } = raw;
     if (!hasExactKeys(raw, ["kind", "id", "dir"]) || !isText(id) || !isText(dir)) throw invalid();
-    if (!isAbsolute(dir)) throw invalid();
+    if (dir !== resolve(dir)) throw invalid();
     return { kind: "local-fs", id, dir };
   }
   if (raw.kind !== "s3" || !hasExactKeys(raw, ["kind", "id", "bucket", "venueId"])) throw invalid();

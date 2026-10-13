@@ -398,6 +398,38 @@ describe("parseArchiveSettings", () => {
     expect(JSON.stringify(params)).not.toContain("custom-secret");
   });
 
+  const storedBucket = (bucket as { bucket: Record<string, unknown> }).bucket;
+  it.each([
+    ["an endpoint that is not a URL", { endpoint: "not a url" }],
+    ["an ftp endpoint", { endpoint: "ftp://s3.example.test" }],
+    ["an upper-case bucket name", { bucket: "UP_PER" }],
+    ["a prefix with outer spaces", { prefix: " sp " }],
+  ])("refuses a stored bucket with %s as the request path would", (_name, change) => {
+    const s = { ...valid, destinations: [{ ...bucket, bucket: { ...storedBucket, ...change } }] };
+    expect(refusal(() => parseArchiveSettings(JSON.stringify(s)))).toEqual({
+      code: "backup.archive_settings_invalid",
+      params: { reason: "bucket" },
+    });
+  });
+
+  it.each(["/a/../b", "/var/backups/", "/a//b", "/a/./b"])(
+    "refuses a stored folder %j that is not already resolved",
+    (dir) => {
+      const s = { ...valid, destinations: [{ ...local, dir }] };
+      expect(refusal(() => parseArchiveSettings(JSON.stringify(s)))).toEqual({
+        code: "backup.archive_settings_invalid",
+        params: { reason: "destination" },
+      });
+    },
+  );
+
+  it("refuses one folder stored twice with and without a trailing slash", () => {
+    const s = { ...valid, destinations: [local, { ...local, id: "second", dir: "/var/backups/" }] };
+    expect(refusal(() => parseArchiveSettings(JSON.stringify(s))).code).toBe(
+      "backup.archive_settings_invalid",
+    );
+  });
+
   it("refuses text that is not JSON", () => {
     expect(refusal(() => parseArchiveSettings("{not json")).code).toBe(
       "backup.archive_settings_invalid",
