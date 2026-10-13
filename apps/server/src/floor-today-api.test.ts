@@ -333,6 +333,20 @@ describe("the table routes' revision", () => {
     await expectRevision(today(table.a!, "put-back", { zoneRevision: read }), zoneId, read);
   });
 
+  it("a request sending the current revision still meets the route's own refusal, writing nothing", async () => {
+    const { zoneId, table } = await ROOM();
+    await seatAt(table.a!);
+    const read = (await zoneRevisionOf(zoneId))!;
+    const before = await everything();
+
+    expect(await refusal(today(table.a!, "take-off", { zoneRevision: read }))).toEqual({
+      status: 409,
+      body: { error: { code: "tab.already_open", params: { tableId: table.a! } } },
+    });
+    expect(await everything()).toEqual(before);
+    expect(await zoneRevisionOf(zoneId)).toBe(read);
+  });
+
   it("a stale screen is refused when the catch-up changes the room", async () => {
     const { zoneId, table, master, revision } = await plannedZone(v, [
       { key: "bar", label: "Bar", place: { x: 40, y: 0 } },
@@ -613,15 +627,25 @@ describe("today's routes", () => {
       await tx.insert(floorTodayZones).values({ zoneId, businessDay: "2026-01-01", revision: 1 });
     });
 
-    const answer = await send("POST", `/api/zones/${zoneId}/today/reset`, {});
-    const [row] = await inTx(v, (tx) =>
-      tx.select().from(floorTodayZones).where(eq(floorTodayZones.zoneId, zoneId)),
-    );
-    expect(row).toMatchObject({ businessDay: "2026-01-01", revision: 1 });
-    expect(answer.status).toBe(404);
-    expect(await answer.json()).toEqual({
-      error: { code: "zone.not_found", params: { zoneId } },
-    });
+    try {
+      const answer = await send("POST", `/api/zones/${zoneId}/today/reset`, {});
+      const [row] = await inTx(v, (tx) =>
+        tx.select().from(floorTodayZones).where(eq(floorTodayZones.zoneId, zoneId)),
+      );
+      expect(row).toMatchObject({ businessDay: "2026-01-01", revision: 1 });
+      expect(answer.status).toBe(404);
+      expect(await answer.json()).toEqual({
+        error: { code: "zone.not_found", params: { zoneId } },
+      });
+    } finally {
+      // A location with no kitchen timing fails every later floor read (`station.timing_missing`).
+      await inTx(v, async (tx) => {
+        await tx.delete(floorTodayZones).where(eq(floorTodayZones.zoneId, zoneId));
+        await tx.delete(floorPlans).where(eq(floorPlans.zoneId, zoneId));
+        await tx.delete(floorZones).where(eq(floorZones.id, zoneId));
+        await tx.delete(locations).where(eq(locations.id, elsewhere));
+      });
+    }
   });
 
   it("leaves a zone with no master plan alone on a reset", async () => {

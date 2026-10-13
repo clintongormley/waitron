@@ -70,12 +70,17 @@ async function post(path: string, body: unknown): Promise<Response> {
   });
 }
 
-async function merge(movingId: string, targetId: string, side: string): Promise<void> {
-  const answer = await post(`/api/tables/${movingId}/today/merge`, { targetId, side, seats: 8 });
+/** A 200 naming a room and its revision. */
+async function expectRevision(answer: Response): Promise<void> {
   expect({ status: answer.status, body: await answer.json() }).toEqual({
     status: 200,
     body: { zoneId: expect.any(String), revision: expect.any(Number) },
   });
+}
+
+async function merge(movingId: string, targetId: string, side: string): Promise<void> {
+  const answer = await post(`/api/tables/${movingId}/today/merge`, { targetId, side, seats: 8 });
+  await expectRevision(answer);
 }
 
 async function refusal(answer: Promise<Response>): Promise<{ status: number; body: unknown }> {
@@ -121,10 +126,7 @@ async function threeTables(fixed = false) {
 
 async function takeOff(tableId: string): Promise<void> {
   const answer = await post(`/api/tables/${tableId}/today/take-off`, {});
-  expect({ status: answer.status, body: await answer.json() }).toEqual({
-    status: 200,
-    body: { zoneId: expect.any(String), revision: expect.any(Number) },
-  });
+  await expectRevision(answer);
 }
 
 describe("seating at a table taken off today", () => {
