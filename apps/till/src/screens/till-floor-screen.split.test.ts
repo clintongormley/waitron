@@ -4,7 +4,7 @@ import { setLocale } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
 import "./till-floor-screen.js";
-import type { FloorZone, TableState, TableToday, TillApi } from "../api/client.js";
+import type { FloorAnswer, FloorZone, TableState, TableToday, TillApi } from "../api/client.js";
 
 const zone: FloorZone = {
   id: "z1",
@@ -86,7 +86,11 @@ const barPart = (id: string, label: string) =>
 const twoJoined = () => [...floor(), barTable(), barPart("b1", "Bar 1"), barPart("b2", "Bar 2")];
 
 function stubApi() {
-  return { splitOffToday: vi.fn<TillApi["splitOffToday"]>(() => Promise.resolve()) };
+  return {
+    splitOffToday: vi.fn<TillApi["splitOffToday"]>(() =>
+      Promise.resolve({ zoneId: "z1", revision: 0 }),
+    ),
+  };
 }
 
 type Stub = ReturnType<typeof stubApi>;
@@ -101,8 +105,8 @@ function holdAnswer(api: Stub): Answer {
   const answer = {} as Answer;
   api.splitOffToday.mockImplementationOnce(
     () =>
-      new Promise<void>((resolve, reject) => {
-        answer.done = resolve;
+      new Promise<FloorAnswer>((resolve, reject) => {
+        answer.done = () => resolve({ zoneId: "z1", revision: 0 });
         answer.refuse = reject;
       }),
   );
@@ -180,10 +184,14 @@ describe("till-floor-screen: splitting tables off a joined table", () => {
     send(opened, "split-joined-confirm", { partIds: ["c5"], seats: 8 });
     await settle(el);
 
-    expect(api.splitOffToday).toHaveBeenCalledExactlyOnceWith("long", {
-      partIds: ["c5"],
-      seats: 8,
-    });
+    expect(api.splitOffToday).toHaveBeenCalledExactlyOnceWith(
+      "long",
+      {
+        partIds: ["c5"],
+        seats: 8,
+      },
+      0,
+    );
     expect(commit).toHaveBeenCalledOnce();
     expect(windowOf(el)).toBeNull();
     expect(refreshes.count).toBe(1);
@@ -193,14 +201,19 @@ describe("till-floor-screen: splitting tables off a joined table", () => {
   it("keeps the window open while the split is sent", async () => {
     const api = stubApi();
     let answer!: () => void;
-    api.splitOffToday.mockImplementation(() => new Promise<void>((resolve) => (answer = resolve)));
+    api.splitOffToday.mockImplementation(
+      () =>
+        new Promise<FloorAnswer>(
+          (resolve) => (answer = () => resolve({ zoneId: "z1", revision: 0 })),
+        ),
+    );
     const el = await mount(floor(), api);
     const refreshes = countRefreshes(el);
 
     send(await openSplit(el), "split-joined-confirm", { partIds: ["c4", "c5"], seats: null });
     await settle(el);
 
-    expect(api.splitOffToday).toHaveBeenCalledExactlyOnceWith("long", { partIds: ["c4", "c5"] });
+    expect(api.splitOffToday).toHaveBeenCalledExactlyOnceWith("long", { partIds: ["c4", "c5"] }, 0);
     expect(windowOf(el)).not.toBeNull();
     expect(windowOf(el)!.busy).toBe(true);
     expect(refreshes.count).toBe(0);
@@ -433,5 +446,25 @@ describe("till-floor-screen: splitting tables off a joined table", () => {
     await settle(el);
     expect(windowOf(el)).toBeNull();
     expect(api.splitOffToday).not.toHaveBeenCalled();
+  });
+});
+
+/** `tables` as a floor read at the room's revision `revision`. */
+const atRevision = (tables: TableState[], revision: number): TableState[] =>
+  tables.map((each) => ({ ...each, today: { ...each.today!, zoneRevision: revision } }));
+
+describe("till-floor-screen: Split tables… and the room's revision", () => {
+  it("Split sends the revision of the read current at the press, not at the window's opening", async () => {
+    const api = stubApi();
+    const el = await mount(atRevision(floor(), 7), api);
+    const opened = await openSplit(el);
+
+    el.tablesReadAt = performance.now();
+    el.tables = atRevision(floor(), 8);
+    await el.updateComplete;
+    send(opened, "split-joined-confirm", { partIds: ["c5"], seats: null });
+    await settle(el);
+
+    expect(api.splitOffToday).toHaveBeenCalledExactlyOnceWith("long", { partIds: ["c5"] }, 8);
   });
 });

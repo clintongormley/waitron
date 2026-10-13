@@ -294,6 +294,12 @@ type Drill = { kind: "table-order" | "ticket" | TillDestination };
 
 type RefreshList = "held" | "station" | "waiting";
 
+/** A floor read's number, taken as it starts, and when it started. */
+interface TablesRead {
+  number: number;
+  startedAt: number;
+}
+
 /** How reading an adjusted order again ended. */
 type Reread = "read" | "unread" | "gone";
 
@@ -1324,6 +1330,8 @@ export class TillApp extends LitElement {
   #transferViewRead = 0;
   /** Each table read takes the next number as it starts; see {@link #applyTables}. */
   #tablesRead = 0;
+  /** When the read whose answer `tables` holds started, on `performance.now()`'s clock. */
+  @state() private tablesReadAt = 0;
   #tablesApplied = 0;
   #tablesJson = "[]";
   #counterRetrievals = new Map<object, string>();
@@ -1474,7 +1482,7 @@ export class TillApp extends LitElement {
     const replaced = () =>
       read !== this.#transferViewRead || session !== this.#operatorSession || api !== this.api;
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
-    const tablesRead = ++this.#tablesRead;
+    const tablesRead = this.#startTablesRead();
     try {
       const tables = await api.getTablesState({ signal: limit.signal });
       if (replaced()) return;
@@ -5522,7 +5530,7 @@ export class TillApp extends LitElement {
    */
   async #loadFloorData(replaced: () => boolean = () => false): Promise<void> {
     const zonesRead = ++this.#floorZonesRead;
-    const tablesRead = ++this.#tablesRead;
+    const tablesRead = this.#startTablesRead();
     try {
       const [tables, zones, statuses] = await Promise.all([
         this.api.getTablesState(),
@@ -5637,22 +5645,27 @@ export class TillApp extends LitElement {
    * this read's answer, or a newer one's, has been applied; `this.tables` then holds it or a list
    * equal to it. */
   async #refreshFloor(...options: [] | [ReadOptions]): Promise<boolean> {
-    const read = ++this.#tablesRead;
+    const read = this.#startTablesRead();
     try {
       const tables = await this.api.getTablesState(...options);
       if (options[0]?.signal?.aborted !== true) this.#applyTables(read, tables);
     } catch {
       // The last-known floor stays.
     }
-    return this.#tablesApplied >= read;
+    return this.#tablesApplied >= read.number;
+  }
+
+  #startTablesRead(): TablesRead {
+    return { number: ++this.#tablesRead, startedAt: performance.now() };
   }
 
   /** A read's answer replaces the tables unless a read that started after it was applied first, so
    * a poll answering late never undoes an action's newer read. An answer equal to the tables shown
    * still counts as applied, but keeps the list shown. */
-  #applyTables(read: number, tables: TableState[]): void {
-    if (read <= this.#tablesApplied) return;
-    this.#tablesApplied = read;
+  #applyTables(read: TablesRead, tables: TableState[]): void {
+    if (read.number <= this.#tablesApplied) return;
+    this.#tablesApplied = read.number;
+    this.tablesReadAt = read.startedAt;
     const json = JSON.stringify(tables);
     if (json === this.#tablesJson) return;
     this.#tablesJson = json;
@@ -7616,7 +7629,7 @@ export class TillApp extends LitElement {
   /** Re-reads occupancy without leaving the screen. Unlike {@link #refreshFloor}, a failed read
    * empties the floor. */
   async #reloadTables(): Promise<void> {
-    const read = ++this.#tablesRead;
+    const read = this.#startTablesRead();
     try {
       this.#applyTables(read, await this.api.getTablesState());
     } catch {
@@ -9450,6 +9463,7 @@ export class TillApp extends LitElement {
       .fireControl=${this.fireControl}
       .zones=${this.zones}
       .tables=${this.tables}
+      .tablesReadAt=${this.tablesReadAt}
       .bumpMode=${this.bumpMode}
       .deviceMode=${this.deviceMode}
       .initialDeviceStation=${this.initialDeviceStation}

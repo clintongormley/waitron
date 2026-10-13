@@ -7900,6 +7900,38 @@ describe("till-app", () => {
       expect(floor(el)!.tables).toEqual([tableB]);
     });
 
+    it("tells the floor when the read it shows started, not when a later read still out started", async () => {
+      const answerA = deferredTables();
+      const answerB = deferredTables();
+      const { el } = await mountApp({
+        getTablesState: vi
+          .fn()
+          .mockResolvedValueOnce([freeTable])
+          .mockReturnValueOnce(answerA.promise)
+          .mockReturnValueOnce(answerB.promise),
+        listZones: vi.fn().mockResolvedValue([floorZone]),
+      });
+      await toCounter(el);
+      selectTab(el, "floor");
+      await flush(el);
+      const beforeA = performance.now();
+      emit(floor(el)!, "floor-refresh");
+      let betweenReads = performance.now();
+      while (betweenReads <= beforeA) betweenReads = performance.now();
+      while (performance.now() <= betweenReads);
+      emit(floor(el)!, "floor-refresh");
+      await flush(el);
+
+      answerA.resolve([{ ...freeTable }]);
+      await flush(el);
+      expect(floor(el)!.tablesReadAt).toBeGreaterThanOrEqual(beforeA);
+      expect(floor(el)!.tablesReadAt).toBeLessThanOrEqual(betweenReads);
+
+      answerB.resolve([tableB]);
+      await flush(el);
+      expect(floor(el)!.tablesReadAt).toBeGreaterThan(betweenReads);
+    });
+
     it("a floor read that answers what the floor already shows keeps the same tables list", async () => {
       const { el } = await mountApp({
         getTablesState: vi

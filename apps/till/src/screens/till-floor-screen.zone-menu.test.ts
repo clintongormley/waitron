@@ -70,10 +70,11 @@ const patioTables = [
 ];
 
 function stubApi() {
+  const answer = () => Promise.resolve({ zoneId: "z1", revision: 0 });
   return {
-    placeSpareToday: vi.fn<TillApi["placeSpareToday"]>(() => Promise.resolve()),
-    putBackToday: vi.fn<TillApi["putBackToday"]>(() => Promise.resolve()),
-    resetZoneToday: vi.fn<TillApi["resetZoneToday"]>(() => Promise.resolve()),
+    placeSpareToday: vi.fn<TillApi["placeSpareToday"]>(answer),
+    putBackToday: vi.fn<TillApi["putBackToday"]>(answer),
+    resetZoneToday: vi.fn<TillApi["resetZoneToday"]>(answer),
   };
 }
 
@@ -161,7 +162,7 @@ describe("till-floor-screen: the zone menu", () => {
     expect(menuOf(el)!.zone!.id).toBe("z4");
     const refreshes = countRefreshes(el);
     await send(el, "zone-reset", { zoneId: "z4" });
-    expect(api.resetZoneToday).toHaveBeenCalledExactlyOnceWith("z4");
+    expect(api.resetZoneToday).toHaveBeenCalledExactlyOnceWith("z4", null);
     expect(refreshes.count).toBe(1);
   });
 
@@ -186,15 +187,15 @@ describe("till-floor-screen: the zone menu", () => {
     expect(middle).not.toEqual({ x: 0, y: 0 });
 
     await send(el, "zone-place-spare", { tableId: "t9" });
-    expect(api.placeSpareToday).toHaveBeenCalledExactlyOnceWith("t9", middle);
+    expect(api.placeSpareToday).toHaveBeenCalledExactlyOnceWith("t9", middle, 0);
     expect(refreshes.count).toBe(1);
 
     await send(el, "zone-put-back", { tableId: "t3" });
-    expect(api.putBackToday).toHaveBeenCalledExactlyOnceWith("t3");
+    expect(api.putBackToday).toHaveBeenCalledExactlyOnceWith("t3", 0);
     expect(refreshes.count).toBe(2);
 
     await send(el, "zone-reset", { zoneId: "z1" });
-    expect(api.resetZoneToday).toHaveBeenCalledExactlyOnceWith("z1");
+    expect(api.resetZoneToday).toHaveBeenCalledExactlyOnceWith("z1", 0);
     expect(refreshes.count).toBe(3);
     expect(refusal(el)).toBeNull();
   });
@@ -235,5 +236,58 @@ describe("till-floor-screen: the zone menu", () => {
     await send(el, "zone-put-back", { tableId: "t3" });
     await send(el, "zone-reset", { zoneId: "z1" });
     expect(escaped).toEqual([]);
+  });
+});
+
+describe("till-floor-screen: the zone menu and the room's revision", () => {
+  const terraceAt7 = () =>
+    terraceTables.map((each) => ({ ...each, today: { ...each.today!, zoneRevision: 7 } }));
+
+  async function mountAt7(api = stubApi()) {
+    const { el } = await mountWidget<TillFloorScreen>("till-floor-screen", {
+      zones: [...zones, zone("z4", "Garden")],
+      tables: [...terraceAt7(), ...barTables, ...patioTables],
+      api: api as unknown as TillApi,
+      canChangeToday: true,
+    });
+    return el;
+  }
+
+  it("each action sends the read's revision, and a zone reset with no tables sends none", async () => {
+    const actions: [string, object, (api: ReturnType<typeof stubApi>) => unknown, unknown[]][] = [
+      [
+        "zone-place-spare",
+        { tableId: "t9" },
+        (api) => api.placeSpareToday,
+        ["t9", spareSpot(terraceAt7()), 7],
+      ],
+      ["zone-put-back", { tableId: "t3" }, (api) => api.putBackToday, ["t3", 7]],
+      ["zone-reset", { zoneId: "z1" }, (api) => api.resetZoneToday, ["z1", 7]],
+    ];
+    for (const [type, detail, route, args] of actions) {
+      const api = stubApi();
+      const el = await mountAt7(api);
+      await showZone(el, "z1");
+      await send(el, type, detail);
+      expect(route(api)).toHaveBeenCalledExactlyOnceWith(...args);
+      cleanupWidgets();
+    }
+
+    const api = stubApi();
+    const el = await mountAt7(api);
+    await showZone(el, "z4");
+    await send(el, "zone-reset", { zoneId: "z4" });
+    expect(api.resetZoneToday).toHaveBeenCalledExactlyOnceWith("z4", null);
+  });
+
+  it("a table change in a zone the read holds no today's row of sends nothing, says the floor has changed and re-reads", async () => {
+    const api = stubApi();
+    const el = await mountAt7(api);
+    await showZone(el, "z4");
+    const refreshes = countRefreshes(el);
+    await send(el, "zone-put-back", { tableId: "t3" });
+    expect(api.putBackToday).not.toHaveBeenCalled();
+    expect(refusal(el)).toBe("The floor has changed. Check and try again");
+    expect(refreshes.count).toBe(1);
   });
 });
