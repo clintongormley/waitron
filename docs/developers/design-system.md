@@ -3598,14 +3598,14 @@ Opening hours' Year.
   column heading names the weekday) and a Today marker. Each date shows its special day's or
   public holiday's name and a bar of hours per active department, or, with one department picked,
   a bar for it and one per zone with the zone's closed time drawn as a gap. A row with no hours
-  that day says "<name> closed", and a date closed all day shows only its name with Closed. ‹ and the year go back to the Year, ‹ › step months, and the month has the
+  that day says "<name> closed". A date closed all day also shows its name with Closed, and at phone width it shows that name alone. ‹ and the year go back to the Year, ‹ › step months, and the month has the
   department picker, + Special day, the season chips and a Rows legend. Arrow keys move between
   dates, with one Tab stop. A special-day or public-holiday date opens the special-day dialog as
   the Year does. An ordinary date opens the ordinary-date dialog (`ordinary-date-dialog.ts`): it
   says which season's week the date follows and offers Edit the <season> week (the Week tab on
   that season), Make this a special day… (the special-day dialog on a new day holding the date)
-  and a list of existing special days, where choosing one opens that day's dialog with the date
-  added as an unsaved change. A venue viewer gets the month read-only: its dates are not buttons
+  and a special-day picker with Add, which opens the chosen day's dialog with the date added as an
+  unsaved change. A venue viewer gets the month read-only: its dates are not buttons
   and + Special day is not offered.
 - **Seasons.** The Year's season chips (`season-chips.ts`) list the venue's seasons in start
   order, each written as its name and first and last day. Each chip is a button that opens the

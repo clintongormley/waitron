@@ -109,7 +109,7 @@ run into the next day's hours; Opening hours opens on the Year, which replaced t
 tab, and setup's Done link opens it.
 A506-7 landed in #NNNN: a month view, reached from the Year, draws each date's hours as a bar per
 department and opens a dialog on an ordinary date; it replaced the Day tab and the Real week
-switch, and the dated week code went.
+switch, and the dashboard's dated week views went.
 
 **Left open by A506-1, for the later parts.**
 - No test yet gives a second department its own paint on the same special day.
@@ -126,7 +126,7 @@ switch, and the dated week code went.
   `apps/dashboard/src/screens/business-day-start-editor.ts`), so a change to that rule on the server
   would make the dialog miscount without any test noticing. The server could return how many conflicts
   it left off its list instead, which adds a field to the shared preview type.
-- A venue with no seasons cannot save a week from the dashboard: the Day and Week tabs send an empty
+- A venue with no seasons cannot save a week from the dashboard: the Week tab sends an empty
   `seasonId`, the route refuses it, and the person sees only the generic save error. Provisioning gives
   every venue four seasons, and deleting the last one is refused (`season.invalid`, reason `last`,
   `deleteSeason` in `packages/venue-service/src/seasons.ts`), so this is believed unreachable — read in
@@ -212,6 +212,10 @@ switch, and the dated week code went.
   no language, so the browser cannot hyphenate.
 - The special-day dialog's note under "Every year" (`special.holiday_note`, from #1603) says "each
   year" twice in English and reads as awkwardly in Spanish.
+- The stations service-times route's dated week (`stationServiceTimes(..., "dated")`), and
+  `watchStationTimes`'s `normal` flag, have no dashboard caller since A506-7.
+- With no readable venue clock the station view reads the week of 5 January 2026, a fallback the
+  screen already used before A506-7; the station view is replaced in A506-12.
 
 **Left open by A506-6, for the later parts.**
 - A season dialog whose season another session deletes says "This season no longer exists." but
@@ -311,8 +315,6 @@ closed, as today.
   underneath. A period saves when its dialog saves, separately from the painter's Save, because the
   Periods page and the till use it at once (owner, 2026-10-11). The bar links to the Periods page;
   leaving with unsaved painting asks first.
-
-**Taken in from older entries.**
 
 **For the spec to settle** (settled in the spec's sections 8, 9, 10.2, 12 and 14; its review found the
 kind has three readers, not one, and that `station-times.ts` reads the week only through routing's

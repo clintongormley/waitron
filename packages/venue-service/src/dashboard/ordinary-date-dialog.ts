@@ -11,7 +11,7 @@ import { format, formatDayMonthYear, formatWeekday } from "./hours-view.js";
 import { seasonTintStyles } from "./season-tint.js";
 import { t } from "./strings.js";
 
-/** A date with no special day: it says which season's week it follows and offers the three ways
+/** A date with no special day and no public holiday: it says which season's week it follows and offers the three ways
  *  to change it. It writes nothing; each choice is an event the host acts on. */
 @customElement("ordinary-date-dialog")
 export class OrdinaryDateDialog extends LitElement {

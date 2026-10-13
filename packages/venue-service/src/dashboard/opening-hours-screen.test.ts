@@ -1770,7 +1770,7 @@ it("an opened period keeps its revision through a passive replacement and submit
   expect(writes[0]).toMatchObject({ endOffsetMinutes: 15, expectedClockRevision: 7 });
   await expect.poll(() => editor.refusal?.code).toBe("hours.clock_changed");
 });
-it("pre-fills the holiday's name when the sender names only the date's own holidays, as the Day view does", async () => {
+it("pre-fills the holiday's name when the sender names only the date's own holidays, as the per-date editor does", async () => {
   history.replaceState(null, "", "/manage/opening-hours/view/year");
   const el = await mount((async (path, method) => {
     if (method !== "GET") throw new Error(`unexpected ${method} ${path}`);

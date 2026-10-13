@@ -945,6 +945,8 @@ that release before the check made both pass, and each installed-candidate delet
 
 **2026-10-13, A506-5:** the real week is read-only and both cases below were deleted with its per-date editors; the account is historical.
 
+**2026-10-13, A506-7:** the real week is gone, and `opening-hours-date.unsaved.test.ts` with it.
+
 On A366 slice 2 Task 22 (2026-10-09), both real-week editors disposed their per-date scopes on
 removal. A fresh department or zone object supplied before reconnect's first update then looked
 clean, because the scopes had not been registered again. Reconciliation replaced the staged

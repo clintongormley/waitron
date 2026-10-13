@@ -91,16 +91,11 @@ it("Today keeps chronological ownership in a repeated hour instead of applying t
   vi.setSystemTime(new Date("2026-10-25T01:45:00Z"));
   expect(businessDateToday(model)).toBe("2026-10-25");
 });
-it("normal-week columns keep their explicit reference instead of choosing a historical date", async () => {
+it("the All departments week draws undated columns at the venue's changeover", async () => {
   await import("./opening-hours-all.js");
   const el = document.createElement("opening-hours-all");
   Object.assign(el, {
     dayCutover: "07:00",
-    businessDayClock: {
-      timeZone: "Europe/Madrid",
-      dayCutover: "05:00",
-      cutoverChanges: [{ effectiveBusinessDay: "2026-11-04", dayCutover: "07:00" }],
-    },
     departments: [
       {
         id: "d",
@@ -145,7 +140,7 @@ it("the range editor refuses an endpoint beyond the selected short column's boun
     el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=endsAt]")!.error,
   ).toBeTruthy();
 });
-it("the Day view uses its selected business date for every department and zone column", async () => {
+it("the per-date editor uses its selected business date for every department and zone column", async () => {
   const { OpeningHoursApi } = await import("./opening-hours-client.js");
   const el = document.createElement("opening-hours-day");
   const model: OpeningHoursModel = {

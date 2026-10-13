@@ -737,7 +737,7 @@ it("keeps a created period's signed offset in its wire body and department range
   ).toBe("late");
 });
 
-it("shows a repeat note naming 02:00 for 02:00-03:00 when the Day tab's date, 30 Oct 2027, is the night the clocks go back", async () => {
+it("shows a repeat note naming 02:00 for 02:00-03:00 when the per-date editor's date, 30 Oct 2027, is the night the clocks go back", async () => {
   vi.setSystemTime(new Date("2027-10-30T10:00:00Z"));
   const model = dayFixture();
   const day = await mount(undefined, model);
