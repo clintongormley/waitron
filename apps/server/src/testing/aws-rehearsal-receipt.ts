@@ -124,7 +124,7 @@ const CLEANUP_COMMAND = new RegExp(
   `^${escapeRegExp(CLEANUP_COMMAND_HEAD)}${REGION}` +
     `${escapeRegExp(CLEANUP_COMMAND_SCRIPT)}/(?:[A-Za-z0-9._@-]+/){0,40}aws-rehearsal-[A-Za-z0-9._:-]{1,64}\\.json$`,
 );
-const CLEANUP_COMMAND_MAX = 512;
+export const CLEANUP_COMMAND_MAX = 512;
 const EVENT_OUTCOMES = ["ok", "failed", "refused", "skipped"] as const;
 const TEARDOWN_OUTCOMES = ["ok", "failed", "skipped"] as const;
 const TEARDOWN_STEPS = [

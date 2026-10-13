@@ -559,6 +559,8 @@ describe("cleanupFromReceipt fix round 1", () => {
     const h = harness();
     const error = await refusal(cleanupFromReceipt(receiptPath, h.deps));
     expect((error as AwsRehearsalRefused).reason).toBe("receipt-dir-unsupported");
+    expect(error.message).toContain("may hold only letters, digits and . _ @ -");
+    expect(error.message).not.toContain("512");
     expect(h.createAdminClient).not.toHaveBeenCalled();
   });
 
@@ -575,7 +577,7 @@ describe("cleanupFromReceipt fix round 1", () => {
       "an unowned candidate that is not a rehearsal bucket",
       { ownership: { state: "unowned-candidate", bucket: null, candidate: "x" } },
     ],
-    ["a remaining block that is not an object", { remaining: [BUCKET] }],
+    ["a remaining block that is not an object", { remaining: null }],
     [
       "upload ids that are not a list",
       { remaining: { bucket: BUCKET, uploadIds: "upload-from-receipt" } },

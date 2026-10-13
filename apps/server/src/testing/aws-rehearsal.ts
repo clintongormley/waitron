@@ -37,6 +37,7 @@ import {
   AWS_REHEARSAL_PROFILE,
   type AwsReceiptOwnership,
   type AwsReceiptRemaining,
+  CLEANUP_COMMAND_MAX,
   cleanupCommandFor,
   createReceiptLog,
   isReceiptCleanupCommand,
@@ -683,11 +684,14 @@ function assertCleanupCommandFits(region: string, runId: string, receiptDir: str
     );
   }
   for (const kind of ["run", "cleanup"] as const) {
-    const path = join(receiptDir, receiptFileName(runId, kind));
-    if (!isReceiptCleanupCommand(cleanupCommandFor(region, path))) {
+    const command = cleanupCommandFor(region, join(receiptDir, receiptFileName(runId, kind)));
+    const tooLong = command.length > CLEANUP_COMMAND_MAX;
+    if (!isReceiptCleanupCommand(command)) {
       throw new AwsRehearsalRefused(
         "receipt-dir-unsupported",
-        "the receipt folder's path cannot be named in a cleanup command of at most 512 characters",
+        tooLong
+          ? `the receipt folder's path is too long for a cleanup command of at most ${CLEANUP_COMMAND_MAX} characters`
+          : "the receipt folder's path may hold only letters, digits and . _ @ - between its slashes",
       );
     }
   }

@@ -750,6 +750,7 @@ describe("7c fix round 1", () => {
     const h = harness({}, { receiptDir: folder });
     const error = await rejection(withAwsRehearsal(async () => undefined, h.deps));
     expect((error as AwsRehearsalRefused).reason).toBe("receipt-dir-unsupported");
+    expect(error.message).toContain("too long");
     expect(h.fake.calls).toEqual([]);
   });
 
