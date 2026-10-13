@@ -30,7 +30,8 @@ import type { Logger } from "./logger.js";
 import type { Run, TillApiDeps } from "./till-api.js";
 import { requireSession } from "./till-session.js";
 import { checkZones } from "./zone-access.js";
-import { roomRevision, sentRevision } from "./floor-revision.js";
+import { moveRoom, roomPrints, roomRevision, sentRevision } from "./floor-revision.js";
+import { zoneOfTable } from "./floor-today-table.js";
 import "./errors.js";
 
 export function whole(value: unknown, field: string, low: number, high: number): number {
@@ -48,13 +49,12 @@ export function requireTargetTable(value: unknown, field: string): string {
   return value.toLowerCase();
 }
 
-async function corner(c: Context): Promise<{ x: number; y: number }> {
-  const body = asObject(await readRawJsonBody<unknown>(c));
+function corner(body: Record<string, unknown>): { x: number; y: number } {
   return { x: whole(body.x, "x", 0, 999), y: whole(body.y, "y", 0, 999) };
 }
 
-async function seatsOf(c: Context): Promise<number> {
-  return whole(asObject(await readRawJsonBody<unknown>(c)).seats, "seats", 1, 999);
+function seatsOf(body: Record<string, unknown>): number {
+  return whole(body.seats, "seats", 1, 999);
 }
 
 /** A write and the other tables its zone check covers. */
@@ -63,11 +63,10 @@ interface TableWrite {
   others?: readonly string[];
 }
 
-async function mergeBody(
-  c: Context,
+function mergeBody(
+  body: Record<string, unknown>,
   tableId: string,
-): Promise<{ targetId: string; side: JoinSide; seats: number | null }> {
-  const body = asObject(await readRawJsonBody<unknown>(c));
+): { targetId: string; side: JoinSide; seats: number | null } {
   const targetId = requireTargetTable(body.targetId, "targetId");
   if (targetId === tableId) throw invalid("targetId");
   const side = body.side;
@@ -76,8 +75,7 @@ async function mergeBody(
   return { targetId, side: side as JoinSide, seats };
 }
 
-async function partsBody(c: Context): Promise<{ partIds: string[]; seats: number | null }> {
-  const body = asObject(await readRawJsonBody<unknown>(c));
+function partsBody(body: Record<string, unknown>): { partIds: string[]; seats: number | null } {
   const raw = body.partIds;
   if (!Array.isArray(raw) || raw.length === 0) throw invalid("partIds");
   const partIds = raw.map((partId) => {
@@ -94,8 +92,7 @@ async function partsBody(c: Context): Promise<{ partIds: string[]; seats: number
  * the zone with a today's row, or undefined when the till sends none.
  */
 async function resetRevision(c: Context): Promise<number | null | undefined> {
-  const raw = await readRawJsonBody<unknown>(c);
-  const body = raw === null ? {} : asObject(raw);
+  const body = await bodyOf(c);
   return body.zoneRevision === null ? null : sentRevision(body);
 }
 
@@ -109,13 +106,36 @@ async function hasTodayRow(tx: Transaction, locationId: string, zoneId: string):
   return row !== undefined;
 }
 
-/** Today's changes to one table, merging and splitting, each answering 204; the zone reset answers the room's revision. */
+/** A till body, `{}` when it sent none. */
+async function bodyOf(c: Context): Promise<Record<string, unknown>> {
+  const raw = await readRawJsonBody<unknown>(c);
+  return raw === null ? {} : asObject(raw);
+}
+
+/** Today's changes to one table, merging and splitting, and the zone reset, each answering the room's revision. */
 export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, run: Run): void {
   const removals = deps.tableRemovals ?? [];
 
+  /** The room's write, refused when `sent` is not its revision now; moves it when the write changed the room (D1, D2, D5). */
+  const changeRoom = async (
+    tx: Transaction,
+    zoneId: string,
+    sent: number | undefined,
+    write: () => Promise<void>,
+  ): Promise<{ zoneId: string; revision: number }> => {
+    const from = await roomRevision(tx, zoneId);
+    if (sent !== undefined && sent !== from) {
+      throw new AppError("floor_today.out_of_date", { zoneId, revision: from });
+    }
+    const before = (await roomPrints(tx, deps.cfg, [zoneId])).get(zoneId);
+    await write();
+    const after = (await roomPrints(tx, deps.cfg, [zoneId])).get(zoneId);
+    return { zoneId, revision: after === before ? from : await moveRoom(tx, zoneId, from) };
+  };
+
   const tableRoute = (
     change: string,
-    read: (c: Context, tableId: string) => TableWrite | Promise<TableWrite>,
+    read: (body: Record<string, unknown>, tableId: string) => TableWrite,
   ) =>
     app.post(`/api/tables/:id/today/${change}`, (c) =>
       run(c, log, async () => {
@@ -123,37 +143,40 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
         const id = c.req.param("id");
         if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
         const tableId = id.toLowerCase();
-        const { write, others = [] } = await read(c, tableId);
-        await withTransaction(deps.db, async (tx) => {
+        const body = await bodyOf(c);
+        const sent = sentRevision(body);
+        const { write, others = [] } = read(body, tableId);
+        const answer = await withTransaction(deps.db, async (tx) => {
           await checkZones(tx, deps.cfg, session, [
             { tableId },
             ...others.map((other) => ({ tableId: other })),
           ]);
           await ensureToday(tx, deps.cfg, removals, deps.clock.now().instant);
-          await write(tx, tableId);
+          const zoneId = await zoneOfTable(tx, deps.cfg, tableId);
+          return changeRoom(tx, zoneId, sent, () => write(tx, tableId));
         });
-        return c.body(null, 204);
+        return c.json(answer);
       }),
     );
 
-  tableRoute("move", async (c) => {
-    const at = await corner(c);
+  tableRoute("move", (body) => {
+    const at = corner(body);
     return { write: (tx, tableId) => moveToday(tx, deps.cfg, tableId, at) };
   });
   tableRoute("rotate", () => ({ write: (tx, tableId) => rotateToday(tx, deps.cfg, tableId) }));
   tableRoute("take-off", () => ({ write: (tx, tableId) => takeOffToday(tx, deps.cfg, tableId) }));
   tableRoute("put-back", () => ({ write: (tx, tableId) => putBackToday(tx, deps.cfg, tableId) }));
-  tableRoute("place", async (c) => {
-    const at = await corner(c);
+  tableRoute("place", (body) => {
+    const at = corner(body);
     return { write: (tx, tableId) => placeSpareToday(tx, deps.cfg, tableId, at) };
   });
-  tableRoute("seats", async (c) => {
-    const seats = await seatsOf(c);
+  tableRoute("seats", (body) => {
+    const seats = seatsOf(body);
     return { write: (tx, tableId) => seatsToday(tx, deps.cfg, tableId, seats) };
   });
   tableRoute("back", () => ({ write: (tx, tableId) => backToSaved(tx, deps.cfg, tableId) }));
-  tableRoute("merge", async (c, tableId) => {
-    const { targetId, side, seats } = await mergeBody(c, tableId);
+  tableRoute("merge", (body, tableId) => {
+    const { targetId, side, seats } = mergeBody(body, tableId);
     return {
       write: (tx, movingId) =>
         writeMerge(tx, deps.cfg, { movingId, targetId, side, seats, free: true }),
@@ -161,16 +184,16 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
     };
   });
   tableRoute("split", () => ({ write: (tx, tableId) => splitFreeMerge(tx, deps.cfg, tableId) }));
-  tableRoute("split-off", async (c) => {
-    const { partIds, seats } = await partsBody(c);
+  tableRoute("split-off", (body) => {
+    const { partIds, seats } = partsBody(body);
     return {
       write: (tx, joinedId) =>
         splitJoinedTable(tx, deps.cfg, { tableId: joinedId, partIds, seats }),
       others: partIds,
     };
   });
-  tableRoute("join-again", async (c) => {
-    const { partIds, seats } = await partsBody(c);
+  tableRoute("join-again", (body) => {
+    const { partIds, seats } = partsBody(body);
     return {
       write: (tx, joinedId) =>
         joinAgain(tx, deps.cfg, removals, deps.clock.now().instant, {

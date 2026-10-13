@@ -112,7 +112,7 @@ async function tables(...entries: { key: string; x: number; fixed?: boolean }[])
 }
 
 async function freeMerge(movingId: string, targetId: string): Promise<void> {
-  await ok(post(`/api/tables/${movingId}/today/merge`, { targetId, side: "right", seats: 8 }), 204);
+  await ok(post(`/api/tables/${movingId}/today/merge`, { targetId, side: "right", seats: 8 }), 200);
 }
 
 describe("a join that merges", () => {
@@ -290,7 +290,7 @@ describe("a table taken off today", () => {
   it("is refused to a join, and nobody takes it", async () => {
     const { a, b } = await tables({ key: "a", x: 0 }, { key: "b", x: 20 });
     const p = await seat(a!);
-    await ok(post(`/api/tables/${b}/today/take-off`, {}), 204);
+    await ok(post(`/api/tables/${b}/today/take-off`, {}), 200);
 
     expect(
       await refusal(
@@ -306,7 +306,7 @@ describe("a table taken off today", () => {
   it("answers a join's malformed merge before the table taken off", async () => {
     const { a, b, x } = await tables({ key: "a", x: 0 }, { key: "b", x: 20 }, { key: "x", x: 40 });
     const p = await seat(a!);
-    await ok(post(`/api/tables/${b}/today/take-off`, {}), 204);
+    await ok(post(`/api/tables/${b}/today/take-off`, {}), 200);
 
     expect(
       await refusal(
@@ -327,7 +327,7 @@ describe("a table taken off today", () => {
   it("is refused to a move, and the party stays where it was", async () => {
     const { a, b } = await tables({ key: "a", x: 0 }, { key: "b", x: 20 });
     const p = await seat(a!);
-    await ok(post(`/api/tables/${b}/today/take-off`, {}), 204);
+    await ok(post(`/api/tables/${b}/today/take-off`, {}), 200);
 
     expect(
       await refusal(
@@ -350,7 +350,7 @@ describe("a table taken off today", () => {
       partyId: string;
       tabId: string;
     };
-    await ok(post(`/api/tables/${b}/today/take-off`, {}), 204);
+    await ok(post(`/api/tables/${b}/today/take-off`, {}), 200);
 
     expect(
       await refusal(

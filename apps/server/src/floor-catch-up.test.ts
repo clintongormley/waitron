@@ -88,6 +88,19 @@ async function send(method: string, path: string, body?: unknown): Promise<Respo
   });
 }
 
+/** A 200 naming a room and its revision. */
+async function expectRevision(answer: Response | Promise<Response>): Promise<void> {
+  const settled = await answer;
+  const body: unknown = await settled
+    .clone()
+    .json()
+    .catch(() => null);
+  expect({ status: settled.status, body }, await settled.text()).toEqual({
+    status: 200,
+    body: { zoneId: expect.any(String), revision: expect.any(Number) },
+  });
+}
+
 /** The till's floor read; answers the tables it lists. */
 async function readFloor(): Promise<{ id: string; label: string }[]> {
   const answer = await send("GET", "/api/tables/state");
@@ -374,13 +387,13 @@ describe("the till's floor routes catch today's plan up", () => {
   it("a part merged on today's map when its joined table goes live stays usable until the merge ends", async () => {
     const z = await longWaitsForItsName();
     const placed = await send("POST", `/api/tables/${z.t3}/today/place`, { x: 20, y: 40 });
-    expect(placed.status).toBe(204);
+    await expectRevision(placed);
     const merged = await send("POST", `/api/tables/${z.t3}/today/merge`, {
       targetId: z.bar,
       side: "right",
       seats: 6,
     });
-    expect(merged.status).toBe(204);
+    await expectRevision(merged);
 
     await finish(z.held);
     const live = await readJoined();
@@ -393,25 +406,23 @@ describe("the till's floor routes catch today's plan up", () => {
     expect((await readJoined()).get(z.t3)).toBeNull();
 
     const split = await send("POST", `/api/tables/${z.bar}/today/split`, {});
-    expect(split.status).toBe(204);
+    await expectRevision(split);
     expect((await readJoined()).get(z.t3)).toBe(z.long);
     expect((await todayRow(z.t3))?.x).not.toBeNull();
   });
 
   it("a part whose merge is split after its joined table goes live is free, still joined and still placed", async () => {
     const z = await longWaitsForItsName();
-    expect((await send("POST", `/api/tables/${z.t3}/today/place`, { x: 20, y: 40 })).status).toBe(
-      204,
-    );
+    await expectRevision(send("POST", `/api/tables/${z.t3}/today/place`, { x: 20, y: 40 }));
     const merged = await send("POST", `/api/tables/${z.t3}/today/merge`, {
       targetId: z.bar,
       side: "right",
       seats: 6,
     });
-    expect(merged.status).toBe(204);
+    await expectRevision(merged);
     await finish(z.held);
     await readJoined();
-    expect((await send("POST", `/api/tables/${z.bar}/today/split`, {})).status).toBe(204);
+    await expectRevision(send("POST", `/api/tables/${z.bar}/today/split`, {}));
 
     const answer = await send("GET", "/api/tables/state");
     expect(answer.status).toBe(200);

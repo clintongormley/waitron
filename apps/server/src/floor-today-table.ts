@@ -52,6 +52,27 @@ export async function todayOf(tx: Transaction, cfg: TillConfig, tableId: string)
   return { tableId, zoneId, row, merge: { joinId, members: members.map((m) => m.row) } };
 }
 
+/** The zone of a table in an active zone of the venue's location, as `todayOf` finds it. */
+export async function zoneOfTable(
+  tx: Transaction,
+  cfg: TillConfig,
+  tableId: string,
+): Promise<string> {
+  const [table] = await tx
+    .select({ zoneId: diningTables.zoneId })
+    .from(diningTables)
+    .innerJoin(floorZones, eq(floorZones.id, diningTables.zoneId))
+    .where(
+      and(
+        eq(diningTables.id, tableId),
+        eq(diningTables.locationId, cfg.locationId),
+        eq(floorZones.active, true),
+      ),
+    );
+  if (table === undefined) throw new AppError("table.not_found", { tableId });
+  return table.zoneId;
+}
+
 /** The refusals a move, a turn or a merge shares, in the order the routes answer them; each is checked across every table before the next. */
 export function refuseUnmovable(...tables: readonly Today[]): void {
   for (const { tableId, row } of tables) {

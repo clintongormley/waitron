@@ -63,9 +63,17 @@ async function today(tableId: string, change: string, body: unknown = {}): Promi
   });
 }
 
-async function expect204(answer: Promise<Response>): Promise<void> {
+/** A 200 naming a room and its revision. */
+async function expectRevision(answer: Promise<Response>): Promise<void> {
   const settled = await answer;
-  expect(settled.status, await settled.clone().text()).toBe(204);
+  const body: unknown = await settled
+    .clone()
+    .json()
+    .catch(() => null);
+  expect({ status: settled.status, body }, await settled.text()).toEqual({
+    status: 200,
+    body: { zoneId: expect.any(String), revision: expect.any(Number) },
+  });
 }
 
 async function refusal(answer: Promise<Response>): Promise<{ status: number; body: unknown }> {
@@ -103,7 +111,7 @@ describe("merging and splitting free tables", () => {
   it("merges two free tables and splits them back", async () => {
     const { a, b } = await twoTables();
 
-    await expect204(today(a, "merge", { targetId: b, side: "right", seats: 8 }));
+    await expectRevision(today(a, "merge", { targetId: b, side: "right", seats: 8 }));
 
     const [atA, atB] = [await floorToday(a), await floorToday(b)];
     expect(atA.joinId).not.toBeNull();
@@ -111,7 +119,7 @@ describe("merging and splitting free tables", () => {
     expect(atB).toMatchObject({ joinSeats: 8, placement: { x: 20, y: 0, rotation: 0 } });
     expect(atA.placement).toMatchObject({ x: 28, y: 0, rotation: 0 });
 
-    await expect204(today(a, "split"));
+    await expectRevision(today(a, "split"));
 
     expect(await floorToday(a)).toMatchObject({
       joinId: null,
@@ -126,14 +134,14 @@ describe("merging and splitting free tables", () => {
 
   it("splits a merge from either member, and leaves a table in no merge alone", async () => {
     const { a, b } = await twoTables();
-    await expect204(today(a, "merge", { targetId: b, side: "bottom", seats: 6 }));
+    await expectRevision(today(a, "merge", { targetId: b, side: "bottom", seats: 6 }));
 
-    await expect204(today(b, "split"));
+    await expectRevision(today(b, "split"));
     expect(await mergeOf(v, a)).toBeNull();
     expect((await floorToday(a)).placement).toMatchObject({ x: 0, y: 0 });
 
     const before = await todayRow(v, a);
-    await expect204(today(a, "split"));
+    await expectRevision(today(a, "split"));
     expect(await todayRow(v, a)).toEqual(before);
   });
 
@@ -176,7 +184,7 @@ describe("merging and splitting free tables", () => {
     for (const flip of [false, true]) {
       const held = await twoTables();
       const [moving, target] = flip ? [held.b, held.a] : [held.a, held.b];
-      await expect204(today(moving, "merge", { targetId: target, side: "right", seats: 8 }));
+      await expectRevision(today(moving, "merge", { targetId: target, side: "right", seats: 8 }));
       await seat(v, held.b);
       const before = await todayRow(v, held.a);
       const [first] = [held.a, held.b].sort();
