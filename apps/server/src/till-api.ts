@@ -191,7 +191,12 @@ import { invalid } from "./bill-allocation.js";
 import { printSalePaymentSlip } from "./payment-slip-print.js";
 import { issueIfFullyPaid } from "./bill-payments.js";
 import { asObject, mountBillPaymentsApi, submissionIdOf } from "./bill-payments-api.js";
-import { listPrintProblems, reprintOrderTickets } from "./kitchen-print.js";
+import {
+  enqueueMovedSlipsFor,
+  listPrintProblems,
+  readPartiesSentWork,
+  reprintOrderTickets,
+} from "./kitchen-print.js";
 import {
   canonicaliseUuid,
   clearSessionCookie,
@@ -2664,7 +2669,19 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           const heldBefore = await memberTables(tx, partyId);
           const check = sent === undefined ? undefined : { tableId, sent };
           return movingRooms(tx, deps.cfg, [...heldBefore, tableId], check, async () => {
-            const acted = await act(tx, sendCfg, partyId, tableId, command);
+            // A merge can pass guests on after the join, so the kitchen is told once, at the end.
+            const slipsLater =
+              merge === null ? undefined : { mergedInto: new Map<string, string>() };
+            const holder = slipsLater === undefined ? null : await holderOf(tx, tableId);
+            const before =
+              slipsLater === undefined
+                ? null
+                : await readPartiesSentWork(
+                    tx,
+                    sendCfg,
+                    holder === null ? [partyId] : [partyId, holder],
+                  );
+            const acted = await act(tx, sendCfg, partyId, tableId, { ...command, slipsLater });
             if (path === "move") {
               // Only a party staying on part of its merge breaks it up; a merge left whole stays, free.
               const merged = await mergeMembers(tx, tableId);
@@ -2673,7 +2690,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
                 heldBefore.filter((id) => id !== tableId && merged.includes(id)),
               );
             }
-            await joinMergeMembers(tx, sendCfg, acted.partyId, tableId, personId);
+            await joinMergeMembers(tx, sendCfg, acted.partyId, tableId, personId, slipsLater);
             if (merge !== null) {
               const held = merge.moving === tableId ? merge.target : merge.moving;
               if (!heldBefore.includes(held)) throw invalid("merge");
@@ -2684,6 +2701,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
                 seats: merge.seats,
                 free: false,
               });
+            }
+            if (before !== null) {
+              await enqueueMovedSlipsFor(tx, sendCfg, before, slipsLater!.mergedInto);
             }
             // Last, so the route's own refusals answer first.
             await refuseTakenOff(tx, [tableId]);

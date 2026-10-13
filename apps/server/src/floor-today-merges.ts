@@ -17,12 +17,12 @@ import {
   todayOf,
   type Today,
 } from "./floor-today-table.js";
-import { partsOf, type Part } from "./floor-today-parts.js";
+import { partsOf, passGuests, type Part } from "./floor-today-parts.js";
 import { placementColumns, placementOf, refuseDeliveryPending } from "./floor-today-store.js";
 import type { Placement } from "./floor-reset-plan.js";
 import { partPlaces } from "./joined-split-layout.js";
 import { holderOf } from "./parties.js";
-import { joinTables } from "./table-actions.js";
+import { joinTables, type SlipsLater } from "./table-actions.js";
 import type { OriginConfig, TillConfig } from "./till-config.js";
 import "./errors.js";
 
@@ -134,6 +134,7 @@ export async function joinMergeMembers(
   partyId: string,
   tableId: string,
   operatorId: string,
+  slipsLater?: SlipsLater,
 ): Promise<void> {
   for (const member of await mergeMembers(tx, tableId)) {
     if ((await holderOf(tx, member)) !== null) continue;
@@ -142,6 +143,7 @@ export async function joinMergeMembers(
       expectedPartyRevision: await partyRevision(tx, partyId),
       operatorId,
       otherPartyId: null,
+      slipsLater,
     });
   }
 }
@@ -157,7 +159,8 @@ export async function partyRevision(tx: Transaction, partyId: string): Promise<n
 
 /**
  * `moving` joins `target`'s merge (or a new one), touching it on `side`; with `free`, neither table may be held or need clearing.
- * A joined table never goes in a merge: its tables still joined are split off it and go in instead.
+ * A joined table never goes in a merge: its tables still joined are split off it and go in instead,
+ * and its guests pass to them; the caller tells the kitchen.
  */
 export async function writeMerge(
   tx: Transaction,
@@ -208,6 +211,15 @@ export async function writeMerge(
   for (const laid of targetTables) {
     await standApart(tx, joinId, target.tableId, laid.tableId, laid.place, laid.place);
   }
+  if (targetParts.length > 0) {
+    await passGuests(
+      tx,
+      cfg,
+      target.tableId,
+      targetTables.map((laid) => laid.tableId),
+      "caller",
+    );
+  }
 
   const goes = { width: moving.row.width!, height: moving.row.height! };
   const against = placeOf(target.row);
@@ -229,6 +241,13 @@ export async function writeMerge(
   for (const [index, laid] of to.entries()) {
     await standApart(tx, joinId, moving.tableId, laid.tableId, laid.place, from[index]!.place);
   }
+  await passGuests(
+    tx,
+    cfg,
+    moving.tableId,
+    to.map((laid) => laid.tableId),
+    "caller",
+  );
 }
 
 /** Each table of the joined table still joined, in number order, where it stands inside `outline`. */

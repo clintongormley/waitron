@@ -1,41 +1,12 @@
 import { eq } from "drizzle-orm";
-import {
-  diningTables,
-  floorTodaySplitParts,
-  floorTodayTables,
-  partyTables,
-  type Transaction,
-} from "@waitron/db";
+import { floorTodaySplitParts, floorTodayTables, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { refuseInJoinedTable, todayOf } from "./floor-today-table.js";
-import { partyRevision } from "./floor-today-merges.js";
-import { enqueueMovedSlipsFor, readPartiesSentWork } from "./kitchen-print.js";
-import { checkAndBumpParty, holderOf, leaveTables } from "./parties.js";
 import { placementColumns, placementOf, refuseDeliveryPending } from "./floor-today-store.js";
 import { partPlaces, remainingPlace } from "./joined-split-layout.js";
-import { partsOf } from "./floor-today-parts.js";
+import { partsOf, passGuests } from "./floor-today-parts.js";
 import type { TillConfig } from "./till-config.js";
 import "./errors.js";
-
-/** The party holding the joined table, if any, sits at `lastPartId` instead: not a turnover, so its status stays. */
-async function passGuestsTo(
-  tx: Transaction,
-  cfg: TillConfig,
-  tableId: string,
-  lastPartId: string,
-): Promise<void> {
-  const partyId = await holderOf(tx, tableId);
-  if (partyId === null) return;
-  await tx
-    .update(diningTables)
-    .set({ needsClearingSince: null })
-    .where(eq(diningTables.id, lastPartId));
-  const before = await readPartiesSentWork(tx, cfg, [partyId]);
-  await checkAndBumpParty(tx, partyId, await partyRevision(tx, partyId), "open");
-  await leaveTables(tx, [tableId]);
-  await tx.insert(partyTables).values({ partyId, tableId: lastPartId });
-  await enqueueMovedSlipsFor(tx, cfg, before);
-}
 
 /** Splits `partIds` off the joined table: they stand side by side in its place, and it keeps the rest. */
 export async function splitJoinedTable(
@@ -82,7 +53,7 @@ export async function splitJoinedTable(
       .where(eq(floorTodayTables.tableId, part.tableId));
   }
   if (toOne) {
-    await passGuestsTo(tx, cfg, tableId, left[0]!);
+    await passGuests(tx, cfg, tableId, [left[0]!], "now");
     return;
   }
 

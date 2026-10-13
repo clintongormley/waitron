@@ -44,11 +44,18 @@ import "./errors.js";
  * acting from one read the second is refused `party.out_of_date`.
  */
 
+/** Set by a caller that tells the kitchen itself once its work is done: each bill merged away is recorded, by the bill it merged into. */
+export interface SlipsLater {
+  mergedInto: Map<string, string>;
+}
+
 export interface TableActionOptions extends OtherPartyRead {
   bills: "merge" | "separate";
   /** The party in the path. */
   expectedPartyRevision: number;
   operatorId: string;
+  /** Honoured by a join, which then tells the kitchen nothing. */
+  slipsLater?: SlipsLater;
 }
 
 export interface TableActionResult {
@@ -131,14 +138,15 @@ export async function joinTables(
   }
   await refuseUnseatable(tx, cfg, table);
 
-  const before = await readPartiesSentWork(tx, cfg, [partyId]);
+  const later = options.slipsLater !== undefined;
+  const before = later ? null : await readPartiesSentWork(tx, cfg, [partyId]);
   const mainBillId = await readMainBill(tx, partyId);
   await addTable(tx, partyId, tableId, { clearStatus: false });
-  await enqueueMovedSlipsFor(tx, cfg, before);
+  if (before !== null) await enqueueMovedSlipsFor(tx, cfg, before);
   return { partyId, mainBillId, merged: false };
 }
 
-/** {@link combineParties} as a table action: the kitchen is told of every sent dish that moved. */
+/** {@link combineParties} as a table action: the kitchen is told of every sent dish that moved, unless `slipsLater` leaves that to the caller. */
 async function combineAt(
   tx: Transaction,
   cfg: TillConfig,
@@ -148,7 +156,8 @@ async function combineAt(
   options: TableActionOptions,
   intoZoneId?: string | null,
 ): Promise<TableActionResult> {
-  const before = await readPartiesSentWork(tx, cfg, [from, into]);
+  const later = options.slipsLater;
+  const before = later === undefined ? await readPartiesSentWork(tx, cfg, [from, into]) : null;
   const combined = await combineParties(tx, cfg, {
     from,
     into,
@@ -157,7 +166,11 @@ async function combineAt(
     operatorId: options.operatorId,
     intoZoneId,
   });
-  await enqueueMovedSlipsFor(tx, cfg, before, combined.mergedInto);
+  if (later !== undefined) {
+    for (const [billId, intoBillId] of combined.mergedInto)
+      later.mergedInto.set(billId, intoBillId);
+  }
+  if (before !== null) await enqueueMovedSlipsFor(tx, cfg, before, combined.mergedInto);
   return { partyId: into, mainBillId: combined.mainBillId, merged: combined.merged };
 }
 
