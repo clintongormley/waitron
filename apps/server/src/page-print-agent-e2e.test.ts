@@ -360,12 +360,12 @@ function request(v: Venue, method: "POST" | "PATCH", path: string, body: unknown
 type PrintPage = NonNullable<ReturnType<typeof fakeHost>["printPage"]>;
 
 /** Prints over IPP exactly as the agent's own host does (`apps/print-agent/src/host.ts`). */
-const printOverIppAsHost: PrintPage = (target, bytes, format, signal, onHold) =>
-  printOverIpp({ ...target, documentFormat: format }, bytes, { signal, onHold });
+const printOverIppAsHost: PrintPage = (target, bytes, format, media, signal, onHold) =>
+  printOverIpp({ ...target, documentFormat: format, media }, bytes, { signal, onHold });
 
 /** As the host prints, polling every 20 ms so a held job's answers arrive without waiting 10 s. */
-const printWithQuickPolls: PrintPage = (target, bytes, format, signal, onHold) =>
-  printOverIpp({ ...target, documentFormat: format }, bytes, {
+const printWithQuickPolls: PrintPage = (target, bytes, format, media, signal, onHold) =>
+  printOverIpp({ ...target, documentFormat: format, media }, bytes, {
     signal,
     onHold,
     pollIntervalMs: 20,
