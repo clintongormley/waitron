@@ -149,10 +149,20 @@ export class EquipmentLabel extends LitElement {
     const generation = this.#generation;
     try {
       await navigator.clipboard.writeText(code);
-      if (this.#generation === generation && this.isConnected && this.#code() === code)
+      if (
+        this.#generation === generation &&
+        this.isConnected &&
+        this.#code() === code &&
+        this.nfcBusy === ""
+      )
         this.nfcMessage = "equipment.code_copied";
     } catch {
-      if (this.#generation === generation && this.isConnected && this.#code() === code)
+      if (
+        this.#generation === generation &&
+        this.isConnected &&
+        this.#code() === code &&
+        this.nfcBusy === ""
+      )
         this.nfcMessage = "equipment.copy_failed";
     }
   }
@@ -258,7 +268,7 @@ export class EquipmentLabel extends LitElement {
             >${t("equipment.print")}</wt-button
           >
           <wt-button
-            variant=${nfcWriter() ? "primary" : "secondary"}
+            variant=${nfcWriter() && !this.confirmLock && this.nfcBusy !== "lock" ? "primary" : "secondary"}
             data-test="write-equipment-nfc"
             ?disabled=${!nfcWriter() || this.nfcBusy !== "" || this.confirmLock}
             .loading=${this.nfcBusy === "write"}
@@ -281,39 +291,35 @@ export class EquipmentLabel extends LitElement {
           }
         </wt-form-actions>
       </wt-modal>
-      ${
-        this.confirmLock
-          ? html`<wt-dialog
-              data-test="lock-equipment-nfc-confirmation"
-              heading=${t("equipment.nfc_lock")}
-              .open=${true}
-              @wt-close=${(event: Event) => {
-                event.stopPropagation();
-                this.confirmLock = false;
-              }}
-            >
-              <p>${t("equipment.nfc_lock_confirmation")}</p>
-              <wt-form-actions slot="footer">
-                <wt-button
-                  slot="cancel"
-                  data-test="cancel-lock-equipment-nfc"
-                  @click=${() => {
-                    this.renderRoot.querySelector<HTMLElementTagNameMap["wt-dialog"]>(
-                      "wt-dialog",
-                    )!.open = false;
-                  }}
-                  >${t("action.cancel")}</wt-button
-                >
-                <wt-button
-                  variant="danger"
-                  data-test="confirm-lock-equipment-nfc"
-                  @click=${() => void this.#nfc("lock")}
-                  >${t("equipment.nfc_lock")}</wt-button
-                >
-              </wt-form-actions>
-            </wt-dialog>`
-          : nothing
-      }`;
+      <wt-dialog
+        data-test="lock-equipment-nfc-confirmation"
+        heading=${t("equipment.nfc_lock")}
+        .open=${this.confirmLock}
+        .opener=${this.renderRoot.querySelector<HTMLElement>("[data-test=close-equipment-label]")}
+        @wt-close=${(event: Event) => {
+          event.stopPropagation();
+          this.confirmLock = false;
+        }}
+      >
+        <p>${t("equipment.nfc_lock_confirmation")}</p>
+        <wt-form-actions slot="footer">
+          <wt-button
+            slot="cancel"
+            data-test="cancel-lock-equipment-nfc"
+            @click=${() => {
+              this.renderRoot.querySelector<HTMLElementTagNameMap["wt-dialog"]>("wt-dialog")!.open =
+                false;
+            }}
+            >${t("action.cancel")}</wt-button
+          >
+          <wt-button
+            variant="danger"
+            data-test="confirm-lock-equipment-nfc"
+            @click=${() => void this.#nfc("lock")}
+            >${t("equipment.nfc_lock")}</wt-button
+          >
+        </wt-form-actions>
+      </wt-dialog>`;
   }
 }
 

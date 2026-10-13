@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { page, userEvent } from "vitest/browser";
 import type { WtButton, WtDialog, WtModal } from "@waitron/ui";
 import { cleanupWidgets, dialogClosed, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
@@ -133,6 +134,7 @@ describe("equipment label NFC writer", () => {
       const dialog = el.shadowRoot!.querySelector<WtDialog>(
         "[data-test=lock-equipment-nfc-confirmation]",
       )!;
+      expect(dialog.open).toBe(true);
       const reported = dialogClosed(dialog);
       button(el, "cancel-lock-equipment-nfc").click();
       await reported;
@@ -274,5 +276,103 @@ describe("equipment label NFC writer", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     await el.updateComplete;
     expect(message(el)).toBeUndefined();
+  });
+
+  it("confirming a lock returns keyboard focus to the label while the lock waits", async () => {
+    FakeWriter.lockResult = () => new Promise<void>(() => {});
+    const el = await mount();
+    await write(el);
+    const click = async (test: string) =>
+      userEvent.click(page.elementLocator(button(el, test).shadowRoot!.querySelector("button")!));
+    await click("lock-equipment-nfc");
+    await el.updateComplete;
+    await click("confirm-lock-equipment-nfc");
+    await vi.waitFor(() => {
+      let focused = document.activeElement;
+      while (focused?.shadowRoot?.activeElement) focused = focused.shadowRoot.activeElement;
+      expect(focused).toBe(button(el, "close-equipment-label").shadowRoot!.querySelector("button"));
+    });
+    expect(FakeWriter.locks).toHaveLength(1);
+    expect(FakeWriter.locks[0]!.signal.aborted).toBe(false);
+  });
+
+  it.each(["write", "lock"] as const)(
+    "Copy cannot hide the sticker instruction during a pending %s",
+    async (operation) => {
+      const copy = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
+      const el = await mount();
+      if (operation === "write") {
+        FakeWriter.writeResult = () => new Promise<void>(() => {});
+        button(el, "write-equipment-nfc").click();
+      } else {
+        await write(el);
+        FakeWriter.lockResult = () => new Promise<void>(() => {});
+        button(el, "lock-equipment-nfc").click();
+        await el.updateComplete;
+        button(el, "confirm-lock-equipment-nfc").click();
+      }
+      await el.updateComplete;
+      button(el, "copy-equipment-code").click();
+      await vi.waitFor(() => expect(copy).toHaveBeenCalledTimes(1));
+      await el.updateComplete;
+      expect(message(el)).toBe("Hold the sticker against the phone");
+      copy.mockRejectedValue(new DOMException("refused", "NotAllowedError"));
+      button(el, "copy-equipment-code").click();
+      await vi.waitFor(() => expect(copy).toHaveBeenCalledTimes(2));
+      await el.updateComplete;
+      expect(message(el)).toBe("Hold the sticker against the phone");
+    },
+  );
+
+  it("draws Write quiet while a lock blocks it, and aborts that lock on close", async () => {
+    FakeWriter.lockResult = () => new Promise<void>(() => {});
+    const el = await mount();
+    await write(el);
+    button(el, "lock-equipment-nfc").click();
+    await el.updateComplete;
+    button(el, "confirm-lock-equipment-nfc").click();
+    await el.updateComplete;
+    const writeAction = button(el, "write-equipment-nfc");
+    expect(writeAction.disabled).toBe(true);
+    expect(writeAction.variant).toBe("secondary");
+    const reported = dialogClosed(el.shadowRoot!.querySelector("wt-modal")!);
+    button(el, "close-equipment-label").click();
+    await reported;
+    expect(FakeWriter.locks[0]!.signal.aborted).toBe(true);
+  });
+
+  it("a retained confirmation cannot lock after Cancel, and Write cannot bypass an open confirmation", async () => {
+    const el = await mount();
+    await write(el);
+    button(el, "lock-equipment-nfc").click();
+    await el.updateComplete;
+    button(el, "write-equipment-nfc").click();
+    expect(FakeWriter.writes).toHaveLength(1);
+    const dialog = el.shadowRoot!.querySelector<WtDialog>("wt-dialog")!;
+    expect(dialog.open).toBe(true);
+    const confirm = button(el, "confirm-lock-equipment-nfc");
+    const reported = dialogClosed(dialog);
+    button(el, "cancel-lock-equipment-nfc").click();
+    await reported;
+    confirm.click();
+    expect(FakeWriter.locks).toEqual([]);
+  });
+
+  it("Close aborts a write before its native close report", async () => {
+    FakeWriter.writeResult = () => new Promise<void>(() => {});
+    const el = await mount();
+    button(el, "write-equipment-nfc").click();
+    button(el, "close-equipment-label").click();
+    expect(FakeWriter.writes[0]!.options.signal.aborted).toBe(true);
+  });
+
+  it("native Escape aborts a write without using Close", async () => {
+    FakeWriter.writeResult = () => new Promise<void>(() => {});
+    const el = await mount();
+    button(el, "write-equipment-nfc").click();
+    const reported = dialogClosed(el.shadowRoot!.querySelector("wt-modal")!);
+    await userEvent.keyboard("{Escape}");
+    await reported;
+    expect(FakeWriter.writes[0]!.options.signal.aborted).toBe(true);
   });
 });

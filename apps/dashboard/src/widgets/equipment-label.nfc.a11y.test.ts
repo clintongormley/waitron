@@ -24,6 +24,7 @@ for (const locale of ["en", "es"] as const) {
         "confirmation",
         "failed",
         "locked",
+        "locking",
       ] as const)("has no axe violations when %s, at phone width", async (state) => {
         await page.viewport(390, 844);
         await vi.waitFor(() => expect(innerWidth).toBe(390));
@@ -40,6 +41,7 @@ for (const locale of ["en", "es"] as const) {
                   return Promise.resolve();
                 }
                 makeReadOnly() {
+                  if (state === "locking") return new Promise<void>(() => {});
                   return Promise.resolve();
                 }
               },
@@ -63,15 +65,20 @@ for (const locale of ["en", "es"] as const) {
               el.shadowRoot!.querySelector("[data-test=equipment-nfc-message]"),
             ).not.toBeNull(),
           );
-          if (["written", "confirmation", "locked"].includes(state)) {
+          if (["written", "confirmation", "locked", "locking"].includes(state)) {
             await vi.waitFor(() => expect(action("lock-equipment-nfc")).not.toBeNull());
           }
-          if (["confirmation", "locked"].includes(state)) {
+          if (["confirmation", "locked", "locking"].includes(state)) {
             action("lock-equipment-nfc").click();
             await el.updateComplete;
-            if (state === "locked") {
+            if (state === "locked" || state === "locking") {
               action("confirm-lock-equipment-nfc").click();
-              await vi.waitFor(() => expect(action("lock-equipment-nfc")).toBeNull());
+              if (state === "locked")
+                await vi.waitFor(() => expect(action("lock-equipment-nfc")).toBeNull());
+              else {
+                await el.updateComplete;
+                expect(action("write-equipment-nfc").variant).toBe("secondary");
+              }
             }
           }
         }
