@@ -171,6 +171,11 @@ export class SeasonDialog extends LitElement {
     if (!this.draft.day || !this.draft.month) errors.startsOn = t("season.start_required");
     return errors;
   }
+  /** The edited season is missing from the latest list: another session deleted it. */
+  private get gone(): boolean {
+    const season = this.season;
+    return season !== undefined && !this.seasons.some((entry) => entry.id === season.id);
+  }
   private refusalField(): Field | undefined {
     const params = this.refusal?.params;
     if (this.refusal?.code !== "season.invalid" || params?.reason === "end_offset")
@@ -188,6 +193,7 @@ export class SeasonDialog extends LitElement {
   /** A refusal that names no field on this form, worded for beside the action. */
   private refusalText(): string {
     const refusal = this.refusal;
+    if (this.gone) return t("season.not_found");
     if (this.impactFailed) return t("venue.delete_load_error");
     if (!refusal || this.refusalField() !== undefined) return "";
     const params = refusal.params ?? {};
@@ -395,7 +401,7 @@ export class SeasonDialog extends LitElement {
     const generation = this.generation;
     const current = () =>
       this.isConnected && this.open && !this.busy && generation === this.generation;
-    const confirming = this.season !== undefined && this.confirmDelete !== undefined;
+    const confirming = this.season !== undefined && this.confirmDelete !== undefined && !this.gone;
     return keyed(
       generation,
       html`<wt-modal

@@ -520,3 +520,17 @@ it("keeps a save busy when an earlier save, sent before the chips were moved, an
   expect(save().loading).toBe(true);
   expect(api.saveSeason).toHaveBeenCalledTimes(2);
 });
+
+it("withdraws a delete confirmation and says so when another session deletes its season", async () => {
+  const { api, changed } = await mount([spring, winter]);
+  await openChip("Winter");
+  await click("[data-test=delete-season]");
+  await expect.poll(() => dq("[data-test=confirm-delete-season]")).not.toBeNull();
+  el.seasons = [{ ...spring, startsOn: "01-01", lastDay: "12-31" }];
+  await settle();
+  expect(dq("[data-test=delete-confirm-text]")).toBeNull();
+  expect(dq("[data-test=confirm-delete-season]")).toBeNull();
+  expect(footerError()).toBe("This season no longer exists.");
+  expect(api.deleteSeason).not.toHaveBeenCalled();
+  expect(changed).toEqual([]);
+});
