@@ -4,7 +4,9 @@ import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./backup-screen.js";
 import type { BackupScreen } from "./backup-screen.js";
-import type { BackupStatusView, DashboardApi } from "../api/client.js";
+import type { BackupStatusView, BackupWriteAnswer, DashboardApi } from "../api/client.js";
+import { codeMessage } from "../i18n/codes.js";
+import { t } from "../i18n/t.js";
 
 /**
  * Scanned in several shapes, including the advanced paste + pick-weekdays + fixed-time branches so every
@@ -62,6 +64,56 @@ const ENABLED: BackupStatusView = {
 };
 
 const MANAGED: BackupStatusView = { ...OFF, managedByEnvironment: true };
+
+const FAILING: BackupWriteAnswer = {
+  ...ENABLED,
+  destinations: [
+    { id: "primary", kind: "local-fs", dir: "/mnt/usb/waitron" },
+    {
+      id: "bucket",
+      kind: "s3",
+      endpoint: null,
+      region: "eu-north-1",
+      bucket: "owner-bucket",
+      prefix: "waitron",
+      accessKeyId: "AKIAOWNER",
+      namespace: `waitron/archives/${ENABLED.venueId}/`,
+      credentialPresent: true,
+    },
+  ],
+  backupStatus: {
+    configured: true,
+    destinations: [
+      {
+        id: "primary",
+        lastBackupAt: "2026-09-09T02:00:00Z",
+        ageSeconds: 3600,
+        stale: false,
+        readErrorCode: null,
+        storedUnderCurrentKey: true,
+        uploadErrorCode: "storage.upload_failed",
+        pruneErrorCode: "storage.delete_failed",
+      },
+      {
+        id: "bucket",
+        lastBackupAt: null,
+        ageSeconds: null,
+        stale: true,
+        readErrorCode: "storage.unreachable",
+        storedUnderCurrentKey: false,
+        uploadErrorCode: null,
+        pruneErrorCode: null,
+      },
+    ],
+  },
+  reloadErrorCode: "backup.archive_settings_invalid",
+};
+
+function change(el: BackupScreen, sel: string, value: string): void {
+  q(el, sel)!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+  );
+}
 
 function stubApi(status: BackupStatusView, overrides: Partial<DashboardApi> = {}): DashboardApi {
   return {
@@ -464,6 +516,77 @@ describe.each(["light", "dark"] as const)("backup-screen a11y (%s theme)", (them
     q(el, "[data-test=show-pack]")!.click();
     await flush(el);
     expect(q(el, "[data-test=pack-failure]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders destinations whose upload failed, could not be checked and could not remove old backups, after a save the box could not load, accessibly", async () => {
+    const { el, host } = await mountWidget<BackupScreen>(
+      "dashboard-backup-screen",
+      {
+        api: stubApi(
+          { ...OFF, recoveryKeySet: true },
+          { applyBackup: vi.fn().mockResolvedValue(FAILING) },
+        ),
+      },
+      theme,
+    );
+    await flush(el);
+    change(el, "[data-test=destination]", "/mnt/usb/waitron");
+    await el.updateComplete;
+    q(el, "[data-test=apply]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=reload-failed]")).not.toBeNull());
+    expect(q(el, "[data-test=reload-failed]")!.textContent).toContain(
+      t("backup.reload_failed_after_save"),
+    );
+    const local = q(el, '[data-test=destination-row][data-destination="primary"]')!.textContent;
+    expect(local).toContain(t("backup.destination.failed"));
+    expect(local).toContain(codeMessage("storage.upload_failed"));
+    expect(local).toContain(t("backup.destination.prune_failed"));
+    const bucket = q(el, '[data-test=destination-row][data-destination="bucket"]')!.textContent;
+    expect(bucket).toContain(t("backup.destination.unreadable"));
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders a required folder beside a failed bucket test's bottom message accessibly", async () => {
+    const { el, host } = await mountWidget<BackupScreen>(
+      "dashboard-backup-screen",
+      {
+        api: stubApi(
+          { ...OFF, recoveryKeySet: true },
+          {
+            applyBackup: vi.fn().mockRejectedValue({
+              code: "backup.archive_test_failed",
+              params: { reason: "timed_out" },
+            }),
+          },
+        ),
+      },
+      theme,
+    );
+    await flush(el);
+    await chooseOption(q(el, "[data-test=archive-destination]")!, "custom-s3");
+    await el.updateComplete;
+    for (const [name, value] of [
+      ["region", "eu-west-3"],
+      ["name", "my-bucket"],
+      ["access-key-id", "AKIAMINE"],
+      ["secret-access-key", "SECRET-1"],
+    ] as const)
+      change(el, `[data-test=archive-bucket-${name}]`, value);
+    await el.updateComplete;
+    q(el, "[data-test=apply]")!.click();
+    const actions = () =>
+      q(el, "[data-test=apply-actions]") as HTMLElementTagNameMap["wt-form-actions"];
+    await vi.waitFor(() =>
+      expect(actions().error).toContain(codeMessage("backup.archive_test_failed")),
+    );
+    await chooseOption(q(el, "[data-test=archive-destination]")!, "local-fs");
+    await el.updateComplete;
+    const folder = q(el, "[data-test=destination]") as HTMLElementTagNameMap["wt-input"];
+    expect(folder.error).toBe(t("backup.destination.folder_required"));
+    expect(actions().error).toBe(
+      `${codeMessage("backup.archive_test_failed")} ${t("backup.archive_test.timed_out")} ${t("form.fix_fields")}`,
+    );
     await expectNoA11yViolations(host);
   });
 
