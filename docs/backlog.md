@@ -4346,11 +4346,6 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   or admin) lands after it fetched the key. Left open by SQLite slice 2 Task 2a (#557, a recovery
   key that does not need an archive destination).
 
-- **The owner's call: `rotate` with a destination loaded rebuilds `backup.env`** from the running
-  settings rather than keeping the file's other lines, so a destination added to the file by hand
-  and not yet loaded is dropped. Left open by SQLite slice 2 Task 2a (#557, a recovery key that does
-  not need an archive destination).
-
 - **From #608: the recovery level is read before `recovery.lock`,** so the pre-boot count another
   start writes can still push a server restarting at that moment onto the recovery page. Left open
   by SQLite slice 2 Task 3a (#566, one process per venue folder; #573; #608).

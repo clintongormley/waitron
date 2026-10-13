@@ -1,37 +1,53 @@
+import { randomUUID } from "node:crypto";
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
+import type { KeyRing } from "@waitron/credentials";
 import { withTransaction, type Database } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import type { StreamView } from "@waitron/stream";
-import { AppError } from "@waitron/shared";
-import { createErrorBoundary, readJsonBody, requireManagementSession } from "@waitron/server-kit";
+import { AppError, hasCode, isAppError } from "@waitron/shared";
 import {
-  loadBackupConfig,
+  codeOf,
+  createErrorBoundary,
+  readJsonBody,
+  requireManagementSession,
+} from "@waitron/server-kit";
+import {
+  parseArchiveSettings,
+  readArchiveSettings,
+  resolveArchiveChoice,
+  writeArchiveSettings,
+  type ArchiveSettings,
+} from "./archive-settings.js";
+import { buildBackupBackend } from "./backup-backends.js";
+import {
+  DEFAULT_DESTINATION_TIMEOUT_MS,
+  MAX_DESTINATION_TIMEOUT_MS,
+  MIN_DESTINATION_TIMEOUT_MS,
   loadRecoveryKey,
   mintRecoveryKey,
   readHeldKey,
+  resolveBackupConfig,
   type BackupSchedule,
 } from "./backup-config.js";
-import {
-  backupEnvRecord,
-  readBackupKeyRotatedAt,
-  writeBackupEnv,
-  writeRecoveryKey,
-  type BackupEnvInput,
-} from "./backup-env-writer.js";
+import { writeRecoveryKey } from "./backup-env-writer.js";
 import { formatEnvFile, parseEnvFile } from "./env-file.js";
 import { MIN_PASSPHRASE_LENGTH } from "./recovery-bundle.js";
 import type { BackupRuntimeStatus, BackupSupervisor } from "./backup-supervisor.js";
 import type { Logger } from "./logger.js";
 import type { SealedStateRefresher } from "./sealed-state.js";
+import type { BackupDestination, StorageBackend } from "./storage-backend.js";
+import { readStreamSettings } from "./stream-host.js";
 import type { Turns } from "./backup-turns.js";
 import "./errors.js";
 
-/** Everything the authenticated backup admin routes need. `stateDir` is where `backup.env` is
- * written. */
+/** Everything the authenticated backup admin routes need. `stateDir` is where `backup.env`, which
+ * holds the recovery key, is written. */
 export interface BackupApiDeps {
   supervisor: BackupSupervisor;
   db: Database;
+  /** Seals the archive settings, and opens the stream's for a `stream-bucket` choice. */
+  ring: KeyRing;
   venueId: string;
   stateDir: string;
   /** The recovery key from the box env, read afresh each call. Answers with no archive destination
@@ -44,6 +60,9 @@ export interface BackupApiDeps {
   /** Shared with the stream settings routes, which also read and then write the key in
    * `backup.env`. */
   turns: Turns;
+  /** Builds the backend Save tests an archive bucket through. */
+  buildBackend?: (dest: BackupDestination) => StorageBackend;
+  archiveProbeTimeoutMs?: number;
 }
 
 const STATUS: Record<string, ContentfulStatusCode> = {
@@ -61,7 +80,15 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "backup.schedule_invalid": 400,
   "backup.request_invalid": 400,
   "backup.effective_mismatch": 400,
+  "backup.archive_namespace_overlap": 400,
+  "backup.stream_not_configured": 409,
+  "backup.archive_test_failed": 422,
+  "backup.archive_settings_invalid": 500,
 };
+
+const ARCHIVE_PROBE_TIMEOUT_MS = 30 * 1000;
+const PROBE_CLEANUP_TIMEOUT_MS = 10 * 1000;
+const PROBE_BYTES = Buffer.from("waitron archive test\n");
 
 /**
  * Refuse a recovery key that cannot be stored VERBATIM in `backup.env`: the box would encrypt archives
@@ -85,122 +112,168 @@ function projectStatus<T extends BackupRuntimeStatus>(s: T): Omit<T, "recoveryKe
   return rest;
 }
 
-/** Structural validation only — the semantic checks are `loadBackupConfig`'s job on the
- * dry-validate below, so the route rejects exactly what boot would. */
-function readSchedule(raw: unknown): BackupSchedule {
-  if (typeof raw !== "object" || raw === null) {
-    throw new AppError("backup.request_invalid", { field: "schedule" });
-  }
-  const s = raw as { kind?: unknown; ms?: unknown; days?: unknown; at?: unknown };
-  if (s.kind === "interval") {
-    if (typeof s.ms !== "number" || !Number.isInteger(s.ms) || s.ms <= 0) {
-      throw new AppError("backup.request_invalid", { field: "schedule" });
-    }
-    return { kind: "interval", ms: s.ms };
-  }
-  if (s.kind === "wall-clock") {
-    let days: "daily" | number[];
-    if (s.days === "daily") days = "daily";
-    else if (
-      Array.isArray(s.days) &&
-      s.days.every((n) => typeof n === "number" && Number.isInteger(n) && n >= 0 && n <= 6)
-    ) {
-      days = s.days as number[];
-    } else throw new AppError("backup.request_invalid", { field: "schedule" });
+function requestInvalid(field: string): AppError {
+  return new AppError("backup.request_invalid", { field });
+}
 
-    let at: { hour: number; minute: number } | "auto";
-    if (s.at === "auto") at = "auto";
-    else if (
-      typeof s.at === "object" &&
-      s.at !== null &&
-      typeof (s.at as { hour?: unknown }).hour === "number" &&
-      typeof (s.at as { minute?: unknown }).minute === "number"
-    ) {
-      const a = s.at as { hour: number; minute: number };
-      at = { hour: a.hour, minute: a.minute };
-    } else throw new AppError("backup.request_invalid", { field: "schedule" });
-    return { kind: "wall-clock", days, at };
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function onlyKeys(value: Record<string, unknown>, keys: readonly string[], field: string): void {
+  if (!Object.keys(value).every((key) => keys.includes(key))) throw requestInvalid(field);
+}
+
+function isWhole(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value);
+}
+
+function readSchedule(raw: unknown): BackupSchedule {
+  const invalid = () => requestInvalid("schedule");
+  if (!isRecord(raw)) throw invalid();
+  if (raw.kind === "interval") {
+    onlyKeys(raw, ["kind", "ms"], "schedule");
+    if (!isWhole(raw.ms) || raw.ms <= 0) throw invalid();
+    return { kind: "interval", ms: raw.ms };
   }
-  throw new AppError("backup.request_invalid", { field: "schedule" });
+  if (raw.kind !== "wall-clock") throw invalid();
+  onlyKeys(raw, ["kind", "days", "at"], "schedule");
+  let days: "daily" | number[];
+  if (raw.days === "daily") days = "daily";
+  else if (
+    Array.isArray(raw.days) &&
+    raw.days.length > 0 &&
+    raw.days.every((n) => isWhole(n) && n >= 0 && n <= 6)
+  ) {
+    days = [...new Set(raw.days as number[])].sort((a, b) => a - b);
+  } else throw invalid();
+
+  let at: { hour: number; minute: number } | "auto";
+  if (raw.at === "auto") at = "auto";
+  else if (isRecord(raw.at)) {
+    onlyKeys(raw.at, ["hour", "minute"], "schedule");
+    const { hour, minute } = raw.at;
+    if (!isWhole(hour) || !isWhole(minute) || hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+      throw invalid();
+    }
+    at = { hour, minute };
+  } else throw invalid();
+  return { kind: "wall-clock", days, at };
 }
 
 function readRetention(raw: unknown): { count: number; days: number } {
-  if (typeof raw !== "object" || raw === null) {
-    throw new AppError("backup.request_invalid", { field: "retention" });
+  if (!isRecord(raw)) throw requestInvalid("retention");
+  onlyKeys(raw, ["count", "days"], "retention");
+  const { count, days } = raw;
+  if (!isWhole(count) || count <= 0 || !isWhole(days) || days <= 0) {
+    throw requestInvalid("retention");
   }
-  const r = raw as { count?: unknown; days?: unknown };
-  if (typeof r.count !== "number" || !Number.isInteger(r.count) || r.count <= 0) {
-    throw new AppError("backup.request_invalid", { field: "retention" });
-  }
-  if (typeof r.days !== "number" || !Number.isInteger(r.days) || r.days <= 0) {
-    throw new AppError("backup.request_invalid", { field: "retention" });
-  }
-  return { count: r.count, days: r.days };
+  return { count, days };
 }
 
-/** `recoveryKey` is `undefined` when absent, because a box that already holds a key reuses it.
- * A refusal names the offending field, never its value — it could be the key. */
-async function readApplyBody(
-  c: Context,
-): Promise<
-  Omit<BackupEnvInput, "recoveryKey" | "keyRotatedAt"> & { recoveryKey: string | undefined }
-> {
-  const body = await readJsonBody<{
-    destinationDir?: unknown;
-    recoveryKey?: unknown;
-    schedule?: unknown;
-    retention?: unknown;
-  }>(c);
-  if (typeof body.destinationDir !== "string" || body.destinationDir.trim() === "") {
-    throw new AppError("backup.request_invalid", { field: "destinationDir" });
+interface ApplyBody {
+  /** Resolved inside the write's turn, against the settings held then. */
+  destination: Record<string, unknown>;
+  /** `undefined` when absent, because a box that already holds a key reuses it. */
+  recoveryKey: string | undefined;
+  schedule: BackupSchedule;
+  retention: { count: number; days: number };
+  destinationTimeoutMs: number | undefined;
+}
+
+const APPLY_FIELDS = [
+  "destination",
+  "recoveryKey",
+  "schedule",
+  "retention",
+  "destinationTimeoutMs",
+];
+
+/** A refusal names the offending field, never its value — it could be the key or a secret. */
+async function readApplyBody(c: Context): Promise<ApplyBody> {
+  const body = await readJsonBody<unknown>(c);
+  if (!isRecord(body)) throw requestInvalid("body");
+  const unknown = Object.keys(body).find((key) => !APPLY_FIELDS.includes(key));
+  if (unknown !== undefined) throw requestInvalid(unknown);
+  if (!isRecord(body.destination)) throw requestInvalid("destination");
+  const { recoveryKey, destinationTimeoutMs } = body;
+  if ("recoveryKey" in body && (typeof recoveryKey !== "string" || recoveryKey === "")) {
+    throw requestInvalid("recoveryKey");
   }
   if (
-    body.recoveryKey !== undefined &&
-    (typeof body.recoveryKey !== "string" || body.recoveryKey === "")
+    "destinationTimeoutMs" in body &&
+    (!isWhole(destinationTimeoutMs) ||
+      destinationTimeoutMs < MIN_DESTINATION_TIMEOUT_MS ||
+      destinationTimeoutMs > MAX_DESTINATION_TIMEOUT_MS)
   ) {
-    throw new AppError("backup.request_invalid", { field: "recoveryKey" });
+    throw requestInvalid("destinationTimeoutMs");
   }
   return {
-    destinationDir: body.destinationDir,
-    recoveryKey: body.recoveryKey,
+    destination: body.destination,
+    recoveryKey: recoveryKey as string | undefined,
     schedule: readSchedule(body.schedule),
     retention: readRetention(body.retention),
+    destinationTimeoutMs: destinationTimeoutMs as number | undefined,
   };
 }
 
 async function readRotateBody(c: Context): Promise<{ recoveryKey: string }> {
   const body = await readJsonBody<{ recoveryKey?: unknown }>(c);
   if (typeof body.recoveryKey !== "string" || body.recoveryKey === "") {
-    throw new AppError("backup.request_invalid", { field: "recoveryKey" });
+    throw requestInvalid("recoveryKey");
   }
   return { recoveryKey: body.recoveryKey };
 }
 
-/** The destination + schedule + retention `rotate` reuses from the running config. Refuses when no
- * destination is loaded, which on this path means the box holds no key either. */
-function fromCurrent(
-  cur: BackupRuntimeStatus,
-): Omit<BackupEnvInput, "recoveryKey" | "keyRotatedAt"> {
-  const first = cur.destinations[0];
-  const dir = first?.kind === "local-fs" ? first.dir : undefined;
-  if (dir === undefined || cur.schedule === undefined || cur.retention === undefined) {
-    throw new AppError("backup.request_invalid", { field: "config" });
-  }
-  return {
-    destinationDir: dir,
-    schedule: cur.schedule,
-    retention: { count: cur.retention.count, days: cur.retention.days },
-  };
+function testFailed(reason: string): AppError {
+  return new AppError("backup.archive_test_failed", { reason });
 }
 
 /**
- * The write routes run `guardWritable` BEFORE any file write, dry-validate what they will write the way
- * boot would read it, write `backup.env`, reload, and assert the EFFECTIVE key equals the expected one
- * (the guard against a partial env override silently orphaning archives). `rotate` with no
- * destination loaded does not reload; it compares the key re-read from the box env files instead.
+ * Writes, reads back and lists one object under the archive folder, then deletes only that object.
+ * Passing says the bucket answered these four calls now, not that later archives will fit or be
+ * kept. The delete gets its own time limit, so it is still attempted after the test ran out of time.
+ */
+async function probeArchive(
+  backend: StorageBackend,
+  timeoutMs: number,
+  cleanupTimeoutMs: number,
+): Promise<void> {
+  const probeKey = `waitron-probe-${randomUUID()}`;
+  const signal = AbortSignal.timeout(timeoutMs);
+  const reason = (error: unknown) => (signal.aborted ? "timed_out" : codeOf(error));
+  let failure: AppError | undefined;
+  try {
+    await backend.put(probeKey, PROBE_BYTES, { signal });
+    const read = await backend.get(probeKey, { signal });
+    if (!PROBE_BYTES.equals(read)) throw testFailed("read_mismatch");
+    const listed = await backend.list(probeKey, { signal });
+    if (!listed.some((o) => o.key === probeKey)) throw testFailed("not_listed");
+  } catch (error) {
+    failure =
+      isAppError(error) && hasCode(error, "backup.archive_test_failed")
+        ? error
+        : testFailed(reason(error));
+  }
+  try {
+    await backend.deleteMany([probeKey], { signal: AbortSignal.timeout(cleanupTimeoutMs) });
+  } catch (error) {
+    failure ??= testFailed(codeOf(error));
+  } finally {
+    backend.close();
+  }
+  if (failure !== undefined) throw failure;
+}
+
+/**
+ * The write routes run `guardWritable` BEFORE any write, dry-validate what they will store the way
+ * boot would read it, write, reload, and assert the EFFECTIVE key equals the expected one (the guard
+ * against a partial env override silently orphaning archives). A reload that fails after the
+ * settings committed is answered 200 with `reloadErrorCode`: the save stands.
  */
 export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): void {
   const run = createErrorBoundary(STATUS, "backup.failed");
+  const buildBackend = deps.buildBackend ?? buildBackupBackend;
 
   const authorize = async (c: Context): Promise<void> => {
     const sessionId = requireManagementSession(c);
@@ -216,12 +289,28 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
     if (!s.isPrimary) throw new AppError("backup.not_primary", {});
   };
 
-  // Every `backup.env` write this API makes goes through here. The refresh follows the write straight
-  // away, before anything that can refuse the request: the file has changed whatever the request
-  // answers.
+  // The refresh follows each write straight away, before anything that can refuse the request: what
+  // is stored has changed whatever the request answers.
   const persist = async (write: () => Promise<void>): Promise<void> => {
     await write();
     await deps.sealedState.refresh();
+  };
+
+  const storeSettings = (settings: Omit<ArchiveSettings, "revision">): Promise<void> =>
+    persist(async () => {
+      await withTransaction(deps.db, (tx) => writeArchiveSettings(tx, deps.ring, settings));
+    });
+
+  /** Runs outside every transaction; a failure is reported, not thrown, because the write stands. */
+  const reloadAfterWrite = async (): Promise<string | undefined> => {
+    try {
+      await deps.supervisor.reload();
+      return undefined;
+    } catch (error) {
+      const errorCode = codeOf(error);
+      log("warn", "backup.reload_after_write_failed", { errorCode });
+      return errorCode;
+    }
   };
 
   const heldKey = async (): Promise<string | undefined> =>
@@ -240,6 +329,13 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
       stream: deps.readStream(),
     };
   };
+
+  /** The complete status, as `GET /api/backup/status` answers, plus a failed reload's code. */
+  const writeAnswer = async (c: Context, reloadErrorCode: string | undefined) =>
+    c.json({
+      ...(await statusBody()),
+      ...(reloadErrorCode === undefined ? {} : { reloadErrorCode }),
+    });
 
   // Never carries the recovery key.
   app.get("/api/backup/status", (c) =>
@@ -279,26 +375,79 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
           throw new AppError("backup.recovery_key_exists", {});
         }
         const recoveryKey = held.key ?? body.recoveryKey;
-        if (recoveryKey === undefined) {
-          throw new AppError("backup.request_invalid", { field: "recoveryKey" });
+        if (recoveryKey === undefined) throw requestInvalid("recoveryKey");
+        assertStorableKey(recoveryKey);
+
+        const heldSettings = await readArchiveSettings(deps.db, deps.ring);
+        const stream = await readStreamSettings(deps.db, deps.ring);
+        const destination = resolveArchiveChoice(body.destination, {
+          venueId: deps.venueId,
+          stream,
+          held: heldSettings,
+        });
+        const settings: Omit<ArchiveSettings, "revision"> = {
+          enabled: true,
+          destinations: [destination],
+          schedule: body.schedule,
+          retention: body.retention,
+          destinationTimeoutMs:
+            body.destinationTimeoutMs ??
+            heldSettings?.destinationTimeoutMs ??
+            DEFAULT_DESTINATION_TIMEOUT_MS,
+        };
+        // Refuse exactly what boot would, before anything is written.
+        resolveBackupConfig({
+          managedByEnvironment: false,
+          env: { WAITRON_BACKUP_RECOVERY_KEY: recoveryKey },
+          sealed: parseArchiveSettings(JSON.stringify({ ...settings, revision: randomUUID() })),
+          venueId: deps.venueId,
+        });
+        if (destination.kind === "s3") {
+          await probeArchive(
+            buildBackend(destination),
+            deps.archiveProbeTimeoutMs ?? ARCHIVE_PROBE_TIMEOUT_MS,
+            PROBE_CLEANUP_TIMEOUT_MS,
+          );
         }
-        const keyRotatedAt = await readBackupKeyRotatedAt(deps.stateDir);
-        const input: BackupEnvInput = { ...body, recoveryKey, keyRotatedAt };
-        assertStorableKey(input.recoveryKey);
-        // Dry-validate the EXACT record we are about to write, so the route rejects exactly what boot
-        // would BEFORE touching disk.
-        loadBackupConfig(backupEnvRecord(input), deps.venueId);
-        await persist(() => writeBackupEnv(deps.stateDir, input));
-        await deps.supervisor.reload();
+
+        // Deliberate split: the key file cannot join the transaction; refused settings leave a key.
+        if (held.key === undefined) {
+          await persist(() =>
+            writeRecoveryKey(deps.stateDir, { recoveryKey, keyRotatedAt: undefined }),
+          );
+        }
+        await storeSettings(settings);
+        const reloadErrorCode = await reloadAfterWrite();
         // The effective key is what the box will actually encrypt under. If a partial env override (or
         // any merge) made it differ from the key chosen above, fail LOUD rather than orphan archives.
-        if (deps.supervisor.current().recoveryKey !== input.recoveryKey) {
+        if (
+          reloadErrorCode === undefined &&
+          deps.supervisor.current().recoveryKey !== recoveryKey
+        ) {
           throw new AppError("backup.effective_mismatch", {});
         }
-        // Return the COMPLETE status (the same shape `GET /api/backup/status` returns), so the
-        // dashboard, which assigns this response straight to its status state and reads
-        // `backupStatus`/`archiveUnderCurrentKey`, gets both — the sync `current()` snapshot omits them.
-        return c.json(await statusBody());
+        return writeAnswer(c, reloadErrorCode);
+      });
+    }),
+  );
+
+  // Keeps the stored destinations, schedule and retention, so Save can switch archives back on.
+  app.post("/api/backup/disable", (c) =>
+    run(c, log, async () => {
+      await authorize(c);
+      guardWritable();
+      return deps.turns(async () => {
+        guardWritable();
+        const held = await readArchiveSettings(deps.db, deps.ring);
+        if (held === null) throw requestInvalid("config");
+        await storeSettings({
+          enabled: false,
+          destinations: held.destinations,
+          schedule: held.schedule,
+          retention: held.retention,
+          destinationTimeoutMs: held.destinationTimeoutMs,
+        });
+        return writeAnswer(c, await reloadAfterWrite());
       });
     }),
   );
@@ -315,9 +464,9 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
     }),
   );
 
-  // With an archive destination, rotate reuses the running destination/schedule/retention. A box
-  // holding a key whose supervisor has no destination LOADED — none configured, or its config dropped
-  // after the venue failed to open — has only the key and `keyRotatedAt` rewritten in `backup.env`.
+  // Rotation rewrites only the key in `backup.env`; the stored settings stay as they are. A box
+  // holding a key whose supervisor has no destination LOADED is not reloaded. A bucket destination
+  // is refused until rotation can re-key it.
   app.post("/api/backup/rotate", (c) =>
     run(c, log, async () => {
       await authorize(c);
@@ -328,22 +477,22 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
         guardWritable(); // Again: role or env ownership may have changed while this write waited.
         const keyRotatedAt = new Date().toISOString();
         const cur = deps.supervisor.current();
-        if (cur.destinations.length === 0 && (await keyPresent())) {
-          loadRecoveryKey({ WAITRON_BACKUP_RECOVERY_KEY: recoveryKey });
+        loadRecoveryKey({ WAITRON_BACKUP_RECOVERY_KEY: recoveryKey });
+        if (cur.destinations.length === 0) {
+          if (!(await keyPresent())) throw requestInvalid("config");
           await persist(() => writeRecoveryKey(deps.stateDir, { recoveryKey, keyRotatedAt }));
           if ((await deps.readRecoveryKey()) !== recoveryKey) {
             throw new AppError("backup.effective_mismatch", {});
           }
           return c.json(await statusBody({ held: true, key: recoveryKey }));
         }
-        const input: BackupEnvInput = { ...fromCurrent(cur), recoveryKey, keyRotatedAt };
-        loadBackupConfig(backupEnvRecord(input), deps.venueId);
-        await persist(() => writeBackupEnv(deps.stateDir, input));
+        if (cur.destinations.some((d) => d.kind !== "local-fs")) throw requestInvalid("config");
+        await persist(() => writeRecoveryKey(deps.stateDir, { recoveryKey, keyRotatedAt }));
         await deps.supervisor.reload();
         if (deps.supervisor.current().recoveryKey !== recoveryKey) {
           throw new AppError("backup.effective_mismatch", {});
         }
-        // Complete status, as `apply` returns and the dashboard expects (see the note there).
+        // Complete status, as `apply` returns and the dashboard expects.
         return c.json(await statusBody());
       });
     }),

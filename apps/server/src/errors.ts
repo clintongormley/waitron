@@ -1175,6 +1175,10 @@ declare module "@waitron/shared" {
     /** An archive bucket's folder for this venue would sit inside, or contain, the stream's venue
      * folder in the same bucket. No params: they would be the owner's bucket settings. */
     "backup.archive_namespace_overlap": Record<string, never>;
+    /** Save's test of an archive bucket — write, read back, list and delete one object — failed or
+     * ran out of time. `reason` is a code, or `timed_out`, `read_mismatch` or `not_listed`; never
+     * the provider's message. */
+    "backup.archive_test_failed": { reason: string };
     /** A recovery kit was asked for on a node with no membership public key (`nodes.public_key`),
      * so a rebuild could not verify the pointer this node signs. */
     "backup.stream_signer_missing": Record<string, never>;

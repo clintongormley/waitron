@@ -1920,6 +1920,7 @@ async function bootServer(
     {
       supervisor: backupSupervisor,
       db,
+      ring,
       venueId: till.locationId,
       stateDir: config.stateDir,
       readRecoveryKey,

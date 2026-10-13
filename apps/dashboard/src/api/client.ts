@@ -4028,7 +4028,11 @@ export class DashboardApi {
   }
 
   applyBackup(body: BackupApplyBody): Promise<BackupStatusView> {
-    return this.#request<BackupStatusView>("/api/backup/apply", "POST", body);
+    const { destinationDir, ...rest } = body;
+    return this.#request<BackupStatusView>("/api/backup/apply", "POST", {
+      ...rest,
+      destination: { kind: "local-fs", dir: destinationDir },
+    });
   }
 
   getBackupRecoveryKey(): Promise<{ key: string | null }> {
