@@ -122,10 +122,13 @@ their full text.
   [equipment plan](../superpowers/plans/2026-10-04-device-equipment-and-independent-drawers.md).
   The hardware probe is done on a OnePlus 13 with Chrome 154 and metal-backed NTAG-type stickers
   ([results](../research/2026-10-12-nfc-probe-oneplus-13.md)). Plan Task 5's NFC
-  reader path remains open. Printers now have a server-side pick-up role set (receipt and payment
-  slip by default); an unnamed authenticated scan applies that set in one transaction, while a
-  scan for a named row changes only that row. NFC reading, writing/locking stickers and venue-printer
-  label printing remain open. What the probe settles for the build: the sticker holds a
+  reader path is implemented in the equipment dialog, with browser tests using simulated NFC
+  readers. A general tap submits the equipment kind and id through the authenticated selection
+  request; a row's Scan arms just that row. If NFC is allowed or awaiting permission, you choose Scan QR code to open
+  the camera, which pauses NFC until you return. Printers have a server-side pick-up role set
+  (receipt and payment slip by default); an unnamed authenticated scan applies that set in one
+  transaction, while a scan for a named row changes only that row. Reading on every till screen,
+  writing/locking stickers and venue-printer label printing remain open. What the probe settles for the build: the sticker holds a
   **text record** of `formatEquipmentCode`'s text (owner, 2026-10-12); the till scans whenever it is
   in front, or a tap brings up Android's own tag viewer; opening the camera stops NFC, so the QR
   scanner and NFC take turns; a lost tap reaches the page as nothing at all. Still to check during

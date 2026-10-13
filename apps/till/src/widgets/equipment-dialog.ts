@@ -1,6 +1,7 @@
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { live } from "lit/directives/live.js";
+import { parseEquipmentCode } from "@waitron/shared";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -17,6 +18,21 @@ import type {
   EquipmentRole,
   RoleEquipment,
 } from "../api/client.js";
+
+interface NfcRecord {
+  recordType: string;
+  encoding: string;
+  data: DataView;
+}
+interface NfcReading extends Event {
+  message: { records: NfcRecord[] };
+}
+interface NfcReader extends EventTarget {
+  scan(options: { signal: AbortSignal }): Promise<void>;
+}
+function nfcReader(): (new () => NfcReader) | undefined {
+  return (window as Window & { NDEFReader?: new () => NfcReader }).NDEFReader;
+}
 
 type Field = "receiptPrinterId" | "paymentSlipPrinterId" | "cardReaderId" | "cashDrawerPrinterId";
 
@@ -105,11 +121,197 @@ export class TillEquipmentDialog extends LitElement {
   /** A held item picked from a list, waiting for the person to say whether to take it. */
   @state() private asking: { role: EquipmentRole; item: EquipmentItem } | null = null;
   @state() private scanning: (typeof ROWS)[number] | null = null;
+  @state() private qrScanning = false;
+  @state() private nfcPermission: PermissionState | null = null;
+  @state() private nfcMessage:
+    | "equipment.scan_not_ours"
+    | "equipment.scan_not_printer"
+    | "equipment.scan_not_reader"
+    | "equipment.scan_not_available"
+    | "equipment.nfc_read_error"
+    | "equipment.nfc_unavailable"
+    | null = null;
+  #nfcAbort?: AbortController;
+  #permissionAbort?: AbortController;
+  #opening = 0;
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    if (this.hasUpdated && this.open) void this.#discoverNfc();
+  }
+
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.#stopNfcPermission();
+  }
+
+  #stopNfc(): void {
+    this.#nfcAbort?.abort();
+    this.#nfcAbort = undefined;
+  }
+
+  #stopNfcPermission(): void {
+    this.#opening++;
+    this.#stopNfc();
+    this.#permissionAbort?.abort();
+    this.#permissionAbort = undefined;
+    this.nfcPermission = null;
+    this.nfcMessage = null;
+  }
+
+  async #discoverNfc(): Promise<void> {
+    this.#stopNfcPermission();
+    if (nfcReader() === undefined) return;
+    const opening = this.#opening;
+    let permission: PermissionStatus;
+    try {
+      permission = await navigator.permissions.query({ name: "nfc" as PermissionName });
+    } catch {
+      return;
+    }
+    if (opening !== this.#opening || !this.open || !this.isConnected) return;
+    const abort = new AbortController();
+    this.#permissionAbort = abort;
+    const update = () => {
+      this.nfcPermission = permission.state;
+      if (permission.state === "granted" && !this.qrScanning) void this.#startNfc();
+      else this.#stopNfc();
+    };
+    permission.addEventListener("change", update, { signal: abort.signal });
+    update();
+  }
+
+  async #startNfc(): Promise<void> {
+    const Reader = nfcReader();
+    if (
+      Reader === undefined ||
+      this.#nfcAbort !== undefined ||
+      !this.open ||
+      !this.isConnected ||
+      this.qrScanning
+    )
+      return;
+    const abort = new AbortController();
+    this.#nfcAbort = abort;
+    this.nfcMessage = null;
+    try {
+      const reader = new Reader();
+      reader.addEventListener(
+        "reading",
+        (event) => {
+          if (
+            this.#nfcAbort !== abort ||
+            abort.signal.aborted ||
+            !this.open ||
+            !this.isConnected ||
+            this.qrScanning ||
+            this.asking !== null
+          )
+            return;
+          this.#readNfc(event as NfcReading);
+        },
+        { signal: abort.signal },
+      );
+      reader.addEventListener(
+        "readingerror",
+        () => {
+          this.nfcMessage = "equipment.nfc_read_error";
+        },
+        { signal: abort.signal },
+      );
+      await reader.scan({ signal: abort.signal });
+      if (this.#nfcAbort === abort && !abort.signal.aborted) this.nfcPermission = "granted";
+    } catch (error) {
+      if (this.#nfcAbort !== abort || abort.signal.aborted) return;
+      this.#stopNfc();
+      if ((error as { name?: string }).name === "NotAllowedError") this.nfcPermission = "denied";
+      else this.nfcMessage = "equipment.nfc_unavailable";
+    }
+  }
+
+  #readNfc(event: NfcReading): void {
+    const codes = event.message.records.flatMap((record) => {
+      if (record.recordType !== "text") return [];
+      try {
+        const code = parseEquipmentCode(
+          new TextDecoder(record.encoding || "utf-8", { fatal: true }).decode(record.data),
+        );
+        return code === null ? [] : [code];
+      } catch {
+        return [];
+      }
+    });
+    const code = codes.length === 1 ? codes[0] : undefined;
+    if (code === undefined) {
+      this.nfcMessage = "equipment.scan_not_ours";
+      return;
+    }
+    const row = this.scanning;
+    if (row !== null && code.kind !== row.scan) {
+      this.nfcMessage =
+        row.scan === "printer" ? "equipment.scan_not_printer" : "equipment.scan_not_reader";
+      return;
+    }
+    const permitted = this.equipment?.roles.some(
+      (role) =>
+        (row === null
+          ? code.kind === "reader"
+            ? role.role === "card_terminal"
+            : role.role === "receipt" || role.role === "payment_slip"
+          : role.role === row.role) && role.choices.some((item) => item.id === code.id),
+    );
+    if (!permitted) {
+      this.nfcMessage = "equipment.scan_not_available";
+      return;
+    }
+    this.nfcMessage = null;
+    this.scanning = null;
+    this.#change(
+      row === null
+        ? { kind: code.kind, selection: { id: code.id }, via: "scan" }
+        : { role: row.role, selection: { id: code.id }, via: "scan", takeOver: false },
+    );
+  }
+
+  #close(): void {
+    this.#stopNfcPermission();
+    this.#emit("close");
+  }
+
+  #scanRow(row: (typeof ROWS)[number]): void {
+    this.scanning = row;
+    this.nfcMessage = null;
+    this.qrScanning = this.nfcPermission === null || this.nfcPermission === "denied";
+    if (this.qrScanning) this.#stopNfc();
+    else if (this.nfcPermission === "granted") void this.#startNfc();
+  }
+
+  #backToList(): void {
+    this.scanning = null;
+    this.qrScanning = false;
+    this.nfcMessage = null;
+    if (this.nfcPermission === "granted") void this.#startNfc();
+  }
+
+  #renderNfc(): TemplateResult | typeof nothing {
+    if (this.nfcPermission === null || this.nfcPermission === "denied" || this.qrScanning)
+      return nothing;
+    return html`<div class="scanning" data-equipment-nfc>
+      <p data-equipment-nfc-message role="status">
+        ${this.nfcMessage === null ? t("equipment.nfc_hint") : t(this.nfcMessage)}
+      </p>
+      ${this.nfcPermission === "prompt" ? html`<wt-button data-equipment-nfc-allow variant="primary" @click=${() => void this.#startNfc()}>${t("equipment.nfc_allow")}</wt-button>` : nothing}
+    </div>`;
+  }
 
   protected override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("open") && !this.open) {
       this.asking = null;
       this.scanning = null;
+      this.qrScanning = false;
+      this.#stopNfcPermission();
+    } else if (changed.has("open") && this.open) {
+      void this.#discoverNfc();
     }
   }
 
@@ -219,12 +421,13 @@ export class TillEquipmentDialog extends LitElement {
           }}
         ></wt-combobox>
         ${
-          row.scan !== null && canScan()
+          row.scan !== null &&
+          (canScan() || this.nfcPermission === "granted" || this.nfcPermission === "prompt")
             ? html`<wt-button
                 data-equipment-scan
                 variant="secondary"
                 aria-label=${`${t("equipment.scan")}: ${label}`}
-                @click=${() => (this.scanning = row)}
+                @click=${() => this.#scanRow(row)}
                 >${t("equipment.scan")}</wt-button
               >`
             : nothing
@@ -236,24 +439,39 @@ export class TillEquipmentDialog extends LitElement {
   #renderScanning(row: (typeof ROWS)[number]): TemplateResult {
     return html`<div class="scanning">
       <span class="label">${t(`equipment.${row.role}`)}</span>
-      <till-equipment-scanner
-        .kind=${row.scan!}
-        @equipment-scanned=${(event: CustomEvent<{ id: string }>) => {
-          event.stopPropagation();
-          this.scanning = null;
-          this.#change({
-            role: row.role,
-            selection: { id: event.detail.id },
-            via: "scan",
-            takeOver: false,
-          });
-        }}
-      ></till-equipment-scanner>
+      ${
+        this.qrScanning
+          ? html`<till-equipment-scanner
+              .kind=${row.scan!}
+              @equipment-scanned=${(event: CustomEvent<{ id: string }>) => {
+                event.stopPropagation();
+                this.#backToList();
+                this.#change({
+                  role: row.role,
+                  selection: { id: event.detail.id },
+                  via: "scan",
+                  takeOver: false,
+                });
+              }}
+            ></till-equipment-scanner>`
+          : html`
+              ${
+                canScan()
+                  ? html`<wt-button
+                      data-equipment-qr
+                      variant="secondary"
+                      @click=${() => {
+                        this.qrScanning = true;
+                        this.#stopNfc();
+                      }}
+                      >${t("equipment.scan_qr")}</wt-button
+                    >`
+                  : nothing
+              }
+            `
+      }
       <div>
-        <wt-button
-          data-equipment-scan-back
-          variant="secondary"
-          @click=${() => (this.scanning = null)}
+        <wt-button data-equipment-scan-back variant="secondary" @click=${() => this.#backToList()}
           >${t("equipment.scan_back")}</wt-button
         >
       </div>
@@ -312,15 +530,16 @@ export class TillEquipmentDialog extends LitElement {
         ${trackDialog()}
         .open=${true}
         .heading=${t("equipment.title")}
-        @wt-close=${() => this.#emit("close")}
+        @wt-close=${() => this.#close()}
       >
         ${
           this.scanning === null
             ? html`<div class="fields">${ROWS.map((row) => this.#row(row))}</div>`
             : this.#renderScanning(this.scanning)
         }
+        ${this.#renderNfc()}
         <wt-form-actions slot="footer" .error=${this.#bottomMessage()}>
-          <wt-button data-equipment-close variant="secondary" @click=${() => this.#emit("close")}>
+          <wt-button data-equipment-close variant="secondary" @click=${() => this.#close()}>
             ${t("equipment.close")}
           </wt-button>
         </wt-form-actions>
