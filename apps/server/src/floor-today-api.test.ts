@@ -422,10 +422,12 @@ describe("the zone reset's revision", () => {
   it("refuses a revision newer than the room's", async () => {
     const { zoneId } = await plannedZone(v, [{ key: "a" }]);
     const from = (await zoneRevisionOf(zoneId))!;
+    const before = await everything();
 
     expect(await refusal(resetZoneToday(zoneId, { zoneRevision: from + 1 }))).toEqual(
       outOfDate(zoneId, from),
     );
+    expect(await everything()).toEqual(before);
     expect(await zoneRevisionOf(zoneId)).toBe(from);
   });
 
@@ -481,6 +483,45 @@ describe("the zone reset's revision", () => {
     );
 
     await expectRevision(resetZoneToday(zoneId, { zoneRevision: 1 }), zoneId, 1);
+  });
+
+  it("refuses a stale reset when the catch-up changes the room, and rolls the catch-up back", async () => {
+    const { zoneId, table, master, revision } = await plannedZone(v, [
+      { key: "t", label: "T", place: { x: 0, y: 0 } },
+    ]);
+    const partyId = await seatAt(table.t!);
+    const label = (await tableRow(v, table.t!)).label;
+    const renamed = `${label} b`;
+    await inTx(v, (tx) =>
+      saveZonePlan(tx, v.cfg, REMOVALS, zoneId, {
+        revision,
+        tables: [
+          {
+            id: master.t!,
+            key: "t",
+            label: renamed,
+            seats: 4,
+            fixed: false,
+            placement: { x: 0, y: 0, width: 8, height: 8, shape: "rect", rotation: 0 },
+            partKeys: [],
+          },
+        ],
+      }),
+    );
+    await expectRevision(resetZoneToday(zoneId), zoneId);
+    expect((await tableRow(v, table.t!)).label).toBe(label);
+    await finish(partyId);
+    expect((await tableRow(v, table.t!)).label).toBe(label);
+    const read = (await zoneRevisionOf(zoneId))!;
+    const before = await everything();
+
+    expect(await refusal(resetZoneToday(zoneId, { zoneRevision: read }))).toEqual(
+      outOfDate(zoneId, read + 1),
+    );
+
+    expect((await tableRow(v, table.t!)).label).toBe(label);
+    expect(await everything()).toEqual(before);
+    expect(await zoneRevisionOf(zoneId)).toBe(read);
   });
 
   it("refuses a revision that is not a whole number from 0", async () => {

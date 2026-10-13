@@ -99,12 +99,12 @@ async function resetRevision(c: Context): Promise<number | null | undefined> {
   return body.zoneRevision === null ? null : sentRevision(body);
 }
 
-async function hasTodayRow(tx: Transaction, zoneId: string): Promise<boolean> {
+async function hasTodayRow(tx: Transaction, locationId: string, zoneId: string): Promise<boolean> {
   const [row] = await tx
     .select({ id: floorTodayTables.id })
     .from(floorTodayTables)
     .innerJoin(diningTables, eq(diningTables.id, floorTodayTables.tableId))
-    .where(eq(diningTables.zoneId, zoneId))
+    .where(and(eq(diningTables.locationId, locationId), eq(diningTables.zoneId, zoneId)))
     .limit(1);
   return row !== undefined;
 }
@@ -201,7 +201,9 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
         await ensureToday(tx, deps.cfg, removals, now);
         const from = await roomRevision(tx, zoneId);
         const stale =
-          sent === null ? await hasTodayRow(tx, zoneId) : sent !== undefined && sent !== from;
+          sent === null
+            ? await hasTodayRow(tx, deps.cfg.locationId, zoneId)
+            : sent !== undefined && sent !== from;
         if (stale) throw new AppError("floor_today.out_of_date", { zoneId, revision: from });
         if (zone.active && zone.planId !== null)
           await resetZone(tx, deps.cfg, removals, zoneId, now);
