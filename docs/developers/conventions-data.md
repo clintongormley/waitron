@@ -1650,7 +1650,7 @@ waiting together while any of them is held by a party, refused by a module, merg
 table, or has food on its way to it; a merge in which no table is held by a party, refused by a module
 or in a split group that waits is ended as any free merge is. Its parts
 not split off stay joined meanwhile, and the split ends when the reset puts the joined table back,
-or, for the tables it takes back, when Join again does, or when Split tables… on a group puts it
+or, for the tables it takes back, when Join again or Reset table does, or when Split tables… on a group puts it
 back over the tables that stay (`splitGroup`, which also clears their "needs clearing" marks)
 (`splitWithBusy`, `apps/server/src/floor-reset-plan.ts:38`; `waitingTogether`,
 `apps/server/src/floor-today-store.ts:486`). When the reset, or a later catch-up of its pending
@@ -1708,9 +1708,10 @@ not keep one apart, unlike Join again. It ends each group a table it takes back 
 other tables going back where they stood, then clears the marks of the tables it takes back, deletes
 their split rows, gives them their reset row's seats and no place, and puts the joined table at its
 saved place, not where it stands: all of it with its saved seats when every table comes back, else
-over the slots of the tables joined from the saved place's left end, with the seats sent. Before
-those writes it refuses `table.place_taken`, naming the first table by label drawn on today's map
-whose box overlaps that place by at least one square along each side's direction of both turned boxes (`standsIn`,
+over the slots of the tables joined from the saved place's left end, with the seats sent. A joined table saved with no place is placed as Join again places it, and
+when that leaves it off the map nothing is checked. After ending those groups, and before its other
+writes, it refuses `table.place_taken`, naming the first, in number order, of the tables drawn on
+today's map whose box overlaps that place by at least one square along each side's direction of both turned boxes (`standsIn`,
 `apps/server/src/joined-split-layout.ts`); a table that only touches the edge, the joined table and
 the tables it takes back do not count, and a table left apart does. When too few tables would come
 back and a table split off it is held in a group, it refuses `joined_table.tables_in_group`, naming

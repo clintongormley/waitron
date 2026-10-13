@@ -711,9 +711,15 @@ declare module "@waitron/shared" {
     "joined_table.seats_required": Record<string, never>;
     /** Back to its saved place is refused for a joined table while any of its parts is split off. */
     "joined_table.parts_split_off": { tableId: string };
-    /** Join again or Reset table finds no table split off it may take back, or would leave the joined table with fewer than two parts. */
+    /**
+     * Join again or Reset table finds no table split off it may take back, or would leave the joined
+     * table with fewer than two parts.
+     */
     "joined_table.nothing_to_join": { tableId: string };
-    /** Join again or Reset table names other tables than the ones split off it may take back: the till read an older floor. */
+    /**
+     * Join again or Reset table names other tables than the ones split off it may take back: the till
+     * read an older floor.
+     */
     "joined_table.out_of_date": { tableId: string };
     /**
      * Reset table would take back nothing, or leave fewer than two tables joined, while `partIds`

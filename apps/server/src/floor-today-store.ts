@@ -656,7 +656,6 @@ export async function refuseDeliveryPending(tx: Transaction, tableId: string): P
   if (delivery !== undefined) throw new AppError("table.delivery_pending", { tableId });
 }
 
-/** A table split off a joined table goes back only through Join again or the reset. */
 async function refuseSplitOff(tx: Transaction, tableId: string): Promise<void> {
   const [splitOff] = await tx
     .select({ id: floorTodaySplitParts.id })

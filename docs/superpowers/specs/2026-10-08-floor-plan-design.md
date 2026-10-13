@@ -253,7 +253,7 @@ undone at the next reset anyway.
 > Added 2026-10-13 by A579 part 4a ([design](2026-10-13-a579-flattened-joined-tables-design.md)): the
 > server's **Reset table** takes back every free table split off a joined table (a "needs clearing"
 > mark or a group nobody sits at does not keep one apart) and puts the joined table at its saved
-> place, refused when another table stands in that place (`table.place_taken`, owner question 5) or
+> place (one saved with no place goes where Join again would put it), refused when another table stands in that place (`table.place_taken`, owner question 5) or
 > when the tables it needs are in a group with guests (`joined_table.tables_in_group`). The till
 > offers it from part 4b, in place of Join again.
 
