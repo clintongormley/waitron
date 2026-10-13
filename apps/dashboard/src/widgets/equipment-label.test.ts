@@ -39,6 +39,17 @@ describe("dashboard-equipment-label", () => {
     },
   );
 
+  it("puts a name holding a replacement pattern into its heading as written", async () => {
+    const { el } = await mountWidget<EquipmentLabel>("dashboard-equipment-label", {
+      kind: "printer",
+      itemId: ID,
+      name: "Barra $&",
+    });
+    expect(
+      el.shadowRoot!.querySelector("[data-test=equipment-label-modal]")!.getAttribute("heading"),
+    ).toBe(t("equipment.label_title").split("{name}").join("Barra $&"));
+  });
+
   it("draws a new QR when it is given another item", async () => {
     const { el } = await mount("printer");
     const other = "7d2c9a10-5b3e-4f61-8a2d-1c0e9b8a7f65";

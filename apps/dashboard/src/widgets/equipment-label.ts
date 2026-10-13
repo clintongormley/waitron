@@ -6,7 +6,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import { formatEquipmentCode, type EquipmentKind } from "@waitron/shared";
-import { t } from "../i18n/t.js";
+import { fill, t } from "../i18n/t.js";
 
 /** What a printed label carries. */
 export interface EquipmentLabelContent {
@@ -127,7 +127,7 @@ export class EquipmentLabel extends LitElement {
     return html`<wt-modal
       size="compact"
       data-test="equipment-label-modal"
-      heading=${t("equipment.label_title").replace("{name}", this.name)}
+      heading=${fill("equipment.label_title", { name: this.name })}
       .open=${true}
       .opener=${this.opener}
     >

@@ -64,6 +64,13 @@ function submitted(el: Form) {
   return (listener.mock.calls[0]![0] as CustomEvent).detail as unknown;
 }
 
+it("puts a menu name holding a replacement pattern into its heading as written", async () => {
+  const el = await includeForm({ menuName: "Carta $&" });
+  expect(el.shadowRoot!.querySelector("wt-modal")!.heading).toBe(
+    t("menus.include_edit_heading").split("{name}").join("Carta $&"),
+  );
+});
+
 it("opens with the switch on and every field filled with the folder's current values", async () => {
   const el = await includeForm();
   expect(el.shadowRoot!.querySelector("wt-modal")!.heading).toBe(
