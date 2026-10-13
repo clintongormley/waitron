@@ -60,7 +60,8 @@ async function paintedIn(
     .select({ id: menuPeriods.id })
     .from(menuPeriods)
     .innerJoin(departments, eq(departments.id, menuPeriods.departmentId))
-    .where(and(eq(departments.locationId, cfg.locationId), onePeriod(menuPeriods.id)));
+    .where(and(eq(departments.locationId, cfg.locationId), onePeriod(menuPeriods.id)))
+    .orderBy(asc(menuPeriods.name), asc(menuPeriods.id));
   const painted = new Map<string, PaintedIn>(
     periods.map(({ id }) => [id, { seasons: [], specialDays: [] }]),
   );

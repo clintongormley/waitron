@@ -80,6 +80,7 @@ import {
   readSpecialDay,
   saveSpecialDay,
 } from "./special-days.js";
+import { deletePeriod, periodDeleteImpact, readPaintedIn } from "./period-delete.js";
 
 const STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.required": 401,
@@ -1020,6 +1021,50 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           saveMenuPeriod(tx, ctx.cfg, departmentId, input, body.expectedClockRevision as number),
         );
         return c.json(period, 201);
+      }),
+    );
+
+    app.get("/management-api/venue-service/menu-periods/painted-in", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const painted = await viewed(sessionId, (tx) => readPaintedIn(tx, ctx.cfg, new Date()));
+        return c.json([...painted].map(([periodId, where]) => ({ periodId, ...where })));
+      }),
+    );
+
+    app.get("/management-api/venue-service/menu-periods/:periodId/delete-impact", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const periodId = requireUuidParam(c.req.param("periodId"), "MenuPeriodId");
+        return c.json(
+          await viewed(sessionId, (tx) => periodDeleteImpact(tx, ctx.cfg, periodId, new Date())),
+        );
+      }),
+    );
+
+    app.post("/management-api/venue-service/menu-periods/:periodId/delete", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const periodId = requireUuidParam(c.req.param("periodId"), "MenuPeriodId");
+        const body = await readJsonBody<Record<string, unknown>>(c);
+        await gated(sessionId, (tx) => {
+          onlyKeys(body, ["replacementPeriodId", "expectedClockRevision"]);
+          const replacementId = requireNullableBodyUuid(
+            body.replacementPeriodId,
+            "replacementPeriodId",
+          );
+          if (body.expectedClockRevision === undefined)
+            throw new AppError("management.request_invalid", { field: "expectedClockRevision" });
+          return deletePeriod(
+            tx,
+            ctx.cfg,
+            periodId,
+            replacementId,
+            new Date(),
+            body.expectedClockRevision as number,
+          );
+        });
+        return c.body(null, 204);
       }),
     );
 

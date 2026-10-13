@@ -658,6 +658,19 @@ Deleting a period is refused `menu_period.in_use` while a season week or a speci
 places it, past dates included; the refusal lists each use (`periodUses` and `deleteMenuPeriod` in
 `packages/venue-service/src/menu-timetable.ts`).
 
+**2026-10-13, A506-10.** `POST …/menu-periods/:periodId/delete` deletes a period in use
+(`deletePeriod`, `packages/venue-service/src/period-delete.ts`); `GET …/menu-periods/painted-in`
+and `GET …/menu-periods/:periodId/delete-impact` read what it would touch. With a replacement, which
+must be another period of the same department, every range painting the period, in season weeks
+and on special-day dates past or future, names the replacement, and on each day that held the
+period touching ranges of one period then join; a routing-cell line naming it names the
+replacement, except in a cell that already has a line for the replacement, which keeps that line
+and loses the period's; and every keep-open extension of it names the replacement. Without one,
+its painted ranges are deleted, a special-day date left with no paint loses its `department_days`
+row so the season shows through, and its routing lines and extensions go with the period through
+their cascading foreign keys. It all runs in the caller's transaction, and ends with an end-offset
+check over the period's department that refuses `menu_timetable.invalid` (`reason: "end_offset"`).
+
 A configuration transfer carries both tables under the importing venue's location
 (`VENUE_SERVICE_CONFIGURATION_TRANSFER`). The import refuses, as `setup.request_invalid` naming
 the field, a bundle the writer could not have stored: two special-day dates on one date; a
