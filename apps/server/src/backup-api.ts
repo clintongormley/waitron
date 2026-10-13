@@ -458,13 +458,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
         }
         const held = read.settings;
         if (held === null) throw requestInvalid("config");
-        await storeSettings({
-          enabled: false,
-          destinations: held.destinations,
-          schedule: held.schedule,
-          retention: held.retention,
-          destinationTimeoutMs: held.destinationTimeoutMs,
-        });
+        await storeSettings({ ...withoutRevision(held), enabled: false });
         return writeAnswer(c, await reloadAfterWrite());
       });
     }),
