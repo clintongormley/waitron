@@ -37,5 +37,5 @@ the Spanish history export remain, followed by the full branch review and curren
 library has no new route or screen yet.
 
 A10-1 library checkpoint: rich reads now include frozen pay-period snapshots and later changes,
-with worker-scoped snapshots and summaries. Period closing and the rich Spanish export remain in
+with worker-scoped snapshots and summaries. The rich Spanish export and final review remain in
 this branch; the library is not ready for owner review.

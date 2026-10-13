@@ -8,6 +8,8 @@ import "@waitron/shared";
  */
 declare module "@waitron/shared" {
   interface ErrorParams {
+    "pay_period.invalid": { reason: string };
+    "pay_period.not_due": { closeAt: string };
     /** No `employments` row for this person, so there is no overtime baseline. */
     "employment.not_found": { personId: string };
     /** A clock-in while clocked in, or a break-start while already on break. */

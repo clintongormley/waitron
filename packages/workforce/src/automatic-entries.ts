@@ -4,6 +4,9 @@ import { appendToChain } from "./chain.js";
 import { recordInstant } from "./corrections.js";
 import { readRecordedEntries } from "./record-reads.js";
 import { compareEvents, liveClockEntries, effectiveClockEntries } from "./effective-entries.js";
+import { projectWorkSessions } from "./projection.js";
+import { readClosures } from "./pay-period-reads.js";
+import { appendCountingMarker } from "./pay-period-close.js";
 import "./errors.js";
 
 export interface AutomaticCloseInput {
@@ -77,6 +80,30 @@ export async function recordAutomaticClose(
       },
     },
   );
+  const afterEntries = await readRecordedEntries(tx, {
+    personId: input.personId,
+    locationId: input.locationId,
+  });
+  const end = afterEntries.find((e) => e.entryId === id)!;
+  const session = projectWorkSessions([
+    ...afterEntries,
+    {
+      ...end,
+      entryId: `count:${id}`,
+      entryKind: "confirmation",
+      extension: { ...end.extension!, respondsToEntryId: id, payPeriodClosureId: "pending" },
+    },
+  ]).find((s) => s.endedAt === eventAt);
+  if (session !== undefined) {
+    const next = new Date(`${session.workDate}T00:00:00Z`);
+    next.setUTCDate(next.getUTCDate() + 1);
+    const [closure] = await readClosures(tx, {
+      locationId: input.locationId,
+      period: { start: session.workDate, end: next.toISOString().slice(0, 10) },
+    });
+    if (closure !== undefined)
+      await appendCountingMarker(tx, input.nodeId, end, closure.id, input.origin);
+  }
   return id;
 }
 export async function confirmAutomaticEntry(
