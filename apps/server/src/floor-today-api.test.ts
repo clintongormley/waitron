@@ -170,7 +170,7 @@ describe("the table routes' revision", () => {
 
   type Setup = () => Promise<{ zoneId: string; tableId: string; body: Record<string, unknown> }>;
 
-  const ROUTES: [string, Setup][] = [
+  const ROUTES: [string, Setup, string?][] = [
     [
       "move",
       async () => {
@@ -230,7 +230,7 @@ describe("the table routes' revision", () => {
       },
     ],
     [
-      "split",
+      "split-off (a group)",
       async () => {
         const { zoneId, table } = await ROOM();
         await expectRevision(
@@ -238,8 +238,9 @@ describe("the table routes' revision", () => {
           today(table.a!, "merge", { targetId: table.b!, side: "right", seats: 8 }),
           zoneId,
         );
-        return { zoneId, tableId: table.a!, body: {} };
+        return { zoneId, tableId: table.a!, body: { partIds: [table.b!] } };
       },
+      "split-off",
     ],
     [
       "split-off",
@@ -262,22 +263,25 @@ describe("the table routes' revision", () => {
     ],
   ];
 
-  it.each(ROUTES)("%s with no revision is refused and writes nothing", async (change, setup) => {
-    const { zoneId, tableId, body } = await setup();
-    const read = await zoneRevisionOf(v, zoneId);
-    const before = await everything();
+  it.each(ROUTES)(
+    "%s with no revision is refused and writes nothing",
+    async (label, setup, change = label) => {
+      const { zoneId, tableId, body } = await setup();
+      const read = await zoneRevisionOf(v, zoneId);
+      const before = await everything();
 
-    expect(await refusal(send("POST", `/api/tables/${tableId}/today/${change}`, body))).toEqual({
-      status: 400,
-      body: { error: { code: "management.request_invalid", params: { field: "zoneRevision" } } },
-    });
-    expect(await everything()).toEqual(before);
-    expect(await zoneRevisionOf(v, zoneId)).toBe(read);
-  });
+      expect(await refusal(send("POST", `/api/tables/${tableId}/today/${change}`, body))).toEqual({
+        status: 400,
+        body: { error: { code: "management.request_invalid", params: { field: "zoneRevision" } } },
+      });
+      expect(await everything()).toEqual(before);
+      expect(await zoneRevisionOf(v, zoneId)).toBe(read);
+    },
+  );
 
   it.each(ROUTES)(
     "%s refuses a second till acting from the old revision and writes nothing",
-    async (change, setup) => {
+    async (label, setup, change = label) => {
       const { zoneId, tableId, body } = await setup();
       const read = (await zoneRevisionOf(v, zoneId))!;
 

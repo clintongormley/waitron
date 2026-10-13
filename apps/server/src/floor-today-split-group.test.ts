@@ -322,8 +322,13 @@ describe("Split tables… on a group with nobody seated", () => {
     expect(await groupOf(table.c3!)).toBeNull();
   });
 
-  it("A pushed onto B's right, B ticked from either table: the group ends and A goes back where it stood", async () => {
-    for (const from of ["a", "b"] as const) {
+  it("A pushed onto B's right, A or B ticked from either table: the group ends and A goes back where it stood", async () => {
+    for (const [from, ticked] of [
+      ["a", "b"],
+      ["b", "b"],
+      ["a", "a"],
+      ["b", "a"],
+    ] as const) {
       const { table, zoneId } = await plannedZone(
         v,
         [
@@ -336,7 +341,7 @@ describe("Split tables… on a group with nobody seated", () => {
       expect(await placeOf(table.a!)).toMatchObject({ x: 28, y: 0 });
       const { joinId } = (await mergeOf(v, table.a!))!;
 
-      await settles(() => splitOff(table[from]!, [table.b!]), zoneId);
+      await settles(() => splitOff(table[from]!, [table[ticked]!]), zoneId);
 
       expect(await groupRowsOf(joinId)).toEqual({ joins: [], members: [] });
       expect(await todayRow(v, table.a!)).toMatchObject({ x: 0, y: 0, rotation: 0 });
