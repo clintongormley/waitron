@@ -396,3 +396,187 @@ it("shows no holiday-name note on a saved date with no stored name, even when it
   });
   expect(q("[data-test=holiday-note]")).toBeNull();
 });
+
+it("asks for a first date beside the first field and adds nothing without one", async () => {
+  await mount((dialog) => (dialog.date = "2026-12-14"));
+  await click("[data-test=add-dates]");
+  await click("[data-test=add-dates-confirm]");
+  expect(field("addFrom").error).toBe("Enter a valid date.");
+  expect(field("addTo").error).toBe("");
+  expect(shownDates()).toEqual(["2026-12-14"]);
+});
+
+it("refuses a last date that is not a calendar date beside the second field", async () => {
+  await mount((dialog) => (dialog.date = "2026-12-14"));
+  await addDates("2026-12-16", "20261-12-20");
+  expect(field("addFrom").error).toBe("");
+  expect(field("addTo").error).toBe("Enter a valid date.");
+  expect(shownDates()).toEqual(["2026-12-14"]);
+});
+
+it("refuses a range of more than 366 dates beside the last date field, and takes 366", async () => {
+  await mount((dialog) => (dialog.date = "2026-11-04"));
+  await addDates("2026-01-01", "2027-01-02");
+  expect(field("addTo").error).toBe("Choose at most 366 dates.");
+  expect(shownDates()).toEqual(["2026-11-04"]);
+  await change("addTo", { value: "2027-01-01" });
+  await click("[data-test=add-dates-confirm]");
+  const dates = shownDates();
+  expect(dates).toHaveLength(366);
+  expect([dates[0], dates.at(-1)]).toEqual(["2026-01-01", "2027-01-01"]);
+});
+
+it("opens a new special day with no date when it was given none, and asks for one on Save", async () => {
+  await mount();
+  const sent = saves();
+  expect(shownDates()).toEqual([]);
+  await change("name", { value: "Fair" });
+  save().click();
+  await el.updateComplete;
+  expect(q("[data-error=dates]")!.textContent).toBe("Add at least one date.");
+  expect(sent).toEqual([]);
+});
+
+it.each([
+  ["no field", { code: "special_day.invalid" }],
+  ["a field the form does not show", { code: "special_day.invalid", params: { field: "colour" } }],
+])("places a special_day.invalid naming %s at the bottom", async (_, refusal) => {
+  await mount((dialog) => (dialog.specialDay = structuredClone(stored)));
+  await change("name", { value: "Changed" });
+  el.refusal = refusal;
+  await el.updateComplete;
+  expect(field("name").error).toBe("");
+  expect(q("[data-error=dates]")).toBeNull();
+  expect(q("[data-error=repeats]")).toBeNull();
+  expect(footer().error).toBe("The change could not be saved.");
+  expect(save().disabled).toBe(false);
+});
+
+it("says Check this field under Dates for a date_taken refusal that names no date", async () => {
+  await mount((dialog) => (dialog.specialDay = structuredClone(stored)));
+  await change("name", { value: "Changed" });
+  el.refusal = { code: "special_day.date_taken" };
+  await el.updateComplete;
+  expect(q("[data-error=dates]")!.textContent).toBe("Check this field.");
+});
+
+it("says Check this field when an overlap names a date the list does not hold", async () => {
+  await mount((dialog) => (dialog.specialDay = structuredClone(stored)));
+  await change("repeats", { checked: true });
+  el.refusal = {
+    code: "special_day.invalid",
+    params: { field: "dates.5.date", reason: "overlap" },
+  };
+  await el.updateComplete;
+  expect(q("[data-error=dates]")!.textContent).toBe("Check this field.");
+});
+
+it("clears a refusal once its own field changes, and keeps it through another field's change", async () => {
+  await mount((dialog) => (dialog.specialDay = structuredClone(stored)));
+  await change("closed.2026-12-14", { checked: true });
+  el.refusal = { code: "special_day.invalid", params: { field: "name" } };
+  await el.updateComplete;
+  await change("repeats", { checked: true });
+  expect(field("name").error).toBe("Check this field.");
+  await change("name", { value: "Company dinners" });
+  expect(field("name").error).toBe("");
+  expect(footer().error).toBe("");
+});
+
+it("Enter in a field saves, and Enter while adding dates does not", async () => {
+  await mount((dialog) => (dialog.date = "2026-11-04"));
+  const sent = saves();
+  const enter = (name: string) =>
+    field(name)
+      .shadowRoot!.querySelector("input")!
+      .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
+  await change("name", { value: "Fair" });
+  await click("[data-test=add-dates]");
+  enter("addFrom");
+  enter("name");
+  expect(sent).toEqual([]);
+  await change("addFrom", { value: "2026-11-05" });
+  await click("[data-test=add-dates-confirm]");
+  enter("name");
+  expect(sent).toEqual([
+    {
+      id: null,
+      input: {
+        name: "Fair",
+        repeatsYearly: false,
+        dates: [
+          { date: "2026-11-04", closedAllDay: false },
+          { date: "2026-11-05", closedAllDay: false },
+        ],
+      },
+    },
+  ]);
+});
+
+it("Cancel on an unchanged special day closes the dialog and tells the host", async () => {
+  await mount((dialog) => (dialog.specialDay = structuredClone(stored)));
+  let closes = 0;
+  el.addEventListener("special-day-close", () => closes++);
+  await click("wt-button[slot=cancel]");
+  await expect.poll(() => closes).toBe(1);
+  expect(el.open).toBe(false);
+});
+
+it("ignores every control while a save is in flight", async () => {
+  await mount((dialog) => (dialog.specialDay = structuredClone(stored)));
+  const sent = saves();
+  let closes = 0;
+  el.addEventListener("special-day-close", () => closes++);
+  await change("name", { value: "Company dinners" });
+  await click("[data-test=add-dates]");
+  el.busy = true;
+  await el.updateComplete;
+  await change("name", { value: "Ignored" });
+  await change("closed.2026-12-14", { checked: true });
+  await change("repeats", { checked: true });
+  await change("addFrom", { value: "2026-12-16" });
+  await change("addTo", { value: "2026-12-17" });
+  await click("[data-test=add-dates-confirm]");
+  await click('[data-date="2026-12-20"] [data-test=remove-date]');
+  await click("[data-test=save-special-day]");
+  await click("wt-button[slot=cancel]");
+  el.busy = false;
+  await el.updateComplete;
+  expect(sent).toEqual([]);
+  expect(closes).toBe(0);
+  expect(el.open).toBe(true);
+  expect(field("name").value).toBe("Company dinners");
+  expect(field("addFrom").value).toBe("");
+  expect(field("addTo").value).toBe("");
+  expect(shownDates()).toEqual(["2026-12-14", "2026-12-20"]);
+  expect(q<HTMLElementTagNameMap["wt-switch"]>('[name="closed.2026-12-14"]')!.checked).toBe(false);
+  expect(q<HTMLElementTagNameMap["wt-switch"]>("[name=repeats]")!.checked).toBe(false);
+});
+
+it("ignores the add-dates control while a save is in flight", async () => {
+  await mount((dialog) => (dialog.specialDay = structuredClone(stored)));
+  el.busy = true;
+  await el.updateComplete;
+  await click("[data-test=add-dates]");
+  el.busy = false;
+  await el.updateComplete;
+  expect(q("[name=addFrom]")).toBeNull();
+});
+
+it("ignores the offer's buttons while a save is in flight", async () => {
+  await mount((dialog) => {
+    dialog.date = "2026-12-25";
+    dialog.holidays = [navidad];
+    dialog.existing = [{ id: "n2025", name: "Navidad" }];
+  });
+  const added: unknown[] = [];
+  el.addEventListener("special-day-add-to", (event) => added.push((event as CustomEvent).detail));
+  el.busy = true;
+  await el.updateComplete;
+  await click("[data-test=add-to]");
+  await click("[data-test=new-instead]");
+  el.busy = false;
+  await el.updateComplete;
+  expect(added).toEqual([]);
+  expect(q("[data-test=add-to]")).not.toBeNull();
+});
