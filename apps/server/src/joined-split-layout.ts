@@ -173,7 +173,7 @@ export function standsIn(place: Placement, other: Placement): boolean {
     const onB = along(b.corners);
     const overlap =
       Math.min(Math.max(...onA), Math.max(...onB)) - Math.max(Math.min(...onA), Math.min(...onB));
-    // Slack for rounding: an exact one-square overlap at 195° computes as 0.999…98 (standsIn's 195° test).
+    // Slack for rounding: the 195° pair in standsIn's tests overlaps by exactly one square and computes as 0.9999999999999982.
     return overlap >= 1 - 1e-9;
   });
 }

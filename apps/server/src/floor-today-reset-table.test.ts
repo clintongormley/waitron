@@ -857,4 +857,27 @@ describe("Reset table on a joined table saved with no place", () => {
     expect(await placeOf(table.bar!)).toEqual({ x: 40, y: 0, width: 2, height: 2 });
     expect(await splitRowsOf(table.long!)).toEqual([]);
   });
+
+  it("Counter 5 split off, then Long table taken off for today: Reset table leaves Long table off the map, as Join again does", async () => {
+    const { table, zoneId } = await longPutOut([BAR]);
+    await ok(splitOff(table.long!, [table.c5!], 6));
+    await ok(post(`/api/tables/${table.long!}/today/take-off`, table.long!, {}));
+    expect(await placeOf(table.long!)).toEqual({ x: 10, y: 20, width: 4, height: 8 });
+    expect((await todayRow(v, table.long!))!.takenOff).toBe(true);
+
+    await settles(() => reset(table.long!, [table.c5!]), zoneId);
+
+    expect(await placeOf(table.long!)).toEqual(NO_PLACE);
+    expect((await todayRow(v, table.long!))!.takenOff).toBe(false);
+  });
+
+  it("Counter 3, the first part, split off with 8 seats: Reset table puts Long table back where it stood before, as Join again does", async () => {
+    const { table, zoneId } = await longPutOut([BAR]);
+    await ok(splitOff(table.long!, [table.c3!], 8));
+    expect(await placeOf(table.long!)).toEqual({ x: 12, y: 20, width: 4, height: 8 });
+
+    await settles(() => reset(table.long!, [table.c3!]), zoneId);
+
+    expect(await placeOf(table.long!)).toEqual({ x: 10, y: 20, width: 8, height: 8 });
+  });
 });
