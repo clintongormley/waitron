@@ -15,8 +15,8 @@ async function mount(theme: "light" | "dark", state: string) {
     theme,
   )) as OrdinaryDateDialog;
   el.date = "2026-12-10";
-  el.season = { id: "winter", name: "Winter" };
-  el.tint = "1";
+  el.season = state === "no season" ? undefined : { id: "winter", name: "Winter" };
+  el.tint = state === "no season" ? "" : "1";
   el.specialDays =
     state === "no special days" ? [] : [{ id: "d1", name: "Christmas company dinners" }];
   el.open = true;
@@ -26,11 +26,17 @@ async function mount(theme: "light" | "dark", state: string) {
     await el.updateComplete;
   }
   expect(el.shadowRoot!.querySelector("wt-modal")).not.toBeNull();
+  if (state === "no season")
+    expect(
+      el.shadowRoot!.querySelector(
+        "[data-test=season], [data-test=follows], [data-test=edit-week]",
+      ),
+    ).toBeNull();
   return el;
 }
 
 describe.each(["light", "dark"] as const)("ordinary-date-dialog in %s", (theme) => {
-  test.each(["with special days", "chosen", "no special days"])(
+  test.each(["with special days", "chosen", "no special days", "no season"])(
     "has no a11y violations: %s",
     async (state) => {
       const el = await mount(theme, state);

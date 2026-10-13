@@ -184,6 +184,18 @@ it("preserves an Opening hours date view's date while the shell replaces its sec
   host.remove();
 });
 
+it("preserves an Opening hours month view's month while the shell replaces its section", async () => {
+  history.replaceState(null, "", "/manage/opening-hours/view/month/month/2026-12");
+  const host = document.createElement("test-dashboard-navigation-host") as NavigationHost;
+  hosts.push(host);
+  document.body.append(host);
+  const url = new UrlStateController(host, () => {}, dashboardPath);
+  await url.write({ dashboard: "opening-hours" }, true);
+  expect(location.pathname).toBe("/manage/opening-hours/view/month/month/2026-12");
+  expect(url.read("month")).toBe("2026-12");
+  host.remove();
+});
+
 it("draws the Calendar's own-hours clock from the dashboard registry", async () => {
   registerIcons(DASHBOARD_ICONS);
   const icon = document.createElement("wt-icon");

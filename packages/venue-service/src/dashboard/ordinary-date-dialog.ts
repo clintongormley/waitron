@@ -12,7 +12,8 @@ import { seasonTintStyles } from "./season-tint.js";
 import { t } from "./strings.js";
 
 /** A date with no special day and no public holiday: it says which season's week it follows and offers the three ways
- *  to change it. It writes nothing; each choice is an event the host acts on. */
+ *  to change it. It writes nothing; each choice is an event the host acts on, and a dismissal sends
+ *  `ordinary-date-close`. */
 @customElement("ordinary-date-dialog")
 export class OrdinaryDateDialog extends LitElement {
   static override styles = [
@@ -156,10 +157,12 @@ export class OrdinaryDateDialog extends LitElement {
         open
         size="compact"
         aria-label=${title}
-        @wt-close=${() => {
+        @wt-close=${(event: Event) => {
+          event.stopPropagation();
           if (!this.open) return;
           this.open = false;
           void this.handBack();
+          this.emit("ordinary-date-close");
         }}
       >
         <div class="head">

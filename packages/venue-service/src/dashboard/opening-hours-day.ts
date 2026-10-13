@@ -135,6 +135,7 @@ export class OpeningHoursDay extends LitElement {
   @property({ attribute: false }) api!: OpeningHoursApi;
   @property({ attribute: false }) model!: OpeningHoursModel;
   @property({ type: Boolean }) readOnly = false;
+  /** The date shown; ‹ › change it here and send `day-date-change` with the new one. */
   @property() date = "";
   @state() private draft: Draft = { menus: {}, zones: {} };
   @state() private opening?: Opening;
@@ -416,6 +417,13 @@ export class OpeningHoursDay extends LitElement {
       this.error = "";
       this.errorDepartment = "";
       this.errorZone = "";
+      this.dispatchEvent(
+        new CustomEvent("day-date-change", {
+          detail: { date: this.date },
+          bubbles: true,
+          composed: true,
+        }),
+      );
     };
     const coordinator = leaveCoordinatorFor(this);
     if (coordinator) await coordinator.request({ scopes: "all", reason: "navigation", proceed });

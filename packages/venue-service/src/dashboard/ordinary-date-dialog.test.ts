@@ -165,7 +165,7 @@ it("leaves out the add row when the venue has no special days", async () => {
   expect(q("[data-test=make-special]")).not.toBeNull();
 });
 
-it("closes on Escape and on ✕, sending only wt-close, and hands focus back", async () => {
+it("closes on Escape and on ✕, sending only ordinary-date-close, and hands focus back", async () => {
   for (const how of ["escape", "dismiss"]) {
     await mount();
     const sent: string[] = [];
@@ -173,9 +173,10 @@ it("closes on Escape and on ✕, sending only wt-close, and hands focus back", a
       "ordinary-date-edit-week",
       "ordinary-date-make-special",
       "ordinary-date-add-to-special",
+      "wt-close",
     ])
       el.addEventListener(name, () => sent.push(name));
-    const closed = next("wt-close");
+    const closed = next("ordinary-date-close");
     if (how === "escape") {
       q<HTMLElement>("[data-test=make-special]")!.focus();
       await userEvent.keyboard("{Escape}");
@@ -200,7 +201,7 @@ it("hands focus to the element returnTo names now, when the clicked one has been
   document.body.append(redrawn);
   el.returnTo = () => redrawn;
   opener.remove();
-  const closed = next("wt-close");
+  const closed = next("ordinary-date-close");
   q<HTMLElement>("[data-test=make-special]")!.focus();
   await userEvent.keyboard("{Escape}");
   await closed;

@@ -2401,6 +2401,16 @@ describe("Month view", () => {
     expect(months).toEqual(["2027-03"]);
   });
 
+  it("takes the browser's own month, not UTC's, when the venue's clock cannot be read", async () => {
+    // East of UTC this moment is still February in UTC; at UTC itself both read March.
+    const { view, months } = await monthMount("/manage/opening-hours/view/month", false, (data) => {
+      data.clockReadable = false;
+      vi.setSystemTime(new Date(2027, 2, 1, 0, 30));
+    });
+    await shown(view, "2027-03");
+    expect(months).toEqual(["2027-03"]);
+  });
+
   it("keeps the month drawn beside the message when a later reread of it fails", async () => {
     const { el, view, failNext } = await monthMount(
       "/manage/opening-hours/view/month/month/2026-12",
@@ -2478,9 +2488,7 @@ describe("Month view", () => {
       ]);
     expect(dialog.returnTo!()).toBe(dateButton(view()!, "2026-12-10"));
     dialog.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
-    await expect
-      .poll(() => el.shadowRoot!.querySelector("ordinary-date-dialog")?.open ?? false)
-      .toBe(false);
+    await expect.poll(() => el.shadowRoot!.querySelector("ordinary-date-dialog")).toBeNull();
   });
 
   it("Edit the Winter week goes to the Week with that season, keeping the month's department", async () => {
@@ -2650,12 +2658,36 @@ describe("Month view", () => {
       .not.toBeNull();
     const back = el.shadowRoot!.querySelector<HTMLElement>("[data-test=month-back]")!;
     expect(back.textContent!.replace(/\s+/g, " ").trim()).toBe(text);
+    expect(back.getAttribute("aria-label")).toBe(
+      `${locale === "es" ? "Volver a" : "Back to"} ${text.slice(2)}`,
+    );
     back.click();
     await expect
       .poll(() => location.pathname)
       .toBe(`/manage/opening-hours/view/month/month/${month}`);
     await expect.poll(() => view()?.model?.month).toBe(month);
     expect(el.shadowRoot!.querySelector("opening-hours-day")).toBeNull();
+  });
+
+  it("links back to the month of the date the per-date editor has stepped to", async () => {
+    const { el, view } = await monthMount("/manage/opening-hours/view/date/date/2026-12-31");
+    const back = () =>
+      el
+        .shadowRoot!.querySelector<HTMLElement>("[data-test=month-back]")
+        ?.textContent!.replace(/\s+/g, " ")
+        .trim();
+    await expect.poll(back).toBe("‹ December 2026");
+    const day = el.shadowRoot!.querySelector("opening-hours-day")!;
+    await day.updateComplete;
+    day.shadowRoot!.querySelector<HTMLElement>("[data-test=next-day]")!.click();
+    await expect.poll(() => day.date).toBe("2027-01-01");
+    await expect.poll(back).toBe("‹ January 2027");
+    expect(location.pathname).toBe("/manage/opening-hours/view/date/date/2027-01-01");
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=month-back]")!.click();
+    await expect
+      .poll(() => location.pathname)
+      .toBe("/manage/opening-hours/view/month/month/2027-01");
+    await expect.poll(() => view()?.model?.month).toBe("2027-01");
   });
 
   it("passes read-only to the month and opens nothing from it", async () => {

@@ -420,10 +420,11 @@ export class OpeningHoursScreen extends LitElement {
   }
   private shownMonth() {
     if (!this.model || this.view !== "month") return "";
-    return (
-      this.requestedMonth ||
-      (businessDateToday(this.model) || new Date().toISOString().slice(0, 10)).slice(0, 7)
-    );
+    if (this.requestedMonth) return this.requestedMonth;
+    const today = businessDateToday(this.model);
+    if (today) return today.slice(0, 7);
+    const now = new Date();
+    return `${String(now.getFullYear()).padStart(4, "0")}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   }
   private watchMonth() {
     const month = this.shownMonth();
@@ -920,7 +921,7 @@ export class OpeningHoursScreen extends LitElement {
         .tint=${season ? (seasonTints(seasons).get(season.id) ?? "") : ""}
         .specialDays=${this.knownSpecialDays}
         .returnTo=${open.returnTo}
-        @wt-close=${leave}
+        @ordinary-date-close=${leave}
         @ordinary-date-edit-week=${(event: CustomEvent<{ seasonId: string }>) => {
           if (!leave(event)) return;
           void Promise.resolve(
@@ -980,7 +981,7 @@ export class OpeningHoursScreen extends LitElement {
       type="button"
       class="month-back"
       data-test="month-back"
-      aria-label=${format("month.year_back", { year: name })}
+      aria-label=${format("month.back", { month: name })}
       @click=${() =>
         void Promise.resolve(
           this.url.write({ dashboard: "opening-hours", view: "month", month, date: null }),
@@ -1217,6 +1218,11 @@ export class OpeningHoursScreen extends LitElement {
                               .date=${this.dayDate}
                               .readOnly=${this.readOnly}
                               @special-day-action=${this.openNamedDay}
+                              @day-date-change=${(event: CustomEvent<{ date: string }>) => {
+                                event.stopPropagation();
+                                this.dayDate = event.detail.date;
+                                void this.url.write({ date: event.detail.date }, true);
+                              }}
                             ></opening-hours-day>`
                         : this.shownMonth()
                           ? this.month()
