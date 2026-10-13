@@ -1619,6 +1619,14 @@ not split off stay joined meanwhile, and the split ends when the reset puts the 
 `apps/server/src/floor-today-store.ts:464`).
 When deleting a table is refused, `removeLiveTables` deletes the split rows naming it and tries again,
 and puts them back if that is refused too (`apps/server/src/table-removal.ts:115`).
+Join again deletes the split rows of the tables split off a joined table that are free (held by no
+open party, with no clearing mark, in none of today's merges and with no food on its way), gives
+each of them its reset row's seats and no place on today's map, writes no reset row of its own, and
+ends with the zone's catch-up (`catchUpZone`), so a table taken back after Reset to saved plan
+counts as a part still joined in the same transaction, while a later reset still holds the tables
+left apart (`joinAgain`, `apps/server/src/floor-today-join-again.ts`). Back to its saved place and
+Take off for today refuse a table split off (`table.split_off`, `refuseSplitOff`,
+`apps/server/src/floor-today-store.ts`).
 
 Measured on 2026-10-11, Node v26.7.0, after applying every manifest migration to `node:sqlite`:
 `pragma_foreign_key_list` reports six incoming keys, all `ON DELETE NO ACTION`:
