@@ -681,6 +681,7 @@ export class TillFloorScreen extends LitElement {
       .heading=${this.#detailsHeading(table)}
       .now=${this.#drawnAt}
       .actions=${this.canChangeToday}
+      .tables=${this.tables}
       @today-action=${(event: Event) => this.#onTodayAction(event)}
       @details-close=${(event: Event) => {
         event.stopPropagation();
@@ -788,6 +789,8 @@ export class TillFloorScreen extends LitElement {
         return;
       case "split-off":
         this.splittingJoined = { tableId, busy: false, refusal: null };
+        return;
+      case "join-again":
         return;
       case "rotate":
         void this.#settle(api.rotateToday(table.id));

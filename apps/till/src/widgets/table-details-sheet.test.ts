@@ -108,6 +108,54 @@ describe("till-table-details-sheet", () => {
     expect(text(es, '[data-today-action="split-off"]')).toBe("Separar mesas…");
   });
 
+  describe("Join again", () => {
+    const todayOf = (over: Partial<NonNullable<TableState["today"]>>) => ({
+      placement: { x: 10, y: 20, width: 6, height: 2, shape: "rect" as const, rotation: 0 },
+      seats: 4,
+      fixed: false,
+      takenOff: false,
+      joinId: null,
+      joinSeats: null,
+      inJoinedTable: null,
+      joined: null,
+      splitOffFrom: null,
+      ...over,
+    });
+    const long = table({
+      id: "long",
+      label: "Long table",
+      today: todayOf({
+        seats: 10,
+        joined: { parts: ["c3", "c4"], splitOff: ["c5"], apart: false },
+      }),
+    });
+    const c5 = table({ id: "c5", label: "Counter 5", today: todayOf({ splitOffFrom: "long" }) });
+
+    it("labels Join again in English and Spanish", async () => {
+      const el = await mount({
+        table: long,
+        heading: "Long table",
+        actions: true,
+        tables: [long, c5],
+      });
+      expect(text(el, '[data-today-action="join-again"]')).toBe("Join again");
+      setLocale("es-ES");
+      const es = await mount({
+        table: c5,
+        heading: "Counter 5",
+        actions: true,
+        tables: [long, c5],
+      });
+      expect(text(es, '[data-today-action="join-again"]')).toBe("Volver a unir");
+    });
+
+    it("offers no Join again without the zone's tables", async () => {
+      const el = await mount({ table: long, heading: "Long table", actions: true });
+      expect(find(el, '[data-today-action="split-off"]')).not.toBeNull();
+      expect(find(el, '[data-today-action="join-again"]')).toBeNull();
+    });
+  });
+
   it("is closed with no table", async () => {
     const el = await mount({ table: null });
     expect(dialogOf(el).open).toBe(false);
