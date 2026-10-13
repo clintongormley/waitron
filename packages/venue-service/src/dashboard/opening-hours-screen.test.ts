@@ -1472,9 +1472,16 @@ describe("Calendar special-day actions", () => {
       refuse?: unknown;
       readFails?: boolean;
       listFails?: boolean;
+      oneOff?: boolean;
     } = {},
   ) {
-    const { withFeast = false, refuse, readFails = false, listFails = false } = options;
+    const {
+      withFeast = false,
+      refuse,
+      readFails = false,
+      listFails = false,
+      oneOff = false,
+    } = options;
     history.replaceState(null, "", "/manage/opening-hours/view/calendar/month/2026-10");
     const writes: unknown[][] = [];
     let reads = 0;
@@ -1497,7 +1504,7 @@ describe("Calendar special-day actions", () => {
           : [{ id: stored.id, name: stored.name, repeatsYearly: true, dates: stored.dates }];
       if (path.endsWith("/special-days/annual%2Fday")) {
         if (readFails) throw { code: "connection.failed" };
-        return structuredClone(stored);
+        return { ...structuredClone(stored), repeatsYearly: !oneOff };
       }
       if (path.endsWith("/special-days/feast%2F2025")) return structuredClone(feast);
       if (path.includes("/named-days?")) {
@@ -1776,6 +1783,15 @@ describe("Calendar special-day actions", () => {
       .toBeNull();
     expect(writes).toHaveLength(1);
   });
+  it("Delete names a one-off special day with no every-year warning", async () => {
+    const { el, cal } = await calendarMount({ oneOff: true });
+    await action(cal, "2026-10-13", "delete");
+    await expect
+      .poll(() =>
+        el.shadowRoot!.querySelector("[data-test=delete-special-day] p")?.textContent?.trim(),
+      )
+      .toBe("Delete Anniversary?");
+  });
   it("closing the Delete confirmation from the dialog itself deletes nothing", async () => {
     const { el, cal, writes } = await calendarMount();
     await action(cal, "2026-10-13", "delete");
@@ -1818,6 +1834,7 @@ it.each([
           tone: "special_day",
           closed: false,
         },
+        { date: "2026-10-13", specialDay: null, holidays: [], tone: "standard", closed: false },
       ],
     };
     let failures = 1;

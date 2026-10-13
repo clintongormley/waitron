@@ -384,6 +384,24 @@ describe("the date-taken check uses each year's resolved date", () => {
   });
 });
 
+describe("a repeating month and day against a repeating holiday date", () => {
+  it("refuses them where they first meet in a later year, though their stored dates differ", async () => {
+    const v = await venue();
+    const thursday = await yearly(v, "Jueves Santo", "2026-04-02");
+    expect(await refusal(yearly(v, "Aniversario", "2026-03-25"))).toEqual({
+      code: "special_day.date_taken",
+      params: { date: "2027-03-25", specialDayId: thursday.id, name: "Jueves Santo" },
+    });
+    await yearly(v, "Aniversario", "2026-03-24");
+  });
+});
+
+it("finds no special day on an empty list of days", async () => {
+  const v = await venue();
+  await yearly(v, "Jueves Santo", "2026-04-02");
+  expect(await scoped((tx) => specialDaysOn(tx, v.cfg, []))).toEqual(new Map());
+});
+
 describe("the end-offset check uses each year's resolved date", () => {
   /** Lunch from 06:30 every day; Dinner sends for an hour after it ends, so a Dinner until 05:30
    *  runs into the next day's Lunch unless that Lunch is Closed. Holy Saturday's Lunch is Closed
