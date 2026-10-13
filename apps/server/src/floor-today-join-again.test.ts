@@ -32,6 +32,7 @@ import {
   inTx,
   partyAt,
   pay,
+  revisionOf,
   seat,
   setupPartyVenue,
   type PartyVenue,
@@ -596,6 +597,18 @@ describe("joining split-off tables again while some stay apart", () => {
       seats: 8,
     });
     expect(await splitRowsOf(table.long!)).toEqual([table.c3!]);
+  });
+
+  it("keeps the guests at Long table and their party's revision", async () => {
+    const { table } = await LONG_PLUS_BAR();
+    const { partyId } = await seat(v, table.long!);
+    await split(table.long!, [table.c5!], 6);
+    const revision = await revisionOf(v, partyId);
+
+    await join(table.long!, [table.c5!]);
+
+    expect(await partyAt(v, table.long!)).toBe(partyId);
+    expect(await revisionOf(v, partyId)).toBe(revision);
   });
 
   it("the second of two tills is refused once guests sit at a table it expected back", async () => {
