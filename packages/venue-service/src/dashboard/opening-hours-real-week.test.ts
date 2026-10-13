@@ -383,3 +383,24 @@ it("leaves a modified click on a Day link to the browser", async () => {
   expect(screen.shadowRoot!.querySelector("opening-hours-day")).toBeNull();
   expect(location.pathname).toBe("/manage/opening-hours/view/week/department/restaurant");
 });
+it("keeps the Week when it drops an invalid week from an address naming nothing else", async () => {
+  history.replaceState(null, "", "/manage/opening-hours?week=bad&keep=yes");
+  await mount();
+  await expect.poll(() => location.search).toBe("?keep=yes");
+  expect(location.pathname).toBe("/manage/opening-hours/view/week");
+  expect(screen.shadowRoot!.querySelector("wt-tabs")!.value).toBe("week");
+  expect(screen.shadowRoot!.querySelector("opening-hours-week")).not.toBeNull();
+});
+it("keeps the Week when the real week is switched off on an address naming nothing else", async () => {
+  await mount();
+  emit(screen.shadowRoot!.querySelector("[name=realWeek]")!, "wt-change", { checked: false });
+  await expect.poll(() => location.search).toBe("?keep=yes");
+  expect(location.pathname).toBe("/manage/opening-hours/view/week");
+  expect(screen.shadowRoot!.querySelector("wt-tabs")!.value).toBe("week");
+});
+it("leaves the path alone when it drops the week from an address naming a department", async () => {
+  history.replaceState(null, "", "/manage/opening-hours/department/d1?week=bad");
+  await mount();
+  await expect.poll(() => location.search).toBe("");
+  expect(location.pathname).toBe("/manage/opening-hours/department/d1");
+});

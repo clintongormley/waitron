@@ -153,15 +153,10 @@ export class OpeningHoursScreen extends LitElement {
   private followUrl() {
     if (this.url.read("dashboard") !== "opening-hours") return;
     const view = this.url.read("view");
-    const href = new URL(navigationGuardFor(window)?.href ?? location.href);
-    const weekAddress =
-      ["department", "zone", "station", "season"].some((key) => this.url.read(key) !== null) ||
-      href.searchParams.has("station") ||
-      href.searchParams.has("week");
     const shown: View =
       view === "year" || view === "periods" || view === "day" || view === "week"
         ? view
-        : view === null && !weekAddress
+        : view === null && !this.namesWeek(new URL(navigationGuardFor(window)?.href ?? location.href))
           ? "year"
           : "week";
     if (shown !== this.view) this.specialReadError = "";
@@ -181,6 +176,14 @@ export class OpeningHoursScreen extends LitElement {
       new URL(navigationGuardFor(window)?.href ?? location.href).searchParams.get("week") ?? "";
     this.weekStart = isLocalDate(week) && weekdayOf(week) === 1 ? week : "";
     this.resolveSeason();
+  }
+  /** Whether an address with no view opens the Week rather than the Year (ruling R3). */
+  private namesWeek(url: URL) {
+    return (
+      ["department", "zone", "station", "season"].some((key) => this.url.read(key) !== null) ||
+      url.searchParams.has("station") ||
+      url.searchParams.has("week")
+    );
   }
   override connectedCallback() {
     super.connectedCallback();
@@ -484,7 +487,11 @@ export class OpeningHoursScreen extends LitElement {
     if (!this.isConnected || this.view !== "week") return;
     const url = new URL(navigationGuardFor(window)?.href ?? location.href);
     if (week) url.searchParams.set("week", week);
-    else url.searchParams.delete("week");
+    else {
+      url.searchParams.delete("week");
+      if (this.url.read("view") === null && !this.namesWeek(url))
+        url.pathname = `${url.pathname.replace(/\/$/, "")}/view/week`;
+    }
     await this.writeAddress(url, replace);
   }
   private async writeAddress(url: URL, replace = false) {
