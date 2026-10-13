@@ -3538,8 +3538,9 @@ someone with `venue_service.manage`; a supervisor is not offered it.
 
 Department opening hours belong to `/manage/opening-hours`, with Year, Week, Periods and Day
 tabs. The page opens on Year when its address names no view and no department, zone, station,
-season or week; otherwise on Week (`opening-hours-screen.ts`). `/view/year/year/<yyyy>` picks a
-year; `/department/<id>` selects the department and `/view/periods` selects its periods, and on the Week
+season or week, and on an old `/view/calendar` address; otherwise on Week
+(`opening-hours-screen.ts`). `/view/year/year/<yyyy>` picks a year, and choosing another tab drops
+it; `/department/<id>` selects the department and `/view/periods` selects its periods, and on the Week
 tab `/season/<id>` selects the season (in the standard week only; the fallback is in Forms above). The Week
 and Day editing contract is in Forms above. After provisioning, setup's completion screen shows
 the first saved Open schedule, when it is still Monday to Friday, 09:00–17:00, with a link to
