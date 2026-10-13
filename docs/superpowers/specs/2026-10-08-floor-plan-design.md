@@ -246,8 +246,9 @@ undone at the next reset anyway.
 > (owner question 3).
 
 > Superseded 2026-10-13 by A579 part 3c ([design](2026-10-13-a579-flattened-joined-tables-design.md)):
-> the group's **Split** goes. **Split tables…** on a table of a group lists the group's tables, except on a
-> joined table with tables still joined, which lists those; each ticked one leaves as a table leaves a group.
+> the group's **Split** goes. **Split tables…** on a table of a group lists the group's tables, and each
+> ticked one leaves as a table leaves a group; on a joined table with tables still joined it lists those,
+> and splits them off the joined table as it does outside a group.
 
 ### 6.3 Reset
 
