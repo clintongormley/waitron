@@ -11,14 +11,14 @@ import {
   readTenantIdentities,
   readOperationalVenueIds,
 } from "@waitron/provisioning";
-import { parseModuleOverrides, type ModuleConfig } from "@waitron/module";
+import { enabledModules, parseModuleOverrides, type ModuleConfig } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import { mintBreakGlassKey } from "./break-glass.js";
 import type { DeploymentEnvironment } from "./config.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
 import { generateStandbyIdentity } from "./reserved-identity.js";
-import { writePendingAdoption } from "./finish-adoption.js";
+import { assertAdoptionModules, writePendingAdoption } from "./finish-adoption.js";
 import type { TradingConfig } from "./trading-config.js";
 import "./errors.js";
 
@@ -93,6 +93,7 @@ export async function adoptFromPrimary(
   // Validated against THIS node's modules, so a skewed or hostile primary is refused before any
   // write to this node.
   const moduleConfig = parseModuleOverrides(bundle.moduleOverrides, ALL_MODULES);
+  assertAdoptionModules(enabledModules(ALL_MODULES, moduleConfig));
 
   // One database serves one environment (CLAUDE.md §5).
   if (bundle.environment !== deps.environment) {

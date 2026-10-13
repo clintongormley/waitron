@@ -848,3 +848,28 @@ identity and a ten-digit invoice counter.
 
 The default fiscal descriptors, text installation schema and local-counter retirement remain
 incomplete; this checkpoint is not a publication candidate.
+
+
+### W41s-4 adoption boundary checkpoint, 2026-10-14
+
+An adoption file cannot carry the live authentication that an allocated standby needs. When an
+independently prepared module owns series at activation, the public adopter refuses before its
+first local write, and the setup route returns `409 module.operation_invalid`. The pending worker
+logs that refusal and keeps the complete adoption file. A booted pending mirror returns only its
+pending status, with no ambient viewer session, sealed node key or selling identity created by
+that step. A disabled allocation module does not prevent adoption.
+
+The new `adoption-allocation-refusal.test.ts` cases compare the full database before and after
+refusal and retry. `boot.adoption-allocation.test.ts` runs the actual pending boot with a test
+module contribution. The additional signed-reservation case in `allocated-standby-host.test.ts`
+runs the actual bundle assembler with synthetic paper evidence before the adopter refuses;
+the separately supplied reservation/confirmation remain unchanged. Its administrator authority
+is supplied by the test, not a real primary login or independent master-register implementation.
+The primary may already have reserved the name before local adoption refuses; do not spend that
+reservation again because the spare stayed empty.
+
+The production defaults still select the earlier numeric hooks, so this checkpoint does not
+qualify default allocated adoption. Copying the primary's venue data and collecting fresh
+establishment authority remain separate work. W41s-4 must still couple its default descriptors,
+text identity and counter retirement, regenerate and qualify the final migrations, align the
+Cloud contract, then complete both full reviews and current-head CI before landing.

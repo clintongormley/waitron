@@ -455,6 +455,19 @@ first failed with the former hooks (unsuffixed setup codes; no restore allocatio
 passed with the allocated hooks. Production composition and all entry-point/schema/counter
 replacement remain coupled work before publication; these exports do not switch the descriptor.
 
+**2026-10-14 adoption-consumer checkpoint:** the public adopter deliberately refuses an enabled
+module whose independently prepared standby opens series only at activation. The setup route
+returns `409 module.operation_invalid` before the local first-write hook; the pending worker logs
+that code and retains the exact latch across retries. Its boot case checks the real pending
+status and absence of a viewer session, node key and selling identity. Disabled modules retain
+the existing adoption path. A synthetic signed-reservation journey leaves supplied outside
+evidence unchanged after the local refusal. No copy mechanism or stored authentication is added.
+
+Default descriptors, text SIF/counter retirement and the final migration/all-consumer qualification
+remain coupled work. This checkpoint does not enable default allocated setup or restore and is
+not ready for publication. The two whole-branch reviews, normal push hook and current-head CI
+still precede authorised landing.
+
 ## Task 5: select active series inside issuance transactions
 
 **Modify:** `apps/server/src/till-config.ts`, `trading-config.ts`, `till-sale.ts`,

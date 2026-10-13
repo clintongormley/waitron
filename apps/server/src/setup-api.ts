@@ -222,6 +222,7 @@ const runProvision = createErrorBoundary(PROVISION_STATUS, "setup.provision_fail
  * `password.invalid` is the primary's refusal of the login, relayed by `fetchMirrorBundle`.
  */
 const ADOPT_STATUS: Record<string, ContentfulStatusCode> = {
+  "module.operation_invalid": 409,
   "setup.request_invalid": 400,
   "mirror.primary_url_invalid": 400,
   "mirror.bundle_fetch_failed": 502,

@@ -1,5 +1,5 @@
 import { generateKeyPairSync } from "node:crypto";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeAll, afterAll, beforeEach, expect, it, vi } from "vitest";
@@ -41,6 +41,8 @@ import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { nodeId } from "@waitron/shared";
 import { assembleMirrorBundle, type ReservedIdentity } from "./mirror-bundle.js";
 import { establishNodeIdentity } from "./node-identity.js";
+import { adoptFromPrimary } from "./adopt.js";
+import { readPendingAdoption } from "./finish-adoption.js";
 import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./reserved-identity.js";
 import { promoteMirrorToPrimary } from "./promote.js";
 import { createDeploymentHolders } from "./deployment-holders.js";
@@ -52,6 +54,7 @@ vi.mock("./modules.js", () => ({ ALL_MODULES: modules }));
 const migrations = migrationOptionsFor(manifestSets(), null);
 const primary = useVenueDb({ migrations });
 const spare = useVenueDb({ migrations });
+const unadopted = useVenueDb({ migrations });
 const LOCATION = "e1000000-0000-4000-8000-000000000001";
 const PRIMARY = "e1000000-0000-4000-8000-000000000002";
 const RING = loadKeyRing({
@@ -423,4 +426,67 @@ it("retains the dormant reservation and all fiscal rows after a refused membersh
   } finally {
     await spare.db.execute(sql`drop trigger refuse_chart`);
   }
+});
+
+it("a refused public adoption retains its independently signed reservation without stamping the empty spare", async () => {
+  let target = "";
+  let originalConfirmation = "";
+  let originalReservation = "";
+  const adoptionDir = join(stateDir!, "empty-adoption");
+  await mkdir(adoptionDir);
+  await expect(
+    adoptFromPrimary(
+      {
+        ownerDb: unadopted.db,
+        advertisedOrigin: "https://spare.test",
+        environment: "preproduction",
+        database: "synthetic-empty-spare",
+        stateDir: adoptionDir,
+        persistTrading: async () => {},
+        persistModuleConfig: async () => {},
+        fetchBundle: async (_url, _credential, standby) => {
+          target = standby.nodeId;
+          const held = joinRequest(target, "reserve");
+          originalConfirmation = JSON.stringify(held.confirmation);
+          originalReservation = JSON.stringify(held.input);
+          await writeFile(configuration().confirmationPath, originalConfirmation);
+          return withOperationAuthority(held.binding, held.operatorId, (authority) =>
+            assembleMirrorBundle({
+              appDb: primary.db,
+              ring: RING,
+              stateDir: stateDir!,
+              relayUrl: "https://relay.test",
+              boxHostname: "waitron.local",
+              accountKey: "test-account-key",
+              designated: { nodeId: PRIMARY, locationId: LOCATION },
+              standby,
+              moduleOperations: new Map([
+                [held.binding.module, { binding: held.binding, authority, input: held.input }],
+              ]),
+            }),
+          );
+        },
+      },
+      {
+        primaryUrl: "https://primary.test",
+        credential: {
+          personId: "e1000000-0000-4000-8000-000000000003",
+          password: "synthetic-unused-credential",
+        },
+      },
+      { beforeFirstWrite: async () => {} },
+    ),
+  ).rejects.toMatchObject({
+    code: "module.operation_invalid",
+    params: { module: "fiscal-verifactu" },
+  });
+  expect(target).not.toBe("");
+  expect(await readFile(configuration().confirmationPath, "utf8")).toBe(originalConfirmation);
+  expect(JSON.stringify(joinRequest(target, "reserve").input)).toBe(originalReservation);
+  expect(await unadopted.db.select().from(deployment)).toEqual([]);
+  expect(await unadopted.db.select().from(nodes)).toEqual([]);
+  expect(await unadopted.db.select().from(fiscalReservations)).toEqual([]);
+  expect(await unadopted.db.select().from(fiscalAllocations)).toEqual([]);
+  expect(await tryGetCredential(unadopted.db, RING, { purpose: "membership.node_key" })).toBeNull();
+  expect(await readPendingAdoption(adoptionDir)).toBeNull();
 });
