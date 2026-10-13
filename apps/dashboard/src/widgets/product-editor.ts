@@ -1500,7 +1500,7 @@ export class ProductEditor extends LitElement {
               label: t("editor.base_price"),
               value: unitLabel
                 ? `${priceText(price)} ${fill("editor.per_unit", { unit: unitLabel })}`
-                : t("editor.price_each").replace("{price}", priceText(price)),
+                : fill("editor.price_each", { price: priceText(price) }),
             },
           ]
         : []),

@@ -5069,6 +5069,15 @@ it.each([
   }
 });
 
+it("writes a typed price holding a replacement pattern into the folded Pricing line as written", async () => {
+  const el = await mountPricing({ ...saved, unitId: null, variants: [small] });
+  await input(el, "unit-price", "1$&");
+  expect(pricing(el).summaryFields[0]).toEqual({
+    label: t("editor.base_price"),
+    value: t("editor.price_each").split("{price}").join("1$&"),
+  });
+});
+
 it("leaves a blank base price, and a VAT class the form does not offer, off the folded line", async () => {
   const el = await mountPricing({
     ...saved,
