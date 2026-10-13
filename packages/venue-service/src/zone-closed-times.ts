@@ -59,6 +59,7 @@ export async function stageZoneClosedWeek(
   days: unknown,
   clock: BusinessDayClock,
   season: string | Season | undefined,
+  seasonWeeks?: Awaited<ReturnType<typeof readZoneSeasonWeeks>>,
 ): Promise<{ changed: boolean; write: () => Promise<void> }> {
   if (!Array.isArray(days) || days.length !== 7)
     throw new AppError("zone_closed_time.invalid", { field: "days" });
@@ -84,7 +85,9 @@ export async function stageZoneClosedWeek(
   const seasonWeek = [0, 1, 2, 3, 4, 5, 6].map((weekday) =>
     joinTouching(week.get(weekday)!, () => true),
   );
-  const seasonsNow = (await readZoneSeasonWeeks(tx, cfg, [zoneId], clock.dayCutover)).get(zoneId);
+  const seasonsNow = (
+    seasonWeeks ?? (await readZoneSeasonWeeks(tx, cfg, [zoneId], clock.dayCutover))
+  ).get(zoneId);
   const changed = targets.some((season) =>
     seasonWeek.some(
       (ranges, weekday) =>

@@ -986,4 +986,32 @@ describe("saveSeasonWeeks", () => {
     ).rejects.toMatchObject({ code: "service_zone.not_found" });
     expect(await stored(p)).toEqual(before);
   });
+
+  it("refuses a department's slot naming another listed department's period, by its place, writing nothing", async () => {
+    const p = await painted();
+    const before = await stored(p);
+    const terrace = { periodId: p.terrace.period, startsAt: "12:00", endsAt: "15:00" };
+    await expect(
+      scoped((tx) =>
+        saveSeasonWeeks(
+          tx,
+          p.cfg,
+          p.winter,
+          {
+            departments: [
+              { departmentId: p.terrace.id, days: menuWeek([terrace]) },
+              { departmentId: p.bar.id, days: menuWeek([terrace]) },
+            ],
+          },
+          AT,
+          0,
+        ),
+      ),
+    ).rejects.toSatisfy(
+      refused("menu_timetable.invalid", {
+        field: `departments.1.days.${TUESDAY}.slots.0.periodId`,
+      }),
+    );
+    expect(await stored(p)).toEqual(before);
+  });
 });

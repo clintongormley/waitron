@@ -125,25 +125,52 @@ export async function requirePeriod(tx: Transaction, cfg: VenueScope, periodId: 
 }
 
 /** Refuses a slot naming a period that is not the department's own. */
-async function assertOwnPeriods(
-  tx: Transaction,
-  departmentId: string,
+function assertOwnPeriods(
+  own: ReadonlySet<string>,
   days: readonly { field: string; slots: readonly MenuSlot[] }[],
-): Promise<void> {
-  const ids = [...new Set(days.flatMap((day) => day.slots.map((slot) => slot.periodId)))];
-  if (ids.length === 0) return;
-  const own = new Set(
-    (
-      await tx
-        .select({ id: menuPeriods.id })
-        .from(menuPeriods)
-        .where(and(eq(menuPeriods.departmentId, departmentId), inArray(menuPeriods.id, ids)))
-    ).map((row) => row.id),
-  );
+): void {
   for (const { field, slots } of days)
     slots.forEach((slot, index) => {
       if (!own.has(slot.periodId)) invalidTimetable(`${field}.${index}.periodId`);
     });
+}
+
+/** What staging a department week reads, for every listed department at once. */
+export type DepartmentWeekReads = {
+  active: ReadonlySet<string>;
+  periods: ReadonlyMap<string, ReadonlySet<string>>;
+  seasonWeeks: Awaited<ReturnType<typeof readDepartmentSeasonWeeks>>;
+};
+
+export async function readDepartmentWeekReads(
+  tx: Transaction,
+  cfg: VenueScope,
+  departmentIds: readonly string[],
+  clock: BusinessDayClock,
+): Promise<DepartmentWeekReads> {
+  const ids = [...new Set(departmentIds)];
+  if (ids.length === 0) return { active: new Set(), periods: new Map(), seasonWeeks: new Map() };
+  const activeRows = await tx
+    .select({ id: departments.id })
+    .from(departments)
+    .where(
+      and(
+        inArray(departments.id, ids),
+        eq(departments.locationId, cfg.locationId),
+        eq(departments.active, true),
+      ),
+    );
+  const periodRows = await tx
+    .select({ id: menuPeriods.id, departmentId: menuPeriods.departmentId })
+    .from(menuPeriods)
+    .where(inArray(menuPeriods.departmentId, ids));
+  const periods = new Map(ids.map((id) => [id, new Set<string>()]));
+  for (const row of periodRows) periods.get(row.departmentId)!.add(row.id);
+  return {
+    active: new Set(activeRows.map((row) => row.id)),
+    periods,
+    seasonWeeks: await readDepartmentSeasonWeeks(tx, cfg, ids, clock.dayCutover),
+  };
 }
 
 type EndOffsetClash = NonNullable<Awaited<ReturnType<typeof endOffsetClash>>>;
@@ -730,6 +757,7 @@ export async function stageMenuWeek(
   days: unknown,
   clock: BusinessDayClock,
   season: string | Season | undefined,
+  reads?: DepartmentWeekReads,
 ): Promise<{
   changed: boolean;
   write: () => Promise<void>;
@@ -739,19 +767,17 @@ export async function stageMenuWeek(
     const parsed = scheduleCutovers(clock).map((cutover) => parseServiceDay(value, field, cutover));
     return parsed[0]!;
   });
-  await assertDepartment(tx, cfg, departmentId);
-  await assertOwnPeriods(
-    tx,
-    departmentId,
+  const known = reads ?? (await readDepartmentWeekReads(tx, cfg, [departmentId], clock));
+  if (!known.active.has(departmentId)) throw new AppError("department.not_found", { departmentId });
+  assertOwnPeriods(
+    known.periods.get(departmentId)!,
     week.slots.map((slots, weekday) => ({ field: `days.${week.indexOf[weekday]}.slots`, slots })),
   );
   const targets = typeof season === "object" ? [season] : await targetSeasons(tx, cfg, season);
   const seasonId = typeof season === "object" ? season.id : season;
   const samePeriod = (a: ServiceRange, b: ServiceRange) => a.periodId === b.periodId;
   const seasonWeek = week.slots.map((slots) => joinTouching(slots, samePeriod));
-  const seasonsNow = (
-    await readDepartmentSeasonWeeks(tx, cfg, [departmentId], clock.dayCutover)
-  ).get(departmentId);
+  const seasonsNow = known.seasonWeeks.get(departmentId);
   const changed = targets.some((season) =>
     seasonWeek.some(
       (ranges, weekday) =>
