@@ -13,6 +13,8 @@ import {
   clampToGrid,
   gridExtent,
   outward,
+  type ResizeCursor,
+  resizeCursor,
   resizeFrom,
   rotatedRect,
   showsName,
@@ -265,25 +267,26 @@ export class WtFloorPlanCanvas extends LitElement {
       [data-side="top"] {
         top: 0;
         left: 50%;
-        cursor: ns-resize;
       }
 
       [data-side="right"] {
         top: 50%;
         left: 100%;
-        cursor: ew-resize;
       }
 
       [data-side="bottom"] {
         top: 100%;
         left: 50%;
-        cursor: ns-resize;
       }
 
       [data-side="left"] {
         top: 50%;
         left: 0;
-        cursor: ew-resize;
+      }
+
+      /* The drag listens on the window, so the pointer leaves the dot while the arrow should stay. */
+      .viewport[data-resizing] * {
+        cursor: inherit !important;
       }
 
       .size-badge {
@@ -323,7 +326,7 @@ export class WtFloorPlanCanvas extends LitElement {
 
   @state() private announcement = "";
 
-  @state() private resizing: { key: string; side: PlanSide } | null = null;
+  @state() private resizing: { key: string; side: PlanSide; cursor: ResizeCursor } | null = null;
 
   #drag: Drag | null = null;
 
@@ -473,7 +476,12 @@ export class WtFloorPlanCanvas extends LitElement {
       backgroundSize: `${px(1)} ${px(1)}`,
     });
     return html`
-      <div class="viewport" part="viewport">
+      <div
+        class="viewport"
+        part="viewport"
+        ?data-resizing=${this.resizing !== null}
+        style=${styleMap({ cursor: this.resizing?.cursor })}
+      >
         <div
           class="grid"
           part="grid"
@@ -584,6 +592,7 @@ export class WtFloorPlanCanvas extends LitElement {
             part="resize-dot"
             data-side=${side}
             ?data-dragging=${side === dragged}
+            style=${styleMap({ cursor: resizeCursor(side, p.rotation) })}
           ></div>`,
       )}
     </div>`;
@@ -598,6 +607,7 @@ export class WtFloorPlanCanvas extends LitElement {
             class="resize-handle"
             part="resize-handle"
             data-side=${side}
+            style=${styleMap({ cursor: resizeCursor(side, p.rotation) })}
             @click=${(e: Event) => e.stopPropagation()}
             @pointerdown=${(e: PointerEvent) => this.#onPointerDown(e, t, { kind: "resize", side })}
           ></div>`,
@@ -754,7 +764,10 @@ export class WtFloorPlanCanvas extends LitElement {
     window.addEventListener("pointermove", this.#onPointerMove);
     window.addEventListener("pointerup", this.#onPointerUp);
     window.addEventListener("pointercancel", this.#onPointerCancel);
-    if (grab.kind === "resize") this.resizing = { key: t.key, side: grab.side };
+    if (grab.kind === "resize") {
+      const cursor = resizeCursor(grab.side, p.rotation);
+      this.resizing = { key: t.key, side: grab.side, cursor };
+    }
   }
 
   // The window listeners below are attached only while `#drag` is set.

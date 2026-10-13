@@ -80,6 +80,18 @@ export function outward(side: PlanSide, rotation: number): { x: number; y: numbe
   return { x: x * cos - y * sin, y: x * sin + y * cos };
 }
 
+const RESIZE_CURSORS = ["ew-resize", "nwse-resize", "ns-resize", "nesw-resize"] as const;
+export type ResizeCursor = (typeof RESIZE_CURSORS)[number];
+
+/** The resize arrow nearest the way `side` drags on screen; exactly halfway takes the next one
+ *  clockwise. */
+export function resizeCursor(side: PlanSide, rotation: number): ResizeCursor {
+  const { x, y } = outward(side, rotation);
+  // Rounded so that a turn exactly halfway between two arrows is not split by floating-point noise.
+  const degrees = Math.round(((Math.atan2(y, x) * 180) / Math.PI) * 1e6) / 1e6;
+  return RESIZE_CURSORS[((Math.round(degrees / 45) % 4) + 4) % 4]!;
+}
+
 /** Whole squares, a half going away from zero so that a shift and its reverse cancel. */
 function roundShift(squares: number): number {
   // At 90° a shift of exactly -0.5 is computed as -0.49999999999999994.

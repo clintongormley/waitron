@@ -1157,6 +1157,66 @@ it("shows the size badge under the table, past its bottom dot, while a dot is dr
   expect([...el.shadowRoot!.querySelectorAll("[part~=resize-dot][data-dragging]")]).toHaveLength(0);
 });
 
+const cursorOf = (node: Element) => getComputedStyle(node).cursor;
+
+const SIDES = ["top", "right", "bottom", "left"] as const;
+
+it.each([
+  [0, ["ns-resize", "ew-resize", "ns-resize", "ew-resize"]],
+  [90, ["ew-resize", "ns-resize", "ew-resize", "ns-resize"]],
+  [45, ["nesw-resize", "nwse-resize", "nesw-resize", "nwse-resize"]],
+])(
+  "shows each dot of a table turned %i° the arrow of the way it drags on screen",
+  async (rotation, want) => {
+    const el = await canvas([table("t1", "T1", { x: 10, y: 10, width: 8, height: 4, rotation })], {
+      selected: "t1",
+    });
+    expect(SIDES.map((side) => cursorOf(drawn(el, side)))).toEqual(want);
+    expect(SIDES.map((side) => cursorOf(dot(el, side)))).toEqual(want);
+  },
+);
+
+it("turns the dots' arrows with the table while its turn arrow is dragged", async () => {
+  const el = await canvas([table("t1", "T1", { x: 10, y: 10 })], { selected: "t1" });
+  const handle = handles(el)[0]!;
+  const h = centreOf(handle);
+  const to = roundFrom(centreOf(button(el, "t1")), h, 90);
+  pointer(handle, "pointerdown", 1, h.x, h.y);
+  pointer(window, "pointermove", 1, to.x, to.y);
+  await el.updateComplete;
+  expect(cursorOf(drawn(el, "top"))).toBe("ew-resize");
+  expect(cursorOf(dot(el, "top"))).toBe("ew-resize");
+  pointer(window, "pointercancel", 1, to.x, to.y);
+  await el.updateComplete;
+  expect(cursorOf(drawn(el, "top"))).toBe("ns-resize");
+});
+
+it.each(["pointerup", "pointercancel"])(
+  "shows the dragged dot's arrow over the whole canvas until the %s",
+  async (end) => {
+    const el = await canvas(
+      [table("t1", "T1", { x: 10, y: 10, width: 8, height: 4, rotation: 90 }), table("t2", "T2")],
+      { selected: "t1" },
+    );
+    expect(cursorOf(button(el, "t1"))).toBe("pointer");
+    const at = dragDot(el, "top", 24, 0);
+    await el.updateComplete;
+    expect(cursorOf(button(el, "t1"))).toBe("ew-resize");
+    expect(cursorOf(button(el, "t2"))).toBe("ew-resize");
+    expect(cursorOf(dot(el, "left"))).toBe("ew-resize");
+    expect(cursorOf(drawn(el, "left"))).toBe("ew-resize");
+    expect(cursorOf(handles(el)[0]!)).toBe("ew-resize");
+    expect(cursorOf(part(el, "grid"))).toBe("ew-resize");
+    pointer(window, end, 1, at.x, at.y);
+    await el.updateComplete;
+    expect(cursorOf(button(el, "t1"))).toBe("pointer");
+    expect(cursorOf(button(el, "t2"))).toBe("pointer");
+    expect(cursorOf(dot(el, "left"))).toBe("ns-resize");
+    expect(cursorOf(handles(el)[0]!)).toBe("grab");
+    expect(cursorOf(part(el, "grid"))).toBe("auto");
+  },
+);
+
 it("draws a refused table's reason below the size badge while a dot is dragged", async () => {
   const el = await canvas([refusedTable("t1", "T1", "Booked at 21:00", { x: 10, y: 10 })], {
     selected: "t1",
