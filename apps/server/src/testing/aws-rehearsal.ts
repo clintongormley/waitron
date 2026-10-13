@@ -837,8 +837,8 @@ async function preflight(
 }
 
 /**
- * Creates one bucket this run owns, runs `scenario` against it, and always attempts teardown; a
- * failed teardown step leaves the bucket, named in the receipt.
+ * Creates one bucket this run owns and runs `scenario` against it. Attempts teardown of a bucket it
+ * created; when any teardown step fails, the receipt names the bucket as possibly left.
  * Credentials reach the scenario only inside `bucketConfig(...)`.
  */
 export async function withAwsRehearsal<T>(

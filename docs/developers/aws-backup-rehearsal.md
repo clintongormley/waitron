@@ -47,8 +47,9 @@ Two limits matter if something goes wrong:
   `waitron-rehearsal-waitron-` prefix and delete it by hand, after checking that its
   `.waitron-rehearsal-owner` object is from your run. The loop scenario's working folder,
   `waitron-aws-stream-loop-<random>` under your temporary folder (`$TMPDIR` on a Mac), is left
-  behind too. It holds the boxes' `secrets.env` files and, once the loop has written it,
-  `recovery-kit.txt`, which carries the rehearsal's key pair encoded as base64url, not encrypted.
+  behind too. It holds a box's `secrets.env` (box A's until the loop removes it, then the rebuilt
+  box's) and, once written, `recovery-kit.txt`, which carries the rehearsal's key pair encoded as
+  base64url, not encrypted.
   Delete that folder as well.
 
 ## Running it
