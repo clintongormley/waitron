@@ -197,10 +197,67 @@ describe("nameToday", () => {
   });
 });
 
+describe("nameToday leaves a name it already has alone, even when another table shares it", () => {
+  const writeName = (tableId: string, name: string) =>
+    inTx(v, (tx) =>
+      tx.update(floorTodayTables).set({ name }).where(eq(floorTodayTables.tableId, tableId)),
+    );
+
+  it("a table", async () => {
+    const { table } = await LONG_TABLE();
+    const name = suffixed("Window");
+    await rename(table.bar!, name);
+    await writeName(table.long!, name);
+    const before = await everything();
+
+    await rename(table.bar!, name);
+
+    expect(await everything()).toEqual(before);
+  });
+
+  it("a group", async () => {
+    const { table } = await LONG_TABLE();
+    await pushBarOntoLong(table);
+    const name = suffixed("García birthday");
+    await rename(table.c4!, name);
+    await writeName(table.c3!, name);
+    const before = await everything();
+
+    await rename(table.c4!, name);
+
+    expect(await everything()).toEqual(before);
+  });
+});
+
 describe("nameToday refuses a name in use, writing nothing", () => {
   it("another table's saved name, in other capitals", async () => {
     const { table } = await LONG_TABLE();
     const label = (await labelOf(table.long!)).toUpperCase();
+    const before = await everything();
+
+    expect(await refused(rename(table.bar!, label))).toEqual({
+      code: "table.label_taken",
+      params: { label, field: "name" },
+    });
+    expect(await everything()).toEqual(before);
+  });
+
+  it("a saved name of a table the map does not show", async () => {
+    const { table } = await LONG_TABLE();
+    const label = await labelOf(table.c3!);
+    const before = await everything();
+
+    expect(await refused(rename(table.bar!, label))).toEqual({
+      code: "table.label_taken",
+      params: { label, field: "name" },
+    });
+    expect(await everything()).toEqual(before);
+  });
+
+  it("a saved name of a table in another zone", async () => {
+    const other = await LONG_TABLE();
+    const { table } = await LONG_TABLE();
+    const label = await labelOf(other.table.bar!);
     const before = await everything();
 
     expect(await refused(rename(table.bar!, label))).toEqual({
@@ -306,6 +363,25 @@ describe("nameToday refuses a name in use, writing nothing", () => {
     await inTx(v, (tx) =>
       tx.update(floorTodayTables).set({ name }).where(eq(floorTodayTables.tableId, table.c3!)),
     );
+
+    await rename(table.bar!, name);
+
+    expect((await todayRow(v, table.bar!))!.name).toBe(name);
+  });
+});
+
+describe("nameToday ignores a stale name on a joined table off the map", () => {
+  it("Long table, come apart into a group", async () => {
+    const first = await LONG_TABLE();
+    await pushBarOntoLong(first.table);
+    const name = suffixed("Stale");
+    await inTx(v, (tx) =>
+      tx
+        .update(floorTodayTables)
+        .set({ name })
+        .where(eq(floorTodayTables.tableId, first.table.long!)),
+    );
+    const { table } = await LONG_TABLE();
 
     await rename(table.bar!, name);
 
