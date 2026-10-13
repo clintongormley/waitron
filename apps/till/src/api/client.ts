@@ -3665,6 +3665,18 @@ export class TillApi {
     await this.#todayChange(tableId, "split", {});
   }
 
+  /** Split parts off a joined table → `POST /api/tables/:id/today/split-off`.
+   * `seats` is left out when unset: the server refuses a null. */
+  async splitOffToday(
+    tableId: string,
+    split: { partIds: string[]; seats?: number },
+  ): Promise<void> {
+    await this.#todayChange(tableId, "split-off", {
+      partIds: split.partIds,
+      ...(split.seats === undefined ? {} : { seats: split.seats }),
+    });
+  }
+
   /** Reset a zone to its saved plan → `POST /api/zones/:id/today/reset`. */
   async resetZoneToday(zoneId: string): Promise<void> {
     await this.#request<void>(`/api/zones/${zoneId}/today/reset`, "POST", {});

@@ -2599,6 +2599,23 @@ describe("TillApi", () => {
     ]);
   });
 
+  it("sends a split-off with its parts, and seats only when given", async () => {
+    const fetchStub = vi.fn(async () => new Response(null, { status: 204 }));
+    const api = new TillApi("", fetchStub);
+
+    await expect(api.splitOffToday("long", { partIds: ["c4", "c5"] })).resolves.toBeUndefined();
+    await expect(api.splitOffToday("long", { partIds: ["c5"], seats: 8 })).resolves.toBeUndefined();
+
+    const sent = fetchStub.mock.calls.map((call) => {
+      const [path, init] = call as unknown as [string, RequestInit];
+      return [path, init.method, JSON.parse(String(init.body)) as unknown];
+    });
+    expect(sent).toEqual([
+      ["/api/tables/long/today/split-off", "POST", { partIds: ["c4", "c5"] }],
+      ["/api/tables/long/today/split-off", "POST", { partIds: ["c5"], seats: 8 }],
+    ]);
+  });
+
   it("splitTable POSTs the table, the chosen bill or null, and the revision to the party's /split-table route", async () => {
     const answer = { partyId: "v-new", mainBillId: null };
     const fetchStub = vi.fn(async () => jsonResponse(answer));

@@ -33,6 +33,8 @@ import "../widgets/seat-dialog.js";
 import "../widgets/today-seats-dialog.js";
 import "../widgets/bill-choice-dialog.js";
 import "../widgets/join-with-dialog.js";
+import "../widgets/split-joined-dialog.js";
+import type { SplitJoinedDetail, TillSplitJoinedDialog } from "../widgets/split-joined-dialog.js";
 import "../widgets/floor-zone-menu.js";
 import type { JoinWithPickDetail } from "../widgets/join-with-dialog.js";
 import type { BillChoiceDetail } from "../widgets/bill-choice-dialog.js";
@@ -481,6 +483,12 @@ export class TillFloorScreen extends LitElement {
   } | null = null;
   /** Join with…'s table; closed when the table leaves the map. */
   @state() private joiningWith: { tableId: string } | null = null;
+  /** Split tables…'s joined table, open until the split is sent or cancelled. */
+  @state() private splittingJoined: {
+    tableId: string;
+    busy: boolean;
+    refusal: { code: string; field?: string } | null;
+  } | null = null;
   /** A drop joining two seated parties, waiting for which bills to keep. */
   @state() private askingBills: { api: TillApi; action: JoinAction } | null = null;
 
@@ -771,6 +779,7 @@ export class TillFloorScreen extends LitElement {
         void this.#settle(this.#split(api, table));
         return;
       case "split-off":
+        this.splittingJoined = { tableId, busy: false, refusal: null };
         return;
       case "rotate":
         void this.#settle(api.rotateToday(table.id));
@@ -954,6 +963,52 @@ export class TillFloorScreen extends LitElement {
         this.#setPending(null);
       }}
     ></till-today-seats-dialog>`;
+  }
+
+  #splitJoined(): TemplateResult | typeof nothing {
+    const splitting = this.splittingJoined;
+    const joined = splitting && this.tables.find((each) => each.id === splitting.tableId);
+    const partIds = joined?.today?.joined?.parts;
+    if (!splitting || partIds === undefined) return nothing;
+    return html`<till-split-joined-dialog
+      .joined=${joined}
+      .parts=${partIds.flatMap((id) => this.tables.filter((each) => each.id === id))}
+      .busy=${splitting.busy}
+      .refusal=${splitting.refusal}
+      @split-joined-confirm=${(event: CustomEvent<SplitJoinedDetail>) => {
+        event.stopPropagation();
+        void this.#splitOff(event.currentTarget as TillSplitJoinedDialog, event.detail);
+      }}
+      @split-joined-cancel=${(event: Event) => {
+        event.stopPropagation();
+        this.splittingJoined = null;
+      }}
+    ></till-split-joined-dialog>`;
+  }
+
+  /** The window stays open while the split is sent, and closes only once it is done. */
+  async #splitOff(dialog: TillSplitJoinedDialog, detail: SplitJoinedDetail): Promise<void> {
+    const splitting = this.splittingJoined;
+    const api = this.api;
+    if (splitting === null || splitting.busy || api === undefined) return;
+    this.splittingJoined = { ...splitting, busy: true, refusal: null };
+    try {
+      await api.splitOffToday(splitting.tableId, {
+        partIds: detail.partIds,
+        ...(detail.seats === null ? {} : { seats: detail.seats }),
+      });
+      dialog.commit();
+      this.splittingJoined = null;
+    } catch (cause) {
+      const refused = (cause ?? {}) as { code?: string; field?: unknown };
+      const code = refused.code ?? "server.internal";
+      this.splittingJoined = {
+        ...splitting,
+        busy: false,
+        refusal: typeof refused.field === "string" ? { code, field: refused.field } : { code },
+      };
+    }
+    this.#requestFloorRefresh();
   }
 
   #billChoice(): TemplateResult | typeof nothing {
@@ -1158,7 +1213,7 @@ export class TillFloorScreen extends LitElement {
             : this.#plannedMap(onMap, unplaced, activeKey)
         }
         ${this.#seatDialog()} ${this.#clearDialog()} ${this.#detailsSheet()} ${this.#seatsPrompt()}
-        ${this.#billChoice()} ${this.#joinWith()}
+        ${this.#splitJoined()} ${this.#billChoice()} ${this.#joinWith()}
       </section>
     `;
   }
