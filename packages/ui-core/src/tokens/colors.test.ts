@@ -393,6 +393,43 @@ describe.each(["light", "dark"] as const)("calendar day colours (%s)", (theme) =
   });
 });
 
+// The Opening hours seasons' tints, taken in a venue's season start order and repeated past four.
+const SEASON_FILLS = [1, 2, 3, 4].map((index) => `--wt-color-season-${index}`);
+
+describe.each(["light", "dark"] as const)("season colours (%s)", (theme) => {
+  test("each fill has its own text colour, readable on it at 4.5:1 or more", () => {
+    const el = mount(theme);
+    for (const fill of SEASON_FILLS)
+      expect(ratio(token(el, onFill(fill)), token(el, fill)), fill).toBeGreaterThanOrEqual(4.5);
+  });
+
+  test("each chip's line stands 3:1 or more from its fill and from the surface", () => {
+    const el = mount(theme);
+    for (const fill of SEASON_FILLS) {
+      const line = token(el, `${fill}-line`);
+      expect(ratio(line, token(el, fill)), fill).toBeGreaterThanOrEqual(3);
+      expect(ratio(line, token(el, "--wt-color-surface")), fill).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  test("the four fills are different colours", () => {
+    const el = mount(theme);
+    expect(new Set(SEASON_FILLS.map((fill) => token(el, fill))).size).toBe(SEASON_FILLS.length);
+  });
+
+  test("the OS preference gives them the same values as the explicit theme", async () => {
+    const names = SEASON_FILLS.flatMap((fill) => [fill, onFill(fill), `${fill}-line`]);
+    await commands.emulateColorScheme(theme === "light" ? "dark" : "light");
+    const explicit = mount(theme);
+    const fromTheme = names.map((name) => token(explicit, name));
+    expect(fromTheme).not.toContain("");
+    explicit.remove();
+    await commands.emulateColorScheme(theme);
+    const byPreference = mount();
+    expect(names.map((name) => token(byPreference, name))).toEqual(fromTheme);
+  });
+});
+
 // The till map's table fills.
 const TABLE_FILLS = ["free", "seated", "bill", "clearing", "reserved"].map(
   (fill) => `--wt-color-table-${fill}`,

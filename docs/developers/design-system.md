@@ -122,7 +122,7 @@ at Waitron's red. Set each one too, with a light and a dark value (see Tokens �
 `--wt-color-field-value`, `--wt-color-google-button-fill`, `--wt-color-google-button-line`,
 `--wt-color-google-button-text`, `--wt-color-stepper-button`, and the calendar's
 `--wt-color-palette-{red,amber,grey,blue,green,purple}`, `--wt-color-day-standard` and
-`--wt-color-day-closed`, and the table map's `--wt-color-table-{free,seated,bill,clearing,reserved}`,
+`--wt-color-day-closed`, the seasons' `--wt-color-season-{1,2,3,4}` (each with a `-line` border), and the table map's `--wt-color-table-{free,seated,bill,clearing,reserved}`,
 and the search result's `--wt-color-highlight`, each with an `--wt-color-on-…` text colour
 
 `--wt-color-stepper-button` is the hover tint of `wt-number-stepper`'s − and + buttons: `#e8f0ff`
@@ -208,6 +208,23 @@ each other and from both reserved fills, that the standard and Closed fills are 
 and that the `prefers-color-scheme` blocks give the same values as the explicit themes. They do not
 hold that two palette colours are told apart by eye: the light standard fill, for one, is only
 about 1.2:1 against `--wt-color-surface`, which is why the words carry the meaning.
+
+Opening hours' season chips (`packages/venue-service/src/dashboard/season-chips.ts`) tint each
+season with `--wt-color-season-<n>`, its text with `--wt-color-on-season-<n>` and its border with
+`--wt-color-season-<n>-line`, where `n` is the season's place in start order, 1 to 4, repeating for
+a fifth season onwards. The season's name and dates are always written on the chip.
+
+| Fill                  | Light     | Line      | Text on it | Dark      | Line      | Text on it |
+| --------------------- | --------- | --------- | ---------- | --------- | --------- | ---------- |
+| `--wt-color-season-1` | `#dbe7f9` | `#3d6fc4` | `#16181d`  | `#1c2a44` | `#7aa2ff` | `#eceef2`  |
+| `--wt-color-season-2` | `#dcf1dc` | `#3c8a4a` | `#16181d`  | `#1d3a23` | `#4ac08d` | `#eceef2`  |
+| `--wt-color-season-3` | `#fbecc0` | `#a87a12` | `#16181d`  | `#3f3315` | `#f5b34a` | `#eceef2`  |
+| `--wt-color-season-4` | `#f9dccd` | `#b8603a` | `#16181d`  | `#45281c` | `#f09a74` | `#eceef2`  |
+
+The "season colours" cases in `packages/ui-core/src/tokens/colors.test.ts` hold, in both themes,
+that each text colour is 4.5:1 or more on its fill, that each line is 3:1 or more from its fill and
+from `--wt-color-surface`, that the four fills differ, and that the `prefers-color-scheme` blocks
+give the same values as the explicit themes.
 
 The till's table map paints a table's fill from `--wt-color-table-<fill>` and its text from
 `--wt-color-on-table-<fill>`, through `floorMapFillStyles` (`packages/ui/src/floor-map-fills.ts`), a
