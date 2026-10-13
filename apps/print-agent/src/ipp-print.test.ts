@@ -49,7 +49,8 @@ vi.mock("node:http", async (importOriginal) => {
   return { ...actual, request };
 });
 
-type Attr = { tag: number; name: string; value: Buffer };
+/** `group` is the delimiter tag of the attribute group the value was read in. */
+type Attr = { group: number; tag: number; name: string; value: Buffer };
 
 /** One request the fake printer received, read by a decoder independent of the module under test. */
 type Received = {
@@ -65,17 +66,21 @@ function decodeRequest(body: Buffer, raw: IncomingMessage): Received {
   const attrs: Attr[] = [];
   let offset = 8;
   let name = "";
+  let group = 0;
   for (;;) {
     const tag = body[offset++]!;
     if (tag === 0x03) break;
-    if (tag < 0x10) continue;
+    if (tag < 0x10) {
+      group = tag;
+      continue;
+    }
     const n = body.readUInt16BE(offset);
     offset += 2;
     if (n > 0) name = body.toString("utf8", offset, offset + n);
     offset += n;
     const length = body.readUInt16BE(offset);
     offset += 2;
-    attrs.push({ tag, name, value: body.subarray(offset, offset + length) });
+    attrs.push({ group, tag, name, value: body.subarray(offset, offset + length) });
     offset += length;
   }
   return {
@@ -257,11 +262,16 @@ afterEach(async () => {
 });
 
 const DOCUMENT = Buffer.from("%PDF-1.7 synthetic invoice page\n");
-const target = (port: number, documentFormat = "application/pdf") => ({
+const target = (
+  port: number,
+  documentFormat = "application/pdf",
+  media: "iso_a4_210x297mm" | "na_letter_8.5x11in" = "iso_a4_210x297mm",
+) => ({
   host: "127.0.0.1",
   port,
   resourcePath: "/ipp/print",
   documentFormat,
+  media,
 });
 /** Short bounds so the cases run in well under a second each; the defaults have their own cases. */
 const quick: IppPrintOptions = { submitTimeoutMs: 1000, pollLimitMs: 1000, pollIntervalMs: 5 };
@@ -298,6 +308,8 @@ describe("printOverIpp — submission", () => {
       "requesting-user-name",
       "job-name",
       "document-format",
+      "copies",
+      "media",
     ]);
 
     expect(printer.polls()).toHaveLength(3);
@@ -327,6 +339,45 @@ describe("printOverIpp — submission", () => {
       expect(request.headers["transfer-encoding"]).toBe("chunked");
       expect(request.headers).not.toHaveProperty("content-length");
     }
+  });
+
+  it.each(["iso_a4_210x297mm", "na_letter_8.5x11in"] as const)(
+    "asks for one copy on %s in the Print-Job's job-template group",
+    async (media) => {
+      const printer = await fakePrinter((req, res) => res.end(accepted(req, 7, COMPLETED)));
+      expect(
+        await printOverIpp(target(printer.port, "application/pdf", media), DOCUMENT, quick),
+      ).toEqual(sent);
+      const template = printer.printJobs()[0]!.attrs.filter((a) => a.group === 0x02);
+      expect(template).toEqual([
+        { group: 0x02, tag: 0x21, name: "copies", value: int(1) },
+        { group: 0x02, tag: 0x44, name: "media", value: Buffer.from(media) },
+      ]);
+    },
+  );
+
+  it("prints one copy on the chosen paper at a printer whose own defaults are two Letter copies", async () => {
+    const output: Array<{ copies: number; media: string }> = [];
+    const printer = await fakePrinter((req, res) => {
+      const copies = req.attrs.find((a) => a.name === "copies" && a.group === 0x02);
+      output.push({
+        copies: copies === undefined ? 2 : copies.value.readInt32BE(0),
+        media: text(req.attrs, "media")[0] ?? "na_letter_8.5x11in",
+      });
+      res.end(accepted(req, 7, COMPLETED));
+    });
+    expect(await printOverIpp(target(printer.port), DOCUMENT, quick)).toEqual(sent);
+    expect(output).toEqual([{ copies: 1, media: "iso_a4_210x297mm" }]);
+  });
+
+  it("takes successful-ok-ignored-or-substituted-attributes as an accepted job and follows it", async () => {
+    const printer = await fakePrinter(
+      (req, res) => res.end(ippReply(0x0001, req.requestId, jobGroup(42, PENDING))),
+      (req, res) => res.end(jobState(req, COMPLETED)),
+    );
+    expect(await printOverIpp(target(printer.port), DOCUMENT, quick)).toEqual(sent);
+    expect(printer.printJobs()).toHaveLength(1);
+    expect(printer.polls()).toHaveLength(1);
   });
 
   it("answers sent without polling when the Print-Job reply already says completed", async () => {

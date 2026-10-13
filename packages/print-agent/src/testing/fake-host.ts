@@ -12,7 +12,7 @@ import type {
   TransportKind,
   VisibleDevice,
 } from "../host.js";
-import type { PageFormat, PageHold, WireJob } from "../client.js";
+import type { PageFormat, PageHold, PageMedia, WireJob } from "../client.js";
 import { FakeSink, type PrinterTarget, type Transport } from "../transport.js";
 
 /** The default `fetch` rejects (unreachable); `resolve` maps a job's `localKey` straight to a device
@@ -36,6 +36,7 @@ export function fakeHost(
       target: PageTarget,
       bytes: Uint8Array,
       format: PageFormat,
+      media: PageMedia,
       signal: AbortSignal,
       onHold: (hold: PageHold | null) => void,
     ) => Promise<PagePrintOutcome>;

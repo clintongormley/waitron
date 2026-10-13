@@ -402,6 +402,7 @@ export function createAgent(opts: AgentOptions): Agent {
           { host: printerHost, port, resourcePath },
           document.value,
           job.printer.documentFormat,
+          job.printer.media,
           lost.signal,
           (hold) => {
             held.hold = hold;

@@ -2684,6 +2684,7 @@ describe("createAgent — A4 page jobs", () => {
       TARGET,
       new Uint8Array([0x25, 0x50]),
       "application/pdf",
+      "iso_a4_210x297mm",
       expect.any(AbortSignal),
       expect.any(Function),
     );
@@ -2693,6 +2694,28 @@ describe("createAgent — A4 page jobs", () => {
     // The next job is claimed as soon as this one is reported.
     const [reported] = vi.mocked(c.reportPageJob).mock.invocationCallOrder;
     expect(vi.mocked(c.claimPageJob).mock.invocationCallOrder.at(-1)).toBeGreaterThan(reported!);
+  });
+
+  it("hands the printer the paper the server chose for the job", async () => {
+    const letter: PageJob = {
+      ...PAGE_JOB,
+      printer: { ...PAGE_JOB.printer, media: "na_letter_8.5x11in" },
+    };
+    const printPage = vi.fn(async () => SENT);
+    const { host } = pageHost(printPage);
+    const c = client({
+      claimPageJob: vi.fn().mockResolvedValueOnce(okR(letter)).mockResolvedValue(okR(null)),
+    });
+    await createAgent({ host, client: c }).runOnce();
+    await settle();
+    expect(printPage).toHaveBeenCalledExactlyOnceWith(
+      TARGET,
+      new Uint8Array([0x25, 0x50]),
+      "application/pdf",
+      "na_letter_8.5x11in",
+      expect.any(AbortSignal),
+      expect.any(Function),
+    );
   });
 
   it("a receipt job pulled during a long A4 job prints at once, and the pull still claims", async () => {
@@ -2760,7 +2783,7 @@ describe("createAgent — A4 page jobs", () => {
       renewPageJob: renewer([failR({ kind: "unreachable", detail: "ECONNRESET" })]),
     });
     let signal: AbortSignal | undefined;
-    host.printPage = (_target, _bytes, _format, given) => {
+    host.printPage = (_target, _bytes, _format, _media, given) => {
       signal = given;
       return printing.promise;
     };
@@ -2780,7 +2803,7 @@ describe("createAgent — A4 page jobs", () => {
   it("a lost renewal stops the polling and still reports the outcome once", async () => {
     const printing = deferred<PagePrintOutcome>();
     let signal: AbortSignal | undefined;
-    const { host, renewals } = pageHost((_target, _bytes, _format, given) => {
+    const { host, renewals } = pageHost((_target, _bytes, _format, _media, given) => {
       signal = given;
       given.addEventListener("abort", () =>
         printing.resolve({ status: "unknown", failureCode: "timeout" }),
@@ -3127,6 +3150,7 @@ describe("createAgent — A4 page jobs", () => {
         TARGET_Y,
         new Uint8Array([0x25, 0x50]),
         "application/pdf",
+        "iso_a4_210x297mm",
         expect.any(AbortSignal),
         expect.any(Function),
       );
@@ -3405,6 +3429,7 @@ describe("createAgent — A4 page jobs", () => {
           target: { host: string },
           _bytes: Uint8Array,
           _format: string,
+          _media: string,
           signal: AbortSignal,
           onHold?: OnHold,
         ) => {

@@ -457,7 +457,7 @@ describe("createContainerHost — the rest of the seam", () => {
     });
   });
 
-  it("sends an A4 job over IPP in the claimed format, handing on the claim-lost signal and the hold callback", async () => {
+  it("sends an A4 job over IPP in the claimed format and paper, handing on the claim-lost signal and the hold callback", async () => {
     const closed = createServer();
     await new Promise<void>((resolve) => closed.listen(0, "127.0.0.1", resolve));
     const { port } = closed.address() as { port: number };
@@ -472,12 +472,14 @@ describe("createContainerHost — the rest of the seam", () => {
     const signal = new AbortController().signal;
     const onHold = vi.fn();
 
-    expect(await host.printPage!(target, bytes, "image/urf", signal, onHold)).toEqual({
+    expect(
+      await host.printPage!(target, bytes, "image/urf", "na_letter_8.5x11in", signal, onHold),
+    ).toEqual({
       status: "failed",
       failureCode: "printer_unreachable",
     });
     expect(printOverIpp).toHaveBeenCalledExactlyOnceWith(
-      { ...target, documentFormat: "image/urf" },
+      { ...target, documentFormat: "image/urf", media: "na_letter_8.5x11in" },
       bytes,
       { signal, onHold },
     );

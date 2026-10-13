@@ -1,4 +1,4 @@
-import type { PageHold } from "@waitron/print-agent";
+import type { PageHold, PageMedia } from "@waitron/print-agent";
 import { attribute, type IppEndpoint, printerUri, readAttributes } from "./ipp-capabilities.js";
 import { exchangeIpp } from "./ipp-http.js";
 
@@ -14,6 +14,7 @@ export type IppPrintOutcome =
 
 export interface IppPrintTarget extends IppEndpoint {
   documentFormat: string;
+  media: PageMedia;
 }
 
 export interface IppPrintOptions {
@@ -77,6 +78,8 @@ const language = (): Buffer[] => [
 const user = (): Buffer => attribute(0x42, "requesting-user-name", "Waitron");
 
 function printJob(target: IppPrintTarget, document: Uint8Array): Buffer {
+  const one = Buffer.alloc(4);
+  one.writeInt32BE(1);
   return Buffer.concat([
     header(0x0002, 1),
     ...language(),
@@ -84,6 +87,10 @@ function printJob(target: IppPrintTarget, document: Uint8Array): Buffer {
     user(),
     attribute(0x42, "job-name", "Waitron invoice"),
     attribute(0x49, "document-format", target.documentFormat),
+    // Without these the printer applies its own defaults, which may be several copies or Letter.
+    Buffer.from([0x02]),
+    attribute(0x21, "copies", one),
+    attribute(0x44, "media", target.media),
     Buffer.from([0x03]),
     document,
   ]);
@@ -299,6 +306,7 @@ export async function printOverIpp(
   if (reply.kind === "unreachable") return UNREACHABLE;
   if (reply.kind === "http_refused") return REFUSED;
   if (reply.kind === "no_answer") return TIMEOUT;
+  // 0x0000-0x00ff are successful-ok and its variants, such as an attribute substituted.
   if ((statusOf(reply.body) ?? 0) > 0xff) return REFUSED;
   const job = readJob(reply.body);
   if (job?.jobId === undefined) return TIMEOUT;

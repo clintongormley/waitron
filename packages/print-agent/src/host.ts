@@ -1,4 +1,4 @@
-import type { PageFormat, PageHold, ServerEntry, WireJob } from "./client.js";
+import type { PageFormat, PageHold, PageMedia, ServerEntry, WireJob } from "./client.js";
 import type { PrintTransport, PrinterTarget, Transport, TransportKind } from "./transport.js";
 
 export type { TransportKind } from "./transport.js";
@@ -186,14 +186,15 @@ export interface Host {
   /** False when this host cannot print to any paired Bluetooth printer, which the loop tells the
    * server so it can end those printers' jobs rather than leave them waiting. */
   bluetoothPrinting?(): boolean;
-  /** Sends one A4 document to an office printer and follows it to an outcome. `signal` aborts when
-   * the claim is lost: it stops following the job, never cuts a submission short. `onHold` hears
-   * each change in why the printer is holding the job, and `null` once it moves on. A host without
-   * it never claims an A4 job. */
+  /** Sends one A4 document to an office printer, as one copy on `media`, and follows it to an
+   * outcome. `signal` aborts when the claim is lost: it stops following the job, never cuts a
+   * submission short. `onHold` hears each change in why the printer is holding the job, and `null`
+   * once it moves on. A host without it never claims an A4 job. */
   printPage?(
     target: PageTarget,
     bytes: Uint8Array,
     format: PageFormat,
+    media: PageMedia,
     signal: AbortSignal,
     onHold: (hold: PageHold | null) => void,
   ): Promise<PagePrintOutcome>;
