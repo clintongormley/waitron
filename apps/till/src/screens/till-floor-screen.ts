@@ -92,9 +92,11 @@ export interface FloorRefreshDetail {
 
 type JoinAction = Extract<DropAction, { kind: "join" }>;
 
+type ZonedTable = TableState & { zoneId: string };
+
 /** A room and its revision as the screen saw it when a change was asked for. */
 interface Room {
-  zoneId: string | null;
+  zoneId: string;
   revision: number | null;
 }
 
@@ -132,7 +134,7 @@ interface ZoneOnScreen {
   activeKey: string | undefined;
   planned: boolean;
   /** The active zone's tables as the server last read them, before `#pending` is applied. */
-  visible: TableState[];
+  visible: ZonedTable[];
   view: "map" | "list";
   listed: TableState[];
   onMap: FloorMapTable[];
@@ -547,7 +549,7 @@ export class TillFloorScreen extends LitElement {
   /** Where a dropped group is drawn until the next floor read, a refusal or a cancel. */
   #pending: Map<string, TodayPlacement> | null = null;
   /** The room this screen's last answered change was sent for, its answer, and when the answer arrived. */
-  #carried: { zoneId: string | null; revision: number; answeredAt: number } | null = null;
+  #carried: { zoneId: string; revision: number; answeredAt: number } | null = null;
   #mapCopy = { locale: "", copy: { label: "" } };
 
   /** The clock the last render judged reminders by. */
@@ -786,12 +788,14 @@ export class TillFloorScreen extends LitElement {
     );
   }
 
-  #room(zoneId: string | null): Room {
+  /** The room of the table a drop acted on, which `dropAction` found in `#zone.visible`. */
+  #dropRoom(tableId: string): Room {
+    const { zoneId } = this.#zone.visible.find((each) => each.id === tableId)!;
     return { zoneId, revision: this.#revision(zoneId) };
   }
 
-  /** Only a zone reset may send no revision, so any other change on a room the read holds no
-   * today's row of is answered here as a stale one is, without being sent. */
+  /** A null revision is answered here as a stale one is, without being sent: only the zone reset's
+   * route accepts null. */
   #send<T>(revision: number | null, call: (revision: number) => Promise<T>): Promise<T> {
     return revision === null ? Promise.reject({ code: "floor_today.out_of_date" }) : call(revision);
   }
@@ -804,7 +808,6 @@ export class TillFloorScreen extends LitElement {
   #onDrop(drop: FloorMapDrop): void {
     this.refusal = null;
     const action = dropAction(this.#zone.visible, drop);
-    const room = this.#room(this.#zone.activeKey ?? null);
     switch (action.kind) {
       case "say":
         this.refusal = action.message;
@@ -814,7 +817,7 @@ export class TillFloorScreen extends LitElement {
         if (api === undefined) return;
         this.#setPending(pendingPlaces(this.#zone.visible, action));
         void this.#settle(
-          this.#send(room.revision, (revision) =>
+          this.#send(this.#dropRoom(drop.tableId).revision, (revision) =>
             api.moveToday(action.tableId, { x: action.x, y: action.y }, revision),
           ),
         );
@@ -823,19 +826,21 @@ export class TillFloorScreen extends LitElement {
       case "merge":
         if (this.api === undefined) return;
         this.#setPending(pendingPlaces(this.#zone.visible, action));
-        void this.#merge(this.api, action, room.revision);
+        void this.#merge(this.api, action, this.#dropRoom(drop.tableId).revision);
         return;
       case "seat": {
         const table = this.#zone.visible.find((each) => each.id === action.tableId)!;
         this.#openTable(table, { heading: action.heading, withTableIds: action.withTableIds });
         return;
       }
-      case "join":
+      case "join": {
         if (this.api === undefined) return;
         this.#setPending(pendingPlaces(this.#zone.visible, action));
+        const room = this.#dropRoom(drop.tableId);
         if (action.other === null) void this.#join(this.api, action, room, "merge");
         else this.askingBills = { api: this.api, action, room };
         return;
+      }
       default:
         return;
     }
@@ -911,9 +916,9 @@ export class TillFloorScreen extends LitElement {
   }
 
   /** The zone's table Join with… was opened for, while the map draws it. */
-  #joining(tableId: string): (TableState & { today: { placement: TodayPlacement } }) | undefined {
+  #joining(tableId: string): (ZonedTable & { today: { placement: TodayPlacement } }) | undefined {
     return this.#zone.visible.find(
-      (each): each is TableState & { today: { placement: TodayPlacement } } =>
+      (each): each is ZonedTable & { today: { placement: TodayPlacement } } =>
         each.id === tableId && each.today?.placement != null,
     );
   }
@@ -989,7 +994,6 @@ export class TillFloorScreen extends LitElement {
               ...(seats === undefined ? {} : { seats }),
               zoneRevision,
             });
-            if (room.zoneId === null) return null;
             const revision = answer.zoneRevisions?.[room.zoneId];
             return revision === undefined ? null : { zoneId: room.zoneId, revision };
           });
@@ -1373,7 +1377,7 @@ export class TillFloorScreen extends LitElement {
     );
     const refusedZone = this.zones.find((zone) => zone.id === this.refusedZoneId && zone.closed);
     const activeKey = resolveActiveTabKey(this.activeZone, tabs);
-    const visible = this.tables.filter((table) => table.zoneId === activeKey);
+    const visible = this.tables.filter((table): table is ZonedTable => table.zoneId === activeKey);
     const planned = visible.some((table) => table.today !== null);
     const listed = listedTables(visible);
     const pending = this.#pending;

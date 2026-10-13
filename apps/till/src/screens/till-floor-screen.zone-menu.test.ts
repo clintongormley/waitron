@@ -280,7 +280,7 @@ describe("till-floor-screen: the zone menu and the room's revision", () => {
     expect(api.resetZoneToday).toHaveBeenCalledExactlyOnceWith("z4", null);
   });
 
-  it("a table change in a zone the read holds no today's row of sends nothing, says the floor has changed and re-reads", async () => {
+  it("guards a state the real menu never offers: a table change from a zone with no today's row sends nothing, says the floor has changed and re-reads", async () => {
     const api = stubApi();
     const el = await mountAt7(api);
     await showZone(el, "z4");
