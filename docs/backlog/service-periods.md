@@ -110,7 +110,7 @@ tab, and setup's Done link opens it.
 A506-7 landed in #1623: a month view, reached from the Year, draws each date's hours as a bar per
 department and opens a dialog on an ordinary date; it replaced the Day tab and the Real week
 switch, and the dashboard's dated week views went.
-A506-8 landed in #NNNN: a full-screen season painter edits one season's week for every department
+A506-8 landed in #1634: a full-screen season painter edits one season's week for every department
 and zone, saving the edited weeks in one request; it replaced the Week tab's editors, and opens
 from a season chip, an ordinary date and a zone's Opening hours link.
 
