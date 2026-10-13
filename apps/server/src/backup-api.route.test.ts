@@ -56,6 +56,7 @@ import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
+import { omitStoredStreamField } from "./testing/old-stream-credential.js";
 
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse"; // the seeded manager's dashboard password
@@ -2104,6 +2105,63 @@ describe("backup admin routes", () => {
         expect(await readSealed()).toBeNull();
         expect(bucket.calls).toEqual([]);
         await expect(readFile(join(sc.stateDir, "backup.env"), "utf8")).rejects.toThrow();
+      }, 60_000);
+    }
+
+    // The other stored bucket-copy records this server cannot read, and the code a read answers.
+    const UNREADABLE_STREAM: [string, () => Promise<void>][] = [
+      [
+        "credentials.key_version_unknown",
+        async () => {
+          const other = loadKeyRing({
+            WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 9).toString("base64"),
+            WAITRON_CREDENTIALS_KEY_VERSION: "2",
+          });
+          await withTransaction(suite.db, (tx) =>
+            putCredential(tx, other, {
+              purpose: "backup.stream",
+              value: streamSettingsPayload({ venueId: VENUE, bucket: STREAM_BUCKET }),
+            }),
+          );
+        },
+      ],
+      [
+        "credentials.malformed_payload",
+        async () => {
+          await storeStream();
+          const iv = randomBytes(12);
+          const cipher = createCipheriv("aes-256-gcm", RING_KEY, iv);
+          cipher.setAAD(Buffer.from("backup.stream", "utf8"));
+          const ciphertext = Buffer.concat([cipher.update("not json", "utf8"), cipher.final()]);
+          await withTransaction(suite.db, (tx) =>
+            tx
+              .update(tenantCredentials)
+              .set({ ciphertext, iv, authTag: cipher.getAuthTag() })
+              .where(eq(tenantCredentials.purpose, "backup.stream")),
+          );
+        },
+      ],
+      [
+        "server.credential_unusable",
+        async () => {
+          await storeStream();
+          await omitStoredStreamField(suite.db, RING, "endpoint");
+        },
+      ],
+    ];
+
+    for (const [code, store] of UNREADABLE_STREAM) {
+      it(`a stream-bucket Save is refused while the bucket copy's settings cannot be read (${code})`, async () => {
+        await store();
+        await expect(readStreamSettings(suite.db, RING)).rejects.toMatchObject({ code });
+        const { post } = await primaryApp();
+        const res = await post("/api/backup/apply", applyBody({ kind: "stream-bucket" }));
+        expect(res.status).toBe(409);
+        expect(await res.json()).toMatchObject({
+          error: { code: "backup.stream_settings_unreadable", params: { reason: code } },
+        });
+        expect(await readSealed()).toBeNull();
+        expect(bucket.calls).toEqual([]);
       }, 60_000);
     }
 

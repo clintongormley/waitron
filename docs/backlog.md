@@ -4200,7 +4200,7 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   Left open by A538-4.
 
 - **The bucket copy's settings screen cannot repair a stored record that cannot be decrypted.**
-  `GET /api/backup/stream` (`view` in `apps/server/src/stream-api.ts`) tolerates only
+  `GET /api/backup/stream` (`readStored`, called by `view`, in `apps/server/src/stream-api.ts`) tolerates only
   `server.credential_unusable`; `credentials.decrypt_failed`, `credentials.malformed_payload` and
   `credentials.key_version_unknown` fail the read (400 with the raw code), so the panel shows an
   error and no form, although the bucket copy's Save would replace the record. Treat all four the
