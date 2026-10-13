@@ -1217,6 +1217,65 @@ it.each(["pointerup", "pointercancel"])(
   },
 );
 
+function setPageCursor(cursor: string): void {
+  document.body.style.cursor = cursor;
+  onTestFinished(() => {
+    document.body.style.cursor = "";
+  });
+}
+
+const turnedTable = () => table("t1", "T1", { x: 10, y: 10, width: 8, height: 4, rotation: 90 });
+
+it.each(["pointerup", "pointercancel"])(
+  "holds the dragged dot's arrow on the page body, off the plan too, until the %s",
+  async (end) => {
+    setPageCursor("help");
+    const el = await canvas([turnedTable()], { selected: "t1" });
+    const elsewhere = document.createElement("div");
+    elsewhere.style.height = "20px";
+    document.body.appendChild(elsewhere);
+    onTestFinished(() => elsewhere.remove());
+    dragDot(el, "top", 24, 0);
+    const box = el.getBoundingClientRect();
+    const off = { x: box.right + 40, y: box.bottom + 40 };
+    pointer(window, "pointermove", 1, off.x, off.y);
+    await el.updateComplete;
+    expect(document.body.style.cursor).toBe("ew-resize");
+    expect(cursorOf(elsewhere)).toBe("ew-resize");
+    pointer(window, end, 1, off.x, off.y);
+    await el.updateComplete;
+    expect(document.body.style.cursor).toBe("help");
+    expect(cursorOf(elsewhere)).toBe("help");
+  },
+);
+
+it("puts the page's cursor back when the canvas is removed mid size-dot drag", async () => {
+  setPageCursor("help");
+  const el = await canvas([turnedTable()], { selected: "t1" });
+  dragDot(el, "top", 24, 0);
+  expect(document.body.style.cursor).toBe("ew-resize");
+  el.remove();
+  expect(document.body.style.cursor).toBe("help");
+});
+
+it("leaves the page's cursor alone for a move drag, a turn drag, and a removal with no drag", async () => {
+  setPageCursor("crosshair");
+  const el = await canvas([turnedTable()], { selected: "t1" });
+  const at = dragBy(el, "t1", 24, 0);
+  expect(document.body.style.cursor).toBe("crosshair");
+  pointer(window, "pointerup", 1, at.x, at.y);
+  expect(document.body.style.cursor).toBe("crosshair");
+  const handle = handles(el)[0]!;
+  const h = centreOf(handle);
+  pointer(handle, "pointerdown", 1, h.x, h.y);
+  pointer(window, "pointermove", 1, h.x + 30, h.y + 30);
+  expect(document.body.style.cursor).toBe("crosshair");
+  pointer(window, "pointercancel", 1, h.x + 30, h.y + 30);
+  expect(document.body.style.cursor).toBe("crosshair");
+  el.remove();
+  expect(document.body.style.cursor).toBe("crosshair");
+});
+
 it("draws a refused table's reason below the size badge while a dot is dragged", async () => {
   const el = await canvas([refusedTable("t1", "T1", "Booked at 21:00", { x: 10, y: 10 })], {
     selected: "t1",
