@@ -85,6 +85,8 @@ Decisions 1–8 came from the lane runner; where this plan changes one it says *
    `/health` was rejected: neither app reads it. The live stream was rejected: `EventSource` exposes
    no response headers, and the till does not open one.
    - **CHANGED — the header is set AFTER the handler runs**, not before like `x-request-id`.
+     _2026-10-13 (A537): `requestIdMiddleware` now sets its response header after the handler too;
+     its route-created-response cases are in `apps/server/src/request-id.test.ts`._
      Measured 2026-10-11 by the plan reviewer with a Node script against the installed
      `hono@4.13.9` (`node_modules/.pnpm/hono@4.13.9`), one `app.use("*")` middleware, `app.request`:
      set BEFORE `next()`, `c.json`, `c.body`, a thrown error (500, with and without `onError`) and an

@@ -4094,11 +4094,6 @@ _Formerly A5, and the logging part of A9._ Detail: [backlog/alerts.md](backlog/a
   source's five-minute cache shares that in-flight call with reads during its lifetime. Left open
   by the A258 follow-up (the alerts list's battery check has its own deadline, W58, #1176).
 
-- **`x-request-id` may be missing from a response a route builds itself.** `requestIdMiddleware`
-  (`apps/server/src/request-id.ts`) sets it before the route runs; for A491's build header, a
-  header set before the route was measured missing on such a response (`build-header.test.ts`'s
-  raw case with the setter moved first). The request-id case was not run. Left open by A491.
-
 ### Working time and staff
 
 _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md).
