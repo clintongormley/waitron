@@ -258,6 +258,13 @@ export class PrintersScreen extends LitElement {
         max-width: min(28vw, 24dvh);
         font-size: var(--wt-font-size-sm);
       }
+      /* Capped like the name beside it, so a button's label or the added note wraps instead of
+         widening a phone's list past its screen in a wider font. */
+      wt-data-table::part(page-printer-action),
+      wt-data-table::part(page-printer-added) {
+        display: block;
+        max-width: 40vw;
+      }
 
       /* wt-data-table is at least max-content wide, so without a cap these would never wrap, and an
          agent's reason (up to MAX_OUTCOME_ERROR_LENGTH characters) would widen the whole list. */
@@ -3823,12 +3830,14 @@ export class PrintersScreen extends LitElement {
       >`;
     const { entry } = row;
     if (row.kind === "add")
-      return html`<wt-button
-        variant="primary"
-        data-test=${`add-page-printer-${key}`}
-        @click=${() => this.#openPagePrinterAdd(d, entry)}
-        >${t("printers.page_printer_add")}</wt-button
-      >`;
+      return html`<div part="page-printer-action">
+        <wt-button
+          variant="primary"
+          data-test=${`add-page-printer-${key}`}
+          @click=${() => this.#openPagePrinterAdd(d, entry)}
+          >${t("printers.page_printer_add")}</wt-button
+        >
+      </div>`;
     const refusedCode = this.pagePrinterRefusals[key];
     return html`<div part="page-printer-action">
       <wt-button

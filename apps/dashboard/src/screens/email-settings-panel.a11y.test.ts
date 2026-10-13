@@ -99,9 +99,15 @@ describe.each(["light", "dark"] as const)("email settings in %s", (theme) => {
             );
         }
       }
+      const family = getComputedStyle(host).getPropertyValue("--wt-font-family");
+      expect(family).not.toBe("");
+      // Verdana is about as wide as CI's Linux system font, where the reveal button once covered
+      // the password's label although macOS's narrower font fitted.
+      const fonts = state === "initial" ? [family, `Verdana, ${family}`] : [family];
       try {
-        for (const locale of ["en-GB", "es"]) {
+        for (const [locale, font] of ["en-GB", "es"].flatMap((l) => fonts.map((f) => [l, f]))) {
           setLocale(locale);
+          host.style.setProperty("--wt-font-family", font);
           await el.updateComplete;
           const form = el.shadowRoot!.querySelector("dashboard-email-settings-form");
           if (form) await form.updateComplete;
@@ -125,7 +131,7 @@ describe.each(["light", "dark"] as const)("email settings in %s", (theme) => {
             }
             if (import.meta.env.VITE_A231Q_VISUAL === "1")
               await page.screenshot({
-                path: `__screenshots__/a231q-dashboard-${state}-${theme}-${locale}-${width}.png`,
+                path: `__screenshots__/a231q-dashboard-${state}-${theme}-${locale}${font === family ? "" : "-verdana"}-${width}.png`,
               });
           }
         }

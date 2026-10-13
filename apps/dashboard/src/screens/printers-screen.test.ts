@@ -10708,20 +10708,26 @@ describe("office printers in discovery", () => {
       listDiscoveredPrinters: vi.fn().mockResolvedValue(devices),
       ...overrides,
     });
-    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    const { el, host } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
     await openDiscovery(el);
-    return { el, api };
+    return { el, host, api };
   }
 
-  it.each(["en", "es-ES"] as const)(
-    "keeps every office row's action in view on a phone-width list in %s",
-    async (locale) => {
+  // Verdana is about as wide as CI's Linux system font, which widened this list past the phone's
+  // width where macOS's narrower one fitted.
+  it.each(
+    (["en", "es-ES"] as const).flatMap((locale) =>
+      (["default", "Verdana"] as const).map((font) => [locale, font] as const),
+    ),
+  )(
+    "keeps every office row's action in view on a phone-width list in %s, %s font",
+    async (locale, font) => {
       const before = currentLocale();
       setLocale(locale);
       await page.viewport(390, 844);
       try {
-        const { el } = await mountWith(
+        const { el, host } = await mountWith(
           [
             office(),
             office({ host: "10.0.0.57" }),
@@ -10741,6 +10747,12 @@ describe("office printers in discovery", () => {
         expect(q(el, "[data-test='page-printer-added-a1:10.0.0.57:9100']")).not.toBeNull();
         expect(q(el, "[data-test='repoint-page-printer-a2:10.0.0.58:9100']")).not.toBeNull();
         expect(q(el, "[data-test='enable-page-printer-a1:10.0.0.59:9100']")).not.toBeNull();
+        if (font === "Verdana") {
+          const family = getComputedStyle(host).getPropertyValue("--wt-font-family");
+          expect(family).not.toBe("");
+          host.style.setProperty("--wt-font-family", `Verdana, ${family}`);
+          await new Promise(requestAnimationFrame);
+        }
         const scroll = q(el, "[data-test=discovered-table]")!.shadowRoot!.querySelector(".scroll")!;
         expect(scroll.scrollWidth).toBeLessThanOrEqual(scroll.clientWidth);
       } finally {

@@ -243,10 +243,19 @@ it("opens a new gateway without errors and marks all missing values after a test
 it("reveals the current password without changing Save's dirty state", async () => {
   const { el } = await mount();
   expect(field(el, "password").type).toBe("password");
+  expect(button(el, "reveal").getAttribute("aria-label")).toBe("Show password");
   button(el, "reveal").click();
   await el.updateComplete;
   expect(field(el, "password").type).toBe("text");
+  expect(button(el, "reveal").getAttribute("aria-label")).toBe("Hide password");
   expect(button(el, "save").variant).toBe("secondary");
+});
+
+it("draws the reveal button as an icon, which fits the room the field keeps for it", async () => {
+  const { el } = await mount();
+  const reveal = button(el, "reveal");
+  expect(reveal.textContent!.trim()).toBe("");
+  expect(reveal.querySelector("svg")!.getAttribute("aria-hidden")).toBe("true");
 });
 
 it("explains the SMTP refusal at the bottom in the screen language", async () => {

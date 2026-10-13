@@ -1,4 +1,4 @@
-import { LitElement, css, html, nothing, type TemplateResult } from "lit";
+import { LitElement, css, html, nothing, svg, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
@@ -50,6 +50,13 @@ export class EmailSettingsForm extends LitElement {
       .pair > * {
         flex: 1;
         min-width: 0;
+      }
+      [data-test="reveal"] svg {
+        display: block;
+        width: var(--wt-font-size-lg);
+        height: var(--wt-font-size-lg);
+        fill: none;
+        stroke: currentColor;
       }
       .success {
         color: var(--wt-color-success);
@@ -257,10 +264,15 @@ export class EmailSettingsForm extends LitElement {
               slot="end"
               variant="ghost"
               data-test="reveal"
+              aria-label=${t(this.passwordVisible ? "email.settings.hide_password" : "email.settings.show_password")}
               @click=${() => {
                 this.passwordVisible = !this.passwordVisible;
               }}
-              >${t(this.passwordVisible ? "email.settings.hide_password" : "email.settings.show_password")}</wt-button
+              ><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                <path d="M1 8s2.5-4 7-4 7 4 7 4-2.5 4-7 4-7-4-7-4Z"></path>
+                <circle cx="8" cy="8" r="2"></circle>
+                ${this.passwordVisible ? svg`<path d="m2 2 12 12"></path>` : nothing}
+              </svg></wt-button
             >`
           : nothing
       }
