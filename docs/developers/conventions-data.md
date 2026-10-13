@@ -1628,7 +1628,7 @@ rows that had to wait for a name (`apps/server/src/floor-today-store.ts:350`). T
 a later master edit from changing the copy a reset is still applying.
 
 A closing party keeps its table names as text and releases its `party_tables` rows
-(`apps/server/src/parties.ts:667`). Permanent removal releases order delivery references and calls
+(`closePartyTables`, `apps/server/src/parties.ts`). Permanent removal releases order delivery references and calls
 each module's `TableRemoval` seat before deleting the table
 (`apps/server/src/table-removal.ts:75`). Bookings copies the table label and clears its pointer
 (`packages/bookings/src/table-removal.ts:42`); the delivery release copies the label onto referenced orders

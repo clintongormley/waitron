@@ -236,12 +236,12 @@ undone at the next reset anyway.
 > Added 2026-10-13 by A579 part 3b ([design](2026-10-13-a579-flattened-joined-tables-design.md)):
 > Split tables… also splits tables off a group (the server does; the till offers it from part 3c).
 > Each ticked table leaves the group as a table leaves a group, back where it stood before it. With
-> guests seated, a ticked table comes off without them, needing clearing where the venue uses it,
-> and the guests keep the tables that stay (owner question 2). With nobody seated, when what stays
-> is two or more tables of one joined table, side by side in its order and standing where it lays
-> them out, none of its tables still joined and no food on its way to them, that joined table is put
-> back over them, clearing their "needs clearing" marks, whole when all its tables stay (owner
-> question 3).
+> guests seated, a ticked table they hold comes off without them, needing clearing where the venue
+> uses it, and the guests keep the tables that stay (owner question 2). With nobody seated, when
+> what stays is two or more tables of one joined table, side by side in its order and standing where
+> it lays them out, every one of its tables split off and no food on its way to them, that joined
+> table is put back over them, clearing their "needs clearing" marks, whole when all its tables stay
+> (owner question 3).
 
 ### 6.3 Reset
 

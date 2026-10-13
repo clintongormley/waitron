@@ -65,7 +65,7 @@ interface Rejoin {
 
 /**
  * `partIds` leave the group as a table leaves a group. When two or more stay, all split off one
- * joined table none of whose tables is still joined, next to each other in its order and each
+ * joined table every one of whose tables is split off, next to each other in its order and each
  * standing where its layout from the first of them puts it, with nobody seated and no food on its
  * way to them, the joined table is put back over them; otherwise they stay a group of `seats`.
  * Guests at the group leave the ticked tables, as Move guests leaves tables;
