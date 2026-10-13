@@ -759,7 +759,28 @@ refused membership write retain the dormant reservation. Source/authority/argume
 late expiry, rollback, wrong target and active-spare refusals have focused checks and installed
 removal controls. The existing behavioural assertions remain unchanged.
 
-Default production composition and public allocation collectors remain unconnected. The text
-SIF/counter transition, all entry points, current-main schema regeneration/populated upgrade,
+The production collector and initial public setup input are connected in the later checkpoint
+below. The default seed/restore/standby contributions remain old. The text
+SIF/counter transition, remaining entry points, current-main schema regeneration/populated upgrade,
 Cloud handoff binding and both whole-branch reviews plus push-hook/current-head CI remain open.
 This branch checkpoint does not complete Task 4 and must not be published.
+
+
+### W41s-4 production source and initial input, 2026-10-13
+
+The production module list selects paper collection from three independent host settings. Missing
+settings refuse collection. The configured files are reread for each attempt, and their operator
+statements still do not establish independent current outside history.
+
+Initial setup carries a planned node and administrator plus opaque signed module inputs through
+the public route and provisioning CLI. The CLI reads at most 128 KiB and refuses malformed or
+unselected-module input before the permanent environment stamp. Setup recovery asks the filing
+module for its committed series references and compares their IDs, codes and purposes with stored
+rows in one transaction. Planned node/admin mismatches refuse. A persisted-route test interrupts
+after the venue commits, removes outside confirmation, and then checks a successful retry with
+unchanged series counters and allocation rows.
+
+The host tests explicitly supply the allocated seed; the production descriptor still selects its
+old seed, restore and standby hooks. Selecting those hooks, text SIF/counter retirement, remaining
+public authentication/input paths, current-main regeneration/populated upgrade, Cloud binding and
+both reviews plus hook/current-head CI remain. Do not publish this incomplete Task 4 checkpoint.

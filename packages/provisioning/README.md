@@ -271,3 +271,17 @@ pnpm --filter @waitron/provisioning test:coverage
 `src/bin.ts` is excluded from coverage deliberately: every decision it could get wrong lives in
 `cli.ts`, which is injected and fully tested. What remains — a tty, a readline, a process exit
 code — is verified by running the built bundle instead.
+
+## Supplied initial allocation input on the Task 4 branch
+
+To carry identities chosen before signing, set `WAITRON_INITIAL_VENUE_INPUT` to a JSON file holding
+`nodeId`, `administratorId` and an `inputs` array. Each array entry has `module`, `eventId`,
+`sourceId` and opaque `input`. The CLI reads up to 128 KiB, validates the IDs and module selection,
+and supplies them to the venue runner before its transaction. Missing/empty file configuration
+leaves the injected-input option absent; a configured invalid file refuses before the environment
+stamp and never prints its contents. See the [custodian procedure](../../docs/developers/paper-custodian.md#configure-the-task-4-host-collector)
+for the independent host evidence settings.
+
+The allocated seed is explicitly supplied in the host qualification tests. Its default selection
+and the text identity transition remain Task 4 work, so this branch checkpoint is not a completed
+venue setup procedure.

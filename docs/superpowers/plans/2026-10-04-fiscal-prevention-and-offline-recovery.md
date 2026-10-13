@@ -848,3 +848,21 @@ with text SIF/counter retirement and every setup/CLI/readiness/re-registration/a
 staged/bundle/adoption/promotion consumer. Then rebase/regenerate the complete candidate schema,
 run populated upgrade and fiscal qualification, align the Cloud handoff's operator union, and
 complete both full reviews, normal hook and current-head CI. No intermediate publication.
+
+
+**2026-10-13 production source and initial-entry checkpoint:** the production module list now
+selects `FISCAL_OPERATIONS`, which reads separately configured custodian/current-confirmation paths
+and an independently compared fingerprint at each attempt. This supersedes earlier checkpoint
+statements that no production collector is selected. No default path or submitted trust is used.
+
+The public setup route accepts `initialOperations`; the provisioning CLI reads the same shape from
+`WAITRON_INITIAL_VENUE_INPUT`. Both carry the planned node/admin IDs and module event/source inputs
+into `applyVenue`. A committed setup retry uses the module's series resolver, checks the planned
+node/admin and exact stored references, and does not recollect outside consumption. The CLI refuses
+malformed, oversized or unselected-module input before stamping the environment.
+
+Qualification uses real database/route/CLI operations and an explicitly supplied allocated seed.
+The default fiscal seed/restore/standby contributions still need to switch together with text SIF
+and counter retirement. Remaining public authentication/input consumers, schema regeneration and
+populated upgrade, Cloud operator binding, two FULL reviews, hook and current-head CI remain.
+This is not a publication candidate. Local receipts use the `w41s4-production-*` prefix.

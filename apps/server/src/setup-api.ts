@@ -2,7 +2,7 @@ import type { Context, Hono } from "hono";
 import { createHash } from "node:crypto";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { VenueRequest, VenueResult } from "@waitron/provisioning";
-import { venueFiscalSelection } from "@waitron/provisioning";
+import { venueFiscalSelection, parseInitialVenueInput } from "@waitron/provisioning";
 import { ALL_MODULES } from "@waitron/composition";
 import {
   findAdministrativeArea,
@@ -471,6 +471,11 @@ function parseProvisionPayload(
     invalidRequest("body");
   }
   const body = parsed as Record<string, unknown>;
+  const initialOperations =
+    body.initialOperations === undefined
+      ? undefined
+      : parseInitialVenueInput(body.initialOperations);
+  if (initialOperations === null) invalidRequest("initialOperations");
   const mode = body.mode;
   if (mode !== "demo" && mode !== "prepare" && mode !== "live") invalidRequest("mode");
   if (body.configurationImport !== undefined && typeof body.configurationImport !== "boolean") {
@@ -515,6 +520,7 @@ function parseProvisionPayload(
       venue,
       configurationImport: mode === "live" && body.configurationImport === true,
       newTaxpayer: mode === "live" && body.newTaxpayer === true,
+      ...(initialOperations === undefined ? {} : { initialOperations }),
     },
     contribution,
     secret,

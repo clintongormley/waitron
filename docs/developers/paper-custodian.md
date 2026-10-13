@@ -56,7 +56,8 @@ The internal `createPaperAllocationSource` accepts a host-selected custodian pub
 a current-confirmation file path and the fingerprint you compared with the outside register.
 The custodian file uses the command's public output above. The source reads both files on each
 attempt and refuses missing or malformed files and files larger than 64 KiB. An altered key requires a new
-independent fingerprint comparison. No default file or source is selected.
+independent fingerprint comparison. You configure both file paths explicitly; the production
+module collector reads the settings described below.
 
 Prepare the confirmation from your consultation of the current outside master for this exact
 operation. Its format is:
@@ -102,8 +103,8 @@ the original signed allocation and approval.
 This file records your statement; copying or rereading it does not establish that the outside
 master is current. Consult that master again before another attempt. Keep both this consultation
 and the compared fingerprint separate from the submitted allocation and a restored recovery pack.
-The source is qualified internally on the Task 4 branch; public command selection, the fiscal
-descriptor and the complete setup/restore/takeover journey remain unfinished.
+The production collector now selects this source from the host settings. The default fiscal
+hooks, text identity transition and complete setup/restore/takeover journey remain unfinished.
 
 ## Sign a reserved block
 
@@ -260,3 +261,35 @@ verifier, a value used to check the secret. It cannot print an old secret from a
 restore output names the selected backup's key when that backup contains a name. Fetch the
 paper with that name. The backup encryption key is a separate secret; it opens the backup
 file and does not authenticate the node's recovery operation.
+
+
+## Configure the Task 4 host collector
+
+The Task 4 branch now selects the paper collector in the production module list. Configure its
+public custodian file, current-event confirmation file and separately compared fingerprint:
+
+```sh
+export WAITRON_FISCAL_CUSTODIAN_FILE=/secure/public/custodian.json
+export WAITRON_FISCAL_CONFIRMATION_FILE=/secure/current/setup-event.json
+export WAITRON_FISCAL_CUSTODIAN_FINGERPRINT='<fingerprint compared with the current outside master>'
+```
+
+The collector rereads both files for each attempt. Missing or empty settings refuse collection.
+Keep the custodian's private signing key outside the venue; these settings name public evidence.
+The event file's statements remain your confirmation of the outside master, not independent proof
+that an old snapshot is current. Use the formats in the configured-source section above.
+
+For initial setup, add `initialOperations` to your setup request. It contains `nodeId`,
+`administratorId` and an `inputs` array. Each entry has `module`, `eventId`, `sourceId` and `input`.
+The fiscal input is the signed allocation and its approval. Create the planned IDs before signing;
+the signed consumption, approval and separate event confirmation must name those same identities.
+Do not put a signing key, recovery secret, host path or trust object in this input.
+
+The provisioning CLI reads that same object from the file named by `WAITRON_INITIAL_VENUE_INPUT`.
+It limits the whole file to 128 KiB and validates it before writing the permanent environment stamp.
+An unreadable, malformed or oversized file, or an input for an unselected seed, returns
+`provisioning.initial_input_invalid` without echoing its contents.
+
+The default fiscal seed/restore/standby hooks and text identity schema remain unfinished on this
+branch. The new host tests supply the allocated seed explicitly; this checkpoint is not a complete
+setup or recovery procedure. Finish the coupled transition before using it for a venue.

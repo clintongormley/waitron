@@ -7,6 +7,8 @@ export type { ProvisioningIo } from "./io.js";
 export { planVenue, describeVenueAction } from "./venue-plan.js";
 export type { AdoptResult, VenueRequest, VenueAction } from "./venue-plan.js";
 export { applyVenue } from "./venue-apply.js";
+export { parseInitialVenueInput, initialVenueApplyInput } from "./initial-venue-input.js";
+export type { InitialVenueInput } from "./initial-venue-input.js";
 export { renameTaxpayer } from "./taxpayer-name.js";
 export type { InitialModuleInput, VenueApplyDeps, VenueResult } from "./venue-apply.js";
 export { FISCAL_TERRITORIES, resolveFiscalModules } from "./fiscal-modules.js";
