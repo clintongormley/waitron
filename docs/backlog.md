@@ -3851,8 +3851,8 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   other such label under `apps/dashboard/src` to `fill` (`apps/dashboard/src/i18n/t.ts`). In
   `apps/dashboard/src/screens/printers-screen.ts`: "Actions for …", "Test page sent to …",
   "Added ….", "Seen on …", "Seen on … · …" (an agent name, then a time) and the calibration
-  ruler's disagreement line, which fills what was typed; left because PR #1602 changes that file,
-  so take them after it lands. In `apps/dashboard/src/screens/receipt-language-panel.ts` and
+  ruler's disagreement line, which fills what was typed (PR #1602, which held that file, has
+  landed). In `apps/dashboard/src/screens/receipt-language-panel.ts` and
   `apps/dashboard/src/widgets/receipt-language.ts`: the receipt-language sentences, which fill two
   language names one after another, and a language tag the browser has no name for is shown as
   written; left because lane D's A493 changes the receipt files.
