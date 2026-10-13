@@ -18,7 +18,39 @@ const states: Record<string, Partial<OpeningHoursMonthView>> = {
   "read-only, one department": { readOnly: true, departmentId: "rest" },
 };
 
+function contrastRatio(a: string, b: string): number {
+  const luminance = (rgb: string) => {
+    expect(rgb).toMatch(/^rgba?\(/);
+    const [r, g, bl] = rgb
+      .match(/\d+(\.\d+)?/g)!
+      .slice(0, 3)
+      .map((part) => Number(part) / 255)
+      .map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * r! + 0.7152 * g! + 0.0722 * bl!;
+  };
+  const [light, dark] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (light! + 0.05) / (dark! + 0.05);
+}
+
 describe.each(["light", "dark"] as const)("Opening hours month accessibility (%s)", (theme) => {
+  // axe scores no contrast for a shape with no text; light's track against its date, about 1.4,
+  // is the bar dark must match.
+  test("draws a bar's empty track apart from its date", async () => {
+    await mountThemed("<div></div>", theme);
+    const el = document.createElement("opening-hours-month");
+    Object.assign(el, { model: monthModel(), departments: DEPARTMENTS });
+    host.append(el);
+    await el.updateComplete;
+    const date = el.shadowRoot!.querySelector<HTMLElement>('[data-date="2026-12-09"] .day')!;
+    const track = date.querySelector<HTMLElement>(".track")!;
+    expect(
+      contrastRatio(
+        getComputedStyle(track).backgroundColor,
+        getComputedStyle(date).backgroundColor,
+      ),
+    ).toBeGreaterThanOrEqual(1.4);
+  });
+
   test.each(Object.keys(states))("%s", async (state) => {
     await mountThemed("<div></div>", theme);
     const el = document.createElement("opening-hours-month");

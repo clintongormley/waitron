@@ -5,7 +5,7 @@ import { applyTokens } from "@waitron/ui";
 import type { OpeningHoursMonth } from "../opening-hours-calendar.js";
 import type { LocalDate } from "../hours-types.js";
 import { addDays } from "../hours-rules.js";
-import { DEPARTMENTS, monthModel } from "../testing/opening-hours-month-fixture.js";
+import { DEPARTMENTS, holiday, monthModel } from "../testing/opening-hours-month-fixture.js";
 import type { SpecialDayAction } from "./special-day-action.js";
 import type { OpeningHoursMonthView } from "./opening-hours-month.js";
 import "./opening-hours-month.js";
@@ -363,6 +363,124 @@ describe("Opening hours month", () => {
         expect(part.getBoundingClientRect().right).toBeLessThanOrEqual(
           frame.getBoundingClientRect().right + 0.5,
         );
+    }
+  });
+
+  /** The month's width on a 390 px phone (the screen's own padding taken off), or on a desktop. */
+  const PHONE = 302;
+  const DESKTOP = 900;
+  async function mountAt(
+    width: number,
+    model: OpeningHoursMonth = monthModel(),
+    extra: Partial<OpeningHoursMonthView> = {},
+  ) {
+    const frame = document.createElement("div");
+    frame.style.width = `${width}px`;
+    document.body.append(frame);
+    applyTokens(frame);
+    hosts.push(frame);
+    const el = await mount(model, extra);
+    frame.append(el);
+    await el.updateComplete;
+    return el;
+  }
+  /** Shown whole: no line or letter of its text is cut off. */
+  const whole = (node: HTMLElement) =>
+    node.scrollWidth <= node.clientWidth + 0.5 && node.scrollHeight <= node.clientHeight + 0.5;
+
+  it("marks today with a ring and a mark that is never cut off, at a phone's width and a desktop's", async () => {
+    for (const locale of ["en", "es"] as const)
+      for (const width of [PHONE, DESKTOP]) {
+        setLocale(locale);
+        const el = await mountAt(width);
+        const today = dayButton(el, "2026-12-30");
+        expect(getComputedStyle(today).boxShadow, `${locale} ${width}`).not.toBe("none");
+        expect(getComputedStyle(dayButton(el, "2026-12-29")).boxShadow).toBe("none");
+        expect(today.getAttribute("aria-label")).toContain(locale === "en" ? "Today" : "Hoy");
+        const marker = cell(el, "2026-12-30").querySelector<HTMLElement>('[data-test="today"]')!;
+        expect(text(marker)).toBe(locale === "en" ? "Today" : "Hoy");
+        const box = marker.getBoundingClientRect();
+        if (width === DESKTOP) {
+          expect(box.width, `${locale} ${width}`).toBeGreaterThan(1);
+          expect(whole(marker), `${locale} ${width}`).toBe(true);
+          expect(box.right).toBeLessThanOrEqual(today.getBoundingClientRect().right + 0.5);
+        } else {
+          // Too narrow for the word: it is kept for a screen reader, and the number is marked.
+          expect(box.width, `${locale} ${width}`).toBeLessThanOrEqual(1);
+          const number = cell(el, "2026-12-30").querySelector<HTMLElement>(
+            '[data-test="date-heading"]',
+          )!;
+          expect(getComputedStyle(number).backgroundColor).not.toBe(
+            getComputedStyle(today).backgroundColor,
+          );
+        }
+      }
+  });
+
+  it("shows special-day, holiday and closed names whole at a phone's width, wrapping them", async () => {
+    for (const locale of ["en", "es"] as const) {
+      setLocale(locale);
+      const el = await mountAt(PHONE);
+      for (const date of ["2026-12-08", "2026-12-14", "2026-12-25"]) {
+        const name = cell(el, date).querySelector<HTMLElement>('[data-test="name"]')!;
+        expect(whole(name), `${locale} ${date}: ${text(name)}`).toBe(true);
+      }
+      for (const line of cell(el, "2026-12-06").querySelectorAll<HTMLElement>(
+        '[data-test="department-closed"]',
+      ))
+        expect(whole(line), `${locale}: ${text(line)}`).toBe(true);
+    }
+  });
+
+  it('reads "<name> · Closed" and one closed line per department on a date closed all day', async () => {
+    const long = "Lunes siguiente al Día de la Constitución Española";
+    const model = monthModel();
+    const days = model.days.map((day) =>
+      day.date === "2026-12-07" ? { ...day, holidays: [holiday(day.date, long)] } : day,
+    );
+    const el = await mountAt(DESKTOP, { ...model, days });
+    const xmas = cell(el, "2026-12-25");
+    const name = xmas.querySelector<HTMLElement>('[data-test="name"]')!;
+    expect(text(name)).toBe("Christmas Day · Closed");
+    expect(whole(name)).toBe(true);
+    expect([...xmas.querySelectorAll('[data-test="department-closed"]')].map(text)).toEqual([
+      "Restaurant closed",
+      "Bar closed",
+    ]);
+    const holidayName = cell(el, "2026-12-07").querySelector<HTMLElement>('[data-test="name"]')!;
+    expect(text(holidayName)).toBe(long);
+    expect(whole(holidayName)).toBe(true);
+    el.departmentId = "rest";
+    await el.updateComplete;
+    expect([...xmas.querySelectorAll('[data-test="department-closed"]')].map(text)).toEqual([
+      "Restaurant closed",
+      "Terrace closed",
+    ]);
+  });
+
+  it("draws every date of a week row the row's full height", async () => {
+    const zones = ["Terrace", "Dining room", "Downstairs", "Upstairs", "Patio"].map((name, i) => ({
+      id: i ? `zone-${i}` : "terrace",
+      name,
+      seasonWeeks: [],
+    }));
+    const departments = DEPARTMENTS.map((d) => (d.id === "rest" ? { ...d, zones } : d));
+    const model = monthModel();
+    const days = model.days.map((day) => ({
+      ...day,
+      departments: day.departments.map((d) =>
+        d.departmentId === "rest"
+          ? { ...d, zones: zones.map((zone) => ({ zoneId: zone.id, closed: [] })) }
+          : d,
+      ),
+    }));
+    for (const departmentId of ["", "rest"]) {
+      const el = await mountAt(DESKTOP, { ...model, days }, { departments, departmentId });
+      for (const date of ["2026-12-07", "2026-12-08", "2026-12-09", "2026-12-13"]) {
+        const td = cell(el, date).getBoundingClientRect();
+        const card = dayButton(el, date).getBoundingClientRect();
+        expect(card.height, `${departmentId || "all"} ${date}`).toBeCloseTo(td.height, 0);
+      }
     }
   });
 

@@ -100,7 +100,7 @@ it("sends the date to make a special day of, and closes", async () => {
   expect(document.activeElement).toBe(opener);
 });
 
-it("keeps Add quiet and disabled until a special day is chosen, then sends it and closes", async () => {
+it("keeps Add secondary and disabled until a special day is chosen, then sends it and closes", async () => {
   await mount();
   const box = q<HTMLElementTagNameMap["wt-combobox"]>("wt-combobox[name=specialDayId]")!;
   expect(box.options.map((option) => option.label)).toEqual([
@@ -116,11 +116,36 @@ it("keeps Add quiet and disabled until a special day is chosen, then sends it an
   await el.updateComplete;
   expect(sentEarly).toBe(false);
   expect(add.disabled).toBe(false);
-  expect(add.getAttribute("variant")).toBe("primary");
+  expect(add.getAttribute("variant")).toBe("secondary");
+  expect(
+    [...el.shadowRoot!.querySelectorAll("wt-button[variant=primary]")].map((b) =>
+      b.getAttribute("data-test"),
+    ),
+  ).toEqual(["make-special"]);
   const sent = next<{ date: string; specialDayId: string }>("ordinary-date-add-to-special");
   add.click();
   expect((await sent).detail).toEqual({ date: "2026-12-10", specialDayId: "d2" });
   expect(el.open).toBe(false);
+});
+
+it("keeps the picker and Add side by side, beside the sentence on a desktop", async () => {
+  const middle = (node: Element) => {
+    const box = node.getBoundingClientRect();
+    return box.top + box.height / 2;
+  };
+  for (const [width, beside] of [
+    [1280, true],
+    [390, false],
+  ] as const) {
+    await page.viewport(width, 800);
+    await mount();
+    await chooseOption(q("wt-combobox[name=specialDayId]")!, "d1");
+    await el.updateComplete;
+    const box = q("wt-combobox[name=specialDayId]")!;
+    expect(middle(q("[data-test=add-to-special]")!), `${width}`).toBeCloseTo(middle(box), 0);
+    if (beside) expect(middle(q("[data-test=add-label]")!)).toBeCloseTo(middle(box), 0);
+    el.remove();
+  }
 });
 
 it("forgets a choice when it reopens", async () => {

@@ -110,12 +110,16 @@ export class OpeningHoursDay extends LitElement {
       .date-nav {
         display: flex;
         align-items: center;
-        flex-wrap: wrap;
         gap: var(--wt-space-3);
         margin-block: var(--wt-space-4);
       }
       .date-nav p {
+        min-width: 0;
         margin: 0;
+        overflow-wrap: anywhere;
+      }
+      .date-nav wt-button {
+        flex: none;
       }
       .note {
         font-weight: var(--wt-font-weight-normal);

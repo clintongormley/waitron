@@ -60,6 +60,12 @@ export class OrdinaryDateDialog extends LitElement {
       .muted {
         color: var(--wt-color-text-muted);
       }
+      .pick {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-2);
+        min-width: 0;
+      }
       wt-combobox {
         min-width: 0;
       }
@@ -107,31 +113,33 @@ export class OrdinaryDateDialog extends LitElement {
     const chosen = this.specialDays.some((day) => day.id === this.chosen) ? this.chosen : "";
     return html`<div class="row" data-test="add-row">
       <span class="muted" data-test="add-label">${t("ordinary.add_to_existing")}</span>
-      <wt-combobox
-        name="specialDayId"
-        label=${t("calendar.special_day")}
-        hide-label
-        search="auto"
-        placeholder=${t("calendar.special_day")}
-        .value=${chosen}
-        .options=${this.specialDays.map((day) => ({ value: day.id, label: day.name }))}
-        @wt-change=${(event: CustomEvent<{ value: string }>) => {
-          event.stopPropagation();
-          this.chosen = event.detail.value;
-        }}
-      ></wt-combobox>
-      <wt-button
-        data-test="add-to-special"
-        variant=${chosen ? "primary" : "secondary"}
-        ?disabled=${!chosen}
-        @click=${() => {
-          if (chosen)
-            void this.act("ordinary-date-add-to-special", {
-              date: this.date,
-              specialDayId: chosen,
-            });
-        }}
-        >${t("special.add")}</wt-button
+      <span class="pick">
+        <wt-combobox
+          name="specialDayId"
+          label=${t("calendar.special_day")}
+          hide-label
+          search="auto"
+          placeholder=${t("calendar.special_day")}
+          .value=${chosen}
+          .options=${this.specialDays.map((day) => ({ value: day.id, label: day.name }))}
+          @wt-change=${(event: CustomEvent<{ value: string }>) => {
+            event.stopPropagation();
+            this.chosen = event.detail.value;
+          }}
+        ></wt-combobox>
+        <wt-button
+          data-test="add-to-special"
+          variant="secondary"
+          ?disabled=${!chosen}
+          @click=${() => {
+            if (chosen)
+              void this.act("ordinary-date-add-to-special", {
+                date: this.date,
+                specialDayId: chosen,
+              });
+          }}
+          >${t("special.add")}</wt-button
+        ></span
       >
     </div>`;
   }
@@ -146,7 +154,7 @@ export class OrdinaryDateDialog extends LitElement {
       this.generation,
       html`<wt-modal
         open
-        size="compact"
+        size="standard"
         aria-label=${title}
         @wt-close=${() => {
           if (!this.open) return;

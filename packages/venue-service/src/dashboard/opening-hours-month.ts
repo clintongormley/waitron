@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { styleMap } from "lit/directives/style-map.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, visuallyHiddenStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import { holidayDateName } from "../holiday-naming.js";
@@ -68,6 +68,7 @@ export class OpeningHoursMonthView extends LitElement {
       :host {
         display: block;
         min-width: 0;
+        container: month / inline-size;
       }
       .year-back {
         padding: 0;
@@ -125,6 +126,8 @@ export class OpeningHoursMonthView extends LitElement {
         white-space: nowrap;
       }
       td {
+        /* Without a set height the card's 100% resolves to nothing and stops short of the row. */
+        height: 1px;
         padding: 0;
         vertical-align: top;
       }
@@ -133,6 +136,8 @@ export class OpeningHoursMonthView extends LitElement {
         flex-direction: column;
         gap: var(--wt-space-1);
         width: 100%;
+        position: relative;
+        height: 100%;
         min-width: 0;
         min-height: calc(var(--wt-tap-min) * 2);
         padding: var(--wt-space-1);
@@ -148,6 +153,9 @@ export class OpeningHoursMonthView extends LitElement {
       }
       button.day {
         cursor: pointer;
+      }
+      .day[aria-current="date"] {
+        box-shadow: inset 0 0 0 var(--wt-field-line-width-active) var(--wt-color-primary);
       }
       button.day:focus-visible,
       .year-back:focus-visible {
@@ -182,16 +190,16 @@ export class OpeningHoursMonthView extends LitElement {
         border-radius: var(--wt-radius-sm);
         background: var(--wt-color-primary);
         color: var(--wt-color-on-primary);
-        overflow: hidden;
-        text-overflow: ellipsis;
         white-space: nowrap;
       }
       .name,
       .closed-row {
-        display: block;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 4;
         overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        overflow-wrap: anywhere;
+        hyphens: auto;
       }
       .name {
         font-weight: var(--wt-font-weight-bold);
@@ -210,7 +218,7 @@ export class OpeningHoursMonthView extends LitElement {
         display: block;
         height: var(--wt-space-2);
         border-radius: var(--wt-radius-sm);
-        background: var(--wt-color-surface-sunken);
+        background: var(--wt-color-border);
         overflow: hidden;
       }
       .segment,
@@ -219,7 +227,7 @@ export class OpeningHoursMonthView extends LitElement {
         inset-block: 0;
       }
       .gap {
-        background: var(--wt-color-surface-sunken);
+        background: var(--wt-color-border);
       }
       .segment[data-colour="red"] {
         background: var(--wt-color-palette-red);
@@ -241,6 +249,32 @@ export class OpeningHoursMonthView extends LitElement {
       }
       .closed-row {
         color: inherit;
+      }
+      /* A phone's width: too narrow for the word "Today" in a date, so the number is marked and the
+         word kept for a screen reader. */
+      @container month (width < 560px) {
+        table {
+          border-spacing: calc(var(--wt-space-1) / 2);
+        }
+        .day {
+          padding: var(--wt-space-1) calc(var(--wt-space-1) / 2);
+        }
+        .top {
+          flex-wrap: wrap;
+        }
+        .day[aria-current="date"] .date {
+          padding: 0 calc(var(--wt-space-1) / 2);
+          border-radius: var(--wt-radius-sm);
+          background: var(--wt-color-primary);
+          color: var(--wt-color-on-primary);
+        }
+        .today {
+          ${visuallyHiddenStyles}
+        }
+        .name,
+        .closed-row {
+          -webkit-line-clamp: 6;
+        }
       }
     `,
   ];
@@ -402,44 +436,40 @@ export class OpeningHoursMonthView extends LitElement {
         ${isToday ? html`<span class="today" data-test="today">${t("hours.today")}</span>` : nothing}
       </span>
       ${nameLine}
-      ${
-        day.closedAllDay
-          ? nothing
-          : rows.map((row) =>
-              !row.ranges.length
-                ? html`<span class="closed-row" data-test="department-closed"
-                    >${format("month.department_closed", { name: row.name })}</span
-                  >`
-                : html`<span class="track" data-row=${row.key}>
-                    ${row.ranges.map((range) => {
-                      const period = names.period(range.periodId);
-                      return html`<span
-                        class="segment"
-                        data-colour=${period.colour ?? nothing}
-                        title=${format("month.range", {
-                          name: period.name,
-                          start: range.startsAt,
-                          end: range.endsAt,
-                        })}
-                        style=${place(range)}
-                      ></span>`;
+      ${rows.map((row) =>
+        !row.ranges.length
+          ? html`<span class="closed-row" data-test="department-closed"
+              >${format("month.department_closed", { name: row.name })}</span
+            >`
+          : html`<span class="track" data-row=${row.key}>
+              ${row.ranges.map((range) => {
+                const period = names.period(range.periodId);
+                return html`<span
+                  class="segment"
+                  data-colour=${period.colour ?? nothing}
+                  title=${format("month.range", {
+                    name: period.name,
+                    start: range.startsAt,
+                    end: range.endsAt,
+                  })}
+                  style=${place(range)}
+                ></span>`;
+              })}
+              ${row.gaps.map(
+                (gap) =>
+                  html`<span
+                    class="gap"
+                    data-test="gap"
+                    title=${format("month.zone_closed", {
+                      name: row.name,
+                      start: gap.startsAt,
+                      end: gap.endsAt,
                     })}
-                    ${row.gaps.map(
-                      (gap) =>
-                        html`<span
-                          class="gap"
-                          data-test="gap"
-                          title=${format("month.zone_closed", {
-                            name: row.name,
-                            start: gap.startsAt,
-                            end: gap.endsAt,
-                          })}
-                          style=${place(gap)}
-                        ></span>`,
-                    )}
-                  </span>`,
-            )
-      }`;
+                    style=${place(gap)}
+                  ></span>`,
+              )}
+            </span>`,
+      )}`;
     return html`<td
       data-date=${day.date}
       data-tint=${(day.seasonId && tints.get(day.seasonId)) || nothing}
