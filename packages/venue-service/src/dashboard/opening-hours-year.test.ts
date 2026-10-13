@@ -547,3 +547,263 @@ describe("Opening hours year", () => {
     ]);
   });
 });
+
+describe("Opening hours year holiday area", () => {
+  type Area = OpeningHoursYear["area"];
+  const areaModel = (area: Partial<Area> = {}) =>
+    yearModel({
+      area: {
+        readiness: "ready",
+        addressKey: "old-city",
+        options: [
+          { key: "aran", name: "Aran" },
+          { key: "rest", name: "Rest of province" },
+        ],
+        required: true,
+        chosen: null,
+        ...area,
+      },
+    });
+  const chooser = (el: OpeningHoursYearView) =>
+    root(el).querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=holidayArea]");
+  const pick = (el: OpeningHoursYearView, value = "aran") =>
+    chooser(el)!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+    );
+  const settle = async (el: OpeningHoursYearView) => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+  };
+  /** A host stand-in: a re-read hands the view the server's current area. */
+  function areaHost(
+    save: (value: string) => Promise<void>,
+    server: () => Partial<Area> = () => ({}),
+  ) {
+    let el!: OpeningHoursYearView;
+    const saves: string[] = [];
+    const rereadWatches = vi.fn(() => {
+      el.model = areaModel(server());
+    });
+    const areaApi = {
+      saveHolidayArea: vi.fn(async (value: string) => {
+        saves.push(value);
+        await save(value);
+      }),
+      rereadWatches,
+    };
+    return {
+      saves,
+      rereadWatches,
+      async mount(model = areaModel()) {
+        el = await mount(model, { areaApi });
+        return el;
+      },
+    };
+  }
+
+  it("saves only an offered changed area and re-reads the year", async () => {
+    let chosen: string | null = null;
+    const host = areaHost(
+      async (value) => {
+        chosen = value;
+      },
+      () => ({ chosen }),
+    );
+    const el = await host.mount();
+    pick(el);
+    await vi.waitFor(() => expect(chooser(el)!.value).toBe("aran"));
+    expect(host.saves).toEqual(["aran"]);
+    expect(host.rereadWatches).toHaveBeenCalledTimes(1);
+    pick(el, "missing");
+    pick(el, "aran");
+    await settle(el);
+    expect(host.saves).toEqual(["aran"]);
+  });
+
+  it("ignores an old area refusal after detach and reconnect", async () => {
+    let refuse!: (value: unknown) => void;
+    const host = areaHost(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          refuse = reject;
+        }),
+    );
+    const el = await host.mount();
+    pick(el);
+    await el.updateComplete;
+    expect(chooser(el)!.disabled).toBe(true);
+    el.remove();
+    document.body.append(el);
+    await el.updateComplete;
+    refuse({ code: "holiday.invalid", params: { field: "areaKey" } });
+    await settle(el);
+    expect(chooser(el)!.error).toBe("");
+    expect(chooser(el)!.disabled).toBe(false);
+  });
+
+  it("keeps an area refusal through a re-read of the same address, and allows a retry", async () => {
+    let saves = 0;
+    let chosen: string | null = null;
+    const host = areaHost(
+      async (value) => {
+        if (++saves === 1) throw { code: "holiday.invalid" };
+        chosen = value;
+      },
+      () => ({ chosen }),
+    );
+    const el = await host.mount();
+    pick(el);
+    await vi.waitFor(() => expect(chooser(el)!.error).toBe("The change could not be saved."));
+    el.model = areaModel();
+    await settle(el);
+    expect(chooser(el)!.error).toBe("The change could not be saved.");
+    expect(chooser(el)!.disabled).toBe(false);
+    pick(el);
+    await vi.waitFor(() => expect(chooser(el)!.value).toBe("aran"));
+    expect(chooser(el)!.error).toBe("");
+  });
+
+  it.each(["settled refusal", "late refusal", "late success"])(
+    "an address change clears area state and ignores the old address's %s",
+    async (reply) => {
+      let reject!: (value: unknown) => void;
+      let resolve!: () => void;
+      const host = areaHost(
+        () =>
+          new Promise<void>((yes, no) => {
+            resolve = yes;
+            reject = no;
+          }),
+      );
+      const el = await host.mount();
+      pick(el);
+      await vi.waitFor(() => expect(chooser(el)!.disabled).toBe(true));
+      if (reply === "settled refusal") {
+        reject({ code: "holiday.invalid" });
+        await vi.waitFor(() => expect(chooser(el)!.error).toBe("The change could not be saved."));
+      }
+      el.model = areaModel({ addressKey: "new-city" });
+      await el.updateComplete;
+      expect(chooser(el)!.error).toBe("");
+      expect(chooser(el)!.disabled).toBe(false);
+      if (reply === "late refusal") reject({ code: "holiday.invalid" });
+      if (reply === "late success") resolve();
+      await settle(el);
+      expect(chooser(el)!.error).toBe("");
+      expect(chooser(el)!.disabled).toBe(false);
+      expect(host.rereadWatches).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["en", "es"] as const)(
+    "%s explains unresolved area addresses and sends no write",
+    async (locale) => {
+      setLocale(locale);
+      const explanations =
+        locale === "en"
+          ? {
+              missing_city: "The holiday area needs the venue's city. Add it in Venue details.",
+              unresolved_province:
+                "The holiday area needs a recognised province. Correct it in Venue details.",
+              unresolved_address:
+                "The holiday area needs the venue's city and a recognised province. Set them in Venue details.",
+              unsupported_country: "Holiday areas are unavailable for this country.",
+            }
+          : {
+              missing_city:
+                "La zona de festivos necesita la ciudad del local. Añádela en Datos del local.",
+              unresolved_province:
+                "La zona de festivos necesita una provincia reconocida. Corrígela en Datos del local.",
+              unresolved_address:
+                "La zona de festivos necesita la ciudad y una provincia reconocida. Indícalas en Datos del local.",
+              unsupported_country: "No hay zonas de festivos para este país.",
+            };
+      for (const [readiness, message] of Object.entries(explanations)) {
+        const host = areaHost(async () => {
+          throw new Error("Unexpected area write");
+        });
+        const el = await host.mount(
+          areaModel({
+            readiness: readiness as Area["readiness"],
+            ...(readiness === "missing_city" ? {} : { options: [] }),
+          }),
+        );
+        if (readiness === "missing_city") {
+          const field = chooser(el)!;
+          await field.updateComplete;
+          expect(field.shadowRoot!.querySelector<HTMLButtonElement>("button")!.disabled).toBe(true);
+          pick(el);
+          await settle(el);
+        } else {
+          expect(chooser(el)).toBeNull();
+        }
+        expect(text(root(el).querySelector('[data-test="area-address"]'))).toBe(message);
+        expect(host.saves).toEqual([]);
+        el.remove();
+      }
+    },
+  );
+
+  it.each(["en", "es"] as const)(
+    "%s keeps actionable area refusals and a generic fallback, with retry",
+    async (locale) => {
+      setLocale(locale);
+      const cases = [
+        [
+          { code: "holiday.invalid", params: { field: "geography" } },
+          locale === "en"
+            ? "The holiday area needs the venue's city and a recognised province. Set them in Venue details."
+            : "La zona de festivos necesita la ciudad y una provincia reconocida. Indícalas en Datos del local.",
+        ],
+        [
+          { code: "holiday.invalid", params: { field: "areaKey" } },
+          locale === "en"
+            ? "Choose one of the areas offered."
+            : "Elige una de las zonas ofrecidas.",
+        ],
+        [
+          { code: "unrelated.failure" },
+          locale === "en" ? "The change could not be saved." : "No se pudo guardar el cambio.",
+        ],
+      ] as const;
+      for (const [error, message] of cases) {
+        let writes = 0;
+        let chosen: string | null = null;
+        const host = areaHost(
+          async (value) => {
+            if (++writes === 1) throw error;
+            chosen = value;
+          },
+          () => ({ chosen }),
+        );
+        const el = await host.mount();
+        pick(el);
+        await vi.waitFor(() => expect(chooser(el)!.error).toBe(message));
+        await chooser(el)!.updateComplete;
+        expect(chooser(el)!.shadowRoot!.querySelector<HTMLButtonElement>("button")!.disabled).toBe(
+          false,
+        );
+        pick(el);
+        await vi.waitFor(() => expect(chooser(el)!.value).toBe("aran"));
+        expect(chooser(el)!.error).toBe("");
+        expect(writes).toBe(2);
+        el.remove();
+      }
+    },
+  );
+
+  it("shows a viewer the saved area in words and no chooser, and the coverage asks for the area", async () => {
+    const model = areaModel({ chosen: "aran" });
+    model.holidayCoverage = [{ ...model.holidayCoverage[0]!, nationalRegional: "area_required" }];
+    const el = await mount(model, { readOnly: true });
+    expect(chooser(el)).toBeNull();
+    expect(text(root(el).querySelector('[data-test="area-chosen"]'))).toBe("Aran");
+    expect(text(root(el).querySelector('[data-test="coverage"]'))).toContain(
+      "choose the holiday area here",
+    );
+    const none = await mount(areaModel(), { readOnly: true });
+    expect(text(root(none).querySelector('[data-test="area-chosen"]'))).toBe(
+      "Holiday area: not chosen",
+    );
+  });
+});
