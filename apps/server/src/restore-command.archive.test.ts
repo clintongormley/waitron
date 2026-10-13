@@ -539,12 +539,12 @@ describe("waitron-restore restore --from-archive", () => {
     [
       "no pack in it",
       "nothing to see here\n",
-      "restore failed: backup.archive_pack_invalid — the file holds no archive recovery pack; give the archive recovery pack file saved for this venue",
+      "restore failed: backup.archive_recovery_pack_invalid — the file holds no archive recovery pack; give the archive recovery pack file saved for this venue",
     ],
     [
       "a damaged pack",
       "WAITRON-ARCHIVE-PACK-1:e30\n",
-      "restore failed: backup.archive_pack_invalid — the archive recovery pack in the file is incomplete or damaged, perhaps cut short when it was copied; use the whole pack file as it was saved",
+      "restore failed: backup.archive_recovery_pack_invalid — the archive recovery pack in the file is incomplete or damaged, perhaps cut short when it was copied; use the whole pack file as it was saved",
     ],
   ])("refuses a pack file with %s, without printing it", async (_label, text, line) => {
     const f = await fixture();
@@ -705,7 +705,7 @@ describe("waitron-restore restore --from-archive", () => {
     expect(result).toEqual({
       code: 1,
       out: [
-        "restore failed: backup.archive_pack_invalid — the archive recovery pack in the file is incomplete or damaged, perhaps cut short when it was copied; use the whole pack file as it was saved",
+        "restore failed: backup.archive_recovery_pack_invalid — the archive recovery pack in the file is incomplete or damaged, perhaps cut short when it was copied; use the whole pack file as it was saved",
       ],
     });
     expect(f.storeCalls).toEqual([]);

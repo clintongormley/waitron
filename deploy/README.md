@@ -435,6 +435,14 @@ command against it treat that entrypoint differently:
   restores with `restore <backup-file>` and the recovery key alone, in
   `WAITRON_BACKUP_RECOVERY_KEY`.
 
+  ```bash
+  docker compose run --rm -v "$PWD/pack.txt:/pack.txt:ro" --entrypoint node app \
+    /app/bin-restore.js restore --from-archive /pack.txt --archive-key <name>
+  ```
+
+  The Backups screen does not offer the pack yet: it is served by
+  `GET /api/backup/archive-recovery-pack` (backlog A538, Task 6).
+
   A restore moves the old database into a hidden folder in the venue folder
   (`/var/lib/waitron/state/venue/` inside the container), named `.venue.db-replaced-` and six
   random characters, and deletes that folder once the restored database is in place. If the command

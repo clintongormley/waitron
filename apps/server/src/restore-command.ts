@@ -396,7 +396,7 @@ function packRefusal(err: AppError): string | null {
     "restore.archive_disk_full":
       "there is not enough free disk space to download the archive; nothing on this server changed. Free some space and run it again",
     "restore.archive_download_failed":
-      "the archive could not be downloaded: the bucket did not answer in time, refused the pack's key, or the download broke off; check this server's network and that the bucket and its key still exist, then run it again",
+      "the archive could not be downloaded from the bucket, for a reason on this server, on its network or at the bucket; check this server's network, the bucket and its key, and that this server's disk and state folder can be written, then run it again",
   };
   const said = words[err.code];
   return said === undefined ? null : `restore failed: ${err.code} — ${said}`;
@@ -430,10 +430,10 @@ async function runPackRestore(
     pack = decodeArchiveRecoveryPack(packText);
   } catch (err) {
     deps.out(
-      hasCode(err as AppError, "backup.archive_pack_invalid") &&
-        (err as AppError<"backup.archive_pack_invalid">).params.reason === "not_found"
-        ? "restore failed: backup.archive_pack_invalid — the file holds no archive recovery pack; give the archive recovery pack file saved for this venue"
-        : "restore failed: backup.archive_pack_invalid — the archive recovery pack in the file is incomplete or damaged, perhaps cut short when it was copied; use the whole pack file as it was saved",
+      hasCode(err as AppError, "backup.archive_recovery_pack_invalid") &&
+        (err as AppError<"backup.archive_recovery_pack_invalid">).params.reason === "not_found"
+        ? "restore failed: backup.archive_recovery_pack_invalid — the file holds no archive recovery pack; give the archive recovery pack file saved for this venue"
+        : "restore failed: backup.archive_recovery_pack_invalid — the archive recovery pack in the file is incomplete or damaged, perhaps cut short when it was copied; use the whole pack file as it was saved",
     );
     return 1;
   }

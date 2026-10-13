@@ -44,7 +44,7 @@ function usableKey(value: unknown): value is string {
 }
 
 function refuse(reason: "not_found" | "encoding" | "shape"): never {
-  throw new AppError("backup.archive_pack_invalid", { reason });
+  throw new AppError("backup.archive_recovery_pack_invalid", { reason });
 }
 
 function token(pack: ArchiveRecoveryPack): string {
@@ -57,10 +57,10 @@ export function encodeArchiveRecoveryPack(pack: ArchiveRecoveryPack): string {
   decodeArchiveRecoveryPack(line);
   return [
     "Waitron archive recovery pack.",
-    "Keep this file secret: it opens this venue's archived backups.",
+    "Keep this file secret: it opens this venue's archived backups made under its recovery key.",
+    "Keep the previous pack until the older archives have expired.",
     "Save it somewhere off the box, such as a password manager or a USB stick kept safe.",
-    "To restore an archive on a new box, run:",
-    "  waitron-restore restore --from-archive <this-file> --archive-key <archive-name>",
+    'To restore an archive on a new box, follow "A restore takes one of three sources" in deploy/README.md.',
     "",
     line,
     "",

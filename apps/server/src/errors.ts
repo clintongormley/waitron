@@ -1116,7 +1116,8 @@ declare module "@waitron/shared" {
     "backup.archive_invalid": { reason: string };
     /** WAITRON_BACKUP_RECOVERY_KEY is unset where one is needed: a backup destination is configured
      * (refused at load so an unattended backup can never write an unencrypted or box-key-encrypted
-     * artifact), or a recovery kit is asked for (`GET /api/backup/stream/kit`). */
+     * artifact), or a recovery kit or archive recovery pack is asked for
+     * (`GET /api/backup/stream/kit`, `GET /api/backup/archive-recovery-pack`). */
     "backup.recovery_key_missing": Record<string, never>;
     /** WAITRON_BACKUP_RECOVERY_KEY is shorter than `min` characters. */
     "backup.recovery_key_too_short": { min: number };
@@ -1187,8 +1188,9 @@ declare module "@waitron/shared" {
      * `reason` names the part that failed, never its value, which could be a secret. */
     "backup.archive_settings_invalid": { reason: string };
     /** A stored archive record could not be read. `disable` has no settings to keep switched off,
-     * and the bucket copy's Save (`PUT /api/backup/stream`) cannot check its folder against the
-     * archive's; an archive Save replaces the record. `reason` is the read's error code, never the
+     * the bucket copy's Save (`PUT /api/backup/stream`) cannot check its folder against the
+     * archive's, and the archive recovery pack (`GET /api/backup/archive-recovery-pack`) cannot be
+     * built; an archive Save replaces the record. `reason` is the read's error code, never the
      * record. */
     "backup.archive_settings_unreadable": { reason: string };
     /** The bucket copy's stored settings (`backup.stream`) could not be read, so an archive Save
@@ -1201,7 +1203,7 @@ declare module "@waitron/shared" {
     /** An archive recovery pack (`archive-recovery-pack.ts`) held no token (`not_found`), a token
      * that is not base64url JSON (`encoding`), or not exactly a pack this server issues (`shape`).
      * Never carries a field's value: the pack holds the bucket's secret key and the recovery key. */
-    "backup.archive_pack_invalid": { reason: "not_found" | "encoding" | "shape" };
+    "backup.archive_recovery_pack_invalid": { reason: "not_found" | "encoding" | "shape" };
     /** An archive recovery pack was asked for while the archive settings name no bucket: no
      * dashboard record is stored, the stored one names only a local folder, or the environment owns
      * the settings and names no bucket. */

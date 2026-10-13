@@ -4205,8 +4205,11 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   Left open by A538-4. It also needs a Download archive recovery pack action over
   `GET /api/backup/archive-recovery-pack`, which answers `keyFingerprint`, `keyRotatedAt` and
   `revision` so a displayed pack can be marked stale; that route's `backup.recovery_key_missing`
-  refusal would show the existing "Enter a recovery key" wording, written for the form. Left open
-  by A538-5.
+  refusal would show the existing "Enter a recovery key" wording, written for the form. Under
+  environment management the pack route answers no `revision`, so a bucket changed in the
+  environment marks no pack stale. The pack file's explanatory text is written by the server in
+  English only (`encodeArchiveRecoveryPack`); the recovery kit's file text is built by the dashboard
+  in English and Spanish. Decide which owns it when the button lands. Left open by A538-5.
 
 - **A restore that fails while writing the secrets has already replaced the venue database.**
   `placeValidated` (`apps/server/src/restore.ts`) puts the database in place and runs the restore
@@ -4214,7 +4217,10 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   database with the old box's secrets. Measured in A538-5's review with a throwaway case that made
   the secrets write fail: the command exited 1 and the live venue's name was already the archive's.
   Predates A538-5. Write the secrets into staging before placement, or put the previous database
-  back on failure.
+  back on failure. The same step sets `trading.env` aside (as `trading.env.replaced`) before it
+  moves the database into place, so a full disk at that move leaves the old database without its
+  active identity file; found by the finish-branch review's run-it seat with an injected ENOSPC,
+  and it predates A538-5 too (`placeValidated`, `setAsideExistingIdentity`).
 
 - **A backup destination that fails to build leaves archives reported as on.** In
   `BackupSupervisor.reload()` (`apps/server/src/backup-supervisor.ts`) the venue handle is assigned
@@ -4498,9 +4504,10 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   setup wizard ever accepts as confirmed, so it cannot be restored; no dedicated error code names
   that case. Left open by SQLite slice 2 Task 9b (#642, `waitron-restore restore --from-bucket`).
 
-- **An interrupted bucket rebuild or archive check leaves its scratch folder,** a full copy of the
-  venue database, under the state folder; the next run makes a new one and does not remove it. Left
-  open by SQLite slice 2 Task 9b (#642, `waitron-restore restore --from-bucket`).
+- **An interrupted bucket rebuild, archive check or archive download leaves its scratch folder** —
+  a full copy of the venue database, or the encrypted archive (`archive-download-`, inside
+  `restore-staging`) — under the state folder; the next run makes a new one and does not remove it.
+  Left open by SQLite slice 2 Task 9b (#642, `waitron-restore restore --from-bucket`) and A538-5.
 
 - **A `.venue.db-replaced-` folder left in the venue folder is removed by the box's next start**
   (`clearReplacedDatabases`, A31) only from the container's entry: a server started any other way

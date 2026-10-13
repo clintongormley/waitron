@@ -4080,7 +4080,6 @@ export class DashboardApi {
     return this.#request<{ kit: string; keyFingerprint: string }>("/api/backup/stream/kit", "GET");
   }
 
-  /** Fingerprint, rotation time and revision tell a pack saved earlier is out of date. */
   getArchiveRecoveryPack(): Promise<ArchiveRecoveryPackAnswer> {
     return this.#request<ArchiveRecoveryPackAnswer>("/api/backup/archive-recovery-pack", "GET");
   }
