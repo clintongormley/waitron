@@ -99,7 +99,10 @@ it("adds timing storage without rewriting populated stations, mappings, keys or 
     db,
     CORE_CHANGE_SOURCES.filter((source) => tables.includes(source.table)),
   );
-  installAppendOnlyTriggers(db, CORE_MIGRATIONS.appendOnlyTables);
+  installAppendOnlyTriggers(
+    db,
+    CORE_MIGRATIONS.appendOnlyTables.filter((table) => tables.includes(table)),
+  );
   const beforeRows = Object.fromEntries(
     tables.map((name) => [
       name,
