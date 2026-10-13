@@ -4416,9 +4416,10 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   stack during A538-6's visual check). That line came in with #1628 (A538-4).
 
 - **The Backups screen's bucket fields copy the bucket copy panel's.** The field table, the
-  required checks, the reveal button and the "same bucket place" comparison exist in both
-  `apps/dashboard/src/screens/backup-destination-model.ts` and `stream-settings-panel.ts`, and the
-  folder rule copies `normalisePrefix` (`packages/stream/src/names.ts`). Share them. Left open by A538-6.
+  required checks and the reveal button exist in both `apps/dashboard/src/screens/backup-screen.ts`
+  (`CUSTOM_FIELDS`) and `stream-settings-panel.ts` (`FIELDS`), and `normalisePrefix` in
+  `backup-destination-model.ts` copies the stream package's (`packages/stream/src/names.ts`). Share
+  them. Left open by A538-6.
 
 - **At phone width the configuration export's passphrase labels overlap "Show password"** on the
   Backups screen (seen at 390 px during A538-6's visual check, both themes). I believe this predates

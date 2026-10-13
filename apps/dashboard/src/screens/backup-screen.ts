@@ -929,7 +929,8 @@ export class BackupScreen extends LitElement {
     this.#archiveScope?.commit(this.#archiveValue());
   }
 
-  /** A write's answer is the box's state after it, newer than any status read still running. */
+  /** A write's answer is the box's state after it; a status read begun before it is taken may be
+   * older, so it is dropped. */
   #takeWriteAnswer(status: BackupStatusView): void {
     this.#writeAnswers++;
     this.#dropStalePack(status);
