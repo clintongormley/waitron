@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -9,6 +9,7 @@ import {
   floorTodaySplitParts,
   floorTodayTables,
   floorTodayZones,
+  joinedTableApart,
   locations,
   withTransaction,
   workingOrders,
@@ -728,6 +729,7 @@ async function longJoinedInFreeGroup() {
     v,
     send("POST", `/api/tables/${z.jar}/today/split-off`, { partIds: [z.bar], seats: 8 }),
   );
+  const barStood = await todayRow(z.bar);
   await expectRevision(
     v,
     send("POST", `/api/tables/${z.long}/today/merge`, {
@@ -760,7 +762,7 @@ async function longJoinedInFreeGroup() {
   );
   const holders = await inTx(v, (tx) => holdersOf(tx, [z.long, z.bar]));
   expect(holders.size).toBe(0);
-  return { ...z, partyId };
+  return { ...z, partyId, barStood };
 }
 
 /** The joined table's split rows, by part. */
@@ -779,20 +781,43 @@ const tablesOf = (partyId: string) =>
 
 const sorted = (...ids: string[]) => [...ids].sort();
 
+async function refusal(answer: Promise<Response>): Promise<{ status: number; body: unknown }> {
+  const settled = await answer;
+  return { status: settled.status, body: await settled.json() };
+}
+
+/** Today's rows of the tables, in the order given. */
+async function todayRows(tableIds: readonly string[]) {
+  const rows = [];
+  for (const id of tableIds) rows.push(await todayRow(id));
+  return rows;
+}
+
+/** 1 when the floor counts the joined table as come apart. */
+async function apart(tableId: string): Promise<number | null> {
+  const rows = await v.db.all<{ id: string; named: number | null }>(
+    sql`select dt.id, ${joinedTableApart(sql`dt.id`)} as named from dining_tables dt`,
+  );
+  return rows.find((row) => row.id === tableId)!.named;
+}
+
 describe("a joined table the reset leaves in one of today's groups", () => {
   it("refuses splitting it down to one while guests sit at the group, writing nothing", async () => {
     const z = await longJoinedInSeatedGroup(2);
     const group = await mergeOf(v, z.long);
     const revision = await revisionOf(v, z.partyId);
+    const tables = [z.long, z.bar, ...z.counter];
+    const rows = await todayRows(tables);
 
-    const answer = await send("POST", `/api/tables/${z.long}/today/split-off`, {
+    const answer = send("POST", `/api/tables/${z.long}/today/split-off`, {
       partIds: [z.counter[0]],
     });
 
-    expect(answer.status).toBe(409);
-    expect(((await answer.json()) as { error: { code: string } }).error.code).toBe(
-      "tab.already_open",
-    );
+    expect(await refusal(answer)).toEqual({
+      status: 409,
+      body: { error: { code: "tab.already_open", params: { tableId: sorted(z.long, z.bar)[0] } } },
+    });
+    expect(await todayRows(tables)).toEqual(rows);
     expect(await mergeOf(v, z.long)).toEqual(group);
     expect(await tablesOf(z.partyId)).toEqual(sorted(z.long, z.bar));
     expect(await revisionOf(v, z.partyId)).toBe(revision);
@@ -810,18 +835,27 @@ describe("a joined table the reset leaves in one of today's groups", () => {
     await expectRevision(v, answer);
     expect(await mergeOf(v, z.long)).toBeNull();
     expect(await mergeOf(v, z.bar)).toBeNull();
-    for (const id of [z.long, z.bar]) {
-      const { beforeX, beforeY } = before.get(id)!;
-      expect(await todayRow(id)).toMatchObject({ x: beforeX, y: beforeY });
-    }
     const long = before.get(z.long)!;
-    expect(await todayRow(z.counter[0]!)).toMatchObject({ x: long.beforeX, y: long.beforeY });
+    expect(await todayRow(z.long)).toMatchObject({
+      x: long.beforeX,
+      y: long.beforeY,
+      rotation: long.beforeRotation,
+    });
+    expect(await todayRow(z.bar)).toEqual(z.barStood);
+    expect(await todayRow(z.counter[0]!)).toMatchObject({
+      x: long.beforeX,
+      y: long.beforeY,
+      width: 8,
+      height: 8,
+    });
     expect(await splitRowsOf(z.long)).toEqual(sorted(...z.counter));
+    expect(await apart(z.long)).toBe(1);
   });
 
   it("splitting parts off it while two stay joined leaves the group as it is", async () => {
     const z = await longJoinedInSeatedGroup(3);
     const group = await mergeOf(v, z.long);
+    const longBefore = (await todayRow(z.long))!;
 
     const answer = send("POST", `/api/tables/${z.long}/today/split-off`, {
       partIds: [z.counter[0]],
@@ -830,6 +864,14 @@ describe("a joined table the reset leaves in one of today's groups", () => {
 
     await expectRevision(v, answer);
     expect(await mergeOf(v, z.long)).toEqual(group);
+    // The counters stand side by side from Long's left edge; Counter 3, 8 wide, took the first place.
+    expect(await todayRow(z.long)).toMatchObject({
+      x: longBefore.x! + 8,
+      y: longBefore.y,
+      width: 16,
+      height: 8,
+      seats: 6,
+    });
     expect(await tablesOf(z.partyId)).toEqual(sorted(z.long, z.bar));
     expect(await splitRowsOf(z.long)).toEqual([z.counter[0]]);
   });
@@ -852,23 +894,42 @@ describe("a joined table the reset leaves in one of today's groups", () => {
   it("guests joining a table pushed onto it hold the group, the joined table whole in it", async () => {
     const z = await longJoinedInSeatedGroup(2);
 
-    const answer = await app.request(`/api/parties/${z.partyId}/join`, {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({
-        zoneRevision: await zoneRevisionOf(v, z.zoneId),
-        tableId: z.stool,
-        bills: "merge",
-        expectedPartyRevision: await revisionOf(v, z.partyId),
-        otherPartyId: null,
-        merge: { moving: z.stool, target: z.long, side: "right", seats: 14 },
-      }),
+    const answer = await send("POST", `/api/parties/${z.partyId}/join`, {
+      zoneRevision: await zoneRevisionOf(v, z.zoneId),
+      tableId: z.stool,
+      bills: "merge",
+      expectedPartyRevision: await revisionOf(v, z.partyId),
+      otherPartyId: null,
+      merge: { moving: z.stool, target: z.long, side: "right", seats: 14 },
     });
 
     expect(answer.status, await answer.clone().text()).toBe(200);
     const group = await mergeOf(v, z.long);
     expect(group?.members.map((m) => m.tableId).sort()).toEqual(sorted(z.long, z.bar, z.stool));
     expect(await tablesOf(z.partyId)).toEqual(sorted(z.long, z.bar, z.stool));
+    expect(await splitRowsOf(z.long)).toEqual([]);
+  });
+
+  it("Join again keeps the guests at it, their party's revision and the group", async () => {
+    const z = await longJoinedInSeatedGroup(3);
+    await expectRevision(
+      v,
+      send("POST", `/api/tables/${z.long}/today/split-off`, {
+        partIds: [z.counter[0]],
+        seats: 6,
+      }),
+    );
+    const revision = await revisionOf(v, z.partyId);
+    const group = await mergeOf(v, z.long);
+
+    const answer = send("POST", `/api/tables/${z.long}/today/join-again`, {
+      partIds: [z.counter[0]],
+    });
+
+    await expectRevision(v, answer);
+    expect(await tablesOf(z.partyId)).toEqual(sorted(z.long, z.bar));
+    expect(await revisionOf(v, z.partyId)).toBe(revision);
+    expect(await mergeOf(v, z.long)).toEqual(group);
     expect(await splitRowsOf(z.long)).toEqual([]);
   });
 });
