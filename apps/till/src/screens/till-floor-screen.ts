@@ -35,8 +35,8 @@ import "../widgets/bill-choice-dialog.js";
 import "../widgets/join-with-dialog.js";
 import "../widgets/split-joined-dialog.js";
 import type { SplitJoinedDetail, TillSplitJoinedDialog } from "../widgets/split-joined-dialog.js";
-import "../widgets/join-again-dialog.js";
-import type { JoinAgainDetail, TillJoinAgainDialog } from "../widgets/join-again-dialog.js";
+import "../widgets/reset-table-dialog.js";
+import type { ResetTableDetail, TillResetTableDialog } from "../widgets/reset-table-dialog.js";
 import "../widgets/floor-zone-menu.js";
 import type { JoinWithPickDetail } from "../widgets/join-with-dialog.js";
 import type { BillChoiceDetail } from "../widgets/bill-choice-dialog.js";
@@ -120,7 +120,7 @@ interface SplittingJoined {
   seatsRequired: boolean;
 }
 
-interface JoiningAgain {
+interface ResettingTable {
   tableId: string;
   /** The plan sent, until its answer arrives. */
   sent: ResetTablePlan | null;
@@ -128,6 +128,12 @@ interface JoiningAgain {
 }
 
 const asksSeats = (refused: { code?: string }): boolean => refused.code === "merge.seats_required";
+
+/** Sent at once, without asking seats, when every table comes back, and when too few would be joined
+ * to make the table: then its fellow tables are in a group with guests, which the server refuses
+ * (`joined_table.tables_in_group`) whatever the seats. */
+const resetsAtOnce = (plan: ResetTablePlan): boolean =>
+  plan.whole || plan.joined.today!.joined!.parts.length + plan.back.length < 2;
 
 function placedAt(table: TableState, pending: Map<string, TodayPlacement>): TableState {
   const placement = pending.get(table.id);
@@ -536,9 +542,9 @@ export class TillFloorScreen extends LitElement {
   /** The table Split tables… was opened on, while its window is open; `#splitShown` says when a
    * floor read closes it. */
   @state() private splittingJoined: SplittingJoined | null = null;
-  /** Join again's joined table, while its window is open; `#joinAgainShown` says when a floor read
+  /** Reset table's joined table, while its window is open; `#resetShown` says when a floor read
    * closes it. */
-  @state() private joiningAgain: JoiningAgain | null = null;
+  @state() private resettingTable: ResettingTable | null = null;
   /** A drop joining two seated parties, waiting for which bills to keep. */
   @state() private askingBills: { api: TillApi; action: JoinAction; room: Room } | null = null;
 
@@ -605,10 +611,10 @@ export class TillFloorScreen extends LitElement {
         this.refusal = codeMessage(this.splittingJoined.refusal.code);
       this.splittingJoined = null;
     }
-    if (this.joiningAgain !== null && this.#joinAgainShown(this.joiningAgain) === undefined) {
-      if (this.joiningAgain.refusal !== null)
-        this.refusal = codeMessage(this.joiningAgain.refusal.code);
-      this.joiningAgain = null;
+    if (this.resettingTable !== null && this.#resetShown(this.resettingTable) === undefined) {
+      if (this.resettingTable.refusal !== null)
+        this.refusal = codeMessage(this.resettingTable.refusal.code);
+      this.resettingTable = null;
     }
   }
 
@@ -875,11 +881,15 @@ export class TillFloorScreen extends LitElement {
       case "reset-table": {
         const plan = resetTableOf(table, this.tables);
         if (plan === null) return;
-        if (plan.whole)
+        if (resetsAtOnce(plan))
           send((sent) =>
-            api.joinAgainToday(plan.joined.id, { partIds: plan.back.map((each) => each.id) }, sent),
+            api.resetTableToday(
+              plan.joined.id,
+              { partIds: plan.back.map((each) => each.id) },
+              sent,
+            ),
           );
-        else this.joiningAgain = { tableId: plan.joined.id, sent: null, refusal: null };
+        else this.resettingTable = { tableId: plan.joined.id, sent: null, refusal: null };
         return;
       }
       case "rotate":
@@ -1184,38 +1194,38 @@ export class TillFloorScreen extends LitElement {
     this.#requestFloorRefresh();
   }
 
-  /** Join again's plan for the joined table it was opened for, while some of its tables stay apart. */
-  #joiningAgain(tableId: string): ResetTablePlan | undefined {
+  /** Reset table's plan for the joined table it was opened for, while some of its tables stay apart. */
+  #resetPlan(tableId: string): ResetTablePlan | undefined {
     const joined = this.tables.find((each) => each.id === tableId);
     const plan = joined === undefined ? null : resetTableOf(joined, this.tables);
-    return plan === null || plan.whole ? undefined : plan;
+    return plan === null || resetsAtOnce(plan) ? undefined : plan;
   }
 
   /** While its request is out, the window keeps the plan it sent unless its joined table has left
    * the floor read; otherwise it shows the plan the floor reads now. */
-  #joinAgainShown(joining: JoiningAgain): ResetTablePlan | undefined {
-    if (joining.sent === null) return this.#joiningAgain(joining.tableId);
-    return this.tables.some((each) => each.id === joining.tableId) ? joining.sent : undefined;
+  #resetShown(resetting: ResettingTable): ResetTablePlan | undefined {
+    if (resetting.sent === null) return this.#resetPlan(resetting.tableId);
+    return this.tables.some((each) => each.id === resetting.tableId) ? resetting.sent : undefined;
   }
 
-  #joinAgain(): TemplateResult | typeof nothing {
-    const joining = this.joiningAgain;
-    const plan = joining === null ? undefined : this.#joinAgainShown(joining);
-    if (joining === null || plan === undefined) return nothing;
-    return html`<till-join-again-dialog
+  #resetTable(): TemplateResult | typeof nothing {
+    const resetting = this.resettingTable;
+    const plan = resetting === null ? undefined : this.#resetShown(resetting);
+    if (resetting === null || plan === undefined) return nothing;
+    return html`<till-reset-table-dialog
       .joined=${plan.joined}
       .apart=${plan.apart}
-      .busy=${joining.sent !== null}
-      .refusal=${joining.refusal}
-      @join-again-confirm=${(event: CustomEvent<JoinAgainDetail>) => {
+      .busy=${resetting.sent !== null}
+      .refusal=${resetting.refusal}
+      @reset-table-confirm=${(event: CustomEvent<ResetTableDetail>) => {
         event.stopPropagation();
-        void this.#sendJoinAgain(event.currentTarget as TillJoinAgainDialog, event.detail);
+        void this.#sendResetTable(event.currentTarget as TillResetTableDialog, event.detail);
       }}
-      @join-again-cancel=${(event: Event) => {
+      @reset-table-cancel=${(event: Event) => {
         event.stopPropagation();
-        this.joiningAgain = null;
+        this.resettingTable = null;
       }}
-    ></till-join-again-dialog>`;
+    ></till-reset-table-dialog>`;
   }
 
   /**
@@ -1223,40 +1233,40 @@ export class TillFloorScreen extends LitElement {
    * sent it. The tables sent are the plan's as the floor reads them at the press, so a poll since
    * the window opened is what the server is asked to check against.
    */
-  async #sendJoinAgain(dialog: TillJoinAgainDialog, detail: JoinAgainDetail): Promise<void> {
-    const joining = this.joiningAgain;
-    const plan = joining === null ? undefined : this.#joiningAgain(joining.tableId);
+  async #sendResetTable(dialog: TillResetTableDialog, detail: ResetTableDetail): Promise<void> {
+    const resetting = this.resettingTable;
+    const plan = resetting === null ? undefined : this.#resetPlan(resetting.tableId);
     const api = this.api;
-    if (joining === null || plan === undefined || joining.sent !== null || api === undefined)
+    if (resetting === null || plan === undefined || resetting.sent !== null || api === undefined)
       return;
-    const sending = { ...joining, sent: plan, refusal: null };
-    this.joiningAgain = sending;
+    const sending = { ...resetting, sent: plan, refusal: null };
+    this.resettingTable = sending;
     const revision = this.#revision(plan.joined.zoneId);
     try {
       this.#carry(
         await this.#send(revision, (sent) =>
-          api.joinAgainToday(
-            joining.tableId,
+          api.resetTableToday(
+            resetting.tableId,
             { partIds: plan.back.map((each) => each.id), seats: detail.seats },
             sent,
           ),
         ),
       );
-      if (this.joiningAgain === sending) {
+      if (this.resettingTable === sending) {
         dialog.commit();
-        this.joiningAgain = null;
+        this.resettingTable = null;
       }
     } catch (cause) {
       const refused = (cause ?? {}) as { code?: string; field?: unknown };
       const code = refused.code ?? "server.internal";
-      if (this.joiningAgain === sending && this.#joiningAgain(joining.tableId) !== undefined)
-        this.joiningAgain = {
-          ...joining,
+      if (this.resettingTable === sending && this.#resetPlan(resetting.tableId) !== undefined)
+        this.resettingTable = {
+          ...resetting,
           sent: null,
           refusal: typeof refused.field === "string" ? { code, field: refused.field } : { code },
         };
-      else if (this.joiningAgain === sending || this.joiningAgain === null) {
-        this.joiningAgain = null;
+      else if (this.resettingTable === sending || this.resettingTable === null) {
+        this.resettingTable = null;
         this.refusal = codeMessage(code);
       }
     }
@@ -1475,7 +1485,7 @@ export class TillFloorScreen extends LitElement {
             : this.#plannedMap(onMap, unplaced, activeKey)
         }
         ${this.#seatDialog()} ${this.#clearDialog()} ${this.#detailsSheet()} ${this.#seatsPrompt()}
-        ${this.#splitJoined()} ${this.#joinAgain()} ${this.#billChoice()} ${this.#joinWith()}
+        ${this.#splitJoined()} ${this.#resetTable()} ${this.#billChoice()} ${this.#joinWith()}
       </section>
     `;
   }

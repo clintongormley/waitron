@@ -48,7 +48,7 @@ function kitchenProgress(table: TableState): string {
 const ACTION_LABELS = {
   "join-with": "floor.join_with",
   "split-off": "floor.split_tables",
-  "reset-table": "floor.join_again",
+  "reset-table": "floor.reset_table",
   rotate: "floor.rotate",
   seats: "floor.change_seats",
   back: "floor.back_to_saved",

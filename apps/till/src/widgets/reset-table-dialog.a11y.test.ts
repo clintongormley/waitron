@@ -2,8 +2,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import type { TableState, TableToday } from "../api/client.js";
-import "./join-again-dialog.js";
-import type { TillJoinAgainDialog } from "./join-again-dialog.js";
+import "./reset-table-dialog.js";
+import type { TillResetTableDialog } from "./reset-table-dialog.js";
 
 afterEach(cleanupWidgets);
 afterEach(() => setLocale("en"));
@@ -56,7 +56,7 @@ const apart = [
   { table: table("c4", "Counter 4", today(6, { splitOffFrom: "long" })), reason: "food" as const },
 ];
 
-async function typeSeats(el: TillJoinAgainDialog, value: string) {
+async function typeSeats(el: TillResetTableDialog, value: string) {
   const input = el
     .shadowRoot!.querySelector("wt-number-stepper")!
     .shadowRoot!.querySelector<HTMLInputElement>("input")!;
@@ -65,10 +65,10 @@ async function typeSeats(el: TillJoinAgainDialog, value: string) {
   await el.updateComplete;
 }
 
-describe.each(["light", "dark"] as const)("till-join-again-dialog a11y (%s theme)", (theme) => {
+describe.each(["light", "dark"] as const)("till-reset-table-dialog a11y (%s theme)", (theme) => {
   async function mount() {
     setLocale("es-ES");
-    return mountWidget<TillJoinAgainDialog>("till-join-again-dialog", { joined, apart }, theme);
+    return mountWidget<TillResetTableDialog>("till-reset-table-dialog", { joined, apart }, theme);
   }
 
   it("has no violations empty, and with seats typed", async () => {
@@ -81,7 +81,7 @@ describe.each(["light", "dark"] as const)("till-join-again-dialog a11y (%s theme
   it("has no violations with the seats error", async () => {
     const { el, host } = await mount();
     await typeSeats(el, "1000");
-    el.shadowRoot!.querySelector<HTMLElement>("[data-join-again-action]")!.click();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-reset-table-action]")!.click();
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("wt-number-stepper")!.error).not.toBe("");
     await expectNoA11yViolations(host);

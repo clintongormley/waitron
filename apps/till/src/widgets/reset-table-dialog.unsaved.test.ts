@@ -4,8 +4,8 @@ import { LeaveController } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import type { TableState, TableToday } from "../api/client.js";
-import "./join-again-dialog.js";
-import type { JoinAgainDetail, TillJoinAgainDialog } from "./join-again-dialog.js";
+import "./reset-table-dialog.js";
+import type { ResetTableDetail, TillResetTableDialog } from "./reset-table-dialog.js";
 
 function today(seats: number, over: Partial<TableToday> = {}): TableToday {
   return {
@@ -54,17 +54,17 @@ const apart = [
   },
 ];
 
-class JoinAgainLeaveApp extends LitElement {
+class ResetTableLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
   closes = 0;
-  confirmed: JoinAgainDetail[] = [];
+  confirmed: ResetTableDetail[] = [];
   override render() {
-    return html`<till-join-again-dialog
+    return html`<till-reset-table-dialog
         .joined=${joined}
         .apart=${apart}
-        @join-again-cancel=${() => this.closes++}
-        @join-again-confirm=${(e: CustomEvent<JoinAgainDetail>) => this.confirmed.push(e.detail)}
-      ></till-join-again-dialog
+        @reset-table-cancel=${() => this.closes++}
+        @reset-table-confirm=${(e: CustomEvent<ResetTableDetail>) => this.confirmed.push(e.detail)}
+      ></till-reset-table-dialog
       >${this.leave.render({
         heading: t("unsaved.heading"),
         message: t("unsaved.message"),
@@ -73,18 +73,18 @@ class JoinAgainLeaveApp extends LitElement {
       })}`;
   }
 }
-customElements.define("join-again-leave-test-app", JoinAgainLeaveApp);
+customElements.define("reset-table-leave-test-app", ResetTableLeaveApp);
 beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
 
 async function mount() {
-  const { el: app } = await mountWidget<JoinAgainLeaveApp>("join-again-leave-test-app", {});
-  const form = app.shadowRoot!.querySelector<TillJoinAgainDialog>("till-join-again-dialog")!;
+  const { el: app } = await mountWidget<ResetTableLeaveApp>("reset-table-leave-test-app", {});
+  const form = app.shadowRoot!.querySelector<TillResetTableDialog>("till-reset-table-dialog")!;
   await form.updateComplete;
   await form.shadowRoot!.querySelector("wt-dialog")!.updateComplete;
   return { app, form };
 }
-async function typeSeats(form: TillJoinAgainDialog, value: string) {
+async function typeSeats(form: TillResetTableDialog, value: string) {
   const input = form
     .shadowRoot!.querySelector("wt-number-stepper")!
     .shadowRoot!.querySelector<HTMLInputElement>("input")!;
@@ -92,10 +92,10 @@ async function typeSeats(form: TillJoinAgainDialog, value: string) {
   input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
   await form.updateComplete;
 }
-function cancel(form: TillJoinAgainDialog) {
-  form.shadowRoot!.querySelector<HTMLElement>("[data-join-again-cancel]")!.click();
+function cancel(form: TillResetTableDialog) {
+  form.shadowRoot!.querySelector<HTMLElement>("[data-reset-table-cancel]")!.click();
 }
-async function question(app: JoinAgainLeaveApp) {
+async function question(app: ResetTableLeaveApp) {
   await app.updateComplete;
   const q = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
   await q.updateComplete;
@@ -141,7 +141,7 @@ it("closing untouched does not ask", async () => {
 it("after commit() nothing is left unsaved", async () => {
   const { app, form } = await mount();
   await typeSeats(form, "8");
-  form.shadowRoot!.querySelector<HTMLElement>("[data-join-again-action]")!.click();
+  form.shadowRoot!.querySelector<HTMLElement>("[data-reset-table-action]")!.click();
   expect(app.confirmed).toEqual([{ seats: 8 }]);
   expect(unload()).toBe(true);
   form.commit();
