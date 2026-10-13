@@ -28,6 +28,7 @@ import type { OpeningHoursApi } from "./opening-hours-client.js";
 import type { PaintChange, PaintColumn, PaintPeriod } from "./paint-grid.js";
 import { paintRow, paintRowStyles } from "./paint-row.js";
 import { periodColourStyles } from "./period-colour-styles.js";
+import { ownerName, refusalReason } from "./season-painter.js";
 import {
   browserToday,
   format,
@@ -59,7 +60,12 @@ interface Refused {
   message: string;
   field?: "name" | "dates";
   column?: LocalDate;
+  /** The department (`d:<id>`) or zone (`z:<id>`) whose column is marked; any, when absent. */
+  owner?: string;
+  /** What the column heading says, when shorter than the message. */
+  mark?: string;
 }
+type PaintEntries = Pick<SpecialDayInput, "paint" | "zonePaint">;
 
 /** A zone's Open, which no period id can equal: period ids are uuids. */
 const ZONE_OPEN = "open";
@@ -523,13 +529,69 @@ export class SpecialDayPainter extends LitElement {
     this.seeded = id;
     this.read(id, date);
   }
-  private adopt(detail: SpecialDayDetail | undefined, dates: readonly LocalDate[], name = "") {
+  /** `kept` is paint made since the save that answered `detail` was sent; it stays unsaved. */
+  private adopt(
+    detail: SpecialDayDetail | undefined,
+    dates: readonly LocalDate[],
+    name = "",
+    kept: OwnerPaint = new Map(),
+  ) {
     this.stored = new Map(detail?.dates.map(({ date, holidayName }) => [date, holidayName]));
     this.savableAtOpen = !detail && name !== "";
     const fresh = detail ? fromDetail(detail) : blank(dates, name);
-    this.draft = copyDraft(fresh);
+    const draft = copyDraft(fresh);
+    for (const [owner, days] of copyPaint(kept))
+      draft.paint.set(owner, new Map([...(draft.paint.get(owner) ?? []), ...days]));
+    this.draft = draft;
     this.baseline = fresh;
     this.scope?.commit(copyDraft(fresh));
+  }
+  /** The (owner, date) days painted since `sent` was taken. */
+  private paintedSince(sent: OwnerPaint): OwnerPaint {
+    const since: OwnerPaint = new Map();
+    for (const [owner, days] of this.draft.paint)
+      for (const [date, day] of days)
+        if (!samePaint(day, sent.get(owner)?.get(date) ?? []))
+          since.set(owner, new Map(since.get(owner)).set(date, day));
+    return since;
+  }
+  /** One entry per (owner, date) whose paint differs from the saved state, for owners the model
+   *  still has; a removed date sends none, as the server drops its paint with it. */
+  private changedPaint(): PaintEntries {
+    const known = new Set(
+      this.model.departments.flatMap(({ id, zones }) => [
+        departmentKey(id),
+        ...zones.map((zone) => zoneKey(zone.id)),
+      ]),
+    );
+    const owners = [...new Set([...this.baseline.paint.keys(), ...this.draft.paint.keys()])]
+      .filter((owner) => known.has(owner))
+      .sort();
+    const paint: NonNullable<SpecialDayInput["paint"]>[number][] = [];
+    const zonePaint: NonNullable<SpecialDayInput["zonePaint"]>[number][] = [];
+    for (const owner of owners)
+      for (const { date } of this.draft.dates) {
+        const day = this.draft.paint.get(owner)?.get(date) ?? [];
+        if (samePaint(day, this.baseline.paint.get(owner)?.get(date) ?? [])) continue;
+        const id = owner.slice(2);
+        if (owner.startsWith("d:"))
+          paint.push({
+            departmentId: id,
+            date,
+            ranges: day.map(({ periodId, startsAt, endsAt }) => ({ periodId, startsAt, endsAt })),
+          });
+        else
+          zonePaint.push({
+            zoneId: id,
+            date,
+            ranges: day.map(({ periodId, startsAt, endsAt }) => ({
+              kind: periodId === ZONE_OPEN ? "open" : "closed",
+              startsAt,
+              endsAt,
+            })),
+          });
+      }
+    return { ...(paint.length ? { paint } : {}), ...(zonePaint.length ? { zonePaint } : {}) };
   }
   private change(next: Draft) {
     this.draft = next;
@@ -565,7 +627,9 @@ export class SpecialDayPainter extends LitElement {
       name: this.draft.name.trim(),
       repeatsYearly: this.draft.repeatsYearly,
       dates: this.draft.dates.map(({ date, closedAllDay }) => ({ date, closedAllDay })),
+      ...this.changedPaint(),
     };
+    const sent = copyPaint(this.draft.paint);
     const generation = this.generation;
     this.saving = true;
     this.refused = undefined;
@@ -582,7 +646,7 @@ export class SpecialDayPainter extends LitElement {
     this.specialDayId = detail.id;
     this.seeded = detail.id;
     this.attempted = false;
-    this.adopt(detail, []);
+    this.adopt(detail, [], "", this.paintedSince(sent));
     this.dispatchEvent(
       new CustomEvent("special-day-saved", { detail: { detail }, bubbles: true, composed: true }),
     );
@@ -591,8 +655,19 @@ export class SpecialDayPainter extends LitElement {
   private refuse(error: unknown, input: SpecialDayInput) {
     const code = codeOf(error);
     const params =
-      (error as { params?: { field?: unknown; reason?: unknown; date?: unknown; name?: unknown } })
-        .params ?? {};
+      (
+        error as {
+          params?: {
+            field?: unknown;
+            reason?: unknown;
+            date?: unknown;
+            name?: unknown;
+            departmentId?: unknown;
+            zoneId?: unknown;
+            periodId?: unknown;
+          };
+        }
+      ).params ?? {};
     const column = (date: LocalDate | undefined) =>
       date !== undefined && this.draft.dates.some((entry) => entry.date === date)
         ? date
@@ -608,6 +683,12 @@ export class SpecialDayPainter extends LitElement {
         field: "dates",
         column: column(params.date),
       };
+    } else if (code === "department.not_found") {
+      this.refused = { message: t("menu.department_gone") };
+    } else if (code === "service_zone.not_found") {
+      this.refused = { message: t("special.zone_gone") };
+    } else if (code === "special_day.invalid" && this.refusePaint(params, input)) {
+      return;
     } else if (code === "special_day.invalid" && params.field === "name") {
       this.refused = { message: t("special.field_refused"), field: "name" };
     } else if (code === "special_day.invalid" && typeof params.field === "string") {
@@ -627,6 +708,60 @@ export class SpecialDayPainter extends LitElement {
     } else {
       this.refused = { message: t("menu.save_error") };
     }
+  }
+
+  /** A refusal naming a paint entry, by its place in the request or, for a kept entry, by its
+   *  owner and date: shows that owner, marking the date's column. False when it names none. */
+  private refusePaint(
+    params: {
+      field?: unknown;
+      reason?: unknown;
+      date?: unknown;
+      departmentId?: unknown;
+      zoneId?: unknown;
+      periodId?: unknown;
+    },
+    input: SpecialDayInput,
+  ): boolean {
+    const match = /^(paint|zonePaint)(?:\.(\d+))?(?=\.|$)/.exec(
+      typeof params.field === "string" ? params.field : "",
+    );
+    if (!match) return false;
+    const zoned = match[1] === "zonePaint";
+    const named = (value: unknown) => (typeof value === "string" ? value : undefined);
+    let id: string | undefined;
+    let date: LocalDate | undefined;
+    if (match[2] === undefined) {
+      id = named(zoned ? params.zoneId : params.departmentId);
+      date = isLocalDate(params.date) ? params.date : undefined;
+    } else {
+      const index = Number(match[2]);
+      const entry = zoned ? input.zonePaint?.[index] : input.paint?.[index];
+      id = entry && ("zoneId" in entry ? entry.zoneId : entry.departmentId);
+      date = entry?.date;
+    }
+    if (id === undefined) return false;
+    const owner = zoned ? zoneKey(id) : departmentKey(id);
+    const period = this.model.departments
+      .find((department) => department.id === id)
+      ?.periods.find((entry) => entry.id === params.periodId);
+    const reason =
+      params.reason === "end_offset" || params.reason === "clock_skips"
+        ? refusalReason("special_day.invalid", params.reason, period)
+        : t("opening.check_day");
+    const name = ownerName(this.model, owner);
+    const column = date !== undefined && this.draft.dates.some((entry) => entry.date === date);
+    this.refused = {
+      message:
+        date === undefined
+          ? format("painter.refused_in", { name, message: reason })
+          : format("painter.refused_on", { name, day: formatDate(date), message: reason }),
+      owner,
+      column: column ? date : undefined,
+      mark: reason,
+    };
+    this.pick(zoned ? `zone:${id}` : id);
+    return true;
   }
 
   private async confirmDelete() {
@@ -867,9 +1002,10 @@ export class SpecialDayPainter extends LitElement {
           />${t("hours.closed")}</label
         >`,
     );
-    const columnErrors = this.refused?.column
-      ? new Map([[this.refused.column, this.refused.message]])
-      : NOTHING_BY_KEY;
+    const columnErrors = (shown: string | undefined) =>
+      this.refused?.column && (this.refused.owner === undefined || this.refused.owner === shown)
+        ? new Map([[this.refused.column, this.refused.mark ?? this.refused.message]])
+        : NOTHING_BY_KEY;
     const cutover = this.cutover();
     if (!department)
       return html`${notices}<paint-grid
@@ -878,7 +1014,7 @@ export class SpecialDayPainter extends LitElement {
           .closedErases=${false}
           .cutover=${cutover}
           .readOnly=${true}
-          .columnErrors=${columnErrors}
+          .columnErrors=${columnErrors(undefined)}
           >${ticks}</paint-grid
         >`;
     const zone = this.zone(department);
@@ -910,8 +1046,8 @@ export class SpecialDayPainter extends LitElement {
         .closedErases=${false}
         .paintable=${zone ? ZONE_PAINTABLE : undefined}
         .cutover=${cutover}
-        .readOnly=${locked || this.offered !== undefined}
-        .columnErrors=${columnErrors}
+        .readOnly=${this.readOnly || this.loading || this.loadFailed || this.offered !== undefined}
+        .columnErrors=${columnErrors(owner)}
         @paint-change=${(event: CustomEvent<PaintChange>) => this.paint(owner, event)}
         >${ticks}</paint-grid
       >`;

@@ -85,7 +85,7 @@ function listOf(names: readonly string[]): string {
     type: "conjunction",
   }).format(names);
 }
-function ownerName(model: Model, key: string): string {
+export function ownerName(model: Model, key: string): string {
   const id = key.slice(2);
   if (key.startsWith("d:")) return model.departments.find((entry) => entry.id === id)?.name ?? "";
   return (
@@ -110,7 +110,7 @@ function shownIn(model: Model, departmentId: string, zoneId: string) {
 /** Department columns erase on Closed, so a Closed paint is never a department slot. */
 const isPeriodPaint = (paint: Paint): paint is Paint & { periodId: string } =>
   paint.periodId !== null;
-function refusalReason(code: string, reason: unknown, period: Period | undefined): string {
+export function refusalReason(code: string, reason: unknown, period: Period | undefined): string {
   if (reason === "end_offset")
     return period
       ? format("menu.offset_timetable_named", { period: period.name })

@@ -3,7 +3,7 @@ import { OpeningHoursApi } from "../dashboard/opening-hours-client.js";
 import type { SpecialDayPainter } from "../dashboard/special-day-painter.js";
 import type { SeasonDays } from "../opening-hours-calendar.js";
 import type { ClosedRange, ServiceRange } from "../service-day.js";
-import type { SpecialDayDetail, SpecialDaySummary } from "../special-days.js";
+import type { SpecialDayDetail, SpecialDayInput, SpecialDaySummary } from "../special-days.js";
 import { painterModel, type Write } from "./season-painter-fixture.js";
 
 export { painterModel, type Write };
@@ -52,17 +52,31 @@ export interface SpecialDayAnswers {
   answer?: (write: Write) => unknown;
 }
 
-/** The answer a save gets by default: the request's facts as a stored day `sd1`, or `sd-new`. */
-function savedFrom(write: Write): SpecialDayDetail {
-  const body = write.body as Pick<SpecialDayDetail, "name" | "repeatsYearly" | "dates">;
+/** The answer a save gets by default, as the server builds it: the request's facts as a stored day
+ *  `sd1`, or `sd-new`, keeping the stored paint of every kept date the request names no paint for. */
+function savedFrom(write: Write, stored: SpecialDayDetail | undefined): SpecialDayDetail {
+  const body = write.body as SpecialDayInput;
   const id = write.method === "POST" ? "sd-new" : decodeURIComponent(write.url.split("/").pop()!);
+  const dates = new Set(body.dates.map(({ date }) => date));
+  const named = new Set([
+    ...(body.paint ?? []).map(({ departmentId, date }) => `d:${departmentId}/${date}`),
+    ...(body.zonePaint ?? []).map(({ zoneId, date }) => `z:${zoneId}/${date}`),
+  ]);
+  const kept = <T extends { date: string }>(entries: readonly T[], key: (entry: T) => string) =>
+    entries.filter((entry) => dates.has(entry.date) && !named.has(key(entry)));
   return {
     id,
     name: body.name.trim(),
     repeatsYearly: body.repeatsYearly,
     dates: body.dates.map(({ date, closedAllDay }) => ({ date, closedAllDay })),
-    paint: [],
-    zonePaint: [],
+    paint: [
+      ...kept(stored?.paint ?? [], ({ departmentId, date }) => `d:${departmentId}/${date}`),
+      ...(body.paint ?? []).filter(({ ranges }) => ranges.length),
+    ].map((entry) => ({ ...entry, ranges: [...entry.ranges] })),
+    zonePaint: [
+      ...kept(stored?.zonePaint ?? [], ({ zoneId, date }) => `z:${zoneId}/${date}`),
+      ...(body.zonePaint ?? []).filter(({ ranges }) => ranges.length),
+    ].map((entry) => ({ ...entry, ranges: [...entry.ranges] })),
   };
 }
 
@@ -120,7 +134,9 @@ export function specialDayApi(writes: Write[] = [], answers: SpecialDayAnswers =
     const answer = answers.answer ? await answers.answer(write) : undefined;
     if (answer && typeof answer === "object" && "code" in answer) throw answer;
     if (answer !== undefined) return answer;
-    return method === "DELETE" ? undefined : savedFrom(write);
+    if (method === "DELETE") return undefined;
+    const stored = answers.days?.[decodeURIComponent(url.split("/").pop()!)];
+    return savedFrom(write, method === "PUT" ? stored : undefined);
   }) as DashboardRequest);
 }
 

@@ -88,6 +88,7 @@ const en = {
   "special.no": "No",
   "special.yes": "Yes",
   "special.open": "Open",
+  "special.zone_gone": "This zone no longer exists.",
   "special.season_error": "The season's hours could not be loaded.",
   "special.changeover_differs":
     "These dates start their day at different times; drawn from {time}.",
@@ -897,6 +898,7 @@ const es: Record<keyof typeof en, string> = {
   "special.no": "No",
   "special.yes": "Sí",
   "special.open": "Abierto",
+  "special.zone_gone": "Esta zona ya no existe.",
   "special.season_error": "No se ha podido cargar el horario de la temporada.",
   "special.changeover_differs":
     "Estas fechas empiezan el día a horas distintas; se dibujan desde las {time}.",
