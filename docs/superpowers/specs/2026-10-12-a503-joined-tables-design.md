@@ -184,7 +184,7 @@ split today. A split decides only who sits where today.
   stay joined, and the merge is untouched. A split down to one part first undoes the merge, which is
   refused while a party holds it (`tab.already_open`, `refuseHeld`,
   `apps/server/src/floor-today-table.ts:63-67`), as a merge's Split is today.
-  > Superseded 2026-10-13 by A579 part 3a ([design](2026-10-13-a579-flattened-joined-tables-design.md)): pushing a joined table into a group splits it; the group holds its real tables.
+  > Changed 2026-10-13 by A579 part 3a ([design](2026-10-13-a579-flattened-joined-tables-design.md)): pushing a joined table into a group splits it, so this holds only for a joined table a reset leaves in a group.
 - **A party stays with what remains** (**Owner**). Split is allowed while a party is seated: the party
   and its bills stay at the joined table while two or more parts remain. When one part remains, the
   party's hold on the joined table passes to that part and nothing else changes: any other table the

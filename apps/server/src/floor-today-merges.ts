@@ -152,7 +152,8 @@ export async function joinMergeMembers(
  * `moving` joins `target`'s merge (or a new one), touching it on `side`; with `free`, neither table
  * nor a table still joined in either may be held or need clearing.
  * A joined table never goes in a merge: its tables still joined are split off it and go in instead,
- * and its guests pass to them; the caller tells the kitchen.
+ * and its guests pass to them; the caller tells the kitchen. A joined `target` a reset left in a
+ * merge stays whole in it.
  */
 export async function writeMerge(
   tx: Transaction,
@@ -180,7 +181,7 @@ export async function writeMerge(
   const { seats } = args;
 
   const movingParts = await partsOf(tx, moving.tableId);
-  const targetParts = await partsOf(tx, target.tableId);
+  const targetParts = target.merge === null ? await partsOf(tx, target.tableId) : [];
   if (movingParts.length > 0) await refuseDeliveryPending(tx, moving.tableId);
   if (targetParts.length > 0) await refuseDeliveryPending(tx, target.tableId);
   if (args.free) {

@@ -468,6 +468,11 @@ their party check, move the room's revision when they end a group, and answer wi
   reset ends it (`floor-today-store.ts:364`), and Long table comes back whole. Only a group with
   guests seated at ship time stays. **Default:** a venue reset all the same, said in that PR's first
   line. That is acceptable before go-live, and simpler than teaching the new code the old shape.
+
+  > Corrected 2026-10-13 by part 3a's review: the reset still makes this shape. A group the reset
+  > keeps waiting can hold a table the saved plan has made a joined table; a split down to one then
+  > refuses or ends the group (`splitJoinedTable`), and a table pushed onto it joins with the joined
+  > table whole (`writeMerge`).
 - **A till still showing the old page** sends no revision. The server accepts a missing revision until
   the till part lands (see "Build"), so nothing breaks in between.
 

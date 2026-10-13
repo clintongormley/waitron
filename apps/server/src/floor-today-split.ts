@@ -1,7 +1,8 @@
 import { eq } from "drizzle-orm";
 import { floorTodaySplitParts, floorTodayTables, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import { refuseInJoinedTable, todayOf } from "./floor-today-table.js";
+import { refuseHeld, refuseInJoinedTable, todayOf } from "./floor-today-table.js";
+import { leaveMergesRestoring } from "./floor-today-merges.js";
 import { placementColumns, placementOf, refuseDeliveryPending } from "./floor-today-store.js";
 import { partPlaces, remainingPlace } from "./joined-split-layout.js";
 import { partsOf, passGuests } from "./floor-today-parts.js";
@@ -16,7 +17,7 @@ export async function splitJoinedTable(
 ): Promise<void> {
   const { tableId, partIds, seats } = args;
   const today = await todayOf(tx, cfg, tableId);
-  const row = placementOf(today.row);
+  let row = placementOf(today.row);
   if (row === null) throw new AppError("table.not_on_today_plan", { tableId });
   if (today.row.takenOff) throw new AppError("table.taken_off", { tableId });
 
@@ -37,7 +38,16 @@ export async function splitJoinedTable(
   }
   if (left.length >= 2 && seats === null) throw new AppError("joined_table.seats_required", {});
   const toOne = left.length === 1;
-  if (toOne) await refuseDeliveryPending(tx, tableId);
+  if (toOne) {
+    await refuseDeliveryPending(tx, tableId);
+    // A reset can leave a joined table in a group that waited for its guests.
+    if (today.merge !== null) {
+      const members = today.merge.members.map((member) => member.tableId);
+      await refuseHeld(tx, members);
+      await leaveMergesRestoring(tx, members);
+      row = placementOf((await todayOf(tx, cfg, tableId)).row)!;
+    }
+  }
 
   const splitting = toOne ? joined : named;
   const covered = parts.findIndex((part) => !part.splitOff);
