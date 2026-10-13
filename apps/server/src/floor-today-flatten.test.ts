@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
+  diningTables,
   floorTodayJoinTables,
   floorTodayJoins,
   floorTodaySplitParts,
@@ -326,6 +327,31 @@ describe("refusals of a free push with a joined table", () => {
     });
     expect(await everything()).toEqual(before);
   });
+
+  for (const pushed of ["Bar onto Long table", "Long table onto Bar"] as const) {
+    it(`${pushed}, while Counter 4 still joined needs clearing, is refused`, async () => {
+      const { table } = await LONG_TABLE();
+      await inTx(v, (tx) =>
+        tx
+          .update(diningTables)
+          .set({ needsClearingSince: NOW.toISOString() })
+          .where(eq(diningTables.id, table.c4!)),
+      );
+      const before = await everything();
+
+      const error = await refusalOf(
+        pushed === "Bar onto Long table"
+          ? push(table.bar!, table.long!, "left")
+          : push(table.long!, table.bar!, "right"),
+      );
+
+      expect({ code: error?.code, params: error?.params }).toEqual({
+        code: "table.needs_clearing",
+        params: { tableId: table.c4! },
+      });
+      expect(await everything()).toEqual(before);
+    });
+  }
 
   it("Long table with guests cannot be pushed in a free merge", async () => {
     const { table } = await LONG_TABLE();

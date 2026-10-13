@@ -159,7 +159,8 @@ export async function partyRevision(tx: Transaction, partyId: string): Promise<n
 }
 
 /**
- * `moving` joins `target`'s merge (or a new one), touching it on `side`; with `free`, neither table may be held or need clearing.
+ * `moving` joins `target`'s merge (or a new one), touching it on `side`; with `free`, neither table
+ * nor a table still joined in either may be held or need clearing.
  * A joined table never goes in a merge: its tables still joined are split off it and go in instead,
  * and its guests pass to them; the caller tells the kitchen.
  */
@@ -192,6 +193,12 @@ export async function writeMerge(
   const targetParts = await partsOf(tx, target.tableId);
   if (movingParts.length > 0) await refuseDeliveryPending(tx, moving.tableId);
   if (targetParts.length > 0) await refuseDeliveryPending(tx, target.tableId);
+  if (args.free) {
+    const joining = [...movingParts, ...targetParts].flatMap((part) =>
+      part.stillJoined ? [part.tableId] : [],
+    );
+    await refuseUnfree(tx, joining);
+  }
   await splitInUse(tx, moving.tableId, movingParts);
   await splitInUse(tx, target.tableId, targetParts);
 
