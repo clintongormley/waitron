@@ -328,10 +328,12 @@ export interface GroupSplit {
 }
 
 /** Split tables… on a table in a group: its members in number order, its name, and whether the
- * tables `staying` need seats. Mirrors `rejoining` (apps/server/src/floor-today-split-group.ts):
- * no seats when nobody sits at the group and what stays is every table split off one joined table
- * with none of its tables still joined and no food on its way. The server's check that each stays
- * where that joined table's layout puts it is left to the server. */
+ * tables `staying` need seats. None are asked when no member has a party (as `splitGroup`'s holders
+ * check in apps/server/src/floor-today-split-group.ts) and what stays is every table split off one
+ * joined table with none of its tables still joined, none with food on its way. Left to the server:
+ * a part held by a party when the joined table went live, which the till's tables do not show, and
+ * whether each stands where that joined table's layout puts it. Its seats refusal makes the window
+ * ask Seats. */
 export function groupSplitOf(
   table: TableState,
   zoneTables: readonly TableState[],
