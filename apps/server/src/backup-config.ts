@@ -1,6 +1,8 @@
 import { randomBytes } from "node:crypto";
 import { resolve } from "node:path";
 import { AppError, isAppError } from "@waitron/shared";
+import { readBucketConfig } from "@waitron/stream";
+import { archiveNamespace, type ArchiveSettings } from "./archive-settings.js";
 import { isUnset } from "./env-value.js";
 import { positiveInt } from "./config.js";
 import { MIN_PASSPHRASE_LENGTH } from "./recovery-bundle.js";
@@ -12,10 +14,16 @@ export type BackupSchedule =
   | { kind: "wall-clock"; days: "daily" | number[]; at: { hour: number; minute: number } | "auto" };
 
 export interface BackupConfig {
-  /** Never empty; ids and resolved dirs are both unique. */
+  source: "environment" | "dashboard";
+  /** The stored record's revision; `undefined` for the environment. */
+  revision: string | undefined;
+  /** False only for a dashboard record stored switched off, which runs no sweep. */
+  enabled: boolean;
+  /** Never empty; ids are unique, and so are local folders' resolved dirs. */
   destinations: BackupDestination[];
-  /** The operator-held passphrase every backup artifact is encrypted under. */
-  recoveryKey: string;
+  /** The operator-held passphrase every backup artifact is encrypted under. `undefined` only on a
+   * switched-off record whose box holds no usable key. */
+  recoveryKey: string | undefined;
   schedule: BackupSchedule;
   /** The count cap: how many archives each destination keeps. */
   retain: number;
@@ -94,8 +102,67 @@ function parseDestinationTimeout(env: Env): number {
   return ms;
 }
 
-function parseDestinations(env: Env): BackupDestination[] {
-  const out: Extract<BackupDestination, { kind: "local-fs" }>[] = [];
+/** The `WAITRON_BACKUP_*` variables whose presence in the RAW base env marks the backup settings as
+ * the environment's, so the dashboard cannot change them. */
+export const BACKUP_ENV_KEYS = [
+  "WAITRON_BACKUP_DIR",
+  "WAITRON_BACKUP_DESTINATIONS",
+  "WAITRON_BACKUP_RECOVERY_KEY",
+  "WAITRON_BACKUP_SCHEDULE_DAYS",
+  "WAITRON_BACKUP_AT",
+  "WAITRON_BACKUP_INTERVAL_MS",
+  "WAITRON_BACKUP_RETAIN",
+  "WAITRON_BACKUP_RETAIN_DAYS",
+  "WAITRON_BACKUP_DESTINATION_TIMEOUT_MS",
+] as const;
+
+export function isBackupManagedByEnvironment(base: Env): boolean {
+  return BACKUP_ENV_KEYS.some((k) => !isUnset(base[k]));
+}
+
+const LOCAL_FIELDS = ["kind", "id", "dir"];
+const S3_FIELDS = [
+  "kind",
+  "id",
+  "endpoint",
+  "region",
+  "bucket",
+  "prefix",
+  "accessKeyId",
+  "secretAccessKey",
+];
+
+function badEntry(): AppError {
+  return new AppError("backup.destinations_invalid", { reason: "bad_entry" });
+}
+
+/** Every refusal is `bad_entry` with no value in it: an entry may carry a secret. */
+function parseEntry(raw: unknown, venueId: string): BackupDestination {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) throw badEntry();
+  const entry = raw as Record<string, unknown>;
+  const allowed = entry.kind === "local-fs" ? LOCAL_FIELDS : entry.kind === "s3" ? S3_FIELDS : null;
+  if (allowed === null || !Object.keys(entry).every((k) => allowed.includes(k))) throw badEntry();
+  const { id } = entry;
+  if (typeof id !== "string" || isUnset(id)) throw badEntry();
+  if (entry.kind === "local-fs") {
+    const { dir } = entry;
+    // `resolve("")` is the working directory (CLAUDE.md §3).
+    if (typeof dir !== "string" || isUnset(dir)) throw badEntry();
+    return { kind: "local-fs", id, dir: resolve(dir) };
+  }
+  try {
+    const bucket = readBucketConfig(entry, () => {
+      throw badEntry();
+    });
+    archiveNamespace(bucket.prefix, venueId);
+    return { kind: "s3", id, bucket, venueId };
+  } catch {
+    throw badEntry();
+  }
+}
+
+function parseDestinations(env: Env, venueId: string): BackupDestination[] {
+  const out: BackupDestination[] = [];
   const dir = env.WAITRON_BACKUP_DIR;
   if (!isUnset(dir)) out.push({ kind: "local-fs", id: "primary", dir: resolve(dir) });
 
@@ -110,22 +177,7 @@ function parseDestinations(env: Env): BackupDestination[] {
     if (!Array.isArray(parsed)) {
       throw new AppError("backup.destinations_invalid", { reason: "not_array" });
     }
-    for (const raw of parsed) {
-      const entry = raw as { kind?: unknown; id?: unknown; dir?: unknown } | null;
-      if (
-        typeof entry !== "object" ||
-        entry === null ||
-        entry.kind !== "local-fs" ||
-        typeof entry.id !== "string" ||
-        typeof entry.dir !== "string" ||
-        // `resolve("")` is the working directory (CLAUDE.md §3).
-        isUnset(entry.id) ||
-        isUnset(entry.dir)
-      ) {
-        throw new AppError("backup.destinations_invalid", { reason: "bad_entry" });
-      }
-      out.push({ kind: "local-fs", id: entry.id, dir: resolve(entry.dir) });
-    }
+    for (const raw of parsed) out.push(parseEntry(raw, venueId));
   }
 
   // Compared after `resolve`, so `/mnt/a` and `/mnt/a/` collide.
@@ -136,6 +188,7 @@ function parseDestinations(env: Env): BackupDestination[] {
       throw new AppError("backup.destinations_invalid", { reason: "duplicate_id" });
     }
     seenIds.add(d.id);
+    if (d.kind !== "local-fs") continue;
     if (seenDirs.has(d.dir)) {
       throw new AppError("backup.destinations_invalid", { reason: "duplicate_dir" });
     }
@@ -177,18 +230,31 @@ export async function readHeldKey(
   }
 }
 
-/**
- * `undefined`, and no backup duty runs, when no destination is configured. With one, the recovery
- * key is required, so an unattended backup never writes an unencrypted artifact.
- */
-export function loadBackupConfig(env: Env): BackupConfig | undefined {
-  const destinations = parseDestinations(env);
-  if (destinations.length === 0) return undefined;
+function keyRotatedAt(env: Env): string | undefined {
+  return isUnset(env.WAITRON_BACKUP_KEY_ROTATED_AT) ? undefined : env.WAITRON_BACKUP_KEY_ROTATED_AT;
+}
 
+function requiredKey(env: Env): string {
   const recoveryKey = loadRecoveryKey(env);
   if (recoveryKey === undefined) throw new AppError("backup.recovery_key_missing", {});
+  return recoveryKey;
+}
+
+/**
+ * The settings the environment injects. `undefined`, and no backup duty runs, when no destination is
+ * configured. With one, the recovery key is required, so an unattended backup never writes an
+ * unencrypted artifact. `venueId` is stamped on every bucket destination.
+ */
+export function loadBackupConfig(env: Env, venueId: string): BackupConfig | undefined {
+  const destinations = parseDestinations(env, venueId);
+  if (destinations.length === 0) return undefined;
+
+  const recoveryKey = requiredKey(env);
 
   return {
+    source: "environment",
+    revision: undefined,
+    enabled: true,
     destinations,
     recoveryKey,
     schedule: parseSchedule(env),
@@ -196,8 +262,45 @@ export function loadBackupConfig(env: Env): BackupConfig | undefined {
     retainDays: positiveInt(env, "WAITRON_BACKUP_RETAIN_DAYS", DEFAULT_BACKUP_RETAIN_DAYS),
     staleAfterMs: positiveInt(env, "WAITRON_BACKUP_STALE_AFTER_MS", DEFAULT_BACKUP_STALE_AFTER_MS),
     destinationTimeoutMs: parseDestinationTimeout(env),
-    keyRotatedAt: isUnset(env.WAITRON_BACKUP_KEY_ROTATED_AT)
-      ? undefined
-      : env.WAITRON_BACKUP_KEY_ROTATED_AT,
+    keyRotatedAt: keyRotatedAt(env),
   };
+}
+
+/**
+ * Exactly one source: the environment when it owns any backup variable, else the sealed dashboard
+ * record. Without a record nothing runs; `WAITRON_BACKUP_DIR` left in `backup.env` is not read,
+ * because no installation's data is carried forward before go-live (CLAUDE.md §3).
+ */
+export function resolveBackupConfig(input: {
+  managedByEnvironment: boolean;
+  env: Env;
+  sealed: ArchiveSettings | null;
+  venueId: string;
+}): BackupConfig | undefined {
+  const { env, sealed } = input;
+  if (input.managedByEnvironment) return loadBackupConfig(env, input.venueId);
+  if (sealed === null) return undefined;
+  return {
+    source: "dashboard",
+    revision: sealed.revision,
+    enabled: sealed.enabled,
+    destinations: sealed.destinations,
+    // A switched-off record runs nothing, so a missing or short key must not stop it being reported.
+    recoveryKey: sealed.enabled ? requiredKey(env) : heldUsableKey(env),
+    schedule: sealed.schedule,
+    retain: sealed.retention.count,
+    retainDays: sealed.retention.days,
+    staleAfterMs: positiveInt(env, "WAITRON_BACKUP_STALE_AFTER_MS", DEFAULT_BACKUP_STALE_AFTER_MS),
+    destinationTimeoutMs: sealed.destinationTimeoutMs,
+    keyRotatedAt: keyRotatedAt(env),
+  };
+}
+
+function heldUsableKey(env: Env): string | undefined {
+  try {
+    return loadRecoveryKey(env);
+  } catch (error) {
+    if (isAppError(error) && error.code === "backup.recovery_key_too_short") return undefined;
+    throw error;
+  }
 }

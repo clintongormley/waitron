@@ -32,6 +32,7 @@ import "./errors.js";
 export interface BackupApiDeps {
   supervisor: BackupSupervisor;
   db: Database;
+  venueId: string;
   stateDir: string;
   /** The recovery key from the box env, read afresh each call. Answers with no archive destination
    * configured, which the supervisor's `current()` cannot. */
@@ -180,7 +181,8 @@ async function readRotateBody(c: Context): Promise<{ recoveryKey: string }> {
 function fromCurrent(
   cur: BackupRuntimeStatus,
 ): Omit<BackupEnvInput, "recoveryKey" | "keyRotatedAt"> {
-  const dir = cur.destinations[0]?.dir;
+  const first = cur.destinations[0];
+  const dir = first?.kind === "local-fs" ? first.dir : undefined;
   if (dir === undefined || cur.schedule === undefined || cur.retention === undefined) {
     throw new AppError("backup.request_invalid", { field: "config" });
   }
@@ -285,7 +287,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
         assertStorableKey(input.recoveryKey);
         // Dry-validate the EXACT record we are about to write, so the route rejects exactly what boot
         // would BEFORE touching disk.
-        loadBackupConfig(backupEnvRecord(input));
+        loadBackupConfig(backupEnvRecord(input), deps.venueId);
         await persist(() => writeBackupEnv(deps.stateDir, input));
         await deps.supervisor.reload();
         // The effective key is what the box will actually encrypt under. If a partial env override (or
@@ -335,7 +337,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
           return c.json(await statusBody({ held: true, key: recoveryKey }));
         }
         const input: BackupEnvInput = { ...fromCurrent(cur), recoveryKey, keyRotatedAt };
-        loadBackupConfig(backupEnvRecord(input));
+        loadBackupConfig(backupEnvRecord(input), deps.venueId);
         await persist(() => writeBackupEnv(deps.stateDir, input));
         await deps.supervisor.reload();
         if (deps.supervisor.current().recoveryKey !== recoveryKey) {

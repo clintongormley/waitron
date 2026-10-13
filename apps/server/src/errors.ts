@@ -1138,8 +1138,8 @@ declare module "@waitron/shared" {
     "backup.source_kind_unsupported": { kind: string };
     /**
      * A backup admin route (`apply`/`rotate`), or the bucket copy's Save on a box holding no
-     * recovery key, was refused because a variable `BACKUP_ENV_KEYS` (`boot.ts`) lists is set in the
-     * environment. The environment then owns this box's backup settings, and the server
+     * recovery key, was refused because a variable `BACKUP_ENV_KEYS` (`backup-config.ts`) lists is
+     * set in the environment. The environment then owns this box's backup settings, and the server
      * does not write `backup.env` beside it. No params: an env var could hold the recovery key. */
     "backup.managed_by_environment": Record<string, never>;
     /**

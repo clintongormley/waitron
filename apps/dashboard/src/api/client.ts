@@ -1613,11 +1613,28 @@ export interface ServerListing {
 
 /** Never carries the recovery key: the server strips it (`projectStatus`,
  * `apps/server/src/backup-api.ts`). */
+/** LOCAL copy of the server's `DestinationView` (`apps/server/src/backup-supervisor.ts`). */
+export type BackupDestinationView =
+  | { id: string; kind: "local-fs"; dir: string }
+  | {
+      id: string;
+      kind: "s3";
+      endpoint: string | null;
+      region: string;
+      bucket: string;
+      namespace: string;
+      credentialPresent: true;
+    };
+
 export interface BackupStatusView {
   enabled: boolean;
   isPrimary: boolean;
   managedByEnvironment: boolean;
-  destinations: { id: string; dir: string }[];
+  source: "environment" | "dashboard" | null;
+  revision: string | null;
+  /** A dashboard record is stored switched off. */
+  storedDisabled: boolean;
+  destinations: BackupDestinationView[];
   schedule?: BackupSchedule;
   retention?: { count: number; days: number };
   keyFingerprint?: string;

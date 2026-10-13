@@ -32,6 +32,9 @@ const off: BackupStatusView = {
   enabled: false,
   isPrimary: true,
   managedByEnvironment: false,
+  source: null,
+  revision: null,
+  storedDisabled: false,
   destinations: [],
   backupStatus: { configured: false },
   archiveUnderCurrentKey: false,
@@ -41,7 +44,7 @@ const off: BackupStatusView = {
 const on: BackupStatusView = {
   ...off,
   enabled: true,
-  destinations: [{ id: "primary", dir: "/mnt/usb/waitron" }],
+  destinations: [{ id: "primary", kind: "local-fs", dir: "/mnt/usb/waitron" }],
   schedule: { kind: "wall-clock", days: [1, 2, 3, 4, 5], at: "auto" },
   retention: { count: 7, days: 30 },
 };
@@ -203,7 +206,10 @@ it("accepted settings commit only the submitted values and retain newer input", 
   await change(screen, "destination", "/mnt/submitted");
   await click(screen, "save-settings");
   await change(screen, "destination", "/mnt/newer");
-  write.resolve({ ...on, destinations: [{ id: "primary", dir: "/mnt/submitted" }] });
+  write.resolve({
+    ...on,
+    destinations: [{ id: "primary", kind: "local-fs", dir: "/mnt/submitted" }],
+  });
   await expect.poll(() => field(screen, "save-settings")?.hasAttribute("disabled")).toBe(false);
   expect(field(screen, "destination").value).toBe("/mnt/newer");
   expect(unload()).toBe(true);
@@ -273,7 +279,7 @@ it("a live backup read cannot reset an edited opening baseline", async () => {
   const { app, screen, api } = await mount(on, { getBackupStatus: async () => status });
   await edit(screen);
   await change(screen, "destination", "/mnt/changed");
-  status = { ...on, destinations: [{ id: "primary", dir: "/mnt/changed" }] };
+  status = { ...on, destinations: [{ id: "primary", kind: "local-fs", dir: "/mnt/changed" }] };
   api.liveData.invalidate([{ type: "backup_status" }]);
   await expect.poll(() => field(screen, "status").textContent).toContain("/mnt/changed");
   expect(unload()).toBe(true);

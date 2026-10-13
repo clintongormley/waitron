@@ -18,6 +18,7 @@ import type { WaitronModule } from "@waitron/module";
 import { VENUE_FILE } from "@waitron/store";
 import { AppError } from "@waitron/shared";
 import { codeOf } from "@waitron/server-kit";
+import { archiveNamespace } from "./archive-settings.js";
 import { buildBackupBackend } from "./backup-backends.js";
 import type { BackupConfig, BackupSchedule } from "./backup-config.js";
 import type { ScheduleClock } from "./backup-schedule.js";
@@ -36,12 +37,41 @@ import "./errors.js";
 
 /** A SYNC, config-derived snapshot of the backup duty — no I/O. The routes and the box-status shell
  * read this; `status()` layers the async freshness on top. */
+/** Where a destination is, never what opens it: a bucket's keys stay on the box. */
+export type DestinationView =
+  | { id: string; kind: "local-fs"; dir: string }
+  | {
+      id: string;
+      kind: "s3";
+      endpoint: string | null;
+      region: string;
+      bucket: string;
+      namespace: string;
+      credentialPresent: true;
+    };
+
+export function destinationView(d: BackupDestination): DestinationView {
+  if (d.kind === "local-fs") return { id: d.id, kind: "local-fs", dir: d.dir };
+  return {
+    id: d.id,
+    kind: "s3",
+    endpoint: d.bucket.endpoint ?? null,
+    region: d.bucket.region,
+    bucket: d.bucket.bucket,
+    namespace: archiveNamespace(d.bucket.prefix, d.venueId),
+    credentialPresent: true,
+  };
+}
+
 export interface BackupRuntimeStatus {
   enabled: boolean;
   isPrimary: boolean;
   managedByEnvironment: boolean;
-  /** A bucket destination shows its id alone here. */
-  destinations: { id: string; dir?: string }[];
+  source: "environment" | "dashboard" | null;
+  revision: string | null;
+  /** A dashboard record is stored switched off. */
+  storedDisabled: boolean;
+  destinations: DestinationView[];
   schedule: BackupSchedule | undefined;
   retention: { count: number; days: number } | undefined;
   /** Short hash PREFIX of the running recovery key — NEVER the key itself. */
@@ -153,7 +183,12 @@ export class BackupSupervisor {
       if (this.#stopped) return; // a stop() landed during buildConfig — don't adopt this config
       this.#config = cfg;
       this.#sweep = new Map();
-      if (cfg === undefined || this.#deps.readSingletonRole() !== "primary") {
+      if (
+        cfg === undefined ||
+        !cfg.enabled ||
+        cfg.recoveryKey === undefined ||
+        this.#deps.readSingletonRole() !== "primary"
+      ) {
         // #config is kept so `current()` can report the destinations/schedule; enabled stays false
         // because `#db` is undefined (nothing was opened) — a non-primary reads disabled.
         this.#deps.log("info", "backup.disabled", {});
@@ -229,13 +264,13 @@ export class BackupSupervisor {
       enabled: cfg !== undefined && isPrimary && this.#db !== undefined,
       isPrimary,
       managedByEnvironment: this.#deps.isManagedByEnvironment(),
-      destinations:
-        cfg?.destinations.map((d) =>
-          d.kind === "local-fs" ? { id: d.id, dir: d.dir } : { id: d.id },
-        ) ?? [],
+      source: cfg?.source ?? null,
+      revision: cfg?.revision ?? null,
+      storedDisabled: cfg !== undefined && cfg.source === "dashboard" && !cfg.enabled,
+      destinations: cfg?.destinations.map(destinationView) ?? [],
       schedule: cfg?.schedule,
       retention: cfg === undefined ? undefined : { count: cfg.retain, days: cfg.retainDays },
-      keyFingerprint: cfg === undefined ? undefined : keyFingerprint(cfg.recoveryKey),
+      keyFingerprint: cfg?.recoveryKey === undefined ? undefined : keyFingerprint(cfg.recoveryKey),
       keyRotatedAt: cfg?.keyRotatedAt,
       recoveryKey: cfg?.recoveryKey,
     };

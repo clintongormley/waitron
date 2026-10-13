@@ -33,7 +33,7 @@ export interface StreamApiDeps {
   /** The venue the stream writes under; Save stores it with the settings. */
   venueId: string;
   isPrimary: () => boolean;
-  /** True when the environment sets a variable `BACKUP_ENV_KEYS` (`boot.ts`) lists. */
+  /** True when the environment sets a variable `BACKUP_ENV_KEYS` (`backup-config.ts`) lists. */
   isManagedByEnvironment: () => boolean;
   readRecoveryKey: () => Promise<string | undefined>;
   writeRecoveryKey: (key: string) => Promise<void>;

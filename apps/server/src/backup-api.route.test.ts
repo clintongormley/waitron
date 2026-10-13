@@ -44,10 +44,12 @@ const BACKUP_KEYS = [
   "WAITRON_BACKUP_INTERVAL_MS",
   "WAITRON_BACKUP_RETAIN",
   "WAITRON_BACKUP_RETAIN_DAYS",
+  "WAITRON_BACKUP_DESTINATION_TIMEOUT_MS",
 ];
 // ≥ MIN_PASSPHRASE_LENGTH (12) and base64url-safe (survives the env-file round-trip).
 const KEY_1 = "recovery-key-one-strong";
 const KEY_2 = "recovery-key-two-different";
+const VENUE = "c0000000-0000-4000-8000-000000000002";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -102,7 +104,7 @@ interface Scenario {
 
 function makeSupervisor(sc: Scenario): BackupSupervisor {
   const sup = new BackupSupervisor({
-    buildConfig: async () => loadBackupConfig(await loadBoxEnv(sc.base, sc.stateDir)),
+    buildConfig: async () => loadBackupConfig(await loadBoxEnv(sc.base, sc.stateDir), VENUE),
     isManagedByEnvironment: () => BACKUP_KEYS.some((k) => !isUnset(sc.base[k])),
     readSingletonRole: () => sc.role,
     venueDir,
@@ -145,6 +147,7 @@ function buildApp(
     {
       supervisor: sup,
       db: suite.db,
+      venueId: VENUE,
       stateDir,
       readRecoveryKey,
       sealedState,
@@ -555,6 +558,9 @@ describe("backup admin routes", () => {
     const dest = makeDestDir();
     const stateDir = await makeStateDir();
     const mismatch: BackupConfig = {
+      source: "environment",
+      revision: undefined,
+      enabled: true,
       destinations: [{ kind: "local-fs", id: "primary", dir: dest }],
       recoveryKey: "effective-key-differs-from-request",
       schedule: DAILY_AT_0330,
@@ -600,6 +606,9 @@ describe("backup admin routes", () => {
     const dest = makeDestDir();
     const stateDir = await makeStateDir();
     const pinned: BackupConfig = {
+      source: "environment",
+      revision: undefined,
+      enabled: true,
       destinations: [{ kind: "local-fs", id: "primary", dir: dest }],
       recoveryKey: KEY_1,
       schedule: DAILY_AT_0330,
@@ -1078,7 +1087,7 @@ describe("backup admin routes", () => {
           entered(); // the first reload is now inside its critical section, holding the latch…
           await gate; // …and parked here until we release it
         }
-        return loadBackupConfig(await loadBoxEnv(base, stateDir));
+        return loadBackupConfig(await loadBoxEnv(base, stateDir), VENUE);
       },
       isManagedByEnvironment: () => false,
       readSingletonRole: () => "primary",

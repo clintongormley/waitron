@@ -13,6 +13,9 @@ const OFF_WITH_KEY: BackupStatusView = {
   enabled: false,
   isPrimary: true,
   managedByEnvironment: false,
+  source: null,
+  revision: null,
+  storedDisabled: false,
   destinations: [],
   backupStatus: { configured: false },
   archiveUnderCurrentKey: false,
@@ -26,7 +29,10 @@ const ENABLED: BackupStatusView = {
   enabled: true,
   isPrimary: true,
   managedByEnvironment: false,
-  destinations: [{ id: "primary", dir: "/mnt/usb/waitron" }],
+  source: "dashboard",
+  revision: "6f1c2a43-8a49-4d0f-9b51-4d4f4c7c2a10",
+  storedDisabled: false,
+  destinations: [{ id: "primary", kind: "local-fs", dir: "/mnt/usb/waitron" }],
   schedule: { kind: "wall-clock", days: [3, 0], at: { hour: 2, minute: 5 } },
   retention: { count: 5, days: 14 },
   keyFingerprint: "ab12cd34",
@@ -198,7 +204,10 @@ describe("the backup settings editor's Save", () => {
     await typeInto("destination", "/mnt/usb/second")(el);
     await press(el, "save-settings");
     await typeInto("destination", "/mnt/usb/third")(el);
-    finish({ ...ENABLED, destinations: [{ id: "primary", dir: "/mnt/usb/second" }] });
+    finish({
+      ...ENABLED,
+      destinations: [{ id: "primary", kind: "local-fs", dir: "/mnt/usb/second" }],
+    });
     await vi.waitFor(() => expect(api.applyBackup).toHaveBeenCalledOnce());
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(q(el, "[data-test=edit-title]")).not.toBeNull();
@@ -283,7 +292,10 @@ describe("turning archives on: Apply", () => {
     await typeInto("destination", "/mnt/usb/first")(el);
     await press(el, "apply");
     await typeInto("destination", "/mnt/usb/second")(el);
-    finish({ ...ENABLED, destinations: [{ id: "primary", dir: "/mnt/usb/first" }] });
+    finish({
+      ...ENABLED,
+      destinations: [{ id: "primary", kind: "local-fs", dir: "/mnt/usb/first" }],
+    });
     await vi.waitFor(() => expect(api.applyBackup).toHaveBeenCalledOnce());
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(await state(el, "apply")).toEqual(ready);
