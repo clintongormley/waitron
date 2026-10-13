@@ -8,6 +8,7 @@ import type { OpeningHoursApi, SeasonDeleteImpact, SeasonInput } from "./opening
 import { format, formatMonthDay } from "./hours-view.js";
 import type { SeasonChip, SeasonDialog } from "./season-dialog.js";
 import "./season-dialog.js";
+import { byStart, seasonTints } from "./season-tint.js";
 import { t } from "./strings.js";
 
 export type { SeasonChip } from "./season-dialog.js";
@@ -19,9 +20,6 @@ type Refusal = { code: string; params?: Record<string, unknown> };
 /** One opening of the dialog: the season it edits, or none for "+ Season". */
 type Opening = { season?: SeasonChip; returnTo: HTMLElement | null };
 
-const TINTS = 4;
-const byStart = (seasons: readonly SeasonChip[]) =>
-  [...seasons].sort((a, b) => (a.startsOn < b.startsOn ? -1 : Number(a.startsOn > b.startsOn)));
 const refusalOf = (error: unknown): Refusal => ({
   code: codeOf(error),
   params:
@@ -214,15 +212,16 @@ export class SeasonChips extends LitElement {
     );
   }
   override render() {
+    const tints = seasonTints(this.seasons);
     return html`<div class="row">
         <span class="label">${t("season.seasons")}</span>
-        ${byStart(this.seasons).map((season, index) => {
+        ${byStart(this.seasons).map((season) => {
           const range = {
             from: formatMonthDay(season.startsOn),
             to: formatMonthDay(season.lastDay),
           };
           const label = format("season.chip", { name: season.name, ...range });
-          const tint = String((index % TINTS) + 1);
+          const tint = tints.get(season.id);
           return this.readOnly
             ? html`<span class="chip" data-season=${season.id} data-tint=${tint}>${label}</span>`
             : html`<button

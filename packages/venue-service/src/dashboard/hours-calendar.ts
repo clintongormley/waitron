@@ -3,59 +3,22 @@ import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
-import type { HolidayCoverage, SpecialDaysModel } from "../holiday-types.js";
+import type { SpecialDaysModel } from "../holiday-types.js";
+import { areaAddress, nationalCoverage } from "./holiday-coverage-text.js";
 import { holidayDateName } from "../holiday-naming.js";
-import type { HolidayFact, LocalDate } from "../hours-types.js";
-import { addDays, weekdayOf } from "../hours-rules.js";
+import type { LocalDate } from "../hours-types.js";
+import { addDays } from "../hours-rules.js";
+import { addMonths, monthGrid, type Month } from "./calendar-grid.js";
+import type { SpecialDayAction } from "./special-day-action.js";
 import { browserToday, format, formatDate, formatLongDate } from "./hours-view.js";
 import type { SpecialDaysApi } from "./special-days-client.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import { t } from "./strings.js";
 
-/** A month, `YYYY-MM`. */
-export type Month = string;
-
-export interface SpecialDayRef {
-  id: string;
-  name: string;
-}
-
-/** A request to open the special-day dialog on `date`, or to delete the special day holding it. */
-export interface SpecialDayAction {
-  kind: "open" | "delete";
-  date: LocalDate;
-  /** Absent when the sender does not know; the host then looks the date up itself. */
-  specialDay?: SpecialDayRef | null;
-  holidays: readonly HolidayFact[];
-  /** Every public holiday the sender shows, for the dialog's note on dates added there. */
-  visibleHolidays?: readonly HolidayFact[];
-  returnTo: () => HTMLElement | null;
-}
+export { addMonths, monthGrid, type Month } from "./calendar-grid.js";
+export type { SpecialDayAction, SpecialDayRef } from "./special-day-action.js";
 
 type Key = Parameters<typeof t>[0];
-
-/** The national and regional sentence for a year's coverage, or the unknown one without it. */
-function nationalCoverage(year: number, coverage: HolidayCoverage | undefined): string {
-  return format(`hours.calendar.coverage.${coverage?.nationalRegional ?? "unknown"}` as Key, {
-    year: String(year),
-  });
-}
-
-export function addMonths(month: Month, months: number): Month {
-  const [year, number] = month.split("-").map(Number) as [number, number];
-  return new Date(Date.UTC(year, number - 1 + months, 1)).toISOString().slice(0, 7);
-}
-
-/** Every date of the weeks that hold `month`, Monday first: the month and its real neighbours. */
-export function monthGrid(month: Month): LocalDate[] {
-  const first = `${month}-01`;
-  const start = addDays(first, -((weekdayOf(first) + 6) % 7));
-  const last = addDays(`${addMonths(month, 1)}-01`, -1);
-  const end = addDays(last, (7 - weekdayOf(last)) % 7);
-  const dates: LocalDate[] = [];
-  for (let date = start; date <= end; date = addDays(date, 1)) dates.push(date);
-  return dates;
-}
 
 const locale = () => (currentLocale().startsWith("es") ? "es-ES" : "en-GB");
 const formatUtc = (date: LocalDate, options: Intl.DateTimeFormatOptions) =>
@@ -575,27 +538,11 @@ export class HoursCalendar extends LitElement {
       ${entry?.holidays.map((holiday) => html`<p>${holiday.name}</p>`)}
       ${this.readOnly ? nothing : html`<div class="actions">${day ? html`${action("open", "special-edit", "hours.edit")}${action("delete", "special-delete", "hours.delete")}` : action("open", "special-add", "special.make")}</div>`}`;
   }
-  #areaAddress(readiness: SpecialDaysModel["area"]["readiness"]): string {
-    switch (readiness) {
-      case "missing_city":
-        return t("holidays.area_needs_city");
-      case "unresolved_province":
-        return t("holidays.area_needs_province");
-      case "unresolved_address":
-        return t("holidays.area_needs_address");
-      case "unsupported_country":
-        return t("holidays.area_unsupported");
-      case "ready":
-        return "";
-    }
-  }
   #namedArea(model: SpecialDaysModel) {
     const explanation =
       model.area.readiness === "ready"
         ? nothing
-        : html`<p class="note" data-test="area-address">
-            ${this.#areaAddress(model.area.readiness)}
-          </p>`;
+        : html`<p class="note" data-test="area-address">${areaAddress(model.area.readiness)}</p>`;
     if (!model.area.options.length) return explanation;
     if (this.readOnly)
       return html`${explanation}
