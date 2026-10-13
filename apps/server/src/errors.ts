@@ -1202,6 +1202,9 @@ declare module "@waitron/shared" {
      * that is not base64url JSON (`encoding`), or not exactly a pack this server issues (`shape`).
      * Never carries a field's value: the pack holds the bucket's secret key and the recovery key. */
     "backup.archive_pack_invalid": { reason: "not_found" | "encoding" | "shape" };
+    /** An archive recovery pack was asked for while the archive settings name no bucket: nothing is
+     * stored, or only a local folder is. */
+    "backup.archive_bucket_not_configured": Record<string, never>;
     /** Save's test of an archive bucket — write, read back, list and delete one object — failed or
      * ran out of time. `reason` is a code, or `timed_out`, `read_mismatch` or `not_listed`; never
      * the provider's message. */

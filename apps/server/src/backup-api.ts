@@ -13,21 +13,25 @@ import {
   requireManagementSession,
 } from "@waitron/server-kit";
 import {
+  archiveNamespace,
   hasExactKeys,
   isRecord,
   archiveRecord,
   parseSchedule,
+  readArchiveSettings,
   readHeldArchiveSettings,
   requestInvalid,
   resolveArchiveChoice,
   writeArchiveSettings,
   type ArchiveSettings,
 } from "./archive-settings.js";
+import { encodeArchiveRecoveryPack } from "./archive-recovery-pack.js";
 import { buildBackupBackend } from "./backup-backends.js";
 import {
   DEFAULT_DESTINATION_TIMEOUT_MS,
   MAX_DESTINATION_TIMEOUT_MS,
   MIN_DESTINATION_TIMEOUT_MS,
+  loadBackupSettings,
   loadKeyRotatedAt,
   loadRecoveryKey,
   mintRecoveryKey,
@@ -94,6 +98,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "backup.effective_mismatch": 400,
   "backup.archive_namespace_overlap": 400,
   "backup.stream_not_configured": 409,
+  "backup.archive_bucket_not_configured": 409,
+  "backup.recovery_key_missing": 409,
   "backup.archive_test_failed": 422,
   "backup.archive_settings_invalid": 500,
   "backup.rotation_metadata_failed": 500,
@@ -488,6 +494,55 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
       await authorize(c);
       const key = (await heldKey()) ?? null;
       return c.json({ key });
+    }),
+  );
+
+  // One box env read gives both the key and, under environment management, the bucket, and the
+  // turn keeps a Save or rotation from landing between this read and the record's: either could
+  // pair a bucket with a key its archives were not written under. Logs nothing.
+  app.get("/api/backup/archive-recovery-pack", (c) =>
+    run(c, log, async () => {
+      await authorize(c);
+      return deps.turns(async () => {
+        const env = await deps.readBoxEnv();
+        const { held, key: recoveryKey } = await readHeldKey(async () => loadRecoveryKey(env));
+        if (!held) throw new AppError("backup.recovery_key_missing", {});
+        if (recoveryKey === undefined) {
+          throw new AppError("backup.recovery_key_too_short", { min: MIN_PASSPHRASE_LENGTH });
+        }
+        const config = await loadBackupSettings({
+          managedByEnvironment: deps.supervisor.current().managedByEnvironment,
+          env,
+          readSealed: () => readArchiveSettings(deps.db, deps.ring),
+          venueId: deps.venueId,
+        });
+        const notConfigured = () => new AppError("backup.archive_bucket_not_configured", {});
+        if (config === undefined) throw notConfigured();
+        if ("loadErrorCode" in config) {
+          throw new AppError("backup.archive_settings_unreadable", {
+            reason: config.loadErrorCode,
+          });
+        }
+        const destination = config.destinations.find((d) => d.kind === "s3");
+        if (destination === undefined) throw notConfigured();
+        const { bucket, venueId } = destination;
+        const pack = encodeArchiveRecoveryPack({
+          version: 1,
+          format: "WBK1",
+          venueId,
+          bucket,
+          archivePrefix: archiveNamespace(bucket.prefix, venueId),
+          recoveryKey,
+        });
+        const keyRotatedAt = loadKeyRotatedAt(env);
+        c.header("Cache-Control", "no-store");
+        return c.json({
+          pack,
+          keyFingerprint: keyFingerprint(recoveryKey),
+          ...(keyRotatedAt === undefined ? {} : { keyRotatedAt }),
+          ...(config.revision === undefined ? {} : { revision: config.revision }),
+        });
+      });
     }),
   );
 
