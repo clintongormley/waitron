@@ -27,7 +27,7 @@ import {
   toFloorTable,
 } from "@waitron/ui";
 import type { FloorMapDrop, FloorMapTable, FloorTable, ZoneTab } from "@waitron/ui";
-import { decimal, formatMoney, isZeroDecimal } from "@waitron/shared";
+import { conjunctionList, decimal, formatMoney, isZeroDecimal } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
 import "../widgets/seat-dialog.js";
 import "../widgets/today-seats-dialog.js";
@@ -124,8 +124,12 @@ interface ResettingTable {
   tableId: string;
   /** The plan sent, until its answer arrives. */
   sent: ResetTablePlan | null;
-  refusal: { code: string; field?: string } | null;
+  /** `message` is the refusal's sentence naming the tables, when the floor read has their names. */
+  refusal: { code: string; field?: string; message?: string } | null;
 }
+
+/** A server refusal: its code, and its params as the client spreads them beside it. */
+type Refused = { code?: string; field?: unknown } & Record<string, unknown>;
 
 const asksSeats = (refused: { code?: string }): boolean => refused.code === "merge.seats_required";
 
@@ -613,7 +617,8 @@ export class TillFloorScreen extends LitElement {
     }
     if (this.resettingTable !== null && this.#resetShown(this.resettingTable) === undefined) {
       if (this.resettingTable.refusal !== null)
-        this.refusal = codeMessage(this.resettingTable.refusal.code);
+        this.refusal =
+          this.resettingTable.refusal.message ?? codeMessage(this.resettingTable.refusal.code);
       this.resettingTable = null;
     }
   }
@@ -1045,12 +1050,57 @@ export class TillFloorScreen extends LitElement {
     try {
       this.#carry(await call);
     } catch (cause) {
-      const refused = (cause ?? {}) as { code?: string; field?: unknown };
+      const refused = (cause ?? {}) as Refused;
       if (asks(refused)) return;
-      this.refusal = codeMessage(refused.code ?? "server.internal");
+      this.refusal = this.#refusalText(refused);
       this.#setPending(null);
     }
     this.#requestFloorRefresh();
+  }
+
+  #refusalText(refused: Refused): string {
+    const code = refused.code ?? "server.internal";
+    return this.#namedRefusal(code, refused) ?? codeMessage(code);
+  }
+
+  /** The refusal's sentence naming its tables, or undefined when it names none or the floor read no
+   * longer has one of them. */
+  #namedRefusal(code: string, refused: Refused): string | undefined {
+    const tableOf = (id: unknown) => this.tables.find((each) => each.id === id);
+    switch (code) {
+      case "table.place_taken": {
+        const standing = tableOf(refused.standingId)?.label;
+        const joined = tableOf(refused.tableId)?.label;
+        if (standing === undefined || joined === undefined) return undefined;
+        return t("floor.place_taken")
+          .replaceAll("{table}", () => standing)
+          .replace("{joined}", () => joined);
+      }
+      case "joined_table.tables_in_group": {
+        const ids = Array.isArray(refused.partIds) ? (refused.partIds as unknown[]) : [];
+        const parts = ids.map(tableOf);
+        if (parts.length === 0 || parts.some((each) => each === undefined)) return undefined;
+        const group = this.#mergeName(parts[0]!);
+        if (group === null) return undefined;
+        const labels = parts.map((each) => each!.label);
+        const sentence =
+          labels.length === 1
+            ? t("floor.table_in_group").replace("{table}", () => labels[0]!)
+            : t("floor.tables_in_group").replace("{tables}", () =>
+                conjunctionList(labels, currentLocale()),
+              );
+        return sentence.replace("{group}", () => group);
+      }
+      case "table.split_off": {
+        const from = tableOf(refused.tableId)?.today?.splitOffFrom ?? null;
+        const joined = from === null ? undefined : tableOf(from)?.label;
+        return joined === undefined
+          ? undefined
+          : t("floor.split_off_reset").replace("{joined}", () => joined);
+      }
+      default:
+        return undefined;
+    }
   }
 
   #carry(answer: FloorAnswer | null): void {
@@ -1257,17 +1307,22 @@ export class TillFloorScreen extends LitElement {
         this.resettingTable = null;
       }
     } catch (cause) {
-      const refused = (cause ?? {}) as { code?: string; field?: unknown };
+      const refused = (cause ?? {}) as Refused;
       const code = refused.code ?? "server.internal";
+      const message = this.#namedRefusal(code, refused);
       if (this.resettingTable === sending && this.#resetPlan(resetting.tableId) !== undefined)
         this.resettingTable = {
           ...resetting,
           sent: null,
-          refusal: typeof refused.field === "string" ? { code, field: refused.field } : { code },
+          refusal: {
+            code,
+            ...(typeof refused.field === "string" ? { field: refused.field } : {}),
+            ...(message === undefined ? {} : { message }),
+          },
         };
       else if (this.resettingTable === sending || this.resettingTable === null) {
         this.resettingTable = null;
-        this.refusal = codeMessage(code);
+        this.refusal = message ?? codeMessage(code);
       }
     }
     this.#requestFloorRefresh();

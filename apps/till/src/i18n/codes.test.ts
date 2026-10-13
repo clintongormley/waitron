@@ -552,8 +552,8 @@ it("says each joined-table refusal in English and Spanish", () => {
     ],
     [
       "joined_table.parts_split_off",
-      "Some of its tables are split off",
-      "Algunas de sus mesas están separadas",
+      "Some of its tables are split off. Reset the table first",
+      "Algunas de sus mesas están separadas. Restablece la mesa primero",
     ],
   ];
   for (const [code, en, es] of words) {
@@ -591,13 +591,9 @@ it("says the floor changed under a till, in English and Spanish", () => {
   );
 });
 
-it("says each Join again refusal in English and Spanish", () => {
+it("says each Reset table refusal about what the table holds now, in English and Spanish", () => {
   const words: [string, string, string][] = [
-    [
-      "joined_table.nothing_to_join",
-      "Nothing to join again now",
-      "Ahora no hay nada que volver a unir",
-    ],
+    ["joined_table.nothing_to_join", "Nothing to reset now", "Ahora no hay nada que restablecer"],
     [
       "joined_table.out_of_date",
       "Its tables have changed. Check and try again",
@@ -605,8 +601,8 @@ it("says each Join again refusal in English and Spanish", () => {
     ],
     [
       "table.split_off",
-      "That table was split off. Join it again first",
-      "Esa mesa está separada. Vuelve a unirla primero",
+      "That table was split off. Reset its table first",
+      "Esa mesa está separada. Restablece su mesa primero",
     ],
   ];
   for (const [code, en, es] of words) {

@@ -113,12 +113,12 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Indica las plazas de la mesa unida",
   },
   "joined_table.parts_split_off": {
-    en: "Some of its tables are split off",
-    es: "Algunas de sus mesas están separadas",
+    en: "Some of its tables are split off. Reset the table first",
+    es: "Algunas de sus mesas están separadas. Restablece la mesa primero",
   },
   "joined_table.nothing_to_join": {
-    en: "Nothing to join again now",
-    es: "Ahora no hay nada que volver a unir",
+    en: "Nothing to reset now",
+    es: "Ahora no hay nada que restablecer",
   },
   "joined_table.out_of_date": {
     en: "Its tables have changed. Check and try again",
@@ -133,8 +133,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "La sala ha cambiado. Revísala y vuelve a intentarlo",
   },
   "table.split_off": {
-    en: "That table was split off. Join it again first",
-    es: "Esa mesa está separada. Vuelve a unirla primero",
+    en: "That table was split off. Reset its table first",
+    es: "Esa mesa está separada. Restablece su mesa primero",
   },
   "table.place_taken": {
     en: "Another table is in its place. Move it, then try again",

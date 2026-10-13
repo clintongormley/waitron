@@ -61,7 +61,11 @@ export class TillResetTableDialog extends LitElement {
   @property({ attribute: false }) joined!: TableState;
   @property({ attribute: false }) apart: { table: TableState; reason: ApartReason }[] = [];
   @property({ type: Boolean }) busy = false;
-  @property({ attribute: false }) refusal: { code: string; field?: string } | null = null;
+  @property({ attribute: false }) refusal: {
+    code: string;
+    field?: string;
+    message?: string;
+  } | null = null;
 
   @state() private seats = "";
   @state() private attempted = false;
@@ -117,7 +121,7 @@ export class TillResetTableDialog extends LitElement {
     return this.attempted && seatsFrom(this.seats) === null ? t("floor.seats_invalid") : "";
   }
 
-  #shownRefusal(): { code: string; field?: string } | null {
+  #shownRefusal(): { code: string; field?: string; message?: string } | null {
     return this.refusal === null || this.refusalDismissed ? null : this.refusal;
   }
 
@@ -165,7 +169,7 @@ export class TillResetTableDialog extends LitElement {
   override render() {
     const seatsError = this.#seatsError();
     const refusal = this.#shownRefusal();
-    const refusalText = refusal === null ? "" : codeMessage(refusal.code);
+    const refusalText = refusal === null ? "" : (refusal.message ?? codeMessage(refusal.code));
     const seatsMessage = seatsError || (refusal?.field === "seats" ? refusalText : "");
     const invalid = seatsError !== "";
     const footError = seatsMessage !== "" ? t("form.fix_fields") : refusalText;

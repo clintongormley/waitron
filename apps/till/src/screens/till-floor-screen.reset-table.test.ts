@@ -264,7 +264,9 @@ describe("till-floor-screen: resetting a joined table", () => {
     expect(await pressResetTable(el, "c5")).toBeNull();
 
     expect(api.resetTableToday).toHaveBeenCalledExactlyOnceWith("long", { partIds: ["c5"] }, 0);
-    expect(floorRefusal(el)).toBe(codeMessage("joined_table.tables_in_group"));
+    expect(floorRefusal(el)).toBe(
+      "Counter 3 and Counter 4 are in Bar+Counter 3+Counter 4. Split them off first, then Reset table.",
+    );
     expect(refreshes.count).toBe(1);
   });
 
@@ -540,6 +542,163 @@ describe("till-floor-screen: resetting a joined table", () => {
     expect(windowOf(el)).toBeNull();
     expect(api.resetTableToday).not.toHaveBeenCalled();
   });
+});
+
+/** Counter 3 and Counter 4 split off from Long table and in a group with Bar's guests; Counter 5 free. */
+const inBarGroup = () => {
+  const inGroup = (id: string, label: string, x: number) =>
+    table(id, label, x, { splitOffFrom: "long", joinId: "g" }, held);
+  return [
+    longTable([], ["c3", "c4", "c5"]),
+    inGroup("c3", "Counter 3", 50),
+    inGroup("c4", "Counter 4", 60),
+    splitOff("c5", "Counter 5", 70),
+    table("bar", "Bar", 80, { joinId: "g" }, held),
+  ];
+};
+
+/** Counter 5 split off and free, with Terrace 9 standing where Long table was saved. */
+const standingInPlace = () => [...oneFree(), table("t9", "Terrace 9", 10)];
+
+describe("till-floor-screen: Reset table's refusals name the tables", () => {
+  it.each([
+    [
+      "en",
+      ["c3", "c4"],
+      "Counter 3 and Counter 4 are in Bar+Counter 3+Counter 4. Split them off first, then Reset table.",
+    ],
+    [
+      "es",
+      ["c3", "c4"],
+      "Counter 3 y Counter 4 están en Bar+Counter 3+Counter 4. Sepáralas primero y luego restablece.",
+    ],
+    [
+      "en",
+      ["c4"],
+      "Counter 4 is in Bar+Counter 3+Counter 4. Split it off first, then Reset table.",
+    ],
+    [
+      "es",
+      ["c4"],
+      "Counter 4 está en Bar+Counter 3+Counter 4. Sepárala primero y luego restablece.",
+    ],
+  ])(
+    "in %s, tables in a group with guests are named with the group",
+    async (locale, partIds, words) => {
+      setLocale(locale);
+      const api = stubApi();
+      api.resetTableToday.mockRejectedValueOnce({
+        code: "joined_table.tables_in_group",
+        status: 409,
+        tableId: "long",
+        partIds,
+      });
+      const el = await mount(inBarGroup(), api);
+
+      await pressResetTable(el, "c5");
+      expect(floorRefusal(el)).toBe(words);
+    },
+  );
+
+  it.each([
+    ["en", "Terrace 9 is standing in Long table's place. Move Terrace 9, then Reset table again."],
+    ["es", "Terrace 9 ocupa el sitio de Long table. Muévela y vuelve a restablecer."],
+  ])("in %s, a table standing in the joined table's place is named", async (locale, words) => {
+    setLocale(locale);
+    const api = stubApi();
+    api.resetTableToday.mockRejectedValueOnce({
+      code: "table.place_taken",
+      status: 409,
+      tableId: "long",
+      standingId: "t9",
+    });
+    const el = await mount(standingInPlace(), api);
+
+    await pressResetTable(el);
+    expect(floorRefusal(el)).toBe(words);
+  });
+
+  it.each([
+    ["en", "That table was split off. Reset Long table first"],
+    ["es", "Esa mesa está separada. Restablece Long table primero"],
+  ])("in %s, a split-off refusal names the table it was split off from", async (locale, words) => {
+    setLocale(locale);
+    const api = stubApi();
+    api.resetTableToday.mockRejectedValueOnce({
+      code: "table.split_off",
+      status: 409,
+      tableId: "c5",
+    });
+    const el = await mount(oneFree(), api);
+
+    await pressResetTable(el);
+    expect(floorRefusal(el)).toBe(words);
+  });
+
+  it("a named refusal shows at the window's foot, and moves to the floor when the window closes", async () => {
+    const api = stubApi();
+    api.resetTableToday.mockRejectedValueOnce({
+      code: "table.place_taken",
+      status: 409,
+      tableId: "long",
+      standingId: "t9",
+    });
+    const el = await mount([...counter3Busy(), table("t9", "Terrace 9", 10)], api);
+    const opened = (await pressResetTable(el, "c4"))!;
+    send(opened, "reset-table-confirm", { seats: 6 });
+    await settle(el);
+    await opened.updateComplete;
+
+    const words =
+      "Terrace 9 is standing in Long table's place. Move Terrace 9, then Reset table again.";
+    expect(windowOf(el)).toBe(opened);
+    expect(footError(el)).toBe(words);
+    expect(floorRefusal(el)).toBeNull();
+
+    el.tables = [...allFree(), table("t9", "Terrace 9", 10)];
+    await settle(el);
+    expect(windowOf(el)).toBeNull();
+    expect(floorRefusal(el)).toBe(words);
+  });
+
+  it.each([
+    [
+      "a table standing in its place",
+      { code: "table.place_taken", tableId: "long", standingId: "gone" },
+      oneFree,
+    ],
+    [
+      "the joined table",
+      { code: "table.place_taken", tableId: "gone", standingId: "t9" },
+      standingInPlace,
+    ],
+    [
+      "a table in the group",
+      { code: "joined_table.tables_in_group", tableId: "long", partIds: ["c4", "gone"] },
+      inBarGroup,
+    ],
+    [
+      "the group a table is in",
+      { code: "joined_table.tables_in_group", tableId: "long", partIds: ["c5"] },
+      inBarGroup,
+    ],
+    ["the split-off table", { code: "table.split_off", tableId: "gone" }, oneFree],
+    [
+      "what a table was split off from",
+      { code: "table.split_off", tableId: "c3" },
+      () => oneFree(),
+    ],
+  ])(
+    "falls back to the plain sentence when the read no longer has %s",
+    async (_, refused, tables) => {
+      const api = stubApi();
+      api.resetTableToday.mockRejectedValueOnce({ status: 409, ...refused });
+      const el = await mount(tables(), api);
+
+      await pressResetTable(el, tables === inBarGroup ? "c5" : "long");
+      expect(floorRefusal(el)).toBe(codeMessage(refused.code));
+    },
+  );
 });
 
 /** `tables` as a floor read at the room's revision `revision`. */
