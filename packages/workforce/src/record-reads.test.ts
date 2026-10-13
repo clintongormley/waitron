@@ -9,6 +9,9 @@ import { seedLocation, seedEmployment } from "../test/fixtures.js";
 import { WorkforceBackend } from "./clocking.js";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { timeEntries } from "./schema/time-entries.js";
+import { payPeriodClosures } from "./schema/pay-period-closures.js";
+import { computeClosureHash } from "./pay-period-chain.js";
+import type { PayPeriodClosure } from "./record-types.js";
 const backend = new WorkforceBackend(),
   origin = jobOrigin("dashboard");
 const suite = useVenueDb({
@@ -69,6 +72,76 @@ async function correct(target: string, at: string) {
   );
   return { request, answer };
 }
+async function freezeJanuary() {
+  const record = await run((tx) => backend.timeRecord(tx, { period: january, locationId }));
+  const row: Omit<PayPeriodClosure, "closureHash"> = {
+    id: "018ee400-0000-7000-8000-000000000001",
+    nodeId,
+    locationId,
+    period: january,
+    clock: { timeZone: "UTC", dayCutover: "06:00", cutoverChanges: [] },
+    scheduledCloseAt: "2026-02-01T06:00:00.000Z",
+    closedAt: "2026-02-01T06:00:00.000Z",
+    sequenceNo: 1,
+    prevClosureHash: null,
+    snapshot: {
+      sessions: record.sessions,
+      entries: record.entries,
+      summaries: [
+        { personId, summary: null },
+        { personId: other, summary: null },
+      ],
+      countedAutomaticEntryIds: [],
+    },
+  };
+  await suite.db
+    .insert(payPeriodClosures)
+    .values({
+      ...row,
+      periodStart: january.start,
+      periodEnd: january.end,
+      closureHash: computeClosureHash(row),
+    });
+  return row.id;
+}
+it("returns a worker-scoped frozen snapshot without the other worker's entries or summaries", async () => {
+  await day();
+  await run((tx) => backend.clockIn(tx, event("2026-01-05T09:00:00Z", other)));
+  await run((tx) => backend.clockOut(tx, event("2026-01-05T17:00:00Z", other)));
+  const closureId = await freezeJanuary();
+  const record = await query();
+  expect(record.closures).toHaveLength(1);
+  expect(record.closures[0]!.closureId).toBe(closureId);
+  const snapshot = record.closures[0]!.snapshot;
+  expect(snapshot.sessions.map((s) => s.personId)).toEqual([personId]);
+  expect(snapshot.entries.map((e) => e.entry.personId)).toEqual([personId, personId]);
+  expect(snapshot.summaries).toEqual([{ personId, summary: null }]);
+  expect(snapshot.countedAutomaticEntryIds).toEqual([]);
+  expect(record.closedPeriodImpacts).toEqual([]);
+  const stored = (await suite.db.select().from(payPeriodClosures))[0]!.snapshot;
+  expect(stored.sessions.map((s) => s.personId).sort()).toEqual([personId, other].sort());
+});
+it("reads the frozen snapshot and scoped impact after a correction recorded later", async () => {
+  const target = await day();
+  const closureId = await freezeJanuary();
+  await correct(target, "2026-01-05T18:00:00Z");
+  const record = await query();
+  expect(record.closures[0]!.snapshot.sessions[0]!.workedMinutes).toBe(480);
+  expect(record.closedPeriodImpacts).toEqual([
+    {
+      closureId,
+      personId,
+      beforeWorkedMinutes: 480,
+      afterWorkedMinutes: 540,
+      deltaWorkedMinutes: 60,
+    },
+  ]);
+  const unrelated = await run((tx) =>
+    backend.timeRecord(tx, { period: { start: "2026-03-01", end: "2026-04-01" }, personId }),
+  );
+  expect(unrelated.closures).toEqual([]);
+  expect(unrelated.closedPeriodImpacts).toEqual([]);
+});
 it("reads a January target answered in March with the actual recorder metadata", async () => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-01-05T20:00:00Z"));

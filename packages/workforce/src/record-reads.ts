@@ -6,11 +6,11 @@ import type { TimeEntryRecord } from "./projection.js";
 import type { Period } from "./projection.js";
 import { AppError } from "@waitron/shared";
 import type { TimeRecord } from "./record-types.js";
-import { projectTimeRecord, recordRoot } from "./record-projection.js";
+import { projectTimeRecord } from "./record-projection.js";
+import { recordInPeriod } from "./record-period.js";
+import { readClosures } from "./pay-period-reads.js";
 import "./errors.js";
 import { isRecordDate } from "./record-dates.js";
-import { compareEvents, effectiveClockEntries } from "./effective-entries.js";
-import type { WorkSession } from "./projection.js";
 
 export interface TimeRecordQuery {
   period: Period;
@@ -33,48 +33,31 @@ export async function readTimeRecord(
     query.period.start >= query.period.end
   )
     throw new AppError("attendance.invalid", { reason: "record_scope_or_period" });
-  const entries = await readRecordedEntries(tx, query);
-  const byId = new Map(entries.map((e) => [e.entryId, e]));
-  const roots = new Set(
-    entries
-      .filter((e) => {
-        const date = new Date(Date.parse(e.eventAt) + e.offsetMinutes * 60000)
-          .toISOString()
-          .slice(0, 10);
-        return date >= query.period.start && date < query.period.end;
-      })
-      .map((e) => recordRoot(e, byId).entryId),
-  );
-  const record = projectTimeRecord(entries);
-  record.sessions = record.sessions.filter(
-    (s) => s.workDate >= query.period.start && s.workDate < query.period.end,
-  );
-  const sessionsBySubject = new Map<string, { sessions: WorkSession[]; index: number }>();
-  for (const session of record.sessions) {
-    const key = JSON.stringify([session.personId, session.locationId]);
-    const group = sessionsBySubject.get(key) ?? { sessions: [], index: 0 };
-    group.sessions.push(session);
-    sessionsBySubject.set(key, group);
+  const entries = await readRecordedEntries(tx, { locationId: query.locationId });
+  const closures = await readClosures(tx, query);
+  const record = recordInPeriod(projectTimeRecord(entries, closures), query.period);
+  if (query.personId !== undefined) {
+    const personId = query.personId;
+    record.sessions = record.sessions.filter((s) => s.personId === personId);
+    record.entries = record.entries.filter((e) => e.entry.personId === personId);
+    record.closedPeriodImpacts = record.closedPeriodImpacts.filter((i) => i.personId === personId);
+    record.closures = record.closures.map((closure) => {
+      const snapshot = closure.snapshot;
+      const ownEntries = snapshot.entries.filter((e) => e.entry.personId === personId);
+      const ownIds = new Set(ownEntries.map((e) => e.entry.entryId));
+      return {
+        ...closure,
+        snapshot: {
+          sessions: snapshot.sessions.filter((s) => s.personId === personId),
+          entries: ownEntries,
+          summaries: snapshot.summaries.filter((s) => s.personId === personId),
+          countedAutomaticEntryIds: snapshot.countedAutomaticEntryIds.filter((id) =>
+            ownIds.has(id),
+          ),
+        },
+      };
+    });
   }
-  for (const clockEntry of effectiveClockEntries(entries).sort(compareEvents)) {
-    const group = sessionsBySubject.get(
-      JSON.stringify([clockEntry.personId, clockEntry.locationId]),
-    );
-    if (group === undefined) continue;
-    while (
-      group.index < group.sessions.length &&
-      clockEntry.eventAt > group.sessions[group.index]!.endedAt
-    )
-      group.index++;
-    const session = group.sessions[group.index];
-    if (
-      session !== undefined &&
-      clockEntry.eventAt >= session.startedAt &&
-      clockEntry.eventAt <= session.endedAt
-    )
-      roots.add(recordRoot(clockEntry, byId).entryId);
-  }
-  record.entries = record.entries.filter((row) => roots.has(recordRoot(row.entry, byId).entryId));
   return record;
 }
 

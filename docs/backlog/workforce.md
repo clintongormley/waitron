@@ -35,3 +35,7 @@ Part 1 is in progress on `feat/a10-1-record-library`. Its schema, correction and
 methods, and record reads are implemented locally. Pay-period closure, configuration transfer and
 the Spanish history export remain, followed by the full branch review and current-head CI. The
 library has no new route or screen yet.
+
+A10-1 library checkpoint: rich reads now include frozen pay-period snapshots and later changes,
+with worker-scoped snapshots and summaries. Period closing and the rich Spanish export remain in
+this branch; the library is not ready for owner review.

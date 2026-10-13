@@ -6,7 +6,8 @@ import {
   uncountedAutomaticEntryIds,
   sameSubject,
 } from "./effective-entries.js";
-import type { EntryAuthor, TimeRecord } from "./record-types.js";
+import type { EntryAuthor, TimeRecord, PayPeriodClosure } from "./record-types.js";
+import { recordInPeriod } from "./record-period.js";
 import "./errors.js";
 
 export function recordRoot(
@@ -34,7 +35,10 @@ function authorFor(entry: TimeEntryRecord): EntryAuthor {
     return { kind, personId: entry.recordedByPersonId };
   throw new AppError("attendance.invalid", { reason: "incomplete_attribution" });
 }
-export function projectTimeRecord(entries: readonly TimeEntryRecord[]): TimeRecord {
+export function projectTimeRecord(
+  entries: readonly TimeEntryRecord[],
+  closures: readonly PayPeriodClosure[] = [],
+): TimeRecord {
   const byId = new Map(entries.map((e) => [e.entryId, e]));
   const groups = new Map<string, TimeEntryRecord[]>();
   for (const entry of entries) {
@@ -45,7 +49,7 @@ export function projectTimeRecord(entries: readonly TimeEntryRecord[]): TimeReco
   }
   const effectiveIds = new Set(effectiveClockEntries(entries).map((e) => e.entryId));
   const uncounted = uncountedAutomaticEntryIds(entries);
-  return {
+  const record: TimeRecord = {
     sessions: projectWorkSessions(entries).sort(
       (a, b) =>
         a.personId.localeCompare(b.personId) ||
@@ -73,4 +77,78 @@ export function projectTimeRecord(entries: readonly TimeEntryRecord[]): TimeReco
     closures: [],
     closedPeriodImpacts: [],
   };
+  for (const closure of [...closures].sort(
+    (a, b) =>
+      a.period.start.localeCompare(b.period.start) ||
+      a.locationId.localeCompare(b.locationId) ||
+      a.id.localeCompare(b.id),
+  )) {
+    record.closures.push({
+      closureId: closure.id,
+      locationId: closure.locationId,
+      period: closure.period,
+      closedAt: closure.closedAt,
+      closureHash: closure.closureHash,
+      snapshot: structuredClone(closure.snapshot),
+    });
+    const current = recordInPeriod(
+      {
+        ...record,
+        sessions: record.sessions.filter((s) => s.locationId === closure.locationId),
+        entries: record.entries.filter((e) => e.entry.locationId === closure.locationId),
+      },
+      closure.period,
+    );
+    const frozenEntries = closure.snapshot.entries;
+    const frozenById = new Map(frozenEntries.map((e) => [e.entry.entryId, e.entry]));
+    const roots = new Set([
+      ...current.entries.map((e) => recordRoot(e.entry, byId).entryId),
+      ...frozenEntries.map((e) => recordRoot(e.entry, frozenById).entryId),
+    ]);
+    for (const row of record.entries)
+      if (
+        row.entry.locationId === closure.locationId &&
+        roots.has(recordRoot(row.entry, byId).entryId)
+      )
+        row.closedPeriodIds.push(closure.id);
+    const people = new Set([
+      ...closure.snapshot.sessions.map((s) => s.personId),
+      ...frozenEntries.map((e) => e.entry.personId),
+      ...current.entries.map((e) => e.entry.personId),
+    ]);
+    for (const personId of [...people].sort()) {
+      const oldSessions = closure.snapshot.sessions.filter((s) => s.personId === personId);
+      const newSessions = current.sessions.filter((s) => s.personId === personId);
+      const history = (rows: typeof current.entries) =>
+        rows
+          .filter(
+            (e) =>
+              e.entry.personId === personId && e.entry.extension?.payPeriodClosureId !== closure.id,
+          )
+          .map((e) => [
+            e.entry.entryId,
+            e.entry.eventAt,
+            e.entry.correctionStatus ?? null,
+            e.effective,
+            e.confirmed,
+            e.corrected,
+            e.disputed,
+          ]);
+      if (
+        JSON.stringify([oldSessions, history(frozenEntries)]) ===
+        JSON.stringify([newSessions, history(current.entries)])
+      )
+        continue;
+      const beforeWorkedMinutes = oldSessions.reduce((sum, s) => sum + s.workedMinutes, 0),
+        afterWorkedMinutes = newSessions.reduce((sum, s) => sum + s.workedMinutes, 0);
+      record.closedPeriodImpacts.push({
+        closureId: closure.id,
+        personId,
+        beforeWorkedMinutes,
+        afterWorkedMinutes,
+        deltaWorkedMinutes: afterWorkedMinutes - beforeWorkedMinutes,
+      });
+    }
+  }
+  return record;
 }
