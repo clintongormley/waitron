@@ -84,6 +84,11 @@ const en = {
   "special.add_to": "Add to {name}",
   "special.delete": "Delete {name}?",
   "special.delete_repeat": "Delete {name}? This removes it every year.",
+  "special.load_error": "This special day could not be loaded.",
+  "special.no": "No",
+  "special.yes": "Yes",
+  "special.explain":
+    "Each date starts with its season's hours, drawn faded. What you paint replaces them for that stretch. Paint Closed to shut part of a day, or tick Closed under a date to shut all of it.",
   "season.seasons": "Seasons",
   "season.chip": "{name} · {from} – {to}",
   "season.edit_named": "Edit {name}, {from} – {to}",
@@ -884,6 +889,11 @@ const es: Record<keyof typeof en, string> = {
   "special.add_to": "Añadir a {name}",
   "special.delete": "¿Eliminar {name}?",
   "special.delete_repeat": "¿Eliminar {name}? Se elimina de todos los años.",
+  "special.load_error": "No se ha podido cargar este día especial.",
+  "special.no": "No",
+  "special.yes": "Sí",
+  "special.explain":
+    "Cada fecha empieza con el horario de su temporada, en tenue. Lo que pintes lo sustituye en ese tramo. Pinta Cerrado para cerrar parte del día, o marca Cerrado bajo una fecha para cerrarla entera.",
   "season.seasons": "Temporadas",
   "season.chip": "{name} · {from} – {to}",
   "season.edit_named": "Editar {name}, {from} – {to}",

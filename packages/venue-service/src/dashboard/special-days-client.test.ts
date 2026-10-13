@@ -265,3 +265,28 @@ it("lists the venue's special days with one GET", async () => {
     ["/management-api/venue-service/special-days", "GET", undefined, undefined],
   ]);
 });
+
+it("writes a whole special-day input, paint included, creating it when it has no id", async () => {
+  const requests: unknown[][] = [];
+  const input = {
+    name: "Fair",
+    repeatsYearly: true,
+    dates: [{ date: "2027-04-20", closedAllDay: false }],
+    paint: [{ departmentId: "d1", date: "2027-04-20", ranges: [] }],
+  };
+  const saved = { id: "a/b", ...input, zonePaint: [] };
+  const api = new clients.SpecialDaysApi((async (path, method, body) => {
+    requests.push([path, method, body]);
+    return saved;
+  }) as DashboardRequest);
+  expect(await api.writeSpecialDay(null, input, 5)).toEqual(saved);
+  expect(await api.writeSpecialDay("a/b", input, 6)).toEqual(saved);
+  expect(requests).toEqual([
+    ["/management-api/venue-service/special-days", "POST", { ...input, expectedClockRevision: 5 }],
+    [
+      "/management-api/venue-service/special-days/a%2Fb",
+      "PUT",
+      { ...input, expectedClockRevision: 6 },
+    ],
+  ]);
+});

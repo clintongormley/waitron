@@ -1,7 +1,7 @@
 import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
 import type { SpecialDaysModel } from "../holiday-types.js";
 import type { LocalDate } from "../hours-types.js";
-import type { SpecialDayDetail, SpecialDaySummary } from "../special-days.js";
+import type { SpecialDayDetail, SpecialDayInput, SpecialDaySummary } from "../special-days.js";
 import type { SpecialDayFacts } from "./special-day-dialog.js";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
 import { ModelWatches } from "./model-watch.js";
@@ -65,6 +65,21 @@ export class SpecialDaysApi {
           ...input,
           expectedClockRevision,
         });
+  }
+  /** Creates the special day when `id` is null, else replaces it; answers with what was stored. */
+  writeSpecialDay(
+    id: string | null,
+    input: SpecialDayInput,
+    expectedClockRevision: number,
+  ): Promise<SpecialDayDetail> {
+    const body = { ...input, expectedClockRevision };
+    return id === null
+      ? this.request<SpecialDayDetail>(`${BASE}/special-days`, "POST", body)
+      : this.request<SpecialDayDetail>(
+          `${BASE}/special-days/${encodeURIComponent(id)}`,
+          "PUT",
+          body,
+        );
   }
   deleteSpecialDay(id: string, expectedClockRevision: number): Promise<void> {
     return this.request(`${BASE}/special-days/${encodeURIComponent(id)}`, "DELETE", {
