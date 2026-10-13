@@ -4693,7 +4693,7 @@ describe("names holding replacement patterns or another placeholder", () => {
   beforeEach(() => {
     const before = currentLocale();
     setLocale("en-GB");
-    return () => setLocale(before);
+    onTestFinished(() => setLocale(before));
   });
 
   const message = (el: MenuPricesTable) =>

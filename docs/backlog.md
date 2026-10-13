@@ -3777,6 +3777,8 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   `apps/dashboard/src/widgets/receipt-language.ts`: the receipt-language sentences, which fill two
   language names one after another, and a language tag the browser has no name for is shown as
   written; left because lane D's A493 changes the receipt files.
+  `apps/dashboard/src/widgets/price-source.ts` keeps a private one-pass fill because it is handed
+  its `t`.
 
 - **One earlier Spanish dark-theme 390 px demo probe reached its 12-second deadline before the
   bottom** — left open by A334 (#1416, held reorder drags scroll at the list edge): a later

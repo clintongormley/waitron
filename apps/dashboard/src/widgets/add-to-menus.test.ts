@@ -493,7 +493,7 @@ describe("names holding replacement patterns", () => {
   beforeEach(() => {
     const before = currentLocale();
     setLocale("en");
-    return () => setLocale(before);
+    onTestFinished(() => setLocale(before));
   });
 
   const trapMenus: PlacementMenu[] = [

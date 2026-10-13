@@ -4439,7 +4439,7 @@ describe("names holding replacement patterns or another placeholder", () => {
   beforeEach(() => {
     const before = currentLocale();
     setLocale("en");
-    return () => setLocale(before);
+    onTestFinished(() => setLocale(before));
   });
 
   function trapNodes(): MenuStructureNode[] {

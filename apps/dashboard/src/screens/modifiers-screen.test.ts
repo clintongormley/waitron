@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { LiveData, tableNoMatches } from "@waitron/dashboard-kit";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -1548,9 +1548,7 @@ it("dismisses the detail modal when it closes itself", async () => {
 // Deleting
 
 it("heads the Used by and Delete windows with a list name holding a replacement pattern as written", async () => {
-  const before = currentLocale();
   setLocale("en");
-  onTestFinished(() => setLocale(before));
   const el = await mount(
     api({ listExtraLists: vi.fn().mockResolvedValue([{ ...extraList, name: "Breads $&" }]) }),
   );

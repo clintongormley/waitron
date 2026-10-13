@@ -18,7 +18,6 @@ import {
 } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
-import type { StringKey } from "../i18n/strings.js";
 import type {
   DashboardApi,
   DeviceProfile,
@@ -2820,10 +2819,6 @@ describe("the Edit dialog", () => {
     });
 
     it("puts a device label and a holder name holding a replacement pattern into the heading and the refusal as written", async () => {
-      const as = (key: StringKey, name: string) =>
-        t(key)
-          .split(/\{\w+\}/)
-          .join(name);
       const api = equipmentApi({
         listDevices: vi.fn().mockResolvedValue([{ ...onDefault, label: "Caja $&" }, kitchen]),
         updateDevice: vi.fn().mockRejectedValue({
@@ -2838,14 +2833,14 @@ describe("the Edit dialog", () => {
       });
       const el = await openEdit(api);
       expect(q(el, "[data-test=edit-device-modal]")!.getAttribute("heading")).toBe(
-        as("devices.edit_title", "Caja $&"),
+        t("devices.edit_title").split("{name}").join("Caja $&"),
       );
       await chooseOption(q(el, "[data-test=edit-receipt-printer]")!, "pr2");
       await flush(el);
       await save(el);
       await vi.waitFor(() =>
         expect(field(el, "edit-receipt-printer").error).toBe(
-          as("devices.err_equipment_held", "Móvil $&"),
+          t("devices.err_equipment_held").split("{device}").join("Móvil $&"),
         ),
       );
     });
