@@ -1356,14 +1356,6 @@ decides whether that still covers the no-Void decision.
   about whether a basket edit may change a variant AT ALL: if no, stop offering the variant control
   on a reopened line; if yes, `setLineModifiers` has to carry the product.
 
-## A separate finding remains: entering `05,50` for an amount discount and pressing Continue raises `shared.invalid_decimal` from the existing amount check
-
-A separate finding remains: entering `05,50` for an amount discount and pressing Continue raises
-`shared.invalid_decimal` from the existing amount check. The W69 adjustment checkpoint reproduced
-it before implementation (`red.log`, campaign receipts `w69-adjustment-20261006`);
-`git show 26b67286a:apps/till/src/widgets/adjustment-dialog.ts` lines 287–289 shows the same call.
-W69 leaves the amount validation and request conversion unchanged.
-
 ## Reopening a held order still removes a sold-out extra on the first edit
 
 From **Variants as products (#511–#556) — what is left open.** How the model works is in
