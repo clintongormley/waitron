@@ -336,7 +336,7 @@ export interface GroupSplit {
    * out rather than named wrongly. */
   guestsMoveTo(ticked: readonly string[]): string[];
   /** Whether a party a ticked table holds would keep none of its tables, which the server refuses
-   * `tab.already_open`. */
+   * `merge.strands_party`. */
   strandsGuests(ticked: readonly string[]): boolean;
 }
 

@@ -969,19 +969,20 @@ async function partyAtBarAlone() {
 }
 
 describe("Split tables… on a group a party holds only some of", () => {
-  it("Bar ticked while the party holds Bar alone is refused tab.already_open naming Bar, nothing written", async () => {
+  it("Bar ticked while the party holds Bar alone is refused merge.strands_party naming Bar, nothing written", async () => {
     await withClearing(async () => {
       const { table } = await partyAtBarAlone();
       const before = await everything();
 
-      await refused(splitOff(table.bar!, [table.bar!], 10), 409, "tab.already_open", {
+      await refused(splitOff(table.bar!, [table.bar!], 10), 409, "merge.strands_party", {
         tableId: table.bar!,
+        field: "partIds",
       });
       expect(await everything()).toEqual(before);
     });
   });
 
-  it("Bar ticked while the party holds Bar alone, having sat at Long table earlier and left it, is refused tab.already_open naming Bar, nothing written", async () => {
+  it("Bar ticked while the party holds Bar alone, having sat at Long table earlier and left it, is refused merge.strands_party naming Bar, nothing written", async () => {
     await withClearing(async () => {
       const { table, partyId } = await partyAtBarAlone();
       const earlier = new Date(NOW.getTime() - 60 * 60_000).toISOString();
@@ -992,8 +993,9 @@ describe("Split tables… on a group a party holds only some of", () => {
       );
       const before = await everything();
 
-      await refused(splitOff(table.bar!, [table.bar!], 10), 409, "tab.already_open", {
+      await refused(splitOff(table.bar!, [table.bar!], 10), 409, "merge.strands_party", {
         tableId: table.bar!,
+        field: "partIds",
       });
       expect(await everything()).toEqual(before);
     });

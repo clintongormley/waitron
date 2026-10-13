@@ -156,21 +156,11 @@ export class TillSplitJoinedDialog extends LitElement {
       : "";
   }
 
-  /** A refusal naming a field not shown goes to the foot, so it is never silent. In a group's
-   * window `tab.already_open` means the ticks would leave a party no table (`splitGroup`), not that
-   * another party sits there, so it goes under the list. */
+  /** A refusal naming a field not shown goes to the foot, so it is never silent. */
   #shownRefusal(): { code: string; field?: string } | null {
     if (this.refusal === null || this.refusalDismissed) return null;
     if (this.refusal.field === "seats" && !this.#asksSeats()) return { code: this.refusal.code };
-    if (this.refusal.code === "tab.already_open" && splitsGroup(this.joined))
-      return { code: this.refusal.code, field: "partIds" };
     return this.refusal;
-  }
-
-  #refusalText(refusal: { code: string; field?: string }): string {
-    return refusal.code === "tab.already_open" && refusal.field === "partIds"
-      ? t("floor.split_strands")
-      : codeMessage(refusal.code);
   }
 
   #onChoose(event: CustomEvent<{ values: string[] }>): void {
@@ -228,7 +218,7 @@ export class TillSplitJoinedDialog extends LitElement {
     const partsError = this.#partsError();
     const seatsError = this.#seatsError();
     const refusal = this.#shownRefusal();
-    const refusalText = refusal === null ? "" : this.#refusalText(refusal);
+    const refusalText = refusal === null ? "" : codeMessage(refusal.code);
     const partsMessage = partsError || (refusal?.field === "partIds" ? refusalText : "");
     const seatsMessage = seatsError || (refusal?.field === "seats" ? refusalText : "");
     const invalid = partsError !== "" || seatsError !== "";

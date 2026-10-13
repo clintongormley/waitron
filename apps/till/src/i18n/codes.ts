@@ -144,6 +144,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Leave at least one table joined",
     es: "Deja al menos una mesa unida",
   },
+  "merge.strands_party": {
+    en: "Leave one of the guests' tables",
+    es: "Deja una de las mesas de los clientes",
+  },
   "table.not_on_today_plan": {
     en: "That table is not on today's plan",
     es: "Esa mesa no está en el plano de hoy",

@@ -528,6 +528,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "merge.seats_required": 400,
   "merge.member_invalid": 400,
   "merge.split_all": 409,
+  "merge.strands_party": 409,
   "joined_table.not_found": 404,
   "joined_table.part_invalid": 400,
   "joined_table.split_all": 409,

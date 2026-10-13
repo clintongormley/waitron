@@ -639,16 +639,20 @@ describe("till-floor-screen: Split tables… on a group", () => {
     expect(opened.strandsGuests(["c4"])).toBe(false);
   });
 
-  it("a tab.already_open refusal shows under the list as the guests' tables, not as another party", async () => {
+  it("a merge.strands_party refusal shows under the list as the guests' tables", async () => {
     const api = stubApi();
-    api.splitOffToday.mockRejectedValueOnce({ code: "tab.already_open", tableId: "bar" });
+    api.splitOffToday.mockRejectedValueOnce({
+      code: "merge.strands_party",
+      tableId: "bar",
+      field: "partIds",
+    });
     const el = await mount(groupFloor(), api);
     const opened = await openSplit(el, "bar");
     send(opened, "split-joined-confirm", { partIds: ["bar"], seats: null });
     await settle(el);
     expect(windowOf(el)).toBe(opened);
     await opened.updateComplete;
-    expect(pickError(el)).toBe("Leave one of the guests' tables.");
+    expect(pickError(el)).toBe("Leave one of the guests' tables");
     expect(footError(el)).toBe("Correct the highlighted fields to continue.");
     expect(floorRefusal(el)).toBeNull();
   });

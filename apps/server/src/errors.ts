@@ -694,6 +694,8 @@ declare module "@waitron/shared" {
     "merge.member_invalid": { tableId: string; field: "partIds" };
     /** The split names every member of the group, which would leave it with none. */
     "merge.split_all": { tableId: string; field: "partIds" };
+    /** The split names every table a party holds, which would leave it with none. */
+    "merge.strands_party": { tableId: string; field: "partIds" };
     /** The path's table is not the joined table of any part in today's copy. */
     "joined_table.not_found": { tableId: string };
     /** A table named to split off is not a part of this joined table still joined to it. */

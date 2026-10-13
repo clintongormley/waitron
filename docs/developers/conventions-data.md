@@ -1671,7 +1671,7 @@ otherwise ends the merge first, putting its tables back where they stood (`split
 Split tables… on a table in a group goes to `splitGroup` unless the table is a joined table with
 tables still joined, which keeps `splitJoinedTable` (`splitOff`, `apps/server/src/floor-today-split-group.ts`).
 A ticked table not in the group is refused `merge.member_invalid`, ticking every table
-`merge.split_all`, and ticking every table a party holds `tab.already_open` (a moved bill can hold
+`merge.split_all`, and ticking every table a party holds `merge.strands_party` (a moved bill can hold
 one table of a group, backlog A594).
 When deleting a table is refused, `removeLiveTables` deletes the split rows naming it and tries again,
 and puts them back if that is refused too (`apps/server/src/table-removal.ts:115`).

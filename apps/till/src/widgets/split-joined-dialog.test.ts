@@ -527,12 +527,12 @@ describe("on a group", () => {
     expect(seen.confirmed).toEqual([{ partIds: ["bar"], seats: 8 }]);
   });
 
-  it("shows a tab.already_open refusal under the list as the guests' tables, until the choice changes, without disabling Split", async () => {
+  it("shows a merge.strands_party refusal under the list as the guests' tables, until the choice changes, without disabling Split", async () => {
     const el = await mountGroup();
     await choose(el, ["bar"]);
-    el.refusal = { code: "tab.already_open" };
+    el.refusal = { code: "merge.strands_party", field: "partIds" };
     await el.updateComplete;
-    expect(pick(el).error).toBe("Leave one of the guests' tables.");
+    expect(pick(el).error).toBe("Leave one of the guests' tables");
     expect(foot(el).error).toBe("Correct the highlighted fields to continue.");
     expect(action(el).disabled).toBe(false);
     await choose(el, ["c3"]);
@@ -567,8 +567,8 @@ describe("on a group", () => {
     const el = await mountGroup();
     await choose(el, ["c5"]);
     expect(seatsField(el)!.label).toBe("Plazas para lo que queda");
-    el.refusal = { code: "tab.already_open" };
+    el.refusal = { code: "merge.strands_party", field: "partIds" };
     await el.updateComplete;
-    expect(pick(el).error).toBe("Deja una de las mesas de los clientes.");
+    expect(pick(el).error).toBe("Deja una de las mesas de los clientes");
   });
 });
