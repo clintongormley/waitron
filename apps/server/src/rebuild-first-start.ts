@@ -215,10 +215,18 @@ export async function readBucketPointerTerm(
     if (settings === null) return null;
     const store = (options.openStore ?? createS3ObjectStore)(settings.bucket);
     const reading = new AbortController();
-    read = await Promise.race([
-      readPointer(store, settings.venueId, { signal: reading.signal }),
-      delay(options.timeoutMs ?? POINTER_READ_TIMEOUT_MS, TIMED_OUT, { ref: false }),
-    ]);
+    const bound = new AbortController();
+    try {
+      read = await Promise.race([
+        readPointer(store, settings.venueId, { signal: reading.signal }),
+        delay(options.timeoutMs ?? POINTER_READ_TIMEOUT_MS, TIMED_OUT, {
+          ref: false,
+          signal: bound.signal,
+        }),
+      ]);
+    } finally {
+      bound.abort();
+    }
     if (read === TIMED_OUT) reading.abort();
   } catch (error) {
     if (isAppError(error)) throw error;

@@ -1,3 +1,4 @@
+import { createHook } from "node:async_hooks";
 import { X509Certificate, createPrivateKey } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -568,6 +569,32 @@ describe("readBucketPointerTerm", () => {
     ).toBeNull();
     await delay(100);
     expect(signals.map((signal) => signal?.aborted)).toEqual([true, false]);
+  });
+
+  it("leaves no timer waiting once the bucket has answered in time", async () => {
+    await storeSettings(SETTINGS);
+    const store = createMemoryObjectStore();
+    const bound = 123_457;
+    const live = new Set<number>();
+    const timers = createHook({
+      init(id, type, _trigger, resource) {
+        if (type === "Timeout" && (resource as { _idleTimeout?: number })._idleTimeout === bound) {
+          live.add(id);
+        }
+      },
+      destroy(id) {
+        live.delete(id);
+      },
+    }).enable();
+    try {
+      expect(
+        await readBucketPointerTerm(suite.db, RING, { openStore: () => store, timeoutMs: bound }),
+      ).toBeNull();
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(live.size).toBe(0);
+    } finally {
+      timers.disable();
+    }
   });
 
   it("refuses when the pointer in the bucket cannot be read", async () => {
