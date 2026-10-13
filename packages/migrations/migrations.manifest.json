@@ -50,7 +50,7 @@
     "name": "workforce",
     "table": "__drizzle_migrations_workforce",
     "from": "../workforce/drizzle",
-    "appendOnlyTables": ["time_entries"]
+    "appendOnlyTables": ["time_entries", "pay_period_closures"]
   },
   {
     "name": "workforce-es",

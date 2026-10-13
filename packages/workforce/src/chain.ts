@@ -7,7 +7,8 @@ import { isUniqueViolation, type Database, type Transaction } from "@waitron/db"
 import { computeEntryHash, type VerifiableEntry } from "./chain-hash.js";
 import { timeEntries } from "./schema/time-entries.js";
 import { workforceChains } from "./schema/workforce-chains.js";
-import type { WorkforceEntryKind } from "./projection.js";
+import type { RecordExtension } from "./record-types.js";
+import type { CorrectionStatus, WorkforceEntryKind } from "./projection.js";
 
 /**
  * `time_entries_chain_position_uq` refuses a position whatever occupies it, including a row this code
@@ -29,12 +30,13 @@ export interface TimeEntryAppend {
   entryKind: WorkforceEntryKind;
   eventAt: string;
   eventOffsetMinutes: number;
-  recordedByPersonId: string;
+  recordedByPersonId: string | null;
+  extension?: RecordExtension | null;
   /** Where the entry was captured: the device, or the job that wrote it. */
   origin: Origin;
   correctsEntryId?: string | null;
   correctionReason?: string | null;
-  correctionStatus?: "requested" | "approved" | null;
+  correctionStatus?: CorrectionStatus | null;
   correctionActorId?: string | null;
 }
 
@@ -136,6 +138,7 @@ async function attemptAppend(
     correctionStatus: entry.correctionStatus ?? null,
     correctionActorId: entry.correctionActorId ?? null,
     prevEntryHash,
+    extension: entry.extension,
   });
 
   const [inserted] = await tx
@@ -155,6 +158,11 @@ async function attemptAppend(
       correctionReason: entry.correctionReason ?? null,
       correctionStatus: entry.correctionStatus ?? null,
       correctionActorId: entry.correctionActorId ?? null,
+      authorKind: entry.extension?.authorKind ?? null,
+      correctionDirection: entry.extension?.direction ?? null,
+      missingEntryKind: entry.extension?.missingEntryKind ?? null,
+      respondsToEntryId: entry.extension?.respondsToEntryId ?? null,
+      payPeriodClosureId: entry.extension?.payPeriodClosureId ?? null,
       entryHash,
       prevEntryHash,
       sequenceNo,
@@ -197,6 +205,13 @@ export async function appendToChain(
   entry: TimeEntryAppend,
   clock: () => Date = () => new Date(),
 ): Promise<{ id: string; sequenceNo: number; entryHash: string }> {
+  if (
+    entry.extension !== undefined &&
+    entry.extension !== null &&
+    Object.values(entry.extension).every((value) => value === null)
+  ) {
+    throw new AppError("attendance.invalid", { reason: "empty_extension" });
+  }
   for (let attempt = 1; attempt <= MAX_APPEND_ATTEMPTS; attempt++) {
     try {
       return await tx.transaction((nested) => attemptAppend(nested, key, entry, clock));
@@ -235,6 +250,11 @@ export async function readChain(
       correctionReason: timeEntries.correctionReason,
       correctionStatus: timeEntries.correctionStatus,
       correctionActorId: timeEntries.correctionActorId,
+      authorKind: timeEntries.authorKind,
+      correctionDirection: timeEntries.correctionDirection,
+      missingEntryKind: timeEntries.missingEntryKind,
+      respondsToEntryId: timeEntries.respondsToEntryId,
+      payPeriodClosureId: timeEntries.payPeriodClosureId,
       prevEntryHash: timeEntries.prevEntryHash,
       entryHash: timeEntries.entryHash,
       isFirstEntry: timeEntries.isFirstEntry,
@@ -242,5 +262,31 @@ export async function readChain(
     .from(timeEntries)
     .where(and(eq(timeEntries.nodeId, key.nodeId), eq(timeEntries.locationId, key.locationId)))
     .orderBy(timeEntries.sequenceNo);
-  return rows;
+  return rows.map(
+    ({
+      authorKind,
+      correctionDirection,
+      missingEntryKind,
+      respondsToEntryId,
+      payPeriodClosureId,
+      ...row
+    }) => ({
+      ...row,
+      extension: [
+        authorKind,
+        correctionDirection,
+        missingEntryKind,
+        respondsToEntryId,
+        payPeriodClosureId,
+      ].every((value) => value === null)
+        ? null
+        : {
+            authorKind,
+            direction: correctionDirection,
+            missingEntryKind,
+            respondsToEntryId,
+            payPeriodClosureId,
+          },
+    }),
+  );
 }

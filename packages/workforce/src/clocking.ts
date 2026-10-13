@@ -155,7 +155,7 @@ export interface UpdateShiftInput {
 
 type ShiftState = "out" | "working" | "on_break";
 
-type LiveEntryKind = Exclude<WorkforceEntryKind, "correction">;
+type LiveEntryKind = "in" | "out" | "break_start" | "break_end";
 
 const SUPERVISOR_ROLES = new Set(["supervisor", "manager", "admin"]);
 
@@ -621,7 +621,7 @@ export class WorkforceBackend {
   private async currentState(tx: Transaction, personId: string): Promise<ShiftState> {
     const { rows } = await tx.execute<{ entry_kind: LiveEntryKind }>(sql`
       select entry_kind from time_entries
-      where person_id = ${personId} and entry_kind <> 'correction'
+      where person_id = ${personId} and entry_kind in ('in', 'out', 'break_start', 'break_end')
       order by event_at desc, recorded_at desc, node_id desc, sequence_no desc
       limit 1`);
     const last = rows[0];

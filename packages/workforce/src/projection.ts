@@ -1,3 +1,4 @@
+import type { RecordAttribution } from "./record-types.js";
 /**
  * Overtime has TWO lawful readings, and the code returns BOTH rather than choosing: which one binds
  * for an employment is a collective-agreement decision, not a code decision. The article
@@ -5,12 +6,13 @@
  */
 
 /** `correction` supersedes an earlier entry's timestamp rather than mutating it. */
-export type WorkforceEntryKind = "in" | "out" | "break_start" | "break_end" | "correction";
+export type WorkforceEntryKind =
+  "in" | "out" | "break_start" | "break_end" | "correction" | "confirmation";
 
 /** Only `approved` corrections affect the projection. */
-export type CorrectionStatus = "requested" | "approved";
+export type CorrectionStatus = "requested" | "approved" | "declined" | "disputed";
 
-export interface TimeEntryRecord {
+export interface TimeEntryRecord extends RecordAttribution {
   entryId: string;
   personId: string;
   locationId: string;

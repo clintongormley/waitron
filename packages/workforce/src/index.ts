@@ -96,3 +96,18 @@ export { WORKFORCE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 // Keeps errors.ts's registry augmentation reachable from the public barrel.
 import "./errors.js";
 export { WORKFORCE_CHANGE_SOURCES } from "./classification.js";
+
+export { payPeriodSettings } from "./schema/pay-period-settings.js";
+export { payPeriodClosures } from "./schema/pay-period-closures.js";
+export { verifyPayPeriodClosures } from "./pay-period-chain.js";
+export type {
+  ClockEntryKind,
+  EntryAuthor,
+  RecordExtension,
+  ProjectedRecordEntry,
+  PayPeriodSnapshot,
+  PayPeriodClosure,
+  ClosedPeriodImpact,
+  PayPeriodClosureView,
+  TimeRecord,
+} from "./record-types.js";

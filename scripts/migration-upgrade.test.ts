@@ -373,6 +373,9 @@ const RESETS: Record<string, { refused: readonly string[] } | { lost: readonly s
   "payments/0005_operator_script_source": {
     refused: ["DROP TABLE `payments`", "FOREIGN KEY constraint failed"],
   },
+  "workforce/0005_a10_record_constraints": {
+    refused: ["DROP TABLE `time_entries`", "FOREIGN KEY constraint failed"],
+  },
   "workforce/0003_operator_script_source": {
     refused: ["DROP TABLE `time_entries`", "FOREIGN KEY constraint failed"],
   },

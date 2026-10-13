@@ -1,3 +1,4 @@
+import { payPeriodClosures } from "./pay-period-closures.js";
 import { sql } from "drizzle-orm";
 import { check, foreignKey, index, uniqueIndex } from "drizzle-orm/sqlite-core";
 import {
@@ -18,17 +19,21 @@ import {
 } from "@waitron/db";
 import { persons } from "@waitron/identity";
 
-/**
- * The kind of clock event. A `correction` never mutates an existing row: it is appended, carrying the
- * corrected timestamp and pointing at the entry it supersedes via `corrects_entry_id`.
- */
-export const workforceEntryKind = enumType(["in", "out", "break_start", "break_end", "correction"]);
+export const workforceEntryKind = enumType([
+  "in",
+  "out",
+  "break_start",
+  "break_end",
+  "correction",
+  "confirmation",
+]);
 
-/**
- * A `requested` correction has no projection effect; an `approved` one supersedes its target.
- * Approval is a second appended row, not an update of the request (`WorkforceBackend.approveCorrection`).
- */
-export const workforceCorrectionStatus = enumType(["requested", "approved"]);
+export const workforceCorrectionStatus = enumType([
+  "requested",
+  "approved",
+  "declined",
+  "disputed",
+]);
 
 /**
  * The append-only stream of clock events — the working-time record (art. 34.9). A mistake is
@@ -54,18 +59,24 @@ export const timeEntries = table(
     /** Where the entry was captured; a device is named exactly when the source is `device`. */
     capturedBySource: sourceColumn("captured_by_source").notNull(),
     capturedByDeviceId: id("captured_by_device_id"),
-    /** Equals `person_id` for a self-service clock-in; differs when a supervisor records on someone's
-     * behalf, which is the attribution art. 34.9 requires. */
-    recordedByPersonId: id("recorded_by_person_id").notNull(),
+    recordedByPersonId: id("recorded_by_person_id"),
     /** Whole seconds, hashed, and clamped monotonic per chain against the head's `last_recorded_at`. */
     recordedAt: tsString("recorded_at").notNull(),
-    /** On a correction, the entry it supersedes — a base event or an earlier correction. */
     correctsEntryId: id("corrects_entry_id"),
     correctionReason: label("correction_reason"),
     correctionStatus: workforceCorrectionStatus("correction_status"),
     /** The accountable actor who requested or approved the correction, distinct from
      * `recorded_by_person_id` (the device operator) even when they are the same person. */
     correctionActorId: id("correction_actor_id"),
+    authorKind: label("author_kind").$type<"worker" | "manager" | "automatic">(),
+    correctionDirection: label("correction_direction").$type<
+      "worker_request" | "manager_proposal"
+    >(),
+    missingEntryKind: label("missing_entry_kind").$type<
+      "in" | "out" | "break_start" | "break_end"
+    >(),
+    respondsToEntryId: id("responds_to_entry_id"),
+    payPeriodClosureId: id("pay_period_closure_id"),
     // The hash chain, assigned by `appendToChain` (../chain.ts), never by the device.
     /** `computeEntryHash(content ‖ prev_entry_hash)`, uppercase hex. */
     entryHash: label("entry_hash").notNull(),
@@ -115,18 +126,72 @@ export const timeEntries = table(
       foreignColumns: [persons.id],
       name: "time_entries_correction_actor_fk",
     }).onDelete("restrict"),
+    foreignKey({
+      columns: [t.respondsToEntryId],
+      foreignColumns: [t.id],
+      name: "time_entries_response_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [t.respondsToEntryId, t.personId, t.locationId],
+      foreignColumns: [t.id, t.personId, t.locationId],
+      name: "time_entries_response_subject_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [t.payPeriodClosureId],
+      foreignColumns: [payPeriodClosures.id],
+      name: "time_entries_closure_fk",
+    }).onDelete("restrict"),
+    uniqueIndex("time_entries_subject_identity_uq").on(t.id, t.personId, t.locationId),
+    check(
+      "time_entries_author_kind_ck",
+      sql`${t.authorKind} is null or ${t.authorKind} in ('worker','manager','automatic')`,
+    ),
+    check(
+      "time_entries_correction_direction_ck",
+      sql`${t.correctionDirection} is null or ${t.correctionDirection} in ('worker_request','manager_proposal')`,
+    ),
+    check(
+      "time_entries_missing_entry_kind_ck",
+      sql`${t.missingEntryKind} is null or ${t.missingEntryKind} in ('in','out','break_start','break_end')`,
+    ),
+    check(
+      "time_entries_author_ck",
+      sql`coalesce((${t.authorKind} = 'automatic' and ${t.recordedByPersonId} is null)
+      or (${t.authorKind} is null and ${t.recordedByPersonId} is not null)
+      or (${t.authorKind} in ('worker','manager') and ${t.recordedByPersonId} is not null), 0)`,
+    ),
     index("time_entries_person_event_idx").on(t.personId, t.eventAt),
     index("time_entries_corrects_entry_idx").on(t.correctsEntryId),
     // ±14h, the wall-offset domain `sales` uses.
     check("time_entries_event_offset_ck", sql`${t.eventOffsetMinutes} between -840 and 840`),
-    // All four correction columns null, or all four set. Nothing here ties them to
-    // `entry_kind = 'correction'`; the application sets that.
     check(
       "time_entries_correction_shape_ck",
-      sql`(${t.correctsEntryId} is null and ${t.correctionReason} is null
-             and ${t.correctionStatus} is null and ${t.correctionActorId} is null)
-          or (${t.correctsEntryId} is not null and ${t.correctionReason} is not null
-             and ${t.correctionStatus} is not null and ${t.correctionActorId} is not null)`,
+      sql`(${t.authorKind} is null and ${t.correctionDirection} is null
+          and ${t.missingEntryKind} is null and ${t.respondsToEntryId} is null
+          and ${t.payPeriodClosureId} is null
+          and ${t.entryKind} <> 'confirmation'
+          and ((${t.correctsEntryId} is null and ${t.correctionReason} is null
+            and ${t.correctionStatus} is null and ${t.correctionActorId} is null)
+            or (${t.correctsEntryId} is not null and ${t.correctionReason} is not null
+            and ${t.correctionStatus} is not null and ${t.correctionActorId} is not null)))
+        or (${t.entryKind} in ('in','out','break_start','break_end')
+          and ${t.correctsEntryId} is null and ${t.correctionReason} is null
+          and ${t.correctionStatus} is null and ${t.correctionActorId} is null
+          and ${t.correctionDirection} is null and ${t.missingEntryKind} is null
+          and ${t.respondsToEntryId} is null and ${t.payPeriodClosureId} is null)
+        or (${t.entryKind} = 'confirmation' and ${t.respondsToEntryId} is not null
+          and ${t.authorKind} is not null
+          and ((${t.authorKind} = 'worker' and ${t.payPeriodClosureId} is null)
+            or (${t.authorKind} = 'automatic' and ${t.payPeriodClosureId} is not null))
+          and ${t.correctsEntryId} is null and ${t.correctionReason} is null
+          and ${t.correctionStatus} is null and ${t.correctionActorId} is null
+          and ${t.correctionDirection} is null and ${t.missingEntryKind} is null)
+        or (${t.entryKind} = 'correction' and ${t.correctionReason} is not null
+          and ${t.correctionStatus} is not null and ${t.correctionActorId} is not null
+          and ${t.payPeriodClosureId} is null
+          and ((${t.correctsEntryId} is not null and ${t.missingEntryKind} is null)
+            or (${t.correctsEntryId} is null and ${t.missingEntryKind} is not null
+              and ${t.correctionDirection} is not null and ${t.authorKind} is not null)))`,
     ),
     // The backstop against a forked chain: refuses a taken position whatever wrote the row.
     uniqueIndex("time_entries_chain_position_uq").on(t.nodeId, t.locationId, t.sequenceNo),
