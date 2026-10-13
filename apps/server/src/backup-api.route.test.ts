@@ -25,11 +25,16 @@ import { deleteCredential, loadKeyRing, putCredential } from "@waitron/credentia
 import { mountStreamApi } from "./stream-api.js";
 import {
   isBackupManagedByEnvironment,
+  loadBackupSettings,
   loadRecoveryKey,
   resolveBackupConfig,
   type BackupConfig,
 } from "./backup-config.js";
-import { ARCHIVE_PURPOSE, readArchiveSettings } from "./archive-settings.js";
+import {
+  ARCHIVE_PURPOSE,
+  readArchiveSettings,
+  type ArchiveSettings,
+} from "./archive-settings.js";
 import type {
   BackupDestination,
   StorageBackend,
@@ -121,6 +126,8 @@ interface Scenario {
   stateDir: string;
   base: NodeJS.ProcessEnv;
   role: SingletonRole;
+  /** How the supervisor reads the dashboard record, read at each reload; `readSealed` by default. */
+  readRecord?: () => Promise<ArchiveSettings | null>;
 }
 
 /** One in-memory bucket per test: every S3 destination built while it is set reaches it. */
@@ -182,15 +189,14 @@ const readSealed = () => readArchiveSettings(suite.db, RING);
 
 function makeSupervisor(sc: Scenario): BackupSupervisor {
   const sup = new BackupSupervisor({
-    buildConfig: async () => {
-      const managedByEnvironment = isBackupManagedByEnvironment(sc.base);
-      return resolveBackupConfig({
-        managedByEnvironment,
+    // As boot builds it.
+    buildConfig: async () =>
+      loadBackupSettings({
+        managedByEnvironment: isBackupManagedByEnvironment(sc.base),
         env: await loadBoxEnv(sc.base, sc.stateDir),
-        sealed: managedByEnvironment ? null : await readSealed(),
+        readSealed: () => (sc.readRecord ?? readSealed)(),
         venueId: VENUE,
-      });
-    },
+      }),
     buildBackend,
     isManagedByEnvironment: () => BACKUP_KEYS.some((k) => !isUnset(sc.base[k])),
     readSingletonRole: () => sc.role,
@@ -1976,6 +1982,32 @@ describe("backup admin routes", () => {
         });
         expect(await fileKey(sc.stateDir)).toBe(KEY_2);
         expect(await readSealed()).toEqual(sealed);
+      }, 60_000);
+
+      it("a reload that fails after the key and revision were written answers 200 with its code", async () => {
+        const { sc, sup, post, sealed } = await savedInBucket();
+        vi.spyOn(sup, "reload").mockRejectedValueOnce(
+          new AppError("backup.destinations_invalid", { reason: "bad_entry" }),
+        );
+        const res = await post("/api/backup/rotate", { recoveryKey: KEY_2 });
+        expect(res.status).toBe(200);
+        expect(await res.json()).toMatchObject({ reloadErrorCode: "backup.destinations_invalid" });
+        expect(await fileKey(sc.stateDir)).toBe(KEY_2);
+        expect((await readSealed())!.revision).not.toBe(sealed.revision);
+      }, 60_000);
+
+      it("a reload that finds the stored settings unusable answers 200 with that code", async () => {
+        const { sc, post, sealed } = await savedInBucket();
+        sc.readRecord = async () => {
+          throw new AppError("backup.archive_settings_invalid", { reason: "fields" });
+        };
+        const res = await post("/api/backup/rotate", { recoveryKey: KEY_2 });
+        expect(res.status).toBe(200);
+        expect(await res.json()).toMatchObject({
+          loadErrorCode: "backup.archive_settings_invalid",
+        });
+        expect(await fileKey(sc.stateDir)).toBe(KEY_2);
+        expect((await readSealed())!.revision).not.toBe(sealed.revision);
       }, 60_000);
 
       it("a key file that cannot be written changes nothing, and says no key changed", async () => {

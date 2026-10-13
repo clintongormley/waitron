@@ -518,12 +518,16 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
           }
           await deps.sealedState.refresh();
         }
-        await deps.supervisor.reload();
-        if (deps.supervisor.current().recoveryKey !== recoveryKey) {
+        const reloadErrorCode = await reloadAfterWrite();
+        const loaded = deps.supervisor.current();
+        if (
+          reloadErrorCode === undefined &&
+          loaded.loadErrorCode === null &&
+          loaded.recoveryKey !== recoveryKey
+        ) {
           throw new AppError("backup.effective_mismatch", {});
         }
-        // Complete status, as `apply` returns and the dashboard expects.
-        return c.json(await statusBody());
+        return writeAnswer(c, reloadErrorCode);
       });
     }),
   );
