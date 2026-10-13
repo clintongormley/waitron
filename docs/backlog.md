@@ -4874,9 +4874,9 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   checkpoints; what moved the odds (pages written per sale, runner
   speed) was not measured. Left open by A549.
 
-- **The case "refused while the run is stopping" catches a removed stop check only through the order
-  two pending steps finish in,** so re-run that removal if `#bucketAnswers` is restructured. Left
-  open by #668, #686, A57, A60 and #723 (the pause test and the bucket's error reports).
+- **The case "refused while the run is stopping" catches a log check blind to the stop only by the
+  order two pending steps finish in:** in A538, with that check reading only the deadline, it passed
+  once the refusal arrived one `setImmediate` later. Left open by #668, #686, A57, A60, #723, A538.
 
 - **Every `maxWorkers: 1` config whose comment gives the coverage reason**, apart from `payments`,
   which carries its own measurement, still says the pin is needed without having measured it; the
