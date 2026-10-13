@@ -1757,7 +1757,89 @@ describe("Calendar special-day actions", () => {
       ]);
     await expect.poll(reads).toBe(2);
   });
+  it("a refused Delete says so and stays open; Cancel then closes it without another write", async () => {
+    const { el, cal, writes } = await calendarMount({ refuse: { code: "hours.clock_changed" } });
+    await action(cal, "2026-10-13", "delete");
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("[data-test=delete-special-day]"))
+      .not.toBeNull();
+    const confirm = el.shadowRoot!.querySelector("[data-test=delete-special-day]")!;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-special-delete]")!.click();
+    await expect
+      .poll(() => confirm.querySelector("[role=alert]")?.textContent)
+      .toBe("The change could not be saved.");
+    expect(writes).toHaveLength(1);
+    expect(el.shadowRoot!.querySelector("[data-test=delete-special-day]")).toBe(confirm);
+    confirm.querySelector<HTMLElement>("wt-button[slot=cancel]")!.click();
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("[data-test=delete-special-day]"))
+      .toBeNull();
+    expect(writes).toHaveLength(1);
+  });
+  it("closing the Delete confirmation from the dialog itself deletes nothing", async () => {
+    const { el, cal, writes } = await calendarMount();
+    await action(cal, "2026-10-13", "delete");
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("[data-test=delete-special-day]"))
+      .not.toBeNull();
+    el.shadowRoot!.querySelector("[data-test=delete-special-day]")!.dispatchEvent(
+      new CustomEvent("wt-close", { bubbles: true, composed: true }),
+    );
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("[data-test=delete-special-day]"))
+      .toBeNull();
+    expect(writes).toEqual([]);
+  });
 });
+
+it.each([
+  ["the week's calendar", "/named-days?"],
+  ["a special day in the week", "/special-days/named"],
+])(
+  "says when %s cannot be read on the real week, and clears it once a reread succeeds",
+  async (_, failing) => {
+    history.replaceState(null, "", "/manage/opening-hours/view/week");
+    const detail: SpecialDayDetail = {
+      id: "named",
+      name: "Own Monday",
+      repeatsYearly: false,
+      dates: [{ date: "2026-10-12", closedAllDay: false }],
+      paint: [],
+      zonePaint: [],
+    };
+    const { namedWeekModel } = await import("../testing/real-week-model.js");
+    const calendar: SpecialDaysModel = {
+      ...namedWeekModel(),
+      days: [
+        {
+          date: "2026-10-12",
+          specialDay: { id: "named", name: "Own Monday" },
+          holidays: [],
+          tone: "special_day",
+          closed: false,
+        },
+      ],
+    };
+    let failures = 1;
+    const el = await mount((async (path: string) => {
+      if (path.includes(failing) && failures-- > 0) throw { code: "connection.failed" };
+      return path.includes("/named-days?")
+        ? calendar
+        : path.endsWith("/special-days/named")
+          ? structuredClone(detail)
+          : structuredClone(model());
+    }) as DashboardRequest);
+    vi.setSystemTime(new Date("2026-10-12T12:00:00Z"));
+    el.shadowRoot!.querySelector("[name=realWeek]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { checked: true }, bubbles: true, composed: true }),
+    );
+    await expect.poll(() => location.search).toBe("?week=2026-10-12");
+    const alert = () => el.shadowRoot!.querySelector("[slot=week] p[role=alert]")?.textContent;
+    await expect.poll(alert).toBe("Opening hours could not be loaded. It will be tried again.");
+    el.api.rereadWithSpecialDays();
+    await expect.poll(alert).toBeUndefined();
+  },
+);
 
 it("an opened period keeps its revision through a passive replacement and submits the edited offset", async () => {
   const data = model();
