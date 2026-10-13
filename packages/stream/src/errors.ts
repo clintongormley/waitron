@@ -4,6 +4,10 @@ import "@waitron/shared";
 
 export type BucketOperation = "get" | "put" | "list" | "delete";
 
+/** The archive file store's requests (`s3-file-store.ts`). */
+export type DestinationOperation =
+  "put" | "create_upload" | "upload_part" | "complete_upload" | "get" | "list" | "delete";
+
 /**
  * This package's codes in the shared registry. They sit in the `backup.*` family with the archive's
  * codes (apps/server/src/errors.ts) because the stream is the venue's other kind of backup. No param
@@ -52,5 +56,32 @@ declare module "@waitron/shared" {
      * system's own "no space left on device", or its configuration could not be written for lack of
      * space. Its output is not carried — it can name the bucket and endpoint. */
     "backup.stream_restore_failed": { exitCode: number | null; diskFull: boolean };
+    /** An archive destination's bucket request failed (`createS3FileStore`). `status` and `name`
+     * follow `backup.stream_request_failed`'s rules. A cancelled signal is always `status` null and
+     * `name` "AbortError": the store cannot tell a caller's stop from a time limit, so it names
+     * neither, and a caller that owns the time limit says which. */
+    "backup.destination_request_failed": {
+      operation: DestinationOperation;
+      key: string;
+      status: number | null;
+      name: string;
+    };
+    /** After a failed upload, the store could not abandon its own multipart upload, or delete its
+     * own key when the bucket may have stored it, within its cleanup budget. Reported in place of
+     * the failure that caused the cleanup, because something of this upload may be left in the
+     * bucket. `status` and `name` describe the cleanup request, as `backup.stream_request_failed`'s
+     * do. */
+    "backup.destination_cleanup_failed": {
+      key: string;
+      cleanup: "abort_upload" | "delete_object";
+      status: number | null;
+      name: string;
+    };
+    /** A key, a listing prefix or the configured prefix is empty where it must not be, absolute,
+     * holds a control character or an empty, `.` or `..` segment; or a listing named a key outside
+     * the prefix asked for (`listedKey`). Never carries the key. */
+    "backup.destination_key_invalid": { field: "key" | "prefix" | "listedKey" };
+    /** A file needs more than 10,000 parts of the largest part size, refused before any request. */
+    "backup.destination_too_large": { bytes: number; maxBytes: number };
   }
 }
