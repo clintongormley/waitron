@@ -224,9 +224,17 @@ describe("a listing", () => {
     expect(bucket.seen).toHaveLength(2);
   });
 
-  it("refuses an entry whose size is negative", async () => {
+  it("refuses the whole listing when a key appears twice on one page", async () => {
+    const bucket = await bucketWith({ answer: answeringPages([entry("a/1") + entry("a/1")]) });
+    expect(await outcome(storeFor(bucket).list("a/", live()))).toEqual({
+      code: "backup.destination_request_failed",
+      params: { operation: "list", key: "a/", status: 200, name: "RepeatedKey" },
+    });
+  });
+
+  it.each(["-1", "1.5"])("refuses an entry whose size is %s", async (size) => {
     const bucket = await bucketWith({
-      answer: answeringPages([entry("a/1") + entry("a/2", "<Size>-1</Size>")]),
+      answer: answeringPages([entry("a/1") + entry("a/2", `<Size>${size}</Size>`)]),
     });
     expect(await outcome(storeFor(bucket).list("a/", live()))).toEqual({
       code: "backup.destination_request_failed",
