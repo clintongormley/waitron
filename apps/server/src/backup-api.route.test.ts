@@ -1995,7 +1995,17 @@ describe("backup admin routes", () => {
     }, 60_000);
 
     it("settings refused after the key is written leave a usable key and archives off", async () => {
-      const { sc, sup, post, status } = await primaryApp();
+      // The key each re-lock of this node's state row saw, read from the state folder at the time.
+      const relocked: (string | undefined)[] = [];
+      let stateDir = "";
+      const sealedState: SealedStateRefresher = {
+        refresh: async () => {
+          relocked.push(loadRecoveryKey(await loadBoxEnv({}, stateDir)));
+          return "sealed";
+        },
+      };
+      const { sc, sup, post, status } = await primaryApp({ sealedState });
+      stateDir = sc.stateDir;
       suite.db.run(
         sql.raw(`create trigger refuse_archive_settings before insert on tenant_credentials
           when new.purpose = '${ARCHIVE_PURPOSE}' begin select raise(abort, 'refused'); end`),
@@ -2006,9 +2016,12 @@ describe("backup admin routes", () => {
           applyBody({ kind: "local-fs", dir: makeDestDir() }),
         );
         expect(res.status).not.toBe(200);
+        expect(res.status).toBe(500);
+        expect(await res.json()).toEqual({ error: { code: "server.internal" } });
       } finally {
         suite.db.run(sql.raw("drop trigger refuse_archive_settings"));
       }
+      expect(relocked).toEqual([KEY_1]);
       expect(loadRecoveryKey(await loadBoxEnv({}, sc.stateDir))).toBe(KEY_1);
       expect(await readSealed()).toBeNull();
       expect(sup.current().enabled).toBe(false);
