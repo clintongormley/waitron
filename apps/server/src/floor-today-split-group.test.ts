@@ -948,6 +948,24 @@ describe("Split tables… on a group a party holds only some of", () => {
     });
   });
 
+  it("Bar ticked while the party holds Bar alone, having sat at Long table earlier and left it, is refused tab.already_open naming Bar, nothing written", async () => {
+    await withClearing(async () => {
+      const { table, partyId } = await partyAtBarAlone();
+      const earlier = new Date(NOW.getTime() - 60 * 60_000).toISOString();
+      await inTx(v, (tx) =>
+        tx
+          .insert(partyTables)
+          .values({ partyId, tableId: table.long!, joinedAt: earlier, leftAt: earlier }),
+      );
+      const before = await everything();
+
+      await refused(splitOff(table.bar!, [table.bar!], 10), 409, "tab.already_open", {
+        tableId: table.bar!,
+      });
+      expect(await everything()).toEqual(before);
+    });
+  });
+
   it("Counter 5 ticked while the party holds Bar alone: the party keeps Bar and its revision, and Counter 5 needs no clearing", async () => {
     await withClearing(async () => {
       const { table, zoneId, partyId } = await partyAtBarAlone();

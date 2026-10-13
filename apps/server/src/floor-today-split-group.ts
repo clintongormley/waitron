@@ -21,7 +21,7 @@ import {
   checkAndBumpParty,
   holdersOf,
   leaveForClearing,
-  memberTables,
+  partiesHoldingOnly,
   partyRevision,
 } from "./parties.js";
 import type { Placement } from "./floor-reset-plan.js";
@@ -43,14 +43,12 @@ export async function splitOff(
   now: Date,
   args: SplitArgs,
 ): Promise<void> {
-  if ((await partsOf(tx, args.tableId)).some((part) => part.stillJoined)) {
-    return splitJoinedTable(tx, cfg, args);
-  }
   const today = await todayOf(tx, cfg, args.tableId);
-  if (today.merge !== null) {
+  const parts = await partsOf(tx, args.tableId);
+  if (today.merge !== null && !parts.some((part) => part.stillJoined)) {
     return splitGroup(tx, cfg, removals, now, { zoneId: today.zoneId, merge: today.merge }, args);
   }
-  return splitJoinedTable(tx, cfg, args);
+  return splitJoinedTable(tx, cfg, args, { today, parts });
 }
 
 type Merge = NonNullable<Today["merge"]>;
@@ -94,19 +92,18 @@ async function splitGroup(
   if (holders.size > 0) {
     const leaving = partIds.filter((id) => holders.has(id));
     const losing = [...new Set(leaving.map((id) => holders.get(id)!))];
-    const emptied = new Set<string>();
-    for (const partyId of losing) {
-      if ((await memberTables(tx, partyId)).every((id) => ticked.has(id))) emptied.add(partyId);
-    }
+    const emptied = await partiesHoldingOnly(tx, losing, partIds);
     const stranding = members.find((id) => ticked.has(id) && emptied.has(holders.get(id)!));
     if (stranding !== undefined) throw new AppError("tab.already_open", { tableId: stranding });
     if (staying.length >= 2 && seats === null) throw new AppError("merge.seats_required", {});
+    const groupSeats = staying.length >= 2 ? seats : null;
+    if (leaving.length === 0) return leaveAsGroup(tx, merge.joinId, partIds, groupSeats);
     const before = await readPartiesSentWork(tx, cfg, losing);
     for (const partyId of losing) {
       await checkAndBumpParty(tx, partyId, await partyRevision(tx, partyId), "open");
     }
     await leaveForClearing(tx, leaving, nowIso());
-    await leaveAsGroup(tx, merge.joinId, partIds, staying.length >= 2 ? seats : null);
+    await leaveAsGroup(tx, merge.joinId, partIds, groupSeats);
     await enqueueMovedSlipsFor(tx, cfg, before);
     return;
   }

@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, notInArray, sql } from "drizzle-orm";
 import { formatInvoiceNumber } from "@waitron/core";
 import {
   diningTables,
@@ -295,6 +295,27 @@ export async function memberTables(tx: Transaction, partyId: string): Promise<st
     .where(and(eq(partyTables.partyId, partyId), isNull(partyTables.leftAt)))
     .orderBy(partyTables.joinedAt, partyTables.id);
   return rows.map((row) => row.tableId);
+}
+
+/** Those of `partyIds` that hold no table outside `tableIds`. */
+export async function partiesHoldingOnly(
+  tx: Transaction,
+  partyIds: readonly string[],
+  tableIds: readonly string[],
+): Promise<Set<string>> {
+  if (partyIds.length === 0) return new Set();
+  const keeping = await tx
+    .selectDistinct({ partyId: partyTables.partyId })
+    .from(partyTables)
+    .where(
+      and(
+        inArray(partyTables.partyId, [...partyIds]),
+        isNull(partyTables.leftAt),
+        notInArray(partyTables.tableId, [...tableIds]),
+      ),
+    );
+  const kept = new Set(keeping.map((row) => row.partyId));
+  return new Set(partyIds.filter((partyId) => !kept.has(partyId)));
 }
 
 /** The table stops belonging to whichever party holds it. */
