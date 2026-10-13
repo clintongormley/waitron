@@ -275,6 +275,16 @@ than two tables still joined, and the till shows the same sentence ("That table 
 table") for it, which is not accurate. Next: give that case its own wording, or its own code if the
 server should say which case it is.
 
+## A590. Splitting a table from the order screen drops the room's new revision
+
+**A590 (2026-10-13).** Since A579 part 2b (#1624) the floor screen keeps the room's revision from
+each floor answer until a newer floor read replaces it. The order screen's table split
+(`#onSplitTable`, `apps/till/src/till-app.ts`) calls `splitTable` and ignores the `zoneRevisions` the
+server answers when the split ends a group, then re-reads the floor (`#reloadTables`). Read, not
+run: a floor change sent before that read arrives would carry the old revision and be refused
+`floor_today.out_of_date` once, and the re-read fixes it. Next: hand the answer to the floor screen
+as its own floor answers are, or confirm the window cannot be hit and close this.
+
 ## A565. "Reset to saved plan" does not wait for food on its way to an ordinary table
 
 **A565 (2026-10-13).** A reset applies a free table's saved place without asking about food on its

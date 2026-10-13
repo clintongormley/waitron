@@ -1922,6 +1922,10 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   (2026-10-13).** `table.in_joined_table` covers both cases since #1604.
   [Detail](backlog/till.md#a563-the-till-says-part-of-a-joined-table-for-a-joined-table-that-has-come-apart)
 
+- **A590. Splitting a table from the order screen drops the room's new revision
+  (2026-10-13).** Left open by A579 part 2b (#1624); the floor re-reads straight after.
+  [Detail](backlog/till.md#a590-splitting-a-table-from-the-order-screen-drops-the-rooms-new-revision)
+
 - **A565. "Reset to saved plan" does not wait for food on its way to an ordinary table
   (2026-10-13).** Dates from floor plans slice 1; #1604 made only split groups wait.
   [Detail](backlog/till.md#a565-reset-to-saved-plan-does-not-wait-for-food-on-its-way-to-an-ordinary-table)
