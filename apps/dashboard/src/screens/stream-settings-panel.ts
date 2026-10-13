@@ -97,8 +97,8 @@ function isField(value: unknown): value is Field {
   return typeof value === "string" && Object.hasOwn(EMPTY, value);
 }
 
-/** The bucket fields a settings read carries. The secret access key is not one of them, so a change
- * of the secret alone does not take the kit away. */
+/** The bucket fields a settings read carries. The secret access key is not one of them; only the
+ * revision shows that it changed. */
 function bucketKey(bucket: StreamSettingsView["bucket"]): string {
   return bucket === null
     ? ""
@@ -145,7 +145,8 @@ function failureOf(error: unknown): Failure {
  * the recovery kit. When a later read of the settings brings a different key fingerprint, the key
  * was changed, so the kit is fetched again with a banner, because copies made before the change
  * still need the old kit. A failed re-fetch is tried again on the next read. The kit describes the
- * bucket too, so a read bringing different bucket fields takes the kit away.
+ * bucket, secret access key included, so a read bringing different bucket fields or a different
+ * revision takes the kit away.
  */
 @customElement("dashboard-stream-settings")
 export class StreamSettingsPanel extends LitElement {
@@ -371,7 +372,10 @@ export class StreamSettingsPanel extends LitElement {
     const before = this.settings;
     this.settings = value;
     this.#trackShownForm(value);
-    if (before !== undefined && bucketKey(before.bucket) !== bucketKey(value.bucket))
+    if (
+      before !== undefined &&
+      (bucketKey(before.bucket) !== bucketKey(value.bucket) || before.revision !== value.revision)
+    )
       this.#dropKit();
     if (!value.configured) this.turnOffArmed = false;
     const known = this.#knownFingerprint;
