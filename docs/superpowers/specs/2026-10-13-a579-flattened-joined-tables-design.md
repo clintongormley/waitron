@@ -489,7 +489,7 @@ From the A503 design and its owner answers:
    Under question 4's default it takes them back, clearing the mark and ending a group nobody sits
    at, which sends that group's other tables (Bar) back to where they stood.
 5. **The reset leaves a split-off table's "needs clearing" mark** (part 4's default, A573). The
-   reset clears it.
+   reset clears it on each split-off table it takes back into its joined table.
 
 Kept as built: Back to saved place, hidden on a joined table until it is whole and unchanged on every
 other table; a table put back on the plan keeps its old size; guests passing to a table that needs

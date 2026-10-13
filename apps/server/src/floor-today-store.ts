@@ -1,5 +1,6 @@
 import { requireZone } from "./floor-plan.js";
 import { and, eq, exists, getTableColumns, inArray, isNull, lt, or } from "drizzle-orm";
+import { alias } from "drizzle-orm/sqlite-core";
 import {
   diningTables,
   floorPlans,
@@ -191,6 +192,9 @@ async function copyParts(
   if (copied.length > 0) await tx.insert(floorResetTableParts).values(copied);
 }
 
+const joinedReset = alias(floorResetTables, "taken_back_joined");
+const partReset = alias(floorResetTables, "taken_back_part");
+
 function zoneTables(tx: Transaction, cfg: TillConfig, zoneId: string) {
   return tx
     .select({
@@ -372,6 +376,24 @@ async function catchUpPass(
   }
   const putBack = [...placedNow].map((target) => target.tableId!);
   if (putBack.length > 0) {
+    // A part the copied plan no longer joins to it keeps its mark.
+    const takenBack = tx
+      .select({ id: floorTodaySplitParts.partTableId })
+      .from(floorTodaySplitParts)
+      .innerJoin(joinedReset, eq(joinedReset.tableId, floorTodaySplitParts.joinedTableId))
+      .innerJoin(floorResetTableParts, eq(floorResetTableParts.joinedResetTableId, joinedReset.id))
+      .innerJoin(
+        partReset,
+        and(
+          eq(partReset.id, floorResetTableParts.partResetTableId),
+          eq(partReset.tableId, floorTodaySplitParts.partTableId),
+        ),
+      )
+      .where(inArray(floorTodaySplitParts.joinedTableId, putBack));
+    await tx
+      .update(diningTables)
+      .set({ needsClearingSince: null })
+      .where(inArray(diningTables.id, takenBack));
     await tx
       .delete(floorTodaySplitParts)
       .where(inArray(floorTodaySplitParts.joinedTableId, putBack));

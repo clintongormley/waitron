@@ -1958,10 +1958,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   (2026-10-13).** Full saved seats, none asked. Left open by #1608.
   [Detail](backlog/till.md#a572-join-again-counts-a-joined-table-whole-while-a-table-added-to-it-still-has-guests)
 
-- **A573. The reset takes back a split-off table that needs clearing (2026-10-13).** Join again
-  leaves it apart. Owner question open; the default built leaves it.
-  [Detail](backlog/till.md#a573-the-reset-takes-back-a-split-off-table-that-needs-clearing)
-
 - **A574. `joined_table.parts_split_off` could say what to do (2026-10-13).** "Join its tables
   again first"; the sentence is pinned by a test.
   [Detail](backlog/till.md#a574-joined_tableparts_split_off-could-say-what-to-do)
