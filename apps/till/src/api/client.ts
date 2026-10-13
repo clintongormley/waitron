@@ -1875,6 +1875,14 @@ export interface TableToday {
   joined: { parts: string[]; splitOff: string[]; apart: boolean } | null;
   /** For a part split off today, its joined table's id. */
   splitOffFrom: string | null;
+  /** The revision of this table's room, sent back with each change to today's floor. */
+  zoneRevision: number;
+}
+
+/** A change to today's floor answers its room's new revision. */
+export interface FloorAnswer {
+  zoneId: string;
+  revision: number;
 }
 
 /**
@@ -3729,102 +3737,148 @@ export class TillApi {
     tableId: string,
     bills: "merge" | "separate",
     revisions: TableActionRevisions,
-    merge?: JoinMerge,
-  ): Promise<TableActionResult> {
+    merge?: JoinMerge & { zoneRevision: number },
+  ): Promise<TableActionResult & { zoneRevisions?: Record<string, number> }> {
+    if (merge === undefined) {
+      return this.#request(`/api/parties/${partyId}/join`, "POST", {
+        tableId,
+        bills,
+        ...revisions,
+      });
+    }
+    const { zoneRevision, ...shape } = merge;
     return this.#request(`/api/parties/${partyId}/join`, "POST", {
       tableId,
       bills,
       ...revisions,
-      ...(merge === undefined ? {} : { merge }),
+      merge: shape,
+      zoneRevision,
     });
   }
 
-  // --- Today's plan: each answers 204, and the caller re-reads the floor. ---
+  // --- Today's plan: each sends the room's revision and answers the room's new one. ---
 
   /** Move a table, with its merge, to a new top-left corner → `POST /api/tables/:id/today/move`. */
-  async moveToday(tableId: string, at: { x: number; y: number }): Promise<void> {
-    await this.#todayChange(tableId, "move", { x: at.x, y: at.y });
+  moveToday(
+    tableId: string,
+    at: { x: number; y: number },
+    zoneRevision: number,
+  ): Promise<FloorAnswer> {
+    return this.#todayChange(tableId, "move", { x: at.x, y: at.y }, zoneRevision);
   }
 
   /** Turn a table 15° more, clockwise → `POST /api/tables/:id/today/rotate`. */
-  async rotateToday(tableId: string): Promise<void> {
-    await this.#todayChange(tableId, "rotate", {});
+  rotateToday(tableId: string, zoneRevision: number): Promise<FloorAnswer> {
+    return this.#todayChange(tableId, "rotate", {}, zoneRevision);
   }
 
   /** Take a table off the floor for today → `POST /api/tables/:id/today/take-off`. */
-  async takeOffToday(tableId: string): Promise<void> {
-    await this.#todayChange(tableId, "take-off", {});
+  takeOffToday(tableId: string, zoneRevision: number): Promise<FloorAnswer> {
+    return this.#todayChange(tableId, "take-off", {}, zoneRevision);
   }
 
   /** Put a taken-off table back → `POST /api/tables/:id/today/put-back`. */
-  async putBackToday(tableId: string): Promise<void> {
-    await this.#todayChange(tableId, "put-back", {});
+  putBackToday(tableId: string, zoneRevision: number): Promise<FloorAnswer> {
+    return this.#todayChange(tableId, "put-back", {}, zoneRevision);
   }
 
   /** Put a spare on the map at a corner → `POST /api/tables/:id/today/place`. */
-  async placeSpareToday(tableId: string, at: { x: number; y: number }): Promise<void> {
-    await this.#todayChange(tableId, "place", { x: at.x, y: at.y });
+  placeSpareToday(
+    tableId: string,
+    at: { x: number; y: number },
+    zoneRevision: number,
+  ): Promise<FloorAnswer> {
+    return this.#todayChange(tableId, "place", { x: at.x, y: at.y }, zoneRevision);
   }
 
   /** A table's seats for today, or its merge's → `POST /api/tables/:id/today/seats`. */
-  async setSeatsToday(tableId: string, seats: number): Promise<void> {
-    await this.#todayChange(tableId, "seats", { seats });
+  setSeatsToday(tableId: string, seats: number, zoneRevision: number): Promise<FloorAnswer> {
+    return this.#todayChange(tableId, "seats", { seats }, zoneRevision);
   }
 
   /** Put a table back as the last reset left it → `POST /api/tables/:id/today/back`. */
-  async backToSavedToday(tableId: string): Promise<void> {
-    await this.#todayChange(tableId, "back", {});
+  backToSavedToday(tableId: string, zoneRevision: number): Promise<FloorAnswer> {
+    return this.#todayChange(tableId, "back", {}, zoneRevision);
   }
 
   /** Merge two free tables, `tableId` moving against `targetId` → `POST /api/tables/:id/today/merge`.
    * `seats` is left out when unset: the server refuses a null. */
-  async mergeToday(
+  mergeToday(
     tableId: string,
     merge: { targetId: string; side: JoinSide; seats?: number },
-  ): Promise<void> {
-    await this.#todayChange(tableId, "merge", {
-      targetId: merge.targetId,
-      side: merge.side,
-      ...(merge.seats === undefined ? {} : { seats: merge.seats }),
-    });
+    zoneRevision: number,
+  ): Promise<FloorAnswer> {
+    return this.#todayChange(
+      tableId,
+      "merge",
+      {
+        targetId: merge.targetId,
+        side: merge.side,
+        ...(merge.seats === undefined ? {} : { seats: merge.seats }),
+      },
+      zoneRevision,
+    );
   }
 
   /** End a free merge → `POST /api/tables/:id/today/split`. */
-  async splitToday(tableId: string): Promise<void> {
-    await this.#todayChange(tableId, "split", {});
+  splitToday(tableId: string, zoneRevision: number): Promise<FloorAnswer> {
+    return this.#todayChange(tableId, "split", {}, zoneRevision);
   }
 
   /** Split parts off a joined table → `POST /api/tables/:id/today/split-off`.
    * `seats` is left out when unset: the server refuses a null. */
-  async splitOffToday(
+  splitOffToday(
     tableId: string,
     split: { partIds: string[]; seats?: number },
-  ): Promise<void> {
-    await this.#todayChange(tableId, "split-off", {
-      partIds: split.partIds,
-      ...(split.seats === undefined ? {} : { seats: split.seats }),
-    });
+    zoneRevision: number,
+  ): Promise<FloorAnswer> {
+    return this.#todayChange(
+      tableId,
+      "split-off",
+      {
+        partIds: split.partIds,
+        ...(split.seats === undefined ? {} : { seats: split.seats }),
+      },
+      zoneRevision,
+    );
   }
 
   /** Take split-off tables back into their joined table → `POST /api/tables/:id/today/join-again`.
    * `seats` is left out when unset: the server refuses a null. */
-  async joinAgainToday(
+  joinAgainToday(
     tableId: string,
     join: { partIds: string[]; seats?: number },
-  ): Promise<void> {
-    await this.#todayChange(tableId, "join-again", {
-      partIds: join.partIds,
-      ...(join.seats === undefined ? {} : { seats: join.seats }),
+    zoneRevision: number,
+  ): Promise<FloorAnswer> {
+    return this.#todayChange(
+      tableId,
+      "join-again",
+      {
+        partIds: join.partIds,
+        ...(join.seats === undefined ? {} : { seats: join.seats }),
+      },
+      zoneRevision,
+    );
+  }
+
+  /** Reset a zone to its saved plan → `POST /api/zones/:id/today/reset`. `zoneRevision` is null when
+   * the floor read held no table of the zone. */
+  resetZoneToday(zoneId: string, zoneRevision: number | null): Promise<FloorAnswer> {
+    return this.#request<FloorAnswer>(`/api/zones/${zoneId}/today/reset`, "POST", {
+      zoneRevision,
     });
   }
 
-  /** Reset a zone to its saved plan → `POST /api/zones/:id/today/reset`. */
-  async resetZoneToday(zoneId: string): Promise<void> {
-    await this.#request<void>(`/api/zones/${zoneId}/today/reset`, "POST", {});
-  }
-
-  async #todayChange(tableId: string, change: string, body: object): Promise<void> {
-    await this.#request<void>(`/api/tables/${tableId}/today/${change}`, "POST", body);
+  #todayChange(
+    tableId: string,
+    change: string,
+    body: object,
+    zoneRevision: number,
+  ): Promise<FloorAnswer> {
+    return this.#request<FloorAnswer>(`/api/tables/${tableId}/today/${change}`, "POST", {
+      ...body,
+      zoneRevision,
+    });
   }
 
   /**

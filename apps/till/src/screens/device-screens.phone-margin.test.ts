@@ -209,6 +209,7 @@ const plannedTable: TableState = {
     inJoinedTable: null,
     joined: null,
     splitOffFrom: null,
+    zoneRevision: 0,
   },
   signals: [],
   party: null,

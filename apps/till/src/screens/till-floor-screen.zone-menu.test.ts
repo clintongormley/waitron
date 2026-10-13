@@ -44,6 +44,7 @@ function table(
             inJoinedTable: null,
             joined: null,
             splitOffFrom: null,
+            zoneRevision: 0,
             ...today,
           },
     signals: [],

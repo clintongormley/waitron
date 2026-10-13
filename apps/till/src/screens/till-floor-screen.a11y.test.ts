@@ -211,6 +211,7 @@ const todayRow = (x: number, placed = true) => ({
   inJoinedTable: null,
   joined: null,
   splitOffFrom: null,
+  zoneRevision: 0,
 });
 
 /** A planned zone: a seated table and a free one on the plan, and a seated one with no place. */

@@ -64,6 +64,7 @@ function planned(
       inJoinedTable: null,
       joined: null,
       splitOffFrom: null,
+      zoneRevision: 0,
       ...over,
     },
     signals: [],

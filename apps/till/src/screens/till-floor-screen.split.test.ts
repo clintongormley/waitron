@@ -41,6 +41,7 @@ function table(id: string, label: string, x: number, over: Partial<TableToday> =
       inJoinedTable: null,
       joined: null,
       splitOffFrom: null,
+      zoneRevision: 0,
       ...over,
     },
     signals: [],

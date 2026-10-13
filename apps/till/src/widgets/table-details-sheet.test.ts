@@ -99,6 +99,7 @@ describe("till-table-details-sheet", () => {
         inJoinedTable: null,
         joined: { parts: ["c3", "c4"], splitOff: ["c5"], apart: false },
         splitOffFrom: null,
+        zoneRevision: 0,
       },
     });
     const el = await mount({ table: long, heading: "Long table", actions: true });
@@ -119,6 +120,7 @@ describe("till-table-details-sheet", () => {
       inJoinedTable: null,
       joined: null,
       splitOffFrom: null,
+      zoneRevision: 0,
       ...over,
     });
     const long = table({
@@ -176,6 +178,7 @@ describe("till-table-details-sheet", () => {
           inJoinedTable: null,
           joined: null,
           splitOffFrom: null,
+          zoneRevision: 0,
         },
       }),
     });
@@ -342,6 +345,7 @@ describe("till-table-details-sheet", () => {
           inJoinedTable: null,
           joined: null,
           splitOffFrom: null,
+          zoneRevision: 0,
         },
         signals: [{ kind: "bill_requested", requestedAt: "2026-10-10T12:00:00Z" }],
       }),
