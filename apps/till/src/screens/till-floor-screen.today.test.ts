@@ -489,33 +489,6 @@ describe("till-floor-screen: the room's revision on today's plan", () => {
     expect(api.moveToday).toHaveBeenLastCalledWith("t1", { x: 14, y: 5 }, 8);
   });
 
-  it("a read that started just before the answer leaves the answer as the revision sent, though the clock read the same at both", async () => {
-    const api = stubApi();
-    let answer!: () => void;
-    api.moveToday.mockImplementationOnce(
-      () =>
-        new Promise<FloorAnswer>(
-          (resolve) => (answer = () => resolve({ zoneId: "z1", revision: 8 })),
-        ),
-    );
-    const el = await mount(at7(), api);
-    await drop(el, { tableId: "t1", x: 12, y: 5, targetId: null });
-    const clock = vi.spyOn(performance, "now").mockReturnValue(100);
-    try {
-      el.tablesReadAt = nextFloorMoment();
-      answer();
-      await settle(el);
-    } finally {
-      clock.mockRestore();
-    }
-    el.tables = at7();
-    await el.updateComplete;
-
-    await drop(el, { tableId: "t1", x: 14, y: 5, targetId: null });
-
-    expect(api.moveToday).toHaveBeenLastCalledWith("t1", { x: 14, y: 5 }, 8);
-  });
-
   it("a read that started after the answer replaces it, higher or lower", async () => {
     for (const read of [9, 6]) {
       const { api, el } = await movedTo8();

@@ -549,7 +549,7 @@ export class TillFloorScreen extends LitElement {
   #zoneInputs?: readonly unknown[];
   /** Where a dropped group is drawn until the next floor read, a refusal or a cancel. */
   #pending: Map<string, TodayPlacement> | null = null;
-  /** Each room's revision as this screen's last answered change there answered it, and when it arrived. */
+  /** Each room's revision as this screen's last change there answered it, and that answer's `nextFloorMoment`. */
   #carried = new Map<string | null, { revision: number; answeredAt: number }>();
   #mapCopy = { locale: "", copy: { label: "" } };
 

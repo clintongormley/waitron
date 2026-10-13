@@ -40,11 +40,8 @@ interface Group {
 
 let floorMoments = 0;
 
-/**
- * Numbers a floor read's start and a change's answer in the order they happen, one sequence for the
- * whole till. Not `performance.now()`: browsers coarsen it, so a read's start and an answer can read
- * the same and then cannot be ordered.
- */
+/** Numbers a floor read's start and a change's answer in the order they happen: one strictly
+ * increasing sequence for the whole till, so no two can tie. */
 export function nextFloorMoment(): number {
   return ++floorMoments;
 }
