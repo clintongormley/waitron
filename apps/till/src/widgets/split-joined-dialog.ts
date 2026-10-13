@@ -134,7 +134,8 @@ export class TillSplitJoinedDialog extends LitElement {
   }
 
   #asksSeats(): boolean {
-    return this.seatsRequired || this.asksSeats(this.#left().map((part) => part.id));
+    const left = this.#left().map((part) => part.id);
+    return (this.seatsRequired && left.length >= 2) || this.asksSeats(left);
   }
 
   #partsError(): string {

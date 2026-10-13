@@ -451,6 +451,15 @@ describe("on a group", () => {
     expect(seen.confirmed).toEqual([{ partIds: ["bar"], seats: 10 }]);
   });
 
+  it("asks no seats when its host says they are required but only one table stays, and sends none", async () => {
+    const el = await mountGroup({ seatsRequired: true });
+    const seen = captured(el);
+    await choose(el, ["c3", "c4", "c5"]);
+    expect(seatsField(el)).toBeNull();
+    await press(el);
+    expect(seen.confirmed).toEqual([{ partIds: ["c3", "c4", "c5"], seats: null }]);
+  });
+
   it("says where the guests go when a ticked table holds them, as its host names it", async () => {
     const el = await mountGroup({
       guestsMoveTo: (ticked) => (ticked.includes("c3") ? ["Counter 4"] : []),

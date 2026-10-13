@@ -558,6 +558,28 @@ describe("till-floor-screen: Split tables… on a group", () => {
     });
   }
 
+  it("keeps Seats required after a seats_required refusal is followed by a member_invalid one", async () => {
+    const api = stubApi();
+    api.splitOffToday
+      .mockRejectedValueOnce({ code: "merge.seats_required" })
+      .mockRejectedValueOnce({ code: "merge.member_invalid", field: "partIds" });
+    const el = await mount(groupFloor(), api);
+    const opened = await openSplit(el, "bar");
+    send(opened, "split-joined-confirm", { partIds: ["bar"], seats: null });
+    await settle(el);
+    send(opened, "split-joined-confirm", { partIds: ["c5"], seats: 8 });
+    await settle(el);
+    expect(api.splitOffToday).toHaveBeenCalledTimes(2);
+    expect(windowOf(el)).toBe(opened);
+    expect(opened.seatsRequired).toBe(true);
+    await opened.updateComplete;
+    const seats = opened.shadowRoot!.querySelector<HTMLElement & { required: boolean }>(
+      "[name=seats]",
+    );
+    expect(seats).not.toBeNull();
+    expect(seats!.required).toBe(true);
+  });
+
   it("lists the group as the floor reads it while the window is open", async () => {
     const el = await mount(groupFloor(), stubApi());
     await openSplit(el, "bar");
