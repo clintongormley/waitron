@@ -1,4 +1,5 @@
 import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
+import type { OpeningHoursYear } from "../opening-hours-calendar.js";
 import type { MenuPeriodInput, MenuWeekDay, OpeningHoursModel } from "../menu-timetable-types.js";
 import type { Season } from "../season-rules.js";
 import type { ClosedRange } from "../service-day.js";
@@ -51,6 +52,28 @@ export class OpeningHoursApi {
         this.request<OpeningHoursModel>(`${BASE}/opening-hours`, "GET", undefined, {
           passive: true,
         }),
+      apply,
+      failed,
+      recovered,
+    );
+  }
+  /** On the special-day calendar's dependencies, so a special-day or holiday-area write re-reads it. */
+  watchYear(
+    year: number,
+    apply: (model: OpeningHoursYear) => void,
+    failed: (error: unknown) => void,
+    recovered: () => void,
+  ): () => void {
+    return this.#watches.watch(
+      `venue-service:opening-hours-year:${year}`,
+      QUERY_DEPENDENCIES["named-days"],
+      () =>
+        this.request<OpeningHoursYear>(
+          `${BASE}/opening-hours/year?${new URLSearchParams({ year: String(year) })}`,
+          "GET",
+          undefined,
+          { passive: true },
+        ),
       apply,
       failed,
       recovered,

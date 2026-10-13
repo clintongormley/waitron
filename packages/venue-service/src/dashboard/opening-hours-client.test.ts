@@ -65,6 +65,69 @@ describe("OpeningHoursApi", () => {
     ]);
   });
 
+  it("reads a year passively on the special-day calendar's dependencies, and re-reads it with the special days", async () => {
+    const live = new LiveData();
+    const year = { year: 2027, days: [] };
+    const request = vi.fn(async () => year);
+    const api = new OpeningHoursApi(request as DashboardRequest, live);
+    const apply = vi.fn();
+    const stop = api.watchYear(2027, apply, vi.fn(), vi.fn());
+    try {
+      await vi.waitFor(() => expect(apply).toHaveBeenCalledWith(year));
+      expect(request.mock.calls).toEqual([
+        [`${base}/opening-hours/year?year=2027`, "GET", undefined, { passive: true }],
+      ]);
+      expect(live.interests).toEqual(
+        [
+          "departments",
+          "tenants",
+          "locations",
+          "location_business_day_settings",
+          "location_day_cutover_changes",
+          "holiday_geographies",
+          "seasons",
+          "department_days",
+          "department_day_ranges",
+          "zone_days",
+          "zone_day_ranges",
+          "special_days",
+          "special_day_dates",
+        ].map((type) => ({ type })),
+      );
+      api.specialDays.rereadWatches();
+      await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(2));
+    } finally {
+      stop();
+    }
+  });
+
+  it("re-reads a watched year with the special days when there is no live data", async () => {
+    const request = vi.fn(async (path: string) =>
+      path.includes("/year?") ? { year: 2027, days: [] } : model,
+    );
+    const api = new OpeningHoursApi(request as DashboardRequest);
+    const apply = vi.fn();
+    const stop = api.watchYear(2027, apply, vi.fn(), vi.fn());
+    try {
+      await vi.waitFor(() => expect(apply).toHaveBeenCalledTimes(1));
+      api.rereadWithSpecialDays();
+      await vi.waitFor(() => expect(apply).toHaveBeenCalledTimes(2));
+    } finally {
+      stop();
+    }
+  });
+
+  it("lists the special days passively when asked to", async () => {
+    const request = vi.fn(async () => []);
+    const api = new OpeningHoursApi(request as DashboardRequest);
+    await api.specialDays.listSpecialDays({ passive: true });
+    await api.specialDays.listSpecialDays();
+    expect(request.mock.calls).toEqual([
+      [`${base}/special-days`, "GET", undefined, { passive: true }],
+      [`${base}/special-days`, "GET", undefined, undefined],
+    ]);
+  });
+
   it("re-reads both the opening hours and the special-day calendar after a special-day write", async () => {
     const request = vi.fn(async (path: string) =>
       path.includes("named-days") ? { days: [] } : model,
