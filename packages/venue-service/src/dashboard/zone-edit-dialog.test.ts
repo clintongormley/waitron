@@ -213,9 +213,11 @@ it("retains this zone's floor preview and hours links, with passive reads and li
   expect(floor.getAttribute("href")).toBe(
     "/manage/floor-plan/zone/z1?back=%2Fmanage%2Fvenue-operations",
   );
-  expect(el.shadowRoot!.querySelector("[data-test=zone-opening-hours]")!.getAttribute("href")).toBe(
-    "/manage/opening-hours/view/week/department/d1/zone/z1",
-  );
+  await expect
+    .poll(() =>
+      el.shadowRoot!.querySelector("[data-test=zone-opening-hours]")!.getAttribute("href"),
+    )
+    .toBe("/manage/opening-hours/view/season/season/autumn/department/d1/zone/z1");
   await expect
     .poll(() =>
       el.shadowRoot!.querySelector("[data-test=closed-week-summary]")?.textContent?.trim(),

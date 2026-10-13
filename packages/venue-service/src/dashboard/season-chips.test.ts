@@ -64,6 +64,7 @@ async function settle() {
 async function openChip(name: string) {
   chips()
     .find((chip) => chip.textContent!.includes(name))!
+    .querySelector<HTMLElement>("[data-test=season-edit]")!
     .click();
   await settle();
 }
@@ -97,7 +98,9 @@ it("labels each chip from the server's last day and tints it by start order, rep
     "Winter · 1 Dec – 29 Feb ✎",
   ]);
   expect(chips().map((chip) => chip.dataset.tint)).toEqual(["1", "2", "3", "4", "1"]);
-  expect(chips()[0]!.getAttribute("aria-label")).toBe("Edit Spring, 1 Mar – 31 May");
+  expect(chips()[0]!.querySelector("[data-test=season-edit]")!.getAttribute("aria-label")).toBe(
+    "Edit Spring, 1 Mar – 31 May",
+  );
 });
 
 it("paints each chip with its season's colour tokens", async () => {

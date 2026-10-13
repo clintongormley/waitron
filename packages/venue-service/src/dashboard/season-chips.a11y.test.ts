@@ -62,7 +62,7 @@ async function mount(theme: "light" | "dark", state: string) {
   if (state === "empty" || state === "end-offset")
     root.querySelector<HTMLElement>("[data-test=add-season]")!.click();
   if (state === "editing" || state === "refused" || state === "delete")
-    root.querySelector<HTMLElement>("[data-season=w]")!.click();
+    root.querySelector<HTMLElement>("[data-season=w] [data-test=season-edit]")!.click();
   await el.updateComplete;
   if (state === "refused") {
     await change("name", "Spring");

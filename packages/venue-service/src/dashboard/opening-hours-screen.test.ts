@@ -83,7 +83,13 @@ async function mount(request?: DashboardRequest, readOnly = false) {
   ).toBeDefined();
   const el = document.createElement("dashboard-opening-hours-screen") as Screen;
   el.api = new OpeningHoursApi(
-    withOpeningStations(request ?? ((async () => structuredClone(model())) as DashboardRequest)),
+    withOpeningStations(
+      request ??
+        ((async (path: string) =>
+          path.includes("/opening-hours/year?")
+            ? yearRead(2026)
+            : structuredClone(model())) as DashboardRequest),
+    ),
   );
   el.readOnly = readOnly;
   applyTokens(el);
@@ -134,12 +140,12 @@ it("selects a linked inactive department and keeps view and department in the ad
   await el.updateComplete;
   expect(location.pathname).toBe("/manage/opening-hours/view/periods/department/restaurant");
   const tabs = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-tabs"]>("wt-tabs")!;
-  expect(tabs.items.map((item) => item.key)).toEqual(["year", "week", "periods"]);
+  expect(tabs.items.map((item) => item.key)).toEqual(["year", "periods"]);
   tabs.dispatchEvent(
-    new CustomEvent("wt-tab-change", { detail: { value: "week" }, bubbles: true, composed: true }),
+    new CustomEvent("wt-tab-change", { detail: { value: "year" }, bubbles: true, composed: true }),
   );
   await el.updateComplete;
-  expect(location.pathname).toBe("/manage/opening-hours/view/week/department/restaurant");
+  expect(location.pathname).toBe("/manage/opening-hours/view/year/department/restaurant");
 });
 
 it("lets a venue viewer read periods without exposing create or row actions", async () => {
@@ -153,12 +159,12 @@ it("falls back to an active department for an unknown link", async () => {
   history.replaceState(null, "", "/manage/opening-hours/view/unknown/department/missing");
   const el = await mount();
   expect(el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-tabs"]>("wt-tabs")!.value).toBe(
-    "week",
+    "year",
   );
-  expect(
-    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=departmentId]")!
-      .value,
-  ).toBe("restaurant");
+  await expect
+    .poll(() => location.pathname)
+    .toBe("/manage/opening-hours/view/season/department/restaurant");
+  expect(el.shadowRoot!.querySelector("season-painter")!.departmentId).toBe("restaurant");
 });
 
 it("ignores another screen's department link while Opening hours is mounted", async () => {
@@ -1122,7 +1128,7 @@ function pick(el: Screen, value: string) {
   );
 }
 it("lists All departments then active departments with their zones on Week only", async () => {
-  history.replaceState(null, "", "/manage/opening-hours/view/week");
+  history.replaceState(null, "", "/manage/opening-hours/view/week/department/all");
   const el = await mount((async () => structuredClone(pickerModel())) as DashboardRequest);
   expect(picker(el).options).toEqual([
     { value: "all", label: "All departments" },
@@ -1145,35 +1151,37 @@ it("lists All departments then active departments with their zones on Week only"
   ]);
 });
 it("keeps a zone through Back and Forward and clears it when choosing a department", async () => {
-  history.replaceState(null, "", "/manage/opening-hours/view/week/department/restaurant");
+  history.replaceState(null, "", "/manage/opening-hours/view/week/department/all");
   const guard = new NavigationGuard(window, {
     isDirty: () => false,
     request: async () => "proceeded",
   });
   try {
     const el = await mount((async () => structuredClone(pickerModel())) as DashboardRequest);
+    const painter = () => el.shadowRoot!.querySelector("season-painter");
     pick(el, "zone:terrace");
     await expect
       .poll(() => location.pathname)
-      .toBe("/manage/opening-hours/view/week/department/restaurant/zone/terrace");
-    expect(picker(el).value).toBe("zone:terrace");
-    const zoneWeek =
-      el.shadowRoot!.querySelector<HTMLElementTagNameMap["opening-hours-zone-week"]>(
-        "opening-hours-zone-week",
-      );
-    expect(zoneWeek?.zone.name).toBe("Terrace");
-    expect(zoneWeek?.zone.id).toBe("terrace");
-    expect(zoneWeek?.department.id).toBe("restaurant");
-    expect(el.shadowRoot!.querySelector("opening-hours-week")).toBeNull();
+      .toBe("/manage/opening-hours/view/season/department/restaurant/zone/terrace");
+    await expect.poll(() => painter()?.zoneId).toBe("terrace");
+    expect(painter()!.departmentId).toBe("restaurant");
     history.back();
-    await expect.poll(() => picker(el).value).toBe("restaurant");
+    await expect.poll(() => painter()).toBeNull();
+    expect(picker(el).value).toBe("all");
     history.forward();
-    await expect.poll(() => picker(el).value).toBe("zone:terrace");
-    pick(el, "bar");
+    await expect.poll(() => painter()?.zoneId).toBe("terrace");
+    painter()!.dispatchEvent(
+      new CustomEvent("painter-navigate", {
+        detail: { seasonId: "", departmentId: "bar", zoneId: null },
+        bubbles: true,
+        composed: true,
+      }),
+    );
     await expect
       .poll(() => location.pathname)
-      .toBe("/manage/opening-hours/view/week/department/bar");
-    expect(el.shadowRoot!.querySelector("[data-test=zone-placeholder]")).toBeNull();
+      .toBe("/manage/opening-hours/view/season/department/bar");
+    await expect.poll(() => painter()?.zoneId).toBe("");
+    expect(painter()!.departmentId).toBe("bar");
   } finally {
     guard.dispose();
   }
@@ -1188,11 +1196,14 @@ it("links All departments headings to a department and returns to the all view",
   const link = all!.shadowRoot!.querySelector<HTMLElement>("[data-department=bar]");
   expect(link).not.toBeNull();
   link!.click();
-  await expect.poll(() => picker(el).value).toBe("bar");
-  expect(location.pathname).toBe("/manage/opening-hours/view/week/department/bar");
-  pick(el, "all");
+  await expect.poll(() => el.shadowRoot!.querySelector("season-painter")?.departmentId).toBe("bar");
+  expect(location.pathname).toBe("/manage/opening-hours/view/season/department/bar");
+  el.shadowRoot!.querySelector("season-painter")!.dispatchEvent(
+    new CustomEvent("painter-close", { bubbles: true, composed: true }),
+  );
   await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/week/department/all");
-  expect(el.shadowRoot!.querySelector("opening-hours-week")).toBeNull();
+  expect(picker(el).value).toBe("all");
+  expect(el.shadowRoot!.querySelector("season-painter")).toBeNull();
 });
 it("draws the picked season's standard week for All departments", async () => {
   history.replaceState(null, "", "/manage/opening-hours/view/week/department/all/season/summer");
@@ -1229,13 +1240,22 @@ it("draws the picked season's standard week for All departments", async () => {
 });
 it("ignores a zone belonging to another department and unknown picker values", async () => {
   history.replaceState(null, "", "/manage/opening-hours/view/week/department/bar/zone/terrace");
-  const el = await mount((async () => structuredClone(pickerModel())) as DashboardRequest);
-  expect(picker(el).value).toBe("bar");
-  expect(el.shadowRoot!.querySelector("[data-test=zone-placeholder]")).toBeNull();
+  const el = await mount((async (path: string) =>
+    path.includes("/opening-hours/year?")
+      ? yearRead(2026)
+      : structuredClone(pickerModel())) as DashboardRequest);
+  await expect
+    .poll(() => location.pathname)
+    .toBe("/manage/opening-hours/view/season/department/bar");
+  const painter = el.shadowRoot!.querySelector("season-painter")!;
+  expect([painter.departmentId, painter.zoneId]).toEqual(["bar", ""]);
+  history.replaceState(null, "", "/manage/opening-hours/view/week/department/all");
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  await expect.poll(() => picker(el)?.value).toBe("all");
   pick(el, "zone:missing");
   await el.updateComplete;
-  expect(picker(el).value).toBe("bar");
-  expect(location.pathname).toBe("/manage/opening-hours/view/week/department/bar/zone/terrace");
+  expect(picker(el).value).toBe("all");
+  expect(location.pathname).toBe("/manage/opening-hours/view/week/department/all");
 });
 
 it("still offers All departments when no department is available", async () => {
@@ -1949,7 +1969,7 @@ describe("Year view", () => {
   it("opens on the venue's current year when the address names no view and no week parameter", async () => {
     const { el, view, years } = await yearMount("/manage/opening-hours");
     expect(tabs(el).value).toBe("year");
-    expect(tabs(el).items.map((item) => item.key)).toEqual(["year", "week", "periods"]);
+    expect(tabs(el).items.map((item) => item.key)).toEqual(["year", "periods"]);
     expect(tabs(el).items[0]!.label).toBe("Year");
     await expect.poll(() => view()?.model?.year).toBe(2026);
     expect(years).toEqual(["2026"]);
@@ -1963,11 +1983,14 @@ describe("Year view", () => {
     ["a season", "/manage/opening-hours/season/winter"],
     ["a zone", "/manage/opening-hours/zone/z1"],
     ["an unknown view", "/manage/opening-hours/view/nonsense"],
-  ])("keeps the Week when the address names %s", async (_, address) => {
+  ])("opens the painter over the Year when the address names %s", async (_, address) => {
     const { el, years } = await yearMount(address);
-    expect(tabs(el).value).toBe("week");
-    expect(el.shadowRoot!.querySelector("opening-hours-year")).toBeNull();
-    expect(years).toEqual([]);
+    await expect
+      .poll(() => location.pathname)
+      .toBe("/manage/opening-hours/view/season/department/restaurant");
+    expect(tabs(el).value).toBe("year");
+    expect(el.shadowRoot!.querySelector("season-painter")!.departmentId).toBe("restaurant");
+    await expect.poll(() => years).toEqual(["2026"]);
   });
 
   it("hands the year view its model, the season writes and the area writes, and every special day once a season dialog opens", async () => {
@@ -1984,7 +2007,9 @@ describe("Year view", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(listReads()).toEqual([]);
     expect(view()!.specialDays).toEqual([]);
-    chips.shadowRoot!.querySelector<HTMLElement>("[data-season=all]")!.click();
+    chips
+      .shadowRoot!.querySelector<HTMLElement>("[data-season=all] [data-test=season-edit]")!
+      .click();
     await expect
       .poll(() => view()!.specialDays)
       .toEqual([
@@ -2082,7 +2107,10 @@ describe("Year view", () => {
     );
     await expect.poll(() => view().model?.year).toBe(2027);
     const chips = view().shadowRoot!.querySelector("season-chips")!;
-    const open = () => chips.shadowRoot!.querySelector<HTMLElement>("[data-season=all]")!.click();
+    const open = () =>
+      chips
+        .shadowRoot!.querySelector<HTMLElement>("[data-season=all] [data-test=season-edit]")!
+        .click();
     open();
     await expect.poll(() => held.length).toBe(1);
     await chips.updateComplete;
@@ -2320,7 +2348,7 @@ describe("Month view", () => {
     expect(month.readOnly).toBe(false);
     expect(month.api).toBe(el.api);
     expect(tabs(el).value).toBe("year");
-    expect(tabs(el).items.map((item) => item.key)).toEqual(["year", "week", "periods"]);
+    expect(tabs(el).items.map((item) => item.key)).toEqual(["year", "periods"]);
     expect(el.shadowRoot!.querySelector("[slot=year] opening-hours-month")).toBe(month);
     expect(el.shadowRoot!.querySelector("opening-hours-year")).toBeNull();
     expect(el.shadowRoot!.querySelector("[name=departmentId]")).toBeNull();
@@ -2491,21 +2519,38 @@ describe("Month view", () => {
     await expect.poll(() => el.shadowRoot!.querySelector("ordinary-date-dialog")).toBeNull();
   });
 
+  const withWinter = (data: OpeningHoursModel) => {
+    data.seasons = [
+      { id: "autumn", name: "Autumn", startsOn: "09-01" },
+      { id: "winter", name: "Winter", startsOn: "12-01" },
+    ];
+    data.currentSeasonId = "autumn";
+  };
   it("Edit the Winter week goes to the Week with that season, keeping the month's department", async () => {
     const { el, view } = await monthMount(
       "/manage/opening-hours/view/month/department/bar/month/2026-12",
+      false,
+      withWinter,
     );
     const dialog = await ordinary(el, await shown(view));
     dialog.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-week]")!.click();
     await expect
       .poll(() => location.pathname)
-      .toBe("/manage/opening-hours/view/week/department/bar/season/winter");
-    await expect.poll(() => tabs(el).value).toBe("week");
+      .toBe("/manage/opening-hours/view/season/season/winter/department/bar");
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("season-painter")?.seasonId)
+      .toBe("winter");
+    expect(el.shadowRoot!.querySelector("season-painter")!.departmentId).toBe("bar");
+    expect(el.shadowRoot!.querySelector("opening-hours-month")).toBe(view());
     expect(el.shadowRoot!.querySelector("ordinary-date-dialog")?.open ?? false).toBe(false);
   });
 
   it("Edit the Winter week carries a department chosen in the month's picker, and none after All departments", async () => {
-    const { el, view } = await monthMount("/manage/opening-hours/view/month/month/2026-12");
+    const { el, view } = await monthMount(
+      "/manage/opening-hours/view/month/month/2026-12",
+      false,
+      withWinter,
+    );
     const pick = async (value: string, path: string) => {
       view()!
         .shadowRoot!.querySelector("[name=departmentId]")!
@@ -2519,7 +2564,7 @@ describe("Month view", () => {
     dialog.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-week]")!.click();
     await expect
       .poll(() => location.pathname)
-      .toBe("/manage/opening-hours/view/week/department/bar/season/winter");
+      .toBe("/manage/opening-hours/view/season/season/winter/department/bar");
     history.replaceState(null, "", "/manage/opening-hours/view/month/department/bar/month/2026-12");
     window.dispatchEvent(new PopStateEvent("popstate"));
     await shown(view);
@@ -2528,8 +2573,10 @@ describe("Month view", () => {
     dialog.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-week]")!.click();
     await expect
       .poll(() => location.pathname)
-      .toBe("/manage/opening-hours/view/week/season/winter");
-    await expect.poll(() => tabs(el).value).toBe("week");
+      .toBe("/manage/opening-hours/view/season/season/winter/department/rest");
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("season-painter")?.departmentId)
+      .toBe("rest");
   });
 
   it("Make this a special day opens a new special day holding the date", async () => {
@@ -2724,7 +2771,8 @@ describe("no Day tab and no real week", () => {
   it("offers no Real week switch and ignores a week in the address", async () => {
     history.replaceState(null, "", "/manage/opening-hours/view/week?week=2026-10-12");
     const el = await mount();
-    await expect.poll(() => el.shadowRoot!.querySelector("opening-hours-week")).not.toBeNull();
+    await expect.poll(() => el.shadowRoot!.querySelector("season-painter")).not.toBeNull();
+    expect(location.pathname).toBe("/manage/opening-hours/view/season/department/restaurant");
     expect(el.shadowRoot!.querySelector("[name=realWeek]")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=previous-week]")).toBeNull();
     expect(location.search).toBe("?week=2026-10-12");
@@ -2743,12 +2791,12 @@ describe("no Day tab and no real week", () => {
   it("treats the retired Day view as an unknown view", async () => {
     history.replaceState(null, "", "/manage/opening-hours/view/day/date/2026-12-25");
     const el = await mount();
-    await expect.poll(() => el.shadowRoot!.querySelector("opening-hours-week")).not.toBeNull();
+    await expect.poll(() => el.shadowRoot!.querySelector("season-painter")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("opening-hours-day")).toBeNull();
     expect(
       el
         .shadowRoot!.querySelector<HTMLElementTagNameMap["wt-tabs"]>("wt-tabs")!
         .items.map((item) => item.key),
-    ).toEqual(["year", "week", "periods"]);
+    ).toEqual(["year", "periods"]);
   });
 });
