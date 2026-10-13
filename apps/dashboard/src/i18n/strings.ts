@@ -1555,6 +1555,11 @@ export const en = {
   "backup.edit.title": "Change backup settings",
   "backup.edit.save": "Save changes",
   "backup.edit.cancel": "Cancel",
+  "backup.turn_off.button": "Turn off scheduled backups",
+  "backup.turn_off.confirm": "Turn off scheduled backups?",
+  "backup.turn_off.explain":
+    "Scheduled backups stop. The saved destination and recovery key are kept, and nothing already stored is deleted.",
+  "backup.turn_off.cancel": "Cancel",
   "backup.pack.title": "Archive recovery pack",
   "backup.pack.explanation": "Restoring a backup from the bucket on a new box asks for this pack.",
   "backup.pack.show": "Download archive recovery pack",
@@ -4407,6 +4412,11 @@ export const es: Record<StringKey, string> = {
   "backup.edit.title": "Cambiar los ajustes de copia",
   "backup.edit.save": "Guardar cambios",
   "backup.edit.cancel": "Cancelar",
+  "backup.turn_off.button": "Desactivar las copias programadas",
+  "backup.turn_off.confirm": "¿Desactivar las copias programadas?",
+  "backup.turn_off.explain":
+    "Las copias programadas se detienen. Se conservan el destino guardado y la clave de recuperación, y no se borra nada de lo ya guardado.",
+  "backup.turn_off.cancel": "Cancelar",
   "backup.pack.title": "Paquete de recuperación de las copias",
   "backup.pack.explanation":
     "Para restaurar en una caja nueva una copia del bucket se pide este paquete.",

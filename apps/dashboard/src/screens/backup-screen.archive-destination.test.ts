@@ -1613,3 +1613,210 @@ describe("a pack refusal or pack the status no longer supports", () => {
     expect(q(el, "[data-test=pack-failure]")).toBeNull();
   });
 });
+
+const OFF_REVISION = "77777777-2222-4333-8444-555555555555";
+
+/** What the box answers to a turn-off: the record kept, switched off. */
+const storedOff = (status: BackupStatusView): BackupStatusView => ({
+  ...status,
+  enabled: false,
+  storedDisabled: true,
+  revision: OFF_REVISION,
+  backupStatus: { configured: false },
+});
+
+async function press(el: BackupScreen, test: string) {
+  q(el, `[data-test=${test}]`)!.click();
+  await el.updateComplete;
+}
+
+describe("switching off", () => {
+  it("needs two presses, explaining what happens on the first, and sends one turn-off", async () => {
+    const { el, api } = await mount(LOCAL_ONLY, {
+      disableBackup: vi.fn().mockResolvedValue(storedOff(LOCAL_ONLY)),
+    });
+    expect(q(el, "[data-test=turn-off-explain]")).toBeNull();
+    await press(el, "turn-off");
+    expect(api.disableBackup).toHaveBeenCalledTimes(0);
+    expect(q(el, "[data-test=turn-off]")!.dataset.armed).toBe("true");
+    expect(text(q(el, "[data-test=turn-off-explain]")!)).toContain(t("backup.turn_off.explain"));
+    await press(el, "turn-off");
+    await vi.waitFor(() => expect(api.disableBackup).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() =>
+      expect(text(q(el, "[data-test=status]")!)).toContain(t("backup.status.stored_off")),
+    );
+    expect(text(row(el, "primary"))).toContain("/mnt/usb/waitron");
+    expect(q(el, "[data-test=turn-off]")).toBeNull();
+  });
+
+  it("Cancel disarms it and sends nothing", async () => {
+    const { el, api } = await mount(LOCAL_ONLY, { disableBackup: vi.fn() });
+    await press(el, "turn-off");
+    await press(el, "turn-off-cancel");
+    expect(q(el, "[data-test=turn-off]")!.dataset.armed).toBeUndefined();
+    expect(q(el, "[data-test=turn-off-explain]")).toBeNull();
+    expect(q(el, "[data-test=turn-off-cancel]")).toBeNull();
+    await settle();
+    expect(api.disableBackup).not.toHaveBeenCalled();
+  });
+
+  it("keeps its own colour while its own request is sent", async () => {
+    const { el } = await mount(LOCAL_ONLY, {
+      disableBackup: vi.fn().mockReturnValue(new Promise(() => undefined)),
+    });
+    await press(el, "turn-off");
+    await press(el, "turn-off");
+    expect(await buttonState(el, "turn-off")).toEqual(["danger", true]);
+  });
+
+  it("an answer whose reload failed says the box could not load the settings", async () => {
+    const { el } = await mount(LOCAL_ONLY, {
+      disableBackup: vi.fn().mockResolvedValue({
+        ...storedOff(LOCAL_ONLY),
+        reloadErrorCode: "backup.archive_settings_invalid",
+      }),
+    });
+    await press(el, "turn-off");
+    await press(el, "turn-off");
+    await vi.waitFor(() => expect(q(el, "[data-test=reload-failed]")).not.toBeNull());
+    expect(text(q(el, "[data-test=reload-failed]")!)).toContain(
+      t("backup.reload_failed_after_save"),
+    );
+  });
+
+  it("a refusal shows its wording and leaves the button usable", async () => {
+    const { el, api } = await mount(LOCAL_ONLY, {
+      disableBackup: vi.fn().mockRejectedValue({ code: "backup.archive_settings_unreadable" }),
+    });
+    await press(el, "turn-off");
+    await press(el, "turn-off");
+    await vi.waitFor(() =>
+      expect(text(banner(el)!)).toContain(codeMessage("backup.archive_settings_unreadable")),
+    );
+    expect(await buttonState(el, "turn-off")).toEqual(["ghost", false]);
+    await press(el, "turn-off");
+    await press(el, "turn-off");
+    await vi.waitFor(() => expect(api.disableBackup).toHaveBeenCalledTimes(2));
+  });
+
+  it("is not offered when the environment manages backups", async () => {
+    const { el } = await mount({
+      ...TWO,
+      managedByEnvironment: true,
+      source: "environment",
+      revision: null,
+    } as BackupStatusView);
+    expect(q(el, "[data-test=show-pack]")).not.toBeNull();
+    expect(q(el, "[data-test=turn-off]")).toBeNull();
+    expect(q(el, "[data-test=edit-settings]")).toBeNull();
+  });
+});
+
+describe("turning stored settings back on", () => {
+  async function openOff(status: BackupStatusView, overrides: Partial<DashboardApi> = {}) {
+    const opened = await mount(storedOff(status), {
+      getStreamSettings: vi.fn().mockResolvedValue(STREAM_ON),
+      ...overrides,
+    });
+    await vi.waitFor(() => expect(q(opened.el, "[data-test=apply]")).not.toBeNull());
+    await settle();
+    await opened.el.updateComplete;
+    return opened;
+  }
+
+  it("a stored folder opens filled in, with Turn on ready, and sends that folder", async () => {
+    const { el, api } = await openOff({
+      ...LOCAL_ONLY,
+      schedule: { kind: "wall-clock", days: [1, 3], at: { hour: 4, minute: 30 } },
+      retention: { count: 5, days: 20 },
+    });
+    expect(choice(el)!.value).toBe("local-fs");
+    expect((q(el, "[data-test=destination]") as Field).value).toBe("/mnt/usb/waitron");
+    expect((q(el, "[data-test=retain-count]") as Field).value).toBe("5");
+    expect(await buttonState(el, "apply")).toEqual(["primary", false]);
+    q(el, "[data-test=apply]")!.click();
+    await vi.waitFor(() => expect(api.applyBackup).toHaveBeenCalledOnce());
+    const body = vi.mocked(api.applyBackup).mock.calls[0]![0];
+    expect(body.destination).toEqual({ kind: "local-fs", dir: "/mnt/usb/waitron" });
+    expect(body.schedule).toEqual({
+      kind: "wall-clock",
+      days: [1, 3],
+      at: { hour: 4, minute: 30 },
+    });
+    expect(body.retention).toEqual({ count: 5, days: 20 });
+    expect(body.recoveryKey).toBeUndefined();
+  });
+
+  it("a stored bucket that is the bucket copy's opens on that choice and sends it", async () => {
+    const { el, api } = await openOff(ON_STREAM_BUCKET);
+    expect(choice(el)!.value).toBe("stream-bucket");
+    q(el, "[data-test=apply]")!.click();
+    await vi.waitFor(() => expect(api.applyBackup).toHaveBeenCalledOnce());
+    expect(vi.mocked(api.applyBackup).mock.calls[0]![0].destination).toEqual({
+      kind: "stream-bucket",
+    });
+  });
+
+  it("another stored bucket opens filled in with an empty secret that is kept, and is sent without one", async () => {
+    const { el, api } = await openOff(ON_CUSTOM);
+    expect(choice(el)!.value).toBe("custom-s3");
+    expect(customField(el, "name").value).toBe("owner-bucket");
+    expect(customField(el, "access-key-id").value).toBe("AKIAOWNER");
+    const secret = customField(el, "secret-access-key");
+    expect(secret.value).toBe("");
+    expect(secret.required).toBe(false);
+    expect(secret.hint).toBe(t("backup.destination.secret_keep"));
+    q(el, "[data-test=apply]")!.click();
+    await vi.waitFor(() => expect(api.applyBackup).toHaveBeenCalledOnce());
+    expect(vi.mocked(api.applyBackup).mock.calls[0]![0].destination).toEqual({
+      kind: "custom-s3",
+      region: "eu-north-1",
+      bucket: "owner-bucket",
+      prefix: "waitron",
+      accessKeyId: "AKIAOWNER",
+    });
+  });
+
+  it("after a turn-off, the form opens with the stored folder", async () => {
+    const { el } = await mount(LOCAL_ONLY, {
+      disableBackup: vi.fn().mockResolvedValue(storedOff(LOCAL_ONLY)),
+    });
+    await press(el, "turn-off");
+    await press(el, "turn-off");
+    await vi.waitFor(() => expect(q(el, "[data-test=apply]")).not.toBeNull());
+    await settle();
+    await el.updateComplete;
+    expect((q(el, "[data-test=destination]") as Field).value).toBe("/mnt/usb/waitron");
+    expect(await buttonState(el, "apply")).toEqual(["primary", false]);
+  });
+
+  it("a later read does not overwrite a folder typed since", async () => {
+    const { el, api } = await openOff(LOCAL_ONLY);
+    await typeFolder(el, "/mnt/usb/other");
+    await read(el, api, { ...storedOff(LOCAL_ONLY), revision: NEW_REVISION });
+    expect((q(el, "[data-test=destination]") as Field).value).toBe("/mnt/usb/other");
+  });
+});
+
+describe("a key change whose settings record failed", () => {
+  it("takes a shown pack refusal away", async () => {
+    const { el } = await mount(TWO, {
+      getArchiveRecoveryPack: vi.fn().mockRejectedValue({ code: "backup.recovery_key_missing" }),
+      rotateBackupKey: vi.fn().mockRejectedValue({
+        code: "backup.rotation_metadata_failed",
+        params: { effectiveKeyChanged: true, keyFingerprint: "ffee0011" },
+      }),
+    });
+    q(el, "[data-test=show-pack]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=pack-failure]")).not.toBeNull());
+    q(el, "[data-test=show-old-key]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=old-key]")).not.toBeNull());
+    const box = q(el, "[data-test=saved-it]") as HTMLInputElement;
+    box.checked = true;
+    box.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    q(el, "[data-test=rotate-confirm]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=old-key]")).toBeNull());
+    expect(q(el, "[data-test=pack-failure]")).toBeNull();
+  });
+});

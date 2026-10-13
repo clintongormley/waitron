@@ -236,15 +236,12 @@ classification entry — never an enum, CLAUDE.md §2); names (built-ins are tra
   `purchase.duplicate` (supplier tax id and invoice number), a purchase line's rate, base, tax or
   type,
   `provisioning.duplicate_series_code` and `territory_country_mismatch` on the setup venue screen;
-  (4) on the backup screen: a refusal naming
-  the folder (`destinationDir` then; `dir` or `destination` since A538-4) or `schedule` still shows in the page banner rather than under the folder field
-  or above the button (both seen by running, in the Codex run-it review of C63), and so, read and
-  not run, does every other refusal; the backup folder is required but not marked, and Turn on
-  backups stays disabled before the first press until the folder is filled and the key is saved —
-  the same shape as (7) (both seen by running, in the Codex run-it review); and, read and not run:
-  the settings editor's Save changes is also disabled before any press while the folder is blank
-  (`#saveSettingsDisabled` in `apps/dashboard/src/screens/backup-screen.ts`); the destination
-  folder, the saved-it tick and the weekday ticks carry no `name`; the screen does not submit on
+  (4) on the backup screen, read and not run: a refusal naming `schedule` or the whole
+  `destination` still shows in the page banner, and so does every refusal `#onApplyRefused`
+  (`apps/dashboard/src/screens/backup-screen.ts`) neither puts under a field nor lists in
+  `FORM_REFUSALS`; Turn on backups stays disabled before the first
+  press until the key is saved — the same shape as (7) (seen by running, in the Codex run-it review
+  of C63); the saved-it tick and the weekday ticks carry no `name`; the screen does not submit on
   Enter (`submitOnEnter`, which design-system.md → "Submit ordinary forms with Enter" asks for and
   `stream-settings-panel.ts` uses); and no test covers only the second box being invalid, or where
   focus lands after a failed check on the Save form;

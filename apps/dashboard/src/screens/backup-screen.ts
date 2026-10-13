@@ -363,6 +363,7 @@ export class BackupScreen extends LitElement {
   @state() private packUrl: string | null = null;
   @state() private packFailure: string | null = null;
   @state() private packLoading = false;
+  @state() private turnOffArmed = false;
   /** Every pack fetch takes the next number; only the latest, unchanged since, may show its answer. */
   #packRequest = 0;
 
@@ -375,6 +376,7 @@ export class BackupScreen extends LitElement {
   /** The stored policy is one the form cannot write, so the editor shows defaults in its place and
    * saving it as shown changes the box. */
   #policyReplaced = false;
+  #storedOffOpened = false;
   /** The status watcher asks for a key at most once, so a failing mint is not retried on every
    * refresh: the mint is a POST, and a POST is never passive session activity. */
   #watcherAsked = false;
@@ -527,8 +529,6 @@ export class BackupScreen extends LitElement {
     this.mintedKey = null;
     this.oldKey = null;
     this.#dropPack();
-    this.packFailure = null;
-    this.packLoading = false;
     this.#watcherAsked = false;
     this.#minting = null;
     for (const url of this.#blobUrls.values()) URL.revokeObjectURL(url);
@@ -548,6 +548,9 @@ export class BackupScreen extends LitElement {
         this.#dropStalePack(value);
         this.status = value;
         this.refreshErrorKey = null;
+        if (!value.enabled) this.turnOffArmed = false;
+        if (!value.storedDisabled) this.#storedOffOpened = false;
+        await this.#openStoredOff(false);
         await this.#mintIfNone();
       });
     } catch (error) {
@@ -739,7 +742,7 @@ export class BackupScreen extends LitElement {
 
   async #apply(): Promise<void> {
     const sendsKey = !this.#reusesHeldKey;
-    if (saveActionState(this.#archiveScope).unchanged) return;
+    if (this.#applyAction().unchanged) return;
     if (this.#applyDisabled || (sendsKey && this.#pastedKeyTooShort())) return;
     if (!this.#checkPolicy()) return;
     this.errorKey = null;
@@ -782,6 +785,7 @@ export class BackupScreen extends LitElement {
 
   async #rotate(): Promise<void> {
     if (this.#rotateDisabled || this.#pastedKeyTooShort()) return;
+    this.turnOffArmed = false;
     this.errorKey = null;
     this.refreshErrorKey = null;
     this.submitting = true;
@@ -826,6 +830,47 @@ export class BackupScreen extends LitElement {
     }
   }
 
+  async #turnOff(): Promise<void> {
+    if (this.submitting) return;
+    if (!this.turnOffArmed) {
+      this.turnOffArmed = true;
+      return;
+    }
+    this.errorKey = null;
+    this.refreshErrorKey = null;
+    this.submitting = true;
+    const generation = this.#generation;
+    try {
+      const status = await this.api.disableBackup();
+      if (generation !== this.#generation) return;
+      this.reloadErrorCode = status.reloadErrorCode ?? null;
+      this.#dropStalePack(status);
+      this.status = status;
+      this.turnOffArmed = false;
+      await this.#openStoredOff(true);
+    } catch (error) {
+      if (generation !== this.#generation) return;
+      this.errorKey = codeOf(error);
+      this.turnOffArmed = false;
+    } finally {
+      if (generation === this.#generation) this.submitting = false;
+    }
+  }
+
+  /** Turning stored settings back on starts from them, once: a later read never replaces what was
+   * typed since. */
+  async #openStoredOff(afterTurnOff: boolean): Promise<void> {
+    const generation = this.#generation;
+    await this.#streamRead;
+    const s = this.status;
+    if (generation !== this.#generation || s === undefined) return;
+    if (!s.storedDisabled || s.enabled || !s.isPrimary || s.managedByEnvironment) return;
+    if (!afterTurnOff && (this.#storedOffOpened || this.#archiveScope?.isDirty())) return;
+    this.#storedOffOpened = true;
+    this.#prefillFromStatus(s);
+    this.#archiveScope?.commit(this.#archiveValue());
+  }
+
   /** A pack, or its refusal, is for one key and one stored record, and only while a bucket is
    * listed: a read naming another key or record, or no bucket, takes it away. */
   #dropStalePack(value: BackupStatusView): void {
@@ -841,7 +886,6 @@ export class BackupScreen extends LitElement {
           (pack.revision ?? null) !== value.revision);
     if (!changed) return;
     this.#dropPack();
-    this.packFailure = null;
   }
 
   #sameKeyAndRecord(a: BackupStatusView, b: BackupStatusView): boolean {
@@ -852,11 +896,12 @@ export class BackupScreen extends LitElement {
     );
   }
 
-  /** Also discards the answer of any pack fetch still running. */
+  /** Also discards the answer of any pack fetch still running, and a shown refusal. */
   #dropPack(): void {
     this.#packRequest++;
     this.packLoading = false;
     this.pack = null;
+    this.packFailure = null;
     if (this.packUrl !== null) URL.revokeObjectURL(this.packUrl);
     this.packUrl = null;
   }
@@ -864,7 +909,6 @@ export class BackupScreen extends LitElement {
   async #showPack(): Promise<void> {
     if (this.packLoading) return;
     this.#dropPack();
-    this.packFailure = null;
     this.packLoading = true;
     const request = this.#packRequest;
     try {
@@ -902,6 +946,7 @@ export class BackupScreen extends LitElement {
   }
 
   async #startEdit(): Promise<void> {
+    this.turnOffArmed = false;
     const generation = this.#generation;
     if (
       this.#leave &&
@@ -1232,7 +1277,7 @@ export class BackupScreen extends LitElement {
                   @click=${() => void this.#startEdit()}
                   >${t("backup.edit.button")}</wt-button
                 >
-                ${this.#renderRotate()}`
+                ${this.#renderTurnOff()} ${this.#renderRotate()}`
             : nothing
         }
       </div>
@@ -1540,8 +1585,16 @@ export class BackupScreen extends LitElement {
     `;
   }
 
+  /** Stored settings that are switched off can be turned back on as they are. */
+  #applyAction() {
+    const s = this.status;
+    return saveActionState(this.#archiveScope, {
+      savableAtOpen: s?.storedDisabled === true && !s.enabled,
+    });
+  }
+
   #renderConfigure(): TemplateResult {
-    const s = saveActionState(this.#archiveScope);
+    const s = this.#applyAction();
     return html`
       ${this.#renderDestinationField()}
 
@@ -1810,6 +1863,40 @@ export class BackupScreen extends LitElement {
                 >
               </div>`
       }
+    `;
+  }
+
+  #renderTurnOff(): TemplateResult {
+    const armed = this.turnOffArmed;
+    return html`
+      ${
+        armed
+          ? html`<p class="hint" role="note" data-test="turn-off-explain">
+              ${t("backup.turn_off.explain")}
+            </p>`
+          : nothing
+      }
+      <div class="key-actions">
+        <wt-button
+          variant=${armed ? "danger" : "ghost"}
+          data-armed=${armed ? "true" : nothing}
+          data-test="turn-off"
+          ?disabled=${this.submitting}
+          @click=${() => void this.#turnOff()}
+          >${t(armed ? "backup.turn_off.confirm" : "backup.turn_off.button")}</wt-button
+        >
+        ${
+          armed
+            ? html`<wt-button
+                variant="ghost"
+                data-test="turn-off-cancel"
+                ?disabled=${this.submitting}
+                @click=${() => (this.turnOffArmed = false)}
+                >${t("backup.turn_off.cancel")}</wt-button
+              >`
+            : nothing
+        }
+      </div>
     `;
   }
 

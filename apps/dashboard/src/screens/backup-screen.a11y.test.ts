@@ -246,6 +246,30 @@ describe.each(["light", "dark"] as const)("backup-screen a11y (%s theme)", (them
     await expectNoA11yViolations(host);
   });
 
+  it("renders an armed Turn off with its explanation and Cancel accessibly", async () => {
+    const { el, host } = await mountWidget<BackupScreen>(
+      "dashboard-backup-screen",
+      { api: stubApi(ENABLED) },
+      theme,
+    );
+    await flush(el);
+    q(el, "[data-test=turn-off]")!.click();
+    await flush(el);
+    expect(q(el, "[data-test=turn-off-explain]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders stored settings that are switched off, ready to turn back on, accessibly", async () => {
+    const { el, host } = await mountWidget<BackupScreen>(
+      "dashboard-backup-screen",
+      { api: stubApi({ ...ENABLED, enabled: false, storedDisabled: true }) },
+      theme,
+    );
+    await flush(el);
+    expect(q(el, "[data-test=apply]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   it("renders the enabled edit-settings form accessibly", async () => {
     const { el, host } = await mountWidget<BackupScreen>(
       "dashboard-backup-screen",

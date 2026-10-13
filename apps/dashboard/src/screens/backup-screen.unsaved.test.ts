@@ -136,6 +136,19 @@ it("default configuration and generated-key output leave without warning", async
   expect(await leave(app)).toBe("proceeded");
   expect(unload()).toBe(false);
 });
+it("stored settings switched off open filled in without warning, and a changed folder warns", async () => {
+  const { app, screen } = await mount({ ...on, enabled: false, storedDisabled: true });
+  await expect.poll(() => field(screen, "destination")?.value).toBe("/mnt/usb/waitron");
+  expect(unload()).toBe(false);
+  expect(await leave(app)).toBe("proceeded");
+  await change(screen, "destination", "/mnt/changed");
+  expect(unload()).toBe(true);
+  const discarded = leave(app);
+  await choose(app, "discard");
+  expect(await discarded).toBe("proceeded");
+  await screen.updateComplete;
+  expect(field(screen, "destination").value).toBe("/mnt/usb/waitron");
+});
 it("destination edits warn, Keep preserves the native value, and Discard restores the opening", async () => {
   const { app, screen } = await mount();
   await change(screen, "destination", "/mnt/changed");
