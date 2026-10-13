@@ -47,6 +47,24 @@ describe("OpeningHoursApi", () => {
     ]);
   });
 
+  it("sends each season write with the clock revision and reads a delete's impact", async () => {
+    const request = vi.fn(async (_path: string, method: string) =>
+      method === "GET" ? { departments: [] } : { id: "s/1", name: "Winter", startsOn: "12-01" },
+    );
+    const api = new OpeningHoursApi(request as DashboardRequest);
+    const input = { name: "Winter", startsOn: "12-01" };
+    await api.saveSeason("s/1", input, 3);
+    await api.addSeason(input, 4);
+    await api.deleteSeason("s/1", 5);
+    expect(await api.readSeasonDeleteImpact("s/1")).toEqual({ departments: [] });
+    expect(request.mock.calls).toEqual([
+      [`${base}/seasons/s%2F1`, "PUT", { ...input, expectedClockRevision: 3 }],
+      [`${base}/seasons`, "POST", { ...input, expectedClockRevision: 4 }],
+      [`${base}/seasons/s%2F1`, "DELETE", { expectedClockRevision: 5 }],
+      [`${base}/seasons/s%2F1/delete-impact`, "GET"],
+    ]);
+  });
+
   it("re-reads both the opening hours and the special-day calendar after a special-day write", async () => {
     const request = vi.fn(async (path: string) =>
       path.includes("named-days") ? { days: [] } : model,
