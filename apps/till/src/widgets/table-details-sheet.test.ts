@@ -140,7 +140,7 @@ describe("till-table-details-sheet", () => {
         actions: true,
         tables: [long, c5],
       });
-      expect(text(el, '[data-today-action="join-again"]')).toBe("Join again");
+      expect(text(el, '[data-today-action="reset-table"]')).toBe("Join again");
       setLocale("es-ES");
       const es = await mount({
         table: c5,
@@ -148,13 +148,13 @@ describe("till-table-details-sheet", () => {
         actions: true,
         tables: [long, c5],
       });
-      expect(text(es, '[data-today-action="join-again"]')).toBe("Volver a unir");
+      expect(text(es, '[data-today-action="reset-table"]')).toBe("Volver a unir");
     });
 
     it("offers no Join again without the zone's tables", async () => {
       const el = await mount({ table: long, heading: "Long table", actions: true });
       expect(find(el, '[data-today-action="split-off"]')).not.toBeNull();
-      expect(find(el, '[data-today-action="join-again"]')).toBeNull();
+      expect(find(el, '[data-today-action="reset-table"]')).toBeNull();
     });
   });
 

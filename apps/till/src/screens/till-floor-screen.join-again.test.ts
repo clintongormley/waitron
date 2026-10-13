@@ -165,7 +165,7 @@ async function pressJoinAgain(el: TillFloorScreen, tableId = "long") {
   await el.updateComplete;
   const sheet = el.shadowRoot!.querySelector("till-table-details-sheet")!;
   await sheet.updateComplete;
-  sheet.shadowRoot!.querySelector<HTMLElement>('[data-today-action="join-again"]')!.click();
+  sheet.shadowRoot!.querySelector<HTMLElement>('[data-today-action="reset-table"]')!.click();
   await settle(el);
   return windowOf(el);
 }

@@ -48,11 +48,11 @@ import {
   type SheetAction,
   dropAction,
   groupSplitOf,
-  joinAgainOf,
-  type JoinAgainPlan,
   nextFloorMoment,
   onTodaysPlan,
   pendingPlaces,
+  resetTableOf,
+  type ResetTablePlan,
   sheetActions,
   spareSpot,
 } from "../state/floor-today.js";
@@ -123,7 +123,7 @@ interface SplittingJoined {
 interface JoiningAgain {
   tableId: string;
   /** The plan sent, until its answer arrives. */
-  sent: JoinAgainPlan | null;
+  sent: ResetTablePlan | null;
   refusal: { code: string; field?: string } | null;
 }
 
@@ -872,8 +872,8 @@ export class TillFloorScreen extends LitElement {
       case "split-off":
         this.splittingJoined = { tableId, sent: null, refusal: null, seatsRequired: false };
         return;
-      case "join-again": {
-        const plan = joinAgainOf(table, this.tables);
+      case "reset-table": {
+        const plan = resetTableOf(table, this.tables);
         if (plan === null) return;
         if (plan.whole)
           send((sent) =>
@@ -1185,15 +1185,15 @@ export class TillFloorScreen extends LitElement {
   }
 
   /** Join again's plan for the joined table it was opened for, while some of its tables stay apart. */
-  #joiningAgain(tableId: string): JoinAgainPlan | undefined {
+  #joiningAgain(tableId: string): ResetTablePlan | undefined {
     const joined = this.tables.find((each) => each.id === tableId);
-    const plan = joined === undefined ? null : joinAgainOf(joined, this.tables);
+    const plan = joined === undefined ? null : resetTableOf(joined, this.tables);
     return plan === null || plan.whole ? undefined : plan;
   }
 
   /** While its request is out, the window keeps the plan it sent unless its joined table has left
    * the floor read; otherwise it shows the plan the floor reads now. */
-  #joinAgainShown(joining: JoiningAgain): JoinAgainPlan | undefined {
+  #joinAgainShown(joining: JoiningAgain): ResetTablePlan | undefined {
     if (joining.sent === null) return this.#joiningAgain(joining.tableId);
     return this.tables.some((each) => each.id === joining.tableId) ? joining.sent : undefined;
   }

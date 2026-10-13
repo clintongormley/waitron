@@ -106,13 +106,6 @@ it("heads itself Join Long table again and says which tables stay apart and why"
     "Counter 5 stays apart: guests seated",
     "Counter 4 stays apart: food on its way",
   ]);
-  const other = await mount({
-    apart: [away("c4", "Counter 4", "clearing"), away("c5", "Counter 5", "merged")],
-  });
-  expect(lines(other)).toEqual([
-    "Counter 4 stays apart: needs clearing",
-    "Counter 5 stays apart: pushed together",
-  ]);
 });
 
 it("puts a label holding a placeholder's text into its line as written", async () => {
@@ -223,13 +216,6 @@ it("speaks Spanish", async () => {
     "Counter 5 sigue aparte: hay clientes",
     "Counter 4 sigue aparte: comida en camino",
   ]);
-  const other = await mount({
-    apart: [away("c4", "Counter 4", "clearing"), away("c5", "Counter 5", "merged")],
-  });
-  expect(lines(other)).toEqual([
-    "Counter 4 sigue aparte: por recoger",
-    "Counter 5 sigue aparte: unida a otra",
-  ]);
   expect(seatsField(el).label).toBe("Plazas para Long table");
   expect(action(el).textContent!.trim()).toBe("Volver a unir");
   await typeSeats(el, "0");
@@ -250,7 +236,7 @@ for (const [width, height] of [
           apart: [
             away("t1", "Terrace corner table by the fountain", "guests"),
             away("t2", "Counter 4", "food"),
-            away("t3", "Window table beside the old bar", "clearing"),
+            away("t3", "Window table beside the old bar", "guests"),
           ],
         });
         const window = el
