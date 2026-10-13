@@ -216,10 +216,11 @@ it("keeps an edited week when a fresh model arrives before the painter, put back
   const parent = painter.parentNode!;
   painter.remove();
   const fresh = painterModel();
-  fresh.departments[0]!.seasonWeeks[1]!.week[3] = {
-    weekday: 3,
-    slots: [{ periodId: "p1", startsAt: "12:00", endsAt: "15:00" }],
-  };
+  (fresh.departments[0]!.seasonWeeks[1]!.week[3]!.slots as unknown[]).push({
+    periodId: "p1",
+    startsAt: "12:00",
+    endsAt: "15:00",
+  });
   painter.model = fresh;
   parent.insertBefore(painter, parent.firstChild);
   await settle(painter);
