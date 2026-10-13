@@ -52,7 +52,6 @@ import { loadBoxEnv } from "./box-env.js";
 import { parseEnvFile } from "./env-file.js";
 import type { Logger } from "./logger.js";
 import type { SealedStateRefresher } from "./sealed-state.js";
-import { isUnset } from "./env-value.js";
 import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
@@ -61,18 +60,6 @@ import { TOTP_KEY_RING } from "./testing/authenticator.js";
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse"; // the seeded manager's dashboard password
 const MANAGER_EMAIL = "manager@x.com";
-// Every backup env var provenance keys on — the wizard's `isManagedByEnvironment` mirror.
-const BACKUP_KEYS = [
-  "WAITRON_BACKUP_DIR",
-  "WAITRON_BACKUP_DESTINATIONS",
-  "WAITRON_BACKUP_RECOVERY_KEY",
-  "WAITRON_BACKUP_SCHEDULE_DAYS",
-  "WAITRON_BACKUP_AT",
-  "WAITRON_BACKUP_INTERVAL_MS",
-  "WAITRON_BACKUP_RETAIN",
-  "WAITRON_BACKUP_RETAIN_DAYS",
-  "WAITRON_BACKUP_DESTINATION_TIMEOUT_MS",
-];
 // ≥ MIN_PASSPHRASE_LENGTH (12) and base64url-safe (survives the env-file round-trip).
 const KEY_1 = "recovery-key-one-strong";
 const KEY_2 = "recovery-key-two-different";
@@ -204,7 +191,7 @@ function makeSupervisor(sc: Scenario): BackupSupervisor {
         venueId: VENUE,
       }),
     buildBackend,
-    isManagedByEnvironment: () => BACKUP_KEYS.some((k) => !isUnset(sc.base[k])),
+    isManagedByEnvironment: () => isBackupManagedByEnvironment(sc.base),
     readSingletonRole: () => sc.role,
     venueDir,
     modules: ALL_MODULES,
