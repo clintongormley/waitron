@@ -46,7 +46,7 @@ function table(id: string, label: string, todayRow: TableToday): TableState {
 const joined = table(
   "long",
   "Long table",
-  today(2, { joined: { parts: ["c3"], splitOff: ["c4", "c5"], apart: true } }),
+  today(2, { joined: { parts: ["c3"], splitOff: ["c4", "c5", "c6"], apart: true } }),
 );
 const apart = [
   {
@@ -54,6 +54,10 @@ const apart = [
     reason: "guests" as const,
   },
   { table: table("c4", "Counter 4", today(6, { splitOffFrom: "long" })), reason: "food" as const },
+  {
+    table: table("c6", "Counter 6", today(8, { splitOffFrom: "long" })),
+    reason: "group" as const,
+  },
 ];
 
 async function typeSeats(el: TillResetTableDialog, value: string) {

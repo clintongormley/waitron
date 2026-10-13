@@ -247,7 +247,7 @@ export function spareSpot(zoneTables: readonly TableState[]): { x: number; y: nu
   };
 }
 
-export type ApartReason = "guests" | "food";
+export type ApartReason = "guests" | "group" | "food";
 
 export interface ResetTablePlan {
   joined: TableState;
@@ -291,13 +291,16 @@ export function resetTableOf(
   // names the tables to split off the group first.
   const blockedByGroup =
     joined !== table &&
-    apart.some(({ table: each, reason }) => reason === "guests" && each.today?.joinId != null);
+    apart.some(
+      ({ table: each, reason }) =>
+        (reason === "guests" || reason === "group") && each.today?.joinId != null,
+    );
   return blockedByGroup ? { ...plan, refusedInGroup: true } : null;
 }
 
 function apartReason(table: TableState, zoneTables: readonly TableState[]): ApartReason | null {
   if (table.condition === "held") return "guests";
-  if (mergeMembersOf(zoneTables, table).some((each) => each.condition === "held")) return "guests";
+  if (mergeMembersOf(zoneTables, table).some((each) => each.condition === "held")) return "group";
   if (table.pendingDeliveries > 0) return "food";
   return null;
 }
