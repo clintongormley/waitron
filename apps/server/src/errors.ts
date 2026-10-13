@@ -1198,6 +1198,10 @@ declare module "@waitron/shared" {
     /** An archive bucket's folder for this venue would sit inside, or contain, the stream's venue
      * folder in the same bucket. No params: they would be the owner's bucket settings. */
     "backup.archive_namespace_overlap": Record<string, never>;
+    /** An archive recovery pack (`archive-recovery-pack.ts`) held no token (`not_found`), a token
+     * that is not base64url JSON (`encoding`), or not exactly a pack this server issues (`shape`).
+     * Never carries a field's value: the pack holds the bucket's secret key and the recovery key. */
+    "backup.archive_pack_invalid": { reason: "not_found" | "encoding" | "shape" };
     /** Save's test of an archive bucket — write, read back, list and delete one object — failed or
      * ran out of time. `reason` is a code, or `timed_out`, `read_mismatch` or `not_listed`; never
      * the provider's message. */
@@ -1379,6 +1383,18 @@ declare module "@waitron/shared" {
     "restore.stream_state_missing": { nodeId: string };
     /** The disk filled while the copy was being downloaded from the bucket. */
     "restore.stream_disk_full": Record<string, never>;
+    /** The archive named for a restore is not a name an archive is stored under, so nothing was
+     * asked of the bucket. */
+    "restore.archive_key_invalid": Record<string, never>;
+    /** The pack's archive folder holds no archive by the name given. */
+    "restore.archive_missing": Record<string, never>;
+    /** The staging folder has too little free space for the archive, or the disk filled while it
+     * was being downloaded. */
+    "restore.archive_disk_full": Record<string, never>;
+    /** Downloading the archive did not finish: it was cancelled or ran out of time (`timed_out`),
+     * the bucket refused or failed a request (`request_failed`), or anything else (`failed`).
+     * Carries no key, path or bucket text. */
+    "restore.archive_download_failed": { reason: "timed_out" | "request_failed" | "failed" };
     // The server's working-order paths throw these contributed venue-service codes directly.
     "order.service_context_missing": { workingOrderId: string };
     "service_zone.mode_incompatible": {
