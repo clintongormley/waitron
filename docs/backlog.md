@@ -3766,20 +3766,17 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   only `--wt-color-primary` or `--wt-color-danger` gets Waitron's default blue or red on a hovered
   primary or danger `wt-button`.
 
-- **Many dashboard labels still put a name into a translated string with `.replace("{name}", …)`,
-  so a name holding `$&` (or, where two placeholders are filled one after another, another
-  placeholder's `{…}` text) can garble them** — left open by A520, which moved the colour chooser,
-  the order detail dialog, the product list's Made at, price-per and colour labels, the product
-  details' price-per text, the product image link's label, and the private helpers in the sales,
-  orders, menu preview, order detail, catalogue browser and product media code to `fill`
-  (`apps/dashboard/src/i18n/t.ts`). Sites remain in, among others, `menu-structure-table.ts`
-  (including the same colour label), `menu-prices-table.ts`, `add-to-menus.ts`, `devices-screen.ts`,
-  `printers-screen.ts`, `modifiers-screen.ts` and `menus-screen.ts`. A lone replacement whose value
-  is a number is safe; one that follows a name in the same chain is not (`action.reordered` in
-  `menu-structure-table.ts` and `device-home-preview.ts`, and the delete-section question in
-  `menus-screen.ts`).
-  `apps/dashboard/src/widgets/price-source.ts` keeps a private one-pass fill because it is handed
-  its `t`.
+- **The printers screen and the receipt-language text still put names into translated text with
+  `.replace`, so a name holding `$&`, or one holding a later placeholder's `{…}` text where two
+  are filled one after another, can garble the label** — left open by A536, which moved every
+  other such label under `apps/dashboard/src` to `fill` (`apps/dashboard/src/i18n/t.ts`). In
+  `apps/dashboard/src/screens/printers-screen.ts`: "Actions for …", "Test page sent to …",
+  "Added ….", "Seen on …", "Seen on … · …" (an agent name, then a time) and the calibration
+  ruler's disagreement line, which fills what was typed; left because PR #1602 changes that file,
+  so take them after it lands. In `apps/dashboard/src/screens/receipt-language-panel.ts` and
+  `apps/dashboard/src/widgets/receipt-language.ts`: the receipt-language sentences, which fill two
+  language names one after another, and a language tag the browser has no name for is shown as
+  written; left because lane D's A493 changes the receipt files.
 
 - **One earlier Spanish dark-theme 390 px demo probe reached its 12-second deadline before the
   bottom** — left open by A334 (#1416, held reorder drags scroll at the list edge): a later
