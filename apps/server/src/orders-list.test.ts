@@ -7,6 +7,7 @@ import {
   billPaymentRefunds,
   billPayments,
   diningTables,
+  invoicePdfDownloads,
   invoiceSeries,
   partyTables,
   printJobs,
@@ -672,6 +673,21 @@ describe("rows written within one millisecond, read in the order they were writt
     });
     const detail = await detailOf(billId);
     expect(detail.reprints.map((reprint) => reprint.personId)).toEqual(askedBy);
+  });
+
+  it("shows an invoice's PDF downloads in the order they were asked for", async () => {
+    const billId = await placedIssuedBill(venue, "Tarta");
+    const saleId = await saleOf(billId);
+    const id = descendingIds();
+    const askedBy = [venue.operatorId, venue.supervisorId, venue.adminId];
+    await inTx(venue, async (tx) => {
+      for (const personId of askedBy)
+        await tx
+          .insert(invoicePdfDownloads)
+          .values({ id: id(), saleId, personId, requestedAt: AT });
+    });
+    const detail = await detailOf(billId);
+    expect(detail.invoicePdfDownloads.map((download) => download.personId)).toEqual(askedBy);
   });
 });
 

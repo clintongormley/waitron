@@ -712,7 +712,7 @@ async function readPdfDownloads(
     .from(invoicePdfDownloads)
     .leftJoin(persons, eq(persons.id, invoicePdfDownloads.personId))
     .where(eq(invoicePdfDownloads.saleId, saleId))
-    .orderBy(invoicePdfDownloads.requestedAt, invoicePdfDownloads.id);
+    .orderBy(invoicePdfDownloads.requestedAt, sql`${invoicePdfDownloads}.rowid`);
 }
 
 async function readBillLines(tx: Transaction, billId: string): Promise<OrderLine[]> {
