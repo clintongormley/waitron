@@ -58,8 +58,7 @@ and hours proposals; the historical spec keeps its dated pointers.
 
 ## Smaller notes from the Hours reviews
 
-- Smaller notes: nothing pins which of two repeated midnights a clock change picks; on a phone the
-  calendar's cells break a long special-day name mid-word (a design choice for the owner). The separate Hours client's
+- Smaller notes: nothing pins which of two repeated midnights a clock change picks. The separate Hours client's
   read-window and lifecycle notes and station-cell checks are retired with that page (slice 4 Part B).
 
 ## Province edits in Venue details
@@ -113,8 +112,9 @@ tab, and setup's Done link opens it.
 - No test yet gives a second department its own paint on the same special day.
 
 **Left open by A506-3, for the later parts.**
-- A506-6: a Day-tab draft takes its season when Save is pressed; once a season's start can move, a
-  draft built for one season could be saved under the next. Season edits should bump the clock
+- Still open after A506-6, whose season writes check but never bump the clock revision: a Day-tab
+  draft takes its season when Save is pressed; once a season's start can move, a draft built for one
+  season could be saved under the next. Season edits should bump the clock
   revision or refuse a draft built before them.
 - With no season in the address, a Week tab left open across a season change keeps showing the old
   season (the picker names it) until the address changes.
@@ -125,7 +125,9 @@ tab, and setup's Done link opens it.
   it left off its list instead, which adds a field to the shared preview type.
 - A venue with no seasons cannot save a week from the dashboard: the Day and Week tabs send an empty
   `seasonId`, the route refuses it, and the person sees only the generic save error. Provisioning gives
-  every venue its four seasons, so this is believed unreachable — read in the code, not run.
+  every venue four seasons, and deleting the last one is refused (`season.invalid`, reason `last`,
+  `deleteSeason` in `packages/venue-service/src/seasons.ts`), so this is believed unreachable — read in
+  the code, not run.
 
 **Left open by A506-4, for the later parts.**
 - The Periods tab's "Placed on" column counts season weeks only, so a period placed only on a special
@@ -153,8 +155,10 @@ tab, and setup's Done link opens it.
   (`venue.zone_closed_days`, `venue.zone_closed_summary`, and `venue.zone_open_with_department`)
   only when the venue has no seasons at all: `zoneClosedWeek`
   (`packages/venue-service/src/dashboard/zone-closed-week.ts`) picks them when neither the current
-  season nor a first season exists. Provisioning gives every venue four seasons, so this is
-  believed unreachable — read in the code, not run; no test names those keys.
+  season nor a first season exists. Provisioning gives every venue four seasons, and deleting the
+  last one is refused (`season.invalid`, reason `last`, `deleteSeason` in
+  `packages/venue-service/src/seasons.ts`), so this is believed unreachable — read in the code, not
+  run; no test names those keys.
 - A department or zone delete's preview never counts a special day's painted hours, yet the delete
   removes them: `readServiceDeleteSettings` (`packages/venue-service/src/service-delete-settings.ts`) counts
   only `department_days` and `zone_days` rows that have a season, while
@@ -178,6 +182,9 @@ tab, and setup's Done link opens it.
 - The readiness line for a repeating holiday date with no match names the stored official holiday
   name ("Natividad del Señor"), not the special day's own ("Christmas Day"), and says "no public
   holiday of that name" when the cause is that the year's whole list has not shipped yet.
+  The Year's missing-holiday warning (`#warnings`,
+  `packages/venue-service/src/dashboard/opening-hours-year.ts`) uses the same sentence and the same
+  name, though its read carries the special day's own `name`; a fix covers both.
 - Once a stored holiday date's year has passed, each order's service-state read (`readServiceDayPlan`)
   also reads the tenant, location and holiday area to find that year's holiday: about 100 µs of
   roughly 860 µs per call, measured over 2000 calls on a Madrid test venue during the A506-5
@@ -189,6 +196,14 @@ tab, and setup's Done link opens it.
   `packages/venue-service/src/dashboard/special-date.ts`) and the week views fetch each special day's detail separately; returning the stored date in the model
   would leave one copy of the rule. The "Add to" offer reads every special day with every date
   (`GET …/special-days`) to show a name and a latest date.
+
+**Left open by A506-6, for the later parts.**
+- A season delete's confirmation names only departments (`seasonDeleteImpact`,
+  `packages/venue-service/src/seasons.ts`), yet the delete also removes the zones' closed times for
+  that season, so a zone closed all winter quietly takes the previous season's closed times. Shown by
+  the A506-6 finish-branch review: a zone's Winter Saturday closure was gone after deleting Winter,
+  and the impact named one department. The spec promises departments only; whether to name zones
+  too is the owner's call.
 
 **Why.** One standard week does not fit a venue whose hours change with the season, and copying a
 week into future dates would bury the special days among ordinary ones.

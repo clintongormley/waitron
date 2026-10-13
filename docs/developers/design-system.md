@@ -2058,7 +2058,7 @@ and nothing guards it across screens:
   canvas editor;
 - batch 4a: adjustment reason create/edit and the bill-discount limit; booking create/edit; image
   upload and names edit;
-- Opening hours: the normal week, a day, the period editor and the date range dialog.
+- Opening hours: the normal week, a day, the period editor, the date range dialog and the season dialog.
   A366 slice 4 retires the separate Station hours page and its draft editors;
 - Departments: Add and Rename department, Add and Rename zone, Move and Add to department,
   the Settings form (including transfers) and the selected zone's settings. Their sibling

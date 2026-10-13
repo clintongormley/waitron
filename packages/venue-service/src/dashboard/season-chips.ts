@@ -28,7 +28,7 @@ const refusalOf = (error: unknown): Refusal => ({
       : undefined,
 });
 
-/** The venue's seasons as tinted chips; ✎ and "+ Season" open the season dialog, whose writes this
+/** The venue's seasons as tinted chips; a chip and "+ Season" open the season dialog, whose writes this
  *  element sends itself, announcing each with `season-changed` so its host re-reads. */
 @customElement("season-chips")
 export class SeasonChips extends LitElement {

@@ -1416,7 +1416,7 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 
 - **Smaller notes from the Hours reviews** — left open by the reviews of A261 step 5 (Hours, #1298):
   the participant-failure route case checks the status but not the body's code; repeated-midnight
-  clock choices and narrow-calendar name wrapping still need checking; …
+  clock choices still need checking; …
   [Detail](backlog/service-periods.md#smaller-notes-from-the-hours-reviews)
 
 - **2027 data** — left open by A261 step 6 (Public holidays, #1305). Not shipped; the BOE daily

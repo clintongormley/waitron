@@ -547,7 +547,7 @@ the server receives no trusted selection timestamp.
 An offset is bounded to −1439…1439 minutes. Each placement must keep a nonempty sending window;
 a positive offset must stop strictly before the same department's next placement starts. Each
 season's week, each season boundary and the dated overrides are checked when you edit periods,
-timetables, dates or the venue clock, and during configuration import. Yesterday's grace can reach a closed business day only
+timetables, dates, seasons or the venue clock, and during configuration import. Yesterday's grace can reach a closed business day only
 until its own cutoff. Selection and sending remain separate from the department's actual open state.
 The [A432 plan](../superpowers/plans/2026-10-08-a432-period-end-offset.md) records the decisions.
 `apps/server/src/till-api.service-periods.test.ts` exercises the request boundary.
@@ -556,7 +556,7 @@ clock cannot be read, timetable resolution leaves the department's period menus 
 
 Provisioning places the first department's Open period at 09:00–17:00 Monday to Friday when
 there is a catalogue and no existing period. Setup's completion screen shows those normal-week
-hours and links to that department in Opening hours only when its saved schedule matches them.
+hours, with a link to Opening hours' Year, only when its saved schedule matches them.
 A different authored or demo schedule is not described as that first weekday schedule. The checks are in
 `apps/server/src/setup-opening-hours.test.ts`, with the response and completed-request replay in
 `apps/server/src/setup-api.test.ts`.
@@ -613,6 +613,18 @@ changes that season alone (`replaceMenuWeek` in `packages/venue-service/src/menu
 In-process callers that name no season, such as `placeOpenPeriod` (`menu-timetable.ts`), which gives a new
 department its first Open period at provisioning and whenever a department is created, and the demo
 seed, still write every season.
+
+**2026-10-13, A506-6.** `addSeason`, `saveSeason` and `deleteSeason`
+(`packages/venue-service/src/seasons.ts`) add, rename or move, and delete a season, behind
+`POST …/seasons`, `PUT …/seasons/:seasonId` and `DELETE …/seasons/:seasonId` (`routes.ts`);
+`GET …/seasons/:seasonId/delete-impact` names the departments whose painted hours a delete loses. A
+new season starts with a copy of the department and zone weeks of the season it starts inside (a
+venue with no seasons first gets its four); a deleted season's days join the season before it, and
+its weeks go with it. A blank or taken name, a malformed or taken start, and deleting the last
+season are refused `season.invalid` naming the `field`; an add, a move or a delete re-checks every
+department's end offsets and refuses a clash with `season.invalid`, reason `end_offset`. Every write
+must send `expectedClockRevision`; a stale one refuses an add, a move or a delete with
+`hours.clock_changed`, but not a rename.
 
 A configuration transfer carries the five season tables (`VENUE_SERVICE_CONFIGURATION_TRANSFER` in
 `packages/venue-service/src/configuration-transfer.ts`). `importConfigurationTables`
