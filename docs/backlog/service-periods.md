@@ -103,7 +103,7 @@ its department taking over its paint, routing lines and keep-open extensions, or
 reads list where each period is painted and what the delete dialog shows (one-off special days with
 no date still to come left out). The Periods page that uses
 them is A506-11, and the old refusing delete stays until then.
-A506-6 landed in #NNNN: seasons are added, renamed, moved and deleted from the season chips and
+A506-6 landed in #1609: seasons are added, renamed, moved and deleted from the season chips and
 their dialog (+ Season), and a move or a deletion is refused when a period's end offset would
 run into the next day's hours; Opening hours opens on the Year, which replaced the Calendar
 tab, and setup's Done link opens it.
