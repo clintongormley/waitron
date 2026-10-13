@@ -100,6 +100,36 @@ export function specialDateIn(
   return holidays.get(year)?.get(rule.holidayName!) ?? null;
 }
 
+/** Whether a date stands in `year` only by following its holiday's name there from an earlier year. */
+export const followsHolidayIn = (rule: SpecialDayDateRule, year: number) =>
+  followsHoliday(rule) && year > yearOf(rule.date);
+
+/** Which of `entries` stands on each day of `year` that any falls on. A date standing there on its
+ *  own terms beats one following a holiday's name there; otherwise the first in `entries` wins. */
+export function standingInYear<T>(
+  entries: readonly T[],
+  year: number,
+  dateIn: (entry: T, year: number) => LocalDate | null,
+  followsIn: (entry: T, year: number) => boolean,
+): Map<LocalDate, T> {
+  const standing = new Map<LocalDate, T>();
+  for (const following of [false, true])
+    for (const entry of entries) {
+      if (followsIn(entry, year) !== following) continue;
+      const date = dateIn(entry, year);
+      if (date !== null && !standing.has(date)) standing.set(date, entry);
+    }
+  return standing;
+}
+
+/** Which special-day date stands on each day of `year`, by `standingInYear`. */
+export const specialDatesStandingIn = <T extends SpecialDayDateRule>(
+  rules: readonly T[],
+  year: number,
+  holidays: HolidayDates,
+): Map<LocalDate, T> =>
+  standingInYear(rules, year, (rule, at) => specialDateIn(rule, at, holidays), followsHolidayIn);
+
 /** The first day two special-day dates would both stand on, or null when they never meet. A date
  *  following a holiday's name is compared in every year `holidays` holds as well. */
 export function sharedSpecialDate(
@@ -207,8 +237,14 @@ export async function specialDaysOn(
     yearOf(ordered[ordered.length - 1]!),
   ]);
   const matched = new Map<LocalDate, (typeof dates)[number]>();
+  const standingByYear = new Map<number, Map<LocalDate, (typeof dates)[number]>>();
   for (const day of ordered) {
-    const row = dates.find((row) => specialDateIn(row, yearOf(day), holidays) === day);
+    let standing = standingByYear.get(yearOf(day));
+    if (standing === undefined) {
+      standing = specialDatesStandingIn(dates, yearOf(day), holidays);
+      standingByYear.set(yearOf(day), standing);
+    }
+    const row = standing.get(day);
     if (row !== undefined) matched.set(day, row);
   }
   if (matched.size === 0) return found;

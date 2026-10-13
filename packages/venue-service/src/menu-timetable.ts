@@ -33,7 +33,12 @@ import type {
   PeriodRoutingUse,
 } from "./menu-timetable-types.js";
 import { assertDepartment, resolveZoneContext, wireTime, type VenueScope } from "./operations.js";
-import { holidayDatesFor, readSpecialDaySchedules, specialDateIn } from "./special-days.js";
+import {
+  followsHolidayIn,
+  holidayDatesFor,
+  readSpecialDaySchedules,
+  specialDateIn,
+} from "./special-days.js";
 import { menuPeriods, menuPeriodStaffMenus } from "./schema/menus.js";
 import { departments } from "./schema/service.js";
 import { routingCellPeriods, routingCells } from "./schema/routing.js";
@@ -180,7 +185,12 @@ async function endOffsetClash(
       specialDays.map((day) => ({
         date: day.date,
         closeWholeVenue: day.closedAllDay,
-        ...(day.repeats ? { occursIn: (year: number) => specialDateIn(day, year, holidays) } : {}),
+        ...(day.repeats
+          ? {
+              occursIn: (year: number) => specialDateIn(day, year, holidays),
+              followsHolidayIn: (year: number) => followsHolidayIn(day, year),
+            }
+          : {}),
         paint: day.paint.get(id) ?? [],
         specialDayId: day.specialDayId,
       })),

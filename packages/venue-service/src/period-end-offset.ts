@@ -4,6 +4,7 @@ import type { LocalDate } from "./hours-types.js";
 import { byStart, seasonOnSorted } from "./season-rules.js";
 import { rangeSpan, type ServiceRange } from "./service-day.js";
 import { scheduleCutovers, serviceDayWallContext } from "./service-day-context.js";
+import { standingInYear } from "./special-days.js";
 import type { BusinessDayClock } from "@waitron/shared";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
@@ -74,6 +75,8 @@ export interface DatedSchedule {
   date: LocalDate;
   closeWholeVenue: boolean;
   occursIn?: (year: number) => LocalDate | null;
+  /** Whether it stands in a year only by following a holiday's name there; such a date gives way. */
+  followsHolidayIn?: (year: number) => boolean;
   paint: readonly PaintRange[];
   specialDayId?: string;
 }
@@ -143,28 +146,25 @@ export function findSeasonEndOffsetClash(
     const season = seasonOf(date);
     return season === null ? [] : weekOf(season, weekdayOf(date));
   };
-  // The first entry in `dated` that holds a date: on that date, or repeating onto it.
-  const firstOnDate = new Map<LocalDate, number>();
-  dated.forEach((entry, index) => {
-    if (entry.occursIn === undefined && !firstOnDate.has(entry.date))
-      firstOnDate.set(entry.date, index);
-  });
-  const occursInYear = new Map<number, Map<LocalDate, number>>();
-  const occursOn = (date: LocalDate): number => {
+  const standingByYear = new Map<number, Map<LocalDate, number>>();
+  const storedIndex = (date: LocalDate): number => {
     const year = Number(date.slice(0, 4));
-    let index = occursInYear.get(year);
-    if (index === undefined) {
-      index = new Map();
-      for (const [at, entry] of dated.entries()) {
-        const on = entry.occursIn?.(year) ?? null;
-        if (on !== null && !index.has(on)) index.set(on, at);
-      }
-      occursInYear.set(year, index);
+    let standing = standingByYear.get(year);
+    if (standing === undefined) {
+      standing = standingInYear(
+        dated.map((_, index) => index),
+        year,
+        (index, at) => {
+          const entry = dated[index]!;
+          if (entry.occursIn !== undefined) return entry.occursIn(at);
+          return Number(entry.date.slice(0, 4)) === at ? entry.date : null;
+        },
+        (index, at) => dated[index]!.followsHolidayIn?.(at) ?? false,
+      );
+      standingByYear.set(year, standing);
     }
-    return index.get(date) ?? Infinity;
+    return standing.get(date) ?? Infinity;
   };
-  const storedIndex = (date: LocalDate): number =>
-    Math.min(firstOnDate.get(date) ?? Infinity, occursOn(date));
   const storedOn = (date: LocalDate): DatedSchedule | undefined => dated[storedIndex(date)];
   // A repeating date falls on up to 400 years of dates but only (season, weekday) varies its day.
   const layered = new Map<string, readonly ServiceRange[]>();
