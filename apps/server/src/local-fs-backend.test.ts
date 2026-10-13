@@ -22,10 +22,14 @@ import { SMALL_OBJECT_MAX_BYTES } from "./storage-backend.js";
 // test names their path or sets `hooks.during`, which runs inside the call, as a cancellation landing
 // while the file system is busy would.
 const VANISHING_KEY = "waitron-vanishes.dump.enc";
+// Opened through a handle whose `stat` reports one byte, as a file that grows after its size was
+// read would.
+const GROWING_KEY = "waitron-grows.backup.enc";
 const hooks = vi.hoisted(() => ({
   during: undefined as ((call: string, path: string) => void) | undefined,
   failNextWrite: false,
   endless: undefined as Readable | undefined,
+  growing: { bytesAsked: 0, readFileCalls: 0 },
 }));
 vi.mock("node:fs", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:fs")>();
@@ -75,6 +79,23 @@ vi.mock("node:fs/promises", async (importOriginal) => {
     };
   return {
     ...actual,
+    open: async (...args: Parameters<typeof actual.open>) => {
+      const handle = await actual.open(...args);
+      if (!String(args[0]).endsWith(GROWING_KEY)) return handle;
+      return new Proxy(handle, {
+        get(target, prop) {
+          if (prop === "stat") return async () => ({ ...(await target.stat()), size: 1 });
+          if (prop === "read")
+            return (buffer: Buffer, offset: number, length: number, position: number) => {
+              hooks.growing.bytesAsked += length;
+              return target.read(buffer, offset, length, position);
+            };
+          if (prop === "readFile") hooks.growing.readFileCalls += 1;
+          const value: unknown = Reflect.get(target, prop);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+    },
     chmod: during("chmod", actual.chmod),
     readdir: during("readdir", actual.readdir as (path: string) => Promise<string[]>),
     rm: during("rm", actual.rm),
@@ -100,6 +121,7 @@ afterEach(() => {
   hooks.during = undefined;
   hooks.failNextWrite = false;
   hooks.endless = undefined;
+  hooks.growing = { bytesAsked: 0, readFileCalls: 0 };
 });
 
 describe("LocalFsBackend", () => {
@@ -126,6 +148,18 @@ describe("LocalFsBackend", () => {
       code: "backup.destination_object_too_large",
       params: { maxBytes: SMALL_OBJECT_MAX_BYTES },
     });
+  });
+
+  it("get refuses a file that grew past the bound after its size was read, holding at most one byte over it", async () => {
+    const be = new LocalFsBackend("d1", dir);
+    await writeFile(join(dir, GROWING_KEY), Buffer.alloc(SMALL_OBJECT_MAX_BYTES + 4 * 1024 * 1024));
+    await expect(be.get(GROWING_KEY, call)).rejects.toMatchObject({
+      code: "backup.destination_object_too_large",
+      params: { maxBytes: SMALL_OBJECT_MAX_BYTES },
+    });
+    expect(hooks.growing.readFileCalls).toBe(0);
+    expect(hooks.growing.bytesAsked).toBeGreaterThan(0);
+    expect(hooks.growing.bytesAsked).toBeLessThanOrEqual(SMALL_OBJECT_MAX_BYTES + 1);
   });
 
   it("get returns a file exactly at the small-object bound", async () => {

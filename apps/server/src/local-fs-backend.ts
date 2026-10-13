@@ -53,11 +53,23 @@ export class LocalFsBackend implements StorageBackend {
     signal.throwIfAborted();
     const handle = await open(path, "r");
     try {
-      if ((await handle.stat()).size > SMALL_OBJECT_MAX_BYTES) throw objectTooLarge();
-      const bytes = await handle.readFile({ signal });
-      // The file can grow after its size was read.
-      if (bytes.length > SMALL_OBJECT_MAX_BYTES) throw objectTooLarge();
-      return bytes;
+      const { size } = await handle.stat();
+      if (size > SMALL_OBJECT_MAX_BYTES) throw objectTooLarge();
+      // The file can grow after its size was read, so nothing past one byte over the bound is read.
+      let buffer = Buffer.alloc(size + 1);
+      let filled = 0;
+      for (;;) {
+        signal.throwIfAborted();
+        if (filled === buffer.length) {
+          if (filled > SMALL_OBJECT_MAX_BYTES) throw objectTooLarge();
+          const larger = Buffer.alloc(SMALL_OBJECT_MAX_BYTES + 1);
+          buffer.copy(larger);
+          buffer = larger;
+        }
+        const { bytesRead } = await handle.read(buffer, filled, buffer.length - filled, filled);
+        if (bytesRead === 0) return buffer.subarray(0, filled);
+        filled += bytesRead;
+      }
     } finally {
       await handle.close();
     }
