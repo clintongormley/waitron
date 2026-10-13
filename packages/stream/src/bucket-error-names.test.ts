@@ -5,13 +5,15 @@ const REFUSALS = [
   "IncompleteDeleteResult",
   "IncompleteListing",
   "IncompleteResponse",
+  "InvalidSize",
   "MissingContinuationToken",
   "MissingETag",
   "RepeatedContinuationToken",
+  "RepeatedKey",
 ];
 
 describe("loggableErrorName", () => {
-  it("holds exactly the six answer-refusal names", () => {
+  it("holds exactly the eight answer-refusal names", () => {
     expect([...ANSWER_REFUSALS]).toEqual(REFUSALS);
   });
 

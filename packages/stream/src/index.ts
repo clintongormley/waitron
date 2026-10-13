@@ -7,6 +7,8 @@ export type {
 } from "./object-store.js";
 export { CONFLICT_ATTEMPTS, createS3ObjectStore } from "./s3-store.js";
 export { createBucketClient } from "./s3-client.js";
+export { createS3FileStore } from "./s3-file-store.js";
+export type { FileCall, ListedFile, S3FileStore, S3FileStoreOptions } from "./s3-file-store.js";
 export type { BucketConfig, S3ObjectStoreOptions } from "./s3-client.js";
 export {
   GENERATION_NAME,

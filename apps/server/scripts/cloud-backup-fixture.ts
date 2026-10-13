@@ -89,6 +89,9 @@ if (request.command === "capture") {
           async delete() {
             throw new Error("Capture does not prune Cloud retention");
           },
+          async deleteMany() {
+            throw new Error("Capture does not prune Cloud retention");
+          },
         },
       ],
       db: store.venue,

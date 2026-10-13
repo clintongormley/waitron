@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { readBackupStatus } from "./backup-status.js";
-import { buildBackend } from "./local-fs-backend.js";
+import { buildBackupBackend } from "./backup-backends.js";
 import type { StorageBackend, StoredObject } from "./storage-backend.js";
 
 const backend = (id: string, newestMtimeMs: number | null): StorageBackend => ({
@@ -14,6 +14,7 @@ const backend = (id: string, newestMtimeMs: number | null): StorageBackend => ({
   getFile: async () => {},
   get: async () => Buffer.alloc(0),
   delete: async () => {},
+  deleteMany: async () => {},
   list: async (): Promise<StoredObject[]> =>
     newestMtimeMs === null
       ? []
@@ -81,7 +82,7 @@ describe("readBackupStatus", () => {
       writeFileSync(artifact, "ciphertext");
       const mtime = new Date(NOW.getTime() - 30_000); // 30s old, well inside the 60s stale window
       await utimes(artifact, mtime, mtime);
-      const be = buildBackend({ kind: "local-fs", id: "primary", dir });
+      const be = buildBackupBackend({ kind: "local-fs", id: "primary", dir });
       const s = await readBackupStatus([be], 60_000, NOW);
       expect(s).toMatchObject({
         configured: true,

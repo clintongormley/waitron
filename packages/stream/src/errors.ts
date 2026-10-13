@@ -4,10 +4,17 @@ import "@waitron/shared";
 
 export type BucketOperation = "get" | "put" | "list" | "delete";
 
+/** The archive file store's requests (`s3-file-store.ts`). */
+export type DestinationOperation =
+  "put" | "create_upload" | "upload_part" | "complete_upload" | "get" | "list" | "delete";
+
+export type DestinationCleanup = "abort_upload" | "delete_object";
+
 /**
- * This package's codes in the shared registry. They sit in the `backup.*` family with the archive's
- * codes (apps/server/src/errors.ts) because the stream is the venue's other kind of backup. No param
- * ever carries a credential; what `name` may hold is stated at `backup.stream_request_failed`.
+ * This package's codes in the shared registry: the bucket copy's (`backup.stream_*`) and the archive
+ * destination's (`backup.destination_*`), in the `backup.*` family with the archive's other codes
+ * (apps/server/src/errors.ts). No param ever carries a credential; what `name` may hold is stated at
+ * `backup.stream_request_failed`.
  */
 declare module "@waitron/shared" {
   interface ErrorParams {
@@ -52,5 +59,39 @@ declare module "@waitron/shared" {
      * system's own "no space left on device", or its configuration could not be written for lack of
      * space. Its output is not carried — it can name the bucket and endpoint. */
     "backup.stream_restore_failed": { exitCode: number | null; diskFull: boolean };
+    /** An archive destination's bucket request failed (`createS3FileStore`). `status` and `name`
+     * follow `backup.stream_request_failed`'s rules. A cancelled signal is always `status` null and
+     * `name` "AbortError": the store cannot tell a caller's stop from a time limit, so it names
+     * neither. */
+    "backup.destination_request_failed": {
+      operation: DestinationOperation;
+      key: string;
+      status: number | null;
+      name: string;
+    };
+    /** After a failed upload, the store could not abandon its own multipart upload, or delete its
+     * own key when the bucket may have stored it, within its cleanup budget. Reported in place of
+     * the failure that caused the cleanup, because something of this upload may be left in the
+     * bucket. `unresolved` names every step left unfinished, abandoning the upload before deleting
+     * the key, so a whole object the bucket may hold is named even when the abandonment failed too.
+     * The steps run side by side under one budget, counted from the failure; a step it ran out on
+     * is `status` null and `name` "AbortError". Otherwise each step's `status` and `name` describe
+     * its request, as `backup.stream_request_failed`'s do. */
+    "backup.destination_cleanup_failed": {
+      key: string;
+      unresolved: { cleanup: DestinationCleanup; status: number | null; name: string }[];
+    };
+    /** A key, a listing prefix or the configured prefix is empty where it must not be, absolute,
+     * holds a control character or an empty, `.` or `..` segment; or a listing named a key outside
+     * the prefix asked for (`listedKey`). The server's destinations add a stricter rule: a key must
+     * be one plain name, and a bucket destination's listing prefix may hold no "/". Never carries
+     * the key. */
+    "backup.destination_key_invalid": { field: "key" | "prefix" | "listedKey" };
+    /** The file being uploaded to `key` ended before the length it had when its upload began, so
+     * the upload stopped rather than send a part shorter than the length it stated. Never carries the
+     * file's path. */
+    "backup.destination_file_shrank": { key: string };
+    /** A file needs more than 10,000 parts of the largest part size, refused before any request. */
+    "backup.destination_file_too_large": { bytes: number; maxBytes: number };
   }
 }

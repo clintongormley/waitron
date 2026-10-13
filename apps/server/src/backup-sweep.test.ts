@@ -1,5 +1,5 @@
 // Every case injects the archive step, which the supervisor binds to the venue store's `archiveTo`.
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -21,6 +21,7 @@ import {
 } from "./backup-sweep.js";
 import type { BackupOutcomeHolder } from "./alert-sources.js";
 import { backupArchiveKey } from "./backup-keys.js";
+import { LocalFsBackend } from "./local-fs-backend.js";
 import { ALL_MODULES } from "./modules.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
 import type { StorageBackend, StoredObject } from "./storage-backend.js";
@@ -77,6 +78,9 @@ class FakeBackend implements StorageBackend {
   }
   async delete(key: string) {
     this.objects.delete(key);
+  }
+  async deleteMany(keys: string[]) {
+    for (const key of keys) this.objects.delete(key);
   }
 }
 
@@ -276,11 +280,11 @@ describe("runOnce (fan-out)", () => {
       async put() {
         throw enospc;
       },
-      async putFile(key, path) {
-        await this.put(key, await readFile(path));
+      async putFile(key, path, call) {
+        await this.put(key, await readFile(path), call);
       },
-      async getFile(key, path) {
-        await writeFile(path, await this.get(key));
+      async getFile(key, path, call) {
+        await writeFile(path, await this.get(key, call));
       },
       async get() {
         return Buffer.alloc(0);
@@ -289,6 +293,7 @@ describe("runOnce (fan-out)", () => {
         return [];
       },
       async delete() {},
+      async deleteMany() {},
     };
     const log = vi.fn();
     await runOnce(deps([failing], log));
@@ -331,11 +336,11 @@ describe("runOnce (fan-out)", () => {
       async put() {
         observedMode = (await stat(staged)).mode & 0o777;
       },
-      async putFile(key, path) {
-        await this.put(key, await readFile(path));
+      async putFile(key, path, call) {
+        await this.put(key, await readFile(path), call);
       },
-      async getFile(key, path) {
-        await writeFile(path, await this.get(key));
+      async getFile(key, path, call) {
+        await writeFile(path, await this.get(key, call));
       },
       async get() {
         return Buffer.alloc(0);
@@ -344,6 +349,7 @@ describe("runOnce (fan-out)", () => {
         return [];
       },
       async delete() {},
+      async deleteMany() {},
     };
     await runOnce({
       ...deps([probe]),
@@ -357,7 +363,6 @@ describe("runOnce (fan-out)", () => {
   it("leaves no staging file behind", async () => {
     const a = new FakeBackend("a");
     await runOnce(deps([a]));
-    const { readdir } = await import("node:fs/promises");
     expect(await readdir(staging)).toEqual([]);
   });
 });
@@ -804,7 +809,7 @@ describe("pruneBackend (dual count + age retention)", () => {
       backend.objects.set(backupArchiveKey(new Date(nowMs - d * day)), Buffer.from(`age-${d}`));
 
     // Age 2d is within the count cap of 3 but past the 1-day age cap.
-    await pruneBackend(backend, 3, 1, nowMs);
+    await pruneBackend(backend, 3, 1, nowMs, { signal: new AbortController().signal });
 
     const survivors = [...backend.objects.keys()].sort();
     expect(survivors).toEqual(
@@ -824,8 +829,48 @@ describe("pruneBackend (dual count + age retention)", () => {
     const nowMs = Date.parse("2026-09-20T00:00:00Z");
     const freshKey = backupArchiveKey(new Date(nowMs));
     backend.objects.set(freshKey, Buffer.from("fresh"));
-    await pruneBackend(backend, 7, 1, nowMs);
+    await pruneBackend(backend, 7, 1, nowMs, { signal: new AbortController().signal });
     expect(backend.objects.has(freshKey)).toBe(true);
+  });
+
+  it("leaves a listed name the destination cannot address and prunes the rest", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "backup-prune-odd-"));
+    try {
+      const nowMs = Date.UTC(2026, 9, 13);
+      const fresh = backupArchiveKey(new Date(Date.UTC(2026, 9, 12)));
+      const oldPlain = backupArchiveKey(new Date(Date.UTC(2025, 0, 2)));
+      const oldOdd = "waitron-20250101T000000Z-a\\b.backup.enc";
+      for (const name of [fresh, oldPlain, oldOdd]) await writeFile(join(dir, name), "x");
+
+      await pruneBackend(new LocalFsBackend("odd", dir), 5, 30, nowMs, {
+        signal: new AbortController().signal,
+      });
+
+      expect((await readdir(dir)).sort()).toEqual([fresh, oldOdd].sort());
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not count a name the destination cannot address toward the kept newest", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "backup-prune-odd-slot-"));
+    try {
+      const nowMs = Date.UTC(2026, 9, 13);
+      const plain = backupArchiveKey(new Date(Date.UTC(2026, 9, 10)));
+      const odd = "waitron-20261011T000000Z-a\\b.backup.enc";
+      await writeFile(join(dir, plain), "x");
+      await writeFile(join(dir, odd), "x");
+      await utimes(join(dir, plain), 1000, 1000);
+      await utimes(join(dir, odd), 2000, 2000);
+
+      await pruneBackend(new LocalFsBackend("odd", dir), 1, 3650, nowMs, {
+        signal: new AbortController().signal,
+      });
+
+      expect((await readdir(dir)).sort()).toEqual([plain, odd].sort());
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });
 // The default manifest builder, which every case above replaces, against a real migrated venue.

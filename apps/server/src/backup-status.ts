@@ -31,7 +31,9 @@ async function destinationStatus(
   staleAfterMs: number,
   now: Date,
 ): Promise<DestinationStatus> {
-  const objects = await backend.list(BACKUP_KEY_PREFIX); // newest-first
+  const objects = await backend.list(BACKUP_KEY_PREFIX, {
+    signal: new AbortController().signal,
+  }); // newest-first
   const newest = objects[0];
   if (newest === undefined) {
     return { id: backend.id, lastBackupAt: null, ageSeconds: null, stale: true };

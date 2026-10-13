@@ -4149,13 +4149,23 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   `deploy/waitron.sh`'s call order, not reproduced. Pin file downloads to the resolved commit
   in a separate deployment change. A490 pins both image builds only.
 
-- **S3-compatible bucket, then Google Drive.** The bucket stream of `venue.db` is built (slice 2);
-  the archive's S3 backend is not — only `LocalFsBackend` exists for archives. The abort-aware
-  per-destination timeout lands with the first network backend.
+- **S3-compatible bucket, then Google Drive.** The bucket stream of `venue.db` is built (slice 2).
+  The archive's bucket destination (`S3Backend` over `S3FileStore`) is built but nothing can
+  configure it yet, so `LocalFsBackend` is still the only archive destination in use.
   A538's [draft design](superpowers/specs/2026-10-12-a538-archive-s3-design.md) and
   [implementation plan](superpowers/plans/2026-10-12-a538-archive-s3.md): the owner approved the
   proposed defaults on 2026-10-12. Plan Task 1, which makes the bucket stream's calls cancellable,
-  is built (A538-1); the remaining tasks and the real-AWS evidence are open.
+  is built (A538-1), and so is Task 2, which moves archive files to and from a bucket without
+  holding them in memory (A538-2). Tasks 3 to 10 and the real-AWS evidence are open; Task 3 owns
+  the per-destination time limit. Points left for Task 3 by A538-2: `StorageBackend` has no
+  `close()`, so a bucket client would never be disposed; the sweep's stop signal does not reach
+  destination calls yet; and the folder destination reports a cancelled call as an uncoded error (the
+  signal's reason, or Node's `AbortError`) where the bucket destination reports
+  `backup.destination_request_failed`.
+  `S3FileStore`'s listing and batch delete repeat `S3ObjectStore`'s (`packages/stream/src/s3-store.ts`)
+  with different error codes, and only the file store's refuses a repeated key or bad size and
+  counts `NoSuchKey` as deleted; share them, deciding whether the bucket stream takes those checks
+  too.
 
 - **Whole-state-volume capture** (its own §5-reviewed slice): capture the whole state directory EXCEPT
   an explicit exclusion set, with a completeness guard that fails when a new top-level entry is
@@ -4163,8 +4173,7 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   [Detail](backlog/box.md#backup--restore--carry-forwards-b2)
 
 - **Backup & restore — carry-forwards (B2)** — left open by the restore hook (SP-3d, #248) and the
-  dashboard wizard (#295). Named carry-forwards: a stale-`.tmp` sweep; confirm the `StorageBackend`
-  key path-traversal guard landed with BR-3's manifest-driven `get(key)`; a working-backup boot
+  dashboard wizard (#295). Named carry-forwards: a stale-`.tmp` sweep; a working-backup boot
   success-path integration test; scope the flat `resolvers` map by module when a second `nonDbState`
   module lands; a `packArchive` pack-time entries bound; a manifest-shape coded refusal (it fails
   safe under GCM auth today); generalise archive entry routing off declared source ids when a second

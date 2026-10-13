@@ -41,8 +41,10 @@ const BUCKET_IDLE_MS = 30_000;
 export function createBucketClient(
   config: BucketConfig,
   options: S3ObjectStoreOptions = {},
+  checksums: Pick<S3ClientConfig, "requestChecksumCalculation"> = {},
 ): S3Client {
   return new S3Client({
+    ...checksums,
     region: config.region,
     ...(config.endpoint === undefined ? {} : { endpoint: config.endpoint }),
     // Litestream's own rule, from its configuration reference: path style "is automatically enabled

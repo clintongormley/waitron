@@ -1,6 +1,6 @@
 /**
- * The error names a log line may carry, and that `createS3ObjectStore` puts in
- * `backup.stream_request_failed`'s `name`. The bucket can supply the name, and the log tail is shown
+ * The error names a log line may carry, and that `createS3ObjectStore` and `createS3FileStore` put in
+ * `backup.stream_request_failed`'s and `backup.destination_request_failed`'s `name`. The bucket can supply the name, and the log tail is shown
  * on the unauthenticated recovery page, so a name off these lists becomes
  * {@link UNLISTED_ERROR_NAME}, never the bucket's text.
  *
@@ -96,14 +96,16 @@ const S3_ERROR_NAMES = [
   "ConditionalRequestConflict",
 ] as const;
 
-/** The names `s3-store.ts` gives an answer it refused. */
+/** The names `s3-store.ts` and `s3-file-store.ts` give an answer they refused. */
 export const ANSWER_REFUSALS = [
   "IncompleteDeleteResult",
   "IncompleteListing",
   "IncompleteResponse",
+  "InvalidSize",
   "MissingContinuationToken",
   "MissingETag",
   "RepeatedContinuationToken",
+  "RepeatedKey",
 ] as const;
 
 export type AnswerRefusal = (typeof ANSWER_REFUSALS)[number];

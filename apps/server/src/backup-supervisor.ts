@@ -16,13 +16,13 @@ import { openVenueDatabase, type SingletonRole, type VenueDatabase } from "@wait
 import type { WaitronModule } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { codeOf } from "@waitron/server-kit";
+import { buildBackupBackend } from "./backup-backends.js";
 import type { BackupConfig, BackupSchedule } from "./backup-config.js";
 import type { ScheduleClock } from "./backup-schedule.js";
 import { readBackupStatus, type BackupStatus } from "./backup-status.js";
 import { runBackupSweep } from "./backup-sweep.js";
 import type { BackupOutcomeHolder } from "./alert-sources.js";
 import type { DeploymentEnvironment } from "./config.js";
-import { buildBackend } from "./local-fs-backend.js";
 import { realSleep } from "./loop.js";
 import type { Logger } from "./logger.js";
 import "./errors.js";
@@ -135,7 +135,7 @@ export class BackupSupervisor {
       const controller = new AbortController();
       this.#controller = controller;
       this.#worker = runBackupSweep({
-        backends: cfg.destinations.map(buildBackend),
+        backends: cfg.destinations.map(buildBackupBackend),
         db: venue.venue,
         modules: this.#deps.modules,
         environment: this.#deps.environment,
@@ -193,7 +193,7 @@ export class BackupSupervisor {
     const base = this.current();
     const cfg = this.#config;
     const now = this.#now();
-    const backends = cfg?.destinations.map(buildBackend) ?? [];
+    const backends = cfg?.destinations.map(buildBackupBackend) ?? [];
     const backupStatus = await readBackupStatus(backends, cfg?.staleAfterMs ?? 0, now);
     return { ...base, backupStatus, archiveUnderCurrentKey: this.#storedUnderCurrentKey };
   }
