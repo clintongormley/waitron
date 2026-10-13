@@ -38,7 +38,10 @@ function text(value: unknown): value is string {
   );
 }
 
-export function parseRecoveryOperationInput(value: unknown): RecoveryOperationInput | null {
+function parseOperationInput(
+  value: unknown,
+  actions: readonly string[],
+): RecoveryOperationInput | null {
   if (
     !exact(value, ["binding", "input"]) ||
     !exact(value.binding, ["module", "action", "eventId", "sourceId", "targetNodeId"])
@@ -49,7 +52,7 @@ export function parseRecoveryOperationInput(value: unknown): RecoveryOperationIn
     !text(module) ||
     !/^[a-z][a-z0-9-]*$/.test(module) ||
     typeof action !== "string" ||
-    !["restore", "re-register", "promote"].includes(action) ||
+    !actions.includes(action) ||
     !text(eventId) ||
     !text(sourceId) ||
     typeof targetNodeId !== "string" ||
@@ -66,6 +69,14 @@ export function parseRecoveryOperationInput(value: unknown): RecoveryOperationIn
   } catch {
     return null;
   }
+}
+
+export function parseRecoveryOperationInput(value: unknown): RecoveryOperationInput | null {
+  return parseOperationInput(value, ["restore", "re-register", "promote"]);
+}
+
+export function parseStandbyOperationInput(value: unknown): RecoveryOperationInput | null {
+  return parseOperationInput(value, ["reserve", "establish", "promote"]);
 }
 
 export async function readRecoveryOperationFile(path: string): Promise<RecoveryOperationInput> {

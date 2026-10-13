@@ -136,6 +136,13 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
   const moduleConfig = await readModuleConfig(deps.stateDir);
   const modules = enabledModules(ALL_MODULES, moduleConfig);
 
+  for (const name of operations.keys()) {
+    if (
+      !modules.some((module) => module.name === name && module.provisioning?.standby !== undefined)
+    )
+      throw new AppError("module.operation_invalid", { module: name });
+  }
+
   // Every module's reservation shares one transaction, so their reads and allocations agree.
   const [reserved, primaryPrivateKey, boxCaPem] = await Promise.all([
     withPreparedModuleOperations(modules, operations, standby.nodeId, "reserve", (prepared) =>

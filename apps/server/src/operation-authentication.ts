@@ -30,6 +30,21 @@ export async function withRecoveryKeyOperation<T>(
   run: (tx: Transaction, authority: OperationAuthority) => Promise<T>,
   collect?: (authority: OperationAuthority, commit: () => Promise<T>) => Promise<T>,
 ): Promise<T> {
+  return withRecoveryKeyAuthority(deps, operation, secret, (authority, commit) => {
+    const perform = () => commit((tx) => run(tx, authority));
+    return collect === undefined ? perform() : collect(authority, perform);
+  });
+}
+
+export async function withRecoveryKeyAuthority<T>(
+  deps: { readonly db: Database; readonly nodeId: string },
+  operation: OperationBinding,
+  secret: unknown,
+  run: (
+    authority: OperationAuthority,
+    commit: <R>(body: (tx: Transaction) => Promise<R>) => Promise<R>,
+  ) => Promise<T>,
+): Promise<T> {
   const binding = { ...operation };
   const targetNodeId = deps.nodeId;
   const refuse = (): never => {
@@ -51,17 +66,17 @@ export async function withRecoveryKeyOperation<T>(
       const authorise = (): void => {
         if (readOperationAuthority(authority, binding) === undefined) refuse();
       };
-      const commit = async () => {
+      const commit = async <R>(body: (tx: Transaction) => Promise<R>): Promise<R> => {
         authorise();
         return withTransaction(deps.db, async (tx) => {
           authorise();
           if ((await readBreakGlassVerifier(tx, targetNodeId)) !== verifier) return refuse();
-          const result = await run(tx, authority);
+          const result = await body(tx);
           authorise();
           return result;
         });
       };
-      return collect === undefined ? commit() : collect(authority, commit);
+      return run(authority, commit);
     },
   );
 }

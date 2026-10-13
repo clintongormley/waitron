@@ -17,6 +17,7 @@ import {
   disabledProvisionOnly,
   enabledModules,
   fiscalSlot,
+  type WaitronModule,
   type ModuleConfig,
 } from "@waitron/module";
 import { ALL_MODULES } from "./modules.js";
@@ -57,6 +58,7 @@ export interface ProvisionDeps {
 export async function recoverProvisionedVenue(
   ownerDb: Database,
   req: ProvisionRequest,
+  availableModules: readonly WaitronModule[] = ALL_MODULES,
 ): Promise<VenueResult> {
   const venue = structuredClone(req.venue);
   const initial =
@@ -70,8 +72,8 @@ export async function recoverProvisionedVenue(
     { code: venue.fullSeriesCode ?? "FF", purpose: "full" },
     { code: venue.rectificativeSeriesCode, purpose: "rectificative" },
   ];
-  const selection = venueFiscalSelection(ALL_MODULES, venue.location.fiscalTerritory);
-  const owners = enabledModules(ALL_MODULES, selection.config).filter(
+  const selection = venueFiscalSelection(availableModules, venue.location.fiscalTerritory);
+  const owners = enabledModules(availableModules, selection.config).filter(
     (module) =>
       module.fiscal?.id === selection.contribution?.id &&
       module.provisioning?.seed?.series !== undefined,

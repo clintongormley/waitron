@@ -811,3 +811,29 @@ The public initial setup path was qualified in the previous checkpoint. Default 
 readiness, standby HTTP/boot consumers, text SIF/counter retirement, current-main schema regeneration,
 populated upgrade, Cloud binding and both full reviews/hook/current-head CI remain. Task 4 is
 incomplete; do not publish this candidate.
+
+
+### W41s-4 public standby and readiness input, 2026-10-13
+
+The bundle and promotion routes accept a detached `moduleOperation` containing the generic binding
+and public evidence. A bundle request authenticates `mirror.create`, binds the original primary and
+requested standby, and rejects operations for modules that the enabled set does not reserve.
+Promotion authenticates an account holding `node.promote` or the node recovery key; its scoped
+runner collects before the write transaction. The key verifier is checked again at commit.
+A committed promotion retry authenticates but skips outside collection and returns the existing
+series. Boot passes the enabled modules and runner to mirror promotion.
+
+Readiness accepts `initialOperations` for its own preproduction allocation and stamps only its
+separate test database. Recovery uses the same supplied module set and committed allocation-owned
+references. In `apps/server/src/fiscal-readiness-allocation.test.ts`, a signed synthetic allocation
+produces `A-S000042/1`; a retry with the outside confirmation removed compares all saved SIF,
+allocation and invoice rows. Acceptance is simulated in that case. The existing real-drain refusal
+case remains in the focused checks; no live AEAT acceptance is claimed.
+
+The generic route cases use a test module; separate signed fiscal HTTP cases exercise the actual
+paper source and dormant/activation contributions. A real boot uses a test contribution to check
+both credential paths and wiring. Fiscal descriptors are supplied explicitly in the fiscal cases.
+Adoption still has its existing missing-copy limitation; no new copy mechanism or boot-time
+establishment credential is supplied here. Default fiscal descriptors, text SIF/counter retirement,
+current-main regeneration/populated upgrade, Cloud binding and both full reviews/hook/current-head
+CI remain. This is an incomplete Task 4 checkpoint, with no intermediate PR.

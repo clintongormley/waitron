@@ -84,6 +84,7 @@ import {
 import type {
   FenceAttestation,
   MirrorPromotionResult,
+  PromotionOperationRunner,
   PromoteDeps,
   PromotionResult,
 } from "./promote.js";
@@ -1003,6 +1004,7 @@ async function bootServer(
                 migrationsRoot: config.migrationsRoot,
                 modules,
                 venue: request.venue,
+                initialOperations: request.initialOperations,
                 contribution,
                 secret,
                 ring,
@@ -2011,10 +2013,13 @@ async function bootServer(
   // An already-primary re-run is a no-op that skips the restart.
   const promoteMirrorRun = async (
     attestation: FenceAttestation,
+    withModuleOperations?: PromotionOperationRunner,
   ): Promise<MirrorPromotionResult> => {
     const result = await promoteMirrorToPrimary(
       {
         ...promoteDeps,
+        modules: setsToMigrate,
+        withModuleOperations,
         persistTradingEnv: async () => {
           const next: TradingConfig = {
             nodeId: till.nodeId,
@@ -2036,9 +2041,12 @@ async function bootServer(
 
   // The promote endpoint's delegate. On a non-mirror it only reports status; it NEVER calls
   // `promoteLocalSecondaryToPrimary` (shelved active-active).
-  const promoteRun = async (attestation: FenceAttestation): Promise<PromoteRunResult> => {
+  const promoteRun = async (
+    attestation: FenceAttestation,
+    withModuleOperations?: PromotionOperationRunner,
+  ): Promise<PromoteRunResult> => {
     if (isMirror) {
-      const result = await promoteMirrorRun(attestation);
+      const result = await promoteMirrorRun(attestation, withModuleOperations);
       return { alreadyPrimary: result.alreadyPrimary, restarting: !result.alreadyPrimary };
     }
     const held = await readNodeMembership(db);
@@ -2048,7 +2056,13 @@ async function bootServer(
 
   mountPromoteApi(
     app,
-    { appDb: db, nodeId: till.nodeId, credentialKeyRing: totpKeyRing, run: promoteRun },
+    {
+      appDb: db,
+      nodeId: till.nodeId,
+      credentialKeyRing: totpKeyRing,
+      modules: setsToMigrate,
+      run: promoteRun,
+    },
     log,
   );
 

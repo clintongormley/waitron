@@ -883,3 +883,23 @@ The default fiscal seed/restore/standby contributions still need to switch toget
 and counter retirement. Remaining public authentication/input consumers, schema regeneration and
 populated upgrade, Cloud operator binding, two FULL reviews, hook and current-head CI remain.
 This is not a publication candidate. Local receipts use the `w41s4-production-*` prefix.
+
+
+**2026-10-13 public standby/readiness checkpoint:** the bundle and promotion HTTP routes accept
+opaque generic operation input and scope it to fresh account or recovery-key authentication.
+Bundle operations are bound to the primary/standby and selected reserving module. Promotion uses
+a scoped runner that collects outside evidence only when activation is needed, checks a replaced
+node verifier at commit, and shares activation/series/role/membership writes. Boot forwards the
+enabled set and runner. Signed fiscal HTTP cases supply the real paper source and allocated
+standby contribution; generic route and boot cases use test contributions.
+
+Readiness now carries separately supplied initial allocation input into its isolated preproduction
+venue, stamps that database, and recovers committed allocated references through the supplied
+module set. The signed sample case checks the recorded identity/invoice and complete returned-row
+comparisons after retry with the confirmation removed. Its accepted drain reply is simulated;
+the existing real-drain refusal case also runs. No live authority probe or default fiscal descriptor
+switch is claimed. Adoption's missing-copy limit remains, without persisted authentication.
+
+The coupled default-descriptor/text-SIF/counter/remaining-consumer transition, current-main schema
+regeneration/populated upgrade, Cloud operator union, two FULL reviews and normal hook/current-head
+CI remain. Task 4 is still incomplete and this checkpoint must not be published.
