@@ -338,6 +338,26 @@ describe("saveSeason", () => {
     expect(await seasonsOf(v)).toEqual(THREE);
   });
 
+  it("renames under a stale clock revision, while a move under the same revision is refused", async () => {
+    const v = await autumnVenue();
+    const renamed = await scoped((tx) =>
+      saveSeason(tx, v.cfg, v.lateAutumn, { name: "Fall", startsOn: "11-01" }, AT, 1),
+    );
+    expect(renamed).toEqual({ id: v.lateAutumn, name: "Fall", startsOn: "11-01" });
+    expect(
+      await refusal(
+        scoped((tx) =>
+          saveSeason(tx, v.cfg, v.lateAutumn, { name: "Fall", startsOn: "11-05" }, AT, 1),
+        ),
+      ),
+    ).toEqual({ code: "hours.clock_changed", params: {} });
+    expect(await seasonsOf(v)).toEqual([
+      { name: "Autumn", startsOn: "09-01" },
+      { name: "Fall", startsOn: "11-01" },
+      { name: "Winter", startsOn: "12-01" },
+    ]);
+  });
+
   it("refuses another venue's season", async () => {
     const v = await autumnVenue();
     const other = await autumnVenue();
@@ -435,6 +455,20 @@ describe("deleteSeason", () => {
       await db.select().from(departmentDays).where(eq(departmentDays.seasonId, christmas.id)),
     ).toEqual([]);
     expect(await db.select().from(zoneDays).where(eq(zoneDays.seasonId, christmas.id))).toEqual([]);
+  });
+
+  it("gives the first season's days to the last one when the first is deleted, and removes its weeks", async () => {
+    const v = await autumnVenue();
+    expect(await seasonOnDay(v, "2030-09-15")).toBe(v.autumn);
+    expect(await terrazaWeek(v, v.autumn)).toEqual(v.zoneWeek);
+    await scoped((tx) => deleteSeason(tx, v.cfg, v.autumn, AT, 0));
+    expect(await seasonOnDay(v, "2030-09-15")).toBe(v.winter);
+    expect(await seasonsOf(v)).toEqual(THREE.slice(1));
+    expect(
+      await db.select().from(departmentDays).where(eq(departmentDays.seasonId, v.autumn)),
+    ).toEqual([]);
+    expect(await db.select().from(zoneDays).where(eq(zoneDays.seasonId, v.autumn))).toEqual([]);
+    expect(await restaurantWeek(v, v.winter)).toEqual(v.winterWeek);
   });
 
   it("refuses deleting the last season", async () => {
