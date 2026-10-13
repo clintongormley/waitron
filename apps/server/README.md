@@ -378,6 +378,10 @@ schedule are kept. If that second write fails, the new key is already in effect:
 read is never rewritten: rotation then changes only the key, and answers the read's error code as
 `loadErrorCode`.
 
+The tests check the bucket copy against versitygw, a local stand-in for S3. A rehearsal against Amazon
+S3 itself runs only by hand: see
+[aws-backup-rehearsal.md](../../docs/developers/aws-backup-rehearsal.md).
+
 ## What `/health` means
 
 `GET /health` is unauthenticated — no metrics, no auth, no readiness/liveness split. It is

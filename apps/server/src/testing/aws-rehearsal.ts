@@ -691,7 +691,7 @@ function assertCleanupCommandFits(region: string, runId: string, receiptDir: str
         "receipt-dir-unsupported",
         tooLong
           ? `the receipt folder's path is too long for a cleanup command of at most ${CLEANUP_COMMAND_MAX} characters`
-          : "the receipt folder's path may hold only letters, digits and . _ @ - between its slashes",
+          : "the receipt folder's path may hold only letters, digits and . _ @ - between its slashes, and be at most 40 folders deep",
       );
     }
   }

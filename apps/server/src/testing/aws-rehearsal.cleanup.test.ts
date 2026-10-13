@@ -560,6 +560,21 @@ describe("cleanupFromReceipt fix round 1", () => {
     const error = await refusal(cleanupFromReceipt(receiptPath, h.deps));
     expect((error as AwsRehearsalRefused).reason).toBe("receipt-dir-unsupported");
     expect(error.message).toContain("may hold only letters, digits and . _ @ -");
+    expect(error.message).toContain("at most 40 folders deep");
+    expect(error.message).not.toContain("512");
+    expect(h.createAdminClient).not.toHaveBeenCalled();
+  });
+
+  it("refuses a receipt more than 40 folders deep, saying so, though its path is short", async () => {
+    const folder = join(dir, ...Array.from({ length: 41 }, () => "d"));
+    await mkdir(folder, { recursive: true });
+    receiptPath = join(folder, `aws-rehearsal-${RUN_ID}.json`);
+    expect(receiptPath.length).toBeLessThan(512);
+    await writeLeft(leftReceipt());
+    const h = harness();
+    const error = await refusal(cleanupFromReceipt(receiptPath, h.deps));
+    expect((error as AwsRehearsalRefused).reason).toBe("receipt-dir-unsupported");
+    expect(error.message).toContain("at most 40 folders deep");
     expect(error.message).not.toContain("512");
     expect(h.createAdminClient).not.toHaveBeenCalled();
   });
