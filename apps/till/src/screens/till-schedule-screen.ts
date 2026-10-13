@@ -193,6 +193,7 @@ export class TillScheduleScreen extends LitElement {
   @state() private failed: ReadonlySet<ScheduleRead> = new Set();
   @state() private noticeCode?: string;
   @state() private busy = false;
+  @state() private reloading = false;
 
   @state() private coverShiftId = "";
   @state() private coverColleagueId = "";
@@ -205,7 +206,7 @@ export class TillScheduleScreen extends LitElement {
   #absenceScope?: DraftScope<AbsenceDraft>;
   #leave?: LeaveCoordinator;
   #connection = 0;
-  #loading?: Promise<void>;
+  #generation = 0;
 
   #coverDraft(): CoverDraft {
     return { fromShiftId: this.coverShiftId, toPersonId: this.coverColleagueId, toShiftId: null };
@@ -289,22 +290,25 @@ export class TillScheduleScreen extends LitElement {
   }
 
   #retry(): void {
-    if (!this.isConnected || this.#loading) return;
+    if (!this.isConnected || this.reloading) return;
     this.failed = new Set();
     void this.#reload();
   }
 
-  #reload(): Promise<void> {
-    const loading = this.#loadLists().finally(() => {
-      if (this.#loading === loading) this.#loading = undefined;
-    });
-    this.#loading = loading;
-    return loading;
+  async #reload(): Promise<void> {
+    const generation = ++this.#generation;
+    this.reloading = true;
+    try {
+      await this.#loadLists(generation);
+    } finally {
+      if (generation === this.#generation) this.reloading = false;
+    }
   }
 
-  async #loadLists(): Promise<void> {
+  async #loadLists(generation: number): Promise<void> {
     const connection = this.#connection;
-    const current = () => this.isConnected && connection === this.#connection;
+    const current = () =>
+      this.isConnected && connection === this.#connection && generation === this.#generation;
     const read = async <T>(
       name: ScheduleRead,
       fetch: () => Promise<T>,
@@ -451,7 +455,12 @@ export class TillScheduleScreen extends LitElement {
   }
 
   #body() {
-    if (this.shifts === undefined && this.failed.size === 0) {
+    if (
+      this.shifts === undefined &&
+      this.swaps === undefined &&
+      this.absences === undefined &&
+      this.failed.size === 0
+    ) {
       return html`<p class="status" role="status">${t("schedule.loading")}</p>`;
     }
     return html`
@@ -459,7 +468,12 @@ export class TillScheduleScreen extends LitElement {
         this.failed.size > 0
           ? html`<div class="load-failed">
               <p class="notice" role="alert">${t("schedule.load_failed")}</p>
-              <wt-button class="retry" variant="secondary" @click=${() => this.#retry()}>
+              <wt-button
+                class="retry"
+                variant="secondary"
+                .loading=${this.reloading}
+                @click=${() => this.#retry()}
+              >
                 ${t("schedule.retry")}
               </wt-button>
             </div>`
@@ -476,6 +490,12 @@ export class TillScheduleScreen extends LitElement {
       : nothing;
   }
 
+  #listLoading(read: ScheduleRead) {
+    return this.failed.has(read)
+      ? nothing
+      : html`<p class="status" role="status">${t("schedule.loading")}</p>`;
+  }
+
   #shiftsSection() {
     const shifts = this.shifts;
     return html`<section class="shifts">
@@ -483,7 +503,7 @@ export class TillScheduleScreen extends LitElement {
       ${this.#listFailed("shifts", t("schedule.shifts_failed"))}
       ${
         shifts === undefined
-          ? nothing
+          ? this.#listLoading("shifts")
           : shifts.length === 0
             ? html`<p class="status">${t("schedule.shifts_empty")}</p>`
             : html`<ul>
@@ -507,7 +527,7 @@ export class TillScheduleScreen extends LitElement {
       ${this.#listFailed("swaps", t("schedule.swaps_failed"))}
       ${
         offered === undefined
-          ? nothing
+          ? this.#listLoading("swaps")
           : offered.length === 0
             ? html`<p class="status">${t("schedule.swaps_empty")}</p>`
             : html`<ul>
@@ -609,7 +629,7 @@ export class TillScheduleScreen extends LitElement {
       ${this.#listFailed("absences", t("schedule.absences_failed"))}
       ${
         absences === undefined
-          ? nothing
+          ? this.#listLoading("absences")
           : absences.length === 0
             ? html`<p class="status">${t("schedule.absences_empty")}</p>`
             : html`<ul>

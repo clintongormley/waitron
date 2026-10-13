@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { WtCombobox } from "@waitron/ui";
+import type { WtButton, WtCombobox } from "@waitron/ui";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { localIsoDate, scheduleWindow } from "./till-schedule-screen.js";
@@ -397,7 +397,11 @@ describe("till-schedule-screen", () => {
   });
 
   it("does not call a list that never loaded empty when the first load fails", async () => {
-    const api = stubApi({ listMyShifts: vi.fn().mockRejectedValue(new Error("network")) });
+    const api = stubApi({
+      listMyShifts: vi.fn().mockRejectedValue(new Error("network")),
+      listMySwaps: vi.fn().mockRejectedValue(new Error("network")),
+      listMyAbsences: vi.fn().mockRejectedValue(new Error("network")),
+    });
     const { el } = await mount(api);
     const text = root(el).textContent!;
     expect(root(el).querySelector('[role="alert"]')?.textContent).toContain(
@@ -568,6 +572,130 @@ describe("till-schedule-screen", () => {
     const { el } = await mount(api);
     const status = root(el).querySelector('[role="status"]');
     expect(status?.textContent?.trim()).toBe(t("schedule.loading"));
+  });
+
+  it("shows one loading line, and no lists, while no list has answered", async () => {
+    const pending = () => vi.fn().mockReturnValue(new Promise(() => {}));
+    const api = stubApi({
+      listMyShifts: pending(),
+      listMySwaps: pending(),
+      listMyAbsences: pending(),
+    });
+    const { el } = await mount(api);
+    const statuses = root(el).querySelectorAll('[role="status"]');
+    expect(statuses).toHaveLength(1);
+    expect(statuses[0]!.textContent?.trim()).toBe(t("schedule.loading"));
+    expect(root(el).querySelector("section")).toBeNull();
+  });
+
+  it("shows the swaps and time off that answered while shifts are still loading", async () => {
+    const api = stubApi({ listMyShifts: vi.fn().mockReturnValue(new Promise(() => {})) });
+    const { el } = await mount(api);
+    expect(root(el).querySelectorAll(".swap")).toHaveLength(1);
+    expect(root(el).querySelectorAll(".absence")).toHaveLength(1);
+    const statuses = root(el).querySelectorAll('[role="status"]');
+    expect(statuses).toHaveLength(1);
+    expect(root(el).querySelector('.shifts [role="status"]')?.textContent?.trim()).toBe(
+      t("schedule.loading"),
+    );
+    expect(root(el).textContent).not.toContain(t("schedule.shifts_empty"));
+    const shiftPicker = root(el).querySelector<WtCombobox>('wt-combobox[name="cover-shift"]')!;
+    expect(shiftPicker.options.map((o) => o.value)).toEqual([""]);
+    expect(root(el).querySelector("wt-button.cover-submit")!.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("shows the loading line under swaps while swaps are still loading", async () => {
+    const api = stubApi({ listMySwaps: vi.fn().mockReturnValue(new Promise(() => {})) });
+    const { el } = await mount(api);
+    expect(root(el).querySelectorAll(".shift")).toHaveLength(1);
+    expect(root(el).querySelectorAll(".absence")).toHaveLength(1);
+    expect(root(el).querySelectorAll('[role="status"]')).toHaveLength(1);
+    expect(root(el).querySelector('.swaps [role="status"]')?.textContent?.trim()).toBe(
+      t("schedule.loading"),
+    );
+  });
+
+  it("shows the loading line under a failed list while Try again asks for it again", async () => {
+    const api = stubApi({
+      listMySwaps: vi
+        .fn()
+        .mockRejectedValueOnce(new Error("network"))
+        .mockReturnValueOnce(new Promise(() => {})),
+    });
+    const { el } = await mount(api);
+    expect(root(el).querySelector('.swaps [role="status"]')).toBeNull();
+    root(el).querySelector<HTMLElement>("wt-button.retry")!.click();
+    await flush(el);
+    expect(root(el).querySelector(".swaps .list-failed")).toBeNull();
+    expect(root(el).querySelector('.swaps [role="status"]')?.textContent?.trim()).toBe(
+      t("schedule.loading"),
+    );
+    expect(root(el).querySelectorAll(".shift")).toHaveLength(1);
+  });
+
+  it("shows Try again as loading while an action's reload runs, and stops when it settles", async () => {
+    let failReload!: (error: Error) => void;
+    const listMySwaps = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("network"))
+      .mockReturnValueOnce(new Promise<MySwap[]>((_, reject) => (failReload = reject)));
+    const { el } = await mount(stubApi({ listMySwaps }));
+    const retry = () => root(el).querySelector<WtButton>("wt-button.retry")!;
+    expect(retry().hasAttribute("loading")).toBe(false);
+    setInput(el, "wt-input.abs-from", "2026-07-01");
+    setInput(el, "wt-input.abs-to", "2026-07-05");
+    await el.updateComplete;
+    root(el).querySelector<HTMLElement>("wt-button.abs-submit")!.click();
+    await vi.waitFor(() => expect(listMySwaps).toHaveBeenCalledTimes(2));
+    await flush(el);
+    expect(retry().loading).toBe(true);
+    expect(retry().hasAttribute("loading")).toBe(true);
+    failReload(new Error("network"));
+    await flush(el);
+    expect(retry().loading).toBe(false);
+    expect(retry().hasAttribute("loading")).toBe(false);
+  });
+
+  it("drops an older load's rows when they arrive after a newer load's", async () => {
+    let answerOld!: (rows: MySwap[]) => void;
+    const listMySwaps = vi
+      .fn()
+      .mockReturnValueOnce(new Promise<MySwap[]>((resolve) => (answerOld = resolve)))
+      .mockResolvedValue([]);
+    const { el } = await mount(stubApi({ listMySwaps }));
+    setInput(el, "wt-input.abs-from", "2026-07-01");
+    setInput(el, "wt-input.abs-to", "2026-07-05");
+    await el.updateComplete;
+    root(el).querySelector<HTMLElement>("wt-button.abs-submit")!.click();
+    await vi.waitFor(() => expect(listMySwaps).toHaveBeenCalledTimes(2));
+    await flush(el);
+    expect(root(el).textContent).toContain(t("schedule.swaps_empty"));
+    answerOld(swaps);
+    await flush(el);
+    expect(root(el).querySelectorAll(".swap")).toHaveLength(0);
+    expect(root(el).textContent).toContain(t("schedule.swaps_empty"));
+  });
+
+  it("drops an older load's failure when it arrives after a newer load loaded the list", async () => {
+    let failOld!: (error: Error) => void;
+    const listMySwaps = vi
+      .fn()
+      .mockReturnValueOnce(new Promise<MySwap[]>((_, reject) => (failOld = reject)))
+      .mockResolvedValue(swaps);
+    const { el } = await mount(stubApi({ listMySwaps }));
+    setInput(el, "wt-input.abs-from", "2026-07-01");
+    setInput(el, "wt-input.abs-to", "2026-07-05");
+    await el.updateComplete;
+    root(el).querySelector<HTMLElement>("wt-button.abs-submit")!.click();
+    await vi.waitFor(() => expect(listMySwaps).toHaveBeenCalledTimes(2));
+    await flush(el);
+    expect(root(el).querySelectorAll(".swap")).toHaveLength(1);
+    failOld(new Error("network"));
+    await flush(el);
+    expect(root(el).querySelector(".list-failed")).toBeNull();
+    expect(root(el).textContent).not.toContain(t("schedule.load_failed"));
+    expect(root(el).querySelector("wt-button.retry")).toBeNull();
+    expect(root(el).querySelectorAll(".swap")).toHaveLength(1);
   });
 
   it("drops a chosen shift that a reload no longer lists, and keeps one it still lists", async () => {
