@@ -112,11 +112,6 @@ tab, and setup's Done link opens it.
 **Left open by A506-1, for the later parts.**
 - No test yet gives a second department its own paint on the same special day.
 
-**Left open by A506-2, for the later parts.**
-- A506-6: when seasons become editable, adding, deleting or moving one must re-check end offsets
-  across the boundaries it changes (`findSeasonEndOffsetClash`,
-  `packages/venue-service/src/period-end-offset.ts`).
-
 **Left open by A506-3, for the later parts.**
 - A506-6: a Day-tab draft takes its season when Save is pressed; once a season's start can move, a
   draft built for one season could be saved under the next. Season edits should bump the clock
