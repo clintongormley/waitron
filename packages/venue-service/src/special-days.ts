@@ -44,19 +44,30 @@ const yearOf = (date: LocalDate) => Number(date.slice(0, 4));
 const followsHoliday = (rule: SpecialDayDateRule) =>
   rule.repeats && rule.holidayName !== undefined && rule.holidayName !== null;
 
-/** The holiday lists the rules need from `fromYear` through `toYear`: none, and nothing read, when
- *  no rule is a repeating date that follows a holiday's name. */
+/** The holiday lists the rules need over `years` (by default their `holidayHorizon`): none, and
+ *  nothing read, when no rule is a repeating date that follows a holiday's name. */
 export async function holidayDatesFor(
   tx: Transaction,
   cfg: VenueScope,
   rules: readonly SpecialDayDateRule[],
-  fromYear: number,
-  toYear: number,
+  [fromYear, toYear]: readonly [number, number] = holidayHorizon(rules),
 ): Promise<HolidayDates> {
   const named = rules.filter(followsHoliday);
   if (named.length === 0) return NO_HOLIDAY_DATES;
   const first = Math.min(...named.map((rule) => yearOf(rule.date))) + 1;
   return readHolidayDates(tx, cfg, Math.max(fromYear, first), toYear);
+}
+
+const yearsInOrder = new WeakMap<HolidayDates, readonly number[]>();
+
+/** The years `holidays` holds, ascending; sorted once per map. */
+function holidayYears(holidays: HolidayDates): readonly number[] {
+  let years = yearsInOrder.get(holidays);
+  if (years === undefined) {
+    years = [...holidays.keys()].sort((a, b) => a - b);
+    yearsInOrder.set(holidays, years);
+  }
+  return years;
 }
 
 /** The official name of the first public holiday on `date`, or null. */
@@ -65,11 +76,15 @@ function holidayNameOn(holidays: HolidayDates, date: LocalDate): string | null {
   return null;
 }
 
-/** The years a check over every future occurrence walks: 400 from the earliest date, as
- *  `findSeasonEndOffsetClash` does. */
-export function holidayHorizon(rules: readonly { date: LocalDate }[]): [number, number] {
+/** The years a check over every future occurrence walks, from the earliest date: 400 from it, or
+ *  from `walkFrom` when that is later, as `findSeasonEndOffsetClash` does. No years without rules. */
+export function holidayHorizon(
+  rules: readonly { date: LocalDate }[],
+  walkFrom = -Infinity,
+): [number, number] {
+  if (rules.length === 0) return [1, 0];
   const first = Math.min(...rules.map((rule) => yearOf(rule.date)));
-  return [first, Math.min(first + 400, 9999)];
+  return [first, Math.min(Math.max(first, walkFrom) + 400, 9999)];
 }
 
 /** Where a special-day date falls in `year`: a one-off only in its own year, a repeating one from
@@ -79,10 +94,9 @@ export function holidayHorizon(rules: readonly { date: LocalDate }[]): [number, 
 export function specialDateIn(
   rule: SpecialDayDateRule,
   year: number,
-  holidays?: HolidayDates,
+  holidays: HolidayDates,
 ): LocalDate | null {
   if (!followsHoliday(rule) || year <= yearOf(rule.date)) return occurrenceIn(rule, year);
-  if (holidays === undefined) throw new Error("a holiday-named date needs the holiday lists");
   return holidays.get(year)?.get(rule.holidayName!) ?? null;
 }
 
@@ -91,13 +105,13 @@ export function specialDateIn(
 export function sharedSpecialDate(
   a: SpecialDayDateRule,
   b: SpecialDayDateRule,
-  holidays?: HolidayDates,
+  holidays: HolidayDates,
 ): LocalDate | null {
   if (specialDateIn(a, yearOf(b.date), holidays) === b.date) return b.date;
   if (specialDateIn(b, yearOf(a.date), holidays) === a.date) return a.date;
   if (!a.repeats || !b.repeats || (!followsHoliday(a) && !followsHoliday(b))) return null;
   const after = Math.max(yearOf(a.date), yearOf(b.date));
-  for (const year of [...(holidays ?? NO_HOLIDAY_DATES).keys()].sort((x, y) => x - y)) {
+  for (const year of holidayYears(holidays)) {
     if (year <= after) continue;
     const date = specialDateIn(a, year, holidays);
     if (date !== null && date === specialDateIn(b, year, holidays)) return date;
@@ -109,11 +123,11 @@ export function sharedSpecialDate(
 function nextSpecialDate(
   rule: SpecialDayDateRule,
   from: LocalDate,
-  holidays?: HolidayDates,
+  holidays: HolidayDates,
 ): LocalDate | null {
   if (!followsHoliday(rule)) return nextOccurrence(rule, from);
   if (rule.date >= from) return rule.date;
-  for (const year of [...(holidays ?? NO_HOLIDAY_DATES).keys()].sort((x, y) => x - y)) {
+  for (const year of holidayYears(holidays)) {
     const date = specialDateIn(rule, year, holidays);
     if (date !== null && date >= from) return date;
   }
@@ -127,7 +141,7 @@ export function firstSkippedEnd<T extends ClosedRange>(
   rule: SpecialDayDateRule,
   from: LocalDate,
   ranges: readonly T[],
-  holidays?: HolidayDates,
+  holidays: HolidayDates,
 ): { range: T; end: "startsAt" | "endsAt"; date: LocalDate } | null {
   const date = rule.repeats ? (nextSpecialDate(rule, from, holidays) ?? rule.date) : rule.date;
   for (const range of ranges)
@@ -139,6 +153,7 @@ export function firstSkippedEnd<T extends ClosedRange>(
 
 export interface SpecialDayOccurrence {
   specialDayId: string;
+  name: string;
   dateId: string;
   storedDate: LocalDate;
   closedAllDay: boolean;
@@ -159,6 +174,7 @@ export async function specialDaysOn(
   const dates = await tx
     .select({
       specialDayId: specialDayDates.specialDayId,
+      name: specialDays.name,
       dateId: specialDayDates.id,
       date: specialDayDates.date,
       closedAllDay: specialDayDates.closedAllDay,
@@ -186,13 +202,10 @@ export async function specialDaysOn(
       ),
     )
     .orderBy(asc(specialDayDates.date), asc(specialDayDates.id));
-  const holidays = await holidayDatesFor(
-    tx,
-    cfg,
-    dates,
+  const holidays = await holidayDatesFor(tx, cfg, dates, [
     yearOf(ordered[0]!),
     yearOf(ordered[ordered.length - 1]!),
-  );
+  ]);
   const matched = new Map<LocalDate, (typeof dates)[number]>();
   for (const day of ordered) {
     const row = dates.find((row) => specialDateIn(row, yearOf(day), holidays) === day);
@@ -247,6 +260,7 @@ export async function specialDaysOn(
   for (const [day, row] of matched)
     found.set(day, {
       specialDayId: row.specialDayId,
+      name: row.name,
       dateId: row.dateId,
       storedDate: row.date,
       closedAllDay: row.closedAllDay,
@@ -290,7 +304,7 @@ export async function missingHolidays(
   const today = venueLocalMoment(at, clock)?.civilDate ?? at.toISOString().slice(0, 10);
   const years = [yearOf(today), yearOf(today) + 1];
   const rules = rows.map((row) => ({ ...row, repeats: true }));
-  const holidays = await holidayDatesFor(tx, cfg, rules, years[0]!, years[1]!);
+  const holidays = await holidayDatesFor(tx, cfg, rules, [years[0]!, years[1]!]);
   const missing = new Map<string, MissingHoliday>();
   for (const year of years)
     for (const rule of rules)
@@ -915,19 +929,9 @@ export async function saveSpecialDay(
     readZoneRange,
   );
   const keptNames = new Map(
-    id === null
-      ? []
-      : (
-          await tx
-            .select({ date: specialDayDates.date, holidayName: specialDayDates.holidayName })
-            .from(specialDayDates)
-            .where(eq(specialDayDates.specialDayId, id))
-        ).map((row) => [row.date, row.holidayName]),
+    (stored?.dates ?? []).map((entry) => [entry.date, entry.holidayName ?? null]),
   );
-  const holidays =
-    parsed.dates.length === 0
-      ? NO_HOLIDAY_DATES
-      : await readHolidayDates(tx, cfg, ...holidayHorizon(parsed.dates));
+  const holidays = await readHolidayDates(tx, cfg, ...holidayHorizon(parsed.dates));
   const rules = parsed.dates.map(({ date }): SpecialDayDateRule => ({
     date,
     repeats: parsed.repeatsYearly,

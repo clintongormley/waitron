@@ -264,6 +264,28 @@ describe("one special day's own dates under name-following", () => {
         .where(eq(specialDayDates.specialDayId, day.id)),
     ).toEqual([{ holidayName: "Stored name" }]);
   });
+
+  it("checks a kept date stored without a holiday name on its month and day, though the list names it", async () => {
+    const v = await venue();
+    const day = await yearly(v, "Viernes Santo", "2026-04-03");
+    await db
+      .update(specialDayDates)
+      .set({ holidayName: null })
+      .where(eq(specialDayDates.specialDayId, day.id));
+    // Where 2027's list puts Viernes Santo, which the unnamed date does not follow.
+    await save(v, { name: "Cena", repeatsYearly: false, dates: dates(["2027-03-26"]) });
+    const saved = await scoped((tx) =>
+      saveSpecialDay(
+        tx,
+        v.cfg,
+        day.id,
+        { name: "Good Friday", repeatsYearly: true, dates: dates(["2026-04-03"]) },
+        AT,
+        0,
+      ),
+    );
+    expect(saved.dates).toEqual([{ date: "2026-04-03", closedAllDay: false }]);
+  });
 });
 
 describe("a repeating holiday date follows the holiday's name", () => {
@@ -321,6 +343,17 @@ describe("a repeating holiday date follows the holiday's name", () => {
     reads.count = 0;
     await standing(v, ["2027-03-26", "2028-04-03", "2028-06-10"]);
     expect(reads.count).toBe(1);
+  });
+
+  it("reads no holiday list for days in the holiday-named date's own year", async () => {
+    const v = await venue();
+    const day = await yearly(v, "Viernes Santo", "2026-04-03");
+    reads.count = 0;
+    expect(await standing(v, ["2026-04-02", "2026-04-03"])).toEqual({
+      "2026-04-02": null,
+      "2026-04-03": day.id,
+    });
+    expect(reads.count).toBe(0);
   });
 });
 

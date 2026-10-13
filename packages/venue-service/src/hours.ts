@@ -1,10 +1,9 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { type Transaction } from "@waitron/db";
 import { readLocationClock } from "@waitron/reporting";
 import { rangeDates } from "./hours-rules.js";
 import { type CalendarDay, type HolidayFact, type LocalDate } from "./hours-types.js";
 import { type VenueScope } from "./operations.js";
-import { specialDays } from "./schema/seasons.js";
 import { departments } from "./schema/service.js";
 import { readDayPlan, resolveDepartmentsDays } from "./day-resolver.js";
 import { isReadableZone } from "./hours-clock.js";
@@ -24,19 +23,6 @@ async function calendarDays(
   // business-day-clock.ts), so a venue whose zone cannot be read still has its days drawn.
   const clock = isReadableZone(stored.timeZone) ? stored : { ...stored, timeZone: "UTC" };
   const plan = await readDayPlan(tx, cfg, dates);
-  const specialIds = [
-    ...new Set([...plan.special.values()].flatMap((day) => (day ? [day.specialDayId] : []))),
-  ];
-  const names = new Map(
-    specialIds.length === 0
-      ? []
-      : (
-          await tx
-            .select({ id: specialDays.id, name: specialDays.name })
-            .from(specialDays)
-            .where(inArray(specialDays.id, specialIds))
-        ).map(({ id, name }) => [id, name]),
-  );
   const active = await tx
     .select({ id: departments.id })
     .from(departments)
@@ -60,10 +46,7 @@ async function calendarDays(
     const closed = !open.has(date);
     return {
       date,
-      specialDay:
-        special === null
-          ? null
-          : { id: special.specialDayId, name: names.get(special.specialDayId)! },
+      specialDay: special === null ? null : { id: special.specialDayId, name: special.name },
       holidays: dayHolidays,
       tone: dayHolidays.some(({ scope }) => scope !== "local")
         ? "public_holiday"
@@ -78,8 +61,8 @@ async function calendarDays(
 }
 
 /**
- * Public holiday facts for a range of dates. A reader must read on the caller's transaction, must
- * make no network call while it is open, and must not derive its facts from special dates.
+ * Public holiday facts for a range of dates. A reader must read on the caller's transaction and
+ * must make no network call while it is open.
  */
 export type HolidayReader = (
   tx: Transaction,

@@ -33,13 +33,7 @@ import type {
   PeriodRoutingUse,
 } from "./menu-timetable-types.js";
 import { assertDepartment, resolveZoneContext, wireTime, type VenueScope } from "./operations.js";
-import {
-  holidayDatesFor,
-  holidayHorizon,
-  NO_HOLIDAY_DATES,
-  readSpecialDaySchedules,
-  specialDateIn,
-} from "./special-days.js";
+import { holidayDatesFor, readSpecialDaySchedules, specialDateIn } from "./special-days.js";
 import { menuPeriods, menuPeriodStaffMenus } from "./schema/menus.js";
 import { departments } from "./schema/service.js";
 import { routingCellPeriods, routingCells } from "./schema/routing.js";
@@ -173,10 +167,7 @@ async function endOffsetClash(
   const offsets = new Map(periods.map((period) => [period.id, period.offset]));
   const departmentIds = [...new Set(periods.map((period) => period.departmentId))];
   const specialDays = await readSpecialDaySchedules(tx, cfg, departmentIds);
-  const holidays =
-    specialDays.length === 0
-      ? NO_HOLIDAY_DATES
-      : await holidayDatesFor(tx, cfg, specialDays, ...holidayHorizon(specialDays));
+  const holidays = await holidayDatesFor(tx, cfg, specialDays);
   const allSeasons = await readSeasons(tx, cfg);
   const weeks = await readDepartmentSeasonWeeks(tx, cfg, departmentIds, clock.dayCutover);
   for (const id of departmentIds) {

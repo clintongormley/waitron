@@ -25,13 +25,7 @@ import {
 import { seasonOnSorted } from "./season-rules.js";
 import { addDays, weekdayOf } from "./hours-rules.js";
 import { layerPaint, type PaintRange } from "./day-paint.js";
-import { repeatKey } from "./repeat-rules.js";
-import {
-  holidayDatesFor,
-  holidayHorizon,
-  NO_HOLIDAY_DATES,
-  specialDateIn,
-} from "./special-days.js";
+import { holidayDatesFor, holidayHorizon, specialDateIn } from "./special-days.js";
 import { parseClosedRanges, rangeSpan, type ClosedRange } from "./service-day.js";
 import "./errors.js";
 
@@ -49,7 +43,7 @@ interface Placement {
   specialDayName: string | null;
   specialDayDateId: string | null;
   date: string | null;
-  repeatOn: string | null;
+  repeats: boolean;
   periodId?: string;
   startsAt: string;
   endsAt: string;
@@ -161,16 +155,12 @@ export async function businessDayClockConflicts(
         ),
     );
   const effectiveYear = Number(effectiveBusinessDay.slice(0, 4));
-  const holidays =
-    specialDayList.length === 0
-      ? NO_HOLIDAY_DATES
-      : await holidayDatesFor(
-          tx,
-          cfg,
-          specialDayList,
-          holidayHorizon(specialDayList)[0],
-          Math.min(Math.max(holidayHorizon(specialDayList)[0], effectiveYear) + 400, 9999),
-        );
+  const holidays = await holidayDatesFor(
+    tx,
+    cfg,
+    specialDayList,
+    holidayHorizon(specialDayList, effectiveYear),
+  );
   const specialDayOf = new Map(specialDayList.map((day) => [day.dateId, day]));
   const specialPlacements: Placement[] = specialPaint.flatMap((row) => {
     const day = specialDayOf.get(row.dateId!);
@@ -187,7 +177,7 @@ export async function businessDayClockConflicts(
         weekday: null,
         seasonId: null,
         date: day.date,
-        repeatOn: day.repeats ? repeatKey(day.date) : null,
+        repeats: day.repeats,
         startsAt: row.startsAt,
         endsAt: row.endsAt,
         offset: row.offset ?? 0,
@@ -206,7 +196,7 @@ export async function businessDayClockConflicts(
   const nextSeason = (seasonId: string) =>
     seasonList[((seasonById.get(seasonId)?.index ?? -1) + 1) % seasonList.length]!.id;
   const noSpecialDay = { specialDayId: null, specialDayName: null, specialDayDateId: null };
-  const undated = { date: null, repeatOn: null, ...noSpecialDay };
+  const undated = { date: null, repeats: false, ...noSpecialDay };
   const periods: Placement[] = seasonPeriods.map((row) => ({ ...row, ...undated }));
   const closures: Omit<Placement, "offset">[] = seasonClosures.map((row) => ({
     ...row,
@@ -252,7 +242,7 @@ export async function businessDayClockConflicts(
   ]) {
     if (
       placement.date !== null &&
-      placement.repeatOn === null &&
+      !placement.repeats &&
       placement.date < addDays(effectiveBusinessDay, -1)
     )
       continue;
@@ -370,7 +360,7 @@ export async function businessDayClockConflicts(
   // The earliest start among a placement's next days, per changeover; placements of one day share it.
   const earliest = new Map<string, number>();
   const earliestTomorrow = (p: Placement, cutover: string): number => {
-    const key = `${p.departmentId}|${p.specialDayDateId ?? `${p.seasonId}:${p.weekday}`}|${p.date}|${p.repeatOn}|${cutover}`;
+    const key = `${p.departmentId}|${p.specialDayDateId ?? `${p.seasonId}:${p.weekday}`}|${p.date}|${cutover}`;
     const found =
       earliest.get(key) ??
       nextPlacements(p).reduce(
