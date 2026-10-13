@@ -904,3 +904,38 @@ it("the retained geography city constraint refuses a corrupt city key", async ()
   ).rejects.toThrow("CHECK constraint failed: holiday_geographies_city_ck");
   expect(await stored()).toEqual(before);
 });
+
+it("reads an address whose province does not resolve, but whose city is entered, as an unresolved province", async () => {
+  const cfg = await venue({ province: "Atlantis" });
+  expect(await run((tx) => store.readHolidayAreaModel(tx, cfg))).toMatchObject({
+    venue: { country: "ZZ", provinceCode: null, city: "Villa Real" },
+    readiness: "unresolved_province",
+    areaOptions: [],
+  });
+});
+
+it("refuses an area choice in a country whose pack has no holiday calendar, writing nothing", async () => {
+  const cfg = await venue({ country: "ZY", province: "Isleshire" });
+  expect(
+    await refusal(() => run((tx) => store.saveHolidayArea(tx, cfg, { areaKey: "isle-a" }))),
+  ).toMatchObject({ code: "holiday.invalid", params: { field: "areaKey" } });
+  expect(await stored()).toEqual({ geographies: [], entries: [], dates: [] });
+});
+
+it("gives the holiday dates by year and name, adding an area's holiday once the venue chooses that area", async () => {
+  const cfg = await venue({ province: "Isleshire" });
+  const dates = () => run((tx) => store.readHolidayDates(tx, cfg, 2026, 2027));
+  expect(await dates()).toEqual(
+    new Map([
+      [2026, new Map([["New Year", "2026-01-01"]])],
+      [2027, new Map([["New Year", "2027-01-01"]])],
+    ]),
+  );
+  await run((tx) => store.saveHolidayArea(tx, cfg, { areaKey: "isle-a" }));
+  expect((await dates()).get(2026)).toEqual(
+    new Map([
+      ["New Year", "2026-01-01"],
+      ["Isle A day", "2026-07-01"],
+    ]),
+  );
+});
