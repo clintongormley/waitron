@@ -1499,6 +1499,32 @@ describe("device-profiles-screen kitchen screens", () => {
     }
   });
 
+  it("names a narrowed device whose name holds the lost placeholder as written", async () => {
+    const previous = currentLocale();
+    setLocale("en");
+    try {
+      const { el } = await edit(kitchen, stored, {
+        updateDeviceProfile: vi.fn().mockResolvedValue({
+          ...kitchen,
+          narrowedDevices: [
+            {
+              deviceId: "dv1",
+              deviceName: "Pantalla {lost}",
+              lost: { screens: [], stations: [{ id: "s9", name: "Deli" }], zones: [] },
+            },
+          ],
+        }),
+      });
+      toggle(el, "profile-station-screen-station-s1", false);
+      await flush(el);
+      await save(el);
+      await flush(el);
+      expect(text(el, "narrowed-devices")).toBe("Saved. Pantalla {lost} no longer shows Deli.");
+    } finally {
+      setLocale(previous);
+    }
+  });
+
   it("shows no status line when a save narrowed nothing, and clears one when the editor opens again", async () => {
     const narrowing = vi.fn().mockResolvedValueOnce({
       ...kitchen,
@@ -1797,6 +1823,24 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
     await flush(el);
     expect(q(el, "editor-form")!.hasAttribute("data-editing-id")).toBe(false);
     expect(q(el, "profile-name")!.value).toBe("Terraza");
+  });
+
+  it("puts a department name and a person's name holding a replacement pattern in as written", async () => {
+    const el = await openCreate(
+      stubApi({
+        getProfileScopeChoices: vi.fn().mockResolvedValue({
+          ...scopeChoices,
+          departments: [{ id: "d1", name: "Restaurante $&", active: true }],
+        }),
+        listStaff: vi.fn().mockResolvedValue([person("pe-ana", "Ana $&", "staff")]),
+      }),
+    );
+    expect(text(el, "profile-zones-hint")).toBe(
+      t("device_profiles.every_zone_hint").split("{department}").join("Restaurante $&"),
+    );
+    expect(text(el, "admitted-people")).toBe(
+      t("device_profiles.admitted_people").split("{names}").join("Ana $&"),
+    );
   });
 
   it("starts a new profile in the venue's only department, at its first zone, using every zone", async () => {
