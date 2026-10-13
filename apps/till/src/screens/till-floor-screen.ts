@@ -45,6 +45,7 @@ import {
   type DropAction,
   type SheetAction,
   dropAction,
+  onTodaysPlan,
   pendingPlaces,
   spareSpot,
 } from "../state/floor-today.js";
@@ -822,7 +823,7 @@ export class TillFloorScreen extends LitElement {
   }
 
   /**
-   * One per placed group of the zone, a party linked across groups counting once, its first member
+   * One per group of the zone on today's plan, a party linked across groups counting once, its first member
    * in the map's label order named as the map names it, leaving out every group a drop of `table` on it would do nothing with.
    */
   #joinTargets(table: TableState, from: TodayPlacement): TableState[] {
@@ -830,7 +831,7 @@ export class TillFloorScreen extends LitElement {
     const seen = new Set<string>();
     const targets: TableState[] = [];
     for (const each of [...zoneTables].sort((a, b) => inNumberOrder(a.label, b.label))) {
-      if (each.today?.placement == null) continue;
+      if (!onTodaysPlan(each)) continue;
       const linkId = this.#linkOf(each);
       const group = drawnGroupKey(each, linkId);
       if (seen.has(group)) continue;

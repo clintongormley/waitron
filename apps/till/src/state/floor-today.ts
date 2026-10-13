@@ -179,7 +179,8 @@ export function pendingPlaces(
   return places;
 }
 
-/** A still-joined part, or a joined table that has come apart: the till offers neither. */
+/** A still-joined part, or a joined table that has come apart: the map, Join with… and every
+ * picker that calls this leave it out. */
 export function outOfServiceJoined(table: TableState): boolean {
   return (
     table.today !== null &&
