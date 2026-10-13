@@ -1,7 +1,7 @@
-import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { page } from "vitest/browser";
 import type { CatalogueSummary, MenuStructure } from "../api/client.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { AddToMenus, placementMenus, type PlacementMenu } from "./add-to-menus.js";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
 import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
@@ -486,5 +486,53 @@ describe("dashboard-add-to-menus on a phone", () => {
     await new Promise((resolve) => requestAnimationFrame(resolve));
     expect(body.scrollTop).toBeGreaterThan(0);
     expect(placed()).toEqual(unscrolled);
+  });
+});
+
+describe("names holding replacement patterns", () => {
+  beforeEach(() => {
+    const before = currentLocale();
+    setLocale("en");
+    return () => setLocale(before);
+  });
+
+  const trapMenus: PlacementMenu[] = [
+    {
+      id: "m-lunch",
+      name: "Lunch $& Menu",
+      rootSectionId: "root-lunch",
+      sections: [{ id: "s-drinks", name: "Drinks", sharedWith: ["Dinner $& Menu"], children: [] }],
+    },
+    { id: "m-dinner", name: "Dinner $& Menu", rootSectionId: "root-dinner", sections: [] },
+  ];
+  const mountTrap = () => mount({ productName: "Croquetas $&", menus: trapMenus });
+
+  it("names the product and the shared menus as written", async () => {
+    const el = await mountTrap();
+    expect(root(el).querySelector("wt-modal")!.getAttribute("heading")).toBe(
+      "Add Croquetas $& to menus",
+    );
+    expect(root(el).textContent).toContain(
+      "Croquetas $& is saved. Choose where it goes on your menus",
+    );
+    expect(button(el, "shared")!.textContent!.trim()).toBe("Also on Dinner $& Menu");
+  });
+
+  it("names the product and a refused top level as written", async () => {
+    const el = await mountTrap();
+    el.failures = [{ sectionId: "root-dinner", reason: "Try again." }];
+    await el.updateComplete;
+    const alert = button(el, "placement-error")!.textContent!;
+    expect(alert).toContain("Croquetas $& is saved, but it could not be added to these places.");
+    expect(alert).toContain("Top level of Dinner $& Menu: Try again.");
+  });
+
+  it("names the product as written when the menus could not be loaded", async () => {
+    const el = await mount({ productName: "Croquetas $&", menus: null });
+    el.loadError = "Try again.";
+    await el.updateComplete;
+    expect(button(el, "load-error")!.textContent).toContain(
+      "Croquetas $& is saved, but your menus could not be loaded",
+    );
   });
 });
