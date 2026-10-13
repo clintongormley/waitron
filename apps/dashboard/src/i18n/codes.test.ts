@@ -672,3 +672,10 @@ it("has English and Spanish copy for every refusal of Print on A4 and Download P
     expect(codeMessage(code, "es"), code).not.toBe(codeMessage(code, "en"));
   }
 });
+
+it("says a box holds no recovery key rather than asking for one to be entered, since Edit and the recovery pack reach it", () => {
+  expect(codeMessage("backup.recovery_key_missing", "en")).toBe("This box holds no recovery key.");
+  expect(codeMessage("backup.recovery_key_missing", "es")).toBe(
+    "Esta caja no tiene clave de recuperación.",
+  );
+});

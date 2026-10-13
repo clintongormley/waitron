@@ -1044,6 +1044,56 @@ describe("stream-settings-panel: once set up", () => {
     },
   );
 
+  it.each([
+    ["en-GB", "save"],
+    ["en-GB", "kit"],
+    ["es-ES", "save"],
+    ["es-ES", "kit"],
+  ] as const)(
+    "in %s, with archives on, points a %s refused for a too-short key at Change the recovery key, not Turn on backups",
+    async (locale, which) => {
+      const before = currentLocale();
+      setLocale(locale);
+      try {
+        const refusal = { code: "backup.recovery_key_too_short", params: { min: 12 } };
+        const api =
+          which === "save"
+            ? stubApi({ saveStreamSettings: vi.fn().mockRejectedValue(refusal) })
+            : stubApi({ getRecoveryKit: vi.fn().mockRejectedValue(refusal) }, ON);
+        const { el } = await mount(api, { managedByEnvironment: false, archivesEnabled: true });
+        if (which === "save") {
+          fillRequired(el);
+          await press(el, "save");
+        } else {
+          await press(el, "show-kit");
+        }
+        const alert = text(el, "[role=alert]");
+        expect(alert).toContain(t("backup.rotate.title"));
+        expect(alert).not.toContain(t("backup.apply"));
+      } finally {
+        setLocale(before);
+      }
+    },
+  );
+
+  it("with archives off, points a too-short key's refusal at Turn on backups", async () => {
+    const refusal = { code: "backup.recovery_key_too_short", params: { min: 12 } };
+    const api = stubApi({ getRecoveryKit: vi.fn().mockRejectedValue(refusal) }, ON);
+    const { el } = await mount(api, { managedByEnvironment: false, archivesEnabled: false });
+    await press(el, "show-kit");
+    const alert = text(el, "[role=alert]");
+    expect(alert).toContain(t("backup.apply"));
+    expect(alert).not.toContain(t("backup.rotate.title"));
+  });
+
+  it("with archives on but the environment owning the settings, sends a too-short key's refusal to the environment", async () => {
+    const refusal = { code: "backup.recovery_key_too_short", params: { min: 12 } };
+    const api = stubApi({ getRecoveryKit: vi.fn().mockRejectedValue(refusal) }, ON);
+    const { el } = await mount(api, { managedByEnvironment: true, archivesEnabled: true });
+    await press(el, "show-kit");
+    expect(text(el, "[role=alert]")).toBe(t("stream.error.recovery_key_too_short_managed"));
+  });
+
   it("explains, in this panel's words, a kit refused because the box holds no recovery key", async () => {
     const api = stubApi(
       { getRecoveryKit: vi.fn().mockRejectedValue({ code: "backup.recovery_key_missing" }) },

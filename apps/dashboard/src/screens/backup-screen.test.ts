@@ -228,6 +228,22 @@ describe("backup-screen", () => {
     expect(panel.managedByEnvironment).toBe(false);
   });
 
+  it("tells the bucket-copy panel whether archives are on, so a too-short key's refusal names the action shown", async () => {
+    const off = stubApi({}, { ...OFF, recoveryKeySet: true, recoveryKeyTooShort: true });
+    const { el: offEl } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api: off });
+    await flush(offEl);
+    expect((q(offEl, "dashboard-stream-settings") as StreamSettingsPanel).archivesEnabled).toBe(
+      false,
+    );
+    const on = stubApi({}, ENABLED);
+    const { el: onEl } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api: on });
+    await flush(onEl);
+    expect(q(onEl, "[data-test=rotate]")!.textContent!.trim()).toBe(t("backup.rotate.title"));
+    expect((q(onEl, "dashboard-stream-settings") as StreamSettingsPanel).archivesEnabled).toBe(
+      true,
+    );
+  });
+
   it("tells the bucket-copy panel the environment owns a too-short key, where there is no button to replace it", async () => {
     const api = stubApi({}, { ...MANAGED, recoveryKeySet: true, recoveryKeyTooShort: true });
     const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
@@ -343,6 +359,47 @@ describe("backup-screen", () => {
       { timeout: 2_000 },
     );
     expect(api.getRecoveryKit).toHaveBeenCalledOnce();
+  });
+
+  it("treats a key change whose settings record failed as done: the old key goes, the next read shows the new key, and a fresh key is made", async () => {
+    const api = stubApi(
+      {
+        rotateBackupKey: vi.fn().mockRejectedValue({
+          code: "backup.rotation_metadata_failed",
+          params: {
+            effectiveKeyChanged: true,
+            keyFingerprint: "ffee0011",
+            keyRotatedAt: "2026-10-13T09:00:00Z",
+          },
+        }),
+      },
+      ENABLED,
+    );
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+    await flush(el);
+    q(el, "[data-test=show-old-key]")!.click();
+    await flush(el);
+    tickCheckbox(el, "[data-test=saved-it]");
+    await el.updateComplete;
+    const mints = vi.mocked(api.mintBackupKey).mock.calls.length;
+    const reads = vi.mocked(api.getBackupStatus).mock.calls.length;
+    vi.mocked(api.getBackupStatus).mockResolvedValue({
+      ...ENABLED,
+      keyFingerprint: "ffee0011",
+      keyRotatedAt: "2026-10-13T09:00:00Z",
+    });
+    vi.mocked(api.mintBackupKey).mockResolvedValue({ key: "NEXT-KEY-0123456789ab" });
+    q(el, "[data-test=rotate-confirm]")!.click();
+    await vi.waitFor(() =>
+      expect(vi.mocked(api.getBackupStatus).mock.calls.length).toBeGreaterThan(reads),
+    );
+    await flush(el);
+    expect(q(el, "[data-test=old-key]")).toBeNull();
+    expect(alertText(el)).toContain(codeMessage("backup.rotation_metadata_failed"));
+    expect(q(el, "[data-test=status]")!.textContent).toContain("ffee0011");
+    expect(vi.mocked(api.mintBackupKey).mock.calls.length).toBeGreaterThan(mints);
+    expect(q(el, "[data-test=minted-key]")!.textContent).toContain("NEXT-KEY-0123456789ab");
+    expect(q(el, "[data-test=rotate-confirm]")!.hasAttribute("disabled")).toBe(true);
   });
 
   it("exports prepared configuration under a confirmed passphrase", async () => {

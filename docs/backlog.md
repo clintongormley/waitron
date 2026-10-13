@@ -4205,24 +4205,12 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   counts `NoSuchKey` as deleted; share them, deciding whether the bucket stream takes those checks
   too.
 
-- **The Backups screen does not yet read what A538-4 added to the backup routes** (plan Task 6).
-  It needs English and Spanish wording for `backup.archive_test_failed` and
-  `backup.rotation_metadata_failed`; `backup.archive_settings_unusable` is worded only as an alert
-  (`alert-messages.ts`). It must show a write's `reloadErrorCode` (the settings were saved, but the
-  box could not load them) and the status's `loadErrorCode` (archives are off because the stored
-  settings cannot be used), and on `backup.rotation_metadata_failed` it must replace a displayed
-  recovery key or fingerprint with the new one, which is already in effect. It offers no control for
-  `POST /api/backup/disable` and does not show `storedDisabled` (archives stored switched off).
-  Left open by A538-4. It also needs a Download archive recovery pack action over
-  `GET /api/backup/archive-recovery-pack`, which answers `keyFingerprint`, `keyRotatedAt` and
-  `revision` so a displayed pack can be marked stale; that route's `backup.recovery_key_missing`
-  refusal would show the existing "Enter a recovery key" wording, written for the form. Under
-  environment management the pack route answers no `revision`, so a bucket changed in the
-  environment marks no pack stale. The pack file's explanatory text is written by the server in
-  English only (`encodeArchiveRecoveryPack`); the recovery kit's file text is built by the dashboard
-  in English and Spanish. Decide which owns it when the button lands. Left open by A538-5. When
-  the button lands, remove deploy/README.md's line saying the Backups screen does not offer the
-  pack yet.
+- **The Backups screen does not yet read all of what A538-4 added to the backup routes** (plan
+  Task 6). `backup.archive_settings_unusable` is worded only as an alert (`alert-messages.ts`). The
+  screen offers no control for `POST /api/backup/disable`. Left open by A538-4. Under environment management the pack route answers no `revision`, so a bucket changed
+  in the environment marks no shown pack stale until the key changes. The pack file's explanatory
+  text is written by the server in English only (`encodeArchiveRecoveryPack`), and the screen
+  downloads it as written. Left open by A538-5.
 
 - **A recovery kit can carry a recovery key its own restore refuses.** `parseRecoveryKit`
   (`packages/stream/src/kit.ts`) refuses a recovery key holding a C0 control character or DEL, which

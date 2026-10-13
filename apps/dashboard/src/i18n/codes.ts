@@ -997,8 +997,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "La clave de recuperación es demasiado corta",
   },
   "backup.recovery_key_missing": {
-    en: "Enter a recovery key",
-    es: "Introduce una clave de recuperación",
+    en: "This box holds no recovery key.",
+    es: "Esta caja no tiene clave de recuperación.",
   },
   "backup.destinations_invalid": {
     en: "Check the backup destination",

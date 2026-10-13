@@ -1555,6 +1555,21 @@ export const en = {
   "backup.edit.title": "Change backup settings",
   "backup.edit.save": "Save changes",
   "backup.edit.cancel": "Cancel",
+  "backup.pack.title": "Archive recovery pack",
+  "backup.pack.explanation": "Restoring a backup from the bucket on a new box asks for this pack.",
+  "backup.pack.show": "Download archive recovery pack",
+  "backup.pack.warning":
+    "Anyone holding this pack can open every backup in the bucket. Keep it as safe as the recovery key: offline, and never in the bucket itself.",
+  "backup.pack.copy": "Copy",
+  "backup.pack.download": "Download pack file",
+  "backup.pack.key_missing":
+    "This box holds no recovery key, so there is no archive recovery pack.",
+  "backup.pack.key_too_short":
+    "The recovery key this box holds is too short to make a recovery pack. Use “Change the recovery key” on this page: the new key replaces the short one.",
+  "backup.pack.key_too_short_off":
+    "The recovery key this box holds is too short to make a recovery pack. Use “Turn on backups” on this page: the new key it saves replaces the short one.",
+  "backup.pack.key_too_short_managed":
+    "The recovery key this box holds is too short to make a recovery pack. This box's backup settings come from its environment, so a longer key has to be set there.",
   "backup.rotate.title": "Change the recovery key",
   "backup.rotate.warning":
     "Backups taken before now still need the OLD key — keep it safe too. Changing the key does not re-encrypt older backups.",
@@ -1618,6 +1633,8 @@ export const en = {
     "This box holds no recovery key, so there is no recovery kit to show.",
   "stream.error.recovery_key_too_short":
     "The recovery key this box holds is too short, so the bucket copy cannot use it. Use “Turn on backups” above: the new key it saves replaces the short one.",
+  "stream.error.recovery_key_too_short_archives_on":
+    "The recovery key this box holds is too short, so the bucket copy cannot use it. Use “Change the recovery key” above: the new key replaces the short one.",
   "stream.error.recovery_key_too_short_managed":
     "The recovery key this box holds is too short, so the bucket copy cannot use it. This box's backup settings come from its environment, so a longer key has to be set there.",
   "stream.error.recovery_key_too_short_unknown":
@@ -4390,6 +4407,22 @@ export const es: Record<StringKey, string> = {
   "backup.edit.title": "Cambiar los ajustes de copia",
   "backup.edit.save": "Guardar cambios",
   "backup.edit.cancel": "Cancelar",
+  "backup.pack.title": "Paquete de recuperación de las copias",
+  "backup.pack.explanation":
+    "Para restaurar en una caja nueva una copia del bucket se pide este paquete.",
+  "backup.pack.show": "Descargar el paquete de recuperación de las copias",
+  "backup.pack.warning":
+    "Quien tenga este paquete puede abrir todas las copias del bucket. Guárdalo con el mismo cuidado que la clave de recuperación: fuera de línea y nunca en el propio bucket.",
+  "backup.pack.copy": "Copiar",
+  "backup.pack.download": "Descargar el archivo del paquete",
+  "backup.pack.key_missing":
+    "Esta caja no tiene clave de recuperación, así que no hay paquete de recuperación de las copias.",
+  "backup.pack.key_too_short":
+    "La clave de recuperación que tiene esta caja es demasiado corta para hacer un paquete de recuperación. Usa «Cambiar la clave de recuperación» en esta página: la clave nueva sustituye a la corta.",
+  "backup.pack.key_too_short_off":
+    "La clave de recuperación que tiene esta caja es demasiado corta para hacer un paquete de recuperación. Usa «Activar las copias» en esta página: la clave nueva que guarda sustituye a la corta.",
+  "backup.pack.key_too_short_managed":
+    "La clave de recuperación que tiene esta caja es demasiado corta para hacer un paquete de recuperación. Los ajustes de copia de esta caja vienen de su entorno, así que hay que poner allí una clave más larga.",
   "backup.rotate.title": "Cambiar la clave de recuperación",
   "backup.rotate.warning":
     "Las copias hechas antes de ahora siguen necesitando la clave ANTIGUA; guárdala también. Cambiar la clave no vuelve a cifrar las copias anteriores.",
@@ -4453,6 +4486,8 @@ export const es: Record<StringKey, string> = {
     "Este equipo no tiene clave de recuperación, así que no hay kit de recuperación que mostrar.",
   "stream.error.recovery_key_too_short":
     "La clave de recuperación que tiene este equipo es demasiado corta, así que la copia en el bucket no puede usarla. Usa «Activar las copias» más arriba: la clave nueva que guarda sustituye a la corta.",
+  "stream.error.recovery_key_too_short_archives_on":
+    "La clave de recuperación que tiene este equipo es demasiado corta, así que la copia en el bucket no puede usarla. Usa «Cambiar la clave de recuperación» más arriba: la clave nueva sustituye a la corta.",
   "stream.error.recovery_key_too_short_managed":
     "La clave de recuperación que tiene este equipo es demasiado corta, así que la copia en el bucket no puede usarla. Los ajustes de copia de este equipo vienen de su entorno, así que hay que poner allí una clave más larga.",
   "stream.error.recovery_key_too_short_unknown":

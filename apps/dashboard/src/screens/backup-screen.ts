@@ -20,6 +20,7 @@ import { currentLocale, fill, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import "./stream-settings-panel.js";
 import type {
+  ArchiveRecoveryPackAnswer,
   BackupApplyBody,
   BackupDestinationStatus,
   BackupDestinationView,
@@ -249,6 +250,10 @@ export class BackupScreen extends LitElement {
         border-radius: var(--wt-radius-md);
         color: var(--wt-color-text);
       }
+      .pack {
+        margin: 0;
+        white-space: pre-wrap;
+      }
       .key-actions {
         display: flex;
         gap: var(--wt-space-2);
@@ -353,6 +358,13 @@ export class BackupScreen extends LitElement {
   @state() private exportingConfiguration = false;
 
   @state() private oldKey: string | null = null;
+  /** Held in this element alone, never in storage. */
+  @state() private pack: ArchiveRecoveryPackAnswer | null = null;
+  @state() private packUrl: string | null = null;
+  @state() private packFailure: string | null = null;
+  @state() private packLoading = false;
+  /** Every pack fetch takes the next number; only the latest, unchanged since, may show its answer. */
+  #packRequest = 0;
 
   @state() private editSettings = false;
   @state() private configureAfterApply = false;
@@ -514,6 +526,9 @@ export class BackupScreen extends LitElement {
     this.#configureUsesHeldKey = false;
     this.mintedKey = null;
     this.oldKey = null;
+    this.#dropPack();
+    this.packFailure = null;
+    this.packLoading = false;
     this.#watcherAsked = false;
     this.#minting = null;
     for (const url of this.#blobUrls.values()) URL.revokeObjectURL(url);
@@ -530,6 +545,7 @@ export class BackupScreen extends LitElement {
           this.#configureUsesHeldKey = this.#reusesHeldKey;
           this.configureAfterApply = true;
         }
+        this.#dropStalePack(value);
         this.status = value;
         this.refreshErrorKey = null;
         await this.#mintIfNone();
@@ -747,6 +763,7 @@ export class BackupScreen extends LitElement {
       scope?.commit(submitted);
       this.configureAfterApply = scope?.isDirty() ?? false;
       this.#configureUsesHeldKey = this.configureAfterApply && !sendsKey;
+      this.#dropStalePack(status);
       this.status = status;
       // The bucket copy's panel reads the same key.
       if (sendsKey) this.api.liveData.invalidate([{ type: "backup_status" }]);
@@ -771,11 +788,28 @@ export class BackupScreen extends LitElement {
     const submitted = this.#archiveValue();
     const generation = this.#generation;
     const scope = this.#archiveScope;
+    let reloadErrorCode: string | null;
     try {
       const status = await this.api.rotateBackupKey({ recoveryKey: this.#effectiveKey });
       if (generation !== this.#generation) return;
-      this.reloadErrorCode = status.reloadErrorCode ?? null;
+      reloadErrorCode = status.reloadErrorCode ?? null;
+      this.#dropStalePack(status);
       this.status = status;
+    } catch (error) {
+      if (generation !== this.#generation) return;
+      if (codeOf(error) !== "backup.rotation_metadata_failed") {
+        this.errorKey = codeOf(error);
+        this.submitting = false;
+        return;
+      }
+      // The new key is in effect: the box changed it before the record failed.
+      this.errorKey = "backup.rotation_metadata_failed";
+      const params = (error as { params?: { reloadErrorCode?: unknown } }).params;
+      reloadErrorCode = typeof params?.reloadErrorCode === "string" ? params.reloadErrorCode : null;
+      this.#dropPack();
+    }
+    try {
+      this.reloadErrorCode = reloadErrorCode;
       scope?.commit(submitted);
       // The bucket copy's kit carries the key, so its panel has to read the new one now.
       this.api.liveData.invalidate([{ type: "backup_status" }]);
@@ -787,11 +821,69 @@ export class BackupScreen extends LitElement {
       }
       this.oldKey = null;
       await this.#mint();
-    } catch (error) {
-      if (generation === this.#generation) this.errorKey = codeOf(error);
     } finally {
       if (generation === this.#generation) this.submitting = false;
     }
+  }
+
+  /** A pack is for one key and one stored record: a read naming another of either takes it away. */
+  #dropStalePack(value: BackupStatusView): void {
+    const pack = this.pack;
+    const shown = this.status;
+    if (pack === null && !this.packLoading) return;
+    const changed =
+      pack === null
+        ? shown !== undefined && !this.#sameKeyAndRecord(shown, value)
+        : value.keyFingerprint !== pack.keyFingerprint ||
+          value.keyRotatedAt !== pack.keyRotatedAt ||
+          (pack.revision ?? null) !== value.revision;
+    if (changed) this.#dropPack();
+  }
+
+  #sameKeyAndRecord(a: BackupStatusView, b: BackupStatusView): boolean {
+    return (
+      a.keyFingerprint === b.keyFingerprint &&
+      a.keyRotatedAt === b.keyRotatedAt &&
+      a.revision === b.revision
+    );
+  }
+
+  /** Also discards the answer of any pack fetch still running. */
+  #dropPack(): void {
+    this.#packRequest++;
+    this.packLoading = false;
+    this.pack = null;
+    if (this.packUrl !== null) URL.revokeObjectURL(this.packUrl);
+    this.packUrl = null;
+  }
+
+  async #showPack(): Promise<void> {
+    if (this.packLoading) return;
+    this.#dropPack();
+    this.packFailure = null;
+    this.packLoading = true;
+    const request = this.#packRequest;
+    try {
+      const answer = await this.api.getArchiveRecoveryPack();
+      if (request !== this.#packRequest) return;
+      this.pack = answer;
+      this.packUrl = URL.createObjectURL(new Blob([answer.pack], { type: "text/plain" }));
+    } catch (error) {
+      if (request === this.#packRequest) this.packFailure = codeOf(error);
+    } finally {
+      if (request === this.#packRequest) this.packLoading = false;
+    }
+  }
+
+  #packFailureText(code: string): string {
+    const s = this.status;
+    if (code === "backup.recovery_key_missing") return t("backup.pack.key_missing");
+    if (code === "backup.recovery_key_too_short" && s !== undefined) {
+      if (s.managedByEnvironment) return t("backup.pack.key_too_short_managed");
+      if (s.isPrimary)
+        return t(s.enabled ? "backup.pack.key_too_short" : "backup.pack.key_too_short_off");
+    }
+    return codeMessage(code);
   }
 
   async #showOldKey(): Promise<void> {
@@ -867,6 +959,7 @@ export class BackupScreen extends LitElement {
       this.custom = { ...this.custom, secretAccessKey: "" };
       this.secretDemanded = false;
       this.reloadErrorCode = status.reloadErrorCode ?? null;
+      this.#dropStalePack(status);
       this.status = status;
       scope?.commit(submitted);
       this.#policyReplaced = false;
@@ -1029,6 +1122,7 @@ export class BackupScreen extends LitElement {
         <dashboard-stream-settings
           .api=${this.api}
           .managedByEnvironment=${s?.managedByEnvironment}
+          .archivesEnabled=${s?.enabled}
         ></dashboard-stream-settings>
       </div>
     `;
@@ -1123,6 +1217,7 @@ export class BackupScreen extends LitElement {
               ? html`<p class="hint" data-test="not-primary">${t("backup.status.not_primary")}</p>`
               : nothing
         }
+        ${s.destinations.some((d) => d.kind === "s3") ? this.#renderPack() : nothing}
         ${writable && (!s.enabled || this.configureAfterApply) ? this.#renderConfigure() : nothing}
         ${writable && s.enabled && this.editSettings ? this.#renderEditSettings() : nothing}
         ${
@@ -1664,6 +1759,53 @@ export class BackupScreen extends LitElement {
           this.retentionRefused = false;
         }}
       ></wt-number-stepper>
+    `;
+  }
+
+  #renderPack(): TemplateResult {
+    const pack = this.pack;
+    return html`
+      <h2>${t("backup.pack.title")}</h2>
+      <p class="hint">${t("backup.pack.explanation")}</p>
+      <div class="key-actions">
+        <wt-button
+          variant="secondary"
+          data-test="show-pack"
+          ?disabled=${this.packLoading}
+          @click=${() => void this.#showPack()}
+          >${t("backup.pack.show")}</wt-button
+        >
+      </div>
+      ${
+        this.packFailure === null
+          ? nothing
+          : html`<p class="error" role="alert" data-test="pack-failure">
+              ${this.#packFailureText(this.packFailure)}
+            </p>`
+      }
+      ${
+        pack === null || this.packUrl === null
+          ? nothing
+          : html`<p class="warning" role="note" data-test="pack-warning">
+                ${t("backup.pack.warning")}
+              </p>
+              <pre class="key pack" data-test="pack">${pack.pack}</pre>
+              <div class="key-actions">
+                <wt-button
+                  variant="secondary"
+                  data-test="copy-pack"
+                  @click=${() => this.#copy(pack.pack)}
+                  >${t("backup.pack.copy")}</wt-button
+                >
+                <a
+                  class="download"
+                  data-test="download-pack"
+                  download=${`waitron-archive-recovery-pack-${pack.keyFingerprint}.txt`}
+                  href=${this.packUrl}
+                  >${t("backup.pack.download")}</a
+                >
+              </div>`
+      }
     `;
   }
 

@@ -327,6 +327,82 @@ describe.each(["light", "dark"] as const)("backup-screen a11y (%s theme)", (them
     await expectNoA11yViolations(host);
   });
 
+  it("renders a shown archive recovery pack, with its warning, Copy and download, accessibly", async () => {
+    const WITH_BUCKET: BackupStatusView = {
+      ...ENABLED,
+      destinations: [
+        {
+          id: "bucket",
+          kind: "s3",
+          endpoint: null,
+          region: "eu-north-1",
+          bucket: "owner-bucket",
+          prefix: "waitron",
+          accessKeyId: "AKIAOWNER",
+          namespace: `waitron/archives/${ENABLED.venueId}/`,
+          credentialPresent: true,
+        },
+      ],
+      backupStatus: { configured: false },
+    };
+    const { el, host } = await mountWidget<BackupScreen>(
+      "dashboard-backup-screen",
+      {
+        api: stubApi(WITH_BUCKET, {
+          getArchiveRecoveryPack: vi.fn().mockResolvedValue({
+            pack: "Waitron archive recovery pack.\n\nWAITRON-ARCHIVE-PACK-1:eyJ2ZXJzaW9uIjoxfQ\n",
+            keyFingerprint: "ab12cd34",
+            revision: ENABLED.revision,
+          }),
+        }),
+      },
+      theme,
+    );
+    await flush(el);
+    q(el, "[data-test=show-pack]")!.click();
+    await flush(el);
+    expect(q(el, "[data-test=pack]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders a refused archive recovery pack accessibly", async () => {
+    const { el, host } = await mountWidget<BackupScreen>(
+      "dashboard-backup-screen",
+      {
+        api: stubApi(
+          {
+            ...ENABLED,
+            destinations: [
+              {
+                id: "bucket",
+                kind: "s3",
+                endpoint: null,
+                region: "eu-north-1",
+                bucket: "owner-bucket",
+                prefix: "waitron",
+                accessKeyId: "AKIAOWNER",
+                namespace: `waitron/archives/${ENABLED.venueId}/`,
+                credentialPresent: true,
+              },
+            ],
+            backupStatus: { configured: false },
+          },
+          {
+            getArchiveRecoveryPack: vi
+              .fn()
+              .mockRejectedValue({ code: "backup.recovery_key_missing" }),
+          },
+        ),
+      },
+      theme,
+    );
+    await flush(el);
+    q(el, "[data-test=show-pack]")!.click();
+    await flush(el);
+    expect(q(el, "[data-test=pack-failure]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   it("renders the error banner accessibly", async () => {
     const { el, host } = await mountWidget<BackupScreen>(
       "dashboard-backup-screen",
