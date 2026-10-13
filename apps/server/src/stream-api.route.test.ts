@@ -40,7 +40,10 @@ import { TOTP_KEY_RING } from "./testing/authenticator.js";
 
 // The route calls `putCredential` itself, so the harness sees the credential write through this
 // pass-through wrapper.
-const credentialWrites = vi.hoisted(() => ({ onPut: (): void => {} }));
+const credentialWrites = vi.hoisted(() => ({
+  onPut: (): void => {},
+  afterGet: async (): Promise<void> => {},
+}));
 vi.mock("@waitron/credentials", async (importOriginal) => {
   const real = await importOriginal<typeof import("@waitron/credentials")>();
   return {
@@ -48,6 +51,11 @@ vi.mock("@waitron/credentials", async (importOriginal) => {
     putCredential: (...args: Parameters<typeof real.putCredential>) => {
       credentialWrites.onPut();
       return real.putCredential(...args);
+    },
+    tryGetCredential: async (...args: Parameters<typeof real.tryGetCredential>) => {
+      const value = await real.tryGetCredential(...args);
+      await credentialWrites.afterGet();
+      return value;
     },
   };
 });
@@ -808,6 +816,55 @@ describe("stream settings routes", () => {
     expect(text).not.toContain(BODY.secretAccessKey);
     expect(text).not.toContain(ciphertext.toString("hex"));
     expect(text).not.toContain(ciphertext.toString("base64"));
+  });
+
+  it("the settings view pairs the settings it shows with their own revision, while a Save lands", async () => {
+    await clearBucket();
+    const { app } = harness({}, "recovery-key-one-strong");
+    const cookie = await login(app);
+    expect(
+      (await app.request("/api/backup/stream", { method: "PUT", ...json(cookie, BODY) })).status,
+    ).toBe(200);
+    const before = await (await app.request("/api/backup/stream", { headers: { cookie } })).json();
+    let reading!: () => void;
+    const readDone = new Promise<void>((resolve) => (reading = resolve));
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    credentialWrites.afterGet = async () => {
+      credentialWrites.afterGet = async () => {};
+      reading();
+      await gate;
+    };
+    let write: Promise<unknown> | undefined;
+    try {
+      const pending = app.request("/api/backup/stream", { headers: { cookie } });
+      await readDone;
+      // Started from outside the view's read, as another request's Save would be.
+      write = withTransaction(suite.db, (tx) =>
+        putCredential(tx, RING, {
+          purpose: STREAM_PURPOSE,
+          value: streamSettingsPayload({
+            venueId: VENUE_ID,
+            bucket: { ...BUCKET, bucket: "moved-copy" },
+          }),
+        }),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      release();
+      const shown = await (await pending).json();
+      await write;
+      expect(shown.bucket.bucket).toBe("venue-copy");
+      expect(shown.revision).toBe(before.revision);
+      // Control: the write did land, under a revision of its own.
+      const after = await (await app.request("/api/backup/stream", { headers: { cookie } })).json();
+      expect(after.bucket.bucket).toBe("moved-copy");
+      expect(after.revision).not.toBe(before.revision);
+    } finally {
+      credentialWrites.afterGet = async () => {};
+      release();
+      await write?.catch(() => {});
+      await clearBucket();
+    }
   });
 
   describe("with archives held in a bucket", () => {

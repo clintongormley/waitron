@@ -1,7 +1,12 @@
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import { tryGetCredential, type KeyRing } from "@waitron/credentials";
-import { readNodeMembership, withTransaction, type Database } from "@waitron/db";
+import {
+  readNodeMembership,
+  withTransaction,
+  type Database,
+  type Transaction,
+} from "@waitron/db";
 import { signBytes } from "@waitron/membership";
 import { codeOf } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
@@ -54,9 +59,14 @@ export async function readStreamSettings(
   db: Database,
   ring: KeyRing,
 ): Promise<StreamSettings | null> {
-  const value = await withTransaction(db, (tx) =>
-    tryGetCredential(tx, ring, { purpose: STREAM_PURPOSE }),
-  );
+  return withTransaction(db, (tx) => readStreamSettingsIn(tx, ring));
+}
+
+export async function readStreamSettingsIn(
+  tx: Transaction,
+  ring: KeyRing,
+): Promise<StreamSettings | null> {
+  const value = await tryGetCredential(tx, ring, { purpose: STREAM_PURPOSE });
   if (value === null) return null;
   const field = (
     name:

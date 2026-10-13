@@ -31,6 +31,7 @@ import type { Turns } from "./backup-turns.js";
 import {
   STREAM_PURPOSE,
   readStreamSettings,
+  readStreamSettingsIn,
   streamSettingsPayload,
   type StreamHost,
 } from "./stream-host.js";
@@ -165,21 +166,30 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
     return held;
   };
 
+  // One transaction, so the revision is the one of the settings shown.
+  const readStored = (): Promise<{
+    bucket: BucketConfig | null;
+    configured: boolean;
+    revision: string | null;
+  }> =>
+    withTransaction(deps.db, async (tx) => {
+      let bucket: BucketConfig | null;
+      let configured: boolean;
+      try {
+        bucket = (await readStreamSettingsIn(tx, deps.ring))?.bucket ?? null;
+        configured = bucket !== null;
+      } catch (error) {
+        if (!isAppError(error) || !hasCode(error, "server.credential_unusable")) throw error;
+        bucket = null;
+        configured = true;
+      }
+      const revision = await credentialRevision(tx, { purpose: STREAM_PURPOSE });
+      return { bucket, configured, revision };
+    });
+
   const view = async (): Promise<StreamSettingsView> => {
-    let bucket: BucketConfig | null;
-    let configured: boolean;
-    try {
-      bucket = (await readStreamSettings(deps.db, deps.ring))?.bucket ?? null;
-      configured = bucket !== null;
-    } catch (error) {
-      if (!isAppError(error) || !hasCode(error, "server.credential_unusable")) throw error;
-      bucket = null;
-      configured = true;
-    }
+    const { bucket, configured, revision } = await readStored();
     const { held: recoveryKeySet, key } = await readHeldKey(deps.readRecoveryKey);
-    const revision = await withTransaction(deps.db, (tx) =>
-      credentialRevision(tx, { purpose: STREAM_PURPOSE }),
-    );
     return {
       isPrimary: deps.isPrimary(),
       configured,
