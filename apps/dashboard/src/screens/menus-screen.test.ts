@@ -4603,6 +4603,29 @@ describe("the Structure tree", () => {
       expect(modal(el, "remove-selected").getAttribute("heading")).toBe("¿Quitar 1 elemento?");
     });
 
+    it("names an item holding a replacement pattern and the list's placeholder as written", async () => {
+      const client = api({
+        listLibraryProducts: vi
+          .fn()
+          .mockResolvedValue(
+            products.map((item) =>
+              item.id === "p-burger" ? { ...item, name: "Burger $& {list}" } : item,
+            ),
+          ),
+      });
+      const el = await mountLunch(client);
+      await pressSelect(el);
+      await tick(el, "m-burger");
+      await openRemove(el);
+      expect(
+        [
+          ...modal(el, "remove-selected").querySelectorAll(
+            '[data-test="remove-selected-items"] li',
+          ),
+        ].map(text),
+      ).toEqual(["Burger $& {list}, from Lunch Menu"]);
+    });
+
     it("asks in Spanish how many items to remove", async () => {
       setLocale("es");
       const el = await mountLunch();
@@ -11029,5 +11052,113 @@ it.each(
   await page.screenshot({
     element: empty,
     path: `.superpowers/a462-task5/structure-${width}-${locale}-${theme}-empty.png`,
+  });
+});
+
+describe("a name put into a sentence", () => {
+  beforeEach(() => {
+    const before = currentLocale();
+    setLocale("en");
+    onTestFinished(() => setLocale(before));
+  });
+
+  /** Lunch's structure with Drinks, wherever it sits, given `name` and `extra` below it. */
+  function renameDrinks(client: Api, name: string, extra: MenuStructureNode[] = []): void {
+    const read = client.getMenuStructure.getMockImplementation() as (
+      id: string,
+    ) => Promise<MenuStructure>;
+    const rename = (nodes: MenuStructureNode[]): MenuStructureNode[] =>
+      nodes.map((node) =>
+        node.ref.kind === "section" && node.ref.sectionId === "s-drinks"
+          ? { ...node, internalName: name, children: [...rename(node.children ?? []), ...extra] }
+          : node.children
+            ? { ...node, children: rename(node.children) }
+            : node,
+      );
+    client.getMenuStructure.mockImplementation(async (id: string) => {
+      const snapshot = await read(id);
+      return { ...snapshot, nodes: rename(snapshot.nodes) };
+    });
+  }
+
+  it("asks to delete a section whose name holds a replacement pattern and the count's placeholder as written", async () => {
+    const client = api();
+    renameDrinks(client, "Drinks $& {count}", [
+      {
+        memberId: "m-wine",
+        ref: { kind: "section", sectionId: "s-wine" },
+        internalName: "Wine",
+        names: {},
+        image: null,
+        color: null,
+        ownerMenuId: "menu-lunch",
+        children: [],
+      },
+    ]);
+    const el = await mountLunch(client);
+    await rowAction(el, "m-drinks", "delete");
+    expect(text(modal(el, "delete-section").querySelector("p"))).toBe(
+      "Delete Drinks $& {count} and the 2 sections below it? Its products stay.",
+    );
+  });
+
+  it("names a section holding a replacement pattern and the reason's placeholder as written when its change is refused elsewhere", async () => {
+    const adding = deferred<{ added: number }>();
+    const client = api({ addSectionProducts: vi.fn(() => adding.promise) });
+    renameDrinks(client, "Drinks $& {reason}");
+    const el = await mountLunch(client);
+    await rowAction(el, "m-drinks", "open-add-products");
+    const picker = inModal<SectionAddProducts>(
+      el,
+      "add-products",
+      "dashboard-section-add-products",
+    );
+    emit(picker, "wt-add-products", { productIds: ["p-chips"] });
+    await vi.waitFor(() => expect(client.addSectionProducts).toHaveBeenCalledOnce());
+    await visit(el, DINNER_PATH, "Dinner Menu");
+    adding.reject({ code: "menu_section.membership_invalid" });
+    await vi.waitFor(() =>
+      expect(text(q(el, '[data-test="member-error"]'))).toBe(
+        `Your change to Drinks $& {reason} was not saved. ${codeMessage("menu_section.membership_invalid")}`,
+      ),
+    );
+  });
+
+  it("names a product holding a replacement pattern and the reason's placeholder as written when its price is refused elsewhere", async () => {
+    const pending = deferred<void>();
+    const client = api({
+      updateMenuItem: vi.fn(() => pending.promise),
+      getMenuPrices: vi.fn(async (id: string) =>
+        id === "menu-lunch"
+          ? lunchPrices().map((row) =>
+              row.menuItemId === "mi-burger" ? { ...row, name: "Burger $& {reason}" } : row,
+            )
+          : [],
+      ),
+    });
+    const el = await mountPrices(client);
+    await commitPrice(el, "mi-burger", "11.00");
+    history.pushState(null, "", "/manage/menus/menu/menu-dinner/view/prices");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await vi.waitFor(() => expect(text(q(el, "h1"))).toBe("Dinner Menu"));
+    pending.reject({ code: "catalogue.not_found" });
+    await vi.waitFor(() =>
+      expect(text(q(el, '[data-test="member-error"]'))).toBe(
+        `Your change to Burger $& {reason} was not saved. ${codeMessage("catalogue.not_found")}`,
+      ),
+    );
+  });
+
+  it("heads the rename window with a menu name holding a replacement pattern as written", async () => {
+    const client = api({
+      listCatalogues: vi
+        .fn()
+        .mockResolvedValue(
+          menus.map((menu) => (menu.id === "menu-lunch" ? { ...menu, name: "Lunch $&" } : menu)),
+        ),
+    });
+    const el = await mount(client);
+    await inTable(el, "rename-menu-lunch");
+    expect(modal(el, "menu-form").heading).toBe("Rename Lunch $&");
   });
 });

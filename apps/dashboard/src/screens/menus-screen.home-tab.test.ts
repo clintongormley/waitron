@@ -793,6 +793,33 @@ describe("adding shortcuts on the Home page tab", () => {
     expect(client.getMenuHome.mock.calls.length).toBe(reads + 1);
   });
 
+  it("names a refused shortcut holding a replacement pattern and the reason's placeholder as written", async () => {
+    const before = currentLocale();
+    setLocale("en");
+    onTestFinished(() => setLocale(before));
+    const client = api({
+      getMenuHome: vi.fn().mockResolvedValue(drinksOnly()),
+      listLibraryProducts: vi
+        .fn()
+        .mockResolvedValue(
+          products.map((item) =>
+            item.id === "p-burger" ? { ...item, name: "Burger $& {reason}" } : item,
+          ),
+        ),
+      addHomeShortcut: vi.fn().mockRejectedValue({ code: "menu.shortcut_unreachable" }),
+    });
+    const el = await mountHome(client);
+    await openAdd(el, "product");
+    await choose(el, ["p-burger"]);
+    pressAdd(el);
+    await vi.waitFor(() => expect(client.addHomeShortcut).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(preview(el)!.busy).toBe(false));
+    await combobox(el).updateComplete;
+    expect(combobox(el).error).toBe(
+      `Burger $& {reason} was not added. ${codeMessage("menu.shortcut_unreachable")}`,
+    );
+  });
+
   it("puts a refusal that names no shortcut at the bottom and keeps every choice", async () => {
     const client = api({
       getMenuHome: vi.fn().mockResolvedValue(drinksOnly()),
