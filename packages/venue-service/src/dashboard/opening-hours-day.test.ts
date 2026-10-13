@@ -98,7 +98,7 @@ export function dayFixture(): OpeningHoursModel {
 }
 beforeEach(() => {
   setLocale("en");
-  history.replaceState(null, "", "/manage/opening-hours/view/day");
+  history.replaceState(null, "", "/manage/opening-hours/view/date");
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-10-13T01:00:00Z"));
 });
@@ -173,6 +173,25 @@ it("starts on the venue business day before changeover, showing only active depa
   expect(screen.shadowRoot!.querySelector("[name=departmentId]")).toBeNull();
   expect(save(day).disabled).toBe(true);
   expect(save(day).variant).toBe("secondary");
+});
+it("keeps the date between ‹ and › on one line at a phone's width", async () => {
+  for (const locale of ["en", "es"] as const) {
+    setLocale(locale);
+    const day = await mount();
+    // The screen's width on a 390 px phone, its page padding taken off.
+    screen.style.width = "302px";
+    await day.updateComplete;
+    const middle = (test: string) => {
+      const box = day.shadowRoot!.querySelector(`[data-test=${test}]`)!.getBoundingClientRect();
+      return box.top + box.height / 2;
+    };
+    expect(day.shadowRoot!.querySelector("[data-test=day-date]")!.textContent).toContain(
+      "Special 2026-10-12",
+    );
+    expect(middle("next-day"), locale).toBeCloseTo(middle("previous-day"), 0);
+    expect(middle("day-date"), locale).toBeCloseTo(middle("previous-day"), 0);
+    screen.remove();
+  }
 });
 it("starts on the next business day at the exact changeover", async () => {
   vi.setSystemTime(new Date("2026-10-13T04:00:00Z"));
@@ -718,7 +737,7 @@ it("keeps a created period's signed offset in its wire body and department range
   ).toBe("late");
 });
 
-it("shows a repeat note naming 02:00 for 02:00-03:00 when the Day tab's date, 30 Oct 2027, is the night the clocks go back", async () => {
+it("shows a repeat note naming 02:00 for 02:00-03:00 when the per-date editor's date, 30 Oct 2027, is the night the clocks go back", async () => {
   vi.setSystemTime(new Date("2027-10-30T10:00:00Z"));
   const model = dayFixture();
   const day = await mount(undefined, model);

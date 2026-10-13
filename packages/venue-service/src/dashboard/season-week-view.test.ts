@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { seasonIdOn } from "./real-week.js";
+import { seasonIdOn } from "./season-week-view.js";
 
 const seasons = [
   { id: "winter", name: "Winter", startsOn: "12-01" },

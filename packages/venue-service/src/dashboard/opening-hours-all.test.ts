@@ -3,9 +3,6 @@ import { applyTokens } from "@waitron/ui";
 import { setLocale } from "@waitron/dashboard-kit";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import type { ServiceGrid } from "./service-grid.js";
-import type { SpecialDaysModel } from "../holiday-types.js";
-import type { SpecialDayDetail } from "../special-days.js";
-import { namedWeekModel } from "../testing/real-week-model.js";
 import "./opening-hours-screen.js";
 
 type All = HTMLElementTagNameMap["opening-hours-all"];
@@ -86,7 +83,6 @@ async function mount() {
   el.departments = allDepartments();
   el.dayCutover = "06:00";
   el.seasonId = "s";
-  el.seasons = [{ id: "s", name: "Year", startsOn: "01-01" }];
   document.body.append(el);
   expect(el.shadowRoot, "All departments registered and rendered").not.toBeNull();
   await el.updateComplete;
@@ -152,90 +148,6 @@ it("updates headings and periods from the next model snapshot", async () => {
   expect(el.shadowRoot!.textContent).toContain("Dining room");
 });
 
-it("shows dated ranges and whole-venue closure when a special day is on the date", async () => {
-  const el = await mount();
-  const detail: SpecialDayDetail = {
-    id: "named",
-    name: "Own Monday",
-    repeatsYearly: false,
-    dates: [{ date: "2026-10-12", closedAllDay: false }],
-    paint: [
-      {
-        departmentId: "restaurant",
-        date: "2026-10-12",
-        ranges: [
-          { periodId: null, startsAt: "12:00", endsAt: "14:00" },
-          { periodId: "lunch", startsAt: "14:00", endsAt: "17:00" },
-        ],
-      },
-    ],
-    zonePaint: [],
-  };
-  const calendar = (closed: boolean): SpecialDaysModel => ({
-    ...namedWeekModel(),
-    days: [
-      {
-        date: "2026-10-12",
-        specialDay: { id: "named", name: "Own Monday" },
-        holidays: [],
-        tone: "special_day",
-        closed,
-      },
-    ],
-  });
-  el.weekStart = "2026-10-12";
-  el.calendar = calendar(false);
-  el.specials = new Map([[detail.id, detail]]);
-  await el.updateComplete;
-  const grid = el.shadowRoot!.querySelector<ServiceGrid>("service-grid")!;
-  expect(grid.columns).toHaveLength(14);
-  expect(grid.columns[0]!.slots).toEqual([
-    { periodId: "lunch", startsAt: "14:00", endsAt: "17:00" },
-  ]);
-  expect(grid.columns[1]!.slots).toEqual([]);
-  el.weekStart = "2026-10-12";
-  el.calendar = calendar(true);
-  await el.updateComplete;
-  expect(grid.columns.slice(0, 2).every((column) => column.slots.length === 0)).toBe(true);
-  expect(grid.columns[3]!.slots).toEqual([
-    { periodId: "dinner", startsAt: "18:00", endsAt: "23:00" },
-  ]);
-});
-
-it("in the real week from Monday 25 Nov 2030, shows Autumn's Monday to Saturday and Winter's Sunday 1 Dec", async () => {
-  const el = await mount();
-  const week = (endsAt: string) =>
-    Array.from({ length: 7 }, (_, weekday) => ({
-      weekday,
-      slots: [{ periodId: "lunch", startsAt: "12:00", endsAt: `${endsAt}${weekday}` }],
-    }));
-  el.seasons = [
-    { id: "autumn", name: "Autumn", startsOn: "09-01" },
-    { id: "winter", name: "Winter", startsOn: "12-01" },
-  ];
-  el.seasonId = "autumn";
-  el.departments = [
-    {
-      ...allDepartments()[0]!,
-      seasonWeeks: [
-        { seasonId: "autumn", week: week("16:0") },
-        { seasonId: "winter", week: week("17:0") },
-      ],
-    },
-  ];
-  el.weekStart = "2030-11-25";
-  await el.updateComplete;
-  const grid = el.shadowRoot!.querySelector<ServiceGrid>("service-grid")!;
-  expect(grid.columns.map((column) => column.slots[0]!.endsAt)).toEqual([
-    "16:01",
-    "16:02",
-    "16:03",
-    "16:04",
-    "16:05",
-    "16:06",
-    "17:00",
-  ]);
-});
 it("leaves a modified or non-primary click on a heading to the browser", async () => {
   const el = await mount();
   const events: unknown[] = [];

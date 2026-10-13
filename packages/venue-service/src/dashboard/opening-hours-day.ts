@@ -24,7 +24,7 @@ import type { RangeDialog } from "./range-dialog.js";
 import type { PeriodEditor } from "./period-editor.js";
 import type { SpecialDaysModel } from "../holiday-types.js";
 import type { SpecialDayAction } from "./special-day-action.js";
-import { seasonIdOn } from "./real-week.js";
+import { seasonIdOn } from "./season-week-view.js";
 import { paintedClosed, paintedSlots, specialOn, type DatedSpecial } from "./special-date.js";
 import { seasonWeek } from "./season-choice.js";
 import { format, formatDate } from "./hours-view.js";
@@ -110,12 +110,16 @@ export class OpeningHoursDay extends LitElement {
       .date-nav {
         display: flex;
         align-items: center;
-        flex-wrap: wrap;
         gap: var(--wt-space-3);
         margin-block: var(--wt-space-4);
       }
       .date-nav p {
+        min-width: 0;
         margin: 0;
+        overflow-wrap: anywhere;
+      }
+      .date-nav wt-button {
+        flex: none;
       }
       .note {
         font-weight: var(--wt-font-weight-normal);
@@ -131,6 +135,7 @@ export class OpeningHoursDay extends LitElement {
   @property({ attribute: false }) api!: OpeningHoursApi;
   @property({ attribute: false }) model!: OpeningHoursModel;
   @property({ type: Boolean }) readOnly = false;
+  /** The date shown; ‹ › change it here and send `day-date-change` with the new one. */
   @property() date = "";
   @state() private draft: Draft = { menus: {}, zones: {} };
   @state() private opening?: Opening;
@@ -412,6 +417,13 @@ export class OpeningHoursDay extends LitElement {
       this.error = "";
       this.errorDepartment = "";
       this.errorZone = "";
+      this.dispatchEvent(
+        new CustomEvent("day-date-change", {
+          detail: { date: this.date },
+          bubbles: true,
+          composed: true,
+        }),
+      );
     };
     const coordinator = leaveCoordinatorFor(this);
     if (coordinator) await coordinator.request({ scopes: "all", reason: "navigation", proceed });

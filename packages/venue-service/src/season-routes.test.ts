@@ -192,6 +192,68 @@ describe("the year read route", () => {
   });
 });
 
+describe("the month read route", () => {
+  it("answers a month's whole weeks to a viewer", async () => {
+    const r = await routed();
+    const response = await r.send("GET", "/opening-hours/month?month=2030-12", r.supervisor);
+    expect(response.status).toBe(200);
+    const month = (await response.json()) as {
+      month: string;
+      days: { date: string; inMonth: boolean; seasonId: string | null }[];
+      seasons: { name: string; lastDay: string }[];
+    };
+    expect(month.month).toBe("2030-12");
+    expect(month.days).toHaveLength(42);
+    expect(month.days[0]).toMatchObject({
+      date: "2030-11-25",
+      inMonth: false,
+      seasonId: r.seasons.Autumn,
+    });
+    expect(month.days.at(-1)).toMatchObject({
+      date: "2031-01-05",
+      inMonth: false,
+      seasonId: r.seasons.Winter,
+    });
+    expect(month.seasons.map(({ name, lastDay }) => ({ name, lastDay }))).toEqual([
+      { name: "Autumn", lastDay: "11-30" },
+      { name: "Winter", lastDay: "02-28" },
+    ]);
+  });
+
+  it("refuses a month that is not YYYY-MM from 0100-02 to 9998-12, and an anonymous read", async () => {
+    const r = await routed();
+    for (const query of [
+      "",
+      "?month=",
+      "?month=2030",
+      "?month=2030-00",
+      "?month=2030-13",
+      "?month=2030-1",
+      "?month=2030-12-01",
+      "?month=0099-12",
+      "?month=0100-01",
+      "?month=9999-01",
+    ])
+      await answers(await r.send("GET", `/opening-hours/month${query}`, r.manager), 400, {
+        error: { code: "management.request_invalid", params: { field: "month" } },
+      });
+    expect((await r.send("GET", "/opening-hours/month?month=2030-12", "")).status).toBe(401);
+  });
+
+  it("serves both ends of the calendar, reaching into the years beyond them", async () => {
+    const r = await routed();
+    for (const [month, first, last] of [
+      ["0100-02", "0100-02-01", "0100-02-28"],
+      ["9998-12", "9998-11-30", "9999-01-03"],
+    ] as const) {
+      const response = await r.send("GET", `/opening-hours/month?month=${month}`, r.manager);
+      expect(response.status).toBe(200);
+      const read = (await response.json()) as { days: { date: string }[] };
+      expect({ first: read.days[0]!.date, last: read.days.at(-1)!.date }).toEqual({ first, last });
+    }
+  });
+});
+
 describe("the season routes", () => {
   it("PUT renames and moves a season, answering it", async () => {
     const r = await routed();

@@ -6,7 +6,7 @@ import { OpeningHoursApi } from "./opening-hours-client.js";
 import "./opening-hours-screen.js";
 import type { SpecialDaysModel } from "../holiday-types.js";
 import type { SpecialDayDetail } from "../special-days.js";
-import { namedWeekModel } from "../testing/real-week-model.js";
+import { namedWeekModel } from "../testing/hours-models.js";
 
 let screen: HTMLElementTagNameMap["dashboard-opening-hours-screen"];
 const originalUrl = location.href;
@@ -30,7 +30,7 @@ async function mount(
   write: (path: string, method: string, body: unknown) => Promise<unknown> = async () => {},
 ) {
   vi.setSystemTime(new Date("2026-10-12T12:00:00Z"));
-  history.replaceState(null, "", `/manage/opening-hours/view/day/date/${date}`);
+  history.replaceState(null, "", `/manage/opening-hours/view/date/date/${date}`);
   const model = {
     businessDayClock: { timeZone, dayCutover: "06:00", cutoverChanges: [] },
     dayCutover: "06:00",

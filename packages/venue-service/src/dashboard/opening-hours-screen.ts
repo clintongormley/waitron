@@ -23,9 +23,13 @@ import "./opening-hours-day.js";
 import "./opening-hours-all.js";
 import "./opening-hours-station.js";
 import "./opening-hours-year.js";
+import "./opening-hours-month.js";
+import "./ordinary-date-dialog.js";
+import type { OrdinaryDateOpen } from "./opening-hours-month.js";
+import { seasonTints } from "./season-tint.js";
 import "./special-day-dialog.js";
 import type { SpecialDayAction, SpecialDayRef } from "./special-day-action.js";
-import type { OpeningHoursYear } from "../opening-hours-calendar.js";
+import type { OpeningHoursMonth, OpeningHoursYear } from "../opening-hours-calendar.js";
 import type { SpecialDayDialog, SpecialDayFacts } from "./special-day-dialog.js";
 import type { SpecialDayDetail } from "../special-days.js";
 import type { PeriodEditor } from "./period-editor.js";
@@ -37,16 +41,14 @@ import type {
 } from "../menu-timetable-types.js";
 import type { OpeningHoursApi, OpeningStation } from "./opening-hours-client.js";
 import { businessDateToday } from "./opening-hours-day.js";
-import { addDays, isLocalDate, parseCalendarYear, weekdayOf } from "../hours-rules.js";
-import type { SpecialDaysModel } from "../holiday-types.js";
-import "@waitron/ui/src/components/wt-switch.js";
-import { format, formatDate } from "./hours-view.js";
+import { isLocalDate, parseCalendarMonth, parseCalendarYear } from "../hours-rules.js";
+import { browserToday, format, formatDate, formatMonthName } from "./hours-view.js";
 import { t } from "./strings.js";
 import { chosenSeasonId, seasonOptions } from "./season-choice.js";
 
 type Department = OpeningHoursModel["departments"][number];
 type Period = Department["periods"][number];
-type View = "year" | "week" | "periods" | "day";
+type View = "year" | "month" | "week" | "periods" | "date";
 type Editor = { department: Department; period?: Period; clockRevision: number };
 type OpenSpecialDay = Omit<SpecialDayAction, "specialDay"> & {
   clockRevision: number;
@@ -54,6 +56,10 @@ type OpenSpecialDay = Omit<SpecialDayAction, "specialDay"> & {
   detail?: SpecialDayDetail;
   /** The venue's special days, read when the action opened on a public holiday. */
   existing?: { id: string; name: string; latest?: string }[];
+  /** A date to add to `detail` as an unsaved change. */
+  addDate?: string;
+  /** Whether the dialog offers the per-date editor for `date`. */
+  offerEditDate?: boolean;
 };
 type Deletion = { period: Period };
 
@@ -76,12 +82,19 @@ export class OpeningHoursScreen extends LitElement {
       a {
         color: var(--wt-color-primary-text);
       }
-      .week-nav {
-        display: flex;
-        align-items: center;
-        flex-wrap: wrap;
-        gap: var(--wt-space-3);
-        margin-block: var(--wt-space-3);
+      .month-back {
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: var(--wt-color-primary-text);
+        font: inherit;
+        cursor: pointer;
+        min-height: var(--wt-tap-min);
+        text-transform: capitalize;
+      }
+      .month-back:focus-visible {
+        outline: var(--wt-field-line-width-active) solid var(--wt-color-focus);
+        outline-offset: var(--wt-focus-offset);
       }
       .toolbar {
         display: flex;
@@ -118,13 +131,14 @@ export class OpeningHoursScreen extends LitElement {
   private yearDetach?: () => void;
   private watchedYear = 0;
   private knownSpecialDaysRead = {};
-  @state() private weekStart = "";
-  @state() private namedWeek?: SpecialDaysModel;
-  @state() private weekSpecials: ReadonlyMap<string, SpecialDayDetail> = new Map();
+  /** The address's month, or "" for the venue's current one. */
+  @state() private requestedMonth = "";
+  @state() private monthModel?: OpeningHoursMonth;
+  @state() private monthReadError = "";
+  private monthDetach?: () => void;
+  private watchedMonth = "";
+  @state() private ordinary?: OrdinaryDateOpen;
   @state() private dayDate = "";
-  @state() private namedReadError = "";
-  private weekDetach?: () => void;
-  private watchedWeek = "";
   @state() private readError = "";
   @state() private editor?: Editor;
   @state() private deleting?: Deletion;
@@ -147,6 +161,7 @@ export class OpeningHoursScreen extends LitElement {
         season: "season",
         date: "date",
         year: "year",
+        month: "month",
       },
     },
   });
@@ -154,7 +169,11 @@ export class OpeningHoursScreen extends LitElement {
     if (this.url.read("dashboard") !== "opening-hours") return;
     const view = this.url.read("view");
     const shown: View =
-      view === "year" || view === "periods" || view === "day" || view === "week"
+      view === "year" ||
+      view === "month" ||
+      view === "periods" ||
+      view === "date" ||
+      view === "week"
         ? view
         : view === "calendar"
           ? "year"
@@ -172,19 +191,16 @@ export class OpeningHoursScreen extends LitElement {
       new URL(navigationGuardFor(window)?.href ?? location.href).searchParams.get("station") ??
       "";
     this.requestedYear = parseCalendarYear(this.url.read("year")) ?? 0;
+    this.requestedMonth = parseCalendarMonth(this.url.read("month")) ?? "";
     const date = this.url.read("date") ?? "";
     this.dayDate = isLocalDate(date) ? date : "";
-    const week =
-      new URL(navigationGuardFor(window)?.href ?? location.href).searchParams.get("week") ?? "";
-    this.weekStart = isLocalDate(week) && weekdayOf(week) === 1 ? week : "";
     this.resolveSeason();
   }
   /** Whether an address with no view opens the Week rather than the Year (ruling R3). */
   private namesWeek(url: URL) {
     return (
       ["department", "zone", "station", "season"].some((key) => this.url.read(key) !== null) ||
-      url.searchParams.has("station") ||
-      url.searchParams.has("week")
+      url.searchParams.has("station")
     );
   }
   override connectedCallback() {
@@ -223,8 +239,8 @@ export class OpeningHoursScreen extends LitElement {
   override disconnectedCallback() {
     this.stationsDetach?.();
     this.detach?.();
-    this.weekDetach?.();
-    this.watchedWeek = "";
+    this.monthDetach?.();
+    this.watchedMonth = "";
     this.yearDetach?.();
     this.watchedYear = 0;
     this.generation = {};
@@ -328,11 +344,7 @@ export class OpeningHoursScreen extends LitElement {
   private resolveSeason() {
     this.season =
       this.model && this.view === "week" && !this.stationId
-        ? chosenSeasonId(
-            this.model.seasons,
-            this.model.currentSeasonId,
-            this.weekStart ? "" : this.requestedSeason,
-          )
+        ? chosenSeasonId(this.model.seasons, this.model.currentSeasonId, this.requestedSeason)
         : "";
   }
   private async chooseSeason(value: string) {
@@ -340,13 +352,10 @@ export class OpeningHoursScreen extends LitElement {
     await this.url.write({ dashboard: "opening-hours", season: value });
     this.followUrl();
   }
-  private currentWeek() {
-    const date = this.model ? businessDateToday(this.model) : "";
-    return date ? addDays(date, -((weekdayOf(date) + 6) % 7)) : "";
-  }
   protected override willUpdate() {
     if (!this.model) return;
     this.watchYear();
+    this.watchMonth();
     if (this.editor) {
       const department = this.model.departments.find(
         (row) => row.active && row.id === this.editor!.department.id,
@@ -371,44 +380,6 @@ export class OpeningHoursScreen extends LitElement {
       this.deleting = undefined;
       this.busy = false;
     }
-    const rawWeek = new URL(navigationGuardFor(window)?.href ?? location.href).searchParams.get(
-      "week",
-    );
-    if (this.view === "week" && rawWeek !== null && !this.weekStart) {
-      void this.writeWeek("", true);
-      return;
-    }
-    const current = this.currentWeek();
-    if (this.weekStart && current && this.weekStart < current) {
-      void this.writeWeek(current, true);
-      return;
-    }
-    const week = this.view === "week" ? this.weekStart : "";
-    if (week === this.watchedWeek) return;
-    this.weekDetach?.();
-    this.watchedWeek = week;
-    this.namedWeek = undefined;
-    this.weekSpecials = new Map();
-    this.namedReadError = "";
-    if (week)
-      this.weekDetach = this.api.specialDays.watchSpecialDays(
-        week,
-        addDays(week, 6),
-        (model) => {
-          if (this.isConnected && this.watchedWeek === week) {
-            this.namedWeek = model;
-            this.namedReadError = "";
-            this.readWeekSpecials(model, week);
-          }
-        },
-        () => {
-          if (this.isConnected && this.watchedWeek === week)
-            this.namedReadError = t("opening.load_error");
-        },
-        () => {
-          if (this.isConnected && this.watchedWeek === week) this.namedReadError = "";
-        },
-      );
   }
   private shownYear() {
     if (this.view !== "year" || !this.model) return 0;
@@ -447,6 +418,38 @@ export class OpeningHoursScreen extends LitElement {
       },
     );
   }
+  private shownMonth() {
+    if (!this.model || this.view !== "month") return "";
+    if (this.requestedMonth) return this.requestedMonth;
+    const today = businessDateToday(this.model);
+    return (today || browserToday()).slice(0, 7);
+  }
+  private watchMonth() {
+    const month = this.shownMonth();
+    if (month === this.watchedMonth) return;
+    this.monthDetach?.();
+    this.monthDetach = undefined;
+    this.watchedMonth = month;
+    this.monthReadError = "";
+    if (!month) {
+      this.monthModel = undefined;
+      return;
+    }
+    this.monthDetach = this.api.watchMonth(
+      month,
+      (model) => {
+        this.monthModel = model;
+        this.monthReadError = "";
+      },
+      () => {
+        this.monthReadError = t("opening.load_error");
+        if (this.monthModel?.month !== month) this.monthModel = undefined;
+      },
+      () => {
+        this.monthReadError = "";
+      },
+    );
+  }
   /** Feeds only the season dialog's naming of a refusal, so a failed read keeps the last list. */
   private readKnownSpecialDays() {
     const read = (this.knownSpecialDaysRead = {});
@@ -462,44 +465,16 @@ export class OpeningHoursScreen extends LitElement {
     saveHolidayArea: (areaKey: string) => this.api.specialDays.saveHolidayArea(areaKey),
     rereadWatches: () => this.api.rereadWithSpecialDays(),
   };
-  /** Each distinct special day in the shown week, read once per calendar snapshot. */
-  private readWeekSpecials(model: SpecialDaysModel, week: string) {
-    const ids = [
-      ...new Set((model.days ?? []).flatMap((day) => (day.specialDay ? [day.specialDay.id] : []))),
-    ];
-    const current = () => this.isConnected && this.watchedWeek === week && this.namedWeek === model;
-    void Promise.all(
-      ids.map((id) => this.api.specialDays.readSpecialDay(id, { passive: true })),
-    ).then(
-      (details) => {
-        if (current()) this.weekSpecials = new Map(details.map((detail) => [detail.id, detail]));
-      },
-      () => {
-        if (current()) this.namedReadError = t("opening.load_error");
-      },
-    );
-  }
-  private openDay(event: CustomEvent<{ date: string }>) {
+  private openMonth(event: CustomEvent<{ date: string }>) {
     event.stopPropagation();
     void Promise.resolve(
       this.url.write({
         dashboard: "opening-hours",
-        view: "day",
-        date: event.detail.date,
+        view: "month",
+        month: event.detail.date.slice(0, 7),
         year: null,
       }),
     ).then(() => this.followUrl());
-  }
-  private async writeWeek(week: string, replace = false) {
-    if (!this.isConnected || this.view !== "week") return;
-    const url = new URL(navigationGuardFor(window)?.href ?? location.href);
-    if (week) url.searchParams.set("week", week);
-    else {
-      url.searchParams.delete("week");
-      if (this.url.read("view") === null && !this.namesWeek(url))
-        url.pathname = `${url.pathname.replace(/\/$/, "")}/view/week`;
-    }
-    await this.writeAddress(url, replace);
   }
   private async writeAddress(url: URL, replace = false) {
     const generation = this.generation;
@@ -518,56 +493,6 @@ export class OpeningHoursScreen extends LitElement {
     const coordinator = leaveCoordinatorFor(this);
     if (coordinator) await coordinator.request({ scopes: "all", reason: "navigation", proceed });
     else proceed();
-  }
-  private weekChooser() {
-    const current = this.currentWeek();
-    return html`<div class="chooser">
-      <wt-switch
-        name="realWeek"
-        label=${t("opening.real_week")}
-        .checked=${!!this.weekStart}
-        .disabled=${!current}
-        @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
-          event.stopPropagation();
-          if (
-            !this.isConnected ||
-            event.currentTarget !== this.shadowRoot?.querySelector("[name=realWeek]") ||
-            this.view !== "week" ||
-            (!current && event.detail.checked)
-          )
-            return;
-          (event.currentTarget as HTMLElementTagNameMap["wt-switch"]).checked = !!this.weekStart;
-          void this.writeWeek(event.detail.checked ? current : "");
-        }}
-      ></wt-switch>
-      ${!current ? html`<p>${t("opening.clock_unreadable")}</p>` : nothing}
-      ${
-        this.weekStart
-          ? html`<div class="week-nav">
-              <wt-button
-                variant="secondary"
-                data-test="previous-week"
-                aria-label=${t("opening.previous_week")}
-                ?disabled=${!current || this.weekStart <= current}
-                @click=${() => {
-                  if (current && this.weekStart > current)
-                    void this.writeWeek(addDays(this.weekStart, -7));
-                }}
-                >‹</wt-button
-              >
-              <span>${formatDate(this.weekStart)} – ${formatDate(addDays(this.weekStart, 6))}</span>
-              <wt-button
-                variant="secondary"
-                data-test="next-week"
-                aria-label=${t("opening.next_week")}
-                @click=${() => this.writeWeek(addDays(this.weekStart, 7))}
-                >›</wt-button
-              >
-            </div>`
-          : nothing
-      }
-      ${this.namedReadError ? html`<p role="alert">${this.namedReadError}</p>` : nothing}
-    </div>`;
   }
   private menuLabel(id: string) {
     const menu = this.model!.menus.find((m) => m.id === id);
@@ -693,24 +618,36 @@ export class OpeningHoursScreen extends LitElement {
   }
   private async openNamedDay(event: CustomEvent<SpecialDayAction>) {
     event.stopPropagation();
+    const day = this.shadowRoot?.querySelector("opening-hours-day");
+    if (
+      ![
+        this.shadowRoot?.querySelector("opening-hours-year"),
+        this.shadowRoot?.querySelector("opening-hours-month"),
+        day,
+      ].some((component) => component === event.currentTarget)
+    )
+      return;
+    await this.openSpecial(event.detail, { offerEditDate: event.currentTarget !== day });
+  }
+  private async openSpecial(
+    sentAction: SpecialDayAction,
+    extra: Pick<OpenSpecialDay, "addDate" | "offerEditDate">,
+  ) {
     if (
       !this.isConnected ||
       this.readOnly ||
       this.busy ||
       this.editor ||
       this.deleting ||
-      this.namedAction ||
-      ![
-        this.shadowRoot?.querySelector("opening-hours-year"),
-        this.shadowRoot?.querySelector("opening-hours-day"),
-      ].some((component) => component === event.currentTarget)
+      this.namedAction
     )
       return;
-    const { specialDay: sent, ...detail } = event.detail;
+    const { specialDay: sent, ...detail } = sentAction;
     const specialDay: SpecialDayRef | null = sent ?? null;
     if (detail.kind === "delete" && !specialDay) return;
     const action: OpenSpecialDay = {
       ...detail,
+      ...extra,
       clockRevision: this.model!.clockRevision,
     };
     this.namedDeleteError = "";
@@ -904,10 +841,13 @@ export class OpeningHoursScreen extends LitElement {
         .open=${true}
         .specialDay=${action.detail}
         .date=${action.date}
+        .addDate=${action.addDate ?? ""}
+        .offerEditDate=${action.offerEditDate ?? false}
         .holidays=${action.visibleHolidays ?? action.holidays}
         .existing=${action.existing ?? []}
         .busy=${this.busy}
         @special-day-save=${this.saveNamedDay}
+        @special-day-edit-date=${this.editDate}
         @special-day-add-to=${this.addToSpecialDay}
         @special-day-close=${(event: Event) => {
           event.stopPropagation();
@@ -915,6 +855,178 @@ export class OpeningHoursScreen extends LitElement {
         }}
       ></special-day-dialog>`,
     );
+  }
+  /** Goes to the per-date editor through the leave question, closing the dialog once it has gone. */
+  private async editDate(event: CustomEvent<{ date: string }>) {
+    const opened = this.dialogFor(event);
+    if (!opened || !isLocalDate(event.detail.date)) return;
+    const { action } = opened;
+    const write = () =>
+      this.url.write({
+        dashboard: "opening-hours",
+        view: "date",
+        date: event.detail.date,
+        month: null,
+        year: null,
+      });
+    const coordinator = leaveCoordinatorFor(this);
+    const outcome = navigationGuardFor(window)
+      ? await write()
+      : coordinator
+        ? await coordinator.request({
+            scopes: "all",
+            reason: "navigation",
+            proceed: () => void write(),
+          })
+        : (write(), "proceeded");
+    if (outcome !== "proceeded" || !this.isConnected || this.namedAction !== action) return;
+    this.namedAction = undefined;
+    this.followUrl();
+  }
+  private openOrdinary(event: CustomEvent<OrdinaryDateOpen>) {
+    event.stopPropagation();
+    if (
+      !this.isConnected ||
+      this.readOnly ||
+      this.busy ||
+      this.editor ||
+      this.deleting ||
+      this.namedAction ||
+      this.ordinary ||
+      event.currentTarget !== this.shadowRoot?.querySelector("opening-hours-month")
+    )
+      return;
+    this.ordinary = event.detail;
+    this.readKnownSpecialDays();
+  }
+  private ordinaryDialog() {
+    const open = this.ordinary;
+    const seasons = this.monthModel?.seasons ?? [];
+    if (!open) return nothing;
+    const season = seasons.find((row) => row.id === open.seasonId);
+    const leave = (event: Event) => {
+      event.stopPropagation();
+      if (!this.isConnected || this.ordinary !== open) return false;
+      this.ordinary = undefined;
+      return true;
+    };
+    return keyed(
+      open,
+      html`<ordinary-date-dialog
+        .open=${true}
+        .date=${open.date}
+        .season=${season ? { id: season.id, name: season.name } : undefined}
+        .tint=${season ? (seasonTints(seasons).get(season.id) ?? "") : ""}
+        .specialDays=${this.knownSpecialDays}
+        .returnTo=${open.returnTo}
+        @ordinary-date-close=${leave}
+        @ordinary-date-edit-week=${(event: CustomEvent<{ seasonId: string }>) => {
+          if (!leave(event)) return;
+          void Promise.resolve(
+            this.url.write({
+              dashboard: "opening-hours",
+              view: "week",
+              season: event.detail.seasonId,
+              zone: null,
+              station: null,
+              month: null,
+              date: null,
+              year: null,
+            }),
+          ).then(() => this.followUrl());
+        }}
+        @ordinary-date-make-special=${(event: CustomEvent<{ date: string }>) => {
+          if (!leave(event)) return;
+          void this.openSpecial(
+            {
+              kind: "open",
+              date: event.detail.date,
+              specialDay: null,
+              holidays: [],
+              returnTo: open.returnTo,
+            },
+            {},
+          );
+        }}
+        @ordinary-date-add-to-special=${(
+          event: CustomEvent<{ date: string; specialDayId: string }>,
+        ) => {
+          if (!leave(event)) return;
+          const { date, specialDayId } = event.detail;
+          void this.openSpecial(
+            {
+              kind: "open",
+              date: "",
+              specialDay: {
+                id: specialDayId,
+                name: this.knownSpecialDays.find((day) => day.id === specialDayId)?.name ?? "",
+              },
+              holidays: [],
+              returnTo: open.returnTo,
+            },
+            { addDate: date },
+          );
+        }}
+      ></ordinary-date-dialog>`,
+    );
+  }
+  /** "‹ December 2026" above the per-date editor, back to the shown date's month. */
+  private monthBack() {
+    const month = (this.dayDate || businessDateToday(this.model!)).slice(0, 7);
+    if (!month) return nothing;
+    const name = `${formatMonthName(Number(month.slice(5, 7)))} ${Number(month.slice(0, 4))}`;
+    return html`<button
+      type="button"
+      class="month-back"
+      data-test="month-back"
+      aria-label=${format("month.back", { month: name })}
+      @click=${() =>
+        void Promise.resolve(
+          this.url.write({ dashboard: "opening-hours", view: "month", month, date: null }),
+        ).then(() => this.followUrl())}
+    >
+      ‹ ${name}
+    </button>`;
+  }
+  private month() {
+    const write = (changes: Record<string, string | null>) =>
+      void Promise.resolve(this.url.write({ dashboard: "opening-hours", ...changes })).then(() =>
+        this.followUrl(),
+      );
+    return html`${this.monthReadError ? html`<p role="alert" data-test="month-read-error">${this.monthReadError}</p>` : nothing}
+      <opening-hours-month
+        .model=${this.monthModel}
+        .month=${this.shownMonth()}
+        .departmentId=${this.departmentId}
+        .departments=${this.model!.departments}
+        .api=${this.api}
+        .specialDays=${this.knownSpecialDays}
+        .readOnly=${this.readOnly}
+        @special-day-action=${this.openNamedDay}
+        @ordinary-date-open=${this.openOrdinary}
+        @season-dialog-open=${() => this.readKnownSpecialDays()}
+        @season-changed=${(event: Event) => {
+          event.stopPropagation();
+          this.api.rereadWithSpecialDays();
+        }}
+        @month-change=${(event: CustomEvent<{ month: string }>) => {
+          event.stopPropagation();
+          write({ view: "month", month: event.detail.month, date: null });
+        }}
+        @month-year-open=${(event: CustomEvent<{ year: number }>) => {
+          event.stopPropagation();
+          write({
+            view: "year",
+            year: String(event.detail.year).padStart(4, "0"),
+            month: null,
+            date: null,
+          });
+        }}
+        @month-department-change=${(event: CustomEvent<{ departmentId: string }>) => {
+          event.stopPropagation();
+          write({ department: event.detail.departmentId || null, zone: null, station: null });
+        }}
+      ></opening-hours-month>`;
   }
   private periods(department: Department) {
     const columns: DataTableColumn<Period>[] = [
@@ -994,7 +1106,8 @@ export class OpeningHoursScreen extends LitElement {
         !this.model
           ? nothing
           : html` ${
-                (department || this.view === "week") && this.view !== "day" && this.view !== "year"
+                (department || this.view === "week") &&
+                (this.view === "week" || this.view === "periods")
                   ? html`<div class="chooser">
                       <wt-combobox
                         name="departmentId"
@@ -1016,10 +1129,7 @@ export class OpeningHoursScreen extends LitElement {
                         }}
                       ></wt-combobox>
                       ${
-                        this.view === "week" &&
-                        !this.weekStart &&
-                        !this.stationId &&
-                        this.model.seasons.length
+                        this.view === "week" && !this.stationId && this.model.seasons.length
                           ? html`<wt-combobox
                               name="seasonId"
                               label=${t("opening.season")}
@@ -1044,26 +1154,28 @@ export class OpeningHoursScreen extends LitElement {
                       }
                       ${this.stationReadError ? html`<p role="alert">${this.stationReadError}</p>` : nothing}
                     </div>`
-                  : this.view === "day" || this.view === "year"
-                    ? nothing
-                    : html`<p>${t("menu.no_departments")}</p>`
+                  : this.view === "periods"
+                    ? html`<p>${t("menu.no_departments")}</p>`
+                    : nothing
               }
               <wt-tabs
                 label=${t("opening.title")}
-                .value=${this.view}
+                .value=${this.view === "month" || this.view === "date" ? "year" : this.view}
                 .items=${[
                   { key: "year", label: t("opening.tab.year") },
                   { key: "week", label: t("hours.tab.week") },
                   { key: "periods", label: t("opening.tab.periods") },
-                  { key: "day", label: t("opening.tab.day") },
                 ]}
                 @wt-tab-change=${(event: CustomEvent<{ value: View }>) => {
                   if (event.target !== event.currentTarget) return;
-                  (event.currentTarget as HTMLElementTagNameMap["wt-tabs"]).value = this.view;
+                  (event.currentTarget as HTMLElementTagNameMap["wt-tabs"]).value =
+                    this.view === "month" || this.view === "date" ? "year" : this.view;
                   void this.url.write({
                     dashboard: "opening-hours",
                     view: event.detail.value,
                     year: null,
+                    month: null,
+                    date: null,
                   });
                   this.followUrl();
                 }}
@@ -1095,34 +1207,42 @@ export class OpeningHoursScreen extends LitElement {
                                 }),
                               ).then(() => this.followUrl());
                             }}
-                            @year-month-open=${this.openDay}
+                            @year-month-open=${this.openMonth}
                           ></opening-hours-year>`
-                      : nothing
+                      : this.view === "date"
+                        ? html`${this.monthBack()}<opening-hours-day
+                              .api=${this.api}
+                              .model=${this.model}
+                              .date=${this.dayDate}
+                              .readOnly=${this.readOnly}
+                              @special-day-action=${this.openNamedDay}
+                              @day-date-change=${(event: CustomEvent<{ date: string }>) => {
+                                event.stopPropagation();
+                                this.dayDate = event.detail.date;
+                                // Replaced, not pushed: Back leaves the per-date editor rather than retracing its steps.
+                                void this.url.write({ date: event.detail.date }, true);
+                              }}
+                            ></opening-hours-day>`
+                        : this.shownMonth()
+                          ? this.month()
+                          : nothing
                   }
                 </div>
                 <div slot="week">
                   ${this.view === "week" && !department ? html`<p>${t("menu.no_departments")}</p>` : nothing}
-                  ${this.view === "week" ? this.weekChooser() : nothing}
                   ${
                     this.view === "week" && this.stationId
                       ? html`<opening-hours-station
                           .api=${this.api}
                           .model=${this.model}
                           .stationId=${this.stationId}
-                          .weekStart=${this.weekStart || this.currentWeek() || "2026-01-05"}
-                          .normal=${!this.weekStart}
                         ></opening-hours-station>`
                       : this.view === "week" && this.departmentId === "all"
                         ? html`<opening-hours-all
                             .departments=${this.model.departments}
                             .clockRevision=${this.model.clockRevision}
-                            .businessDayClock=${this.model.businessDayClock}
                             .dayCutover=${this.model.dayCutover}
-                            .weekStart=${this.weekStart}
                             .seasonId=${this.season}
-                            .seasons=${this.model.seasons}
-                            .calendar=${this.namedWeek}
-                            .specials=${this.weekSpecials}
                             @department-open=${(event: CustomEvent<{ departmentId: string }>) => {
                               event.stopPropagation();
                               void this.chooseDepartment(event.detail.departmentId);
@@ -1130,40 +1250,30 @@ export class OpeningHoursScreen extends LitElement {
                           ></opening-hours-all>`
                         : this.view === "week" && this.zone()
                           ? keyed(
-                              `${this.zone()!.id}:${this.weekStart}:${this.season}`,
+                              `${this.zone()!.id}:${this.season}`,
                               html`<opening-hours-zone-week
                                 .api=${this.api}
                                 .department=${department!}
                                 .zone=${this.zone()!}
                                 .seasonId=${this.season}
-                                .seasons=${this.model.seasons}
                                 .clockRevision=${this.model.clockRevision}
                                 .businessDayClock=${this.model.businessDayClock}
                                 .dayCutover=${this.model.dayCutover}
                                 .readOnly=${this.readOnly}
-                                .weekStart=${this.weekStart}
-                                .calendar=${this.namedWeek}
-                                .specials=${this.weekSpecials}
-                                @day-open=${this.openDay}
                               ></opening-hours-zone-week>`,
                             )
                           : this.view === "week" && department
                             ? keyed(
-                                `${department.id}:${this.weekStart}:${this.season}`,
+                                `${department.id}:${this.season}`,
                                 html`<opening-hours-week
                                   .api=${this.api}
                                   .department=${department}
                                   .seasonId=${this.season}
-                                  .seasons=${this.model.seasons}
                                   .menus=${this.model!.menus}
                                   .clockRevision=${this.model!.clockRevision}
                                   .businessDayClock=${this.model!.businessDayClock}
                                   .dayCutover=${this.model!.dayCutover}
-                                  .weekStart=${this.weekStart}
-                                  .calendar=${this.namedWeek}
-                                  .specials=${this.weekSpecials}
                                   .readOnly=${this.readOnly}
-                                  @day-open=${this.openDay}
                                 ></opening-hours-week>`,
                               )
                             : nothing
@@ -1172,13 +1282,10 @@ export class OpeningHoursScreen extends LitElement {
                 <div slot="periods">
                   ${this.view === "periods" && department ? this.periods(department) : nothing}
                 </div>
-                <div slot="day">
-                  ${this.view === "day" ? html`<opening-hours-day .api=${this.api} .model=${this.model} .date=${this.dayDate} .readOnly=${this.readOnly} @special-day-action=${this.openNamedDay}></opening-hours-day>` : nothing}
-                </div>
               </wt-tabs>`
       }
       ${this.specialReadError ? html`<p role="alert" data-test="special-read-error">${this.specialReadError}</p>` : nothing}
-      ${this.namedDialog()}
+      ${this.namedDialog()} ${this.ordinaryDialog()}
       ${
         this.editor
           ? keyed(

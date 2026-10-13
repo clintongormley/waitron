@@ -2,7 +2,7 @@ import type { DashboardRequest } from "@waitron/dashboard-kit";
 import type { SpecialDaysModel } from "../holiday-types.js";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import type { SpecialDayDetail } from "../special-days.js";
-import { namedWeekModel } from "./real-week-model.js";
+import { namedWeekModel } from "./hours-models.js";
 
 export const PARTY_DATE = "2026-10-13";
 const AUTUMN = { id: "autumn", name: "Autumn", startsOn: "09-01" };

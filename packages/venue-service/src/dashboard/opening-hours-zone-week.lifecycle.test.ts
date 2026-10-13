@@ -2,7 +2,7 @@ import { afterEach, expect, it } from "vitest";
 import { applyTokens } from "@waitron/ui";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { OpeningHoursApi } from "./opening-hours-client.js";
-import { realWeekModel } from "../testing/real-week-model.js";
+import { terraceWeekModel } from "../testing/hours-models.js";
 import "./opening-hours-zone-week.js";
 
 let week: HTMLElementTagNameMap["opening-hours-zone-week"];
@@ -10,15 +10,14 @@ afterEach(() => {
   week?.remove();
   setLocale("en");
 });
-async function mount(real = false, refusal?: unknown) {
+async function mount(refusal?: unknown) {
   setLocale("en");
-  const data = realWeekModel();
+  const data = terraceWeekModel();
   const writes: unknown[][] = [];
   week = document.createElement("opening-hours-zone-week");
   week.department = data.departments[0]!;
   week.zone = week.department.zones[0]!;
   week.seasonId = data.seasons[0]!.id;
-  week.weekStart = real ? "2026-10-12" : "";
   week.api = new OpeningHoursApi((async (path, method, body) => {
     if (method === "GET") return data;
     writes.push([path, method, body]);
@@ -164,20 +163,6 @@ it("copying blocks grid edits and a retained confirmation cannot copy after acce
   await week.updateComplete;
   expect(ranges("1")).toEqual([]);
   expect(ranges()).toEqual([{ startsAt: "22:00", endsAt: "06:00" }]);
-  expect(week.shadowRoot!.querySelector("range-dialog")).toBeNull();
-  expect(writes).toEqual([]);
-});
-
-it("a real week ignores range events for plain and whole-venue-closed dates", async () => {
-  const writes = await mount(true);
-  const before = structuredClone(grid().columns);
-  for (const columnKey of ["1", "4"]) {
-    emit(grid(), "grid-range-select", { columnKey, startsAt: "10:00", endsAt: "11:00" });
-    emit(grid(), "grid-block-open", { columnKey, index: 0 });
-    emit(grid(), "grid-block-change", { columnKey, index: 0, startsAt: "10:00", endsAt: "11:00" });
-  }
-  await week.updateComplete;
-  expect(grid().columns).toEqual(before);
   expect(week.shadowRoot!.querySelector("range-dialog")).toBeNull();
   expect(writes).toEqual([]);
 });

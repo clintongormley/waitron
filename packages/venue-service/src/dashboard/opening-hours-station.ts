@@ -1,4 +1,3 @@
-import { serviceDayContext } from "../service-day-context.js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
@@ -6,7 +5,8 @@ import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import type { StationServiceTimes } from "../station-service-times.js";
 import type { OpeningHoursApi } from "./opening-hours-client.js";
 import { addDays, weekdayOf } from "../hours-rules.js";
-import { realDayLabel } from "./real-week.js";
+import { businessDateToday } from "./opening-hours-day.js";
+import { weekdayLabel } from "./season-week-view.js";
 import { t } from "./strings.js";
 import "./service-grid.js";
 
@@ -28,12 +28,12 @@ export class OpeningHoursStation extends LitElement {
   @property({ attribute: false }) api!: OpeningHoursApi;
   @property({ attribute: false }) model!: OpeningHoursModel;
   @property() stationId = "";
-  @property() weekStart = "";
-  @property({ type: Boolean }) normal = false;
   @state() private times?: StationServiceTimes;
   @state() private error = "";
   private detach?: () => void;
   private key = "";
+  /** The server reads a normal week in the season of its first date: this week's Monday. */
+  private monday = "";
   override connectedCallback() {
     super.connectedCallback();
     this.requestUpdate();
@@ -44,18 +44,21 @@ export class OpeningHoursStation extends LitElement {
     super.disconnectedCallback();
   }
   protected override willUpdate() {
-    const key = `${this.stationId}:${this.weekStart}:${this.normal}`;
+    const today = businessDateToday(this.model) || "2026-01-05";
+    const monday = addDays(today, -((weekdayOf(today) + 6) % 7));
+    const key = `${this.stationId}:${monday}`;
     if (key === this.key) return;
     this.detach?.();
     this.key = key;
+    this.monday = monday;
     this.times = undefined;
     this.error = "";
-    if (!this.stationId || !this.weekStart) return;
+    if (!this.stationId) return;
     this.detach = this.api.watchStationTimes(
       this.stationId,
-      this.weekStart,
-      addDays(this.weekStart, 6),
-      this.normal,
+      monday,
+      addDays(monday, 6),
+      true,
       (times) => {
         if (this.isConnected && this.key === key) {
           this.times = times;
@@ -80,12 +83,11 @@ export class OpeningHoursStation extends LitElement {
       </p>`;
     const departments = this.model.departments.filter((department) => department.active);
     const columns = Array.from({ length: 7 }, (_, index) => {
-      const date = addDays(this.weekStart, index);
+      const date = addDays(this.monday, index);
       const day = times.days.find((day) => day.date === date);
       return departments.map((department) => ({
         key: `${date}:${department.id}`,
-        clock: this.normal ? undefined : serviceDayContext(this.model.businessDayClock, date),
-        label: realDayLabel(this.normal ? "" : this.weekStart, weekdayOf(date)),
+        label: weekdayLabel(weekdayOf(date)),
         slots: day?.departments.find((row) => row.departmentId === department.id)?.ranges ?? [],
         periods: department.periods,
         editable: false,

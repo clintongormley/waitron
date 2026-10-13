@@ -28,6 +28,14 @@ export function parseCalendarYear(value: unknown): number | null {
   return year >= CALENDAR_YEAR_MIN && year <= CALENDAR_YEAR_MAX ? year : null;
 }
 
+/** A `YYYY-MM` whose year `parseCalendarYear` accepts, or null; never the first year's January,
+ *  whose Monday-to-Sunday weeks start in a year the business-day clock cannot place. */
+export function parseCalendarMonth(value: unknown): string | null {
+  if (typeof value !== "string" || !/^\d{4}-(?:0[1-9]|1[0-2])$/.test(value)) return null;
+  if (parseCalendarYear(value.slice(0, 4)) === null) return null;
+  return value === `${String(CALENDAR_YEAR_MIN).padStart(4, "0")}-01` ? null : value;
+}
+
 /** Every date from `from` to `to`, both included: real dates, in order, at most a leap year. */
 export function rangeDates(from: unknown, to: unknown): LocalDate[] {
   if (!isLocalDate(from)) invalidHours("from");

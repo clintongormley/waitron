@@ -5,7 +5,7 @@ import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { OpeningHoursApi } from "./opening-hours-client.js";
 import type { SpecialDaysModel } from "../holiday-types.js";
 import type { SpecialDayDetail } from "../special-days.js";
-import { realWeekModel, namedWeekModel } from "../testing/real-week-model.js";
+import { terraceWeekModel, namedWeekModel } from "../testing/hours-models.js";
 import {
   PARTY_DATE,
   everyDateSpecial,
@@ -20,7 +20,7 @@ beforeEach(() => {
   setLocale("en");
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-10-12T12:00:00Z"));
-  history.replaceState(null, "", "/manage/opening-hours/view/day");
+  history.replaceState(null, "", "/manage/opening-hours/view/date");
 });
 afterEach(() => {
   screen?.remove();
@@ -37,7 +37,7 @@ const closedEveryNight = () =>
     ranges: [{ startsAt: "23:00", endsAt: "06:00" }],
   }));
 function fixture() {
-  const model = realWeekModel();
+  const model = terraceWeekModel();
   return {
     ...model,
     departments: model.departments.map((department) => ({

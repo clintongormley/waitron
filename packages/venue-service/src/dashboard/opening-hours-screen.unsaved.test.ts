@@ -114,11 +114,15 @@ class OpeningLeaveApp extends LitElement {
           { id: "lunch", name: "Lunch menu", active: true, includes: [] },
           { id: "dinner", name: "Dinner menu", active: true, includes: [] },
         ],
+        seasons: [],
+        currentSeasonId: null,
         departments: [
           {
             id: "restaurant",
             name: "Restaurant",
             active: true,
+            zones: [],
+            seasonWeeks: [],
             periods: [
               {
                 id: "p1",
@@ -333,4 +337,46 @@ describe.each(["en", "es"])("Year discard (%s)", (locale) => {
     expect(unload()).toBe(false);
     expect(app.writes).toEqual([]);
   });
+});
+
+it("asks before Edit hours on this date leaves a changed special day, staying on keep", async () => {
+  history.replaceState(null, "", "/manage/opening-hours/view/year/year/2026");
+  app = document.createElement("opening-leave-test-app") as OpeningLeaveApp;
+  applyTokens(app);
+  document.body.append(app);
+  await app.updateComplete;
+  const screen = app.shadowRoot!.querySelector("dashboard-opening-hours-screen")!;
+  await expect.poll(() => screen.shadowRoot!.querySelector("opening-hours-year")).not.toBeNull();
+  const cal = screen.shadowRoot!.querySelector("opening-hours-year")!;
+  await expect
+    .poll(() => cal.shadowRoot!.querySelector("td[data-date='2026-10-13'] button"))
+    .not.toBeNull();
+  cal.shadowRoot!.querySelector<HTMLElement>("td[data-date='2026-10-13'] button")!.click();
+  await cal.updateComplete;
+  cal.shadowRoot!.querySelector<HTMLElement>("[data-test=special-edit]")!.click();
+  await expect.poll(() => screen.shadowRoot!.querySelector("special-day-dialog")).not.toBeNull();
+  const form = screen.shadowRoot!.querySelector<LitElement>("special-day-dialog")!;
+  await form.updateComplete;
+  form.shadowRoot!.querySelector("[name=name]")!.dispatchEvent(
+    new CustomEvent("wt-change", {
+      detail: { value: "New anniversary" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await form.updateComplete;
+  const editDate = () =>
+    form.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-date-hours]")!.click();
+  editDate();
+  await choose("keep");
+  expect(location.pathname).toBe("/manage/opening-hours/view/year/year/2026");
+  expect(screen.shadowRoot!.querySelector("special-day-dialog")).toBe(form);
+  editDate();
+  await choose("discard");
+  await expect
+    .poll(() => location.pathname)
+    .toBe("/manage/opening-hours/view/date/date/2026-10-13");
+  await expect.poll(() => screen.shadowRoot!.querySelector("special-day-dialog")).toBeNull();
+  expect(screen.shadowRoot!.querySelector("opening-hours-day")).not.toBeNull();
+  expect(app.writes).toEqual([]);
 });

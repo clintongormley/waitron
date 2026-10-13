@@ -172,15 +172,27 @@ it("preserves Opening hours zone and All departments URLs", async () => {
   expect(url.read("department")).toBe("all");
 });
 
-it("preserves an Opening hours Day view's date while the shell replaces its section", async () => {
-  history.replaceState(null, "", "/manage/opening-hours/view/day/date/2026-12-25");
+it("preserves an Opening hours date view's date while the shell replaces its section", async () => {
+  history.replaceState(null, "", "/manage/opening-hours/view/date/date/2026-12-25");
   const host = document.createElement("test-dashboard-navigation-host") as NavigationHost;
   hosts.push(host);
   document.body.append(host);
   const url = new UrlStateController(host, () => {}, dashboardPath);
   await url.write({ dashboard: "opening-hours" }, true);
-  expect(location.pathname).toBe("/manage/opening-hours/view/day/date/2026-12-25");
+  expect(location.pathname).toBe("/manage/opening-hours/view/date/date/2026-12-25");
   expect(url.read("date")).toBe("2026-12-25");
+  host.remove();
+});
+
+it("preserves an Opening hours month view's month while the shell replaces its section", async () => {
+  history.replaceState(null, "", "/manage/opening-hours/view/month/month/2026-12");
+  const host = document.createElement("test-dashboard-navigation-host") as NavigationHost;
+  hosts.push(host);
+  document.body.append(host);
+  const url = new UrlStateController(host, () => {}, dashboardPath);
+  await url.write({ dashboard: "opening-hours" }, true);
+  expect(location.pathname).toBe("/manage/opening-hours/view/month/month/2026-12");
+  expect(url.read("month")).toBe("2026-12");
   host.remove();
 });
 
@@ -204,6 +216,7 @@ it("declares no Station hours destination while retaining Opening hours navigati
     season: "season",
     date: "date",
     year: "year",
+    month: "month",
   });
 });
 

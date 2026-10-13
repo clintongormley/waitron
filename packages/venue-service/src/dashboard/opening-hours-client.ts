@@ -1,5 +1,5 @@
 import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
-import type { OpeningHoursYear } from "../opening-hours-calendar.js";
+import type { OpeningHoursMonth, OpeningHoursYear } from "../opening-hours-calendar.js";
 import type { MenuPeriodInput, MenuWeekDay, OpeningHoursModel } from "../menu-timetable-types.js";
 import type { Season } from "../season-rules.js";
 import type { ClosedRange } from "../service-day.js";
@@ -70,6 +70,28 @@ export class OpeningHoursApi {
       () =>
         this.request<OpeningHoursYear>(
           `${BASE}/opening-hours/year?${new URLSearchParams({ year: String(year).padStart(4, "0") })}`,
+          "GET",
+          undefined,
+          { passive: true },
+        ),
+      apply,
+      failed,
+      recovered,
+    );
+  }
+  /** `month` is `YYYY-MM`; on the year's dependencies and the zones a department serves. */
+  watchMonth(
+    month: string,
+    apply: (model: OpeningHoursMonth) => void,
+    failed: (error: unknown) => void,
+    recovered: () => void,
+  ): () => void {
+    return this.#watches.watch(
+      `venue-service:opening-hours-month:${month}`,
+      QUERY_DEPENDENCIES["opening-hours-month"],
+      () =>
+        this.request<OpeningHoursMonth>(
+          `${BASE}/opening-hours/month?${new URLSearchParams({ month })}`,
           "GET",
           undefined,
           { passive: true },

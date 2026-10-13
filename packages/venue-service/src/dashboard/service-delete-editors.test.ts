@@ -11,7 +11,7 @@ import "./department-settings.js";
 import "./venue-departments-shell.js";
 import "./zone-edit-dialog.js";
 import "./opening-hours-screen.js";
-import { namedWeekModel } from "../testing/real-week-model.js";
+import { namedWeekModel } from "../testing/hours-models.js";
 import { everyDateSpecial } from "../testing/special-day-fixture.js";
 
 const originalUrl = location.href;
@@ -172,7 +172,7 @@ async function hours(
     withOpeningStations((async (path, method, body) => {
       if (method === "GET")
         return (
-          (view === "day" && everyDateSpecial(path)) ||
+          (view === "date" && everyDateSpecial(path)) ||
           (path.includes("/named-days?") ? namedWeekModel() : model)
         );
       writes.push([path, method, body]);
@@ -230,7 +230,7 @@ it.each(["department", "period"])(
 it("day deletion removes only the deleted department and preserves the surviving staged hours", async () => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-10-12T12:00:00Z"));
-  const { screen, model, replace } = await hours("day");
+  const { screen, model, replace } = await hours("date");
   const day = screen.shadowRoot!.querySelector("opening-hours-day")!;
   await day.updateComplete;
   const grid = day.shadowRoot!.querySelector("service-grid")!;
@@ -373,7 +373,7 @@ it.each(["keep", "discard"] as const)(
   async (decision) => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-10-12T12:00:00Z"));
-    const { screen, model, replace } = await hours("day");
+    const { screen, model, replace } = await hours("date");
     const day = screen.shadowRoot!.querySelector("opening-hours-day")!;
     await day.updateComplete;
     const grid = day.shadowRoot!.querySelector("service-grid")!;
@@ -444,7 +444,7 @@ it.each(["success", "refusal"] as const)(
     vi.setSystemTime(new Date("2026-10-12T12:00:00Z"));
     const pending: { resolve(): void; reject(reason: unknown): void }[] = [];
     const { screen, model, replace, writes } = await hours(
-      "day",
+      "date",
       hoursFixture(),
       () => new Promise<void>((resolve, reject) => pending.push({ resolve, reject })),
     );
@@ -518,7 +518,7 @@ it("a reconnected day owner can save its retained draft after an old pending wri
   vi.setSystemTime(new Date("2026-10-12T12:00:00Z"));
   const pending: (() => void)[] = [];
   const { screen, writes } = await hours(
-    "day",
+    "date",
     hoursFixture(),
     () => new Promise<void>((done) => pending.push(done)),
   );

@@ -9,19 +9,23 @@ import {
 } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
+  floorZones,
+  locationDayCutoverChanges,
   locations,
   tenants,
   withTransaction,
   type Transaction,
 } from "@waitron/db";
+import { eq } from "drizzle-orm";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId } from "@waitron/shared";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import { readOpeningHoursYear } from "./opening-hours-calendar.js";
-import { createDepartment, type VenueScope } from "./operations.js";
-import { readSeasons } from "./seasons.js";
+import { readOpeningHoursMonth, readOpeningHoursYear } from "./opening-hours-calendar.js";
+import { configureZone, createDepartment, type VenueScope } from "./operations.js";
+import { ensureDefaultSeasons, readSeasons } from "./seasons.js";
 import { missingHolidaysIn, saveSpecialDay } from "./special-days.js";
+import { replaceZoneClosedWeek } from "./zone-closed-times.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
@@ -234,6 +238,340 @@ describe("the Opening hours year read", () => {
         const prepared = vi.spyOn(session, "prepareQuery");
         try {
           await readOpeningHoursYear(tx, v.cfg, 2030, AT);
+          return prepared.mock.calls.length;
+        } finally {
+          prepared.mockRestore();
+        }
+      });
+    const one = await statementsFor(await venue([[1]]));
+    expect(await statementsFor(await venue([[1], [1], [1]]))).toBe(one);
+    expect(one).toBeLessThan(40);
+  });
+});
+
+/** A Sevilla venue: Sala serves lunch 12:00–16:00 in Autumn and dinner 20:00–23:30 in Winter, every
+ *  day, with a Terrace closed 20:00–22:00 on Winter Sundays and a Bar; Barra serves lunch 13:00–15:00
+ *  every day of every season, with its own Counter zone. */
+async function monthVenue() {
+  const { cfg } = await venue([]);
+  return run(async (tx) => {
+    const menuId = (await createCatalogue(tx, { name: `Carta ${randomUUID()}` })).id;
+    const { document } = await buildMenuDocument(tx, menuId);
+    await publishMenu(tx, menuId, menuDocumentHash(document), "person-1");
+    const department = async (name: string) =>
+      (await createDepartment(tx, cfg, { name, orderStart: "table" })).id;
+    const period = async (departmentId: string, name: string) =>
+      (await saveMenuPeriod(tx, cfg, departmentId, { name, menuId, staffMenuIds: [] }, 0)).id;
+    const everyDay = (periodId: string, startsAt: string, endsAt: string) =>
+      [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+        weekday,
+        slots: [{ periodId, startsAt, endsAt }],
+      }));
+    const zone = async (name: string, displayOrder: number, departmentId: string) => {
+      const [row] = await tx
+        .insert(floorZones)
+        .values({ locationId: cfg.locationId, name, displayOrder })
+        .returning({ id: floorZones.id });
+      await configureZone(tx, cfg, { zoneId: row!.id, departmentId });
+      return row!.id;
+    };
+    const sala = await department("Sala");
+    const barra = await department("Barra");
+    await ensureDefaultSeasons(tx, cfg);
+    const seasons = Object.fromEntries(
+      (await readSeasons(tx, cfg)).map((season) => [season.name, season.id]),
+    );
+    const lunch = await period(sala, "Lunch");
+    const dinner = await period(sala, "Dinner");
+    const barLunch = await period(barra, "Lunch");
+    await replaceMenuWeek(tx, cfg, sala, everyDay(lunch, "12:00", "16:00"), AT, 0, {
+      seasonId: seasons.Autumn,
+    });
+    await replaceMenuWeek(tx, cfg, sala, everyDay(dinner, "20:00", "23:30"), AT, 0, {
+      seasonId: seasons.Winter,
+    });
+    await replaceMenuWeek(tx, cfg, barra, everyDay(barLunch, "13:00", "15:00"), AT, 0);
+    const terrace = await zone("Terrace", 1, sala);
+    const bar = await zone("Bar", 2, sala);
+    const counter = await zone("Counter", 3, barra);
+    await replaceZoneClosedWeek(
+      tx,
+      cfg,
+      terrace,
+      [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+        weekday,
+        ranges: weekday === 0 ? [{ startsAt: "20:00", endsAt: "22:00" }] : [],
+      })),
+      0,
+      AT,
+      { seasonId: seasons.Winter },
+    );
+    return { cfg, seasons, sala, barra, lunch, dinner, barLunch, terrace, bar, counter };
+  });
+}
+
+const readMonth = (v: { cfg: VenueScope }, month: string) =>
+  run((tx) => readOpeningHoursMonth(tx, v.cfg, month, AT));
+
+describe("the Opening hours month read", () => {
+  it("gives December 2030 by value: Autumn's last Saturday, Winter's first Sunday and a painted special day", async () => {
+    const v = await monthVenue();
+    const nochebuena = await special(v, {
+      name: "Nochebuena",
+      repeatsYearly: false,
+      dates: [{ date: "2030-12-24", closedAllDay: false }],
+      paint: [
+        {
+          departmentId: v.sala,
+          date: "2030-12-24",
+          ranges: [{ periodId: v.lunch, startsAt: "19:00", endsAt: "20:30" }],
+        },
+      ],
+      zonePaint: [
+        {
+          zoneId: v.bar,
+          date: "2030-12-24",
+          ranges: [{ kind: "closed", startsAt: "19:00", endsAt: "20:00" }],
+        },
+      ],
+    });
+    const month = await readMonth(v, "2030-12");
+    expect(month.month).toBe("2030-12");
+    expect(month.today).toBe("2026-10-09");
+    expect(month.seasons).toEqual([
+      { id: v.seasons.Autumn, name: "Autumn", startsOn: "09-01", lastDay: "11-30" },
+      { id: v.seasons.Winter, name: "Winter", startsOn: "12-01", lastDay: "02-28" },
+    ]);
+    const dayOn = (date: string) => month.days.find((day) => day.date === date);
+    expect(dayOn("2030-11-30")).toEqual({
+      date: "2030-11-30",
+      inMonth: false,
+      dayCutover: "06:00",
+      endMinute: 1440,
+      seasonId: v.seasons.Autumn,
+      specialDay: null,
+      holidays: [],
+      closedAllDay: false,
+      departments: [
+        {
+          departmentId: v.barra,
+          ranges: [{ periodId: v.barLunch, startsAt: "13:00", endsAt: "15:00" }],
+          zones: [{ zoneId: v.counter, closed: [] }],
+        },
+        {
+          departmentId: v.sala,
+          ranges: [{ periodId: v.lunch, startsAt: "12:00", endsAt: "16:00" }],
+          zones: [
+            { zoneId: v.terrace, closed: [] },
+            { zoneId: v.bar, closed: [] },
+          ],
+        },
+      ],
+    });
+    expect(dayOn("2030-12-01")).toEqual({
+      date: "2030-12-01",
+      inMonth: true,
+      dayCutover: "06:00",
+      endMinute: 1440,
+      seasonId: v.seasons.Winter,
+      specialDay: null,
+      holidays: [],
+      closedAllDay: false,
+      departments: [
+        {
+          departmentId: v.barra,
+          ranges: [{ periodId: v.barLunch, startsAt: "13:00", endsAt: "15:00" }],
+          zones: [{ zoneId: v.counter, closed: [] }],
+        },
+        {
+          departmentId: v.sala,
+          ranges: [{ periodId: v.dinner, startsAt: "20:00", endsAt: "23:30" }],
+          zones: [
+            { zoneId: v.terrace, closed: [{ startsAt: "20:00", endsAt: "22:00" }] },
+            { zoneId: v.bar, closed: [] },
+          ],
+        },
+      ],
+    });
+    expect(dayOn("2030-12-24")).toEqual({
+      date: "2030-12-24",
+      inMonth: true,
+      dayCutover: "06:00",
+      endMinute: 1440,
+      seasonId: v.seasons.Winter,
+      specialDay: { id: nochebuena.id, name: "Nochebuena" },
+      holidays: [],
+      closedAllDay: false,
+      departments: [
+        {
+          departmentId: v.barra,
+          ranges: [{ periodId: v.barLunch, startsAt: "13:00", endsAt: "15:00" }],
+          zones: [{ zoneId: v.counter, closed: [] }],
+        },
+        {
+          departmentId: v.sala,
+          ranges: [
+            { periodId: v.lunch, startsAt: "19:00", endsAt: "20:30" },
+            { periodId: v.dinner, startsAt: "20:30", endsAt: "23:30" },
+          ],
+          zones: [
+            { zoneId: v.terrace, closed: [] },
+            { zoneId: v.bar, closed: [{ startsAt: "19:00", endsAt: "20:00" }] },
+          ],
+        },
+      ],
+    });
+  });
+
+  it("covers the month with whole Monday-to-Sunday weeks, its neighbours' dates marked outside it", async () => {
+    const v = await monthVenue();
+    const month = await readMonth(v, "2030-12");
+    expect(month.days).toHaveLength(42);
+    expect(month.days.slice(0, 7).map(({ date, inMonth }) => ({ date, inMonth }))).toEqual([
+      { date: "2030-11-25", inMonth: false },
+      { date: "2030-11-26", inMonth: false },
+      { date: "2030-11-27", inMonth: false },
+      { date: "2030-11-28", inMonth: false },
+      { date: "2030-11-29", inMonth: false },
+      { date: "2030-11-30", inMonth: false },
+      { date: "2030-12-01", inMonth: true },
+    ]);
+    expect(month.days.slice(-6).map(({ date, inMonth }) => ({ date, inMonth }))).toEqual([
+      { date: "2030-12-31", inMonth: true },
+      { date: "2031-01-01", inMonth: false },
+      { date: "2031-01-02", inMonth: false },
+      { date: "2031-01-03", inMonth: false },
+      { date: "2031-01-04", inMonth: false },
+      { date: "2031-01-05", inMonth: false },
+    ]);
+    expect(month.days.filter(({ inMonth }) => inMonth)).toHaveLength(31);
+    const june = await readMonth(v, "2026-06");
+    expect([june.days[0]!.date, june.days.at(-1)!.date, june.days.length]).toEqual([
+      "2026-06-01",
+      "2026-07-05",
+      35,
+    ]);
+  });
+
+  it("ends a touched season where the occurrence holding the month ends, 29 February into a leap year", async () => {
+    const v = await monthVenue();
+    const lastDays = async (month: string) =>
+      (await readMonth(v, month)).seasons.map(({ name, lastDay }) => ({ name, lastDay }));
+    expect(await lastDays("2027-12")).toEqual([
+      { name: "Autumn", lastDay: "11-30" },
+      { name: "Winter", lastDay: "02-29" },
+    ]);
+    expect(await lastDays("2028-03")).toEqual([
+      { name: "Winter", lastDay: "02-29" },
+      { name: "Spring", lastDay: "05-31" },
+    ]);
+  });
+
+  it("gives the next year's public holidays on December's trailing dates, and the Closed tick", async () => {
+    const v = await monthVenue();
+    await special(v, {
+      name: "Cierre",
+      repeatsYearly: false,
+      dates: [{ date: "2025-12-29", closedAllDay: true }],
+    });
+    const month = await readMonth(v, "2025-12");
+    const dayOn = (date: string) => month.days.find((day) => day.date === date)!;
+    expect(dayOn("2026-01-01")).toMatchObject({
+      inMonth: false,
+      holidays: [{ date: "2026-01-01", scope: "national" }],
+    });
+    expect(dayOn("2025-12-29")).toMatchObject({
+      closedAllDay: true,
+      departments: [
+        { departmentId: v.barra, ranges: [], zones: [{ zoneId: v.counter, closed: [] }] },
+        {
+          departmentId: v.sala,
+          ranges: [],
+          zones: [
+            { zoneId: v.terrace, closed: [] },
+            { zoneId: v.bar, closed: [] },
+          ],
+        },
+      ],
+    });
+    expect(dayOn("2025-12-30").closedAllDay).toBe(false);
+  });
+
+  it("gives each day its own changeover and length across a pending changeover change, with the clock's status", async () => {
+    const v = await venue();
+    await suite.db.insert(locationDayCutoverChanges).values({
+      locationId: v.cfg.locationId,
+      effectiveBusinessDay: "2030-12-10",
+      dayCutover: "07:00:00",
+    });
+    const month = await readMonth(v, "2030-12");
+    const day = (date: string) => month.days.find((d) => d.date === date)!;
+    expect([day("2030-12-08"), day("2030-12-09"), day("2030-12-10")]).toMatchObject([
+      { dayCutover: "06:00", endMinute: 1440 },
+      { dayCutover: "06:00", endMinute: 1500 },
+      { dayCutover: "07:00", endMinute: 1440 },
+    ]);
+    expect(month.clockRevision).toEqual(expect.any(Number));
+    expect(month.businessDayClock).toEqual({
+      timeZone: "Europe/Madrid",
+      dayCutover: "06:00",
+      cutoverChanges: [{ effectiveBusinessDay: "2030-12-10", dayCutover: "07:00" }],
+    });
+    expect(month.currentBusinessDay).toBe("2026-10-09");
+    expect(month.pending).toMatchObject({
+      effectiveBusinessDay: "2030-12-10",
+      dayCutover: "07:00",
+    });
+  });
+
+  it("still gives the hours, with no today, when the venue's stored time zone cannot be read", async () => {
+    const v = await venue();
+    await suite.db
+      .update(locations)
+      .set({ timeZone: "Not/AZone" })
+      .where(eq(locations.id, v.cfg.locationId));
+    const month = await readMonth(v, "2030-12");
+    expect(month.today).toBeNull();
+    expect(month.days).toHaveLength(42);
+    expect(month.days.find((day) => day.date === "2030-12-10")).toMatchObject({
+      dayCutover: "06:00",
+      endMinute: 1440,
+      seasonId: v.seasons.Winter,
+      departments: [{ ranges: [{ startsAt: "12:00", endsAt: "16:00" }] }],
+    });
+    expect(month.days.find((day) => day.date === "2030-12-09")!.departments[0]!.ranges).toEqual([]);
+    expect((await read(v, 2030)).today).toBeNull();
+  });
+
+  it("gives a venue with no seasons yet every date with no season and no chips", async () => {
+    const [location] = await suite.db
+      .insert(locations)
+      .values({
+        name: `Casa ${randomUUID()}`,
+        invoiceLocales: ["es-ES"],
+        operationDescription: "Hostelería",
+        timeZone: "Europe/Madrid",
+        dayCutover: "06:00",
+        province: "Sevilla",
+        city: "Sevilla",
+      })
+      .returning({ id: locations.id });
+    const month = await readMonth({ cfg: { locationId: locationId(location!.id) } }, "2030-12");
+    expect(month.seasons).toEqual([]);
+    expect(month.days).toHaveLength(42);
+    expect(month.days.map(({ seasonId, departments }) => ({ seasonId, departments }))).toEqual(
+      Array(42).fill({ seasonId: null, departments: [] }),
+    );
+  });
+
+  it("sends the same statements for one department as for three, not one per day or department", async () => {
+    const statementsFor = async (v: { cfg: VenueScope }) =>
+      run(async (tx) => {
+        const session = (tx as unknown as { session: { prepareQuery: (...a: never[]) => unknown } })
+          .session;
+        const prepared = vi.spyOn(session, "prepareQuery");
+        try {
+          await readOpeningHoursMonth(tx, v.cfg, "2030-12", AT);
           return prepared.mock.calls.length;
         } finally {
           prepared.mockRestore();

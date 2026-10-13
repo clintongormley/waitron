@@ -30,8 +30,8 @@ export function formatDate(date: LocalDate): string {
   );
 }
 
-/** A date's weekday, "M" or "Monday", in the dashboard's language. */
-export function formatWeekday(date: LocalDate, style: "narrow" | "long"): string {
+/** A date's weekday, "M", "Mon" or "Monday", in the dashboard's language. */
+export function formatWeekday(date: LocalDate, style: "narrow" | "short" | "long"): string {
   return dateFormat({ weekday: style }).format(asUtc(date));
 }
 
@@ -44,6 +44,11 @@ export function formatMonthDay(monthDay: string): string {
 /** A month's name from its number, 1 to 12, "December", in the dashboard's language. */
 export function formatMonthName(month: number): string {
   return dateFormat({ month: "long" }).format(asUtc(`2001-${String(month).padStart(2, "0")}-01`));
+}
+
+/** A date's day, month and year, "12 October 2026", in the dashboard's language. */
+export function formatDayMonthYear(date: LocalDate): string {
+  return dateFormat({ day: "numeric", month: "long", year: "numeric" }).format(asUtc(date));
 }
 
 /** A date written out in full, "Monday, 12 October 2026", for a name read aloud. */
