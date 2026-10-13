@@ -678,6 +678,27 @@ describe("Split tables… on a group", () => {
     expect(groupSplitOf(bar, swapped)!.asksSeats(["c3", "c4", "c5"])).toBe(true);
   });
 
+  it("asks seats for Counter 3, 4 and 5 when the only guests sit at Bar, the table ticked", () => {
+    const seated = table("bar", "Bar", {
+      ...seatedBy(party("p", ["bar"])),
+      today: bar.today!,
+    });
+    const swapped = zone.map((each) => (each.id === "bar" ? seated : each));
+    expect(groupSplitOf(seated, swapped)!.asksSeats(["c3", "c4", "c5"])).toBe(true);
+  });
+
+  it.each([
+    ["split off no joined table", null],
+    ["split off another joined table", "other"],
+  ])("asks seats when a staying table after the counters was %s", (_, from) => {
+    const terrace = table("t9", "Terrace 9", {
+      today: today({ placement: place(44, 0), joinId: "g", splitOffFrom: from }),
+    });
+    const withTerrace = [...zone, terrace];
+    expect(groupSplitOf(bar, withTerrace)!.members.at(-1)!.id).toBe("t9");
+    expect(groupSplitOf(bar, withTerrace)!.asksSeats(["c3", "c4", "c5", "t9"])).toBe(true);
+  });
+
   it("names a joined table by its tables when a table is dropped on it", () => {
     const whole = table("long", "Long table", {
       today: today({
