@@ -10,6 +10,7 @@ import {
   firstFreeSpot,
   fitScale,
   gridExtent,
+  resizeCursor,
   resizeFrom,
   rotatedRect,
   showsName,
@@ -299,6 +300,43 @@ describe("floor plan geometry", () => {
       // left (half the width) and half a square down (the side moving out).
       expect(resizeFrom(table(10, 10, 8, 4, 90), "right", 1)).toEqual(table(9, 11, 9, 4, 90));
       expect(resizeFrom(table(9, 11, 9, 4, 90), "right", -1)).toEqual(table(10, 10, 8, 4, 90));
+    });
+  });
+
+  describe("resizeCursor", () => {
+    const sides = ["top", "right", "bottom", "left"] as const;
+    const cursorsAt = (rotation: number) => sides.map((side) => resizeCursor(side, rotation));
+
+    it("gives each side the arrow nearest the way its dot drags on screen", () => {
+      expect(cursorsAt(0)).toEqual(["ns-resize", "ew-resize", "ns-resize", "ew-resize"]);
+      expect(cursorsAt(90)).toEqual(["ew-resize", "ns-resize", "ew-resize", "ns-resize"]);
+      expect(cursorsAt(180)).toEqual(["ns-resize", "ew-resize", "ns-resize", "ew-resize"]);
+      expect(cursorsAt(270)).toEqual(["ew-resize", "ns-resize", "ew-resize", "ns-resize"]);
+      // Turned 45° clockwise, the right side faces down-right and the top up-right.
+      expect(cursorsAt(45)).toEqual(["nesw-resize", "nwse-resize", "nesw-resize", "nwse-resize"]);
+      expect(cursorsAt(315)).toEqual(["nwse-resize", "nesw-resize", "nwse-resize", "nesw-resize"]);
+      expect(cursorsAt(30)).toEqual(["nesw-resize", "nwse-resize", "nesw-resize", "nwse-resize"]);
+      expect(cursorsAt(-90)).toEqual(cursorsAt(270));
+      expect(cursorsAt(-45)).toEqual(cursorsAt(315));
+    });
+
+    it("switches arrow between the 15° turns either side of each halfway mark", () => {
+      expect(cursorsAt(15)).toEqual(["ns-resize", "ew-resize", "ns-resize", "ew-resize"]);
+      expect(cursorsAt(60)).toEqual(["nesw-resize", "nwse-resize", "nesw-resize", "nwse-resize"]);
+      expect(cursorsAt(75)).toEqual(["ew-resize", "ns-resize", "ew-resize", "ns-resize"]);
+      expect(cursorsAt(105)).toEqual(["ew-resize", "ns-resize", "ew-resize", "ns-resize"]);
+      expect(cursorsAt(120)).toEqual(["nwse-resize", "nesw-resize", "nwse-resize", "nesw-resize"]);
+      expect(cursorsAt(150)).toEqual(["nwse-resize", "nesw-resize", "nwse-resize", "nesw-resize"]);
+      expect(cursorsAt(165)).toEqual(["ns-resize", "ew-resize", "ns-resize", "ew-resize"]);
+    });
+
+    // A table turns in 15° steps, so it never sits exactly halfway between two arrows.
+    it("takes the arrows of the next 45° turn clockwise when a direction is exactly halfway", () => {
+      expect(cursorsAt(22.5)).toEqual(cursorsAt(45));
+      expect(cursorsAt(67.5)).toEqual(cursorsAt(90));
+      expect(cursorsAt(112.5)).toEqual(cursorsAt(135));
+      expect(cursorsAt(157.5)).toEqual(cursorsAt(180));
+      expect(cursorsAt(-22.5)).toEqual(cursorsAt(157.5));
     });
   });
 });
