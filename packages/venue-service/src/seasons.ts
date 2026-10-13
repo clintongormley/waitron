@@ -56,6 +56,18 @@ function parseSeasonInput(
   return { name, startsOn };
 }
 
+/** The venue's seasons, and the one `id` names. */
+async function seasonsNaming(
+  tx: Transaction,
+  cfg: VenueScope,
+  id: string,
+): Promise<{ all: Season[]; own: Season }> {
+  const all = await ensureDefaultSeasons(tx, cfg);
+  const own = all.find((season) => season.id === id);
+  if (own === undefined) throw new AppError("season.not_found", { seasonId: id });
+  return { all, own };
+}
+
 /** Every department, since a season change moves days under all of them. */
 async function checkScheduleAfterSeasonWrite(
   tx: Transaction,
@@ -75,10 +87,9 @@ export async function saveSeason(
   at: Date,
   expectedClockRevision: number,
 ): Promise<Season> {
-  const [own] = await targetSeasons(tx, cfg, id);
-  const all = await readSeasons(tx, cfg);
+  const { all, own } = await seasonsNaming(tx, cfg, id);
   const parsed = parseSeasonInput(all, input, id);
-  const moved = parsed.startsOn !== own!.startsOn;
+  const moved = parsed.startsOn !== own.startsOn;
   await assertBusinessDayScheduleWrite(
     tx,
     cfg,
@@ -130,8 +141,8 @@ export async function deleteSeason(
   expectedClockRevision: number,
 ): Promise<void> {
   await assertBusinessDayScheduleWrite(tx, cfg, "time", at, expectedClockRevision);
-  await targetSeasons(tx, cfg, id);
-  if ((await readSeasons(tx, cfg)).length === 1) invalid({ field: "seasonId", reason: "last" });
+  const { all } = await seasonsNaming(tx, cfg, id);
+  if (all.length === 1) invalid({ field: "seasonId", reason: "last" });
   await tx.delete(seasons).where(eq(seasons.id, id));
   await checkScheduleAfterSeasonWrite(tx, cfg, "seasonId");
 }
