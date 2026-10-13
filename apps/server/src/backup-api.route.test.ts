@@ -1736,6 +1736,61 @@ describe("backup admin routes", () => {
       expect([...bucket.objects.keys()].sort()).toEqual([...seeded, `${key}-neighbour`].sort());
     }, 60_000);
 
+    it("Save's bucket test closes the bucket it built, whether the test passes or fails", async () => {
+      let closed = 0;
+      // The route's own handle on the bucket, so the supervisor's handles are not counted.
+      const probed: StorageBackend = Object.create(bucket);
+      probed.close = () => {
+        closed += 1;
+      };
+      const { post } = await primaryApp({ buildBackend: () => probed });
+      const save = () =>
+        post("/api/backup/apply", applyBody({ ...CUSTOM, secretAccessKey: CUSTOM_SECRET }));
+      expect((await save()).status).toBe(200);
+      expect(closed).toBe(1);
+      bucket.failGet = true;
+      expect((await save()).status).toBe(422);
+      expect(closed).toBe(2);
+    }, 60_000);
+
+    it("a bucket that answers the test object with other bytes is refused", async () => {
+      bucket.get = async (key) => {
+        bucket.calls.push(`get ${key}`);
+        return Buffer.from("something else");
+      };
+      const { post } = await primaryApp();
+      const res = await post(
+        "/api/backup/apply",
+        applyBody({ ...CUSTOM, secretAccessKey: CUSTOM_SECRET }),
+      );
+      expect(res.status).toBe(422);
+      expect(await res.json()).toMatchObject({
+        error: { code: "backup.archive_test_failed", params: { reason: "read_mismatch" } },
+      });
+      const { key, calls } = probeCalls();
+      expect(calls).toEqual([`put ${key}`, `get ${key}`, `deleteMany ${key}`]);
+      expect(await readSealed()).toBeNull();
+    }, 60_000);
+
+    it("a bucket whose listing leaves out the test object is refused", async () => {
+      bucket.list = async (prefix) => {
+        bucket.calls.push(`list ${prefix}`);
+        return [];
+      };
+      const { post } = await primaryApp();
+      const res = await post(
+        "/api/backup/apply",
+        applyBody({ ...CUSTOM, secretAccessKey: CUSTOM_SECRET }),
+      );
+      expect(res.status).toBe(422);
+      expect(await res.json()).toMatchObject({
+        error: { code: "backup.archive_test_failed", params: { reason: "not_listed" } },
+      });
+      const { key, calls } = probeCalls();
+      expect(calls).toEqual([`put ${key}`, `get ${key}`, `list ${key}`, `deleteMany ${key}`]);
+      expect(await readSealed()).toBeNull();
+    }, 60_000);
+
     it("a bucket that fails the test is refused, with the test object still deleted", async () => {
       bucket.failGet = true;
       const { sc, post } = await primaryApp();
@@ -1762,7 +1817,9 @@ describe("backup admin routes", () => {
         applyBody({ ...CUSTOM, secretAccessKey: CUSTOM_SECRET }),
       );
       expect(res.status).toBe(422);
-      expect(await res.json()).toMatchObject({ error: { code: "backup.archive_test_failed" } });
+      expect(await res.json()).toMatchObject({
+        error: { code: "backup.archive_test_failed", params: { reason: "timed_out" } },
+      });
       const { key } = probeCalls();
       expect(bucket.deleted).toEqual([[key]]);
       expect(await readSealed()).toBeNull();
