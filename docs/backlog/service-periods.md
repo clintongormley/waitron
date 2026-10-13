@@ -222,7 +222,12 @@ from a season chip, an ordinary date and a zone's Opening hours link.
   stale read is delivered by `LiveData`'s read (`packages/dashboard-kit/src/live-data.ts`), which
   applies whatever answers; without it, `model-watch.ts` applies a read that started before the
   save until a later read answers. A fix may need both places. The old week editors are believed
-  to have had the same flaw; that was read, not reproduced.
+  to have had the same flaw; that was read, not reproduced. The other order fails too: a live read
+  that arrives while a save is in flight is not applied to the weeks being saved, and once the save
+  succeeds the painter keeps showing what it sent, so another manager's change in that read is
+  hidden and a later save sends the older week back (reproduced in the A506-8 finish-branch review
+  with a delayed save reply). Telling the two orders apart needs the read to say whether it saw the
+  save.
 - The routes `PUT …/departments/:departmentId/menu-week` and `PUT …/zones/:zoneId/closed-week`
   (`routes.ts`) are called by no client now that the painter saves through
   `PUT …/seasons/:seasonId/weeks`. Remove them, or keep them with a stated reason.
