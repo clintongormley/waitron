@@ -582,7 +582,13 @@ export class SeasonPainter extends LitElement {
     event.stopPropagation();
     const editor = this.editor;
     const component = event.currentTarget as PeriodEditor;
-    if (!editor || this.periodBusy || !this.isConnected) return;
+    if (
+      !editor ||
+      this.periodBusy ||
+      !this.isConnected ||
+      component !== this.renderRoot.querySelector("period-editor")
+    )
+      return;
     const { periodId, input } = event.detail;
     this.periodBusy = true;
     component.refusal = undefined;

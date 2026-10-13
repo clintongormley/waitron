@@ -557,3 +557,25 @@ it("a paint made while a save is in flight is kept, and is still unsaved once th
   expect(writes).toHaveLength(2);
   expect(frame(painter).dirty).toBe(false);
 });
+
+it("Save writes the season being painted, not the venue's current season", async () => {
+  const { painter, writes, navigations } = await mount();
+  button(painter, "next-season").click();
+  await expect.poll(() => frame(painter).heading).toBe("Spring week");
+  await settle(painter);
+  expect(navigations).toEqual([{ seasonId: "spring", departmentId: "d1", zoneId: null }]);
+  await drag(painter, "3", 7 * 60, 9 * 60);
+  await save(painter, writes);
+  expect(writes.map(({ url, method }) => ({ url, method }))).toEqual([
+    { url: "/management-api/venue-service/seasons/spring/weeks", method: "PUT" },
+  ]);
+  expect((writes[0]!.body as { departments: { days: unknown[] }[] }).departments[0]!.days).toEqual([
+    { weekday: 1, slots: [{ periodId: "p2", startsAt: "20:00", endsAt: "23:00" }] },
+    empty(2),
+    { weekday: 3, slots: [{ periodId: "p1", startsAt: "13:00", endsAt: "15:00" }] },
+    empty(4),
+    empty(5),
+    empty(6),
+    empty(0),
+  ]);
+});

@@ -440,3 +440,75 @@ it("a refresh that moves the current season keeps the season being painted and i
   expect(painter.edited()).toEqual({ departments: ["d1"], zones: [] });
   expect(navigations).toEqual([]);
 });
+
+const editorOf = (el: SeasonPainter) => el.shadowRoot!.querySelector("period-editor");
+async function openEditor(painter: SeasonPainter, test: string) {
+  chip(painter, test)!.click();
+  await settle(painter);
+  const editor = editorOf(painter)!;
+  await editor.updateComplete;
+  expect(editor.shadowRoot!.querySelector("wt-modal")!.open).toBe(true);
+  return editor;
+}
+async function cancelEditor(
+  painter: SeasonPainter,
+  editor: HTMLElementTagNameMap["period-editor"],
+) {
+  const closed = new Promise((resolve) => editor.addEventListener("period-close", resolve));
+  editor.shadowRoot!.querySelector<HTMLElement>("wt-button[slot=cancel]")!.click();
+  await closed;
+  await settle(painter);
+}
+
+it("cancelling the period editor creates nothing, keeps the painting, and + New period opens a fresh editor", async () => {
+  const { painter, writes } = await mount();
+  chip(painter, "paint-p2")!.click();
+  await settle(painter);
+  await drag(painter, "3", 14 * 60, 17 * 60);
+  const first = await openEditor(painter, "new-period");
+  await cancelEditor(painter, first);
+  expect(editorOf(painter)).toBeNull();
+  const second = await openEditor(painter, "new-period");
+  expect(second).not.toBe(first);
+  expect(second.period).toBeUndefined();
+  await cancelEditor(painter, second);
+  const third = await openEditor(painter, "edit-p1");
+  expect(third.period?.id).toBe("p1");
+  expect(writes).toEqual([]);
+  expect(grid(painter).days.get("3")).toEqual([
+    { periodId: "p2", startsAt: "20:00", endsAt: "23:00" },
+  ]);
+  expect(frame(painter).dirty).toBe(true);
+});
+
+it("a save from an earlier, closed period editor writes nothing and leaves the open editor alone", async () => {
+  const { painter, writes } = await mount();
+  const earlier = await openEditor(painter, "edit-p1");
+  await cancelEditor(painter, earlier);
+  const current = await openEditor(painter, "new-period");
+  earlier.dispatchEvent(
+    new CustomEvent("period-save", {
+      detail: { periodId: "p1", input: { name: "Brunch" } },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await settle(painter);
+  expect(writes).toEqual([]);
+  expect(editorOf(painter)).toBe(current);
+  expect(current.busy).toBe(false);
+});
+
+it("a refresh that removes the open season of a clean painter moves on without a notice", async () => {
+  const { painter } = await mount();
+  const next = painterModel();
+  painter.model = {
+    ...next,
+    seasons: next.seasons.filter(({ id }) => id !== "winter"),
+    currentSeasonId: "spring",
+  };
+  await settle(painter);
+  expect(frame(painter).heading).toBe("Spring week");
+  expect(frame(painter).refusal).toBe("");
+  expect(frame(painter).dirty).toBe(false);
+});
