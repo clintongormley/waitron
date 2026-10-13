@@ -625,16 +625,18 @@ export class OpeningHoursScreen extends LitElement {
       event.currentTarget === this.shadowRoot?.querySelector("season-painter")
     );
   }
+  /** The painter is given what the address names, not what that resolves to, so that when a
+   *  refresh removes it the painter sees it go and tells (ruling R11). */
   private seasonPainter() {
-    if (!this.painter || !this.model) return nothing;
-    const target = this.painterTarget(this.model, this.painter);
+    const named = this.painter;
+    if (!named || !this.model) return nothing;
     return html`<season-painter
       .open=${true}
       .api=${this.api}
       .model=${this.model}
-      .seasonId=${target.seasonId}
-      .departmentId=${target.departmentId}
-      .zoneId=${target.zoneId}
+      .seasonId=${named.seasonId}
+      .departmentId=${named.departmentId}
+      .zoneId=${named.zoneId}
       .readOnly=${this.readOnly}
       @painter-navigate=${(event: CustomEvent<PainterNavigation>) => {
         event.stopPropagation();
