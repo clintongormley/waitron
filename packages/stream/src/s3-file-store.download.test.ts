@@ -1,11 +1,12 @@
 import { mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Readable } from "node:stream";
+import { Readable } from "node:stream";
 import { setTimeout as delay } from "node:timers/promises";
 import { afterEach, describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
 import { createS3FileStore, type S3FileStore } from "./s3-file-store.js";
+import type { BucketConfig } from "./s3-client.js";
 import { loopbackBucket, type LoopbackBucket } from "./testing/loopback-bucket.js";
 
 const cleanups: (() => Promise<void>)[] = [];
@@ -215,6 +216,18 @@ describe("a download as a stream", () => {
     await expect.poll(() => observed.closed).toBe(true);
   });
 
+  it("fails as cancelled when cancelled while a chunk waits unread", async () => {
+    const { bucket, headersSent } = await stallingBucket();
+    const controller = new AbortController();
+    const stream = await storeFor(bucket).readStream("a.enc", controller);
+    await headersSent;
+    const buffered = new Promise((resolve) => stream.once("readable", resolve));
+    stream.read(0);
+    await buffered;
+    controller.abort();
+    expect(await outcome(readAll(stream))).toEqual(cancelled);
+  });
+
   it("fails as a request that broke off when its connection drops", async () => {
     const { bucket } = await stallingBucket((socket) => setTimeout(() => socket.destroy(), 20));
     const stream = await storeFor(bucket).readStream("a.enc", live());
@@ -246,5 +259,87 @@ describe("a download as a stream", () => {
       await outcome(storeFor(bucket).readStream("a.enc", { signal: AbortSignal.abort() })),
     ).toEqual(cancelled);
     expect(bucket.seen).toEqual([]);
+  });
+});
+
+const NO_NETWORK: BucketConfig = {
+  endpoint: "http://127.0.0.1:9",
+  region: "us-east-1",
+  bucket: "owner-bucket",
+  prefix: "",
+  accessKeyId: "AKIAEXAMPLE0000",
+  secretAccessKey: "not-a-real-secret",
+};
+
+/**
+ * For each `depth`, a store whose request handler answers a GET with a body that sends one chunk
+ * and then waits, and cancels the call `depth` microtasks after answering. Sweeping the depth
+ * lands the cancellation at every point between the answer and the store's own listener.
+ */
+function answeredThenCancelled(depth: number) {
+  const controller = new AbortController();
+  const body = new Readable({ read() {} });
+  body.push("the first part");
+  const requestHandler = {
+    async handle() {
+      let tick = Promise.resolve();
+      for (let i = 0; i < depth; i += 1) tick = tick.then(() => {});
+      void tick.then(() => controller.abort());
+      return {
+        response: {
+          statusCode: 200,
+          headers: { etag: '"v1"', "content-length": "1000" },
+          body,
+        },
+      };
+    },
+    updateHttpClientConfig() {},
+    httpHandlerConfigs: () => ({}),
+    destroy() {},
+  };
+  const store = createS3FileStore(NO_NETWORK, { requestHandler: requestHandler as never });
+  cleanups.push(async () => store.close());
+  return { store, signal: controller.signal, body };
+}
+
+const DEPTHS = Array.from({ length: 100 }, (_, depth) => depth);
+const settled = () => new Promise((resolve) => setImmediate(resolve));
+
+describe("a download cancelled at any point after the bucket answered", () => {
+  it("to a file ends as cancelled and closes the body", async () => {
+    const dir = await scratch();
+    const missed: number[] = [];
+    for (const depth of DEPTHS) {
+      const { store, signal, body } = answeredThenCancelled(depth);
+      const ended = await outcome(store.getFile("a.enc", join(dir, "a.enc"), { signal }), 300);
+      await settled();
+      if (JSON.stringify(ended) !== JSON.stringify(cancelled) || !body.destroyed)
+        missed.push(depth);
+    }
+    expect(missed).toEqual([]);
+    expect(await readdir(dir)).toEqual([]);
+  });
+
+  it("as a stream ends as cancelled and closes the body", async () => {
+    const missed: number[] = [];
+    const handedBackAtCancel: boolean[] = [];
+    for (const depth of DEPTHS) {
+      const { store, signal, body } = answeredThenCancelled(depth);
+      let handedBack = false;
+      signal.addEventListener("abort", () => handedBackAtCancel.push(handedBack));
+      const ended = await outcome(
+        store.readStream("a.enc", { signal }).then((stream) => {
+          handedBack = true;
+          return readAll(stream);
+        }),
+        300,
+      );
+      await settled();
+      if (JSON.stringify(ended) !== JSON.stringify(cancelled) || !body.destroyed)
+        missed.push(depth);
+    }
+    expect(missed).toEqual([]);
+    // The sweep starts before the stream is handed back and ends after it.
+    expect([handedBackAtCancel[0], handedBackAtCancel.at(-1)]).toEqual([false, true]);
   });
 });

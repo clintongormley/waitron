@@ -455,6 +455,8 @@ export function createS3FileStore(
       const partial = join(dirname(outPath), `.${basename(outPath)}.${randomUUID()}.part`);
       const stop = () => body.destroy();
       signal.addEventListener("abort", stop, { once: true });
+      // A cancellation after the answer and before this listener has no event left to fire.
+      if (signal.aborted) stop();
       let handle: FileHandle | undefined;
       try {
         handle = await open(partial, "wx", 0o600);
@@ -491,11 +493,19 @@ export function createS3FileStore(
     async readStream(key, { signal }) {
       if (!isSafeKey(key)) throw keyInvalid("key");
       const body = await getBody(key, signal);
+      // Only the body's read is caught: the stream's own destroy throws its error in at the `yield`,
+      // and a different error thrown back reaches the reader as an AggregateError of the two.
       async function* relay() {
-        try {
-          for await (const chunk of body) yield chunk as Buffer;
-        } catch (error) {
-          throw failure(signal, "get", key, error);
+        const chunks = body[Symbol.asyncIterator]() as AsyncIterator<Buffer>;
+        for (;;) {
+          let next: IteratorResult<Buffer>;
+          try {
+            next = await chunks.next();
+          } catch (error) {
+            throw failure(signal, "get", key, error);
+          }
+          if (next.done) return;
+          yield next.value;
         }
       }
       const stream = Readable.from(relay(), { objectMode: false });
@@ -504,6 +514,7 @@ export function createS3FileStore(
         stream.destroy(cancelled("get", key));
       };
       signal.addEventListener("abort", stop, { once: true });
+      if (signal.aborted) stop();
       stream.once("close", () => {
         signal.removeEventListener("abort", stop);
         body.destroy();
