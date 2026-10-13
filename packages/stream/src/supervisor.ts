@@ -607,6 +607,9 @@ export class StreamSupervisor {
         this.#pruneDaily(generation, signal);
         readBucket();
       });
+      // Only these ticks hold a read to its deadline, and a pause stops them.
+      reading?.cancel.abort();
+      reading = undefined;
       await this.#pauseAndResume(generation, walBytes, signal);
     }
   }
@@ -614,9 +617,9 @@ export class StreamSupervisor {
   /**
    * Reads the live generation's newest file and forgets the commits it covers, then
    * checks the bucket when that is due: after a failed read, or with a problem named, at most every
-   * ten minutes; otherwise daily. `read` is cancelled once the run has stopped, or once a newer
-   * read has replaced this one; a listing answered after that changes nothing and starts no check:
-   * it may be older than the newer read's.
+   * ten minutes; otherwise daily. `read` is cancelled once the run has stopped, once the stream
+   * pauses, or once a newer read has replaced this one; a listing answered after that changes nothing
+   * and starts no check: it may be older than the newer read's.
    */
   async #readBucket(generation: string, signal: AbortSignal, read: AbortSignal): Promise<void> {
     const answer = await this.#newestUpload(generation, read);

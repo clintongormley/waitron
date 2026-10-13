@@ -196,6 +196,21 @@ describe("the freshness read", () => {
     ]);
   });
 
+  it("cancels a read in flight when the stream pauses, and logs nothing for it", async () => {
+    const h = await streaming();
+    h.store.hang = true;
+    h.setWal(LIMIT);
+    await h.clock.next();
+    await vi.waitFor(() =>
+      expect(h.callsOn("list", levelZero(h.generation), h.callsBefore)).toHaveLength(2),
+    );
+    const [read] = h.callsOn("list", levelZero(h.generation), h.callsBefore);
+    await settle();
+    expect(h.supervisor.status().state).toBe("paused");
+    expect(read!.signal?.aborted).toBe(true);
+    expect(h.logs.slice(h.logsBefore).map((line) => line.event)).toEqual(["stream.paused"]);
+  });
+
   it("cancels the read and the prune in flight on stop, and logs nothing after", async () => {
     const h = await streaming();
     h.store.hang = true;
