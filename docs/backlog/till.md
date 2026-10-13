@@ -1440,6 +1440,12 @@ From **Variants as products (#511–#556) — what is left open.** How the model
 - **A turned table's size dots stay on its own sides (A548, owner, 2026-10-12).** At every angle the
   dots sit on the table's own sides, diagonal on a 30° table; only each dot's cursor follows the way
   it drags on screen.
+- **A dragged size dot's arrow is the page's cursor until release (A580, owner, 2026-10-13).**
+  It is held the way row reordering holds its grabbing hand (`holdPageCursor`,
+  `packages/ui/src/reorder-table.ts`): the page body takes the arrow, and an element with a cursor
+  rule of its own keeps it unless that rule reads `--reorder-drag-cursor`, as the row-reorder
+  handles' rules do. In Chromium, a button outside the plan and a table on another canvas still
+  showed `pointer` mid-drag.
 - **Individual tables keep the later floor contract (A435 step 6, 2026-10-11).** Delete is a master
   draft edit with Undo until Save; today's release remains deferred. There is no table active flag
   or immediate table write route. Labels remain unique across the location. Hierarchy Delete is

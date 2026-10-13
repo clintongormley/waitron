@@ -4,7 +4,12 @@ import { repeat } from "lit/directives/repeat.js";
 import { commands, userEvent } from "vitest/browser";
 import { afterEach, expect, it, vi } from "vitest";
 import { cleanup, middleWithin, mount as mountHtml, textLines } from "./test-helpers.js";
-import { ReorderController, type ReorderModel } from "./reorder-table.js";
+import {
+  ReorderController,
+  holdPageCursor,
+  releasePageCursor,
+  type ReorderModel,
+} from "./reorder-table.js";
 import { reorder } from "./reorder.js";
 import { baseStyles } from "./base-styles.js";
 
@@ -660,6 +665,24 @@ it("leaves the page's cursor alone when a table that is not dragging is removed"
   try {
     el.remove();
     expect(document.body.style.cursor).toBe("help");
+  } finally {
+    document.body.style.cursor = "";
+  }
+});
+
+it("holds the cursor it is given on the page body and a row's handle, and puts the page's back", async () => {
+  const el = await mount();
+  document.body.style.cursor = "help";
+  try {
+    holdPageCursor("ns-resize");
+    try {
+      expect(document.body.style.cursor).toBe("ns-resize");
+      expect(getComputedStyle(handle(el, "a")).cursor).toBe("ns-resize");
+    } finally {
+      releasePageCursor();
+    }
+    expect(document.body.style.cursor).toBe("help");
+    expect(getComputedStyle(handle(el, "a")).cursor).toBe("grab");
   } finally {
     document.body.style.cursor = "";
   }

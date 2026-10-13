@@ -22,6 +22,7 @@ import {
 } from "../floor-plan-geometry.js";
 import { ROTATION_STEP, snapRotation } from "../floor.js";
 import { delegatesFocusShadowRootOptions } from "../interactive.js";
+import { holdPageCursor, releasePageCursor } from "../reorder-table.js";
 import { registerIcons } from "./wt-icon.js";
 
 registerIcons({
@@ -767,6 +768,7 @@ export class WtFloorPlanCanvas extends LitElement {
     if (grab.kind === "resize") {
       const cursor = resizeCursor(grab.side, p.rotation);
       this.resizing = { key: t.key, side: grab.side, cursor };
+      holdPageCursor(cursor);
     }
   }
 
@@ -832,6 +834,7 @@ export class WtFloorPlanCanvas extends LitElement {
         key: false,
       };
     }
+    if (this.resizing !== null) releasePageCursor();
     this.#drag = null;
     this.resizing = null;
     this.draft = null;

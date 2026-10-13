@@ -12,20 +12,21 @@ import "./components/wt-icon.js";
 
 type ReorderHost = ReactiveControllerHost & { readonly shadowRoot: ShadowRoot | null };
 
-/** Set on the body while any drag is in progress. The body's own `cursor` loses to any element
- * with a cursor rule of its own, such as the handle; a custom property inherits into every shadow
- * root, so a rule that reads it follows the drag. */
+/** Set on the body, to the held cursor, while any drag holds the page's cursor. The body's own
+ * `cursor` loses to any element with a cursor rule of its own, such as the handle; a custom property
+ * inherits into every shadow root, so a rule that reads it follows the drag. */
 const DRAG_CURSOR = "--reorder-drag-cursor";
 
-/** Shared by every controller on the page, so overlapping drags (two tables, two fingers) hand the
- * page's own cursor back only when the last one ends. */
+/** Shared by every drag that holds the page's cursor, so overlapping holds (two tables, two fingers)
+ * hand the page's own cursor back only when the last one ends; the first hold's cursor stays until
+ * then. */
 const pageDrag = { count: 0, cursor: "" };
 
-export function holdPageCursor(): void {
+export function holdPageCursor(cursor = "grabbing"): void {
   if (pageDrag.count++ > 0) return;
   pageDrag.cursor = document.body.style.cursor;
-  document.body.style.cursor = "grabbing";
-  document.body.style.setProperty(DRAG_CURSOR, "grabbing");
+  document.body.style.cursor = cursor;
+  document.body.style.setProperty(DRAG_CURSOR, cursor);
 }
 
 export function releasePageCursor(): void {
