@@ -2803,10 +2803,12 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   them to `loading` so they keep their full colour with a spinner. Question in the lane C questions
   file, "A535 (#1617)".
 
-- **A separate finding remains: entering `05,50` for an amount discount and pressing Continue raises
-  `shared.invalid_decimal` from the existing amount check** (found during W69). W69 leaves the amount
-  validation and request conversion unchanged.
-  [Detail](backlog/till.md#a-separate-finding-remains-entering-0550-for-an-amount-discount-and-pressing-continue-raises-sharedinvalid_decimal-from-the-existing-amount-check)
+- **Till payment and refund amounts still pass leading zeros to the strict decimal reader.**
+  `typedAmount("05,50")` returns `"05.50"` (`apps/till/src/state/bill-payment.ts`); calling
+  `decimal` on that result raises `shared.invalid_decimal`. A531’s temporary browser probe ran
+  both calls and asserted the code. The part-refund dialog’s `#partAmount` calls them in turn
+  (`apps/till/src/widgets/bill-refund-dialog.ts`). Next: reproduce through the payment/refund
+  forms and normalise valid input before comparison and request conversion, keeping their limits.
 
 - **Reopening a held order still removes a sold-out extra on the first edit.** The till now keeps
   such a line marked "Not offered now"; a line with no stored snapshot whose product the till no

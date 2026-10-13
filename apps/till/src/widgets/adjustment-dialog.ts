@@ -370,7 +370,8 @@ export class TillAdjustmentDialog extends LitElement {
   }
 
   #typedNumber(): string {
-    return parseDecimalInput(this.value) ?? this.value.trim();
+    const number = parseDecimalInput(this.value) ?? this.value.trim();
+    return TYPED_AMOUNT.test(number) ? number.replace(/^0+(?=\d)/, "") : number;
   }
 
   /** The form's own checks, by field; an empty map when it can be sent. */

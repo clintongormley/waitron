@@ -700,6 +700,62 @@ describe("till-adjustment-dialog: a refusal from the server", () => {
 });
 
 for (const locale of ["en", "es"]) {
+  for (const value of ["05,50", "05.50", "000000005.50", "00.01"]) {
+    it(`sends the leading-zero amount ${value} as an exact decimal in ${locale}`, async () => {
+      setLocale(locale);
+      const el = await mount({ kind: "discount", reasons: [staffMeal] });
+      const asked = capture<AdjustmentChoice>(el, "adjust-preview");
+      await chooseReason(el, "Staff meal");
+      await type(el, "amount", value);
+      await press(continueButton(el), el);
+      expect(field(el, "amount").error).toBe("");
+      expect(asked).toEqual([
+        {
+          action: "discount_amount",
+          reasonId: "Staff meal",
+          note: null,
+          amount: value === "00.01" ? "0.01" : "5.50",
+        },
+      ]);
+    });
+  }
+
+  it(`keeps the amount limits for leading-zero input in ${locale}`, async () => {
+    setLocale(locale);
+    const el = await mount({ kind: "discount", target: steaks });
+    const asked = capture<AdjustmentChoice>(el, "adjust-preview");
+    await choose(el, "discountKind", "amount");
+    await chooseReason(el, "Regular");
+    for (const value of ["00.00", "0000000005.50", "05.555", "-05.50", "05,5.0"]) {
+      await type(el, "amount", value);
+      await press(continueButton(el), el);
+      expect(field(el, "amount").error, value).toBe(t("adjust.amount_invalid"));
+      expect(actions(el).error, value).toBe(t("form.fix_fields"));
+      expect(continueButton(el).disabled, value).toBe(true);
+    }
+    await choose(el, "quantity", "1");
+    await type(el, "amount", "025,01");
+    expect(field(el, "amount").error).toBe(
+      t("adjust.amount_too_large").replace("{total}", money("25.00")),
+    );
+    expect(continueButton(el).disabled).toBe(true);
+    expect(asked).toEqual([]);
+    await type(el, "amount", "025.00");
+    expect(field(el, "amount").error).toBe("");
+    expect(actions(el).error).toBe("");
+    expect(continueButton(el).disabled).toBe(false);
+    await press(continueButton(el), el);
+    expect(asked).toEqual([
+      {
+        action: "discount_amount",
+        reasonId: "Regular",
+        note: null,
+        quantity: "1",
+        amount: "25.00",
+      },
+    ]);
+  });
+
   it(`decimal input in a till discount follows ${locale}`, async () => {
     setLocale(locale);
     const el = await mount({ kind: "discount", reasons: [staffMeal] });
