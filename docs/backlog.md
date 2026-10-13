@@ -4415,6 +4415,11 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   so `backups-relative` saved as a folder under the server's working directory (seen on the dev
   stack during A538-6's visual check). That line came in with #1628 (A538-4).
 
+- **The Backups screen's bucket fields copy the bucket copy panel's.** The field table, the
+  required checks, the reveal button and the "same bucket place" comparison exist in both
+  `apps/dashboard/src/screens/backup-destination-model.ts` and `stream-settings-panel.ts`, and the
+  folder rule copies `normalisePrefix` (`packages/stream/src/names.ts`). Share them. Left open by A538-6.
+
 - **At phone width the configuration export's passphrase labels overlap "Show password"** on the
   Backups screen (seen at 390 px during A538-6's visual check, both themes). I believe this predates
   A538-6: the export section came in with #296.
