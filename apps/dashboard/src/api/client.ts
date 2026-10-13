@@ -1536,7 +1536,8 @@ export type BackupDestinationStatus = {
 };
 
 export type BackupFreshness =
-  { configured: false } | { configured: true; destinations: BackupDestinationStatus[] };
+  | { configured: false; loadErrorCode?: string }
+  | { configured: true; destinations: BackupDestinationStatus[] };
 
 export interface CloudConnectionStatus {
   replacementEligible?: boolean;
@@ -1634,6 +1635,8 @@ export interface BackupStatusView {
   revision: string | null;
   /** A dashboard record is stored switched off. */
   storedDisabled: boolean;
+  /** Why the stored settings could not be used, which leaves archives off. */
+  loadErrorCode: string | null;
   destinations: BackupDestinationView[];
   schedule?: BackupSchedule;
   retention?: { count: number; days: number };

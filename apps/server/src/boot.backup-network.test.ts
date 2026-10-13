@@ -4,12 +4,14 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { deleteCredential, loadKeyRing, type KeyRing } from "@waitron/credentials";
 import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { emptyDrainResult } from "@waitron/fiscal";
 import { startManagementSession } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { ARCHIVE_PURPOSE, writeArchiveSettings } from "./archive-settings.js";
 import { startServer, type StartedServer } from "./boot.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import type { StorageBackend, StorageCall } from "./storage-backend.js";
@@ -97,6 +99,7 @@ const scratches: string[] = [];
 afterEach(async () => {
   stall.on = false;
   stall.started = [];
+  await withTransaction(venue.db, (tx) => deleteCredential(tx, { purpose: ARCHIVE_PURPOSE }));
   await Promise.all(scratches.splice(0).map((d) => rm(d, { recursive: true, force: true })));
 });
 
@@ -231,6 +234,87 @@ describe("trading with an archive destination the box cannot use", () => {
           expect(answered.status, await answered.text()).toBe(200);
         };
       },
+    );
+  }, 60_000);
+});
+
+/** Seals an archive record into the venue database under `ring`. */
+async function storeArchiveRecord(ring: KeyRing, dir: string): Promise<void> {
+  await withTransaction(venue.db, (tx) =>
+    writeArchiveSettings(tx, ring, {
+      enabled: true,
+      destinations: [{ kind: "local-fs", id: "primary", dir }],
+      schedule: { kind: "interval", ms: 60 * 60 * 1000 },
+      retention: { count: 7, days: 30 },
+      destinationTimeoutMs: 15 * 60 * 1000,
+    }),
+  );
+}
+
+/** The box's own key ring: `tradingEnv`'s `WAITRON_CREDENTIALS_KEY`. */
+const boxRing = (): KeyRing =>
+  loadKeyRing({
+    WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
+    WAITRON_CREDENTIALS_KEY_VERSION: "1",
+  });
+
+async function expectArchivesOffFor(
+  errorCode: string,
+  cookie: string,
+  lines: readonly string[],
+  http: { base: string; via: RequestInit },
+): Promise<void> {
+  expect(await waitForEvent(lines, "backup.archive_settings_unusable")).toMatchObject({
+    errorCode,
+  });
+  const status = await fetch(`${http.base}/api/backup/status`, {
+    ...http.via,
+    headers: { cookie },
+  });
+  expect(status.status).toBe(200);
+  expect(await status.json()).toMatchObject({
+    enabled: false,
+    loadErrorCode: errorCode,
+    backupStatus: { configured: false, loadErrorCode: errorCode },
+  });
+  const alerts = await fetch(`${http.base}/management-api/alerts`, {
+    ...http.via,
+    headers: { cookie },
+  });
+  const body = (await alerts.json()) as { alerts: { code: string; area: string }[] };
+  expect(body.alerts).toContainEqual(
+    expect.objectContaining({ code: "backup.archive_settings_unusable", area: "backup" }),
+  );
+}
+
+describe("trading with dashboard archive settings the box cannot use", () => {
+  // The session is written before the server starts: written from here while the server ran, it
+  // failed with `database is locked`.
+  it("starts, sells and answers /health with archives off when the record will not decrypt", async () => {
+    let cookie = "";
+    await bootAndTrade(
+      async (scratch) => {
+        const otherRing = loadKeyRing({
+          WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 6).toString("base64"),
+          WAITRON_CREDENTIALS_KEY_VERSION: "1",
+        });
+        await storeArchiveRecord(otherRing, join(scratch, "backups"));
+        cookie = await managerCookie();
+        return {};
+      },
+      (lines, http) => expectArchivesOffFor("credentials.decrypt_failed", cookie, lines, http),
+    );
+  }, 60_000);
+
+  it("starts, sells and answers /health with archives off when an enabled record has no recovery key", async () => {
+    let cookie = "";
+    await bootAndTrade(
+      async (scratch) => {
+        await storeArchiveRecord(boxRing(), join(scratch, "backups"));
+        cookie = await managerCookie();
+        return {};
+      },
+      (lines, http) => expectArchivesOffFor("backup.recovery_key_missing", cookie, lines, http),
     );
   }, 60_000);
 });

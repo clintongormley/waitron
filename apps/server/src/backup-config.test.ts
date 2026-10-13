@@ -5,6 +5,7 @@ import {
   BACKUP_ENV_KEYS,
   isBackupManagedByEnvironment,
   loadBackupConfig as loadWithVenue,
+  loadBackupSettings,
   loadRecoveryKey,
   resolveBackupConfig,
 } from "./backup-config.js";
@@ -525,5 +526,67 @@ describe("resolveBackupConfig with a held key under the length floor", () => {
       venueId: VENUE,
     });
     expect(cfg).toMatchObject({ enabled: false, recoveryKey: undefined });
+  });
+});
+
+describe("loadBackupSettings", () => {
+  const sealed: ArchiveSettings = {
+    revision: "6f1c2a43-8a49-4d0f-9b51-4d4f4c7c2a10",
+    enabled: true,
+    destinations: [{ kind: "local-fs", id: "primary", dir: "/mnt/sealed" }],
+    schedule: { kind: "interval", ms: 86_400_000 },
+    retention: { count: 7, days: 30 },
+    destinationTimeoutMs: 900_000,
+  };
+  const unreadable = () =>
+    Promise.reject(new AppError("credentials.decrypt_failed", { purpose: "backup.archive" }));
+
+  it("still refuses an environment the box cannot use, and never reads the sealed record", async () => {
+    let read = false;
+    await expect(
+      loadBackupSettings({
+        managedByEnvironment: true,
+        env: { WAITRON_BACKUP_DESTINATIONS: "not json" },
+        readSealed: async () => {
+          read = true;
+          return sealed;
+        },
+        venueId: VENUE,
+      }),
+    ).rejects.toMatchObject({ code: "backup.destinations_invalid" });
+    expect(read).toBe(false);
+  });
+
+  it("leaves archives off with the code when the dashboard record will not decrypt", async () => {
+    expect(
+      await loadBackupSettings({
+        managedByEnvironment: false,
+        env: { WAITRON_BACKUP_RECOVERY_KEY: "held-recovery-key-0123" },
+        readSealed: unreadable,
+        venueId: VENUE,
+      }),
+    ).toEqual({ loadErrorCode: "credentials.decrypt_failed" });
+  });
+
+  it("leaves archives off with the code when an enabled dashboard record has no recovery key", async () => {
+    expect(
+      await loadBackupSettings({
+        managedByEnvironment: false,
+        env: {},
+        readSealed: async () => sealed,
+        venueId: VENUE,
+      }),
+    ).toEqual({ loadErrorCode: "backup.recovery_key_missing" });
+  });
+
+  it("names a failure that carries no code as unknown, never by its message", async () => {
+    expect(
+      await loadBackupSettings({
+        managedByEnvironment: false,
+        env: {},
+        readSealed: () => Promise.reject(new Error("secret-bearing message")),
+        venueId: VENUE,
+      }),
+    ).toEqual({ loadErrorCode: "unknown" });
   });
 });

@@ -20,7 +20,7 @@ import { AppError } from "@waitron/shared";
 import { codeOf } from "@waitron/server-kit";
 import { archiveNamespace } from "./archive-settings.js";
 import { buildBackupBackend } from "./backup-backends.js";
-import type { BackupConfig, BackupSchedule } from "./backup-config.js";
+import type { BackupConfig, BackupConfigUnusable, BackupSchedule } from "./backup-config.js";
 import type { ScheduleClock } from "./backup-schedule.js";
 import {
   readDestinationStatus,
@@ -71,6 +71,9 @@ export interface BackupRuntimeStatus {
   revision: string | null;
   /** A dashboard record is stored switched off. */
   storedDisabled: boolean;
+  /** Why the dashboard's stored settings could not be used, which leaves archives off; the error's
+   * code, never its message. */
+  loadErrorCode: string | null;
   destinations: DestinationView[];
   schedule: BackupSchedule | undefined;
   retention: { count: number; days: number } | undefined;
@@ -90,7 +93,8 @@ export type SupervisedDestinationStatus = DestinationStatus & {
 };
 
 export type SupervisedBackupStatus =
-  { configured: false } | { configured: true; destinations: SupervisedDestinationStatus[] };
+  | { configured: false; loadErrorCode?: string }
+  | { configured: true; destinations: SupervisedDestinationStatus[] };
 
 type SweepRecord = Omit<SupervisedDestinationStatus, keyof DestinationStatus>;
 
@@ -107,7 +111,7 @@ const NO_RECORD: SweepRecord = {
 export interface BackupSupervisorDeps {
   /** Re-reads the box-env files from DISK each reload — closing over a boot-time value would make
    * hot-reload a no-op. */
-  buildConfig: () => Promise<BackupConfig | undefined>;
+  buildConfig: () => Promise<BackupConfig | BackupConfigUnusable | undefined>;
   /** True iff any `WAITRON_BACKUP_*` var is non-empty in the RAW base env. */
   isManagedByEnvironment: () => boolean;
   /** The live singleton role, read fresh each reload/status so a promotion is followed. */
@@ -159,6 +163,7 @@ export class BackupSupervisor {
   #backends: StorageBackend[] = [];
   #db: VenueDatabase | undefined;
   #config: BackupConfig | undefined;
+  #loadErrorCode: string | null = null;
   #reloading = false;
   /** Set once by `stop()` (shutdown is terminal). `reload()` checks it after every `await` and bails —
    * tearing down anything it opened — rather than start (or leave) a worker after a stop. */
@@ -179,8 +184,19 @@ export class BackupSupervisor {
       await this.#teardown();
       // A `stop()` may have run while we awaited the teardown, which already left no worker/handle.
       if (this.#stopped) return;
-      const cfg = await this.#deps.buildConfig();
+      const loaded = await this.#deps.buildConfig();
       if (this.#stopped) return; // a stop() landed during buildConfig — don't adopt this config
+      let cfg: BackupConfig | undefined;
+      if (loaded !== undefined && "loadErrorCode" in loaded) {
+        this.#deps.log("error", "backup.archive_settings_unusable", {
+          errorCode: loaded.loadErrorCode,
+        });
+        this.#loadErrorCode = loaded.loadErrorCode;
+        cfg = undefined;
+      } else {
+        this.#loadErrorCode = null;
+        cfg = loaded;
+      }
       this.#config = cfg;
       this.#sweep = new Map();
       if (
@@ -267,6 +283,7 @@ export class BackupSupervisor {
       source: cfg?.source ?? null,
       revision: cfg?.revision ?? null,
       storedDisabled: cfg !== undefined && cfg.source === "dashboard" && !cfg.enabled,
+      loadErrorCode: this.#loadErrorCode,
       destinations: cfg?.destinations.map(destinationView) ?? [],
       schedule: cfg?.schedule,
       retention: cfg === undefined ? undefined : { count: cfg.retain, days: cfg.retainDays },
@@ -288,7 +305,10 @@ export class BackupSupervisor {
     if (cfg === undefined || !cfg.enabled || cfg.destinations.length === 0)
       return {
         ...base,
-        backupStatus: { configured: false },
+        backupStatus:
+          base.loadErrorCode === null
+            ? { configured: false }
+            : { configured: false, loadErrorCode: base.loadErrorCode },
         archiveUnderCurrentKey: archiveUnderCurrentKey(),
       };
     const now = this.#now();

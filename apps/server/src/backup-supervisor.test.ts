@@ -898,6 +898,56 @@ describe("BackupSupervisor with a switched-off record or a bucket destination", 
     }
   });
 
+  it("keeps archives off and reports the code when the settings could not be loaded", async () => {
+    const dest = await makeDestDir();
+    const built: BackupDestination[] = [];
+    const logs: { level: string; event: string; fields: unknown }[] = [];
+    let load: BackupConfig | { loadErrorCode: string } = {
+      loadErrorCode: "credentials.decrypt_failed",
+    };
+    const sup = new BackupSupervisor({
+      buildConfig: async () => load,
+      isManagedByEnvironment: () => false,
+      readSingletonRole: () => "primary",
+      venueDir: await makeVenueDir(),
+      modules: ALL_MODULES,
+      environment: "production",
+      stateDir: await makeStateDir(),
+      jitterSeed: "seed",
+      readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] }),
+      log: (level, event, fields) => logs.push({ level, event, fields }),
+      buildBackend: (dest) => {
+        built.push(dest);
+        return new LocalFsBackend(dest.id, dest.kind === "local-fs" ? dest.dir : "/");
+      },
+    });
+    try {
+      await sup.reload();
+      expect(logs).toContainEqual({
+        level: "error",
+        event: "backup.archive_settings_unusable",
+        fields: { errorCode: "credentials.decrypt_failed" },
+      });
+      expect(sup.current()).toMatchObject({
+        enabled: false,
+        source: null,
+        destinations: [],
+        loadErrorCode: "credentials.decrypt_failed",
+      });
+      expect((await sup.status()).backupStatus).toEqual({
+        configured: false,
+        loadErrorCode: "credentials.decrypt_failed",
+      });
+      expect(built).toEqual([]);
+
+      load = localFsConfig([dest], STRONG_KEY_1);
+      await sup.reload();
+      expect(sup.current()).toMatchObject({ enabled: true, loadErrorCode: null });
+    } finally {
+      await sup.stop();
+    }
+  });
+
   it("reports an enabled environment config as not stored switched off", async () => {
     const dest = await makeDestDir();
     const sup = supervisorFor(localFsConfig([dest], STRONG_KEY_1), [], await makeStateDir());

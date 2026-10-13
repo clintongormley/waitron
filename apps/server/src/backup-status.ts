@@ -18,8 +18,10 @@ export type DestinationStatus = {
   readErrorCode: string | null;
 };
 
+/** `loadErrorCode`: the stored settings could not be used, so nothing is configured. */
 export type BackupStatus =
-  { configured: false } | { configured: true; destinations: DestinationStatus[] };
+  | { configured: false; loadErrorCode?: string }
+  | { configured: true; destinations: DestinationStatus[] };
 
 export const unreadDestination = (id: string, readErrorCode: string | null): DestinationStatus => ({
   id,

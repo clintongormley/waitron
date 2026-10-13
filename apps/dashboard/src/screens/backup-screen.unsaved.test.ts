@@ -35,6 +35,7 @@ const off: BackupStatusView = {
   source: null,
   revision: null,
   storedDisabled: false,
+  loadErrorCode: null,
   destinations: [],
   backupStatus: { configured: false },
   archiveUnderCurrentKey: false,

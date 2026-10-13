@@ -224,8 +224,8 @@ import { mountBackupApi } from "./backup-api.js";
 import { createSealedStateRefresher, type SealedStateStatus } from "./sealed-state.js";
 import {
   isBackupManagedByEnvironment as backupKeysInEnv,
+  loadBackupSettings,
   loadRecoveryKey,
-  resolveBackupConfig,
 } from "./backup-config.js";
 import { readArchiveSettings } from "./archive-settings.js";
 import { BackupSupervisor } from "./backup-supervisor.js";
@@ -1730,15 +1730,13 @@ async function bootServer(
     loadRecoveryKey(await loadBoxEnv(base, config.stateDir));
   const isBackupManagedByEnvironment = (): boolean => backupKeysInEnv(base);
   const backupSupervisor = new BackupSupervisor({
-    buildConfig: async () => {
-      const managedByEnvironment = isBackupManagedByEnvironment();
-      return resolveBackupConfig({
-        managedByEnvironment,
+    buildConfig: async () =>
+      loadBackupSettings({
+        managedByEnvironment: isBackupManagedByEnvironment(),
         env: await loadBoxEnv(base, config.stateDir),
-        sealed: managedByEnvironment ? null : await readArchiveSettings(db, ring),
+        readSealed: () => readArchiveSettings(db, ring),
         venueId: till.locationId,
-      });
-    },
+      }),
     isManagedByEnvironment: isBackupManagedByEnvironment,
     readSingletonRole: () => holders.singletonRole.current,
     venueDir: config.venueDir,

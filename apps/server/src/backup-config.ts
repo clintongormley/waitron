@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { resolve } from "node:path";
+import { codeOf } from "@waitron/server-kit";
 import { AppError, isAppError } from "@waitron/shared";
 import { readBucketConfig } from "@waitron/stream";
 import { archiveNamespace, type ArchiveSettings } from "./archive-settings.js";
@@ -294,6 +295,35 @@ export function resolveBackupConfig(input: {
     destinationTimeoutMs: sealed.destinationTimeoutMs,
     keyRotatedAt: keyRotatedAt(env),
   };
+}
+
+/** The dashboard's stored settings could not be read or used, so archives stay off. */
+export interface BackupConfigUnusable {
+  loadErrorCode: string;
+}
+
+/**
+ * {@link resolveBackupConfig} over the settings' one source. An environment the box cannot use
+ * still stops the start; a dashboard record that cannot be read or used answers its error code
+ * instead, so the box still starts and sells, as it does when the bucket copy's sealed settings
+ * fail (`StreamHost.start`).
+ */
+export async function loadBackupSettings(input: {
+  managedByEnvironment: boolean;
+  env: Env;
+  readSealed: () => Promise<ArchiveSettings | null>;
+  venueId: string;
+}): Promise<BackupConfig | BackupConfigUnusable | undefined> {
+  const { managedByEnvironment, env, venueId } = input;
+  if (managedByEnvironment) {
+    return resolveBackupConfig({ managedByEnvironment, env, sealed: null, venueId });
+  }
+  try {
+    const sealed = await input.readSealed();
+    return resolveBackupConfig({ managedByEnvironment, env, sealed, venueId });
+  } catch (error) {
+    return { loadErrorCode: codeOf(error) };
+  }
 }
 
 function heldUsableKey(env: Env): string | undefined {
