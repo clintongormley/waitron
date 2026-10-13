@@ -285,7 +285,7 @@ export class BackupSupervisor {
     // Taken with the settings: a reload during the read replaces `#sweep`, not this one.
     const sweep = this.#sweep;
     const archiveUnderCurrentKey = () => [...sweep.values()].some((r) => r.storedUnderCurrentKey);
-    if (cfg === undefined || cfg.destinations.length === 0)
+    if (cfg === undefined || !cfg.enabled || cfg.destinations.length === 0)
       return {
         ...base,
         backupStatus: { configured: false },

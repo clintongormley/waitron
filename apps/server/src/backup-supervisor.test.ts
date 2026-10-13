@@ -10,6 +10,7 @@ import {
   type VenueDatabase,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { backupAlertSource } from "./alert-sources.js";
 import { decryptArtifact } from "./artifact-cipher.js";
 import { unpackArchive } from "./backup-archive.js";
 import type { BackupConfig } from "./backup-config.js";
@@ -852,6 +853,46 @@ describe("BackupSupervisor with a switched-off record or a bucket destination", 
         revision: REVISION,
         destinations: [{ id: "primary", kind: "local-fs", dir: dest }],
       });
+    } finally {
+      await sup.stop();
+    }
+  });
+
+  it("reads a switched-off record as archives off: no destination is opened, no alert is overdue", async () => {
+    const dest = await makeDestDir();
+    const built: BackupDestination[] = [];
+    const sup = supervisorFor(
+      {
+        ...localFsConfig([dest], STRONG_KEY_1),
+        source: "dashboard",
+        revision: REVISION,
+        enabled: false,
+      },
+      built,
+      await makeStateDir(),
+    );
+    try {
+      await sup.reload();
+      const status = await sup.status();
+      expect(built).toEqual([]);
+      expect(status.backupStatus).toEqual({ configured: false });
+      expect(status.destinations).toEqual([{ id: "primary", kind: "local-fs", dir: dest }]);
+      const streaming = () => ({
+        state: "streaming" as const,
+        generation: "gen-0-node-a-20260915T110000Z",
+        reason: null,
+        stateSince: new Date().toISOString(),
+        bucketProblem: null,
+        lagMs: 0,
+        lastConfirmedUploadAt: new Date().toISOString(),
+      });
+      const alerts = backupAlertSource({
+        listStatus: async () => (await sup.status()).backupStatus,
+        outcomes: { failed: new Map() },
+        now: () => new Date(),
+        readStream: streaming,
+      });
+      expect(await alerts.read({ tx: {} as never, now: new Date() })).toEqual([]);
     } finally {
       await sup.stop();
     }
