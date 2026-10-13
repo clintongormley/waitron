@@ -97,6 +97,25 @@ describe("archiveNamespace", () => {
     },
   );
 
+  it.each([
+    ["a right-to-left override", "a‮b"],
+    ["a byte-order mark", "﻿a"],
+    ["a zero-width space", "a​b"],
+    ["a line separator", "a b"],
+    ["a paragraph separator", "a b"],
+    ["a lone high surrogate", "a\ud800b"],
+    ["a lone low surrogate", "a\udc00"],
+  ])("refuses a prefix holding %s", (_name, prefix) => {
+    expect(refusal(() => archiveNamespace(prefix, VENUE))).toEqual({
+      code: "backup.request_invalid",
+      params: { field: "prefix" },
+    });
+  });
+
+  it("accepts a prefix holding a whole character outside the basic plane", () => {
+    expect(archiveNamespace("a\u{1f600}b", VENUE)).toBe(`a\u{1f600}b/archives/${VENUE}/`);
+  });
+
   it.each(["", "a/b", "-a", "a.b"])("refuses the venue id %j", (venueId) => {
     expect(refusal(() => archiveNamespace("p", venueId))).toEqual({
       code: "backup.request_invalid",

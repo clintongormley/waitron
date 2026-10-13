@@ -36,6 +36,10 @@ export interface ArchiveSettings {
 // eslint-disable-next-line no-control-regex
 const CONTROL = /[\u0000-\u001f\u007f-\u009f]/;
 
+// Unicode format characters, line and paragraph separators, and half a surrogate pair: each can
+// hide or reorder what an owner reads as the archive folder.
+const INVISIBLE = /[\p{Cf}\p{Cs}\u2028\u2029]/u;
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 const BUCKET_ID = "bucket";
@@ -53,6 +57,7 @@ export function archiveNamespace(selectedPrefix: string, venueId: string): strin
     const segments = root.slice(0, -1).split("/");
     if (
       CONTROL.test(root) ||
+      INVISIBLE.test(root) ||
       segments.some((segment) => segment === "" || segment === "." || segment === "..")
     ) {
       throw requestInvalid("prefix");
