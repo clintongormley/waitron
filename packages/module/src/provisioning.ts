@@ -44,6 +44,8 @@ export interface StandbyReservation {
 /** Standby support: the primary reserves, the mirror establishes. Declared together — a module that
  * reserves state must know how to establish it. */
 export interface StandbyProvisioning {
+  /** When activation owns the series, neither reservation nor adoption may open scaffold series. */
+  readonly series?: "on-activation";
   /** Primary side, inside the bundle-minting transaction. */
   reserve(
     tx: Transaction,

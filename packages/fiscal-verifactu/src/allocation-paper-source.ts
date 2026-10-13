@@ -7,6 +7,10 @@ import type {
   AllocationEvidenceSource,
   AllocationOperationEvidence,
 } from "./allocation-operation.js";
+import type {
+  StandbyAllocationEvidence,
+  StandbyAllocationEvidenceSource,
+} from "./allocated-standby.js";
 import { enrolPaperCustodian } from "./paper-evidence.js";
 
 type PaperAuthority = Extract<AllocationOperationEvidence["authority"], { kind: "paper" }>;
@@ -137,6 +141,75 @@ export function createPaperAllocationSource(configuration: {
           currentEntryState: current.currentEntryState,
         },
       },
+    };
+  };
+}
+
+export function createPaperStandbySource(configuration: {
+  readonly custodianPath: string;
+  readonly confirmationPath: string;
+  readonly confirmedFingerprint: string;
+}): StandbyAllocationEvidenceSource {
+  const { custodianPath, confirmationPath, confirmedFingerprint } = configuration;
+  return async (supplied) => {
+    const request = structuredClone(supplied);
+    const refuse = (reason: string): never => {
+      throw new AppError("sif.allocation_invalid", { reason });
+    };
+    const key = await readJson(custodianPath);
+    if (!record(key) || !exact(key, ["custodianId", "publicKey", "fingerprint"]))
+      return refuse("reservation_untrusted");
+    const trust = enrolPaperCustodian(key.custodianId, key.publicKey, confirmedFingerprint);
+    if (trust === null || trust.fingerprint !== key.fingerprint)
+      return refuse("reservation_untrusted");
+    const current = await readJson(confirmationPath);
+    if (
+      !record(current) ||
+      !exact(current, [
+        "version",
+        "allocationId",
+        "binding",
+        "operatorId",
+        "incidentEvidence",
+        "recipientVenueId",
+        "generationId",
+        "blockId",
+        "currentRegisterConfirmed",
+        "reservationConfirmed",
+        "currentEntryState",
+      ]) ||
+      current.version !== 1 ||
+      !["allocationId", "incidentEvidence", "recipientVenueId", "generationId", "blockId"].every(
+        (field) => text(current[field]),
+      ) ||
+      typeof current.currentRegisterConfirmed !== "boolean" ||
+      typeof current.reservationConfirmed !== "boolean" ||
+      !["reserved", "consumed-for-event", "consumed-elsewhere", "retired", "abandoned"].includes(
+        current.currentEntryState as string,
+      )
+    )
+      return refuse("outside_confirmation_missing");
+    if (
+      !isDeepStrictEqual(current.binding, request.binding) ||
+      !isDeepStrictEqual(current.operatorId, request.operatorId)
+    )
+      return refuse("event_mismatch");
+    if (current.currentRegisterConfirmed !== true || current.reservationConfirmed !== true)
+      return refuse("outside_confirmation_missing");
+    if (current.currentEntryState !== "reserved") return refuse("reservation_not_current");
+    return {
+      ...request,
+      evidence: {
+        trust,
+        allocationId: current.allocationId as string,
+        incidentEvidence: current.incidentEvidence as string,
+        recipientVenueId: current.recipientVenueId as string,
+        generationId: current.generationId as string,
+        blockId: current.blockId as string,
+        currentRegisterConfirmed: true,
+        reservationConfirmed: true,
+        currentEntryState: "reserved",
+      } satisfies StandbyAllocationEvidence,
     };
   };
 }

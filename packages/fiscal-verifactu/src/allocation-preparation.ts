@@ -12,14 +12,26 @@ import {
   type AllocationEvidenceSource,
 } from "./allocation-operation.js";
 import type { ActivationResult } from "./schema/allocations.js";
-import { createPaperAllocationSource } from "./allocation-paper-source.js";
+import {
+  createPaperAllocationSource,
+  createPaperStandbySource,
+} from "./allocation-paper-source.js";
+import { createStandbyAllocationPreparation } from "./allocated-standby.js";
 
 export function createPaperAllocationPreparation(configuration: {
   readonly custodianPath: string;
   readonly confirmationPath: string;
   readonly confirmedFingerprint: string;
 }): ModuleOperationPreparation {
-  return createAllocationPreparation(createPaperAllocationSource(configuration));
+  const activation = createAllocationPreparation(createPaperAllocationSource(configuration));
+  const standby = createStandbyAllocationPreparation(createPaperStandbySource(configuration));
+  return {
+    prepare(operation, run) {
+      return ["reserve", "establish"].includes(operation.binding.action)
+        ? standby.prepare(operation, run)
+        : activation.prepare(operation, run);
+    },
+  };
 }
 
 const prepared = new WeakMap<

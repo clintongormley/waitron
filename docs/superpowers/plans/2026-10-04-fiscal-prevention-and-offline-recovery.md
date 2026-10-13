@@ -826,3 +826,25 @@ The production composition still selects no collector and retains the old fiscal
 Finish the configured entry points, seed/restore/dormant seats and complete text/counter consumer
 transition before regeneration, populated upgrade, Cloud binding sync, both full reviews and the
 normal hook/current-head CI. This checkpoint does not complete Task 4 and must not be published.
+
+
+**2026-10-13 allocated-standby checkpoint:** the fiscal contribution now implements reserve,
+establish and activate with attempt-local prepared input. Reserve returns only the signed
+reservation carrier; establishment writes only the dormant reservation ledger. Neither opens
+series or a SIF. Separate current reservation statements and enrolled public trust are selected
+through the explicit paper preparation factory. The statements do not establish independent
+current history or fence another writer.
+
+Both generic carriers prepare outside their write transaction. A module declaring series creation
+at activation refuses scaffold series in either reservation output or adoption input. Adopted
+arguments are detached before the first credential read, and all module authorities are rechecked
+before commit, including when a later module outlives an earlier authority. Real bundle/adoption
+and key-authenticated mirror-promotion tests exercise separate databases, complete purposes,
+current-consumption refusal and membership-write rollback. Existing fiscal assertions, root
+checks and shipped SQL are unchanged at this checkpoint.
+
+Next select the production collector and allocated seed/restore/standby contributions together
+with text SIF/counter retirement and every setup/CLI/readiness/re-registration/archive/bucket/
+staged/bundle/adoption/promotion consumer. Then rebase/regenerate the complete candidate schema,
+run populated upgrade and fiscal qualification, align the Cloud handoff's operator union, and
+complete both full reviews, normal hook and current-head CI. No intermediate publication.

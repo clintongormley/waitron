@@ -793,3 +793,236 @@ describe("opaque authenticated standby carriers", () => {
     expect(await readDeploymentMode(suite.db, TARGET)).toBe("mirror");
   });
 });
+
+it("collects the outside reservation before entering the bundle's write transaction", async () => {
+  await establishNodeIdentity({ ownerDb: suite.db, ring: RING }, PRIMARY);
+  const module = regime(async (tx, _primary, _standby, operation) => {
+    expect(operation?.input).toEqual({ prepared: "reservation" });
+    expect((await tx.select().from(locations))[0]?.name).toBe("Source checked");
+    return { state: { reserved: true } };
+  });
+  modules.push({
+    ...module,
+    operations: {
+      async prepare(operation, run) {
+        await withTransaction(suite.db, (tx) =>
+          tx.update(locations).set({ name: "Source checked" }),
+        );
+        return run({ ...operation, input: { prepared: "reservation" } });
+      },
+    },
+  });
+  const result = await withOperationAuthority(binding, "admin", (authority) =>
+    assembleMirrorBundle({ ...bundleDeps(), moduleOperations: operations(authority) }),
+  );
+  expect(result.reservedIdentity.modules).toEqual({ [binding.module]: { reserved: true } });
+});
+
+it("collects outside establishment evidence before sealing the spare's key", async () => {
+  const args = adoptionArgs();
+  const scope = { ...binding, action: "establish", targetNodeId: args.standby.nodeId };
+  const module = regime(
+    async () => ({ state: {} }),
+    async (tx, _node, _state, operation) => {
+      expect(operation?.input).toEqual({ prepared: "establishment" });
+      expect((await tx.select().from(locations))[0]?.name).toBe("Source checked");
+    },
+  );
+  modules.push({
+    ...module,
+    operations: {
+      async prepare(operation, run) {
+        expect(
+          await tryGetCredential(suite.db, RING, { purpose: "membership.node_key" }),
+        ).toBeNull();
+        await withTransaction(suite.db, (tx) =>
+          tx.update(locations).set({ name: "Source checked" }),
+        );
+        return run({ ...operation, input: { prepared: "establishment" } });
+      },
+    },
+  });
+  await withOperationAuthority(scope, "admin", (authority) =>
+    establishReservedStandbyIdentity(
+      { ownerDb: suite.db, ring: RING },
+      { ...args, moduleOperations: operations(authority, scope) },
+    ),
+  );
+  expect(await suite.db.select().from(nodes).where(eq(nodes.id, args.standby.nodeId))).toHaveLength(
+    1,
+  );
+});
+
+it("does not create a spare node or sealed key after outside collection refuses", async () => {
+  const args = adoptionArgs();
+  const scope = { ...binding, action: "establish", targetNodeId: args.standby.nodeId };
+  const module = regime(async () => ({ state: {} }));
+  modules.push({
+    ...module,
+    operations: {
+      async prepare() {
+        throw new Error("outside source refused");
+      },
+    },
+  });
+  await expect(
+    withOperationAuthority(scope, "admin", (authority) =>
+      establishReservedStandbyIdentity(
+        { ownerDb: suite.db, ring: RING },
+        { ...args, moduleOperations: operations(authority, scope) },
+      ),
+    ),
+  ).rejects.toThrow("outside source refused");
+  expect(await suite.db.select().from(nodes).where(eq(nodes.id, args.standby.nodeId))).toEqual([]);
+  expect(await tryGetCredential(suite.db, RING, { purpose: "membership.node_key" })).toBeNull();
+});
+
+it("refuses a carrier that smuggles invoice series beside a module that opens them on activation", async () => {
+  const args = adoptionArgs();
+  modules.push(
+    fakeModule(binding.module, {
+      provisioning: {
+        standby: {
+          series: "on-activation",
+          reserve: async () => ({ state: {} }),
+          establish: async () => {},
+        },
+      },
+    }),
+  );
+  await expect(
+    establishReservedStandbyIdentity(
+      { ownerDb: suite.db, ring: RING },
+      {
+        ...args,
+        reserved: { ...args.reserved, series: [{ code: "unexpected", purpose: "standard" }] },
+      },
+    ),
+  ).rejects.toMatchObject({ code: "module.operation_invalid", params: { module: binding.module } });
+  expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
+  expect(await suite.db.select().from(nodes).where(eq(nodes.id, args.standby.nodeId))).toEqual([]);
+  expect(await tryGetCredential(suite.db, RING, { purpose: "membership.node_key" })).toBeNull();
+});
+
+it("refuses a reservation contribution that opens series before its declared activation", async () => {
+  await establishNodeIdentity({ ownerDb: suite.db, ring: RING }, PRIMARY);
+  modules.push(
+    fakeModule(binding.module, {
+      provisioning: {
+        standby: {
+          series: "on-activation",
+          reserve: async () => ({ state: {}, series: [{ code: "unexpected", purpose: "full" }] }),
+          establish: async () => {},
+        },
+      },
+    }),
+  );
+  await expect(assembleMirrorBundle(bundleDeps())).rejects.toMatchObject({
+    code: "module.operation_invalid",
+    params: { module: binding.module },
+  });
+});
+
+it("snapshots the submitted spare and reservation before its first credential read", async () => {
+  const args = adoptionArgs();
+  const originalNode = args.standby.nodeId;
+  modules.push(
+    regime(
+      async () => ({ state: {} }),
+      async (tx, node, state) => {
+        expect(node.nodeId).toBe(originalNode);
+        expect(state).toEqual({ reserved: true });
+        await tx.update(nodes).set({ name: "Original spare" }).where(eq(nodes.id, node.nodeId));
+      },
+    ),
+  );
+  const pending = establishReservedStandbyIdentity({ ownerDb: suite.db, ring: RING }, args);
+  args.standby.nodeId = crypto.randomUUID();
+  args.reserved.modules[binding.module] = { reserved: false };
+  args.nodeName = "Changed caller";
+  modules.length = 0;
+  await pending;
+  const [stored] = await suite.db.select().from(nodes).where(eq(nodes.id, originalNode));
+  expect(stored?.name).toBe("Original spare");
+  expect(await suite.db.select().from(nodes).where(eq(nodes.id, args.standby.nodeId))).toEqual([]);
+});
+
+it.each(["reserve", "establish"])(
+  "rolls back %s when an earlier module's authority expires during a later module",
+  async (action) => {
+    const args = adoptionArgs();
+    const scope = {
+      ...binding,
+      action,
+      targetNodeId: action === "reserve" ? TARGET : args.standby.nodeId,
+    };
+    if (action === "reserve")
+      await establishNodeIdentity({ ownerDb: suite.db, ring: RING }, PRIMARY);
+    let enter!: () => void;
+    let release!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      enter = resolve;
+    });
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const change = async (tx: Transaction) => {
+      await tx.update(locations).set({ name: "Partial write" });
+    };
+    modules.push(
+      regime(
+        async (tx) => {
+          await change(tx);
+          return { state: {} };
+        },
+        async (tx) => {
+          await change(tx);
+        },
+      ),
+    );
+    modules.push(
+      fakeModule("later-module", {
+        provisioning: {
+          standby: {
+            reserve: async () => {
+              enter();
+              await released;
+              return { state: {} };
+            },
+            establish: async () => {
+              enter();
+              await released;
+            },
+          },
+        },
+      }),
+    );
+    let pending!: Promise<unknown>;
+    await withOperationAuthority(scope, "admin", async (authority) => {
+      pending =
+        action === "reserve"
+          ? assembleMirrorBundle({
+              ...bundleDeps(),
+              moduleOperations: operations(authority, scope),
+            })
+          : establishReservedStandbyIdentity(
+              { ownerDb: suite.db, ring: RING },
+              { ...args, moduleOperations: operations(authority, scope) },
+            );
+      await entered;
+    });
+    const rejected = expect(pending).rejects.toMatchObject({
+      code: "module.operation_invalid",
+      params: { module: binding.module },
+    });
+    release();
+    await rejected;
+    expect((await suite.db.select().from(locations))[0]?.name).toBe("Restaurant");
+    if (action === "establish") {
+      expect(await suite.db.select().from(nodes).where(eq(nodes.id, args.standby.nodeId))).toEqual(
+        [],
+      );
+      expect(await tryGetCredential(suite.db, RING, { purpose: "membership.node_key" })).toBeNull();
+    }
+  },
+);

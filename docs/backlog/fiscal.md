@@ -741,3 +741,25 @@ node isolation and rollback. Browser checks cover both languages, live language 
 malformed stored labels and eight theme/width views. The lane retains red/green and installed
 removal-control receipts under `receipts/w41s4-short-name-*`. Physical paper output and the
 backup chooser remain Task 6 work; the coupled production allocation transition remains open.
+
+
+### W41s-4 allocated standby qualification, 2026-10-13
+
+The allocated standby contribution returns signed reservation state without a SIF or series.
+Establishment stores its signed proof and complete bases in the existing reservation ledger.
+Both actions use freshly scoped host authority and separately collected current paper statements;
+a statement remains an operator assertion rather than independent continuity evidence.
+The configured paper preparation factory handles these actions alongside activation.
+
+Real bundle/adoption carriers now collect before their write transaction, reject scaffold series
+for a module that opens them at activation, and recheck every module's authority before commit.
+A two-database synthetic journey reserves, adopts and takes over with the spare's actual node
+key, checking all three purposes and key-event attribution. Absent current consumption and a
+refused membership write retain the dormant reservation. Source/authority/argument snapshots,
+late expiry, rollback, wrong target and active-spare refusals have focused checks and installed
+removal controls. The existing behavioural assertions remain unchanged.
+
+Default production composition and public allocation collectors remain unconnected. The text
+SIF/counter transition, all entry points, current-main schema regeneration/populated upgrade,
+Cloud handoff binding and both whole-branch reviews plus push-hook/current-head CI remain open.
+This branch checkpoint does not complete Task 4 and must not be published.

@@ -72,3 +72,12 @@ export {
   ALLOCATED_FISCAL_RESTORE,
   activatePreparedFiscalStandby,
 } from "./allocated-lifecycle.js";
+
+export {
+  ALLOCATED_FISCAL_STANDBY,
+  createStandbyAllocationPreparation,
+} from "./allocated-standby.js";
+export type {
+  StandbyAllocationEvidence,
+  StandbyAllocationEvidenceSource,
+} from "./allocated-standby.js";
