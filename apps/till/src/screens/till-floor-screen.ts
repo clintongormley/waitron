@@ -35,6 +35,8 @@ import "../widgets/bill-choice-dialog.js";
 import "../widgets/join-with-dialog.js";
 import "../widgets/split-joined-dialog.js";
 import type { SplitJoinedDetail, TillSplitJoinedDialog } from "../widgets/split-joined-dialog.js";
+import "../widgets/join-again-dialog.js";
+import type { JoinAgainDetail, TillJoinAgainDialog } from "../widgets/join-again-dialog.js";
 import "../widgets/floor-zone-menu.js";
 import type { JoinWithPickDetail } from "../widgets/join-with-dialog.js";
 import type { BillChoiceDetail } from "../widgets/bill-choice-dialog.js";
@@ -45,6 +47,8 @@ import {
   type DropAction,
   type SheetAction,
   dropAction,
+  joinAgainOf,
+  type JoinAgainPlan,
   onTodaysPlan,
   pendingPlaces,
   sheetActions,
@@ -492,6 +496,12 @@ export class TillFloorScreen extends LitElement {
     busy: boolean;
     refusal: { code: string; field?: string } | null;
   } | null = null;
+  /** Join again's joined table, while some of its tables stay apart. */
+  @state() private joiningAgain: {
+    tableId: string;
+    busy: boolean;
+    refusal: { code: string; field?: string } | null;
+  } | null = null;
   /** A drop joining two seated parties, waiting for which bills to keep. */
   @state() private askingBills: { api: TillApi; action: JoinAction } | null = null;
 
@@ -556,6 +566,8 @@ export class TillFloorScreen extends LitElement {
       this.#splitting(this.splittingJoined.tableId) === undefined
     )
       this.splittingJoined = null;
+    if (this.joiningAgain !== null && this.#joiningAgain(this.joiningAgain.tableId) === undefined)
+      this.joiningAgain = null;
   }
 
   override updated(): void {
@@ -790,8 +802,16 @@ export class TillFloorScreen extends LitElement {
       case "split-off":
         this.splittingJoined = { tableId, busy: false, refusal: null };
         return;
-      case "join-again":
+      case "join-again": {
+        const plan = joinAgainOf(table, this.tables);
+        if (plan === null) return;
+        if (plan.whole)
+          void this.#settle(
+            api.joinAgainToday(plan.joined.id, { partIds: plan.back.map((each) => each.id) }),
+          );
+        else this.joiningAgain = { tableId: plan.joined.id, busy: false, refusal: null };
         return;
+      }
       case "rotate":
         void this.#settle(api.rotateToday(table.id));
         return;
@@ -1038,6 +1058,67 @@ export class TillFloorScreen extends LitElement {
     this.#requestFloorRefresh();
   }
 
+  /** Join again's plan for the joined table it was opened for, while some of its tables stay apart. */
+  #joiningAgain(tableId: string): JoinAgainPlan | undefined {
+    const joined = this.tables.find((each) => each.id === tableId);
+    const plan = joined === undefined ? null : joinAgainOf(joined, this.tables);
+    return plan === null || plan.whole ? undefined : plan;
+  }
+
+  #joinAgain(): TemplateResult | typeof nothing {
+    const joining = this.joiningAgain;
+    const plan = joining === null ? undefined : this.#joiningAgain(joining.tableId);
+    if (joining === null || plan === undefined) return nothing;
+    return html`<till-join-again-dialog
+      .joined=${plan.joined}
+      .apart=${plan.apart}
+      .busy=${joining.busy}
+      .refusal=${joining.refusal}
+      @join-again-confirm=${(event: CustomEvent<JoinAgainDetail>) => {
+        event.stopPropagation();
+        void this.#sendJoinAgain(event.currentTarget as TillJoinAgainDialog, event.detail);
+      }}
+      @join-again-cancel=${(event: Event) => {
+        event.stopPropagation();
+        this.joiningAgain = null;
+      }}
+    ></till-join-again-dialog>`;
+  }
+
+  /**
+   * As `#splitOff`: the window stays open until the answer, which applies only to the window that
+   * sent it. The tables sent are the plan's as the floor reads them at the press, so a poll since
+   * the window opened is what the server is asked to check against.
+   */
+  async #sendJoinAgain(dialog: TillJoinAgainDialog, detail: JoinAgainDetail): Promise<void> {
+    const joining = this.joiningAgain;
+    const plan = joining === null ? undefined : this.#joiningAgain(joining.tableId);
+    const api = this.api;
+    if (joining === null || plan === undefined || joining.busy || api === undefined) return;
+    const sent = { ...joining, busy: true, refusal: null };
+    this.joiningAgain = sent;
+    try {
+      await api.joinAgainToday(joining.tableId, {
+        partIds: plan.back.map((each) => each.id),
+        seats: detail.seats,
+      });
+      if (this.joiningAgain === sent) {
+        dialog.commit();
+        this.joiningAgain = null;
+      }
+    } catch (cause) {
+      const refused = (cause ?? {}) as { code?: string; field?: unknown };
+      const code = refused.code ?? "server.internal";
+      if (this.joiningAgain === sent)
+        this.joiningAgain = {
+          ...joining,
+          busy: false,
+          refusal: typeof refused.field === "string" ? { code, field: refused.field } : { code },
+        };
+    }
+    this.#requestFloorRefresh();
+  }
+
   #billChoice(): TemplateResult | typeof nothing {
     const asking = this.askingBills;
     if (asking === null) return nothing;
@@ -1240,7 +1321,7 @@ export class TillFloorScreen extends LitElement {
             : this.#plannedMap(onMap, unplaced, activeKey)
         }
         ${this.#seatDialog()} ${this.#clearDialog()} ${this.#detailsSheet()} ${this.#seatsPrompt()}
-        ${this.#splitJoined()} ${this.#billChoice()} ${this.#joinWith()}
+        ${this.#splitJoined()} ${this.#joinAgain()} ${this.#billChoice()} ${this.#joinWith()}
       </section>
     `;
   }

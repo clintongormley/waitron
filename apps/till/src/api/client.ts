@@ -3677,6 +3677,18 @@ export class TillApi {
     });
   }
 
+  /** Take split-off tables back into their joined table → `POST /api/tables/:id/today/join-again`.
+   * `seats` is left out when unset: the server refuses a null. */
+  async joinAgainToday(
+    tableId: string,
+    join: { partIds: string[]; seats?: number },
+  ): Promise<void> {
+    await this.#todayChange(tableId, "join-again", {
+      partIds: join.partIds,
+      ...(join.seats === undefined ? {} : { seats: join.seats }),
+    });
+  }
+
   /** Reset a zone to its saved plan → `POST /api/zones/:id/today/reset`. */
   async resetZoneToday(zoneId: string): Promise<void> {
     await this.#request<void>(`/api/zones/${zoneId}/today/reset`, "POST", {});

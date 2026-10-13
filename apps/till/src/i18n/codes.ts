@@ -116,6 +116,18 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Some of its tables are split off",
     es: "Algunas de sus mesas están separadas",
   },
+  "joined_table.nothing_to_join": {
+    en: "Nothing to join again now",
+    es: "Ahora no hay nada que volver a unir",
+  },
+  "joined_table.out_of_date": {
+    en: "Its tables have changed. Check and try again",
+    es: "Sus mesas han cambiado. Revísalo e inténtalo de nuevo",
+  },
+  "table.split_off": {
+    en: "That table was split off. Join it again first",
+    es: "Esa mesa está separada. Vuelve a unirla primero",
+  },
   "merge.seats_required": {
     en: "Enter the seats for this merge",
     es: "Indica las plazas de esta unión",
