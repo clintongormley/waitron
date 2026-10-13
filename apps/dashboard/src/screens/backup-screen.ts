@@ -16,7 +16,7 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-number-stepper.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import "./stream-settings-panel.js";
 import type {
@@ -67,8 +67,8 @@ function parseRetention(text: string): number | null {
   return Number.isSafeInteger(n) && n > 0 ? n : null;
 }
 
-const decreaseLabel = (label: string) => t("action.decrease").replace("{label}", label);
-const increaseLabel = (label: string) => t("action.increase").replace("{label}", label);
+const decreaseLabel = (label: string) => fill("action.decrease", { label });
+const increaseLabel = (label: string) => fill("action.increase", { label });
 
 /** Monday-first display order; `n` is the `Date.getDay()` value the server's schedule expects. */
 const WEEKDAYS: { n: number; labelKey: Parameters<typeof t>[0] }[] = [

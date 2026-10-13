@@ -34,10 +34,10 @@ import {
   type FieldContext,
 } from "./form-fields.js";
 import type { ExtraList, ExtraListInput, Product } from "../api/client.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 
-const decreaseLabel = (label: string) => t("action.decrease").replace("{label}", label);
-const increaseLabel = (label: string) => t("action.increase").replace("{label}", label);
+const decreaseLabel = (label: string) => fill("action.decrease", { label });
+const increaseLabel = (label: string) => fill("action.increase", { label });
 
 interface ExtraDraft {
   value: ExtraListInput;
@@ -544,7 +544,7 @@ export class ExtraListForm extends LitElement {
         ...(this.#portionKind(productId) === "measured" ? { portion: "" } : {}),
       };
       this.items = [...this.items, item];
-      this.addedMessage = t("extras.product_added").replace("{name}", this.#productName(productId));
+      this.addedMessage = fill("extras.product_added", { name: this.#productName(productId) });
     });
   }
 
