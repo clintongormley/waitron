@@ -705,6 +705,7 @@ const en = {
   "menu.offset_placement":
     "Change the offset so orders end after this period starts and before the next period starts.",
   "menu.offset_timetable": "Change this period’s end offset to fit these time ranges.",
+  "menu.offset_timetable_named": "Change the end offset of {period} to fit these times.",
   "menu.not_placed": "Not placed",
   "menu.actions": "Actions",
   "menu.row_actions": "Actions: {name}",
@@ -1517,6 +1518,8 @@ const es: Record<keyof typeof en, string> = {
     "Cambia el desfase para que los pedidos terminen después del inicio de este periodo y antes del inicio del siguiente.",
   "menu.offset_timetable":
     "Cambia el desfase del final de este periodo para ajustarlo a estos horarios.",
+  "menu.offset_timetable_named":
+    "Cambia el desfase del final de {period} para ajustarlo a estos horarios.",
   "menu.period_menu": "Carta",
   "menu.period_uses": "Se usa en",
   "menu.not_placed": "Sin colocar",

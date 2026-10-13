@@ -172,7 +172,7 @@ it("a department refusal on a day shows that department, marks the day's heading
   await save(painter, writes);
   const sent = (writes[0]!.body as { departments: { departmentId: string }[] }).departments;
   expect(sent.map(({ departmentId }) => departmentId)).toEqual(["d1", "d3"]);
-  const message = "Change this period’s end offset to fit these time ranges.";
+  const message = "Change the end offset of Drinks to fit these times.";
   expect(button(painter, "follows")).toBeNull();
   expect(grid(painter).periods.map(({ id }) => id)).toEqual(["q1"]);
   expect([...grid(painter).columnErrors]).toEqual([["3", message]]);
@@ -186,6 +186,21 @@ it("a department refusal on a day shows that department, marks the day's heading
   await drag(painter, "3", 10 * 60, 11 * 60);
   expect(grid(painter).columnErrors.size).toBe(0);
   expect(frame(painter).refusal).toBe("");
+});
+
+it("an end-offset refusal naming no period of the department keeps the unnamed wording", async () => {
+  const { painter, writes } = await mount(withBar(), [
+    {
+      code: "menu_timetable.invalid",
+      params: { field: "departments.0.days.2.slots", reason: "end_offset", periodId: "gone" },
+    },
+  ]);
+  await pick(painter, "d3");
+  await drag(painter, "3", 7 * 60, 9 * 60);
+  await save(painter, writes);
+  expect(frame(painter).refusal).toBe(
+    "Bar, Wednesday: Change this period’s end offset to fit these time ranges.",
+  );
 });
 
 it("a zone refusal on a day shows that zone and marks its heading; the next save clears it", async () => {

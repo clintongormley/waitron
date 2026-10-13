@@ -111,8 +111,11 @@ function shownIn(model: Model, departmentId: string, zoneId: string) {
 /** Department columns erase on Closed, so a Closed paint is never a department slot. */
 const isPeriodPaint = (paint: Paint): paint is Paint & { periodId: string } =>
   paint.periodId !== null;
-function refusalReason(code: string, reason: unknown): string {
-  if (reason === "end_offset") return t("menu.offset_timetable");
+function refusalReason(code: string, reason: unknown, period: Period | undefined): string {
+  if (reason === "end_offset")
+    return period
+      ? format("menu.offset_timetable_named", { period: period.name })
+      : t("menu.offset_timetable");
   if (reason === "clock_skips") return t("menu.time_skipped");
   if (code === "zone_closed_time.invalid") return t("opening.closed_invalid");
   if (code === "menu_timetable.invalid") return t("opening.check_day");
@@ -569,7 +572,9 @@ export class SeasonPainter extends LitElement {
   /** A refusal naming `departments.<i>` or `zones.<i>` shows that week, marking the day it names. */
   private refuse(error: unknown, departments: string[], zones: string[]) {
     const code = codeOf(error);
-    const params = (error as { params?: { field?: unknown; reason?: unknown } } | null)?.params;
+    const params = (
+      error as { params?: { field?: unknown; reason?: unknown; periodId?: unknown } } | null
+    )?.params;
     if (code === "hours.clock_changed" || code === "hours.clock_change_pending") {
       this.refused = { message: t(code) };
       return;
@@ -586,7 +591,10 @@ export class SeasonPainter extends LitElement {
     const owner = zoned ? zoneKey(id) : departmentKey(id);
     const weekday = match[3] === undefined ? undefined : WEEKDAYS[Number(match[3])];
     const name = ownerName(this.model, owner);
-    const reason = refusalReason(code, params?.reason);
+    const period = departmentOf(this.model, owner)?.periods.find(
+      ({ id }) => id === params?.periodId,
+    );
+    const reason = refusalReason(code, params?.reason, period);
     this.refused = {
       message:
         weekday === undefined
