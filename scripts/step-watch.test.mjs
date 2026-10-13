@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 import { setTimeout } from "node:timers";
+import { MessageChannel } from "node:worker_threads";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createStepWatch, reportStallAfter, watchFromAnotherThread } from "./step-watch.mjs";
 
@@ -183,6 +184,7 @@ describe("watchFromAnotherThread", () => {
           fire = callback;
           delay = ms;
         },
+        receive: () => undefined,
       },
     );
     return { port, written, fire: () => fire(), delay: () => delay };
@@ -214,6 +216,41 @@ describe("watchFromAnotherThread", () => {
     );
   });
 
+  it("reads the phases the test's thread already sent when its timer fires before they are delivered", () => {
+    const { port1, port2 } = new MessageChannel();
+    const written = [];
+    try {
+      port2.postMessage({ finished: { label: "core/0008: migrate", ms: 40 } });
+      port2.postMessage({ started: "core/0009: migrate", at: 400 });
+      watchFromAnotherThread(
+        port1,
+        { dueAt: 900, ms: 3000, graceMs: 1000, answered: answeredFlag(0), reportTo: 9 },
+        {
+          write: (fd, text) => written.push(text),
+          now: () => 1000,
+          setTimer: (callback) => callback(),
+        },
+      );
+    } finally {
+      port1.close();
+    }
+
+    expect(written).toEqual([
+      "The test's thread has not run its 3000 ms deadline timer 1000 ms after it fell due: something synchronous is holding it. Stalled in phase core/0009: migrate after 600 ms.\nPhases finished before it:\ncore/0008: migrate: 40 ms\n",
+    ]);
+  });
+
+  it("arms its timer with no delay, not a negative one, when it starts after the time fell due", () => {
+    let delay;
+    watchFromAnotherThread(
+      new EventEmitter(),
+      { dueAt: 900, ms: 3000, graceMs: 1000, answered: answeredFlag(0), reportTo: 9 },
+      { now: () => 1000, setTimer: (_, ms) => (delay = ms) },
+    );
+
+    expect(delay).toBe(0);
+  });
+
   it("writes nothing when the test's thread has answered", () => {
     const dog = watchdog({ answered: 1 });
     dog.port.emit("message", { started: "core/0009: migrate", at: 400 });
@@ -224,10 +261,11 @@ describe("watchFromAnotherThread", () => {
 
   it("writes to the file descriptor when the time falls due on the shared monotonic clock, by default", async () => {
     const report = reportFile();
+    const { port1 } = new MessageChannel();
     const startedAt = monotonicMs();
     let writtenAfter;
     try {
-      watchFromAnotherThread(new EventEmitter(), {
+      watchFromAnotherThread(port1, {
         dueAt: startedAt + 100,
         ms: 50,
         graceMs: 50,
@@ -240,6 +278,7 @@ describe("watchFromAnotherThread", () => {
       }
       writtenAfter = monotonicMs() - startedAt;
     } finally {
+      port1.close();
       report.close();
     }
 
