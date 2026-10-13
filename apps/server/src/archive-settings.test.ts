@@ -311,6 +311,16 @@ describe("resolveArchiveChoice", () => {
       });
     });
 
+    it("refuses an empty secret for another venue's archives", () => {
+      const other = { ...ctx, venueId: "d0000000-0000-4000-8000-000000000009", held };
+      expect(
+        refusal(() => resolveArchiveChoice({ ...custom, secretAccessKey: "" }, other)),
+      ).toEqual({
+        code: "backup.request_invalid",
+        params: { field: "secretAccessKey" },
+      });
+    });
+
     it("refuses an empty secret once the endpoint is removed", () => {
       const body = without({ ...custom, secretAccessKey: "" }, "endpoint");
       expect(refusal(() => resolveArchiveChoice(body, { ...ctx, held })).params).toEqual({
@@ -368,6 +378,10 @@ describe("parseArchiveSettings", () => {
     ["a null destination", (s) => ({ ...s, destinations: [null] })],
     ["duplicate ids", (s) => ({ ...s, destinations: [local, { ...local, dir: "/other" }] })],
     ["two buckets", (s) => ({ ...s, destinations: [bucket, { ...bucket, id: "second" }] })],
+    [
+      "two ids sharing one folder",
+      (s) => ({ ...s, destinations: [local, { ...local, id: "second" }] }),
+    ],
     ["a relative dir", (s) => ({ ...s, destinations: [{ ...local, dir: "rel" }] })],
     [
       "a bucket with an extra key",
