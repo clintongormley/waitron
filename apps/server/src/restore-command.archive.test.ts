@@ -1,7 +1,7 @@
-import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { DatabaseSync } from "node:sqlite";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { loadKeyRing } from "@waitron/credentials";
@@ -44,13 +44,28 @@ import {
 import { runRestore } from "./restore-command.js";
 import { readStreamSettings } from "./stream-host.js";
 
+const decodeFault = vi.hoisted(() => ({ error: undefined as unknown }));
+vi.mock("./archive-recovery-pack.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./archive-recovery-pack.js")>();
+  return {
+    ...actual,
+    decodeArchiveRecoveryPack: (input: string) => {
+      if (decodeFault.error !== undefined) throw decodeFault.error;
+      return actual.decodeArchiveRecoveryPack(input);
+    },
+  };
+});
+
 const RECOVERY_KEY = "pack-recovery-key-value-7c1d";
 const SECRET_ACCESS_KEY = "pack-secret-access-key-value-93ab";
 const VAULT_KEY = Buffer.alloc(32, 5).toString("base64");
 const KEY = backupArchiveKey(new Date("2026-10-01T03:00:00Z"));
 const COLD_RESTORE_NOTICE =
   "cold restore: use only when no peer (mirror or local secondary) survived — a survivor holds more history and is promoted, not overwritten";
-const WRONG_KEY_LINE = "restore failed: wrong recovery key or corrupt artifact";
+const WRONG_KEY_LINE =
+  "restore failed: the recovery key in this pack does not open the archive, or the archive is damaged";
+const LEFT_DOWNLOAD_LINE =
+  "the downloaded archive could not be removed: once no restore is running, delete the archive-download-* folder inside the restore-staging folder of the state volume (/var/lib/waitron/state inside the container) by hand";
 const DISK_FULL_LINE =
   "restore failed: the disk filled during the restore; free some space and run it again";
 const HUELLA = "A".repeat(64);
@@ -477,7 +492,10 @@ describe("waitron-restore restore --from-archive", () => {
   });
 
   it.each<[string, (f: Fixture) => Promise<ArchiveRecoveryPack | void>]>([
-    ["a pack holding another recovery key", async () => ({ ...PACK, recoveryKey: "not-the-key" })],
+    [
+      "a pack holding another recovery key",
+      async () => ({ ...PACK, recoveryKey: "not-the-recovery-key" }),
+    ],
     [
       "an archive with a byte changed in the bucket",
       async (f) => {
@@ -628,6 +646,69 @@ describe("waitron-restore restore --from-archive", () => {
     });
     expect({ code, last: out.at(-1) }).toEqual({ code: 1, last: "restore failed" });
     await expect(stat(seen!)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it.each<[string, (path: string) => Promise<void>, number, string]>([
+    [
+      "a restore that succeeds",
+      async () => {},
+      0,
+      `restored archive ${KEY} from the bucket named in `,
+    ],
+    [
+      "a restore refused by the archive's key",
+      async () => {
+        throw new AppError("recovery.passphrase_invalid", {});
+      },
+      1,
+      WRONG_KEY_LINE,
+    ],
+  ])(
+    "keeps the outcome of %s when the download cannot be removed, and says so",
+    async (_label, outcome, expectedCode, expectedLine) => {
+      const f = await fixture();
+      let folder: string | undefined;
+      let result: { code: number; out: string[] };
+      try {
+        result = await run(f, [], {
+          restore: async (deps) => {
+            folder = dirname(deps.artifactPath);
+            await chmod(folder, 0o500);
+            await outcome(deps.artifactPath);
+          },
+        });
+      } finally {
+        if (folder !== undefined) {
+          await chmod(folder, 0o700);
+          await rm(folder, { recursive: true, force: true });
+        }
+      }
+      const { code, out } = result;
+      expect(code).toBe(expectedCode);
+      expect(out.slice(-2)).toEqual([
+        expectedCode === 0 ? expectedLine + f.packPath : expectedLine,
+        LEFT_DOWNLOAD_LINE,
+      ]);
+      expect(out.join("\n")).not.toContain(folder!);
+    },
+  );
+
+  it("calls a pack the decoder fails on unexpectedly damaged, without its message", async () => {
+    const f = await fixture();
+    decodeFault.error = new TypeError(`boom ${SECRET_ACCESS_KEY}`);
+    let result: { code: number; out: string[] };
+    try {
+      result = await run(f);
+    } finally {
+      decodeFault.error = undefined;
+    }
+    expect(result).toEqual({
+      code: 1,
+      out: [
+        "restore failed: backup.archive_pack_invalid — the archive recovery pack in the file is incomplete or damaged, perhaps cut short when it was copied; use the whole pack file as it was saved",
+      ],
+    });
+    expect(f.storeCalls).toEqual([]);
   });
 
   it.each([

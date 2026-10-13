@@ -1,4 +1,4 @@
-import { chmod, mkdir, mkdtemp, rm, stat, statfs as fsStatfs } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { Database } from "@waitron/db";
 import { recordBackupOutcome, type BackupOutcomeHolder } from "./alert-sources.js";
@@ -12,6 +12,7 @@ import type { BackupSchedule } from "./backup-config.js";
 import { MAX_SLEEP_MS, nextFireMs, type ScheduleClock } from "./backup-schedule.js";
 import type { DeploymentEnvironment } from "./config.js";
 import { errnoOf } from "./errno.js";
+import { freeBytes, type Statfs } from "./free-bytes.js";
 import { codeOf } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import type { Logger } from "./logger.js";
@@ -93,7 +94,7 @@ export interface BackupSweepDeps {
    */
   stagingEstimateBytes?: () => Promise<number>;
   /** DI for tests; defaults to `node:fs/promises`'s `statfs`. */
-  statfs?: (path: string) => Promise<{ bavail: number; frsize: number }>;
+  statfs?: Statfs;
 }
 
 /** Throws `backup.staging_space_low` when the staging folder's filesystem reports less than
@@ -102,13 +103,8 @@ async function checkStagingSpace(
   deps: Pick<BackupSweepDeps, "stagingDir" | "statfs">,
   neededBytes: number,
 ): Promise<void> {
-  let availableBytes: number;
-  try {
-    const fs = await (deps.statfs ?? fsStatfs)(deps.stagingDir);
-    availableBytes = fs.bavail * fs.frsize;
-  } catch {
-    return;
-  }
+  const availableBytes = await freeBytes(deps.stagingDir, deps.statfs);
+  if (availableBytes === null) return;
   if (availableBytes < neededBytes)
     throw new AppError("backup.staging_space_low", { neededBytes, availableBytes });
 }

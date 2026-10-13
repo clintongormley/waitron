@@ -1,9 +1,10 @@
-import { mkdir, mkdtemp, rm, statfs as nodeStatfs } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { AppError, hasCode, isAppError } from "@waitron/shared";
 import { createS3FileStore, type BucketConfig, type S3FileStore } from "@waitron/stream";
 import type { ArchiveRecoveryPack } from "./archive-recovery-pack.js";
 import { parseBackupArchiveKey } from "./backup-keys.js";
+import { freeBytes, type Statfs } from "./free-bytes.js";
 import "./errors.js";
 
 export interface DownloadedArchive {
@@ -35,19 +36,6 @@ function safeFailure(error: unknown, signal: AbortSignal, downloading: boolean):
   return new AppError("restore.archive_download_failed", { reason: "failed" });
 }
 
-/** Free bytes at `dir`, or null where the platform cannot say. */
-async function freeBytes(
-  dir: string,
-  statfs: (path: string) => Promise<{ bavail: number; bsize: number }>,
-): Promise<number | null> {
-  try {
-    const stats = await statfs(dir);
-    return stats.bavail * stats.bsize;
-  } catch {
-    return null;
-  }
-}
-
 /**
  * Downloads one archive named by `key` from the pack's archive folder into a fresh folder under
  * `stagingDir`. Every failure is one of the `restore.archive_*` codes, carrying no key, path or
@@ -59,7 +47,7 @@ export async function downloadArchive(deps: {
   stagingDir: string;
   signal: AbortSignal;
   openFiles?: (bucket: BucketConfig) => S3FileStore;
-  statfs?: (path: string) => Promise<{ bavail: number; bsize: number }>;
+  statfs?: Statfs;
 }): Promise<DownloadedArchive> {
   const { pack, key, stagingDir, signal } = deps;
   if (parseBackupArchiveKey(key) === null) throw new AppError("restore.archive_key_invalid", {});
@@ -73,7 +61,7 @@ export async function downloadArchive(deps: {
     if (found === undefined) throw new AppError("restore.archive_missing", {});
     await mkdir(stagingDir, { recursive: true, mode: 0o700 });
     // Advisory: the download's own ENOSPC is what is relied on.
-    const free = await freeBytes(stagingDir, deps.statfs ?? nodeStatfs);
+    const free = await freeBytes(stagingDir, deps.statfs);
     if (free !== null && free < found.size) throw new AppError("restore.archive_disk_full", {});
     scratch = await mkdtemp(join(stagingDir, "archive-download-"));
     const path = join(scratch, "archive.backup.enc");

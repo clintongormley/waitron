@@ -1,6 +1,7 @@
 import { AppError } from "@waitron/shared";
 import { readBucketConfig, type BucketConfig } from "@waitron/stream";
-import { archiveNamespace, hasExactKeys, isRecord } from "./archive-settings.js";
+import { archiveNamespace, hasExactKeys, isRecord, isText } from "./archive-settings.js";
+import { checkedRecoveryKey } from "./backup-config.js";
 import "./errors.js";
 
 /** Marks the pack token and its format version, so a pasted wrong thing is refused by name. */
@@ -32,14 +33,14 @@ const PACK_FIELDS = [
 ] as const;
 const BUCKET_FIELDS = ["region", "bucket", "prefix", "accessKeyId", "secretAccessKey"] as const;
 
-// C0 controls, DEL and C1 controls.
-// eslint-disable-next-line no-control-regex
-const CONTROL = /[\u0000-\u001f\u007f-\u009f]/;
-
 const BASE64URL = /^[A-Za-z0-9_-]+$/;
 
-function text(value: unknown): value is string {
-  return typeof value === "string" && value !== "" && !CONTROL.test(value);
+function usableKey(value: unknown): value is string {
+  try {
+    return typeof value === "string" && checkedRecoveryKey(value) !== undefined;
+  } catch {
+    return false;
+  }
 }
 
 function refuse(reason: "not_found" | "encoding" | "shape"): never {
@@ -68,7 +69,9 @@ export function encodeArchiveRecoveryPack(pack: ArchiveRecoveryPack): string {
 
 /** Accepts the bare token or the downloaded file, whose explanatory lines surround it. */
 export function decodeArchiveRecoveryPack(input: string): ArchiveRecoveryPack {
-  const found = input.split(/\s+/).find((part) => part.startsWith(ARCHIVE_PACK_PREFIX));
+  const tokens = input.split(/\s+/).filter((part) => part.startsWith(ARCHIVE_PACK_PREFIX));
+  if (tokens.length > 1) refuse("shape");
+  const found = tokens[0];
   if (found === undefined) refuse("not_found");
   const body = found.slice(ARCHIVE_PACK_PREFIX.length);
   // Node's base64url decoder skips characters it does not know rather than refusing them.
@@ -84,8 +87,8 @@ export function decodeArchiveRecoveryPack(input: string): ArchiveRecoveryPack {
   if (
     version !== 1 ||
     format !== "WBK1" ||
-    !text(venueId) ||
-    !text(recoveryKey) ||
+    !isText(venueId) ||
+    !usableKey(recoveryKey) ||
     typeof archivePrefix !== "string"
   ) {
     refuse("shape");

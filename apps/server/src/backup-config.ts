@@ -170,7 +170,7 @@ function bucketPlace(b: BucketConfig): string {
 
 /** The environment's destinations, in the order listed: `WAITRON_BACKUP_DIR` first, then
  * `WAITRON_BACKUP_DESTINATIONS`. Unlike {@link loadBackupConfig}, requires no recovery key. */
-export function parseDestinations(env: Env, venueId: string): BackupDestination[] {
+function parseDestinations(env: Env, venueId: string): BackupDestination[] {
   const out: BackupDestination[] = [];
   const dir = env.WAITRON_BACKUP_DIR;
   if (!isUnset(dir)) out.push({ kind: "local-fs", id: "primary", dir: resolve(dir) });
@@ -214,14 +214,18 @@ export function parseDestinations(env: Env, venueId: string): BackupDestination[
   return out;
 }
 
-/** The recovery key without requiring an archive destination. Unset or empty is `undefined`. */
-export function loadRecoveryKey(env: Env): string | undefined {
-  const recoveryKey = env.WAITRON_BACKUP_RECOVERY_KEY;
+/** {@link loadRecoveryKey}'s check, for a key read from elsewhere. Unset or empty is `undefined`. */
+export function checkedRecoveryKey(recoveryKey: string | undefined): string | undefined {
   if (isUnset(recoveryKey)) return undefined;
   if (recoveryKey.length < MIN_PASSPHRASE_LENGTH) {
     throw new AppError("backup.recovery_key_too_short", { min: MIN_PASSPHRASE_LENGTH });
   }
   return recoveryKey;
+}
+
+/** The recovery key without requiring an archive destination. Unset or empty is `undefined`. */
+export function loadRecoveryKey(env: Env): string | undefined {
+  return checkedRecoveryKey(env.WAITRON_BACKUP_RECOVERY_KEY);
 }
 
 /** A new recovery key: 32 random bytes, base64url. */
@@ -264,7 +268,10 @@ function requiredKey(env: Env): string {
  * unencrypted artifact. `venueId` is stamped on every bucket destination.
  */
 export function loadBackupConfig(env: Env, venueId: string): BackupConfig | undefined {
-  const destinations = parseDestinations(env, venueId);
+  return environmentConfig(env, parseDestinations(env, venueId));
+}
+
+function environmentConfig(env: Env, destinations: BackupDestination[]): BackupConfig | undefined {
   if (destinations.length === 0) return undefined;
 
   const recoveryKey = requiredKey(env);
@@ -300,13 +307,14 @@ export function resolveBackupConfig(input: {
   venueId: string;
 }): BackupConfig | undefined {
   const { env, sealed } = input;
-  if (input.managedByEnvironment) return loadBackupConfig(env, input.venueId);
+  const destinations = archiveDestinations(input);
+  if (input.managedByEnvironment) return environmentConfig(env, destinations);
   if (sealed === null) return undefined;
   return {
     source: "dashboard",
     revision: sealed.revision,
     enabled: sealed.enabled,
-    destinations: sealed.destinations,
+    destinations,
     // A switched-off record runs nothing, so a missing or short key must not stop it being reported.
     recoveryKey: sealed.enabled ? requiredKey(env) : heldUsableKey(env),
     schedule: sealed.schedule,
@@ -316,6 +324,20 @@ export function resolveBackupConfig(input: {
     destinationTimeoutMs: sealed.destinationTimeoutMs,
     keyRotatedAt: loadKeyRotatedAt(env),
   };
+}
+
+/**
+ * The destinations of the source {@link resolveBackupConfig} reads, with no recovery key required:
+ * the environment's when it owns the settings, else the sealed record's, and none without one.
+ */
+export function archiveDestinations(input: {
+  managedByEnvironment: boolean;
+  env: Env;
+  sealed: ArchiveSettings | null;
+  venueId: string;
+}): BackupDestination[] {
+  if (input.managedByEnvironment) return parseDestinations(input.env, input.venueId);
+  return input.sealed?.destinations ?? [];
 }
 
 /** The dashboard's stored settings could not be read or used, so archives stay off. */

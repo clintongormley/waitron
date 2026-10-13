@@ -30,10 +30,10 @@ import {
   DEFAULT_DESTINATION_TIMEOUT_MS,
   MAX_DESTINATION_TIMEOUT_MS,
   MIN_DESTINATION_TIMEOUT_MS,
+  archiveDestinations,
   loadKeyRotatedAt,
   loadRecoveryKey,
   mintRecoveryKey,
-  parseDestinations,
   readHeldKey,
   resolveBackupConfig,
   type BackupSchedule,
@@ -507,19 +507,22 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
       await authorize(c);
       return deps.turns(async () => {
         const env = await deps.readBoxEnv();
-        let destinations: readonly BackupDestination[];
-        let revision: string | undefined;
-        if (deps.supervisor.current().managedByEnvironment) {
-          destinations = parseDestinations(env, deps.venueId);
-        } else {
+        const { managedByEnvironment } = deps.supervisor.current();
+        let sealed: ArchiveSettings | null = null;
+        if (!managedByEnvironment) {
           const read = await readHeldSettings();
           if ("unreadable" in read) {
             throw new AppError("backup.archive_settings_unreadable", { reason: read.unreadable });
           }
-          destinations = read.settings?.destinations ?? [];
-          revision = read.settings?.revision;
+          sealed = read.settings;
         }
-        const destination = destinations.find((d) => d.kind === "s3");
+        const revision = sealed?.revision;
+        const destination = archiveDestinations({
+          managedByEnvironment,
+          env,
+          sealed,
+          venueId: deps.venueId,
+        }).find((d) => d.kind === "s3");
         if (destination === undefined) {
           throw new AppError("backup.archive_bucket_not_configured", {});
         }

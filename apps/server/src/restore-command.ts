@@ -107,7 +107,10 @@ export async function runRestore(deps: CommandDeps): Promise<number> {
   const target = resolveRestoreTarget(deps);
   if (typeof target === "number") return target;
   deps.out(COLD_RESTORE_NOTICE);
-  if (!(await restoreArtifact(deps, target, artifactPath, recoveryKey, oldBoxGone))) return 1;
+  const restored = await restoreArtifact(deps, target, artifactPath, recoveryKey, oldBoxGone, {
+    keyDoesNotOpen: "restore failed: wrong recovery key or corrupt artifact",
+  });
+  if (!restored) return 1;
   deps.out(`restored ${artifactPath}`);
   return 0;
 }
@@ -115,13 +118,17 @@ export async function runRestore(deps: CommandDeps): Promise<number> {
 const COLD_RESTORE_NOTICE =
   "cold restore: use only when no peer (mirror or local secondary) survived — a survivor holds more history and is promoted, not overwritten";
 
-/** The archive restore chain both file forms share; false once the refusal is printed. */
+/**
+ * The archive restore chain both file forms share; false once the refusal is printed.
+ * `keyDoesNotOpen` is the one line for every {@link DECRYPT_PHASE_CODES} refusal.
+ */
 async function restoreArtifact(
   deps: CommandDeps,
   target: RestoreTarget,
   artifactPath: string,
   recoveryKey: string,
   oldBoxGone: boolean,
+  words: { keyDoesNotOpen: string },
 ): Promise<boolean> {
   try {
     await (deps.restore ?? restoreFromArtifactFile)({
@@ -139,11 +146,15 @@ async function restoreArtifact(
     });
     return true;
   } catch (err) {
-    deps.out(
-      (err as { code?: unknown } | null)?.code === "ENOSPC"
-        ? RESTORE_DISK_FULL
-        : (err instanceof AppError && archiveRefusal(err)) || sharedRefusal(err),
-    );
+    if ((err as { code?: unknown } | null)?.code === "ENOSPC") deps.out(RESTORE_DISK_FULL);
+    else if (err instanceof AppError && DECRYPT_PHASE_CODES.has(err.code)) {
+      deps.out(words.keyDoesNotOpen);
+    } else {
+      deps.out(
+        (err instanceof AppError && sourceLiveRefusal(err, "the server this backup came from")) ||
+          sharedRefusal(err),
+      );
+    }
     return false;
   }
 }
@@ -253,13 +264,6 @@ function sourceLiveRefusal(err: AppError, subject: string): string | null {
     return `restore failed: restore.stream_source_unchecked — whether ${subject} is still writing to its bucket could not be checked; ${goAhead}`;
   }
   return null;
-}
-
-/** The words for a refusal only the archive path words its own way; null for any other. */
-function archiveRefusal(err: AppError): string | null {
-  if (DECRYPT_PHASE_CODES.has(err.code))
-    return "restore failed: wrong recovery key or corrupt artifact";
-  return sourceLiveRefusal(err, "the server this backup came from");
 }
 
 /**
@@ -398,9 +402,16 @@ function packRefusal(err: AppError): string | null {
   return said === undefined ? null : `restore failed: ${err.code} — ${said}`;
 }
 
+const PACK_KEY_DOES_NOT_OPEN =
+  "restore failed: the recovery key in this pack does not open the archive, or the archive is damaged";
+
+/** Names the folder the way deploy/README.md does: the error would name the path and its cause. */
+const DOWNLOAD_LEFT_BEHIND =
+  "the downloaded archive could not be removed: once no restore is running, delete the archive-download-* folder inside the restore-staging folder of the state volume (/var/lib/waitron/state inside the container) by hand";
+
 /**
  * The recovery key and the bucket's secret come from the pack, never the environment; no printed
- * line carries the pack's text. The downloaded archive is removed whatever the outcome.
+ * line carries the pack's text.
  */
 async function runPackRestore(
   deps: CommandDeps,
@@ -419,7 +430,8 @@ async function runPackRestore(
     pack = decodeArchiveRecoveryPack(packText);
   } catch (err) {
     deps.out(
-      (err as AppError<"backup.archive_pack_invalid">).params.reason === "not_found"
+      hasCode(err as AppError, "backup.archive_pack_invalid") &&
+        (err as AppError<"backup.archive_pack_invalid">).params.reason === "not_found"
         ? "restore failed: backup.archive_pack_invalid — the file holds no archive recovery pack; give the archive recovery pack file saved for this venue"
         : "restore failed: backup.archive_pack_invalid — the archive recovery pack in the file is incomplete or damaged, perhaps cut short when it was copied; use the whole pack file as it was saved",
     );
@@ -441,18 +453,14 @@ async function runPackRestore(
     deps.out((err instanceof AppError && packRefusal(err)) || sharedRefusal(err));
     return 1;
   }
+  let restored: boolean;
   try {
-    const restored = await restoreArtifact(
-      deps,
-      target,
-      downloaded.path,
-      pack.recoveryKey,
-      oldBoxGone,
-    );
-    if (!restored) return 1;
+    restored = await restoreArtifact(deps, target, downloaded.path, pack.recoveryKey, oldBoxGone, {
+      keyDoesNotOpen: PACK_KEY_DOES_NOT_OPEN,
+    });
+    if (restored) deps.out(`restored archive ${archiveKey} from the bucket named in ${packPath}`);
   } finally {
-    await downloaded.dispose();
+    await downloaded.dispose().catch(() => deps.out(DOWNLOAD_LEFT_BEHIND));
   }
-  deps.out(`restored archive ${archiveKey} from the bucket named in ${packPath}`);
-  return 0;
+  return restored ? 0 : 1;
 }

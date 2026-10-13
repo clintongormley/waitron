@@ -96,6 +96,26 @@ describe("archive recovery pack", () => {
     expect(decodeArchiveRecoveryPack(encodeArchiveRecoveryPack(hyphen))).toEqual(hyphen);
   });
 
+  it.each([
+    ["a C1 control character", "valid-recovery-\u0085-key-value"],
+    ["a C0 control character", "valid-recovery-\u0007-key-value"],
+  ])("round-trips a recovery key holding %s byte for byte", (_label, recoveryKey) => {
+    const decoded = decodeArchiveRecoveryPack(
+      encodeArchiveRecoveryPack({ ...pack(), recoveryKey }),
+    );
+    expect(Buffer.from(decoded.recoveryKey, "utf8")).toEqual(Buffer.from(recoveryKey, "utf8"));
+  });
+
+  it("refuses a file holding two packs", () => {
+    const other: ArchiveRecoveryPack = {
+      ...pack(),
+      venueId: "venue-2",
+      archivePrefix: "waitron/archives/venue-2/",
+    };
+    const text = encodeArchiveRecoveryPack(pack()) + encodeArchiveRecoveryPack(other);
+    expectRefused(() => decodeArchiveRecoveryPack(text), "shape");
+  });
+
   it("refuses text holding no token", () => {
     expectRefused(() => decodeArchiveRecoveryPack("just some words"), "not_found");
   });
@@ -134,7 +154,8 @@ describe("archive recovery pack", () => {
     ],
     ["an empty endpoint", { ...pack(), bucket: { ...pack().bucket, endpoint: "" } }],
     ["an empty recovery key", { ...pack(), recoveryKey: "" }],
-    ["a recovery key with a control character", { ...pack(), recoveryKey: "a\u0007b" }],
+    ["a recovery key under the length floor", { ...pack(), recoveryKey: "eleven-char" }],
+    ["a recovery key that is not text", { ...pack(), recoveryKey: 7 }],
     ["a non-text venue id", { ...pack(), venueId: 7 }],
     ["an array", [pack()]],
     ["null", null],
