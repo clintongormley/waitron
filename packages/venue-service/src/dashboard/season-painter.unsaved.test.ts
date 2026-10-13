@@ -209,3 +209,23 @@ it.each(["before", "after"])(
     expect(unload()).toBe(true);
   },
 );
+
+it("keeps an edited week when a fresh model arrives before the painter, put back on the page, has updated", async () => {
+  const painter = await mount();
+  await paintWednesday(painter);
+  const parent = painter.parentNode!;
+  painter.remove();
+  const fresh = painterModel();
+  fresh.departments[0]!.seasonWeeks[1]!.week[3] = {
+    weekday: 3,
+    slots: [{ periodId: "p1", startsAt: "12:00", endsAt: "15:00" }],
+  };
+  painter.model = fresh;
+  parent.insertBefore(painter, parent.firstChild);
+  await settle(painter);
+  expect(grid(painter).days.get("3")).toEqual([
+    { periodId: "p2", startsAt: "20:00", endsAt: "23:00" },
+  ]);
+  expect(unload()).toBe(true);
+  expect(save(painter).disabled).toBe(false);
+});
