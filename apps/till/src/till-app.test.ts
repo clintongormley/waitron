@@ -22,6 +22,7 @@ import type { TillDeadEndsSection } from "./widgets/dead-ends-section.js";
 import { TillApp } from "./till-app.js";
 import { TillApi as CollectApi } from "./api/client.js";
 import { SUBMIT_RETRY_PAUSE_MS } from "./state/draft-sync.js";
+import { nextFloorMoment } from "./state/floor-today.js";
 import { ServerRouter } from "./api/server-router.js";
 import { diag } from "./diagnostics.js";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
@@ -7914,18 +7915,16 @@ describe("till-app", () => {
       await toCounter(el);
       selectTab(el, "floor");
       await flush(el);
-      const beforeA = performance.now();
+      const beforeA = nextFloorMoment();
       emit(floor(el)!, "floor-refresh");
-      let betweenReads = performance.now();
-      while (betweenReads <= beforeA) betweenReads = performance.now();
-      while (performance.now() <= betweenReads);
+      const betweenReads = nextFloorMoment();
       emit(floor(el)!, "floor-refresh");
       await flush(el);
 
       answerA.resolve([{ ...freeTable }]);
       await flush(el);
-      expect(floor(el)!.tablesReadAt).toBeGreaterThanOrEqual(beforeA);
-      expect(floor(el)!.tablesReadAt).toBeLessThanOrEqual(betweenReads);
+      expect(floor(el)!.tablesReadAt).toBeGreaterThan(beforeA);
+      expect(floor(el)!.tablesReadAt).toBeLessThan(betweenReads);
 
       answerB.resolve([tableB]);
       await flush(el);

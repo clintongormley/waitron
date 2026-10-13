@@ -6,6 +6,7 @@ import { codeMessage } from "../i18n/codes.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
 import "./till-floor-screen.js";
 import type { FloorZone, TableParty, TableState, TableToday, TillApi } from "../api/client.js";
+import { nextFloorMoment } from "../state/floor-today.js";
 
 const zone: FloorZone = {
   id: "z1",
@@ -468,7 +469,7 @@ describe("till-floor-screen: the sheet's actions and the room's revision", () =>
     const el = await mount([planned("t1", 2, { seats: 6, zoneRevision: 7 })], api);
     await press(el, "t1", "seats");
 
-    el.tablesReadAt = performance.now();
+    el.tablesReadAt = nextFloorMoment();
     el.tables = [planned("t1", 2, { seats: 6, zoneRevision: 8 })];
     await el.updateComplete;
     send(el.shadowRoot!.querySelector("till-today-seats-dialog")!, "today-seats-confirm", {

@@ -5,6 +5,7 @@ import { codeMessage } from "../i18n/codes.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
 import "./till-floor-screen.js";
 import type { FloorAnswer, FloorZone, TableState, TableToday, TillApi } from "../api/client.js";
+import { nextFloorMoment } from "../state/floor-today.js";
 
 const zone: FloorZone = {
   id: "z1",
@@ -506,7 +507,7 @@ describe("till-floor-screen: Join again and the room's revision", () => {
     const el = await mount(atRevision(counter3Busy(), 7), api);
     const opened = (await pressJoinAgain(el, "c4"))!;
 
-    el.tablesReadAt = performance.now();
+    el.tablesReadAt = nextFloorMoment();
     el.tables = atRevision(counter3Busy(), 8);
     await el.updateComplete;
     send(opened, "join-again-confirm", { seats: 8 });

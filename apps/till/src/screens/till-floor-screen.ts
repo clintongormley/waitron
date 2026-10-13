@@ -49,6 +49,7 @@ import {
   dropAction,
   joinAgainOf,
   type JoinAgainPlan,
+  nextFloorMoment,
   onTodaysPlan,
   pendingPlaces,
   sheetActions,
@@ -476,7 +477,7 @@ export class TillFloorScreen extends LitElement {
 
   @property({ attribute: false }) zones: FloorZone[] = [];
   @property({ attribute: false }) tables: TableState[] = [];
-  /** When the read that drew `tables` started, on `performance.now()`'s clock. */
+  /** When the read that drew `tables` started, numbered by `nextFloorMoment`. */
   @property({ attribute: false }) tablesReadAt = 0;
   @property({ attribute: false }) api?: TillApi;
   @property({ attribute: false }) canExitToCounter = true;
@@ -1059,7 +1060,7 @@ export class TillFloorScreen extends LitElement {
     if (answer !== null)
       this.#carried.set(answer.zoneId, {
         revision: answer.revision,
-        answeredAt: performance.now(),
+        answeredAt: nextFloorMoment(),
       });
   }
 

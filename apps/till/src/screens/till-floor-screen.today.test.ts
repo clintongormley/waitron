@@ -4,6 +4,7 @@ import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
 import "./till-floor-screen.js";
 import type { FloorAnswer, FloorZone, TableState, TableToday, TillApi } from "../api/client.js";
+import { nextFloorMoment } from "../state/floor-today.js";
 
 function zone(over: Partial<FloorZone> = {}): FloorZone {
   return {
@@ -420,13 +421,6 @@ describe("till-floor-screen: dragging on today's plan", () => {
   });
 });
 
-/** A clock reading strictly after `since`, so a read's start and an answer never share one. */
-function after(since: number): number {
-  let now = performance.now();
-  while (now <= since) now = performance.now();
-  return now;
-}
-
 describe("till-floor-screen: the room's revision on today's plan", () => {
   const at7 = () => [planned("t1", 2, { zoneRevision: 7 }), planned("t2", 20, { zoneRevision: 7 })];
 
@@ -449,7 +443,7 @@ describe("till-floor-screen: the room's revision on today's plan", () => {
       7,
     );
 
-    el.tablesReadAt = after(performance.now());
+    el.tablesReadAt = nextFloorMoment();
     el.tables = [planned("t1", 2, { zoneRevision: 8 }), planned("t2", 20, { zoneRevision: 8 })];
     await el.updateComplete;
     el.shadowRoot!.querySelector("till-today-seats-dialog")!.dispatchEvent(
@@ -473,9 +467,8 @@ describe("till-floor-screen: the room's revision on today's plan", () => {
     const api = stubApi();
     api.moveToday.mockResolvedValueOnce({ zoneId: "z1", revision: 8 });
     const el = await mount(at7(), api);
-    const readStarted = performance.now();
+    const readStarted = nextFloorMoment();
     el.tablesReadAt = readStarted;
-    after(readStarted);
     await drop(el, { tableId: "t1", x: 12, y: 5, targetId: null });
     await settle(el);
     return { api, el, readStarted };
@@ -496,10 +489,37 @@ describe("till-floor-screen: the room's revision on today's plan", () => {
     expect(api.moveToday).toHaveBeenLastCalledWith("t1", { x: 14, y: 5 }, 8);
   });
 
+  it("a read that started just before the answer leaves the answer as the revision sent, though the clock read the same at both", async () => {
+    const api = stubApi();
+    let answer!: () => void;
+    api.moveToday.mockImplementationOnce(
+      () =>
+        new Promise<FloorAnswer>(
+          (resolve) => (answer = () => resolve({ zoneId: "z1", revision: 8 })),
+        ),
+    );
+    const el = await mount(at7(), api);
+    await drop(el, { tableId: "t1", x: 12, y: 5, targetId: null });
+    const clock = vi.spyOn(performance, "now").mockReturnValue(100);
+    try {
+      el.tablesReadAt = nextFloorMoment();
+      answer();
+      await settle(el);
+    } finally {
+      clock.mockRestore();
+    }
+    el.tables = at7();
+    await el.updateComplete;
+
+    await drop(el, { tableId: "t1", x: 14, y: 5, targetId: null });
+
+    expect(api.moveToday).toHaveBeenLastCalledWith("t1", { x: 14, y: 5 }, 8);
+  });
+
   it("a read that started after the answer replaces it, higher or lower", async () => {
     for (const read of [9, 6]) {
       const { api, el } = await movedTo8();
-      el.tablesReadAt = performance.now();
+      el.tablesReadAt = nextFloorMoment();
       el.tables = [
         planned("t1", 2, { zoneRevision: read }),
         planned("t2", 20, { zoneRevision: read }),

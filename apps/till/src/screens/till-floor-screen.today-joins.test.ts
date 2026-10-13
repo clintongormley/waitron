@@ -4,6 +4,7 @@ import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
 import "./till-floor-screen.js";
 import type { FloorZone, TableParty, TableState, TableToday, TillApi } from "../api/client.js";
+import { nextFloorMoment } from "../state/floor-today.js";
 
 function zone(over: Partial<FloorZone> = {}): FloorZone {
   return {
@@ -500,7 +501,7 @@ describe("till-floor-screen: joins and the room's revision", () => {
       planned("t1", 2, { zoneRevision: 8 }, "1", P),
       planned("t2", 20, { zoneRevision: 8 }, "2", Q),
     ];
-    el.tablesReadAt = performance.now();
+    el.tablesReadAt = nextFloorMoment();
     el.tables = at8();
     await el.updateComplete;
     send(el.shadowRoot!.querySelector("till-bill-choice-dialog")!, "bill-choice-confirm", {
@@ -515,7 +516,7 @@ describe("till-floor-screen: joins and the room's revision", () => {
       { moving: "t1", target: "t2", side: "left", zoneRevision: 7 },
     );
 
-    el.tablesReadAt = performance.now();
+    el.tablesReadAt = nextFloorMoment();
     el.tables = at8();
     await el.updateComplete;
     send(el.shadowRoot!.querySelector("till-today-seats-dialog")!, "today-seats-confirm", {

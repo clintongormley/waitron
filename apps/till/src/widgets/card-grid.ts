@@ -187,7 +187,7 @@ export class TillCardGrid extends LitElement {
   @property() fireControl?: FireControlMode;
   @property({ attribute: false }) zones: FloorZone[] = [];
   @property({ attribute: false }) tables: TableState[] = [];
-  /** When the read that drew `tables` started, on `performance.now()`'s clock. */
+  /** When the read that drew `tables` started, numbered by `nextFloorMoment`. */
   @property({ attribute: false }) tablesReadAt = 0;
   @property() bumpMode: BumpMode = "line";
   /** Whether the embedded station screen (kds-board card) runs as an always-on ENROLLED display (no

@@ -177,7 +177,7 @@ import type { BillPayDetail, MoveBillDetail } from "./screens/till-table-order-s
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import { billName, owing, paidInPart, shownBills } from "./state/bill-state.js";
 import { billRequestOf } from "./state/table-signals.js";
-import { mergeMembersOf } from "./state/floor-today.js";
+import { mergeMembersOf, nextFloorMoment } from "./state/floor-today.js";
 import type { BumpMode, FireControlMode } from "./widgets/station-queue.js";
 import type {
   AdjustmentAsk,
@@ -294,7 +294,7 @@ type Drill = { kind: "table-order" | "ticket" | TillDestination };
 
 type RefreshList = "held" | "station" | "waiting";
 
-/** A floor read's number, taken as it starts, and when it started. */
+/** A floor read's number, taken as it starts, and its start's `nextFloorMoment`. */
 interface TablesRead {
   number: number;
   startedAt: number;
@@ -1330,7 +1330,7 @@ export class TillApp extends LitElement {
   #transferViewRead = 0;
   /** Each table read takes the next number as it starts; see {@link #applyTables}. */
   #tablesRead = 0;
-  /** When the read whose answer `tables` holds started, on `performance.now()`'s clock. */
+  /** When the read whose answer `tables` holds started, numbered by `nextFloorMoment`. */
   @state() private tablesReadAt = 0;
   #tablesApplied = 0;
   #tablesJson = "[]";
@@ -5656,7 +5656,7 @@ export class TillApp extends LitElement {
   }
 
   #startTablesRead(): TablesRead {
-    return { number: ++this.#tablesRead, startedAt: performance.now() };
+    return { number: ++this.#tablesRead, startedAt: nextFloorMoment() };
   }
 
   /** A read's answer replaces the tables unless a read that started after it was applied first, so
