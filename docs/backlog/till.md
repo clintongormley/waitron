@@ -285,6 +285,18 @@ run: a floor change sent before that read arrives would carry the old revision a
 `floor_today.out_of_date` once, and the re-read fixes it. Next: hand the answer to the floor screen
 as its own floor answers are, or confirm the window cannot be hit and close this.
 
+## A591. A split down to one loses a table that had guests when its joined table went live
+
+**A591 (2026-10-13).** A table of a joined table that holds guests when the reset puts the joined
+table on the map is not a part still joined (`stillJoinedPart`, `packages/db/src/joined-parts.ts`).
+Splitting the joined table down to one (`splitJoinedTable`, `apps/server/src/floor-today-split.ts`)
+writes split rows only for the parts still joined, so when that table's guests leave it becomes a
+part still joined of a joined table that has come apart: off the map, and seating it is refused
+`table.in_joined_table`. Run on main 42ca8b30b and on A579 part 3a's branch (Counter 3 seated before
+Long table went live, Counter 4 split off, Counter 3's party finished). Part 3a fixed the same case
+for a push into a group (`writeMerge` writes a split row for such a table and marks its reset row
+placed). Next: do the same in the split down to one.
+
 ## A565. "Reset to saved plan" does not wait for food on its way to an ordinary table
 
 **A565 (2026-10-13).** A reset applies a free table's saved place without asking about food on its
