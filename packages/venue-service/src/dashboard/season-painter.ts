@@ -838,6 +838,7 @@ export class SeasonPainter extends LitElement {
         >
         ${this.readOnly ? nothing : this.paintRow(department, chosen, zone !== undefined)}
         <paint-grid
+          .target=${`${this.seasonId}/${key}`}
           .columns=${columns}
           .days=${this.draft.get(key) ?? new Map()}
           .underlay=${zone ? (this.draft.get(departmentKey(department.id)) ?? new Map()) : new Map()}

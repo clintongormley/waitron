@@ -594,3 +594,75 @@ it("Save writes the season being painted, not the venue's current season", async
     empty(0),
   ]);
 });
+
+/** Presses on `key`'s column at `minute` and answers a release at another minute, measured
+ *  against the column as it stood when pressed. */
+function hold(el: SeasonPainter, key: string, minute: number) {
+  const day = grid(el).shadowRoot!.querySelector<HTMLElement>(`.day[data-column="${key}"]`)!;
+  const box = day.getBoundingClientRect();
+  const point = (type: string, at: number) =>
+    (type === "pointerdown" ? day : window).dispatchEvent(
+      new PointerEvent(type, {
+        bubbles: true,
+        composed: true,
+        pointerId: 7,
+        button: 0,
+        clientX: box.left + box.width / 2,
+        clientY: box.top + (at / 1440) * box.height,
+      }),
+    );
+  point("pointerdown", minute);
+  return async (at: number) => {
+    point("pointerup", at);
+    await settle(el);
+  };
+}
+
+it.each(["season", "department", "zone"])(
+  "removing the %s being painted during a held stroke cannot paint its replacement",
+  async (kind) => {
+    const { painter } = await mount();
+    if (kind === "zone") await pick(painter, "zone:z2");
+    const release = hold(painter, "3", 7 * 60);
+    const next = withBar();
+    painter.model =
+      kind === "season"
+        ? {
+            ...next,
+            seasons: next.seasons.filter(({ id }) => id !== "winter"),
+            currentSeasonId: "spring",
+          }
+        : kind === "department"
+          ? { ...next, departments: next.departments.filter(({ id }) => id !== "d1") }
+          : {
+              ...next,
+              departments: next.departments.map((department) =>
+                department.id === "d1"
+                  ? { ...department, zones: department.zones.filter(({ id }) => id !== "z2") }
+                  : department,
+              ),
+            };
+    await settle(painter);
+    if (kind === "season") expect(painter.seasonId).toBe("spring");
+    await release(9 * 60);
+    expect(painter.edited()).toEqual({ departments: [], zones: [] });
+    expect(grid(painter).days.get("3")).toEqual([]);
+  },
+);
+
+it("a refresh that keeps the department being painted keeps a held stroke", async () => {
+  const { painter } = await mount();
+  const release = hold(painter, "3", 7 * 60);
+  const next = withBar();
+  painter.model = {
+    ...next,
+    departments: next.departments.filter(({ id }) => id !== "d3"),
+    clockRevision: 9,
+  };
+  await settle(painter);
+  await release(9 * 60);
+  expect(painter.edited()).toEqual({ departments: ["d1"], zones: [] });
+  expect(grid(painter).days.get("3")).toEqual([
+    { periodId: "p1", startsAt: "13:00", endsAt: "15:00" },
+  ]);
+});

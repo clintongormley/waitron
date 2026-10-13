@@ -1108,6 +1108,29 @@ test("turning read-only closes an open block menu and a Copy to… chooser", asy
   expect(chooser.matches(":popover-open")).toBe(false);
 });
 
+test("a new target closes an open block menu and a Copy to… chooser; the same target keeps them", async () => {
+  const el = await grid();
+  el.target = "winter/d:d1";
+  await el.updateComplete;
+  block(el, "thu").click();
+  await expect.poll(() => menu(el).matches(":popover-open")).toBe(true);
+  el.target = "winter/d:d1";
+  el.days = new Map(el.days);
+  await el.updateComplete;
+  expect(menu(el).matches(":popover-open")).toBe(true);
+  el.target = "winter/d:d3";
+  await el.updateComplete;
+  expect(menu(el).matches(":popover-open")).toBe(false);
+  el.shadowRoot!.querySelector<HTMLElement>(
+    '.heading[data-column="mon"] wt-row-actions wt-button',
+  )!.click();
+  const chooser = el.shadowRoot!.querySelector<HTMLElement>(".chooser")!;
+  await expect.poll(() => chooser.matches(":popover-open")).toBe(true);
+  el.target = "spring/d:d3";
+  await el.updateComplete;
+  expect(chooser.matches(":popover-open")).toBe(false);
+});
+
 test("read-only: the grid's scrolling region takes the keyboard focus, and only then", async () => {
   const el = await grid();
   const region = el.shadowRoot!.querySelector<HTMLElement>(".scroll")!;

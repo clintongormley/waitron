@@ -319,6 +319,9 @@ export class PaintGrid extends LitElement {
   @property({ attribute: false }) paintable: readonly (string | null)[] | undefined = undefined;
   /** Shows the week only: nothing paints, and no block or day offers a menu. */
   @property({ type: Boolean }) readOnly = false;
+  /** What the days belong to. When it changes, a stroke, menu or chooser begun on the old days
+   *  is dropped, or its release would land on the new ones. */
+  @property() target = "";
 
   @state() private preview: Stretch | null = null;
   @state() private selected: { key: string; startsAt: string } | null = null;
@@ -341,7 +344,7 @@ export class PaintGrid extends LitElement {
   protected override willUpdate(changes: PropertyValues<this>): void {
     if (changes.has("days") && this.selected !== null && this.#selectedIndex() < 0)
       this.#closeMenu();
-    if (changes.has("readOnly") && this.readOnly) {
+    if ((changes.has("readOnly") && this.readOnly) || (changes.has("target") && this.hasUpdated)) {
       this.#stop();
       this.#closeMenu();
       this.#closeChooser(false);
