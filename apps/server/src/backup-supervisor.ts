@@ -15,7 +15,7 @@ import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import { openVenueDatabase, type SingletonRole, type VenueDatabase } from "@waitron/db";
 import type { WaitronModule } from "@waitron/module";
-import { VENUE_FILE, WAL_SUFFIX } from "@waitron/store";
+import { VENUE_FILE } from "@waitron/store";
 import { AppError } from "@waitron/shared";
 import { codeOf } from "@waitron/server-kit";
 import { buildBackupBackend, type ResolvedBackupDestination } from "./backup-backends.js";
@@ -110,18 +110,15 @@ const unreadable = (id: string, readErrorCode: string): DestinationStatus => ({
   readErrorCode,
 });
 
-/** The bytes of the venue database the archive copies, its write-ahead file included; a missing
- * file counts as empty. */
+/** The size of the venue database file, without its write-ahead file; a missing file counts as
+ * empty. */
 export async function venueStagingEstimate(venueDir: string): Promise<number> {
-  let total = 0;
-  for (const name of [VENUE_FILE, `${VENUE_FILE}${WAL_SUFFIX}`]) {
-    try {
-      total += (await stat(join(venueDir, name))).size;
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
-    }
+  try {
+    return (await stat(join(venueDir, VENUE_FILE))).size;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+    return 0;
   }
-  return total;
 }
 
 export function keyFingerprint(key: string): string {

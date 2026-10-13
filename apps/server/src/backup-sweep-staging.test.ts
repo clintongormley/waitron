@@ -199,7 +199,7 @@ it("removes this run's partial files when encrypting runs out of space, leaving 
   expect(await backend.get(earlier[0]!, call)).toEqual(before);
 });
 
-it("estimates from the venue database and its write-ahead file, counting a missing one as empty", async () => {
+it("estimates from the venue database file alone, not its write-ahead file, counting a missing one as empty", async () => {
   const venueDir = await mkdtemp(join(tmpdir(), "sweep-staging-venue-"));
   dirs.push(venueDir);
   expect(await venueStagingEstimate(venueDir)).toBe(0);
@@ -207,5 +207,5 @@ it("estimates from the venue database and its write-ahead file, counting a missi
   expect(await venueStagingEstimate(venueDir)).toBe(300);
   await writeFile(join(venueDir, `${VENUE_FILE}${WAL_SUFFIX}`), Buffer.alloc(50));
   await writeFile(join(venueDir, "node.db"), Buffer.alloc(7000));
-  expect(await venueStagingEstimate(venueDir)).toBe(350);
+  expect(await venueStagingEstimate(venueDir)).toBe(300);
 });
