@@ -308,6 +308,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   asesor answers and the owner decides.** [Detail](backlog/fiscal.md#a275-invoice-a-bill-paid-later-by-transfer-full-or-simplified-invoice--waits-on-asesor-q42-2026-10-06)
 
 - **W41s. Fiscal prevention and offline recovery** — DESIGN AND REVISED PLAN APPROVED (2026-10-04).
+  **2026-10-13, Task 4 decision pending:** a real archived database accepted a replaced node
+  recovery key and refused its replacement. Settle the current-key source for cold restore and
+  the [remaining exact test ports](superpowers/plans/2026-10-13-w41s4-current-key-and-remaining-checks.md)
+  before production wiring. The live-key controls passed; this does not qualify a complete restore.
   **Update, 2026-10-12: queued again in Lane E.** The owner authorised landing after green
   checks and resolved findings; an important unresolved decision still goes to the owner. Q5(f)
   and Q33–Q40 in the adviser document are revised, and Q41 covers issued invoices missing from the

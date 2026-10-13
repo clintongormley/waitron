@@ -209,6 +209,14 @@ Statements below that a conflict holds its chain, that a cancellation of a rejec
 held or holds its chain, or that the brake reads the three records immediately before a record,
 describe the earlier behaviour.
 
+**2026-10-13, old-backup authentication:** a disposable real archive taken before key
+replacement accepted the replaced node key and refused the replacement. The live database
+refused the old key and accepted the replacement. The internal helper reads the verifier in
+the supplied database; the signed consumption identifies its node/event but supplies no
+current-key verifier. The [decision and remaining test inventory](../superpowers/plans/2026-10-13-w41s4-current-key-and-remaining-checks.md)
+proposes an outside current-key record, with its missing-record limit stated. This requires
+the owner's choice before cold-restore wiring. No public restore path has been changed.
+
 **2026-10-12, standby decision:** the owner selected dormant reservation at join and activation at
 takeover. The Task 4 branch signs a dedicated paper-reservation receipt for the named spare and
 checks its signatures, outside reserved state and stored venue scope without writing a SIF,
