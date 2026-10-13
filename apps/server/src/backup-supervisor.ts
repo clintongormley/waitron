@@ -16,7 +16,7 @@ import { openVenueDatabase, type SingletonRole, type VenueDatabase } from "@wait
 import type { WaitronModule } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { codeOf } from "@waitron/server-kit";
-import { buildBackupBackend } from "./backup-backends.js";
+import { buildBackupBackend, type ResolvedBackupDestination } from "./backup-backends.js";
 import type { BackupConfig, BackupSchedule } from "./backup-config.js";
 import type { ScheduleClock } from "./backup-schedule.js";
 import { readBackupStatus, type DestinationStatus } from "./backup-status.js";
@@ -44,8 +44,8 @@ export interface BackupRuntimeStatus {
   recoveryKey: string | undefined;
 }
 
-/** A destination's freshness plus what the CURRENT sweep did there: `storedUnderCurrentKey` once
- * it stored, and the latest upload and pruning codes. */
+/** A destination's freshness plus what the sweep under the reported settings did there:
+ * `storedUnderCurrentKey` once it stored, and the latest upload and pruning codes. */
 export type SupervisedDestinationStatus = DestinationStatus & {
   storedUnderCurrentKey: boolean;
   uploadErrorCode: string | null;
@@ -56,6 +56,17 @@ export type SupervisedBackupStatus =
   { configured: false } | { configured: true; destinations: SupervisedDestinationStatus[] };
 
 type SweepRecord = Omit<SupervisedDestinationStatus, keyof DestinationStatus>;
+
+/** What one config's sweep has done. Replaced, never cleared, when a reload adopts a config, so a
+ * status read holding the old one keeps the settings and the record together. */
+interface SweepState {
+  /** True once the sweep stored to ≥1 destination — the in-process proof that an artifact exists
+   * under the CURRENT key. `archiveUnderCurrentKey` is this flag. */
+  stored: boolean;
+  records: Map<string, SweepRecord>;
+}
+
+const freshSweep = (): SweepState => ({ stored: false, records: new Map() });
 
 export interface BackupSupervisorDeps {
   /** Re-reads the box-env files from DISK each reload — closing over a boot-time value would make
@@ -81,11 +92,21 @@ export interface BackupSupervisorDeps {
   /** DI for tests; defaults to `openVenueDatabase`. */
   openVenue?: (directory: string) => Promise<VenueDatabase>;
   onScheduled?: (at: number | null) => void;
+  /** DI for tests; defaults to `buildBackupBackend`. */
+  buildBackend?: (dest: ResolvedBackupDestination) => StorageBackend;
   /** DI for tests; defaults to `readBackupStatus`'s own limit. */
   statusReadTimeoutMs?: number;
   now?: () => Date;
   sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
 }
+
+const unreadable = (id: string, readErrorCode: string): DestinationStatus => ({
+  id,
+  lastBackupAt: null,
+  ageSeconds: null,
+  stale: true,
+  readErrorCode,
+});
 
 export function keyFingerprint(key: string): string {
   return createHash("sha256").update(key).digest("hex").slice(0, 8);
@@ -93,6 +114,7 @@ export function keyFingerprint(key: string): string {
 
 export class BackupSupervisor {
   readonly #deps: BackupSupervisorDeps;
+  readonly #buildBackend: (dest: ResolvedBackupDestination) => StorageBackend;
   #controller: AbortController | undefined;
   #worker: Promise<void> | undefined;
   #backends: StorageBackend[] = [];
@@ -102,15 +124,11 @@ export class BackupSupervisor {
   /** Set once by `stop()` (shutdown is terminal). `reload()` checks it after every `await` and bails —
    * tearing down anything it opened — rather than start (or leave) a worker after a stop. */
   #stopped = false;
-  /** True once the running sweep has stored an archive to ≥1 destination since the last reload — the
-   * in-process proof that an artifact exists under the CURRENT key. `archiveUnderCurrentKey` is this
-   * flag. */
-  #storedUnderCurrentKey = false;
-  /** Per destination, what the running sweep has reported since the last reload. */
-  #sweepRecords = new Map<string, SweepRecord>();
+  #sweep: SweepState = freshSweep();
 
   constructor(deps: BackupSupervisorDeps) {
     this.#deps = deps;
+    this.#buildBackend = deps.buildBackend ?? buildBackupBackend;
   }
 
   /** Latched: a concurrent reload throws `backup.reload_in_progress` rather than racing two
@@ -119,14 +137,13 @@ export class BackupSupervisor {
     if (this.#reloading) throw new AppError("backup.reload_in_progress", {});
     this.#reloading = true;
     try {
-      this.#storedUnderCurrentKey = false;
-      this.#sweepRecords = new Map();
       await this.#teardown();
       // A `stop()` may have run while we awaited the teardown, which already left no worker/handle.
       if (this.#stopped) return;
       const cfg = await this.#deps.buildConfig();
       if (this.#stopped) return; // a stop() landed during buildConfig — don't adopt this config
       this.#config = cfg;
+      this.#sweep = freshSweep();
       if (cfg === undefined || this.#deps.readSingletonRole() !== "primary") {
         // #config is kept so `current()` can report the destinations/schedule; enabled stays false
         // because `#db` is undefined (nothing was opened) — a non-primary reads disabled.
@@ -154,7 +171,7 @@ export class BackupSupervisor {
       this.#db = venue;
       const controller = new AbortController();
       this.#controller = controller;
-      this.#backends = cfg.destinations.map(buildBackupBackend);
+      this.#backends = cfg.destinations.map(this.#buildBackend);
       this.#worker = runBackupSweep({
         backends: this.#backends,
         db: venue.venue,
@@ -177,7 +194,7 @@ export class BackupSupervisor {
         onStored: () => {
           // A replaced sweep is aborted before `reload()` waits for it, and its in-flight tick can
           // still store an archive under the OLD key during that wait.
-          if (!controller.signal.aborted) this.#storedUnderCurrentKey = true;
+          if (!controller.signal.aborted) this.#sweep.stored = true;
         },
         onDestinationResult: (result) => {
           // Guarded like `onStored`: a replaced sweep can still report a store under the OLD key.
@@ -218,8 +235,19 @@ export class BackupSupervisor {
   > {
     const base = this.current();
     const cfg = this.#config;
+    // Taken with the settings: a reload during the read replaces `#sweep`, not this one.
+    const sweep = this.#sweep;
     const now = this.#now();
-    const backends = cfg?.destinations.map(buildBackupBackend) ?? [];
+    const destinations = cfg?.destinations ?? [];
+    // Built one at a time, so a destination that cannot be built is reported, not thrown.
+    const built = destinations.map((dest) => {
+      try {
+        return { backend: this.#buildBackend(dest) };
+      } catch (err) {
+        return { unbuilt: unreadable(dest.id, codeOf(err)) };
+      }
+    });
+    const backends = built.flatMap((b) => (b.backend === undefined ? [] : [b.backend]));
     let read;
     try {
       read = await readBackupStatus(
@@ -231,28 +259,33 @@ export class BackupSupervisor {
     } finally {
       this.#closeBackends(backends);
     }
-    const records = this.#sweepRecords;
-    const backupStatus: SupervisedBackupStatus = read.configured
-      ? {
-          configured: true,
-          destinations: read.destinations.map((d) => ({
-            ...d,
-            ...(records.get(d.id) ?? {
-              storedUnderCurrentKey: false,
-              uploadErrorCode: null,
-              pruneErrorCode: null,
+    const reads = read.configured ? read.destinations : [];
+    let next = 0;
+    const backupStatus: SupervisedBackupStatus =
+      destinations.length === 0
+        ? { configured: false }
+        : {
+            configured: true,
+            destinations: built.map((b) => {
+              const d = b.unbuilt ?? reads[next++]!;
+              return {
+                ...d,
+                ...(sweep.records.get(d.id) ?? {
+                  storedUnderCurrentKey: false,
+                  uploadErrorCode: null,
+                  pruneErrorCode: null,
+                }),
+              };
             }),
-          })),
-        }
-      : read;
-    return { ...base, backupStatus, archiveUnderCurrentKey: this.#storedUnderCurrentKey };
+          };
+    return { ...base, backupStatus, archiveUnderCurrentKey: sweep.stored };
   }
 
   /** A store stays counted for the rest of the sweep; an upload code is cleared only by a later
    * store, and a pruning code only by a later store whose pruning succeeded. */
   #recordResult(result: DestinationResult): void {
-    const prev = this.#sweepRecords.get(result.id);
-    this.#sweepRecords.set(result.id, {
+    const prev = this.#sweep.records.get(result.id);
+    this.#sweep.records.set(result.id, {
       storedUnderCurrentKey: (prev?.storedUnderCurrentKey ?? false) || result.stored,
       uploadErrorCode: result.uploadErrorCode,
       pruneErrorCode: result.stored ? result.pruneErrorCode : (prev?.pruneErrorCode ?? null),

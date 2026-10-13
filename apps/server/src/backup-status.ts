@@ -1,7 +1,9 @@
 import { codeOf } from "@waitron/server-kit";
+import { AppError } from "@waitron/shared";
 import { withDestinationCall } from "./backup-destination-call.js";
 import { BACKUP_KEY_PREFIX, parseBackupArchiveKey } from "./backup-keys.js";
-import type { StorageBackend } from "./storage-backend.js";
+import type { StorageBackend, StoredObject } from "./storage-backend.js";
+import "./errors.js";
 
 export const STATUS_READ_TIMEOUT_MS = 30_000;
 
@@ -22,7 +24,11 @@ export type BackupStatus =
 
 const NEVER_ABORTED = new AbortController().signal;
 
-/** Each destination is read under its own limit, so one that fails or stalls never hides the rest. */
+/**
+ * Each destination is read under its own limit, so one that fails or stalls never hides the rest:
+ * a destination still listing when its limit passes is answered as timed out, even if its listing
+ * ignores the abort and never settles.
+ */
 export async function readBackupStatus(
   backends: StorageBackend[],
   staleAfterMs: number,
@@ -46,9 +52,7 @@ async function destinationStatus(
   const unread = { id: backend.id, lastBackupAt: null, ageSeconds: null, stale: true };
   let objects;
   try {
-    objects = await withDestinationCall(NEVER_ABORTED, readTimeoutMs, (call) =>
-      backend.list(BACKUP_KEY_PREFIX, call),
-    );
+    objects = await listWithinLimit(backend, readTimeoutMs);
   } catch (err) {
     return { ...unread, readErrorCode: codeOf(err) };
   }
@@ -63,4 +67,31 @@ async function destinationStatus(
     stale: ageMs > staleAfterMs,
     readErrorCode: null,
   };
+}
+
+/**
+ * Unlike a transfer, a status read leaves no staged file behind, so it answers at the limit rather
+ * than waiting for the listing to settle; a folder listing's `readdir` takes no abort signal.
+ */
+async function listWithinLimit(
+  backend: StorageBackend,
+  timeoutMs: number,
+): Promise<StoredObject[]> {
+  // Started before this limit's timer, so the call's own timer aborts the listing first.
+  const listing = withDestinationCall(NEVER_ABORTED, timeoutMs, (call) =>
+    backend.list(BACKUP_KEY_PREFIX, call),
+  );
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const limit = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(
+      () => reject(new AppError("backup.destination_timed_out", { timeoutMs })),
+      timeoutMs,
+    );
+  });
+  try {
+    // `Promise.race` subscribes to the listing, so a failure after the limit is handled, not lost.
+    return await Promise.race([listing, limit]);
+  } finally {
+    clearTimeout(timer);
+  }
 }

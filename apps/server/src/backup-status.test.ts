@@ -158,6 +158,57 @@ describe("readBackupStatus", () => {
     });
   });
 
+  it("a listing that ignores its signal and never answers is reported timed out at the limit, and its late failure is not left unhandled", async () => {
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on("unhandledRejection", onUnhandled);
+    let seen: AbortSignal | undefined;
+    let failLate!: (err: Error) => void;
+    const stuck = listing(
+      "usb",
+      (_prefix, call) =>
+        new Promise((_resolve, reject) => {
+          seen = call.signal;
+          failLate = reject;
+        }),
+    );
+    try {
+      const started = Date.now();
+      const answer = await Promise.race([
+        readBackupStatus([stuck, backend("local", NOW.getTime() - 1000)], 60_000, NOW, 100),
+        new Promise<"still waiting">((r) => setTimeout(() => r("still waiting"), 2_000)),
+      ]);
+      expect(answer).not.toBe("still waiting");
+      expect(Date.now() - started).toBeLessThan(1_000);
+      expect(seen?.aborted).toBe(true);
+      expect(answer).toEqual({
+        configured: true,
+        destinations: [
+          {
+            id: "usb",
+            lastBackupAt: null,
+            ageSeconds: null,
+            stale: true,
+            readErrorCode: "backup.destination_timed_out",
+          },
+          {
+            id: "local",
+            lastBackupAt: new Date(NOW.getTime() - 1000).toISOString(),
+            ageSeconds: 1,
+            stale: false,
+            readErrorCode: null,
+          },
+        ],
+      });
+
+      failLate(new Error("the disk came back with an error"));
+      await new Promise((r) => setTimeout(r, 50));
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+  });
+
   it("gives each status read a thirty-second limit by default", async () => {
     vi.useFakeTimers();
     try {

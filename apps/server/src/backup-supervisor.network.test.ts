@@ -8,7 +8,13 @@ import { openVenueDatabase, runMigrations } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { AppError } from "@waitron/shared";
 import type { BackupConfig } from "./backup-config.js";
-import { BackupSupervisor, type SupervisedDestinationStatus } from "./backup-supervisor.js";
+import { buildBackupBackend } from "./backup-backends.js";
+import {
+  BackupSupervisor,
+  keyFingerprint,
+  type BackupSupervisorDeps,
+  type SupervisedDestinationStatus,
+} from "./backup-supervisor.js";
 import { LocalFsBackend } from "./local-fs-backend.js";
 import { ALL_MODULES } from "./modules.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
@@ -82,6 +88,7 @@ async function supervisor(
   logs: LogLine[],
   statusReadTimeoutMs?: number,
   sleep?: (ms: number, signal: AbortSignal) => Promise<void>,
+  extra: Partial<BackupSupervisorDeps> = {},
 ): Promise<BackupSupervisor> {
   return new BackupSupervisor({
     buildConfig: async () => cfg(),
@@ -97,6 +104,7 @@ async function supervisor(
       logs.push({ level, event, fields: fields as Record<string, unknown> | undefined }),
     statusReadTimeoutMs,
     sleep,
+    ...extra,
   });
 }
 
@@ -121,6 +129,17 @@ function stall(call: StorageCall): Promise<never> {
     });
   });
 }
+
+function gate() {
+  let entered!: () => void;
+  const reached = new Promise<void>((r) => (entered = r));
+  let release!: () => void;
+  const released = new Promise<void>((r) => (release = r));
+  return { entered, reached, release, released };
+}
+
+/** `LocalFsBackend` keeps its folder private; the tests below tell destinations apart by it. */
+const folderOf = (backend: LocalFsBackend) => (backend as unknown as { dir: string }).dir;
 
 function byId(destinations: SupervisedDestinationStatus[], id: string) {
   const found = destinations.find((d) => d.id === id);
@@ -300,13 +319,19 @@ describe("BackupSupervisor status, one destination at a time", () => {
       failPrune = false;
       records.push(await local());
 
+      failPut = true;
       wake();
       await poll(() => (sleeps >= 3 ? true : undefined));
+      failPut = false;
+      records.push(await local());
+
+      wake();
+      await poll(() => (sleeps >= 4 ? true : undefined));
       records.push(await local());
 
       failPut = true;
       wake();
-      await poll(() => (sleeps >= 4 ? true : undefined));
+      await poll(() => (sleeps >= 5 ? true : undefined));
       records.push(await local());
     } finally {
       await sup.stop();
@@ -314,6 +339,12 @@ describe("BackupSupervisor status, one destination at a time", () => {
     expect(records).toEqual([
       { stored: false, upload: "backup.destination_key_invalid", prune: null },
       { stored: true, upload: null, prune: "backup.destination_object_too_large" },
+      // A failed upload stores nothing, so it leaves the earlier pruning's code standing.
+      {
+        stored: true,
+        upload: "backup.destination_key_invalid",
+        prune: "backup.destination_object_too_large",
+      },
       { stored: true, upload: null, prune: null },
       // A later failed upload does not undo the earlier store in this sweep.
       { stored: true, upload: "backup.destination_key_invalid", prune: null },
@@ -380,6 +411,134 @@ describe("BackupSupervisor status, one destination at a time", () => {
     }
   }, 60_000);
 
+  it("a reload clears what the replaced sweep stored, until the new sweep stores", async () => {
+    const realPut = LocalFsBackend.prototype.putFile;
+    const newUpload = gate();
+    let holdNextPut = false;
+    vi.spyOn(LocalFsBackend.prototype, "putFile").mockImplementation(async function (
+      this: LocalFsBackend,
+      key,
+      path,
+      call,
+    ) {
+      if (holdNextPut) {
+        holdNextPut = false;
+        newUpload.entered();
+        await newUpload.released;
+      }
+      return realPut.call(this, key, path, call);
+    });
+    const logs: LogLine[] = [];
+    const dir = await tempDir("waitron-bsupnet-local-");
+    let cfg = config([{ id: "local", dir }]);
+    const sup = await supervisor(() => cfg, logs);
+    const local = async () => {
+      const { status, destinations: ds } = await destinations(sup);
+      const d = byId(ds, "local");
+      return {
+        stored: d.storedUnderCurrentKey,
+        upload: d.uploadErrorCode,
+        prune: d.pruneErrorCode,
+        archive: status.archiveUnderCurrentKey,
+      };
+    };
+    try {
+      await sup.reload();
+      await poll(async () => ((await local()).archive ? true : undefined));
+      expect(await local()).toEqual({ stored: true, upload: null, prune: null, archive: true });
+
+      holdNextPut = true;
+      cfg = config([{ id: "local", dir }], { recoveryKey: "recovery-key-two-different" });
+      await sup.reload();
+      await newUpload.reached;
+      expect(await local()).toEqual({ stored: false, upload: null, prune: null, archive: false });
+
+      newUpload.release();
+      await poll(async () => ((await local()).archive ? true : undefined));
+      expect(await local()).toEqual({ stored: true, upload: null, prune: null, archive: true });
+    } finally {
+      newUpload.release();
+      await sup.stop();
+    }
+  }, 60_000);
+
+  it("a status read that overlaps a reload reports the settings and the record of the sweep it began under", async () => {
+    const realPut = LocalFsBackend.prototype.putFile;
+    const realList = LocalFsBackend.prototype.list;
+    let failPut = true;
+    vi.spyOn(LocalFsBackend.prototype, "putFile").mockImplementation(function (
+      this: LocalFsBackend,
+      key,
+      path,
+      call,
+    ) {
+      if (failPut)
+        return Promise.reject(new AppError("backup.destination_key_invalid", { field: "key" }));
+      return realPut.call(this, key, path, call);
+    });
+    const dirA = await tempDir("waitron-bsupnet-a-");
+    const dirB = await tempDir("waitron-bsupnet-b-");
+    const listingA = gate();
+    let holdListingA = false;
+    vi.spyOn(LocalFsBackend.prototype, "list").mockImplementation(async function (
+      this: LocalFsBackend,
+      prefix,
+      call,
+    ) {
+      if (holdListingA && folderOf(this) === dirA) {
+        holdListingA = false;
+        listingA.entered();
+        await listingA.released;
+      }
+      return realList.call(this, prefix, call);
+    });
+    const logs: LogLine[] = [];
+    const keyOne = "recovery-key-one-strong";
+    const keyTwo = "recovery-key-two-different";
+    let cfg = config([{ id: "usb", dir: dirA }], { recoveryKey: keyOne });
+    const sup = await supervisor(() => cfg, logs);
+    try {
+      await sup.reload();
+      await poll(() => (count(logs, "backup.destination_failed", "usb") > 0 ? true : undefined));
+
+      holdListingA = true;
+      const reading = sup.status();
+      await listingA.reached;
+
+      cfg = config([{ id: "usb", dir: dirB }], { recoveryKey: keyTwo });
+      failPut = false;
+      await sup.reload();
+      await poll(async () => ((await sup.status()).archiveUnderCurrentKey ? true : undefined));
+
+      listingA.release();
+      const overlapped = await reading;
+      if (!overlapped.backupStatus.configured) throw new Error("not configured");
+      expect({
+        fingerprint: overlapped.keyFingerprint,
+        folders: overlapped.destinations,
+        archive: overlapped.archiveUnderCurrentKey,
+        usb: byId(overlapped.backupStatus.destinations, "usb"),
+      }).toEqual({
+        fingerprint: keyFingerprint(keyOne),
+        folders: [{ id: "usb", dir: dirA }],
+        archive: false,
+        usb: {
+          id: "usb",
+          lastBackupAt: null,
+          ageSeconds: null,
+          stale: true,
+          readErrorCode: null,
+          storedUnderCurrentKey: false,
+          uploadErrorCode: "backup.destination_key_invalid",
+          pruneErrorCode: null,
+        },
+      });
+    } finally {
+      listingA.release();
+      await sup.stop();
+    }
+  }, 60_000);
+
   it("closes each destination it built for a status read once the read has settled", async () => {
     const closed: string[] = [];
     const realList = LocalFsBackend.prototype.list;
@@ -412,5 +571,46 @@ describe("BackupSupervisor status, one destination at a time", () => {
       event: "backup.destination_close_failed",
       fields: { destination: "local", errorCode: "backup.reload_in_progress" },
     });
+  }, 60_000);
+
+  it("a destination that cannot be built reads stale with its code beside the others, and every one that was built is closed", async () => {
+    const closed: string[] = [];
+    vi.spyOn(LocalFsBackend.prototype, "close").mockImplementation(function (this: LocalFsBackend) {
+      closed.push(this.id);
+    });
+    let failRemote = false;
+    const logs: LogLine[] = [];
+    const cfg = config([
+      { id: "local", dir: await tempDir("waitron-bsupnet-local-") },
+      { id: "remote", dir: await tempDir("waitron-bsupnet-remote-") },
+      { id: "usb", dir: await tempDir("waitron-bsupnet-usb-") },
+    ]);
+    const sup = await supervisor(() => cfg, logs, undefined, undefined, {
+      buildBackend: (dest) => {
+        if (failRemote && dest.id === "remote")
+          throw new AppError("backup.destination_key_invalid", { field: "prefix" });
+        return buildBackupBackend(dest);
+      },
+    });
+    // Stopped before the read, so every close seen after it is the status read's.
+    await sup.reload();
+    await sup.stop();
+    closed.length = 0;
+    failRemote = true;
+
+    const s = await sup.status();
+    if (!s.backupStatus.configured) throw new Error("not configured");
+    expect(s.backupStatus.destinations.map((d) => d.id)).toEqual(["local", "remote", "usb"]);
+    expect(byId(s.backupStatus.destinations, "remote")).toEqual(
+      expect.objectContaining({
+        lastBackupAt: null,
+        ageSeconds: null,
+        stale: true,
+        readErrorCode: "backup.destination_key_invalid",
+      }),
+    );
+    expect(byId(s.backupStatus.destinations, "local").readErrorCode).toBeNull();
+    expect(byId(s.backupStatus.destinations, "usb").readErrorCode).toBeNull();
+    expect(closed.sort()).toEqual(["local", "usb"]);
   }, 60_000);
 });
