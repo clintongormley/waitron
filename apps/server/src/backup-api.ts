@@ -104,6 +104,9 @@ const UNREADABLE_SETTINGS = new Set([
   "server.credential_unusable",
 ]);
 
+/** The destination choices `resolveArchiveChoice` resolves against the bucket copy's settings. */
+const BUCKET_CHOICES = new Set<unknown>(["stream-bucket", "custom-s3"]);
+
 const ARCHIVE_PROBE_TIMEOUT_MS = 30 * 1000;
 const PROBE_CLEANUP_TIMEOUT_MS = 10 * 1000;
 const PROBE_BYTES = Buffer.from("waitron archive test\n");
@@ -434,7 +437,11 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
           log("warn", "backup.archive_settings_unreadable", { reason: read.unreadable });
         }
         const heldSettings = "unreadable" in read ? null : read.settings;
-        const stream = await readStreamSettings(deps.db, deps.ring);
+        // Only a bucket choice reads the bucket copy's settings: an unreadable one refuses it, but
+        // never a local folder.
+        const stream = BUCKET_CHOICES.has(body.destination.kind)
+          ? await readStreamSettings(deps.db, deps.ring)
+          : null;
         const destination = resolveArchiveChoice(body.destination, {
           venueId: deps.venueId,
           stream,

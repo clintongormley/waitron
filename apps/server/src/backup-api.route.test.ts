@@ -2027,6 +2027,52 @@ describe("backup admin routes", () => {
       });
     }, 60_000);
 
+    /** Stores the bucket copy's settings, then breaks their authentication tag, so a read of them
+     * answers `credentials.decrypt_failed`. */
+    async function storeUnreadableStream(): Promise<void> {
+      await storeStream();
+      await withTransaction(suite.db, (tx) =>
+        tx
+          .update(tenantCredentials)
+          .set({ authTag: randomBytes(16) })
+          .where(eq(tenantCredentials.purpose, "backup.stream")),
+      );
+      await expect(readStreamSettings(suite.db, RING)).rejects.toMatchObject({
+        code: "credentials.decrypt_failed",
+      });
+    }
+
+    it("a local-folder Save does not read the bucket copy's settings, so an unreadable one does not block it", async () => {
+      await storeUnreadableStream();
+      const { post } = await primaryApp();
+      const dir = makeDestDir();
+      const res = await post("/api/backup/apply", applyBody({ kind: "local-fs", dir }));
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({ enabled: true });
+      expect(await readSealed()).toMatchObject({
+        enabled: true,
+        destinations: [{ kind: "local-fs", dir }],
+      });
+    }, 60_000);
+
+    for (const destination of [
+      { kind: "stream-bucket" },
+      { ...CUSTOM, secretAccessKey: CUSTOM_SECRET },
+    ]) {
+      it(`a ${destination.kind} Save is refused while the bucket copy's settings cannot be read, with nothing written`, async () => {
+        await storeUnreadableStream();
+        const { sc, post } = await primaryApp();
+        const res = await post("/api/backup/apply", applyBody(destination));
+        expect(res.status).toBe(400);
+        expect(await res.json()).toMatchObject({
+          error: { code: "credentials.decrypt_failed", params: { purpose: "backup.stream" } },
+        });
+        expect(await readSealed()).toBeNull();
+        expect(bucket.calls).toEqual([]);
+        await expect(readFile(join(sc.stateDir, "backup.env"), "utf8")).rejects.toThrow();
+      }, 60_000);
+    }
+
     it("disable with nothing stored is refused", async () => {
       const { post } = await primaryApp();
       const res = await post("/api/backup/disable");
