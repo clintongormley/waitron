@@ -2094,9 +2094,12 @@ describe("backup admin routes", () => {
         await storeUnreadableStream();
         const { sc, post } = await primaryApp();
         const res = await post("/api/backup/apply", applyBody(destination));
-        expect(res.status).toBe(400);
+        expect(res.status).toBe(409);
         expect(await res.json()).toMatchObject({
-          error: { code: "credentials.decrypt_failed", params: { purpose: "backup.stream" } },
+          error: {
+            code: "backup.stream_settings_unreadable",
+            params: { reason: "credentials.decrypt_failed" },
+          },
         });
         expect(await readSealed()).toBeNull();
         expect(bucket.calls).toEqual([]);

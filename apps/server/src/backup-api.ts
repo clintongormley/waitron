@@ -36,6 +36,7 @@ import {
   type BackupSchedule,
 } from "./backup-config.js";
 import { writeRecoveryKey } from "./backup-env-writer.js";
+import { UNREADABLE_CREDENTIAL } from "./credentials.js";
 import { formatEnvFile, parseEnvFile } from "./env-file.js";
 import { MIN_PASSPHRASE_LENGTH } from "./recovery-bundle.js";
 import {
@@ -46,7 +47,7 @@ import {
 import type { Logger } from "./logger.js";
 import type { SealedStateRefresher } from "./sealed-state.js";
 import type { BackupDestination, StorageBackend } from "./storage-backend.js";
-import { readStreamSettings } from "./stream-host.js";
+import { readStreamSettings, type StreamSettings } from "./stream-host.js";
 import type { Turns } from "./backup-turns.js";
 import "./errors.js";
 
@@ -97,6 +98,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "backup.archive_settings_invalid": 500,
   "backup.rotation_metadata_failed": 500,
   "backup.archive_settings_unreadable": 409,
+  "backup.stream_settings_unreadable": 409,
 };
 
 /** The destination choices `resolveArchiveChoice` resolves against the bucket copy's settings. */
@@ -180,6 +182,17 @@ const APPLY_FIELDS = [
   "retention",
   "destinationTimeoutMs",
 ];
+
+async function readBucketCopySettings(db: Database, ring: KeyRing): Promise<StreamSettings | null> {
+  try {
+    return await readStreamSettings(db, ring);
+  } catch (error) {
+    if (isAppError(error) && UNREADABLE_CREDENTIAL.has(error.code)) {
+      throw new AppError("backup.stream_settings_unreadable", { reason: error.code });
+    }
+    throw error;
+  }
+}
 
 /** A refusal names the offending field, never its value — it could be the key or a secret. An
  * unknown field is answered as `body`: its name is the caller's text, and could be a secret too. */
@@ -395,7 +408,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
         // Only a bucket choice reads the bucket copy's settings: an unreadable one refuses it, but
         // never a local folder.
         const stream = BUCKET_CHOICES.has(body.destination.kind)
-          ? await readStreamSettings(deps.db, deps.ring)
+          ? await readBucketCopySettings(deps.db, deps.ring)
           : null;
         const destination = resolveArchiveChoice(body.destination, {
           venueId: deps.venueId,

@@ -1080,5 +1080,34 @@ describe("stream settings routes", () => {
         }
       });
     }
+
+    it("Save replaces stored bucket copy settings that cannot be read", async () => {
+      await clearBucket();
+      await withTransaction(suite.db, (tx) =>
+        putCredential(tx, RING, {
+          purpose: STREAM_PURPOSE,
+          value: streamSettingsPayload({ venueId: VENUE_ID, bucket: BUCKET }),
+        }),
+      );
+      await withTransaction(suite.db, (tx) =>
+        tx
+          .update(tenantCredentials)
+          .set({ authTag: randomBytes(16) })
+          .where(eq(tenantCredentials.purpose, STREAM_PURPOSE)),
+      );
+      try {
+        await expect(storedBucket()).rejects.toMatchObject({ code: "credentials.decrypt_failed" });
+        const { app } = harness({}, "recovery-key-one-strong");
+        const cookie = await login(app);
+        const res = await app.request("/api/backup/stream", {
+          method: "PUT",
+          ...json(cookie, { ...BODY, bucket: "replacement-copy" }),
+        });
+        expect(res.status).toBe(200);
+        expect(await storedBucket()).toMatchObject({ bucket: "replacement-copy" });
+      } finally {
+        await clearBucket();
+      }
+    });
   });
 });

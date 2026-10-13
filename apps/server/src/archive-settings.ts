@@ -14,7 +14,7 @@ import {
   MIN_DESTINATION_TIMEOUT_MS,
   type BackupSchedule,
 } from "./backup-config.js";
-import { credentialField } from "./credentials.js";
+import { credentialField, UNREADABLE_CREDENTIAL } from "./credentials.js";
 import type { BackupDestination } from "./storage-backend.js";
 import type { StreamSettings } from "./stream-host.js";
 import "./errors.js";
@@ -259,13 +259,7 @@ export async function readArchiveSettings(
 }
 
 /** What reading a stored archive record answers when the record itself cannot be read. */
-const UNREADABLE_SETTINGS = new Set([
-  "backup.archive_settings_invalid",
-  "credentials.decrypt_failed",
-  "credentials.malformed_payload",
-  "credentials.key_version_unknown",
-  "server.credential_unusable",
-]);
+const UNREADABLE_SETTINGS = new Set(["backup.archive_settings_invalid", ...UNREADABLE_CREDENTIAL]);
 
 /** The stored archive settings, or the code that says the stored record cannot be read. */
 export async function readHeldArchiveSettings(

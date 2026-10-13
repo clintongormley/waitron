@@ -216,6 +216,13 @@ it("has a sentence for each options/extras list code the dashboard can be answer
   }
 });
 
+it("has English and Spanish copy for an archive Save's refusal of unreadable bucket copy settings", () => {
+  const code = "backup.stream_settings_unreadable";
+  expect(codeMessage(code, "en")).not.toBe(codeMessage("test.unmapped_code", "en"));
+  expect(codeMessage(code, "es")).not.toBe(codeMessage("test.unmapped_code", "es"));
+  expect(codeMessage(code, "es")).not.toBe(codeMessage(code, "en"));
+});
+
 it("has English and Spanish copy for the two refusals that keep variants out of extras lists", () => {
   for (const code of ["extras.product_has_variants", "product.offered_as_extra"]) {
     expect(codeMessage(code, "en")).not.toBe(codeMessage("test.unmapped_code", "en"));
