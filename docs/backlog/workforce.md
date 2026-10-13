@@ -31,11 +31,8 @@ BOE up to 12 Oct 2026 (the spec's legal-basis table has the sources), so A10 bui
 draft and is checked against the final text if it is published. The time record cannot be edited once
 written, so its chain and correction paths take the owner's sign-off at land.
 
-Part 1 is in progress on `feat/a10-1-record-library`. Its schema, correction and automatic-entry
-methods, and record reads are implemented locally. Pay-period closure, configuration transfer and
-the Spanish history export remain, followed by the full branch review and current-head CI. The
-library has no new route or screen yet.
-
-A10-1 library checkpoint: rich reads now include frozen pay-period snapshots and later changes,
-with worker-scoped snapshots and summaries. The rich Spanish export and final review remain in
-this branch; the library is not ready for owner review.
+Part 1 is implemented locally on `feat/a10-1-record-library`: missing-entry corrections,
+worker and manager decisions, automatic-entry confirmation, pay-period closure, scoped frozen
+records and the Spanish history export. The full branch review and current-head CI remain; the
+library has no new route or screen yet. Old workforce venue folders require a reset/reseed for
+the nullable-recorder constraint migration; restoring an old archive is not that reset.
