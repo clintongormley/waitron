@@ -455,3 +455,17 @@ describe("printer layout settings", () => {
     });
   });
 });
+
+it("lists pick-up roles as a set so repeated roles do not appear as multiple choices", async () => {
+  const cfg = await setup();
+  const { id } = await asTx(cfg, (tx) =>
+    createPrinter(tx, cfg, {
+      name: "Receipt only",
+      transport: "network_tcp",
+      host: "10.0.0.8",
+      pickupRoles: ["receipt", "receipt"],
+    }),
+  );
+  const listed = await asTx(cfg, (tx) => listPrinters(tx, cfg));
+  expect(listed.find((row) => row.id === id)!.pickupRoles).toEqual(["receipt"]);
+});
