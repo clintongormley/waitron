@@ -143,12 +143,17 @@ export function drawnGroupKey(table: TableState, linkId: string | null): string 
  * `linkId`.
  */
 export function mapTables(zoneTables: readonly TableState[]): FloorMapTable[] {
-  // `wt-floor-map` draws in the order given, so a part split off lands on top of its joined table.
+  // `wt-floor-map` draws each merge where its first member is listed, so a part split off, and any
+  // merge holding one, goes last to land on top of its joined table.
   const onPlan = zoneTables.filter(onTodaysPlan);
-  const drawn = [
-    ...onPlan.filter((table) => table.today!.splitOffFrom === null),
-    ...onPlan.filter((table) => table.today!.splitOffFrom !== null),
-  ];
+  const liftedJoins = new Set(
+    onPlan.flatMap(({ today }) =>
+      today!.splitOffFrom !== null && today!.joinId !== null ? [today!.joinId] : [],
+    ),
+  );
+  const lifted = ({ today }: TableState): boolean =>
+    today!.splitOffFrom !== null || (today!.joinId !== null && liftedJoins.has(today!.joinId));
+  const drawn = [...onPlan.filter((table) => !lifted(table)), ...onPlan.filter(lifted)];
   const groupsOfParty = new Map<string, Set<string>>();
   for (const table of drawn) {
     if (table.party === null) continue;
