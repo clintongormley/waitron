@@ -36,6 +36,15 @@ const finishParts = {
   cleanupCommand: null,
 };
 
+function runnerCommand(region: string, receiptPath: string): string {
+  return (
+    'WAITRON_RUN_AWS_REHEARSAL=1 AWS_SHARED_CREDENTIALS_FILE="$HOME/.config/waitron-cloud/aws/credentials" ' +
+    'AWS_CONFIG_FILE="$HOME/.config/waitron-cloud/aws/config" AWS_PROFILE=waitron-rehearsal ' +
+    `AWS_REGION=${region} pnpm --filter @waitron/server exec tsx scripts/aws-rehearsal-cleanup.ts ` +
+    `--receipt ${receiptPath}`
+  );
+}
+
 function refusalOf(run: () => unknown): Error {
   try {
     run();
@@ -215,8 +224,7 @@ describe("createReceiptLog", () => {
       ...finishParts,
       ownership: { bucket: null, state: "unowned-candidate", candidate: BUCKET },
       remaining: { bucket: BUCKET, uploadIds: ["2~iCw_lDY8VoNTLVzOhy1YR.KD0Xb-x"] },
-      cleanupCommand:
-        "pnpm --filter @waitron/server exec tsx scripts/aws-rehearsal-cleanup.ts --receipt /tmp/r.json",
+      cleanupCommand: runnerCommand("eu-north-1", "/tmp/aws-rehearsal-run-1.json"),
     });
     expect(receipt.ownership.candidate).toBe(BUCKET);
     expect(receipt.remaining.uploadIds).toEqual(["2~iCw_lDY8VoNTLVzOhy1YR.KD0Xb-x"]);
@@ -451,6 +459,63 @@ describe("receipt rules widened for slice 7b", () => {
       'AWS_CONFIG_FILE="$HOME/.config/waitron-cloud/aws/config" AWS_PROFILE=waitron-rehearsal ' +
       "AWS_REGION=eu-north-1 pnpm --filter @waitron/server exec tsx scripts/aws-rehearsal-cleanup.ts " +
       "--receipt /var/folders/ab/x_y/T/waitron-aws-rehearsal/aws-rehearsal-run-1.json";
+    const receipt = createReceiptLog(header, KEYS).finish({
+      ...finishParts,
+      remaining: { bucket: BUCKET, uploadIds: [] },
+      cleanupCommand: command,
+    });
+    expect(receipt.cleanupCommand).toBe(command);
+  });
+
+  it.each([
+    [
+      "a bare script call",
+      "pnpm --filter @waitron/server exec tsx scripts/aws-rehearsal-cleanup.ts --receipt /tmp/r.json",
+    ],
+    [
+      "another script",
+      runnerCommand("eu-north-1", "/tmp/aws-rehearsal-run-1.json").replace(
+        "aws-rehearsal-cleanup",
+        "aws-rehearsal-wipe",
+      ),
+    ],
+    [
+      "another profile",
+      runnerCommand("eu-north-1", "/tmp/aws-rehearsal-run-1.json").replace(
+        "AWS_PROFILE=waitron-rehearsal",
+        "AWS_PROFILE=default",
+      ),
+    ],
+    [
+      "a region that is not a region",
+      runnerCommand("eu-north-1;", "/tmp/aws-rehearsal-run-1.json"),
+    ],
+    ["a relative receipt path", runnerCommand("eu-north-1", "tmp/aws-rehearsal-run-1.json")],
+    ["a receipt path that is not a receipt", runnerCommand("eu-north-1", "/tmp/credentials")],
+    [
+      "a second argument",
+      `${runnerCommand("eu-north-1", "/tmp/aws-rehearsal-run-1.json")} --force`,
+    ],
+    [
+      "a credentials file elsewhere",
+      runnerCommand("eu-north-1", "/tmp/aws-rehearsal-run-1.json").replace(
+        ".config/waitron-cloud",
+        ".aws",
+      ),
+    ],
+  ])("refuses a cleanup command that is a near miss: %s", (_label, command) => {
+    const log = createReceiptLog(header, KEYS);
+    expect(() =>
+      log.finish({
+        ...finishParts,
+        remaining: { bucket: BUCKET, uploadIds: [] },
+        cleanupCommand: command,
+      }),
+    ).toThrow("receipt field refused: cleanupCommand");
+  });
+
+  it("accepts the runner's command for a cleanup receipt", () => {
+    const command = runnerCommand("us-east-1", "/tmp/r/aws-rehearsal-run-1-cleanup.json");
     const receipt = createReceiptLog(header, KEYS).finish({
       ...finishParts,
       remaining: { bucket: BUCKET, uploadIds: [] },

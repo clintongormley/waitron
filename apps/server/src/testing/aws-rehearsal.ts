@@ -19,6 +19,8 @@ import {
   type GetBucketEncryptionCommandOutput,
   GetBucketVersioningCommand,
   type GetBucketVersioningCommandOutput,
+  GetObjectCommand,
+  type GetObjectCommandOutput,
   ListMultipartUploadsCommand,
   type ListMultipartUploadsCommandOutput,
   ListObjectsV2Command,
@@ -34,15 +36,20 @@ import {
 import {
   type AwsReceiptOwnership,
   type AwsReceiptRemaining,
+  cleanupCommandFor,
   createReceiptLog,
   isReceiptCleanupCommand,
+  isReceiptToken,
   isReceiptUploadId,
+  receiptFileName,
   REHEARSAL_BUCKET_PATTERN,
   type TeardownEntry,
   writeReceipt,
 } from "./aws-rehearsal-receipt.js";
 
 export const AWS_REHEARSAL_PROFILE = "waitron-rehearsal";
+
+export { cleanupCommandFor } from "./aws-rehearsal-receipt.js";
 
 export {
   AWS_REHEARSAL_LIMITS,
@@ -71,7 +78,9 @@ export type AwsRehearsalRefusalReason =
   | "versioning-not-off"
   | "upload-id-refused"
   | "child-pid-refused"
-  | "teardown-started";
+  | "teardown-started"
+  | "receipt-refused"
+  | "ownership-unproven";
 
 /** Its message names a rule and a variable or key, never a value read from the environment or a file. */
 export class AwsRehearsalRefused extends Error {
@@ -654,18 +663,6 @@ export async function teardownOwnedBucket(
   };
 }
 
-export function cleanupCommandFor(region: string, receiptPath: string): string {
-  return [
-    "WAITRON_RUN_AWS_REHEARSAL=1",
-    'AWS_SHARED_CREDENTIALS_FILE="$HOME/.config/waitron-cloud/aws/credentials"',
-    'AWS_CONFIG_FILE="$HOME/.config/waitron-cloud/aws/config"',
-    `AWS_PROFILE=${AWS_REHEARSAL_PROFILE}`,
-    `AWS_REGION=${region}`,
-    "pnpm --filter @waitron/server exec tsx scripts/aws-rehearsal-cleanup.ts",
-    `--receipt ${receiptPath}`,
-  ].join(" ");
-}
-
 function randomBucketSuffix(): string {
   const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
   return Array.from({ length: 12 }, () => alphabet[randomInt(alphabet.length)]).join("");
@@ -1071,12 +1068,12 @@ async function runOwned<T>(
       sourceOnly: SOURCE_ONLY_APIS,
     });
     await writeReceipt(receiptDir, receipt, profile);
-    deps.print(receiptPath);
   } catch (error) {
     receiptFailure = new AwsRehearsalFailed(
       `the receipt was not written (${receiptFailureCause(error)})`,
     );
   }
+  if (receiptFailure === undefined) deps.print(receiptPath);
 
   const teardownFailure =
     failedSteps.length === 0
@@ -1108,4 +1105,198 @@ async function runOwned<T>(
   }
   if (teardownFailure !== undefined) throw teardownFailure;
   return result as T;
+}
+
+export interface CleanupResult {
+  ok: boolean;
+  /** The cleanup's own receipt, or null when nothing was sent that needed one. */
+  receiptPath: string | null;
+}
+
+interface LeftReceipt {
+  runId: string;
+  region: string;
+  ownership: { state: string; bucket: unknown; candidate?: unknown };
+  bucket: string | null;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function receiptRefused(detail: string): AwsRehearsalRefused {
+  return new AwsRehearsalRefused("receipt-refused", detail);
+}
+
+/** Its refusals name a field, never a value read from the receipt. */
+function readLeftReceipt(text: string): LeftReceipt {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw receiptRefused("the receipt is not JSON");
+  }
+  if (!isPlainObject(parsed)) throw receiptRefused("the receipt is not an object");
+  const { header, ownership, remaining } = parsed;
+  if (!isPlainObject(header) || !isReceiptToken(header.runId)) {
+    throw receiptRefused("header.runId must be a token");
+  }
+  if (!isReceiptToken(header.region)) throw receiptRefused("header.region must be a token");
+  if (!isPlainObject(ownership) || typeof ownership.state !== "string") {
+    throw receiptRefused("ownership.state is missing");
+  }
+  if (!isPlainObject(remaining)) throw receiptRefused("remaining is missing");
+  const bucket = remaining.bucket;
+  if (bucket !== null && (typeof bucket !== "string" || !REHEARSAL_BUCKET_PATTERN.test(bucket))) {
+    throw receiptRefused("remaining.bucket is not a rehearsal bucket");
+  }
+  if (!Array.isArray(remaining.uploadIds) || !remaining.uploadIds.every(isReceiptUploadId)) {
+    throw receiptRefused("remaining.uploadIds is not a list of upload ids");
+  }
+  return {
+    runId: header.runId,
+    region: header.region,
+    ownership: { state: ownership.state, bucket: ownership.bucket, candidate: ownership.candidate },
+    bucket,
+  };
+}
+
+function rehearsalBucket(value: unknown): value is string {
+  return typeof value === "string" && REHEARSAL_BUCKET_PATTERN.test(value);
+}
+
+/** Refuses unless the receipt says this runner owned the bucket it still names. */
+function ownedBucketOf(left: LeftReceipt): string | null {
+  const { state, bucket, candidate } = left.ownership;
+  if (state === "unowned-candidate") {
+    if (!rehearsalBucket(candidate)) throw receiptRefused("ownership.candidate is not a bucket");
+    throw new AwsRehearsalRefused(
+      "ownership-unproven",
+      `the run never proved it owned ${candidate}; a person must check who owns it before deleting it`,
+    );
+  }
+  if (state === "collision" || state === "not-created") {
+    throw new AwsRehearsalRefused(
+      "ownership-unproven",
+      `the receipt records ${state}: the run never owned a bucket, so there is nothing to delete`,
+    );
+  }
+  if (state !== "owned" || !rehearsalBucket(bucket)) {
+    throw receiptRefused("ownership is not an owned rehearsal bucket");
+  }
+  if (left.bucket !== null && left.bucket !== bucket) {
+    throw receiptRefused("remaining.bucket is not the bucket the run owned");
+  }
+  return left.bucket;
+}
+
+function namesRun(text: string, runId: string): boolean {
+  try {
+    const marker: unknown = JSON.parse(text);
+    return isPlainObject(marker) && Object.keys(marker).length === 1 && marker.runId === runId;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Removes the bucket a rehearsal's receipt still names, once that bucket's ownership marker names the
+ * receipt's run. Never signals a process. Writes `aws-rehearsal-<runId>-cleanup.json` beside the
+ * receipt and prints only its path.
+ */
+export async function cleanupFromReceipt(
+  receiptPath: string,
+  overrides: Partial<AwsRehearsalDeps> = {},
+): Promise<CleanupResult> {
+  const env = overrides.env ?? process.env;
+  const deps: AwsRehearsalDeps = { ...defaultDeps(env), ...overrides };
+  assertRehearsalOptIn(env);
+  const profile = await loadRehearsalProfile(env, deps);
+  const path = resolve(receiptPath);
+  let text: string;
+  try {
+    text = await deps.readFile(path);
+  } catch {
+    throw receiptRefused("the receipt could not be read");
+  }
+  const left = readLeftReceipt(text);
+  if (left.region !== profile.region) {
+    throw new AwsRehearsalRefused("region-mismatch", "the receipt's region must equal AWS_REGION");
+  }
+  const bucket = ownedBucketOf(left);
+  if (bucket === null) {
+    deps.print("the receipt names no bucket left behind; nothing to do");
+    return { ok: true, receiptPath: null };
+  }
+  const { runId, region } = left;
+  const cleanupPath = join(dirname(path), receiptFileName(runId, "cleanup"));
+  if (!isReceiptCleanupCommand(cleanupCommandFor(region, cleanupPath))) {
+    throw new AwsRehearsalRefused(
+      "receipt-dir-unsupported",
+      "the receipt's folder cannot be named in a cleanup command",
+    );
+  }
+
+  const client = deps.createAdminClient(profile);
+  try {
+    const log = createReceiptLog(
+      {
+        runId,
+        commit: deps.commit(),
+        node: process.version,
+        sdkVersion: sdkVersion(),
+        litestreamVersion: LITESTREAM_VERSION,
+        region,
+        startedAt: new Date(deps.now()).toISOString(),
+        limits: { teardownMs: deps.teardownMs },
+      },
+      profile,
+    );
+    const record = (event: unknown) => log.record(event);
+    const marker = await call<GetObjectCommandOutput>(
+      client,
+      new GetObjectCommand({ Bucket: bucket, Key: AWS_REHEARSAL_NONCE_KEY }),
+      "GetObject",
+      "ownership",
+      { now: deps.now, record },
+      { objectRole: "ownership-nonce" },
+      AbortSignal.timeout(deps.teardownMs),
+    );
+    if (marker.error !== undefined && errorNameOf(marker.error) === "NoSuchBucket") {
+      deps.print("bucket not found; nothing deleted");
+      return { ok: true, receiptPath: null };
+    }
+    let markerText: string | undefined;
+    try {
+      markerText = await marker.output?.Body?.transformToString();
+    } catch {
+      markerText = undefined;
+    }
+    if (markerText === undefined || !namesRun(markerText, runId)) {
+      throw new AwsRehearsalRefused(
+        "ownership-unproven",
+        `${bucket}'s ownership marker is missing, unreadable or names another run; nothing deleted — ` +
+          "a person must check who owns it before deleting it",
+      );
+    }
+
+    const teardown = await teardownOwnedBucket(
+      client,
+      { bucket, runId, uploads: [], pids: [] },
+      { ...deps, record },
+    );
+    for (const entry of teardown.entries) log.teardown(entry);
+    const receipt = log.finish({
+      finishedAt: new Date(deps.now()).toISOString(),
+      ownership: { state: "owned", bucket },
+      remaining: teardown.remaining,
+      cleanupCommand:
+        teardown.remaining.bucket === null ? null : cleanupCommandFor(region, cleanupPath),
+    });
+    const written = await writeReceipt(dirname(path), receipt, profile, "cleanup");
+    deps.print(written);
+    return { ok: teardown.remaining.bucket === null, receiptPath: written };
+  } finally {
+    client.destroy?.();
+  }
 }

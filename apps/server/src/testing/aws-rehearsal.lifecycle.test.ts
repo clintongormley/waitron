@@ -786,6 +786,30 @@ describe("fix round 1", () => {
     );
     expect(() => ctx!.trackUpload("k", "id")).toThrow(AwsRehearsalRefused);
     expect(() => ctx!.trackChild(4242)).toThrow(AwsRehearsalRefused);
+    for (const track of [() => ctx!.trackUpload("k", "id"), () => ctx!.trackChild(4242)]) {
+      let refusal: unknown;
+      try {
+        track();
+      } catch (error) {
+        refusal = error;
+      }
+      expect((refusal as AwsRehearsalRefused).reason).toBe("teardown-started");
+    }
+  });
+
+  it("does not call a written receipt unwritten when printing its path fails", async () => {
+    const printFailure = new Error("stdout closed");
+    const h = harness(
+      {},
+      {
+        print: () => {
+          throw printFailure;
+        },
+      },
+    );
+    const error = await rejection(withAwsRehearsal(async () => "done", h.deps));
+    expect(error).toBe(printFailure);
+    expect(await readdir(receiptDir)).toEqual([`aws-rehearsal-${RUN_ID}.json`]);
   });
 
   it("aborts the scenario's signal when the scenario rejects", async () => {
