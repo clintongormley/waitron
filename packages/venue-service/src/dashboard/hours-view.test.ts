@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { setLocale } from "@waitron/dashboard-kit";
-import { format } from "./hours-view.js";
+import { format, formatDate, formatLongDate, formatWeekday } from "./hours-view.js";
 
 beforeEach(() => setLocale("en"));
 afterEach(() => setLocale("en"));
@@ -43,3 +43,17 @@ it.each([
     expect(api).not.toHaveProperty(method);
   },
 );
+
+it("names a weekday narrow or in full, and follows a change of language", () => {
+  expect(formatWeekday("2024-01-01", "narrow")).toBe("M");
+  expect(formatWeekday("2024-01-01", "long")).toBe("Monday");
+  expect(formatDate("2026-10-12")).toBe("Mon, 12 Oct 2026");
+  expect(formatLongDate("2026-10-12")).toBe("Monday, 12 October 2026");
+  setLocale("es");
+  expect(formatWeekday("2024-01-01", "narrow")).toBe("L");
+  expect(formatWeekday("2024-01-01", "long")).toBe("lunes");
+  expect(formatDate("2026-10-12")).toBe("lun, 12 oct 2026");
+  expect(formatLongDate("2026-10-12")).toBe("lunes, 12 de octubre de 2026");
+  setLocale("en");
+  expect(formatLongDate("2026-10-12")).toBe("Monday, 12 October 2026");
+});

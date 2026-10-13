@@ -531,6 +531,24 @@ describe("Opening hours year", () => {
     expect(root(el).querySelector("[name=holidayArea]")).toBeNull();
   });
 
+  it("names the weekdays atop every month, Monday first, in the language of each render", async () => {
+    const el = await mount();
+    const headers = () =>
+      [...root(el).querySelectorAll("thead tr")].map((row) =>
+        [...row.querySelectorAll("th")].map((th) => `${text(th)} ${th.getAttribute("abbr")}`),
+      );
+    expect(headers()).toHaveLength(12);
+    expect(new Set(headers().map((row) => row.join()))).toEqual(
+      new Set(["M Monday,T Tuesday,W Wednesday,T Thursday,F Friday,S Saturday,S Sunday"]),
+    );
+    setLocale("es");
+    el.requestUpdate();
+    await el.updateComplete;
+    expect(new Set(headers().map((row) => row.join()))).toEqual(
+      new Set(["L lunes,M martes,X miércoles,J jueves,V viernes,S sábado,D domingo"]),
+    );
+  });
+
   it("speaks Spanish", async () => {
     setLocale("es");
     const el = await mount(

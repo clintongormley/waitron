@@ -1,5 +1,4 @@
-import { currentLocale } from "@waitron/dashboard-kit";
-import { LitElement, css, html, nothing, type PropertyValues } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
@@ -11,7 +10,13 @@ import { addDays } from "../hours-rules.js";
 import type { OpeningHoursYear, OpeningHoursYearDay } from "../opening-hours-calendar.js";
 import { MONTHS, monthGrid } from "./calendar-grid.js";
 import { areaAddress, nationalCoverage } from "./holiday-coverage-text.js";
-import { format, formatDate, formatLongDate, formatMonthName } from "./hours-view.js";
+import {
+  format,
+  formatDate,
+  formatLongDate,
+  formatMonthName,
+  formatWeekday,
+} from "./hours-view.js";
 import type { SeasonWrites } from "./season-chips.js";
 import "./season-chips.js";
 import { seasonTints } from "./season-tint.js";
@@ -34,11 +39,6 @@ export type HolidayAreaWrites = Pick<SpecialDaysApi, "saveHolidayArea" | "reread
 
 /** A Monday, so its week names the columns Monday first. */
 const A_MONDAY = "2024-01-01";
-const weekday = (date: LocalDate, style: "narrow" | "long") =>
-  new Intl.DateTimeFormat(currentLocale().startsWith("es") ? "es-ES" : "en-GB", {
-    weekday: style,
-    timeZone: "UTC",
-  }).format(new Date(`${date}T00:00:00Z`));
 
 /** A year of the venue's days in twelve months, tinted by season and marked for public holidays,
  *  special days and closed days, drawn from the server's year read alone. A date opens a panel whose
@@ -365,6 +365,7 @@ export class OpeningHoursYearView extends LitElement {
     days: Map<LocalDate, OpeningHoursYearDay>,
     tints: Map<string, string>,
     stop: LocalDate,
+    header: TemplateResult,
   ) {
     const key = `${model.year}-${month}`;
     const grid = monthGrid(key);
@@ -381,14 +382,7 @@ export class OpeningHoursYearView extends LitElement {
       </button>
       <table aria-labelledby=${headingId} @keydown=${this.#keydown}>
         <thead>
-          <tr>
-            ${Array.from({ length: 7 }, (_, index) => {
-              const date = addDays(A_MONDAY, index);
-              return html`<th scope="col" abbr=${weekday(date, "long")}>
-                ${weekday(date, "narrow")}
-              </th>`;
-            })}
-          </tr>
+          ${header}
         </thead>
         <tbody>
           ${Array.from({ length: grid.length / 7 }, (_, row) => {
@@ -552,6 +546,14 @@ export class OpeningHoursYearView extends LitElement {
     if (!model) return nothing;
     const days = new Map(model.days.map((day) => [day.date, day]));
     const tints = seasonTints(model.seasons);
+    const header = html`<tr>
+      ${Array.from({ length: 7 }, (_, index) => {
+        const date = addDays(A_MONDAY, index);
+        return html`<th scope="col" abbr=${formatWeekday(date, "long")}>
+          ${formatWeekday(date, "narrow")}
+        </th>`;
+      })}
+    </tr>`;
     const prefix = `${model.year}-`;
     const stop =
       [this.focusDate, this.selected, model.today].find(
@@ -610,7 +612,7 @@ export class OpeningHoursYearView extends LitElement {
       }
       ${this.#warnings(model)} ${this.#area(model)} ${this.#notes(model)}
       <div class="months">
-        ${MONTHS.map((month) => this.#month(model, month, days, tints, stop))}
+        ${MONTHS.map((month) => this.#month(model, month, days, tints, stop, header))}
       </div>`;
   }
 }
