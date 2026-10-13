@@ -461,7 +461,7 @@ it("rewrite replaces the accepted entry's address in place and keeps its history
   const f = fixture();
   await guard.write("/guarded/b?dev=1#keep");
   const position = history.state.__wtNavigation;
-  const length = history.length;
+  const pushed = vi.spyOn(history, "pushState");
   f.edit();
   expect(guard.rewrite("/guarded/b2?dev=1#keep")).toBe("proceeded");
   expect(f.answers).toEqual([]);
@@ -469,7 +469,7 @@ it("rewrite replaces the accepted entry's address in place and keeps its history
   expect(guard.href).toBe(new URL("/guarded/b2?dev=1#keep", location.origin).href);
   expect(history.state.__wtNavigation).toEqual(position);
   expect(history.state.marker).toBe("original");
-  expect(history.length).toBe(length);
+  expect(pushed).not.toHaveBeenCalled();
   expect(f.routes).toEqual(["/guarded/b", "/guarded/b2"]);
   history.back();
   await expect.poll(() => f.answers.length).toBe(1);
