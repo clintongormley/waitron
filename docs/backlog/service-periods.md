@@ -230,6 +230,11 @@ from a season chip, an ordinary date and a zone's Opening hours link.
   to later entries, so ✕ can go back to a later entry of the same screen.
 - The navigation guard's `rewrite()` refuses while a leave question is open, so a live refresh that
   moves the painter to another season at that moment leaves the address on the old season.
+- Closing a painter opened from the zone dialog's "Opening hours (normal week)" link, on
+  Departments and zones, lands on the Opening hours Year, not back on Departments and zones
+  (ruling R20). It does what "else the Year" in ruling R14 says, but a manager loses their place.
+- At 390 px a block too short for both lines, such as a one-hour block, shows its period's name
+  but not its times (ruling R21). Only its spoken label names them (`paint-grid.ts`).
 
 **Left open by A506-7, for the later parts.**
 - Public holidays' names show in Spanish in the English interface (seen on the month view, #1623):
