@@ -144,7 +144,6 @@ export class OpeningHoursScreen extends LitElement {
         department: "department",
         zone: "zone",
         station: "station",
-        month: "month",
         season: "season",
         date: "date",
         year: "year",

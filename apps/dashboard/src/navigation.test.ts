@@ -172,18 +172,6 @@ it("preserves Opening hours zone and All departments URLs", async () => {
   expect(url.read("department")).toBe("all");
 });
 
-it("preserves an Opening hours Calendar month while the shell replaces its section", async () => {
-  history.replaceState(null, "", "/manage/opening-hours/view/calendar/month/2027-02?keep=yes");
-  const host = document.createElement("test-dashboard-navigation-host") as NavigationHost;
-  hosts.push(host);
-  document.body.append(host);
-  const url = new UrlStateController(host, () => {}, dashboardPath);
-  await url.write({ dashboard: "opening-hours" }, true);
-  expect(location.pathname).toBe("/manage/opening-hours/view/calendar/month/2027-02");
-  expect(location.search).toBe("?keep=yes");
-  host.remove();
-});
-
 it("preserves an Opening hours Day view's date while the shell replaces its section", async () => {
   history.replaceState(null, "", "/manage/opening-hours/view/day/date/2026-12-25");
   const host = document.createElement("test-dashboard-navigation-host") as NavigationHost;
@@ -213,7 +201,6 @@ it("declares no Station hours destination while retaining Opening hours navigati
     department: "department",
     zone: "zone",
     station: "station",
-    month: "month",
     season: "season",
     date: "date",
     year: "year",
