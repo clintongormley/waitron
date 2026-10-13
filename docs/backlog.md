@@ -4413,6 +4413,15 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   Task 2a (#557, a recovery key that does not need an archive destination) and A538-6d.
   [Detail](backlog/box.md#a-too-short-recovery-key-the-refusals-do-not-link-to-the-button-they-name-and-change-the-recovery-key-cannot-finish)
 
+- **A relative backup folder is accepted.** The Backups screen's hint asks for a full path, but
+  the server resolves whatever it is given (`resolve(dir)`, `apps/server/src/backup-config.ts`), so
+  `backups-relative` saved as a folder under the server's working directory (seen on the dev stack
+  during A538-6's visual check). I believe this predates A538-6: the line goes back to #226.
+
+- **At phone width the configuration export's passphrase labels overlap "Show password"** on the
+  Backups screen (seen at 390 px during A538-6's visual check, both themes). I believe this predates
+  A538-6: the export section came in with #296.
+
 - **The status watcher does not retry its own failed mint** (the mint is a POST, never passive
   session activity), so the screen then offers no key until it is reopened. Left open by SQLite
   slice 2 Task 2a (#557, a recovery key that does not need an archive destination).
