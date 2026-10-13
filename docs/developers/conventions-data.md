@@ -1617,7 +1617,7 @@ Edit the master plan on the dashboard; work from today's plan on the till. Savin
 master does not rearrange tables during service. The first save builds today's plan immediately
 (`apps/server/src/floor-plan.ts:412`). Thereafter `ensureToday` resets a live zone at the first
 floor read or change that sees a new business day, or catches up its pending reset rows
-(`apps/server/src/floor-today-store.ts:493`). Reset to saved plan takes a fresh copy explicitly.
+(`apps/server/src/floor-today-store.ts:501`). Reset to saved plan takes a fresh copy explicitly.
 
 A reset copies the master's tables into `floor_reset_tables`
 (`apps/server/src/floor-today-store.ts:149`), and each joined table's parts into
@@ -1652,7 +1652,8 @@ or in a split group that waits is ended as any free merge is. Its parts
 not split off stay joined meanwhile, and the split ends when the reset puts the joined table back,
 or, for the tables it takes back, when Join again does
 (`splitWithBusy`, `apps/server/src/floor-reset-plan.ts:38`; `waitingTogether`,
-`apps/server/src/floor-today-store.ts:464`).
+`apps/server/src/floor-today-store.ts:472`). The reset clears the "needs clearing" mark of each
+table it takes back (`catchUpPass`, `apps/server/src/floor-today-store.ts`).
 When deleting a table is refused, `removeLiveTables` deletes the split rows naming it and tries again,
 and puts them back if that is refused too (`apps/server/src/table-removal.ts:115`).
 Join again deletes the split rows of the tables split off a joined table that are free (held by no

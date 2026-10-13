@@ -236,6 +236,8 @@ undone at the next reset anyway.
 > Added 2026-10-12 by A503 part 2 ([design](2026-10-12-a503-joined-tables-design.md)): a joined table is a table on the saved plan made of two or more tables not placed on the plan (`floor_plan_table_parts`); each reset copies its parts (`floor_reset_table_parts`), and a part still joined cannot be seated, joined to a party, moved to, given a bill, merged, put on the map as a spare, named as an order's table or chosen for a department transfer (`table.in_joined_table`). It cannot yet be split.
 >
 > Added 2026-10-13 by A503 part 3: Split tables… now splits parts off a joined table for the day (§6.2).
+>
+> Added 2026-10-13 by A579 part 1 ([design](2026-10-13-a579-flattened-joined-tables-design.md)): Reset to saved plan also clears the "needs clearing" mark of each table it takes back (owner, "Clear the mark").
 
 ## 7. Seats
 

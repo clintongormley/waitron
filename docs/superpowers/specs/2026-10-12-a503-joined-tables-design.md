@@ -253,6 +253,8 @@ split today. A split decides only who sits where today.
   > as any free merge is, and the joined table is put back whole. Food on its way to any table of the
   > group holds it back too, and with it any merge one of the group's tables is in, until the food is
   > collected or its order is abandoned.
+  > Added 2026-10-13 by A579 part 1: it also clears the "needs clearing" mark of each table it takes
+  > back (owner, "Clear the mark").
 
 ### Service merges ask for seats
 

@@ -356,16 +356,6 @@ apart around a part guests held since the reset" (`apps/server/src/floor-today-j
 expects those 10 seats. #1608's first Codex review found it again (design gap 8). Left open by A503
 part 4 (#1608). Next: decide whether that table counts as staying apart.
 
-## A573. The reset takes back a split-off table that needs clearing
-
-**A573 (2026-10-13).** Join again leaves a split-off table that needs clearing apart, but "Reset to
-saved plan" does not wait for the mark: it takes the table back and puts the joined table back
-whole. The mark stays on the table (`dining_tables.needs_clearing_since`), which the till no longer
-shows, and shows again if the table is split off later. The reset's behaviour came with #1604.
-Owner question open in `~/waitron-campaign-c/questions.md` ("A503 part 4 … needs clearing"); the
-default built is to leave it. Next: the owner's answer — leave it, the reset waits, or the reset
-clears the mark.
-
 ## A574. `joined_table.parts_split_off` could say what to do
 
 **A574 (2026-10-13).** The till says "Some of its tables are split off" (`apps/till/src/i18n/codes.ts`);
