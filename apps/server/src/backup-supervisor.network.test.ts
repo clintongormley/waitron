@@ -590,7 +590,7 @@ describe("BackupSupervisor status, one destination at a time", () => {
             setTimeout(() => {
               events.push("listing settled");
               reject(new Error("stopped late"));
-            }, 300);
+            }, 2_000);
           },
           { once: true },
         );
@@ -613,7 +613,7 @@ describe("BackupSupervisor status, one destination at a time", () => {
     const started = Date.now();
     const s = await sup.status();
     events.push("status returned");
-    expect(Date.now() - started).toBeLessThan(300);
+    expect(Date.now() - started).toBeLessThan(1_000);
     if (!s.backupStatus.configured) throw new Error("not configured");
     expect(byId(s.backupStatus.destinations, "remote").readErrorCode).toBe(
       "backup.destination_timed_out",
@@ -626,6 +626,53 @@ describe("BackupSupervisor status, one destination at a time", () => {
       "remote closed",
     ]);
     expect(events).toContain("local closed");
+  }, 60_000);
+
+  it("a destination whose listing throws before it returns a promise reads with that code, beside a healthy sibling, and is closed", async () => {
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on("unhandledRejection", onUnhandled);
+    const closed: string[] = [];
+    vi.spyOn(LocalFsBackend.prototype, "close").mockImplementation(function (this: LocalFsBackend) {
+      closed.push(this.id);
+    });
+    const logs: LogLine[] = [];
+    const cfg = config([
+      { id: "local", dir: await tempDir("waitron-bsupnet-local-") },
+      { id: "remote", dir: await tempDir("waitron-bsupnet-remote-") },
+    ]);
+    let throwOnList = false;
+    const sup = await supervisor(() => cfg, logs, 100, undefined, {
+      buildBackend: (dest) => {
+        const backend = buildBackupBackend(dest);
+        if (throwOnList && dest.id === "remote")
+          backend.list = () => {
+            throw new AppError("backup.destination_key_invalid", { field: "prefix" });
+          };
+        return backend;
+      },
+    });
+    try {
+      // Stopped before the read, so every close seen after it is the status read's.
+      await sup.reload();
+      await sup.stop();
+      closed.length = 0;
+      throwOnList = true;
+
+      const s = await sup.status();
+      if (!s.backupStatus.configured) throw new Error("not configured");
+      expect(byId(s.backupStatus.destinations, "remote").readErrorCode).toBe(
+        "backup.destination_key_invalid",
+      );
+      expect(byId(s.backupStatus.destinations, "local").readErrorCode).toBeNull();
+      await poll(() => (closed.length === 2 ? true : undefined));
+      expect(closed.sort()).toEqual(["local", "remote"]);
+      // Past the read limit, where an unobserved timer rejection would surface.
+      await new Promise((r) => setTimeout(r, 300));
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
   }, 60_000);
 
   it("reports an archive under the current key once one destination stored, while a sibling's upload is still stalled", async () => {

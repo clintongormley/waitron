@@ -55,7 +55,13 @@ export function readDestinationStatus(
       controller.abort(timedOut);
     }, readTimeoutMs);
   });
-  const listing = backend.list(BACKUP_KEY_PREFIX, { signal: controller.signal });
+  let listing: Promise<StoredObject[]>;
+  try {
+    listing = backend.list(BACKUP_KEY_PREFIX, { signal: controller.signal });
+  } catch (err) {
+    // No async wrapper: its extra ticks let the timer-order tests pass whichever order the timer uses.
+    listing = Promise.reject(err);
+  }
   const settled = listing.then(
     () => clearTimeout(timer),
     () => clearTimeout(timer),
