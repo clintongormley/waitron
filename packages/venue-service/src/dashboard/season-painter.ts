@@ -24,6 +24,7 @@ import { seasonTints, seasonTintStyles } from "./season-tint.js";
 import { weekdayLabel } from "./season-week-view.js";
 import { t } from "./strings.js";
 import { periodColourStyles } from "./period-colour-styles.js";
+import { paintRow, paintRowStyles } from "./paint-row.js";
 import { refusalOf } from "./refusal.js";
 import "./painter-frame.js";
 import "./paint-grid.js";
@@ -150,6 +151,7 @@ export class SeasonPainter extends LitElement {
     baseStyles,
     seasonTintStyles,
     periodColourStyles,
+    paintRowStyles,
     css`
       :host {
         display: contents;
@@ -181,96 +183,6 @@ export class SeasonPainter extends LitElement {
       }
       a {
         color: var(--wt-color-primary-text);
-      }
-      .paint {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: var(--wt-space-2);
-        border-block-start: 1px solid var(--wt-color-border);
-        border-block-end: 1px solid var(--wt-color-border);
-        padding-block: var(--wt-space-2);
-      }
-      .label {
-        color: var(--wt-color-text-muted);
-      }
-      .pots {
-        display: contents;
-      }
-      /* On a phone the paint chips scroll sideways in one line, leaving the height to the grid. */
-      @media (width < 720px) {
-        .pots {
-          display: flex;
-          align-items: center;
-          gap: var(--wt-space-2);
-          flex: 1 1 100%;
-          min-width: 0;
-          overflow-x: auto;
-          padding: var(--wt-field-line-width-active);
-        }
-        .pots > * {
-          flex: none;
-        }
-        .hint {
-          margin-inline-start: 0;
-        }
-      }
-      .pot {
-        display: inline-flex;
-        align-items: stretch;
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-surface);
-      }
-      .pot:has(button[aria-pressed="true"]) {
-        outline: var(--wt-field-line-width-active) solid var(--wt-color-text);
-      }
-      .pot button,
-      .new {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--wt-space-2);
-        min-height: var(--wt-tap-min);
-        border: 0;
-        background: none;
-        color: var(--wt-color-text);
-        padding: 0 var(--wt-space-3);
-        font: inherit;
-        cursor: pointer;
-      }
-      .pot button[aria-pressed="true"] {
-        font-weight: var(--wt-font-weight-bold);
-      }
-      .pot button:focus-visible,
-      .new:focus-visible {
-        outline: var(--wt-focus-ring);
-        outline-offset: var(--wt-focus-offset);
-      }
-      .pot .edit {
-        padding-inline: var(--wt-space-2);
-        color: var(--wt-color-text-muted);
-      }
-      .new {
-        border: 1px dashed var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-      }
-      .swatch {
-        inline-size: var(--wt-space-3);
-        block-size: var(--wt-space-3);
-        border-radius: var(--wt-radius-sm);
-        background: var(--period-fill);
-      }
-      .swatch.closed {
-        background: repeating-linear-gradient(
-          135deg,
-          var(--wt-color-border) 0 var(--wt-space-1),
-          transparent 0 calc(var(--wt-space-1) * 2)
-        );
-      }
-      .hint {
-        margin-inline-start: auto;
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
       }
     `,
   ];
@@ -749,63 +661,32 @@ export class SeasonPainter extends LitElement {
       }`;
   }
   private paintRow(department: Department, chosen: string | null, zoned: boolean) {
-    const choose = (id: string | null) => {
-      this.chosen = id;
-    };
-    return html`<div slot="row" class="paint">
-      <div class="pots">
-        <span class="label">${t("painter.paint")}</span>
-        ${
-          zoned
-            ? nothing
-            : department.periods.map(
-                (period) =>
-                  html`<span class="pot">
-                    <button
-                      type="button"
-                      data-test=${`paint-${period.id}`}
-                      aria-pressed=${chosen === period.id ? "true" : "false"}
-                      @click=${() => choose(period.id)}
-                    >
-                      <span class="swatch" data-colour=${period.colour}></span>${period.name}
-                    </button>
-                    <button
-                      type="button"
-                      class="edit"
-                      data-test=${`edit-${period.id}`}
-                      aria-label=${format("painter.edit_period", { name: period.name })}
-                      @click=${() => this.openPeriod(department, period)}
-                    >
-                      ✎
-                    </button>
-                  </span>`,
-              )
-        }
-        <span class="pot">
-          <button
+    return paintRow({
+      slot: "row",
+      pots: [
+        ...(zoned
+          ? []
+          : department.periods.map((period) => ({
+              ...period,
+              edit: () => this.openPeriod(department, period),
+            }))),
+        { id: null, name: t("hours.closed") },
+      ],
+      chosen,
+      choose: (id) => {
+        this.chosen = id;
+      },
+      after: zoned
+        ? nothing
+        : html`<button
             type="button"
-            data-test="paint-closed"
-            aria-pressed=${chosen === null ? "true" : "false"}
-            @click=${() => choose(null)}
+            class="new"
+            data-test="new-period"
+            @click=${() => this.openPeriod(department)}
           >
-            <span class="swatch closed"></span>${t("hours.closed")}
-          </button>
-        </span>
-        ${
-          zoned
-            ? nothing
-            : html`<button
-                type="button"
-                class="new"
-                data-test="new-period"
-                @click=${() => this.openPeriod(department)}
-              >
-                ${t("painter.new_period")}
-              </button>`
-        }
-      </div>
-      <span class="hint" data-test="hint">${t("painter.hint")}</span>
-    </div>`;
+            ${t("painter.new_period")}
+          </button>`,
+    });
   }
   private periodEditor() {
     const editor = this.editor;

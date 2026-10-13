@@ -87,6 +87,10 @@ const en = {
   "special.load_error": "This special day could not be loaded.",
   "special.no": "No",
   "special.yes": "Yes",
+  "special.open": "Open",
+  "special.season_error": "The season's hours could not be loaded.",
+  "special.changeover_differs":
+    "These dates start their day at different times; drawn from {time}.",
   "special.explain":
     "Each date starts with its season's hours, drawn faded. What you paint replaces them for that stretch. Paint Closed to shut part of a day, or tick Closed under a date to shut all of it.",
   "season.seasons": "Seasons",
@@ -892,6 +896,10 @@ const es: Record<keyof typeof en, string> = {
   "special.load_error": "No se ha podido cargar este día especial.",
   "special.no": "No",
   "special.yes": "Sí",
+  "special.open": "Abierto",
+  "special.season_error": "No se ha podido cargar el horario de la temporada.",
+  "special.changeover_differs":
+    "Estas fechas empiezan el día a horas distintas; se dibujan desde las {time}.",
   "special.explain":
     "Cada fecha empieza con el horario de su temporada, en tenue. Lo que pintes lo sustituye en ese tramo. Pinta Cerrado para cerrar parte del día, o marca Cerrado bajo una fecha para cerrarla entera.",
   "season.seasons": "Temporadas",

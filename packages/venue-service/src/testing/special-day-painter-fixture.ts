@@ -1,6 +1,8 @@
 import { type DashboardRequest } from "@waitron/dashboard-kit";
 import { OpeningHoursApi } from "../dashboard/opening-hours-client.js";
 import type { SpecialDayPainter } from "../dashboard/special-day-painter.js";
+import type { SeasonDays } from "../opening-hours-calendar.js";
+import type { ClosedRange, ServiceRange } from "../service-day.js";
 import type { SpecialDayDetail, SpecialDaySummary } from "../special-days.js";
 import { painterModel, type Write } from "./season-painter-fixture.js";
 
@@ -36,6 +38,16 @@ export interface SpecialDayAnswers {
   taken?: readonly { date: string; id: string; name: string }[];
   /** Months whose read fails. */
   failingMonths?: readonly string[];
+  /** Each date's season, which the season days read reports; by default no hours and no closures. */
+  season?: (date: string) => {
+    ranges?: ServiceRange[];
+    zones?: Record<string, ClosedRange[]>;
+    dayCutover?: string;
+  };
+  /** Awaited before a season days read answers. */
+  seasonAfter?: () => Promise<unknown>;
+  /** The season days read fails. */
+  failingSeason?: () => boolean;
   /** A write's answer; thrown when it returns an object with a `code`. Defaults to the saved day. */
   answer?: (write: Write) => unknown;
 }
@@ -68,6 +80,31 @@ export function specialDayApi(writes: Write[] = [], answers: SpecialDayAnswers =
         if (!found) throw { code: "special_day.not_found" };
         return structuredClone(found);
       }
+      if (url.includes("/opening-hours/season-days?")) {
+        await answers.seasonAfter?.();
+        if (answers.failingSeason?.()) throw { code: "server.internal" };
+        const dates = new URL(url, "http://x").searchParams.get("dates")!.split(",");
+        return {
+          days: dates.map((date) => {
+            const season = answers.season?.(date) ?? {};
+            return {
+              date,
+              seasonId: "winter",
+              dayCutover: season.dayCutover ?? "06:00",
+              departments: [
+                {
+                  departmentId: "d1",
+                  ranges: season.ranges ?? [],
+                  zones: ["z1", "z2"].map((zoneId) => ({
+                    zoneId,
+                    closed: season.zones?.[zoneId] ?? [],
+                  })),
+                },
+              ],
+            };
+          }),
+        } satisfies SeasonDays;
+      }
       const month = /\/opening-hours\/month\?month=(\d{4}-\d{2})/.exec(url)?.[1];
       if (month && answers.failingMonths?.includes(month)) throw { code: "server.internal" };
       if (month)
@@ -93,6 +130,35 @@ export const grid = (el: SpecialDayPainter) =>
   el.shadowRoot!.querySelector<HTMLElementTagNameMap["paint-grid"]>("paint-grid")!;
 export const part = <T extends HTMLElement = HTMLElement>(el: SpecialDayPainter, test: string) =>
   el.shadowRoot!.querySelector<T>(`[data-test="${test}"]`);
+export async function pick(el: SpecialDayPainter, value: string) {
+  el.shadowRoot!.querySelector("[name=department]")!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+  );
+  await settle(el);
+}
+function point(el: HTMLElementTagNameMap["paint-grid"], key: string, minute: number, type: string) {
+  const day = el.shadowRoot!.querySelector<HTMLElement>(`.day[data-column="${key}"]`)!;
+  const box = day.getBoundingClientRect();
+  (type === "pointerdown" ? day : window).dispatchEvent(
+    new PointerEvent(type, {
+      bubbles: true,
+      composed: true,
+      pointerId: 7,
+      button: 0,
+      clientX: box.left + box.width / 2,
+      clientY: box.top + (minute / 1440) * box.height,
+    }),
+  );
+}
+/** Minutes are counted from the changeover the grid draws from. */
+export async function drag(el: SpecialDayPainter, key: string, from: number, to: number) {
+  const target = grid(el);
+  point(target, key, from, "pointerdown");
+  point(target, key, to, "pointermove");
+  await target.updateComplete;
+  point(target, key, to, "pointerup");
+  await settle(el);
+}
 export async function settle(el: SpecialDayPainter) {
   await el.updateComplete;
   await frame(el)?.updateComplete;
