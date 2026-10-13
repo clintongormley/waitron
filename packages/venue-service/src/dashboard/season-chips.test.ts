@@ -494,3 +494,29 @@ it("deletes with the clock revision the dialog opened at, though a newer one arr
   await expect.poll(() => changed.length).toBe(1);
   expect(api.deleteSeason).toHaveBeenCalledWith("sp", 7);
 });
+
+it("keeps a save busy when an earlier save, sent before the chips were moved, answers first", async () => {
+  const answers: (() => void)[] = [];
+  const api = fakeApi({
+    saveSeason: vi.fn(
+      (id: string, input: { name: string; startsOn: string }) =>
+        new Promise((resolve) => answers.push(() => resolve({ id, ...input }))),
+    ),
+  });
+  await mount(four, api);
+  await openChip("Winter");
+  await change("name", "Cold");
+  await click("[data-test=save-season]");
+  el.remove();
+  document.body.append(el);
+  await settle();
+  await openChip("Winter");
+  await change("name", "Colder");
+  await click("[data-test=save-season]");
+  expect(save().loading).toBe(true);
+  answers[0]!();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await settle();
+  expect(save().loading).toBe(true);
+  expect(api.saveSeason).toHaveBeenCalledTimes(2);
+});
