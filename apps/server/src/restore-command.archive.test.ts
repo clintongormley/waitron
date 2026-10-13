@@ -1,7 +1,8 @@
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { DatabaseSync } from "node:sqlite";
 import { join } from "node:path";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { loadKeyRing } from "@waitron/credentials";
 import {
@@ -9,11 +10,20 @@ import {
   locations,
   nodes,
   openVenueDatabase,
+  sales,
   tenants,
   withTransaction,
+  type Database,
 } from "@waitron/db";
+import { seedDevice } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { contadoresInstalacion, installationFloor, registroSif } from "@waitron/fiscal-verifactu";
+import {
+  cadenas,
+  contadoresInstalacion,
+  installationFloor,
+  registroSif,
+  registrosFacturacion,
+} from "@waitron/fiscal-verifactu";
 import { hashPin, persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { AppError, jobOrigin } from "@waitron/shared";
@@ -26,7 +36,11 @@ import { packArchive } from "./backup-archive.js";
 import { backupArchiveKey, dumpFileName } from "./backup-keys.js";
 import { buildManifest } from "./backup-manifest.js";
 import { ALL_MODULES } from "./modules.js";
-import { restoreFromArtifactFile, type RestoreFileDeps } from "./restore.js";
+import {
+  restoreFromArtifactFile,
+  type RestoreFileDeps,
+  type ValidatedArtifact,
+} from "./restore.js";
 import { runRestore } from "./restore-command.js";
 import { readStreamSettings } from "./stream-host.js";
 
@@ -37,12 +51,16 @@ const KEY = backupArchiveKey(new Date("2026-10-01T03:00:00Z"));
 const COLD_RESTORE_NOTICE =
   "cold restore: use only when no peer (mirror or local secondary) survived — a survivor holds more history and is promoted, not overwritten";
 const WRONG_KEY_LINE = "restore failed: wrong recovery key or corrupt artifact";
+const DISK_FULL_LINE =
+  "restore failed: the disk filled during the restore; free some space and run it again";
+const HUELLA = "A".repeat(64);
 
 const ids = {
   location: "a5380000-0000-4000-8000-000000000001",
   node: "a5380000-0000-4000-8000-000000000002",
   series: "a5380000-0000-4000-8000-000000000003",
   sif: "a5380000-0000-4000-8000-000000000004",
+  sale: "a5380000-0000-4000-8000-000000000005",
 };
 
 const suite = useVenueDb({
@@ -85,9 +103,13 @@ beforeAll(async () => {
       operationDescription: "Venta",
     });
     await tx.insert(nodes).values({ id: ids.node, locationId: ids.location, name: "Archive node" });
-    await tx
-      .insert(invoiceSeries)
-      .values({ id: ids.series, nodeId: ids.node, code: "FA", purpose: "standard" });
+    await tx.insert(invoiceSeries).values({
+      id: ids.series,
+      nodeId: ids.node,
+      code: "FA",
+      purpose: "standard",
+      nextNumber: 5,
+    });
     await tx
       .insert(invoiceSeries)
       .values({ nodeId: ids.node, code: "RE", purpose: "rectificative" });
@@ -108,6 +130,7 @@ beforeAll(async () => {
       .returning({ id: persons.id });
     personId = person!.id;
   });
+  await seedFiscalRecord(suite.db);
   for (const at of ["2026-10-01T09:00:00Z", "2026-10-01T13:00:00Z"]) {
     await suite.db.transaction((tx) =>
       appendToChain(
@@ -160,6 +183,83 @@ afterAll(async () => {
   }
   await rm(scratch, { recursive: true, force: true });
 });
+
+/** One filed sale and a chain head pointing at it, as `restore-fiscal-e2e.test.ts` seeds them. */
+async function seedFiscalRecord(db: Database): Promise<void> {
+  await seedDevice(db, { locationId: ids.location });
+  const device = sql`(select id from devices where location_id = ${ids.location})`;
+  await db.insert(sales).values({
+    id: ids.sale,
+    source: "device",
+    deviceId: device,
+    nodeId: ids.node,
+    seriesId: ids.series,
+    invoiceNumber: 4,
+    issuedAt: "2026-07-20T19:20:30+01:00",
+    issuedOffsetMinutes: 60,
+    total: 0,
+    vatBreakdown: [],
+    locale: "es",
+    invoiceLocales: ["es"],
+    fiscalBackend: "verifactu",
+    fiscalState: "recorded",
+  });
+  const [registro] = await db
+    .insert(registrosFacturacion)
+    .values({
+      source: "device",
+      deviceId: device,
+      nodeId: ids.node,
+      sifId: ids.sif,
+      saleId: ids.sale,
+      secuencia: 1,
+      tipoRegistro: "alta",
+      idEmisorFactura: "89890001K",
+      numSerieFactura: "FA/4",
+      fechaExpedicionFactura: "2026-07-20",
+      nombreRazonEmisor: "Archive source",
+      tipoFactura: "F2",
+      descripcionOperacion: "Venta",
+      desglose: [],
+      cuotaTotal: "12.35",
+      importeTotal: "123.45",
+      primerRegistro: true,
+      sistemaInformatico: {},
+      fechaHoraHusoGenRegistro: new Date("2026-07-20T19:20:30+01:00"),
+      offsetMinutos: 60,
+      tipoHuella: "01",
+      huella: HUELLA,
+    })
+    .returning({ id: registrosFacturacion.id });
+  await db.insert(cadenas).values({
+    nodeId: ids.node,
+    secuencia: 1,
+    ultimoRegistroId: registro!.id,
+    ultimaHuella: HUELLA,
+  });
+}
+
+async function chainHead(db: Database): Promise<unknown[]> {
+  return db
+    .select({ ultimaHuella: cadenas.ultimaHuella, secuencia: cadenas.secuencia })
+    .from(cadenas)
+    .where(eq(cadenas.nodeId, ids.node));
+}
+
+async function seriesOfNode(
+  db: Database,
+): Promise<{ code: string; retired: boolean; next: number }[]> {
+  const rows = await db
+    .select({
+      code: invoiceSeries.code,
+      retiredAt: invoiceSeries.retiredAt,
+      next: invoiceSeries.nextNumber,
+    })
+    .from(invoiceSeries)
+    .where(eq(invoiceSeries.nodeId, ids.node))
+    .orderBy(invoiceSeries.code);
+  return rows.map(({ code, retiredAt, next }) => ({ code, retired: retiredAt !== null, next }));
+}
 
 interface Fixture {
   root: string;
@@ -296,6 +396,12 @@ describe("waitron-restore restore --from-archive", () => {
     const expectedChain = await readChain(suite.db, chainKey);
     const expectedHead = await suite.db.select().from(workforceChains);
     expect(expectedChain.map((e) => e.sequenceNo)).toEqual([1, 2]);
+    expect(await chainHead(suite.db)).toEqual([{ ultimaHuella: HUELLA, secuencia: 1 }]);
+    expect(await seriesOfNode(suite.db)).toEqual([
+      { code: "FA", retired: false, next: 5 },
+      { code: "FF", retired: false, next: 1 },
+      { code: "RE", retired: false, next: 1 },
+    ]);
 
     const f = await fixture();
     // The pack carries the recovery key; a different one in the environment is not used.
@@ -332,6 +438,16 @@ describe("waitron-restore restore --from-archive", () => {
       expect(sifs[1]!.numeroInstalacion).toBeGreaterThanOrEqual(
         installationFloor(new Date(Date.now() - 60_000)),
       );
+      const n = sifs[1]!.numeroInstalacion;
+      expect(await chainHead(db)).toEqual([{ ultimaHuella: null, secuencia: 1 }]);
+      expect(await seriesOfNode(db)).toEqual([
+        { code: "FA", retired: true, next: 5 },
+        { code: `FA-${n}`, retired: false, next: 1 },
+        { code: "FF", retired: true, next: 1 },
+        { code: `FF-${n}`, retired: false, next: 1 },
+        { code: "RE", retired: true, next: 1 },
+        { code: `RE-${n}`, retired: false, next: 1 },
+      ]);
       // The working-time chain continues from the backup's head.
       expect(await readChain(db, chainKey)).toEqual(expectedChain);
       expect(await db.select().from(workforceChains)).toEqual(expectedHead);
@@ -514,15 +630,80 @@ describe("waitron-restore restore --from-archive", () => {
     await expect(stat(seen!)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  it("hands the restore the old-box check, settled at once with --confirm-old-box-gone", async () => {
+  it.each([
+    [[], false],
+    [["--confirm-old-box-gone"], true],
+  ] as const)(
+    "hands the restore the old-box check (flags %j; settles at once: %s)",
+    async (flags, settles) => {
+      const f = await fixture();
+      const unreadable = {
+        manifest: { manifestVersion: 1, createdAt: "", environment: "preproduction", modules: {} },
+        databasePath: join(f.root, "unreadable.db"),
+        discard: async () => {},
+        secretEntries: [
+          { name: "secrets/secrets.env", bytes: Buffer.from("WAITRON_CREDENTIALS_KEY=x\n") },
+        ],
+      } as unknown as ValidatedArtifact;
+      await writeFile(unreadable.databasePath, "not a database");
+      let check: RestoreFileDeps["checkSourceLive"];
+      await run(f, [...flags], {
+        restore: async (deps) => {
+          check = deps.checkSourceLive;
+        },
+      });
+      expect(check).toBeDefined();
+      // With the flag the check returns at once; without it, it reads the archive's database.
+      const outcome = await check!(unreadable).then(
+        () => true,
+        () => false,
+      );
+      expect(outcome).toBe(settles);
+    },
+  );
+
+  it("says the disk filled when the restore step runs out of space, without a path", async () => {
     const f = await fixture();
-    let check: RestoreFileDeps["checkSourceLive"];
-    await run(f, ["--confirm-old-box-gone"], {
+    await liveVenue(f);
+    const before = await venueFiles(f);
+    let seen: string | undefined;
+    const { code, out } = await run(f, ["--confirm-old-box-gone"], {
       restore: async (deps) => {
-        check = deps.checkSourceLive;
+        seen = deps.artifactPath;
+        throw Object.assign(new Error(`ENOSPC: no space left on device, write '${seen}'`), {
+          code: "ENOSPC",
+        });
       },
     });
-    await expect(check!({} as never)).resolves.toBeUndefined();
+    expect({ code, last: out.at(-1) }).toEqual({ code: 1, last: DISK_FULL_LINE });
+    expect(out.join("\n")).not.toContain(f.root);
+    await expect(stat(seen!)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await venueFiles(f)).toEqual(before);
+    expect(await legalName(f.venueDir)).toBe("Live venue");
+  });
+
+  it("downloads the archive before it is refused by a server holding the venue folder", async () => {
+    const f = await fixture();
+    await liveVenue(f);
+    const held = new DatabaseSync(join(f.venueDir, "venue.lock"));
+    held.exec("begin immediate");
+    let before: Record<string, string>;
+    let after: Record<string, string>;
+    let result: { code: number; out: string[] };
+    try {
+      before = await venueFiles(f);
+      result = await run(f, ["--confirm-old-box-gone"]);
+      after = await venueFiles(f);
+    } finally {
+      held.close();
+    }
+    expect(after).toEqual(before);
+    expect(f.storeCalls).toContain(`getFile:${KEY}`);
+    expect({ code: result.code, last: result.out.at(-1) }).toEqual({
+      code: 1,
+      last: "restore failed: provisioning.database_in_use — another process, usually the Waitron server, is using this venue folder; stop it first (docker compose stop app)",
+    });
+    expect(await legalName(f.venueDir)).toBe("Live venue");
   });
 });
 

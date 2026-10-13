@@ -139,10 +139,21 @@ async function restoreArtifact(
     });
     return true;
   } catch (err) {
-    deps.out((err instanceof AppError && archiveRefusal(err)) || sharedRefusal(err));
+    deps.out(
+      (err as { code?: unknown } | null)?.code === "ENOSPC"
+        ? RESTORE_DISK_FULL
+        : (err instanceof AppError && archiveRefusal(err)) || sharedRefusal(err),
+    );
     return false;
   }
 }
+
+/**
+ * No "nothing changed": the last secrets write runs after the database is placed
+ * (`placeValidated`, `restore.ts`).
+ */
+const RESTORE_DISK_FULL =
+  "restore failed: the disk filled during the restore; free some space and run it again";
 
 type ParsedArgs =
   | { artifactPath: string; oldBoxGone: boolean }

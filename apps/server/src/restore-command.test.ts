@@ -949,6 +949,27 @@ describe("waitron-restore restore <artifact> and the old server", () => {
     expect(code).toBe(1);
     expect(out).toEqual([COLD_RESTORE_NOTICE, line]);
   });
+
+  it("says the disk filled when the restore runs out of space, without the path", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-cli-archive-"));
+    const artifactPath = await makeArtifact(dir);
+    const out: string[] = [];
+    const code = await runRestore({
+      argv: ["restore", artifactPath],
+      env: { WAITRON_STATE_DIR: dir, WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY },
+      out: (l) => out.push(l),
+      restore: async (d) => {
+        throw Object.assign(new Error(`ENOSPC: no space left on device, write '${d.stagingDir}'`), {
+          code: "ENOSPC",
+        });
+      },
+    });
+    expect(code).toBe(1);
+    expect(out).toEqual([
+      COLD_RESTORE_NOTICE,
+      "restore failed: the disk filled during the restore; free some space and run it again",
+    ]);
+  });
 });
 
 describe("waitron-restore restore, the arguments each form accepts", () => {
