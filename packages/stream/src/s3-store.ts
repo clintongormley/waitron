@@ -4,54 +4,37 @@ import {
   GetObjectCommand,
   ListObjectsV2Command,
   PutObjectCommand,
-  S3Client,
 } from "@aws-sdk/client-s3";
 import type {
   DeleteObjectsCommandOutput,
   GetObjectCommandOutput,
   ListObjectsV2CommandOutput,
   PutObjectCommandOutput,
-  S3ClientConfig,
 } from "@aws-sdk/client-s3";
 import { setTimeout as sleep } from "node:timers/promises";
 import { AppError } from "@waitron/shared";
-import { loggableErrorName, type AnswerRefusal } from "./bucket-error-names.js";
+import type { AnswerRefusal } from "./bucket-error-names.js";
 import "./errors.js";
 import type { BucketOperation } from "./errors.js";
 import { normalisePrefix, strayListedKey } from "./names.js";
 import type { ListedObject, ObjectStore, PutCondition } from "./object-store.js";
+import {
+  answerRefused,
+  createBucketClient,
+  nameOf,
+  requestFailed,
+  statusOf,
+  type BucketConfig,
+  type S3ObjectStoreOptions,
+} from "./s3-client.js";
+import {
+  callCancelled,
+  cancellableWait,
+  eachUntilFailure,
+  throwIfCancelled,
+} from "./store-call.js";
 
-export interface BucketConfig {
-  /** Absent for Amazon S3 itself; the address of any other S3-compatible store. */
-  endpoint?: string;
-  region: string;
-  bucket: string;
-  /** A folder inside the bucket the venue's objects live under; "" for the bucket root. */
-  prefix: string;
-  accessKeyId: string;
-  secretAccessKey: string;
-}
-
-export interface S3ObjectStoreOptions {
-  /** Replaces the network, and with it {@link BUCKET_IDLE_MS}. Tests only. */
-  requestHandler?: S3ClientConfig["requestHandler"];
-  /** Replaces the wait between conflict retries. Tests only. */
-  sleep?: (ms: number) => Promise<void>;
-  /** Replaces {@link BUCKET_IDLE_MS}. Tests only. */
-  idleMs?: number;
-}
-
-/**
- * The handler's `socketTimeout`. A request that gets no reply is given up, and the client makes
- * three attempts in all (its default). An answer whose headers arrive within the first three
- * seconds and whose body then stalls is not given up: at this size the handler sets the limit three
- * seconds into the request, so headers that arrive before then cancel it before it is set; once
- * set, it stays for the rest of the request. `requestTimeout` is not used because it stops counting
- * at the headers and only warns unless `throwOnRequestTimeout` is set.
- * Thirty seconds keeps the three attempts inside the stream's five-minute read deadline
- * (`READ_DEADLINE_MS`, `./supervisor.ts`). Receipts: #676.
- */
-const BUCKET_IDLE_MS = 30_000;
+export type { BucketConfig, S3ObjectStoreOptions } from "./s3-client.js";
 
 /** S3's own limit: "The request can contain a list of up to 1,000 keys" (API_DeleteObjects). */
 const DELETE_BATCH_KEYS = 1000;
@@ -61,40 +44,6 @@ export const DELETE_CONCURRENCY = 8;
 /** How many times a write answered "conflict" is sent in all before it is reported as failed. */
 export const CONFLICT_ATTEMPTS = 5;
 const CONFLICT_BACKOFF_MS = 200;
-
-function statusOf(error: unknown): number | null {
-  const status = (error as { $metadata?: { httpStatusCode?: unknown } } | null)?.$metadata
-    ?.httpStatusCode;
-  return typeof status === "number" ? status : null;
-}
-
-function nameOf(error: unknown): string {
-  return error instanceof Error ? error.name : "Unknown";
-}
-
-// Vetted here because callers log these params, and answer them over HTTP, as they are.
-function requestFailed(
-  operation: BucketOperation,
-  key: string,
-  status: number | null,
-  name: string,
-): AppError {
-  return new AppError("backup.stream_request_failed", {
-    operation,
-    key,
-    status,
-    name: loggableErrorName(name),
-  });
-}
-
-function answerRefused(
-  operation: BucketOperation,
-  key: string,
-  status: number | null,
-  name: AnswerRefusal,
-): AppError {
-  return requestFailed(operation, key, status, name);
-}
 
 function conditionHeaders(condition: PutCondition | undefined): {
   IfMatch?: string;
@@ -106,64 +55,49 @@ function conditionHeaders(condition: PutCondition | undefined): {
     : { IfNoneMatch: condition.ifNoneMatch };
 }
 
-/** Stops starting work at the first failure, and answers only once the work in flight has settled. */
-async function eachUntilFailure<T>(
-  items: T[],
-  concurrency: number,
-  work: (item: T) => Promise<void>,
-): Promise<void> {
-  let next = 0;
-  let failed = false;
-  const worker = async () => {
-    while (!failed && next < items.length) {
-      const item = items[next]!;
-      next += 1;
-      try {
-        await work(item);
-      } catch (error) {
-        failed = true;
-        throw error;
-      }
-    }
-  };
-  const workers = Array.from({ length: Math.min(concurrency, items.length) }, worker);
-  const outcomes = await Promise.allSettled(workers);
-  const refusal = outcomes.find((outcome) => outcome.status === "rejected");
-  if (refusal !== undefined) throw refusal.reason;
+/** Once the signal is cancelled, any failure is reported as the cancellation. */
+function failure(
+  signal: AbortSignal | undefined,
+  operation: BucketOperation,
+  key: string,
+  error: unknown,
+): AppError {
+  if (signal?.aborted) return callCancelled(operation, key);
+  return requestFailed(operation, key, statusOf(error), nameOf(error));
 }
 
 export function createS3ObjectStore(
   config: BucketConfig,
   options: S3ObjectStoreOptions = {},
 ): ObjectStore {
-  const client = new S3Client({
-    region: config.region,
-    ...(config.endpoint === undefined ? {} : { endpoint: config.endpoint }),
-    // Litestream's own rule, from its configuration reference: path style "is automatically enabled
-    // if endpoint is set".
-    forcePathStyle: config.endpoint !== undefined,
-    credentials: { accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey },
-    requestHandler: options.requestHandler ?? { socketTimeout: options.idleMs ?? BUCKET_IDLE_MS },
-  });
+  const client = createBucketClient(config, options);
   const wait = options.sleep ?? sleep;
   const bucket = config.bucket;
   const root = normalisePrefix(config.prefix);
   const at = (key: string) => root + key;
 
-  async function deleteOne(key: string): Promise<void> {
+  async function deleteOne(key: string, signal: AbortSignal | undefined): Promise<void> {
+    throwIfCancelled(signal, "delete", key);
     try {
-      await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: at(key) }));
+      await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: at(key) }), {
+        abortSignal: signal,
+      });
     } catch (error) {
-      throw requestFailed("delete", key, statusOf(error), nameOf(error));
+      throw failure(signal, "delete", key, error);
     }
   }
 
   return {
-    async get(key) {
+    async get(key, call) {
+      const signal = call?.signal;
+      throwIfCancelled(signal, "get", key);
       let out: GetObjectCommandOutput;
       try {
-        out = await client.send(new GetObjectCommand({ Bucket: bucket, Key: at(key) }));
+        out = await client.send(new GetObjectCommand({ Bucket: bucket, Key: at(key) }), {
+          abortSignal: signal,
+        });
       } catch (error) {
+        if (signal?.aborted) throw callCancelled("get", key);
         // By name: a missing bucket also answers 404, and must never read as "nothing written yet".
         if (nameOf(error) === "NoSuchKey") return null;
         throw requestFailed("get", key, statusOf(error), nameOf(error));
@@ -171,16 +105,30 @@ export function createS3ObjectStore(
       if (out.Body === undefined || out.ETag === undefined) {
         throw answerRefused("get", key, out.$metadata.httpStatusCode ?? null, "IncompleteResponse");
       }
+      // The headers having arrived is not the end of the call: a cancellation closes the body too.
+      const body = out.Body as typeof out.Body & { destroy(error?: Error): void };
+      const stop = () => body.destroy(callCancelled("get", key));
+      signal?.addEventListener("abort", stop, { once: true });
       try {
-        return { body: await out.Body.transformToByteArray(), etag: out.ETag };
+        throwIfCancelled(signal, "get", key);
+        return { body: await body.transformToByteArray(), etag: out.ETag };
       } catch (error) {
+        if (signal?.aborted) {
+          // No error: when the read never started, nothing would be listening for one.
+          body.destroy();
+          throw callCancelled("get", key);
+        }
         // Reported with no status, so callers treat a body that broke off as no answer, not a refusal.
         throw requestFailed("get", key, null, nameOf(error));
+      } finally {
+        signal?.removeEventListener("abort", stop);
       }
     },
 
-    async put(key, body, condition) {
+    async put(key, body, condition, call) {
+      const signal = call?.signal;
       for (let attempt = 1; ; attempt += 1) {
+        throwIfCancelled(signal, "put", key);
         let out: PutObjectCommandOutput;
         try {
           out = await client.send(
@@ -190,15 +138,17 @@ export function createS3ObjectStore(
               Body: body,
               ...conditionHeaders(condition),
             }),
+            { abortSignal: signal },
           );
         } catch (error) {
+          if (signal?.aborted) throw callCancelled("put", key);
           const status = statusOf(error);
           if (status === 412) throw new AppError("backup.stream_precondition_failed", { key });
           // A conflict is a concurrent request on the same object, not a verdict, and is sent again
           // with the caller's condition unchanged. Re-reading the version first would turn
           // "only if unchanged since I read it" into "whatever is there now".
           if (status === 409 && attempt < CONFLICT_ATTEMPTS) {
-            await wait(CONFLICT_BACKOFF_MS * attempt);
+            await cancellableWait(wait, CONFLICT_BACKOFF_MS * attempt, signal);
             continue;
           }
           throw requestFailed("put", key, status, nameOf(error));
@@ -211,12 +161,14 @@ export function createS3ObjectStore(
 
     // Pruning deletes what this answers, so an answer that cannot be complete, or names a key outside
     // the prefix asked for, is refused whole rather than trimmed.
-    async list(prefix) {
+    async list(prefix, call) {
+      const signal = call?.signal;
       const wanted = at(prefix);
       const found: ListedObject[] = [];
       const followed = new Set<string>();
       let token: string | undefined;
       do {
+        throwIfCancelled(signal, "list", prefix);
         let page: ListObjectsV2CommandOutput;
         try {
           page = await client.send(
@@ -225,9 +177,10 @@ export function createS3ObjectStore(
               Prefix: wanted,
               ContinuationToken: token,
             }),
+            { abortSignal: signal },
           );
         } catch (error) {
-          throw requestFailed("list", prefix, statusOf(error), nameOf(error));
+          throw failure(signal, "list", prefix, error);
         }
         const refuse = (name: AnswerRefusal) =>
           answerRefused("list", prefix, page.$metadata.httpStatusCode ?? null, name);
@@ -248,12 +201,14 @@ export function createS3ObjectStore(
       return found;
     },
 
-    delete: deleteOne,
+    delete: (key, call) => deleteOne(key, call?.signal),
 
     // Batches go one at a time, so a failed one stops the rest with nothing else in flight.
-    async deleteMany(keys) {
+    async deleteMany(keys, call) {
+      const signal = call?.signal;
       for (let start = 0; start < keys.length; start += DELETE_BATCH_KEYS) {
         const batch = keys.slice(start, start + DELETE_BATCH_KEYS);
+        throwIfCancelled(signal, "delete", batch[0]!);
         let out: DeleteObjectsCommandOutput;
         try {
           out = await client.send(
@@ -261,15 +216,22 @@ export function createS3ObjectStore(
               Bucket: bucket,
               Delete: { Objects: batch.map((key) => ({ Key: at(key) })), Quiet: true },
             }),
+            { abortSignal: signal },
           );
         } catch (error) {
           // 501 is HTTP's "does not support the functionality required" (RFC 9110 §15.6.2). Any other
           // refusal of the batch fails the delete; which providers answer what is not established here.
-          if (statusOf(error) === 501) {
-            await eachUntilFailure(batch, DELETE_CONCURRENCY, deleteOne);
+          if (!signal?.aborted && statusOf(error) === 501) {
+            await eachUntilFailure(
+              batch,
+              DELETE_CONCURRENCY,
+              (key) => deleteOne(key, signal),
+              signal,
+            );
+            throwIfCancelled(signal, "delete", batch[0]!);
             continue;
           }
-          throw requestFailed("delete", batch[0]!, statusOf(error), nameOf(error));
+          throw failure(signal, "delete", batch[0]!, error);
         }
         // A quiet answer lists only the keys it did not delete, inside a request that succeeded.
         const refused = out.Errors?.[0];
