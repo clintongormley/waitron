@@ -71,7 +71,7 @@ function deps(f: Awaited<ReturnType<typeof fixture>>, backends: LocalFsBackend[]
 }
 
 /** A filesystem reporting `free` bytes available, whatever the real disk holds. */
-const freeSpace = (free: number) => vi.fn(async () => ({ bavail: free / 4, bsize: 4 }));
+const freeSpace = (free: number) => vi.fn(async () => ({ bavail: free / 4, frsize: 4 }));
 
 class Watched extends LocalFsBackend {
   puts = 0;
@@ -110,6 +110,32 @@ it("proceeds when free space covers twice the database's size", async () => {
   expect(await readdir(f.stagingDir)).toEqual([]);
 });
 
+it("proceeds when free space is exactly twice the database's size", async () => {
+  const f = await fixture();
+  const backend = new Watched("a", join(f.root, "a"));
+  await runOnce({
+    ...deps(f, [backend]),
+    stagingEstimateBytes: async () => 1000,
+    statfs: freeSpace(2000),
+  });
+  expect(backend.puts).toBe(1);
+});
+
+it("counts free blocks in the filesystem's fundamental block size, not its preferred transfer size", async () => {
+  const f = await fixture();
+  const backend = new Watched("a", join(f.root, "a"));
+  const d = deps(f, [backend]);
+  // One free block: 4096 bytes, though one transfer-sized block would be a mebibyte.
+  const statfs = vi.fn(async () => ({ bavail: 1, bsize: 1_048_576, frsize: 4096 }));
+  await expect(
+    runOnce({ ...d, stagingEstimateBytes: async () => 2049, statfs }),
+  ).rejects.toMatchObject({
+    code: "backup.staging_space_low",
+    params: { neededBytes: 4098, availableBytes: 4096 },
+  });
+  expect(d.archive).not.toHaveBeenCalled();
+});
+
 it("proceeds when free space cannot be read", async () => {
   const f = await fixture();
   const backend = new Watched("a", join(f.root, "a"));
@@ -130,8 +156,8 @@ it("refuses after the copy when free space is under the copy's actual size, and 
   // Enough for the estimate of a 10-byte database; then the copy turns out to be 1000 bytes.
   const statfs = vi
     .fn()
-    .mockResolvedValueOnce({ bavail: 100, bsize: 1 })
-    .mockResolvedValue({ bavail: 999, bsize: 1 });
+    .mockResolvedValueOnce({ bavail: 100, frsize: 1 })
+    .mockResolvedValue({ bavail: 999, frsize: 1 });
   await expect(
     runOnce({ ...d, stagingEstimateBytes: async () => 10, statfs }),
   ).rejects.toMatchObject({

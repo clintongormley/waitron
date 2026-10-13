@@ -91,7 +91,7 @@ export interface BackupSweepDeps {
    */
   stagingEstimateBytes?: () => Promise<number>;
   /** DI for tests; defaults to `node:fs/promises`'s `statfs`. */
-  statfs?: (path: string) => Promise<{ bavail: number; bsize: number }>;
+  statfs?: (path: string) => Promise<{ bavail: number; frsize: number }>;
 }
 
 /** Throws `backup.staging_space_low` when the staging folder's filesystem reports less than
@@ -103,7 +103,7 @@ async function checkStagingSpace(
   let availableBytes: number;
   try {
     const fs = await (deps.statfs ?? fsStatfs)(deps.stagingDir);
-    availableBytes = fs.bavail * fs.bsize;
+    availableBytes = fs.bavail * fs.frsize;
   } catch {
     return;
   }
