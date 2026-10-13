@@ -683,6 +683,11 @@ declare module "@waitron/shared" {
     "floor_plan.out_of_date": { zoneId: string; revision: number };
     /** A master-plan save's entry is out of range; `field` is its path, such as `tables.0.seats`. */
     "floor_plan.invalid": { field: string };
+    /**
+     * The till's read of today's room is older than the room: `revision` is the room's current one;
+     * the till re-reads the floor and tries again.
+     */
+    "floor_today.out_of_date": { zoneId: string; revision: number };
     "merge.seats_required": Record<string, never>;
     /** The path's table is not the joined table of any part in today's copy. */
     "joined_table.not_found": { tableId: string };

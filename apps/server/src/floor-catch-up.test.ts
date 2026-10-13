@@ -324,7 +324,10 @@ describe("the till's floor routes catch today's plan up", () => {
       entry("long", long, { seats: 10, placement: place(0, 20), partKeys: ["c3", "c4", "c5"] }),
     ]);
     const answer = await send("POST", `/api/zones/${zoneId}/today/reset`, {});
-    expect(answer.status).toBe(204);
+    expect({ status: answer.status, body: await answer.json() }).toEqual({
+      status: 200,
+      body: { zoneId, revision: (await zoneRevisionOf(zoneId))! },
+    });
 
     const before = await readJoined();
     expect(before.get(t3)).toBeNull();

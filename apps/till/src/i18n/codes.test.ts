@@ -562,6 +562,15 @@ it("says each joined-table refusal in English and Spanish", () => {
   }
 });
 
+it("says the floor changed under a till, in English and Spanish", () => {
+  expect(codeMessage("floor_today.out_of_date", "en")).toBe(
+    "The floor has changed. Check and try again",
+  );
+  expect(codeMessage("floor_today.out_of_date", "es")).toBe(
+    "La sala ha cambiado. Revísala y vuelve a intentarlo",
+  );
+});
+
 it("says each Join again refusal in English and Spanish", () => {
   const words: [string, string, string][] = [
     [

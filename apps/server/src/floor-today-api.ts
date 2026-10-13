@@ -1,6 +1,13 @@
 import { and, eq } from "drizzle-orm";
 import type { Context, Hono } from "hono";
-import { floorPlans, floorZones, withTransaction, type Transaction } from "@waitron/db";
+import {
+  diningTables,
+  floorPlans,
+  floorTodayTables,
+  floorZones,
+  withTransaction,
+  type Transaction,
+} from "@waitron/db";
 import { readRawJsonBody } from "@waitron/server-kit";
 import { AppError, isUuid, JOIN_SIDES, type JoinSide } from "@waitron/shared";
 import { invalid } from "./bill-allocation.js";
@@ -23,6 +30,7 @@ import type { Logger } from "./logger.js";
 import type { Run, TillApiDeps } from "./till-api.js";
 import { requireSession } from "./till-session.js";
 import { checkZones } from "./zone-access.js";
+import { roomRevision, sentRevision } from "./floor-revision.js";
 import "./errors.js";
 
 export function whole(value: unknown, field: string, low: number, high: number): number {
@@ -81,7 +89,27 @@ async function partsBody(c: Context): Promise<{ partIds: string[]; seats: number
   return { partIds, seats };
 }
 
-/** Today's changes to one table, merging and splitting, and the zone reset; each answers 204. */
+/**
+ * The zone reset's `zoneRevision`: a whole number from 0, `null` for a read that held no table of
+ * the zone with a today's row, or undefined when the till sends none.
+ */
+async function resetRevision(c: Context): Promise<number | null | undefined> {
+  const raw = await readRawJsonBody<unknown>(c);
+  const body = raw === null ? {} : asObject(raw);
+  return body.zoneRevision === null ? null : sentRevision(body);
+}
+
+async function hasTodayRow(tx: Transaction, zoneId: string): Promise<boolean> {
+  const [row] = await tx
+    .select({ id: floorTodayTables.id })
+    .from(floorTodayTables)
+    .innerJoin(diningTables, eq(diningTables.id, floorTodayTables.tableId))
+    .where(eq(diningTables.zoneId, zoneId))
+    .limit(1);
+  return row !== undefined;
+}
+
+/** Today's changes to one table, merging and splitting, each answering 204; the zone reset answers the room's revision. */
 export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, run: Run): void {
   const removals = deps.tableRemovals ?? [];
 
@@ -160,7 +188,8 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("zone.not_found", { zoneId: id });
       const zoneId = id.toLowerCase();
-      await withTransaction(deps.db, async (tx) => {
+      const sent = await resetRevision(c);
+      const revision = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ zoneId }]);
         const [zone] = await tx
           .select({ active: floorZones.active, planId: floorPlans.id })
@@ -170,10 +199,15 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
         if (zone === undefined) throw new AppError("zone.not_found", { zoneId });
         const now = deps.clock.now().instant;
         await ensureToday(tx, deps.cfg, removals, now);
+        const from = await roomRevision(tx, zoneId);
+        const stale =
+          sent === null ? await hasTodayRow(tx, zoneId) : sent !== undefined && sent !== from;
+        if (stale) throw new AppError("floor_today.out_of_date", { zoneId, revision: from });
         if (zone.active && zone.planId !== null)
           await resetZone(tx, deps.cfg, removals, zoneId, now);
+        return roomRevision(tx, zoneId);
       });
-      return c.body(null, 204);
+      return c.json({ zoneId, revision });
     }),
   );
 }

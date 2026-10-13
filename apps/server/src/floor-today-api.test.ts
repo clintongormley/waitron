@@ -8,11 +8,14 @@ import {
   tableInService,
   diningTables,
   floorPlans,
+  floorTodayJoins,
+  floorTodayJoinTables,
   floorTodaySplitParts,
   floorTodayTables,
   floorTodayZones,
   floorZones,
   locations,
+  partyTables,
 } from "@waitron/db";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { saveZonePlan } from "./floor-plan.js";
@@ -125,7 +128,7 @@ async function refusal(answer: Promise<Response>): Promise<{ status: number; bod
   return { status: settled.status, body: await settled.json() };
 }
 
-/** Every today's row and every split row, to show a refusal wrote nothing. */
+/** Every today's row, split row, group row and party table, to show a refusal wrote nothing. */
 async function everything() {
   const today = await inTx(v, (tx) =>
     tx.select().from(floorTodayTables).orderBy(asc(floorTodayTables.id)),
@@ -133,7 +136,37 @@ async function everything() {
   const split = await inTx(v, (tx) =>
     tx.select().from(floorTodaySplitParts).orderBy(asc(floorTodaySplitParts.id)),
   );
-  return { today, split };
+  const joins = await inTx(v, (tx) =>
+    tx.select().from(floorTodayJoins).orderBy(asc(floorTodayJoins.id)),
+  );
+  const joinTables = await inTx(v, (tx) =>
+    tx.select().from(floorTodayJoinTables).orderBy(asc(floorTodayJoinTables.id)),
+  );
+  const parties = await inTx(v, (tx) => tx.select().from(partyTables).orderBy(asc(partyTables.id)));
+  return { today, split, joins, joinTables, parties };
+}
+
+async function resetZoneToday(zoneId: string, body: unknown = {}): Promise<Response> {
+  return send("POST", `/api/zones/${zoneId}/today/reset`, body);
+}
+
+/** A 200 naming the zone and the revision it now stores (0 with no row), which is `revision` when given. */
+async function expectRevision(
+  answer: Response | Promise<Response>,
+  zoneId: string,
+  revision?: number,
+): Promise<void> {
+  const settled = await answer;
+  const body: unknown = await settled
+    .clone()
+    .json()
+    .catch(() => null);
+  const stored = (await zoneRevisionOf(zoneId)) ?? 0;
+  expect({ status: settled.status, body }, await settled.text()).toEqual({
+    status: 200,
+    body: { zoneId, revision: stored },
+  });
+  if (revision !== undefined) expect(stored).toBe(revision);
 }
 
 async function zoneRevisionOf(zoneId: string): Promise<number | undefined> {
@@ -203,7 +236,8 @@ describe("today's routes", () => {
     await expect204(today(table.free!, "move", { x: 50, y: 50 }));
     await expect204(today(table.seated!, "move", { x: 70, y: 70 }));
 
-    await expect204(send("POST", `/api/zones/${zoneId}/today/reset`, {}));
+    const before = (await zoneRevisionOf(zoneId))!;
+    await expectRevision(resetZoneToday(zoneId), zoneId, before + 1);
 
     expect((await floorToday(table.free!))?.placement).toMatchObject({ x: 0, y: 0 });
     expect((await floorToday(table.seated!))?.placement).toMatchObject({ x: 70, y: 70 });
@@ -231,7 +265,7 @@ describe("today's routes", () => {
         ],
       }),
     );
-    await expect204(send("POST", `/api/zones/${zoneId}/today/reset`, {}));
+    await expectRevision(resetZoneToday(zoneId), zoneId);
     expect((await todayRow(v, table.t!))?.x).toBe(0);
     await finish(partyId);
 
@@ -249,7 +283,7 @@ describe("today's routes", () => {
     const zoneRevision = await zoneRevisionOf(zoneId);
     expect(zoneRevision).toBe(1);
 
-    await expect204(send("POST", `/api/zones/${zoneId}/today/reset`, {}));
+    await expectRevision(resetZoneToday(zoneId), zoneId, 1);
 
     expect(await inService(table.a!)).toBe(false);
     expect(await zoneRevisionOf(zoneId)).toBe(zoneRevision);
@@ -358,9 +392,111 @@ describe("today's routes", () => {
     const zoneId = await tableServiceZone(v);
     await v.table(`Unplanned ${randomUUID().slice(0, 6)}`, zoneId);
 
-    await expect204(send("POST", `/api/zones/${zoneId}/today/reset`, {}));
+    await expectRevision(resetZoneToday(zoneId), zoneId, 0);
 
     expect(await zoneRevisionOf(zoneId)).toBeUndefined();
+  });
+});
+
+describe("the zone reset's revision", () => {
+  const outOfDate = (zoneId: string, revision: number) => ({
+    status: 409,
+    body: { error: { code: "floor_today.out_of_date", params: { zoneId, revision } } },
+  });
+
+  it("refuses a revision older than the room's and writes nothing", async () => {
+    const { zoneId, table } = await plannedZone(v, [{ key: "a", place: { x: 0, y: 0 } }]);
+    await seatAt(table.a!);
+    await expect204(today(table.a!, "move", { x: 50, y: 50 }));
+    const from = (await zoneRevisionOf(zoneId))!;
+    const before = await everything();
+
+    expect(await refusal(resetZoneToday(zoneId, { zoneRevision: from - 1 }))).toEqual(
+      outOfDate(zoneId, from),
+    );
+
+    expect(await everything()).toEqual(before);
+    expect(await zoneRevisionOf(zoneId)).toBe(from);
+  });
+
+  it("refuses a revision newer than the room's", async () => {
+    const { zoneId } = await plannedZone(v, [{ key: "a" }]);
+    const from = (await zoneRevisionOf(zoneId))!;
+
+    expect(await refusal(resetZoneToday(zoneId, { zoneRevision: from + 1 }))).toEqual(
+      outOfDate(zoneId, from),
+    );
+    expect(await zoneRevisionOf(zoneId)).toBe(from);
+  });
+
+  it("applies the room's current revision and answers it moved by one", async () => {
+    const { zoneId, table } = await plannedZone(v, [{ key: "a", place: { x: 0, y: 0 } }]);
+    await expect204(today(table.a!, "move", { x: 50, y: 50 }));
+    const from = (await zoneRevisionOf(zoneId))!;
+
+    await expectRevision(resetZoneToday(zoneId, { zoneRevision: from }), zoneId, from + 1);
+
+    expect(await todayRow(v, table.a!)).toMatchObject({ x: 0, y: 0 });
+  });
+
+  it("applies a reset that sends no revision", async () => {
+    const { zoneId, table } = await plannedZone(v, [{ key: "a", place: { x: 0, y: 0 } }]);
+    await expect204(today(table.a!, "move", { x: 50, y: 50 }));
+    const from = (await zoneRevisionOf(zoneId))!;
+
+    await expectRevision(
+      app.request(`/api/zones/${zoneId}/today/reset`, { method: "POST", headers: { cookie } }),
+      zoneId,
+      from + 1,
+    );
+
+    expect(await todayRow(v, table.a!)).toMatchObject({ x: 0, y: 0 });
+  });
+
+  it("applies null on a room none of whose tables has a today's row", async () => {
+    const { zoneId } = await plannedZone(v, []);
+    expect(await zoneRevisionOf(zoneId)).toBe(1);
+
+    await expectRevision(resetZoneToday(zoneId, { zoneRevision: null }), zoneId, 2);
+  });
+
+  it("refuses null once a table of the room has a today's row", async () => {
+    const { zoneId, table } = await plannedZone(v, [{ key: "a", place: { x: 0, y: 0 } }]);
+    await expect204(today(table.a!, "move", { x: 50, y: 50 }));
+    const from = (await zoneRevisionOf(zoneId))!;
+    const before = await everything();
+
+    expect(await refusal(resetZoneToday(zoneId, { zoneRevision: null }))).toEqual(
+      outOfDate(zoneId, from),
+    );
+
+    expect(await everything()).toEqual(before);
+    expect(await zoneRevisionOf(zoneId)).toBe(from);
+  });
+
+  it("answers a disabled room's revision unchanged when it is current", async () => {
+    const { zoneId } = await plannedZone(v, [{ key: "a" }]);
+    await inTx(v, async (tx) =>
+      tx.execute(sql`update floor_zones set active = false where id = ${zoneId}`),
+    );
+
+    await expectRevision(resetZoneToday(zoneId, { zoneRevision: 1 }), zoneId, 1);
+  });
+
+  it("refuses a revision that is not a whole number from 0", async () => {
+    const { zoneId } = await plannedZone(v, [{ key: "a" }]);
+    const before = await everything();
+
+    for (const zoneRevision of [-1, 1.5, "3"]) {
+      expect(await refusal(resetZoneToday(zoneId, { zoneRevision }))).toEqual({
+        status: 400,
+        body: {
+          error: { code: "management.request_invalid", params: { field: "zoneRevision" } },
+        },
+      });
+    }
+    expect(await everything()).toEqual(before);
+    expect(await zoneRevisionOf(zoneId)).toBe(1);
   });
 });
 

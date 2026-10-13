@@ -519,6 +519,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "joined_table.parts_split_off": 409,
   "joined_table.nothing_to_join": 409,
   "joined_table.out_of_date": 409,
+  "floor_today.out_of_date": 409,
   "zone.not_found": 404,
   "tab.already_open": 409,
   "tab.not_open": 409,
