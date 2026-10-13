@@ -1939,7 +1939,8 @@ The season painter (`season-painter.ts`, under `packages/venue-service/src/dashb
 season's week for every active department and zone, in a full-screen frame (`painter-frame.ts`, a
 `wt-modal size="full"`). Its bar holds ✕, the heading "<season> week", ‹ the season chip ›, the
 department-or-zone picker, a Periods link, and Cancel and Save; the bar stays in view while the
-paint grid (`paint-grid.ts`) scrolls in the space under it. A paint row offers the department's
+paint grid (`paint-grid.ts`) scrolls in the space under it. A heading too long for its room wraps
+onto more lines rather than being cut. A paint row offers the department's
 periods (✎ edits one), Closed and + New period, which saves the period on its own and chooses it.
 Dragging down a day paints the chosen period in the business day's quarter hours; a drag over a
 block replaces what it covers, touching blocks of one period join, and clicking a block offers

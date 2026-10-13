@@ -68,9 +68,8 @@ export class PainterFrame extends LitElement {
         grid-area: title;
         margin: 0;
         font-size: var(--wt-font-size-lg);
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        line-height: 1.2;
+        overflow-wrap: anywhere;
       }
       .picker {
         grid-area: picker;

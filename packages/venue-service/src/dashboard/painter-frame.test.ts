@@ -193,6 +193,11 @@ test("the host closing the frame sends painter-close too", async () => {
   expect(modal(frame).shadowRoot!.querySelector("dialog")!.open).toBe(false);
 });
 
+/** Season names are the venue's own, so a heading can be longer than any bar's line. */
+const LONG_HEADING = {
+  en: "Summer high season with the terrace open week",
+  es: "Semana de Temporada alta de verano con la terraza abierta",
+};
 describe.each(["en", "es"] as const)("the bar's width (%s)", (locale) => {
   test.each([390, 1280])("at %i px", async (width) => {
     const old = [window.innerWidth, window.innerHeight];
@@ -200,6 +205,8 @@ describe.each(["en", "es"] as const)("the bar's width (%s)", (locale) => {
       await page.viewport(width, 800);
       setLocale(locale);
       const { frame } = await open();
+      frame.heading = LONG_HEADING[locale];
+      await frame.updateComplete;
       const required = [dismiss(frame), part(frame, "h2"), cancel(frame), save(frame)];
       for (const each of required) {
         const box = each.getBoundingClientRect();
