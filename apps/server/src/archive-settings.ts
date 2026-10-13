@@ -283,10 +283,30 @@ function sameBucketPlace(a: BucketConfig, b: BucketConfig): boolean {
   );
 }
 
+const AWS = "aws";
+
+/**
+ * Two spellings the S3 client sends to one URL compare equal. No endpoint is taken to be AWS's
+ * regional or global endpoint: wrongly calling two places one only refuses more.
+ */
+function endpointPlace(bucket: BucketConfig): string {
+  if (bucket.endpoint === undefined) return AWS;
+  const url = new URL(bucket.endpoint);
+  const place = `${url.protocol}//${url.host}${url.pathname.replace(/\/$/, "")}`;
+  return place === "https://s3.amazonaws.com" ||
+    place === `https://s3.${bucket.region}.amazonaws.com`
+    ? AWS
+    : place;
+}
+
 function refuseOverlap(bucket: BucketConfig, venueId: string, stream: StreamSettings | null): void {
   if (stream === null) return;
   const s = stream.bucket;
-  if (s.endpoint !== bucket.endpoint || s.region !== bucket.region || s.bucket !== bucket.bucket) {
+  if (
+    endpointPlace(s) !== endpointPlace(bucket) ||
+    s.region !== bucket.region ||
+    s.bucket !== bucket.bucket
+  ) {
     return;
   }
   const archive = archiveNamespace(bucket.prefix, venueId);

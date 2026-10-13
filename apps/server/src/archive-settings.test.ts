@@ -174,6 +174,53 @@ describe("resolveArchiveChoice", () => {
     );
   });
 
+  const inStreamVenue = {
+    ...custom,
+    region: stream.bucket.region,
+    bucket: stream.bucket.bucket,
+    prefix: `waitron/venues/${VENUE}/old`,
+  };
+
+  it.each([
+    "https://s3.example.test/",
+    "HTTPS://S3.EXAMPLE.TEST",
+    "https://S3.example.test",
+    "https://s3.example.test:443",
+  ])("refuses the stream's endpoint spelled %j", (endpoint) => {
+    expect(refusal(() => resolveArchiveChoice({ ...inStreamVenue, endpoint }, ctx)).code).toBe(
+      "backup.archive_namespace_overlap",
+    );
+  });
+
+  describe("on AWS's own endpoint", () => {
+    const aws = { ...stream, bucket: without(stream.bucket, "endpoint") };
+
+    it.each(["https://s3.eu-north-1.amazonaws.com", "https://s3.amazonaws.com/"])(
+      "refuses %j as the same place as no endpoint",
+      (endpoint) => {
+        const body = { ...inStreamVenue, endpoint };
+        expect(refusal(() => resolveArchiveChoice(body, { ...ctx, stream: aws })).code).toBe(
+          "backup.archive_namespace_overlap",
+        );
+      },
+    );
+
+    it("refuses no endpoint as the same place as the regional AWS endpoint", () => {
+      const regional = {
+        ...stream,
+        bucket: { ...stream.bucket, endpoint: "https://s3.eu-north-1.amazonaws.com" },
+      };
+      const body = without(inStreamVenue, "endpoint");
+      expect(refusal(() => resolveArchiveChoice(body, { ...ctx, stream: regional })).code).toBe(
+        "backup.archive_namespace_overlap",
+      );
+    });
+
+    it("allows another endpoint in the same-named bucket", () => {
+      expect(resolveArchiveChoice(inStreamVenue, { ...ctx, stream: aws }).kind).toBe("s3");
+    });
+  });
+
   it("allows the same prefix in a different bucket", () => {
     const body = { ...custom, prefix: `waitron/venues/${VENUE}/old` };
     expect(resolveArchiveChoice(body, ctx).kind).toBe("s3");
