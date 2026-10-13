@@ -1,9 +1,9 @@
 import type { Transaction } from "@waitron/db";
-import { AppError, type JobOrigin, type Origin } from "@waitron/shared";
+import { AppError, SOURCES, type JobOrigin, type Origin } from "@waitron/shared";
 import { appendToChain } from "./chain.js";
 import { recordInstant } from "./corrections.js";
 import { readRecordedEntries } from "./record-reads.js";
-import { compareEvents, isClockEntry, effectiveClockEntries } from "./effective-entries.js";
+import { compareEvents, liveClockEntries, effectiveClockEntries } from "./effective-entries.js";
 import "./errors.js";
 
 export interface AutomaticCloseInput {
@@ -26,10 +26,16 @@ export async function recordAutomaticClose(
   input: AutomaticCloseInput,
 ): Promise<string> {
   const eventAt = recordInstant(input.at, input.offsetMinutes, "attendance");
-  if ((input.origin as Origin).source === "device" || input.origin.deviceId !== null)
+  if (
+    input.origin === null ||
+    typeof input.origin !== "object" ||
+    (input.origin as Origin).source === "device" ||
+    input.origin.deviceId !== null ||
+    !SOURCES.includes(input.origin.source)
+  )
     throw new AppError("attendance.invalid", { reason: "automatic_origin" });
   const entries = await readRecordedEntries(tx, { personId: input.personId });
-  const live = entries.filter(isClockEntry).sort(compareEvents);
+  const live = liveClockEntries(entries).sort(compareEvents);
   const open = live.find((e) => e.entryId === input.openEntryId);
   const after = open === undefined ? [] : live.slice(live.indexOf(open) + 1);
   if (

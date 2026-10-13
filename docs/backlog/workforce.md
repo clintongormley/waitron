@@ -30,3 +30,8 @@ on their own. The labour-advisor gate is answered: the digital-record decree was
 BOE up to 12 Oct 2026 (the spec's legal-basis table has the sources), so A10 builds to the October 2025
 draft and is checked against the final text if it is published. The time record cannot be edited once
 written, so its chain and correction paths take the owner's sign-off at land.
+
+Part 1 is in progress on `feat/a10-1-record-library`. Its schema, correction and automatic-entry
+methods, and record reads are implemented locally. Pay-period closure, configuration transfer and
+the Spanish history export remain, followed by the full branch review and current-head CI. The
+library has no new route or screen yet.

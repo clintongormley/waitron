@@ -49,6 +49,8 @@ export type { ChainHead, ChainKey, TimeEntryAppend } from "./chain.js";
 export { computeEntryHash, verifyChain } from "./chain-hash.js";
 export type { ChainVerification, EntryHashInput, VerifiableEntry } from "./chain-hash.js";
 export { WorkforceBackend } from "./clocking.js";
+export { projectTimeRecord } from "./record-projection.js";
+export type { TimeRecordQuery } from "./record-reads.js";
 export type {
   ClockEventInput,
   CorrectionApprovalInput,

@@ -65,12 +65,25 @@ export function effectiveClockEntries(entries: readonly TimeEntryRecord[]): Time
     return { ...effective, entryKind: base.extension?.missingEntryKind ?? base.entryKind };
   });
 }
+export function liveClockEntries(entries: readonly TimeEntryRecord[]): TimeEntryRecord[] {
+  return entries.flatMap((e) =>
+    isClockEntry(e)
+      ? [e]
+      : e.entryKind === "correction" &&
+          e.correctionStatus === "approved" &&
+          !e.correctsEntryId &&
+          e.extension?.missingEntryKind
+        ? [{ ...e, entryKind: e.extension.missingEntryKind }]
+        : [],
+  );
+}
 export function uncountedAutomaticEntryIds(entries: readonly TimeEntryRecord[]): Set<string> {
+  const byId = new Map(entries.map((e) => [e.entryId, e]));
   const confirmations = new Set(
     entries
       .filter((e) => e.entryKind === "confirmation")
       .flatMap((e) => {
-        const target = entries.find((t) => t.entryId === e.extension?.respondsToEntryId);
+        const target = byId.get(e.extension?.respondsToEntryId ?? "");
         return target !== undefined && sameSubject(e, target) ? [target.entryId] : [];
       }),
   );

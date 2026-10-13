@@ -66,6 +66,21 @@ async function unchanged(action: () => Promise<unknown>, code: string) {
   expect(await suite.db.select().from(timeEntries)).toEqual(before);
 }
 describe("automatic closes and worker confirmation", () => {
+  it.each([
+    null,
+    { source: "unknown", deviceId: null },
+    { source: "dashboard", deviceId: "00000000-0000-4000-8000-000000000001" },
+  ])("refuses a malformed automatic origin %j before any row", async (badOrigin) => {
+    await unchanged(
+      () =>
+        run((tx) =>
+          backend.recordAutomaticClose(tx, { ...input(), origin: badOrigin } as Parameters<
+            WorkforceBackend["recordAutomaticClose"]
+          >[1]),
+        ),
+      "attendance.invalid",
+    );
+  });
   it("accepts the last break event itself as later activity without inventing a later departure", async () => {
     await run((tx) => backend.breakStart(tx, event("2026-01-05T16:00:00Z")));
     const end = await run((tx) =>

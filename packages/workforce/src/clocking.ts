@@ -23,6 +23,9 @@ export type {
 import { recordAutomaticClose, confirmAutomaticEntry } from "./automatic-entries.js";
 import type { AutomaticCloseInput, AutomaticConfirmationInput } from "./automatic-entries.js";
 export type { AutomaticCloseInput, AutomaticConfirmationInput } from "./automatic-entries.js";
+import { liveClockEntries, compareEvents } from "./effective-entries.js";
+import { readTimeRecord, type TimeRecordQuery } from "./record-reads.js";
+import type { TimeRecord } from "./record-types.js";
 import { readRecordedEntries } from "./record-reads.js";
 import {
   dailyContractedTargetMinutes,
@@ -206,7 +209,7 @@ export class WorkforceBackend {
   ): Promise<PeriodSummary> {
     const { workingDaysPerWeek, overtimeModel, dailyTargetMinutes } = ruleset;
     const contractedPerWeek = await this.contractedMinutesPerWeek(tx, query.personId);
-    const entries = await this.entriesInPeriod(tx, query);
+    const entries = await this.entriesForPerson(tx, query.personId);
     const sessions = projectWorkSessions(entries);
     const periodDays = (Date.parse(query.period.end) - Date.parse(query.period.start)) / MS_PER_DAY;
     return summarisePeriod(
@@ -227,7 +230,7 @@ export class WorkforceBackend {
     query: { locationId: string; period: Period },
   ): Promise<PlannedVsActual[]> {
     const plannedShifts = await this.plannedShiftsInPeriod(tx, query.locationId, query.period);
-    const entries = await this.entriesForLocationInPeriod(tx, query.locationId, query.period);
+    const entries = await this.entriesForLocation(tx, query.locationId);
     // The ±1-day widened fetch can return a session one local day outside the window.
     const sessions = projectWorkSessions(entries).filter(
       (s) => s.workDate >= query.period.start && s.workDate < query.period.end,
@@ -268,18 +271,12 @@ export class WorkforceBackend {
     }));
   }
 
-  private async entriesForLocationInPeriod(
-    tx: Transaction,
-    locationId: string,
-    period: Period,
-  ): Promise<TimeEntryRecord[]> {
-    const start = shiftDay(period.start, -1),
-      end = shiftDay(period.end, 1);
-    return (await readRecordedEntries(tx, { locationId })).filter(
-      (e) => e.eventAt >= start && e.eventAt < end,
-    );
+  private entriesForLocation(tx: Transaction, locationId: string): Promise<TimeEntryRecord[]> {
+    return readRecordedEntries(tx, { locationId });
   }
-
+  timeRecord(tx: Transaction, query: TimeRecordQuery): Promise<TimeRecord> {
+    return readTimeRecord(tx, query);
+  }
   requestCorrection(tx: Transaction, input: CorrectionRequestInput): Promise<string> {
     return requestCorrection(tx, input);
   }
@@ -556,15 +553,11 @@ export class WorkforceBackend {
         and prior.id <> ${versionId}`);
   }
 
-  /** Corrections are excluded: a correction of a past shift must not drive today's state. */
   private async currentState(tx: Transaction, personId: string): Promise<ShiftState> {
-    const { rows } = await tx.execute<{ entry_kind: LiveEntryKind }>(sql`
-      select entry_kind from time_entries
-      where person_id = ${personId} and entry_kind in ('in', 'out', 'break_start', 'break_end')
-      order by event_at desc, recorded_at desc, node_id desc, sequence_no desc
-      limit 1`);
-    const last = rows[0];
-    return last === undefined ? "out" : STATE_AFTER[last.entry_kind];
+    const last = liveClockEntries(await readRecordedEntries(tx, { personId }))
+      .sort(compareEvents)
+      .at(-1);
+    return last === undefined ? "out" : STATE_AFTER[last.entryKind as LiveEntryKind];
   }
 
   private async append(
@@ -610,15 +603,8 @@ export class WorkforceBackend {
     return employment.contracted;
   }
 
-  private async entriesInPeriod(
-    tx: Transaction,
-    query: WorkSummaryQuery,
-  ): Promise<TimeEntryRecord[]> {
-    const start = shiftDay(query.period.start, -1),
-      end = shiftDay(query.period.end, 1);
-    return (await readRecordedEntries(tx, { personId: query.personId })).filter(
-      (e) => e.eventAt >= start && e.eventAt < end,
-    );
+  private entriesForPerson(tx: Transaction, personId: string): Promise<TimeEntryRecord[]> {
+    return readRecordedEntries(tx, { personId });
   }
 
   private alreadyOpen(input: ClockEventInput): AppError {
@@ -632,11 +618,6 @@ export class WorkforceBackend {
       personId: input.personId,
     });
   }
-}
-
-/** The UTC ISO instant `deltaDays` from a local date's midnight — bounds the fetch window. */
-function shiftDay(date: string, deltaDays: number): string {
-  return new Date(Date.parse(`${date}T00:00:00Z`) + deltaDays * MS_PER_DAY).toISOString();
 }
 
 /**
