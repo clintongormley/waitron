@@ -293,11 +293,13 @@ export async function missingHolidays(
   }));
 }
 
-/** `missingHolidays` for the given years, ascending, each naming its special day. */
+/** `missingHolidays` for the given years, ascending, each naming its special day. `known`, when
+ *  given, holds the official holidays of every one of `years` and is read instead. */
 export async function missingHolidaysIn(
   tx: Transaction,
   cfg: VenueScope,
   years: readonly number[],
+  known?: HolidayDates,
 ): Promise<(MissingHoliday & { name: string })[]> {
   const rows = await tx
     .select({
@@ -318,7 +320,7 @@ export async function missingHolidaysIn(
     .orderBy(asc(specialDayDates.date), asc(specialDayDates.id));
   if (rows.length === 0 || years.length === 0) return [];
   const rules = rows.map((row) => ({ ...row, repeats: true }));
-  const holidays = await holidayDatesFor(tx, cfg, rules, [years[0]!, years.at(-1)!]);
+  const holidays = known ?? (await holidayDatesFor(tx, cfg, rules, [years[0]!, years.at(-1)!]));
   const missing = new Map<string, MissingHoliday & { name: string }>();
   for (const year of years)
     for (const rule of rules)

@@ -2,7 +2,7 @@ import type { Transaction } from "@waitron/db";
 import { readLocationClock } from "@waitron/reporting";
 import { readBusinessDayScheduleStatus } from "./business-day-schedule.js";
 import type { HolidayCoverage, SpecialDaysModel } from "./holiday-types.js";
-import { readHolidayAreaModel, readHolidays } from "./holidays.js";
+import { readHolidayYear } from "./holidays.js";
 import { venueLocalMoment } from "./hours-clock.js";
 import { addDays, rangeDates } from "./hours-rules.js";
 import type { CalendarTone, HolidayFact, LocalDate } from "./hours-types.js";
@@ -54,11 +54,10 @@ export async function readOpeningHoursYear(
   const dates = rangeDates(`${yearText}-01-01`, `${yearText}-12-31`);
   const clock = await readLocationClock(tx, cfg.locationId);
   const status = await readBusinessDayScheduleStatus(tx, cfg, clock, at);
-  const holidays = await readHolidays(tx, cfg, dates[0]!, dates.at(-1)!);
-  const area = await readHolidayAreaModel(tx, cfg);
+  const { read: holidays, area, dates: holidayDates } = await readHolidayYear(tx, cfg, year);
   const seasons = await readSeasons(tx, cfg);
-  const { days, seasonIdOn } = await calendarDays(tx, cfg, dates, holidays.facts, clock);
-  const missing = await missingHolidaysIn(tx, cfg, [year]);
+  const { days, seasonIdOn } = await calendarDays(tx, cfg, dates, holidays.facts, clock, seasons);
+  const missing = await missingHolidaysIn(tx, cfg, [year], holidayDates);
   return {
     ...status,
     year,

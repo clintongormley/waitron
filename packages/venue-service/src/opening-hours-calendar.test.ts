@@ -21,7 +21,7 @@ import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { readOpeningHoursYear } from "./opening-hours-calendar.js";
 import { createDepartment, type VenueScope } from "./operations.js";
 import { readSeasons } from "./seasons.js";
-import { saveSpecialDay } from "./special-days.js";
+import { missingHolidaysIn, saveSpecialDay } from "./special-days.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
@@ -180,6 +180,8 @@ describe("the Opening hours year read", () => {
     expect(next.missingHolidays).toEqual([
       { specialDayId: semanaSanta.id, name: "Semana Santa", holidayName: "Viernes Santo" },
     ]);
+    const known = new Map([[2027, new Map([["Viernes Santo", "2027-03-26"]])]]);
+    expect(await run((tx) => missingHolidaysIn(tx, v.cfg, [2027], known))).toEqual([]);
   });
 
   it("closes a date only when every active department is closed all day", async () => {

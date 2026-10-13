@@ -6,6 +6,7 @@ import { rangeDates } from "./hours-rules.js";
 import { type CalendarDay, type HolidayFact, type LocalDate } from "./hours-types.js";
 import { type VenueScope } from "./operations.js";
 import { departments } from "./schema/service.js";
+import type { Season } from "./season-rules.js";
 import { readDayPlan, resolveDepartmentsDays } from "./day-resolver.js";
 import { isReadableZone } from "./hours-clock.js";
 import "./errors.js";
@@ -19,12 +20,13 @@ export async function calendarDays(
   dates: readonly LocalDate[],
   holidays: readonly HolidayFact[],
   stored?: BusinessDayClock,
+  seasons?: readonly Season[],
 ): Promise<{ days: CalendarDay[]; seasonIdOn: ReadonlyMap<LocalDate, string | null> }> {
   stored ??= await readLocationClock(tx, cfg.locationId);
   // A business day's cutover never reads the zone (`cutoverAt`, @waitron/shared
   // business-day-clock.ts), so a venue whose zone cannot be read still has its days drawn.
   const clock = isReadableZone(stored.timeZone) ? stored : { ...stored, timeZone: "UTC" };
-  const plan = await readDayPlan(tx, cfg, dates);
+  const plan = await readDayPlan(tx, cfg, dates, seasons);
   const active = await tx
     .select({ id: departments.id })
     .from(departments)
