@@ -7,7 +7,12 @@ import {
   withTransaction,
   type Database,
 } from "@waitron/db";
-import type { WaitronModule } from "@waitron/module";
+import {
+  moduleOperationFor,
+  snapshotModuleOperations,
+  type ModuleOperations,
+  type WaitronModule,
+} from "@waitron/module";
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import { NODE_KEY_PURPOSE } from "./node-identity.js";
 import type { ReservedIdentity } from "./mirror-bundle.js";
@@ -55,8 +60,10 @@ export async function establishReservedStandbyIdentity(
     /** The enabled set, in composition order — those declaring `provisioning.standby` establish. */
     modules: readonly WaitronModule[];
     reserved: ReservedIdentity;
+    moduleOperations?: ModuleOperations;
   },
 ): Promise<void> {
+  const operations = snapshotModuleOperations(args.moduleOperations);
   await withTransaction(deps.ownerDb, async (tx) => {
     const existing = await tryGetCredential(tx, deps.ring, { purpose: NODE_KEY_PURPOSE });
     if (existing !== null) return; // already established — idempotent no-op
@@ -80,7 +87,14 @@ export async function establishReservedStandbyIdentity(
     };
     for (const m of args.modules) {
       if (m.provisioning?.standby === undefined) continue;
-      await m.provisioning.standby.establish(tx, standbyNode, args.reserved.modules?.[m.name]);
+      const operation = moduleOperationFor(operations, m.name, standbyNode.nodeId, "establish");
+      await m.provisioning.standby.establish(
+        tx,
+        standbyNode,
+        args.reserved.modules?.[m.name],
+        operation,
+      );
+      moduleOperationFor(operations, m.name, standbyNode.nodeId, "establish");
     }
     await insertReservedSeriesTx(
       tx,

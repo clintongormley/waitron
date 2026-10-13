@@ -36,10 +36,26 @@ export interface StandbyReservation {
  * reserves state must know how to establish it. */
 export interface StandbyProvisioning {
   /** Primary side, inside the bundle-minting transaction. */
-  reserve(tx: Transaction, primary: ProvisionedNode): Promise<StandbyReservation>;
+  reserve(
+    tx: Transaction,
+    primary: ProvisionedNode,
+    standby?: ProvisionedNode,
+    operation?: ModuleOperationInput,
+  ): Promise<StandbyReservation>;
   /** Mirror side, inside the adopt transaction, after the standby's own node row exists. `state` is
    * wire input the module validates before writing anything. */
-  establish(tx: Transaction, standby: ProvisionedNode, state: unknown): Promise<void>;
+  establish(
+    tx: Transaction,
+    standby: ProvisionedNode,
+    state: unknown,
+    operation?: ModuleOperationInput,
+  ): Promise<void>;
+  /** Runs in the role-change transaction, before the host checks the trading series. */
+  activate?(
+    tx: Transaction,
+    standby: ProvisionedNode,
+    operation?: ModuleOperationInput,
+  ): Promise<void>;
 }
 
 export interface ModuleProvisioning {

@@ -20,7 +20,11 @@ import {
 } from "@waitron/fiscal-verifactu/src/paper-evidence.js";
 import { withRecoveryKeyOperation } from "./operation-authentication.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
-import { commitMirrorPromotionTx } from "./promote.js";
+import { commitMirrorPromotionTx, promoteMirrorToPrimary } from "./promote.js";
+import { createDeploymentHolders } from "./deployment-holders.js";
+import { establishNodeIdentity } from "./node-identity.js";
+import { loadKeyRing } from "@waitron/credentials";
+import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -357,6 +361,96 @@ describe("recovery-key fiscal attribution", () => {
     );
     try {
       await expect(promote()).rejects.toThrow("test chart refusal");
+      expect(await snapshot()).toEqual(before);
+    } finally {
+      await suite.db.execute(sql`drop trigger refuse_chart`);
+    }
+  });
+});
+
+describe("real mirror promotion with a dormant fiscal seat", () => {
+  const ring = loadKeyRing({
+    WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 9).toString("base64"),
+    WAITRON_CREDENTIALS_KEY_VERSION: "1",
+  });
+  async function realPromotion() {
+    await establishNodeIdentity({ ownerDb: suite.db, ring }, target.nodeId);
+    const module = fakeModule("fiscal-verifactu", {
+      provisioning: {
+        standby: {
+          reserve: async () => ({ state: {} }),
+          establish: async () => {},
+          activate: async (tx, node, operation) => {
+            await activateAuthenticatedDormantAllocation(
+              tx,
+              node,
+              join.eventId,
+              allocation,
+              approval,
+              context,
+              operation!.authority,
+            );
+          },
+        },
+      },
+    });
+    return promoteMirrorToPrimary(
+      {
+        db: suite.db,
+        nodeId: target.nodeId,
+        ring,
+        holders: createDeploymentHolders("mirror", "secondary"),
+        log: () => {},
+        persistTradingEnv: async () => {},
+        modules: [module],
+        withModuleOperations: ({ db, node }, run) =>
+          withRecoveryKeyOperation(
+            { db, nodeId: node.nodeId },
+            binding,
+            recoveryKey,
+            (tx, authority) =>
+              run(
+                tx,
+                new Map([[module.name, { input: { allocation, approval }, binding, authority }]]),
+              ),
+          ),
+      },
+      { oldNodeNeutralised: true },
+    );
+  }
+
+  it("promotes a seriesless standby with the actual signed reservation and key-only authority", async () => {
+    const result = await realPromotion();
+    expect(result.alreadyPrimary).toBe(false);
+    expect(
+      (await suite.db.select().from(invoiceSeries).where(eq(invoiceSeries.nodeId, target.nodeId)))
+        .map((s) => ({ code: s.code, purpose: s.purpose }))
+        .sort((a, b) => a.code.localeCompare(b.code)),
+    ).toEqual([...candidate.series].sort((a, b) => a.code.localeCompare(b.code)));
+    expect(result.seriesId).toBe(
+      (await suite.db.select().from(invoiceSeries).where(eq(invoiceSeries.code, "A-P000042")))[0]!
+        .id,
+    );
+    const audit = (await suite.db.execute(sql`select approval from fiscal_allocations`)).rows;
+    expect(JSON.parse(audit[0]!.approval as string)).toEqual(approval);
+    expect(await suite.db.select().from(persons)).toEqual([]);
+    expect(await suite.db.select().from(managementSessions)).toEqual([]);
+    const [role] = await suite.db
+      .select()
+      .from(nodeRoles)
+      .where(eq(nodeRoles.nodeId, target.nodeId));
+    expect(role!.mode).toBe("primary");
+    expect(role!.singletonRole).toBe("primary");
+  });
+
+  it("rolls the actual signed activation back with a refused promotion document", async () => {
+    await establishNodeIdentity({ ownerDb: suite.db, ring }, target.nodeId);
+    const before = await snapshot();
+    await suite.db.execute(
+      sql`create trigger refuse_chart before insert on node_membership begin select raise(abort, 'test chart refusal'); end`,
+    );
+    try {
+      await expect(realPromotion()).rejects.toThrow("test chart refusal");
       expect(await snapshot()).toEqual(before);
     } finally {
       await suite.db.execute(sql`drop trigger refuse_chart`);

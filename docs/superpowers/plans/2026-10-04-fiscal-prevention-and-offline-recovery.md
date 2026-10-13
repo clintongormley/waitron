@@ -651,3 +651,25 @@ and every setup, seed, restore, bundle, adoption and promotion consumer together
 rebase, complete migration regeneration and populated upgrade; sync the Cloud handoff's proposed
 operator binding to the owner-selected union; two full reviews, normal hook and current-head CI.
 Do not publish this incomplete candidate.
+
+
+**2026-10-13 standby-host checkpoint:** the reservation carrier supplies the named standby and
+scoped opaque input. Establishment carries its own scoped input without serialising in-process
+authority into the bundle or pending marker. The new `provisioning.standby.activate` seat runs in
+`promoteMirrorToPrimary` before trading-series validation, in the same transaction as the role and
+membership writes. An optional trusted host callback supplies that transaction and its freshly
+issued authority; key authentication need not open a nested transaction.
+
+New tests run signed dormant-allocation activation through that real promotion function using the
+actual node-key verifier. They retain the separate outside reservation and consumption, compare
+all three purposes and permanent key-event attribution, and roll back activation on a refused
+membership write. Generic carrier tests check scope, detached binding snapshots, expired authority,
+replaced keys, incomplete series and refused settings writes. The original missing-full-series
+check still refuses before writing trading settings. The settings file itself remains outside the
+database transaction; these tests do not claim that a later database refusal rolls that file back.
+
+The production composition's fiscal standby and restore seats are unchanged and do not use these
+new inputs. Boot/HTTP allocation collection and fiscal-seat wiring, text SIF/counter retirement,
+all setup/seed/restore/bundle/adoption/promotion consumers, current-main migration regeneration,
+populated upgrade, Cloud binding sync, and two full reviews plus hook/current-head CI remain.
+Task 4 is still incomplete; do not publish this candidate.

@@ -19,7 +19,13 @@ import {
 } from "@waitron/membership";
 import type { KeyRing } from "@waitron/credentials";
 import type { AdoptResult } from "@waitron/provisioning";
-import { enabledModules, serializeModuleConfig } from "@waitron/module";
+import {
+  enabledModules,
+  moduleOperationFor,
+  serializeModuleConfig,
+  snapshotModuleOperations,
+  type ModuleOperations,
+} from "@waitron/module";
 import { caCertPath } from "./box-secrets.js";
 import { readModuleConfig } from "./module-config.js";
 import { ALL_MODULES } from "./modules.js";
@@ -67,6 +73,7 @@ export interface AssembleDeps {
   standby: { nodeId: string; publicKey: string };
   accountKey: string;
   wireguardPublicKey?: string;
+  moduleOperations?: ModuleOperations;
 }
 
 export function refuseRemovedStandby(
@@ -99,6 +106,11 @@ export function refuseFullChart(
 // `mirror.standby_removed` when the held chart lists the standby as `evicted` or has cleared it, and
 // `mirror.membership_full` when it has no place left for the standby.
 export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBundle> {
+  const operations = snapshotModuleOperations(deps.moduleOperations);
+  const standby = {
+    nodeId: brandNodeId(deps.standby.nodeId),
+    locationId: brandLocationId(deps.designated.locationId),
+  };
   const { tenant, primaryNode } = await withTransaction(deps.appDb, async (tx) => {
     // Safe: every provisioned database holds the taxpayer row and the designated node's row.
     const t = (await readTenant(tx))!;
@@ -138,7 +150,9 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
       const series: { code: string; purpose: string }[] = [];
       for (const m of modules) {
         if (m.provisioning?.standby === undefined) continue;
-        const r = await m.provisioning.standby.reserve(tx, primary);
+        const operation = moduleOperationFor(operations, m.name, standby.nodeId, "reserve");
+        const r = await m.provisioning.standby.reserve(tx, primary, standby, operation);
+        moduleOperationFor(operations, m.name, standby.nodeId, "reserve");
         states[m.name] = r.state;
         series.push(...(r.series ?? []));
       }

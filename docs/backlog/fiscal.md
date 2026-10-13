@@ -673,3 +673,17 @@ approval bind `{kind:"recovery-key",nodeId,eventId}`; normal administrator actio
 attribution. Tests compare retained audit/role rows around takeover and rollback, with no accounts
 or management sessions. This does not connect a public promotion or cold restore. Coupled
 representation, all host consumers, outside continuity and final review remain open.
+
+
+### W41s-4 standby-host qualification, 2026-10-13
+
+The feature branch adds scoped reservation/establishment input and a module takeover seat inside
+real mirror promotion. Synthetic signed paper evidence and the actual current node-key verifier
+now exercise dormant activation, all three invoice purposes, key-event attribution and rollback
+when the membership write refuses. Expiration during a module or settings await refuses the
+operation and rolls back its database writes. Incomplete series refuse before settings persistence;
+the settings file is not a transactional database write and is not covered by that rollback claim.
+
+Production fiscal-seat wiring and allocation collectors, text SIF/counter retirement and all coupled
+consumers, final schema regeneration/populated upgrade and the whole-branch review/CI remain open.
+This checkpoint establishes no independent current paper history or remote-writer exclusion.
