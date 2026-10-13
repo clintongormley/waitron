@@ -104,7 +104,7 @@ export function joinedPlaceOver(
     : remainingPlace(anchor, parts, first, first, staying.at(-1)!);
 }
 
-/** Where a joined table stands after Join again or Reset table takes tables back into it. */
+/** Where a joined table stands after Reset table takes tables back into it. */
 export function joinedPlaceAfter(args: {
   row: Placement | null;
   standing: boolean;

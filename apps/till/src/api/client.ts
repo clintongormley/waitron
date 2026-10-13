@@ -3839,16 +3839,16 @@ export class TillApi {
     );
   }
 
-  /** Take split-off tables back into their joined table → `POST /api/tables/:id/today/join-again`.
-   * `seats` is left out when unset: the server refuses a null. */
-  joinAgainToday(
+  /** Take split-off tables back into their joined table →
+   * `POST /api/tables/:id/today/reset`. `seats` is left out when unset: the server refuses a null. */
+  resetTableToday(
     tableId: string,
     join: { partIds: string[]; seats?: number },
     zoneRevision: number,
   ): Promise<FloorAnswer> {
     return this.#todayChange(
       tableId,
-      "join-again",
+      "reset",
       {
         partIds: join.partIds,
         ...(join.seats === undefined ? {} : { seats: join.seats }),

@@ -251,6 +251,9 @@ split today. A split decides only who sits where today.
   > "Reset to saved plan" count as joined again at once (`joinAgain`,
   > `apps/server/src/floor-today-join-again.ts`; `joinedPlaceAfter`,
   > `apps/server/src/joined-split-layout.ts`).
+  > Superseded 2026-10-13 by A579 part 4b ([design](2026-10-13-a579-flattened-joined-tables-design.md)):
+  > Join again is gone from the till and the server; **Reset table** takes its place (`resetTable`,
+  > `apps/server/src/floor-today-reset-table.ts`).
 - **The reset puts a split joined table back whole only when it and every split-off part are free**
   and in no merge; until then everything stays as it is and the joined table waits, as a held table
   waits today (`planReset`, `apps/server/src/floor-reset-plan.ts:80-96`).
@@ -297,6 +300,8 @@ The four questions this design first raised, answered in the campaign's question
    makes a service merge that does not come back under the joined table's name. (The first draft
    said "Reset to saved plan" resets the whole zone; it does not: a held table waits and free ones
    are put back, `planReset`, `apps/server/src/floor-reset-plan.ts:80-96`.)
+   > Superseded 2026-10-13 by A579 ([design](2026-10-13-a579-flattened-joined-tables-design.md)): the
+   > owner replaced Join again with Reset table, which also puts the joined table at its saved place.
 4. **Where the parts go: each keeps its own saved size, side by side from the left**, so the parts
    may not fill the outline, or may overflow it.
 

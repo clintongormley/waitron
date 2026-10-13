@@ -27,7 +27,7 @@ import {
   toFloorTable,
 } from "@waitron/ui";
 import type { FloorMapDrop, FloorMapTable, FloorTable, ZoneTab } from "@waitron/ui";
-import { decimal, formatMoney, isZeroDecimal } from "@waitron/shared";
+import { conjunctionList, decimal, formatMoney, isZeroDecimal } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
 import "../widgets/seat-dialog.js";
 import "../widgets/today-seats-dialog.js";
@@ -35,8 +35,8 @@ import "../widgets/bill-choice-dialog.js";
 import "../widgets/join-with-dialog.js";
 import "../widgets/split-joined-dialog.js";
 import type { SplitJoinedDetail, TillSplitJoinedDialog } from "../widgets/split-joined-dialog.js";
-import "../widgets/join-again-dialog.js";
-import type { JoinAgainDetail, TillJoinAgainDialog } from "../widgets/join-again-dialog.js";
+import "../widgets/reset-table-dialog.js";
+import type { ResetTableDetail, TillResetTableDialog } from "../widgets/reset-table-dialog.js";
 import "../widgets/floor-zone-menu.js";
 import type { JoinWithPickDetail } from "../widgets/join-with-dialog.js";
 import type { BillChoiceDetail } from "../widgets/bill-choice-dialog.js";
@@ -48,11 +48,11 @@ import {
   type SheetAction,
   dropAction,
   groupSplitOf,
-  joinAgainOf,
-  type JoinAgainPlan,
   nextFloorMoment,
   onTodaysPlan,
   pendingPlaces,
+  resetTableOf,
+  type ResetTablePlan,
   sheetActions,
   spareSpot,
 } from "../state/floor-today.js";
@@ -120,14 +120,22 @@ interface SplittingJoined {
   seatsRequired: boolean;
 }
 
-interface JoiningAgain {
+interface ResettingTable {
   tableId: string;
   /** The plan sent, until its answer arrives. */
-  sent: JoinAgainPlan | null;
-  refusal: { code: string; field?: string } | null;
+  sent: ResetTablePlan | null;
+  /** `message` is the refusal's sentence naming the tables, when the floor read has their names. */
+  refusal: { code: string; field?: string; message?: string } | null;
 }
 
+/** A server refusal: its code, and its params as the client spreads them beside it. */
+type Refused = { code?: string; field?: unknown } & Record<string, unknown>;
+
 const asksSeats = (refused: { code?: string }): boolean => refused.code === "merge.seats_required";
+
+/** Sent at once, without asking seats, when every table comes back, and when the server will refuse
+ * it whatever the seats. */
+const resetsAtOnce = (plan: ResetTablePlan): boolean => plan.whole || plan.refusedInGroup;
 
 function placedAt(table: TableState, pending: Map<string, TodayPlacement>): TableState {
   const placement = pending.get(table.id);
@@ -536,9 +544,9 @@ export class TillFloorScreen extends LitElement {
   /** The table Split tables… was opened on, while its window is open; `#splitShown` says when a
    * floor read closes it. */
   @state() private splittingJoined: SplittingJoined | null = null;
-  /** Join again's joined table, while its window is open; `#joinAgainShown` says when a floor read
+  /** Reset table's joined table, while its window is open; `#resetShown` says when a floor read
    * closes it. */
-  @state() private joiningAgain: JoiningAgain | null = null;
+  @state() private resettingTable: ResettingTable | null = null;
   /** A drop joining two seated parties, waiting for which bills to keep. */
   @state() private askingBills: { api: TillApi; action: JoinAction; room: Room } | null = null;
 
@@ -605,10 +613,11 @@ export class TillFloorScreen extends LitElement {
         this.refusal = codeMessage(this.splittingJoined.refusal.code);
       this.splittingJoined = null;
     }
-    if (this.joiningAgain !== null && this.#joinAgainShown(this.joiningAgain) === undefined) {
-      if (this.joiningAgain.refusal !== null)
-        this.refusal = codeMessage(this.joiningAgain.refusal.code);
-      this.joiningAgain = null;
+    if (this.resettingTable !== null && this.#resetShown(this.resettingTable) === undefined) {
+      if (this.resettingTable.refusal !== null)
+        this.refusal =
+          this.resettingTable.refusal.message ?? codeMessage(this.resettingTable.refusal.code);
+      this.resettingTable = null;
     }
   }
 
@@ -872,14 +881,18 @@ export class TillFloorScreen extends LitElement {
       case "split-off":
         this.splittingJoined = { tableId, sent: null, refusal: null, seatsRequired: false };
         return;
-      case "join-again": {
-        const plan = joinAgainOf(table, this.tables);
+      case "reset-table": {
+        const plan = resetTableOf(table, this.tables);
         if (plan === null) return;
-        if (plan.whole)
+        if (resetsAtOnce(plan))
           send((sent) =>
-            api.joinAgainToday(plan.joined.id, { partIds: plan.back.map((each) => each.id) }, sent),
+            api.resetTableToday(
+              plan.joined.id,
+              { partIds: plan.back.map((each) => each.id) },
+              sent,
+            ),
           );
-        else this.joiningAgain = { tableId: plan.joined.id, sent: null, refusal: null };
+        else this.resettingTable = { tableId: plan.joined.id, sent: null, refusal: null };
         return;
       }
       case "rotate":
@@ -1035,12 +1048,60 @@ export class TillFloorScreen extends LitElement {
     try {
       this.#carry(await call);
     } catch (cause) {
-      const refused = (cause ?? {}) as { code?: string; field?: unknown };
+      const refused = (cause ?? {}) as Refused;
       if (asks(refused)) return;
-      this.refusal = codeMessage(refused.code ?? "server.internal");
+      this.refusal = this.#refusalText(refused);
       this.#setPending(null);
     }
     this.#requestFloorRefresh();
+  }
+
+  #refusalText(refused: Refused): string {
+    const code = refused.code ?? "server.internal";
+    return this.#namedRefusal(code, refused) ?? codeMessage(code);
+  }
+
+  /** The refusal's sentence naming its tables, or undefined when it names none or the floor read no
+   * longer has one of them. */
+  #namedRefusal(code: string, refused: Refused): string | undefined {
+    const tableOf = (id: unknown) => this.tables.find((each) => each.id === id);
+    switch (code) {
+      case "table.place_taken": {
+        const standing = tableOf(refused.standingId)?.label;
+        const joined = tableOf(refused.tableId)?.label;
+        if (standing === undefined || joined === undefined) return undefined;
+        return t("floor.place_taken")
+          .replaceAll("{table}", () => standing)
+          .replace("{joined}", () => joined);
+      }
+      case "joined_table.tables_in_group": {
+        const ids = Array.isArray(refused.partIds) ? (refused.partIds as unknown[]) : [];
+        const parts = ids.map(tableOf);
+        if (parts.length === 0 || parts.some((each) => each === undefined)) return undefined;
+        const joinId = parts[0]!.today?.joinId ?? null;
+        if (joinId === null || parts.some((each) => each!.today?.joinId !== joinId))
+          return undefined;
+        const group = this.#mergeName(parts[0]!);
+        if (group === null) return undefined;
+        const labels = parts.map((each) => each!.label);
+        const sentence =
+          labels.length === 1
+            ? t("floor.table_in_group").replace("{table}", () => labels[0]!)
+            : t("floor.tables_in_group").replace("{tables}", () =>
+                conjunctionList(labels, currentLocale()),
+              );
+        return sentence.replace("{group}", () => group);
+      }
+      case "table.split_off": {
+        const from = tableOf(refused.tableId)?.today?.splitOffFrom ?? null;
+        const joined = from === null ? undefined : tableOf(from)?.label;
+        return joined === undefined
+          ? undefined
+          : t("floor.split_off_reset").replace("{joined}", () => joined);
+      }
+      default:
+        return undefined;
+    }
   }
 
   #carry(answer: FloorAnswer | null): void {
@@ -1184,38 +1245,38 @@ export class TillFloorScreen extends LitElement {
     this.#requestFloorRefresh();
   }
 
-  /** Join again's plan for the joined table it was opened for, while some of its tables stay apart. */
-  #joiningAgain(tableId: string): JoinAgainPlan | undefined {
+  /** Reset table's plan for the joined table it was opened for, while some of its tables stay apart. */
+  #resetPlan(tableId: string): ResetTablePlan | undefined {
     const joined = this.tables.find((each) => each.id === tableId);
-    const plan = joined === undefined ? null : joinAgainOf(joined, this.tables);
+    const plan = joined === undefined ? null : resetTableOf(joined, this.tables);
     return plan === null || plan.whole ? undefined : plan;
   }
 
   /** While its request is out, the window keeps the plan it sent unless its joined table has left
    * the floor read; otherwise it shows the plan the floor reads now. */
-  #joinAgainShown(joining: JoiningAgain): JoinAgainPlan | undefined {
-    if (joining.sent === null) return this.#joiningAgain(joining.tableId);
-    return this.tables.some((each) => each.id === joining.tableId) ? joining.sent : undefined;
+  #resetShown(resetting: ResettingTable): ResetTablePlan | undefined {
+    if (resetting.sent === null) return this.#resetPlan(resetting.tableId);
+    return this.tables.some((each) => each.id === resetting.tableId) ? resetting.sent : undefined;
   }
 
-  #joinAgain(): TemplateResult | typeof nothing {
-    const joining = this.joiningAgain;
-    const plan = joining === null ? undefined : this.#joinAgainShown(joining);
-    if (joining === null || plan === undefined) return nothing;
-    return html`<till-join-again-dialog
+  #resetTable(): TemplateResult | typeof nothing {
+    const resetting = this.resettingTable;
+    const plan = resetting === null ? undefined : this.#resetShown(resetting);
+    if (resetting === null || plan === undefined) return nothing;
+    return html`<till-reset-table-dialog
       .joined=${plan.joined}
       .apart=${plan.apart}
-      .busy=${joining.sent !== null}
-      .refusal=${joining.refusal}
-      @join-again-confirm=${(event: CustomEvent<JoinAgainDetail>) => {
+      .busy=${resetting.sent !== null}
+      .refusal=${resetting.refusal}
+      @reset-table-confirm=${(event: CustomEvent<ResetTableDetail>) => {
         event.stopPropagation();
-        void this.#sendJoinAgain(event.currentTarget as TillJoinAgainDialog, event.detail);
+        void this.#sendResetTable(event.currentTarget as TillResetTableDialog, event.detail);
       }}
-      @join-again-cancel=${(event: Event) => {
+      @reset-table-cancel=${(event: Event) => {
         event.stopPropagation();
-        this.joiningAgain = null;
+        this.resettingTable = null;
       }}
-    ></till-join-again-dialog>`;
+    ></till-reset-table-dialog>`;
   }
 
   /**
@@ -1223,41 +1284,46 @@ export class TillFloorScreen extends LitElement {
    * sent it. The tables sent are the plan's as the floor reads them at the press, so a poll since
    * the window opened is what the server is asked to check against.
    */
-  async #sendJoinAgain(dialog: TillJoinAgainDialog, detail: JoinAgainDetail): Promise<void> {
-    const joining = this.joiningAgain;
-    const plan = joining === null ? undefined : this.#joiningAgain(joining.tableId);
+  async #sendResetTable(dialog: TillResetTableDialog, detail: ResetTableDetail): Promise<void> {
+    const resetting = this.resettingTable;
+    const plan = resetting === null ? undefined : this.#resetPlan(resetting.tableId);
     const api = this.api;
-    if (joining === null || plan === undefined || joining.sent !== null || api === undefined)
+    if (resetting === null || plan === undefined || resetting.sent !== null || api === undefined)
       return;
-    const sending = { ...joining, sent: plan, refusal: null };
-    this.joiningAgain = sending;
+    const sending = { ...resetting, sent: plan, refusal: null };
+    this.resettingTable = sending;
     const revision = this.#revision(plan.joined.zoneId);
     try {
       this.#carry(
         await this.#send(revision, (sent) =>
-          api.joinAgainToday(
-            joining.tableId,
+          api.resetTableToday(
+            resetting.tableId,
             { partIds: plan.back.map((each) => each.id), seats: detail.seats },
             sent,
           ),
         ),
       );
-      if (this.joiningAgain === sending) {
+      if (this.resettingTable === sending) {
         dialog.commit();
-        this.joiningAgain = null;
+        this.resettingTable = null;
       }
     } catch (cause) {
-      const refused = (cause ?? {}) as { code?: string; field?: unknown };
+      const refused = (cause ?? {}) as Refused;
       const code = refused.code ?? "server.internal";
-      if (this.joiningAgain === sending && this.#joiningAgain(joining.tableId) !== undefined)
-        this.joiningAgain = {
-          ...joining,
+      const message = this.#namedRefusal(code, refused);
+      if (this.resettingTable === sending && this.#resetPlan(resetting.tableId) !== undefined)
+        this.resettingTable = {
+          ...resetting,
           sent: null,
-          refusal: typeof refused.field === "string" ? { code, field: refused.field } : { code },
+          refusal: {
+            code,
+            ...(typeof refused.field === "string" ? { field: refused.field } : {}),
+            ...(message === undefined ? {} : { message }),
+          },
         };
-      else if (this.joiningAgain === sending || this.joiningAgain === null) {
-        this.joiningAgain = null;
-        this.refusal = codeMessage(code);
+      else if (this.resettingTable === sending || this.resettingTable === null) {
+        this.resettingTable = null;
+        this.refusal = message ?? codeMessage(code);
       }
     }
     this.#requestFloorRefresh();
@@ -1475,7 +1541,7 @@ export class TillFloorScreen extends LitElement {
             : this.#plannedMap(onMap, unplaced, activeKey)
         }
         ${this.#seatDialog()} ${this.#clearDialog()} ${this.#detailsSheet()} ${this.#seatsPrompt()}
-        ${this.#splitJoined()} ${this.#joinAgain()} ${this.#billChoice()} ${this.#joinWith()}
+        ${this.#splitJoined()} ${this.#resetTable()} ${this.#billChoice()} ${this.#joinWith()}
       </section>
     `;
   }

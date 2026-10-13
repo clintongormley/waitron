@@ -13,7 +13,7 @@ import type { ApartReason } from "../state/floor-today.js";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 
-export interface JoinAgainDetail {
+export interface ResetTableDetail {
   seats: number;
 }
 
@@ -25,8 +25,6 @@ const SEATS_MAX = 999;
 
 const REASON_KEYS = {
   guests: "floor.apart_guests",
-  clearing: "floor.apart_clearing",
-  merged: "floor.apart_merged",
   food: "floor.apart_food",
 } as const satisfies Record<ApartReason, string>;
 
@@ -37,8 +35,8 @@ function seatsFrom(value: string): number | null {
   return seats >= 1 && seats <= SEATS_MAX ? seats : null;
 }
 
-@customElement("till-join-again-dialog")
-export class TillJoinAgainDialog extends LitElement {
+@customElement("till-reset-table-dialog")
+export class TillResetTableDialog extends LitElement {
   static override styles = [
     baseStyles,
     css`
@@ -63,7 +61,11 @@ export class TillJoinAgainDialog extends LitElement {
   @property({ attribute: false }) joined!: TableState;
   @property({ attribute: false }) apart: { table: TableState; reason: ApartReason }[] = [];
   @property({ type: Boolean }) busy = false;
-  @property({ attribute: false }) refusal: { code: string; field?: string } | null = null;
+  @property({ attribute: false }) refusal: {
+    code: string;
+    field?: string;
+    message?: string;
+  } | null = null;
 
   @state() private seats = "";
   @state() private attempted = false;
@@ -119,7 +121,7 @@ export class TillJoinAgainDialog extends LitElement {
     return this.attempted && seatsFrom(this.seats) === null ? t("floor.seats_invalid") : "";
   }
 
-  #shownRefusal(): { code: string; field?: string } | null {
+  #shownRefusal(): { code: string; field?: string; message?: string } | null {
     return this.refusal === null || this.refusalDismissed ? null : this.refusal;
   }
 
@@ -142,7 +144,7 @@ export class TillJoinAgainDialog extends LitElement {
       return;
     }
     this.dispatchEvent(
-      new CustomEvent<JoinAgainDetail>("join-again-confirm", {
+      new CustomEvent<ResetTableDetail>("reset-table-confirm", {
         detail: { seats },
         bubbles: true,
         composed: true,
@@ -161,24 +163,24 @@ export class TillJoinAgainDialog extends LitElement {
     this.active = false;
     this.#scope?.dispose();
     this.#scope = undefined;
-    this.dispatchEvent(new CustomEvent("join-again-cancel", { bubbles: true, composed: true }));
+    this.dispatchEvent(new CustomEvent("reset-table-cancel", { bubbles: true, composed: true }));
   }
 
   override render() {
     const seatsError = this.#seatsError();
     const refusal = this.#shownRefusal();
-    const refusalText = refusal === null ? "" : codeMessage(refusal.code);
+    const refusalText = refusal === null ? "" : (refusal.message ?? codeMessage(refusal.code));
     const seatsMessage = seatsError || (refusal?.field === "seats" ? refusalText : "");
     const invalid = seatsError !== "";
     const footError = seatsMessage !== "" ? t("form.fix_fields") : refusalText;
     const actionState = saveActionState(this.#scope);
-    const withTable = (key: "floor.join_again_title" | "floor.seats_title") =>
+    const withTable = (key: "floor.reset_table_title" | "floor.seats_title") =>
       t(key).replace("{table}", () => this.joined.label);
     return html`<wt-dialog
       ${trackDialog()}
       .open=${this.active}
       .beforeClose=${this.#leave ? this.#beforeClose : () => Promise.resolve(!this.busy)}
-      .heading=${withTable("floor.join_again_title")}
+      .heading=${withTable("floor.reset_table_title")}
       @wt-close=${(event: Event) => this.#closed(event)}
     >
       <div class="fields">
@@ -206,7 +208,7 @@ export class TillJoinAgainDialog extends LitElement {
         <wt-form-actions .error=${footError}>
           <wt-button
             slot="cancel"
-            data-join-again-cancel
+            data-reset-table-cancel
             variant="secondary"
             ?disabled=${this.busy}
             @click=${() => this.#cancel()}
@@ -214,12 +216,12 @@ export class TillJoinAgainDialog extends LitElement {
             ${t("action.cancel")}
           </wt-button>
           <wt-button
-            data-join-again-action
+            data-reset-table-action
             variant=${actionState.variant}
             ?disabled=${this.busy || actionState.unchanged || invalid}
             @click=${() => void this.#confirm()}
           >
-            ${t("floor.join_again")}
+            ${t("floor.reset_table")}
           </wt-button>
         </wt-form-actions>
       </div>
@@ -229,6 +231,6 @@ export class TillJoinAgainDialog extends LitElement {
 
 declare global {
   interface HTMLElementTagNameMap {
-    "till-join-again-dialog": TillJoinAgainDialog;
+    "till-reset-table-dialog": TillResetTableDialog;
   }
 }

@@ -250,7 +250,7 @@ describe("the table routes' revision", () => {
       },
     ],
     [
-      "join-again",
+      "reset",
       async () => {
         const { zoneId, table } = await LONG();
         await expectRevision(
@@ -937,12 +937,12 @@ describe("the split-off route", () => {
   });
 });
 
-describe("the join-again route", () => {
-  it("joins Counter 5 again over HTTP and answers the room's revision", async () => {
+describe("the joined table's reset route", () => {
+  it("takes Counter 5 back over HTTP and answers the room's revision", async () => {
     const { table } = await LONG();
     await expectRevision(v, today(table.long!, "split-off", { partIds: [table.c5!], seats: 6 }));
 
-    await expectRevision(v, today(table.long!, "join-again", { partIds: [table.c5!] }));
+    await expectRevision(v, today(table.long!, "reset", { partIds: [table.c5!] }));
 
     expect(await todayRow(v, table.long!)).toMatchObject({ width: 6, seats: 10 });
     expect(await todayRow(v, table.c5!)).toMatchObject({ x: null });
@@ -995,7 +995,7 @@ describe("the join-again route", () => {
     const [tableId, body] = await setup(table);
     const before = await everything();
 
-    expect(await refusal(today(tableId, "join-again", body))).toEqual({
+    expect(await refusal(today(tableId, "reset", body))).toEqual({
       status,
       body: { error: { code, params: params(table) } },
     });
@@ -1012,7 +1012,7 @@ describe("the join-again route", () => {
     await expectRevision(v, today(table.long!, "split-off", { partIds: [table.c5!], seats: 6 }));
     const before = await everything();
 
-    expect(await refusal(today(table.long!, "join-again", { partIds: partIds(table) }))).toEqual({
+    expect(await refusal(today(table.long!, "reset", { partIds: partIds(table) }))).toEqual({
       status: 400,
       body: { error: { code: "management.request_invalid", params: { field: "partIds" } } },
     });
@@ -1024,9 +1024,7 @@ describe("the join-again route", () => {
     await expectRevision(v, today(table.long!, "split-off", { partIds: [table.c5!], seats: 6 }));
     const before = await everything();
 
-    expect(
-      await refusal(today(table.long!, "join-again", { partIds: [table.c5!], seats: 0 })),
-    ).toEqual({
+    expect(await refusal(today(table.long!, "reset", { partIds: [table.c5!], seats: 0 }))).toEqual({
       status: 400,
       body: { error: { code: "management.request_invalid", params: { field: "seats" } } },
     });

@@ -247,21 +247,26 @@ export function spareSpot(zoneTables: readonly TableState[]): { x: number; y: nu
   };
 }
 
-export type ApartReason = "guests" | "clearing" | "merged" | "food";
+export type ApartReason = "guests" | "food";
 
-export interface JoinAgainPlan {
+export interface ResetTablePlan {
   joined: TableState;
   back: TableState[];
   apart: { table: TableState; reason: ApartReason }[];
   whole: boolean;
+  /** Offered only to be refused: too few tables would be joined because the rest are in a group
+   * with guests, which the server refuses `joined_table.tables_in_group` whatever the seats. */
+  refusedInGroup: boolean;
 }
 
-/** What Join again on `table` would do: `table` is the joined table or a free table split off it.
- * `null` when it offers nothing. */
-export function joinAgainOf(
+/** What Reset table on `table` would take back: `table` is the joined table or a free table split
+ * off it. `null` when it offers nothing. Mirrors the server's rule in
+ * `apps/server/src/floor-today-reset-table.ts`, and also offers one case that rule refuses
+ * (`refusedInGroup`). */
+export function resetTableOf(
   table: TableState,
   zoneTables: readonly TableState[],
-): JoinAgainPlan | null {
+): ResetTablePlan | null {
   const today = table.today;
   if (today === null) return null;
   const joined =
@@ -272,31 +277,36 @@ export function joinAgainOf(
         : undefined;
   const state = joined?.today?.joined;
   if (joined === undefined || state == null) return null;
-  if (joined !== table && apartReason(table) !== null) return null;
+  if (joined !== table && apartReason(table, zoneTables) !== null) return null;
   const byId = new Map(zoneTables.map((each) => [each.id, each]));
   const splitOff = state.splitOff.flatMap((id) => byId.get(id) ?? []);
-  const back = splitOff.filter((each) => apartReason(each) === null);
-  if (back.length === 0 || state.parts.length + back.length < 2) return null;
+  const back = splitOff.filter((each) => apartReason(each, zoneTables) === null);
   const apart = splitOff.flatMap((each) => {
-    const reason = apartReason(each);
+    const reason = apartReason(each, zoneTables);
     return reason === null ? [] : [{ table: each, reason }];
   });
-  return { joined, back, apart, whole: apart.length === 0 };
+  const plan = { joined, back, apart, whole: apart.length === 0, refusedInGroup: false };
+  if (back.length > 0 && state.parts.length + back.length >= 2) return plan;
+  // Offered so that pressing it shows the server's `joined_table.tables_in_group` refusal, which
+  // names the tables to split off the group first.
+  const blockedByGroup =
+    joined !== table &&
+    apart.some(({ table: each, reason }) => reason === "guests" && each.today?.joinId != null);
+  return blockedByGroup ? { ...plan, refusedInGroup: true } : null;
 }
 
-function apartReason(table: TableState): ApartReason | null {
+function apartReason(table: TableState, zoneTables: readonly TableState[]): ApartReason | null {
   if (table.condition === "held") return "guests";
-  if (table.condition === "needs_clearing") return "clearing";
-  if (table.today?.joinId != null) return "merged";
+  if (mergeMembersOf(zoneTables, table).some((each) => each.condition === "held")) return "guests";
   if (table.pendingDeliveries > 0) return "food";
   return null;
 }
 
 export type SheetAction =
-  "join-with" | "split-off" | "join-again" | "rotate" | "seats" | "back" | "take-off";
+  "join-with" | "split-off" | "reset-table" | "rotate" | "seats" | "back" | "take-off";
 
 /** Slice 4 decisions 12 and 16: the details sheet's changes for today that apply to `table`, in
- * order. Join again is offered only when `zoneTables` holds the joined table and its split-off tables. */
+ * order. Reset table is offered only when `zoneTables` holds the joined table and its split-off tables. */
 export function sheetActions(
   table: TableState,
   zoneTables: readonly TableState[] = [],
@@ -312,7 +322,7 @@ export function sheetActions(
   const applies: [SheetAction, boolean][] = [
     ["join-with", !merged && !clearing],
     ["split-off", merged || (joined !== null && joined.parts.length >= 2)],
-    ["join-again", joinAgainOf(table, zoneTables) !== null],
+    ["reset-table", resetTableOf(table, zoneTables) !== null],
     ["rotate", !today.fixed && !merged],
     ["seats", true],
     ["back", !splitOff && (joined === null || joined.splitOff.length === 0)],

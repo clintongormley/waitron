@@ -4,7 +4,6 @@ import {
   joinedOutOfService,
   joinedTableApart,
   floorResetTables,
-  floorTodayJoinTables,
   floorTodaySplitParts,
   floorTodayTables,
   type Transaction,
@@ -22,10 +21,11 @@ import type { TillConfig } from "./till-config.js";
 import "./errors.js";
 
 /**
- * Takes back every table split off the joined table that no party holds and no food is on its way
- * to, ending any group one is in, and puts the joined table back from its saved place: all of it
- * when whole, else from the first table joined to the last. Saved with no place, it is placed as
- * Join again places it.
+ * Takes back every table split off the joined table that no party holds, that is in no group a
+ * party holds a table of, and that no food is on its way to, ending any group one is in, and puts
+ * the joined table back from its saved place: all of it when whole, else from the first table
+ * joined to the last. Saved with no place, `joinedPlaceAfter` places it from its place on today's
+ * map, and it is off the map when that gives none.
  */
 export async function resetTable(
   tx: Transaction,
@@ -48,20 +48,22 @@ export async function resetTable(
     .where(eq(floorTodaySplitParts.joinedTableId, tableId));
   const split = new Set(splitRows.map((row) => row.partId));
   const splitOffIds = parts.filter((part) => split.has(part.tableId)).map((part) => part.tableId);
-  const held = await holdersOf(tx, splitOffIds);
+  const groups = new Map<string, string[]>();
+  for (const id of splitOffIds) groups.set(id, await mergeMembers(tx, id));
+  const held = await holdersOf(tx, [...new Set([...splitOffIds, ...[...groups.values()].flat()])]);
+  const groupHeld = (id: string) => groups.get(id)!.some((member) => held.has(member));
   const food = await foodComingTo(tx, splitOffIds);
   const back = parts.filter(
-    (part) => split.has(part.tableId) && !held.has(part.tableId) && !food.has(part.tableId),
+    (part) =>
+      split.has(part.tableId) &&
+      !held.has(part.tableId) &&
+      !groupHeld(part.tableId) &&
+      !food.has(part.tableId),
   );
   const joined = parts.filter((part) => part.stillJoined).length;
   if (back.length === 0 || joined + back.length < 2) {
-    const grouped = await tx
-      .select({ id: floorTodayJoinTables.tableId })
-      .from(floorTodayJoinTables)
-      .where(inArray(floorTodayJoinTables.tableId, splitOffIds));
-    const inGroup = new Set(grouped.map((row) => row.id));
     const blocking = parts
-      .filter((part) => held.has(part.tableId) && inGroup.has(part.tableId))
+      .filter((part) => split.has(part.tableId) && groupHeld(part.tableId))
       .sort(byNumberOrder)
       .map((part) => part.tableId);
     if (blocking.length > 0) {

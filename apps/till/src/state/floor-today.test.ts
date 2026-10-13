@@ -5,10 +5,10 @@ import type { TableParty, TableState, TableToday, TodayPlacement } from "../api/
 import {
   dropAction,
   groupSplitOf,
-  joinAgainOf,
   onTodaysPlan,
   outOfServiceJoined,
   pendingPlaces,
+  resetTableOf,
   sheetActions,
   spareSpot,
   sparesOf,
@@ -502,33 +502,46 @@ describe("a joined table split today", () => {
     expect(onTodaysPlan(c5)).toBe(true);
   });
 
-  it("offers Join again on Long table and on Counter 5 while Counter 5 is free", () => {
+  it("offers Reset table on Long table and on Counter 5 while Counter 5 is free", () => {
     const zone = [long, c3, c4, c5];
     const offered = sheetActions(long, zone);
-    expect(offered.indexOf("join-again")).toBe(offered.indexOf("split-off") + 1);
-    expect(sheetActions(c5, zone)).toContain("join-again");
-    expect(sheetActions(long)).not.toContain("join-again");
+    expect(offered.indexOf("reset-table")).toBe(offered.indexOf("split-off") + 1);
+    expect(sheetActions(c5, zone)).toContain("reset-table");
+    expect(sheetActions(long)).not.toContain("reset-table");
   });
 
   const busy: [string, Partial<TableState>][] = [
     ["seated", seatedBy(party("p1", ["c5"]))],
-    ["needing clearing", { condition: "needs_clearing" }],
-    ["merged", { today: { ...c5.today!, joinId: "m1" } }],
     ["with food on its way", { pendingDeliveries: 1 }],
   ];
 
+  const comesBack: [string, Partial<TableState>][] = [
+    ["needing clearing", { condition: "needs_clearing" }],
+    ["merged", { today: { ...c5.today!, joinId: "m1" } }],
+  ];
+
   it.each(busy)(
-    "offers no Join again on a table split off that is not free, nor on a joined table none of whose split-off tables is free: Counter 5 %s",
+    "offers no Reset table on a table split off that is not free, nor on a joined table none of whose split-off tables is free: Counter 5 %s",
     (_, over) => {
       const busyC5 = table("c5", "Counter 5", { ...c5, ...over });
       const zone = [long, c3, c4, busyC5];
-      expect(sheetActions(busyC5, zone)).not.toContain("join-again");
-      expect(sheetActions(long, zone)).not.toContain("join-again");
+      expect(sheetActions(busyC5, zone)).not.toContain("reset-table");
+      expect(sheetActions(long, zone)).not.toContain("reset-table");
+    },
+  );
+
+  it.each(comesBack)(
+    "offers Reset table on Counter 5 and on Long table, since Reset table takes Counter 5 back: Counter 5 %s",
+    (_, over) => {
+      const backC5 = table("c5", "Counter 5", { ...c5, ...over });
+      const zone = [long, c3, c4, backC5];
+      expect(sheetActions(backC5, zone)).toContain("reset-table");
+      expect(sheetActions(long, zone)).toContain("reset-table");
     },
   );
 
   it.each(busy)(
-    "offers Join again on a free table split off, but not on one that is busy, while another is free: Counter 5 %s",
+    "offers Reset table on a free table split off, but not on one that is busy, while another is free: Counter 5 %s",
     (_, over) => {
       const standing = table("long", "Long table", {
         today: today({
@@ -542,11 +555,191 @@ describe("a joined table split today", () => {
       });
       const busyC5 = table("c5", "Counter 5", { ...c5, ...over });
       const zone = [standing, c3, freeC4, busyC5];
-      expect(sheetActions(busyC5, zone)).not.toContain("join-again");
-      expect(sheetActions(freeC4, zone)).toContain("join-again");
-      expect(sheetActions(standing, zone)).toContain("join-again");
+      expect(sheetActions(busyC5, zone)).not.toContain("reset-table");
+      expect(sheetActions(freeC4, zone)).toContain("reset-table");
+      expect(sheetActions(standing, zone)).toContain("reset-table");
     },
   );
+
+  describe("Reset table", () => {
+    const zone = [long, c3, c4, c5];
+    const whole = { joined: long, back: [c5], apart: [], whole: true, refusedInGroup: false };
+
+    it("offers Reset table on Long table and on Counter 5 when Counter 5 is free, taking every table back", () => {
+      expect(resetTableOf(long, zone)).toEqual(whole);
+      expect(resetTableOf(c5, zone)).toEqual(whole);
+      expect(sheetActions(long, zone)).toContain("reset-table");
+      expect(sheetActions(c5, zone)).toContain("reset-table");
+    });
+
+    it("takes back a table marked needs clearing", () => {
+      const marked = table("c5", "Counter 5", { ...c5, condition: "needs_clearing" });
+      const markedZone = [long, c3, c4, marked];
+      const plan = { joined: long, back: [marked], apart: [], whole: true, refusedInGroup: false };
+      expect(resetTableOf(long, markedZone)).toEqual(plan);
+      expect(resetTableOf(marked, markedZone)).toEqual(plan);
+    });
+
+    it("takes back a table in a group nobody sits at", () => {
+      const grouped = table("c5", "Counter 5", { ...c5, today: { ...c5.today!, joinId: "g" } });
+      const groupBar = table("gbar", "Bar", {
+        today: today({ placement: place(40, 30), joinId: "g" }),
+      });
+      const groupZone = [long, c3, c4, grouped, groupBar];
+      const plan = { joined: long, back: [grouped], apart: [], whole: true, refusedInGroup: false };
+      expect(resetTableOf(long, groupZone)).toEqual(plan);
+      expect(resetTableOf(grouped, groupZone)).toEqual(plan);
+    });
+
+    it("offers Reset table on Long table but not on Counter 5 while guests sit at Counter 5, which stays apart", () => {
+      const standing = table("long", "Long table", {
+        today: today({
+          placement: place(10, 20, { width: 6, height: 2 }),
+          seats: 10,
+          joined: { parts: ["c3"], splitOff: ["c4", "c5"], apart: false },
+        }),
+      });
+      const freeC4 = table("c4", "Counter 4", {
+        today: today({ placement: place(30, 22), splitOffFrom: "long" }),
+      });
+      const seatedC5 = table("c5", "Counter 5", { ...c5, ...seatedBy(party("p1", ["c5"])) });
+      const seatedZone = [standing, c3, freeC4, seatedC5];
+      const plan = {
+        joined: standing,
+        back: [freeC4],
+        apart: [{ table: seatedC5, reason: "guests" }],
+        whole: false,
+        refusedInGroup: false,
+      };
+      expect(resetTableOf(standing, seatedZone)).toEqual(plan);
+      expect(resetTableOf(freeC4, seatedZone)).toEqual(plan);
+      expect(resetTableOf(seatedC5, seatedZone)).toBeNull();
+    });
+
+    it("offers Reset table on a free Counter 5 whose fellow tables are in a group with guests, which the server refuses", () => {
+      const apartLong = table("long", "Long table", {
+        today: today({
+          placement: null,
+          seats: 10,
+          joined: { parts: [], splitOff: ["c3", "c4", "c5"], apart: true },
+        }),
+      });
+      const group = party("p1", ["gbar", "c3", "c4"]);
+      const inGroup = (id: string, label: string) =>
+        table(id, label, {
+          ...seatedBy(group),
+          today: today({ placement: place(30, 0), splitOffFrom: "long", joinId: "g" }),
+        });
+      const gc3 = inGroup("c3", "Counter 3");
+      const gc4 = inGroup("c4", "Counter 4");
+      const groupBar = table("gbar", "Bar", {
+        ...seatedBy(group),
+        today: today({ placement: place(40, 0), joinId: "g" }),
+      });
+      const freeC5 = table("c5", "Counter 5", {
+        today: today({ placement: place(10, 22), splitOffFrom: "long" }),
+      });
+      const groupZone = [apartLong, gc3, gc4, groupBar, freeC5];
+      expect(resetTableOf(freeC5, groupZone)).toEqual({
+        joined: apartLong,
+        back: [freeC5],
+        apart: [
+          { table: gc3, reason: "guests" },
+          { table: gc4, reason: "guests" },
+        ],
+        whole: false,
+        refusedInGroup: true,
+      });
+      expect(sheetActions(freeC5, groupZone)).toContain("reset-table");
+      expect(resetTableOf(apartLong, groupZone)).toBeNull();
+      expect(resetTableOf(gc3, groupZone)).toBeNull();
+    });
+
+    describe("Counter 5 free in a group with Bar, where guests sit at Bar alone", () => {
+      const grouped = table("c5", "Counter 5", { ...c5, today: { ...c5.today!, joinId: "g" } });
+      const heldBar = table("gbar", "Bar", {
+        ...seatedBy(party("p1", ["gbar"])),
+        today: today({ placement: place(40, 30), joinId: "g" }),
+      });
+
+      it("keeps Counter 5 apart for guests while Counter 4 comes back", () => {
+        const standing = table("long", "Long table", {
+          today: today({
+            placement: place(10, 20, { width: 6, height: 2 }),
+            seats: 10,
+            joined: { parts: ["c3"], splitOff: ["c4", "c5"], apart: false },
+          }),
+        });
+        const freeC4 = table("c4", "Counter 4", {
+          today: today({ placement: place(30, 22), splitOffFrom: "long" }),
+        });
+        const zone = [standing, c3, freeC4, grouped, heldBar];
+        const plan = {
+          joined: standing,
+          back: [freeC4],
+          apart: [{ table: grouped, reason: "guests" }],
+          whole: false,
+          refusedInGroup: false,
+        };
+        expect(resetTableOf(standing, zone)).toEqual(plan);
+        expect(resetTableOf(freeC4, zone)).toEqual(plan);
+        expect(resetTableOf(grouped, zone)).toBeNull();
+        expect(sheetActions(grouped, zone)).not.toContain("reset-table");
+      });
+
+      it("offers nothing when Counter 5 is the one table split off", () => {
+        const zone = [long, c3, c4, grouped, heldBar];
+        for (const each of zone) expect(resetTableOf(each, zone)).toBeNull();
+        expect(sheetActions(long, zone)).not.toContain("reset-table");
+        expect(sheetActions(grouped, zone)).not.toContain("reset-table");
+      });
+    });
+
+    it("offers Reset table on a free Counter 5 whose fellow tables are free in a group where guests sit at Bar alone, which the server refuses", () => {
+      const apartLong = table("long", "Long table", {
+        today: today({
+          placement: null,
+          seats: 10,
+          joined: { parts: [], splitOff: ["c3", "c4", "c5"], apart: true },
+        }),
+      });
+      const inGroup = (id: string, label: string) =>
+        table(id, label, {
+          today: today({ placement: place(30, 0), splitOffFrom: "long", joinId: "g" }),
+        });
+      const gc3 = inGroup("c3", "Counter 3");
+      const gc4 = inGroup("c4", "Counter 4");
+      const groupBar = table("gbar", "Bar", {
+        ...seatedBy(party("p1", ["gbar"])),
+        today: today({ placement: place(40, 0), joinId: "g" }),
+      });
+      const freeC5 = table("c5", "Counter 5", {
+        today: today({ placement: place(10, 22), splitOffFrom: "long" }),
+      });
+      const groupZone = [apartLong, gc3, gc4, groupBar, freeC5];
+      expect(resetTableOf(freeC5, groupZone)).toEqual({
+        joined: apartLong,
+        back: [freeC5],
+        apart: [
+          { table: gc3, reason: "guests" },
+          { table: gc4, reason: "guests" },
+        ],
+        whole: false,
+        refusedInGroup: true,
+      });
+      expect(sheetActions(freeC5, groupZone)).toContain("reset-table");
+      expect(resetTableOf(apartLong, groupZone)).toBeNull();
+      expect(resetTableOf(gc3, groupZone)).toBeNull();
+    });
+
+    it("offers nothing on Long table's tables when Counter 5, the one table split off, has guests", () => {
+      const seatedC5 = table("c5", "Counter 5", { ...c5, ...seatedBy(party("p1", ["c5"])) });
+      const seatedZone = [long, c3, c4, seatedC5];
+      for (const each of seatedZone) expect(resetTableOf(each, seatedZone)).toBeNull();
+      expect(sheetActions(long, seatedZone)).not.toContain("reset-table");
+      expect(sheetActions(seatedC5, seatedZone)).not.toContain("reset-table");
+    });
+  });
 
   describe("Bar table, come apart", () => {
     const comeApart = (splitOff: string[]) =>
@@ -567,18 +760,14 @@ describe("a joined table split today", () => {
       const b1 = barPart("b1", "Bar 1", seatedBy(party("p1", ["b1"])));
       const b2 = barPart("b2", "Bar 2");
       const b3 = barPart("b3", "Bar 3");
-      expect(joinAgainOf(b2, [bar3, b1, b2, b3])).toEqual({
+      expect(resetTableOf(b2, [bar3, b1, b2, b3])).toEqual({
         joined: bar3,
         back: [b2, b3],
         apart: [{ table: b1, reason: "guests" }],
         whole: false,
+        refusedInGroup: false,
       });
       const reasons: [Partial<TableState>, string][] = [
-        [{ condition: "needs_clearing" }, "clearing"],
-        [
-          { today: today({ placement: place(40, 10), splitOffFrom: "bar", joinId: "m1" }) },
-          "merged",
-        ],
         [{ pendingDeliveries: 1 }, "food"],
         [
           {
@@ -590,24 +779,39 @@ describe("a joined table split today", () => {
       ];
       for (const [over, reason] of reasons) {
         const apartB1 = barPart("b1", "Bar 1", over);
-        expect(joinAgainOf(b2, [bar3, apartB1, b2, b3])?.apart).toEqual([
+        expect(resetTableOf(b2, [bar3, apartB1, b2, b3])?.apart).toEqual([
           { table: apartB1, reason },
         ]);
       }
+      const comingBack: Partial<TableState>[] = [
+        { condition: "needs_clearing" },
+        { today: today({ placement: place(40, 10), splitOffFrom: "bar", joinId: "m1" }) },
+      ];
+      for (const over of comingBack) {
+        const backB1 = barPart("b1", "Bar 1", over);
+        expect(resetTableOf(b2, [bar3, backB1, b2, b3])).toEqual({
+          joined: bar3,
+          back: [backB1, b2, b3],
+          apart: [],
+          whole: true,
+          refusedInGroup: false,
+        });
+      }
       const freeB1 = barPart("b1", "Bar 1");
-      expect(joinAgainOf(b2, [bar3, freeB1, b2, b3])).toEqual({
+      expect(resetTableOf(b2, [bar3, freeB1, b2, b3])).toEqual({
         joined: bar3,
         back: [freeB1, b2, b3],
         apart: [],
         whole: true,
+        refusedInGroup: false,
       });
     });
 
-    it("offers no Join again when fewer than two tables would be joined", () => {
+    it("offers no Reset table when fewer than two tables would be joined", () => {
       const bar2 = comeApart(["b1", "b2"]);
       const b1 = barPart("b1", "Bar 1", seatedBy(party("p1", ["b1"])));
       const b2 = barPart("b2", "Bar 2");
-      expect(joinAgainOf(b2, [bar2, b1, b2])).toBeNull();
+      expect(resetTableOf(b2, [bar2, b1, b2])).toBeNull();
     });
   });
 });

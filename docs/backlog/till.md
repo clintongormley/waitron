@@ -317,7 +317,9 @@ Counter 3, Counter 5" in one run.
 leaves the rest of its group free (`apps/server/src/move-bill.ts`, the `openParty` call), so a party
 can hold some of a group's tables. Seating, the party join and Move guests all treat a group whole.
 Found by A579 part 3b's review: Split tables… ticking that table would have left the party open with
-no table; it is now refused `merge.strands_party`. Next: decide whether the moved bill's party takes the
+no table; it is now refused `merge.strands_party`. Reset table (A579 part 4b) keeps a table split off a
+joined table apart while a party holds any table of its group, so a group such a party holds only part of
+is not ended under it. Next: decide whether the moved bill's party takes the
 whole group, as seating at one of its tables does.
 
 ## A600. The floor-wide reset and its catch-up do not look at what stands in a saved place
@@ -375,7 +377,7 @@ here, and check what the reset does with that order's table.
 **A567 (2026-10-13).** A split joined table waits for the reset while one of its tables is busy.
 An edit to the saved plan that changes its tables meanwhile can shift where later tables land when
 it is split or joined again. #1604 accepted it for now; #1608's plan notes that Join again lays
-out from the same slots (`slotStart`, `apps/server/src/joined-split-layout.ts`). Left open by A503
+out from the same slots, and Reset table, which replaced Join again in A579, does too (`slotStart`, `apps/server/src/joined-split-layout.ts`). Left open by A503
 (#1604, #1608). Next: decide whether such an edit waits for the reset, or the layout keeps the
 tables it split from.
 
@@ -399,49 +401,46 @@ A503 part 2 (#1601). Next: an inline multi-pick primitive, and the owner's call 
 
 **A570 (2026-10-13).** When a joined table's removal is refused, its split rows stay
 (`deleteWithItsSplit`, `apps/server/src/table-removal.ts`), so a table split off it is refused
-Back and Take off (`table.split_off`), and Join again has no joined table on today's plan to join.
+Back and Take off (`table.split_off`), and Reset table (Join again before A579) has no joined table on
+today's plan to put back.
 Review M1 of #1608's tasks 1a–4 found it reached only through a party record left by an older
 version. Left open by A503 part 4 (#1608). Next: decide whether a refused removal also ends the
 split for the tables split off it.
 
-## A571. A joined table that came apart cannot reach Join again when its free tables are off the map
+## A571. A joined table that came apart cannot reach Reset table when its free tables are off the map
 
 **A571 (2026-10-13).** A joined table that has come apart is hidden from the till's map
 (`outOfServiceJoined`), and a split-off table that is taken off or has no place is offered no
 action (`sheetActions`; both in `apps/till/src/state/floor-today.ts`). When those are its only
-free split-off tables, Join again is offered nowhere; the reset still puts it back. #1608's plan
+free split-off tables, Reset table (Join again before A579) is offered nowhere; the reset still puts it back. #1608's plan
 found this state made by Back or Take off on a split-off table, which #1608 now refuses (design gap
-7). Left open by A503 part 4 (#1608). Next: decide whether the zone menu offers Join again.
+7). Left open by A503 part 4 (#1608). Next: decide whether the zone menu offers Reset table.
 
-## A572. Join again counts a joined table whole while a table added to it still has guests
+## A572. Reset table counts a joined table whole while a table added to it still has guests
 
 **A572 (2026-10-13).** A table the saved plan adds to a joined table while guests sit at it is left
-separate by the reset, with no split record. Join again then counts the joined table whole: it
-gives it its full saved seats and asks for none, while that table still holds its guests — the
-same state the reset produces. The case "brings Long table back at its saved place when it came
-apart around a part guests held since the reset" (`apps/server/src/floor-today-join-again.test.ts`)
-expects those 10 seats. #1608's first Codex review found it again (design gap 8). Left open by A503
-part 4 (#1608). Next: decide whether that table counts as staying apart.
+separate by the reset, with no split record. Reset table (Join again before A579) then counts the
+joined table whole: it gives it its full saved seats and asks for none, while that table still holds
+its guests — the same state the reset produces. The case "brings Long table back at its saved place,
+not where staff moved it" (`apps/server/src/floor-today-reset-table.test.ts`) expects those 10 seats.
+#1608's first Codex review found it again (design gap 8). Left open by A503 part 4 (#1608). Next: decide whether that table counts as staying apart.
 
-## A574. `joined_table.parts_split_off` could say what to do
-
-**A574 (2026-10-13).** The till says "Some of its tables are split off" (`apps/till/src/i18n/codes.ts`);
-since #1608 it could add "Join its tables again first". The sentence is pinned in
-`apps/till/src/i18n/codes.test.ts`, so #1608 left it. Next: the new wording in English and Spanish,
-and the pinned test with it.
-
-## A575. Join again: three things seen in #1608's look
+## A575. Reset table's window: two things seen in #1608's look
 
 **A575 (2026-10-13).** Wording and layout calls for the owner, seen in #1608's screenshots
-(`~/waitron-campaign-c/a503-4-shots`), none a defect:
+(`~/waitron-campaign-c/a503-4-shots`), neither a defect:
 
 - The Spanish `joined_table.out_of_date` sentence ("Sus mesas han cambiado. Revísalo e inténtalo de
-  nuevo", `apps/till/src/i18n/codes.ts`) wraps to two lines at 390 px.
-- In the Join again window the lines naming each table that stays apart sit below the Seats field
-  (`apps/till/src/widgets/join-again-dialog.ts`), so the reason is read after the field it explains.
-- A joined table's details sheet still offers Take off for today while one of its tables is split
-  off (`sheetActions`, `apps/till/src/state/floor-today.ts`); the design speaks only of the
-  split-off table.
+  nuevo", `apps/till/src/i18n/codes.ts`) wraps to two lines at 390 px. A579 part 4b's look did not
+  shoot it; the three of its four new floor sentences it shot (all but `floor.table_in_group`, the one-table
+  form) fit at 390 px in Spanish
+  (`~/waitron-campaign-c/a579-4b-shots`).
+- In the Reset table window (the Join again window before A579) the lines naming each table that
+  stays apart sit below the Seats field (`apps/till/src/widgets/reset-table-dialog.ts`), so the
+  reason is read after the field it explains; A579 part 4b's look found them there still.
+
+Take off for today on a joined table with tables split off, the third point, is allowed by the
+owner's A579 design and left as it is.
 
 ## A504. Floor plans published for a future date, and one per service period
 

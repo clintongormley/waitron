@@ -280,7 +280,8 @@ floor-wide reset takes back:
 - a table that needs clearing comes back and its mark is cleared;
 - a table in a group nobody sits at comes back. That group ends, and its other tables go back to
   where they stood before it was made (Bar goes back by the bar counter);
-- a table with guests, or with food on its way, stays apart.
+- a table with guests, or in a group where guests sit at any of its tables, or with food on its way,
+  stays apart.
 
 **Example, every table free.** Counter 5 was split off. Staff then moved Long table (now 4 × 2) to
 the middle of the room.

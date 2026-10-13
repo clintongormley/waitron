@@ -1660,7 +1660,7 @@ waiting together while any of them is held by a party, refused by a module, merg
 table, or has food on its way to it; a merge in which no table is held by a party, refused by a module
 or in a split group that waits is ended as any free merge is. Its parts
 not split off stay joined meanwhile, and the split ends when the reset puts the joined table back,
-or, for the tables it takes back, when Join again or Reset table does, or when Split tables… on a group puts it
+or, for the tables it takes back, when Reset table does, or when Split tables… on a group puts it
 back over the tables that stay (`splitGroup`, which also clears their "needs clearing" marks)
 (`splitWithBusy`, `apps/server/src/floor-reset-plan.ts:38`; `waitingTogether`,
 `apps/server/src/floor-today-store.ts:486`). When the reset, or a later catch-up of its pending
@@ -1702,30 +1702,28 @@ route, the zone reset and a party join with a merge, and any of those that sends
 (`management.request_invalid`, `requiredRevision` in `apps/server/src/floor-revision.ts`); the
 zone reset alone may send `null`, for a read that held no table of the zone with a today's row.
 
-Join again deletes the split rows of the tables split off a joined table that are free (held by no
-open party, with no clearing mark, in none of today's merges and with no food on its way), gives
-each of them its reset row's seats and no place on today's map, writes no reset row of its own, and
-ends with the zone's catch-up (`catchUpZone`), so a table taken back after Reset to saved plan
-counts as a part still joined in the same transaction, while a later reset still holds the tables
-left apart (`joinAgain`, `apps/server/src/floor-today-join-again.ts`). Back to its saved place and
-Take off for today refuse a table split off (`table.split_off`, `refuseSplitOff`,
+Back to its saved place and Take off for today refuse a table split off (`table.split_off`, `refuseSplitOff`,
 `apps/server/src/floor-today-store.ts`).
 
 Reset table (`POST /api/tables/:id/today/reset`, `resetTable`,
 `apps/server/src/floor-today-reset-table.ts`) takes back every table split off the joined table that
-no party holds and no food is on its way to; a "needs clearing" mark or a group nobody sits at does
-not keep one apart, unlike Join again. It ends each group a table it takes back is in, the group's
+no party holds, that is in no group a party holds a table of, and that no food is on its way to; a
+"needs clearing" mark or a group nobody sits at does not keep one apart. It ends each group a table it takes back is in, the group's
 other tables going back where they stood, then clears the marks of the tables it takes back, deletes
 their split rows, gives them their reset row's seats and no place, and puts the joined table at its
 saved place, not where it stands: all of it with its saved seats when every table comes back, else
-over the slots of the tables joined from the saved place's left end, with the seats sent. A joined table saved with no place is placed as Join again places it, and
-when that leaves it off the map nothing is checked. After ending those groups, and before its other
+over the slots of the tables joined from the saved place's left end, with the seats sent. A joined table saved with no place is placed by `joinedPlaceAfter`
+(`apps/server/src/joined-split-layout.ts`) from its place on today's map, and when that leaves it off
+the map nothing is checked. After ending those groups, and before its other
 writes, it refuses `table.place_taken`, naming the first, in number order, of the tables drawn on
 today's map whose box overlaps that place by at least one square along each side's direction of both turned boxes (`standsIn`,
 `apps/server/src/joined-split-layout.ts`); a table that only touches the edge, the joined table and
 the tables it takes back do not count, and a table left apart does. When too few tables would come
-back and a table split off it is held in a group, it refuses `joined_table.tables_in_group`, naming
-those tables; otherwise `joined_table.nothing_to_join`.
+back and a table split off it is in a group a party holds a table of, itself or another, it refuses
+`joined_table.tables_in_group`, naming those tables; otherwise `joined_table.nothing_to_join`. It writes no reset row of its own and ends
+with the zone's catch-up (`catchUpZone`), so a table it takes back after Reset to saved plan counts
+as a part still joined in the same transaction, and a later reset still holds the tables it left
+apart.
 
 Measured on 2026-10-11, Node v26.7.0, after applying every manifest migration to `node:sqlite`:
 `pragma_foreign_key_list` reports six incoming keys, all `ON DELETE NO ACTION`:

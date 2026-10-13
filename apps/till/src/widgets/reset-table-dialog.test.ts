@@ -5,8 +5,8 @@ import { setLocale } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { TableState, TableToday } from "../api/client.js";
 import type { ApartReason } from "../state/floor-today.js";
-import "./join-again-dialog.js";
-import type { JoinAgainDetail, TillJoinAgainDialog } from "./join-again-dialog.js";
+import "./reset-table-dialog.js";
+import type { ResetTableDetail, TillResetTableDialog } from "./reset-table-dialog.js";
 
 afterEach(cleanupWidgets);
 beforeEach(() => setLocale("en"));
@@ -59,8 +59,8 @@ const away = (id: string, label: string, reason: ApartReason) => ({
 });
 const apart = () => [away("c5", "Counter 5", "guests"), away("c4", "Counter 4", "food")];
 
-async function mount(props: Partial<TillJoinAgainDialog> = {}): Promise<TillJoinAgainDialog> {
-  const { el } = await mountWidget<TillJoinAgainDialog>("till-join-again-dialog", {
+async function mount(props: Partial<TillResetTableDialog> = {}): Promise<TillResetTableDialog> {
+  const { el } = await mountWidget<TillResetTableDialog>("till-reset-table-dialog", {
     joined: longTable(),
     apart: apart(),
     ...props,
@@ -68,50 +68,46 @@ async function mount(props: Partial<TillJoinAgainDialog> = {}): Promise<TillJoin
   return el;
 }
 
-const seatsField = (el: TillJoinAgainDialog) =>
+const seatsField = (el: TillResetTableDialog) =>
   el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-number-stepper"]>("[name=seats]")!;
-const action = (el: TillJoinAgainDialog) =>
-  el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-join-again-action]")!;
-const cancelButton = (el: TillJoinAgainDialog) =>
-  el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-join-again-cancel]")!;
-const foot = (el: TillJoinAgainDialog) => el.shadowRoot!.querySelector("wt-form-actions")!;
-const lines = (el: TillJoinAgainDialog) =>
+const action = (el: TillResetTableDialog) =>
+  el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-reset-table-action]")!;
+const cancelButton = (el: TillResetTableDialog) =>
+  el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-reset-table-cancel]")!;
+const foot = (el: TillResetTableDialog) => el.shadowRoot!.querySelector("wt-form-actions")!;
+const lines = (el: TillResetTableDialog) =>
   [...el.shadowRoot!.querySelectorAll("[data-stays-apart]")].map((line) =>
     line.textContent!.replace(/\s+/g, " ").trim(),
   );
 
-async function typeSeats(el: TillJoinAgainDialog, value: string): Promise<void> {
+async function typeSeats(el: TillResetTableDialog, value: string): Promise<void> {
   const input = seatsField(el).shadowRoot!.querySelector<HTMLInputElement>("input")!;
   input.value = value;
   input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
   await el.updateComplete;
 }
-async function press(el: TillJoinAgainDialog): Promise<void> {
+async function press(el: TillResetTableDialog): Promise<void> {
   action(el).click();
   await el.updateComplete;
 }
-function captured(el: TillJoinAgainDialog) {
-  const seen: { confirmed: JoinAgainDetail[]; cancelled: number } = { confirmed: [], cancelled: 0 };
-  el.addEventListener("join-again-confirm", (event) =>
-    seen.confirmed.push((event as CustomEvent<JoinAgainDetail>).detail),
+function captured(el: TillResetTableDialog) {
+  const seen: { confirmed: ResetTableDetail[]; cancelled: number } = {
+    confirmed: [],
+    cancelled: 0,
+  };
+  el.addEventListener("reset-table-confirm", (event) =>
+    seen.confirmed.push((event as CustomEvent<ResetTableDetail>).detail),
   );
-  el.addEventListener("join-again-cancel", () => (seen.cancelled += 1));
+  el.addEventListener("reset-table-cancel", () => (seen.cancelled += 1));
   return seen;
 }
 
-it("heads itself Join Long table again and says which tables stay apart and why", async () => {
+it("heads itself Reset Long table and says which tables stay apart and why", async () => {
   const el = await mount();
-  expect(el.shadowRoot!.querySelector("wt-dialog")!.heading).toBe("Join Long table again");
+  expect(el.shadowRoot!.querySelector("wt-dialog")!.heading).toBe("Reset Long table");
   expect(lines(el)).toEqual([
     "Counter 5 stays apart: guests seated",
     "Counter 4 stays apart: food on its way",
-  ]);
-  const other = await mount({
-    apart: [away("c4", "Counter 4", "clearing"), away("c5", "Counter 5", "merged")],
-  });
-  expect(lines(other)).toEqual([
-    "Counter 4 stays apart: needs clearing",
-    "Counter 5 stays apart: pushed together",
   ]);
 });
 
@@ -129,16 +125,16 @@ it("asks Long table's seats, empty and required", async () => {
   expect(seats.label).toBe("Seats for Long table");
 });
 
-it("opens with Join again quiet and disabled", async () => {
+it("opens with Reset table quiet and disabled", async () => {
   const el = await mount();
-  expect(action(el).textContent!.trim()).toBe("Join again");
+  expect(action(el).textContent!.trim()).toBe("Reset table");
   expect([action(el).variant, action(el).disabled]).toEqual(["secondary", true]);
   expect(cancelButton(el).textContent!.trim()).toBe("Cancel");
   await typeSeats(el, "8");
   expect([action(el).variant, action(el).disabled]).toEqual(["primary", false]);
 });
 
-it("explains seats out of range beside Seats and at the foot, and keeps Join again disabled until fixed", async () => {
+it("explains seats out of range beside Seats and at the foot, and keeps Reset table disabled until fixed", async () => {
   const el = await mount();
   const seen = captured(el);
   await typeSeats(el, "1000");
@@ -174,7 +170,7 @@ it("shows a refusal naming Seats under Seats until the number changes", async ()
   expect(foot(el).error).toBe("");
 });
 
-it("shows a refusal naming no field at the foot until Join again is pressed again", async () => {
+it("shows a refusal naming no field at the foot until Reset table is pressed again", async () => {
   const el = await mount();
   const seen = captured(el);
   await typeSeats(el, "8");
@@ -218,20 +214,13 @@ it("names its field", async () => {
 it("speaks Spanish", async () => {
   setLocale("es-ES");
   const el = await mount();
-  expect(el.shadowRoot!.querySelector("wt-dialog")!.heading).toBe("Volver a unir Long table");
+  expect(el.shadowRoot!.querySelector("wt-dialog")!.heading).toBe("Restablecer Long table");
   expect(lines(el)).toEqual([
     "Counter 5 sigue aparte: hay clientes",
     "Counter 4 sigue aparte: comida en camino",
   ]);
-  const other = await mount({
-    apart: [away("c4", "Counter 4", "clearing"), away("c5", "Counter 5", "merged")],
-  });
-  expect(lines(other)).toEqual([
-    "Counter 4 sigue aparte: por recoger",
-    "Counter 5 sigue aparte: unida a otra",
-  ]);
   expect(seatsField(el).label).toBe("Plazas para Long table");
-  expect(action(el).textContent!.trim()).toBe("Volver a unir");
+  expect(action(el).textContent!.trim()).toBe("Restablecer mesa");
   await typeSeats(el, "0");
   await press(el);
   expect(seatsField(el).error).toBe("Escribe de 1 a 999");
@@ -250,7 +239,7 @@ for (const [width, height] of [
           apart: [
             away("t1", "Terrace corner table by the fountain", "guests"),
             away("t2", "Counter 4", "food"),
-            away("t3", "Window table beside the old bar", "clearing"),
+            away("t3", "Window table beside the old bar", "guests"),
           ],
         });
         const window = el

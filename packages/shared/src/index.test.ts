@@ -9,6 +9,7 @@ import {
   BUILD_HEADER,
   classifyBand,
   compareDecimal,
+  conjunctionList,
   decimal,
   deriveDisplayName,
   deviceId,
@@ -187,6 +188,10 @@ describe("package public surface (./index.js)", () => {
     expect(textSearch(" ")).toBeUndefined();
     expect(searchBy("cafe", ["Té", "Café"], (name) => name)).toEqual(["Café"]);
     expect(foldCache()({}, "Café")).toBe("cafe");
+  });
+
+  it("re-exports the 'and' list joiner", () => {
+    expect(conjunctionList(["Counter 3", "Counter 4"], "es-ES")).toBe("Counter 3 y Counter 4");
   });
 
   it("re-exports the equipment takeover rule", () => {
