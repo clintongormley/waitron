@@ -3348,6 +3348,11 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   held back by an invalid field looks pressable (station editor, dark, 390 and 1280). Fix: a
   disabled colour pair in the tokens, or a quiet style while disabled, plus a dark contrast test.
 
+- **`wt-combobox` without a search box never exposes `aria-required`**, so a screen reader is not
+  told a required dropdown is required. Found by A506-6's review: a probe showed `required` set gave
+  `aria-required` on nothing, while a combobox with a search box set it on its input. Every screen
+  using a required combobox without search is affected.
+
 - **In the Customise dialog, a released column row jumps into its slot instead of sliding.** The
   house rule for a dragged row (design-system.md, the `--wt-color-surface-lifted` paragraph) has it
   slide into its slot over `--wt-duration-move`; here every row lands at once (`#endColumnDrag`,

@@ -3544,7 +3544,7 @@ it; `/department/<id>` selects the department and `/view/periods` selects its pe
 tab `/season/<id>` selects the season (in the standard week only; the fallback is in Forms above). The Week
 and Day editing contract is in Forms above. After provisioning, setup's completion screen shows
 the first saved Open schedule, when it is still Monday to Friday, 09:00–17:00, with a link to
-that department's Opening hours.
+Opening hours' Year.
 
 - **Year.** Pick a date: a plain date offers Make this a special day…, and a special-day date
   Edit and Delete; + Special day opens an empty dialog. ‹ › step years, a month's name opens the
@@ -3560,6 +3560,18 @@ that department's Opening hours.
   The Year keeps the address's year across refreshes and offers one keyboard Tab stop in its
   grid. On a special day that is also a public holiday, the date panel and the day's accessible
   name give the holiday's name beside the special day's; the grid itself shows only the marks.
+- **Seasons.** The Year's season chips (`season-chips.ts`) list the venue's seasons in start
+  order, each written as its name and first and last day. A chip's ✎ opens the season dialog
+  (`season-dialog.ts`) on that season, and + Season opens it empty; a new season starts with a
+  copy of the department and zone weeks of the season it starts inside. The dialog has a required
+  Name and a Starts on day and month, each picked from a list; Save stays quiet and disabled until
+  the draft changes. A name or start another season already holds is refused under its field.
+  A move, an addition or a deletion that would make a period's end offset run into the next day's
+  hours is refused beside the action, naming the season and weekday, or the date and its special
+  day, it would run into. Delete is offered on an existing season while the venue has more than one; it
+  asks first, says which season the days join (the one before, or the last for the first season),
+  and names the departments whose hours in the season are lost. The page re-reads its hours
+  after every season change.
 - **Local holidays.** Public holidays come only from the country's shipped calendar; add your
   town's holidays as special days. There is no separate Local holidays editor. The Year reports
   the shown year's official coverage and, when the year has a coverage entry, says Town holidays

@@ -104,6 +104,10 @@ its department taking over its paint, routing lines and keep-open extensions, or
 reads list where each period is painted and what the delete dialog shows (one-off special days with
 no date still to come left out). The Periods page that uses
 them is A506-11, and the old refusing delete stays until then.
+A506-6 landed in #NNNN: seasons are added, renamed, moved and deleted from the season chips and
+their dialog (+ Season), and a move, addition or deletion is refused when a period's end offset
+would run into the next day's hours; Opening hours opens on the Year, which replaced the Calendar
+tab, and setup's Done link opens it.
 
 **Left open by A506-1, for the later parts.**
 - No test yet gives a second department its own paint on the same special day.
@@ -183,7 +187,10 @@ them is A506-11, and the old refusing delete stays until then.
   also reads the tenant, location and holiday area to find that year's holiday: about 100 µs of
   roughly 860 µs per call, measured over 2000 calls on a Madrid test venue during the A506-5
   finish-branch review. One way to remove it is a cache that outlives the transaction.
-- The Calendar model drops each date's stored special-day date, so the dashboard re-derives which
+- The dashboard's day models (`CalendarDay` in `packages/venue-service/src/hours-types.ts`, which the
+  Day and Week tabs read, and the Year's `OpeningHoursYearDay` in
+  `packages/venue-service/src/opening-hours-calendar.ts`) drop each date's stored special-day date,
+  so the dashboard re-derives which
   stored date applies (`specialOn`, `packages/venue-service/src/dashboard/special-date.ts`) and the
   week views fetch each special day's detail separately; returning the stored date in the model
   would leave one copy of the rule. The "Add to" offer reads every special day with every date
