@@ -441,7 +441,8 @@ command against it treat that entrypoint differently:
   ```
 
   The Backups screen's Download archive recovery pack button, offered once a destination is a
-  bucket, shows the pack and downloads it as the server writes it.
+  bucket, shows the pack, and the Download pack file link shown with it downloads the file as the
+  server writes it.
 
   A restore moves the old database into a hidden folder in the venue folder
   (`/var/lib/waitron/state/venue/` inside the container), named `.venue.db-replaced-` and six

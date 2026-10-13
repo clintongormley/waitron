@@ -4399,10 +4399,11 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   `backup.effective_mismatch` (read from the route, not run). Left open by SQLite slice 2 Task 2a
   (#557, a recovery key that does not need an archive destination).
 
-- **The bucket copy panel's refusal for a too-short key names the "Turn on backups" button but does
-  not link or scroll to it.** Left open by SQLite slice 2 Task 2a (#557, a recovery key that does
-  not need an archive destination).
-  [Detail](backlog/box.md#the-bucket-copy-panels-refusal-for-a-too-short-key-names-the-turn-on-backups-button-but-does-not-link-or-scroll-to-it)
+- **A too-short recovery key's refusals do not link to the button they name**, and with archives
+  on the one they name, "Change the recovery key", cannot finish, because showing the current key
+  refuses a too-short one. Left open by SQLite slice 2
+  Task 2a (#557, a recovery key that does not need an archive destination) and A538-6d.
+  [Detail](backlog/box.md#a-too-short-recovery-key-the-refusals-do-not-link-to-the-button-they-name-and-change-the-recovery-key-cannot-finish)
 
 - **The status watcher does not retry its own failed mint** (the mint is a POST, never passive
   session activity), so the screen then offers no key until it is reopened. Left open by SQLite

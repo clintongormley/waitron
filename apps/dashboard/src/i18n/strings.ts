@@ -1559,7 +1559,7 @@ export const en = {
   "backup.pack.explanation": "Restoring a backup from the bucket on a new box asks for this pack.",
   "backup.pack.show": "Download archive recovery pack",
   "backup.pack.warning":
-    "Anyone holding this pack can open every backup in the bucket. Keep it as safe as the recovery key: offline, and never in the bucket itself.",
+    "Anyone holding this pack can open this venue's backups made under the current recovery key. Keep it as safe as the recovery key: offline, and never in the bucket itself.",
   "backup.pack.copy": "Copy",
   "backup.pack.download": "Download pack file",
   "backup.pack.key_missing":
@@ -4412,7 +4412,7 @@ export const es: Record<StringKey, string> = {
     "Para restaurar en una caja nueva una copia del bucket se pide este paquete.",
   "backup.pack.show": "Descargar el paquete de recuperación de las copias",
   "backup.pack.warning":
-    "Quien tenga este paquete puede abrir todas las copias del bucket. Guárdalo con el mismo cuidado que la clave de recuperación: fuera de línea y nunca en el propio bucket.",
+    "Quien tenga este paquete puede abrir las copias de este local hechas con la clave de recuperación actual. Guárdalo con el mismo cuidado que la clave de recuperación: fuera de línea y nunca en el propio bucket.",
   "backup.pack.copy": "Copiar",
   "backup.pack.download": "Descargar el archivo del paquete",
   "backup.pack.key_missing":

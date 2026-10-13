@@ -826,18 +826,22 @@ export class BackupScreen extends LitElement {
     }
   }
 
-  /** A pack is for one key and one stored record: a read naming another of either takes it away. */
+  /** A pack, or its refusal, is for one key and one stored record, and only while a bucket is
+   * listed: a read naming another key or record, or no bucket, takes it away. */
   #dropStalePack(value: BackupStatusView): void {
     const pack = this.pack;
     const shown = this.status;
-    if (pack === null && !this.packLoading) return;
+    if (pack === null && !this.packLoading && this.packFailure === null) return;
     const changed =
-      pack === null
+      !value.destinations.some((d) => d.kind === "s3") ||
+      (pack === null
         ? shown !== undefined && !this.#sameKeyAndRecord(shown, value)
         : value.keyFingerprint !== pack.keyFingerprint ||
           value.keyRotatedAt !== pack.keyRotatedAt ||
-          (pack.revision ?? null) !== value.revision;
-    if (changed) this.#dropPack();
+          (pack.revision ?? null) !== value.revision);
+    if (!changed) return;
+    this.#dropPack();
+    this.packFailure = null;
   }
 
   #sameKeyAndRecord(a: BackupStatusView, b: BackupStatusView): boolean {

@@ -1224,26 +1224,26 @@ const PACK = {
   revision: TWO.revision!,
 };
 
+const displayedPack = (el: BackupScreen) => q(el, "[data-test=pack]")?.textContent ?? null;
+
+async function showPack(el: BackupScreen) {
+  q(el, "[data-test=show-pack]")!.click();
+  await vi.waitFor(() => expect(q(el, "[data-test=pack]")).not.toBeNull());
+  await el.updateComplete;
+}
+
+async function read(el: BackupScreen, api: DashboardApi, status: BackupStatusView) {
+  const reads = vi.mocked(api.getBackupStatus).mock.calls.length;
+  vi.mocked(api.getBackupStatus).mockResolvedValue(status);
+  api.liveData.invalidate([{ type: "backup_status" }]);
+  await vi.waitFor(() =>
+    expect(vi.mocked(api.getBackupStatus).mock.calls.length).toBeGreaterThan(reads),
+  );
+  await settle();
+  await el.updateComplete;
+}
+
 describe("recovery pack", () => {
-  const displayedPack = (el: BackupScreen) => q(el, "[data-test=pack]")?.textContent ?? null;
-
-  async function showPack(el: BackupScreen) {
-    q(el, "[data-test=show-pack]")!.click();
-    await vi.waitFor(() => expect(q(el, "[data-test=pack]")).not.toBeNull());
-    await el.updateComplete;
-  }
-
-  async function read(el: BackupScreen, api: DashboardApi, status: BackupStatusView) {
-    const reads = vi.mocked(api.getBackupStatus).mock.calls.length;
-    vi.mocked(api.getBackupStatus).mockResolvedValue(status);
-    api.liveData.invalidate([{ type: "backup_status" }]);
-    await vi.waitFor(() =>
-      expect(vi.mocked(api.getBackupStatus).mock.calls.length).toBeGreaterThan(reads),
-    );
-    await settle();
-    await el.updateComplete;
-  }
-
   it("asks for the pack only when its action is pressed, then shows it behind a warning with Copy and a download", async () => {
     const getArchiveRecoveryPack = vi.fn().mockResolvedValue(PACK);
     const { el } = await mount(TWO, { getArchiveRecoveryPack });
@@ -1440,5 +1440,176 @@ describe("recovery pack after a key change", () => {
     q(el, "[data-test=rotate-confirm]")!.click();
     await vi.waitFor(() => expect(q(el, "[data-test=old-key]")).toBeNull());
     expect(q(el, "[data-test=pack]")).toBeNull();
+  });
+});
+
+const NEW_REVISION = "99999999-2222-4333-8444-555555555555";
+
+/** A pack fetch that answers only when the test says so. */
+function heldPack() {
+  let answer!: (value: typeof PACK) => void;
+  const fetch = vi.fn().mockReturnValue(new Promise<typeof PACK>((r) => (answer = r)));
+  return { fetch, answer: (value: typeof PACK = PACK) => answer(value) };
+}
+
+async function arrive(el: BackupScreen) {
+  await settle();
+  await el.updateComplete;
+}
+
+describe("a pack fetch still running when a write answers", () => {
+  it("a settings save answering with a new revision discards it, and leaves the draft staged since", async () => {
+    const pack = heldPack();
+    let answerSave!: (value: BackupStatusView) => void;
+    const saved = { ...TWO, revision: NEW_REVISION, retention: { count: 9, days: 30 } };
+    const { el, api } = await openEdit(TWO, {
+      getArchiveRecoveryPack: pack.fetch,
+      applyBackup: vi.fn().mockReturnValue(new Promise((r) => (answerSave = r))),
+    });
+    q(el, "[data-test=show-pack]")!.click();
+    await setRetainCount(el, "9");
+    q(el, "[data-test=save-settings]")!.click();
+    await vi.waitFor(() => expect(api.applyBackup).toHaveBeenCalledOnce());
+    await setRetainCount(el, "10");
+    vi.mocked(api.getBackupStatus).mockResolvedValue(saved);
+    answerSave(saved);
+    await arrive(el);
+    pack.answer();
+    await arrive(el);
+    expect(displayedPack(el)).toBeNull();
+    expect((q(el, "[data-test=retain-count]") as Field).value).toBe("10");
+    expect(await buttonState(el, "save-settings")).toEqual(["primary", false]);
+  });
+
+  it("a turn-on answering with a new revision discards it, and leaves the draft staged since", async () => {
+    const off = { ...TWO, enabled: false, storedDisabled: true };
+    const pack = heldPack();
+    let answerApply!: (value: BackupStatusView) => void;
+    const on = { ...TWO, revision: NEW_REVISION, retention: { count: 9, days: 30 } };
+    const { el, api } = await mount(off, {
+      getStreamSettings: vi.fn().mockResolvedValue(STREAM_ON),
+      getArchiveRecoveryPack: pack.fetch,
+      applyBackup: vi.fn().mockReturnValue(new Promise((r) => (answerApply = r))),
+    });
+    await vi.waitFor(() => expect(q(el, "[data-test=apply]")).not.toBeNull());
+    q(el, "[data-test=show-pack]")!.click();
+    await typeFolder(el, "/mnt/usb/waitron");
+    await setRetainCount(el, "9");
+    q(el, "[data-test=apply]")!.click();
+    await vi.waitFor(() => expect(api.applyBackup).toHaveBeenCalledOnce());
+    await setRetainCount(el, "10");
+    vi.mocked(api.getBackupStatus).mockResolvedValue(on);
+    answerApply(on);
+    await arrive(el);
+    pack.answer();
+    await arrive(el);
+    expect(displayedPack(el)).toBeNull();
+    expect((q(el, "[data-test=retain-count]") as Field).value).toBe("10");
+    expect(await buttonState(el, "apply")).toEqual(["primary", false]);
+  });
+
+  it("a key change answering with a new key discards it", async () => {
+    const pack = heldPack();
+    const rotated = {
+      ...TWO,
+      keyFingerprint: "ffee0011",
+      keyRotatedAt: "2026-10-13T09:00:00Z",
+      revision: NEW_REVISION,
+    };
+    const { el, api } = await mount(TWO, {
+      getArchiveRecoveryPack: pack.fetch,
+      rotateBackupKey: vi.fn().mockResolvedValue(rotated),
+    });
+    q(el, "[data-test=show-pack]")!.click();
+    q(el, "[data-test=show-old-key]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=old-key]")).not.toBeNull());
+    const box = q(el, "[data-test=saved-it]") as HTMLInputElement;
+    box.checked = true;
+    box.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    vi.mocked(api.getBackupStatus).mockResolvedValue(rotated);
+    q(el, "[data-test=rotate-confirm]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=old-key]")).toBeNull());
+    expect(api.rotateBackupKey).toHaveBeenCalledOnce();
+    await arrive(el);
+    pack.answer();
+    await arrive(el);
+    expect(displayedPack(el)).toBeNull();
+  });
+
+  it("a second press with a pack shown revokes the shown pack's download link", async () => {
+    const { el } = await mount(TWO, { getArchiveRecoveryPack: vi.fn().mockResolvedValue(PACK) });
+    await showPack(el);
+    const href = (q(el, "[data-test=download-pack]") as HTMLAnchorElement).href;
+    const revoke = vi.spyOn(URL, "revokeObjectURL");
+    try {
+      q(el, "[data-test=show-pack]")!.click();
+      await vi.waitFor(() => {
+        const link = q(el, "[data-test=download-pack]") as HTMLAnchorElement | null;
+        expect(link?.href ?? href).not.toBe(href);
+      });
+      expect(revoke).toHaveBeenCalledWith(href);
+    } finally {
+      revoke.mockRestore();
+    }
+  });
+});
+
+describe("a pack refusal or pack the status no longer supports", () => {
+  const refused = () => vi.fn().mockRejectedValue({ code: "backup.recovery_key_missing" });
+
+  async function refuse(el: BackupScreen) {
+    q(el, "[data-test=show-pack]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=pack-failure]")).not.toBeNull());
+  }
+
+  it("a status read with a new key and revision takes a refusal away", async () => {
+    const { el, api } = await mount(TWO, { getArchiveRecoveryPack: refused() });
+    await refuse(el);
+    await read(el, api, { ...TWO, keyFingerprint: "ffee0011", revision: NEW_REVISION });
+    expect(q(el, "[data-test=pack-failure]")).toBeNull();
+  });
+
+  it("a status read that changes neither key nor revision keeps the refusal", async () => {
+    const { el, api } = await mount(TWO, { getArchiveRecoveryPack: refused() });
+    await refuse(el);
+    await read(el, api, withOutcomes({ storedUnderCurrentKey: true }, {}));
+    expect(q(el, "[data-test=pack-failure]")).not.toBeNull();
+  });
+
+  const managed = {
+    ...TWO,
+    managedByEnvironment: true,
+    source: "environment",
+    revision: null,
+  } as BackupStatusView;
+  const managedLocal = { ...LOCAL_ONLY, ...managed, destinations: LOCAL_ONLY.destinations };
+
+  it("a status read listing no bucket drops the pack and revokes its link, so it does not come back with the bucket", async () => {
+    const { el, api } = await mount(managed, {
+      getArchiveRecoveryPack: vi.fn().mockResolvedValue({ ...PACK, revision: undefined }),
+    });
+    await showPack(el);
+    const href = (q(el, "[data-test=download-pack]") as HTMLAnchorElement).href;
+    const revoke = vi.spyOn(URL, "revokeObjectURL");
+    try {
+      await read(el, api, managedLocal);
+      expect(q(el, "[data-test=show-pack]")).toBeNull();
+      expect(revoke).toHaveBeenCalledWith(href);
+    } finally {
+      revoke.mockRestore();
+    }
+    await read(el, api, managed);
+    expect(q(el, "[data-test=show-pack]")).not.toBeNull();
+    expect(displayedPack(el)).toBeNull();
+  });
+
+  it("a status read listing no bucket takes a refusal away, so it does not come back with the bucket", async () => {
+    const { el, api } = await mount(managed, { getArchiveRecoveryPack: refused() });
+    await refuse(el);
+    await read(el, api, managedLocal);
+    await read(el, api, managed);
+    expect(q(el, "[data-test=show-pack]")).not.toBeNull();
+    expect(q(el, "[data-test=pack-failure]")).toBeNull();
   });
 });
