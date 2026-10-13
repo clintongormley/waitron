@@ -912,22 +912,28 @@ describe("Split tables… on a group with guests seated", () => {
   });
 });
 
-/** Long table's group with a party holding Bar alone: a counter order moved to Bar, which opens a party at Bar only. */
-async function partyAtBarAlone() {
-  const zone = await barOnLong();
-  const { table } = zone;
+/** A counter order moved to `tableId`, which opens a party holding that table alone; its id. */
+async function partyAloneAt(tableId: string): Promise<string> {
   const billId = await counterOrder(v, "Paella");
   await ok(
     Promise.resolve(
       app.request(`/api/bills/${billId}/move`, {
         method: "POST",
         headers: { "content-type": "application/json", cookie },
-        body: JSON.stringify({ to: { tableId: table.bar! }, otherPartyId: null }),
+        body: JSON.stringify({ to: { tableId }, otherPartyId: null }),
       }),
     ),
   );
   const partyId = (await billRow(v, billId)).partyId!;
-  expect(await activeTablesOf(v, partyId)).toEqual([table.bar!]);
+  expect(await activeTablesOf(v, partyId)).toEqual([tableId]);
+  return partyId;
+}
+
+/** Long table's group with a party holding Bar alone. */
+async function partyAtBarAlone() {
+  const zone = await barOnLong();
+  const { table } = zone;
+  const partyId = await partyAloneAt(table.bar!);
   expect(await groupOf(table.bar!)).toEqual({
     seats: 12,
     members: [table.bar!, table.c3!, table.c4!, table.c5!].sort(),
@@ -982,6 +988,39 @@ describe("Split tables… on a group a party holds only some of", () => {
       });
       expect(await groupOf(table.c5!)).toBeNull();
     });
+  });
+
+  it("Counter 5 ticked with seats missing while the party holds Bar alone is refused merge.seats_required, nothing written", async () => {
+    const { table } = await partyAtBarAlone();
+    const before = await everything();
+
+    await refused(splitOff(table.bar!, [table.c5!]), 400, "merge.seats_required", {});
+    expect(await everything()).toEqual(before);
+  });
+
+  it("Long table's tables back in a group with Bar, a party holding Counter 3 alone, Bar ticked: Long table is not put back, and Counter 3, 4 and 5 stay a group with the seats sent", async () => {
+    const { table, zoneId } = await longApart();
+    await merge(table.c4!, table.c3!, "right", 6);
+    await merge(table.c5!, table.c4!, "right", 6);
+    await merge(table.bar!, table.c3!, "left", 8);
+    const partyId = await partyAloneAt(table.c3!);
+    const revision = await revisionOf(v, partyId);
+    const longBefore = await todayRow(v, table.long!);
+
+    await settles(() => splitOff(table.bar!, [table.bar!], 12), zoneId);
+
+    expect(await groupOf(table.c3!)).toEqual({
+      seats: 12,
+      members: [table.c3!, table.c4!, table.c5!].sort(),
+    });
+    expect(await activeTablesOf(v, partyId)).toEqual([table.c3!]);
+    expect(await revisionOf(v, partyId)).toBe(revision);
+    expect(await placeOf(table.c3!)).toEqual({ x: 10, y: 20, width: 2, height: 2 });
+    expect(await placeOf(table.c4!)).toEqual({ x: 12, y: 20, width: 2, height: 2 });
+    expect(await placeOf(table.c5!)).toEqual({ x: 14, y: 20, width: 2, height: 2 });
+    expect(await placeOf(table.bar!)).toEqual({ x: 40, y: 0, width: 2, height: 2 });
+    expect(await todayRow(v, table.long!)).toEqual(longBefore);
+    expect(await splitRowsOf(table.long!)).toEqual([table.c3!, table.c4!, table.c5!].sort());
   });
 });
 
