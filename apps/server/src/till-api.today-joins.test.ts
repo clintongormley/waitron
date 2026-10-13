@@ -660,6 +660,7 @@ describe("a party change that changes a room answers its revision", () => {
     const { zoneId, a, b, c } = await room();
     const p = await seat(a);
     const read = (await zoneRevisionOf(v, zoneId))!;
+    expect(read).toBeTypeOf("number");
 
     const answer = await ok(
       join(p, {
@@ -685,6 +686,7 @@ describe("a party change that changes a room answers its revision", () => {
     const { zoneId, a, b, c } = await room();
     const p = await seat(a);
     const read = (await zoneRevisionOf(v, zoneId))!;
+    expect(read).toBeTypeOf("number");
     const before = await everything();
     const partyBefore = await revision(p);
 
@@ -748,6 +750,7 @@ describe("a party change that changes a room answers its revision", () => {
     expect((await tableRow(v, c)).label).toBe(label);
     await ok(post(`/api/parties/${q}/finish`, { expectedPartyRevision: await revision(q) }));
     const read = (await zoneRevisionOf(v, zoneId))!;
+    expect(read).toBeTypeOf("number");
     const before = await everything();
     const partyBefore = await revision(p);
 
@@ -775,6 +778,7 @@ describe("a party change that changes a room answers its revision", () => {
     const { zoneId, a, b, c } = await room();
     const p = await seat(a);
     const read = (await zoneRevisionOf(v, zoneId))!;
+    expect(read).toBeTypeOf("number");
     await ok(post(`/api/tables/${c}/today/move`, { x: 60, y: 0 }));
     const before = await everything();
     const partyBefore = await revision(p);
@@ -802,6 +806,7 @@ describe("a party change that changes a room answers its revision", () => {
     const { zoneId, a, b, c } = await room();
     const p = await seat(a);
     const read = (await zoneRevisionOf(v, zoneId))!;
+    expect(read).toBeTypeOf("number");
     const before = await everything();
     const partyBefore = await revision(p);
 
@@ -829,6 +834,7 @@ describe("a party change that changes a room answers its revision", () => {
     const { zoneId, a, b, c } = await room();
     const p = await seat(a);
     const read = (await zoneRevisionOf(v, zoneId))!;
+    expect(read).toBeTypeOf("number");
 
     const answer = await ok(
       join(p, { tableId: b, expectedPartyRevision: await revision(p), otherPartyId: null }),
@@ -844,6 +850,7 @@ describe("a party change that changes a room answers its revision", () => {
     await freeMerge(a, b);
     const p = await seat(a);
     const read = (await zoneRevisionOf(v, zoneId))!;
+    expect(read).toBeTypeOf("number");
 
     const answer = await ok(
       post(`/api/parties/${p}/move`, {
@@ -876,6 +883,7 @@ describe("a party change that changes a room answers its revision", () => {
       }),
     );
     const read = (await zoneRevisionOf(v, zoneId))!;
+    expect(read).toBeTypeOf("number");
 
     const split = (await ok(
       post(`/api/parties/${p}/split-table`, {

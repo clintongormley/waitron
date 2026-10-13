@@ -177,6 +177,7 @@ export async function expectRevision(
     .json()
     .catch(() => null);
   const zone = zoneId ?? (body as { zoneId?: unknown } | null)?.zoneId;
+  expect(zone, "the answer names a zone").toBeTypeOf("string");
   const stored = typeof zone === "string" ? ((await zoneRevisionOf(v, zone)) ?? 0) : undefined;
   expect({ status: settled.status, body }, await settled.text()).toEqual({
     status: 200,

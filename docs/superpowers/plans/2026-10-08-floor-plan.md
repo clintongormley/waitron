@@ -3951,7 +3951,8 @@ if it is wrong.
    (`#onPartyOutOfDate`, `till-app.ts:5685`).
 
    > Changed 2026-10-13 by A579 part 2a: the table routes and the zone reset answer
-   > `200 { zoneId, revision }`, the room's new revision, instead of 204.
+   > `200 { zoneId, revision }`, the room's revision after the request, instead of 204 — here and
+   > wherever this plan says 204 for them.
 
 2. **The routes and their bodies.** All are `POST`, `requireSession(deps, c, { action: "take-orders" })`,
    then one `withTransaction` that runs `checkZones` first, then `catchUpFloor`, then the write:
