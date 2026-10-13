@@ -78,11 +78,13 @@ export async function roomPrints(
       shape: floorTodayTables.shape,
       rotation: floorTodayTables.rotation,
       takenOff: floorTodayTables.takenOff,
+      name: floorTodayTables.name,
       joinId: floorTodayJoinTables.joinId,
       beforeX: floorTodayJoinTables.beforeX,
       beforeY: floorTodayJoinTables.beforeY,
       beforeRotation: floorTodayJoinTables.beforeRotation,
       groupSeats: floorTodayJoins.seats,
+      groupName: floorTodayJoins.name,
       splitOffFrom: floorTodaySplitParts.joinedTableId,
     })
     .from(diningTables)

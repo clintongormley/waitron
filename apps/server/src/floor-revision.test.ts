@@ -1,8 +1,9 @@
+import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { floorTodayJoins, floorTodayZones } from "@waitron/db";
+import { floorTodayJoins, floorTodayTables, floorTodayZones } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { readZonePlan, saveZonePlan, type ZonePlanSave } from "./floor-plan.js";
 import {
@@ -246,6 +247,47 @@ describe("roomPrints", () => {
 
     await inTx(v, (tx) =>
       tx.update(floorTodayJoins).set({ seats: 12 }).where(eq(floorTodayJoins.id, joinId)),
+    );
+
+    expect(await printOf(zoneId)).not.toBe(before);
+  });
+
+  it("a table's name changes the room's print; writing the same name again does not", async () => {
+    const { zoneId, table } = await LONG_TABLE();
+    const before = await printOf(zoneId);
+    const name = `Window seat ${randomUUID().slice(0, 6)}`;
+    const nameBar = () =>
+      inTx(v, (tx) =>
+        tx.update(floorTodayTables).set({ name }).where(eq(floorTodayTables.tableId, table.bar!)),
+      );
+
+    await nameBar();
+    const named = await printOf(zoneId);
+    expect(named).not.toBe(before);
+
+    await nameBar();
+    expect(await printOf(zoneId)).toBe(named);
+  });
+
+  it("a group's name changes the print of the room holding it", async () => {
+    const { zoneId, table } = await LONG_TABLE();
+    await inTx(v, (tx) =>
+      writeMerge(tx, v.cfg, {
+        movingId: table.bar!,
+        targetId: table.long!,
+        side: "left",
+        seats: 14,
+        free: true,
+      }),
+    );
+    const before = await printOf(zoneId);
+    const { joinId } = (await mergeOf(v, table.bar!))!;
+
+    await inTx(v, (tx) =>
+      tx
+        .update(floorTodayJoins)
+        .set({ name: `García birthday ${randomUUID().slice(0, 6)}` })
+        .where(eq(floorTodayJoins.id, joinId)),
     );
 
     expect(await printOf(zoneId)).not.toBe(before);

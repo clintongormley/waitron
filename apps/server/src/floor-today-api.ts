@@ -9,7 +9,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { readRawJsonBody } from "@waitron/server-kit";
-import { AppError, isUuid, JOIN_SIDES, type JoinSide } from "@waitron/shared";
+import { AppError, isUuid, JOIN_SIDES, normalisePartyName, type JoinSide } from "@waitron/shared";
 import { invalid } from "./bill-allocation.js";
 import { asObject } from "./bill-payments-api.js";
 import {
@@ -26,6 +26,7 @@ import {
 import { writeMerge } from "./floor-today-merges.js";
 import { resetTable } from "./floor-today-reset-table.js";
 import { splitOff } from "./floor-today-split-group.js";
+import { nameToday } from "./floor-today-name.js";
 import type { Logger } from "./logger.js";
 import type { Run, TillApiDeps } from "./till-api.js";
 import { requireSession } from "./till-session.js";
@@ -178,6 +179,11 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
     return { write: (tx, tableId) => seatsToday(tx, deps.cfg, tableId, seats) };
   });
   tableRoute("back", () => ({ write: (tx, tableId) => backToSaved(tx, deps.cfg, tableId) }));
+  tableRoute("name", (body) => {
+    if (body.name === undefined) throw invalid("name");
+    const name = normalisePartyName(body.name);
+    return { write: (tx, tableId) => nameToday(tx, deps.cfg, tableId, name) };
+  });
   tableRoute("merge", (body, tableId) => {
     const { targetId, side, seats } = mergeBody(body, tableId);
     return {

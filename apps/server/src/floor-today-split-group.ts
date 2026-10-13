@@ -144,12 +144,17 @@ async function splitGroup(
     const part = parts[index]!;
     await tx
       .update(floorTodayTables)
-      .set({ ...placementColumns(null), seats: part.savedSeats, takenOff: false })
+      .set({ ...placementColumns(null), seats: part.savedSeats, takenOff: false, name: null })
       .where(eq(floorTodayTables.tableId, part.tableId));
   }
   await tx
     .update(floorTodayTables)
-    .set({ ...placementColumns(place), seats: whole ? saved!.seats : seats, takenOff: false })
+    .set({
+      ...placementColumns(place),
+      seats: whole ? saved!.seats : seats,
+      takenOff: false,
+      name: null,
+    })
     .where(eq(floorTodayTables.tableId, joinedId));
   await catchUpZone(tx, cfg, removals, zoneId, now);
 }

@@ -117,6 +117,7 @@ import { offerProducts } from "./testing/zone-offers.js";
  * | POST /api/tables/:id/today/merge                        | table; body target     | refuses .../today/merge (table), (target)            |
  * | POST /api/tables/:id/today/split-off                    | table; body parts      | refuses .../today/split-off (table), (part)          |
  * | POST /api/tables/:id/today/reset                        | table; body parts      | refuses .../today/reset (table), (part)              |
+ * | POST /api/tables/:id/today/name                         | table                  | refuses POST /api/tables/:id/today/name              |
  * | POST /api/zones/:id/today/reset                         | path zone              | refuses POST /api/zones/:id/today/reset              |
  * | POST /api/parties/:id/finish                            | party                  | refuses POST /api/parties/:id/finish                 |
  * | POST /api/parties/:id/bill-request                      | party                  | refuses POST /api/parties/:id/bill-request           |
@@ -833,6 +834,13 @@ const ROUTES: readonly Row[] = [
     "POST",
     (x) => `/api/tables/${x.restFreeTable}/today/reset`,
     (x) => ({ partIds: [x.deliTable], zoneRevision: 0 }),
+    deliTableZone,
+  ],
+  [
+    "POST /api/tables/:id/today/name",
+    "POST",
+    (x) => `/api/tables/${x.deliTable}/today/name`,
+    () => ({ name: "x", zoneRevision: 0 }),
     deliTableZone,
   ],
   [

@@ -261,6 +261,13 @@ describe("the table routes' revision", () => {
         return { zoneId, tableId: table.long!, body: { partIds: [table.c5!] } };
       },
     ],
+    [
+      "name",
+      async () => {
+        const { zoneId, table } = await ROOM();
+        return { zoneId, tableId: table.a!, body: { name: `Window ${randomUUID().slice(0, 6)}` } };
+      },
+    ],
   ];
 
   it.each(ROUTES)(
@@ -813,6 +820,115 @@ describe("the zone reset's revision", () => {
     }
     expect(await everything()).toEqual(before);
     expect(await zoneRevisionOf(v, zoneId)).toBe(1);
+  });
+});
+
+describe("today's name route", () => {
+  const suffix = () => randomUUID().slice(0, 6);
+
+  it("answers the revision unchanged when a table is renamed to the name it already has", async () => {
+    const { zoneId, table } = await plannedZone(v, [{ key: "bar", label: "Bar" }]);
+    const name = `Window ${suffix()}`;
+    await expectRevision(v, today(table.bar!, "name", { name }), zoneId);
+    const read = (await zoneRevisionOf(v, zoneId))!;
+
+    await expectRevision(v, today(table.bar!, "name", { name, zoneRevision: read }), zoneId, read);
+  });
+
+  it("refuses Split tables… and a rename from the read before another till renamed the group", async () => {
+    const { zoneId, table } = await plannedZone(v, [
+      { key: "a", place: { x: 0, y: 0 } },
+      { key: "b", place: { x: 20, y: 0 } },
+      { key: "bar", label: "Bar", place: { x: 40, y: 0 } },
+    ]);
+    await expectRevision(
+      v,
+      today(table.a!, "merge", { targetId: table.b!, side: "right", seats: 8 }),
+      zoneId,
+    );
+    const read = (await zoneRevisionOf(v, zoneId))!;
+
+    await expectRevision(
+      v,
+      today(table.a!, "name", { name: `García birthday ${suffix()}`, zoneRevision: read }),
+      zoneId,
+      read + 1,
+    );
+    const before = await everything();
+
+    expect(
+      await refusal(today(table.a!, "split-off", { partIds: [table.b!], zoneRevision: read })),
+    ).toEqual({
+      status: 409,
+      body: { error: { code: "floor_today.out_of_date", params: { zoneId, revision: read + 1 } } },
+    });
+    expect(
+      await refusal(today(table.bar!, "name", { name: `Window ${suffix()}`, zoneRevision: read })),
+    ).toEqual({
+      status: 409,
+      body: { error: { code: "floor_today.out_of_date", params: { zoneId, revision: read + 1 } } },
+    });
+    expect(await everything()).toEqual(before);
+
+    await expectRevision(
+      v,
+      today(table.a!, "split-off", { partIds: [table.b!], zoneRevision: read + 1 }),
+      zoneId,
+      read + 2,
+    );
+  });
+
+  it("gives a name to one of two tables in two rooms renamed to it at once, and refuses the other", async () => {
+    const first = await plannedZone(v, [{ key: "a", place: { x: 0, y: 0 } }]);
+    const second = await plannedZone(v, [{ key: "a", place: { x: 0, y: 0 } }]);
+    const name = `Window ${suffix()}`;
+    const bodies = [
+      await withRevision(v, first.table.a!, { name }),
+      await withRevision(v, second.table.a!, { name }),
+    ];
+
+    const answers = await Promise.all([
+      refusal(send("POST", `/api/tables/${first.table.a!}/today/name`, bodies[0])),
+      refusal(send("POST", `/api/tables/${second.table.a!}/today/name`, bodies[1])),
+    ]);
+
+    expect(answers.map((a) => a.status).sort()).toEqual([200, 409]);
+    expect(answers.find((a) => a.status === 409)!.body).toEqual({
+      error: { code: "table.label_taken", params: { label: name, field: "name" } },
+    });
+    const names = [
+      (await todayRow(v, first.table.a!))?.name ?? null,
+      (await todayRow(v, second.table.a!))?.name ?? null,
+    ];
+    expect(names.filter((n) => n === name)).toHaveLength(1);
+    expect(names.filter((n) => n === null)).toHaveLength(1);
+  });
+
+  it("names a table, and an empty name clears it", async () => {
+    const { zoneId, table } = await plannedZone(v, [{ key: "a", place: { x: 0, y: 0 } }]);
+    const name = `Window ${suffix()}`;
+
+    await expectRevision(v, today(table.a!, "name", { name: `  ${name} ` }), zoneId);
+    expect(await todayRow(v, table.a!)).toMatchObject({ name });
+
+    await expectRevision(v, today(table.a!, "name", { name: "" }), zoneId);
+    expect(await todayRow(v, table.a!)).toMatchObject({ name: null });
+  });
+
+  it.each([
+    ["41 characters", { name: "x".repeat(41) }],
+    ["a missing name", {}],
+  ])("refuses %s and writes nothing", async (_, body) => {
+    const { zoneId, table } = await plannedZone(v, [{ key: "a", place: { x: 0, y: 0 } }]);
+    const read = await zoneRevisionOf(v, zoneId);
+    const before = await everything();
+
+    expect(await refusal(today(table.a!, "name", body))).toEqual({
+      status: 400,
+      body: { error: { code: "management.request_invalid", params: { field: "name" } } },
+    });
+    expect(await everything()).toEqual(before);
+    expect(await zoneRevisionOf(v, zoneId)).toBe(read);
   });
 });
 

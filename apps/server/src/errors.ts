@@ -356,8 +356,12 @@ declare module "@waitron/shared" {
      */
     "working_order.already_collected": { workingOrderId: string };
     // `table.not_found` is declared in @waitron/db's errors.ts.
-    /** A dining table label already exists in this venue. `label` is the operator's own text. */
-    "table.label_taken": { label: string };
+    /**
+     * The name is already in use in this venue: a table's saved label, or, sent with
+     * `field: "name"` from a till, also a table's or group's name for today. `label` is the name
+     * asked for.
+     */
+    "table.label_taken": { label: string; field?: "name" };
     "table.inactive": { tableId: string };
     /** A change to today's plan named a table with no today's row, or a spare where it needs a place. */
     "table.not_on_today_plan": { tableId: string };

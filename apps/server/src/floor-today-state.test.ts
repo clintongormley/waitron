@@ -15,8 +15,9 @@ import { readZonePlan, saveZonePlan, type ZonePlanSave } from "./floor-plan.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { splitJoinedTable } from "./floor-today-split.js";
 import { ensureToday } from "./floor-today-store.js";
+import { writeMerge } from "./floor-today-merges.js";
 import { inTx, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
-import { giveKeptSize, plannedZone } from "./testing/floor-today-venue.js";
+import { giveKeptSize, mergeOf, plannedZone } from "./testing/floor-today-venue.js";
 import { listTablesWithState, type TableState } from "./working-order.js";
 import "./errors.js";
 
@@ -122,6 +123,8 @@ describe("the till's table-state answer carries today's plan", () => {
       joined: null,
       splitOffFrom: null,
       zoneRevision: 1,
+      name: null,
+      joinName: null,
     });
     expect(states.get(b)!.today).toEqual({
       placement: place(20, 5, { width: 10, rotation: 45 }),
@@ -134,6 +137,8 @@ describe("the till's table-state answer carries today's plan", () => {
       joined: null,
       splitOffFrom: null,
       zoneRevision: 1,
+      name: null,
+      joinName: null,
     });
     expect(states.get(spare)!.today).toEqual({
       placement: null,
@@ -146,6 +151,8 @@ describe("the till's table-state answer carries today's plan", () => {
       joined: null,
       splitOffFrom: null,
       zoneRevision: 1,
+      name: null,
+      joinName: null,
     });
     expect(states.get(off)!.today).toEqual({
       placement: null,
@@ -158,6 +165,8 @@ describe("the till's table-state answer carries today's plan", () => {
       joined: null,
       splitOffFrom: null,
       zoneRevision: 1,
+      name: null,
+      joinName: null,
     });
   });
 
@@ -358,5 +367,42 @@ describe("the till's table-state answer carries the room's revision", () => {
       expect(next.get(unplanned)!.today.zoneRevision).toBe(0);
       expect(next.has(noToday)).toBe(false);
     });
+  });
+});
+
+describe("the till's table-state answer carries today's names", () => {
+  it("the floor read carries a table's and a group's name for today", async () => {
+    const named = await LONG_TABLE();
+    const grouped = await LONG_TABLE();
+    await inTx(v, (tx) =>
+      writeMerge(tx, v.cfg, {
+        movingId: grouped.table.bar!,
+        targetId: grouped.table.long!,
+        side: "left",
+        seats: 14,
+        free: true,
+      }),
+    );
+    const { joinId } = (await mergeOf(v, grouped.table.bar!))!;
+    const tableName = fresh("Window seat");
+    const groupName = fresh("García birthday");
+    await inTx(v, async (tx) => {
+      await tx
+        .update(floorTodayTables)
+        .set({ name: tableName })
+        .where(eq(floorTodayTables.tableId, named.table.bar!));
+      await tx
+        .update(floorTodayJoins)
+        .set({ name: groupName })
+        .where(eq(floorTodayJoins.id, joinId));
+    });
+
+    const states = await read();
+    expect(states.get(named.table.bar!)!.today).toMatchObject({ name: tableName, joinName: null });
+    expect(states.get(named.table.long!)!.today).toMatchObject({ name: null, joinName: null });
+    const members = ["bar", "c3", "c4", "c5"].map((key) => grouped.table[key]!);
+    for (const member of members) {
+      expect(states.get(member)!.today).toMatchObject({ name: null, joinName: groupName });
+    }
   });
 });

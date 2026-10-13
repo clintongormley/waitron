@@ -1702,6 +1702,18 @@ route, the zone reset and a party join with a merge, and any of those that sends
 (`management.request_invalid`, `requiredRevision` in `apps/server/src/floor-revision.ts`); the
 zone reset alone may send `null`, for a read that held no table of the zone with a today's row.
 
+A table's or a joined table's name for today is `floor_today_tables.name`, a group's is
+`floor_today_joins.name`; null means the saved name. `POST /api/tables/:id/today/name` writes it
+(`nameToday`, `apps/server/src/floor-today-name.ts`); a table in a group names the group. A name is
+refused `table.label_taken` when, compared after `normalize("NFC")` and `toLowerCase()` in
+JavaScript (`sameName`), it is the saved name of another table of the location or the today's name
+of another group or of another table on the map, spare or taken off; a group's own tables count as
+other tables. A reset clears a table's name when it puts the table back (`todayColumns` and the
+parts it takes back in `catchUpPass`, Reset table, and Split tables… putting a joined table back).
+A group's name goes with its row, however the group ends. A joined table's name goes when it is split
+down to one table or pushed into a group, which takes that name if it has none, the table pushed
+onto first (`writeMerge`). The room's print reads both columns, so a rename moves the revision.
+
 Back to its saved place and Take off for today refuse a table split off (`table.split_off`, `refuseSplitOff`,
 `apps/server/src/floor-today-store.ts`).
 
