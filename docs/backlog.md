@@ -4129,8 +4129,9 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   the archive's S3 backend is not — only `LocalFsBackend` exists for archives. The abort-aware
   per-destination timeout lands with the first network backend.
   A538's [draft design](superpowers/specs/2026-10-12-a538-archive-s3-design.md) and
-  [implementation plan](superpowers/plans/2026-10-12-a538-archive-s3.md) are **needs-owner-review**
-  before 17 October; build work and real-AWS evidence remain open.
+  [implementation plan](superpowers/plans/2026-10-12-a538-archive-s3.md): the owner approved the
+  proposed defaults on 2026-10-12. Plan Task 1, which makes the bucket stream's calls cancellable,
+  is built (A538-1); the remaining tasks and the real-AWS evidence are open.
 
 - **Whole-state-volume capture** (its own §5-reviewed slice): capture the whole state directory EXCEPT
   an explicit exclusion set, with a completeness guard that fails when a new top-level entry is
@@ -4406,6 +4407,11 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   request up when it has had no reply 30 seconds after it started (`BUCKET_IDLE_MS`,
   `packages/stream/src/s3-client.ts`).
   [Detail](backlog/box.md#the-bucket-clients-limits-a44-676--what-is-still-open)
+
+- **The settings screen's Test and Save wait on the bucket with no time limit and no cancel
+  signal** (`probeBucket` in `apps/server/src/boot.ts`, reached from
+  `apps/server/src/stream-api.ts`), so a bucket that sends headers and then stalls holds that
+  request open, though before any backup turn is taken. Left open by A538-1.
 
 - **The wizard route answers `backup.stream_name_invalid` 400, where other bucket failures answer
   502** — the status table in `apps/server/src/setup-api.ts` maps the code as one, and the same code
