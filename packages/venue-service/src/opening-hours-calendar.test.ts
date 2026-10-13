@@ -10,6 +10,7 @@ import {
 import {
   CORE_MIGRATIONS,
   floorZones,
+  locationDayCutoverChanges,
   locations,
   tenants,
   withTransaction,
@@ -344,6 +345,8 @@ describe("the Opening hours month read", () => {
     expect(dayOn("2030-11-30")).toEqual({
       date: "2030-11-30",
       inMonth: false,
+      dayCutover: "06:00",
+      endMinute: 1440,
       seasonId: v.seasons.Autumn,
       specialDay: null,
       holidays: [],
@@ -367,6 +370,8 @@ describe("the Opening hours month read", () => {
     expect(dayOn("2030-12-01")).toEqual({
       date: "2030-12-01",
       inMonth: true,
+      dayCutover: "06:00",
+      endMinute: 1440,
       seasonId: v.seasons.Winter,
       specialDay: null,
       holidays: [],
@@ -390,6 +395,8 @@ describe("the Opening hours month read", () => {
     expect(dayOn("2030-12-24")).toEqual({
       date: "2030-12-24",
       inMonth: true,
+      dayCutover: "06:00",
+      endMinute: 1440,
       seasonId: v.seasons.Winter,
       specialDay: { id: nochebuena.id, name: "Nochebuena" },
       holidays: [],
@@ -487,6 +494,33 @@ describe("the Opening hours month read", () => {
       ],
     });
     expect(dayOn("2025-12-30").closedAllDay).toBe(false);
+  });
+
+  it("gives each day its own changeover and length across a pending changeover change, with the clock's status", async () => {
+    const v = await venue();
+    await suite.db.insert(locationDayCutoverChanges).values({
+      locationId: v.cfg.locationId,
+      effectiveBusinessDay: "2030-12-10",
+      dayCutover: "07:00:00",
+    });
+    const month = await readMonth(v, "2030-12");
+    const day = (date: string) => month.days.find((d) => d.date === date)!;
+    expect([day("2030-12-08"), day("2030-12-09"), day("2030-12-10")]).toMatchObject([
+      { dayCutover: "06:00", endMinute: 1440 },
+      { dayCutover: "06:00", endMinute: 1500 },
+      { dayCutover: "07:00", endMinute: 1440 },
+    ]);
+    expect(month.clockRevision).toEqual(expect.any(Number));
+    expect(month.businessDayClock).toEqual({
+      timeZone: "Europe/Madrid",
+      dayCutover: "06:00",
+      cutoverChanges: [{ effectiveBusinessDay: "2030-12-10", dayCutover: "07:00" }],
+    });
+    expect(month.currentBusinessDay).toBe("2026-10-09");
+    expect(month.pending).toMatchObject({
+      effectiveBusinessDay: "2030-12-10",
+      dayCutover: "07:00",
+    });
   });
 
   it("sends the same statements for one department as for three, not one per day or department", async () => {

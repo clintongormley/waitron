@@ -1,7 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { styleMap } from "lit/directives/style-map.js";
-import type { BusinessDayClock } from "@waitron/shared";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -11,7 +10,6 @@ import { addDays } from "../hours-rules.js";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import type { OpeningHoursMonth } from "../opening-hours-calendar.js";
 import type { ClosedRange, ServiceRange } from "../service-day.js";
-import { serviceDayWallContext } from "../service-day-context.js";
 import { format, formatLongDate, formatMonthName, formatWeekday } from "./hours-view.js";
 import type { SeasonWrites } from "./season-chips.js";
 import "./season-chips.js";
@@ -256,11 +254,6 @@ export class OpeningHoursMonthView extends LitElement {
   @property() departmentId = "";
   /** The departments' names, zones' names and periods' colours. */
   @property({ attribute: false }) departments: OpeningHoursModel["departments"] = [];
-  @property({ attribute: false }) businessDayClock?: BusinessDayClock;
-  /** The changeover used when no `businessDayClock` is given. */
-  @property() dayCutover = "06:00";
-  /** The clock revision a season write sends. */
-  @property({ type: Number }) clockRevision = 0;
   /** The season writes the chips send. */
   @property({ attribute: false }) api?: SeasonWrites;
   @property({ attribute: false }) specialDays: readonly { id: string; name: string }[] = [];
@@ -339,19 +332,17 @@ export class OpeningHoursMonthView extends LitElement {
     ];
   }
 
-  #placer(date: LocalDate) {
-    const wall = this.businessDayClock
-      ? serviceDayWallContext(this.businessDayClock, date)
-      : { dayCutover: this.dayCutover, endMinute: DAY };
-    const cutover = minutes(wall.dayCutover);
-    const extent = Math.max(DAY, wall.endMinute);
+  /** Places a range on the business day's track, which runs from the day's changeover to the next
+   *  day's; a time at or before the start is on the clock's next day. */
+  #placer({ dayCutover, endMinute }: Day) {
+    const cutover = minutes(dayCutover);
     const minute = (time: string) => (minutes(time) - cutover + DAY) % DAY;
     return ({ startsAt, endsAt }: ClosedRange) => {
       const start = minute(startsAt);
-      const end = minute(endsAt) || wall.endMinute;
+      const end = minute(endsAt) + (minute(endsAt) <= start ? DAY : 0);
       return styleMap({
-        left: `${(start / extent) * 100}%`,
-        width: `${((end - start) / extent) * 100}%`,
+        left: `${(start / endMinute) * 100}%`,
+        width: `${((end - start) / endMinute) * 100}%`,
       });
     };
   }
@@ -383,7 +374,7 @@ export class OpeningHoursMonthView extends LitElement {
     stop: LocalDate,
   ) {
     const rows = this.#rows(day, chosen, names);
-    const place = this.#placer(day.date);
+    const place = this.#placer(day);
     const holidayName = holidayDateName(day.holidays, day.date, "");
     const named = day.specialDay?.name ?? holidayName;
     const isToday = day.date === model.today;
@@ -580,7 +571,7 @@ export class OpeningHoursMonthView extends LitElement {
       <div class="sub">
         <season-chips
           .seasons=${model.seasons}
-          .clockRevision=${this.clockRevision}
+          .clockRevision=${model.clockRevision}
           .api=${this.api}
           .specialDays=${this.specialDays}
           .readOnly=${this.readOnly}

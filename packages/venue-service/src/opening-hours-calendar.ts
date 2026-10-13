@@ -14,7 +14,7 @@ import type { VenueScope } from "./operations.js";
 import type { Season } from "./season-rules.js";
 import { readSeasons } from "./seasons.js";
 import type { ClosedRange, ServiceRange } from "./service-day.js";
-import type { BusinessDayScheduleStatus } from "./service-day-context.js";
+import { serviceDayWallContext, type BusinessDayScheduleStatus } from "./service-day-context.js";
 import { missingHolidaysIn } from "./special-days.js";
 import { readServiceZones } from "./zone-closed-times.js";
 
@@ -92,7 +92,7 @@ export async function readOpeningHoursYear(
   };
 }
 
-export interface OpeningHoursMonth {
+export interface OpeningHoursMonth extends BusinessDayScheduleStatus {
   month: string;
   today: LocalDate | null;
   /** The seasons the returned dates touch, in the order they are first touched. */
@@ -101,6 +101,9 @@ export interface OpeningHoursMonth {
   days: readonly {
     date: LocalDate;
     inMonth: boolean;
+    /** The business day's own changeover, and its length in minutes up to the next day's. */
+    dayCutover: string;
+    endMinute: number;
     seasonId: string | null;
     specialDay: { id: string; name: string } | null;
     holidays: readonly HolidayFact[];
@@ -136,6 +139,7 @@ export async function readOpeningHoursMonth(
   const dates = rangeDates(from, to);
   const stored = await readLocationClock(tx, cfg.locationId);
   const clock = isReadableZone(stored.timeZone) ? stored : { ...stored, timeZone: "UTC" };
+  const status = await readBusinessDayScheduleStatus(tx, cfg, stored, at);
   const seasons = await readSeasons(tx, cfg);
   const plan = await readDayPlan(tx, cfg, dates, seasons);
   const departments = await readActiveDepartments(tx, cfg);
@@ -167,6 +171,7 @@ export async function readOpeningHoursMonth(
       touched.set(season.id, { ...season, lastDay: lastDayAfter(date, sorted, season) });
   }
   return {
+    ...status,
     month,
     today: venueLocalMoment(at, stored)?.civilDate ?? null,
     seasons: [...touched.values()],
@@ -175,6 +180,7 @@ export async function readOpeningHoursMonth(
       return {
         date,
         inMonth: date.startsWith(month),
+        ...serviceDayWallContext(clock, date),
         seasonId: plan.seasonIdOn.get(date) ?? null,
         specialDay: special === null ? null : { id: special.specialDayId, name: special.name },
         holidays: factsOn.get(date) ?? [],

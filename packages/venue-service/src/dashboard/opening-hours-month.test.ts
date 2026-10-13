@@ -5,7 +5,7 @@ import { applyTokens } from "@waitron/ui";
 import type { OpeningHoursMonth } from "../opening-hours-calendar.js";
 import type { LocalDate } from "../hours-types.js";
 import { addDays } from "../hours-rules.js";
-import { CLOCK, DEPARTMENTS, monthModel } from "../testing/opening-hours-month-fixture.js";
+import { DEPARTMENTS, monthModel } from "../testing/opening-hours-month-fixture.js";
 import type { SpecialDayAction } from "./special-day-action.js";
 import type { OpeningHoursMonthView } from "./opening-hours-month.js";
 import "./opening-hours-month.js";
@@ -25,7 +25,6 @@ async function mount(
   Object.assign(el, {
     model,
     departments: DEPARTMENTS,
-    businessDayClock: CLOCK,
     ...extra,
   });
   document.body.append(el);
@@ -160,15 +159,32 @@ describe("Opening hours month", () => {
     expect(text(testId(el, "rows"))).toBe("Rows: Restaurant · Bar");
   });
 
-  it("places ranges from a dated changeover where the clock moves it", async () => {
-    const el = await mount(monthModel(), {
-      businessDayClock: {
-        ...CLOCK,
-        cutoverChanges: [{ effectiveBusinessDay: "2026-12-10", dayCutover: "07:00" }],
-      },
-    } as Partial<OpeningHoursMonthView>);
+  it("places each date's ranges from that date's own changeover, a longer day running past 24 hours", async () => {
+    const model = monthModel();
+    const days = model.days.map((day) =>
+      day.date === "2026-12-09"
+        ? {
+            ...day,
+            endMinute: 1500,
+            departments: day.departments.map((d) =>
+              d.departmentId === "bar"
+                ? { ...d, ranges: [{ periodId: "allday", startsAt: "22:00", endsAt: "07:00" }] }
+                : d,
+            ),
+          }
+        : day.date >= "2026-12-10"
+          ? { ...day, dayCutover: "07:00" }
+          : day,
+    );
+    const el = await mount({ ...model, days });
     const lunch = cell(el, "2026-12-11").querySelectorAll<HTMLElement>(".segment")[1]!;
     expect(percent(lunch.style.left)).toBeCloseTo((6 / 24) * 100, 3);
+    const before = cell(el, "2026-12-08").querySelectorAll<HTMLElement>(".segment")[1]!;
+    expect(percent(before.style.left)).toBeCloseTo((7 / 24) * 100, 3);
+    // 9 December runs 06:00 to the next day's 07:00, 25 hours.
+    const late = cell(el, "2026-12-09").querySelector<HTMLElement>('[data-row="bar"] .segment')!;
+    expect(percent(late.style.left)).toBeCloseTo((16 / 25) * 100, 3);
+    expect(percent(late.style.width)).toBeCloseTo((9 / 25) * 100, 3);
   });
 
   it("with one department chosen, draws it and a bar per zone with the zone's closed time as a gap", async () => {
@@ -309,7 +325,7 @@ describe("Opening hours month", () => {
   });
 
   it("passes the seasons the month touches to the chips", async () => {
-    const el = await mount(monthModel(), { clockRevision: 4 });
+    const el = await mount(monthModel({ clockRevision: 4 }));
     const chips = root(el).querySelector("season-chips")!;
     expect(chips.seasons.map((season) => season.id)).toEqual(["autumn", "winter"]);
     expect(chips.clockRevision).toBe(4);
@@ -350,20 +366,18 @@ describe("Opening hours month", () => {
     }
   });
 
-  it("places ranges from the given changeover without a clock, a range to the changeover running to the bar's end", async () => {
+  it("runs a range that ends at the changeover to the bar's end", async () => {
     const model = monthModel();
     const days = model.days.map((day) => ({
       ...day,
+      dayCutover: "08:00",
       departments: day.departments.map((d) =>
         d.departmentId === "bar"
           ? { ...d, ranges: [{ periodId: "allday", startsAt: "22:00", endsAt: "08:00" }] }
           : d,
       ),
     }));
-    const el = await mount({ ...model, days }, {
-      businessDayClock: undefined,
-      dayCutover: "08:00",
-    } as Partial<OpeningHoursMonthView>);
+    const el = await mount({ ...model, days });
     const [rest, bar] = [...cell(el, "2026-12-07").querySelectorAll<HTMLElement>(".track")];
     const lunch = rest!.querySelectorAll<HTMLElement>(".segment")[1]!;
     expect(percent(lunch.style.left)).toBeCloseTo((5 / 24) * 100, 3);

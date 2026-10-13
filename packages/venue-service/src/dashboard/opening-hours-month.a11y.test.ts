@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "vitest";
 import { setLocale } from "@waitron/dashboard-kit";
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helpers.js";
-import { CLOCK, DEPARTMENTS, monthModel } from "../testing/opening-hours-month-fixture.js";
+import { DEPARTMENTS, monthModel } from "../testing/opening-hours-month-fixture.js";
 import type { OpeningHoursMonthView } from "./opening-hours-month.js";
 import "./opening-hours-month.js";
 
@@ -25,7 +25,6 @@ describe.each(["light", "dark"] as const)("Opening hours month accessibility (%s
     Object.assign(el, {
       model: monthModel(),
       departments: DEPARTMENTS,
-      businessDayClock: CLOCK,
       ...states[state],
     });
     host.append(el);

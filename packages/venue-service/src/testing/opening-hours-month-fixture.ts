@@ -6,6 +6,12 @@ import { addDays } from "../hours-rules.js";
 
 type Day = OpeningHoursMonth["days"][number];
 
+const CLOCK: BusinessDayClock = {
+  timeZone: "Europe/Madrid",
+  dayCutover: "06:00",
+  cutoverChanges: [],
+};
+
 const period = (id: string, name: string, colour: "amber" | "green" | "red" | "purple") => ({
   id,
   name,
@@ -61,6 +67,8 @@ export function monthModel(overrides: Partial<OpeningHoursMonth> = {}): OpeningH
     days.push({
       date,
       inMonth: date.startsWith("2026-12"),
+      dayCutover: "06:00",
+      endMinute: 1440,
       seasonId: date < "2026-12-01" ? "autumn" : "winter",
       specialDay:
         date === "2026-12-14"
@@ -102,6 +110,10 @@ export function monthModel(overrides: Partial<OpeningHoursMonth> = {}): OpeningH
     });
   }
   return {
+    businessDayClock: CLOCK,
+    clockRevision: 7,
+    currentBusinessDay: "2026-12-30",
+    pending: null,
     month: "2026-12",
     today: "2026-12-30",
     seasons: [
@@ -112,9 +124,3 @@ export function monthModel(overrides: Partial<OpeningHoursMonth> = {}): OpeningH
     ...overrides,
   };
 }
-
-export const CLOCK: BusinessDayClock = {
-  timeZone: "Europe/Madrid",
-  dayCutover: "06:00",
-  cutoverChanges: [],
-};
