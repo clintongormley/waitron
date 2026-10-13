@@ -63,18 +63,7 @@ async function checkScheduleAfterSeasonWrite(
   field: "startsOn" | "seasonId",
 ): Promise<void> {
   const clash = await scheduleEndOffsetClash(tx, cfg);
-  if (clash === null) return;
-  const { periodId, departmentId, seasonId, weekday, date, specialDayId } = clash;
-  invalid({
-    field,
-    reason: "end_offset",
-    periodId,
-    departmentId,
-    ...(seasonId === undefined ? {} : { seasonId }),
-    ...(weekday === undefined ? {} : { weekday }),
-    ...(date === undefined ? {} : { date }),
-    ...(specialDayId === undefined ? {} : { specialDayId }),
-  });
+  if (clash !== null) invalid({ field, reason: "end_offset", ...clash });
 }
 
 /** Renames or moves a season. A rename alone changes no times, so it skips the clock check. */
