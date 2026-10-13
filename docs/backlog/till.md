@@ -307,7 +307,18 @@ same millisecond, so their order on the bill falls to the random id. Seen in A57
 at Long table, Long table dragged onto a Bar and Stool group, read "Bar, Stool, …" 13 times in 15
 and "Stool, Bar, …" twice. That joinMergeMembers predates part 3a is read from `git log`, not run
 on main. Next: give each table the group adds a later `joined_at` in number order, as `passGuests`
-does (`apps/server/src/floor-today-parts.ts`).
+does (`apps/server/src/floor-today-parts.ts`). Seating a party at a group has the same tie
+(`seatMergeMembers`, same file as `joinMergeMembers`): A579 part 3b's moved notice read "Counter 4,
+Counter 3, Counter 5" in one run.
+
+## A594. Moving a bill to a free table in a group seats only that table
+
+**A594 (2026-10-13).** `moveBill`'s free-table branch opens a party at the one table it was given and
+leaves the rest of its group free (`apps/server/src/move-bill.ts`, the `openParty` call), so a party
+can hold some of a group's tables. Seating, the party join and Move guests all treat a group whole.
+Found by A579 part 3b's review: Split tables… ticking that table would have left the party open with
+no table; it is now refused `tab.already_open`. Next: decide whether the moved bill's party takes the
+whole group, as seating at one of its tables does.
 
 ## A593. A table the reset turns into a joined table inside a waiting group keeps its old outline
 

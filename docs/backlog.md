@@ -1938,6 +1938,10 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   (2026-10-13).** Narrower than its tables; a split lays them out from its left edge. Left open by #1626.
   [Detail](backlog/till.md#a593-a-table-the-reset-turns-into-a-joined-table-inside-a-waiting-group-keeps-its-old-outline)
 
+- **A594. Moving a bill to a free table in a group seats only that table (2026-10-13).** The party
+  holds part of the group. Found by A579 part 3b's review.
+  [Detail](backlog/till.md#a594-moving-a-bill-to-a-free-table-in-a-group-seats-only-that-table)
+
 - **A565. "Reset to saved plan" does not wait for food on its way to an ordinary table
   (2026-10-13).** Dates from floor plans slice 1; #1604 made only split groups wait.
   [Detail](backlog/till.md#a565-reset-to-saved-plan-does-not-wait-for-food-on-its-way-to-an-ordinary-table)
