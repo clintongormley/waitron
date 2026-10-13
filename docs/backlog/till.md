@@ -322,6 +322,36 @@ joined table apart while a party holds any table of its group, so a group such a
 is not ended under it. Next: decide whether the moved bill's party takes the
 whole group, as seating at one of its tables does.
 
+## A602. Reset table's window says "guests seated" for a free table kept apart by guests elsewhere in its group
+
+**A602 (2026-10-13).** Since A579 part 4b (#1637), Reset table keeps a split-off table apart when
+guests sit at any table of the group it is in, as the floor-wide reset does (`resetTable`,
+`apps/server/src/floor-today-reset-table.ts`; `apartReason`, `apps/till/src/state/floor-today.ts`).
+The Reset table window gives such a table the same reason as one with guests at it, "Counter 5 stays
+apart: guests seated" / "hay clientes", though nobody sits at Counter 5 itself. The case is reached
+when a bill is moved to another table of the group (A594). Next: the owner's wording for a third
+reason, for example "guests in its group" / "hay clientes en su grupo".
+
+## A603. Reset table does not wait for food on its way to a group's other tables, nor for a table a module refuses to remove
+
+**A603 (2026-10-13).** Reset table keeps a split-off table apart for guests at it or anywhere in its
+group, and for food on its way to the table itself (`resetTable`,
+`apps/server/src/floor-today-reset-table.ts`). From reading, not running: food on its way to another
+table of the group does not keep it apart, and neither does a table a module refuses to remove, which
+the floor-wide reset counts as waiting (`refusedByAModule` in `apps/server/src/floor-today-store.ts`).
+Raised in A579 part 4b's finish review and its fix report; neither changed. Next: reproduce each in a
+test, then decide whether Reset table waits as the floor-wide reset does.
+
+## A604. A split-off table the till's read leaves out could make Reset table refuse as out of date
+
+**A604 (2026-10-13).** The till builds Reset table's list from the split-off tables its floor read
+holds (`resetTableOf`, `apps/till/src/state/floor-today.ts`), and the read keeps only tables in
+service; the server counts every split-off table (`resetTable`,
+`apps/server/src/floor-today-reset-table.ts`). A split-off table missing from the read would make the
+till send too few and be refused `joined_table.out_of_date` every time. Join again had the same line.
+A579 part 4b's review found it by reading; whether a split-off table can be out of service was not
+checked. Next: find whether that state can be reached, and if so make the two lists agree.
+
 ## A600. The floor-wide reset and its catch-up do not look at what stands in a saved place
 
 **A600 (2026-10-13).** Reset table (A579 part 4a) refuses to put a joined table back over another

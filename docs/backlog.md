@@ -1953,6 +1953,19 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   server refuses. Found by A579 part 3c's review.
   [Detail](backlog/till.md#a598-a-table-held-by-guests-when-its-joined-table-went-live-is-neither-joined-nor-split-off)
 
+- **A602. Reset table's window says "guests seated" for a free table kept apart by guests elsewhere
+  in its group (2026-10-13).** Wording is the owner's call. Found by A579 part 4b's Codex review.
+  [Detail](backlog/till.md#a602-reset-tables-window-says-guests-seated-for-a-free-table-kept-apart-by-guests-elsewhere-in-its-group)
+
+- **A603. Reset table does not wait for food on its way to a group's other tables, nor for a table a
+  module refuses to remove (2026-10-13).** The floor-wide reset waits for the second. Found reading,
+  not run, in A579 part 4b's reviews.
+  [Detail](backlog/till.md#a603-reset-table-does-not-wait-for-food-on-its-way-to-a-groups-other-tables-nor-for-a-table-a-module-refuses-to-remove)
+
+- **A604. A split-off table the till's read leaves out could make Reset table refuse as out of date
+  (2026-10-13).** Not known to be reachable. Found reading, not run, in A579 part 4b's review.
+  [Detail](backlog/till.md#a604-a-split-off-table-the-tills-read-leaves-out-could-make-reset-table-refuse-as-out-of-date)
+
 - **A600. The floor-wide reset and its catch-up do not look at what stands in a saved place
   (2026-10-13).** Reset table refuses `table.place_taken`; Reset to saved plan has no such check.
   Found reading, not run, by the A579 design.
