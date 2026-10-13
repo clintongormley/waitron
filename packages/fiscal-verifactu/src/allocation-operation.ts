@@ -1,6 +1,7 @@
 import "./errors.js";
-import { eq } from "drizzle-orm";
-import { deployment, readTenant, type Transaction } from "@waitron/db";
+import { isDeepStrictEqual } from "node:util";
+import { and, eq, isNull, sql } from "drizzle-orm";
+import { deployment, invoiceSeries, nodes, readTenant, type Transaction } from "@waitron/db";
 import {
   readOperationAuthority,
   type ModuleOperationInput,
@@ -14,8 +15,64 @@ import {
 } from "./allocation.js";
 import { WAITRON_ID_SISTEMA } from "./provisioning.js";
 import type { ActivationResult } from "./schema/allocations.js";
+import { fiscalAllocations } from "./schema/allocations.js";
+import { registroSif } from "./schema/sif.js";
 
 type SeriesBases = readonly { readonly code: string; readonly purpose: string }[];
+
+export async function readModuleAllocationSeries(
+  tx: Transaction,
+  node: ProvisionedNode,
+  requestedBases: SeriesBases,
+): Promise<ActivationResult["series"]> {
+  const bases = requestedBases.map((base) => ({ code: base.code, purpose: base.purpose }));
+  const refuse = (reason: string): never => {
+    throw new AppError("sif.allocation_invalid", { reason });
+  };
+  const [storedNode] = await tx.select().from(nodes).where(eq(nodes.id, node.nodeId));
+  if (storedNode?.locationId !== node.locationId) return refuse("node_mismatch");
+  const [sif] = await tx
+    .select({
+      id: registroSif.id,
+      taxpayerNif: registroSif.nif,
+      softwareId: registroSif.idSistemaInformatico,
+      identity: sql<string>`${registroSif.numeroInstalacion}`,
+    })
+    .from(registroSif)
+    .where(and(eq(registroSif.nodeId, node.nodeId), isNull(registroSif.revocadoEn)));
+  if (sif === undefined) return refuse("activation_superseded");
+  const [retained] = await tx
+    .select()
+    .from(fiscalAllocations)
+    .where(and(eq(fiscalAllocations.nodeId, node.nodeId), eq(fiscalAllocations.sifId, sif.id)));
+  const tenant = await readTenant(tx);
+  const [stamp] = await tx.select().from(deployment).where(eq(deployment.id, 1));
+  if (
+    retained === undefined ||
+    retained.taxpayerNif !== tenant?.taxId ||
+    retained.taxpayerNif !== sif.taxpayerNif ||
+    retained.softwareId !== sif.softwareId ||
+    retained.installationIdentity !== sif.identity ||
+    retained.environment !== stamp?.environment
+  )
+    return refuse("activation_superseded");
+  const ordered = (values: SeriesBases) =>
+    values
+      .map(({ code, purpose }) => [code, purpose])
+      .sort((left, right) => {
+        const a = JSON.stringify(left);
+        const b = JSON.stringify(right);
+        return a < b ? -1 : a > b ? 1 : 0;
+      });
+  if (!isDeepStrictEqual(ordered(bases), ordered(retained.bases))) return refuse("series_mismatch");
+  const active = await tx
+    .select({ id: invoiceSeries.id, code: invoiceSeries.code, purpose: invoiceSeries.purpose })
+    .from(invoiceSeries)
+    .where(and(eq(invoiceSeries.nodeId, node.nodeId), isNull(invoiceSeries.retiredAt)))
+    .orderBy(invoiceSeries.code);
+  if (!isDeepStrictEqual(active, retained.result.series)) return refuse("activation_superseded");
+  return retained.result.series;
+}
 
 // The host must collect outside confirmations and enrolled trust independently of submitted input.
 export interface AllocationOperationEvidence {

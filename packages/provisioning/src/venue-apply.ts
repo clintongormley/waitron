@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import {
   invoiceSeries,
   kitchenStations,
@@ -52,7 +52,7 @@ export interface InitialModuleInput {
 export interface VenueResult {
   locationId: string;
   nodeId: string;
-  /** The ids of the series actually inserted, in plan order. */
+  /** The active series ids, in the plan's purpose order. */
   seriesIds: string[];
   /** One entry per `seed-module` action run, in plan order: the module and its one-line report. */
   seeded: readonly SeedReport[];
@@ -83,6 +83,20 @@ export async function applyVenue(
     deps.initialAdministratorId === undefined
       ? undefined
       : normaliseUuid(deps.initialAdministratorId, "PersonId");
+  const filingModule = actions.find((action) => action.kind === "create-node")?.filingModule;
+  const seriesOwners = deps.modules.filter((module) => module.provisioning?.seed?.series);
+  if (seriesOwners.length > 1 || seriesOwners.some((module) => module.fiscal?.id !== filingModule))
+    throw new Error("applyVenue: only the filing module may own initial series");
+  const seriesOwner = seriesOwners[0];
+  if (
+    seriesOwner !== undefined &&
+    !actions.some((action) => action.kind === "seed-module" && action.module === seriesOwner.name)
+  )
+    throw new Error("applyVenue: series owner is missing its seed action");
+  const resolveSeries = seriesOwner?.provisioning?.seed?.series?.resolve;
+  const seriesBases = actions
+    .filter((action) => action.kind === "create-series")
+    .map(({ code, purpose }) => ({ code, purpose }));
 
   return withTransaction(deps.db, async (tx) => {
     let locationId = "";
@@ -325,6 +339,7 @@ export async function applyVenue(
         }
         case "create-series": {
           if (nodeId === "") throw new Error("applyVenue: create-series before create-node");
+          if (resolveSeries !== undefined) break;
           if (reusingVenue) {
             const existing = await tx
               .select({ id: invoiceSeries.id })
@@ -364,6 +379,45 @@ export async function applyVenue(
     // The ordering guards fire only when a dependent action runs, so a plan that omits create-node
     // (with everything depending on it) reaches here with an empty id.
     if (nodeId === "") throw new Error("applyVenue: plan is missing create-node");
+    if (resolveSeries !== undefined) {
+      const references = (
+        await resolveSeries(
+          tx,
+          { locationId: brandLocationId(locationId), nodeId: brandNodeId(nodeId) },
+          seriesBases.map((base) => ({ ...base })),
+        )
+      ).map((reference) => ({ ...reference }));
+      const active = await tx
+        .select({ id: invoiceSeries.id, code: invoiceSeries.code, purpose: invoiceSeries.purpose })
+        .from(invoiceSeries)
+        .where(and(eq(invoiceSeries.nodeId, nodeId), isNull(invoiceSeries.retiredAt)));
+      if (
+        seriesBases.length === 0 ||
+        new Set(seriesBases.map((base) => base.purpose)).size !== seriesBases.length ||
+        references.length !== seriesBases.length ||
+        active.length !== references.length ||
+        new Set(references.map((reference) => reference.id)).size !== references.length ||
+        seriesBases.some(
+          (base) =>
+            references.filter((reference) => reference.purpose === base.purpose).length !== 1,
+        ) ||
+        references.some(
+          (reference) =>
+            !active.some(
+              (row) =>
+                row.id === reference.id &&
+                row.code === reference.code &&
+                row.purpose === reference.purpose,
+            ),
+        )
+      )
+        throw new AppError("provisioning.second_venue", {});
+      seriesIds.push(
+        ...seriesBases.map(
+          (base) => references.find((reference) => reference.purpose === base.purpose)!.id,
+        ),
+      );
+    }
     const result = { locationId, nodeId, seriesIds, seeded };
     await deps.beforeCommit?.(tx, result);
     return result;

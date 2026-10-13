@@ -696,3 +696,14 @@ the settings file is not a transactional database write and is not covered by th
 Production fiscal-seat wiring and allocation collectors, text SIF/counter retirement and all coupled
 consumers, final schema regeneration/populated upgrade and the whole-branch review/CI remain open.
 This checkpoint establishes no independent current paper history or remote-writer exclusion.
+
+### W41s-4 initial-series handoff qualification, 2026-10-13
+
+The generic setup runner can delegate series creation to the filing seed and return its active
+references without opening base rows first. Synthetic signed allocation tests exercise this path
+and compare counters and all series rows on retry. The internal fiscal resolver checks the
+committed allocation against requested bases and current venue/SIF/series state.
+
+The production fiscal seed does not declare this contribution yet. Its activation, independent
+outside evidence and every host consumer still belong to the coupled Task 4 transition above.
+No production continuity or writer-exclusion result is established by this checkpoint.

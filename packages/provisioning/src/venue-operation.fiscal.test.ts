@@ -7,6 +7,8 @@ import { persons } from "@waitron/identity";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { activateAuthenticatedAllocation } from "@waitron/fiscal-verifactu/src/allocation.js";
+import { readModuleAllocationSeries } from "@waitron/fiscal-verifactu/src/allocation-operation.js";
+import { FISCAL_SLOT } from "@waitron/fiscal-verifactu";
 import type { AllocationContext } from "@waitron/fiscal-verifactu/src/allocation-envelope.js";
 import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
 import {
@@ -144,11 +146,13 @@ beforeEach(async () => {
   await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
 });
 
-async function establish(input = { allocation, approval, context }) {
+async function establish(input = { allocation, approval, context }, managesSeries = false) {
   const module = fakeModule("fiscal-verifactu", {
+    fiscal: FISCAL_SLOT,
     provisioning: {
       seed: {
         summary: "qualify initial allocation inside setup",
+        series: managesSeries ? { resolve: readModuleAllocationSeries } : undefined,
         run: async (tx, node, operation) => {
           const supplied = operation!.input as typeof input;
           const result = await activateAuthenticatedAllocation(
@@ -231,4 +235,36 @@ describe("internal fresh setup with a signed synthetic allocation", () => {
     for (const table of [persons, tenants, nodes, invoiceSeries, fiscalAllocations])
       expect(await suite.db.select().from(table)).toEqual([]);
   });
+});
+
+it("hands setup the signed allocation's active references with no unsuffixed scaffolds", async () => {
+  const result = await establish(undefined, true);
+  const [ledger] = await suite.db.select().from(fiscalAllocations);
+  expect(result.seriesIds).toEqual(ledger!.result.series.map((series) => series.id));
+  expect(
+    (await suite.db.select().from(invoiceSeries))
+      .map(({ id, code, purpose, retiredAt, nextNumber }) => ({
+        id,
+        code,
+        purpose,
+        retiredAt,
+        nextNumber,
+      }))
+      .sort((a, b) => a.code.localeCompare(b.code)),
+  ).toEqual(ledger!.result.series.map((row) => ({ ...row, retiredAt: null, nextNumber: 1 })));
+  expect(await suite.db.select().from(invoiceSeries)).toHaveLength(3);
+});
+
+it("reapplies allocated setup without creating another SIF, allocation or series", async () => {
+  const first = await establish(undefined, true);
+  await suite.db.update(invoiceSeries).set({ nextNumber: 15 });
+  const before = await suite.db.select().from(invoiceSeries);
+  const retry = await establish(undefined, true);
+  expect(retry.seriesIds).toEqual(first.seriesIds);
+  expect(retry.seeded).toEqual([]);
+  expect(await suite.db.select().from(invoiceSeries)).toEqual(before);
+  expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
+  expect(
+    (await suite.db.execute(sql`select numero_instalacion, revocado_en from registro_sif`)).rows,
+  ).toEqual([{ numero_instalacion: "S000042", revocado_en: null }]);
 });

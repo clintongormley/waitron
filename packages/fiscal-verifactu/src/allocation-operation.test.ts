@@ -580,3 +580,134 @@ it("activates all purposes from opaque module input with the independently authe
       .sort((a, b) => a.code.localeCompare(b.code)),
   ).toEqual(result.series);
 });
+
+async function readAllocated(basesToRead = bases, target = node) {
+  const api = activation as unknown as {
+    readModuleAllocationSeries?: (
+      tx: Transaction,
+      node: typeof target,
+      bases: typeof basesToRead,
+    ) => Promise<readonly { id: string; code: string; purpose: string }[]>;
+  };
+  expect(api.readModuleAllocationSeries).toBeTypeOf("function");
+  return withTransaction(suite.db, (tx) =>
+    api.readModuleAllocationSeries!(tx, target, basesToRead),
+  );
+}
+async function activateForRead() {
+  return withOperationAuthority(binding, operator, (authority) =>
+    withTransaction(suite.db, (tx) => run(tx, { input, binding, authority })),
+  );
+}
+
+it("reads the actual committed allocation references without resetting series on setup retry", async () => {
+  const result = await activateForRead();
+  await suite.db.update(invoiceSeries).set({ nextNumber: 12 });
+  const before = await snapshot();
+  expect(await readAllocated()).toEqual(result.series);
+  expect(await readAllocated([...bases].reverse())).toEqual(result.series);
+  expect(await snapshot()).toEqual(before);
+});
+
+it.each(
+  [
+    bases.slice(0, 2),
+    [{ code: "other", purpose: "standard" }, ...bases.slice(1)],
+    [bases[0]!, bases[0]!, bases[2]!],
+  ].map((otherBases) => [otherBases]),
+)(
+  "refuses requested setup bases that differ from the committed allocation %#",
+  async (otherBases) => {
+    await activateForRead();
+    const before = await snapshot();
+    await expect(readAllocated(otherBases)).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "series_mismatch" },
+    });
+    expect(await snapshot()).toEqual(before);
+  },
+);
+
+it("refuses unallocated live series rather than blessing scaffold references", async () => {
+  const before = await snapshot();
+  await expect(readAllocated()).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "activation_superseded" },
+  });
+  expect(await snapshot()).toEqual(before);
+});
+
+it.each([
+  "taxpayer",
+  "environment",
+  "identity",
+  "code",
+  "retired",
+  "extra",
+  "software",
+  "sif-retired",
+])("refuses a committed allocation after its %s changed", async (field) => {
+  await activateForRead();
+  if (field === "taxpayer") await suite.db.execute(sql`update tenants set tax_id = '89890002M'`);
+  if (field === "environment") await suite.db.update(deployment).set({ environment: "production" });
+  if (field === "identity")
+    await suite.db.execute(sql`update registro_sif set numero_instalacion = 'P000043'`);
+  if (field === "code")
+    await suite.db
+      .update(invoiceSeries)
+      .set({ code: "changed" })
+      .where(sql`${invoiceSeries.purpose} = 'standard' and ${invoiceSeries.retiredAt} is null`);
+  if (field === "retired")
+    await suite.db
+      .update(invoiceSeries)
+      .set({ retiredAt: new Date() })
+      .where(sql`${invoiceSeries.purpose} = 'standard'`);
+  if (field === "extra")
+    await suite.db
+      .insert(invoiceSeries)
+      .values({ nodeId: node.nodeId, code: "other", purpose: "standard" });
+  if (field === "software") await suite.db.update(registroSif).set({ idSistemaInformatico: "W2" });
+  if (field === "sif-retired") await suite.db.update(registroSif).set({ revocadoEn: new Date() });
+  const before = await snapshot();
+  await expect(readAllocated()).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "activation_superseded" },
+  });
+  expect(await snapshot()).toEqual(before);
+});
+
+it("refuses allocation references for a node presented under another location", async () => {
+  await activateForRead();
+  await expect(
+    readAllocated(bases, {
+      ...node,
+      locationId: locationId("b0000000-0000-4000-8000-000000000099"),
+    }),
+  ).rejects.toMatchObject({ code: "sif.allocation_invalid", params: { reason: "node_mismatch" } });
+});
+
+it("refuses a live SIF that has no committed allocation ledger", async () => {
+  await withTransaction(suite.db, (tx) =>
+    registerSif(tx, {
+      nodeId: node.nodeId,
+      nif: candidate.taxpayerNif,
+      idSistemaInformatico: "W1",
+    }),
+  );
+  const before = await snapshot();
+  await expect(readAllocated()).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "activation_superseded" },
+  });
+  expect(await snapshot()).toEqual(before);
+});
+
+it("snapshots requested bases before the first awaited read", async () => {
+  const result = await activateForRead();
+  const mutable = structuredClone(bases);
+  await withTransaction(suite.db, async (tx) => {
+    const reading = activation.readModuleAllocationSeries(tx, node, mutable);
+    mutable[0]!.code = "altered";
+    expect(await reading).toEqual(result.series);
+  });
+});

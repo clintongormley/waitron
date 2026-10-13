@@ -157,6 +157,13 @@ surrounding space is the SAME taxpayer and the re-run is the no-op a re-provisio
 transaction, for the case that pre-read cannot see: another run committing a different taxpayer
 between this run's read and its write.
 
+## Module-owned series
+
+If your filing seed declares a `series` contribution, it creates the invoice series itself.
+Setup skips the base-series inserts and checks that `series.resolve` returns the complete active
+set for the new node. On retry, setup calls that resolver without running the seed again. The
+resolver must reject requested bases that differ from its allocation.
+
 ## Secrets
 
 Three, handled differently, **none ever in `argv`**.

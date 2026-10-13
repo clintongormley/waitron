@@ -722,3 +722,18 @@ owner's explicit permission to place them in the next recovery part.
 The coupled production collectors/fiscal seats/text-SIF/counter/all-consumer transition, current-main
 schema regeneration and populated upgrade, Cloud operator binding, and two full reviews plus hook/
 current-head CI still remain. Task 4 is incomplete; do not publish this checkpoint.
+
+**2026-10-13 initial-series handoff qualification:** a filing seed may declare `series.resolve`.
+The generic venue runner then skips scaffold inserts, resolves the allocated references after
+all seeds and on retries, and checks their node, active state, complete purposes, ids and codes.
+It returns ids in requested purpose order. A repeated setup does not run the seed again.
+The internal fiscal resolver compares requested bases with the committed allocation and refuses
+changed taxpayer, environment, software, installation or active references.
+
+New tests first returned scaffold ids, missed the resolver and returned a duplicate id for
+repeated requested purposes. The signed synthetic integration now opens exactly the allocated
+series and preserves counters and allocation/SIF rows on retry. Installed removal controls cover
+the handoff and resolver's scope checks. Existing assertion expressions and golden/immutability
+sources are retained. The production fiscal descriptor has not adopted this contribution;
+independently collected authority, fiscal seats and the coupled text/counter/all-entry-point
+transition still precede publication, schema regeneration and the full finish/land gates.

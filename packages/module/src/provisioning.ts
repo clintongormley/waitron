@@ -16,6 +16,15 @@ export interface NodeSeed {
    * report of what it established. Re-running for an existing node is the module's call to define,
    * never an error here. */
   run(tx: Transaction, node: ProvisionedNode, operation?: ModuleOperationInput): Promise<string>;
+  /** A filing seed may own series creation. Resolve its active references after setup and on
+   * retries, without activating again; reject requested bases that differ from the allocation. */
+  readonly series?: {
+    resolve(
+      tx: Transaction,
+      node: ProvisionedNode,
+      bases: readonly { readonly code: string; readonly purpose: string }[],
+    ): Promise<readonly { readonly id: string; readonly code: string; readonly purpose: string }[]>;
+  };
 }
 
 /** One module's line in a provisioning run's summary: the report its `NodeSeed.run` returned. */
