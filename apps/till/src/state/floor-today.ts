@@ -236,7 +236,7 @@ export interface JoinAgainPlan {
 }
 
 /** What Join again on `table` would do: `table` is the joined table or a free table split off it.
- * `null` when it offers nothing, which is the server's own refusal (`joined_table.nothing_to_join`). */
+ * `null` when it offers nothing. */
 export function joinAgainOf(
   table: TableState,
   zoneTables: readonly TableState[],
@@ -252,7 +252,8 @@ export function joinAgainOf(
   const state = joined?.today?.joined;
   if (joined === undefined || state == null) return null;
   if (joined !== table && apartReason(table) !== null) return null;
-  const splitOff = state.splitOff.flatMap((id) => zoneTables.filter((each) => each.id === id));
+  const byId = new Map(zoneTables.map((each) => [each.id, each]));
+  const splitOff = state.splitOff.flatMap((id) => byId.get(id) ?? []);
   const back = splitOff.filter((each) => apartReason(each) === null);
   if (back.length === 0 || state.parts.length + back.length < 2) return null;
   const apart = splitOff.flatMap((each) => {

@@ -245,7 +245,7 @@ describe("till-floor-screen: joining a joined table again", () => {
     const el = await mount(counter3Busy(), api);
     const refreshes = countRefreshes(el);
 
-    send((await pressJoinAgain(el))!, "join-again-confirm", { seats: 6 });
+    send((await pressJoinAgain(el, "c4"))!, "join-again-confirm", { seats: 6 });
     await settle(el);
 
     expect(api.joinAgainToday).toHaveBeenCalledOnce();
@@ -269,7 +269,7 @@ describe("till-floor-screen: joining a joined table again", () => {
     const el = await mount(oneOfTwoBusy("c4"), api);
     const refreshes = countRefreshes(el);
 
-    const opened = (await pressJoinAgain(el))!;
+    const opened = (await pressJoinAgain(el, "c5"))!;
     expect(apartIds(el)).toEqual(["c4"]);
     send(opened, "join-again-confirm", { seats: 6 });
     await settle(el);
@@ -305,7 +305,7 @@ describe("till-floor-screen: joining a joined table again", () => {
     const el = await mount(allFree(), api);
     const refreshes = countRefreshes(el);
 
-    expect(await pressJoinAgain(el)).toBeNull();
+    expect(await pressJoinAgain(el, "c3")).toBeNull();
     expect(api.joinAgainToday).toHaveBeenCalledExactlyOnceWith("long", {
       partIds: ["c3", "c4", "c5"],
     });
@@ -319,7 +319,7 @@ describe("till-floor-screen: joining a joined table again", () => {
       splitOff("c5", "Counter 5", 70, held),
     ];
     await settle(el);
-    expect(await pressJoinAgain(el)).not.toBeNull();
+    expect(await pressJoinAgain(el, "c3")).not.toBeNull();
     expect(apartIds(el)).toEqual(["c5"]);
   });
 
@@ -328,7 +328,7 @@ describe("till-floor-screen: joining a joined table again", () => {
     ["the joined table leaves the read", () => counter3Busy().filter((each) => each.id !== "long")],
   ])("closes the window when %s", async (_, next) => {
     const el = await mount(counter3Busy(), stubApi());
-    expect(await pressJoinAgain(el)).not.toBeNull();
+    expect(await pressJoinAgain(el, "c4")).not.toBeNull();
 
     el.tables = next();
     await settle(el);
@@ -349,13 +349,13 @@ describe("till-floor-screen: joining a joined table again", () => {
       const answer = holdAnswer(api);
       const el = await mount(withBar(), api);
 
-      send((await pressJoinAgain(el))!, "join-again-confirm", { seats: 6 });
+      send((await pressJoinAgain(el, "c4"))!, "join-again-confirm", { seats: 6 });
       await settle(el);
       el.tables = withBar().filter((each) => each.id !== "long");
       await settle(el);
       expect(windowOf(el)).toBeNull();
 
-      const bar = (await pressJoinAgain(el, "bar"))!;
+      const bar = (await pressJoinAgain(el, "b2"))!;
       const stepper = bar.shadowRoot!.querySelector("wt-number-stepper")!;
       send(stepper, "wt-change", { value: "5" });
       await settle(el);
@@ -376,7 +376,7 @@ describe("till-floor-screen: joining a joined table again", () => {
   it("Cancel closes the window and sends nothing", async () => {
     const api = stubApi();
     const el = await mount(counter3Busy(), api);
-    send((await pressJoinAgain(el))!, "join-again-cancel");
+    send((await pressJoinAgain(el, "c4"))!, "join-again-cancel");
     await settle(el);
     expect(windowOf(el)).toBeNull();
     expect(api.joinAgainToday).not.toHaveBeenCalled();
