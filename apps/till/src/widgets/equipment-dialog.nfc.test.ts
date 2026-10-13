@@ -53,6 +53,107 @@ function scanRow(el: TillEquipmentDialog, role: string) {
 const code = (kind: string, id: string) => `waitron-equipment:${kind}:${id}`;
 
 describe("equipment dialog NFC", () => {
+  it("an NFC-only row Scan retries after a recoverable reader-start failure", async () => {
+    installNfc();
+    Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: undefined });
+    FakeNdefReader.scanResult = () =>
+      Promise.reject(new DOMException("not ready", "NotReadableError"));
+    try {
+      const el = await mount();
+      const seen = changes(el);
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector("[data-equipment-nfc-message]")?.textContent).toContain(
+          "NFC is not available",
+        ),
+      );
+      FakeNdefReader.scanResult = () => Promise.resolve();
+      scanRow(el, "receipt");
+      await el.updateComplete;
+      await vi.waitFor(() => expect(FakeNdefReader.instances).toHaveLength(2));
+      (await reader()).read(code("printer", PRINTER_ID));
+      expect(seen).toEqual([
+        { role: "receipt", selection: { id: PRINTER_ID }, via: "scan", takeOver: false },
+      ]);
+    } finally {
+      delete (navigator as { mediaDevices?: unknown }).mediaDevices;
+    }
+  });
+  it("an unoffered Waitron label explains device availability rather than calling the label foreign", async () => {
+    installNfc();
+    const el = await mount();
+    const seen = changes(el);
+    (await reader()).read(code("printer", "c45f83b1-3333-4333-8333-333333333333"));
+    await el.updateComplete;
+    expect(seen).toEqual([]);
+    expect(el.shadowRoot!.querySelector("[data-equipment-nfc-message]")!.textContent).toContain(
+      "not available to this device",
+    );
+  });
+  it("a printer offered only for receipts cannot fill an armed payment-slip row", async () => {
+    installNfc();
+    const OTHER = "c45f83b1-3333-4333-8333-333333333333";
+    const equipment = {
+      roles: NFC_EQUIPMENT.roles.map((role) =>
+        role.role === "payment_slip"
+          ? { ...role, choices: [{ ...role.choices[0]!, id: OTHER, name: "Slip-only printer" }] }
+          : role,
+      ),
+    };
+    const el = await mount({ equipment });
+    const seen = changes(el);
+    const nfc = await reader();
+    scanRow(el, "payment_slip");
+    await el.updateComplete;
+    nfc.read(code("printer", PRINTER_ID));
+    expect(seen).toEqual([]);
+    nfc.read(code("printer", OTHER));
+    expect(seen).toEqual([
+      { role: "payment_slip", selection: { id: OTHER }, via: "scan", takeOver: false },
+    ]);
+  });
+  it("invalid UTF-8 bytes in a text label make no selection", async () => {
+    installNfc();
+    const el = await mount();
+    const seen = changes(el);
+    const nfc = await reader();
+    const prefix = new TextEncoder().encode(code("reader", READER_ID));
+    const bytes = new Uint8Array(prefix.length + 1);
+    bytes.set(prefix);
+    bytes[bytes.length - 1] = 0xff;
+    const event = new Event("reading");
+    Object.assign(event, {
+      message: {
+        records: [{ recordType: "text", encoding: "utf-8", data: new DataView(bytes.buffer) }],
+      },
+    });
+    nfc.dispatchEvent(event);
+    expect(seen).toEqual([]);
+    nfc.read(code("reader", READER_ID));
+    expect(seen).toHaveLength(1);
+  });
+
+  it("equipment kind stays significant when a printer and reader share the same id", async () => {
+    installNfc();
+    const equipment = {
+      roles: NFC_EQUIPMENT.roles.map((role) =>
+        role.role === "card_terminal"
+          ? { ...role, choices: [{ ...role.choices[0]!, id: PRINTER_ID }] }
+          : role,
+      ),
+    };
+    const el = await mount({ equipment });
+    const seen = changes(el);
+    const nfc = await reader();
+    scanRow(el, "card_terminal");
+    await el.updateComplete;
+    nfc.read(code("printer", PRINTER_ID));
+    expect(seen).toEqual([]);
+    nfc.read(code("reader", PRINTER_ID));
+    expect(seen).toEqual([
+      { role: "card_terminal", selection: { id: PRINTER_ID }, via: "scan", takeOver: false },
+    ]);
+  });
+
   it("a read arriving between open=false and redraw sends nothing", async () => {
     installNfc();
     const el = await mount();
@@ -388,12 +489,16 @@ describe("equipment dialog NFC", () => {
     expect(el.shadowRoot!.querySelector("[data-equipment-row]")).not.toBeNull();
   });
   it.each([
-    ["garbage", "text"],
-    [code("printer", "bad-id"), "text"],
-    [code("reader", "c45f83b1-3333-4333-8333-333333333333"), "text"],
-    [code("reader", READER_ID), "url"],
-    [code("drawer", PRINTER_ID), "text"],
-  ])("ignores malformed, foreign or non-text record %s/%s", async (text, type) => {
+    ["garbage", "text", "not a Waitron"],
+    [code("printer", "bad-id"), "text", "not a Waitron"],
+    [
+      code("reader", "c45f83b1-3333-4333-8333-333333333333"),
+      "text",
+      "not available to this device",
+    ],
+    [code("reader", READER_ID), "url", "not a Waitron"],
+    [code("drawer", PRINTER_ID), "text", "not a Waitron"],
+  ])("ignores malformed, foreign or non-text record %s/%s", async (text, type, message) => {
     installNfc();
     const el = await mount();
     const seen = changes(el);
@@ -402,7 +507,7 @@ describe("equipment dialog NFC", () => {
     expect(seen).toEqual([]);
     expect(el.equipment).toBe(NFC_EQUIPMENT);
     expect(el.shadowRoot!.querySelector("[data-equipment-nfc-message]")!.textContent).toContain(
-      "not a Waitron",
+      message,
     );
   });
   it("a wrong-kind tap leaves the armed row waiting for its own kind", async () => {

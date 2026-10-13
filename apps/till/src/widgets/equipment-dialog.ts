@@ -127,6 +127,7 @@ export class TillEquipmentDialog extends LitElement {
     | "equipment.scan_not_ours"
     | "equipment.scan_not_printer"
     | "equipment.scan_not_reader"
+    | "equipment.scan_not_available"
     | "equipment.nfc_read_error"
     | "equipment.nfc_unavailable"
     | null = null;
@@ -260,7 +261,7 @@ export class TillEquipmentDialog extends LitElement {
           : role.role === row.role) && role.choices.some((item) => item.id === code.id),
     );
     if (!permitted) {
-      this.nfcMessage = "equipment.scan_not_ours";
+      this.nfcMessage = "equipment.scan_not_available";
       return;
     }
     this.nfcMessage = null;
@@ -282,6 +283,7 @@ export class TillEquipmentDialog extends LitElement {
     this.nfcMessage = null;
     this.qrScanning = this.nfcPermission === null || this.nfcPermission === "denied";
     if (this.qrScanning) this.#stopNfc();
+    else if (this.nfcPermission === "granted") void this.#startNfc();
   }
 
   #backToList(): void {

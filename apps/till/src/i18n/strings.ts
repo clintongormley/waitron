@@ -459,6 +459,8 @@ export const en = {
   "equipment.scan_back": "Back to the list",
   "equipment.scan_hint": "Point the camera at the equipment's label.",
   "equipment.scan_not_ours": "That is not a Waitron equipment label",
+  "equipment.scan_not_available":
+    "That equipment is not available to this device. Choose from the list.",
   "equipment.scan_not_printer": "That label is not for a printer",
   "equipment.scan_not_reader": "That label is not for a card reader",
   "equipment.camera_unavailable": "The camera is not available. Choose from the list.",
@@ -1709,6 +1711,8 @@ export const es: Record<StringKey, string> = {
   "equipment.scan_back": "Volver a la lista",
   "equipment.scan_hint": "Apunta la cámara a la etiqueta del equipo.",
   "equipment.scan_not_ours": "Esa no es una etiqueta de equipo de Waitron",
+  "equipment.scan_not_available":
+    "Ese equipo no está disponible para este dispositivo. Elige de la lista.",
   "equipment.scan_not_printer": "Esa etiqueta no es de una impresora",
   "equipment.scan_not_reader": "Esa etiqueta no es de un lector de tarjetas",
   "equipment.camera_unavailable": "La cámara no está disponible. Elige de la lista.",

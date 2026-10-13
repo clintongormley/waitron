@@ -124,7 +124,7 @@ their full text.
   ([results](../research/2026-10-12-nfc-probe-oneplus-13.md)). Plan Task 5's NFC
   reader path is implemented in the equipment dialog, with browser tests using simulated NFC
   readers. A general tap submits the equipment kind and id through the authenticated selection
-  request; a row's Scan arms just that row. On NFC-capable browsers you choose Scan QR code to open
+  request; a row's Scan arms just that row. If NFC is allowed or awaiting permission, you choose Scan QR code to open
   the camera, which pauses NFC until you return. Printers have a server-side pick-up role set
   (receipt and payment slip by default); an unnamed authenticated scan applies that set in one
   transaction, while a scan for a named row changes only that row. Reading on every till screen,

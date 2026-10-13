@@ -17,7 +17,7 @@ for (const locale of ["en", "es"] as const) {
   for (const theme of ["light", "dark"] as const) {
     for (const width of [390, 1280]) {
       describe(`NFC ${locale}/${theme}/${width}`, () => {
-        it.each(["prompt", "granted", "armed", "read-error", "unavailable"])(
+        it.each(["prompt", "granted", "armed", "read-error", "unavailable", "unoffered"])(
           "accessible %s state fits the viewport",
           async (state) => {
             installNfc(state === "prompt" ? "prompt" : "granted");
@@ -40,6 +40,12 @@ for (const locale of ["en", "es"] as const) {
               )!.click();
               await el.updateComplete;
             }
+            if (state === "unoffered") {
+              FakeNdefReader.instances
+                .at(-1)!
+                .read("waitron-equipment:printer:c45f83b1-3333-4333-8333-333333333333");
+              await el.updateComplete;
+            }
             if (state === "read-error") {
               FakeNdefReader.instances.at(-1)!.dispatchEvent(new Event("readingerror"));
               await el.updateComplete;
@@ -55,7 +61,7 @@ for (const locale of ["en", "es"] as const) {
               expect(rect.right).toBeLessThanOrEqual(width);
             }
             await expectNoA11yViolations(host);
-            if (state === "prompt" || state === "armed")
+            if (state === "prompt" || state === "armed" || state === "unoffered")
               await page.screenshot({
                 path: `__screenshots__/w102-1/${locale}-${theme}-${width}-${state}.png`,
               });
