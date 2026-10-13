@@ -764,8 +764,9 @@ describe("backup admin routes", () => {
     // Once after the key file is written, once after the settings are.
     expect(refresh).toHaveBeenCalledTimes(2);
     expect((await post("/api/backup/rotate", { recoveryKey: KEY_2 })).status).toBe(200);
-    expect(refresh).toHaveBeenCalledTimes(3);
-    expect(recorder.seen).toEqual([KEY_1, KEY_1, KEY_2]);
+    // Rotation too: after the key file, and after the settings' new revision.
+    expect(refresh).toHaveBeenCalledTimes(4);
+    expect(recorder.seen).toEqual([KEY_1, KEY_1, KEY_2, KEY_2]);
   }, 60_000);
 
   it("reads and rotates a recovery key that has no archive destination", async () => {
@@ -1848,5 +1849,192 @@ describe("backup admin routes", () => {
         recoveryKeyTooShort: false,
       });
     }, 60_000);
+
+    describe("rotation", () => {
+      const triggers = ["insert", "update"] as const;
+
+      function refuseArchiveWrites(): () => void {
+        for (const on of triggers) {
+          suite.db.run(
+            sql.raw(`create trigger refuse_archive_${on} before ${on} on tenant_credentials
+              when new.purpose = '${ARCHIVE_PURPOSE}' begin select raise(abort, 'refused'); end`),
+          );
+        }
+        return () => {
+          for (const on of triggers) suite.db.run(sql.raw(`drop trigger refuse_archive_${on}`));
+        };
+      }
+
+      /** Archives on in a custom bucket under KEY_1, with every key the refresher locked under. */
+      async function savedInBucket() {
+        const seen: (string | undefined)[] = [];
+        const dir = { stateDir: "" };
+        const relock: { outcome: "sealed" | "failed" } = { outcome: "sealed" };
+        const app = await primaryApp({
+          sealedState: {
+            refresh: async () => {
+              seen.push(loadRecoveryKey(await loadBoxEnv({}, dir.stateDir)));
+              return relock.outcome;
+            },
+          },
+        });
+        dir.stateDir = app.sc.stateDir;
+        const res = await app.post(
+          "/api/backup/apply",
+          applyBody({ ...CUSTOM, secretAccessKey: CUSTOM_SECRET }),
+        );
+        expect(res.status).toBe(200);
+        return { ...app, seen, relock, saved: await app.status(), sealed: (await readSealed())! };
+      }
+
+      const fileKey = async (stateDir: string) => loadRecoveryKey(await loadBoxEnv({}, stateDir));
+
+      it("keeps a bucket destination, schedule, retention and time limit, under a new revision", async () => {
+        const { post, status, saved, sealed } = await savedInBucket();
+        const res = await post("/api/backup/rotate", { recoveryKey: KEY_2 });
+        expect(res.status).toBe(200);
+        const rotated = await res.json();
+        expect(rotated.destinations).toEqual(saved.destinations);
+        expect(rotated.keyFingerprint).toBe(keyFingerprint(KEY_2));
+        const after = (await readSealed())!;
+        expect(after.revision).not.toBe(sealed.revision);
+        expect({ ...after, revision: sealed.revision }).toEqual(sealed);
+        expect((await status()).revision).toBe(after.revision);
+      }, 60_000);
+
+      it("keeps a local folder switched off, switched off", async () => {
+        const { post } = await primaryApp();
+        const dir = makeDestDir();
+        expect((await post("/api/backup/apply", applyBody({ kind: "local-fs", dir }))).status).toBe(
+          200,
+        );
+        expect((await post("/api/backup/disable")).status).toBe(200);
+        const sealed = (await readSealed())!;
+        expect((await post("/api/backup/rotate", { recoveryKey: KEY_2 })).status).toBe(200);
+        const after = (await readSealed())!;
+        expect(after.revision).not.toBe(sealed.revision);
+        expect({ ...after, revision: sealed.revision }).toEqual(sealed);
+      }, 60_000);
+
+      it("a revision that cannot be stored after the key file was written reports the new key in effect", async () => {
+        const { sc, sup, app, cookie, post, status, seen, saved, sealed } = await savedInBucket();
+        const restore = refuseArchiveWrites();
+        let res: Response;
+        try {
+          res = await post("/api/backup/rotate", { recoveryKey: KEY_2 });
+        } finally {
+          restore();
+        }
+        expect(res.status).toBe(500);
+        const { error } = await res.json();
+        expect(error.code).toBe("backup.rotation_metadata_failed");
+        expect(error.params).toEqual({
+          effectiveKeyChanged: true,
+          keyFingerprint: keyFingerprint(KEY_2),
+          keyRotatedAt: expect.any(String),
+        });
+        expect(JSON.stringify(error)).not.toContain(KEY_2);
+
+        expect(await fileKey(sc.stateDir)).toBe(KEY_2);
+        expect(sup.current().keyFingerprint).toBe(keyFingerprint(KEY_2));
+        const rk = await app.request("/api/backup/recovery-key", { headers: { cookie } });
+        expect((await rk.json()).key).toBe(KEY_2);
+        // Locked under the new key after the key file, and again after the failure.
+        expect(seen).toEqual([KEY_1, KEY_1, KEY_2, KEY_2]);
+
+        const after = await status();
+        expect(after.revision).toBe(saved.revision);
+        expect(after.keyFingerprint).not.toBe(saved.keyFingerprint);
+        expect(after.keyRotatedAt).toBe(error.params.keyRotatedAt);
+        expect(after.keyRotatedAt).not.toBe(saved.keyRotatedAt);
+        expect(after.destinations).toEqual(saved.destinations);
+        expect(await readSealed()).toEqual(sealed);
+      }, 60_000);
+
+      it("names a reload and a re-lock that also failed beside the changed key", async () => {
+        const { sc, sup, post, relock, sealed } = await savedInBucket();
+        relock.outcome = "failed";
+        vi.spyOn(sup, "reload").mockRejectedValueOnce(
+          new AppError("backup.destinations_invalid", { reason: "bad_entry" }),
+        );
+        const restore = refuseArchiveWrites();
+        let res: Response;
+        try {
+          res = await post("/api/backup/rotate", { recoveryKey: KEY_2 });
+        } finally {
+          restore();
+        }
+        expect(res.status).toBe(500);
+        expect((await res.json()).error).toMatchObject({
+          code: "backup.rotation_metadata_failed",
+          params: {
+            effectiveKeyChanged: true,
+            keyFingerprint: keyFingerprint(KEY_2),
+            reloadErrorCode: "backup.destinations_invalid",
+            sealedState: "failed",
+          },
+        });
+        expect(await fileKey(sc.stateDir)).toBe(KEY_2);
+        expect(await readSealed()).toEqual(sealed);
+      }, 60_000);
+
+      it("a key file that cannot be written changes nothing, and says no key changed", async () => {
+        const { sc, sup, post, status, seen, saved, sealed } = await savedInBucket();
+        // A directory where the key file's working copy goes refuses the write before it starts.
+        await mkdir(join(sc.stateDir, "backup.env.tmp"));
+        await writeFile(join(sc.stateDir, "backup.env.tmp", "x"), "x");
+        const res = await post("/api/backup/rotate", { recoveryKey: KEY_2 });
+        expect(res.status).toBe(500);
+        const { error } = await res.json();
+        expect(error.code).not.toBe("backup.rotation_metadata_failed");
+        expect(error.params ?? {}).not.toHaveProperty("effectiveKeyChanged");
+        expect(await fileKey(sc.stateDir)).toBe(KEY_1);
+        expect(sup.current().keyFingerprint).toBe(keyFingerprint(KEY_1));
+        expect(seen).toEqual([KEY_1, KEY_1]);
+        const after = await status();
+        expect([after.revision, after.keyFingerprint, after.keyRotatedAt]).toEqual([
+          saved.revision,
+          saved.keyFingerprint,
+          saved.keyRotatedAt,
+        ]);
+        expect(await readSealed()).toEqual(sealed);
+      }, 60_000);
+
+      it("a second tab's next status read shows another tab's rotation", async () => {
+        const { app, status, saved } = await savedInBucket();
+        const tabA = saved;
+        const cookieB = await login(app);
+        const rotated = await app.request("/api/backup/rotate", {
+          method: "POST",
+          headers: { cookie: cookieB, "content-type": "application/json" },
+          body: JSON.stringify({ recoveryKey: KEY_2 }),
+        });
+        expect(rotated.status).toBe(200);
+        const tabANext = await status();
+        expect(tabANext.keyFingerprint).not.toBe(tabA.keyFingerprint);
+        expect(tabANext.keyRotatedAt).not.toBe(tabA.keyRotatedAt);
+        expect(tabANext.revision).not.toBe(tabA.revision);
+        expect(tabANext.destinations).toEqual(tabA.destinations);
+      }, 60_000);
+
+      it("still refuses when the environment owns the settings", async () => {
+        const sc: Scenario = {
+          stateDir: await makeStateDir(),
+          base: { WAITRON_BACKUP_DIR: makeDestDir(), WAITRON_BACKUP_RECOVERY_KEY: KEY_1 },
+          role: "primary",
+        };
+        const app = buildApp(makeSupervisor(sc), sc.stateDir, sc.base);
+        const cookie = await login(app);
+        const res = await app.request("/api/backup/rotate", {
+          method: "POST",
+          headers: { cookie, "content-type": "application/json" },
+          body: JSON.stringify({ recoveryKey: KEY_2 }),
+        });
+        expect(res.status).toBe(409);
+        expect(await res.json()).toMatchObject({
+          error: { code: "backup.managed_by_environment" },
+        });
+      }, 60_000);
+    });
   });
 });

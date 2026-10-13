@@ -4171,8 +4171,9 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   in a separate deployment change. A490 pins both image builds only.
 
 - **S3-compatible bucket, then Google Drive.** The bucket stream of `venue.db` is built (slice 2).
-  The archive's bucket destination (`S3Backend` over `S3FileStore`) is built but nothing can
-  configure it yet, so `LocalFsBackend` is still the only archive destination in use.
+  The archive's bucket destination (`S3Backend` over `S3FileStore`) is built, and the
+  environment or the authenticated backup routes can name one; the Backups screen still offers only
+  a local folder (plan Task 6).
   A538's [draft design](superpowers/specs/2026-10-12-a538-archive-s3-design.md) and
   [implementation plan](superpowers/plans/2026-10-12-a538-archive-s3.md): the owner approved the
   proposed defaults on 2026-10-12. Plan Task 1, which makes the bucket stream's calls cancellable,

@@ -1159,6 +1159,19 @@ declare module "@waitron/shared" {
      * box will not use. No params — the keys are secrets. */
     "backup.effective_mismatch": Record<string, never>;
     /**
+     * `rotate` wrote the new key to `backup.env`, then failed to store the archive settings' new
+     * revision. The new key is in effect and is never put back; only the revision is stale, and the
+     * rotation time and fingerprint still tell an old recovery pack apart. `keyFingerprint` is the
+     * key's 8-hex fingerprint, never the key. `reloadErrorCode` is set when the reload that followed
+     * failed too, and `sealedState` when re-locking this node's state did not seal. */
+    "backup.rotation_metadata_failed": {
+      effectiveKeyChanged: true;
+      keyFingerprint: string;
+      keyRotatedAt: string;
+      reloadErrorCode?: string;
+      sealedState?: "no_key" | "failed";
+    };
+    /**
      * A backup admin route body failed shape validation before any write; or `field: "config"` when
      * `rotate` finds no destination loaded and no key held. `field` names the offending field, never
      * the value, which could be the recovery key. */

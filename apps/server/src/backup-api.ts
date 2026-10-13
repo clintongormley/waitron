@@ -33,7 +33,11 @@ import {
 import { writeRecoveryKey } from "./backup-env-writer.js";
 import { formatEnvFile, parseEnvFile } from "./env-file.js";
 import { MIN_PASSPHRASE_LENGTH } from "./recovery-bundle.js";
-import type { BackupRuntimeStatus, BackupSupervisor } from "./backup-supervisor.js";
+import {
+  keyFingerprint,
+  type BackupRuntimeStatus,
+  type BackupSupervisor,
+} from "./backup-supervisor.js";
 import type { Logger } from "./logger.js";
 import type { SealedStateRefresher } from "./sealed-state.js";
 import type { BackupDestination, StorageBackend } from "./storage-backend.js";
@@ -84,6 +88,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "backup.stream_not_configured": 409,
   "backup.archive_test_failed": 422,
   "backup.archive_settings_invalid": 500,
+  "backup.rotation_metadata_failed": 500,
 };
 
 const ARCHIVE_PROBE_TIMEOUT_MS = 30 * 1000;
@@ -109,6 +114,12 @@ export function assertStorableKey(key: string): void {
 function projectStatus<T extends BackupRuntimeStatus>(s: T): Omit<T, "recoveryKey"> {
   const rest: Omit<T, "recoveryKey"> & { recoveryKey?: string } = { ...s };
   delete rest.recoveryKey;
+  return rest;
+}
+
+function withoutRevision(settings: ArchiveSettings): Omit<ArchiveSettings, "revision"> {
+  const rest: Omit<ArchiveSettings, "revision"> & { revision?: string } = { ...settings };
+  delete rest.revision;
   return rest;
 }
 
@@ -464,9 +475,8 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
     }),
   );
 
-  // Rotation rewrites only the key in `backup.env`; the stored settings stay as they are. A box
-  // holding a key whose supervisor has no destination LOADED is not reloaded. A bucket destination
-  // is refused until rotation can re-key it.
+  // Rotation writes the key to `backup.env`, then stores the held settings unchanged under a new
+  // revision. A box holding a key whose supervisor has no destination LOADED is not reloaded.
   app.post("/api/backup/rotate", (c) =>
     run(c, log, async () => {
       await authorize(c);
@@ -486,8 +496,28 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
           }
           return c.json(await statusBody({ held: true, key: recoveryKey }));
         }
-        if (cur.destinations.some((d) => d.kind !== "local-fs")) throw requestInvalid("config");
+        const held = await readArchiveSettings(deps.db, deps.ring);
         await persist(() => writeRecoveryKey(deps.stateDir, { recoveryKey, keyRotatedAt }));
+        // The key file is authoritative from here: a failure below never puts the old key back.
+        if (held !== null) {
+          try {
+            await withTransaction(deps.db, (tx) =>
+              writeArchiveSettings(tx, deps.ring, withoutRevision(held)),
+            );
+          } catch (error) {
+            log("warn", "backup.rotation_metadata_failed", { errorCode: codeOf(error) });
+            const sealedState = await deps.sealedState.refresh();
+            const reloadErrorCode = await reloadAfterWrite();
+            throw new AppError("backup.rotation_metadata_failed", {
+              effectiveKeyChanged: true,
+              keyFingerprint: keyFingerprint(recoveryKey),
+              keyRotatedAt,
+              ...(reloadErrorCode === undefined ? {} : { reloadErrorCode }),
+              ...(sealedState === "sealed" ? {} : { sealedState }),
+            });
+          }
+          await deps.sealedState.refresh();
+        }
         await deps.supervisor.reload();
         if (deps.supervisor.current().recoveryKey !== recoveryKey) {
           throw new AppError("backup.effective_mismatch", {});
