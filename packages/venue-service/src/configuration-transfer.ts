@@ -14,6 +14,7 @@ import {
 import type { PaintRange } from "./day-paint.js";
 import { civilDateOf } from "@waitron/reporting";
 import { ZONE_PAINT_KINDS } from "./schema/seasons.js";
+import { parseSeasonStart } from "./season-rules.js";
 import {
   firstSkippedEnd,
   NO_HOLIDAY_DATES,
@@ -158,15 +159,6 @@ export function validateMenuTimetables(tables: Tables): void {
   }
 }
 
-const SEASON_START = /^(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])$/;
-
-/** A season starts on a common year's MM-DD, never 02-29 (`seasons_starts_on_ck`). */
-function isSeasonStart(value: unknown): value is string {
-  if (typeof value !== "string" || !SEASON_START.test(value) || value === "02-29") return false;
-  const date = new Date(`2001-${value}T00:00:00Z`);
-  return date.getUTCDate() === Number(value.slice(3));
-}
-
 interface ImportedSpecialDate {
   date: LocalDate;
   repeats: boolean;
@@ -270,7 +262,8 @@ export function validateSeasonWeeks(tables: Tables, bundle?: ImportClock): void 
   for (const row of tables.seasons ?? []) {
     if (typeof row.name !== "string" || row.name.trim() === "" || names.has(row.name))
       refuse("seasons.name");
-    if (!isSeasonStart(row.starts_on) || starts.has(row.starts_on)) refuse("seasons.starts_on");
+    if (parseSeasonStart(row.starts_on) === null || starts.has(row.starts_on))
+      refuse("seasons.starts_on");
     names.add(row.name);
     starts.add(row.starts_on);
     seasonIds.add(row.id);

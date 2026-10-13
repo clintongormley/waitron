@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_SEASONS, seasonLastDay, seasonOn } from "./season-rules.js";
+import { DEFAULT_SEASONS, parseSeasonStart, seasonLastDay, seasonOn } from "./season-rules.js";
 
 const four = DEFAULT_SEASONS.map((s, i) => ({ ...s, id: String(i) }));
 
@@ -37,4 +37,15 @@ describe("seasonLastDay", () => {
     expect(seasonLastDay([], "03-01")).toBe("02-28");
     expect(seasonLastDay([{ startsOn: "03-01" }], "03-01")).toBe("02-28");
   });
+});
+
+describe("parseSeasonStart", () => {
+  it.each(["01-01", "02-28", "12-31", "04-30"])("takes %s", (value) =>
+    expect(parseSeasonStart(value)).toBe(value),
+  );
+
+  it.each(["02-29", "13-01", "00-10", "04-31", "02-30", "19-39", "1-01", "01-01 ", 101, null])(
+    "refuses %s",
+    (value) => expect(parseSeasonStart(value)).toBeNull(),
+  );
 });

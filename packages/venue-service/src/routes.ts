@@ -127,6 +127,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "hours.clock_changed": 409,
   "venue.business_day_hours_conflict": 409,
   "season.not_found": 404,
+  "season.invalid": 400,
   "zone_closed_time.invalid": 400,
   "station.always_open": 409,
   "holiday.invalid": 400,
