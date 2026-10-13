@@ -1090,7 +1090,7 @@ export class OpeningHoursScreen extends LitElement {
                                 this.url.write({
                                   dashboard: "opening-hours",
                                   view: "year",
-                                  year: String(event.detail.year),
+                                  year: String(event.detail.year).padStart(4, "0"),
                                 }),
                               ).then(() => this.followUrl());
                             }}
