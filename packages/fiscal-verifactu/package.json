@@ -22,11 +22,11 @@
     "@waitron/shared": "workspace:*",
     "@waitron/sync-enrolment": "workspace:*",
     "@waitron/verifactu": "^0.2.1",
-    "drizzle-orm": "^0.45.3",
+    "drizzle-orm": "^0.45.4",
     "undici": "^8.11.2"
   },
   "devDependencies": {
-    "@types/node": "^26.0.0",
+    "@types/node": "^26.6.5",
     "@vitest/coverage-v8": "^4.1.11",
     "@waitron/catalogue": "workspace:*",
     "@waitron/country-packs": "workspace:*",

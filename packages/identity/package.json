@@ -14,15 +14,15 @@
     "db:generate:custom": "drizzle-kit generate --custom"
   },
   "dependencies": {
-    "@simplewebauthn/server": "^14.0.0",
+    "@simplewebauthn/server": "^14.0.3",
     "@waitron/db": "workspace:*",
     "@waitron/shared": "workspace:*",
     "@waitron/sync-enrolment": "workspace:*",
-    "drizzle-orm": "^0.45.3",
+    "drizzle-orm": "^0.45.4",
     "otplib": "^13.5.0"
   },
   "devDependencies": {
-    "@types/node": "^26.0.0",
+    "@types/node": "^26.6.5",
     "@vitest/coverage-v8": "^4.1.11",
     "drizzle-kit": "^0.31.11",
     "typescript": "^7.0.0",

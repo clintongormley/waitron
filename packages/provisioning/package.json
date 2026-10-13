@@ -30,10 +30,10 @@
     "@waitron/migrations": "workspace:*",
     "@waitron/module": "workspace:*",
     "@waitron/shared": "workspace:*",
-    "drizzle-orm": "^0.45.3"
+    "drizzle-orm": "^0.45.4"
   },
   "devDependencies": {
-    "@types/node": "^26.0.0",
+    "@types/node": "^26.6.5",
     "@vitest/coverage-v8": "^4.1.11",
     "@waitron/core": "workspace:*",
     "@waitron/fiscal-verifactu": "workspace:*",
