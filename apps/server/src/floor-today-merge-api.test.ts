@@ -100,8 +100,8 @@ async function twoTables(now?: Date) {
   return { a: table.a!, b: table.b!, zoneId, master };
 }
 
-describe("merging and splitting free tables", () => {
-  it("merges two free tables and splits them back", async () => {
+describe("merging free tables", () => {
+  it("merges two free tables", async () => {
     const { a, b } = await twoTables();
 
     await expectRevision(v, today(a, "merge", { targetId: b, side: "right", seats: 8 }));
@@ -111,31 +111,6 @@ describe("merging and splitting free tables", () => {
     expect(atA).toMatchObject({ joinId: atB.joinId, joinSeats: 8 });
     expect(atB).toMatchObject({ joinSeats: 8, placement: { x: 20, y: 0, rotation: 0 } });
     expect(atA.placement).toMatchObject({ x: 28, y: 0, rotation: 0 });
-
-    await expectRevision(v, today(a, "split"));
-
-    expect(await floorToday(a)).toMatchObject({
-      joinId: null,
-      joinSeats: null,
-      placement: { x: 0, y: 0, rotation: 0 },
-    });
-    expect(await floorToday(b)).toMatchObject({
-      joinId: null,
-      placement: { x: 20, y: 0, rotation: 0 },
-    });
-  });
-
-  it("splits a merge from either member, and leaves a table in no merge alone", async () => {
-    const { a, b } = await twoTables();
-    await expectRevision(v, today(a, "merge", { targetId: b, side: "bottom", seats: 6 }));
-
-    await expectRevision(v, today(b, "split"));
-    expect(await mergeOf(v, a)).toBeNull();
-    expect((await floorToday(a)).placement).toMatchObject({ x: 0, y: 0 });
-
-    const before = await todayRow(v, a);
-    await expectRevision(v, today(a, "split"));
-    expect(await todayRow(v, a)).toEqual(before);
   });
 
   it("asks for seats when a merge sends none", async () => {
@@ -149,7 +124,7 @@ describe("merging and splitting free tables", () => {
     expect(await mergeOf(v, unsaved.a)).toBeNull();
   });
 
-  it("refuses to merge a seated table or one needing clearing, and to split a seated merge here", async () => {
+  it("refuses to merge a seated table or one needing clearing", async () => {
     const seated = await twoTables();
     await seat(v, seated.b);
     expect(
@@ -172,27 +147,6 @@ describe("merging and splitting free tables", () => {
       status: 409,
       body: { error: { code: "table.needs_clearing", params: { tableId: clearing.a } } },
     });
-
-    // Merged both ways round, so one of the two merges records its members out of id order.
-    for (const flip of [false, true]) {
-      const held = await twoTables();
-      const [moving, target] = flip ? [held.b, held.a] : [held.a, held.b];
-      await expectRevision(
-        v,
-        today(moving, "merge", { targetId: target, side: "right", seats: 8 }),
-      );
-      await seat(v, held.b);
-      const before = await todayRow(v, held.a);
-      const [first] = [held.a, held.b].sort();
-      for (const member of [held.a, held.b]) {
-        expect(await refusal(today(member, "split"))).toEqual({
-          status: 409,
-          body: { error: { code: "tab.already_open", params: { tableId: first } } },
-        });
-      }
-      expect(await mergeOf(v, held.a)).not.toBeNull();
-      expect(await todayRow(v, held.a)).toEqual(before);
-    }
   });
 
   it("refuses a malformed merge", async () => {
@@ -229,19 +183,6 @@ describe("merging and splitting free tables", () => {
         body: { error: { code: "management.request_invalid", params: { field: "seats" } } },
       });
     }
-    const { table } = await plannedZone(v, [{ key: "a" }]);
-    const never = await v.table(`Never ${randomUUID().slice(0, 6)}`, await zoneOfTable(table.a!), {
-      today: false,
-    });
-    expect(await todayRow(v, never)).toBeUndefined();
-    expect(await refusal(today(never, "split"))).toEqual({
-      status: 409,
-      body: { error: { code: "table.not_on_today_plan", params: { tableId: never } } },
-    });
-    expect(await refusal(today("not-a-uuid", "split"))).toMatchObject({
-      status: 404,
-      body: { error: { code: "table.not_found" } },
-    });
     expect(await mergeOf(v, a)).toBeNull();
   });
 
@@ -287,22 +228,8 @@ describe("merging and splitting free tables", () => {
       status: 404,
       body: { error: { code: "table.not_found", params: { tableId: other } } },
     });
-    expect(await refusal(today(other, "split"))).toEqual({
-      status: 404,
-      body: { error: { code: "table.not_found", params: { tableId: other } } },
-    });
     expect(await todayRow(v, a)).toEqual(beforeA);
     expect(await todayRow(v, other)).toEqual(beforeOther);
     expect(await mergeOf(v, a)).toBeNull();
   });
 });
-
-async function zoneOfTable(tableId: string): Promise<string> {
-  const [row] = await inTx(v, (tx) =>
-    tx
-      .select({ zoneId: diningTables.zoneId })
-      .from(diningTables)
-      .where(eq(diningTables.id, tableId)),
-  );
-  return row!.zoneId!;
-}

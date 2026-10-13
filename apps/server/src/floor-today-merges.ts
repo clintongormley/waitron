@@ -10,7 +10,6 @@ import {
 import type { Transaction } from "@waitron/db";
 import { AppError, freeSide, touchingPlace, type JoinPlace, type JoinSide } from "@waitron/shared";
 import {
-  refuseHeld,
   refuseInJoinedTable,
   refuseUnfree,
   refuseUnmovable,
@@ -82,19 +81,6 @@ export async function leaveMergesRestoring(
     await putBack(tx, member);
   }
   await leaveMerges(tx, tableIds);
-}
-
-/** The table's merge ends, every member going back to where it stood before; no party may hold one. A table in no merge is left alone. */
-export async function splitFreeMerge(
-  tx: Transaction,
-  cfg: TillConfig,
-  tableId: string,
-): Promise<void> {
-  const { merge } = await todayOf(tx, cfg, tableId);
-  if (merge === null) return;
-  const members = merge.members.map((m) => m.tableId);
-  await refuseHeld(tx, members);
-  await leaveMergesRestoring(tx, members);
 }
 
 /** Every member of `tableId`'s merge by table id, `tableId` included, or [] when it is in none. Reads by id alone: the caller checks the venue first. */
