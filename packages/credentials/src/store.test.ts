@@ -7,6 +7,7 @@ import { loadKeyRing } from "./keyring.js";
 import { CREDENTIALS_MIGRATIONS } from "./migrations.js";
 import { tenantCredentials } from "./schema/tenant-credentials.js";
 import {
+  credentialRevision,
   deleteCredential,
   getCredential,
   listCredentials,
@@ -366,5 +367,46 @@ describe("listCredentials", () => {
     // The exact key set, not the plaintext's absence: the plaintext is in no column, so a
     // `not.toContain("sk_test_x")` passes even when `listCredentials` selects the ciphertext.
     expect(Object.keys(rows[0]!).sort()).toEqual(["keyVersion", "purpose", "updatedAt"]);
+  });
+});
+
+describe("credentialRevision", () => {
+  const revision = () =>
+    withTransaction(suite.db, (tx) => credentialRevision(tx, { purpose: "payments.stripe" }));
+
+  it("is null when nothing is stored", async () => {
+    expect(await revision()).toBeNull();
+  });
+
+  it("changes on every write, even of the same value", async () => {
+    const put = () =>
+      withTransaction(suite.db, (tx) =>
+        putCredential(tx, RING_V1, { purpose: "payments.stripe", value: STRIPE }),
+      );
+    await put();
+    const first = await revision();
+    expect(first).toMatch(/^[0-9a-f]{16}$/);
+    expect(await revision()).toBe(first);
+    await put();
+    const second = await revision();
+    expect(second).toMatch(/^[0-9a-f]{16}$/);
+    expect(second).not.toBe(first);
+  });
+
+  it("reveals neither the value nor the stored ciphertext", async () => {
+    await withTransaction(suite.db, (tx) =>
+      putCredential(tx, RING_V1, { purpose: "payments.stripe", value: STRIPE }),
+    );
+    const rows = await suite.db.execute<{ blob: Uint8Array; iv: Uint8Array; tag: Uint8Array }>(
+      sql`select ciphertext as blob, iv, auth_tag as tag from tenant_credentials`,
+    );
+    const row = rows.rows[0]!;
+    const rev = (await revision())!;
+    for (const bytes of [row.blob, row.iv, row.tag]) {
+      const hex = Buffer.from(bytes).toString("hex");
+      expect(hex).not.toContain(rev);
+      expect(rev).not.toContain(hex.slice(0, 16));
+    }
+    expect(rev).not.toContain("sk_test_x");
   });
 });

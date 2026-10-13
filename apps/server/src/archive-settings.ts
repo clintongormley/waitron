@@ -304,7 +304,12 @@ function endpointPlace(bucket: BucketConfig): string {
     : place;
 }
 
-function refuseOverlap(bucket: BucketConfig, venueId: string, stream: StreamSettings | null): void {
+/** Refuses an archive folder and a stream's venue folders that would share keys in one bucket. */
+export function refuseStreamOverlap(
+  bucket: BucketConfig,
+  venueId: string,
+  stream: StreamSettings | null,
+): void {
   if (stream === null) return;
   const s = stream.bucket;
   if (
@@ -384,7 +389,7 @@ export function resolveArchiveChoice(
     case "custom-s3": {
       const bucket = customBucket(destination, ctx);
       archiveNamespace(bucket.prefix, ctx.venueId);
-      refuseOverlap(bucket, ctx.venueId, ctx.stream);
+      refuseStreamOverlap(bucket, ctx.venueId, ctx.stream);
       return { kind: "s3", id: BUCKET_ID, bucket, venueId: ctx.venueId };
     }
     default:

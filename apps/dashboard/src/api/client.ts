@@ -1710,6 +1710,8 @@ export interface StreamSettingsView {
   /** True for a key under the length floor too, which has no fingerprint. */
   recoveryKeySet: boolean;
   keyFingerprint: string | null;
+  /** Changes on every stored change, a secret-only one included; null when nothing is stored. */
+  revision: string | null;
 }
 
 /** The bucket form's body: a blank `endpoint` means an Amazon bucket, a blank `prefix` the bucket

@@ -71,6 +71,7 @@ const STREAM_ON: StreamSettingsView = {
   status: { state: "off" },
   recoveryKeySet: true,
   keyFingerprint: "ab12cd34",
+  revision: "0123456789abcdef",
 };
 
 function stubApi(

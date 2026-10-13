@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { eq, exists } from "drizzle-orm";
 import { nowIso, tenants, withTransaction, type Database, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
@@ -120,6 +121,32 @@ export async function putCredential(
         updatedAt: nowIso(),
       },
     });
+}
+
+/**
+ * A short digest of the stored row, or null when there is none. Every write seals under a fresh IV,
+ * so it changes on every `putCredential`, even of an identical value. Lengths are hashed beside the
+ * bytes so two rows cannot hash alike by moving bytes between fields.
+ */
+export async function credentialRevision(
+  tx: Transaction,
+  ref: CredentialRef,
+): Promise<string | null> {
+  const [row] = await tx
+    .select({
+      keyVersion: tenantCredentials.keyVersion,
+      iv: tenantCredentials.iv,
+      ciphertext: tenantCredentials.ciphertext,
+      authTag: tenantCredentials.authTag,
+    })
+    .from(tenantCredentials)
+    .where(eq(tenantCredentials.purpose, ref.purpose));
+  if (row === undefined) return null;
+  const hash = createHash("sha256").update(`${row.keyVersion}`);
+  for (const bytes of [row.iv, row.ciphertext, row.authTag]) {
+    hash.update(`:${bytes.length}:`).update(bytes);
+  }
+  return hash.digest("hex").slice(0, 16);
 }
 
 /** True when a row was removed, false when there was none. */

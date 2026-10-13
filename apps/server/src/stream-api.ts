@@ -1,7 +1,12 @@
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { readMembershipTrustSet, withTransaction, type Database } from "@waitron/db";
-import { deleteCredential, putCredential, type KeyRing } from "@waitron/credentials";
+import {
+  credentialRevision,
+  deleteCredential,
+  putCredential,
+  type KeyRing,
+} from "@waitron/credentials";
 import { authorizeManager } from "@waitron/identity";
 import { AppError, hasCode, isAppError } from "@waitron/shared";
 import { createErrorBoundary, readJsonBody, requireManagementSession } from "@waitron/server-kit";
@@ -12,6 +17,7 @@ import {
   type ProbeResult,
   type StreamView,
 } from "@waitron/stream";
+import { readArchiveSettings, refuseStreamOverlap } from "./archive-settings.js";
 import { mintRecoveryKey, readHeldKey } from "./backup-config.js";
 import { keyFingerprint } from "./backup-supervisor.js";
 import type { Logger } from "./logger.js";
@@ -60,6 +66,8 @@ export interface StreamSettingsView {
   /** True for a key under the length floor too, which has no fingerprint here. */
   recoveryKeySet: boolean;
   keyFingerprint: string | null;
+  /** Changes on every stored change, a secret-only one included; null when nothing is stored. */
+  revision: string | null;
 }
 
 const STATUS: Record<string, ContentfulStatusCode> = {
@@ -75,6 +83,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "backup.reload_in_progress": 409,
   "backup.stream_test_failed": 422,
   "backup.stream_not_configured": 409,
+  "backup.archive_namespace_overlap": 400,
   "backup.stream_signer_missing": 409,
   "backup.recovery_key_missing": 409,
   // The bucket gave no answer at all: not a refusal of the owner's settings, so not 422.
@@ -106,6 +115,15 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
     if (!result.ok) throw new AppError("backup.stream_test_failed", { reason: result.reason });
   };
 
+  const refuseArchiveOverlap = async (bucket: BucketConfig): Promise<void> => {
+    const archives = await readArchiveSettings(deps.db, deps.ring);
+    for (const d of archives?.destinations ?? []) {
+      if (d.kind === "s3") {
+        refuseStreamOverlap(d.bucket, d.venueId, { venueId: deps.venueId, bucket });
+      }
+    }
+  };
+
   const heldKeyOrRefuse = async (): Promise<string | undefined> => {
     const held = await deps.readRecoveryKey();
     if (held === undefined && deps.isManagedByEnvironment()) {
@@ -126,6 +144,9 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
       configured = true;
     }
     const { held: recoveryKeySet, key } = await readHeldKey(deps.readRecoveryKey);
+    const revision = await withTransaction(deps.db, (tx) =>
+      credentialRevision(tx, { purpose: STREAM_PURPOSE }),
+    );
     return {
       isPrimary: deps.isPrimary(),
       configured,
@@ -142,6 +163,7 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
       status: deps.stream.status(),
       recoveryKeySet,
       keyFingerprint: key === undefined ? null : keyFingerprint(key),
+      revision,
     };
   };
 
@@ -171,9 +193,11 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
       guardPrimary();
       await heldKeyOrRefuse();
       const bucket = await readBucketBody(c);
+      await refuseArchiveOverlap(bucket);
       await probeOrRefuse(bucket);
       return deps.turns(async () => {
         guardPrimary();
+        await refuseArchiveOverlap(bucket); // Again: archive settings may have changed meanwhile.
         if ((await heldKeyOrRefuse()) === undefined) {
           await deps.writeRecoveryKey(mintRecoveryKey());
         }

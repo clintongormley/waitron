@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it, vi, type Mock } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { nodes, setNodePublicKey, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -21,6 +21,7 @@ import {
   type ProbeFailure,
   type StreamStatus,
 } from "@waitron/stream";
+import { ARCHIVE_PURPOSE, writeArchiveSettings } from "./archive-settings.js";
 import { keyFingerprint } from "./backup-supervisor.js";
 import { createTurns, type Turns } from "./backup-turns.js";
 import { mountManagementApi } from "./management-api.js";
@@ -439,6 +440,7 @@ describe("stream settings routes", () => {
       status: STREAMING,
       recoveryKeySet: true,
       keyFingerprint: keyFingerprint(key.value!),
+      revision: expect.stringMatching(/^[0-9a-f]{16}$/),
     });
     expect(JSON.stringify(view)).not.toContain(BODY.secretAccessKey);
     // Stored with this node's location id as the venue, and the absent prefix as "-".
@@ -770,5 +772,87 @@ describe("stream settings routes", () => {
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({ error: { code: "backup.not_primary" } });
     expect(reload).not.toHaveBeenCalled();
+  });
+
+  it("a Save that changes only the secret changes the revision, which reveals neither secret nor ciphertext", async () => {
+    await clearBucket();
+    const { app } = harness({}, "recovery-key-one-strong");
+    const cookie = await login(app);
+    const read = async () =>
+      (await app.request("/api/backup/stream", { headers: { cookie } })).json();
+    expect((await read()).revision).toBeNull();
+    expect(
+      (await app.request("/api/backup/stream", { method: "PUT", ...json(cookie, BODY) })).status,
+    ).toBe(200);
+    const first = (await read()).revision;
+    expect(first).toMatch(/^[0-9a-f]{16}$/);
+    const newSecret = "another-secret-9876543210abcdef";
+    const res = await app.request("/api/backup/stream", {
+      method: "PUT",
+      ...json(cookie, { ...BODY, secretAccessKey: newSecret }),
+    });
+    expect(res.status).toBe(200);
+    const view = await res.json();
+    expect(view.revision).toMatch(/^[0-9a-f]{16}$/);
+    expect(view.revision).not.toBe(first);
+    const rows = await suite.db.execute<{ blob: Uint8Array }>(
+      sql`select ciphertext as blob from tenant_credentials where purpose = ${STREAM_PURPOSE}`,
+    );
+    const ciphertext = Buffer.from(rows.rows[0]!.blob);
+    const text = JSON.stringify(view);
+    expect(text).not.toContain(newSecret);
+    expect(text).not.toContain(BODY.secretAccessKey);
+    expect(text).not.toContain(ciphertext.toString("hex"));
+    expect(text).not.toContain(ciphertext.toString("base64"));
+  });
+
+  describe("with archives held in a bucket", () => {
+    const archiveBucket: BucketConfig = { ...BUCKET, secretAccessKey: "archive-secret-0123456789" };
+
+    async function holdArchive(): Promise<void> {
+      await withTransaction(suite.db, (tx) =>
+        writeArchiveSettings(tx, RING, {
+          enabled: true,
+          destinations: [{ kind: "s3", id: "bucket", bucket: archiveBucket, venueId: VENUE_ID }],
+          schedule: { kind: "interval", ms: 3_600_000 },
+          retention: { count: 7, days: 30 },
+          destinationTimeoutMs: 900_000,
+        }),
+      );
+    }
+
+    async function dropArchive(): Promise<void> {
+      await withTransaction(suite.db, (tx) => deleteCredential(tx, { purpose: ARCHIVE_PURPOSE }));
+    }
+
+    it("Save refuses a stream folder overlapping the held archive folder, before any probe", async () => {
+      await clearBucket();
+      await holdArchive();
+      try {
+        const { app, deps, reload } = harness({}, "recovery-key-one-strong");
+        const cookie = await login(app);
+        const res = await app.request("/api/backup/stream", {
+          method: "PUT",
+          ...json(cookie, { ...BODY, prefix: `archives/${VENUE_ID}` }),
+        });
+        expect(res.status).toBe(400);
+        expect(await res.json()).toMatchObject({
+          error: { code: "backup.archive_namespace_overlap" },
+        });
+        expect(deps.probe).not.toHaveBeenCalled();
+        expect(reload).not.toHaveBeenCalled();
+        expect(await storedBucket()).toBeNull();
+
+        // Control: the same bucket at its root streams under `venues/`, apart from `archives/`.
+        const apart = await app.request("/api/backup/stream", {
+          method: "PUT",
+          ...json(cookie, BODY),
+        });
+        expect(apart.status).toBe(200);
+      } finally {
+        await dropArchive();
+        await clearBucket();
+      }
+    });
   });
 });

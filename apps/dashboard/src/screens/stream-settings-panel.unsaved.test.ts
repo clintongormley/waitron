@@ -34,6 +34,7 @@ const off: StreamSettingsView = {
   status: { state: "off" },
   recoveryKeySet: false,
   keyFingerprint: null,
+  revision: null,
 };
 const on: StreamSettingsView = {
   ...off,

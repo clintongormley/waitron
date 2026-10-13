@@ -15,6 +15,7 @@ const OFF: StreamSettingsView = {
   status: { state: "off" },
   recoveryKeySet: false,
   keyFingerprint: null,
+  revision: null,
 };
 const PAUSED: StreamSettingsView = {
   ...OFF,

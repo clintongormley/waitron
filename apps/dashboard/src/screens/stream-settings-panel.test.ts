@@ -19,6 +19,7 @@ const OFF: StreamSettingsView = {
   status: { state: "off" },
   recoveryKeySet: false,
   keyFingerprint: null,
+  revision: null,
 };
 const STREAMING = {
   state: "streaming",
@@ -42,6 +43,7 @@ const ON: StreamSettingsView = {
   status: STREAMING,
   recoveryKeySet: true,
   keyFingerprint: "ab12cd34",
+  revision: "0123456789abcdef",
 };
 // A realistic kit is one long token with no spaces — the width case below depends on that.
 const KIT = `WAITRON-RECOVERY-KIT-1:${"eyJ2ZXJzaW9uIjoxLCJ2ZW51ZUlkIjoi".repeat(12)}`;
