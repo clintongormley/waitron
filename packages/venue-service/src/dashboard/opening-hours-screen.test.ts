@@ -7,7 +7,6 @@ import { applyTokens, NavigationGuard, type WtDataTable } from "@waitron/ui";
 import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import type { OpeningHoursYear } from "../opening-hours-calendar.js";
-import type { SpecialDaysModel } from "../holiday-types.js";
 import type { SpecialDayDetail } from "../special-days.js";
 import { OpeningHoursApi } from "./opening-hours-client.js";
 import type { PeriodEditor } from "./period-editor.js";
@@ -135,12 +134,12 @@ it("selects a linked inactive department and keeps view and department in the ad
   await el.updateComplete;
   expect(location.pathname).toBe("/manage/opening-hours/view/periods/department/restaurant");
   const tabs = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-tabs"]>("wt-tabs")!;
-  expect(tabs.items.map((item) => item.key)).toEqual(["year", "week", "periods", "day"]);
+  expect(tabs.items.map((item) => item.key)).toEqual(["year", "week", "periods"]);
   tabs.dispatchEvent(
-    new CustomEvent("wt-tab-change", { detail: { value: "day" }, bubbles: true, composed: true }),
+    new CustomEvent("wt-tab-change", { detail: { value: "week" }, bubbles: true, composed: true }),
   );
   await el.updateComplete;
-  expect(location.pathname).toBe("/manage/opening-hours/view/day/department/restaurant");
+  expect(location.pathname).toBe("/manage/opening-hours/view/week/department/restaurant");
 });
 
 it("lets a venue viewer read periods without exposing create or row actions", async () => {
@@ -1248,49 +1247,6 @@ it("still offers All departments when no department is available", async () => {
   expect(el.shadowRoot!.textContent).toContain("No departments");
 });
 
-it("passes the week's calendar and its special days to All departments", async () => {
-  history.replaceState(null, "", "/manage/opening-hours/view/week/department/all");
-  const data = pickerModel();
-  const detail: SpecialDayDetail = {
-    id: "named",
-    name: "Own Monday",
-    repeatsYearly: false,
-    dates: [{ date: "2026-10-12", closedAllDay: false }],
-    paint: [],
-    zonePaint: [],
-  };
-  const { namedWeekModel } = await import("../testing/real-week-model.js");
-  const calendar: SpecialDaysModel = {
-    ...namedWeekModel(),
-    days: [
-      {
-        date: "2026-10-12",
-        specialDay: { id: "named", name: "Own Monday" },
-        holidays: [],
-        tone: "special_day",
-        closed: false,
-      },
-    ],
-  };
-  const el = await mount((async (path: string) =>
-    path.includes("/named-days?")
-      ? calendar
-      : path.endsWith("/special-days/named")
-        ? structuredClone(detail)
-        : structuredClone(data)) as DashboardRequest);
-  vi.setSystemTime(new Date("2026-10-12T12:00:00Z"));
-  el.shadowRoot!.querySelector("[name=realWeek]")!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { checked: true }, bubbles: true, composed: true }),
-  );
-  await expect.poll(() => location.search).toBe("?week=2026-10-12");
-  const all = el.shadowRoot!.querySelector("opening-hours-all")!;
-  await all.updateComplete;
-  expect(all.weekStart).toBe("2026-10-12");
-  await expect.poll(() => all.specials.get("named")).toEqual(detail);
-  expect(all.calendar).toEqual(calendar);
-  expect(all.shadowRoot!.querySelector("service-grid")!.columns).toHaveLength(14);
-});
-
 function yearRead(
   year: number,
   days: OpeningHoursYear["days"] = [],
@@ -1794,56 +1750,6 @@ describe("Year special-day actions", () => {
   });
 });
 
-it.each([
-  ["the week's calendar", "/named-days?"],
-  ["a special day in the week", "/special-days/named"],
-])(
-  "says when %s cannot be read on the real week, and clears it once a reread succeeds",
-  async (_, failing) => {
-    history.replaceState(null, "", "/manage/opening-hours/view/week");
-    const detail: SpecialDayDetail = {
-      id: "named",
-      name: "Own Monday",
-      repeatsYearly: false,
-      dates: [{ date: "2026-10-12", closedAllDay: false }],
-      paint: [],
-      zonePaint: [],
-    };
-    const { namedWeekModel } = await import("../testing/real-week-model.js");
-    const calendar: SpecialDaysModel = {
-      ...namedWeekModel(),
-      days: [
-        {
-          date: "2026-10-12",
-          specialDay: { id: "named", name: "Own Monday" },
-          holidays: [],
-          tone: "special_day",
-          closed: false,
-        },
-        { date: "2026-10-13", specialDay: null, holidays: [], tone: "standard", closed: false },
-      ],
-    };
-    let failures = 1;
-    const el = await mount((async (path: string) => {
-      if (path.includes(failing) && failures-- > 0) throw { code: "connection.failed" };
-      return path.includes("/named-days?")
-        ? calendar
-        : path.endsWith("/special-days/named")
-          ? structuredClone(detail)
-          : structuredClone(model());
-    }) as DashboardRequest);
-    vi.setSystemTime(new Date("2026-10-12T12:00:00Z"));
-    el.shadowRoot!.querySelector("[name=realWeek]")!.dispatchEvent(
-      new CustomEvent("wt-change", { detail: { checked: true }, bubbles: true, composed: true }),
-    );
-    await expect.poll(() => location.search).toBe("?week=2026-10-12");
-    const alert = () => el.shadowRoot!.querySelector("[slot=week] p[role=alert]")?.textContent;
-    await expect.poll(alert).toBe("Opening hours could not be loaded. It will be tried again.");
-    el.api.rereadWithSpecialDays();
-    await expect.poll(alert).toBeUndefined();
-  },
-);
-
 it("an opened period keeps its revision through a passive replacement and submits the edited offset", async () => {
   const data = model();
   data.clockRevision = 7;
@@ -2008,6 +1914,10 @@ describe("Year view", () => {
           writes.push([path, method, body]);
           return { id: "new" };
         }
+        if (path.includes("/opening-hours/month?")) {
+          const { monthModel } = await import("../testing/opening-hours-month-fixture.js");
+          return monthModel({ month: new URL(path, location.href).searchParams.get("month")! });
+        }
         const asked = /\/opening-hours\/year\?year=(\d+)$/.exec(path);
         if (asked) {
           years.push(asked[1]!);
@@ -2042,7 +1952,7 @@ describe("Year view", () => {
   it("opens on the venue's current year when the address names no view and no week parameter", async () => {
     const { el, view, years } = await yearMount("/manage/opening-hours");
     expect(tabs(el).value).toBe("year");
-    expect(tabs(el).items.map((item) => item.key)).toEqual(["year", "week", "periods", "day"]);
+    expect(tabs(el).items.map((item) => item.key)).toEqual(["year", "week", "periods"]);
     expect(tabs(el).items[0]!.label).toBe("Year");
     await expect.poll(() => view()?.model?.year).toBe(2026);
     expect(years).toEqual(["2026"]);
@@ -2055,7 +1965,6 @@ describe("Year view", () => {
     ["a department", "/manage/opening-hours/department/restaurant"],
     ["a season", "/manage/opening-hours/season/winter"],
     ["a zone", "/manage/opening-hours/zone/z1"],
-    ["a week", "/manage/opening-hours?week=2026-10-12"],
     ["an unknown view", "/manage/opening-hours/view/nonsense"],
   ])("keeps the Week when the address names %s", async (_, address) => {
     const { el, years } = await yearMount(address);
@@ -2254,14 +2163,17 @@ describe("Year view", () => {
     expect(years).toEqual(["2027", "2028", "2027", "2026"]);
   });
 
-  it("opens the Day tab on a month's first day when its name is chosen", async () => {
+  it("opens that month when a month's name is chosen", async () => {
     const { el, view } = await yearMount("/manage/opening-hours/view/year/year/2027");
     await expect.poll(() => view()?.model?.year).toBe(2027);
     view()!.shadowRoot!.querySelectorAll<HTMLElement>("[data-test=month-name]")[2]!.click();
     await expect
       .poll(() => location.pathname)
-      .toBe("/manage/opening-hours/view/day/date/2027-03-01");
-    await expect.poll(() => tabs(el).value).toBe("day");
+      .toBe("/manage/opening-hours/view/month/month/2027-03");
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("opening-hours-month")?.month)
+      .toBe("2027-03");
+    expect(tabs(el).value).toBe("year");
   });
 
   it("re-reads the year and the opening hours after a season change", async () => {
@@ -2524,15 +2436,13 @@ describe("Month view", () => {
     const { el, view, writes } = await monthMount("/manage/opening-hours/view/month/month/2026-12");
     const dialog = await ordinary(el, await shown(view));
     await expect.poll(() => dialog.specialDays.length).toBe(2);
-    dialog
-      .shadowRoot!.querySelector("[name=specialDayId]")!
-      .dispatchEvent(
-        new CustomEvent("wt-change", {
-          detail: { value: "company" },
-          bubbles: true,
-          composed: true,
-        }),
-      );
+    dialog.shadowRoot!.querySelector("[name=specialDayId]")!.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "company" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
     await dialog.updateComplete;
     dialog.shadowRoot!.querySelector<HTMLElement>("[data-test=add-to-special]")!.click();
     const form = await specialDialog(el);
