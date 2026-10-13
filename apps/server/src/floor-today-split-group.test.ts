@@ -5,6 +5,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   diningTables,
+  floorResetTables,
   floorTodayJoinTables,
   floorTodayJoins,
   floorTodaySplitParts,
@@ -15,6 +16,8 @@ import {
 } from "@waitron/db";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { foodOnItsWay } from "./delivery-release.js";
+import { saveZonePlan, type ZonePlanSave } from "./floor-plan.js";
+import { resetZone } from "./floor-today-store.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
@@ -27,7 +30,14 @@ import {
   tableRow,
   type PartyVenue,
 } from "./testing/party-venue.js";
-import { giveKeptSize, mergeOf, plannedZone, todayRow } from "./testing/floor-today-venue.js";
+import {
+  expectRevision,
+  giveKeptSize,
+  mergeOf,
+  plannedZone,
+  todayRow,
+  zoneRevisionOf,
+} from "./testing/floor-today-venue.js";
 import { seedSessionDevice } from "./testing/session-device.js";
 import "./errors.js";
 
@@ -210,6 +220,37 @@ async function markNeedsClearing(tableId: string): Promise<void> {
   );
 }
 
+/** The group's own rows: its `floor_today_joins` row and its member rows. */
+async function groupRowsOf(joinId: string) {
+  return inTx(v, async (tx) => ({
+    joins: await tx.select().from(floorTodayJoins).where(eq(floorTodayJoins.id, joinId)),
+    members: await tx
+      .select()
+      .from(floorTodayJoinTables)
+      .where(eq(floorTodayJoinTables.joinId, joinId)),
+  }));
+}
+
+/** `act` answers a 200 naming the room, its revision one past what it was before. */
+async function settles(act: () => Promise<Response>, zoneId: string): Promise<void> {
+  const before = (await zoneRevisionOf(v, zoneId))!;
+  await expectRevision(v, act(), zoneId, before + 1);
+}
+
+/** Every one of Long table's tables split off and standing where Long table puts them, in no group; Bar by the bar counter. */
+async function longApart() {
+  const zone = await barOnLong();
+  const { table } = zone;
+  await ok(splitOff(table.bar!, [table.c4!, table.c5!], 6));
+  await ok(splitOff(table.bar!, [table.bar!]));
+  expect(await groupOf(table.c3!)).toBeNull();
+  expect(await splitRowsOf(table.long!)).toEqual([table.c3!, table.c4!, table.c5!].sort());
+  expect(await placeOf(table.c3!)).toEqual({ x: 10, y: 20, width: 2, height: 2 });
+  expect(await placeOf(table.c4!)).toEqual({ x: 12, y: 20, width: 2, height: 2 });
+  expect(await placeOf(table.c5!)).toEqual({ x: 14, y: 20, width: 2, height: 2 });
+  return zone;
+}
+
 async function everything() {
   return inTx(v, async (tx) => ({
     today: await tx.select().from(floorTodayTables).orderBy(asc(floorTodayTables.id)),
@@ -248,10 +289,13 @@ const NO_PLACE = { x: null, y: null, width: null, height: null };
 
 describe("Split tables… on a group with nobody seated", () => {
   it("Bar ticked: Long table is whole by the window with 10 seats and Bar goes back by the bar counter", async () => {
-    const { table } = await barOnLong();
+    const { table, zoneId } = await barOnLong();
     expect(await placeOf(table.bar!)).toEqual({ x: 8, y: 20, width: 2, height: 2 });
+    const { joinId } = (await mergeOf(v, table.bar!))!;
 
-    await ok(splitOff(table.bar!, [table.bar!]));
+    await settles(() => splitOff(table.bar!, [table.bar!]), zoneId);
+
+    expect(await groupRowsOf(joinId)).toEqual({ joins: [], members: [] });
 
     expect(await placeOf(table.long!)).toEqual({ x: 10, y: 20, width: 6, height: 2 });
     expect(await seatsOf(table.long!)).toBe(10);
@@ -271,14 +315,17 @@ describe("Split tables… on a group with nobody seated", () => {
   });
 
   it("Counter 5 ticked: Bar, Counter 3 and 4 stay a group with the seats sent (10); Counter 5 stands where it was with 4 seats, still split off", async () => {
-    const { table } = await barOnLong();
+    const { table, zoneId } = await barOnLong();
 
-    await ok(splitOff(table.c3!, [table.c5!], 10));
+    await settles(() => splitOff(table.c3!, [table.c5!], 10), zoneId);
 
     expect(await groupOf(table.bar!)).toEqual({
       seats: 10,
       members: [table.bar!, table.c3!, table.c4!].sort(),
     });
+    expect(await placeOf(table.bar!)).toEqual({ x: 8, y: 20, width: 2, height: 2 });
+    expect(await placeOf(table.c3!)).toEqual({ x: 10, y: 20, width: 2, height: 2 });
+    expect(await placeOf(table.c4!)).toEqual({ x: 12, y: 20, width: 2, height: 2 });
     expect(await placeOf(table.c5!)).toEqual({ x: 14, y: 20, width: 2, height: 2 });
     expect(await seatsOf(table.c5!)).toBe(4);
     expect(await groupOf(table.c5!)).toBeNull();
@@ -286,10 +333,12 @@ describe("Split tables… on a group with nobody seated", () => {
   });
 
   it("Bar and Counter 5 ticked: Long table over Counter 3 and 4 with the seats sent (8), Counter 5 split off beside it", async () => {
-    const { table } = await barOnLong();
+    const { table, zoneId } = await barOnLong();
+    const { joinId } = (await mergeOf(v, table.bar!))!;
 
-    await ok(splitOff(table.c4!, [table.bar!, table.c5!], 8));
+    await settles(() => splitOff(table.c4!, [table.bar!, table.c5!], 8), zoneId);
 
+    expect(await groupRowsOf(joinId)).toEqual({ joins: [], members: [] });
     expect(await placeOf(table.long!)).toEqual({ x: 10, y: 20, width: 4, height: 2 });
     expect(await seatsOf(table.long!)).toBe(8);
     expect(await placeOf(table.c3!)).toEqual(NO_PLACE);
@@ -303,9 +352,9 @@ describe("Split tables… on a group with nobody seated", () => {
   });
 
   it("Counter 4 and 5 ticked: Bar and Counter 3 stay a group (seats sent)", async () => {
-    const { table } = await barOnLong();
+    const { table, zoneId } = await barOnLong();
 
-    await ok(splitOff(table.bar!, [table.c4!, table.c5!], 6));
+    await settles(() => splitOff(table.bar!, [table.c4!, table.c5!], 6), zoneId);
 
     expect(await groupOf(table.bar!)).toEqual({
       seats: 6,
@@ -319,11 +368,11 @@ describe("Split tables… on a group with nobody seated", () => {
   });
 
   it("after Long table was dragged onto Bar, Bar ticked: Long table is whole where its tables stand", async () => {
-    const { table } = await LONG_TABLE();
+    const { table, zoneId } = await LONG_TABLE();
     await merge(table.long!, table.bar!, "right");
     expect(await placeOf(table.c3!)).toEqual({ x: 42, y: 0, width: 2, height: 2 });
 
-    await ok(splitOff(table.c5!, [table.bar!]));
+    await settles(() => splitOff(table.c5!, [table.bar!]), zoneId);
 
     expect(await placeOf(table.long!)).toEqual({ x: 42, y: 0, width: 6, height: 2 });
     expect(await seatsOf(table.long!)).toBe(10);
@@ -385,6 +434,233 @@ describe("Split tables… on a group with nobody seated", () => {
     expect(await seatsOf(table.long!)).toBe(4);
   });
 
+  it("Bar, Counter 4 and 5 ticked: Counter 3 alone ends the group and stays split off where it stands", async () => {
+    const { table, zoneId } = await barOnLong();
+    const { joinId } = (await mergeOf(v, table.bar!))!;
+
+    await settles(() => splitOff(table.c3!, [table.bar!, table.c4!, table.c5!]), zoneId);
+
+    expect(await groupRowsOf(joinId)).toEqual({ joins: [], members: [] });
+    expect(await groupOf(table.c3!)).toBeNull();
+    expect(await placeOf(table.c3!)).toEqual({ x: 10, y: 20, width: 2, height: 2 });
+    expect(await placeOf(table.bar!)).toEqual({ x: 40, y: 0, width: 2, height: 2 });
+    expect(await splitRowsOf(table.long!)).toEqual([table.c3!, table.c4!, table.c5!].sort());
+  });
+
+  it("a counter whose seats were changed today comes back into Long table with its saved seats", async () => {
+    const { table, zoneId } = await longApart();
+    await ok(post(`/api/tables/${table.c4!}/today/seats`, table.c4!, { seats: 3 }));
+    expect(await seatsOf(table.c4!)).toBe(3);
+    await merge(table.c4!, table.c3!, "right", 6);
+    await merge(table.c5!, table.c4!, "right", 6);
+    await merge(table.bar!, table.c3!, "left", 8);
+
+    await settles(() => splitOff(table.bar!, [table.bar!]), zoneId);
+
+    expect(await placeOf(table.long!)).toEqual({ x: 10, y: 20, width: 6, height: 2 });
+    expect(await seatsOf(table.long!)).toBe(10);
+    expect(await seatsOf(table.c4!)).toBe(6);
+    expect(await splitRowsOf(table.long!)).toEqual([]);
+  });
+
+  it("Bar and Counter 4 ticked: Counter 3 and 5 are not side by side in Long table, so they stay a group with the seats sent and Counter 4 stands where it stood", async () => {
+    const { table, zoneId } = await barOnLong();
+    const longBefore = await todayRow(v, table.long!);
+    const before = await everything();
+
+    await refused(splitOff(table.bar!, [table.bar!, table.c4!]), 400, "merge.seats_required", {});
+    expect(await everything()).toEqual(before);
+
+    await settles(() => splitOff(table.bar!, [table.bar!, table.c4!], 6), zoneId);
+
+    expect(await groupOf(table.c3!)).toEqual({ seats: 6, members: [table.c3!, table.c5!].sort() });
+    expect(await placeOf(table.c3!)).toEqual({ x: 10, y: 20, width: 2, height: 2 });
+    expect(await placeOf(table.c4!)).toEqual({ x: 12, y: 20, width: 2, height: 2 });
+    expect(await placeOf(table.c5!)).toEqual({ x: 14, y: 20, width: 2, height: 2 });
+    expect(await placeOf(table.bar!)).toEqual({ x: 40, y: 0, width: 2, height: 2 });
+    expect(await groupOf(table.c4!)).toBeNull();
+    expect(await todayRow(v, table.long!)).toEqual(longBefore);
+    expect(await splitRowsOf(table.long!)).toEqual([table.c3!, table.c4!, table.c5!].sort());
+  });
+
+  it("Counter 5 pushed onto Counter 3's left and Bar onto Counter 5, Bar ticked: Counter 3 and 5 stay a group, Counter 5 where it stands", async () => {
+    const { table, zoneId } = await longApart();
+    await merge(table.c5!, table.c3!, "left", 6);
+    await merge(table.bar!, table.c5!, "left", 8);
+    expect(await placeOf(table.c5!)).toEqual({ x: 8, y: 20, width: 2, height: 2 });
+    const longBefore = await todayRow(v, table.long!);
+    const before = await everything();
+
+    await refused(splitOff(table.bar!, [table.bar!]), 400, "merge.seats_required", {});
+    expect(await everything()).toEqual(before);
+
+    await settles(() => splitOff(table.bar!, [table.bar!], 6), zoneId);
+
+    expect(await groupOf(table.c3!)).toEqual({ seats: 6, members: [table.c3!, table.c5!].sort() });
+    expect(await placeOf(table.c5!)).toEqual({ x: 8, y: 20, width: 2, height: 2 });
+    expect(await placeOf(table.c3!)).toEqual({ x: 10, y: 20, width: 2, height: 2 });
+    expect(await placeOf(table.c4!)).toEqual({ x: 12, y: 20, width: 2, height: 2 });
+    expect(await todayRow(v, table.long!)).toEqual(longBefore);
+    expect(await splitRowsOf(table.long!)).toEqual([table.c3!, table.c4!, table.c5!].sort());
+  });
+
+  it("Counter 4 pushed below Counter 3, Bar ticked: they stand where Long table cannot cover them, so they stay a group", async () => {
+    const { table, zoneId } = await longApart();
+    await merge(table.c4!, table.c3!, "bottom", 6);
+    await merge(table.bar!, table.c3!, "left", 8);
+    expect(await placeOf(table.c4!)).toEqual({ x: 10, y: 22, width: 2, height: 2 });
+    const longBefore = await todayRow(v, table.long!);
+    const before = await everything();
+
+    await refused(splitOff(table.bar!, [table.bar!]), 400, "merge.seats_required", {});
+    expect(await everything()).toEqual(before);
+
+    await settles(() => splitOff(table.bar!, [table.bar!], 6), zoneId);
+
+    expect(await groupOf(table.c3!)).toEqual({ seats: 6, members: [table.c3!, table.c4!].sort() });
+    expect(await placeOf(table.c3!)).toEqual({ x: 10, y: 20, width: 2, height: 2 });
+    expect(await placeOf(table.c4!)).toEqual({ x: 10, y: 22, width: 2, height: 2 });
+    expect(await todayRow(v, table.long!)).toEqual(longBefore);
+    expect(await splitRowsOf(table.long!)).toEqual([table.c3!, table.c4!, table.c5!].sort());
+  });
+
+  it("a counter turned unlike Counter 3 where Long table would put it stays in a group", async () => {
+    const { table, zoneId } = await longApart();
+    await merge(table.c4!, table.c3!, "right", 6);
+    await merge(table.bar!, table.c3!, "left", 8);
+    await inTx(v, (tx) =>
+      tx
+        .update(floorTodayTables)
+        .set({ rotation: 45 })
+        .where(eq(floorTodayTables.tableId, table.c4!)),
+    );
+    const longBefore = await todayRow(v, table.long!);
+
+    await settles(() => splitOff(table.bar!, [table.bar!], 6), zoneId);
+
+    expect(await groupOf(table.c3!)).toEqual({ seats: 6, members: [table.c3!, table.c4!].sort() });
+    expect(await todayRow(v, table.long!)).toEqual(longBefore);
+  });
+
+  it("Counter 3 turned a quarter, Counter 4 pushed on its right, Bar ticked: Long table comes back over them, turned", async () => {
+    const { table, zoneId } = await longApart();
+    for (let turn = 0; turn < 6; turn++) {
+      await ok(post(`/api/tables/${table.c3!}/today/rotate`, table.c3!, {}));
+    }
+    await merge(table.c4!, table.c3!, "right", 6);
+    await merge(table.bar!, table.c3!, "left", 8);
+    expect((await todayRow(v, table.c4!))!.rotation).toBe(90);
+
+    await settles(() => splitOff(table.bar!, [table.bar!], 6), zoneId);
+
+    expect(await placeOf(table.long!)).toEqual({ x: 9, y: 21, width: 4, height: 2 });
+    expect((await todayRow(v, table.long!))!.rotation).toBe(90);
+    expect(await seatsOf(table.long!)).toBe(6);
+    expect(await placeOf(table.c3!)).toEqual(NO_PLACE);
+    expect(await placeOf(table.c4!)).toEqual(NO_PLACE);
+    expect(await splitRowsOf(table.long!)).toEqual([table.c5!]);
+  });
+
+  it("Long table turned one step, Bar pushed onto it, Bar ticked: Long table is whole again where its tables stand, turned", async () => {
+    const { table, zoneId } = await LONG_TABLE();
+    await ok(post(`/api/tables/${table.long!}/today/rotate`, table.long!, {}));
+    const turned = await todayRow(v, table.long!);
+    await merge(table.bar!, table.long!, "left");
+
+    await settles(() => splitOff(table.bar!, [table.bar!]), zoneId);
+
+    const long = await todayRow(v, table.long!);
+    expect({ ...(await placeOf(table.long!)), rotation: long!.rotation }).toEqual({
+      x: turned!.x,
+      y: turned!.y,
+      width: 6,
+      height: 2,
+      rotation: 15,
+    });
+    expect(long!.seats).toBe(10);
+    expect(await splitRowsOf(table.long!)).toEqual([]);
+    expect(await groupOf(table.c3!)).toBeNull();
+  });
+
+  it("Long table saved with no place, put out today and split, comes back whole at the size a new table gets", async () => {
+    const { table, zoneId, master } = await plannedZone(
+      v,
+      [
+        { key: "c3", label: "Counter 3", seats: 2, place: null },
+        { key: "c4", label: "Counter 4", seats: 6, place: null },
+        { key: "c5", label: "Counter 5", seats: 4, place: null },
+        { key: "long", label: "Long table", seats: 10, place: null, partKeys: ["c3", "c4", "c5"] },
+        { key: "bar", label: "Bar", seats: 4, place: { x: 40, y: 0, width: 2, height: 2 } },
+      ],
+      NOW,
+    );
+    for (const key of ["c3", "c4", "c5"])
+      await giveKeptSize(v, master[key]!, { width: 2, height: 2 });
+    await ok(post(`/api/tables/${table.long!}/today/place`, table.long!, { x: 10, y: 20 }));
+    expect(await placeOf(table.long!)).toEqual({ x: 10, y: 20, width: 8, height: 8 });
+    await ok(splitOff(table.long!, [table.c4!, table.c5!], 2));
+    expect(await placeOf(table.c3!)).toEqual({ x: 10, y: 23, width: 2, height: 2 });
+    await merge(table.c4!, table.c3!, "right", 6);
+    await merge(table.c5!, table.c4!, "right", 6);
+    await merge(table.bar!, table.c3!, "left", 8);
+
+    await settles(() => splitOff(table.bar!, [table.bar!]), zoneId);
+
+    expect(await placeOf(table.long!)).toEqual({ x: 10, y: 20, width: 8, height: 8 });
+    expect(await seatsOf(table.long!)).toBe(10);
+    for (const key of ["c3", "c4", "c5"]) expect(await placeOf(table[key]!)).toEqual(NO_PLACE);
+    expect(await splitRowsOf(table.long!)).toEqual([]);
+    expect(await placeOf(table.bar!)).toEqual({ x: 40, y: 0, width: 2, height: 2 });
+    expect(await groupOf(table.c3!)).toBeNull();
+  });
+
+  it("a reset waiting on food on its way to Long table itself is applied once Bar is ticked and Long table is whole", async () => {
+    const { table, zoneId, master, revision } = await barOnLong();
+    await foodOnItsWayTo(table.long!);
+    const removals = enabledTableRemovals(ALL_MODULES);
+    const saved: ZonePlanSave["tables"] = [];
+    for (const [key, seats, partKeys, placement] of [
+      ["c3", 2, [], null],
+      ["c4", 6, [], null],
+      ["c5", 4, [], null],
+      ["long", 10, ["c3", "c4", "c5"], { x: 30, y: 30, width: 6, height: 2 }],
+      ["bar", 4, [], { x: 40, y: 0, width: 2, height: 2 }],
+    ] as const) {
+      saved.push({
+        id: master[key]!,
+        key,
+        label: (await tableRow(v, table[key]!)).label,
+        seats,
+        fixed: false,
+        placement: placement && { ...placement, shape: "rect" as const, rotation: 0 },
+        partKeys: [...partKeys],
+      });
+    }
+    await inTx(v, async (tx) => {
+      await saveZonePlan(tx, v.cfg, removals, zoneId, { revision, tables: saved }, NOW);
+      await resetZone(tx, v.cfg, removals, zoneId, NOW);
+    });
+    const waiting = () =>
+      inTx(v, (tx) =>
+        tx
+          .select({ tableId: floorResetTables.tableId })
+          .from(floorResetTables)
+          .where(and(eq(floorResetTables.zoneId, zoneId), eq(floorResetTables.pending, true))),
+      );
+    expect(await waiting()).toHaveLength(5);
+    expect(await placeOf(table.long!)).toEqual({ x: 10, y: 20, width: 6, height: 2 });
+    await readRevision(table.bar!);
+    expect(await waiting()).toHaveLength(5);
+
+    await settles(() => splitOff(table.bar!, [table.bar!]), zoneId);
+
+    expect(await waiting()).toEqual([]);
+    expect(await placeOf(table.long!)).toEqual({ x: 30, y: 30, width: 6, height: 2 });
+    expect(await seatsOf(table.long!)).toBe(10);
+    expect(await splitRowsOf(table.long!)).toEqual([]);
+    expect(await placeOf(table.bar!)).toEqual({ x: 40, y: 0, width: 2, height: 2 });
+  });
+
   it("guests at the group: refused for now, nothing written", async () => {
     const { table } = await barOnLong();
     await seat(v, table.bar!);
@@ -395,6 +671,84 @@ describe("Split tables… on a group with nobody seated", () => {
       tableId: first,
     });
     expect(await everything()).toEqual(before);
+  });
+});
+
+/** LONG_TABLE plus Short table (4 seats, 4 × 2 at 40, 10) = Counter 6 and 7 (2 seats each, kept 2 × 2), pushed onto Long table's right: one group of five. */
+async function shortOnLong() {
+  const zone = await plannedZone(
+    v,
+    [
+      { key: "c3", label: "Counter 3", seats: 2, place: null },
+      { key: "c4", label: "Counter 4", seats: 6, place: null },
+      { key: "c5", label: "Counter 5", seats: 4, place: null },
+      { key: "c6", label: "Counter 6", seats: 2, place: null },
+      { key: "c7", label: "Counter 7", seats: 2, place: null },
+      {
+        key: "long",
+        label: "Long table",
+        seats: 10,
+        place: { x: 10, y: 20, width: 6, height: 2 },
+        partKeys: ["c3", "c4", "c5"],
+      },
+      {
+        key: "short",
+        label: "Short table",
+        seats: 4,
+        place: { x: 40, y: 10, width: 4, height: 2 },
+        partKeys: ["c6", "c7"],
+      },
+    ],
+    NOW,
+  );
+  for (const key of ["c3", "c4", "c5", "c6", "c7"])
+    await giveKeptSize(v, zone.master[key]!, { width: 2, height: 2 });
+  const { table } = zone;
+  await merge(table.short!, table.long!, "right", 14);
+  expect(await groupOf(table.c3!)).toEqual({
+    seats: 14,
+    members: [table.c3!, table.c4!, table.c5!, table.c6!, table.c7!].sort(),
+  });
+  expect(await placeOf(table.c6!)).toEqual({ x: 16, y: 20, width: 2, height: 2 });
+  expect(await placeOf(table.c7!)).toEqual({ x: 18, y: 20, width: 2, height: 2 });
+  return zone;
+}
+
+describe("Split tables… on a group holding the tables of two joined tables", () => {
+  it("Short table's two counters ticked: Long table is whole again, and Counter 6 and 7 go back where Short table stood", async () => {
+    const { table, zoneId } = await shortOnLong();
+
+    await settles(() => splitOff(table.c3!, [table.c6!, table.c7!]), zoneId);
+
+    expect(await placeOf(table.long!)).toEqual({ x: 10, y: 20, width: 6, height: 2 });
+    expect(await seatsOf(table.long!)).toBe(10);
+    expect(await splitRowsOf(table.long!)).toEqual([]);
+    expect(await placeOf(table.c6!)).toEqual({ x: 40, y: 10, width: 2, height: 2 });
+    expect(await placeOf(table.c7!)).toEqual({ x: 42, y: 10, width: 2, height: 2 });
+    expect(await splitRowsOf(table.short!)).toEqual([table.c6!, table.c7!].sort());
+    expect(await groupOf(table.c3!)).toBeNull();
+  });
+
+  it("Counter 5 and 7 ticked: Counter 3, 4 and 6 come from both, so they stay a group with the seats sent", async () => {
+    const { table, zoneId } = await shortOnLong();
+    const longBefore = await todayRow(v, table.long!);
+    const before = await everything();
+
+    await refused(splitOff(table.c3!, [table.c5!, table.c7!]), 400, "merge.seats_required", {});
+    expect(await everything()).toEqual(before);
+
+    await settles(() => splitOff(table.c3!, [table.c5!, table.c7!], 10), zoneId);
+
+    expect(await groupOf(table.c3!)).toEqual({
+      seats: 10,
+      members: [table.c3!, table.c4!, table.c6!].sort(),
+    });
+    expect(await placeOf(table.c3!)).toEqual({ x: 10, y: 20, width: 2, height: 2 });
+    expect(await placeOf(table.c4!)).toEqual({ x: 12, y: 20, width: 2, height: 2 });
+    expect(await placeOf(table.c6!)).toEqual({ x: 16, y: 20, width: 2, height: 2 });
+    expect(await todayRow(v, table.long!)).toEqual(longBefore);
+    expect(await splitRowsOf(table.long!)).toEqual([table.c3!, table.c4!, table.c5!].sort());
+    expect(await splitRowsOf(table.short!)).toEqual([table.c6!, table.c7!].sort());
   });
 });
 
