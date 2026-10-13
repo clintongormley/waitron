@@ -134,7 +134,7 @@ it("refreshes Calendar and routing from special days, clock and daily station st
   expect(reaches(unrelated, calendar)).toEqual([]);
 });
 
-it("refreshes Calendar and holiday coverage after every special day, area, address and country change", async () => {
+it("refreshes Calendar, holiday coverage and the operations readiness after every special day, area, address and country change", async () => {
   const before = await db.select().from(tenants);
   onTestFinished(() =>
     withTransaction(db, async (tx) => {
@@ -162,6 +162,7 @@ it("refreshes Calendar and holiday coverage after every special day, area, addre
   });
   const calendar = QUERY_DEPENDENCIES["named-days"];
   const holidays = QUERY_DEPENDENCIES.holidays;
+  const operations = QUERY_DEPENDENCIES.operations;
   const both = (types: Set<string>) => [reaches(types, calendar), reaches(types, holidays)];
 
   const named = await announced((tx) =>
@@ -177,12 +178,14 @@ it("refreshes Calendar and holiday coverage after every special day, area, addre
   expect(both(named)).toEqual([["special_days", "special_day_dates"], []]);
   const area = await announced((tx) => saveHolidayArea(tx, cfg, { areaKey: "aran" }));
   expect(both(area)).toEqual([["holiday_geographies"], ["holiday_geographies"]]);
+  expect(reaches(area, operations)).toEqual(["holiday_geographies"]);
   const moved = await announced((tx) =>
     tx.update(locations).set({ city: "Lleida" }).where(eq(locations.id, cfg.locationId)),
   );
   expect(both(moved)).toEqual([["locations"], ["locations"]]);
   const country = await announced((tx) => tx.update(tenants).set({ country: "PT" }));
   expect(both(country)).toEqual([["tenants"], ["tenants"]]);
+  expect(reaches(country, operations)).toEqual(["tenants"]);
 });
 
 it("daily station status refreshes routing and special days refresh Opening hours", async () => {

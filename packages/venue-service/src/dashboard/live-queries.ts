@@ -157,6 +157,7 @@ export const QUERY_DEPENDENCIES = {
   ],
   operations: [
     "department_receipts",
+    "tenants",
     "locations",
     "location_business_day_settings",
     "location_day_cutover_changes",
@@ -178,6 +179,7 @@ export const QUERY_DEPENDENCIES = {
     "sections",
     "section_members",
     "menu_items",
+    "holiday_geographies",
     "seasons",
     "department_days",
     "department_day_ranges",
