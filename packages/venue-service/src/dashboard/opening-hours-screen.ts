@@ -41,13 +41,7 @@ import type {
 } from "../menu-timetable-types.js";
 import type { OpeningHoursApi, OpeningStation } from "./opening-hours-client.js";
 import { businessDateToday } from "./opening-hours-day.js";
-import {
-  addDays,
-  isLocalDate,
-  parseCalendarMonth,
-  parseCalendarYear,
-  weekdayOf,
-} from "../hours-rules.js";
+import { isLocalDate, parseCalendarMonth, parseCalendarYear } from "../hours-rules.js";
 import { format, formatDate, formatMonthName } from "./hours-view.js";
 import { t } from "./strings.js";
 import { chosenSeasonId, seasonOptions } from "./season-choice.js";
@@ -357,10 +351,6 @@ export class OpeningHoursScreen extends LitElement {
     if (!this.isConnected || !this.model?.seasons.some((season) => season.id === value)) return;
     await this.url.write({ dashboard: "opening-hours", season: value });
     this.followUrl();
-  }
-  private currentWeek() {
-    const date = this.model ? businessDateToday(this.model) : "";
-    return date ? addDays(date, -((weekdayOf(date) + 6) % 7)) : "";
   }
   protected override willUpdate() {
     if (!this.model) return;
@@ -1244,17 +1234,13 @@ export class OpeningHoursScreen extends LitElement {
                           .api=${this.api}
                           .model=${this.model}
                           .stationId=${this.stationId}
-                          .weekStart=${this.currentWeek() || "2026-01-05"}
-                          .normal=${true}
                         ></opening-hours-station>`
                       : this.view === "week" && this.departmentId === "all"
                         ? html`<opening-hours-all
                             .departments=${this.model.departments}
                             .clockRevision=${this.model.clockRevision}
-                            .businessDayClock=${this.model.businessDayClock}
                             .dayCutover=${this.model.dayCutover}
                             .seasonId=${this.season}
-                            .seasons=${this.model.seasons}
                             @department-open=${(event: CustomEvent<{ departmentId: string }>) => {
                               event.stopPropagation();
                               void this.chooseDepartment(event.detail.departmentId);
@@ -1268,7 +1254,6 @@ export class OpeningHoursScreen extends LitElement {
                                 .department=${department!}
                                 .zone=${this.zone()!}
                                 .seasonId=${this.season}
-                                .seasons=${this.model.seasons}
                                 .clockRevision=${this.model.clockRevision}
                                 .businessDayClock=${this.model.businessDayClock}
                                 .dayCutover=${this.model.dayCutover}
@@ -1282,7 +1267,6 @@ export class OpeningHoursScreen extends LitElement {
                                   .api=${this.api}
                                   .department=${department}
                                   .seasonId=${this.season}
-                                  .seasons=${this.model.seasons}
                                   .menus=${this.model!.menus}
                                   .clockRevision=${this.model!.clockRevision}
                                   .businessDayClock=${this.model!.businessDayClock}

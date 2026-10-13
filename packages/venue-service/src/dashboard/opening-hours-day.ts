@@ -24,7 +24,7 @@ import type { RangeDialog } from "./range-dialog.js";
 import type { PeriodEditor } from "./period-editor.js";
 import type { SpecialDaysModel } from "../holiday-types.js";
 import type { SpecialDayAction } from "./special-day-action.js";
-import { seasonIdOn } from "./real-week.js";
+import { seasonIdOn } from "./season-week-view.js";
 import { paintedClosed, paintedSlots, specialOn, type DatedSpecial } from "./special-date.js";
 import { seasonWeek } from "./season-choice.js";
 import { format, formatDate } from "./hours-view.js";
