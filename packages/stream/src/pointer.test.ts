@@ -291,3 +291,21 @@ describe("SentPointers", () => {
     expect(pointers.slice(1).every((pointer) => sent.includes(bytes(pointer)))).toBe(true);
   });
 });
+
+describe("a call's signal", () => {
+  it("reaches every bucket call readPointer and writePointer make", async () => {
+    const store = createMemoryObjectStore();
+    const { signal } = new AbortController();
+    const pointer = signPointer(body(), KEYS.privateKey);
+    await writePointer(store, VENUE, pointer, null, undefined, { signal });
+    const later = signPointer(body({ writtenAt: "2026-09-23T10:06:00.000Z" }), KEYS.privateKey);
+    await rejection(writePointer(store, VENUE, later, '"stale"', undefined, { signal }));
+    await readPointer(store, VENUE, { signal });
+    expect(store.calls.map((call) => [call.operation, call.signal])).toEqual([
+      ["put", signal],
+      ["put", signal],
+      ["get", signal],
+      ["get", signal],
+    ]);
+  });
+});

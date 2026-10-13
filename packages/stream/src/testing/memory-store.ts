@@ -2,7 +2,13 @@ import { createHash } from "node:crypto";
 import { AppError } from "@waitron/shared";
 import "../errors.js";
 import type { BucketOperation as Operation } from "../errors.js";
-import type { ListedObject, ObjectStore, PutCondition, StoredObject } from "../object-store.js";
+import type {
+  ListedObject,
+  ObjectStore,
+  PutCondition,
+  StoreCall,
+  StoredObject,
+} from "../object-store.js";
 
 type Entry = { body: Uint8Array; etag: string; lastModified: Date };
 
@@ -19,7 +25,13 @@ export interface MemoryObjectStore extends ObjectStore {
   /** A copy of what is held. */
   snapshot(): Map<string, Entry>;
   failNext(fault: Fault): void;
-  readonly calls: { operation: Operation; key: string; condition?: PutCondition }[];
+  /** `signal` only for a call that carried one; the store itself does not act on it. */
+  readonly calls: {
+    operation: Operation;
+    key: string;
+    condition?: PutCondition;
+    signal?: AbortSignal;
+  }[];
 }
 
 /**
@@ -44,8 +56,11 @@ export function createMemoryObjectStore(options: { now?: () => Date } = {}): Mem
     return index === -1 ? undefined : faults.splice(index, 1)[0];
   }
 
-  async function deleteOne(key: string): Promise<void> {
-    calls.push({ operation: "delete", key });
+  const signalOf = (call: StoreCall | undefined) =>
+    call?.signal === undefined ? {} : { signal: call.signal };
+
+  async function deleteOne(key: string, call?: StoreCall): Promise<void> {
+    calls.push({ operation: "delete", key, ...signalOf(call) });
     const fault = takeFault("delete", key);
     if (fault) throw fault.error;
     objects.delete(key);
@@ -63,15 +78,15 @@ export function createMemoryObjectStore(options: { now?: () => Date } = {}): Mem
     failNext(fault) {
       faults.push(fault);
     },
-    async get(key): Promise<StoredObject | null> {
-      calls.push({ operation: "get", key });
+    async get(key, call): Promise<StoredObject | null> {
+      calls.push({ operation: "get", key, ...signalOf(call) });
       const fault = takeFault("get", key);
       if (fault) throw fault.error;
       const entry = objects.get(key);
       return entry ? { body: entry.body.slice(), etag: entry.etag } : null;
     },
-    async put(key, body, condition) {
-      calls.push({ operation: "put", key, condition });
+    async put(key, body, condition, call) {
+      calls.push({ operation: "put", key, condition, ...signalOf(call) });
       const fault = takeFault("put", key);
       if (fault && !fault.landed) throw fault.error;
       const existing = objects.get(key);
@@ -87,8 +102,8 @@ export function createMemoryObjectStore(options: { now?: () => Date } = {}): Mem
       if (fault) throw fault.error;
       return { etag };
     },
-    async list(prefix): Promise<ListedObject[]> {
-      calls.push({ operation: "list", key: prefix });
+    async list(prefix, call): Promise<ListedObject[]> {
+      calls.push({ operation: "list", key: prefix, ...signalOf(call) });
       const fault = takeFault("list", prefix);
       if (fault) throw fault.error;
       return [...objects]
@@ -97,8 +112,8 @@ export function createMemoryObjectStore(options: { now?: () => Date } = {}): Mem
         .map(([key, entry]) => ({ key, lastModified: new Date(entry.lastModified) }));
     },
     delete: deleteOne,
-    async deleteMany(keys) {
-      for (const key of keys) await deleteOne(key);
+    async deleteMany(keys, call) {
+      for (const key of keys) await deleteOne(key, call);
     },
   };
 }

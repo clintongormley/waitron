@@ -1,5 +1,5 @@
 import { isAppError } from "@waitron/shared";
-import type { ObjectStore, PutCondition } from "./object-store.js";
+import type { ObjectStore, PutCondition, StoreCall } from "./object-store.js";
 
 export function isPreconditionFailure(error: unknown): boolean {
   return isAppError(error) && error.code === "backup.stream_precondition_failed";
@@ -19,12 +19,13 @@ export async function putOwnBytes(
   bytes: Uint8Array,
   condition: PutCondition,
   sentEarlier?: (stored: Uint8Array) => boolean,
+  call?: StoreCall,
 ): Promise<{ etag: string; landed: boolean }> {
   try {
-    return { etag: (await store.put(key, bytes, condition)).etag, landed: true };
+    return { etag: (await store.put(key, bytes, condition, call)).etag, landed: true };
   } catch (error) {
     if (!isPreconditionFailure(error)) throw error;
-    const current = await store.get(key);
+    const current = await store.get(key, call);
     if (current === null) throw error;
     if (Buffer.compare(current.body, bytes) === 0) return { etag: current.etag, landed: true };
     if (sentEarlier?.(current.body) === true) return { etag: current.etag, landed: false };

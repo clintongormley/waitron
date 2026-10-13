@@ -4,7 +4,7 @@ import { AppError } from "@waitron/shared";
 import "./errors.js";
 import { putOwnBytes } from "./conditional.js";
 import { parseGenerationName, strayListedKey, venuePrefix } from "./names.js";
-import type { ObjectStore } from "./object-store.js";
+import type { ObjectStore, StoreCall } from "./object-store.js";
 
 function parsed(field: string, generation: string): { term: number; nodeId: string } {
   const name = parseGenerationName(generation);
@@ -32,12 +32,20 @@ export async function claimGeneration(
   store: ObjectStore,
   venueId: string,
   generation: string,
+  call?: StoreCall,
 ): Promise<void> {
   const { term, nodeId } = parsed("generation", generation);
   const bytes = new TextEncoder().encode(
     canonicalize({ generation, venueId, term, nodeId, nonce: randomUUID() }),
   );
-  await putOwnBytes(store, markerKey(venueId, generation), bytes, { ifNoneMatch: "*" });
+  await putOwnBytes(
+    store,
+    markerKey(venueId, generation),
+    bytes,
+    { ifNoneMatch: "*" },
+    undefined,
+    call,
+  );
 }
 
 /**
@@ -52,6 +60,7 @@ export async function pruneGenerations(
   live: string,
   now: Date,
   windowMs: number,
+  call?: StoreCall,
 ): Promise<string[]> {
   parsed("live", live);
   if (!Number.isFinite(windowMs) || windowMs <= 0) {
@@ -64,7 +73,7 @@ export async function pruneGenerations(
   type Folder = { name: string; newest: number; marker: string; claimed: boolean; files: string[] };
   // null for a folder whose name is not a generation's.
   const folders = new Map<string, Folder | null>();
-  for (const object of await store.list(root)) {
+  for (const object of await store.list(root, call)) {
     if (!object.key.startsWith(root)) throw strayListedKey();
     const rest = object.key.slice(root.length);
     const slash = rest.indexOf("/");
@@ -98,7 +107,13 @@ export async function pruneGenerations(
   doomed.sort((a, b) => (a.name < b.name ? -1 : 1));
   // Markers go last, so a prune interrupted partway leaves every generation that had a marker still
   // claimed.
-  await store.deleteMany(doomed.flatMap((folder) => folder.files));
-  await store.deleteMany(doomed.filter((folder) => folder.claimed).map((folder) => folder.marker));
+  await store.deleteMany(
+    doomed.flatMap((folder) => folder.files),
+    call,
+  );
+  await store.deleteMany(
+    doomed.filter((folder) => folder.claimed).map((folder) => folder.marker),
+    call,
+  );
   return doomed.map((folder) => folder.name);
 }

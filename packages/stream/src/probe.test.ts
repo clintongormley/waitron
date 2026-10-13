@@ -5,6 +5,7 @@ import type { ObjectStore, PutCondition } from "./object-store.js";
 import { PROBE_PREFIX, probeBucket } from "./probe.js";
 import { strayListedKey } from "./names.js";
 import { createS3ObjectStore } from "./s3-store.js";
+import { throwIfCancelled } from "./store-call.js";
 import { createMemoryObjectStore } from "./testing/memory-store.js";
 import { silentBucket } from "./testing/silent-bucket.js";
 
@@ -439,5 +440,64 @@ describe("a bucket that takes the connection and never answers", () => {
     } finally {
       await bucket.close();
     }
+  });
+});
+
+describe("a cancelled check", () => {
+  /** Refuses a call whose signal is cancelled, as the S3 store does, before it reaches `inner`. */
+  function cancellable(inner: ObjectStore, beforeGet: () => void = () => {}): ObjectStore {
+    return {
+      get: async (key, call) => {
+        beforeGet();
+        throwIfCancelled(call?.signal, "get", key);
+        return inner.get(key, call);
+      },
+      put: async (key, body, condition, call) => {
+        throwIfCancelled(call?.signal, "put", key);
+        return inner.put(key, body, condition, call);
+      },
+      list: async (prefix, call) => {
+        throwIfCancelled(call?.signal, "list", prefix);
+        return inner.list(prefix, call);
+      },
+      delete: async (key, call) => {
+        throwIfCancelled(call?.signal, "delete", key);
+        return inner.delete(key, call);
+      },
+      deleteMany: async (keys, call) => {
+        throwIfCancelled(call?.signal, "delete", keys[0] ?? "");
+        return inner.deleteMany(keys, call);
+      },
+    };
+  }
+
+  it("sends nothing on a signal already cancelled, and throws the cancellation rather than report a refusal", async () => {
+    const inner = createMemoryObjectStore();
+    const failure = await probeBucket(cancellable(inner), NONCE, {
+      signal: AbortSignal.abort(),
+    }).catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(AppError);
+    expect(failure).toMatchObject({
+      code: "backup.stream_request_failed",
+      params: { operation: "put", key: KEY, status: null, name: "AbortError" },
+    });
+    expect(inner.calls).toEqual([]);
+  });
+
+  it("cancelled after its write, leaves its object: the clean-up carries the same signal", async () => {
+    const inner = createMemoryObjectStore();
+    const controller = new AbortController();
+    const store = cancellable(inner, () => controller.abort());
+    const failure = await probeBucket(store, NONCE, { signal: controller.signal }).catch(
+      (error: unknown) => error,
+    );
+    expect(failure).toMatchObject({
+      code: "backup.stream_request_failed",
+      params: { operation: "get", key: KEY, status: null, name: "AbortError" },
+    });
+    expect(inner.snapshot().has(KEY)).toBe(true);
+    expect(inner.calls.map((call) => [call.operation, call.signal])).toEqual([
+      ["put", controller.signal],
+    ]);
   });
 });

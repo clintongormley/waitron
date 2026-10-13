@@ -76,3 +76,17 @@ describe("bucketClockOffset", () => {
     await expect(bucketClockOffset(failing, "probe", 0, 0)).rejects.toThrow("unreachable");
   });
 });
+
+describe("a call's signal", () => {
+  it("reaches the listings newestUpload and bucketClockOffset make", async () => {
+    const store = await generationWith({ "0000/a.ltx": 5 });
+    const { signal } = new AbortController();
+    const before = store.calls.length;
+    await newestUpload(store, VENUE, GENERATION, { level: 0 }, { signal });
+    await bucketClockOffset(store, "probe", 0, 0, { signal });
+    expect(store.calls.slice(before).map((call) => [call.operation, call.signal])).toEqual([
+      ["list", signal],
+      ["list", signal],
+    ]);
+  });
+});

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { hasCode, isAppError } from "@waitron/shared";
 import { isPreconditionFailure, putOwnBytes } from "./conditional.js";
-import type { ListedObject, ObjectStore, StoredObject } from "./object-store.js";
+import type { ListedObject, ObjectStore, StoreCall, StoredObject } from "./object-store.js";
 
 /** Where the check writes its one object, under the owner's configured prefix. */
 export const PROBE_PREFIX = "waitron-probe/";
@@ -35,6 +35,7 @@ export type ProbeResult = { ok: true } | { ok: false; reason: ProbeFailure; deta
 export async function probeBucket(
   store: ObjectStore,
   nonce: string = randomUUID(),
+  call?: StoreCall,
 ): Promise<ProbeResult> {
   const key = `${PROBE_PREFIX}${nonce}.json`;
   const bytes = (step: string) => new TextEncoder().encode(JSON.stringify({ probe: nonce, step }));
@@ -43,7 +44,7 @@ export async function probeBucket(
   try {
     let version: string;
     try {
-      version = (await putOwnBytes(store, key, first, { ifNoneMatch: "*" })).etag;
+      version = (await putOwnBytes(store, key, first, { ifNoneMatch: "*" }, undefined, call)).etag;
       written = true;
     } catch (error) {
       return failed(error, "write");
@@ -51,7 +52,7 @@ export async function probeBucket(
 
     let read: StoredObject | null;
     try {
-      read = await store.get(key);
+      read = await store.get(key, call);
     } catch (error) {
       return failed(error, "read");
     }
@@ -62,7 +63,7 @@ export async function probeBucket(
 
     let listed: ListedObject[];
     try {
-      listed = await store.list(PROBE_PREFIX);
+      listed = await store.list(PROBE_PREFIX, call);
     } catch (error) {
       return failed(error, "list");
     }
@@ -70,7 +71,9 @@ export async function probeBucket(
       return refuse("list_failed", "the listing does not show the object just written");
     }
 
-    const again = await attempt(() => store.put(key, bytes("create-again"), { ifNoneMatch: "*" }));
+    const again = await attempt(() =>
+      store.put(key, bytes("create-again"), { ifNoneMatch: "*" }, call),
+    );
     if (again === "accepted") {
       return refuse(
         "create_only_ignored",
@@ -78,11 +81,13 @@ export async function probeBucket(
       );
     }
     if (again !== "refused") return failed(again.error, "write");
-    const createOnlyChanged = await changedSince(store, key, first, "create_only_ignored");
+    const createOnlyChanged = await changedSince(store, key, first, "create_only_ignored", call);
     if (createOnlyChanged) return createOnlyChanged;
 
     const replacement = bytes("replace");
-    const fresh = await attempt(() => putOwnBytes(store, key, replacement, { ifMatch: version }));
+    const fresh = await attempt(() =>
+      putOwnBytes(store, key, replacement, { ifMatch: version }, undefined, call),
+    );
     if (fresh === "refused") {
       return refuse(
         "fresh_version_refused",
@@ -91,7 +96,7 @@ export async function probeBucket(
     }
     if (fresh !== "accepted") return failed(fresh.error, "write");
 
-    const stale = await attempt(() => store.put(key, bytes("stale"), { ifMatch: version }));
+    const stale = await attempt(() => store.put(key, bytes("stale"), { ifMatch: version }, call));
     if (stale === "accepted") {
       return refuse(
         "if_match_ignored",
@@ -99,13 +104,13 @@ export async function probeBucket(
       );
     }
     if (stale !== "refused") return failed(stale.error, "write");
-    const ifMatchChanged = await changedSince(store, key, replacement, "if_match_ignored");
+    const ifMatchChanged = await changedSince(store, key, replacement, "if_match_ignored", call);
     if (ifMatchChanged) return ifMatchChanged;
 
     let after: StoredObject | null;
     try {
-      await store.delete(key);
-      after = await store.get(key);
+      await store.delete(key, call);
+      after = await store.get(key, call);
     } catch (error) {
       return failed(error, "delete");
     }
@@ -115,8 +120,10 @@ export async function probeBucket(
     return { ok: true };
   } finally {
     if (written) {
+      // Under the call's signal too, so a cancelled check leaves its object behind; a later check
+      // with its own nonce writes to another key.
       try {
-        await store.delete(key);
+        await store.delete(key, call);
       } catch {
         // The probe's answer stands over a failed clean-up.
       }
@@ -133,10 +140,11 @@ async function changedSince(
   key: string,
   before: Uint8Array,
   ignored: ProbeFailure,
+  call: StoreCall | undefined,
 ): Promise<ProbeResult | undefined> {
   let current: StoredObject | null;
   try {
-    current = await store.get(key);
+    current = await store.get(key, call);
   } catch (error) {
     return failed(error, "read");
   }
