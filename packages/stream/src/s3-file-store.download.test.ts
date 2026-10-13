@@ -184,6 +184,23 @@ async function readAll(stream: Readable): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
+/** Every exception left uncaught while `run` and the turns after it ran, held from the runner. */
+async function uncaughtDuring(run: () => Promise<void>): Promise<unknown[]> {
+  const caught: unknown[] = [];
+  const record = (error: unknown) => caught.push(error);
+  const runners = process.listeners("uncaughtException");
+  process.removeAllListeners("uncaughtException");
+  process.on("uncaughtException", record);
+  try {
+    await run();
+    await delay(20);
+  } finally {
+    process.off("uncaughtException", record);
+    for (const runner of runners) process.on("uncaughtException", runner);
+  }
+  return caught;
+}
+
 describe("a download as a stream", () => {
   it("hands back the object's bytes", async () => {
     const bucket = await bucketWith();
@@ -213,6 +230,17 @@ describe("a download as a stream", () => {
     controller.abort();
     expect(await outcome(failed.then((error) => Promise.reject(error)))).toEqual(cancelled);
     expect(stream.destroyed).toBe(true);
+    await expect.poll(() => observed.closed).toBe(true);
+  });
+
+  it("raises nothing uncaught when cancelled before anything listens for its errors", async () => {
+    const { bucket, headersSent, observed } = await stallingBucket();
+    const controller = new AbortController();
+    const stream = await storeFor(bucket).readStream("a.enc", controller);
+    await headersSent;
+    expect(await uncaughtDuring(async () => controller.abort())).toEqual([]);
+    expect(stream.destroyed).toBe(true);
+    expect(stream.errored).toMatchObject(cancelled);
     await expect.poll(() => observed.closed).toBe(true);
   });
 

@@ -509,6 +509,9 @@ export function createS3FileStore(
         }
       }
       const stream = Readable.from(relay(), { objectMode: false });
+      // A cancellation can destroy the stream before its caller listens for errors; without a
+      // listener of its own, that error would be uncaught. The caller's listeners still get it.
+      stream.on("error", () => {});
       const stop = () => {
         body.destroy();
         stream.destroy(cancelled("get", key));
