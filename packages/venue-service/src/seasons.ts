@@ -5,7 +5,13 @@ import { AppError, type ErrorParams } from "@waitron/shared";
 import { assertBusinessDayScheduleWrite } from "./business-day-schedule.js";
 import { scheduleEndOffsetClash } from "./menu-timetable.js";
 import type { VenueScope } from "./operations.js";
-import { DEFAULT_SEASONS, parseSeasonStart, seasonOn, type Season } from "./season-rules.js";
+import {
+  byStart,
+  DEFAULT_SEASONS,
+  parseSeasonStart,
+  seasonOn,
+  type Season,
+} from "./season-rules.js";
 import {
   readDepartmentSeasonWeeks,
   readZoneSeasonWeeks,
@@ -33,7 +39,7 @@ export async function ensureDefaultSeasons(tx: Transaction, cfg: VenueScope): Pr
     .values(DEFAULT_SEASONS.map((season) => ({ ...season, locationId: cfg.locationId })))
     .returning({ id: seasons.id, name: seasons.name, startsOn: seasons.startsOn });
   // "The rows emitted by the RETURNING clause appear in an arbitrary order" (sqlite.org/lang_returning.html).
-  return inserted.sort((a, b) => (a.startsOn < b.startsOn ? -1 : Number(a.startsOn > b.startsOn)));
+  return byStart(inserted);
 }
 
 const invalid = (params: ErrorParams["season.invalid"]): never => {

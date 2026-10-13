@@ -1,6 +1,9 @@
 import type { LocalDate } from "../hours-types.js";
 import { addDays, weekdayOf } from "../hours-rules.js";
 
+/** The year's months, "01" to "12". */
+export const MONTHS = Array.from({ length: 12 }, (_, index) => String(index + 1).padStart(2, "0"));
+
 /** A month, `YYYY-MM`. */
 export type Month = string;
 

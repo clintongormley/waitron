@@ -20,7 +20,8 @@ export function parseSeasonStart(value: unknown): string | null {
   return date.getUTCDate() === Number(value.slice(3)) ? value : null;
 }
 
-const byStart = <T extends { startsOn: string }>(seasons: readonly T[]): T[] =>
+/** Seasons in start order, as a new array. */
+export const byStart = <T extends { startsOn: string }>(seasons: readonly T[]): T[] =>
   [...seasons].sort((a, b) => (a.startsOn < b.startsOn ? -1 : Number(a.startsOn > b.startsOn)));
 
 /** The season holding `businessDay`: the latest start on or before its MM-DD, wrapping from the

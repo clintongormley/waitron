@@ -9,7 +9,7 @@ import type { HolidayCoverage } from "../holiday-types.js";
 import type { LocalDate } from "../hours-types.js";
 import { addDays } from "../hours-rules.js";
 import type { OpeningHoursYear, OpeningHoursYearDay } from "../opening-hours-calendar.js";
-import { monthGrid } from "./calendar-grid.js";
+import { MONTHS, monthGrid } from "./calendar-grid.js";
 import { areaAddress, nationalCoverage } from "./holiday-coverage-text.js";
 import { format, formatDate, formatLongDate, formatMonthName } from "./hours-view.js";
 import type { SeasonWrites } from "./season-chips.js";
@@ -32,7 +32,6 @@ function listLacksLocalHolidays(local: HolidayCoverage["local"]): boolean {
 }
 export type HolidayAreaWrites = Pick<SpecialDaysApi, "saveHolidayArea" | "rereadWatches">;
 
-const MONTHS = Array.from({ length: 12 }, (_, index) => String(index + 1).padStart(2, "0"));
 /** A Monday, so its week names the columns Monday first. */
 const A_MONDAY = "2024-01-01";
 const weekday = (date: LocalDate, style: "narrow" | "long") =>

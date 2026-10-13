@@ -8,7 +8,8 @@ import type { OpeningHoursApi, SeasonDeleteImpact, SeasonInput } from "./opening
 import { format, formatMonthDay } from "./hours-view.js";
 import type { SeasonChip, SeasonDialog } from "./season-dialog.js";
 import "./season-dialog.js";
-import { byStart, seasonTints } from "./season-tint.js";
+import { byStart } from "../season-rules.js";
+import { seasonTints } from "./season-tint.js";
 import { t } from "./strings.js";
 
 export type { SeasonChip } from "./season-dialog.js";

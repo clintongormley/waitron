@@ -18,8 +18,9 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { isLocalDate } from "../hours-rules.js";
 import type { LocalDate } from "../hours-types.js";
-import type { Season } from "../season-rules.js";
+import { byStart, type Season } from "../season-rules.js";
 import type { SeasonInput } from "./opening-hours-client.js";
+import { MONTHS } from "./calendar-grid.js";
 import { format, formatDate, formatMonthName } from "./hours-view.js";
 import { t } from "./strings.js";
 import { currentLocale } from "@waitron/dashboard-kit";
@@ -32,7 +33,6 @@ const fields: Field[] = ["name", "startsOn"];
 /** 29 February is never a start, so February always offers 28 days. */
 const daysIn = (month: string) =>
   month === "02" ? 28 : new Date(Date.UTC(2001, Number(month), 0)).getUTCDate();
-const MONTHS = Array.from({ length: 12 }, (_, index) => String(index + 1).padStart(2, "0"));
 const copy = (draft: Draft): Draft => ({ ...draft });
 const same = (a: Draft, b: Draft) => a.name === b.name && a.day === b.day && a.month === b.month;
 const draftOf = (season?: Season): Draft =>
@@ -240,7 +240,7 @@ export class SeasonDialog extends LitElement {
   };
   /** The season whose days a deleted season's days join: the one starting before it. */
   private previous(season: Season): Season {
-    const sorted = [...this.seasons].sort((a, b) => (a.startsOn < b.startsOn ? -1 : 1));
+    const sorted = byStart(this.seasons);
     const index = sorted.findIndex((entry) => entry.id === season.id);
     return sorted.at(index - 1)!;
   }
