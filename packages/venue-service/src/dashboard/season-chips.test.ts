@@ -290,6 +290,23 @@ it("shows a refused delete in the confirmation", async () => {
   expect(changed).toEqual([]);
 });
 
+it("says the season no longer exists when a save or a delete finds it gone", async () => {
+  const gone = async () => {
+    throw { code: "season.not_found", params: { seasonId: "w" } };
+  };
+  await mount(four, fakeApi({ saveSeason: vi.fn(gone), deleteSeason: vi.fn(gone) }));
+  await openChip("Winter");
+  await change("name", "Cold");
+  await click("[data-test=save-season]");
+  await expect.poll(() => footerError()).toBe("This season no longer exists.");
+  await click("[data-test=delete-season]");
+  await expect.poll(() => dq("[data-test=confirm-delete-season]")).not.toBeNull();
+  await click("[data-test=confirm-delete-season]");
+  await expect
+    .poll(() => dq("[data-error=delete]")?.textContent ?? "")
+    .toBe("This season no longer exists.");
+});
+
 it("offers no editing when read-only", async () => {
   el = document.createElement("season-chips");
   el.seasons = four;

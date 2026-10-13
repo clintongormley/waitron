@@ -192,6 +192,7 @@ export class SeasonDialog extends LitElement {
     if (!refusal || this.refusalField() !== undefined) return "";
     const params = refusal.params ?? {};
     if (refusal.code === "hours.clock_changed") return t("hours.clock_changed");
+    if (refusal.code === "season.not_found") return t("season.not_found");
     if (refusal.code !== "season.invalid") return t("prep.save_error");
     if (params.reason === "last") return t("season.last");
     if (params.reason !== "end_offset") return t("prep.save_error");
