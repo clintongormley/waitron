@@ -140,6 +140,19 @@ describe("resolveArchiveChoice", () => {
     ).toBe("backup.stream_not_configured");
   });
 
+  it.each([
+    "",
+    "venues",
+    "archives",
+    `venues/${VENUE}`,
+    `archives/${VENUE}`,
+    `x/archives/${VENUE}/venues`,
+    `x/venues/${VENUE}/archives`,
+  ])("keeps the stream bucket at prefix %j apart from its archives", (prefix) => {
+    const at = { ...stream, bucket: { ...stream.bucket, prefix } };
+    expect(resolveArchiveChoice({ kind: "stream-bucket" }, { ...ctx, stream: at }).kind).toBe("s3");
+  });
+
   it("keeps a stream at the bucket root apart from its archives", () => {
     const rooted = { ...stream, bucket: { ...stream.bucket, prefix: "" } };
     const saved = resolveArchiveChoice({ kind: "stream-bucket" }, { ...ctx, stream: rooted });

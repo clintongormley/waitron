@@ -374,7 +374,6 @@ export function resolveArchiveChoice(
       if (ctx.stream === null) throw new AppError("backup.stream_not_configured", {});
       const bucket = { ...ctx.stream.bucket };
       archiveNamespace(bucket.prefix, ctx.venueId);
-      refuseOverlap(bucket, ctx.venueId, ctx.stream);
       return { kind: "s3", id: BUCKET_ID, bucket, venueId: ctx.venueId };
     }
     case "custom-s3": {
