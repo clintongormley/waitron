@@ -296,6 +296,24 @@ it("disables the chosen printer, says no invoice printer is set now, and reads t
   );
 });
 
+it("puts a printer name holding a replacement pattern into its menu, rename heading and disabled note as written", async () => {
+  const name = "Office $& 2";
+  const { el } = await mount({ rows: [row({ name })] });
+  const menu = q(el, "[data-test=rename-page-printer-pp1]")!.closest("dashboard-row-actions") as
+    (HTMLElement & { label: string }) | null;
+  expect(menu!.label).toBe(t("printers.row_actions").split("{name}").join(name));
+  await click(el, "[data-test=rename-page-printer-pp1]");
+  expect(q(el, "[data-test=rename-page-printer-modal]")!.getAttribute("heading")).toBe(
+    t("printers.invoice_printer_rename_heading").split("{name}").join(name),
+  );
+  await click(el, "[data-test=cancel-rename-page-printer]");
+  await click(el, "[data-test=disable-page-printer-pp1]");
+  await vi.waitFor(() => expect(q(el, "[data-test=invoice-printer-cleared]")).not.toBeNull());
+  expect(text(el, "[data-test=invoice-printer-cleared]")).toBe(
+    t("printers.invoice_printer_cleared").split("{name}").join(name),
+  );
+});
+
 it("disabling a printer that was not chosen says nothing about the choice", async () => {
   const { el, api } = await mount();
   await click(el, "[data-test=disable-page-printer-pp2]");

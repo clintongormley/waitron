@@ -467,9 +467,7 @@ export class PagePrintersPanel extends LitElement {
   }
 
   #actions(row: PagePrinterRow): TemplateResult {
-    return html`<dashboard-row-actions
-      .label=${t("printers.row_actions").replace("{name}", row.name)}
-    >
+    return html`<dashboard-row-actions .label=${fill("printers.row_actions", { name: row.name })}>
       <wt-button data-test=${`rename-page-printer-${row.id}`} @click=${() => this.#openRename(row)}
         >${t("printers.invoice_printer_rename")}</wt-button
       >
@@ -546,7 +544,7 @@ export class PagePrintersPanel extends LitElement {
       heading=${
         target === null
           ? ""
-          : t("printers.invoice_printer_rename_heading").replace("{name}", target.name)
+          : fill("printers.invoice_printer_rename_heading", { name: target.name })
       }
       .open=${target !== null}
       .beforeClose=${this.#beforeRenameClose}
@@ -618,7 +616,7 @@ export class PagePrintersPanel extends LitElement {
           this.cleared === null
             ? nothing
             : html`<p class="note" role="status" data-test="invoice-printer-cleared">
-                ${t("printers.invoice_printer_cleared").replace("{name}", this.cleared)}
+                ${fill("printers.invoice_printer_cleared", { name: this.cleared })}
               </p>`
         }
         ${

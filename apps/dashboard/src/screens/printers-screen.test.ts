@@ -10823,6 +10823,18 @@ describe("office printers in discovery", () => {
     ]);
   });
 
+  it("puts an agent name holding a replacement pattern into the add dialog's description as written", async () => {
+    const agentName = "Cocina $& agent";
+    const { el } = await mountWith([office({ agentName })], {
+      listPagePrinters: vi.fn().mockResolvedValue([]),
+    });
+    q(el, "[data-test='add-page-printer-a1:10.0.0.56:9100']")!.click();
+    await flush(el);
+    expect(text(el, "[data-test=page-printer-add-modal] p")).toBe(
+      `HP LaserJet · 10.0.0.56:631 · ${t("printers.discovered_seen_on").split("{agent}").join(agentName)}`,
+    );
+  });
+
   it("names a new invoice printer in a dialog whose Add waits for a name, then adds it from the row's discovery entry", async () => {
     const listPagePrinters = vi.fn().mockResolvedValue([]);
     const { el, api } = await mountWith([office()], { listPagePrinters });

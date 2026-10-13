@@ -42,7 +42,7 @@ import "../widgets/equipment-label.js";
 import { holderText } from "../i18n/equipment.js";
 import { printerDeleteCopy } from "../widgets/printer-delete-copy.js";
 import { relativeTime } from "../widgets/relative-time.js";
-import { t } from "../i18n/t.js";
+import { fill, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { dashboardPath, leftToBrowser } from "../navigation.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
@@ -1387,7 +1387,7 @@ export class PrintersScreen extends LitElement {
   #openPagePrinterAdd(device: DiscoveredPrinter, entry: PagePrinterEntry): void {
     const parts = [this.#discoveredLabel(device), `${entry.host}:${entry.port}`];
     if (device.agentName)
-      parts.push(t("printers.discovered_seen_on").replace("{agent}", device.agentName));
+      parts.push(fill("printers.discovered_seen_on", { agent: device.agentName }));
     this.addingPagePrinter = { entry, description: parts.join(" · ") };
   }
 
