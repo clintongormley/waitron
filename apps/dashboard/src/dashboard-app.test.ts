@@ -7755,6 +7755,8 @@ describe("mounted public department dialogs", () => {
             seasonWeeks: [],
           })),
         } as never;
+      if (url.startsWith("/management-api/venue-service/opening-hours/year?"))
+        return new Promise(() => {});
       if (url.endsWith("/transfers"))
         return {
           departmentId: "d1",
