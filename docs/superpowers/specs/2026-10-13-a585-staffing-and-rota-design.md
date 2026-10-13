@@ -158,8 +158,12 @@ Staffing paint is independent of opening hours. A date on which the whole venue 
 need staff (a deep clean, a delivery), so the hours never hide or remove staffing paint **(default)**.
 
 Blocks never name a period, so deleting a period (A578's path) never touches staffing. Deleting a
-department, a station, a season or a special day's date deletes its staffing days and blocks with it;
-the delete's confirmation counts them **(default)**.
+department or a station only switches it off (`service-delete.ts:329`, `station-delete.ts:215`), so
+its staffing paint is kept but hidden everywhere, its shifts show under "Not in a slot", and the
+paint comes back if it is switched on again. Deleting a season or a special day's date deletes its
+staffing days and blocks with it; whether the delete's confirmation counts them is open (it needs a
+seam venue-service does not have) **(default: no count)**. (Corrected 2026-10-13 after the plan
+review: an earlier version said departments and stations are deleted.)
 
 Configuration export and import carry `staff_roles`, `person_staff_roles`, `staffing_days` and
 `staffing_blocks`. They do not carry `shift_assignments`, because shifts are not exported today
@@ -283,8 +287,9 @@ work as today.
   day with an empty row; matching with staggered shifts, a shift cut short, a shift outside its role,
   an over shift, and a tie broken the same way twice; a shift past midnight matched on its starting
   day.
-- **Database tests** (`useVenueDb`) for the CHECKs on `staffing_days`, the cascades (department,
-  station, season, special day's date, shift), "Change this week" copying the assignments, the
+- **Database tests** (`useVenueDb`) for the CHECKs on `staffing_days`, the cascades (season,
+  special day's date, shift), a switched-off department or station hiding its paint and moving its
+  shifts to "Not in a slot", "Change this week" copying the assignments, the
   published-only read, and a refused write asserting its domain error code.
 - **Browser tests** for the painter: drawing, resizing, overlapping blocks side by side, "Copy to…",
   Clear and "Follow the season", and the unsaved-changes guard (`*.unsaved.test.ts`). For the Rota
@@ -310,5 +315,16 @@ on the till; a labour-cost estimate; planned versus actual by staff role; shift 
    (changeover 06:00 by default). The rota versions and the labour checks place it on the CALENDAR
    date it starts (`shiftLocalDate`; `publishRoster` attaches by it). A shift starting between
    midnight and the changeover, say Monday 01:00, is matched on Sunday's business day but attached to
-   Monday's week. The plan picks one rule for both and tests that boundary; the default is the
-   business day, so the rota matches the hours **(default)**.
+   Monday's week. **Settled in the plan (Task 6.1):** a rota week holds its roster version's shifts
+   (and unattached shifts by calendar date), and places each on its business day; the Rota view
+   always attaches a shift to the week it was filled in. A version's shift whose business day falls
+   outside the week is listed under "Not in a slot" on the week's first or last day. The labour
+   checks keep grouping by calendar date; that difference is accepted and tested.
+5. **Swaps when a published week is changed.** "Change this week" gives every shift a new id, and a
+   swap request points at the old one. Default: refuse "Change this week" while a swap request on
+   that week is still waiting for a decision; decided swaps stay with the old shifts as history
+   **(default)**.
+6. **The yearly overtime cap** needs a whole year of shifts, so the rota's live warnings do not judge
+   it; the other checks run over the week with a week either side **(default)**.
+7. **Counting staffing paint in a season's or special day's delete confirmation** needs a seam
+   venue-service does not have; not built **(default: no count)**.
