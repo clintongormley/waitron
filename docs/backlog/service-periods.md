@@ -96,6 +96,9 @@ closes by their paint, end-offset and changeover checks read them, and a configu
 carries and checks them; the dashboard shows none of their paint until A506-5.
 A506-3b landed in #1599: the zone editor's closed-times summary reads the current season's week
 and names the season; a zone's single `week` left the Opening hours model.
+A506-5 landed in #NNNN: the Calendar edits special days through the special-day dialog; named
+days, the venue as a holiday source and the four old hours tables (`special_dates`,
+`menu_day_timetables`, `menu_slots`, `zone_closed_times`) are gone.
 
 **Left open by A506-1, for the later parts.**
 - No test yet gives a second department its own paint on the same special day.
