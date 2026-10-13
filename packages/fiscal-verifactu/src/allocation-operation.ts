@@ -78,6 +78,7 @@ export async function readModuleAllocationSeries(
 
 // The host must collect outside confirmations and enrolled trust independently of submitted input.
 export interface AllocationOperationEvidence {
+  readonly allocationId?: string;
   readonly authority: AllocationContext["authority"];
   readonly priorActivation: AllocationContext["priorActivation"];
   readonly incidentEvidence: string;
@@ -204,6 +205,14 @@ export async function activateModuleAllocation(
   };
   const input = snapshotAllocationInput(binding, operation.input);
   const heldEvidence = snapshotAllocationEvidence(evidence);
+  if (
+    heldEvidence.allocationId !== undefined &&
+    (typeof input.allocation !== "object" ||
+      input.allocation === null ||
+      !Object.hasOwn(input.allocation, "allocationId") ||
+      (input.allocation as Record<string, unknown>).allocationId !== heldEvidence.allocationId)
+  )
+    return refuse("reservation_mismatch");
   if (
     binding.action === "promote" &&
     (typeof input.reservationEventId !== "string" || input.reservationEventId.length === 0)

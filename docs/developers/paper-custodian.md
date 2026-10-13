@@ -50,6 +50,61 @@ The verifier takes this independently enrolled key separately from the submitted
 inside a reservation cannot enrol itself. You also confirm that you consulted the current register
 and marked this entry consumed. A valid signature cannot replace either confirmation.
 
+### Configured host source on the Task 4 branch
+
+The internal `createPaperAllocationSource` accepts a host-selected custodian public-file path,
+a current-confirmation file path and the fingerprint you compared with the outside register.
+The custodian file uses the command's public output above. The source reads both files on each
+attempt and refuses missing or malformed files and files larger than 64 KiB. An altered key requires a new
+independent fingerprint comparison. No default file or source is selected.
+
+Prepare the confirmation from your consultation of the current outside master for this exact
+operation. Its format is:
+
+```json
+{
+  "version": 1,
+  "allocationId": "paper-42",
+  "binding": {
+    "module": "fiscal-verifactu",
+    "action": "restore",
+    "eventId": "restore-1",
+    "sourceId": "archive-2026-10-13",
+    "targetNodeId": "replacement-node"
+  },
+  "operatorId": {
+    "kind": "recovery-key",
+    "nodeId": "replacement-node",
+    "eventId": "restore-1"
+  },
+  "priorActivation": "none",
+  "incidentEvidence": "master-register/restore-1",
+  "requiredBases": [
+    { "code": "A", "purpose": "standard" },
+    { "code": "FF", "purpose": "full" },
+    { "code": "R", "purpose": "rectificative" }
+  ],
+  "recipientVenueId": "venue-madrid",
+  "generationId": "generation-1",
+  "blockId": "block-1",
+  "currentRegisterConfirmed": true,
+  "consumptionConfirmed": true,
+  "currentEntryState": "consumed-for-event"
+}
+```
+
+The labels in this example are synthetic. Use the authenticated operation's event, source and
+node, the consumed allocation's exact ID and the current register's scope. An administrator-led
+operation uses the authenticated person's ID instead of the recovery-key object. Mark an uncertain
+previous attempt as `uncertain`; a confirmed committed retry uses `committed` and must retain
+the original signed allocation and approval.
+
+This file records your statement; copying or rereading it does not establish that the outside
+master is current. Consult that master again before another attempt. Keep both this consultation
+and the compared fingerprint separate from the submitted allocation and a restored recovery pack.
+The source is qualified internally on the Task 4 branch; public command selection, the fiscal
+descriptor and the complete setup/restore/takeover journey remain unfinished.
+
 ## Sign a reserved block
 
 Your `block.json` contains the frozen scope and complete identity set. For example:

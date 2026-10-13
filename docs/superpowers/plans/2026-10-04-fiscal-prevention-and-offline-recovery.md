@@ -410,6 +410,34 @@ Next connect the production collectors and fiscal seats together with SIF text t
 retirement and every host consumer. Then regenerate on current main, qualify the populated upgrade
 and complete both full reviews, hook and CI before publication. Task 4 remains incomplete.
 
+**2026-10-13 configured paper-source checkpoint:** `allocation-paper-source.ts` reads the
+custodian command's public-file format against a separately supplied, independently confirmed
+fingerprint. It reads a separate current-event confirmation, binds the operator and full operation
+scope, and forwards its exact allocation ID for comparison at activation. Both files are reread
+on each source call; reads are bounded to 64 KiB. Both paths and the compared fingerprint are
+supplied as separate host configuration; the source does not inspect the submitted allocation.
+No source is selected by default.
+
+The confirmation records an operator's consultation of the outside master. Reusing an old file
+does not establish that the register remains current. Public host selection and the Task 6 manual
+journey must keep that consultation separate from the signed allocation and any restored pack.
+The [custodian procedure](../../developers/paper-custodian.md#configured-host-source-on-the-task-4-branch)
+records the internal format and this limit.
+
+The new source suite covers the actual custodian command's public output, complete signed
+activation, separate fingerprints, replaced keys, request/configuration mutation, missing and
+malformed files, exact read-size boundaries, current-entry states, uncertain prior attempts,
+committed replay without resetting invoice counters and caller rollback without changing the
+outside confirmation. A server integration joins real recovery-key authentication, configured
+paper files and activation, and refuses a key replaced during collection. Lane E retains executed
+checks and installed deletion controls under `receipts/w41s4-source-*`.
+
+This source and its allocation-ID comparison are internal. No public host, fiscal descriptor,
+numeric SIF/counter path, shipped migration or existing fiscal assertion is changed. Finish the
+coupled production seats and all consumers, regenerate on current main, rerun the populated
+upgrade and fiscal qualifications, and complete both whole-branch reviews, hook and CI before
+publication. Task 4 remains incomplete.
+
 ## Task 5: select active series inside issuance transactions
 
 **Modify:** `apps/server/src/till-config.ts`, `trading-config.ts`, `till-sale.ts`,
