@@ -1968,7 +1968,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   [Detail](backlog/till.md#a566-an-open-order-with-nothing-sent-yet-does-not-hold-a-split-group-back-at-a-reset)
 
 - **A567. A saved-plan edit to a waiting joined table can shift where its tables land
-  (2026-10-13).** Accepted for now in #1604; Join again (#1608) lays out from the same slots.
+  (2026-10-13).** Accepted for now in #1604; Reset table (A579) lays out from the same slots.
   [Detail](backlog/till.md#a567-a-saved-plan-edit-to-a-waiting-joined-table-can-shift-where-its-tables-land)
 
 - **A568. A part placed on today's map while its joined table waited keeps its place
@@ -1980,24 +1980,20 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   [Detail](backlog/till.md#a569-the-floor-plan-editors-made-of-picker-and-two-wraps)
 
 - **A570. A table split off a joined table whose removal was refused cannot be moved
-  (2026-10-13).** Refused Back, Take off and Join again. Left open by A503 part 4 (#1608).
+  (2026-10-13).** Refused Back, Take off and Reset table. Left open by A503 part 4 (#1608).
   [Detail](backlog/till.md#a570-a-table-split-off-a-joined-table-whose-removal-was-refused-cannot-be-moved)
 
-- **A571. A joined table that came apart cannot reach Join again when its free tables are off the
+- **A571. A joined table that came apart cannot reach Reset table when its free tables are off the
   map (2026-10-13).** The reset still puts it back. Left open by #1608.
-  [Detail](backlog/till.md#a571-a-joined-table-that-came-apart-cannot-reach-join-again-when-its-free-tables-are-off-the-map)
+  [Detail](backlog/till.md#a571-a-joined-table-that-came-apart-cannot-reach-reset-table-when-its-free-tables-are-off-the-map)
 
-- **A572. Join again counts a joined table whole while a table added to it still has guests
-  (2026-10-13).** Full saved seats, none asked. Left open by #1608.
-  [Detail](backlog/till.md#a572-join-again-counts-a-joined-table-whole-while-a-table-added-to-it-still-has-guests)
+- **A572. Reset table counts a joined table whole while a table added to it still has guests
+  (2026-10-13).** Full saved seats, none asked. Left open by #1608, kept by A579.
+  [Detail](backlog/till.md#a572-reset-table-counts-a-joined-table-whole-while-a-table-added-to-it-still-has-guests)
 
-- **A574. `joined_table.parts_split_off` could say what to do (2026-10-13).** "Join its tables
-  again first"; the sentence is pinned by a test.
-  [Detail](backlog/till.md#a574-joined_tableparts_split_off-could-say-what-to-do)
-
-- **A575. Join again: three things seen in #1608's look (2026-10-13).** A Spanish wrap, where the
-  stays-apart lines sit, and Take off on the joined table itself.
-  [Detail](backlog/till.md#a575-join-again-three-things-seen-in-1608s-look)
+- **A575. Reset table's window: two things seen in #1608's look (2026-10-13).** A Spanish wrap,
+  and where the stays-apart lines sit.
+  [Detail](backlog/till.md#a575-reset-tables-window-two-things-seen-in-1608s-look)
 
 - **A550. Making a booked table part of a joined table is not refused (2026-10-12).** The floor
   plan editor's save refuses deleting a booked table (`table.booked`) but not making one a part; the

@@ -234,6 +234,8 @@ undone at the next reset anyway.
 > back into the joined table. A table split off offers neither Back to its saved place nor Take off
 > for today, and the server refuses both on it (`table.split_off`). Join again ends the split for
 > the tables it takes back.
+>
+> Superseded 2026-10-13 by A579 part 4b: Join again is gone; Reset table (below) is offered in its place.
 
 > Added 2026-10-13 by A579 part 3b ([design](2026-10-13-a579-flattened-joined-tables-design.md)):
 > Split tables… also splits tables off a group (the server does; the till offers it from part 3c).
@@ -256,6 +258,12 @@ undone at the next reset anyway.
 > place (one saved with no place goes where Join again would put it), refused when another table stands in that place (`table.place_taken`, owner question 5) or
 > when the tables it needs are in a group with guests (`joined_table.tables_in_group`). The till
 > offers it from part 4b, in place of Join again.
+
+> Changed 2026-10-13 by A579 part 4b: the till offers **Reset table** where it offered Join again, and
+> also on a free table split off a joined table whose other split-off tables are in a group with guests,
+> where the server refuses it (`joined_table.tables_in_group`); the till's sentence names those tables,
+> and their group when they are all in one. When every table comes back it is one tap; with some apart, its window
+> names them and asks the seats.
 
 ### 6.3 Reset
 
@@ -377,6 +385,9 @@ on every screen. The commit adding them states this reason.
 
 > Added 2026-10-13 by A579 part 4a: and `POST /api/tables/:id/today/reset` (Reset table), with the
 > same checks; Join again's route stays until part 4b.
+
+> Changed 2026-10-13 by A579 part 4b: `POST /api/tables/:id/today/join-again` is removed; Reset table
+> does its work.
 
 > Added 2026-10-13 by A579 part 2a: the table routes and the zone reset answer
 > `200 { zoneId, revision }` instead of 204, and the party join, move and split-table answers gain
