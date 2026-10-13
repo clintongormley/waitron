@@ -195,7 +195,7 @@ export function planParts(bytes: number): { partBytes: number; parts: number } {
 const READ_CHUNK_BYTES = 64 * 1024;
 
 /** A fresh read of `length` bytes at `start`, leaving the handle open for the next range. */
-function rangeOf(handle: FileHandle, start: number, length: number): Readable {
+function rangeOf(handle: FileHandle, key: string, start: number, length: number): Readable {
   const end = start + length;
   let position = start;
   return new Readable({
@@ -210,7 +210,7 @@ function rangeOf(handle: FileHandle, start: number, length: number): Readable {
         .read(Buffer.allocUnsafe(want), 0, want, position)
         .then(({ bytesRead, buffer }) => {
           // Sending fewer bytes than the stated length would leave the request waiting.
-          if (bytesRead === 0) throw new Error("the file is shorter than when its upload began");
+          if (bytesRead === 0) throw new AppError("backup.destination_file_shrank", { key });
           position += bytesRead;
           this.push(buffer.subarray(0, bytesRead));
         })
@@ -251,7 +251,7 @@ export function createS3FileStore(
   ): Promise<T> {
     for (let attempt = 1; ; attempt += 1) {
       if (signal.aborted) throw cancelled(operation, key);
-      const body = rangeOf(range.handle, range.start, range.length);
+      const body = rangeOf(range.handle, key, range.start, range.length);
       // Without this, a request whose body failed to read was still unsettled 8 s later in the
       // shrinking-file case of `s3-file-store.upload.test.ts`, so a read error stops the request.
       const readFailed = new AbortController();

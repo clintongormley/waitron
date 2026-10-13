@@ -502,9 +502,10 @@ describe("a file over 8 MiB", () => {
       },
     });
     ({ path } = await patterned(await scratch(), 20 * MiB));
-    await expect(storeFor(bucket).putFile("a.enc", path, live())).rejects.toThrow(
-      "the file is shorter than when its upload began",
-    );
+    expect(await outcome(storeFor(bucket).putFile("a.enc", path, live()))).toEqual({
+      code: "backup.destination_file_shrank",
+      params: { key: "a.enc" },
+    });
     expect(kinds(bucket)).toEqual(["create", "part", "part", "abort"]);
     expect(bucket.record.completedIds).toEqual([]);
     expect(bucket.record.abortedIds).toEqual([bucket.record.createdIds[0]]);

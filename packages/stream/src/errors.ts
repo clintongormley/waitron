@@ -84,6 +84,10 @@ declare module "@waitron/shared" {
      * holds a control character or an empty, `.` or `..` segment; or a listing named a key outside
      * the prefix asked for (`listedKey`). Never carries the key. */
     "backup.destination_key_invalid": { field: "key" | "prefix" | "listedKey" };
+    /** The file being uploaded to `key` ended before the length it had when its upload began, so
+     * the upload stopped rather than send a part shorter than the length it stated. Never carries the
+     * file's path. */
+    "backup.destination_file_shrank": { key: string };
     /** A file needs more than 10,000 parts of the largest part size, refused before any request. */
     "backup.destination_too_large": { bytes: number; maxBytes: number };
   }
