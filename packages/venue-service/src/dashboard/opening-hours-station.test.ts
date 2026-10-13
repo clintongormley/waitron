@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { page } from "vitest/browser";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { applyTokens } from "@waitron/ui";
 import { OpeningHoursApi } from "./opening-hours-client.js";
@@ -158,55 +157,6 @@ it("a bookmarked switched-off station shows its sentence instead of a grid", asy
   await expect.poll(() => stationView(screen)?.shadowRoot?.textContent).toContain("Switched off");
   expect(grid(screen)).toBeNull();
 });
-it("changing the real week reloads counted ranges and ignores the departed week's late answer", async () => {
-  let resolveFirst!: (answer: unknown) => void;
-  const { screen, calls } = await mount("bar", (path) =>
-    path.includes("week=normal")
-      ? { always: null, days: [] }
-      : path.includes("from=2026-10-12")
-        ? new Promise((resolve) => {
-            resolveFirst = resolve;
-          })
-        : {
-            always: null,
-            days: [
-              {
-                date: "2026-10-19",
-                departments: [
-                  {
-                    departmentId: "dining",
-                    ranges: [{ periodId: "lunch", startsAt: "13:00", endsAt: "15:00" }],
-                  },
-                ],
-              },
-            ],
-          },
-  );
-  const toggle = screen.shadowRoot!.querySelector("wt-switch")!;
-  toggle.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { checked: true }, bubbles: true, composed: true }),
-  );
-  await expect.poll(() => resolveFirst).toBeDefined();
-  await page
-    .elementLocator(screen.shadowRoot!.querySelector<HTMLElement>('[data-test="next-week"]')!)
-    .click();
-  await expect
-    .poll(() => grid(screen)?.columns[0]?.slots)
-    .toEqual([{ periodId: "lunch", startsAt: "13:00", endsAt: "15:00" }]);
-  resolveFirst({ always: null, days: [] });
-  await screen.updateComplete;
-  expect(grid(screen)!.columns[0]!.slots).toEqual([
-    { periodId: "lunch", startsAt: "13:00", endsAt: "15:00" },
-  ]);
-  expect(
-    calls.filter(([path]) => String(path).includes("service-times")).map(([path]) => path),
-  ).toEqual([
-    "/management-api/venue-service/stations/bar/service-times?from=2026-10-12&to=2026-10-18&week=normal",
-    "/management-api/venue-service/stations/bar/service-times?from=2026-10-12&to=2026-10-18",
-    "/management-api/venue-service/stations/bar/service-times?from=2026-10-19&to=2026-10-25",
-  ]);
-});
-
 it("reloads the same station view when reattached without changing its properties", async () => {
   let startsAt = "12:00";
   const { screen } = await mount("bar", () => ({

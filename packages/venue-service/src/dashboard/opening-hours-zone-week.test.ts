@@ -222,26 +222,6 @@ it("read-only and departed controls cannot stage or submit closed times", async 
   await drag(week);
   expect(writes).toEqual([]);
 });
-it("replaces the date placeholder with a real week whose plain dates cannot submit a normal-week change", async () => {
-  vi.setSystemTime(new Date("2026-10-12T12:00:00Z"));
-  const writes: unknown[][] = [];
-  const oldWeek = await mount(async (...args) => {
-    writes.push(args);
-  });
-  emit(screen.shadowRoot!.querySelector("[name=realWeek]")!, "wt-change", { checked: true });
-  await expect.poll(() => location.search).toBe("?week=2026-10-12");
-  const week = screen.shadowRoot!.querySelector("opening-hours-zone-week")!;
-  await week.updateComplete;
-  expect(screen.shadowRoot!.querySelector("[data-test=zone-placeholder]")).toBeNull();
-  expect(oldWeek.isConnected).toBe(false);
-  expect(grid(week).columns.every((column) => !column.editable)).toBe(true);
-  emit(grid(week), "grid-range-select", { columnKey: "5", startsAt: "23:30", endsAt: "06:00" });
-  await week.updateComplete;
-  expect(week.shadowRoot!.querySelector("[data-test=save-week]")).toBeNull();
-  expect(week.shadowRoot!.querySelector("[data-test=save-date]")).toBeNull();
-  expect(writes).toEqual([]);
-});
-
 it("unchanged and busy host clicks cannot send duplicate writes", async () => {
   let release!: () => void;
   const writes: unknown[] = [];

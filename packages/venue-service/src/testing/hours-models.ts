@@ -6,7 +6,7 @@ const lunchWeek = [
   { weekday: 2, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] },
 ];
 const terraceWeek = [{ weekday: 2, ranges: [{ startsAt: "22:00", endsAt: "06:00" }] }];
-export function realWeekModel(): OpeningHoursModel {
+export function terraceWeekModel(): OpeningHoursModel {
   return {
     businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
     clockRevision: 0,

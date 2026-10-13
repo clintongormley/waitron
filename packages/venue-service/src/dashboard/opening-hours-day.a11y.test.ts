@@ -1,5 +1,5 @@
 import { everyDateSpecial } from "../testing/special-day-fixture.js";
-import { namedWeekModel } from "../testing/real-week-model.js";
+import { namedWeekModel } from "../testing/hours-models.js";
 import { withOpeningStations } from "../testing/opening-hours-stations-request.js";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";

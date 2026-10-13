@@ -23,19 +23,8 @@ describe.each(["en", "es"] as const)("Station week %s", (locale) => {
       await page.viewport(width, 900);
       expect(window.innerWidth).toBe(width);
       const wrapper = await mountThemed("<div></div>", theme);
-      for (const state of [
-        "normal",
-        "dated",
-        "default",
-        "switched_off",
-        "empty",
-        "error",
-      ] as const) {
-        history.replaceState(
-          null,
-          "",
-          `/manage/opening-hours/view/week?station=bar${state === "dated" ? "&week=2026-10-12" : ""}`,
-        );
+      for (const state of ["normal", "default", "switched_off", "empty", "error"] as const) {
+        history.replaceState(null, "", "/manage/opening-hours/view/week?station=bar");
         const screen = document.createElement(
           "dashboard-opening-hours-screen",
         ) as OpeningHoursScreen;
@@ -129,7 +118,7 @@ describe.each(["en", "es"] as const)("Station week %s", (locale) => {
           )
           .toBeGreaterThan(0);
         const station = screen.shadowRoot!.querySelector("opening-hours-station")!;
-        if (["normal", "dated", "empty"].includes(state)) {
+        if (["normal", "empty"].includes(state)) {
           await expect
             .poll(() => station.shadowRoot!.querySelector("service-grid")?.columns.length)
             .toBe(14);

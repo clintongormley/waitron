@@ -1771,13 +1771,12 @@ it("an opened period keeps its revision through a passive replacement and submit
   await expect.poll(() => editor.refusal?.code).toBe("hours.clock_changed");
 });
 it("pre-fills the holiday's name when the sender names only the date's own holidays, as the Day view does", async () => {
-  const { namedWeekModel } = await import("../testing/real-week-model.js");
   history.replaceState(null, "", "/manage/opening-hours/view/year");
   const el = await mount((async (path, method) => {
     if (method !== "GET") throw new Error(`unexpected ${method} ${path}`);
     if (path.endsWith("/special-days")) return [];
     if (path.includes("/opening-hours/year?")) return yearRead(2026);
-    return structuredClone(path.includes("named-days?") ? namedWeekModel() : model());
+    return structuredClone(model());
   }) as DashboardRequest);
   const child = el.shadowRoot!.querySelector("opening-hours-year")!;
   child.dispatchEvent(
@@ -1808,11 +1807,9 @@ it("pre-fills the holiday's name when the sender names only the date's own holid
   ).toBe("Town feast");
 });
 it("a special-day editor opened from the Year keeps its revision through a passive replacement", async () => {
-  const { namedWeekModel } = await import("../testing/real-week-model.js");
   const data = model();
   data.clockRevision = 7;
-  const calendar = namedWeekModel();
-  calendar.clockRevision = 7;
+  const calendar = { clockRevision: 7 };
   const writes: unknown[] = [];
   let openingReads = 0;
   history.replaceState(null, "", "/manage/opening-hours/view/year");
@@ -1822,7 +1819,7 @@ it("a special-day editor opened from the Year keeps its revision through a passi
       if (path.endsWith("/special-days")) return [];
       if (path.includes("/opening-hours/year?"))
         return yearRead(2026, [], { clockRevision: calendar.clockRevision });
-      return structuredClone(path.includes("named-days?") ? calendar : data);
+      return structuredClone(data);
     }
     writes.push(body);
     throw { code: "hours.clock_changed" };
@@ -2587,13 +2584,12 @@ describe("Month view", () => {
 });
 
 describe("no Day tab and no real week", () => {
-  it("offers no Real week switch, ignores a week in the address and passes the Week no week start", async () => {
+  it("offers no Real week switch and ignores a week in the address", async () => {
     history.replaceState(null, "", "/manage/opening-hours/view/week?week=2026-10-12");
     const el = await mount();
     await expect.poll(() => el.shadowRoot!.querySelector("opening-hours-week")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("[name=realWeek]")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=previous-week]")).toBeNull();
-    expect(el.shadowRoot!.querySelector("opening-hours-week")!.weekStart).toBe("");
     expect(location.search).toBe("?week=2026-10-12");
   });
 

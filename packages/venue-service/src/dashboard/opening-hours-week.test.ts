@@ -980,10 +980,4 @@ describe("the season picker", () => {
       },
     });
   });
-  it("is not offered in the real week, which does not follow the address's season", async () => {
-    history.replaceState(null, "", "/manage/opening-hours/view/week/season/summer?week=2026-10-12");
-    await mount(undefined, false, seasonal());
-    expect(seasonPicker()).toBeNull();
-    expect(editor().seasonId).toBe("winter");
-  });
 });
