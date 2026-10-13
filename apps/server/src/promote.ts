@@ -24,6 +24,7 @@ import { eq } from "drizzle-orm";
 import {
   moduleOperationFor,
   snapshotModuleOperations,
+  withPreparedModuleOperations,
   type ModuleOperations,
   type ProvisionedNode,
   type WaitronModule,
@@ -219,7 +220,13 @@ export async function promoteMirrorToPrimary(
   };
   const seriesId =
     deps.withModuleOperations === undefined
-      ? await withTransaction(deps.db, (tx) => run(tx))
+      ? await withPreparedModuleOperations(
+          deps.modules ?? [],
+          supplied,
+          node.nodeId,
+          "promote",
+          (ready) => withTransaction(deps.db, (tx) => run(tx, ready)),
+        )
       : await deps.withModuleOperations({ db: deps.db, node }, run);
 
   await refreshDeploymentHolders(deps.db, deps.nodeId, deps.holders);

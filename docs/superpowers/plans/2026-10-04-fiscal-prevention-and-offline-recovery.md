@@ -793,3 +793,19 @@ The configured production sources and authenticated fiscal seats, coupled text-S
 retirement and all consumer replacements remain the next Task 4 work. Current-main schema
 regeneration, populated upgrade, Cloud operator-binding synchronisation, two full reviews,
 the normal push hook and current-head CI still precede publication.
+
+**2026-10-13 host preparation checkpoint:** the module contract now has a scoped preparation seat.
+The generic setup, restore and promotion callers can collect before opening their write transaction.
+An explicit public paper-source factory joins the enrolled public key and current-event files to an
+attempt-local fiscal token. A saved token cannot recreate the collected source or its authority.
+The real-key runner verifies before collection and rechecks the verifier before the host writes.
+Initial authority names the planned account and target; the transaction requires the same newly
+created active administrator. Known or concurrently created administrators refuse initial authority.
+Signed setup exercises the complete series set and committed retry; real-key restore exercises the
+generic hook transaction and key replacement. Restore rechecks each hook's authority and all retained
+hook authorities before commit, so expiration during a later hook rolls earlier writes back.
+
+The production composition still selects no collector and retains the old fiscal contributions.
+Finish the configured entry points, seed/restore/dormant seats and complete text/counter consumer
+transition before regeneration, populated upgrade, Cloud binding sync, both full reviews and the
+normal hook/current-head CI. This checkpoint does not complete Task 4 and must not be published.

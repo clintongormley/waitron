@@ -127,6 +127,69 @@ function operations(authority: ModuleOperationInput["authority"], scope = bindin
   return new Map([[scope.module, { input, binding: scope, authority }]]);
 }
 
+it("collects the standby's current outside input before the promotion transaction", async () => {
+  const scope = { ...binding, action: "promote" };
+  const deps = await mirror(async (tx, node, operation) => {
+    expect(operation?.input).toEqual({ collected: "current-standby" });
+    expect((await tx.select().from(locations))[0]?.name).toBe("outside-confirmed");
+    await activateSeries(tx, node);
+  });
+  const prepared = {
+    ...deps.modules[0]!,
+    operations: {
+      async prepare<T>(
+        operation: ModuleOperationInput,
+        run: (ready: ModuleOperationInput) => Promise<T>,
+      ) {
+        await withTransaction(suite.db, (tx) =>
+          tx.update(locations).set({ name: "outside-confirmed" }),
+        );
+        return run({ ...operation, input: { collected: "current-standby" } });
+      },
+    },
+  };
+  const result = await withOperationAuthority(scope, "admin", (authority) =>
+    promoteMirrorToPrimary(
+      { ...deps, modules: [prepared], moduleOperations: operations(authority, scope) },
+      { oldNodeNeutralised: true },
+    ),
+  );
+  expect(result.alreadyPrimary).toBe(false);
+  expect(await readDeploymentMode(suite.db, TARGET)).toBe("primary");
+  expect(await readSingletonRole(suite.db, TARGET)).toBe("primary");
+  expect((await suite.db.select().from(invoiceSeries)).map((row) => row.purpose).sort()).toEqual([
+    "full",
+    "rectificative",
+    "standard",
+  ]);
+});
+
+it("does not promote or open series after the standby's outside source refuses", async () => {
+  const scope = { ...binding, action: "promote" };
+  const deps = await mirror(async (tx, node) => {
+    await activateSeries(tx, node);
+  });
+  const prepared = {
+    ...deps.modules[0]!,
+    operations: {
+      async prepare() {
+        throw new Error("current-register-refused");
+      },
+    },
+  };
+  await withOperationAuthority(scope, "admin", async (authority) => {
+    await expect(
+      promoteMirrorToPrimary(
+        { ...deps, modules: [prepared], moduleOperations: operations(authority, scope) },
+        { oldNodeNeutralised: true },
+      ),
+    ).rejects.toThrow("current-register-refused");
+  });
+  expect(await readDeploymentMode(suite.db, TARGET)).toBe("mirror");
+  expect(await readSingletonRole(suite.db, TARGET)).toBe("secondary");
+  expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
+});
+
 async function mirror(activate: StandbyProvisioning["activate"]) {
   await suite.db.insert(nodes).values({ id: TARGET, locationId: LOCATION, name: "Standby" });
   await setDeploymentMode(suite.db, TARGET, "mirror");

@@ -707,3 +707,21 @@ committed allocation against requested bases and current venue/SIF/series state.
 The production fiscal seed does not declare this contribution yet. Its activation, independent
 outside evidence and every host consumer still belong to the coupled Task 4 transition above.
 No production continuity or writer-exclusion result is established by this checkpoint.
+
+### W41s-4 host preparation qualification, 2026-10-13
+
+The branch adds a generic module preparation seat and an explicit public paper-source factory.
+Setup, restore and promotion can collect before their write transaction. The fiscal seat carries
+an attempt-local token whose source, binding and authenticated operator cannot be reconstructed
+from a saved marker. Initial setup checks the same newly created active administrator inside its
+transaction; known administrators and a competing creation refuse that initial authority. A
+committed setup retry returns its retained series without collecting again.
+
+Signed initial-setup and actual node-key restore tests exercise all three purposes, account-free
+recovery and rollback. Restore also rechecks each module after its hook and before commit, including
+an earlier module whose authority expires during a later hook. These tests establish the generic
+hosts and an explicitly supplied descriptor, not the default production composition.
+
+Production configuration, fiscal seed/restore/standby seats, text SIF/counter retirement and all
+remaining consumers, current-main regeneration/populated upgrade and the whole-branch gates remain
+open. No independent current-register or remote-writer exclusion result is established.

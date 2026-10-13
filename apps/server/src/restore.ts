@@ -41,6 +41,7 @@ import { orderedMigrationSets, type ProvisionedNode, type WaitronModule } from "
 import {
   moduleOperationFor,
   snapshotModuleOperations,
+  withPreparedModuleOperations,
   type ModuleOperations,
 } from "@waitron/module";
 import { codeOf } from "@waitron/server-kit";
@@ -657,6 +658,7 @@ export async function runRestoreHooks(args: {
       try {
         const operation = moduleOperationFor(operations, m.name, node.nodeId, "restore");
         outcome = operation === undefined ? await hook(tx, node) : await hook(tx, node, operation);
+        moduleOperationFor(operations, m.name, node.nodeId, "restore");
       } catch (err) {
         throw wrapHookError(m.name, err);
       }
@@ -674,20 +676,36 @@ export async function runRestoreHooks(args: {
     // `core` owns `invoice_series`: a failure here with no module returning series is the node's own
     // series contract failing, so that is the module named.
     const owner = replacement?.module ?? "core";
+    let seriesId: string;
     try {
       if (replacement !== undefined) {
         await retireNodeSeriesTx(tx, node.nodeId);
         await insertNodeSeriesTx(tx, node.nodeId, replacement.series);
       }
-      const seriesId = await readStandardSeriesIdTx(tx, node.nodeId);
+      seriesId = await readStandardSeriesIdTx(tx, node.nodeId);
       await readLiveSeriesIdTx(tx, node.nodeId, "full");
-      return { seriesId, reports };
     } catch (err) {
       throw wrapHookError(owner, err);
     }
+    for (const m of args.modules) {
+      if (m.backup?.restore !== undefined) {
+        try {
+          moduleOperationFor(operations, m.name, node.nodeId, "restore");
+        } catch (error) {
+          throw wrapHookError(m.name, error);
+        }
+      }
+    }
+    return { seriesId, reports };
   };
   return args.withModuleOperations === undefined
-    ? withTransaction(args.db, (tx) => run(tx))
+    ? withPreparedModuleOperations(
+        args.modules,
+        suppliedOperations,
+        node.nodeId,
+        "restore",
+        (ready) => withTransaction(args.db, (tx) => run(tx, ready)),
+      )
     : args.withModuleOperations({ db: args.db, node }, run);
 }
 

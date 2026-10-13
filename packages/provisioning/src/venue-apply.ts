@@ -24,7 +24,13 @@ import {
 } from "@waitron/shared";
 import type { CapabilityFlag, FormFactor } from "@waitron/layouts";
 import type { SeedReport, WaitronModule } from "@waitron/module";
-import { withOperationAuthority } from "@waitron/module";
+import {
+  moduleOperationFor,
+  readOperationAuthority,
+  withOperationAuthority,
+  withPreparedModuleOperations,
+  type ModuleOperations,
+} from "@waitron/module";
 import type { VenueAction } from "./venue-plan.js";
 import { normalizeDayCutover } from "./venue-plan.js";
 import "./errors.js";
@@ -58,18 +64,12 @@ export interface VenueResult {
   seeded: readonly SeedReport[];
 }
 
-/**
- * Runs one plan as ONE transaction, so no partial venue is ever left behind.
- *
- * A database contains one taxpayer and one operational venue. Repeating the same plan returns the
- * existing location, node and series without rerunning module seeds. A different location is
- * refused; so is a different taxpayer. Two overlapping plans cannot interleave: `withTransaction`
- * holds the file's write lock for the whole plan.
- */
 export async function applyVenue(
-  actions: readonly VenueAction[],
+  suppliedActions: readonly VenueAction[],
   deps: VenueApplyDeps,
 ): Promise<VenueResult> {
+  const actions = structuredClone(suppliedActions);
+  const modules = [...deps.modules];
   const ensure = actions.find((a) => a.kind === "ensure-tenant");
   if (ensure === undefined || ensure.kind !== "ensure-tenant") {
     throw new Error("applyVenue: plan is missing ensure-tenant");
@@ -77,14 +77,13 @@ export async function applyVenue(
   const inputs = new Map(
     [...(deps.moduleInputs ?? [])].map(([name, input]) => [name, { ...input }]),
   );
-  const initialNodeId =
-    deps.initialNodeId === undefined ? undefined : brandNodeId(deps.initialNodeId);
-  const initialAdministratorId =
-    deps.initialAdministratorId === undefined
-      ? undefined
-      : normaliseUuid(deps.initialAdministratorId, "PersonId");
+  const initialNodeId = brandNodeId(deps.initialNodeId ?? randomUUID());
+  const initialAdministratorId = normaliseUuid(
+    deps.initialAdministratorId ?? randomUUID(),
+    "PersonId",
+  );
   const filingModule = actions.find((action) => action.kind === "create-node")?.filingModule;
-  const seriesOwners = deps.modules.filter((module) => module.provisioning?.seed?.series);
+  const seriesOwners = modules.filter((module) => module.provisioning?.seed?.series);
   if (seriesOwners.length > 1 || seriesOwners.some((module) => module.fiscal?.id !== filingModule))
     throw new Error("applyVenue: only the filing module may own initial series");
   const seriesOwner = seriesOwners[0];
@@ -98,7 +97,7 @@ export async function applyVenue(
     .filter((action) => action.kind === "create-series")
     .map(({ code, purpose }) => ({ code, purpose }));
 
-  return withTransaction(deps.db, async (tx) => {
+  const run = async (tx: Transaction, prepared: ModuleOperations): Promise<VenueResult> => {
     let locationId = "";
     let nodeId = "";
     let reusingVenue = false;
@@ -137,11 +136,6 @@ export async function applyVenue(
           break;
         }
         case "seed-admin": {
-          // The admin belongs to the taxpayer, not to a venue, so a re-run must not add a second
-          // one. Read-then-insert is safe because the write lock is held for the whole plan. The
-          // insert goes through the table definition because `persons.id` and
-          // `persons.created_at` are `$defaultFn` generators that only the insert builder runs.
-          // `planVenue` refuses an unsupported `locale`; a hand-built plan's is not screened here.
           const seededAdmin = await tx
             .select({ id: persons.id })
             .from(persons)
@@ -287,7 +281,7 @@ export async function applyVenue(
             nodeId = existing[0].id;
             break;
           }
-          nodeId = initialNodeId ?? randomUUID();
+          nodeId = initialNodeId;
           await tx.insert(nodes).values({
             id: nodeId,
             locationId,
@@ -298,7 +292,7 @@ export async function applyVenue(
           break;
         case "seed-module": {
           if (nodeId === "") throw new Error("applyVenue: seed-module before create-node");
-          const seed = deps.modules.find((m) => m.name === action.module)?.provisioning?.seed;
+          const seed = modules.find((m) => m.name === action.module)?.provisioning?.seed;
           if (seed === undefined) {
             throw new Error(
               `applyVenue: seed-module names ${action.module}, which is not in deps.modules or declares no seed`,
@@ -330,9 +324,20 @@ export async function applyVenue(
               sourceId: input.sourceId,
               targetNodeId: nodeId,
             });
-            report = await withOperationAuthority(binding, operator.id, (authority) =>
-              seed.run(tx, node, Object.freeze({ input: input.input, binding, authority })),
-            );
+            const collected = moduleOperationFor(prepared, action.module, nodeId, "setup");
+            if (collected === undefined) {
+              report = await withOperationAuthority(binding, operator.id, (authority) =>
+                seed.run(tx, node, Object.freeze({ input: input.input, binding, authority })),
+              );
+            } else {
+              if (
+                readOperationAuthority(collected.authority, collected.binding)?.operatorId !==
+                operator.id
+              )
+                throw new AppError("provisioning.initial_operator_required", {});
+              report = await seed.run(tx, node, collected);
+              moduleOperationFor(prepared, action.module, nodeId, "setup");
+            }
           }
           seeded.push({ module: action.module, report });
           break;
@@ -388,7 +393,11 @@ export async function applyVenue(
         )
       ).map((reference) => ({ ...reference }));
       const active = await tx
-        .select({ id: invoiceSeries.id, code: invoiceSeries.code, purpose: invoiceSeries.purpose })
+        .select({
+          id: invoiceSeries.id,
+          code: invoiceSeries.code,
+          purpose: invoiceSeries.purpose,
+        })
         .from(invoiceSeries)
         .where(and(eq(invoiceSeries.nodeId, nodeId), isNull(invoiceSeries.retiredAt)));
       if (
@@ -420,8 +429,50 @@ export async function applyVenue(
     }
     const result = { locationId, nodeId, seriesIds, seeded };
     await deps.beforeCommit?.(tx, result);
+    for (const [name] of prepared) moduleOperationFor(prepared, name, nodeId, "setup");
     return result;
-  });
+  };
+  const transact = (prepared: ModuleOperations) =>
+    withTransaction(deps.db, (tx) => run(tx, prepared));
+  const collecting = modules.filter(
+    (module) =>
+      module.operations !== undefined &&
+      inputs.has(module.name) &&
+      actions.some((action) => action.kind === "seed-module" && action.module === module.name),
+  );
+  if (collecting.length === 0) return transact(new Map());
+  const [existingVenue] = await deps.db.select({ id: locations.id }).from(locations).limit(1);
+  if (existingVenue !== undefined) return transact(new Map());
+  const [existingAdministrator] = await deps.db
+    .select({ id: persons.id })
+    .from(persons)
+    .where(eq(persons.role, "admin"))
+    .limit(1);
+  if (
+    existingAdministrator !== undefined ||
+    !actions.some((action) => action.kind === "seed-admin")
+  )
+    throw new AppError("provisioning.initial_operator_required", {});
+  // The seed checks that this planned operator is the newly inserted active administrator.
+  const authorise = (index: number, operations: ModuleOperations): Promise<VenueResult> => {
+    const module = collecting[index];
+    if (module === undefined)
+      return withPreparedModuleOperations(collecting, operations, initialNodeId, "setup", transact);
+    const input = inputs.get(module.name)!;
+    const binding = Object.freeze({
+      module: module.name,
+      action: "setup",
+      eventId: input.eventId,
+      sourceId: input.sourceId,
+      targetNodeId: initialNodeId,
+    });
+    return withOperationAuthority(binding, initialAdministratorId, (authority) => {
+      const next = new Map(operations);
+      next.set(module.name, { input: input.input, binding, authority });
+      return authorise(index + 1, next);
+    });
+  };
+  return authorise(0, new Map());
 }
 
 /**
