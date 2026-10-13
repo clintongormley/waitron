@@ -27,7 +27,7 @@ import type {
   TranslationGapKind,
 } from "../api/client.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 import { leftToBrowser } from "../navigation.js";
 import { sameValue } from "./product-editor-model.js";
 import {
@@ -533,7 +533,7 @@ export class ContentTranslationsDialog extends LitElement {
             <div part="translation-fields">
               ${this.#input(row, "text")}
               ${this.reviewRows.length && this.model!.changed(row) ? this.#reviewCell(row) : nothing}
-              ${this.model!.needsDefault(row) && (this.model!.value(row, "text").trim() || this.model!.value(row, "defaultText").trim()) ? html`<span part="translation-meta">${t("translations.default_needed").replace("{language}", this.#name(this.model!.defaultLanguage))}</span>${this.#input(row, "defaultText")}` : nothing}
+              ${this.model!.needsDefault(row) && (this.model!.value(row, "text").trim() || this.model!.value(row, "defaultText").trim()) ? html`<span part="translation-meta">${fill("translations.default_needed", { language: this.#name(this.model!.defaultLanguage) })}</span>${this.#input(row, "defaultText")}` : nothing}
             </div>
           </div>`,
       },
@@ -546,7 +546,7 @@ export class ContentTranslationsDialog extends LitElement {
             part="translation-link"
             ?data-own-click=${row.kind === "product" || row.kind === "variant"}
             href=${editorHref(row)}
-            aria-label=${t("content_gaps.open_named").replace("{name}", label(row))}
+            aria-label=${fill("content_gaps.open_named", { name: label(row) })}
             @click=${(event: MouseEvent) => this.#openEditor(event, row)}
             >${t("content_gaps.open")}</a
           >`,
@@ -698,7 +698,7 @@ export class ContentTranslationsDialog extends LitElement {
                 >
               </div>
               ${count >= 100 ? html`<p role="status">${t("translations.capacity")}</p>` : nothing}
-              ${this.model.rows.length === 0 ? html`<p data-test="complete">${t("content_gaps.complete").replace("{language}", languageDisplayName(this.language, currentLocale(), false))}</p>` : html`<wt-data-table aria-label=${t("content_gaps.table").replace("{language}", this.#name(this.language))} emptyMessage=${tableNoMatches()} noMatchesMessage=${tableNoMatches()} .rows=${shown} .columns=${this.#columns()} .rowKey=${translationKey}></wt-data-table>`}
+              ${this.model.rows.length === 0 ? html`<p data-test="complete">${fill("content_gaps.complete", { language: languageDisplayName(this.language, currentLocale(), false) })}</p>` : html`<wt-data-table aria-label=${fill("content_gaps.table", { language: this.#name(this.language) })} emptyMessage=${tableNoMatches()} noMatchesMessage=${tableNoMatches()} .rows=${shown} .columns=${this.#columns()} .rowKey=${translationKey}></wt-data-table>`}
               ${
                 visible.length > 50
                   ? html`<div class="pages">
