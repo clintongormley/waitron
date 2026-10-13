@@ -202,6 +202,10 @@ undone at the next reset anyway.
   - **Reset to saved plan:** asks first.
 - **Back to its saved place** undoes every change to that one table for today.
 
+> Added 2026-10-13 by A503 part 3 ([design](2026-10-12-a503-joined-tables-design.md)): a joined table
+> with two or more parts still joined also offers **Split tables…**, which stands the chosen parts on
+> the map as tables of their own until the reset puts the joined table back whole.
+
 ### 6.3 Reset
 
 - Today's plan resets automatically at the day cutover, and on Reset to saved plan.
@@ -300,6 +304,9 @@ on every screen. The commit adding them states this reason.
 - **The till's table-state read** returns each table's position for today, worked out from the
   saved plan and today's changes, plus merges and spares.
 - **Live updates:** the floor's subscription names the new tables as its sources.
+
+> Added 2026-10-13 by A503 part 3: the till's routes gain `POST /api/tables/:id/today/split-off`
+> (split parts off a joined table), with the same checks.
 
 ## 11. Removed
 

@@ -98,6 +98,8 @@ refuses or one in an unknown state waits; a free one is put back at once (`planR
   the plan has no size (`floor_plan_tables`' placement check sets all six of x, y, width, height,
   shape and rotation or none, `packages/db/src/schema/floor-plans.ts:52-73`). Owner question 5,
   below, decides where it comes from; the split waits for the answer, nothing before it does.
+  > Added 2026-10-13 by A503 part 3: the split record is `floor_today_split_parts`; a part's size is
+  > `floor_plan_table_sizes`, read from the saved plan when Split runs (8 × 8 when it has none).
 - New tables are classified `state`. `floor_plan_table_parts` joins configuration transfer
   (`packages/db/src/configuration-transfer.ts:48-51`, which carries the saved plan only); all of them
   join the zone and department delete (`apps/server/src/floor-delete.ts`), the live-subscription
@@ -224,6 +226,9 @@ split today. A split decides only who sits where today.
 - **The reset puts a split joined table back whole only when it and every split-off part are free**
   and in no merge; until then everything stays as it is and the joined table waits, as a held table
   waits today (`planReset`, `apps/server/src/floor-reset-plan.ts:80-96`).
+  > Added 2026-10-13 by A503 part 3 (review 5–9): a merge holds the group back only while one of its
+  > tables waits (guests seated, or a module refusing); a merge nobody sits at is ended by the reset
+  > as any free merge is, and the joined table is put back whole.
 
 ### Service merges ask for seats
 
