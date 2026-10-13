@@ -1,7 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
-import { codeOf } from "@waitron/dashboard-kit";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import type { OpeningHoursApi, SeasonDeleteImpact, SeasonInput } from "./opening-hours-client.js";
@@ -11,24 +10,16 @@ import "./season-dialog.js";
 import { byStart } from "../season-rules.js";
 import { seasonTints, seasonTintStyles } from "./season-tint.js";
 import { t } from "./strings.js";
+import { refusalOf, type Refusal } from "./refusal.js";
 
 export type { SeasonChip } from "./season-dialog.js";
 export type SeasonWrites = Pick<
   OpeningHoursApi,
   "saveSeason" | "addSeason" | "deleteSeason" | "readSeasonDeleteImpact"
 >;
-type Refusal = { code: string; params?: Record<string, unknown> };
 /** One opening of the dialog: the season it edits, or none for "+ Season", and the clock revision its
  *  writes send, so a newer read arriving mid-edit still lets the server see the clock changed. */
 type Opening = { season?: SeasonChip; clockRevision: number; returnTo: HTMLElement | null };
-
-const refusalOf = (error: unknown): Refusal => ({
-  code: codeOf(error),
-  params:
-    typeof error === "object" && error !== null
-      ? (error as { params?: Record<string, unknown> }).params
-      : undefined,
-});
 
 /** The venue's seasons as tinted chips. A chip's name asks for its week (`season-week-open`), also
  *  when read-only; its ✎ and "+ Season" open the season dialog, whose writes this element sends itself, announcing each

@@ -12,7 +12,8 @@ import {
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import type { MenuPeriodInput, OpeningHoursModel } from "../menu-timetable-types.js";
-import type { Paint } from "../paint-model.js";
+import { WEEK_DISPLAY_ORDER } from "../hours-types.js";
+import { samePaint, type Paint } from "../paint-model.js";
 import { seasonLastDay } from "../season-rules.js";
 import type { OpeningHoursApi } from "./opening-hours-client.js";
 import type { PaintChange, PaintColumn } from "./paint-grid.js";
@@ -23,6 +24,7 @@ import { seasonTints, seasonTintStyles } from "./season-tint.js";
 import { weekdayLabel } from "./season-week-view.js";
 import { t } from "./strings.js";
 import { periodColourStyles } from "./period-colour-styles.js";
+import { refusalOf } from "./refusal.js";
 import "./painter-frame.js";
 import "./paint-grid.js";
 import "./period-editor.js";
@@ -47,7 +49,9 @@ export interface PainterNavigation {
   zoneId: string | null;
 }
 
-const WEEKDAYS = [1, 2, 3, 4, 5, 6, 0];
+/** Unchanging values, so the grid sees the same ones from one render to the next. */
+const NOTHING_BY_KEY: ReadonlyMap<string, never> = new Map<string, never>();
+const CLOSED_ONLY: readonly null[] = [null];
 const departmentKey = (id: string) => `d:${id}`;
 const zoneKey = (id: string) => `z:${id}`;
 
@@ -55,18 +59,12 @@ const copyWeek = (week: ReadonlyMap<string, readonly Paint[]>): Week =>
   new Map([...week].map(([key, day]) => [key, day.map((paint) => ({ ...paint }))]));
 const copyDraft = (draft: Draft): Draft =>
   new Map([...draft].map(([key, week]) => [key, copyWeek(week)]));
-const sameDay = (a: readonly Paint[], b: readonly Paint[]) =>
-  a.length === b.length &&
-  a.every(
-    (paint, i) =>
-      paint.periodId === b[i]!.periodId &&
-      paint.startsAt === b[i]!.startsAt &&
-      paint.endsAt === b[i]!.endsAt,
-  );
 const sameWeek = (a: Week | undefined, b: Week | undefined) =>
   a !== undefined &&
   b !== undefined &&
-  WEEKDAYS.every((weekday) => sameDay(a.get(String(weekday)) ?? [], b.get(String(weekday)) ?? []));
+  WEEK_DISPLAY_ORDER.every((weekday) =>
+    samePaint(a.get(String(weekday)) ?? [], b.get(String(weekday)) ?? []),
+  );
 const sameDraft = (a: Draft, b: Draft) =>
   a.size === b.size && [...a].every(([key, week]) => sameWeek(week, b.get(key)));
 
@@ -75,7 +73,7 @@ function weekFrom<Day extends { weekday: number }>(
   paint: (day: Day) => Paint[],
 ): Week {
   return new Map(
-    WEEKDAYS.map((weekday) => {
+    WEEK_DISPLAY_ORDER.map((weekday) => {
       const day = days.find((entry) => entry.weekday === weekday);
       return [String(weekday), day ? paint(day) : []];
     }),
@@ -528,7 +526,10 @@ export class SeasonPainter extends LitElement {
       ]),
     );
     const days = (key: string) =>
-      WEEKDAYS.map((weekday) => ({ weekday, paint: sent.get(key)!.get(String(weekday))! }));
+      WEEK_DISPLAY_ORDER.map((weekday) => ({
+        weekday,
+        paint: sent.get(key)!.get(String(weekday))!,
+      }));
     const generation = this.generation;
     this.saving = true;
     this.notice = "";
@@ -589,7 +590,7 @@ export class SeasonPainter extends LitElement {
       return;
     }
     const owner = zoned ? zoneKey(id) : departmentKey(id);
-    const weekday = match[3] === undefined ? undefined : WEEKDAYS[Number(match[3])];
+    const weekday = match[3] === undefined ? undefined : WEEK_DISPLAY_ORDER[Number(match[3])];
     const name = ownerName(this.model, owner);
     const period = departmentOf(this.model, owner)?.periods.find(
       ({ id }) => id === params?.periodId,
@@ -634,14 +635,7 @@ export class SeasonPainter extends LitElement {
           .id;
       else await this.api.updatePeriod(periodId, input, editor.clockRevision);
     } catch (error) {
-      if (this.editor === editor && this.isConnected)
-        component.refusal = {
-          code: codeOf(error),
-          params:
-            typeof error === "object" && error !== null
-              ? (error as { params?: Record<string, unknown> }).params
-              : undefined,
-        };
+      if (this.editor === editor && this.isConnected) component.refusal = refusalOf(error);
       return;
     } finally {
       if (this.editor === editor) this.periodBusy = false;
@@ -801,6 +795,21 @@ export class SeasonPainter extends LitElement {
     );
   }
 
+  /** Kept per locale, so the grid sees the same columns from one render to the next. */
+  private weekColumns?: { locale: string; columns: readonly PaintColumn[] };
+  private columns(): readonly PaintColumn[] {
+    const locale = currentLocale();
+    if (this.weekColumns?.locale !== locale)
+      this.weekColumns = {
+        locale,
+        columns: WEEK_DISPLAY_ORDER.map((weekday) => ({
+          key: String(weekday),
+          label: weekdayLabel(weekday),
+        })),
+      };
+    return this.weekColumns.columns;
+  }
+
   override render() {
     const department = this.model && this.department();
     const season = this.model?.seasons.find(({ id }) => id === this.seasonId);
@@ -808,10 +817,6 @@ export class SeasonPainter extends LitElement {
     const zone = this.zone(department);
     const key = zone ? zoneKey(zone.id) : departmentKey(department.id);
     const chosen = this.effectiveChosen(department, zone !== undefined);
-    const columns: PaintColumn[] = WEEKDAYS.map((weekday) => ({
-      key: String(weekday),
-      label: weekdayLabel(weekday),
-    }));
     return html`<painter-frame
         .open=${this.open}
         .heading=${format("painter.week", { season: season.name })}
@@ -839,19 +844,19 @@ export class SeasonPainter extends LitElement {
         ${this.readOnly ? nothing : this.paintRow(department, chosen, zone !== undefined)}
         <paint-grid
           .target=${`${this.seasonId}/${key}`}
-          .columns=${columns}
-          .days=${this.draft.get(key) ?? new Map()}
-          .underlay=${zone ? (this.draft.get(departmentKey(department.id)) ?? new Map()) : new Map()}
+          .columns=${this.columns()}
+          .days=${this.draft.get(key) ?? NOTHING_BY_KEY}
+          .underlay=${zone ? (this.draft.get(departmentKey(department.id)) ?? NOTHING_BY_KEY) : NOTHING_BY_KEY}
           .periods=${department.periods}
           .chosen=${chosen}
           .cutover=${this.model.dayCutover}
           .closedErases=${zone === undefined}
           .readOnly=${this.readOnly}
-          .paintable=${zone ? [null] : undefined}
+          .paintable=${zone ? CLOSED_ONLY : undefined}
           .columnErrors=${
             this.refused?.owner === key && this.refused.column !== undefined
               ? new Map([[this.refused.column, this.refused.reason!]])
-              : new Map()
+              : NOTHING_BY_KEY
           }
           @paint-change=${(event: CustomEvent<PaintChange>) => this.paint(key, event)}
         ></paint-grid>

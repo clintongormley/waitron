@@ -69,9 +69,26 @@ export function copyDay(
  *  both ends of a range. On a quarter-hour changeover the day's end answers the changeover. A row
  *  with no height answers the first quarter hour. */
 export function stepAt(offsetPx: number, rowPx: number, cutover: string): string {
+  return clockAt(stepMinuteAt(offsetPx, rowPx, cutover), cutover);
+}
+
+/** `stepAt` as minutes from the changeover, so the day's end is 1440 rather than the changeover. */
+export function stepMinuteAt(offsetPx: number, rowPx: number, cutover: string): number {
   const minutes = rowPx > 0 ? (offsetPx / rowPx) * STEP_MINUTES : 0;
   const first = (STEP_MINUTES - (Number(cutover.slice(3, 5)) % STEP_MINUTES)) % STEP_MINUTES;
   const last = Math.floor((DAY_MINUTES - first) / STEP_MINUTES);
   const row = Math.min(Math.max(Math.round((minutes - first) / STEP_MINUTES), 0), last);
-  return clockAt(first + row * STEP_MINUTES, cutover);
+  return first + row * STEP_MINUTES;
+}
+
+export function samePaint(a: readonly Paint[], b: readonly Paint[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every(
+      (paint, i) =>
+        paint.periodId === b[i]!.periodId &&
+        paint.startsAt === b[i]!.startsAt &&
+        paint.endsAt === b[i]!.endsAt,
+    )
+  );
 }

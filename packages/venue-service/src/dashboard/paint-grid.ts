@@ -14,7 +14,8 @@ import {
   copyDay,
   deleteBlock,
   paintStretch,
-  stepAt,
+  samePaint,
+  stepMinuteAt,
   type Paint,
 } from "../paint-model.js";
 
@@ -60,18 +61,6 @@ function isDeleteKey(event: KeyboardEvent): boolean {
     !event.altKey
   );
 }
-function samePaint(a: readonly Paint[], b: readonly Paint[]): boolean {
-  return (
-    a.length === b.length &&
-    a.every(
-      (paint, i) =>
-        paint.periodId === b[i]!.periodId &&
-        paint.startsAt === b[i]!.startsAt &&
-        paint.endsAt === b[i]!.endsAt,
-    )
-  );
-}
-
 function clockMinutes(time: string): number {
   return Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
 }
@@ -377,17 +366,9 @@ export class PaintGrid extends LitElement {
     return this.periods.find(({ id }) => id === periodId)?.colour;
   }
 
-  /** Minutes from the changeover at a pointer offset. `stepAt` answers the changeover for both the
-   *  top and the bottom row; the bottom half of the column reads it as the day's end. */
-  #minuteAt(offset: number, height: number): number {
-    const time = stepAt(offset, height / ROWS, this.cutover);
-    const minute = (clockMinutes(time) - clockMinutes(this.cutover) + DAY) % DAY;
-    return minute === 0 && offset > height / 2 ? DAY : minute;
-  }
-  #minuteAtY(clientY: number, key: string): number {
-    const day = this.renderRoot.querySelector<HTMLElement>(`.day[data-column="${key}"]`)!;
-    const box = day.getBoundingClientRect();
-    return this.#minuteAt(clientY - box.top, box.height);
+  #minuteAtY(clientY: number, column: HTMLElement): number {
+    const box = column.getBoundingClientRect();
+    return stepMinuteAt(clientY - box.top, box.height / ROWS, this.cutover);
   }
 
   #start(event: PointerEvent, key: string): void {
@@ -399,7 +380,7 @@ export class PaintGrid extends LitElement {
       pointerId: event.pointerId,
       key,
       column,
-      anchor: this.#minuteAtY(event.clientY, key),
+      anchor: this.#minuteAtY(event.clientY, column),
     };
     window.addEventListener("pointermove", this.#move);
     window.addEventListener("pointerup", this.#release);
@@ -418,7 +399,7 @@ export class PaintGrid extends LitElement {
   };
   #stretchTo(clientY: number): void {
     const gesture = this.#gesture!;
-    const minute = this.#minuteAtY(clientY, gesture.key);
+    const minute = this.#minuteAtY(clientY, gesture.column);
     // Captured only once it moves: a captured click lands on the column, not the block clicked.
     if (minute !== gesture.anchor) capturePointer(gesture.column, gesture.pointerId);
     const start = Math.min(gesture.anchor, minute);
@@ -510,12 +491,17 @@ export class PaintGrid extends LitElement {
     }
     this.selected = { key, startsAt };
     await this.updateComplete;
-    if (!this.menu.matches(":popover-open")) this.menu.showPopover({ source: trigger });
-    const anchor = trigger.getBoundingClientRect();
-    const popup = this.menu.getBoundingClientRect();
-    this.menu.style.left = `${Math.max(8, Math.min(anchor.left, innerWidth - popup.width - 8))}px`;
-    this.menu.style.top = `${Math.max(8, Math.min(anchor.bottom, innerHeight - popup.height - 8))}px`;
+    this.#place(this.menu, trigger, false);
     this.menu.querySelector<HTMLElement>("wt-button:not([disabled])")?.focus();
+  }
+  /** Opens `popup` below `trigger`, lined up with its start or end edge, kept on screen. */
+  #place(popup: HTMLElement, trigger: HTMLElement, alignEnd: boolean): void {
+    if (!popup.matches(":popover-open")) popup.showPopover({ source: trigger });
+    const anchor = trigger.getBoundingClientRect();
+    const box = popup.getBoundingClientRect();
+    const left = alignEnd ? anchor.right - box.width : anchor.left;
+    popup.style.left = `${Math.max(8, Math.min(left, innerWidth - box.width - 8))}px`;
+    popup.style.top = `${Math.max(8, Math.min(anchor.bottom, innerHeight - box.height - 8))}px`;
   }
   #closeMenu(): void {
     if (this.menu?.matches(":popover-open")) this.menu.hidePopover();
@@ -599,11 +585,7 @@ export class PaintGrid extends LitElement {
     this.copying = { key, ticked: new Set() };
     await this.updateComplete;
     const trigger = this.#columnMenu(key)!;
-    if (!this.chooser.matches(":popover-open")) this.chooser.showPopover({ source: trigger });
-    const anchor = trigger.getBoundingClientRect();
-    const popup = this.chooser.getBoundingClientRect();
-    this.chooser.style.left = `${Math.max(8, Math.min(anchor.right - popup.width, innerWidth - popup.width - 8))}px`;
-    this.chooser.style.top = `${Math.max(8, Math.min(anchor.bottom, innerHeight - popup.height - 8))}px`;
+    this.#place(this.chooser, trigger, true);
     this.chooser.querySelector<HTMLElement>('input[type="checkbox"]')?.focus();
   }
   #closeChooser(refocus: boolean): void {
