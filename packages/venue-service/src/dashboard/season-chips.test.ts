@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import { applyTokens } from "@waitron/ui";
 import { setLocale } from "@waitron/dashboard-kit";
 import type { SeasonChips, SeasonChip, SeasonWrites } from "./season-chips.js";
@@ -351,6 +352,37 @@ it("shows only Delete as busy while the impact is read, and only the confirm whi
   await click("[data-test=confirm-delete-season]");
   expect(button("confirm-delete-season").loading).toBe(true);
   expect(button("cancel-delete-season").loading).toBe(false);
+});
+
+it("stays open on Escape and on a close request while its save is in flight, and closes on Escape after", async () => {
+  let refuse!: () => void;
+  const api = fakeApi({
+    saveSeason: vi.fn(
+      () =>
+        new Promise<never>((_, reject) => (refuse = () => reject({ code: "hours.clock_changed" }))),
+    ),
+  });
+  await mount(four, api);
+  await openChip("Winter");
+  await change("name", "Cold");
+  await click("[data-test=save-season]");
+  const modal = dq<HTMLElementTagNameMap["wt-modal"]>("wt-modal")!;
+  await userEvent.keyboard("{Escape}");
+  expect(await modal.requestClose("escape")).toBe(false);
+  expect(await modal.requestClose("cancel")).toBe(false);
+  await settle();
+  expect(modal.open).toBe(true);
+  expect(dialog().open).toBe(true);
+  refuse();
+  await expect.poll(() => footerError()).not.toBe("");
+  const closed = new Promise<void>((resolve) =>
+    modal.addEventListener("wt-close", () => resolve(), { once: true }),
+  );
+  dq<HTMLElement>("[name=name]")!.focus();
+  await userEvent.keyboard("{Escape}");
+  await closed;
+  await settle();
+  expect(el.shadowRoot!.querySelector("season-dialog")).toBeNull();
 });
 
 it("marks the start once, describes the group by its error, and asks no field of its own", async () => {

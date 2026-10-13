@@ -86,7 +86,6 @@ export class SeasonDialog extends LitElement {
     `,
   ];
   @property({ type: Boolean }) open = false;
-  @property({ type: Boolean }) busy = false;
   /** The request in flight, so only the action that sent it shows it is busy. */
   @property() pending: "save" | "impact" | "delete" | "" = "";
   /** Reading the delete impact failed. */
@@ -102,6 +101,9 @@ export class SeasonDialog extends LitElement {
   @property({ attribute: false }) confirmDelete?: { departments: readonly { name: string }[] };
   @state() private draft: Draft = draftOf();
   @state() private attempted = false;
+  private get busy() {
+    return this.pending !== "";
+  }
   private scope?: DraftScope<Draft>;
   private leave?: LeaveCoordinator;
   private identity?: object;

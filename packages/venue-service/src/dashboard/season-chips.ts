@@ -189,7 +189,6 @@ export class SeasonChips extends LitElement {
         .season=${opening.season}
         .seasons=${this.seasons}
         .specialDays=${this.specialDays}
-        .busy=${this.pending !== ""}
         .pending=${this.pending}
         .impactFailed=${this.impactFailed}
         .refusal=${this.refusal}

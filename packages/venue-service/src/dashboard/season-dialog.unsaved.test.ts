@@ -92,3 +92,24 @@ it("restoring the opened values makes Save quiet and closes without asking", asy
   expect(unload()).toBe(false);
   expect(await modal(el).requestClose("cancel")).toBe(true);
 });
+
+it("refuses a close asked for in the same turn a request starts, without asking about the changes", async () => {
+  const el = await mount();
+  await change(el, "name", "Cold");
+  el.pending = "save";
+  const close = modal(el).requestClose("escape");
+  const question = () =>
+    app.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-unsaved-changes"]>(
+      "wt-unsaved-changes",
+    )!;
+  const asked = expect
+    .poll(() => question().open)
+    .toBe(true)
+    .then(
+      () => "asked",
+      () => "never asked",
+    );
+  expect(await Promise.race([close, asked])).toBe(false);
+  expect(question().open).toBe(false);
+  expect(el.open).toBe(true);
+});
