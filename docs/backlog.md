@@ -4176,6 +4176,13 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   names `parseBackupArchiveKey` reads, a folder holding only old-format archive names also reads as
   never backed up. Left open by A538-3; plan Task 6 covers the screen.
 
+- **No test covers the supervisor ignoring results from a backup run a reload replaced.**
+  `backup-supervisor.ts` drops `onUploaded`/`onDestinationResult` reports once that run's
+  controller is aborted; removing both checks left the supervisor suites green in A538-3's review,
+  because a reload starts a fresh record only after the old run has finished. The checks matter for
+  a status read that began before the reload, or one made after `stop()`; a test needs one of those
+  shapes. Left open by A538-3.
+
 - **Every backup status read builds a new client per destination**, a new S3 client for a bucket,
   and closes it once its listing settles, even while the running sweep holds live ones. This predates A538-3, which added
   `close()`; reusing the sweep's backends needs `close()` to wait for a status read in flight.
