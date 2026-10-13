@@ -468,155 +468,25 @@ describe("sameName", () => {
   });
 });
 
-describe("a reset clears today's name", () => {
-  const REMOVALS = enabledTableRemovals(ALL_MODULES);
-  const DAY = 24 * 60 * 60 * 1000;
-
-  const nameOf = async (tableId: string) => (await todayRow(v, tableId))!.name;
-  const resetRoom = (zoneId: string, now = new Date()) =>
-    inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, now));
-  const newDay = (now: Date) => inTx(v, (tx) => ensureToday(tx, v.cfg, REMOVALS, now));
-  const finish = async (partyId: string) => {
-    const command = await commandFor(v, partyId);
-    await inTx(v, (tx) => finishTable(tx, { partyId, ...command }));
-  };
-  const splitOffLong = (table: Record<string, string>, partIds: string[], seats: number) =>
-    inTx(v, (tx) => splitJoinedTable(tx, v.cfg, { tableId: table.long!, partIds, seats }));
-  const leftOn = (tableId: string, name: string) =>
-    inTx(v, (tx) =>
-      tx.update(floorTodayTables).set({ name }).where(eq(floorTodayTables.tableId, tableId)),
-    );
-  const splitRowsOf = async (joinedTableId: string) =>
-    (
-      await inTx(v, (tx) =>
-        tx
-          .select({ partId: floorTodaySplitParts.partTableId })
-          .from(floorTodaySplitParts)
-          .where(eq(floorTodaySplitParts.joinedTableId, joinedTableId)),
-      )
-    ).map((row) => row.partId);
-  const joinRow = (joinId: string) =>
-    inTx(v, (tx) => tx.select().from(floorTodayJoins).where(eq(floorTodayJoins.id, joinId)));
-
-  it("Reset to saved plan clears a free table's name and moves the revision (reset clears)", async () => {
-    const { table, zoneId } = await LONG_TABLE();
-    await rename(table.bar!, suffixed("Window"));
-    const before = (await zoneRevisionOf(v, zoneId))!;
-
-    await resetRoom(zoneId);
-
-    expect(await nameOf(table.bar!)).toBeNull();
-    expect(await zoneRevisionOf(v, zoneId)).toBe(before + 1);
-  });
-
-  it("a table with guests keeps its name until the party finishes and it is put back (reset clears)", async () => {
-    const { table, zoneId } = await LONG_TABLE();
-    const { partyId } = await seat(v, table.bar!);
-    const name = suffixed("Window");
-    await rename(table.bar!, name);
-
-    await resetRoom(zoneId);
-    expect(await nameOf(table.bar!)).toBe(name);
-
-    await finish(partyId);
-    await newDay(new Date());
-
-    expect(await nameOf(table.bar!)).toBeNull();
-  });
-
-  it("a free group's row goes, and every member's name with it (reset clears)", async () => {
-    const { table, zoneId } = await LONG_TABLE();
-    await rename(table.bar!, suffixed("Window"));
-    await pushBarOntoLong(table);
-    await rename(table.bar!, suffixed("García birthday"));
-    await leftOn(table.c4!, suffixed("Left"));
-    const { joinId } = (await mergeOf(v, table.bar!))!;
-
-    await resetRoom(zoneId);
-
-    expect(await joinRow(joinId)).toEqual([]);
-    for (const key of ["bar", "c3", "c4", "c5"]) {
-      expect(await nameOf(table[key]!), key).toBeNull();
-    }
-  });
-
-  it("Reset table clears the joined table's name and the name of a table it takes back (reset clears)", async () => {
-    const { table } = await LONG_TABLE();
-    await splitOffLong(table, [table.c5!], 6);
-    await rename(table.c5!, suffixed("Corner"));
-    await rename(table.long!, suffixed("Long window"));
-
-    await inTx(v, (tx) =>
-      resetTable(tx, v.cfg, REMOVALS, new Date(), {
-        tableId: table.long!,
-        partIds: [table.c5!],
-        seats: null,
-      }),
-    );
-
-    expect(await nameOf(table.c5!)).toBeNull();
-    expect(await nameOf(table.long!)).toBeNull();
-  });
-
-  it("Split tables… on a group that puts Long table back clears its tables' names and ends the group (reset clears)", async () => {
-    const { table } = await LONG_TABLE();
-    await rename(table.long!, suffixed("Long window"));
-    const window = suffixed("Window");
-    await rename(table.bar!, window);
-    await pushBarOntoLong(table);
-    await rename(table.bar!, suffixed("García birthday"));
-    for (const key of ["c3", "c4", "c5"]) await leftOn(table[key]!, suffixed("Left"));
-    const { joinId } = (await mergeOf(v, table.bar!))!;
-
-    await inTx(v, (tx) =>
-      splitOff(tx, v.cfg, REMOVALS, new Date(), {
-        tableId: table.bar!,
-        partIds: [table.bar!],
-        seats: null,
-      }),
-    );
-
-    expect(await joinRow(joinId)).toEqual([]);
-    for (const key of ["long", "c3", "c4", "c5"]) {
-      expect(await nameOf(table[key]!), key).toBeNull();
-    }
-    expect(await nameOf(table.bar!)).toBe(window);
-  });
-
-  it("a part the catch-up takes back into Long table loses its name, which is then free (reset clears)", async () => {
-    const { table, zoneId } = await LONG_TABLE();
-    const { partyId } = await seat(v, table.long!);
-    await resetRoom(zoneId);
-    await splitOffLong(table, [table.c5!], 6);
-    const corner = suffixed("Corner");
-    await rename(table.c5!, corner);
-
-    await finish(partyId);
-    await newDay(new Date());
-
-    expect(await splitRowsOf(table.long!)).toEqual([]);
-    expect(await nameOf(table.c5!)).toBeNull();
-    await rename(table.bar!, corner);
-    expect(await nameOf(table.bar!)).toBe(corner);
-  });
-
-  // Last: it moves every zone in the shared database a day ahead.
-  it("a new business day clears a free table's name (reset clears)", async () => {
-    const { table } = await LONG_TABLE();
-    await rename(table.bar!, suffixed("Window"));
-
-    await newDay(new Date(Date.now() + DAY));
-
-    expect(await nameOf(table.bar!)).toBeNull();
-  });
-});
-
 describe("what moves, ends or keeps today's name", () => {
   const REMOVALS = enabledTableRemovals(ALL_MODULES);
   const MORE: PlannedEntry[] = [
     { key: "window", label: "Window", seats: 2, place: { x: 60, y: 0, width: 2, height: 2 } },
     { key: "c6", label: "Counter 6", seats: 2, place: { x: 80, y: 0, width: 2, height: 2 } },
     { key: "t9", label: "Table 9", seats: 4, place: { x: 100, y: 0, width: 2, height: 2 } },
+  ];
+
+  /** Snug (6 seats) = Counter 7 (2) and Counter 8 (4), each kept 2 × 2. */
+  const SNUG: PlannedEntry[] = [
+    { key: "s1", label: "Counter 7", seats: 2, place: null },
+    { key: "s2", label: "Counter 8", seats: 4, place: null },
+    {
+      key: "snug",
+      label: "Snug",
+      seats: 6,
+      place: { x: 70, y: 20, width: 4, height: 2 },
+      partKeys: ["s1", "s2"],
+    },
   ];
 
   const nameOf = async (tableId: string) => (await todayRow(v, tableId))!.name;
@@ -660,6 +530,23 @@ describe("what moves, ends or keeps today's name", () => {
     expect(await groupName(table.bar!)).toBe(long);
     expect(await nameOf(table.long!)).toBeNull();
     expect(await nameOf(table.bar!)).toBe(bar);
+  });
+
+  it("renamed Snug pushed onto renamed Long table: the group takes Long's name and both joined tables' own names go (moves)", async () => {
+    const zone = await LONG_TABLE(SNUG);
+    for (const key of ["s1", "s2"]) {
+      await giveKeptSize(v, zone.master[key]!, { width: 2, height: 2 });
+    }
+    const { table } = zone;
+    const long = suffixed("Long window");
+    await rename(table.long!, long);
+    await rename(table.snug!, suffixed("Snug corner"));
+
+    await push(table.snug!, table.long!, 16);
+
+    expect(await groupName(table.c3!)).toBe(long);
+    expect(await nameOf(table.long!)).toBeNull();
+    expect(await nameOf(table.snug!)).toBeNull();
   });
 
   it("a renamed Long table pushed onto Bar: the new group takes Long's name and Long's own goes (moves)", async () => {
@@ -780,6 +667,7 @@ describe("what moves, ends or keeps today's name", () => {
 
   it("a joined table inside a named group split down to one table ends the group (ends)", async () => {
     const { table, zoneId } = await LONG_TABLE();
+    await leftOn(table.long!, suffixed("Long window"));
     const rows = [(await todayRow(v, table.long!))!, (await todayRow(v, table.bar!))!];
     const joinId = await inTx(v, async (tx) => {
       const [join] = await tx
@@ -807,6 +695,7 @@ describe("what moves, ends or keeps today's name", () => {
     );
 
     expect(await joinRow(joinId)).toEqual([]);
+    expect(await nameOf(table.long!)).toBeNull();
   });
 
   it("the group García birthday keeps its name when Split tables… takes only Bar and three stay (keeps)", async () => {
@@ -879,5 +768,148 @@ describe("what moves, ends or keeps today's name", () => {
 
     expect(await partyAt(v, table.bar!)).toBeNull();
     expect(await groupName(table.bar!)).toBe(group);
+  });
+});
+
+describe("a reset clears today's name", () => {
+  const REMOVALS = enabledTableRemovals(ALL_MODULES);
+  const DAY = 24 * 60 * 60 * 1000;
+
+  const nameOf = async (tableId: string) => (await todayRow(v, tableId))!.name;
+  const resetRoom = (zoneId: string, now = new Date()) =>
+    inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, now));
+  const newDay = (now: Date) => inTx(v, (tx) => ensureToday(tx, v.cfg, REMOVALS, now));
+  const finish = async (partyId: string) => {
+    const command = await commandFor(v, partyId);
+    await inTx(v, (tx) => finishTable(tx, { partyId, ...command }));
+  };
+  const splitOffLong = (table: Record<string, string>, partIds: string[], seats: number) =>
+    inTx(v, (tx) => splitJoinedTable(tx, v.cfg, { tableId: table.long!, partIds, seats }));
+  const leftOn = (tableId: string, name: string) =>
+    inTx(v, (tx) =>
+      tx.update(floorTodayTables).set({ name }).where(eq(floorTodayTables.tableId, tableId)),
+    );
+  const splitRowsOf = async (joinedTableId: string) =>
+    (
+      await inTx(v, (tx) =>
+        tx
+          .select({ partId: floorTodaySplitParts.partTableId })
+          .from(floorTodaySplitParts)
+          .where(eq(floorTodaySplitParts.joinedTableId, joinedTableId)),
+      )
+    ).map((row) => row.partId);
+  const joinRow = (joinId: string) =>
+    inTx(v, (tx) => tx.select().from(floorTodayJoins).where(eq(floorTodayJoins.id, joinId)));
+
+  it("Reset to saved plan clears a free table's name and moves the revision (reset clears)", async () => {
+    const { table, zoneId } = await LONG_TABLE();
+    await rename(table.bar!, suffixed("Window"));
+    const before = (await zoneRevisionOf(v, zoneId))!;
+
+    await resetRoom(zoneId);
+
+    expect(await nameOf(table.bar!)).toBeNull();
+    expect(await zoneRevisionOf(v, zoneId)).toBe(before + 1);
+  });
+
+  it("a table with guests keeps its name until the party finishes and it is put back (reset clears)", async () => {
+    const { table, zoneId } = await LONG_TABLE();
+    const { partyId } = await seat(v, table.bar!);
+    const name = suffixed("Window");
+    await rename(table.bar!, name);
+
+    await resetRoom(zoneId);
+    expect(await nameOf(table.bar!)).toBe(name);
+
+    await finish(partyId);
+    await newDay(new Date());
+
+    expect(await nameOf(table.bar!)).toBeNull();
+  });
+
+  it("a free group's row goes, and every member's name with it (reset clears)", async () => {
+    const { table, zoneId } = await LONG_TABLE();
+    await rename(table.bar!, suffixed("Window"));
+    await pushBarOntoLong(table);
+    await rename(table.bar!, suffixed("García birthday"));
+    for (const key of ["c3", "c4", "c5"]) await leftOn(table[key]!, suffixed("Left"));
+    const { joinId } = (await mergeOf(v, table.bar!))!;
+
+    await resetRoom(zoneId);
+
+    expect(await joinRow(joinId)).toEqual([]);
+    for (const key of ["bar", "c3", "c4", "c5"]) {
+      expect(await nameOf(table[key]!), key).toBeNull();
+    }
+  });
+
+  it("Reset table clears the joined table's name and the name of a table it takes back (reset clears)", async () => {
+    const { table } = await LONG_TABLE();
+    await splitOffLong(table, [table.c5!], 6);
+    await rename(table.c5!, suffixed("Corner"));
+    await rename(table.long!, suffixed("Long window"));
+
+    await inTx(v, (tx) =>
+      resetTable(tx, v.cfg, REMOVALS, new Date(), {
+        tableId: table.long!,
+        partIds: [table.c5!],
+        seats: null,
+      }),
+    );
+
+    expect(await nameOf(table.c5!)).toBeNull();
+    expect(await nameOf(table.long!)).toBeNull();
+  });
+
+  it("Split tables… on a group that puts Long table back clears its tables' names and ends the group (reset clears)", async () => {
+    const { table } = await LONG_TABLE();
+    await rename(table.long!, suffixed("Long window"));
+    const window = suffixed("Window");
+    await rename(table.bar!, window);
+    await pushBarOntoLong(table);
+    await rename(table.bar!, suffixed("García birthday"));
+    for (const key of ["c3", "c4", "c5"]) await leftOn(table[key]!, suffixed("Left"));
+    const { joinId } = (await mergeOf(v, table.bar!))!;
+
+    await inTx(v, (tx) =>
+      splitOff(tx, v.cfg, REMOVALS, new Date(), {
+        tableId: table.bar!,
+        partIds: [table.bar!],
+        seats: null,
+      }),
+    );
+
+    expect(await joinRow(joinId)).toEqual([]);
+    for (const key of ["long", "c3", "c4", "c5"]) {
+      expect(await nameOf(table[key]!), key).toBeNull();
+    }
+    expect(await nameOf(table.bar!)).toBe(window);
+  });
+
+  it("a part the catch-up takes back into Long table loses its name, which is then free (reset clears)", async () => {
+    const { table, zoneId } = await LONG_TABLE();
+    const { partyId } = await seat(v, table.long!);
+    await resetRoom(zoneId);
+    await splitOffLong(table, [table.c5!], 6);
+    const corner = suffixed("Corner");
+    await rename(table.c5!, corner);
+
+    await finish(partyId);
+    await newDay(new Date());
+
+    expect(await splitRowsOf(table.long!)).toEqual([]);
+    expect(await nameOf(table.c5!)).toBeNull();
+    await rename(table.bar!, corner);
+    expect(await nameOf(table.bar!)).toBe(corner);
+  });
+
+  // Last: it moves every zone in the shared database a day ahead.
+  it("a new business day clears a free table's name (reset clears)", async () => {
+    const { table } = await LONG_TABLE();
+    await rename(table.bar!, suffixed("Window"));
+
+    await newDay(new Date(Date.now() + DAY));
+
+    expect(await nameOf(table.bar!)).toBeNull();
   });
 });
