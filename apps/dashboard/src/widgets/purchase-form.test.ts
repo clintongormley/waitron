@@ -3,7 +3,7 @@ import { page } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
-import { setLocale, t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { regimeName, vatKindName } from "../i18n/domain.js";
 import { PurchaseForm, purchaseRefusalErrors } from "./purchase-form.js";
 import type { PurchaseInvoice } from "../api/client.js";
@@ -115,6 +115,17 @@ async function shownIn(el: PurchaseForm, name: string): Promise<string | undefin
 }
 
 describe("purchase-form", () => {
+  it("submits a new invoice with Save", async () => {
+    const before = currentLocale();
+    setLocale("en-GB");
+    try {
+      const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
+      expect(confirmOf(el).textContent!.trim()).toBe("Save");
+    } finally {
+      setLocale(before);
+    }
+  });
+
   it("picks the VAT regime and each line's VAT kind from shared dropdowns", async () => {
     const { el } = await mountWidget<PurchaseForm>(
       "dashboard-purchase-form",

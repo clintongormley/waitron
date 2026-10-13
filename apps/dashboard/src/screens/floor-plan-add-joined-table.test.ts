@@ -114,6 +114,7 @@ const errors = (el: FloorPlanAddJoinedTable) => [
 it("offers the tables off the plan and in no joined table, in number order, each with its seats", async () => {
   const el = await openAdd();
   expect(dialog(el).heading).toBe("Add joined table");
+  expect(addButton(el).textContent!.trim()).toBe("Save");
   expect(madeOf(el).label).toBe("Made of");
   expect(
     madeOf(el).options.map(({ value, label, description }) => ({ value, label, description })),

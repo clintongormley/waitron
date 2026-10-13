@@ -275,7 +275,7 @@ export class FloorPlanAddJoinedTable extends LitElement {
           variant=${action.variant}
           ?disabled=${failing || action.unchanged}
           @click=${() => this.#add()}
-          >${t("action.add")}</wt-button
+          >${t("action.save")}</wt-button
         ></wt-form-actions
       >
     </wt-modal>`;

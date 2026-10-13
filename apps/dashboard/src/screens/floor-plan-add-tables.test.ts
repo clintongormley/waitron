@@ -127,6 +127,7 @@ it("Add tables opens with one table, four seats and the zone's name as prefix", 
   expect(addField(el, "fixed")).toBeNull();
   expect(addAction(el, "add-confirm").variant).toBe("primary");
   expect(addAction(el, "add-confirm").disabled).toBe(false);
+  expect(addAction(el, "add-confirm").textContent!.trim()).toBe("Save");
 });
 
 it("the preview gives the first and last names for more than one table", async () => {

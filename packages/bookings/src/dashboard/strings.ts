@@ -34,7 +34,6 @@ const en = {
   "booking.cancel": "Cancel",
   "booking.fix_fields": "Correct the highlighted fields to continue.",
   "action.save": "Save",
-  "action.create": "Add",
   "action.edit": "Edit",
 } as const;
 
@@ -62,7 +61,6 @@ const es: Record<keyof typeof en, string> = {
   "booking.cancel": "Cancelar",
   "booking.fix_fields": "Corrige los campos marcados para continuar.",
   "action.save": "Guardar",
-  "action.create": "Añadir",
   "action.edit": "Editar",
 };
 

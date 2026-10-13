@@ -337,7 +337,7 @@ export class FloorPlanAddTables extends LitElement {
           variant=${action.variant}
           ?disabled=${failing}
           @click=${() => this.#add()}
-          >${t("action.add")}</wt-button
+          >${t("action.save")}</wt-button
         ></wt-form-actions
       >
     </wt-modal>`;

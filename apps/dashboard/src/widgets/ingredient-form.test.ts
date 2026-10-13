@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { IngredientForm, ingredientRefusalErrors } from "./ingredient-form.js";
 import type { AllergenDeclaration, DietaryOrigin, Ingredient } from "../api/client.js";
 
@@ -77,6 +77,17 @@ describe("ingredient-form", () => {
   it("opens the dialog when open is set", async () => {
     const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", baseProps());
     expect((await openedDialog(el)).open).toBe(true);
+  });
+
+  it("submits a new ingredient with Save", async () => {
+    const before = currentLocale();
+    setLocale("en-GB");
+    try {
+      const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", baseProps());
+      expect(confirmOf(el).textContent!.trim()).toBe("Save");
+    } finally {
+      setLocale(before);
+    }
   });
 
   it("emits create-ingredient with the name and the reviewed allergen map", async () => {

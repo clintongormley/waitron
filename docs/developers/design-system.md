@@ -1871,6 +1871,11 @@ A396). Its unchanged Save stays quiet and disabled; an edit stays blocked until 
 Besides an unchanged draft, a save already in progress or a nested window open (below), only the
 form's own checks disable the action; an error that comes back from a request never does (owner rule, 2026-09-29).
 
+A form's submit button says Save whether the form creates or edits. "Add …" belongs to the dialog's
+title and to the button that opens a create dialog. A one-click action whose whole effect is adding
+keeps Add: a discovered printer's or card reader's Add, the home shortcut picker, and the till
+(owner, 2026-10-12, A546).
+
 - mark every required field with `required`; `wt-input` renders the visible asterisk and forwards
   the native constraint. A field with `hide-label` draws no asterisk, so where one sits in a table
   column with a visible heading, that heading carries the `*` while any row's field is required (the

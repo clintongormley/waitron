@@ -310,7 +310,7 @@ export class ShiftDialog extends LitElement {
         ?disabled=${s.unchanged || this.busy || this.#incomplete() || invalid || clockMissing}
         @click=${(e: Event) => this.#confirm(e)}
       >
-        ${this.shift ? t("action.save") : t("action.create")}
+        ${t("action.save")}
       </wt-button>
     </wt-dialog>`;
   }

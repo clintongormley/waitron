@@ -69,13 +69,13 @@ async function shownRole(el: PersonForm): Promise<string | undefined> {
 }
 
 describe("person-form", () => {
-  it("is headed Añadir usuario and confirms with Añadir", async () => {
+  it("is headed Añadir usuario and confirms with Guardar", async () => {
     const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
     await openedDialog(el);
     expect([
       el.shadowRoot!.querySelector("wt-modal")!.getAttribute("heading"),
       confirmOf(el).textContent!.trim(),
-    ]).toEqual(["Añadir usuario", "Añadir"]);
+    ]).toEqual(["Añadir usuario", "Guardar"]);
   });
 
   it("picks the role from a required shared dropdown, starting on staff", async () => {

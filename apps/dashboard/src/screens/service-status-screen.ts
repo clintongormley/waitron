@@ -430,7 +430,7 @@ export class ServiceStatusScreen extends LitElement {
                 data-test="add"
                 ?disabled=${add.unchanged || this.submitting || this.newLabel.trim() === ""}
                 @click=${() => void this.#create()}
-                >${t("action.create")}</wt-button
+                >${t("action.save")}</wt-button
               >
             </div>`
       }
