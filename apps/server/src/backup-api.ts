@@ -316,13 +316,16 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
   // replace it. `GET recovery-key` keeps refusing such a key.
   const keyPresent = async (): Promise<boolean> => (await readHeldKey(heldKey)).held;
 
-  // One read of the box env gives the held key, its fingerprint and its rotation time. With no key
-  // there, the key is the supervisor's and so are its fingerprint and rotation time.
+  // One read of the box env gives the held key, its fingerprint and its rotation time. With no
+  // usable key there, the fingerprint and rotation time are the supervisor's; with none at all, so
+  // is the held key.
   const statusBody = async () => {
     const env = await deps.readBoxEnv();
     const fileKey = await readHeldKey(async () => loadRecoveryKey(env));
     const loadedKey = deps.supervisor.current().recoveryKey;
-    const { held, key } = fileKey.held ? fileKey : { held: loadedKey !== undefined, key: loadedKey };
+    const { held, key } = fileKey.held
+      ? fileKey
+      : { held: loadedKey !== undefined, key: loadedKey };
     return {
       ...projectStatus(await deps.supervisor.status()),
       ...(fileKey.key === undefined
