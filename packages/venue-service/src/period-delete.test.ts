@@ -234,6 +234,49 @@ describe("where a period is painted", () => {
     expect(impact.specialDays).toBe(1);
   });
 
+  it("lists a special day with a date still to come even when only its past date paints the period", async () => {
+    const v = await venue();
+    const twoDates = await scoped(
+      async (tx) =>
+        (
+          await saveSpecialDay(
+            tx,
+            v.cfg,
+            null,
+            {
+              name: "Two dates",
+              repeatsYearly: false,
+              dates: [
+                { date: "2026-09-01", closedAllDay: false },
+                { date: "2026-10-20", closedAllDay: false },
+              ],
+              paint: [
+                {
+                  departmentId: v.restaurant,
+                  date: "2026-09-01",
+                  ranges: [slot(v.afternoon, "16:00", "19:00")],
+                },
+                {
+                  departmentId: v.restaurant,
+                  date: "2026-10-20",
+                  ranges: [slot(v.dinner, "20:00", "23:00")],
+                },
+              ],
+            },
+            WRITE_AT,
+            0,
+          )
+        ).id,
+    );
+
+    const painted = await scoped((tx) => readPaintedIn(tx, v.cfg, AT));
+    const impact = await scoped((tx) => periodDeleteImpact(tx, v.cfg, v.afternoon, AT));
+
+    expect(painted.get(v.afternoon)!.specialDays).toEqual([{ id: twoDates, name: "Two dates" }]);
+    expect(painted.get(v.dinner)!.specialDays).toEqual([{ id: twoDates, name: "Two dates" }]);
+    expect(impact.specialDays).toBe(1);
+  });
+
   it("gives a period painted nowhere empty lists", async () => {
     const v = await venue();
 

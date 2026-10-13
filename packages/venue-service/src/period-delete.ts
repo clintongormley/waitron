@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNotNull, ne, notExists } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNotNull, ne, notExists } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { readLocationClock } from "@waitron/reporting";
 import { AppError, cutoverForBusinessDay, type BusinessDayClock } from "@waitron/shared";
@@ -92,7 +92,6 @@ async function paintedIn(
       id: specialDays.id,
       name: specialDays.name,
       repeatsYearly: specialDays.repeatsYearly,
-      date: specialDayDates.date,
     })
     .from(departmentDayRanges)
     .innerJoin(departmentDays, eq(departmentDays.id, departmentDayRanges.dayId))
@@ -107,12 +106,29 @@ async function paintedIn(
       ),
     )
     .orderBy(asc(specialDays.name), asc(specialDays.id));
-  for (const row of specialDayPaint) {
-    if (today !== null && !row.repeatsYearly && row.date < today) continue;
-    const list = painted.get(row.periodId!)!.specialDays;
-    // A special day's rows are adjacent, by the order above.
-    if (list.at(-1)?.id !== row.id) list.push({ id: row.id, name: row.name });
-  }
+  const oneOffs = [
+    ...new Set(specialDayPaint.filter((row) => !row.repeatsYearly).map((row) => row.id)),
+  ];
+  // A one-off is listed while any of its dates is to come, whichever date paints the period.
+  const toCome =
+    today === null || oneOffs.length === 0
+      ? null
+      : new Set(
+          (
+            await tx
+              .selectDistinct({ id: specialDayDates.specialDayId })
+              .from(specialDayDates)
+              .where(
+                and(
+                  inArray(specialDayDates.specialDayId, oneOffs),
+                  gte(specialDayDates.date, today),
+                ),
+              )
+          ).map((row) => row.id),
+        );
+  for (const row of specialDayPaint)
+    if (row.repeatsYearly || toCome === null || toCome.has(row.id))
+      painted.get(row.periodId!)!.specialDays.push({ id: row.id, name: row.name });
   return painted;
 }
 
