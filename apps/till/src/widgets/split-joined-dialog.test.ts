@@ -451,6 +451,19 @@ describe("on a group", () => {
     expect(seen.confirmed).toEqual([{ partIds: ["bar"], seats: 10 }]);
   });
 
+  it("labels Seats as a joined table's when the joined table in a group still has tables joined", async () => {
+    const el = await mount({
+      joined: longTable({
+        today: today(10, {
+          joinId: "g",
+          joined: { parts: ["c3", "c4", "c5"], splitOff: [], apart: false },
+        }),
+      }),
+    });
+    await choose(el, ["c5"]);
+    expect(seatsField(el)!.label).toBe("Seats for Long table");
+  });
+
   it("speaks Spanish", async () => {
     setLocale("es-ES");
     const el = await mountGroup();

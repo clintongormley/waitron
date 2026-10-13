@@ -12,6 +12,7 @@ import "@waitron/ui/src/components/wt-number-stepper.js";
 import type { TableState } from "../api/client.js";
 import { countText, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
+import { splitsGroup } from "../state/floor-today.js";
 
 export interface SplitJoinedDetail {
   partIds: string[];
@@ -132,11 +133,6 @@ export class TillSplitJoinedDialog extends LitElement {
 
   #asksSeats(): boolean {
     return this.seatsRequired || this.asksSeats(this.#left().map((part) => part.id));
-  }
-
-  /** `joined` is the table the window was opened on; one in a group splits the group. */
-  #group(): boolean {
-    return this.joined.today?.joinId != null;
   }
 
   #partsError(): string {
@@ -261,7 +257,7 @@ export class TillSplitJoinedDialog extends LitElement {
                 required
                 .min=${1}
                 .max=${SEATS_MAX}
-                .label=${this.#group() ? t("floor.seats_staying") : heading("floor.seats_title")}
+                .label=${splitsGroup(this.joined) ? t("floor.seats_staying") : heading("floor.seats_title")}
                 .decreaseLabel=${(label: string) => t("action.decrease").replace("{label}", label)}
                 .increaseLabel=${(label: string) => t("action.increase").replace("{label}", label)}
                 .value=${live(this.seats)}

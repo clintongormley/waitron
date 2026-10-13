@@ -652,6 +652,21 @@ describe("Split tables… on a group", () => {
     expect(groupSplitOf(table("t", "1"), zone)).toBeNull();
   });
 
+  it.each([
+    ["three tables", ["c3", "c4", "c5"]],
+    ["one table", ["c3"]],
+  ])(
+    "splits a joined table in a group with %s still joined as a joined table, not the group",
+    (_, parts) => {
+      const joinedInGroup = table("long", "Long table", {
+        today: today({ joinId: "g", joined: { parts, splitOff: [], apart: false } }),
+      });
+      const free = table("bar", "Bar", { today: today({ placement: place(38, 0), joinId: "g" }) });
+      expect(groupSplitOf(joinedInGroup, [joinedInGroup, free])).toBeNull();
+      expect(groupSplitOf(free, [joinedInGroup, free])).not.toBeNull();
+    },
+  );
+
   it("asks no seats only when what stays is all of the joined table it was split off, free", () => {
     const asks = groupSplitOf(bar, zone)!.asksSeats;
     expect(asks(["c3", "c4", "c5"])).toBe(false);

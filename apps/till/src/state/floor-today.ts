@@ -321,6 +321,12 @@ export function sheetActions(
   return applies.filter(([, offered]) => offered).map(([action]) => action);
 }
 
+/** Split tables… on `table` splits its group, as the server's `splitOff` decides: a joined table
+ * with a table still joined splits as a joined table even in a group. */
+export function splitsGroup(table: TableState): boolean {
+  return table.today?.joinId != null && (table.today.joined?.parts.length ?? 0) === 0;
+}
+
 export interface GroupSplit {
   members: TableState[];
   name: string;
@@ -338,7 +344,7 @@ export function groupSplitOf(
   table: TableState,
   zoneTables: readonly TableState[],
 ): GroupSplit | null {
-  if (table.today?.joinId == null) return null;
+  if (!splitsGroup(table)) return null;
   const members = mergeMembersOf(zoneTables, table).sort((a, b) => inNumberOrder(a.label, b.label));
   const rejoins = (staying: readonly string[]): boolean => {
     if (members.some((each) => each.party !== null)) return false;

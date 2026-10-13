@@ -577,6 +577,37 @@ describe("till-floor-screen: Split tables… on a group", () => {
     expect(windowOf(el)).toBeNull();
   });
 
+  it("on a joined table in a group with tables still joined, opens the joined table's window", async () => {
+    const api = stubApi();
+    const tables = atRevision(
+      [
+        table("long", "Long table", 10, {
+          seats: 10,
+          joinId: "g",
+          joined: { parts: ["c3", "c4", "c5"], splitOff: [], apart: false },
+        }),
+        part("c3", "Counter 3"),
+        part("c4", "Counter 4"),
+        part("c5", "Counter 5"),
+        table("bar", "Bar", 50, { joinId: "g" }),
+      ],
+      7,
+    );
+    const el = await mount(tables, api);
+    const opened = await openSplit(el, "long");
+    expect(opened.name).toBe("Long table");
+    expect(opened.parts.map((each) => each.id)).toEqual(["c3", "c4", "c5"]);
+    expect(opened.asksSeats(["c4", "c5"])).toBe(true);
+    expect(opened.asksSeats(["c5"])).toBe(false);
+    send(opened, "split-joined-confirm", { partIds: ["c3"], seats: 6 });
+    await settle(el);
+    expect(api.splitOffToday).toHaveBeenCalledExactlyOnceWith(
+      "long",
+      { partIds: ["c3"], seats: 6 },
+      7,
+    );
+  });
+
   it("a change after the split, before any read, sends the room's revision the split answered", async () => {
     for (const [answered, sent] of [
       [{ zoneId: "z1", revision: 8 }, 8],
