@@ -74,7 +74,7 @@ import {
   sameValue,
 } from "./product-editor-model.js";
 import type { ProductChildKind } from "../state/product-child-create.js";
-import { t, currentLocale } from "../i18n/t.js";
+import { fill, t, currentLocale } from "../i18n/t.js";
 import { allergenName, vatClassName } from "../i18n/domain.js";
 
 const dietaryLabels: readonly DietaryLabel[] = DIETARY_LABELS;
@@ -1499,7 +1499,7 @@ export class ProductEditor extends LitElement {
             {
               label: t("editor.base_price"),
               value: unitLabel
-                ? `${priceText(price)} ${t("editor.per_unit").replace("{unit}", unitLabel)}`
+                ? `${priceText(price)} ${fill("editor.per_unit", { unit: unitLabel })}`
                 : t("editor.price_each").replace("{price}", priceText(price)),
             },
           ]
@@ -1519,10 +1519,10 @@ export class ProductEditor extends LitElement {
           !base
             ? priceLabel(unitLabel)
             : unitLabel
-              ? t("editor.base_price_unit").replace("{unit}", unitLabel)
+              ? fill("editor.base_price_unit", { unit: unitLabel })
               : t("editor.base_price")
         }
-        unit=${unitLabel ? t("editor.per_unit").replace("{unit}", unitLabel) : t("editor.unit_each")}
+        unit=${unitLabel ? fill("editor.per_unit", { unit: unitLabel }) : t("editor.unit_each")}
         ?fixed-unit=${parent !== null}
         locale=${currentLocale()}
         placeholder=${parent?.unitPrice ?? ""}

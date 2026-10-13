@@ -1674,10 +1674,9 @@ export class ProductList extends LitElement {
         .rowToggleParts=${(row: ListRow) => (row.kind === "product" ? "variant-toggle" : "")}
         .rowToggleLabel=${(row: ListRow, expanded: boolean) =>
           row.kind === "folder" || row.kind === "root"
-            ? t(expanded ? "folders.close_named" : "folders.open_named").replace(
-                "{name}",
-                row.kind === "root" ? t("folders.all_products") : row.folder.name,
-              )
+            ? fill(expanded ? "folders.close_named" : "folders.open_named", {
+                name: row.kind === "root" ? t("folders.all_products") : row.folder.name,
+              })
             : t(expanded ? "categories.collapse" : "categories.expand")}
         .rowClick=${(row: ListRow) => {
           if (row.kind === "product")

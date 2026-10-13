@@ -3598,6 +3598,22 @@ it("adds nothing when the first Add variant is cancelled", async () => {
   expect(variantTable(el)).toBeNull();
 });
 
+it("puts a unit holding a replacement pattern into the price labels as written", async () => {
+  const odd = { ...unit, abbreviation: { en: "ud $&" } };
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, variants: [small, large] },
+    locales: ["en"],
+    units: [odd],
+    taxChoices: reduced,
+  });
+  const price = el.shadowRoot!.querySelector<HTMLElement & { label: string; unit: string }>(
+    "[name=unit-price]",
+  )!;
+  expect(price.label).toBe(t("editor.base_price_unit").split("{unit}").join("ud $&"));
+  expect(price.unit).toBe(t("editor.per_unit").split("{unit}").join("ud $&"));
+});
+
 it("keeps the price field beside the variants, labelled as the base price", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
