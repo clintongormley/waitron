@@ -923,3 +923,11 @@ CI remain. Task 4 is still incomplete and this checkpoint must not be published.
 using that bound. The exact boundary assertion and message changes were approved in the
 2026-10-13 remaining-checks document. Default descriptor/text-SIF/counter replacement and the
 remaining consumers stay coupled; this checkpoint does not complete Task 4.
+
+**2026-10-14 hook-contract checkpoint:** the remaining-consumer audit found existing
+return-field and malformed-reservation-code assertions outside the earlier exact approval
+lists. The [supplemental request](2026-10-14-w41s4-hook-contract-assertion-approval.md)
+names each expression and the retained complete-series, rollback, permission and history
+checks. Six isolated controls reproduced the old/new interface differences and passed
+with the proposed comparisons; no production code or original assertion was changed.
+Task 4 is parked on that exact approval before the coupled default/text/counter switch.

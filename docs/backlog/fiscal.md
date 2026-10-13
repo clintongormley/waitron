@@ -873,3 +873,19 @@ qualify default allocated adoption. Copying the primary's venue data and collect
 establishment authority remain separate work. W41s-4 must still couple its default descriptors,
 text identity and counter retirement, regenerate and qualify the final migrations, align the
 Cloud contract, then complete both full reviews and current-head CI before landing.
+
+### W41s-4 remaining hook-contract checks, 2026-10-14
+
+Task 4 is parked on the [exact remaining assertion ports](../superpowers/plans/2026-10-14-w41s4-hook-contract-assertion-approval.md).
+The prepared restore writes its active series and returns no replacement list. A standby
+reservation carries the signed complete allocation and returns no active series. Malformed
+establishment state answers `sif.allocation_invalid`; the older tests name
+`sif.reservation_invalid`. The earlier exact approval lists do not enumerate all the old
+return-field and refusal-code checks.
+
+Six controls in an independently installed clone failed at those comparisons, then passed
+with the proposed complete-series and rollback checks. The unchanged fiscal/host baseline
+passed 133 cases; the unedited golden and immutability pair passed 20. These experiments
+select the prepared hooks explicitly. No default, schema, allocator or existing assertion
+was changed. Approve the listed ports or retain the old contract and revise the prepared
+hooks before the coupled default/text/counter transition. Earlier approvals stand.
