@@ -21,6 +21,8 @@ import { codeMessage, codeOf } from "../i18n/codes.js";
 import "./stream-settings-panel.js";
 import type {
   BackupApplyBody,
+  BackupDestinationStatus,
+  BackupDestinationView,
   BackupSchedule,
   BackupStatusView,
   DashboardApi,
@@ -32,7 +34,7 @@ const MIN_KEY_LENGTH = 12;
 
 interface ArchiveDraft {
   mode: "configure" | "settings" | "rotate";
-  destinationDir: string;
+  folder: string;
   daysMode: "daily" | "weekdays";
   weekdays: number[];
   timeMode: "auto" | "fixed";
@@ -51,7 +53,7 @@ function archivePayload(value: ArchiveDraft): unknown {
   const pastedKey = value.advancedPaste ? value.pastedKey : "";
   if (value.mode === "rotate") return { pastedKey };
   return {
-    destinationDir: value.destinationDir.trim(),
+    folder: value.folder.trim(),
     days: value.daysMode === "daily" ? "daily" : [...value.weekdays].sort((a, b) => a - b),
     at: value.timeMode === "auto" ? "auto" : value.atTime,
     count: parseRetention(value.retainCount) ?? value.retainCount,
@@ -129,6 +131,12 @@ export class BackupScreen extends LitElement {
       .stale {
         color: var(--wt-color-danger);
       }
+      .destination {
+        display: contents;
+      }
+      .line {
+        display: block;
+      }
       .field-label {
         display: block;
         margin-bottom: var(--wt-space-1);
@@ -204,7 +212,9 @@ export class BackupScreen extends LitElement {
   @state() private refreshErrorKey: string | null = null;
 
   // The configure and rotate forms share this draft: only ONE of them renders at a time.
-  @state() private destinationDir = "";
+  @state() private folder = "";
+  /** A write stood but the box could not load it; kept until the next write. */
+  @state() private reloadErrorCode: string | null = null;
   @state() private mintedKey: string | null = null;
   @state() private advancedPaste = false;
   @state() private pastedKey = "";
@@ -267,7 +277,7 @@ export class BackupScreen extends LitElement {
         : this.configureAfterApply || !this.status?.enabled
           ? "configure"
           : "rotate",
-      destinationDir: this.destinationDir,
+      folder: this.folder,
       daysMode: this.daysMode,
       weekdays: [...this.weekdays],
       timeMode: this.timeMode,
@@ -301,7 +311,7 @@ export class BackupScreen extends LitElement {
       snapshot: (value) => ({ ...value, weekdays: [...value.weekdays] }),
       equal: (a, b) => sameValue(archivePayload(a), archivePayload(b)),
       restore: (value) => {
-        this.destinationDir = value.destinationDir;
+        this.folder = value.folder;
         this.daysMode = value.daysMode;
         this.weekdays = [...value.weekdays];
         this.timeMode = value.timeMode;
@@ -318,7 +328,7 @@ export class BackupScreen extends LitElement {
     this.#trackArchive();
     if (
       [
-        "destinationDir",
+        "folder",
         "daysMode",
         "weekdays",
         "timeMode",
@@ -451,12 +461,12 @@ export class BackupScreen extends LitElement {
 
   get #applyDisabled(): boolean {
     if (this.#reusesHeldKey)
-      return this.submitting || this.destinationDir.trim() === "" || this.#policyHeld;
+      return this.submitting || this.folder.trim() === "" || this.#policyHeld;
     return (
       this.submitting ||
       this.#policyHeld ||
       !this.savedIt ||
-      this.destinationDir.trim() === "" ||
+      this.folder.trim() === "" ||
       this.#effectiveKey === ""
     );
   }
@@ -473,10 +483,7 @@ export class BackupScreen extends LitElement {
 
   get #saveSettingsDisabled(): boolean {
     return (
-      this.submitting ||
-      this.destinationDir.trim() === "" ||
-      this.#reuseKey === null ||
-      this.#policyHeld
+      this.submitting || this.folder.trim() === "" || this.#reuseKey === null || this.#policyHeld
     );
   }
 
@@ -538,7 +545,7 @@ export class BackupScreen extends LitElement {
     this.refreshErrorKey = null;
     this.submitting = true;
     const body: BackupApplyBody = {
-      destinationDir: this.destinationDir.trim(),
+      destination: { kind: "local-fs", dir: this.folder.trim() },
       ...(sendsKey ? { recoveryKey: this.#effectiveKey } : {}),
       schedule: this.#buildSchedule(),
       retention: this.#retention(),
@@ -549,6 +556,7 @@ export class BackupScreen extends LitElement {
     try {
       const status = await this.api.applyBackup(body);
       if (generation !== this.#generation) return;
+      this.reloadErrorCode = status.reloadErrorCode ?? null;
       scope?.commit(submitted);
       this.configureAfterApply = scope?.isDirty() ?? false;
       this.#configureUsesHeldKey = this.configureAfterApply && !sendsKey;
@@ -579,6 +587,7 @@ export class BackupScreen extends LitElement {
     try {
       const status = await this.api.rotateBackupKey({ recoveryKey: this.#effectiveKey });
       if (generation !== this.#generation) return;
+      this.reloadErrorCode = status.reloadErrorCode ?? null;
       this.status = status;
       scope?.commit(submitted);
       // The bucket copy's kit carries the key, so its panel has to read the new one now.
@@ -653,7 +662,7 @@ export class BackupScreen extends LitElement {
     this.refreshErrorKey = null;
     this.submitting = true;
     const body: BackupApplyBody = {
-      destinationDir: this.destinationDir.trim(),
+      destination: { kind: "local-fs", dir: this.folder.trim() },
       recoveryKey: this.#reuseKey,
       schedule: this.#buildSchedule(),
       retention: this.#retention(),
@@ -664,6 +673,7 @@ export class BackupScreen extends LitElement {
     try {
       const status = await this.api.applyBackup(body);
       if (generation !== this.#generation) return;
+      this.reloadErrorCode = status.reloadErrorCode ?? null;
       this.status = status;
       scope?.commit(submitted);
       this.#policyReplaced = false;
@@ -693,7 +703,7 @@ export class BackupScreen extends LitElement {
   #prefillFromStatus(s: BackupStatusView): void {
     this.#policyReplaced = s.schedule?.kind !== "wall-clock" || !s.retention;
     const first = s.destinations[0];
-    this.destinationDir = first?.kind === "local-fs" ? first.dir : "";
+    this.folder = first?.kind === "local-fs" ? first.dir : "";
     if (s.schedule?.kind === "wall-clock") {
       this.daysMode = s.schedule.days === "daily" ? "daily" : "weekdays";
       if (Array.isArray(s.schedule.days)) this.weekdays = [...s.schedule.days];
@@ -756,7 +766,7 @@ export class BackupScreen extends LitElement {
 
   #onDestination(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
-    this.destinationDir = event.detail.value;
+    this.folder = event.detail.value;
   }
 
   #onPaste(event: CustomEvent<{ value: string }>): void {
@@ -902,6 +912,13 @@ export class BackupScreen extends LitElement {
       <div class="card" id="backup-body">
         ${this.#renderStatus(s)}
         ${
+          this.reloadErrorCode === null
+            ? nothing
+            : html`<p class="error" role="status" data-test="reload-failed">
+                ${t("backup.reload_failed_after_save")} ${codeMessage(this.reloadErrorCode)}
+              </p>`
+        }
+        ${
           s.managedByEnvironment
             ? html`<p class="hint" data-test="managed">${t("backup.status.managed")}</p>`
             : !s.isPrimary
@@ -933,21 +950,24 @@ export class BackupScreen extends LitElement {
           ${
             s.enabled
               ? html`<span class="on">${t("backup.status.on")}</span>`
-              : html`<span class="off">${t("backup.status.off")}</span>`
+              : html`<span class="off"
+                  >${s.storedDisabled ? t("backup.status.stored_off") : t("backup.status.off")}</span
+                >`
+          }
+          ${
+            s.loadErrorCode === null
+              ? nothing
+              : html`<span class="line stale" data-test="load-failed"
+                  >${t("backup.status.load_failed")} ${codeMessage(s.loadErrorCode)}</span
+                >`
           }
         </dd>
         ${
           s.destinations.length > 0
-            ? html`<dt>${t("backup.status.where")}</dt>
-                <dd>
-                  ${s.destinations
-                    .map((d) => (d.kind === "local-fs" ? d.dir : `${d.bucket}/${d.namespace}`))
-                    .join(", ")}
-                </dd>`
-            : nothing
+            ? s.destinations.map((d) => this.#renderDestinationRow(s, d))
+            : html`<dt>${t("backup.status.last")}</dt>
+                <dd>${t("backup.status.never")}</dd>`
         }
-        <dt>${t("backup.status.last")}</dt>
-        <dd>${this.#renderFreshness(s)}</dd>
         ${
           s.keyFingerprint
             ? html`<dt>${t("backup.status.fingerprint")}</dt>
@@ -978,13 +998,55 @@ export class BackupScreen extends LitElement {
     `;
   }
 
-  #renderFreshness(s: BackupStatusView): TemplateResult {
-    if (!s.backupStatus.configured) return html`${t("backup.status.never")}`;
-    const first = s.backupStatus.destinations[0];
-    if (first === undefined || first.lastBackupAt === null)
-      return html`${t("backup.status.never")}`;
-    const when = new Date(first.lastBackupAt).toLocaleString(currentLocale());
-    return first.stale
+  #renderDestinationRow(s: BackupStatusView, d: BackupDestinationView): TemplateResult {
+    const local = d.kind === "local-fs";
+    const outcome = s.backupStatus.configured
+      ? s.backupStatus.destinations.find((r) => r.id === d.id)
+      : undefined;
+    return html`
+      <div
+        class="destination"
+        data-test="destination-row"
+        data-destination=${d.id}
+        data-place=${local ? "local" : "off-box"}
+      >
+        <dt>${local ? t("backup.destination.local") : t("backup.destination.off_box")}</dt>
+        <dd>
+          <span class="line">${local ? d.dir : `${d.bucket}/${d.namespace}`}</span>
+          ${s.backupStatus.configured ? this.#renderOutcome(outcome) : nothing}
+        </dd>
+      </div>
+    `;
+  }
+
+  /** One destination's own result: another destination's success is never shown as this one's. */
+  #renderOutcome(r: BackupDestinationStatus | undefined): TemplateResult {
+    if (r?.readErrorCode)
+      return html`<span class="line stale"
+        >${t("backup.destination.unreadable")} ${codeMessage(r.readErrorCode)}</span
+      >`;
+    const result = r?.uploadErrorCode
+      ? html`<span class="line stale"
+          >${t("backup.destination.failed")} ${codeMessage(r.uploadErrorCode)}</span
+        >`
+      : r?.storedUnderCurrentKey
+        ? html`<span class="line">${t("backup.destination.stored")}</span>`
+        : nothing;
+    const prune = r?.pruneErrorCode
+      ? html`<span class="line stale"
+          >${t("backup.destination.prune_failed")} ${codeMessage(r.pruneErrorCode)}</span
+        >`
+      : nothing;
+    return html`${result}<span class="line"
+        >${t("backup.status.last")}: ${this.#renderFreshness(r)}</span
+      >${prune}`;
+  }
+
+  #renderFreshness(r: BackupDestinationStatus | undefined): TemplateResult {
+    if (r === undefined || r.lastBackupAt === null) return html`${t("backup.status.never")}`;
+    const when = new Date(r.lastBackupAt).toLocaleString(currentLocale());
+    if (r.uploadErrorCode) return html`${when}`;
+    return r.stale
       ? html`${when} — <span class="stale">${t("backup.status.stale")}</span>`
       : html`${when} — ${t("backup.status.fresh")}`;
   }
@@ -995,7 +1057,7 @@ export class BackupScreen extends LitElement {
       <wt-input
         data-test="destination"
         label=${t("backup.destination.label")}
-        .value=${this.destinationDir}
+        .value=${this.folder}
         @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onDestination(e)}
       ></wt-input>
       <p class="hint">${t("backup.destination.hint")}</p>

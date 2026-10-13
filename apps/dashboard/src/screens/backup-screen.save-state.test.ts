@@ -10,6 +10,7 @@ import type { BackupScreen } from "./backup-screen.js";
 afterEach(cleanupWidgets);
 
 const OFF_WITH_KEY: BackupStatusView = {
+  venueId: "c0000000-0000-4000-8000-000000000002",
   enabled: false,
   isPrimary: true,
   managedByEnvironment: false,
@@ -27,6 +28,7 @@ const OFF_WITH_KEY: BackupStatusView = {
 // Every field the settings editor shows holds something other than its default, in the shapes the
 // status read returns, so a field that rewrites its value on first draw would show as a change.
 const ENABLED: BackupStatusView = {
+  venueId: "c0000000-0000-4000-8000-000000000002",
   enabled: true,
   isPrimary: true,
   managedByEnvironment: false,
@@ -45,7 +47,7 @@ const ENABLED: BackupStatusView = {
 };
 
 const STORED_BODY = {
-  destinationDir: "/mnt/usb/waitron",
+  destination: { kind: "local-fs", dir: "/mnt/usb/waitron" },
   recoveryKey: "OLD-KEY-xyz789012345",
   schedule: { kind: "wall-clock", days: [3, 0], at: { hour: 2, minute: 5 } },
   retention: { count: 5, days: 14 },

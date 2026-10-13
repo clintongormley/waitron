@@ -1040,6 +1040,14 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The bucket copy and the scheduled backups would write into each other's folder in this bucket. Choose a different folder for one of them.",
     es: "La copia en el bucket y las copias programadas escribirían una en la carpeta de la otra en este bucket. Elige otra carpeta para una de ellas.",
   },
+  "backup.archive_test_failed": {
+    en: "The backup bucket failed the test, so nothing was saved. Check the address, the key and the bucket's permissions.",
+    es: "El bucket de las copias no ha superado la prueba, así que no se ha guardado nada. Revisa la dirección, la clave y los permisos del bucket.",
+  },
+  "backup.rotation_metadata_failed": {
+    en: "The new recovery key is in use, but the box could not record the change in the backup settings.",
+    es: "La nueva clave de recuperación ya está en uso, pero la caja no ha podido anotar el cambio en los ajustes de las copias.",
+  },
   "backup.archive_settings_invalid": {
     en: "The saved settings for scheduled backups are not valid. Save them again on the Backups screen.",
     es: "Los ajustes guardados de las copias programadas no son válidos. Vuelve a guardarlos en la pantalla Copias de seguridad.",

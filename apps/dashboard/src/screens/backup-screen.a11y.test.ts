@@ -13,6 +13,7 @@ import type { BackupStatusView, DashboardApi } from "../api/client.js";
  */
 
 const OFF: BackupStatusView = {
+  venueId: "c0000000-0000-4000-8000-000000000002",
   enabled: false,
   isPrimary: true,
   managedByEnvironment: false,
@@ -28,6 +29,7 @@ const OFF: BackupStatusView = {
 };
 
 const ENABLED: BackupStatusView = {
+  venueId: "c0000000-0000-4000-8000-000000000002",
   enabled: true,
   isPrimary: true,
   managedByEnvironment: false,

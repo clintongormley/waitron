@@ -44,6 +44,8 @@ export type DestinationView =
       endpoint: string | null;
       region: string;
       bucket: string;
+      prefix: string;
+      accessKeyId: string;
       namespace: string;
       credentialPresent: true;
     };
@@ -56,6 +58,8 @@ export function destinationView(d: BackupDestination): DestinationView {
     endpoint: d.bucket.endpoint ?? null,
     region: d.bucket.region,
     bucket: d.bucket.bucket,
+    prefix: d.bucket.prefix,
+    accessKeyId: d.bucket.accessKeyId,
     namespace: archiveNamespace(d.bucket.prefix, d.venueId),
     credentialPresent: true,
   };

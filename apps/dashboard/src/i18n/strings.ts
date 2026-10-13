@@ -1485,6 +1485,15 @@ export const en = {
     "Backups on this box are managed by its environment — there is nothing to change here.",
   "backup.status.not_primary":
     "This node isn't the venue's primary, so backups are changed from the primary node.",
+  "backup.status.stored_off": "Switched off — the saved destination is kept",
+  "backup.status.load_failed": "Backups are off because the saved settings can't be used.",
+  "backup.reload_failed_after_save": "Saved, but the box could not load the new settings.",
+  "backup.destination.local": "On this box",
+  "backup.destination.off_box": "Off the box",
+  "backup.destination.stored": "Stored a backup under the current key",
+  "backup.destination.failed": "The last backup here failed",
+  "backup.destination.unreadable": "Could not check this destination",
+  "backup.destination.prune_failed": "Old backups here could not be removed",
   "backup.destination.title": "Where to save backups",
   "backup.destination.label": "Backup folder",
   "backup.destination.hint":
@@ -4282,6 +4291,17 @@ export const es: Record<StringKey, string> = {
     "Las copias de seguridad de esta caja las gestiona su entorno; aquí no hay nada que cambiar.",
   "backup.status.not_primary":
     "Este nodo no es el principal del local, así que las copias de seguridad se cambian desde el nodo principal.",
+  "backup.status.stored_off": "Desactivadas; el destino guardado se conserva",
+  "backup.status.load_failed":
+    "Las copias están desactivadas porque no se pueden usar los ajustes guardados.",
+  "backup.reload_failed_after_save":
+    "Se ha guardado, pero la caja no ha podido cargar los ajustes nuevos.",
+  "backup.destination.local": "En esta caja",
+  "backup.destination.off_box": "Fuera de la caja",
+  "backup.destination.stored": "Ha guardado una copia con la clave actual",
+  "backup.destination.failed": "La última copia aquí ha fallado",
+  "backup.destination.unreadable": "No se ha podido comprobar este destino",
+  "backup.destination.prune_failed": "No se han podido borrar las copias antiguas de aquí",
   "backup.destination.title": "Dónde guardar las copias",
   "backup.destination.label": "Carpeta de copias",
   "backup.destination.hint":

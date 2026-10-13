@@ -1621,6 +1621,9 @@ export type BackupDestinationView =
       endpoint: string | null;
       region: string;
       bucket: string;
+      /** The folder chosen inside the bucket; archives live under `namespace`, beneath it. */
+      prefix: string;
+      accessKeyId: string;
       namespace: string;
       credentialPresent: true;
     };
@@ -1628,6 +1631,7 @@ export type BackupDestinationView =
 /** Never carries the recovery key: the server strips it (`projectStatus`,
  * `apps/server/src/backup-api.ts`). */
 export interface BackupStatusView {
+  venueId: string;
   enabled: boolean;
   isPrimary: boolean;
   managedByEnvironment: boolean;
@@ -1673,8 +1677,28 @@ export interface AlertsResponse {
   alerts: AlertView[];
 }
 
+/** LOCAL copy of the destination kinds `POST /api/backup/apply` reads
+ * (`apps/server/src/archive-settings.ts`). An empty or absent secret keeps the held one only for
+ * the same bucket place and access key id. */
+export type ArchiveChoice =
+  | { kind: "local-fs"; dir: string }
+  | { kind: "stream-bucket" }
+  | {
+      kind: "custom-s3";
+      endpoint?: string;
+      region: string;
+      bucket: string;
+      prefix?: string;
+      accessKeyId: string;
+      secretAccessKey?: string;
+    };
+
+/** Apply, disable and rotate answer the full status; a reload that failed after the write is
+ * reported here, and the write still stands. */
+export type BackupWriteAnswer = BackupStatusView & { reloadErrorCode?: string };
+
 export interface BackupApplyBody {
-  destinationDir: string;
+  destination: ArchiveChoice;
   /** Omitted when the box already holds a key: the server uses that one. */
   recoveryKey?: string;
   schedule: BackupSchedule;
@@ -4040,12 +4064,12 @@ export class DashboardApi {
     return this.#request<{ key: string }>("/api/backup/mint-key", "POST");
   }
 
-  applyBackup(body: BackupApplyBody): Promise<BackupStatusView> {
-    const { destinationDir, ...rest } = body;
-    return this.#request<BackupStatusView>("/api/backup/apply", "POST", {
-      ...rest,
-      destination: { kind: "local-fs", dir: destinationDir },
-    });
+  applyBackup(body: BackupApplyBody): Promise<BackupWriteAnswer> {
+    return this.#request<BackupWriteAnswer>("/api/backup/apply", "POST", body);
+  }
+
+  disableBackup(): Promise<BackupWriteAnswer> {
+    return this.#request<BackupWriteAnswer>("/api/backup/disable", "POST");
   }
 
   getBackupRecoveryKey(): Promise<{ key: string | null }> {
@@ -4053,8 +4077,8 @@ export class DashboardApi {
   }
 
   /** Archives taken before the rotate still need the old key. */
-  rotateBackupKey(body: { recoveryKey: string }): Promise<BackupStatusView> {
-    return this.#request<BackupStatusView>("/api/backup/rotate", "POST", body);
+  rotateBackupKey(body: { recoveryKey: string }): Promise<BackupWriteAnswer> {
+    return this.#request<BackupWriteAnswer>("/api/backup/rotate", "POST", body);
   }
 
   getStreamSettings(): Promise<StreamSettingsView> {

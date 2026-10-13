@@ -1725,6 +1725,34 @@ describe("backup admin routes", () => {
       ).toBe(CUSTOM_SECRET);
     }, 60_000);
 
+    it("status names a bucket destination's access key id and chosen folder, never its secret", async () => {
+      const { post, status } = await primaryApp();
+      const res = await post(
+        "/api/backup/apply",
+        applyBody({ ...CUSTOM, prefix: "chosen", secretAccessKey: CUSTOM_SECRET }),
+      );
+      expect(res.status).toBe(200);
+      const stored = (await readSealed())!.destinations[0] as Extract<
+        BackupDestination,
+        { kind: "s3" }
+      >;
+      const answered = await status();
+      expect(answered.destinations).toEqual([
+        expect.objectContaining({
+          kind: "s3",
+          prefix: stored.bucket.prefix,
+          accessKeyId: "AKIACUSTOM",
+        }),
+      ]);
+      expect(stored.bucket.prefix).toContain("chosen");
+      expect(JSON.stringify(answered)).not.toContain(CUSTOM_SECRET);
+    }, 60_000);
+
+    it("status carries the venue id", async () => {
+      const { status } = await primaryApp();
+      expect((await status()).venueId).toBe(VENUE);
+    }, 60_000);
+
     it("an archive folder overlapping the stream's venue folder is refused with nothing written", async () => {
       await storeStream();
       const { sc, post } = await primaryApp();
