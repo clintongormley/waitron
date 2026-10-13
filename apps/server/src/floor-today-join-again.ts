@@ -112,7 +112,6 @@ export async function joinAgain(
       .set({
         ...placementColumns(null),
         seats: part.savedSeats,
-        fixed: part.savedFixed,
         takenOff: false,
       })
       .where(eq(floorTodayTables.tableId, part.tableId));

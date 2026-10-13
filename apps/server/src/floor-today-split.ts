@@ -26,7 +26,6 @@ export interface Part extends LaidPart {
   stillJoined: boolean;
   splitOff: boolean;
   savedSeats: number | null;
-  savedFixed: boolean;
 }
 
 const joinedRow = aliasedTable(floorResetTables, "joined_row");
@@ -43,7 +42,6 @@ export async function partsOf(tx: Transaction, tableId: string): Promise<Part[]>
       keptWidth: floorPlanTableSizes.width,
       keptHeight: floorPlanTableSizes.height,
       savedSeats: partRow.seats,
-      savedFixed: partRow.fixed,
       stillJoined: sql<number>`${stillJoinedPart(diningTables.id)}`,
       splitOff: sql<number>`${exists(
         tx
@@ -68,7 +66,6 @@ export async function partsOf(tx: Transaction, tableId: string): Promise<Part[]>
       stillJoined: Boolean(row.stillJoined),
       splitOff: Boolean(row.splitOff),
       savedSeats: row.savedSeats,
-      savedFixed: row.savedFixed,
     }))
     .sort((a, b) => compareLabels(a.label, b.label));
 }
