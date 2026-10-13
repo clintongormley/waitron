@@ -29,7 +29,6 @@ import {
   READ_DEADLINE_MS,
   RESTART_BACKOFF_MS,
   StreamSupervisor,
-  abortableSleep,
   exitCategory,
   type SupervisorDeps,
 } from "./supervisor.js";
@@ -2506,19 +2505,6 @@ describe("constructed without test seams", () => {
       lagMs: 0,
       lastConfirmedUploadAt: null,
     });
-  });
-});
-
-describe("abortableSleep", () => {
-  it("waits, ends early when aborted, and returns at once when already aborted", async () => {
-    const started = performance.now();
-    await abortableSleep(30, new AbortController().signal);
-    expect(performance.now() - started).toBeGreaterThanOrEqual(25);
-    const controller = new AbortController();
-    const long = abortableSleep(60_000, controller.signal);
-    controller.abort();
-    await long;
-    await abortableSleep(60_000, controller.signal);
   });
 });
 

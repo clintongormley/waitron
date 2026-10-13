@@ -32,9 +32,19 @@ describe("throwIfCancelled", () => {
   });
 });
 
-// Its cases with a signal are in supervisor.test.ts, which uses it.
-describe("abortableSleep with no signal", () => {
-  it("sleeps the whole time", async () => {
+describe("abortableSleep", () => {
+  it("waits, ends early when aborted, and returns at once when already aborted", async () => {
+    const started = performance.now();
+    await abortableSleep(30, new AbortController().signal);
+    expect(performance.now() - started).toBeGreaterThanOrEqual(25);
+    const controller = new AbortController();
+    const long = abortableSleep(60_000, controller.signal);
+    controller.abort();
+    await long;
+    await abortableSleep(60_000, controller.signal);
+  });
+
+  it("sleeps the whole time with no signal", async () => {
     const started = performance.now();
     await abortableSleep(30, undefined);
     expect(performance.now() - started).toBeGreaterThanOrEqual(25);

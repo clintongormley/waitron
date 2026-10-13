@@ -35,8 +35,6 @@ import { probeBucket } from "./probe.js";
 import { createS3ObjectStore, type BucketConfig } from "./s3-store.js";
 import { abortableSleep } from "./store-call.js";
 
-export { abortableSleep };
-
 export type StreamLog = (
   level: "info" | "warn" | "error",
   event: string,

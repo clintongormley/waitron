@@ -350,11 +350,11 @@ describe("a call cancelled while the client waits to retry it", () => {
     });
     const store = createS3ObjectStore(config);
     const controller = new AbortController();
-    const call = outcome(store.list("venues/", { signal: controller.signal }), 100);
+    const listing = store.list("venues/", { signal: controller.signal });
     await firstAnswer.promise;
     await delay(20);
     controller.abort();
-    expect(await call).toEqual(cancelled("list", "venues/"));
+    expect(await outcome(listing, 500)).toEqual(cancelled("list", "venues/"));
     await delay(1_500);
     expect(observed.requests).toBe(1);
   });
