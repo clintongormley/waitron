@@ -617,6 +617,16 @@ export async function refuseDeliveryPending(tx: Transaction, tableId: string): P
   if (delivery !== undefined) throw new AppError("table.delivery_pending", { tableId });
 }
 
+/** A table split off a joined table goes back only through Join again or the reset. */
+async function refuseSplitOff(tx: Transaction, tableId: string): Promise<void> {
+  const [splitOff] = await tx
+    .select({ id: floorTodaySplitParts.id })
+    .from(floorTodaySplitParts)
+    .where(eq(floorTodaySplitParts.partTableId, tableId))
+    .limit(1);
+  if (splitOff !== undefined) throw new AppError("table.split_off", { tableId });
+}
+
 /** Takes a free table off today's plan, keeping its place; one already taken off is left as it is. */
 export async function takeOffToday(
   tx: Transaction,
@@ -627,6 +637,7 @@ export async function takeOffToday(
   if (today.row.takenOff) return;
   if (today.merge !== null) throw new AppError("table.merged", { tableId });
   await refuseInJoinedTable(tx, [tableId]);
+  await refuseSplitOff(tx, tableId);
   await refuseUnfree(tx, [tableId]);
   await refuseDeliveryPending(tx, tableId);
   await tx
@@ -673,6 +684,7 @@ export async function backToSaved(
   tableId: string,
 ): Promise<void> {
   const { row } = await todayOf(tx, cfg, tableId);
+  await refuseSplitOff(tx, tableId);
   const [splitOff] = await tx
     .select({ id: floorTodaySplitParts.id })
     .from(floorTodaySplitParts)

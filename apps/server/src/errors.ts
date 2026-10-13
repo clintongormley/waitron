@@ -347,6 +347,8 @@ declare module "@waitron/shared" {
     "table.fixed": { tableId: string };
     /** A change to today's plan would turn or take off a table in one of today's merges. */
     "table.merged": { tableId: string };
+    /** Back to its saved place or Take off for today named a table split off a joined table. */
+    "table.split_off": { tableId: string };
     /** Taking a table off for today found an order with food on its way to it. */
     "table.delivery_pending": { tableId: string };
     /**

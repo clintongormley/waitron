@@ -392,6 +392,22 @@ describe("the split-off route", () => {
     expect(await todayRow(v, table.long!)).toEqual(longBefore);
   });
 
+  it("answers 409 table.split_off to Back and to Take off on a part split off", async () => {
+    const { table } = await LONG();
+    await expect204(today(table.long!, "split-off", { partIds: [table.c5!], seats: 6 }));
+    const c5Before = await todayRow(v, table.c5!);
+    const longBefore = await todayRow(v, table.long!);
+
+    for (const change of ["back", "take-off"]) {
+      expect(await refusal(today(table.c5!, change))).toEqual({
+        status: 409,
+        body: { error: { code: "table.split_off", params: { tableId: table.c5! } } },
+      });
+    }
+    expect(await todayRow(v, table.c5!)).toEqual(c5Before);
+    expect(await todayRow(v, table.long!)).toEqual(longBefore);
+  });
+
   it.each<
     [
       number,

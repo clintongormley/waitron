@@ -13,11 +13,20 @@ import {
 import type { AppError } from "@waitron/shared";
 import { writeMerge } from "./floor-today-merges.js";
 import { foodOnItsWay } from "./delivery-release.js";
-import { moveToday, resetZone, seatsToday, takeOffToday } from "./floor-today-store.js";
+import {
+  backToSaved,
+  catchUpZone,
+  moveToday,
+  resetZone,
+  seatsToday,
+  takeOffToday,
+} from "./floor-today-store.js";
+import { finishTable } from "./parties.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { splitJoinedTable } from "./floor-today-split.js";
 import { joinAgain } from "./floor-today-join-again.js";
 import {
+  commandFor,
   counterOrder,
   inTx,
   partyAt,
@@ -576,5 +585,52 @@ describe("joining split-off tables again while some stay apart", () => {
 
     expect(await splitRowsOf(table.long!)).toEqual([table.c5!]);
     expect(await todayRow(v, table.long!)).toMatchObject({ seats: 6 });
+  });
+});
+
+describe("after Join again", () => {
+  it("Back to its saved place works on Long table once every table is joined again", async () => {
+    const table = await c5SplitOff();
+    const moved = await todayRow(v, table.long!);
+    await inTx(v, (tx) =>
+      moveToday(tx, v.cfg, table.long!, { x: moved!.x! + 5, y: moved!.y! + 5 }),
+    );
+    await join(table.long!, [table.c5!]);
+
+    await inTx(v, (tx) => backToSaved(tx, v.cfg, table.long!));
+
+    expect(await todayRow(v, table.long!)).toMatchObject({
+      x: 10,
+      y: 20,
+      width: 6,
+      height: 2,
+      seats: 10,
+    });
+  });
+
+  it("a reset after a partial Join again waits for the guests left apart, then puts Long table back whole", async () => {
+    const { table, zoneId } = await LONG_PLUS_BAR();
+    const { partyId } = await seat(v, table.long!);
+    await split(table.long!, [table.c4!, table.c5!], null);
+    await join(table.long!, [table.c4!, table.c5!], 8);
+
+    await inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, NOW));
+
+    expect(await todayRow(v, table.long!)).toMatchObject({ x: 12, width: 10, seats: 8 });
+    expect(await splitRowsOf(table.long!)).toEqual([table.c3!]);
+
+    const command = await commandFor(v, partyId);
+    await inTx(v, (tx) => finishTable(tx, { partyId, ...command }));
+    await inTx(v, (tx) => catchUpZone(tx, v.cfg, REMOVALS, zoneId, NOW));
+
+    expect(await todayRow(v, table.long!)).toMatchObject({
+      x: 10,
+      y: 20,
+      width: 6,
+      height: 2,
+      seats: 10,
+    });
+    expect(await splitRowsOf(table.long!)).toEqual([]);
+    expect(await out(table.c3!)).toBe(1);
   });
 });

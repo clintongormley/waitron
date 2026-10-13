@@ -495,6 +495,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "table.in_joined_table": 409,
   "table.fixed": 409,
   "table.merged": 409,
+  "table.split_off": 409,
   "table.delivery_pending": 409,
   "floor_plan.invalid": 400,
   "merge.seats_required": 400,
