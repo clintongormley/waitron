@@ -99,7 +99,8 @@ refuses or one in an unknown state waits; a free one is put back at once (`planR
   shape and rotation or none, `packages/db/src/schema/floor-plans.ts:52-73`). Owner question 5,
   below, decides where it comes from; the split waits for the answer, nothing before it does.
   > Added 2026-10-13 by A503 part 3: the split record is `floor_today_split_parts`; a part's size is
-  > `floor_plan_table_sizes`, read from the saved plan when Split runs (8 × 8 when it has none).
+  > read from the saved plan when Split runs: the size the plan places it at, else its
+  > `floor_plan_table_sizes` row, else 8 × 8.
 - New tables are classified `state`. `floor_plan_table_parts` joins configuration transfer
   (`packages/db/src/configuration-transfer.ts:48-51`, which carries the saved plan only); all of them
   join the zone and department delete (`apps/server/src/floor-delete.ts`), the live-subscription

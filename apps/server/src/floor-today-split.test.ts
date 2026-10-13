@@ -16,6 +16,8 @@ import type { AppError } from "@waitron/shared";
 import { writeMerge } from "./floor-today-merges.js";
 import { foodOnItsWay } from "./delivery-release.js";
 import { backToSaved, moveToday, takeOffToday } from "./floor-today-store.js";
+import { readZonePlan, saveZonePlan } from "./floor-plan.js";
+import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { splitJoinedTable } from "./floor-today-split.js";
 import { finishTable } from "./parties.js";
 import { joinTables } from "./table-actions.js";
@@ -166,6 +168,37 @@ describe("splitting parts off a joined table", () => {
     expect(await todayRow(v, table.c4!)).toMatchObject({ x: 12, y: 20, width: 2, height: 2 });
     expect(await todayRow(v, table.long!)).toMatchObject({ x: 10, width: 12 });
     expect(await splitRowsOf(table.long!)).toEqual([table.c4!]);
+  });
+
+  it("splits Counter 5 at the size the saved plan places it at, once the owner has taken it out of Long table there and placed it", async () => {
+    const { zoneId, table, master } = await LONG_PLUS_BAR();
+    await inTx(v, async (tx) => {
+      const plan = await readZonePlan(tx, v.cfg, zoneId);
+      const tables = plan.tables.map((t) => ({
+        id: t.id,
+        key: t.id,
+        label: t.label,
+        seats: t.seats,
+        fixed: t.fixed,
+        placement:
+          t.id === master.c5
+            ? { x: 50, y: 50, width: 3, height: 4, shape: "rect" as const, rotation: 0 }
+            : t.placement,
+        partKeys: t.partIds.filter((id) => id !== master.c5),
+      }));
+      await saveZonePlan(
+        tx,
+        v.cfg,
+        enabledTableRemovals(ALL_MODULES),
+        zoneId,
+        { revision: plan.revision, tables },
+        NOW,
+      );
+    });
+
+    await split(table.long!, [table.c5!], 6);
+
+    expect(await todayRow(v, table.c5!)).toMatchObject({ x: 14, y: 19, width: 3, height: 4 });
   });
 
   it("keeps a part already split off where staff moved it at a later split", async () => {

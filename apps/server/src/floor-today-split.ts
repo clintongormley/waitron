@@ -2,6 +2,7 @@ import { aliasedTable, eq, exists, sql } from "drizzle-orm";
 import {
   diningTables,
   floorPlanTableSizes,
+  floorPlanTables,
   floorResetTableParts,
   floorResetTables,
   floorTodaySplitParts,
@@ -35,8 +36,10 @@ async function partsOf(tx: Transaction, tableId: string): Promise<Part[]> {
     .select({
       tableId: diningTables.id,
       label: diningTables.label,
-      width: floorPlanTableSizes.width,
-      height: floorPlanTableSizes.height,
+      placedWidth: floorPlanTables.width,
+      placedHeight: floorPlanTables.height,
+      keptWidth: floorPlanTableSizes.width,
+      keptHeight: floorPlanTableSizes.height,
       stillJoined: sql<number>`${stillJoinedPart(diningTables.id)}`,
       splitOff: sql<number>`${exists(
         tx
@@ -49,14 +52,15 @@ async function partsOf(tx: Transaction, tableId: string): Promise<Part[]> {
     .innerJoin(joinedRow, eq(joinedRow.id, floorResetTableParts.joinedResetTableId))
     .innerJoin(partRow, eq(partRow.id, floorResetTableParts.partResetTableId))
     .innerJoin(diningTables, eq(diningTables.id, partRow.tableId))
+    .leftJoin(floorPlanTables, eq(floorPlanTables.id, diningTables.planTableId))
     .leftJoin(floorPlanTableSizes, eq(floorPlanTableSizes.planTableId, diningTables.planTableId))
     .where(eq(joinedRow.tableId, tableId));
   return rows
     .map((row) => ({
       tableId: row.tableId,
       label: row.label,
-      width: row.width ?? NEW_TABLE_SIZE,
-      height: row.height ?? NEW_TABLE_SIZE,
+      width: row.placedWidth ?? row.keptWidth ?? NEW_TABLE_SIZE,
+      height: row.placedHeight ?? row.keptHeight ?? NEW_TABLE_SIZE,
       stillJoined: Boolean(row.stillJoined),
       splitOff: Boolean(row.splitOff),
     }))
