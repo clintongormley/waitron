@@ -159,6 +159,29 @@ days, the venue as a holiday source and the four old hours tables (`special_date
   #1577; special-day paint was first written in A506-4); until A506-5 the preview's timetable, slot and
   closed-time lines at least counted the old named-day hours, so now it discloses no dated hours at
   all.
+- Two repeating special days can come to share a date after both were saved: a save compares
+  dates only in the years whose holiday lists exist then, so "Good Friday" (every year, saved on a
+  public holiday) and "Fair" (every year, 26 March) both save while only 2026's list ships; when
+  2027's list puts Viernes Santo on 26 March, the till uses whichever stored date sorts first
+  (`specialDaysOn`, `packages/venue-service/src/special-days.ts`), the readiness list says nothing,
+  and every later save of either day is refused with `special_day.date_taken`. Shown by the
+  A506-5 finish-branch review with the two rows inserted as a 2026-only save stores them. A
+  configuration import reaches the same state another way: it compares a holiday-following date
+  in its first year only (`NO_HOLIDAY_DATES`, `packages/venue-service/src/configuration-transfer.ts`).
+  Wanted: a readiness line for such a clash in the current or next year, and a stated rule for
+  which day stands.
+- The readiness line for a repeating holiday date with no match names the stored official holiday
+  name ("Natividad del Señor"), not the special day's own ("Christmas Day"), and says "no public
+  holiday of that name" when the cause is that the year's whole list has not shipped yet.
+- Once a stored holiday date's year has passed, each order's service-state read (`readServiceDayPlan`)
+  also reads the tenant, location and holiday area to find that year's holiday: about 100 µs of
+  roughly 860 µs per call, measured over 2000 calls on a Madrid test venue during the A506-5
+  finish-branch review. Removing it needs a cache that outlives the transaction.
+- The Calendar model drops each date's stored special-day date, so the dashboard re-derives which
+  stored date applies (`specialOn`, `packages/venue-service/src/dashboard/special-date.ts`) and the
+  week views fetch each special day's detail separately; returning the stored date in the model
+  would leave one copy of the rule. The "Add to" offer reads every special day with every date
+  (`GET …/special-days`) to show a name and a latest date.
 
 **Why.** One standard week does not fit a venue whose hours change with the season, and copying a
 week into future dates would bury the special days among ordinary ones.
