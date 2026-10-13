@@ -31,8 +31,8 @@ BOE up to 12 Oct 2026 (the spec's legal-basis table has the sources), so A10 bui
 draft and is checked against the final text if it is published. The time record cannot be edited once
 written, so its chain and correction paths take the owner's sign-off at land.
 
-Part 1 is implemented locally on `feat/a10-1-record-library`: missing-entry corrections,
-worker and manager decisions, automatic-entry confirmation, pay-period closure, scoped frozen
-records and the Spanish history export. The full branch review and current-head CI remain; the
-library has no new route or screen yet. Old workforce venue folders require a reset/reseed for
-the nullable-recorder constraint migration; restoring an old archive is not that reset.
+Part 1 adds missing-entry corrections, worker and manager decisions, automatic-entry confirmation,
+pay-period closure, scoped frozen records and the Spanish history export. The library has no new
+route or screen yet. Reset/reseed old workforce venue folders before installing the nullable-recorder
+constraint migration (owner decision, 2026-10-13). The populated old-record migration test checks
+the refused rebuild and unchanged rows/head after rollback; the empty old-schema test upgrades.

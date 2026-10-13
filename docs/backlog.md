@@ -4115,7 +4115,10 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   ([design](superpowers/specs/2026-07-22-workforce-and-time-record-design.md)). **Designed
   2026-10-12, in six parts** ([spec](superpowers/specs/2026-10-12-a10-clocking-in-and-out-design.md)):
   the digital-record decree is not in force (BOE checked to 12 Oct 2026), so it is built to the
-  October 2025 draft. Part 1 (the record's library) lands first, with the owner's sign-off.
+  October 2025 draft. The library supports missing-entry corrections, worker/manager decisions,
+  automatic-entry confirmation, frozen pay periods and a Spanish history export. Left: till
+  clocking and profile-checked routes; end-of-day discovery and questions; correction screens;
+  hours screens; PDF/CSV and the representatives' export. Part 1 takes the owner's sign-off.
   [Detail](backlog/workforce.md#a10-clocking-in-and-out--the-working-time-record)
 
 - **A585. Staffing needs and the rota** — staff roles painted per area and day like opening hours,
