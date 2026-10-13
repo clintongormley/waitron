@@ -95,8 +95,9 @@ function settingsInvalid(reason: string): AppError {
   return new AppError("backup.archive_settings_invalid", { reason });
 }
 
-function parseSchedule(raw: unknown): BackupSchedule {
-  const invalid = () => settingsInvalid("schedule");
+/** Checks a schedule exactly, throwing what `invalid` returns. Wall-clock days must be ascending,
+ * with no repeats. */
+export function parseSchedule(raw: unknown, invalid: () => AppError): BackupSchedule {
   if (!isRecord(raw)) throw invalid();
   if (raw.kind === "interval") {
     if (!hasExactKeys(raw, ["kind", "ms"]) || !isCount(raw.ms)) throw invalid();
@@ -240,7 +241,7 @@ export function parseArchiveSettings(json: string): ArchiveSettings {
     revision,
     enabled,
     destinations: parsed,
-    schedule: parseSchedule(raw.schedule),
+    schedule: parseSchedule(raw.schedule, () => settingsInvalid("schedule")),
     retention: { count: retention.count, days: retention.days },
     destinationTimeoutMs,
   };

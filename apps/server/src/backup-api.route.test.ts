@@ -2117,6 +2117,20 @@ describe("backup admin routes", () => {
       }, 60_000);
     }
 
+    it("Save stores a wall-clock schedule's days in order, once each", async () => {
+      const { post } = await primaryApp();
+      const res = await post("/api/backup/apply", {
+        ...applyBody({ kind: "local-fs", dir: makeDestDir() }),
+        schedule: { kind: "wall-clock", days: [5, 1, 5], at: "auto" },
+      });
+      expect(res.status).toBe(200);
+      expect((await readSealed())!.schedule).toEqual({
+        kind: "wall-clock",
+        days: [1, 5],
+        at: "auto",
+      });
+    }, 60_000);
+
     it("disable with nothing stored is refused", async () => {
       const { post } = await primaryApp();
       const res = await post("/api/backup/disable");

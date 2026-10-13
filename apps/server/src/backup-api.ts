@@ -16,6 +16,7 @@ import {
   hasExactKeys,
   isRecord,
   parseArchiveSettings,
+  parseSchedule,
   readHeldArchiveSettings,
   requestInvalid,
   resolveArchiveChoice,
@@ -141,37 +142,15 @@ function isWhole(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value);
 }
 
+/** A request may list wall-clock days in any order, and more than once. */
 function readSchedule(raw: unknown): BackupSchedule {
-  const invalid = () => requestInvalid("schedule");
-  if (!isRecord(raw)) throw invalid();
-  if (raw.kind === "interval") {
-    onlyKeys(raw, ["kind", "ms"], "schedule");
-    if (!isWhole(raw.ms) || raw.ms <= 0) throw invalid();
-    return { kind: "interval", ms: raw.ms };
-  }
-  if (raw.kind !== "wall-clock") throw invalid();
-  onlyKeys(raw, ["kind", "days", "at"], "schedule");
-  let days: "daily" | number[];
-  if (raw.days === "daily") days = "daily";
-  else if (
-    Array.isArray(raw.days) &&
-    raw.days.length > 0 &&
-    raw.days.every((n) => isWhole(n) && n >= 0 && n <= 6)
-  ) {
-    days = [...new Set(raw.days as number[])].sort((a, b) => a - b);
-  } else throw invalid();
-
-  let at: { hour: number; minute: number } | "auto";
-  if (raw.at === "auto") at = "auto";
-  else if (isRecord(raw.at)) {
-    onlyKeys(raw.at, ["hour", "minute"], "schedule");
-    const { hour, minute } = raw.at;
-    if (!isWhole(hour) || !isWhole(minute) || hour < 0 || hour > 23 || minute < 0 || minute > 59) {
-      throw invalid();
-    }
-    at = { hour, minute };
-  } else throw invalid();
-  return { kind: "wall-clock", days, at };
+  const days =
+    isRecord(raw) && Array.isArray(raw.days) && raw.days.every((d) => typeof d === "number")
+      ? [...new Set(raw.days as number[])].sort((a, b) => a - b)
+      : undefined;
+  return parseSchedule(days === undefined ? raw : { ...(raw as object), days }, () =>
+    requestInvalid("schedule"),
+  );
 }
 
 function readRetention(raw: unknown): { count: number; days: number } {
