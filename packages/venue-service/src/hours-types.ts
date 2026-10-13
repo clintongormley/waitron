@@ -29,6 +29,11 @@ export interface CalendarDay {
 /** The most dates one Hours read covers: a whole leap year. */
 export const HOURS_RANGE_MAX_DAYS = 366;
 
+/** The years a whole-year read can serve: `isLocalDate` reads years 0–99 as 1900–1999, and
+ *  `rangeDates` cannot step past 9999-12-31. */
+export const CALENDAR_YEAR_MIN = 100;
+export const CALENDAR_YEAR_MAX = 9998;
+
 /** The order a week is shown in, Monday first. It never relabels a stored weekday. */
 export const WEEK_DISPLAY_ORDER = [1, 2, 3, 4, 5, 6, 0] as const;
 

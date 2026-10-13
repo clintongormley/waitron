@@ -38,8 +38,8 @@ export class SpecialDaysApi {
       recovered,
     );
   }
-  listSpecialDays(): Promise<SpecialDaySummary[]> {
-    return this.request<SpecialDaySummary[]>(`${BASE}/special-days`, "GET");
+  listSpecialDays(options?: { passive?: boolean }): Promise<SpecialDaySummary[]> {
+    return this.request<SpecialDaySummary[]>(`${BASE}/special-days`, "GET", undefined, options);
   }
   readSpecialDay(id: string, options?: { passive?: boolean }): Promise<SpecialDayDetail> {
     return this.request<SpecialDayDetail>(

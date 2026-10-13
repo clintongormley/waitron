@@ -5,7 +5,7 @@ import { readLocationClock } from "@waitron/reporting";
 import { venueLocalMoment } from "./hours-clock.js";
 import { readCalendarDays, type HolidayReader } from "./hours.js";
 import { readHolidays, readHolidayAreaModel } from "./holidays.js";
-import type { SpecialDaysModel } from "./holiday-types.js";
+import type { HolidayAreaModel, SpecialDaysModel } from "./holiday-types.js";
 export type { SpecialDaysModel } from "./holiday-types.js";
 import { holidayCityKey } from "./holiday-rules.js";
 import type { LocalDate } from "./hours-types.js";
@@ -36,17 +36,21 @@ export async function readSpecialDaysModel(
     days: await readCalendarDays(tx, cfg, from, to, holidays ?? (async () => read.facts)),
     holidayCoverage: read.coverage,
     holidaySources: read.sources,
-    area: {
-      readiness: area.readiness,
-      addressKey: JSON.stringify([
-        area.venue.country,
-        area.venue.provinceCode,
-        holidayCityKey(area.venue.city ?? ""),
-      ]),
-      options: area.areaOptions,
-      required: area.areaRequired,
-      chosen: area.chosen,
-    },
+    area: holidayAreaSummary(area),
     localHolidaysPerYear: area.localHolidaysPerYear,
+  };
+}
+
+export function holidayAreaSummary(area: HolidayAreaModel): SpecialDaysModel["area"] {
+  return {
+    readiness: area.readiness,
+    addressKey: JSON.stringify([
+      area.venue.country,
+      area.venue.provinceCode,
+      holidayCityKey(area.venue.city ?? ""),
+    ]),
+    options: area.areaOptions,
+    required: area.areaRequired,
+    chosen: area.chosen,
   };
 }

@@ -44,11 +44,21 @@ export async function targetSeasons(
   cfg: VenueScope,
   seasonId: string | undefined,
 ): Promise<Season[]> {
+  if (seasonId === undefined) return ensureDefaultSeasons(tx, cfg);
+  return [(await seasonsNaming(tx, cfg, seasonId)).own];
+}
+
+/** The venue's seasons, after giving a venue without any its four, and the one `id` names, which
+ *  must be this venue's. */
+export async function seasonsNaming(
+  tx: Transaction,
+  cfg: VenueScope,
+  id: string,
+): Promise<{ all: Season[]; own: Season }> {
   const all = await ensureDefaultSeasons(tx, cfg);
-  if (seasonId === undefined) return all;
-  const named = all.find((season) => season.id === seasonId);
-  if (named === undefined) throw new AppError("season.not_found", { seasonId });
-  return [named];
+  const own = all.find((season) => season.id === id);
+  if (own === undefined) throw new AppError("season.not_found", { seasonId: id });
+  return { all, own };
 }
 
 function assertWeek(week: readonly unknown[]): void {

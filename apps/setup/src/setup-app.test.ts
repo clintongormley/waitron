@@ -1197,7 +1197,7 @@ describe("setup-app", () => {
     );
     expect(
       done.shadowRoot!.querySelector("[data-test=opening-hours] a")?.getAttribute("href"),
-    ).toBe("/manage/opening-hours/department/first-department");
+    ).toBe("/manage/opening-hours/view/year");
   });
 
   it("provisions on provision-requested and, on the 200, advances to done", async () => {

@@ -469,7 +469,8 @@ The old Station hours page, client, wire types, readers and writers are removed.
 exports omit those tables; import refuses them with `setup.request_invalid`, field `tables`.
 Named days retained their calendar facts and department/zone schedules; they no longer copied,
 validated or returned station cells. (2026-10-13, A506-5: named days are gone; the Calendar uses
-`SpecialDaysApi`, `packages/venue-service/src/dashboard/special-days-client.ts`.)
+`SpecialDaysApi`, `packages/venue-service/src/dashboard/special-days-client.ts`. A506-6 replaced the
+Calendar with the Year view.)
 
 Core migration `0131_station_retention_and_dashboard_moves.sql` adds held-dish retention and
 permits a person-only move, refusing a move with neither person nor device. The populated upgrade
@@ -546,7 +547,7 @@ the server receives no trusted selection timestamp.
 An offset is bounded to −1439…1439 minutes. Each placement must keep a nonempty sending window;
 a positive offset must stop strictly before the same department's next placement starts. Each
 season's week, each season boundary and the dated overrides are checked when you edit periods,
-timetables, dates or the venue clock, and during configuration import. Yesterday's grace can reach a closed business day only
+timetables, dates, seasons or the venue clock, and during configuration import. Yesterday's grace can reach a closed business day only
 until its own cutoff. Selection and sending remain separate from the department's actual open state.
 The [A432 plan](../superpowers/plans/2026-10-08-a432-period-end-offset.md) records the decisions.
 `apps/server/src/till-api.service-periods.test.ts` exercises the request boundary.
@@ -555,7 +556,7 @@ clock cannot be read, timetable resolution leaves the department's period menus 
 
 Provisioning places the first department's Open period at 09:00–17:00 Monday to Friday when
 there is a catalogue and no existing period. Setup's completion screen shows those normal-week
-hours and links to that department in Opening hours only when its saved schedule matches them.
+hours, with a link to Opening hours' Year, only when its saved schedule matches them.
 A different authored or demo schedule is not described as that first weekday schedule. The checks are in
 `apps/server/src/setup-opening-hours.test.ts`, with the response and completed-request replay in
 `apps/server/src/setup-api.test.ts`.
@@ -613,6 +614,20 @@ In-process callers that name no season, such as `placeOpenPeriod` (`menu-timetab
 department its first Open period at provisioning and whenever a department is created, and the demo
 seed, still write every season.
 
+**2026-10-13, A506-6.** `addSeason`, `saveSeason` and `deleteSeason`
+(`packages/venue-service/src/seasons.ts`) add, rename or move, and delete a season, behind
+`POST …/seasons`, `PUT …/seasons/:seasonId` and `DELETE …/seasons/:seasonId` (`routes.ts`);
+`GET …/seasons/:seasonId/delete-impact` names the departments whose painted hours a delete loses. A
+new season starts with a copy of the department and zone weeks of the season it starts inside (a
+venue with no seasons first gets its four); a deleted season's days join the season before it, and
+its weeks go with it. A blank or taken name, a malformed or taken start, and deleting the last
+season are refused `season.invalid` naming the `field`; an add, a move or a delete re-checks every
+department's end offsets and refuses a clash with `season.invalid`, reason `end_offset`. Every write
+must send `expectedClockRevision`; a stale one refuses an add, a move or a delete with
+`hours.clock_changed`, but not a rename. An unknown or another venue's `seasonId` is refused
+`season.not_found`, and while a day-cutover change is pending an add, a move or a delete is refused
+`hours.clock_change_pending`.
+
 A configuration transfer carries the five season tables (`VENUE_SERVICE_CONFIGURATION_TRANSFER` in
 `packages/venue-service/src/configuration-transfer.ts`). `importConfigurationTables`
 (`apps/server/src/configuration-transfer.ts`) deletes every row of a transferred table before
@@ -650,9 +665,9 @@ Whether a date falls on a day is decided in one place, `specialDateIn` and `shar
 name (`special_day_dates.holiday_name`) and, after its first year, falls where the shipped calendar
 puts that name, or nowhere (see [public-holidays.md](public-holidays.md)). `saveSpecialDay` in the
 same file is the writer behind the API; a configuration import inserts a bundle's rows directly
-(below). In the dashboard, the Calendar's special-day dialog writes a special day's name, dates
-and Every year switch, and the Day tab writes one date's paint (see
-[design-system.md](design-system.md), "Calendar").
+(below). In the dashboard, the special-day dialog, opened from the Year or the Day tab, writes a
+special day's name, dates and Every year switch, and the Day tab writes one date's paint (see
+[design-system.md](design-system.md), "Year").
 
 `DELETE …/menu-periods/:periodId` refuses a period `menu_period.in_use` while a season week or a
 special-day date's paint places it, past dates included; the refusal lists each use (`periodUses`

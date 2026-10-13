@@ -11,7 +11,17 @@ export const DEFAULT_SEASONS: readonly { name: string; startsOn: string }[] = [
   { name: "Winter", startsOn: "12-01" },
 ];
 
-const byStart = <T extends { startsOn: string }>(seasons: readonly T[]): T[] =>
+const SEASON_START = /^(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])$/;
+
+/** A season start as a common year's MM-DD, never 02-29 (`seasons_starts_on_ck`), or null. */
+export function parseSeasonStart(value: unknown): string | null {
+  if (typeof value !== "string" || !SEASON_START.test(value) || value === "02-29") return null;
+  const date = new Date(`2001-${value}T00:00:00Z`);
+  return date.getUTCDate() === Number(value.slice(3)) ? value : null;
+}
+
+/** Seasons in start order, as a new array. */
+export const byStart = <T extends { startsOn: string }>(seasons: readonly T[]): T[] =>
   [...seasons].sort((a, b) => (a.startsOn < b.startsOn ? -1 : Number(a.startsOn > b.startsOn)));
 
 /** The season holding `businessDay`: the latest start on or before its MM-DD, wrapping from the

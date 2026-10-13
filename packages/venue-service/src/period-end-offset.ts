@@ -1,7 +1,7 @@
 import { layerPaint, type PaintRange } from "./day-paint.js";
 import { addDays, weekdayOf } from "./hours-rules.js";
 import type { LocalDate } from "./hours-types.js";
-import { seasonOnSorted } from "./season-rules.js";
+import { byStart, seasonOnSorted } from "./season-rules.js";
 import { rangeSpan, type ServiceRange } from "./service-day.js";
 import { scheduleCutovers, serviceDayWallContext } from "./service-day-context.js";
 import type { BusinessDayClock } from "@waitron/shared";
@@ -91,9 +91,7 @@ export function findSeasonEndOffsetClash(
   date?: LocalDate;
   specialDayId?: string;
 } | null {
-  const ordered = [...seasons].sort((a, b) =>
-    a.startsOn < b.startsOn ? -1 : Number(a.startsOn > b.startsOn),
-  );
+  const ordered = byStart(seasons);
   const weekOf = (season: SeasonSchedule, weekday: number) => season.week[weekday] ?? [];
   // Each season with itself, then each season's last day with the next season's first.
   const pairs = ordered.map((season) => [season, season] as const);

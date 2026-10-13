@@ -51,7 +51,7 @@ function fixture(): OpeningHoursModel {
 beforeEach(() => {
   setLocale("en");
   vi.setSystemTime(new Date("2026-10-12T12:00:00Z"));
-  history.replaceState(null, "", "/manage/opening-hours");
+  history.replaceState(null, "", "/manage/opening-hours/view/week");
 });
 afterEach(() => {
   screen?.remove();

@@ -56,6 +56,38 @@ class OpeningLeaveApp extends LitElement {
           },
           localHolidaysPerYear: 2,
         };
+      if (path.endsWith("/special-days")) return [];
+      if (path.includes("/opening-hours/year?"))
+        return {
+          businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
+          clockRevision: 0,
+          currentBusinessDay: "2026-10-07",
+          pending: null,
+          year: 2026,
+          timeZone: "Europe/Madrid",
+          today: "2026-10-07",
+          seasons: [],
+          days: [
+            {
+              date: "2026-10-13",
+              seasonId: null,
+              specialDay: { id: "own", name: "Anniversary" },
+              holidays: [],
+              tone: "special_day",
+              closed: false,
+            },
+          ],
+          publicHolidaysAvailable: true,
+          missingHolidays: [],
+          holidayCoverage: [],
+          area: {
+            addressKey: "fixture-address",
+            readiness: "ready",
+            options: [],
+            required: false,
+            chosen: null,
+          },
+        };
       if (path.includes("/hours?"))
         return {
           timeZone: "Europe/Madrid",
@@ -251,17 +283,17 @@ it("Cancel and native Escape close a period deletion without creating a draft or
   expect(app.writes).toEqual([]);
 });
 
-describe.each(["en", "es"])("Calendar discard (%s)", (locale) => {
+describe.each(["en", "es"])("Year discard (%s)", (locale) => {
   it("protects a changed special day through close and reconnect", async () => {
     setLocale(locale);
-    history.replaceState(null, "", "/manage/opening-hours/view/calendar/month/2026-10");
+    history.replaceState(null, "", "/manage/opening-hours/view/year/year/2026");
     app = document.createElement("opening-leave-test-app") as OpeningLeaveApp;
     applyTokens(app);
     document.body.append(app);
     await app.updateComplete;
     const screen = app.shadowRoot!.querySelector("dashboard-opening-hours-screen")!;
-    await expect.poll(() => screen.shadowRoot!.querySelector("hours-calendar")).not.toBeNull();
-    const cal = screen.shadowRoot!.querySelector("hours-calendar")!;
+    await expect.poll(() => screen.shadowRoot!.querySelector("opening-hours-year")).not.toBeNull();
+    const cal = screen.shadowRoot!.querySelector("opening-hours-year")!;
     await expect
       .poll(() => cal.shadowRoot!.querySelector("td[data-date='2026-10-13'] button"))
       .not.toBeNull();

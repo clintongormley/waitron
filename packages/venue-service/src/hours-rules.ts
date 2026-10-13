@@ -1,6 +1,11 @@
 // Browser-safe structural rules for opening hours, shared by the writers in `./hours.ts`.
 import { AppError } from "@waitron/shared";
-import { HOURS_RANGE_MAX_DAYS, type LocalDate } from "./hours-types.js";
+import {
+  CALENDAR_YEAR_MAX,
+  CALENDAR_YEAR_MIN,
+  HOURS_RANGE_MAX_DAYS,
+  type LocalDate,
+} from "./hours-types.js";
 import "./errors.js";
 
 const DATE_SHAPE = /^\d{4}-\d{2}-\d{2}$/;
@@ -14,6 +19,13 @@ export function isLocalDate(value: unknown): value is LocalDate {
   const [y, m, d] = value.split("-").map(Number) as [number, number, number];
   const date = new Date(Date.UTC(y, m - 1, d));
   return date.getUTCFullYear() === y && date.getUTCMonth() === m - 1 && date.getUTCDate() === d;
+}
+
+/** A four-digit year from `CALENDAR_YEAR_MIN` to `CALENDAR_YEAR_MAX`, or null. */
+export function parseCalendarYear(value: unknown): number | null {
+  if (typeof value !== "string" || !/^\d{4}$/.test(value)) return null;
+  const year = Number(value);
+  return year >= CALENDAR_YEAR_MIN && year <= CALENDAR_YEAR_MAX ? year : null;
 }
 
 /** Every date from `from` to `to`, both included: real dates, in order, at most a leap year. */

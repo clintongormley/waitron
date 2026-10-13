@@ -102,6 +102,18 @@ it("preserves the Opening hours tab and department a link names when the dashboa
   expect(location.pathname).toBe("/manage/opening-hours/view/periods/department/deli");
 });
 
+it("keeps the Opening hours year a link names when the dashboard rewrites its destination", () => {
+  history.replaceState(null, "", "/manage/opening-hours/view/year/year/2027");
+  const host = document.createElement("test-dashboard-navigation-host") as NavigationHost;
+  hosts.push(host);
+  const url = new UrlStateController(host, () => {}, dashboardPath);
+  document.body.append(host);
+  expect(url.read("view")).toBe("year");
+  expect(url.read("year")).toBe("2027");
+  url.write({ dashboard: "opening-hours" }, true);
+  expect(location.pathname).toBe("/manage/opening-hours/view/year/year/2027");
+});
+
 it("ignores a retired Station hours station child when rewriting its destination", () => {
   history.replaceState(null, "", "/manage/hours/view/week/station/bar");
   const host = document.createElement("test-dashboard-navigation-host") as NavigationHost;
@@ -160,18 +172,6 @@ it("preserves Opening hours zone and All departments URLs", async () => {
   expect(url.read("department")).toBe("all");
 });
 
-it("preserves an Opening hours Calendar month while the shell replaces its section", async () => {
-  history.replaceState(null, "", "/manage/opening-hours/view/calendar/month/2027-02?keep=yes");
-  const host = document.createElement("test-dashboard-navigation-host") as NavigationHost;
-  hosts.push(host);
-  document.body.append(host);
-  const url = new UrlStateController(host, () => {}, dashboardPath);
-  await url.write({ dashboard: "opening-hours" }, true);
-  expect(location.pathname).toBe("/manage/opening-hours/view/calendar/month/2027-02");
-  expect(location.search).toBe("?keep=yes");
-  host.remove();
-});
-
 it("preserves an Opening hours Day view's date while the shell replaces its section", async () => {
   history.replaceState(null, "", "/manage/opening-hours/view/day/date/2026-12-25");
   const host = document.createElement("test-dashboard-navigation-host") as NavigationHost;
@@ -201,9 +201,9 @@ it("declares no Station hours destination while retaining Opening hours navigati
     department: "department",
     zone: "zone",
     station: "station",
-    month: "month",
     season: "season",
     date: "date",
+    year: "year",
   });
 });
 

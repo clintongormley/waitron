@@ -1,5 +1,7 @@
 import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
+import type { OpeningHoursYear } from "../opening-hours-calendar.js";
 import type { MenuPeriodInput, MenuWeekDay, OpeningHoursModel } from "../menu-timetable-types.js";
+import type { Season } from "../season-rules.js";
 import type { ClosedRange } from "../service-day.js";
 import type { SpecialDayDetail, SpecialDayInput } from "../special-days.js";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
@@ -13,6 +15,16 @@ export interface OpeningStation {
   name: string;
   active: boolean;
   isDefault: boolean;
+}
+
+export interface SeasonInput {
+  name: string;
+  /** "MM-DD", never "02-29". */
+  startsOn: string;
+}
+/** The departments whose painted hours deleting a season would lose. */
+export interface SeasonDeleteImpact {
+  departments: { id: string; name: string }[];
 }
 
 const BASE = "/management-api/venue-service";
@@ -40,6 +52,28 @@ export class OpeningHoursApi {
         this.request<OpeningHoursModel>(`${BASE}/opening-hours`, "GET", undefined, {
           passive: true,
         }),
+      apply,
+      failed,
+      recovered,
+    );
+  }
+  /** On the special-day calendar's dependencies, so a special-day or holiday-area write re-reads it. */
+  watchYear(
+    year: number,
+    apply: (model: OpeningHoursYear) => void,
+    failed: (error: unknown) => void,
+    recovered: () => void,
+  ): () => void {
+    return this.#watches.watch(
+      `venue-service:opening-hours-year:${year}`,
+      QUERY_DEPENDENCIES["named-days"],
+      () =>
+        this.request<OpeningHoursYear>(
+          `${BASE}/opening-hours/year?${new URLSearchParams({ year: String(year) })}`,
+          "GET",
+          undefined,
+          { passive: true },
+        ),
       apply,
       failed,
       recovered,
@@ -140,6 +174,18 @@ export class OpeningHoursApi {
       seasonId,
       expectedClockRevision,
     });
+  }
+  saveSeason(id: string, input: SeasonInput, expectedClockRevision: number): Promise<Season> {
+    return this.request(`${BASE}/seasons/${at(id)}`, "PUT", { ...input, expectedClockRevision });
+  }
+  addSeason(input: SeasonInput, expectedClockRevision: number): Promise<Season> {
+    return this.request(`${BASE}/seasons`, "POST", { ...input, expectedClockRevision });
+  }
+  deleteSeason(id: string, expectedClockRevision: number): Promise<void> {
+    return this.request(`${BASE}/seasons/${at(id)}`, "DELETE", { expectedClockRevision });
+  }
+  readSeasonDeleteImpact(id: string): Promise<SeasonDeleteImpact> {
+    return this.request(`${BASE}/seasons/${at(id)}/delete-impact`, "GET");
   }
   /** Saves the special day as stored with `paint` replacing what it names; an empty list is left out. */
   saveDatePaint(

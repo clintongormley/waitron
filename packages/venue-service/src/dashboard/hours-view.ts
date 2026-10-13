@@ -8,24 +8,42 @@ export function format(key: Parameters<typeof t>[0], values: Record<string, stri
   );
 }
 
+/** One formatter per language and options: building one costs far more than using it, and the
+ *  Year draws hundreds of dates on every render. */
+const formatters = new Map<string, Intl.DateTimeFormat>();
 function dateFormat(options: Intl.DateTimeFormatOptions) {
-  return new Intl.DateTimeFormat(currentLocale().startsWith("es") ? "es-ES" : "en-GB", {
-    ...options,
-    timeZone: "UTC",
-  });
+  const locale = currentLocale().startsWith("es") ? "es-ES" : "en-GB";
+  const key = `${locale} ${JSON.stringify(options)}`;
+  let formatter = formatters.get(key);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat(locale, { ...options, timeZone: "UTC" });
+    formatters.set(key, formatter);
+  }
+  return formatter;
 }
 const asUtc = (date: LocalDate) => new Date(`${date}T00:00:00Z`);
 
-/** A date as the dashboard reads it, "Mon 12 Oct 2026", in the dashboard's language. */
+/** A date as the dashboard reads it, "Mon, 12 Oct 2026", in the dashboard's language. */
 export function formatDate(date: LocalDate): string {
   return dateFormat({ weekday: "short", day: "numeric", month: "short", year: "numeric" }).format(
     asUtc(date),
   );
 }
 
+/** A date's weekday, "M" or "Monday", in the dashboard's language. */
+export function formatWeekday(date: LocalDate, style: "narrow" | "long"): string {
+  return dateFormat({ weekday: style }).format(asUtc(date));
+}
+
 /** A day of the year from its MM-DD, "1 Dec", in the dashboard's language. */
 export function formatMonthDay(monthDay: string): string {
-  return dateFormat({ day: "numeric", month: "short" }).format(asUtc(`2001-${monthDay}`));
+  // A leap year, so a leap year's last day of February, 02-29, reads as itself.
+  return dateFormat({ day: "numeric", month: "short" }).format(asUtc(`2000-${monthDay}`));
+}
+
+/** A month's name from its number, 1 to 12, "December", in the dashboard's language. */
+export function formatMonthName(month: number): string {
+  return dateFormat({ month: "long" }).format(asUtc(`2001-${String(month).padStart(2, "0")}-01`));
 }
 
 /** A date written out in full, "Monday, 12 October 2026", for a name read aloud. */

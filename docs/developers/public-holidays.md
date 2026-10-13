@@ -1,6 +1,6 @@
 # Public holidays
 
-You plan holidays in Opening hours → Calendar (`/manage/opening-hours/view/calendar`). Public
+You plan holidays in Opening hours → Year (`/manage/opening-hours/view/year`). Public
 holidays come only from the country's shipped calendar: its national and regional dates. The venue
 is not a holiday source. To change the venue's hours on a day, your town's holiday included, make
 that day a special day (see "Special days" in [conventions-data.md](conventions-data.md)). A
@@ -10,9 +10,10 @@ number does not cap special days.
 A public holiday is information: reading one does not write a special day or change opening hours.
 On a public date, Make this a special day… opens the special-day dialog with the holiday's name
 filled in; you choose its dates, whether it repeats every year, and whether each date is Closed all
-day. The reader is `readSpecialDaysModel` in `packages/venue-service/src/named-days.ts`; the dialog
-and the Calendar are `special-day-dialog.ts` and `hours-calendar.ts` in
-`packages/venue-service/src/dashboard/`.
+day. The Year's reader is `readOpeningHoursYear` in
+`packages/venue-service/src/opening-hours-calendar.ts`, and the Week's real week reads
+`readSpecialDaysModel` in `packages/venue-service/src/named-days.ts`; the dialog and the Year are
+`special-day-dialog.ts` and `opening-hours-year.ts` in `packages/venue-service/src/dashboard/`.
 
 A special-day date saved on a public holiday records that holiday's official name
 (`special_day_dates.holiday_name`); a date the special day already held keeps the name it was saved
@@ -39,7 +40,7 @@ date with the others in its first year only (`validateSpecialDays`,
   them. `packages/venue-service/drizzle/0038_clammy_klaw.sql` dropped `local_holidays`.
 - `holiday_geographies` in `packages/venue-service/src/schema/holidays.ts` retains the holiday-area
   choice for an address. `readHolidayAreaModel` and `saveHolidayArea` in `holidays.ts` read and write
-  that choice; the area control is in Calendar. The routes in `routes.ts` require `venue.view`
+  that choice; the area control is in the Year. The routes in `routes.ts` require `venue.view`
   for reads and `venue_service.manage` for writes.
 
 ## Official dates follow your address; special days follow your venue
@@ -47,7 +48,7 @@ date with the others in its first year only (`validateSpecialDays`,
 `readAddress` and `readHolidays` in `packages/venue-service/src/holidays.ts` resolve the country
 from the taxpayer, the province from the pack's province list, and the city from the location.
 A missing or unknown province supplies no official facts. If the official calendar offers a
-territorial choice, choose it in Calendar; until then, only facts certain for the whole province
+territorial choice, choose it in the Year; until then, only facts certain for the whole province
 are shown. The 2026 territorial source notes remain in the archived sources README.
 
 An area's identity uses country, province and normalized city. Changing the address stops using
@@ -56,8 +57,10 @@ Unicode, trims and collapses spaces, and lowercases; accents and punctuation sti
 Special days are not filtered by that identity, and you can add them without a recognized holiday
 address or country calendar.
 
-Each read supplies coverage for every year it spans. Calendar reports official and local coverage
-independently (`hours-calendar.ts`).
+Each read supplies coverage for every year it spans. The Year reports the shown year's official
+coverage, and says the town's holidays are not in the official lists whenever that year has a
+coverage entry, since every `local` value below means the list carries none
+(`opening-hours-year.ts`).
 
 | `nationalRegional` | Meaning |
 | --- | --- |
@@ -74,11 +77,12 @@ name" in `packages/venue-service/src/holidays.test.ts`.
 
 ## The local number is information
 
-`localEntryLimit` remains in the country contract and reaches Calendar as `localHolidaysPerYear`.
+`localEntryLimit` remains in the country contract and reaches `readSpecialDaysModel` as
+`localHolidaysPerYear`.
 Spain's 2 comes from BOE-A-2025-21667: "hasta dos días de cada año natural con carácter de fiestas
 locales". The source is archived in `packages/country-es/src/data/sources/BOE-A-2025-21667.xml`.
-It is guidance about the public calendar, not a limit on special days: Calendar shows it as a hint
-(`calendar.local_hint`, `hours-calendar.ts`), and `saveSpecialDay` never reads it. A special day is your assertion; nothing checks
+It is guidance about the public calendar, not a limit on special days: no screen has shown it since
+A506-6 removed the Calendar (2026-10-13), and `saveSpecialDay` never reads it. A special day is your assertion; nothing checks
 it against a municipal list.
 
 ## What a configuration transfer carries

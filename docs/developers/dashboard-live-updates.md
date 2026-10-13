@@ -69,6 +69,8 @@ its read-ordering tests remain while Opening hours uses the calendar.
 2026-10-13, A506-5: Opening hours Calendar uses `SpecialDaysApi`
 (`packages/venue-service/src/dashboard/special-days-client.ts`) and the query dependencies it
 names. The Hours read counts above describe the retired page, not the current Calendar.
+2026-10-13, A506-6: the Calendar is gone. The Year reads `/opening-hours/year` through
+`OpeningHoursApi.watchYear` on the `named-days` dependencies.
 
 Use passive requests for automatic refreshes so leaving a dashboard open does not keep its session
 alive. `DashboardQueries` handles that distinction for core screens. A module using `request`

@@ -141,8 +141,17 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
   ): Promise<HolidayRead> {
     rangeDates(from, to);
     const address = await readAddress(tx, cfg);
-    const { calendar, provinceCode } = address;
     const current = (await geographiesOf(tx, cfg)).find((row) => matches(row, address));
+    return holidaysAt(address, current, from, to);
+  }
+
+  function holidaysAt(
+    address: Address,
+    current: GeographyRow | undefined,
+    from: LocalDate,
+    to: LocalDate,
+  ): HolidayRead {
+    const { calendar, provinceCode } = address;
     const firstYear = yearOf(from);
     const lastYear = yearOf(to);
 
@@ -195,12 +204,21 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
     fromYear: number,
     toYear: number,
   ): Promise<HolidayDates> {
-    const byYear = new Map<number, Map<string, LocalDate>>();
-    if (fromYear > toYear) return byYear;
+    if (fromYear > toYear) return new Map();
     const address = await readAddress(tx, cfg);
+    const current = (await geographiesOf(tx, cfg)).find((row) => matches(row, address));
+    return holidayDatesAt(address, current, fromYear, toYear);
+  }
+
+  function holidayDatesAt(
+    address: Address,
+    current: GeographyRow | undefined,
+    fromYear: number,
+    toYear: number,
+  ): HolidayDates {
+    const byYear = new Map<number, Map<string, LocalDate>>();
     const { calendar, provinceCode } = address;
     if (calendar === undefined || provinceCode === null) return byYear;
-    const current = (await geographiesOf(tx, cfg)).find((row) => matches(row, address));
     const { facts } = calendar.read({
       provinceCode,
       areaKey: current?.areaKey ?? null,
@@ -220,8 +238,11 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
 
   async function readHolidayAreaModel(tx: Transaction, cfg: VenueScope): Promise<HolidayAreaModel> {
     const address = await readAddress(tx, cfg);
-    const rows = await geographiesOf(tx, cfg);
-    const current = rows.find((row) => matches(row, address));
+    const current = (await geographiesOf(tx, cfg)).find((row) => matches(row, address));
+    return areaModelAt(address, current);
+  }
+
+  function areaModelAt(address: Address, current: GeographyRow | undefined): HolidayAreaModel {
     const areaOptions =
       address.calendar !== undefined && address.provinceCode !== null
         ? address.calendar.areasForProvince(address.provinceCode).map(({ key, name }) => ({
@@ -245,6 +266,22 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
       areaOptions,
       areaRequired: areaOptions.length > 0 && (current?.areaKey ?? null) === null,
       chosen: current?.areaKey ?? null,
+    };
+  }
+
+  /** `readHolidays` over `year`, `readHolidayAreaModel` and `readHolidayDates` for `year`,
+   *  reading the address and its geography once. */
+  async function readHolidayYear(
+    tx: Transaction,
+    cfg: VenueScope,
+    year: number,
+  ): Promise<{ read: HolidayRead; area: HolidayAreaModel; dates: HolidayDates }> {
+    const address = await readAddress(tx, cfg);
+    const current = (await geographiesOf(tx, cfg)).find((row) => matches(row, address));
+    return {
+      read: holidaysAt(address, current, `${String(year).padStart(4, "0")}-01-01`, yearEnd(year)),
+      area: areaModelAt(address, current),
+      dates: holidayDatesAt(address, current, year, year),
     };
   }
 
@@ -276,11 +313,18 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
     readHolidayDates,
     readHolidayFacts,
     readHolidayAreaModel,
+    readHolidayYear,
     saveHolidayArea,
   };
 }
 
 const INSTALLED = createHolidayStore();
 
-export const { readHolidays, readHolidayDates, readHolidayAreaModel, saveHolidayArea } = INSTALLED;
+export const {
+  readHolidays,
+  readHolidayDates,
+  readHolidayAreaModel,
+  readHolidayYear,
+  saveHolidayArea,
+} = INSTALLED;
 export const readHolidayFacts: HolidayReader = INSTALLED.readHolidayFacts;
