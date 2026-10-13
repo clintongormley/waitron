@@ -1942,6 +1942,20 @@ describe("backup admin routes", () => {
       expect(await readSealed()).toBeNull();
     }, 60_000);
 
+    it("a folder path holding a control character is refused as the folder, with nothing written", async () => {
+      const { sc, post } = await primaryApp();
+      for (const control of ["\u0001", "\u007f", "\u0085"]) {
+        const dir = `${makeDestDir()}/a${control}b`;
+        const res = await post("/api/backup/apply", applyBody({ kind: "local-fs", dir }));
+        expect(res.status, JSON.stringify(control)).toBe(400);
+        expect(await res.json(), JSON.stringify(control)).toMatchObject({
+          error: { code: "backup.request_invalid", params: { field: "dir" } },
+        });
+      }
+      expect(await readSealed()).toBeNull();
+      await expect(readFile(join(sc.stateDir, "backup.env"), "utf8")).rejects.toThrow();
+    }, 60_000);
+
     it("an unknown field is refused without its name, which could be a secret", async () => {
       const lines: string[] = [];
       const { post } = await primaryApp({}, undefined, (level, event, fields) => {
