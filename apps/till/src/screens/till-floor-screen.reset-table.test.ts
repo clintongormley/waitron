@@ -637,8 +637,8 @@ describe("till-floor-screen: Reset table's refusals name the tables", () => {
   });
 
   it.each([
-    ["en", "That table was split off. Reset Long table first"],
-    ["es", "Esa mesa está separada. Restablece Long table primero"],
+    ["en", "That table was split off. Reset Long table first."],
+    ["es", "Esa mesa está separada. Restablece Long table primero."],
   ])(
     "in %s, Back to saved place on a table another till has split off names the table it was split off from",
     async (locale, words) => {
