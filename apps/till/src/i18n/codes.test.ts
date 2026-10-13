@@ -562,6 +562,21 @@ it("says each joined-table refusal in English and Spanish", () => {
   }
 });
 
+it("says each refusal of splitting tables off a group in English and Spanish", () => {
+  const words: [string, string, string][] = [
+    [
+      "merge.member_invalid",
+      "That table is no longer joined to these tables",
+      "Esa mesa ya no está unida a estas mesas",
+    ],
+    ["merge.split_all", "Leave at least one table joined", "Deja al menos una mesa unida"],
+  ];
+  for (const [code, en, es] of words) {
+    expect(codeMessage(code, "en")).toBe(en);
+    expect(codeMessage(code, "es")).toBe(es);
+  }
+});
+
 it("says the floor changed under a till, in English and Spanish", () => {
   expect(codeMessage("floor_today.out_of_date", "en")).toBe(
     "The floor has changed. Check and try again",

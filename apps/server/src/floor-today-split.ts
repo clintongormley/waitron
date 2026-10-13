@@ -1,27 +1,31 @@
 import { eq } from "drizzle-orm";
 import { floorTodaySplitParts, floorTodayTables, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import { refuseHeld, refuseInJoinedTable, todayOf } from "./floor-today-table.js";
+import { refuseHeld, refuseInJoinedTable, todayOf, type Today } from "./floor-today-table.js";
 import { leaveMergesRestoring } from "./floor-today-merges.js";
 import { placementColumns, placementOf, refuseDeliveryPending } from "./floor-today-store.js";
 import { partPlaces, remainingPlace } from "./joined-split-layout.js";
-import { partsOf, passGuests } from "./floor-today-parts.js";
+import { partsOf, passGuests, type Part } from "./floor-today-parts.js";
 import type { TillConfig } from "./till-config.js";
 import "./errors.js";
 
-/** Splits `partIds` off the joined table: they stand side by side in its place, and it keeps the rest. */
+/**
+ * Splits `partIds` off the joined table: they stand side by side in its place, and it keeps the
+ * rest. `read` is the table's `todayOf` and `partsOf`, when the caller has just read them in `tx`.
+ */
 export async function splitJoinedTable(
   tx: Transaction,
   cfg: TillConfig,
   args: { tableId: string; partIds: string[]; seats: number | null },
+  read?: { today: Today; parts: Part[] },
 ): Promise<void> {
   const { tableId, partIds, seats } = args;
-  const today = await todayOf(tx, cfg, tableId);
+  const today = read?.today ?? (await todayOf(tx, cfg, tableId));
   let row = placementOf(today.row);
   if (row === null) throw new AppError("table.not_on_today_plan", { tableId });
   if (today.row.takenOff) throw new AppError("table.taken_off", { tableId });
 
-  const parts = await partsOf(tx, tableId);
+  const parts = read?.parts ?? (await partsOf(tx, tableId));
   if (parts.length === 0) throw new AppError("joined_table.not_found", { tableId });
   await refuseInJoinedTable(tx, [tableId]);
 

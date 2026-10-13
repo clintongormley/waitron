@@ -25,7 +25,7 @@ import {
 } from "./floor-today-store.js";
 import { splitFreeMerge, writeMerge } from "./floor-today-merges.js";
 import { joinAgain } from "./floor-today-join-again.js";
-import { splitJoinedTable } from "./floor-today-split.js";
+import { splitOff } from "./floor-today-split-group.js";
 import type { Logger } from "./logger.js";
 import type { Run, TillApiDeps } from "./till-api.js";
 import { requireSession } from "./till-session.js";
@@ -190,8 +190,12 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
   tableRoute("split-off", (body) => {
     const { partIds, seats } = partsBody(body);
     return {
-      write: (tx, joinedId) =>
-        splitJoinedTable(tx, deps.cfg, { tableId: joinedId, partIds, seats }),
+      write: (tx, pathId) =>
+        splitOff(tx, deps.cfg, removals, deps.clock.now().instant, {
+          tableId: pathId,
+          partIds,
+          seats,
+        }),
       others: partIds,
     };
   });

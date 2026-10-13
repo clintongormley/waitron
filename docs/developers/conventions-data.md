@@ -1628,7 +1628,7 @@ rows that had to wait for a name (`apps/server/src/floor-today-store.ts:350`). T
 a later master edit from changing the copy a reset is still applying.
 
 A closing party keeps its table names as text and releases its `party_tables` rows
-(`apps/server/src/parties.ts:667`). Permanent removal releases order delivery references and calls
+(`closePartyTables`, `apps/server/src/parties.ts`). Permanent removal releases order delivery references and calls
 each module's `TableRemoval` seat before deleting the table
 (`apps/server/src/table-removal.ts:75`). Bookings copies the table label and clears its pointer
 (`packages/bookings/src/table-removal.ts:42`); the delivery release copies the label onto referenced orders
@@ -1650,7 +1650,8 @@ waiting together while any of them is held by a party, refused by a module, merg
 table, or has food on its way to it; a merge in which no table is held by a party, refused by a module
 or in a split group that waits is ended as any free merge is. Its parts
 not split off stay joined meanwhile, and the split ends when the reset puts the joined table back,
-or, for the tables it takes back, when Join again does
+or, for the tables it takes back, when Join again does, or when Split tables… on a group puts it
+back over the tables that stay (`splitGroup`, which also clears their "needs clearing" marks)
 (`splitWithBusy`, `apps/server/src/floor-reset-plan.ts:38`; `waitingTogether`,
 `apps/server/src/floor-today-store.ts:486`). When the reset, or a later catch-up of its pending
 rows, puts a split joined table back whole, it clears the "needs clearing" mark of each table split
@@ -1667,6 +1668,11 @@ joined table. A table pushed onto it joins the merge with the joined table whole
 split down to one is refused `tab.already_open` while a party holds a table of the merge, and
 otherwise ends the merge first, putting its tables back where they stood (`splitJoinedTable`,
 `apps/server/src/floor-today-split.ts`).
+Split tables… on a table in a group goes to `splitGroup` unless the table is a joined table with
+tables still joined, which keeps `splitJoinedTable` (`splitOff`, `apps/server/src/floor-today-split-group.ts`).
+A ticked table not in the group is refused `merge.member_invalid`, ticking every table
+`merge.split_all`, and ticking every table a party holds `tab.already_open` (a moved bill can hold
+one table of a group, backlog A594).
 When deleting a table is refused, `removeLiveTables` deletes the split rows naming it and tries again,
 and puts them back if that is refused too (`apps/server/src/table-removal.ts:115`).
 

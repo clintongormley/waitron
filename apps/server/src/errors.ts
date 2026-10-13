@@ -690,6 +690,10 @@ declare module "@waitron/shared" {
      */
     "floor_today.out_of_date": { zoneId: string; revision: number };
     "merge.seats_required": Record<string, never>;
+    /** A table named to split off a group is not one of its members. */
+    "merge.member_invalid": { tableId: string; field: "partIds" };
+    /** The split names every member of the group, which would leave it with none. */
+    "merge.split_all": { tableId: string; field: "partIds" };
     /** The path's table is not the joined table of any part in today's copy. */
     "joined_table.not_found": { tableId: string };
     /** A table named to split off is not a part of this joined table still joined to it. */
