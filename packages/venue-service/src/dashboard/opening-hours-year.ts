@@ -19,7 +19,7 @@ import {
 } from "./hours-view.js";
 import type { SeasonWrites } from "./season-chips.js";
 import "./season-chips.js";
-import { seasonTints } from "./season-tint.js";
+import { seasonTints, seasonTintStyles } from "./season-tint.js";
 import type { SpecialDayAction } from "./special-day-action.js";
 import type { SpecialDaysApi } from "./special-days-client.js";
 import { t } from "./strings.js";
@@ -47,6 +47,7 @@ const A_MONDAY = "2024-01-01";
 export class OpeningHoursYearView extends LitElement {
   static override styles = [
     baseStyles,
+    seasonTintStyles,
     css`
       :host {
         display: block;
@@ -173,21 +174,9 @@ export class OpeningHoursYearView extends LitElement {
         text-align: center;
         cursor: pointer;
       }
-      td[data-tint="1"] .day {
-        background: var(--wt-color-season-1);
-        color: var(--wt-color-on-season-1);
-      }
-      td[data-tint="2"] .day {
-        background: var(--wt-color-season-2);
-        color: var(--wt-color-on-season-2);
-      }
-      td[data-tint="3"] .day {
-        background: var(--wt-color-season-3);
-        color: var(--wt-color-on-season-3);
-      }
-      td[data-tint="4"] .day {
-        background: var(--wt-color-season-4);
-        color: var(--wt-color-on-season-4);
+      td[data-tint] .day {
+        background: var(--season-tint);
+        color: var(--season-on-tint);
       }
       td.mark-holiday .day {
         border-color: var(--wt-color-palette-red);

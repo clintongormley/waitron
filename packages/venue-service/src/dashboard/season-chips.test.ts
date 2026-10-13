@@ -100,6 +100,28 @@ it("labels each chip from the server's last day and tints it by start order, rep
   expect(chips()[0]!.getAttribute("aria-label")).toBe("Edit Spring, 1 Mar – 31 May");
 });
 
+it("paints each chip with its season's colour tokens", async () => {
+  await mount();
+  const token = (name: string) => {
+    const probe = document.createElement("span");
+    probe.style.color = `var(${name})`;
+    el.shadowRoot!.append(probe);
+    const value = getComputedStyle(probe).color;
+    probe.remove();
+    return value;
+  };
+  for (const chip of chips()) {
+    const tint = chip.dataset.tint!;
+    const painted = getComputedStyle(chip);
+    expect([painted.backgroundColor, painted.color, painted.borderTopColor]).toEqual([
+      token(`--wt-color-season-${tint}`),
+      token(`--wt-color-on-season-${tint}`),
+      token(`--wt-color-season-${tint}-line`),
+    ]);
+  }
+  expect(new Set(chips().map((chip) => getComputedStyle(chip).backgroundColor)).size).toBe(4);
+});
+
 it("renames a season through the api with its start and the clock revision, then says it changed", async () => {
   const { api, changed } = await mount();
   await openChip("Winter");

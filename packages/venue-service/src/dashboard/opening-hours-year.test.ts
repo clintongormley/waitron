@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { setLocale } from "@waitron/dashboard-kit";
+import { applyTokens } from "@waitron/ui";
 import type { OpeningHoursYear, OpeningHoursYearDay } from "../opening-hours-calendar.js";
 import type { HolidayFact, LocalDate } from "../hours-types.js";
 import { addDays } from "../hours-rules.js";
@@ -182,6 +183,31 @@ describe("Opening hours year", () => {
         .querySelector("season-chips")!
         .shadowRoot!.querySelector<HTMLElement>('[data-season="x"]')!.dataset.tint,
     ).toBe("1");
+  });
+
+  it("paints each tinted day with its season's colour tokens", async () => {
+    const el = await mount();
+    applyTokens(el);
+    await el.updateComplete;
+    const token = (name: string) => {
+      const probe = document.createElement("span");
+      probe.style.color = `var(${name})`;
+      root(el).append(probe);
+      const value = getComputedStyle(probe).color;
+      probe.remove();
+      return value;
+    };
+    const dates = { "1": "2027-04-10", "2": "2027-07-01", "3": "2027-10-01", "4": "2027-01-15" };
+    for (const [tint, date] of Object.entries(dates)) {
+      const painted = getComputedStyle(dayButton(el, date));
+      expect([painted.backgroundColor, painted.color]).toEqual([
+        token(`--wt-color-season-${tint}`),
+        token(`--wt-color-on-season-${tint}`),
+      ]);
+    }
+    expect(new Set(Object.keys(dates).map((tint) => token(`--wt-color-season-${tint}`))).size).toBe(
+      4,
+    );
   });
 
   it("marks public holidays, special days and closed days, with a legend of the three", async () => {

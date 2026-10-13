@@ -9,7 +9,7 @@ import { format, formatMonthDay } from "./hours-view.js";
 import type { SeasonChip, SeasonDialog } from "./season-dialog.js";
 import "./season-dialog.js";
 import { byStart } from "../season-rules.js";
-import { seasonTints } from "./season-tint.js";
+import { seasonTints, seasonTintStyles } from "./season-tint.js";
 import { t } from "./strings.js";
 
 export type { SeasonChip } from "./season-dialog.js";
@@ -35,6 +35,7 @@ const refusalOf = (error: unknown): Refusal => ({
 export class SeasonChips extends LitElement {
   static override styles = [
     baseStyles,
+    seasonTintStyles,
     css`
       :host {
         display: block;
@@ -64,25 +65,10 @@ export class SeasonChips extends LitElement {
         outline: var(--wt-field-line-width-active) solid var(--wt-color-focus);
         outline-offset: var(--wt-focus-offset);
       }
-      .chip[data-tint="1"] {
-        background: var(--wt-color-season-1);
-        color: var(--wt-color-on-season-1);
-        border-color: var(--wt-color-season-1-line);
-      }
-      .chip[data-tint="2"] {
-        background: var(--wt-color-season-2);
-        color: var(--wt-color-on-season-2);
-        border-color: var(--wt-color-season-2-line);
-      }
-      .chip[data-tint="3"] {
-        background: var(--wt-color-season-3);
-        color: var(--wt-color-on-season-3);
-        border-color: var(--wt-color-season-3-line);
-      }
-      .chip[data-tint="4"] {
-        background: var(--wt-color-season-4);
-        color: var(--wt-color-on-season-4);
-        border-color: var(--wt-color-season-4-line);
+      .chip[data-tint] {
+        background: var(--season-tint);
+        color: var(--season-on-tint);
+        border-color: var(--season-tint-line);
       }
     `,
   ];
