@@ -459,13 +459,11 @@ describe("the period-delete routes", () => {
     expect(await stored(r)).toEqual(before);
   });
 
-  it("refuses a body missing either key, holding another key or a malformed replacement, naming the field and changing nothing", async () => {
+  it("refuses a body missing the replacement, holding another key or a malformed replacement, naming the field and changing nothing", async () => {
     const r = await routed();
     const before = await stored(r);
     const cases: [unknown, string][] = [
       [{ expectedClockRevision: 0 }, "replacementPeriodId"],
-      [{ replacementPeriodId: null }, "expectedClockRevision"],
-      [{ replacementPeriodId: r.afternoon }, "expectedClockRevision"],
       [{ replacementPeriodId: "not-a-uuid", expectedClockRevision: 0 }, "replacementPeriodId"],
       [{ replacementPeriodId: null, expectedClockRevision: 0, force: true }, "force"],
       [{}, "replacementPeriodId"],
@@ -475,6 +473,21 @@ describe("the period-delete routes", () => {
         code: "management.request_invalid",
         params: { field },
       });
+    expect(await stored(r)).toEqual(before);
+  });
+
+  it("refuses a body with no clock revision as a stale one, as the other hours writes do, changing nothing", async () => {
+    const r = await routed();
+    const before = await stored(r);
+    for (const replacementPeriodId of [null, r.afternoon])
+      await answers(
+        await r.send("POST", `/${r.lunch}/delete`, r.manager, { replacementPeriodId }),
+        409,
+        {
+          code: "hours.clock_changed",
+          params: {},
+        },
+      );
     expect(await stored(r)).toEqual(before);
   });
 

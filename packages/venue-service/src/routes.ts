@@ -1053,8 +1053,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
             body.replacementPeriodId,
             "replacementPeriodId",
           );
-          if (body.expectedClockRevision === undefined)
-            throw new AppError("management.request_invalid", { field: "expectedClockRevision" });
           return deletePeriod(
             tx,
             ctx.cfg,

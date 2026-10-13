@@ -654,13 +654,14 @@ same file is the writer behind the API; a configuration import inserts a bundle'
 and Every year switch, and the Day tab writes one date's paint (see
 [design-system.md](design-system.md), "Calendar").
 
-Deleting a period is refused `menu_period.in_use` while a season week or a special-day date's paint
-places it, past dates included; the refusal lists each use (`periodUses` and `deleteMenuPeriod` in
-`packages/venue-service/src/menu-timetable.ts`).
+`DELETE …/menu-periods/:periodId` refuses a period `menu_period.in_use` while a season week or a
+special-day date's paint places it, past dates included; the refusal lists each use (`periodUses`
+and `deleteMenuPeriod` in `packages/venue-service/src/menu-timetable.ts`).
 
 **2026-10-13, A506-10.** `POST …/menu-periods/:periodId/delete` deletes a period in use
-(`deletePeriod`, `packages/venue-service/src/period-delete.ts`); `GET …/menu-periods/painted-in`
-and `GET …/menu-periods/:periodId/delete-impact` read what it would touch. With a replacement, which
+(`deletePeriod`, `packages/venue-service/src/period-delete.ts`), taking the clock revision as the
+other hours writes do; `GET …/menu-periods/painted-in` and
+`GET …/menu-periods/:periodId/delete-impact` read what it would touch. With a replacement, which
 must be another period of the same department, every range painting the period, in season weeks
 and on special-day dates past or future, names the replacement, and on each day that held the
 period touching ranges of one period then join; a routing-cell line naming it names the
