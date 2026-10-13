@@ -246,6 +246,21 @@ describe("a free push of or onto a joined table stores its real tables", () => {
     expect(await splitRowsOf(table.long!)).toEqual(sorted([table.c3!, table.c4!, table.c5!]));
   });
 
+  it("Long table with Counter 3 split off, dragged onto Bar, brings Counter 4 and 5 against Bar", async () => {
+    const { table } = await LONG_TABLE();
+    await inTx(v, (tx) =>
+      splitJoinedTable(tx, v.cfg, { tableId: table.long!, partIds: [table.c3!], seats: 10 }),
+    );
+
+    await push(table.long!, table.bar!, "right");
+
+    expect(await membersOf(table.bar!)).toEqual(sorted([table.bar!, table.c4!, table.c5!]));
+    expect(await placeOf(table.c4!)).toEqual({ x: 42, y: 0 });
+    expect(await placeOf(table.c5!)).toEqual({ x: 44, y: 0 });
+    expect(await beforeOf(table.c4!)).toEqual({ x: 12, y: 20, rotation: 0 });
+    expect(await beforeOf(table.c5!)).toEqual({ x: 14, y: 20, rotation: 0 });
+  });
+
   it("two joined tables pushed together split both", async () => {
     const { table } = await LONG_WINDOW_STOOL();
 
