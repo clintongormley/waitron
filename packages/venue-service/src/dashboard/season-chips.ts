@@ -18,8 +18,9 @@ export type SeasonWrites = Pick<
   "saveSeason" | "addSeason" | "deleteSeason" | "readSeasonDeleteImpact"
 >;
 type Refusal = { code: string; params?: Record<string, unknown> };
-/** One opening of the dialog: the season it edits, or none for "+ Season". */
-type Opening = { season?: SeasonChip; returnTo: HTMLElement | null };
+/** One opening of the dialog: the season it edits, or none for "+ Season", and the clock revision its
+ *  writes send, so a newer read arriving mid-edit still lets the server see the clock changed. */
+type Opening = { season?: SeasonChip; clockRevision: number; returnTo: HTMLElement | null };
 
 const refusalOf = (error: unknown): Refusal => ({
   code: codeOf(error),
@@ -74,7 +75,7 @@ export class SeasonChips extends LitElement {
   ];
   /** Each season with its last day as the server reads it, so 29 February in a leap year. */
   @property({ attribute: false }) seasons: readonly SeasonChip[] = [];
-  /** The clock revision the shown seasons were read at; every write sends it. */
+  /** The clock revision the shown seasons were read at; a write sends the one its dialog opened at. */
   @property({ type: Number }) clockRevision = 0;
   @property({ attribute: false }) api?: SeasonWrites;
   /** Special days by id, so an end-offset refusal can name one. */
@@ -95,7 +96,11 @@ export class SeasonChips extends LitElement {
     if (this.readOnly || this.pending || this.opening || !this.api) return;
     this.refusal = undefined;
     this.impact = undefined;
-    this.opening = { season, returnTo: event.currentTarget as HTMLElement };
+    this.opening = {
+      season,
+      clockRevision: this.clockRevision,
+      returnTo: event.currentTarget as HTMLElement,
+    };
     this.dispatchEvent(new CustomEvent("season-dialog-open", { bubbles: true, composed: true }));
   }
   private close(opening: Opening) {
@@ -143,7 +148,7 @@ export class SeasonChips extends LitElement {
     const api = this.api;
     if (!opening || !api || this.pending) return;
     const { id, input } = event.detail;
-    const revision = this.clockRevision;
+    const revision = opening.clockRevision;
     await this.written(opening, "save", () =>
       id === null ? api.addSeason(input, revision) : api.saveSeason(id, input, revision),
     );
@@ -163,7 +168,7 @@ export class SeasonChips extends LitElement {
     const opening = this.opening;
     const api = this.api;
     if (!opening || !api || this.pending || !this.impact) return;
-    const revision = this.clockRevision;
+    const revision = opening.clockRevision;
     await this.written(opening, "delete", () => api.deleteSeason(event.detail.id, revision));
   }
   private dialog() {

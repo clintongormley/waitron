@@ -471,3 +471,26 @@ it("says when its dialog opens, so the host can read the special days a refusal 
     document.body.removeEventListener("season-dialog-open", listen);
   }
 });
+
+it("saves with the clock revision the dialog opened at, though a newer one arrived while editing", async () => {
+  const { api, changed } = await mount(four, fakeApi(), 7);
+  await openChip("Spring");
+  await change("startDay", "2");
+  el.clockRevision = 8;
+  await settle();
+  await click("[data-test=save-season]");
+  await expect.poll(() => changed.length).toBe(1);
+  expect(api.saveSeason).toHaveBeenCalledWith("sp", { name: "Spring", startsOn: "03-02" }, 7);
+});
+
+it("deletes with the clock revision the dialog opened at, though a newer one arrived while confirming", async () => {
+  const { api, changed } = await mount(four, fakeApi(), 7);
+  await openChip("Spring");
+  await click("[data-test=delete-season]");
+  await expect.poll(() => dq("[data-test=confirm-delete-season]")).not.toBeNull();
+  el.clockRevision = 8;
+  await settle();
+  await click("[data-test=confirm-delete-season]");
+  await expect.poll(() => changed.length).toBe(1);
+  expect(api.deleteSeason).toHaveBeenCalledWith("sp", 7);
+});
