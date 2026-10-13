@@ -61,6 +61,8 @@ export interface S3FileStore {
    * holds.
    */
   putFile(key: string, path: string, call: FileCall): Promise<void>;
+  /** As `putFile`, in one request whatever its size: the caller bounds it. */
+  putBytes(key: string, bytes: Uint8Array, call: FileCall): Promise<void>;
   /** Replaces `outPath` only once the whole object has arrived; a file system error is passed on. */
   getFile(key: string, outPath: string, call: FileCall): Promise<void>;
   /** The object's body, destroyed when the signal is cancelled. */
@@ -70,7 +72,7 @@ export interface S3FileStore {
    * listing; a key inside it is returned whatever its shape, for the caller's own naming rules.
    */
   list(prefix: string, call: FileCall): Promise<ListedFile[]>;
-  /** As `ObjectStore.deleteMany`. */
+  /** As `ObjectStore.deleteMany`; a key the bucket answers `NoSuchKey` counts as deleted. */
   deleteMany(keys: string[], call: FileCall): Promise<void>;
   close(): void;
 }
@@ -184,7 +186,7 @@ export function planParts(bytes: number): { partBytes: number; parts: number } {
   );
   const parts = Math.ceil(bytes / partBytes);
   if (parts > MAX_PARTS) {
-    throw new AppError("backup.destination_too_large", {
+    throw new AppError("backup.destination_file_too_large", {
       bytes,
       maxBytes: MAX_PARTS * MAX_PART_BYTES,
     });
@@ -237,21 +239,22 @@ export function createS3FileStore(
   const at = (key: string) => root + key;
 
   /**
-   * Sends a body read from the file, reading the range afresh for each attempt: the client does not
-   * send a stream twice. Awaits the request itself, so the read has stopped when this returns.
-   * `uncertain` is called for each attempt the bucket may have acted on.
+   * Sends a body made afresh by `makeBody` for each attempt: the client does not send a stream twice.
+   * Awaits the request itself, so the read has stopped when this returns. `uncertain` is called for
+   * each attempt the bucket may have acted on. An answer that arrives after the signal is cancelled
+   * is reported as the cancellation.
    */
-  async function sendRange<T>(
+  async function sendBody<T>(
     operation: DestinationOperation,
     key: string,
     signal: AbortSignal,
-    range: { handle: FileHandle; start: number; length: number },
+    makeBody: () => Readable,
     send: (body: Readable, abortSignal: AbortSignal) => Promise<T>,
     uncertain: () => void = () => {},
   ): Promise<T> {
     for (let attempt = 1; ; attempt += 1) {
       if (signal.aborted) throw cancelled(operation, key);
-      const body = rangeOf(range.handle, key, range.start, range.length);
+      const body = makeBody();
       // Without this, a request whose body failed to read was still unsettled 8 s later in the
       // shrinking-file case of `s3-file-store.upload.test.ts`, so a read error stops the request.
       const readFailed = new AbortController();
@@ -260,8 +263,9 @@ export function createS3FileStore(
         readError = error;
         readFailed.abort();
       });
+      let out: T;
       try {
-        return await send(body, AbortSignal.any([signal, readFailed.signal]));
+        out = await send(body, AbortSignal.any([signal, readFailed.signal]));
       } catch (error) {
         if (readError !== undefined && !signal.aborted) throw readError;
         const status = statusOf(error);
@@ -272,9 +276,15 @@ export function createS3FileStore(
         if (!retryable || attempt === ATTEMPTS)
           throw requestFailed(operation, key, status, nameOf(error));
         await wait(RETRY_BACKOFF_MS * attempt, signal);
+        continue;
       } finally {
         body.destroy();
       }
+      if (signal.aborted) {
+        uncertain();
+        throw cancelled(operation, key);
+      }
+      return out;
     }
   }
 
@@ -323,14 +333,43 @@ export function createS3FileStore(
       client.send(new DeleteObjectCommand({ Bucket: bucket, Key: at(key) }), { abortSignal }),
   ];
 
-  async function putWhole(key: string, handle: FileHandle, size: number, signal: AbortSignal) {
+  const abandonStep = (key: string, UploadId: string): [DestinationCleanup, CleanupSend] => [
+    "abort_upload",
+    (abortSignal) =>
+      client.send(new AbortMultipartUploadCommand({ Bucket: bucket, Key: at(key), UploadId }), {
+        abortSignal,
+      }),
+  ];
+
+  /** Abandons the upload `creation` names, if its answer names one, however late it arrives. */
+  const abandonCreated = (
+    key: string,
+    creation: Promise<CreateMultipartUploadCommandOutput>,
+  ): [DestinationCleanup, CleanupSend] => [
+    "abort_upload",
+    async (abortSignal) => {
+      const UploadId = await creation.then(
+        (out) => out.UploadId,
+        () => undefined,
+      );
+      if (UploadId === undefined || abortSignal?.aborted) return;
+      await abandonStep(key, UploadId)[1](abortSignal);
+    },
+  ];
+
+  async function putWhole(
+    key: string,
+    size: number,
+    makeBody: () => Readable,
+    signal: AbortSignal,
+  ) {
     let mayBeStored = false;
     try {
-      await sendRange(
+      await sendBody(
         "put",
         key,
         signal,
-        { handle, start: 0, length: size },
+        makeBody,
         (body, abortSignal) =>
           client.send(
             new PutObjectCommand({ Bucket: bucket, Key: at(key), Body: body, ContentLength: size }),
@@ -346,19 +385,24 @@ export function createS3FileStore(
 
   async function putInParts(key: string, handle: FileHandle, size: number, signal: AbortSignal) {
     const { partBytes, parts } = planParts(size);
+    let creation: Promise<CreateMultipartUploadCommandOutput> | undefined;
     let created: CreateMultipartUploadCommandOutput;
     try {
       created = await sendUnlessCancelled(
         (abortSignal) =>
-          client.send(new CreateMultipartUploadCommand({ Bucket: bucket, Key: at(key) }), {
-            abortSignal,
-          }),
+          (creation = client.send(
+            new CreateMultipartUploadCommand({ Bucket: bucket, Key: at(key) }),
+            { abortSignal },
+          )),
         signal,
         "put",
         key,
       );
     } catch (error) {
-      throw failure(signal, "create_upload", key, error);
+      const failed = failure(signal, "create_upload", key, error);
+      if (signal.aborted && creation !== undefined)
+        throw (await cleanUp(key, [abandonCreated(key, creation)])) ?? failed;
+      throw failed;
     }
     const UploadId = created.UploadId;
     if (UploadId === undefined)
@@ -374,11 +418,11 @@ export function createS3FileStore(
       for (let PartNumber = 1; PartNumber <= parts; PartNumber += 1) {
         const start = (PartNumber - 1) * partBytes;
         const length = Math.min(partBytes, size - start);
-        const out = await sendRange(
+        const out = await sendBody(
           "upload_part",
           key,
           signal,
-          { handle, start, length },
+          () => rangeOf(handle, key, start, length),
           (body, abortSignal) =>
             client.send(
               new UploadPartCommand({
@@ -417,13 +461,7 @@ export function createS3FileStore(
         throw failure(signal, "complete_upload", key, error);
       }
     } catch (error) {
-      const abandon: [DestinationCleanup, CleanupSend] = [
-        "abort_upload",
-        (abortSignal) =>
-          client.send(new AbortMultipartUploadCommand({ Bucket: bucket, Key: at(key), UploadId }), {
-            abortSignal,
-          }),
-      ];
+      const abandon = abandonStep(key, UploadId);
       // A completion that failed may still have stored the object, as when its answer is lost.
       throw (await cleanUp(key, completing ? [abandon, deleteStep(key)] : [abandon])) ?? error;
     }
@@ -455,6 +493,7 @@ export function createS3FileStore(
         key,
       );
     } catch (error) {
+      if (!signal.aborted && nameOf(error) === "NoSuchKey") return;
       throw failure(signal, "delete", key, error);
     }
   }
@@ -466,11 +505,24 @@ export function createS3FileStore(
       const handle = await open(path, "r");
       try {
         const { size } = await handle.stat();
-        if (size <= SINGLE_PUT_MAX_BYTES) await putWhole(key, handle, size, signal);
+        if (size <= SINGLE_PUT_MAX_BYTES)
+          await putWhole(key, size, () => rangeOf(handle, key, 0, size), signal);
         else await putInParts(key, handle, size, signal);
       } finally {
         await handle.close();
       }
+    },
+
+    async putBytes(key, bytes, { signal }) {
+      if (!isSafeKey(key)) throw keyInvalid("key");
+      if (signal.aborted) throw cancelled("put", key);
+      const chunk = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+      await putWhole(
+        key,
+        chunk.length,
+        () => Readable.from([chunk], { objectMode: false }),
+        signal,
+      );
     },
 
     async getFile(key, outPath, { signal }) {
@@ -549,12 +601,13 @@ export function createS3FileStore(
       return stream;
     },
 
-    // Retention deletes what this answers, so a page that cannot be complete, or names a key
-    // outside the prefix asked for, refuses the whole listing rather than trimming it.
+    // Retention deletes what this answers, so a page that cannot be complete, repeats a key, or
+    // names a key outside the prefix asked for, refuses the whole listing rather than trimming it.
     async list(prefix, { signal }) {
       if (!isSafePrefix(prefix)) throw keyInvalid("prefix");
       const wanted = at(prefix);
       const found: ListedFile[] = [];
+      const keys = new Set<string>();
       const followed = new Set<string>();
       let token: string | undefined;
       do {
@@ -587,6 +640,9 @@ export function createS3FileStore(
           )
             throw refuse("IncompleteListing");
           if (!object.Key.startsWith(wanted)) throw keyInvalid("listedKey");
+          if (!Number.isSafeInteger(object.Size) || object.Size < 0) throw refuse("InvalidSize");
+          if (keys.has(object.Key)) throw refuse("RepeatedKey");
+          keys.add(object.Key);
           found.push({
             key: object.Key.slice(root.length),
             size: object.Size,
@@ -638,7 +694,7 @@ export function createS3FileStore(
           }
           throw failure(signal, "delete", batch[0]!, error);
         }
-        const refused = out.Errors?.[0];
+        const refused = out.Errors?.find((error) => error.Code !== "NoSuchKey");
         if (refused !== undefined) {
           const key = batch.find((candidate) => at(candidate) === refused.Key);
           if (key === undefined || !refused.Code)

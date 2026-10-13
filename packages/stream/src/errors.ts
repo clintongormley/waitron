@@ -11,9 +11,10 @@ export type DestinationOperation =
 export type DestinationCleanup = "abort_upload" | "delete_object";
 
 /**
- * This package's codes in the shared registry. They sit in the `backup.*` family with the archive's
- * codes (apps/server/src/errors.ts) because the stream is the venue's other kind of backup. No param
- * ever carries a credential; what `name` may hold is stated at `backup.stream_request_failed`.
+ * This package's codes in the shared registry: the bucket copy's (`backup.stream_*`) and the archive
+ * destination's (`backup.destination_*`), in the `backup.*` family with the archive's other codes
+ * (apps/server/src/errors.ts). No param ever carries a credential; what `name` may hold is stated at
+ * `backup.stream_request_failed`.
  */
 declare module "@waitron/shared" {
   interface ErrorParams {
@@ -61,7 +62,7 @@ declare module "@waitron/shared" {
     /** An archive destination's bucket request failed (`createS3FileStore`). `status` and `name`
      * follow `backup.stream_request_failed`'s rules. A cancelled signal is always `status` null and
      * `name` "AbortError": the store cannot tell a caller's stop from a time limit, so it names
-     * neither, and a caller that owns the time limit says which. */
+     * neither. */
     "backup.destination_request_failed": {
       operation: DestinationOperation;
       key: string;
@@ -82,13 +83,15 @@ declare module "@waitron/shared" {
     };
     /** A key, a listing prefix or the configured prefix is empty where it must not be, absolute,
      * holds a control character or an empty, `.` or `..` segment; or a listing named a key outside
-     * the prefix asked for (`listedKey`). Never carries the key. */
+     * the prefix asked for (`listedKey`). The server's destinations add a stricter rule: a key must
+     * be one plain name, and a bucket destination's listing prefix may hold no "/". Never carries
+     * the key. */
     "backup.destination_key_invalid": { field: "key" | "prefix" | "listedKey" };
     /** The file being uploaded to `key` ended before the length it had when its upload began, so
      * the upload stopped rather than send a part shorter than the length it stated. Never carries the
      * file's path. */
     "backup.destination_file_shrank": { key: string };
     /** A file needs more than 10,000 parts of the largest part size, refused before any request. */
-    "backup.destination_too_large": { bytes: number; maxBytes: number };
+    "backup.destination_file_too_large": { bytes: number; maxBytes: number };
   }
 }

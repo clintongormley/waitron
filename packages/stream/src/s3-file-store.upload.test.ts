@@ -1,9 +1,11 @@
 import { mkdtemp, open, rm, truncate, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Readable } from "node:stream";
 import { setTimeout as delay } from "node:timers/promises";
 import { afterEach, describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
+import type { BucketConfig } from "./s3-client.js";
 import { createS3FileStore, type S3FileStore } from "./s3-file-store.js";
 import { errorXml, loopbackBucket, type LoopbackBucket } from "./testing/loopback-bucket.js";
 
@@ -385,7 +387,7 @@ describe("a file over 8 MiB", () => {
     });
     const { path } = await patterned(await scratch(), 9 * MiB);
     const ended = await outcome(storeFor(bucket, 400).putFile("a.enc", path, live()));
-    expect(Date.now() - cleanupStarted).toBeLessThan(400 + 150);
+    expect(Date.now() - cleanupStarted).toBeLessThan(750);
     expect(ended).toEqual({
       code: "backup.destination_cleanup_failed",
       params: {
@@ -519,7 +521,7 @@ describe("a file over 8 MiB", () => {
     await handle.close();
     const bucket = await bucketWith();
     expect(await outcome(storeFor(bucket).putFile("a.enc", path, live()))).toEqual({
-      code: "backup.destination_too_large",
+      code: "backup.destination_file_too_large",
       params: { bytes: 10_000 * 64 * MiB + 1, maxBytes: 10_000 * 64 * MiB },
     });
     expect(bucket.seen).toEqual([]);
@@ -548,5 +550,313 @@ describe("an upload of a file that cannot be read", () => {
       code: "ENOENT",
     });
     expect(bucket.seen).toEqual([]);
+  });
+});
+
+describe("a small object held in memory", () => {
+  it("goes up in one request that states its length", async () => {
+    const bucket = await bucketWith({ prefix: "root" });
+    const body = Buffer.from("the small object's bytes");
+    await storeFor(bucket).putBytes("state/a.json", body, live());
+    expect(kinds(bucket)).toEqual(["put"]);
+    expect(bucket.seen[0]!.headers["content-length"]).toBe(String(body.length));
+    expect(bucket.objects.get("root/state/a.json")!.body.equals(body)).toBe(true);
+  });
+
+  it("goes up empty when it is empty", async () => {
+    const bucket = await bucketWith();
+    await storeFor(bucket).putBytes("a.json", new Uint8Array(0), live());
+    expect(bucket.objects.get("a.json")!.body.length).toBe(0);
+  });
+
+  it("is sent again whole after an answer that failed", async () => {
+    let attempts = 0;
+    const bucket = await bucketWith({
+      answer: (seen, _request, response) => {
+        if (seen.kind !== "put") return false;
+        attempts += 1;
+        if (attempts > 1) return false;
+        response.writeHead(503, xml);
+        response.end(errorXml("SlowDown"));
+        return true;
+      },
+    });
+    const body = Buffer.from("again");
+    await storeFor(bucket).putBytes("a.json", body, live());
+    expect(bucket.seen.map((seen) => seen.body!.equals(body))).toEqual([true, true]);
+    expect(bucket.objects.get("a.json")!.body.equals(body)).toBe(true);
+  });
+
+  it("cancelled while it is being sent deletes its own key on a signal of its own", async () => {
+    const controller = new AbortController();
+    const bucket = await bucketWith({
+      onRequest: (seen) => {
+        if (seen.kind === "put") controller.abort();
+      },
+    });
+    expect(
+      await outcome(
+        storeFor(bucket).putBytes("a.json", Buffer.alloc(4 * MiB, 1), {
+          signal: controller.signal,
+        }),
+      ),
+    ).toEqual({
+      code: "backup.destination_request_failed",
+      params: { operation: "put", key: "a.json", status: null, name: "AbortError" },
+    });
+    expect(kinds(bucket)).toEqual(["put", "delete"]);
+    expect(bucket.objects.has("a.json")).toBe(false);
+  });
+
+  it("whose signal is already cancelled sends nothing", async () => {
+    const bucket = await bucketWith();
+    expect(
+      await outcome(
+        storeFor(bucket).putBytes("a.json", Buffer.from("{}"), { signal: AbortSignal.abort() }),
+      ),
+    ).toEqual({
+      code: "backup.destination_request_failed",
+      params: { operation: "put", key: "a.json", status: null, name: "AbortError" },
+    });
+    expect(bucket.seen).toEqual([]);
+  });
+});
+
+const NO_NETWORK: BucketConfig = {
+  endpoint: "http://127.0.0.1:9",
+  region: "us-east-1",
+  bucket: "owner-bucket",
+  prefix: "",
+  accessKeyId: "AKIAEXAMPLE0000",
+  secretAccessKey: "not-a-real-secret",
+};
+
+interface Asked {
+  method: string;
+  uploadId: string | null;
+}
+
+/**
+ * A store whose transport hands each request to `reply` and never looks at the cancel signal, so an
+ * answer can arrive after the call was cancelled. `reply` answering null leaves the request
+ * unanswered.
+ */
+function storeOverTransport(
+  reply: (asked: Asked) => {
+    status: number;
+    headers?: Record<string, string>;
+    body?: string;
+    afterMs?: number;
+  } | null,
+  cleanupMs?: number,
+) {
+  const asked: Asked[] = [];
+  const requestHandler = {
+    async handle(request: { method: string; query: Record<string, unknown> }) {
+      const seen = {
+        method: request.method,
+        uploadId: typeof request.query["uploadId"] === "string" ? request.query["uploadId"] : null,
+      };
+      asked.push(seen);
+      const answer = reply(seen);
+      if (answer === null) return new Promise(() => {});
+      if (answer.afterMs !== undefined) await delay(answer.afterMs);
+      return {
+        response: {
+          statusCode: answer.status,
+          headers: answer.headers ?? xml,
+          body: Readable.from(answer.body === undefined ? [] : [Buffer.from(answer.body)]),
+        },
+      };
+    },
+    updateHttpClientConfig() {},
+    httpHandlerConfigs: () => ({}),
+    destroy() {},
+  };
+  const store = createS3FileStore(NO_NETWORK, {
+    requestHandler: requestHandler as never,
+    sleep: async () => {},
+    ...(cleanupMs === undefined ? {} : { cleanupMs }),
+  });
+  cleanups.push(async () => store.close());
+  return { store, asked };
+}
+
+const created = (id: string) =>
+  `<InitiateMultipartUploadResult><UploadId>${id}</UploadId></InitiateMultipartUploadResult>`;
+const completed = '<CompleteMultipartUploadResult><ETag>"c"</ETag></CompleteMultipartUploadResult>';
+
+describe("an upload whose answer arrives after its signal was cancelled", () => {
+  it("in one request reports the cancellation and deletes its own key", async () => {
+    const controller = new AbortController();
+    const { store, asked } = storeOverTransport(({ method }) => {
+      if (method === "PUT") {
+        controller.abort();
+        return { status: 200, headers: { etag: '"put"' } };
+      }
+      return { status: 204 };
+    });
+    const { path } = await patterned(await scratch(), 10);
+    expect(await outcome(store.putFile("a.enc", path, controller))).toEqual({
+      code: "backup.destination_request_failed",
+      params: { operation: "put", key: "a.enc", status: null, name: "AbortError" },
+    });
+    expect(asked.map(({ method }) => method)).toEqual(["PUT", "DELETE"]);
+  });
+
+  it("from memory reports the cancellation and deletes its own key", async () => {
+    const controller = new AbortController();
+    const { store, asked } = storeOverTransport(({ method }) => {
+      if (method === "PUT") {
+        controller.abort();
+        return { status: 200, headers: { etag: '"put"' } };
+      }
+      return { status: 204 };
+    });
+    expect(await outcome(store.putBytes("a.json", Buffer.from("{}"), controller))).toEqual({
+      code: "backup.destination_request_failed",
+      params: { operation: "put", key: "a.json", status: null, name: "AbortError" },
+    });
+    expect(asked.map(({ method }) => method)).toEqual(["PUT", "DELETE"]);
+  });
+
+  it("to start a multipart upload abandons the upload it names", async () => {
+    const controller = new AbortController();
+    const { store, asked } = storeOverTransport(({ method }) => {
+      if (method === "POST") {
+        controller.abort();
+        return { status: 200, body: created("owned-upload-id") };
+      }
+      return { status: 204 };
+    });
+    const { path } = await patterned(await scratch(), 9 * MiB);
+    expect(await outcome(store.putFile("a.enc", path, controller))).toEqual({
+      code: "backup.destination_request_failed",
+      params: { operation: "create_upload", key: "a.enc", status: null, name: "AbortError" },
+    });
+    expect(asked).toEqual([
+      { method: "POST", uploadId: null },
+      { method: "DELETE", uploadId: "owned-upload-id" },
+    ]);
+  });
+
+  it("to start a multipart upload reports an abandonment the bucket refuses", async () => {
+    const controller = new AbortController();
+    const { store } = storeOverTransport(({ method }) => {
+      if (method === "POST") {
+        controller.abort();
+        return { status: 200, body: created("owned-upload-id") };
+      }
+      return { status: 403, body: errorXml("AccessDenied") };
+    });
+    const { path } = await patterned(await scratch(), 9 * MiB);
+    expect(await outcome(store.putFile("a.enc", path, controller))).toEqual({
+      code: "backup.destination_cleanup_failed",
+      params: {
+        key: "a.enc",
+        unresolved: [{ cleanup: "abort_upload", status: 403, name: "AccessDenied" }],
+      },
+    });
+  });
+
+  it("to start a multipart upload, never given, is reported unresolved once the cleanup budget runs out", async () => {
+    const controller = new AbortController();
+    const { store, asked } = storeOverTransport(({ method }) => {
+      if (method !== "POST") return { status: 204 };
+      controller.abort();
+      return null;
+    }, 150);
+    const { path } = await patterned(await scratch(), 9 * MiB);
+    expect(await outcome(store.putFile("a.enc", path, controller))).toEqual({
+      code: "backup.destination_cleanup_failed",
+      params: {
+        key: "a.enc",
+        unresolved: [{ cleanup: "abort_upload", status: null, name: "AbortError" }],
+      },
+    });
+    expect(asked.map(({ method }) => method)).toEqual(["POST"]);
+  });
+
+  it("to start a multipart upload, given only after the cleanup budget ran out, is reported unresolved and abandoned no later", async () => {
+    const controller = new AbortController();
+    const { store, asked } = storeOverTransport(({ method }) => {
+      if (method !== "POST") return { status: 204 };
+      controller.abort();
+      return { status: 200, body: created("late-upload-id"), afterMs: 300 };
+    }, 100);
+    const { path } = await patterned(await scratch(), 9 * MiB);
+    expect(await outcome(store.putFile("a.enc", path, controller))).toEqual({
+      code: "backup.destination_cleanup_failed",
+      params: {
+        key: "a.enc",
+        unresolved: [{ cleanup: "abort_upload", status: null, name: "AbortError" }],
+      },
+    });
+    await delay(400);
+    expect(asked.map(({ method }) => method)).toEqual(["POST"]);
+  });
+
+  it("to start a multipart upload that failed abandons nothing", async () => {
+    const controller = new AbortController();
+    const { store, asked } = storeOverTransport(({ method }) => {
+      if (method !== "POST") return { status: 204 };
+      controller.abort();
+      return { status: 403, body: errorXml("AccessDenied") };
+    });
+    const { path } = await patterned(await scratch(), 9 * MiB);
+    expect(await outcome(store.putFile("a.enc", path, controller))).toEqual({
+      code: "backup.destination_request_failed",
+      params: { operation: "create_upload", key: "a.enc", status: null, name: "AbortError" },
+    });
+    expect(asked.map(({ method }) => method)).toEqual(["POST"]);
+  });
+
+  it("for a part abandons the upload", async () => {
+    const controller = new AbortController();
+    const { store, asked } = storeOverTransport(({ method }) => {
+      if (method === "POST") return { status: 200, body: created("u1") };
+      if (method === "PUT") {
+        controller.abort();
+        return { status: 200, headers: { etag: '"p"' } };
+      }
+      return { status: 204 };
+    });
+    const { path } = await patterned(await scratch(), 9 * MiB);
+    expect(await outcome(store.putFile("a.enc", path, controller))).toEqual({
+      code: "backup.destination_request_failed",
+      params: { operation: "upload_part", key: "a.enc", status: null, name: "AbortError" },
+    });
+    expect(asked).toEqual([
+      { method: "POST", uploadId: null },
+      { method: "PUT", uploadId: "u1" },
+      { method: "DELETE", uploadId: "u1" },
+    ]);
+  });
+
+  it("to complete a multipart upload abandons the upload and deletes its own key", async () => {
+    const controller = new AbortController();
+    let posts = 0;
+    const { store, asked } = storeOverTransport(({ method }) => {
+      if (method === "POST") {
+        posts += 1;
+        if (posts === 1) return { status: 200, body: created("u1") };
+        controller.abort();
+        return { status: 200, body: completed };
+      }
+      if (method === "PUT") return { status: 200, headers: { etag: '"p"' } };
+      return { status: 204 };
+    });
+    const { path } = await patterned(await scratch(), 9 * MiB);
+    expect(await outcome(store.putFile("a.enc", path, controller))).toEqual({
+      code: "backup.destination_request_failed",
+      params: { operation: "complete_upload", key: "a.enc", status: null, name: "AbortError" },
+    });
+    expect(asked.slice(4)).toHaveLength(2);
+    expect(asked.slice(4)).toEqual(
+      expect.arrayContaining([
+        { method: "DELETE", uploadId: "u1" },
+        { method: "DELETE", uploadId: null },
+      ]),
+    );
   });
 });

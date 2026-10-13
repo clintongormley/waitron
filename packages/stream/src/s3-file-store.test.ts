@@ -63,7 +63,7 @@ describe("the part plan", () => {
   it("refuses a file that would need more than 10,000 parts of 64 MiB", () => {
     expect(() => planParts(10_000 * 64 * MiB + 1)).toThrow(
       expect.objectContaining({
-        code: "backup.destination_too_large",
+        code: "backup.destination_file_too_large",
         params: { bytes: 10_000 * 64 * MiB + 1, maxBytes: 10_000 * 64 * MiB },
       }),
     );
@@ -94,6 +94,7 @@ describe("a malformed key", () => {
     const refused = { code: "backup.destination_key_invalid", params: { field: "key" } };
     // The paths do not exist, so a store that touched the file system first would answer ENOENT.
     expect(await outcome(store.putFile(key, join(dir, "missing.bin"), live()))).toEqual(refused);
+    expect(await outcome(store.putBytes(key, Buffer.from("{}"), live()))).toEqual(refused);
     expect(await outcome(store.getFile(key, join(dir, "no-folder", "out.bin"), live()))).toEqual(
       refused,
     );
@@ -209,6 +210,30 @@ describe("a listing", () => {
     expect(bucket.seen).toHaveLength(2);
   });
 
+  it("refuses the whole listing when a key appears on two pages", async () => {
+    const bucket = await bucketWith({
+      answer: answeringPages([
+        entry("a/1") + more("t1"),
+        entry("a/1") + "<IsTruncated>false</IsTruncated>",
+      ]),
+    });
+    expect(await outcome(storeFor(bucket).list("a/", live()))).toEqual({
+      code: "backup.destination_request_failed",
+      params: { operation: "list", key: "a/", status: 200, name: "RepeatedKey" },
+    });
+    expect(bucket.seen).toHaveLength(2);
+  });
+
+  it("refuses an entry whose size is negative", async () => {
+    const bucket = await bucketWith({
+      answer: answeringPages([entry("a/1") + entry("a/2", "<Size>-1</Size>")]),
+    });
+    expect(await outcome(storeFor(bucket).list("a/", live()))).toEqual({
+      code: "backup.destination_request_failed",
+      params: { operation: "list", key: "a/", status: 200, name: "InvalidSize" },
+    });
+  });
+
   it("refuses a truncated page with no continuation token", async () => {
     const bucket = await bucketWith({
       answer: answeringPages([entry("a/1") + "<IsTruncated>true</IsTruncated>"]),
@@ -300,6 +325,23 @@ describe("a delete of several keys", () => {
     expect(bucket.seen).toHaveLength(1);
   });
 
+  it("counts a key the batch answer names NoSuchKey as already deleted", async () => {
+    const bucket = await bucketWith({
+      answer: (_seen, _request, response) => {
+        response.writeHead(200, xml);
+        response.end(
+          "<DeleteResult><Error><Key>a</Key><Code>NoSuchKey</Code></Error>" +
+            "<Error><Key>b</Key><Code>AccessDenied</Code></Error></DeleteResult>",
+        );
+        return true;
+      },
+    });
+    expect(await outcome(storeFor(bucket).deleteMany(["a", "b"], live()))).toEqual({
+      code: "backup.destination_request_failed",
+      params: { operation: "delete", key: "b", status: 200, name: "AccessDenied" },
+    });
+  });
+
   it("fails on a refusal that names no key it sent", async () => {
     const bucket = await bucketWith({
       answer: (_seen, _request, response) => {
@@ -361,6 +403,21 @@ describe("a delete of several keys", () => {
         .map((seen) => seen.key)
         .sort(),
     ).toEqual(["a", "b", "c"]);
+    expect([...bucket.objects.keys()]).toEqual(["kept"]);
+  });
+
+  it("one key at a time counts a key the bucket answers NoSuchKey as already deleted", async () => {
+    const bucket = await bucketWith({
+      answer: (seen, _request, response) => {
+        if (seen.kind === "deleteMany") response.writeHead(501, xml);
+        else if (seen.key === "b") response.writeHead(404, xml);
+        else return false;
+        response.end(errorXml(seen.kind === "deleteMany" ? "NotImplemented" : "NoSuchKey"));
+        return true;
+      },
+    });
+    for (const key of ["a", "c", "kept"]) put(bucket, key);
+    expect(await outcome(storeFor(bucket).deleteMany(["a", "b", "c"], live()))).toBe("resolved");
     expect([...bucket.objects.keys()]).toEqual(["kept"]);
   });
 

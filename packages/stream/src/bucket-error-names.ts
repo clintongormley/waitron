@@ -101,9 +101,11 @@ export const ANSWER_REFUSALS = [
   "IncompleteDeleteResult",
   "IncompleteListing",
   "IncompleteResponse",
+  "InvalidSize",
   "MissingContinuationToken",
   "MissingETag",
   "RepeatedContinuationToken",
+  "RepeatedKey",
 ] as const;
 
 export type AnswerRefusal = (typeof ANSWER_REFUSALS)[number];
