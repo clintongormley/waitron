@@ -1,0 +1,116 @@
+import { and, eq, inArray } from "drizzle-orm";
+import {
+  diningTables,
+  floorResetTables,
+  floorTodayJoinTables,
+  floorTodaySplitParts,
+  floorTodayTables,
+  type Transaction,
+} from "@waitron/db";
+import type { TableRemoval } from "@waitron/module";
+import { AppError } from "@waitron/shared";
+import { catchUpZone, foodComingTo, placementColumns, placementOf } from "./floor-today-store.js";
+import { leaveMergesRestoring, mergeMembers } from "./floor-today-merges.js";
+import { partsOf } from "./floor-today-parts.js";
+import { todayOf } from "./floor-today-table.js";
+import { joinedPlaceAfter } from "./joined-split-layout.js";
+import { holdersOf } from "./parties.js";
+import type { TillConfig } from "./till-config.js";
+import "./errors.js";
+
+/**
+ * Takes back every table split off the joined table that no party holds and no food is on its way
+ * to, ending any group one is in, and puts the joined table at its saved place.
+ */
+export async function resetTable(
+  tx: Transaction,
+  cfg: TillConfig,
+  removals: readonly TableRemoval[],
+  now: Date,
+  { tableId, partIds, seats }: { tableId: string; partIds: string[]; seats: number | null },
+): Promise<void> {
+  const today = await todayOf(tx, cfg, tableId);
+  const parts = await partsOf(tx, tableId);
+  if (parts.length === 0) throw new AppError("joined_table.not_found", { tableId });
+  // `partsOf` reached the parts through this row, and `table_id` is unique there.
+  const [saved] = await tx
+    .select()
+    .from(floorResetTables)
+    .where(eq(floorResetTables.tableId, tableId));
+  const splitRows = await tx
+    .select({ partId: floorTodaySplitParts.partTableId })
+    .from(floorTodaySplitParts)
+    .where(eq(floorTodaySplitParts.joinedTableId, tableId));
+  const split = new Set(splitRows.map((row) => row.partId));
+  const splitOffIds = parts.filter((part) => split.has(part.tableId)).map((part) => part.tableId);
+  const held = await holdersOf(tx, splitOffIds);
+  const food = await foodComingTo(tx, splitOffIds);
+  const back = parts.filter(
+    (part) => split.has(part.tableId) && !held.has(part.tableId) && !food.has(part.tableId),
+  );
+  const joined = parts.filter((part) => part.stillJoined).length;
+  if (back.length === 0 || joined + back.length < 2) {
+    const grouped = await tx
+      .select({ id: floorTodayJoinTables.tableId })
+      .from(floorTodayJoinTables)
+      .where(inArray(floorTodayJoinTables.tableId, splitOffIds));
+    const inGroup = new Set(grouped.map((row) => row.id));
+    const blocking = splitOffIds.filter((id) => held.has(id) && inGroup.has(id));
+    if (blocking.length > 0) {
+      throw new AppError("joined_table.tables_in_group", { tableId, partIds: blocking });
+    }
+    throw new AppError("joined_table.nothing_to_join", { tableId });
+  }
+  const sent = new Set(partIds);
+  if (sent.size !== back.length || back.some((part) => !sent.has(part.tableId))) {
+    throw new AppError("joined_table.out_of_date", { tableId });
+  }
+  const whole = back.length === splitOffIds.length;
+  if (!whole && seats === null) throw new AppError("joined_table.seats_required", {});
+  const backIds = [...sent];
+  const staying = parts.flatMap((part, index) =>
+    !split.has(part.tableId) || sent.has(part.tableId) ? [index] : [],
+  );
+  const place = joinedPlaceAfter({
+    row: placementOf(today.row),
+    standing: false,
+    saved: placementOf(saved!),
+    parts,
+    covered: 0,
+    staying,
+    whole,
+  });
+
+  const ended = new Set<string>();
+  for (const id of backIds) {
+    if (ended.has(id)) continue;
+    const members = await mergeMembers(tx, id);
+    if (members.length === 0) continue;
+    for (const member of members) ended.add(member);
+    await leaveMergesRestoring(tx, members);
+  }
+  // Task 4a.3's place check goes here: after the groups end, before any other write.
+  await tx
+    .update(diningTables)
+    .set({ needsClearingSince: null })
+    .where(inArray(diningTables.id, backIds));
+  await tx
+    .delete(floorTodaySplitParts)
+    .where(
+      and(
+        eq(floorTodaySplitParts.joinedTableId, tableId),
+        inArray(floorTodaySplitParts.partTableId, backIds),
+      ),
+    );
+  for (const part of back) {
+    await tx
+      .update(floorTodayTables)
+      .set({ ...placementColumns(null), seats: part.savedSeats, takenOff: false })
+      .where(eq(floorTodayTables.tableId, part.tableId));
+  }
+  await tx
+    .update(floorTodayTables)
+    .set({ ...placementColumns(place), seats: whole ? saved!.seats : seats, takenOff: false })
+    .where(eq(floorTodayTables.id, today.row.id));
+  await catchUpZone(tx, cfg, removals, today.zoneId, now);
+}

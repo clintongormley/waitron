@@ -614,3 +614,22 @@ it("says each Join again refusal in English and Spanish", () => {
     expect(codeMessage(code, "es")).toBe(es);
   }
 });
+
+it("says each Reset table refusal in English and Spanish", () => {
+  const words: [string, string, string][] = [
+    [
+      "table.place_taken",
+      "Another table is in its place. Move it, then try again",
+      "Otra mesa ocupa su sitio. Muévela y vuelve a intentarlo",
+    ],
+    [
+      "joined_table.tables_in_group",
+      "Some of its tables are in a group with guests. Split them off first",
+      "Algunas de sus mesas están en un grupo con clientes. Sepáralas primero",
+    ],
+  ];
+  for (const [code, en, es] of words) {
+    expect(codeMessage(code, "en")).toBe(en);
+    expect(codeMessage(code, "es")).toBe(es);
+  }
+});

@@ -371,6 +371,8 @@ declare module "@waitron/shared" {
     "table.split_off": { tableId: string };
     /** Taking a table off for today found an order with food on its way to it. */
     "table.delivery_pending": { tableId: string };
+    /** Reset table found `standingId` standing in the place joined table `tableId` would take. */
+    "table.place_taken": { tableId: string; standingId: string };
     /**
      * The table still needs clearing (`dining_tables.needs_clearing_since` is set), so
      * no party may be seated at it, moved to it or joined to it until Mark cleared.
@@ -713,6 +715,8 @@ declare module "@waitron/shared" {
     "joined_table.nothing_to_join": { tableId: string };
     /** Join again names other tables than the free ones split off: the till read an older floor. */
     "joined_table.out_of_date": { tableId: string };
+    /** Reset table finds nothing to take back while `partIds`, in number order, are in a group with guests. */
+    "joined_table.tables_in_group": { tableId: string; partIds: string[] };
     /** A floor-plan zone name already exists in this venue. `name` is the operator's own text. */
     "zone.name_taken": { name: string };
     /** A kitchen-station name already exists in this venue. `name` is the operator's own text. */

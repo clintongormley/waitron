@@ -124,6 +124,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Its tables have changed. Check and try again",
     es: "Sus mesas han cambiado. Revísalo e inténtalo de nuevo",
   },
+  "joined_table.tables_in_group": {
+    en: "Some of its tables are in a group with guests. Split them off first",
+    es: "Algunas de sus mesas están en un grupo con clientes. Sepáralas primero",
+  },
   "floor_today.out_of_date": {
     en: "The floor has changed. Check and try again",
     es: "La sala ha cambiado. Revísala y vuelve a intentarlo",
@@ -131,6 +135,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "table.split_off": {
     en: "That table was split off. Join it again first",
     es: "Esa mesa está separada. Vuelve a unirla primero",
+  },
+  "table.place_taken": {
+    en: "Another table is in its place. Move it, then try again",
+    es: "Otra mesa ocupa su sitio. Muévela y vuelve a intentarlo",
   },
   "merge.seats_required": {
     en: "Enter the seats for this merge",
