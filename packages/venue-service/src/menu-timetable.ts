@@ -677,6 +677,33 @@ export async function replaceMenuWeek(
   options: { seasonId?: string } = {},
 ): Promise<void> {
   const clock = await readLocationClock(tx, cfg.locationId);
+  const staged = await stageMenuWeek(tx, cfg, departmentId, days, clock, options.seasonId);
+  await assertBusinessDayScheduleWrite(
+    tx,
+    cfg,
+    staged.changed ? "time" : "metadata",
+    at,
+    expectedClockRevision,
+    clock,
+  );
+  await staged.write();
+  await staged.checkEndOffsets();
+}
+
+/** A department week checked and compared with what its seasons hold, written by `write`; its
+ *  end offsets are checked by `checkEndOffsets` once every week of the request is written. */
+export async function stageMenuWeek(
+  tx: Transaction,
+  cfg: VenueScope,
+  departmentId: string,
+  days: unknown,
+  clock: BusinessDayClock,
+  seasonId: string | undefined,
+): Promise<{
+  changed: boolean;
+  write: () => Promise<void>;
+  checkEndOffsets: () => Promise<void>;
+}> {
   const week = parseMenuWeek(days, (value, field) => {
     const parsed = scheduleCutovers(clock).map((cutover) => parseServiceDay(value, field, cutover));
     return parsed[0]!;
@@ -687,7 +714,7 @@ export async function replaceMenuWeek(
     departmentId,
     week.slots.map((slots, weekday) => ({ field: `days.${week.indexOf[weekday]}.slots`, slots })),
   );
-  const targets = await targetSeasons(tx, cfg, options.seasonId);
+  const targets = await targetSeasons(tx, cfg, seasonId);
   const samePeriod = (a: ServiceRange, b: ServiceRange) => a.periodId === b.periodId;
   const seasonWeek = week.slots.map((slots) => joinTouching(slots, samePeriod));
   const seasonsNow = (
@@ -702,35 +729,32 @@ export async function replaceMenuWeek(
         ),
     ),
   );
-  await assertBusinessDayScheduleWrite(
-    tx,
-    cfg,
-    changed ? "time" : "metadata",
-    at,
-    expectedClockRevision,
-    clock,
-  );
   const holding = seasonsHolding(
     seasonsNow,
     targets.map((season) => season.id),
     seasonWeek,
   );
-  await writeDepartmentSeasonWeeks(
-    tx,
-    departmentId,
-    targets.flatMap((season) => (holding.has(season.id) ? [] : [season.id])),
-    seasonWeek,
-  );
-  const clash = await endOffsetClash(tx, cfg, departmentId, false, clock);
-  if (clash !== null)
-    invalidTimetable(
-      // A boundary clash lies in another season's day, which this request does not hold.
-      clash.weekday === undefined ||
-        (options.seasonId !== undefined && clash.seasonId !== options.seasonId)
-        ? "days"
-        : `days.${week.indexOf[clash.weekday]}.slots`,
-      { reason: "end_offset", ...clash },
-    );
+  return {
+    changed,
+    write: () =>
+      writeDepartmentSeasonWeeks(
+        tx,
+        departmentId,
+        targets.flatMap((season) => (holding.has(season.id) ? [] : [season.id])),
+        seasonWeek,
+      ),
+    checkEndOffsets: async () => {
+      const clash = await endOffsetClash(tx, cfg, departmentId, false, clock);
+      if (clash !== null)
+        invalidTimetable(
+          // A boundary clash lies in another season's day, which this request does not hold.
+          clash.weekday === undefined || (seasonId !== undefined && clash.seasonId !== seasonId)
+            ? "days"
+            : `days.${week.indexOf[clash.weekday]}.slots`,
+          { reason: "end_offset", ...clash },
+        );
+    },
+  };
 }
 
 type Folder = { id: string; name: string; parentId: string | null };

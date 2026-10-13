@@ -2,8 +2,10 @@ import { and, eq, inArray } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { readLocationClock } from "@waitron/reporting";
 import { AppError } from "@waitron/shared";
-import { sameScheduleRanges } from "./business-day-schedule.js";
-import { storedTime, wireTime, type VenueScope } from "./operations.js";
+import { assertBusinessDayScheduleWrite, sameScheduleRanges } from "./business-day-schedule.js";
+import { stageMenuWeek } from "./menu-timetable.js";
+import type { MenuWeekDay } from "./menu-timetable-types.js";
+import { resolveZoneContext, storedTime, wireTime, type VenueScope } from "./operations.js";
 import {
   departmentDayRanges,
   departmentDays,
@@ -14,6 +16,7 @@ import {
 import type { Season } from "./season-rules.js";
 import { ensureDefaultSeasons } from "./seasons.js";
 import { rangeSpan, type ClosedRange, type ServiceRange } from "./service-day.js";
+import { stageZoneClosedWeek } from "./zone-closed-times.js";
 import "./errors.js";
 
 const WEEKDAYS = [0, 1, 2, 3, 4, 5, 6] as const;
@@ -280,4 +283,63 @@ export async function readZoneSeasonWeeks(
     })),
     dayCutover,
   );
+}
+
+/** Runs `fn`, naming a refused field by where it sits in the request: `prefix` goes before it. */
+async function within<T>(prefix: string, fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (error) {
+    if (!(error instanceof AppError)) throw error;
+    const field = (error.params as { field?: unknown }).field;
+    if (typeof field !== "string") throw error;
+    throw new AppError(error.code, { ...error.params, field: `${prefix}${field}` });
+  }
+}
+
+/** Every listed department week and zone week of one season, under one revision check; each
+ *  department's end offsets are checked once every week is written. */
+export async function saveSeasonWeeks(
+  tx: Transaction,
+  cfg: VenueScope,
+  seasonId: string,
+  input: {
+    departments?: readonly { departmentId: string; days: readonly MenuWeekDay[] }[];
+    zones?: readonly {
+      zoneId: string;
+      days: readonly { weekday: number; ranges: readonly ClosedRange[] }[];
+    }[];
+  },
+  at: Date,
+  expectedClockRevision: number,
+): Promise<void> {
+  await seasonsNaming(tx, cfg, seasonId);
+  const clock = await readLocationClock(tx, cfg.locationId);
+  const departmentWeeks = [];
+  for (const [index, entry] of (input.departments ?? []).entries())
+    departmentWeeks.push({
+      prefix: `departments.${index}.`,
+      ...(await within(`departments.${index}.`, () =>
+        stageMenuWeek(tx, cfg, entry.departmentId, entry.days, clock, seasonId),
+      )),
+    });
+  const zoneWeeks = [];
+  for (const [index, entry] of (input.zones ?? []).entries()) {
+    await resolveZoneContext(tx, cfg, entry.zoneId);
+    zoneWeeks.push(
+      await within(`zones.${index}.`, () =>
+        stageZoneClosedWeek(tx, cfg, entry.zoneId, entry.days, clock, seasonId),
+      ),
+    );
+  }
+  await assertBusinessDayScheduleWrite(
+    tx,
+    cfg,
+    [...departmentWeeks, ...zoneWeeks].some((week) => week.changed) ? "time" : "metadata",
+    at,
+    expectedClockRevision,
+    clock,
+  );
+  for (const week of [...departmentWeeks, ...zoneWeeks]) await week.write();
+  for (const week of departmentWeeks) await within(week.prefix, week.checkEndOffsets);
 }

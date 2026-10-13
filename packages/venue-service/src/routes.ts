@@ -338,6 +338,8 @@ import { stationServiceTimes } from "./station-service-times.js";
 import { readSpecialDaysModel } from "./named-days.js";
 import { readOpeningHoursMonth, readOpeningHoursYear } from "./opening-hours-calendar.js";
 import { addSeason, deleteSeason, saveSeason, seasonDeleteImpact } from "./seasons.js";
+import { saveSeasonWeeks } from "./season-weeks.js";
+import type { ClosedRange } from "./service-day.js";
 
 /** Refused as a stale clock, as a missing revision is on every other time-affecting write; a
  *  season rename changes no times, so its writer never checks the revision itself. */
@@ -346,6 +348,31 @@ function requireClockRevision(body: { expectedClockRevision?: unknown }): number
   if (typeof revision !== "number" || !Number.isSafeInteger(revision) || revision < 0)
     throw new AppError("hours.clock_changed", {});
   return revision;
+}
+
+/** A season-weeks list: absent, or entries each naming a distinct uuid under `idKey`, with days
+ *  the week's writer checks. */
+function requireWeekList(
+  value: unknown,
+  field: string,
+  idKey: string,
+): { id: string; days: unknown }[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) throw new AppError("management.request_invalid", { field });
+  const seen = new Set<string>();
+  return value.map((entry: unknown, index) => {
+    const at = `${field}.${index}`;
+    if (typeof entry !== "object" || entry === null || Array.isArray(entry))
+      throw new AppError("management.request_invalid", { field: at });
+    const extra = Object.keys(entry).find((key) => key !== idKey && key !== "days");
+    if (extra !== undefined)
+      throw new AppError("management.request_invalid", { field: `${at}.${extra}` });
+    const record = entry as Record<string, unknown>;
+    const id = requireBodyUuid(record[idKey], `${at}.${idKey}`).toLowerCase();
+    if (seen.has(id)) throw new AppError("management.request_invalid", { field: `${at}.${idKey}` });
+    seen.add(id);
+    return { id, days: record.days };
+  });
 }
 
 export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
@@ -1214,6 +1241,38 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
             new Date(),
             body.expectedClockRevision as number,
             { seasonId: requireBodyUuid(body.seasonId, "seasonId") },
+          ),
+        );
+        return c.body(null, 204);
+      }),
+    );
+
+    app.put("/management-api/venue-service/seasons/:seasonId/weeks", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const seasonId = requireUuidParam(c.req.param("seasonId"), "SeasonId");
+        const body = await readJsonBody<Record<string, unknown>>(c);
+        onlyKeys(body, ["departments", "zones", "expectedClockRevision"]);
+        const departments = requireWeekList(body.departments, "departments", "departmentId");
+        const zones = requireWeekList(body.zones, "zones", "zoneId");
+        const revision = requireClockRevision(body);
+        await gated(sessionId, (tx) =>
+          saveSeasonWeeks(
+            tx,
+            ctx.cfg,
+            seasonId,
+            {
+              departments: departments?.map(({ id, days }) => ({
+                departmentId: id,
+                days: days as readonly MenuWeekDay[],
+              })),
+              zones: zones?.map(({ id, days }) => ({
+                zoneId: id,
+                days: days as readonly { weekday: number; ranges: readonly ClosedRange[] }[],
+              })),
+            },
+            new Date(),
+            revision,
           ),
         );
         return c.body(null, 204);

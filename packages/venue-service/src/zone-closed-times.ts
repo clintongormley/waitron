@@ -38,6 +38,28 @@ export async function replaceZoneClosedWeek(
 ): Promise<void> {
   await resolveZoneContext(tx, cfg, zoneId);
   const clock = await readLocationClock(tx, cfg.locationId);
+  const staged = await stageZoneClosedWeek(tx, cfg, zoneId, days, clock, options.seasonId);
+  await assertBusinessDayScheduleWrite(
+    tx,
+    cfg,
+    staged.changed ? "time" : "metadata",
+    at,
+    expectedClockRevision,
+    clock,
+  );
+  await staged.write();
+}
+
+/** A zone's closed week checked and compared with what its seasons hold, written by `write`. The
+ *  zone itself is the caller's to check. */
+export async function stageZoneClosedWeek(
+  tx: Transaction,
+  cfg: VenueScope,
+  zoneId: string,
+  days: unknown,
+  clock: BusinessDayClock,
+  seasonId: string | undefined,
+): Promise<{ changed: boolean; write: () => Promise<void> }> {
   if (!Array.isArray(days) || days.length !== 7)
     throw new AppError("zone_closed_time.invalid", { field: "days" });
   const week = new Map<number, ClosedRange[]>();
@@ -58,7 +80,7 @@ export async function replaceZoneClosedWeek(
     );
     week.set(weekday, parsed[0]!);
   }
-  const targets = await targetSeasons(tx, cfg, options.seasonId);
+  const targets = await targetSeasons(tx, cfg, seasonId);
   const seasonWeek = [0, 1, 2, 3, 4, 5, 6].map((weekday) =>
     joinTouching(week.get(weekday)!, () => true),
   );
@@ -72,25 +94,21 @@ export async function replaceZoneClosedWeek(
         ),
     ),
   );
-  await assertBusinessDayScheduleWrite(
-    tx,
-    cfg,
-    changed ? "time" : "metadata",
-    at,
-    expectedClockRevision,
-    clock,
-  );
   const holding = seasonsHolding(
     seasonsNow,
     targets.map((season) => season.id),
     seasonWeek,
   );
-  await writeZoneSeasonWeeks(
-    tx,
-    zoneId,
-    targets.flatMap((season) => (holding.has(season.id) ? [] : [season.id])),
-    seasonWeek,
-  );
+  return {
+    changed,
+    write: () =>
+      writeZoneSeasonWeeks(
+        tx,
+        zoneId,
+        targets.flatMap((season) => (holding.has(season.id) ? [] : [season.id])),
+        seasonWeek,
+      ),
+  };
 }
 
 /** The venue's active zones that serve an active department. */
