@@ -34,8 +34,8 @@ const DEFAULT_BACKUP_RETAIN = 7;
 const DEFAULT_BACKUP_RETAIN_DAYS = 30;
 const DEFAULT_BACKUP_STALE_AFTER_MS = 2 * 24 * 60 * 60 * 1000;
 const DEFAULT_DESTINATION_TIMEOUT_MS = 15 * 60 * 1000;
-const MIN_DESTINATION_TIMEOUT_MS = 30 * 1000;
-const MAX_DESTINATION_TIMEOUT_MS = 24 * 60 * 60 * 1000;
+export const MIN_DESTINATION_TIMEOUT_MS = 30 * 1000;
+export const MAX_DESTINATION_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 
 type Env = Record<string, string | undefined>;
 
@@ -95,7 +95,7 @@ function parseDestinationTimeout(env: Env): number {
 }
 
 function parseDestinations(env: Env): BackupDestination[] {
-  const out: BackupDestination[] = [];
+  const out: Extract<BackupDestination, { kind: "local-fs" }>[] = [];
   const dir = env.WAITRON_BACKUP_DIR;
   if (!isUnset(dir)) out.push({ kind: "local-fs", id: "primary", dir: resolve(dir) });
 

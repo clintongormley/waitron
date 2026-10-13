@@ -18,7 +18,7 @@ import type { WaitronModule } from "@waitron/module";
 import { VENUE_FILE } from "@waitron/store";
 import { AppError } from "@waitron/shared";
 import { codeOf } from "@waitron/server-kit";
-import { buildBackupBackend, type ResolvedBackupDestination } from "./backup-backends.js";
+import { buildBackupBackend } from "./backup-backends.js";
 import type { BackupConfig, BackupSchedule } from "./backup-config.js";
 import type { ScheduleClock } from "./backup-schedule.js";
 import {
@@ -28,7 +28,7 @@ import {
 } from "./backup-status.js";
 import { runBackupSweep, type DestinationResult } from "./backup-sweep.js";
 import type { BackupOutcomeHolder } from "./alert-sources.js";
-import type { StorageBackend } from "./storage-backend.js";
+import type { BackupDestination, StorageBackend } from "./storage-backend.js";
 import type { DeploymentEnvironment } from "./config.js";
 import { realSleep } from "./loop.js";
 import type { Logger } from "./logger.js";
@@ -40,7 +40,8 @@ export interface BackupRuntimeStatus {
   enabled: boolean;
   isPrimary: boolean;
   managedByEnvironment: boolean;
-  destinations: { id: string; dir: string }[];
+  /** A bucket destination shows its id alone here. */
+  destinations: { id: string; dir?: string }[];
   schedule: BackupSchedule | undefined;
   retention: { count: number; days: number } | undefined;
   /** Short hash PREFIX of the running recovery key — NEVER the key itself. */
@@ -98,7 +99,7 @@ export interface BackupSupervisorDeps {
   openVenue?: (directory: string) => Promise<VenueDatabase>;
   onScheduled?: (at: number | null) => void;
   /** DI for tests; defaults to `buildBackupBackend`. */
-  buildBackend?: (dest: ResolvedBackupDestination) => StorageBackend;
+  buildBackend?: (dest: BackupDestination) => StorageBackend;
   /** DI for tests; defaults to `readDestinationStatus`'s own limit. */
   statusReadTimeoutMs?: number;
   now?: () => Date;
@@ -122,7 +123,7 @@ export function keyFingerprint(key: string): string {
 
 export class BackupSupervisor {
   readonly #deps: BackupSupervisorDeps;
-  readonly #buildBackend: (dest: ResolvedBackupDestination) => StorageBackend;
+  readonly #buildBackend: (dest: BackupDestination) => StorageBackend;
   #controller: AbortController | undefined;
   #worker: Promise<void> | undefined;
   #backends: StorageBackend[] = [];
@@ -179,7 +180,7 @@ export class BackupSupervisor {
       this.#db = venue;
       const controller = new AbortController();
       this.#controller = controller;
-      this.#backends = cfg.destinations.map(this.#buildBackend);
+      this.#backends = cfg.destinations.map((dest) => this.#buildBackend(dest));
       this.#worker = runBackupSweep({
         backends: this.#backends,
         db: venue.venue,
@@ -228,7 +229,10 @@ export class BackupSupervisor {
       enabled: cfg !== undefined && isPrimary && this.#db !== undefined,
       isPrimary,
       managedByEnvironment: this.#deps.isManagedByEnvironment(),
-      destinations: cfg?.destinations.map((d) => ({ id: d.id, dir: d.dir })) ?? [],
+      destinations:
+        cfg?.destinations.map((d) =>
+          d.kind === "local-fs" ? { id: d.id, dir: d.dir } : { id: d.id },
+        ) ?? [],
       schedule: cfg?.schedule,
       retention: cfg === undefined ? undefined : { count: cfg.retain, days: cfg.retainDays },
       keyFingerprint: cfg === undefined ? undefined : keyFingerprint(cfg.recoveryKey),
@@ -268,7 +272,7 @@ export class BackupSupervisor {
 
   /** Answers by the read limit; the backend is closed only once its listing has settled. */
   #readDestination(
-    dest: ResolvedBackupDestination,
+    dest: BackupDestination,
     staleAfterMs: number,
     now: Date,
   ): Promise<DestinationStatus> {

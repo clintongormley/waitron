@@ -14,6 +14,7 @@ export {
   GENERATION_NAME,
   bucketKey,
   generationName,
+  isKeySegment,
   normalisePrefix,
   parseGenerationName,
   venuePrefix,

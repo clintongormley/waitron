@@ -44,6 +44,9 @@ export const PURPOSES = {
     "accessKeyId",
     "secretAccessKey",
   ],
+  /** The venue's archive configuration as one validated JSON document, bucket credentials
+   * included. */
+  "backup.archive": ["settings"],
 } as const satisfies Record<string, readonly string[]>;
 
 export type Purpose = keyof typeof PURPOSES;

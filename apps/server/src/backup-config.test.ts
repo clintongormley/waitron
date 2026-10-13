@@ -30,7 +30,7 @@ describe("loadBackupConfig", () => {
       staleAfterMs: expect.any(Number),
     });
     expect(c!.schedule).toEqual({ kind: "interval", ms: expect.any(Number) });
-    expect(c!.destinations[0].dir).toMatch(/^\//); // resolved absolute
+    expect((c!.destinations[0] as { dir: string }).dir).toMatch(/^\//); // resolved absolute
   });
   it("rejects a non-positive retain count", () => {
     expect(() =>

@@ -1166,8 +1166,15 @@ declare module "@waitron/shared" {
     /** The stream settings' Test, or the same check Save runs first, refused the owner's bucket.
      * `reason` is `probeBucket`'s short reason (`@waitron/stream`), naming which check failed. */
     "backup.stream_test_failed": { reason: ProbeFailure };
-    /** A recovery kit was asked for while no bucket is configured. */
+    /** A recovery kit, or archives in the stream's bucket, were asked for while no bucket is
+     * configured. */
     "backup.stream_not_configured": Record<string, never>;
+    /** The stored archive settings (`backup.archive`) are not a record this server wrote.
+     * `reason` names the part that failed, never its value, which could be a secret. */
+    "backup.archive_settings_invalid": { reason: string };
+    /** An archive bucket's folder for this venue would sit inside, or contain, the stream's venue
+     * folder in the same bucket. No params: they would be the owner's bucket settings. */
+    "backup.archive_namespace_overlap": Record<string, never>;
     /** A recovery kit was asked for on a node with no membership public key (`nodes.public_key`),
      * so a rebuild could not verify the pointer this node signs. */
     "backup.stream_signer_missing": Record<string, never>;

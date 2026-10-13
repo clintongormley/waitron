@@ -1,4 +1,4 @@
-import type { FileCall } from "@waitron/stream";
+import type { BucketConfig, FileCall } from "@waitron/stream";
 import { AppError } from "@waitron/shared";
 import "@waitron/stream";
 import "./errors.js";
@@ -53,4 +53,8 @@ export interface StorageBackend {
   close(): void;
 }
 
-export type BackupDestination = { kind: "local-fs"; id: string; dir: string };
+/** A destination with everything needed to reach it, secrets included; never sent to a browser.
+ * A bucket's `prefix` is the one chosen; its archives live under `archiveNamespace` of it. */
+export type BackupDestination =
+  | { kind: "local-fs"; id: string; dir: string }
+  | { kind: "s3"; id: string; bucket: BucketConfig; venueId: string };
