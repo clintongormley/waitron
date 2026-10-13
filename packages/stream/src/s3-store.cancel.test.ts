@@ -147,6 +147,25 @@ describe("a read cancelled after its headers have arrived", () => {
   });
 });
 
+describe("a read answered with no version tag", () => {
+  it("is refused, and closes the connection of the body it will not read", async () => {
+    const observed = { closed: false };
+    const headersSent = signalled();
+    const config = await bucket((request, response) => {
+      request.socket.once("close", () => (observed.closed = true));
+      response.writeHead(200, { "content-length": "1000" });
+      response.write("the first part");
+      headersSent.resolve();
+    });
+    const store = createS3ObjectStore(config);
+    expect(await outcome(store.get("k"))).toEqual({
+      code: "backup.stream_request_failed",
+      params: { operation: "get", key: "k", status: 200, name: "IncompleteResponse" },
+    });
+    await vi.waitFor(() => expect(observed.closed).toBe(true));
+  });
+});
+
 // A transport that never looks at the signal, so what stops these calls is the store's own checks.
 type Scripted = { statusCode: number; headers?: Record<string, string>; body?: string | Readable };
 function signalBlind(
@@ -198,6 +217,19 @@ describe("over a transport that ignores the signal", () => {
     controller.abort();
     expect(await call).toEqual(cancelled("get", "k"));
     expect(body.destroyed).toBe(true);
+  });
+
+  it("a read whose answer arrives after the cancellation destroys that answer's body", async () => {
+    const body = new Readable({ read() {} });
+    const controller = new AbortController();
+    const { store } = signalBlind(() => {
+      controller.abort();
+      return { statusCode: 200, headers: { etag: '"v1"' }, body };
+    });
+    expect(await outcome(store.get("k", { signal: controller.signal }))).toEqual(
+      cancelled("get", "k"),
+    );
+    await vi.waitFor(() => expect(body.destroyed).toBe(true));
   });
 
   it("a read cancelled before its answer is not read as a missing key", async () => {

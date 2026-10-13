@@ -1,5 +1,5 @@
 import { setTimeout as delay } from "node:timers/promises";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { AppError } from "@waitron/shared";
 import {
   abortableSleep,
@@ -88,6 +88,48 @@ describe("sendUnlessCancelled", () => {
       sendUnlessCancelled(() => Promise.reject(new Error("refused")), open, "get", "k"),
     ).rejects.toThrow("refused");
     await expect(sendUnlessCancelled(async () => 2, undefined, "get", "k")).resolves.toBe(2);
+  });
+
+  it("answers the cancellation when starting the work cancels the signal", async () => {
+    const controller = new AbortController();
+    const answered = sendUnlessCancelled(
+      async () => {
+        controller.abort();
+        return 1;
+      },
+      controller.signal,
+      "get",
+      "k",
+    );
+    expect(params(await answered.catch((error: unknown) => error))).toEqual(CANCELLED);
+  });
+
+  it("hands an answer that arrives after the cancellation to `discard`, and only that one", async () => {
+    const discarded: number[] = [];
+    const discard = (late: number) => discarded.push(late);
+    const controller = new AbortController();
+    let answer!: (value: number) => void;
+    const pending = sendUnlessCancelled(
+      () => new Promise<number>((resolve) => (answer = resolve)),
+      controller.signal,
+      "get",
+      "k",
+      discard,
+    );
+    controller.abort();
+    expect(params(await pending.catch((error: unknown) => error))).toEqual(CANCELLED);
+    answer(7);
+    await vi.waitFor(() => expect(discarded).toEqual([7]));
+    const open = new AbortController().signal;
+    await expect(sendUnlessCancelled(async () => 8, open, "get", "k", discard)).resolves.toBe(8);
+    expect(discarded).toEqual([7]);
+  });
+
+  it("passes the signal to the work it starts", async () => {
+    const signal = new AbortController().signal;
+    await expect(
+      sendUnlessCancelled(async (given) => given === signal, signal, "get", "k"),
+    ).resolves.toBe(true);
   });
 
   it("leaves no unhandled failure when the work fails after the cancellation", async () => {

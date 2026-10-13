@@ -66,6 +66,10 @@ function failure(
   return requestFailed(operation, key, statusOf(error), nameOf(error));
 }
 
+function bodyOf(out: GetObjectCommandOutput) {
+  return out.Body as (NonNullable<typeof out.Body> & { destroy(error?: Error): void }) | undefined;
+}
+
 export function createS3ObjectStore(
   config: BucketConfig,
   options: S3ObjectStoreOptions = {},
@@ -79,10 +83,8 @@ export function createS3ObjectStore(
   async function deleteOne(key: string, signal: AbortSignal | undefined): Promise<void> {
     try {
       await sendUnlessCancelled(
-        () =>
-          client.send(new DeleteObjectCommand({ Bucket: bucket, Key: at(key) }), {
-            abortSignal: signal,
-          }),
+        (abortSignal) =>
+          client.send(new DeleteObjectCommand({ Bucket: bucket, Key: at(key) }), { abortSignal }),
         signal,
         "delete",
         key,
@@ -98,13 +100,12 @@ export function createS3ObjectStore(
       let out: GetObjectCommandOutput;
       try {
         out = await sendUnlessCancelled(
-          () =>
-            client.send(new GetObjectCommand({ Bucket: bucket, Key: at(key) }), {
-              abortSignal: signal,
-            }),
+          (abortSignal) =>
+            client.send(new GetObjectCommand({ Bucket: bucket, Key: at(key) }), { abortSignal }),
           signal,
           "get",
           key,
+          (late) => bodyOf(late)?.destroy(),
         );
       } catch (error) {
         if (signal?.aborted) throw callCancelled("get", key);
@@ -112,22 +113,20 @@ export function createS3ObjectStore(
         if (nameOf(error) === "NoSuchKey") return null;
         throw requestFailed("get", key, statusOf(error), nameOf(error));
       }
-      if (out.Body === undefined || out.ETag === undefined) {
+      // A body left unread holds its connection open, so every failure from here destroys it.
+      const body = bodyOf(out);
+      if (body === undefined || out.ETag === undefined) {
+        body?.destroy();
         throw answerRefused("get", key, out.$metadata.httpStatusCode ?? null, "IncompleteResponse");
       }
-      // The headers having arrived is not the end of the call: a cancellation closes the body too.
-      const body = out.Body as typeof out.Body & { destroy(error?: Error): void };
       const stop = () => body.destroy(callCancelled("get", key));
       signal?.addEventListener("abort", stop, { once: true });
       try {
         throwIfCancelled(signal, "get", key);
         return { body: await body.transformToByteArray(), etag: out.ETag };
       } catch (error) {
-        if (signal?.aborted) {
-          // No error: when the read never started, nothing would be listening for one.
-          body.destroy();
-          throw callCancelled("get", key);
-        }
+        body.destroy();
+        if (signal?.aborted) throw callCancelled("get", key);
         // Reported with no status, so callers treat a body that broke off as no answer, not a refusal.
         throw requestFailed("get", key, null, nameOf(error));
       } finally {
@@ -141,7 +140,7 @@ export function createS3ObjectStore(
         let out: PutObjectCommandOutput;
         try {
           out = await sendUnlessCancelled(
-            () =>
+            (abortSignal) =>
               client.send(
                 new PutObjectCommand({
                   Bucket: bucket,
@@ -149,7 +148,7 @@ export function createS3ObjectStore(
                   Body: body,
                   ...conditionHeaders(condition),
                 }),
-                { abortSignal: signal },
+                { abortSignal },
               ),
             signal,
             "put",
@@ -186,14 +185,14 @@ export function createS3ObjectStore(
         let page: ListObjectsV2CommandOutput;
         try {
           page = await sendUnlessCancelled(
-            () =>
+            (abortSignal) =>
               client.send(
                 new ListObjectsV2Command({
                   Bucket: bucket,
                   Prefix: wanted,
                   ContinuationToken: token,
                 }),
-                { abortSignal: signal },
+                { abortSignal },
               ),
             signal,
             "list",
@@ -231,13 +230,13 @@ export function createS3ObjectStore(
         let out: DeleteObjectsCommandOutput;
         try {
           out = await sendUnlessCancelled(
-            () =>
+            (abortSignal) =>
               client.send(
                 new DeleteObjectsCommand({
                   Bucket: bucket,
                   Delete: { Objects: batch.map((key) => ({ Key: at(key) })), Quiet: true },
                 }),
-                { abortSignal: signal },
+                { abortSignal },
               ),
             signal,
             "delete",

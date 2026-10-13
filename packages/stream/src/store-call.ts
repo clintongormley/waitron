@@ -26,24 +26,34 @@ export async function abortableSleep(ms: number, signal: AbortSignal | undefined
 
 /**
  * Starts `send` unless `signal` is already cancelled, then answers its outcome, or the cancellation
- * as soon as `signal` aborts, whichever comes first.
+ * as soon as `signal` aborts, whichever comes first. An answer that arrives after the cancellation
+ * goes to `discard`.
  * The client's own wait between attempts may outlive a cancelled call; it sends nothing more
  * (`s3-store.cancel.test.ts`).
  */
 export function sendUnlessCancelled<T>(
-  send: () => Promise<T>,
+  send: (signal: AbortSignal | undefined) => Promise<T>,
   signal: AbortSignal | undefined,
   operation: BucketOperation,
   key: string,
+  discard?: (late: T) => void,
 ): Promise<T> {
   if (signal?.aborted) return Promise.reject(callCancelled(operation, key));
-  const work = send();
+  const work = send(signal);
   if (signal === undefined) return work;
   return new Promise<T>((resolve, reject) => {
-    const stop = () => reject(callCancelled(operation, key));
+    let cancelled = false;
+    const stop = () => {
+      cancelled = true;
+      reject(callCancelled(operation, key));
+    };
     signal.addEventListener("abort", stop, { once: true });
+    // `send` itself may have cancelled the signal, before anything was listening.
+    if (signal.aborted) stop();
     // Also settles a call already answered as cancelled, so its later failure is not unhandled.
-    void work.then(resolve, reject).finally(() => signal.removeEventListener("abort", stop));
+    void work
+      .then((value) => (cancelled ? discard?.(value) : resolve(value)), reject)
+      .finally(() => signal.removeEventListener("abort", stop));
   });
 }
 
