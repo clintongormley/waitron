@@ -22,6 +22,7 @@ import {
   takeOffToday,
 } from "./floor-today-store.js";
 import { finishTable } from "./parties.js";
+import { readZonePlan, saveZonePlan } from "./floor-plan.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { splitJoinedTable } from "./floor-today-split.js";
 import { joinAgain } from "./floor-today-join-again.js";
@@ -227,6 +228,57 @@ describe("joining split-off tables again when every one is free", () => {
     for (const id of [table.c3!, table.c4!, table.c5!]) expect(await out(id)).toBe(1);
     expect(await splitRowsOf(table.long!)).toEqual([]);
     expect(await apart(table.long!)).toBe(0);
+  });
+
+  it("brings Long table back at its saved place when it came apart around a part guests held since the reset, not where staff moved it", async () => {
+    const { zoneId, table, master } = await plannedZone(
+      v,
+      [
+        { key: "c3", label: "Counter 3", seats: 2, place: null },
+        { key: "c4", label: "Counter 4", seats: 6, place: null },
+        { key: "c5", label: "Counter 5", seats: 4, place: null },
+        {
+          key: "long",
+          label: "Long table",
+          seats: 10,
+          place: { x: 10, y: 20, width: 6, height: 2 },
+          partKeys: ["c4", "c5"],
+        },
+      ],
+      NOW,
+    );
+    await giveKeptSize(v, master.c3!, { width: 2, height: 2 });
+    await giveKeptSize(v, master.c4!, { width: 2, height: 2 });
+    await seat(v, table.c3!);
+    await inTx(v, async (tx) => {
+      const plan = await readZonePlan(tx, v.cfg, zoneId);
+      const tables = plan.tables.map((t) => ({
+        id: t.id,
+        key: t.id,
+        label: t.label,
+        seats: t.seats,
+        fixed: t.fixed,
+        placement: t.placement,
+        partKeys: t.id === master.long ? [master.c3!, master.c4!, master.c5!] : t.partIds,
+      }));
+      await saveZonePlan(tx, v.cfg, REMOVALS, zoneId, { revision: plan.revision, tables }, NOW);
+    });
+    await inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, NOW));
+    await inTx(v, (tx) => moveToday(tx, v.cfg, table.long!, { x: 15, y: 25 }));
+    await split(table.long!, [table.c5!], null);
+    expect(await apart(table.long!)).toBe(1);
+    expect(await splitRowsOf(table.long!)).toEqual([table.c4!, table.c5!].sort());
+    expect(await todayRow(v, table.long!)).toMatchObject({ x: 15, y: 25 });
+
+    await join(table.long!, [table.c4!, table.c5!]);
+
+    expect(await todayRow(v, table.long!)).toMatchObject({
+      x: 10,
+      y: 20,
+      width: 6,
+      height: 2,
+      seats: 10,
+    });
   });
 
   it("brings Long table back on the map at its saved place when it was taken off, not where it stood", async () => {
