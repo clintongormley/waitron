@@ -853,6 +853,7 @@ describe("opening a generation", () => {
     const put = h.store.put.bind(h.store);
     const get = h.store.get.bind(h.store);
     let release: (() => void) | undefined;
+    // This fake ignores the call's signal on purpose; supervisor.cancel.test.ts has the write that honours it.
     h.store.put = async (key, body, cond) => {
       if (key === pointerKey(VENUE) && release === undefined) {
         await new Promise<void>((resolve) => (release = resolve));

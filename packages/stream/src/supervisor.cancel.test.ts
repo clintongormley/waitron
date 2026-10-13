@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { generationPrefix, markerKey } from "./generations.js";
 import { generationName, venuePrefix } from "./names.js";
 import type { ObjectStore, StoreCall } from "./object-store.js";
-import { pointerKey, SentPointers } from "./pointer.js";
+import { pointerKey, readPointer, SentPointers } from "./pointer.js";
 import { PROBE_PREFIX } from "./probe.js";
 import { callCancelled } from "./store-call.js";
 import { READ_DEADLINE_MS, StreamSupervisor } from "./supervisor.js";
@@ -65,6 +65,7 @@ async function harness() {
   const litestream = new FakeLitestream([]);
   const directory = await mkdtemp(join(tmpdir(), "waitron-stream-cancel-"));
   let wal = 0;
+  let walFails = false;
   const logs: { level: string; event: string; fields?: Record<string, unknown> }[] = [];
   const supervisor = new StreamSupervisor({
     litestreamBin: "litestream",
@@ -85,7 +86,10 @@ async function harness() {
       wal = 0;
       return { reclaimed: true };
     },
-    walBytes: async () => wal,
+    walBytes: async () => {
+      if (walFails) throw new Error("the side file could not be measured");
+      return wal;
+    },
     walLimitBytes: LIMIT,
     now: clock.now,
     monotonic: clock.monotonic,
@@ -112,6 +116,9 @@ async function harness() {
     },
     setWal: (bytes: number) => {
       wal = bytes;
+    },
+    failWal: (fails = true) => {
+      walFails = fails;
     },
     /** The calls after the first `since`, of `operation` on `key`. */
     callsOn: (operation: BucketOperation, key: string, since = 0) =>
@@ -259,5 +266,73 @@ describe("opening", () => {
     await settle();
     expect(held.signal?.aborted).toBe(true);
     expect(h.logs.slice(logged)).toEqual([]);
+  });
+
+  it("cancels the wait for the first full copy when the side file reaches the limit, and logs no failed listing after", async () => {
+    const h = await harness();
+    const waiting = (op: BucketOperation, key: string) =>
+      op === "list" && key === generationPrefix(VENUE, first);
+    h.holdWhen(waiting);
+    await h.supervisor.start();
+    await h.clock.until(() => h.calls.some((call) => waiting(call.operation, call.key)));
+    const held = h.calls.find((call) => waiting(call.operation, call.key))!;
+    expect(held.signal?.aborted).toBe(false);
+    const logged = h.logs.length;
+    h.setWal(LIMIT);
+    await h.clock.until(() => h.logs.some((line) => line.event === "stream.paused"));
+    await settle();
+    expect(held.signal?.aborted).toBe(true);
+    await h.clock.until(() => {
+      const opened = h.supervisor.status().generation;
+      return opened !== null && opened !== first;
+    });
+    expect(h.logs.slice(logged).filter((line) => line.event === "stream.list_failed")).toEqual([]);
+  });
+
+  it("opens a second generation when a pointer write it cancelled lands after the next pointer read", async () => {
+    const h = await harness();
+    const put = h.store.put.bind(h.store);
+    const get = h.store.get.bind(h.store);
+    let held: StoreCall | undefined;
+    let land: (() => void) | undefined;
+    // The first pointer write answers its caller as cancelled, yet the bucket still takes it later.
+    h.store.put = (key, body, condition, call) => {
+      if (key !== pointerKey(VENUE) || held !== undefined) return put(key, body, condition, call);
+      held = call ?? {};
+      return new Promise((_, reject) => {
+        call?.signal?.addEventListener("abort", () => reject(callCancelled("put", key)), {
+          once: true,
+        });
+        land = () => {
+          land = undefined;
+          void put(key, body, condition);
+        };
+      });
+    };
+    // It lands just after the pointer is next read: the order that makes it a change.
+    h.store.get = async (key, call) => {
+      const answer = await get(key, call);
+      if (key === pointerKey(VENUE) && held?.signal?.aborted) land?.();
+      return answer;
+    };
+    await h.supervisor.start();
+    await h.clock.until(() => h.litestream.running() !== undefined);
+    h.store.upload(fullCopyOf(h.supervisor.status().generation!));
+    await h.clock.until(() => held !== undefined);
+    h.failWal();
+    await h.clock.until(() => h.logs.some((line) => line.event === "stream.open_failed"));
+    expect(held!.signal?.aborted).toBe(true);
+    h.failWal(false);
+    await h.clock.until(() => h.litestream.replicas().length === 2);
+    expect(land).toBeUndefined();
+    const second = h.supervisor.status().generation!;
+    h.store.upload(fullCopyOf(second));
+    await h.clock.until(() => ["streaming", "refused"].includes(h.supervisor.status().state));
+    expect(h.supervisor.status()).toMatchObject({
+      state: "streaming",
+      reason: null,
+      generation: second,
+    });
+    expect((await readPointer(h.store, VENUE))?.pointer.body.generation).toBe(second);
   });
 });
