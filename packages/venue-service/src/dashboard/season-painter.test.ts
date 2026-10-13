@@ -421,3 +421,22 @@ it("read-only: only ✕, no paint row, a grid that cannot paint, and the seasons
   expect(grid(painter).readOnly).toBe(true);
   expect(writes).toEqual([]);
 });
+
+it("a refresh that moves the current season keeps the season being painted and its edits", async () => {
+  const { painter } = await mount();
+  const navigations: unknown[] = [];
+  painter.addEventListener("painter-navigate", (event) =>
+    navigations.push((event as CustomEvent).detail),
+  );
+  chip(painter, "paint-p2")!.click();
+  await settle(painter);
+  await drag(painter, "3", 14 * 60, 17 * 60);
+  painter.model = { ...painterModel(), currentSeasonId: "spring" };
+  await settle(painter);
+  expect(frame(painter).heading).toBe("Winter week");
+  expect(grid(painter).days.get("3")).toEqual([
+    { periodId: "p2", startsAt: "20:00", endsAt: "23:00" },
+  ]);
+  expect(painter.edited()).toEqual({ departments: ["d1"], zones: [] });
+  expect(navigations).toEqual([]);
+});

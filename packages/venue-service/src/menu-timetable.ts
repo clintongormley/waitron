@@ -721,7 +721,8 @@ export async function assertWeekEndOffsets(
 }
 
 /** A department week checked and compared with what its seasons hold, written by `write`; its
- *  end offsets are checked by `checkEndOffsets` once every week of the request is written. */
+ *  end offsets are left to `assertWeekEndOffsets`, which the caller runs once every week of the
+ *  request is written. */
 export async function stageMenuWeek(
   tx: Transaction,
   cfg: VenueScope,

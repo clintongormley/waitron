@@ -477,3 +477,83 @@ it("after a save, the painting stays even though the last model refresh came bef
     { periodId: "p2", startsAt: "20:00", endsAt: "23:00" },
   ]);
 });
+
+it.each(["success", "refusal"])(
+  "ignores a save's late %s once the painter was taken off the page and put back",
+  async (outcome) => {
+    let answer!: () => void;
+    const late = new Promise<void>((resolve, reject) => {
+      answer = () =>
+        outcome === "success"
+          ? resolve()
+          : reject({
+              code: "menu_timetable.invalid",
+              params: { field: "departments.0.days.2" },
+            });
+    });
+    const { painter, writes, reread } = await mount(withBar(), [late]);
+    await drag(painter, "3", 7 * 60, 9 * 60);
+    saveButton(painter).click();
+    await expect.poll(() => writes.length).toBe(1);
+    const parent = painter.parentNode!;
+    painter.remove();
+    parent.appendChild(painter);
+    await settle(painter);
+    answer();
+    await late.catch(() => undefined);
+    await settle(painter);
+    expect(frame(painter).busy).toBe(false);
+    expect(frame(painter).refusal).toBe("");
+    expect(grid(painter).columnErrors.size).toBe(0);
+    expect(reread).not.toHaveBeenCalled();
+    expect(painter.edited()).toEqual({ departments: ["d1"], zones: [] });
+    expect(frame(painter).dirty).toBe(true);
+    expect(saveButton(painter).disabled).toBe(false);
+  },
+);
+
+it("a save that fails to reach the server says so beside Save, and a model refresh keeps the message", async () => {
+  const { painter, writes } = await mount(withBar(), [new Error("offline")]);
+  await drag(painter, "3", 7 * 60, 9 * 60);
+  await save(painter, writes);
+  expect(frame(painter).refusal).toBe("This could not be saved. Try again.");
+  expect(grid(painter).columnErrors.size).toBe(0);
+  painter.model = withBar();
+  await settle(painter);
+  expect(frame(painter).refusal).toBe("This could not be saved. Try again.");
+  expect(painter.edited()).toEqual({ departments: ["d1"], zones: [] });
+});
+
+it("a painter-save with nothing changed sends nothing", async () => {
+  const { painter, writes } = await mount();
+  frame(painter).dispatchEvent(new CustomEvent("painter-save", { bubbles: true, composed: true }));
+  await settle(painter);
+  expect(writes).toEqual([]);
+  expect(frame(painter).busy).toBe(false);
+});
+
+it("a paint made while a save is in flight is kept, and is still unsaved once the save lands", async () => {
+  let succeed!: () => void;
+  const late = new Promise<void>((resolve) => {
+    succeed = resolve;
+  });
+  const { painter, writes } = await mount(withBar(), [late]);
+  await drag(painter, "3", 7 * 60, 9 * 60);
+  saveButton(painter).click();
+  await expect.poll(() => writes.length).toBe(1);
+  await drag(painter, "4", 7 * 60, 9 * 60);
+  succeed();
+  await expect.poll(() => frame(painter).busy).toBe(false);
+  await settle(painter);
+  const sent = (writes[0]!.body as { departments: { days: { weekday: number }[] }[] })
+    .departments[0]!.days;
+  expect(sent.find(({ weekday }) => weekday === 4)).toEqual({ weekday: 4, slots: [] });
+  expect(grid(painter).days.get("4")).toEqual([
+    { periodId: "p1", startsAt: "13:00", endsAt: "15:00" },
+  ]);
+  expect(painter.edited()).toEqual({ departments: ["d1"], zones: [] });
+  expect(frame(painter).dirty).toBe(true);
+  await save(painter, writes);
+  expect(writes).toHaveLength(2);
+  expect(frame(painter).dirty).toBe(false);
+});

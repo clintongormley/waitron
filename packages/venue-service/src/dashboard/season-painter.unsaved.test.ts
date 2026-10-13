@@ -178,3 +178,34 @@ it("Discard clears a removal notice and a refused save's message", async () => {
   expect(frame(painter).refusal).toBe("");
   expect(frame(painter).open).toBe(true);
 });
+
+function unload() {
+  const event = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(event);
+  return event.defaultPrevented;
+}
+it.each(["before", "after"])(
+  "an edit made %s the painter is taken off the page and put back still asks before leaving",
+  async (when) => {
+    const painter = await mount();
+    if (when === "before") await paintWednesday(painter);
+    const parent = painter.parentNode!;
+    painter.remove();
+    expect(unload()).toBe(false);
+    parent.insertBefore(painter, parent.firstChild);
+    await settle(painter);
+    if (when === "after") await paintWednesday(painter);
+    expect(unload()).toBe(true);
+    const request = app.leave.coordinator.request({
+      scopes: "all",
+      reason: "navigation",
+      proceed() {},
+    });
+    await choose("keep");
+    expect(await request).toBe("kept");
+    expect(grid(painter).days.get("3")).toEqual([
+      { periodId: "p2", startsAt: "20:00", endsAt: "23:00" },
+    ]);
+    expect(unload()).toBe(true);
+  },
+);
