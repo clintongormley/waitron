@@ -472,22 +472,23 @@ describe("waitron-restore restore --from-archive", () => {
     expect(await legalName(f.venueDir)).toBe("Live venue");
   });
 
-  it.each<[string, Error, string]>([
-    [
-      "refuses its folder",
-      new AppError("backup.destination_key_invalid", { field: "prefix" }),
-      "restore failed: backup.destination_key_invalid",
-    ],
-    ["throws something unexpected", new Error(`boom ${SECRET_ACCESS_KEY}`), "restore failed"],
-  ])("reports a bucket client that %s without its message", async (_label, error, line) => {
-    const f = await fixture();
-    const { code, out } = await run(f, [], {
-      openArchiveFiles: () => {
-        throw error;
-      },
-    });
-    expect({ code, last: out.at(-1) }).toEqual({ code: 1, last: line });
-  });
+  it.each<[string, Error]>([
+    ["refuses its folder", new AppError("backup.destination_key_invalid", { field: "prefix" })],
+    ["throws something unexpected", new Error(`boom ${SECRET_ACCESS_KEY}`)],
+  ])(
+    "says the download failed for a bucket client that %s, without its message",
+    async (_label, error) => {
+      const f = await fixture();
+      const { code, out } = await run(f, [], {
+        openArchiveFiles: () => {
+          throw error;
+        },
+      });
+      expect(code).toBe(1);
+      expect(out.at(-1)).toMatch(/^restore failed: restore\.archive_download_failed — /);
+      expect(out.join("\n")).not.toContain(SECRET_ACCESS_KEY);
+    },
+  );
 
   it("removes the download when the restore throws something unexpected", async () => {
     const f = await fixture();

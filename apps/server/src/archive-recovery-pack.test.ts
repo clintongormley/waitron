@@ -94,6 +94,10 @@ describe("archive recovery pack", () => {
     expectRefused(() => decodeArchiveRecoveryPack(`${ARCHIVE_PACK_PREFIX}!!!not-json`), "encoding");
   });
 
+  it("refuses a valid token followed by characters outside base64url", () => {
+    expectRefused(() => decodeArchiveRecoveryPack(`${token(pack())}!!!***`), "encoding");
+  });
+
   it.each<[string, unknown]>([
     ["an extra key", { ...pack(), extra: true }],
     ["a missing key", without(pack(), "format")],
@@ -118,7 +122,14 @@ describe("archive recovery pack", () => {
       "a bucket missing its secret",
       { ...pack(), bucket: { ...pack().bucket, secretAccessKey: "" } },
     ],
-    ["a prefix of a hyphen", { ...pack(), bucket: { ...pack().bucket, prefix: "-" } }],
+    [
+      "a prefix of a hyphen",
+      {
+        ...pack(),
+        bucket: { ...pack().bucket, prefix: "-" },
+        archivePrefix: "-/archives/venue-1/",
+      },
+    ],
     ["an empty endpoint", { ...pack(), bucket: { ...pack().bucket, endpoint: "" } }],
     ["an empty recovery key", { ...pack(), recoveryKey: "" }],
     ["a recovery key with a control character", { ...pack(), recoveryKey: "a\u0007b" }],

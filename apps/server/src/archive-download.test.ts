@@ -1,12 +1,17 @@
-import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, statfs, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AppError } from "@waitron/shared";
 import type { BucketConfig, FileCall, S3FileStore } from "@waitron/stream";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { downloadArchive } from "./archive-download.js";
 import type { ArchiveRecoveryPack } from "./archive-recovery-pack.js";
 import { backupArchiveKey, dumpFileName } from "./backup-keys.js";
+
+vi.mock("node:fs/promises", async (original) => {
+  const actual = await original<typeof import("node:fs/promises")>();
+  return { ...actual, rm: vi.fn(actual.rm), statfs: vi.fn(actual.statfs) };
+});
 
 const KEY = backupArchiveKey(new Date("2026-10-01T03:00:00Z"));
 const BODY = Buffer.from("WBK1 archive bytes");
@@ -90,6 +95,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  vi.mocked(statfs).mockClear();
   await rm(root, { recursive: true, force: true });
 });
 
@@ -124,6 +130,7 @@ describe("downloadArchive", () => {
 
   it("uses the real statfs when none is given", async () => {
     const done = await run({ statfs: undefined });
+    expect(vi.mocked(statfs)).toHaveBeenCalledWith(staging);
     expect(await readFile(done.path)).toEqual(BODY);
     await done.dispose();
   });
@@ -238,6 +245,57 @@ describe("downloadArchive", () => {
       code: "restore.archive_download_failed",
       params: { reason: "request_failed" },
     });
+    expect(fake.closed).toBe(1);
+  });
+
+  it("reports a listing the bucket answers 404, such as a missing bucket, as a refused request", async () => {
+    fake.list = async () => {
+      throw new AppError("backup.destination_request_failed", {
+        operation: "list",
+        key: KEY,
+        status: 404,
+        name: "NoSuchBucket",
+      });
+    };
+    await expect(run()).rejects.toMatchObject({
+      code: "restore.archive_download_failed",
+      params: { reason: "request_failed" },
+    });
+    expect(fake.closed).toBe(1);
+  });
+
+  it.each<[string, Error]>([
+    ["refuses its folder", new AppError("backup.destination_key_invalid", { field: "prefix" })],
+    ["throws something unexpected", new Error(`boom ${PACK.bucket.secretAccessKey}`)],
+  ])("reports a file store that %s on opening as failed", async (_label, thrown) => {
+    const error = await run({
+      openFiles: () => {
+        throw thrown;
+      },
+    }).catch((e: unknown) => e);
+    expect(error).toMatchObject({
+      code: "restore.archive_download_failed",
+      params: { reason: "failed" },
+    });
+    expect((error as Error).message).not.toContain(PACK.bucket.secretAccessKey);
+  });
+
+  it("keeps the safe code when removing the partial download fails too", async () => {
+    fake.get = async (_key, outPath) => {
+      await writeFile(outPath, "partial");
+      vi.mocked(rm).mockImplementationOnce(async (path) => {
+        throw Object.assign(new Error(`EACCES: permission denied, rmdir '${String(path)}'`), {
+          code: "EACCES",
+        });
+      });
+      throw new Error("boom");
+    };
+    const error = await run().catch((e: unknown) => e);
+    expect(error).toMatchObject({
+      code: "restore.archive_download_failed",
+      params: { reason: "failed" },
+    });
+    expect((error as Error).message).not.toContain(staging);
     expect(fake.closed).toBe(1);
   });
 

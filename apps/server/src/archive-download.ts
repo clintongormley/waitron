@@ -18,7 +18,8 @@ const OWN_CODES = [
   "restore.archive_download_failed",
 ] as const;
 
-function safeFailure(error: unknown, signal: AbortSignal): AppError {
+/** `downloading` is true once the listing has found the archive and its download has begun. */
+function safeFailure(error: unknown, signal: AbortSignal, downloading: boolean): AppError {
   if (isAppError(error) && OWN_CODES.some((code) => hasCode(error, code))) return error;
   if ((error as { code?: unknown } | null)?.code === "ENOSPC") {
     return new AppError("restore.archive_disk_full", {});
@@ -26,7 +27,7 @@ function safeFailure(error: unknown, signal: AbortSignal): AppError {
   if (signal.aborted)
     return new AppError("restore.archive_download_failed", { reason: "timed_out" });
   if (isAppError(error) && hasCode(error, "backup.destination_request_failed")) {
-    if (error.params.status === 404 || error.params.name === "NoSuchKey") {
+    if (downloading && (error.params.status === 404 || error.params.name === "NoSuchKey")) {
       return new AppError("restore.archive_missing", {});
     }
     return new AppError("restore.archive_download_failed", { reason: "request_failed" });
@@ -49,8 +50,8 @@ async function freeBytes(
 
 /**
  * Downloads one archive named by `key` from the pack's archive folder into a fresh folder under
- * `stagingDir`. Every failure removes that folder and is one of the `restore.archive_*` codes,
- * carrying no key, path or bucket text.
+ * `stagingDir`. Every failure is one of the `restore.archive_*` codes, carrying no key, path or
+ * bucket text, and tries to remove that folder; a removal that itself fails leaves it behind.
  */
 export async function downloadArchive(deps: {
   pack: ArchiveRecoveryPack;
@@ -62,12 +63,11 @@ export async function downloadArchive(deps: {
 }): Promise<DownloadedArchive> {
   const { pack, key, stagingDir, signal } = deps;
   if (parseBackupArchiveKey(key) === null) throw new AppError("restore.archive_key_invalid", {});
-  const files = (deps.openFiles ?? createS3FileStore)({
-    ...pack.bucket,
-    prefix: pack.archivePrefix,
-  });
+  let files: S3FileStore | undefined;
   let scratch: string | undefined;
+  let downloading = false;
   try {
+    files = (deps.openFiles ?? createS3FileStore)({ ...pack.bucket, prefix: pack.archivePrefix });
     const listed = await files.list(key, { signal });
     const found = listed.find((file) => file.key === key);
     if (found === undefined) throw new AppError("restore.archive_missing", {});
@@ -77,6 +77,7 @@ export async function downloadArchive(deps: {
     if (free !== null && free < found.size) throw new AppError("restore.archive_disk_full", {});
     scratch = await mkdtemp(join(stagingDir, "archive-download-"));
     const path = join(scratch, "archive.backup.enc");
+    downloading = true;
     await files.getFile(key, path, { signal });
     const folder = scratch;
     return {
@@ -84,9 +85,9 @@ export async function downloadArchive(deps: {
       dispose: () => rm(folder, { recursive: true, force: true }),
     };
   } catch (error) {
-    if (scratch !== undefined) await rm(scratch, { recursive: true, force: true });
-    throw safeFailure(error, signal);
+    if (scratch !== undefined) await rm(scratch, { recursive: true, force: true }).catch(() => {});
+    throw safeFailure(error, signal, downloading);
   } finally {
-    files.close();
+    files?.close();
   }
 }
