@@ -391,6 +391,25 @@ requires the owner's choice before adding that authority path. CLI/staged recove
 bundle/adoption/promotion and final text SIF/counter/all-consumer/schema qualification remain
 coupled work. Do not publish this incomplete candidate; Task 4 remains open.
 
+**2026-10-13 module-adapter checkpoint:** `allocation-operation.ts` accepts the opaque allocation
+and approval through `ModuleOperationInput`, with outside evidence supplied separately by the host.
+It obtains the operator, event and source from live in-process authority and reads stored venue
+scope before calling the authenticated activation operation. Inputs, binding and outside evidence
+are detached before database reads; a genuine emergency draw keeps its in-process identity.
+Promotion requires a retained dormant-reservation event and uses the dormant takeover operation.
+
+`allocation-operation.test.ts` exercises initial setup without scaffold series, recovery-key
+attribution, dormant promotion, emergency input, committed replay and caller rollback on a real
+venue database. Extra or malformed input, another authority scope and expired authority refuse.
+The installed disposable candidate's removal controls fail assertions; the restored suite passes.
+Lane E retains the commands and outputs in `receipts/w41s4-operation-adapter-*`.
+
+The adapter has no production caller or public export. Independently collected custodian trust
+and outside confirmations are still a host obligation, not facts established by these fixtures.
+Next connect the production collectors and fiscal seats together with SIF text typing, counter
+retirement and every host consumer. Then regenerate on current main, qualify the populated upgrade
+and complete both full reviews, hook and CI before publication. Task 4 remains incomplete.
+
 ## Task 5: select active series inside issuance transactions
 
 **Modify:** `apps/server/src/till-config.ts`, `trading-config.ts`, `till-sale.ts`,
