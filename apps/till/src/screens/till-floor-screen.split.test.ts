@@ -469,3 +469,133 @@ describe("till-floor-screen: Split tables… and the room's revision", () => {
     expect(api.splitOffToday).toHaveBeenCalledExactlyOnceWith("long", { partIds: ["c5"] }, 8);
   });
 });
+
+/** Long table's three counters split off and in a group with Bar, at the room's revision 7. */
+const groupFloor = (members = ["bar", "c3", "c4", "c5"]) =>
+  atRevision(
+    [
+      table("long", "Long table", 10, {
+        seats: 10,
+        joined: { parts: [], splitOff: ["c3", "c4", "c5"], apart: true },
+      }),
+      table("bar", "Bar", 50, { joinId: members.includes("bar") ? "g" : null }),
+      ...(
+        [
+          ["c3", "Counter 3", 10],
+          ["c4", "Counter 4", 20],
+          ["c5", "Counter 5", 30],
+        ] as const
+      ).map(([id, label, x]) =>
+        table(id, label, x, {
+          splitOffFrom: "long",
+          joinId: members.includes(id) ? "g" : null,
+        }),
+      ),
+    ],
+    7,
+  );
+
+describe("till-floor-screen: Split tables… on a group", () => {
+  it("opens the window on Bar listing the group's four tables under the group's name", async () => {
+    const el = await mount(groupFloor(), stubApi());
+    const opened = await openSplit(el, "bar");
+    expect(opened.joined.id).toBe("bar");
+    expect(opened.name).toBe("Bar+Counter 3+Counter 4+Counter 5");
+    expect(opened.parts.map((each) => each.id)).toEqual(["bar", "c3", "c4", "c5"]);
+    expect(opened.seatsRequired).toBe(false);
+    expect(opened.asksSeats(["c3", "c4", "c5"])).toBe(false);
+    expect(opened.asksSeats(["c3", "c4"])).toBe(true);
+  });
+
+  it("Split with Bar ticked sends Bar off the group with no seats, closes the window and re-reads the floor", async () => {
+    const api = stubApi();
+    const el = await mount(groupFloor(), api);
+    const refreshes = countRefreshes(el);
+    send(await openSplit(el, "bar"), "split-joined-confirm", { partIds: ["bar"], seats: null });
+    await settle(el);
+    expect(api.splitOffToday).toHaveBeenCalledExactlyOnceWith("bar", { partIds: ["bar"] }, 7);
+    expect(windowOf(el)).toBeNull();
+    expect(refreshes.count).toBe(1);
+  });
+
+  it("Split with Counter 5 ticked sends the seats for what stays", async () => {
+    const api = stubApi();
+    const el = await mount(groupFloor(), api);
+    send(await openSplit(el, "bar"), "split-joined-confirm", { partIds: ["c5"], seats: 8 });
+    await settle(el);
+    expect(api.splitOffToday).toHaveBeenCalledExactlyOnceWith(
+      "bar",
+      { partIds: ["c5"], seats: 8 },
+      7,
+    );
+  });
+
+  it("a member_invalid refusal shows under the list and the window stays open", async () => {
+    const api = stubApi();
+    api.splitOffToday.mockRejectedValueOnce({ code: "merge.member_invalid", field: "partIds" });
+    const el = await mount(groupFloor(), api);
+    send(await openSplit(el, "bar"), "split-joined-confirm", { partIds: ["c5"], seats: 8 });
+    await settle(el);
+    expect(windowOf(el)).not.toBeNull();
+    await windowOf(el)!.updateComplete;
+    expect(pickError(el)).toBe(codeMessage("merge.member_invalid"));
+    expect(floorRefusal(el)).toBeNull();
+  });
+
+  for (const code of ["merge.seats_required", "joined_table.seats_required"]) {
+    it(`a ${code} refusal asks for seats, required, and says why at the window's foot`, async () => {
+      const api = stubApi();
+      api.splitOffToday.mockRejectedValueOnce({ code });
+      const el = await mount(groupFloor(), api);
+      const opened = await openSplit(el, "bar");
+      send(opened, "split-joined-confirm", { partIds: ["bar"], seats: null });
+      await settle(el);
+      expect(windowOf(el)).toBe(opened);
+      expect(opened.seatsRequired).toBe(true);
+      await opened.updateComplete;
+      expect(opened.shadowRoot!.querySelector("[name=seats]")).not.toBeNull();
+      expect(footError(el)).toBe(codeMessage(code));
+    });
+  }
+
+  it("lists the group as the floor reads it while the window is open", async () => {
+    const el = await mount(groupFloor(), stubApi());
+    await openSplit(el, "bar");
+    el.tablesReadAt = nextFloorMoment();
+    el.tables = groupFloor(["bar", "c3", "c4"]);
+    await settle(el);
+    expect(windowOf(el)!.parts.map((each) => each.id)).toEqual(["bar", "c3", "c4"]);
+    expect(windowOf(el)!.name).toBe("Bar+Counter 3+Counter 4");
+  });
+
+  it("closes the window when another till ends the group", async () => {
+    const el = await mount(groupFloor(), stubApi());
+    await openSplit(el, "bar");
+    el.tablesReadAt = nextFloorMoment();
+    el.tables = groupFloor([]);
+    await settle(el);
+    expect(windowOf(el)).toBeNull();
+  });
+
+  it("a change after the split, before any read, sends the room's revision the split answered", async () => {
+    for (const [answered, sent] of [
+      [{ zoneId: "z1", revision: 8 }, 8],
+      [{ zoneId: "z2", revision: 8 }, 7],
+    ] as const) {
+      const api = { ...stubApi(), backToSavedToday: vi.fn<TillApi["backToSavedToday"]>() };
+      api.splitOffToday.mockResolvedValueOnce(answered);
+      api.backToSavedToday.mockResolvedValueOnce({ zoneId: "z1", revision: 9 });
+      const el = await mount(groupFloor(), api);
+      send(await openSplit(el, "bar"), "split-joined-confirm", { partIds: ["c5"], seats: 8 });
+      await settle(el);
+      send(el.shadowRoot!.querySelector("wt-floor-map")!, "wt-table-details", { tableId: "bar" });
+      await el.updateComplete;
+      const sheet = el.shadowRoot!.querySelector("till-table-details-sheet")!;
+      await sheet.updateComplete;
+      sheet.shadowRoot!.querySelector<HTMLElement>('[data-today-action="back"]')!.click();
+      await settle(el);
+      expect(api.backToSavedToday).toHaveBeenCalledExactlyOnceWith("bar", sent);
+      cleanupWidgets();
+    }
+  });
+});

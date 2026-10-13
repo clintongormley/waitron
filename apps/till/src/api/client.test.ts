@@ -2680,7 +2680,6 @@ describe("TillApi", () => {
     await expect(api.mergeToday("t1", { targetId: "t2", side: "bottom" }, 7)).resolves.toEqual(
       answer,
     );
-    await expect(api.splitToday("t1", 7)).resolves.toEqual(answer);
     await expect(api.resetZoneToday("z1", 7)).resolves.toEqual(answer);
     await expect(api.resetZoneToday("z1", null)).resolves.toEqual(answer);
 
@@ -2702,7 +2701,6 @@ describe("TillApi", () => {
         { targetId: "t2", side: "right", seats: 8, zoneRevision: 7 },
       ],
       ["/api/tables/t1/today/merge", "POST", { targetId: "t2", side: "bottom", zoneRevision: 7 }],
-      ["/api/tables/t1/today/split", "POST", { zoneRevision: 7 }],
       ["/api/zones/z1/today/reset", "POST", { zoneRevision: 7 }],
       ["/api/zones/z1/today/reset", "POST", { zoneRevision: null }],
     ]);

@@ -47,6 +47,7 @@ import {
   type DropAction,
   type SheetAction,
   dropAction,
+  groupSplitOf,
   joinAgainOf,
   type JoinAgainPlan,
   nextFloorMoment,
@@ -104,6 +105,8 @@ interface Room {
 interface SplitShown {
   joined: TableState;
   parts: TableState[];
+  name: string;
+  asksSeats(staying: readonly string[]): boolean;
 }
 
 interface SplittingJoined {
@@ -111,6 +114,8 @@ interface SplittingJoined {
   /** What the window showed when Split was pressed, until its answer arrives. */
   sent: SplitShown | null;
   refusal: { code: string; field?: string } | null;
+  /** The server refused for want of seats, which the till's own `asksSeats` did not foresee. */
+  seatsRequired: boolean;
 }
 
 interface JoiningAgain {
@@ -863,7 +868,7 @@ export class TillFloorScreen extends LitElement {
         this.joiningWith = { tableId };
         return;
       case "split-off":
-        this.splittingJoined = { tableId, sent: null, refusal: null };
+        this.splittingJoined = { tableId, sent: null, refusal: null, seatsRequired: false };
         return;
       case "join-again": {
         const plan = joinAgainOf(table, this.tables);
@@ -1077,14 +1082,21 @@ export class TillFloorScreen extends LitElement {
     if (splitting.sent !== null)
       return this.tables.some((each) => each.id === splitting.tableId) ? splitting.sent : undefined;
     const joined = this.#splitting(splitting.tableId);
-    return joined === undefined
-      ? undefined
-      : {
-          joined,
-          parts: joined.today!.joined!.parts.flatMap((id) =>
-            this.tables.filter((each) => each.id === id),
-          ),
-        };
+    if (joined === undefined) return undefined;
+    const group = groupSplitOf(
+      joined,
+      this.tables.filter((each) => each.zoneId === joined.zoneId),
+    );
+    if (group !== null)
+      return { joined, parts: group.members, name: group.name, asksSeats: group.asksSeats };
+    return {
+      joined,
+      parts: joined.today!.joined!.parts.flatMap((id) =>
+        this.tables.filter((each) => each.id === id),
+      ),
+      name: joined.label,
+      asksSeats: (staying) => staying.length >= 2,
+    };
   }
 
   #splitJoined(): TemplateResult | typeof nothing {
@@ -1094,7 +1106,9 @@ export class TillFloorScreen extends LitElement {
     return html`<till-split-joined-dialog
       .joined=${shown.joined}
       .parts=${shown.parts}
-      .name=${shown.joined.label}
+      .name=${shown.name}
+      .asksSeats=${shown.asksSeats}
+      .seatsRequired=${splitting.seatsRequired}
       .busy=${splitting.sent !== null}
       .refusal=${splitting.refusal}
       @split-joined-confirm=${(event: CustomEvent<SplitJoinedDetail>) => {
@@ -1148,6 +1162,10 @@ export class TillFloorScreen extends LitElement {
           ...splitting,
           sent: null,
           refusal: typeof refused.field === "string" ? { code, field: refused.field } : { code },
+          seatsRequired:
+            splitting.seatsRequired ||
+            code === "merge.seats_required" ||
+            code === "joined_table.seats_required",
         };
       else if (this.splittingJoined === sending || this.splittingJoined === null) {
         this.splittingJoined = null;
