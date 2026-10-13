@@ -11,9 +11,11 @@
 // restored/copied OLD-key archive can carry a fresh mtime, so mtime does not prove the key.
 
 import { createHash } from "node:crypto";
+import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import { openVenueDatabase, type SingletonRole, type VenueDatabase } from "@waitron/db";
 import type { WaitronModule } from "@waitron/module";
+import { VENUE_FILE, WAL_SUFFIX } from "@waitron/store";
 import { AppError } from "@waitron/shared";
 import { codeOf } from "@waitron/server-kit";
 import { buildBackupBackend, type ResolvedBackupDestination } from "./backup-backends.js";
@@ -108,6 +110,20 @@ const unreadable = (id: string, readErrorCode: string): DestinationStatus => ({
   readErrorCode,
 });
 
+/** The bytes of the venue database the archive copies, its write-ahead file included; a missing
+ * file counts as empty. */
+export async function venueStagingEstimate(venueDir: string): Promise<number> {
+  let total = 0;
+  for (const name of [VENUE_FILE, `${VENUE_FILE}${WAL_SUFFIX}`]) {
+    try {
+      total += (await stat(join(venueDir, name))).size;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+    }
+  }
+  return total;
+}
+
 export function keyFingerprint(key: string): string {
   return createHash("sha256").update(key).digest("hex").slice(0, 8);
 }
@@ -181,6 +197,7 @@ export class BackupSupervisor {
         stateDir: this.#deps.stateDir,
         stagingDir: join(this.#deps.stateDir, "backup-staging"),
         archive: (outFile) => venue.venue.archiveTo(outFile),
+        stagingEstimateBytes: () => venueStagingEstimate(this.#deps.venueDir),
         recoveryKey: cfg.recoveryKey,
         schedule: cfg.schedule,
         retain: cfg.retain,

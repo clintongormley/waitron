@@ -1204,6 +1204,9 @@ declare module "@waitron/shared" {
     /** One destination's upload and its pruning did not finish within `timeoutMs`
      * (`WAITRON_BACKUP_DESTINATION_TIMEOUT_MS`), and were stopped. */
     "backup.destination_timed_out": { timeoutMs: number };
+    /** The backup staging folder's filesystem reported fewer than `neededBytes` free, so the tick
+     * stopped before writing more there; `availableBytes` is what it reported. */
+    "backup.staging_space_low": { neededBytes: number; availableBytes: number };
     /** A destination's work was stopped because the backup duty stopped or reloaded. A
      * cancellation, never recorded as the destination failing. */
     "backup.destination_cancelled": Record<string, never>;

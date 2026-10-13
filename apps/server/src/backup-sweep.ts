@@ -1,4 +1,4 @@
-import { chmod, mkdir, mkdtemp, rm } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, stat, statfs as fsStatfs } from "node:fs/promises";
 import { join } from "node:path";
 import type { Database } from "@waitron/db";
 import { recordBackupOutcome, type BackupOutcomeHolder } from "./alert-sources.js";
@@ -13,6 +13,7 @@ import { MAX_SLEEP_MS, nextFireMs, type ScheduleClock } from "./backup-schedule.
 import type { DeploymentEnvironment } from "./config.js";
 import { errnoOf } from "./errno.js";
 import { codeOf } from "@waitron/server-kit";
+import { AppError } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import {
   BACKUP_KEY_PREFIX,
@@ -82,6 +83,32 @@ export interface BackupSweepDeps {
   archive: (outFile: string) => Promise<void>;
   buildManifest?: ManifestBuilder;
   now?: () => Date;
+  /**
+   * The venue database's current size. The staged copy and its ciphertext sit side by side in
+   * `stagingDir`, so a tick refuses when free space there is under twice this before the copy, and
+   * under the copy's own size after it. Advisory: nothing is reserved, and without this there is no
+   * check.
+   */
+  stagingEstimateBytes?: () => Promise<number>;
+  /** DI for tests; defaults to `node:fs/promises`'s `statfs`. */
+  statfs?: (path: string) => Promise<{ bavail: number; bsize: number }>;
+}
+
+/** Throws `backup.staging_space_low` when the staging folder's filesystem reports less than
+ * `neededBytes` free; a filesystem that cannot report is let through. */
+async function checkStagingSpace(
+  deps: Pick<BackupSweepDeps, "stagingDir" | "statfs">,
+  neededBytes: number,
+): Promise<void> {
+  let availableBytes: number;
+  try {
+    const fs = await (deps.statfs ?? fsStatfs)(deps.stagingDir);
+    availableBytes = fs.bavail * fs.bsize;
+  } catch {
+    return;
+  }
+  if (availableBytes < neededBytes)
+    throw new AppError("backup.staging_space_low", { neededBytes, availableBytes });
 }
 
 /**
@@ -122,10 +149,13 @@ export async function runOnce(
     budget.addEntry("manifest.json", Buffer.byteLength(JSON.stringify(manifest)));
     budget.addEntry("db.dump", 0);
     await mkdir(deps.stagingDir, { recursive: true, mode: 0o700 });
+    if (deps.stagingEstimateBytes)
+      await checkStagingSpace(deps, 2 * (await deps.stagingEstimateBytes()));
     await deps.archive(staged);
     dumped = true;
     // The whole venue database in plaintext, created under the process umask.
     await chmod(staged, 0o600);
+    if (deps.stagingEstimateBytes) await checkStagingSpace(deps, (await stat(staged)).size);
     const metadata = assembleArchiveEntries(manifest, null, parts);
     const entries: ArchiveInputEntry[] = [
       { kind: "bytes", entry: metadata[0] },
