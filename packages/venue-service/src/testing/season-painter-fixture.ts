@@ -131,3 +131,25 @@ export async function drag(el: SeasonPainter, key: string, from: number, to: num
   point(target, key, to, "pointerup");
   await settle(el);
 }
+
+/** The painter model with a second active department, Bar, painting with its own period q1. */
+export function withBar(model = painterModel()): OpeningHoursModel {
+  const restaurant = model.departments[0]!;
+  return {
+    ...model,
+    departments: [
+      ...model.departments,
+      {
+        id: "d3",
+        name: "Bar",
+        active: true,
+        zones: [],
+        periods: [{ ...restaurant.periods[0]!, id: "q1", name: "Drinks" }],
+        seasonWeeks: restaurant.seasonWeeks.map(({ seasonId }) => ({
+          seasonId,
+          week: Array.from({ length: 7 }, (_, weekday) => ({ weekday, slots: [] })),
+        })),
+      },
+    ],
+  };
+}

@@ -5,6 +5,7 @@ import { capturePointer, releasePointer } from "@waitron/dashboard-kit";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import { t } from "./strings.js";
+import { periodColourStyles } from "./period-colour-styles.js";
 import { clockAt, stepSpan } from "../day-paint.js";
 import type { CalendarColour } from "../hours-types.js";
 import {
@@ -76,226 +77,208 @@ function clockMinutes(time: string): number {
 
 @customElement("paint-grid")
 export class PaintGrid extends LitElement {
-  static override styles = css`
-    :host {
-      display: block;
-      color: var(--wt-color-text);
-      font-family: var(--wt-font-family);
-    }
-    .scroll {
-      box-sizing: border-box;
-      overflow: auto;
-      max-block-size: 100%;
-      border: 1px solid var(--wt-color-border);
-      border-radius: var(--wt-radius-md);
-      background: var(--wt-color-bg);
-    }
-    .layout {
-      display: grid;
-      grid-template-columns: calc(var(--wt-space-6) * 2) var(--column-tracks);
-    }
-    .heading {
-      position: sticky;
-      top: 0;
-      z-index: 3;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: var(--wt-space-1);
-      white-space: nowrap;
-      background: var(--wt-color-surface);
-      padding: 0 var(--wt-space-2);
-      font-size: var(--wt-font-size-sm);
-      font-weight: var(--wt-font-weight-bold);
-      border-block-end: 1px solid var(--wt-color-border);
-    }
-    .heading.corner {
-      left: 0;
-      z-index: 4;
-    }
-    .times,
-    .day {
-      position: relative;
-      height: calc(var(--wt-space-1) * 1.25 * ${ROWS});
-    }
-    .times {
-      position: sticky;
-      left: 0;
-      z-index: 2;
-      background: var(--wt-color-bg);
-      border-inline-end: 1px solid var(--wt-color-border);
-    }
-    .hour {
-      position: absolute;
-      inset-inline-start: var(--wt-space-1);
-      transform: translateY(-50%);
-      font-size: var(--wt-font-size-sm);
-      color: var(--wt-color-text-muted);
-    }
-    .hour:first-child {
-      transform: none;
-    }
-    .day {
-      border-inline-start: 1px solid var(--wt-color-border);
-      touch-action: none;
-      user-select: none;
-    }
-    .day:focus-visible {
-      outline: var(--wt-focus-ring);
-      outline-offset: var(--wt-focus-offset);
-    }
-    .line {
-      position: absolute;
-      inset-inline: 0;
-      border-block-start: 1px solid var(--wt-color-border);
-    }
-    .block,
-    .all-closed,
-    .preview {
-      position: absolute;
-      inset-inline: var(--wt-space-1);
-      box-sizing: border-box;
-      border: 0;
-      border-radius: var(--wt-radius-sm);
-      padding: 0 var(--wt-space-1);
-      text-align: start;
-      font: inherit;
-      font-size: var(--wt-font-size-sm);
-      overflow: hidden;
-    }
-    button.block {
-      display: flex;
-      flex-wrap: wrap;
-      align-content: flex-start;
-      column-gap: var(--wt-space-1);
-      cursor: pointer;
-    }
-    button.block:focus-visible,
-    button.block[aria-expanded="true"] {
-      outline: var(--wt-focus-ring);
-      outline-offset: var(--wt-focus-offset);
-      z-index: 2;
-    }
-    .block span {
-      font-weight: var(--wt-font-weight-bold);
-    }
-    .block[data-colour="red"] {
-      --period-fill: var(--wt-color-palette-red);
-      color: var(--wt-color-on-palette-red);
-    }
-    .block[data-colour="amber"] {
-      --period-fill: var(--wt-color-palette-amber);
-      color: var(--wt-color-on-palette-amber);
-    }
-    .block[data-colour="grey"] {
-      --period-fill: var(--wt-color-palette-grey);
-      color: var(--wt-color-on-palette-grey);
-    }
-    .block[data-colour="blue"] {
-      --period-fill: var(--wt-color-palette-blue);
-      color: var(--wt-color-on-palette-blue);
-    }
-    .block[data-colour="green"] {
-      --period-fill: var(--wt-color-palette-green);
-      color: var(--wt-color-on-palette-green);
-    }
-    .block[data-colour="purple"] {
-      --period-fill: var(--wt-color-palette-purple);
-      color: var(--wt-color-on-palette-purple);
-    }
-    .closed,
-    .all-closed {
-      --period-fill: repeating-linear-gradient(
-        135deg,
-        var(--wt-color-surface),
-        var(--wt-color-surface) var(--wt-space-1),
-        var(--wt-color-border) var(--wt-space-1),
-        var(--wt-color-border) var(--wt-space-2)
-      );
-      color: var(--wt-color-text);
-      border: 1px solid var(--wt-color-border);
-    }
-    .block,
-    .all-closed {
-      background: var(--period-fill);
-    }
-    .all-closed {
-      inset-block: 0;
-      padding-block: var(--wt-space-1);
-    }
-    .underlay {
-      isolation: isolate;
-      background: transparent;
-      color: var(--wt-color-text);
-      pointer-events: none;
-    }
-    .underlay::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      z-index: -1;
-      background: var(--period-fill);
-      opacity: var(--wt-opacity-disabled);
-    }
-    .preview {
-      border: 2px dashed var(--wt-color-text);
-      background: var(--wt-color-surface);
-      color: var(--wt-color-text);
-      pointer-events: none;
-      z-index: 3;
-    }
-    .preview[data-colour] {
-      background: var(--period-fill);
-    }
-    .preview span {
-      display: block;
-    }
-    .menu,
-    .chooser {
-      position: fixed;
-      margin: 0;
-      padding: var(--wt-space-2);
-      border: 1px solid var(--wt-color-border);
-      border-radius: var(--wt-radius-md);
-      background: var(--wt-color-surface);
-      color: var(--wt-color-text);
-      box-shadow: var(--wt-shadow-2);
-    }
-    .menu:popover-open,
-    .chooser:popover-open {
-      display: flex;
-      flex-direction: column;
-      gap: var(--wt-space-1);
-    }
-    .menu p {
-      margin: 0;
-      font-size: var(--wt-font-size-sm);
-      color: var(--wt-color-text-muted);
-    }
-    .menu wt-button {
-      width: 100%;
-    }
-    .chooser h2 {
-      margin: 0;
-      font-size: var(--wt-font-size-md);
-      font-weight: var(--wt-font-weight-bold);
-    }
-    .chooser label {
-      display: flex;
-      align-items: center;
-      gap: var(--wt-space-2);
-      min-height: var(--wt-tap-min);
-      cursor: pointer;
-    }
-    .chooser input[type="checkbox"] {
-      accent-color: var(--wt-color-primary);
-    }
-    .chooser .actions {
-      display: flex;
-      justify-content: flex-end;
-      gap: var(--wt-space-2);
-    }
-  `;
+  static override styles = [
+    periodColourStyles,
+    css`
+      :host {
+        display: block;
+        color: var(--wt-color-text);
+        font-family: var(--wt-font-family);
+      }
+      .scroll {
+        box-sizing: border-box;
+        overflow: auto;
+        max-block-size: 100%;
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-bg);
+      }
+      .layout {
+        display: grid;
+        grid-template-columns: calc(var(--wt-space-6) * 2) var(--column-tracks);
+      }
+      .heading {
+        position: sticky;
+        top: 0;
+        z-index: 3;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--wt-space-1);
+        white-space: nowrap;
+        background: var(--wt-color-surface);
+        padding: 0 var(--wt-space-2);
+        font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-bold);
+        border-block-end: 1px solid var(--wt-color-border);
+      }
+      .heading.corner {
+        left: 0;
+        z-index: 4;
+      }
+      .times,
+      .day {
+        position: relative;
+        height: calc(var(--wt-space-1) * 1.25 * ${ROWS});
+      }
+      .times {
+        position: sticky;
+        left: 0;
+        z-index: 2;
+        background: var(--wt-color-bg);
+        border-inline-end: 1px solid var(--wt-color-border);
+      }
+      .hour {
+        position: absolute;
+        inset-inline-start: var(--wt-space-1);
+        transform: translateY(-50%);
+        font-size: var(--wt-font-size-sm);
+        color: var(--wt-color-text-muted);
+      }
+      .hour:first-child {
+        transform: none;
+      }
+      .day {
+        border-inline-start: 1px solid var(--wt-color-border);
+        touch-action: none;
+        user-select: none;
+      }
+      .day:focus-visible {
+        outline: var(--wt-focus-ring);
+        outline-offset: var(--wt-focus-offset);
+      }
+      .line {
+        position: absolute;
+        inset-inline: 0;
+        border-block-start: 1px solid var(--wt-color-border);
+      }
+      .block,
+      .all-closed,
+      .preview {
+        position: absolute;
+        inset-inline: var(--wt-space-1);
+        box-sizing: border-box;
+        border: 0;
+        border-radius: var(--wt-radius-sm);
+        padding: 0 var(--wt-space-1);
+        text-align: start;
+        font: inherit;
+        font-size: var(--wt-font-size-sm);
+        overflow: hidden;
+      }
+      button.block {
+        display: flex;
+        flex-wrap: wrap;
+        align-content: flex-start;
+        column-gap: var(--wt-space-1);
+        cursor: pointer;
+      }
+      button.block:focus-visible,
+      button.block[aria-expanded="true"] {
+        outline: var(--wt-focus-ring);
+        outline-offset: var(--wt-focus-offset);
+        z-index: 2;
+      }
+      .block span {
+        font-weight: var(--wt-font-weight-bold);
+      }
+      .block[data-colour] {
+        color: var(--period-on-fill);
+      }
+      .closed,
+      .all-closed {
+        --period-fill: repeating-linear-gradient(
+          135deg,
+          var(--wt-color-surface),
+          var(--wt-color-surface) var(--wt-space-1),
+          var(--wt-color-border) var(--wt-space-1),
+          var(--wt-color-border) var(--wt-space-2)
+        );
+        color: var(--wt-color-text);
+        border: 1px solid var(--wt-color-border);
+      }
+      .block,
+      .all-closed {
+        background: var(--period-fill);
+      }
+      .all-closed {
+        inset-block: 0;
+        padding-block: var(--wt-space-1);
+      }
+      .underlay {
+        isolation: isolate;
+        background: transparent;
+        color: var(--wt-color-text);
+        pointer-events: none;
+      }
+      .underlay::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: -1;
+        background: var(--period-fill);
+        opacity: var(--wt-opacity-disabled);
+      }
+      .preview {
+        border: 2px dashed var(--wt-color-text);
+        background: var(--wt-color-surface);
+        color: var(--wt-color-text);
+        pointer-events: none;
+        z-index: 3;
+      }
+      .preview[data-colour] {
+        background: var(--period-fill);
+      }
+      .preview span {
+        display: block;
+      }
+      .menu,
+      .chooser {
+        position: fixed;
+        margin: 0;
+        padding: var(--wt-space-2);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-surface);
+        color: var(--wt-color-text);
+        box-shadow: var(--wt-shadow-2);
+      }
+      .menu:popover-open,
+      .chooser:popover-open {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-1);
+      }
+      .menu p {
+        margin: 0;
+        font-size: var(--wt-font-size-sm);
+        color: var(--wt-color-text-muted);
+      }
+      .menu wt-button {
+        width: 100%;
+      }
+      .chooser h2 {
+        margin: 0;
+        font-size: var(--wt-font-size-md);
+        font-weight: var(--wt-font-weight-bold);
+      }
+      .chooser label {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-2);
+        min-height: var(--wt-tap-min);
+        cursor: pointer;
+      }
+      .chooser input[type="checkbox"] {
+        accent-color: var(--wt-color-primary);
+      }
+      .chooser .actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: var(--wt-space-2);
+      }
+    `,
+  ];
 
   @property({ attribute: false }) columns: readonly PaintColumn[] = [];
   @property({ attribute: false }) days: ReadonlyMap<string, readonly Paint[]> = new Map();

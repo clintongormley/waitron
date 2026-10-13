@@ -190,6 +190,8 @@ const en = {
   "painter.edit_period": "Edit {name}",
   "painter.hint": "Drag down a day to paint · drag over a block to replace it",
   "painter.add_and_paint": "Add and paint with it",
+  "painter.removed_one": "{names} was removed; its changes were dropped.",
+  "painter.removed_many": "{names} were removed; their changes were dropped.",
   "prep.tickets.printer_count": "{count} printers",
   "prep.printed_on": "Printed on",
   "prep.no_printer": "No printer",
@@ -984,6 +986,8 @@ const es: Record<keyof typeof en, string> = {
   "painter.hint":
     "Arrastra hacia abajo en un día para pintar · arrastra sobre un bloque para sustituirlo",
   "painter.add_and_paint": "Añadir y pintar con él",
+  "painter.removed_one": "{names} se eliminó; sus cambios se descartaron.",
+  "painter.removed_many": "{names} se eliminaron; sus cambios se descartaron.",
   "prep.tickets.printer_count": "{count} impresoras",
   "prep.printed_on": "Se imprime en",
   "prep.no_printer": "Sin impresora",

@@ -22,6 +22,7 @@ import { chosenSeasonId, seasonWeek } from "./season-choice.js";
 import { seasonTints, seasonTintStyles } from "./season-tint.js";
 import { weekdayLabel } from "./season-week-view.js";
 import { t } from "./strings.js";
+import { periodColourStyles } from "./period-colour-styles.js";
 import "./painter-frame.js";
 import "./paint-grid.js";
 import "./period-editor.js";
@@ -73,6 +74,18 @@ function weekFrom<Day extends { weekday: number }>(
     }),
   );
 }
+function listOf(names: readonly string[]): string {
+  return new Intl.ListFormat(currentLocale().startsWith("es") ? "es-ES" : "en-GB", {
+    type: "conjunction",
+  }).format(names);
+}
+function ownerName(model: Model, key: string): string {
+  const id = key.slice(2);
+  if (key.startsWith("d:")) return model.departments.find((entry) => entry.id === id)?.name ?? "";
+  return (
+    model.departments.flatMap(({ zones }) => zones).find((entry) => entry.id === id)?.name ?? ""
+  );
+}
 function seed(model: Model, seasonId: string): Draft {
   const draft: Draft = new Map();
   for (const department of model.departments.filter(({ active }) => active)) {
@@ -103,6 +116,7 @@ export class SeasonPainter extends LitElement {
   static override styles = [
     baseStyles,
     seasonTintStyles,
+    periodColourStyles,
     css`
       :host {
         display: contents;
@@ -193,24 +207,6 @@ export class SeasonPainter extends LitElement {
           transparent 0 calc(var(--wt-space-1) * 2)
         );
       }
-      .swatch[data-colour="red"] {
-        --period-fill: var(--wt-color-palette-red);
-      }
-      .swatch[data-colour="amber"] {
-        --period-fill: var(--wt-color-palette-amber);
-      }
-      .swatch[data-colour="grey"] {
-        --period-fill: var(--wt-color-palette-grey);
-      }
-      .swatch[data-colour="blue"] {
-        --period-fill: var(--wt-color-palette-blue);
-      }
-      .swatch[data-colour="green"] {
-        --period-fill: var(--wt-color-palette-green);
-      }
-      .swatch[data-colour="purple"] {
-        --period-fill: var(--wt-color-palette-purple);
-      }
       .hint {
         margin-inline-start: auto;
         color: var(--wt-color-text-muted);
@@ -233,7 +229,10 @@ export class SeasonPainter extends LitElement {
   @state() private periodBusy = false;
   private baseline: Draft = new Map();
   private seededSeason?: string;
-  private created?: string;
+  /** A period just created, chosen in its own department until the model lists it. */
+  private created?: { id: string; departmentId: string };
+  /** Edits a refresh dropped because what they belonged to is gone; shown beside Save. */
+  @state() private notice = "";
   private scope?: DraftScope<Draft>;
   private coordinator?: LeaveCoordinator;
 
@@ -246,10 +245,27 @@ export class SeasonPainter extends LitElement {
 
   protected override willUpdate(changes: PropertyValues<this>) {
     if (!this.model) return;
-    if (!this.model.seasons.some(({ id }) => id === this.seasonId))
+    const previous = (changes.get("model") as Model | undefined) ?? this.model;
+    if (!this.model.seasons.some(({ id }) => id === this.seasonId)) {
+      const gone = previous.seasons.find(({ id }) => id === this.seasonId);
+      const lost = this.seededSeason === this.seasonId && this.anyEdited();
       this.seasonId = chosenSeasonId(this.model.seasons, this.model.currentSeasonId, "");
+      if (this.seededSeason !== undefined) {
+        if (lost && gone) this.notice = this.removed([gone.name]);
+        this.reseed();
+        this.navigate();
+      }
+    }
     if (this.seededSeason !== this.seasonId) this.reseed();
-    else if (changes.has("model")) this.refresh();
+    else if (changes.has("model")) this.refresh(previous);
+    if (
+      this.created &&
+      this.model.departments.some(
+        ({ id, periods }) =>
+          id === this.created!.departmentId && periods.some(({ id }) => id === this.created!.id),
+      )
+    )
+      this.created = undefined;
     if (this.isConnected && !this.scope) {
       const { scope, coordinator } = draftScopeFor(this, {
         id: {},
@@ -277,6 +293,15 @@ export class SeasonPainter extends LitElement {
     };
   }
 
+  private anyEdited(): boolean {
+    const { departments, zones } = this.edited();
+    return departments.length + zones.length > 0;
+  }
+  private removed(names: string[]): string {
+    return format(names.length === 1 ? "painter.removed_one" : "painter.removed_many", {
+      names: listOf(names),
+    });
+  }
   private commitBaseline(baseline: Draft) {
     this.baseline = baseline;
     this.scope?.commit(copyDraft(baseline));
@@ -287,13 +312,19 @@ export class SeasonPainter extends LitElement {
     this.draft = copyDraft(fresh);
     this.commitBaseline(fresh);
   }
-  /** Weeks not edited follow the fresh model; an edited week, and its baseline, stay. */
-  private refresh() {
+  /** Weeks not edited follow the fresh model; an edited week, and its baseline, stay — unless
+   *  its department or zone is gone or inactive, when its edits are dropped with a notice. */
+  private refresh(previous: Model) {
     const fresh = seed(this.model, this.seasonId);
     const draft: Draft = new Map();
     const baseline: Draft = new Map();
+    const gone: string[] = [];
     for (const [key, week] of this.draft) {
       if (sameWeek(week, this.baseline.get(key))) continue;
+      if (!fresh.has(key)) {
+        gone.push(ownerName(previous, key));
+        continue;
+      }
       draft.set(key, week);
       baseline.set(key, this.baseline.get(key)!);
     }
@@ -304,6 +335,7 @@ export class SeasonPainter extends LitElement {
     }
     this.draft = draft;
     this.commitBaseline(baseline);
+    if (gone.length) this.notice = this.removed(gone);
   }
 
   private department(): Department | undefined {
@@ -315,7 +347,11 @@ export class SeasonPainter extends LitElement {
   }
   private effectiveChosen(department: Department, zoned: boolean): string | null {
     if (zoned || this.chosen === null) return null;
-    if (this.chosen === this.created || department.periods.some(({ id }) => id === this.chosen))
+    const created = this.created;
+    if (
+      (created?.departmentId === department.id && this.chosen === created.id) ||
+      department.periods.some(({ id }) => id === this.chosen)
+    )
       return this.chosen!;
     return department.periods[0]?.id ?? null;
   }
@@ -339,6 +375,7 @@ export class SeasonPainter extends LitElement {
     const next = seasons[(at + by + seasons.length) % seasons.length];
     if (!next || next.id === this.seasonId) return;
     const proceed = () => {
+      this.notice = "";
       this.seasonId = next.id;
       this.reseed();
       this.navigate();
@@ -354,10 +391,12 @@ export class SeasonPainter extends LitElement {
         ({ active, zones }) => active && zones.some((zone) => zone.id === id),
       );
       if (!owner) return;
+      if (owner.id !== this.department()?.id) this.chosen = undefined;
       this.departmentId = owner.id;
       this.zoneId = id;
     } else {
       if (!this.model.departments.some(({ id, active }) => active && id === value)) return;
+      if (value !== this.department()?.id) this.chosen = undefined;
       this.departmentId = value;
       this.zoneId = "";
     }
@@ -367,6 +406,7 @@ export class SeasonPainter extends LitElement {
     event.stopPropagation();
     const week = copyWeek(this.draft.get(key) ?? new Map());
     week.set(event.detail.key, event.detail.day);
+    this.notice = "";
     this.draft = new Map(this.draft).set(key, week);
     this.scope?.changed();
   }
@@ -408,7 +448,7 @@ export class SeasonPainter extends LitElement {
       if (this.editor === editor) this.periodBusy = false;
     }
     if (created !== undefined) {
-      this.created = created;
+      this.created = { id: created, departmentId: editor.departmentId };
       this.chosen = created;
     }
     if (this.editor === editor && component.commitSubmitted(input)) this.editor = undefined;
@@ -449,9 +489,7 @@ export class SeasonPainter extends LitElement {
   private picker(department: Department) {
     const zone = this.zone(department);
     const zones = department.zones.map(({ name }) => name);
-    const list = new Intl.ListFormat(currentLocale().startsWith("es") ? "es-ES" : "en-GB", {
-      type: "conjunction",
-    }).format(zones);
+    const list = listOf(zones);
     return html`<wt-combobox
         name="department"
         label=${t("painter.department")}
@@ -577,6 +615,7 @@ export class SeasonPainter extends LitElement {
         .scope=${this.scope}
         .coordinator=${this.coordinator}
         .dirty=${this.scope?.isDirty() ?? false}
+        .refusal=${this.notice}
         @painter-save=${() => this.save()}
         @painter-close=${() => {
           this.open = false;

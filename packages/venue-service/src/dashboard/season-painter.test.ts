@@ -10,6 +10,7 @@ import {
   painterModel,
   pick,
   settle,
+  withBar,
   type Write,
 } from "../testing/season-painter-fixture.js";
 import "./season-painter.js";
@@ -22,11 +23,11 @@ afterEach(() => {
   setLocale("en");
 });
 
-async function mount(options: Partial<Pick<SeasonPainter, "zoneId" | "seasonId">> = {}) {
+async function mount(options: Partial<Pick<SeasonPainter, "zoneId" | "seasonId" | "model">> = {}) {
   const writes: Write[] = [];
   painter = document.createElement("season-painter");
   painter.api = painterApi(writes, () => ({ id: "p-new" }));
-  painter.model = painterModel();
+  painter.model = options.model ?? painterModel();
   painter.seasonId = options.seasonId ?? "winter";
   painter.departmentId = "d1";
   if (options.zoneId) painter.zoneId = options.zoneId;
@@ -247,4 +248,142 @@ it("✎ opens the period editor with that period, and a refusal shows in it", as
     method: "PATCH",
   });
   expect(painter.shadowRoot!.querySelector("period-editor")).not.toBeNull();
+});
+
+it("opens with the department's first period chosen, so a drag with no chip clicked paints it", async () => {
+  const { painter } = await mount();
+  expect(chip(painter, "paint-p1")!.getAttribute("aria-pressed")).toBe("true");
+  expect(grid(painter).chosen).toBe("p1");
+  await drag(painter, "3", 7 * 60, 9 * 60);
+  expect(grid(painter).days.get("3")).toEqual([
+    { periodId: "p1", startsAt: "13:00", endsAt: "15:00" },
+  ]);
+});
+
+async function createPeriod(painter: SeasonPainter) {
+  chip(painter, "new-period")!.click();
+  await settle(painter);
+  const editor = painter.shadowRoot!.querySelector("period-editor")!;
+  await editor.updateComplete;
+  for (const [name, value] of [
+    ["name", "Christmas"],
+    ["menuId", "m1"],
+  ])
+    editor
+      .shadowRoot!.querySelector(`[name=${name}]`)!
+      .dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+      );
+  await editor.updateComplete;
+  editor.shadowRoot!.querySelector<HTMLElement>("[data-test=save-period]")!.click();
+  await expect.poll(() => painter.shadowRoot!.querySelector("period-editor")).toBeNull();
+}
+
+it("a period created in one department is chosen only there; another department chooses its own first period", async () => {
+  const { painter } = await mount({ model: withBar() });
+  await createPeriod(painter);
+  expect(grid(painter).chosen).toBe("p-new");
+  await pick(painter, "d3");
+  expect(grid(painter).chosen).toBe("q1");
+  expect(chip(painter, "paint-q1")!.getAttribute("aria-pressed")).toBe("true");
+  await drag(painter, "3", 7 * 60, 9 * 60);
+  expect(grid(painter).days.get("3")).toEqual([
+    { periodId: "q1", startsAt: "13:00", endsAt: "15:00" },
+  ]);
+  await pick(painter, "zone:z2");
+  expect(grid(painter).chosen).toBeNull();
+  expect(chip(painter, "paint-closed")!.getAttribute("aria-pressed")).toBe("true");
+});
+
+it("switching department chooses the new department's first period, leaving its week unedited", async () => {
+  const { painter } = await mount({ model: withBar() });
+  await createPeriod(painter);
+  await pick(painter, "d3");
+  expect(grid(painter).chosen).toBe("q1");
+  expect(painter.edited()).toEqual({ departments: [], zones: [] });
+});
+
+it("‹ and › are disabled when the venue has one season", async () => {
+  const model = painterModel();
+  const { painter } = await mount({
+    model: { ...model, seasons: model.seasons.filter(({ id }) => id === "winter") },
+  });
+  for (const test of ["previous-season", "next-season"])
+    expect((chip(painter, test) as HTMLElementTagNameMap["wt-button"]).disabled).toBe(true);
+});
+
+it("a refresh that removes the open season drops its edits, says so beside Save and moves to the season shown", async () => {
+  const { painter } = await mount();
+  await drag(painter, "3", 7 * 60, 9 * 60);
+  expect(frame(painter).dirty).toBe(true);
+  const navigations: unknown[] = [];
+  painter.addEventListener("painter-navigate", (event) =>
+    navigations.push((event as CustomEvent).detail),
+  );
+  const next = painterModel();
+  painter.model = {
+    ...next,
+    seasons: next.seasons.filter(({ id }) => id !== "winter"),
+    currentSeasonId: "spring",
+  };
+  await settle(painter);
+  expect(frame(painter).heading).toBe("Spring week");
+  expect(frame(painter).refusal).toBe("Winter was removed; its changes were dropped.");
+  expect(frame(painter).dirty).toBe(false);
+  expect(painter.edited()).toEqual({ departments: [], zones: [] });
+  expect(navigations).toEqual([{ seasonId: "spring", departmentId: "d1", zoneId: null }]);
+});
+
+it("a refresh that removes an edited zone drops only that zone's edits, with a notice", async () => {
+  const { painter } = await mount();
+  await drag(painter, "3", 7 * 60, 9 * 60);
+  await pick(painter, "zone:z2");
+  await drag(painter, "4", 0, 3 * 60);
+  await pick(painter, "d1");
+  const next = painterModel();
+  const restaurant = next.departments[0]!;
+  painter.model = {
+    ...next,
+    departments: [
+      { ...restaurant, zones: restaurant.zones.filter(({ id }) => id !== "z2") },
+      ...next.departments.slice(1),
+    ],
+  };
+  await settle(painter);
+  expect(frame(painter).refusal).toBe("Terrace was removed; its changes were dropped.");
+  expect(painter.edited()).toEqual({ departments: ["d1"], zones: [] });
+  expect(frame(painter).dirty).toBe(true);
+});
+
+it("a refresh that makes an edited department inactive drops its edits, and nothing is left to save", async () => {
+  const { painter } = await mount({ model: withBar() });
+  await pick(painter, "d3");
+  await drag(painter, "3", 7 * 60, 9 * 60);
+  expect(frame(painter).dirty).toBe(true);
+  const next = withBar();
+  painter.model = {
+    ...next,
+    departments: next.departments.map((department) =>
+      department.id === "d3" ? { ...department, active: false } : department,
+    ),
+  };
+  await settle(painter);
+  expect(frame(painter).refusal).toBe("Bar was removed; its changes were dropped.");
+  expect(painter.edited()).toEqual({ departments: [], zones: [] });
+  expect(frame(painter).dirty).toBe(false);
+  expect(frame(painter).heading).toBe("Winter week");
+  expect(grid(painter).days.get("1")).toEqual([
+    { periodId: "p1", startsAt: "13:00", endsAt: "16:00" },
+  ]);
+});
+
+it("paints each period chip's swatch in the period's palette colour", async () => {
+  const { painter } = await mount();
+  const swatch = chip(painter, "paint-p1")!.querySelector<HTMLElement>(".swatch")!;
+  const probe = document.createElement("div");
+  probe.style.background = "var(--wt-color-palette-green)";
+  painter.shadowRoot!.append(probe);
+  expect(getComputedStyle(swatch).backgroundColor).toBe(getComputedStyle(probe).backgroundColor);
+  expect(getComputedStyle(probe).backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
+  probe.remove();
 });
