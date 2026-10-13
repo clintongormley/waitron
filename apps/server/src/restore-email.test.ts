@@ -123,6 +123,7 @@ beforeAll(async () => {
       stagingDir: join(root, "staging"),
       retain: 1,
       retainDays: 1,
+      destinationTimeoutMs: 60_000,
       signal: new AbortController().signal,
       log: () => {},
       archive: (path) => suite.db.archiveTo(path),

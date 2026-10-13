@@ -15,6 +15,7 @@ const backend = (id: string, newestMtimeMs: number | null): StorageBackend => ({
   get: async () => Buffer.alloc(0),
   delete: async () => {},
   deleteMany: async () => {},
+  close: () => {},
   list: async (): Promise<StoredObject[]> =>
     newestMtimeMs === null
       ? []

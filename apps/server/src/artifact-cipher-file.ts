@@ -10,7 +10,9 @@ export async function encryptArtifactFile(
   plaintext: AsyncIterable<Uint8Array>,
   outPath: string,
   passphrase: string,
+  signal?: AbortSignal,
 ): Promise<void> {
+  signal?.throwIfAborted();
   const output = await open(outPath, "wx", 0o600);
   try {
     const salt = randomBytes(16);
@@ -23,9 +25,11 @@ export async function encryptArtifactFile(
     await writeAll(output, Buffer.alloc(16));
     for await (const bytes of plaintext) {
       for (let offset = 0; offset < bytes.length; offset += FILE_CHUNK_BYTES) {
+        signal?.throwIfAborted();
         await writeAll(output, cipher.update(bytes.subarray(offset, offset + FILE_CHUNK_BYTES)));
       }
     }
+    signal?.throwIfAborted();
     await writeAll(output, cipher.final());
     await writeAll(output, cipher.getAuthTag(), 33);
   } catch (error) {

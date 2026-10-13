@@ -561,6 +561,7 @@ describe("backup admin routes", () => {
       retain: 7,
       retainDays: 30,
       staleAfterMs: 2 * 24 * 60 * 60 * 1000,
+      destinationTimeoutMs: 15 * 60 * 1000,
       keyRotatedAt: undefined,
     };
     const sup = new BackupSupervisor({
@@ -605,6 +606,7 @@ describe("backup admin routes", () => {
       retain: 7,
       retainDays: 30,
       staleAfterMs: 2 * 24 * 60 * 60 * 1000,
+      destinationTimeoutMs: 15 * 60 * 1000,
       keyRotatedAt: undefined,
     };
     const sup = new BackupSupervisor({

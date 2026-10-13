@@ -117,6 +117,8 @@ export class LocalFsBackend implements StorageBackend {
     }
     signal.throwIfAborted();
   }
+
+  close(): void {}
 }
 
 async function copyAtomic(source: string, target: string, signal: AbortSignal): Promise<void> {

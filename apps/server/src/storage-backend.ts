@@ -49,6 +49,8 @@ export interface StorageBackend {
   delete(key: string, call: StorageCall): Promise<void>;
   /** A key that is already absent is not a failure. */
   deleteMany(keys: string[], call: StorageCall): Promise<void>;
+  /** Called once no call on this backend is in flight. */
+  close(): void;
 }
 
 export type BackupDestination = { kind: "local-fs"; id: string; dir: string };

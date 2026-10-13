@@ -22,6 +22,7 @@ import type { ScheduleClock } from "./backup-schedule.js";
 import { readBackupStatus, type BackupStatus } from "./backup-status.js";
 import { runBackupSweep } from "./backup-sweep.js";
 import type { BackupOutcomeHolder } from "./alert-sources.js";
+import type { StorageBackend } from "./storage-backend.js";
 import type { DeploymentEnvironment } from "./config.js";
 import { realSleep } from "./loop.js";
 import type { Logger } from "./logger.js";
@@ -79,6 +80,7 @@ export class BackupSupervisor {
   readonly #deps: BackupSupervisorDeps;
   #controller: AbortController | undefined;
   #worker: Promise<void> | undefined;
+  #backends: StorageBackend[] = [];
   #db: VenueDatabase | undefined;
   #config: BackupConfig | undefined;
   #reloading = false;
@@ -134,8 +136,9 @@ export class BackupSupervisor {
       this.#db = venue;
       const controller = new AbortController();
       this.#controller = controller;
+      this.#backends = cfg.destinations.map(buildBackupBackend);
       this.#worker = runBackupSweep({
-        backends: cfg.destinations.map(buildBackupBackend),
+        backends: this.#backends,
         db: venue.venue,
         modules: this.#deps.modules,
         environment: this.#deps.environment,
@@ -147,6 +150,7 @@ export class BackupSupervisor {
         schedule: cfg.schedule,
         retain: cfg.retain,
         retainDays: cfg.retainDays,
+        destinationTimeoutMs: cfg.destinationTimeoutMs,
         jitterSeed: this.#deps.jitterSeed,
         readClock: this.#deps.readClock,
         outcomes: this.#deps.outcomes,
@@ -210,6 +214,7 @@ export class BackupSupervisor {
   async #teardown(): Promise<void> {
     this.#controller?.abort();
     if (this.#worker !== undefined) await this.#worker.catch(() => {});
+    for (const backend of this.#backends.splice(0)) backend.close();
     if (this.#db !== undefined) await this.#db.close().catch(() => {});
     this.#controller = undefined;
     this.#worker = undefined;

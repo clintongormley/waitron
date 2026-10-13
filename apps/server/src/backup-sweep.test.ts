@@ -82,6 +82,7 @@ class FakeBackend implements StorageBackend {
   async deleteMany(keys: string[]) {
     for (const key of keys) this.objects.delete(key);
   }
+  close() {}
 }
 
 /** The one archive key a tick stamped 2026-09-05T00:00:00Z stored; its nonce is random. */
@@ -121,6 +122,7 @@ describe("runOnce (fan-out)", () => {
     retain: 7,
     // Far off, so only the count cap bites here; `pruneBackend`'s own case pins the age cap.
     retainDays: 3650,
+    destinationTimeoutMs: 60_000,
     signal: new AbortController().signal,
     sleep: vi.fn(),
     log,
@@ -316,6 +318,7 @@ describe("runOnce (fan-out)", () => {
       },
       async delete() {},
       async deleteMany() {},
+      close() {},
     };
     const log = vi.fn();
     await runOnce(deps([failing], log));
@@ -372,6 +375,7 @@ describe("runOnce (fan-out)", () => {
       },
       async delete() {},
       async deleteMany() {},
+      close() {},
     };
     await runOnce({
       ...deps([probe]),
@@ -415,6 +419,7 @@ describe("runBackupSweep (loop logic, injected archive + sleep)", () => {
     schedule: { kind: "interval", ms: 10 },
     retain: 7,
     retainDays: 30,
+    destinationTimeoutMs: 60_000,
     jitterSeed: "loop-node",
     readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] }),
     archive: async (outFile: string) => {
@@ -502,17 +507,19 @@ describe("runBackupSweep (loop logic, injected archive + sleep)", () => {
 
   it("checks abort again after the tick and never sleeps when it aborted mid-tick", async () => {
     const controller = new AbortController();
-    const backend = new FakeBackend("only");
+    // Aborts once the archive is stored, since an abort before then stops the store.
+    const backend = new (class extends FakeBackend {
+      override async put(key: string, bytes: Uint8Array) {
+        await super.put(key, bytes);
+        controller.abort();
+      }
+    })("only");
     const sleep = vi.fn();
 
     await runBackupSweep(
       loopDeps(backend, {
         signal: controller.signal,
         log: vi.fn(),
-        archive: async (outFile) => {
-          controller.abort();
-          await writeFile(outFile, "DUMP-BYTES");
-        },
         sleep,
       }),
     );
@@ -776,7 +783,13 @@ describe("runBackupSweep (loop logic, injected archive + sleep)", () => {
 
   it("keeps an advertised archive deadline through dated replace/cancel and recomputes from the next date", async () => {
     const controller = new AbortController();
-    const backend = new FakeBackend("dated");
+    let abortAfterStore = false;
+    const backend = new (class extends FakeBackend {
+      override async put(key: string, bytes: Uint8Array) {
+        await super.put(key, bytes);
+        if (abortAfterStore) controller.abort();
+      }
+    })("dated");
     let now = new Date("2026-11-03T12:00:00Z");
     let changes = [{ effectiveBusinessDay: "2026-11-04", dayCutover: "07:00" }];
     const archived: string[] = [];
@@ -797,7 +810,7 @@ describe("runBackupSweep (loop logic, injected archive + sleep)", () => {
         archive: async (outFile) => {
           archived.push(now.toISOString());
           await writeFile(outFile, "DUMP-BYTES");
-          if (archived.length === 3) controller.abort();
+          if (archived.length === 3) abortAfterStore = true;
         },
         sleep: async (ms) => {
           waits++;
@@ -911,6 +924,7 @@ describe("pruneBackend (which names it reads, in what order, and how it deletes)
       putFile: async () => {},
       getFile: async () => {},
       get: async () => Buffer.alloc(0),
+      close: () => {},
       list: list ?? (async () => listed.map((key) => ({ key, size: 0, mtimeMs: 0 }))),
       delete: async (key) => {
         record.singles.push(key);
@@ -1058,6 +1072,7 @@ describe("runOnce with the real buildManifest (a migrated venue)", () => {
       stagingDir: staging,
       retain: 7,
       retainDays: 3650,
+      destinationTimeoutMs: 60_000,
       signal: new AbortController().signal,
       log: vi.fn(),
       now: () => new Date("2026-09-05T00:00:00Z"),

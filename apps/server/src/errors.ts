@@ -1201,6 +1201,12 @@ declare module "@waitron/shared" {
     /** A small object put to a bucket destination, or read from any destination, is larger than
      * `maxBytes` (`SMALL_OBJECT_MAX_BYTES`, `storage-backend.ts`). */
     "backup.destination_object_too_large": { maxBytes: number };
+    /** One destination's upload and its pruning did not finish within `timeoutMs`
+     * (`WAITRON_BACKUP_DESTINATION_TIMEOUT_MS`), and were stopped. */
+    "backup.destination_timed_out": { timeoutMs: number };
+    /** A destination's work was stopped because the backup duty stopped or reloaded. A
+     * cancellation, never recorded as the destination failing. */
+    "backup.destination_cancelled": Record<string, never>;
     /** Neither an archive destination nor a bucket copy that is on and current: no copy of the data
      * is being kept. Built as data by the backups alert source, never thrown. */
     "backup.disabled": Record<string, never>;

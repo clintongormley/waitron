@@ -20,6 +20,7 @@ import {
   dumpFileName,
   parseBackupArchiveKey,
 } from "./backup-keys.js";
+import { withDestinationCall } from "./backup-destination-call.js";
 import type { StorageBackend, StorageCall } from "./storage-backend.js";
 import "./errors.js";
 
@@ -29,6 +30,13 @@ export type ManifestBuilder = (deps: {
   readonly environment: DeploymentEnvironment;
   readonly now: Date;
 }) => Promise<BackupManifest>;
+
+export interface DestinationResult {
+  id: string;
+  stored: boolean;
+  uploadErrorCode: string | null;
+  pruneErrorCode: string | null;
+}
 
 export interface BackupSweepDeps {
   backends: StorageBackend[];
@@ -54,6 +62,10 @@ export interface BackupSweepDeps {
   sleep: (ms: number, signal: AbortSignal) => Promise<void>;
   /** Fires only on a tick where at least one destination stored the archive. */
   onStored?: () => void;
+  /** Each destination's result on a tick the sweep was not stopped during; codes only. */
+  onDestinationResult?: (result: DestinationResult) => void;
+  /** How long one destination's upload and its pruning may run, together. */
+  destinationTimeoutMs: number;
   onScheduled?: (at: number | null) => void;
   /** Read by the backups alert source, so a failed store shows before the freshness threshold. */
   outcomes?: BackupOutcomeHolder;
@@ -117,31 +129,51 @@ export async function runOnce(
     ];
     encryptedDir = await mkdtemp(join(deps.stagingDir, "backup-encrypt-"));
     const ciphertext = join(encryptedDir, "artifact");
-    await encryptArtifactFile(packArchiveStream(entries), ciphertext, deps.recoveryKey);
+    await encryptArtifactFile(
+      packArchiveStream(entries),
+      ciphertext,
+      deps.recoveryKey,
+      deps.signal,
+    );
     const key = backupArchiveKey(stamp);
-    const call: StorageCall = { signal: new AbortController().signal };
     let anyStored = false;
+    // Every destination call has settled before `finally` removes the ciphertext they read.
     await Promise.allSettled(
       deps.backends.map(async (backend) => {
-        // Separate from the whole try: a prune fault must not record a stored archive as failed.
         let stored = false;
         try {
-          await backend.putFile(key, ciphertext, call);
-          stored = true;
-          anyStored = true;
-          if (deps.outcomes)
-            recordBackupOutcome(deps.outcomes, backend.id, true, stamp.toISOString());
-          await pruneBackend(backend, deps.retain, deps.retainDays, nowMs, call, key);
-          deps.log("info", "backup.destination_completed", { destination: backend.id, key });
-        } catch (err) {
-          // `codeOf` maps only AppErrors.
-          deps.log("warn", "backup.destination_failed", {
-            destination: backend.id,
-            errorCode: codeOf(err),
-            errno: errnoOf(err),
+          await withDestinationCall(deps.signal, deps.destinationTimeoutMs, async (call) => {
+            await backend.putFile(key, ciphertext, call);
+            stored = true;
+            anyStored = true;
+            if (deps.outcomes)
+              recordBackupOutcome(deps.outcomes, backend.id, true, stamp.toISOString());
+            await pruneBackend(backend, deps.retain, deps.retainDays, nowMs, call, key);
           });
-          if (deps.outcomes && !stored)
-            recordBackupOutcome(deps.outcomes, backend.id, false, stamp.toISOString());
+          deps.log("info", "backup.destination_completed", { destination: backend.id, key });
+          deps.onDestinationResult?.({
+            id: backend.id,
+            stored: true,
+            uploadErrorCode: null,
+            pruneErrorCode: null,
+          });
+        } catch (err) {
+          if (deps.signal.aborted) return;
+          // `codeOf` maps only AppErrors.
+          const fields = { destination: backend.id, errorCode: codeOf(err), errno: errnoOf(err) };
+          if (stored) {
+            deps.log("warn", "backup.destination_prune_failed", fields);
+          } else {
+            deps.log("warn", "backup.destination_failed", fields);
+            if (deps.outcomes)
+              recordBackupOutcome(deps.outcomes, backend.id, false, stamp.toISOString());
+          }
+          deps.onDestinationResult?.({
+            id: backend.id,
+            stored,
+            uploadErrorCode: stored ? null : fields.errorCode,
+            pruneErrorCode: stored ? fields.errorCode : null,
+          });
         }
       }),
     );

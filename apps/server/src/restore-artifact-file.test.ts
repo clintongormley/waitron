@@ -208,6 +208,7 @@ it("roundtrips real SQLite and state through scheduled capture, local file stora
     resolvers: {},
     retain: 3,
     retainDays: 30,
+    destinationTimeoutMs: 60_000,
     signal: new AbortController().signal,
     now: () => stamp,
     archive: (path) => suite.db.archiveTo(path),

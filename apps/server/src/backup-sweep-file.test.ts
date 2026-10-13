@@ -64,6 +64,7 @@ function deps(f: Awaited<ReturnType<typeof fixture>>, backends: LocalFsBackend[]
     recoveryKey: "key",
     retain: 3,
     retainDays: 30,
+    destinationTimeoutMs: 60_000,
     signal: new AbortController().signal,
     log: vi.fn(),
     now: () => stamp,

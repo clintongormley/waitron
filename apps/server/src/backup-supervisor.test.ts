@@ -2,7 +2,7 @@
 import { chmod, cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   openVenueDatabase,
   runMigrations,
@@ -14,6 +14,7 @@ import { decryptArtifact } from "./artifact-cipher.js";
 import { unpackArchive } from "./backup-archive.js";
 import type { BackupConfig } from "./backup-config.js";
 import { BackupSupervisor, keyFingerprint } from "./backup-supervisor.js";
+import { LocalFsBackend } from "./local-fs-backend.js";
 import { ALL_MODULES } from "./modules.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
 import { AppError } from "@waitron/shared";
@@ -84,6 +85,7 @@ function localFsConfig(dirs: string[], recoveryKey: string): BackupConfig {
     retain: 7,
     retainDays: 30,
     staleAfterMs: 2 * 24 * 60 * 60 * 1000,
+    destinationTimeoutMs: 15 * 60 * 1000,
     keyRotatedAt: undefined,
   };
 }
@@ -370,6 +372,20 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
     let release!: () => void;
     const oldCopyReleased = new Promise<void>((r) => (release = r));
     let opens = 0;
+    // The first sweep's pruning, which runs after its archive is stored, is held until the second
+    // reload is waiting for it.
+    const realList = LocalFsBackend.prototype.list;
+    let lists = 0;
+    const list = vi.spyOn(LocalFsBackend.prototype, "list").mockImplementation(async function (
+      this: LocalFsBackend,
+      ...args
+    ) {
+      if (lists++ === 0) {
+        entered();
+        await oldCopyReleased;
+      }
+      return realList.apply(this, args);
+    });
     const sup = new BackupSupervisor({
       buildConfig: async () => refs.config,
       isManagedByEnvironment: () => refs.managed,
@@ -381,8 +397,7 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
       jitterSeed: "seed",
       readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] }),
       log: (level, event) => refs.logs.push({ level, event }),
-      // The first sweep's copy is held until the second reload is waiting for it; the second
-      // sweep's copy fails, so nothing is ever stored under the new key.
+      // The second sweep's copy fails, so nothing is ever stored under the new key.
       openVenue: async (dir) => {
         const first = opens++ === 0;
         const opened = await openVenueDatabase(dir);
@@ -392,11 +407,7 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
           opened.venue,
           {
             archiveTo: first
-              ? async (outFile: string) => {
-                  entered();
-                  await oldCopyReleased;
-                  return realArchive(outFile);
-                }
+              ? realArchive
               : () => Promise.reject(new Error("the new sweep stores nothing")),
           },
         ) as typeof opened.venue;
@@ -421,6 +432,7 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
       expect((await sup.status()).archiveUnderCurrentKey).toBe(false);
     } finally {
       await sup.stop();
+      list.mockRestore();
     }
   }, 60_000);
 
@@ -677,4 +689,47 @@ describe("BackupSupervisor — stop() landing inside a reload, and a worker that
     expect(closes).toBe(1);
     expect(sup.current().enabled).toBe(false);
   }, 60_000);
+});
+
+describe("BackupSupervisor closes the sweep's destinations", () => {
+  it("closes each destination once, after the sweep has settled, on stop", async () => {
+    const order: string[] = [];
+    const close = vi.spyOn(LocalFsBackend.prototype, "close").mockImplementation(function (
+      this: LocalFsBackend,
+    ) {
+      order.push(`close ${this.id}`);
+    });
+    try {
+      const [a, b] = [await makeDestDir(), await makeDestDir()];
+      const refs: Refs = {
+        config: localFsConfig([a, b], STRONG_KEY_1),
+        role: "primary",
+        venueDir: await makeVenueDir(),
+        logs: [],
+        managed: false,
+      };
+      const sup = new BackupSupervisor({
+        buildConfig: async () => refs.config,
+        isManagedByEnvironment: () => false,
+        readSingletonRole: () => refs.role,
+        venueDir: refs.venueDir,
+        modules: ALL_MODULES,
+        environment: "production",
+        stateDir: await makeStateDir(),
+        jitterSeed: "seed",
+        readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] }),
+        log: (level, event) => refs.logs.push({ level, event }),
+        onScheduled: (at) => order.push(at === null ? "unscheduled" : "scheduled"),
+      });
+      await sup.reload();
+      await waitForArchive(b);
+      await poll(async () => (order.includes("scheduled") ? true : undefined));
+      expect(close).not.toHaveBeenCalled();
+      await sup.stop();
+      expect(order.slice(-3)).toEqual(["unscheduled", "close primary", "close d1"]);
+      expect(close).toHaveBeenCalledTimes(2);
+    } finally {
+      close.mockRestore();
+    }
+  });
 });
