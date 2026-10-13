@@ -471,10 +471,7 @@ export class PrepStationsScreen extends LitElement {
       : this.#stationName(target.stationId);
   }
   /** Whether `run` succeeded. */
-  async #act(
-    run: () => Promise<unknown>,
-    message: (error: unknown) => string = () => t("prep.save_error"),
-  ): Promise<boolean> {
+  async #act(run: () => Promise<unknown>): Promise<boolean> {
     if (this.busy) return false;
     this.busy = true;
     this.#showError("");
@@ -482,8 +479,8 @@ export class PrepStationsScreen extends LitElement {
       await run();
       await this.#load();
       return true;
-    } catch (error) {
-      this.#showError(message(error));
+    } catch {
+      this.#showError(t("prep.save_error"));
       return false;
     } finally {
       this.busy = false;

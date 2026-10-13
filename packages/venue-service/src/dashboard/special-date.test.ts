@@ -44,3 +44,8 @@ it("a repeating date saved with no holiday name follows its month and day", () =
     specialOn(calendarDay("2027-03-26", "Viernes Santo"), detail, "2027-03-26"),
   ).toBeUndefined();
 });
+
+it("hands back the stored detail itself rather than a copy, since every render asks again", () => {
+  const detail = goodFriday([{ date: "2027-04-03", closedAllDay: false }]);
+  expect(specialOn(calendarDay("2027-04-03"), detail, "2027-04-03")?.detail).toBe(detail);
+});

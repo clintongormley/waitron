@@ -260,12 +260,11 @@ export class OpeningHoursDay extends LitElement {
   private special() {
     return this.contextSpecial;
   }
+  private get calendarDay() {
+    return this.calendar?.days?.find((row) => row.date === this.date);
+  }
   private specialOn(): DatedSpecial | undefined {
-    return specialOn(
-      this.calendar?.days?.find((row) => row.date === this.date),
-      this.detail,
-      this.date,
-    );
+    return specialOn(this.calendarDay, this.detail, this.date);
   }
   private seed(): Draft {
     this.contextDepartments = structuredClone(
@@ -313,7 +312,7 @@ export class OpeningHoursDay extends LitElement {
   private readDetail() {
     if (!this.isConnected || this.calendar === this.detailCalendar) return;
     const calendar = (this.detailCalendar = this.calendar);
-    const id = calendar?.days?.find((row) => row.date === this.date)?.specialDay?.id;
+    const id = this.calendarDay?.specialDay?.id;
     if (!id) {
       this.detail = undefined;
       return;
@@ -625,8 +624,7 @@ export class OpeningHoursDay extends LitElement {
       if (generation !== this.generation || !this.isConnected) return;
       this.baseline = submitted;
       this.scope?.commit(this.baseline);
-      this.api.rereadWatches();
-      this.api.specialDays.rereadWatches();
+      this.api.rereadWithSpecialDays();
     } catch (error) {
       if (generation !== this.generation || !this.isConnected) return;
       this.showRefusal(error, paint, zonePaint);
@@ -737,9 +735,7 @@ export class OpeningHoursDay extends LitElement {
     const opening = this.opening,
       child = this.periodOpening,
       special = this.special(),
-      named = special
-        ? undefined
-        : this.calendar?.days?.find((row) => row.date === this.date)?.specialDay,
+      named = special ? undefined : this.calendarDay?.specialDay,
       state = saveActionState(this.scope),
       closed = special?.closed,
       season = seasonOn(this.model.seasons, this.date)?.name,
@@ -797,12 +793,8 @@ export class OpeningHoursDay extends LitElement {
                         detail: {
                           kind: "open",
                           date: this.date,
-                          specialDay:
-                            this.calendar.days?.find((day) => day.date === this.date)?.specialDay ??
-                            null,
-                          holidays:
-                            this.calendar.days?.find((day) => day.date === this.date)?.holidays ??
-                            [],
+                          specialDay: this.calendarDay?.specialDay ?? null,
+                          holidays: this.calendarDay?.holidays ?? [],
                           returnTo: () => (button.isConnected ? button : null),
                         },
                         bubbles: true,

@@ -719,8 +719,7 @@ export class OpeningHoursScreen extends LitElement {
     );
     if (!saved) return;
     if (component.commitSubmitted(input)) this.closeNamedDay(action);
-    this.api.specialDays.rereadWatches();
-    this.api.rereadWatches();
+    this.api.rereadWithSpecialDays();
   }
   private async addToSpecialDay(event: CustomEvent<{ id: string; date: string }>) {
     const opened = this.dialogFor(event);
@@ -744,8 +743,7 @@ export class OpeningHoursScreen extends LitElement {
     });
     if (!saved) return;
     this.closeNamedDay(action);
-    this.api.specialDays.rereadWatches();
-    this.api.rereadWatches();
+    this.api.rereadWithSpecialDays();
   }
   private async deleteNamedDay(action: OpenSpecialDay) {
     if (
@@ -770,8 +768,7 @@ export class OpeningHoursScreen extends LitElement {
     }
     if (!this.isConnected || generation !== this.generation || this.namedAction !== action) return;
     this.closeNamedDay(action);
-    this.api.specialDays.rereadWatches();
-    this.api.rereadWatches();
+    this.api.rereadWithSpecialDays();
   }
   private namedDialog() {
     const action = this.namedAction;
@@ -820,7 +817,7 @@ export class OpeningHoursScreen extends LitElement {
         .open=${true}
         .specialDay=${action.detail}
         .date=${action.date}
-        .holidays=${[...action.holidays, ...(action.visibleHolidays ?? [])]}
+        .holidays=${action.visibleHolidays ?? action.holidays}
         .existing=${action.existing ?? []}
         .busy=${this.busy}
         @special-day-save=${this.saveNamedDay}

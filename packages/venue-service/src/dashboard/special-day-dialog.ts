@@ -110,7 +110,6 @@ export class SpecialDayDialog extends LitElement {
   @property() date = "";
   /** The public holidays the host knows of, for the pre-fill and the holiday-name note. */
   @property({ attribute: false }) holidays: readonly HolidayFact[] = [];
-  /** Special days the host knows of, for the "Add to <name>" offer. */
   /** Special days the host knows of, for the "Add to <name>" offer; `latest` is a day's last date. */
   @property({ attribute: false }) existing: readonly {
     id: string;
@@ -226,14 +225,20 @@ export class SpecialDayDialog extends LitElement {
     if (field === "name" || field === "repeatsYearly") return field;
     return field === "dates" || field.startsWith("dates.") ? "dates" : undefined;
   }
+  private dateTaken(): string | undefined {
+    const params = this.refusal?.params ?? {};
+    return this.refusal?.code === "special_day.date_taken" && isLocalDate(params.date)
+      ? format("special.date_taken", {
+          name: String(params.name ?? ""),
+          date: formatDate(params.date as LocalDate),
+        })
+      : undefined;
+  }
   private error(field: Field): string {
     if (this.refusalField() === field) {
       const params = this.refusal?.params ?? {};
-      if (this.refusal?.code === "special_day.date_taken" && isLocalDate(params.date))
-        return format("special.date_taken", {
-          name: String(params.name ?? ""),
-          date: formatDate(params.date as LocalDate),
-        });
+      const taken = this.dateTaken();
+      if (taken !== undefined) return taken;
       if (this.refusal?.params?.reason === "overlap") {
         const index = Number(String(params.field).split(".")[1]);
         const date = this.draft.dates[index]?.date;
@@ -337,15 +342,7 @@ export class SpecialDayDialog extends LitElement {
   private offer(current: () => boolean) {
     const name = this.draft.name;
     const match = this.offerMatch();
-    const params = this.refusal?.params ?? {};
-    const refused = !this.refusal
-      ? ""
-      : this.refusal.code === "special_day.date_taken" && isLocalDate(params.date)
-        ? format("special.date_taken", {
-            name: String(params.name ?? ""),
-            date: formatDate(params.date as LocalDate),
-          })
-        : t("prep.save_error");
+    const refused = !this.refusal ? "" : (this.dateTaken() ?? t("prep.save_error"));
     return html`<div class="form">
       <p>${format("special.offer", { name })}</p>
       ${refused ? html`<p class="error" role="alert" data-error="offer">${refused}</p>` : nothing}

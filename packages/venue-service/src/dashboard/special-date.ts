@@ -26,7 +26,7 @@ export function specialOn(
             : occursOn({ date: row.date, repeats: true }, date),
         )
       : undefined);
-  return entry && { detail: structuredClone(detail), date: entry.date, closed: entry.closedAllDay };
+  return entry && { detail, date: entry.date, closed: entry.closedAllDay };
 }
 
 export const paintedSlots = (

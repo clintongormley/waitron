@@ -90,6 +90,10 @@ export class OpeningHoursApi {
   rereadWatches(): void {
     this.#watches.reread(QUERY_DEPENDENCIES["opening-hours"]);
   }
+  rereadWithSpecialDays(): void {
+    this.specialDays.rereadWatches();
+    this.rereadWatches();
+  }
   createPeriod(
     departmentId: string,
     input: MenuPeriodInput,

@@ -47,6 +47,35 @@ describe("OpeningHoursApi", () => {
     ]);
   });
 
+  it("re-reads both the opening hours and the special-day calendar after a special-day write", async () => {
+    const request = vi.fn(async (path: string) =>
+      path.includes("named-days") ? { days: [] } : model,
+    );
+    const api = new OpeningHoursApi(request as DashboardRequest);
+    const hours = vi.fn();
+    const calendar = vi.fn();
+    const stopHours = api.watchOpeningHours(hours, vi.fn(), vi.fn());
+    const stopCalendar = api.specialDays.watchSpecialDays(
+      "2026-10-01",
+      "2026-10-31",
+      calendar,
+      vi.fn(),
+      vi.fn(),
+    );
+    try {
+      await vi.waitFor(() =>
+        expect([hours.mock.calls.length, calendar.mock.calls.length]).toEqual([1, 1]),
+      );
+      api.rereadWithSpecialDays();
+      await vi.waitFor(() =>
+        expect([hours.mock.calls.length, calendar.mock.calls.length]).toEqual([2, 2]),
+      );
+    } finally {
+      stopHours();
+      stopCalendar();
+    }
+  });
+
   it("reads opening hours passively with staff-menu dependencies and refreshes after writes", async () => {
     const live = new LiveData();
     const request = vi.fn(async () => model);
