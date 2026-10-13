@@ -257,6 +257,7 @@ export const floorTodayTables = table(
     fixed: flag("fixed").notNull().default(false),
     ...placementColumns(),
     takenOff: flag("taken_off").notNull().default(false),
+    name: label("name"),
   },
   (t) => [
     unique("floor_today_tables_table_key").on(t.tableId),
@@ -275,6 +276,7 @@ export const floorTodayJoins = table(
     id: id("id").primaryKey().$defaultFn(newId),
     zoneId: id("zone_id").notNull(),
     seats: count("seats").notNull(),
+    name: label("name"),
   },
   (t) => [
     index("floor_today_joins_zone_idx").on(t.zoneId),

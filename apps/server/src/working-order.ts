@@ -7181,6 +7181,10 @@ export interface TableToday {
   splitOffFrom: string | null;
   /** The revision of the table's room; 0 for a room with no today's plan. */
   zoneRevision: number;
+  /** The table's own name for today; `null` for its saved name. */
+  name: string | null;
+  /** Its group's name for today; `null` outside a group or for the group's normal name. */
+  joinName: string | null;
 }
 
 /** One row of the occupancy read-model. */
@@ -7434,6 +7438,8 @@ async function readTodayTables(
       joinId: floorTodayJoins.id,
       joinSeats: floorTodayJoins.seats,
       zoneRevision: floorTodayZones.revision,
+      name: floorTodayTables.name,
+      joinName: floorTodayJoins.name,
     })
     .from(floorTodayTables)
     .innerJoin(diningTables, eq(diningTables.id, floorTodayTables.tableId))
@@ -7511,6 +7517,8 @@ async function readTodayTables(
         joined: joinedState(row.tableId),
         splitOffFrom: splitOffFrom.get(row.tableId) ?? null,
         zoneRevision: row.zoneRevision ?? 0,
+        name: row.name,
+        joinName: row.joinName,
       },
     ]),
   );
