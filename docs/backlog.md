@@ -4163,14 +4163,6 @@ _Formerly entries spread across the old sections._ Detail: [backlog/back-office.
 
 _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 
-- **The hanging-archive boot test raised `database is locked` on main.** CI run
-  [38430159396](https://github.com/clintongormley/waitron/actions/runs/38430159396),
-  at `1c9978735b9b995b6bcb16f1c28f54d761701cb9`, failed `test-server (2)` in
-  `apps/server/src/boot.backup-network.test.ts`'s "starts, sells and answers /health while every
-  call to a destination hangs, a status read included" at `packages/store/src/write-queue.ts:53`.
-  Cause unverified; reproduce and diagnose the lock before treating a later pass as a repair.
-  Recorded while finishing A537; no backup code changed there.
-
 - **A branch install fetches compose and support files before resolving the image commit.**
   A push between those operations could give them different source commits; inferred from
   `deploy/waitron.sh`'s call order, not reproduced. Pin file downloads to the resolved commit
@@ -4796,6 +4788,13 @@ the tree. What remains, largest first:
   open by SQLite slice 1 (#490 and the preparation tasks).
 
 ### CI, tests and developer tooling
+
+- **Nine server suites write to the venue database while their in-process server runs (found by
+  A538-5f).** Each can fail `database is locked` whenever the write meets one of the server's open
+  transactions ([why](developers/testing-guide.md#a-test-that-runs-the-server-in-its-own-process-writes-to-the-database-only-while-the-server-is-down)).
+  Found by reading, none reproduced. Next: move each write before `startServer` or after
+  `close()`, or make it through the server's API.
+  [Detail](backlog/ci.md#nine-server-suites-write-to-the-venue-database-while-their-in-process-server-runs-found-by-a538-5f)
 
 - **The step-watch case's one pre-push failure (A544) is fixed at a likely cause, not a confirmed
   one.** The failure's message was not kept. A worker that starts late could report

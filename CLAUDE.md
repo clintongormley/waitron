@@ -637,6 +637,12 @@ browser test** — most of these rules exist because a test passed while proving
 - **A container port-binding timeout needs Docker state as well as the container's own logs.** Save
   `docker inspect`'s `HostConfig.PortBindings` and `NetworkSettings.Ports` before removing the
   container.
+- **A test that starts the server in its own process writes to the venue database only before
+  `startServer` or after `close()`**: this engine waits for a lock on the one thread both share,
+  so the server's open transaction cannot commit and the test's write fails `database is locked`
+  when its busy wait runs out. Cost: main run 38430159396. Nothing guards it across files, and other suites still
+  write while their server runs (backlog). Receipt:
+  [testing-guide.md](docs/developers/testing-guide.md#a-test-that-runs-the-server-in-its-own-process-writes-to-the-database-only-while-the-server-is-down).
 - **Draw every port a test needs in one `freePorts(n)` call, before binding any of them**
   (`apps/server/src/testing/free-ports.ts`), never two single draws before either is bound. Nothing
   guards it.
