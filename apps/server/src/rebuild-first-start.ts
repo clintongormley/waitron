@@ -201,8 +201,8 @@ const TIMED_OUT = Symbol("timed out");
  * box has no bucket settings or the bucket holds no pointer. Throws when settings are stored but
  * the term cannot be learnt — the settings cannot be read, the pointer is malformed, or the bucket
  * cannot be opened or read or does not answer within the bound — with the failure's own code, or
- * `restore.pointer_unreadable` for the bound and for a failure that has none. A request still
- * waiting at the bound is abandoned, not cancelled: the bucket interface takes no way to stop it.
+ * `restore.pointer_unreadable` for the bound and for a failure that has none. A read still
+ * waiting at the bound is cancelled.
  */
 export async function readBucketPointerTerm(
   db: Database,
@@ -214,10 +214,12 @@ export async function readBucketPointerTerm(
     const settings = await readStreamSettings(db, ring);
     if (settings === null) return null;
     const store = (options.openStore ?? createS3ObjectStore)(settings.bucket);
+    const reading = new AbortController();
     read = await Promise.race([
-      readPointer(store, settings.venueId),
+      readPointer(store, settings.venueId, { signal: reading.signal }),
       delay(options.timeoutMs ?? POINTER_READ_TIMEOUT_MS, TIMED_OUT, { ref: false }),
     ]);
+    if (read === TIMED_OUT) reading.abort();
   } catch (error) {
     if (isAppError(error)) throw error;
     throw new AppError("restore.pointer_unreadable", {});
