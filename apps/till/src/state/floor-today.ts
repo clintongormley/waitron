@@ -243,7 +243,7 @@ export function sheetActions(table: TableState): SheetAction[] {
   const applies: [SheetAction, boolean][] = [
     ["join-with", !merged && !clearing],
     ["split", merged],
-    ["split-off", joined !== null && !joined.apart && joined.parts.length >= 2],
+    ["split-off", joined !== null && joined.parts.length >= 2],
     ["rotate", !today.fixed && !merged],
     ["seats", true],
     ["back", !splitOff && (joined === null || joined.splitOff.length === 0)],
