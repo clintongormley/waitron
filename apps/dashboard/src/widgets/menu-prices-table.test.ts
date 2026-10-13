@@ -4688,3 +4688,69 @@ it("A462 default Price overrides retains variants after closing and reopening th
   expect(row(el, "mi-lemonade:v-large")).not.toBeNull();
   expect(override(el, "mi-lemonade:v-small").placeholder).toBe("2.50");
 });
+
+describe("names holding replacement patterns or another placeholder", () => {
+  beforeEach(() => {
+    const before = currentLocale();
+    setLocale("en-GB");
+    return () => setLocale(before);
+  });
+
+  const message = (el: MenuPricesTable) =>
+    text(outcomeToast(el).shadowRoot!.querySelector('[role="status"] .message'));
+
+  it("labels the table, a product's toggle and its price field with the names as written", async () => {
+    const el = await mount({
+      rows: [{ ...burger, name: "Burger $&" }, { ...lemonade, name: "Lemonade $&" }, lager],
+      menuName: "Lunch $& Menu",
+    });
+    expect(table(el).getAttribute("aria-label")).toBe("Price overrides on Lunch $& Menu");
+    expect(toggleOf(el, "mi-lemonade")!.getAttribute("aria-label")).toBe(
+      "Show the variants of Lemonade $&",
+    );
+    expect(innerLabel(override(el, "mi-burger"))).toBe("Price override for Burger $&");
+  });
+
+  it("names a variant holding another placeholder's text as written in its clash sentence", async () => {
+    const el = await mount({
+      rows: [variantClashRow()],
+      products: [
+        {
+          ...lemonadeProduct,
+          variants: [
+            variant("v-small", "Small $& {candidates}", null),
+            variant("v-large", "Large", "3.40"),
+          ],
+        } as unknown as Product,
+      ],
+    });
+    expect(clashMarker(el, "mi-lemonade")).toBe(
+      "Variant prices disagree. Small $& {candidates}: €3.00 in this menu's sections, €3.50 in Drinks.",
+    );
+  });
+
+  it("names a place holding replacement patterns as written in a clash sentence", async () => {
+    const el = await mount({
+      rows: [clashRow(lager, clashPriceIn("Drinks $& {place} {candidates}"))],
+    });
+    expect(clashMarker(el, "mi-lager")).toBe(
+      "Price set to €3.00 in this menu's sections, €3.50 in Drinks $& {place} {candidates}.",
+    );
+  });
+
+  it("says a save's outcome with the name and reason as written", async () => {
+    const el = await mount();
+    const save = { ...burgerSaved, name: "Burger $& {price} {reason}" };
+    el.outcome = { kind: "saved", save };
+    await el.updateComplete;
+    expect(message(el)).toBe("Saved Burger $& {price} {reason}'s price override: €11.00.");
+    el.outcome = { kind: "saved", save: { ...save, price: null, previous: "11.00" } };
+    await el.updateComplete;
+    expect(message(el)).toBe("Burger $& {price} {reason} now uses the inherited price.");
+    el.outcome = { kind: "refused", save, reason: "No $& connection" };
+    await el.updateComplete;
+    expect(message(el)).toBe(
+      "Your change to Burger $& {price} {reason} was not saved. No $& connection",
+    );
+  });
+});

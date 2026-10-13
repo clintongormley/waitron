@@ -34,7 +34,7 @@ import type {
   MenuPriceVariant,
   Product,
 } from "../api/client.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 import { leftToBrowser } from "../navigation.js";
 import { byLabel, categoryAncestors, categoryPath, PATH_SEPARATOR } from "./category-form.js";
 import { priceText } from "./form-fields.js";
@@ -90,7 +90,7 @@ const keyOf = ({ item, variant }: Line): string =>
 // would redraw the whole table with it.
 const parentKey = ({ item, variant }: Line): string | null => (variant ? item.menuItemId : null);
 const toggleLabel = ({ item }: Line, expanded: boolean): string =>
-  t(expanded ? "menu_prices.collapse" : "menu_prices.expand").replace("{name}", item.name);
+  fill(expanded ? "menu_prices.collapse" : "menu_prices.expand", { name: item.name });
 const keepsVariantOrder = ({ variant }: Line): boolean => variant === null;
 
 /** The row as a published menu holds it: Inactive variants left out. */
@@ -118,15 +118,13 @@ const candidatesText = (setting: Setting<Decimal>): string =>
         .map((candidate) => {
           const place = placeName(candidate.place, t);
           return "value" in candidate
-            ? t("menu_prices.source_candidate")
-                .replace("{price}", priceText(candidate.value))
-                .replace("{place}", () => place)
-            : t("menu_prices.candidate_undecided").replace("{place}", () => place);
+            ? fill("menu_prices.source_candidate", { price: priceText(candidate.value), place })
+            : fill("menu_prices.candidate_undecided", { place });
         })
         .join(", ");
 
 const pricesSentence = (setting: Setting<Decimal>): string =>
-  t("menu_prices.clash_prices").replace("{candidates}", () => candidatesText(setting));
+  fill("menu_prices.clash_prices", { candidates: candidatesText(setting) });
 
 type Span = { low: string; high: string };
 
@@ -779,9 +777,10 @@ export class MenuPricesTable extends LitElement {
       ...variants
         .filter(({ setting }) => setting.state === "clash")
         .map(({ variantId, setting }) =>
-          t("menu_prices.variant_clash")
-            .replace("{variant}", () => this.#variantName(variantId))
-            .replace("{candidates}", () => candidatesText(setting)),
+          fill("menu_prices.variant_clash", {
+            variant: this.#variantName(variantId),
+            candidates: candidatesText(setting),
+          }),
         ),
     ].join(" ");
   }
@@ -869,7 +868,7 @@ export class MenuPricesTable extends LitElement {
         hide-label
         fixed-unit
         locale=${currentLocale()}
-        label=${t(labelKey).replace("{name}", this.#lineName(line))}
+        label=${fill(labelKey, { name: this.#lineName(line) })}
         ?overriding=${this.#holds(line, this.drafts.get(key))}
         .value=${live(this.drafts.get(key) ?? this.#stored(line) ?? "")}
         .error=${this.#error(key)}
@@ -1184,7 +1183,7 @@ export class MenuPricesTable extends LitElement {
         noMatchesMessage=${tableNoMatches()}
         filterSearchPlaceholder=${t("categories.combobox_search")}
         filterNoResultsLabel=${t("categories.combobox_no_results")}
-        aria-label=${t("menu_prices.label").replace("{menu}", this.menuName)}
+        aria-label=${fill("menu_prices.label", { menu: this.menuName })}
         viewKey="waitron.menus.menu-prices.table"
         searchable
         searchLabel=${t("menu_prices.search")}
@@ -1238,12 +1237,10 @@ export class MenuPricesTable extends LitElement {
     if (outcome === null) return "";
     const { name, price } = outcome.save;
     if (outcome.kind === "refused")
-      return t("menus.change_not_saved")
-        .replace("{name}", name)
-        .replace("{reason}", outcome.reason);
+      return fill("menus.change_not_saved", { name, reason: outcome.reason });
     return price === null
-      ? t("menu_prices.cleared").replace("{name}", name)
-      : t("menu_prices.saved").replace("{name}", name).replace("{price}", priceText(price));
+      ? fill("menu_prices.cleared", { name })
+      : fill("menu_prices.saved", { name, price: priceText(price) });
   }
 
   #undoButton() {
