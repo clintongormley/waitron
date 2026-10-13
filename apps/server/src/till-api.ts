@@ -176,7 +176,15 @@ import { RETAINED_COURSE } from "./retained-course.js";
 import { readDrafts, saveDraft, submitDraft, takeOverDraft } from "./order-drafts.js";
 import { availableStations, findDeadEnds, requireMakeAtStation } from "./dead-ends.js";
 import { ensureToday } from "./floor-today-store.js";
-import { refuseTakenOff } from "./floor-today-table.js";
+import { refuseTakenOff, zoneOfTable } from "./floor-today-table.js";
+import {
+  moveChangedRooms,
+  roomPrints,
+  roomRevision,
+  roomRevisions,
+  sentRevision,
+  zonesOf,
+} from "./floor-revision.js";
 import type { SubmitDraftInput } from "./order-drafts.js";
 import { invalid } from "./bill-allocation.js";
 import { printSalePaymentSlip } from "./payment-slip-print.js";
@@ -1077,6 +1085,14 @@ function tillTenderKind(tender: TillTender | undefined): TenderKind | undefined 
 function refuseKitchenSignIn(device: DeviceBinding): void {
   if (kindOfFormFactor(device.formFactor) === "kds_station")
     throw new AppError("device.forbidden_action", { action: "sign_in" });
+}
+
+/** `result`, with `zoneRevisions` only when a room moved. */
+function withMovedRooms<T extends object>(
+  result: T,
+  moved: ReadonlyMap<string, number>,
+): T | (T & { zoneRevisions: Record<string, number> }) {
+  return moved.size === 0 ? result : { ...result, zoneRevisions: Object.fromEntries(moved) };
 }
 
 /** Mount the till routes with the shared error boundary. */
@@ -2622,11 +2638,22 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         const tableId = requireTargetTable(body[field], field);
         const command = tableActionCommand(personId, body);
         const merge = path === "join" ? requireMerge(body.merge, tableId) : null;
+        const sent = path === "join" ? sentRevision(body) : undefined;
         const sendCfg = sendingCfg(cfg, c, session.device);
         const result = await withTransaction(deps.db, async (tx) => {
           await catchUpFloor(tx);
           await checkZones(tx, deps.cfg, session, [{ partyId }, { tableId }]);
+          if (sent !== undefined) {
+            const zoneId = await zoneOfTable(tx, deps.cfg, tableId);
+            const revision = await roomRevision(tx, zoneId);
+            if (sent !== revision) {
+              throw new AppError("floor_today.out_of_date", { zoneId, revision });
+            }
+          }
           const heldBefore = await memberTables(tx, partyId);
+          const rooms = await zonesOf(tx, deps.cfg, [...heldBefore, tableId]);
+          const revisions = await roomRevisions(tx, rooms);
+          const before = await roomPrints(tx, deps.cfg, rooms);
           const acted = await act(tx, sendCfg, partyId, tableId, command);
           if (path === "move") {
             // Only a party staying on part of its merge breaks it up; a merge left whole stays, free.
@@ -2650,7 +2677,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           }
           // Last, so the route's own refusals answer first.
           await refuseTakenOff(tx, [tableId]);
-          return acted;
+          const after = await roomPrints(tx, deps.cfg, rooms);
+          return withMovedRooms(acted, await moveChangedRooms(tx, revisions, before, after));
         });
         return c.json(result);
       }),
@@ -2680,12 +2708,19 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const result = await withTransaction(deps.db, async (tx) => {
         await catchUpFloor(tx);
         await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        const rooms = await zonesOf(tx, deps.cfg, [
+          ...(await memberTables(tx, partyId)),
+          tableId.toLowerCase(),
+        ]);
+        const revisions = await roomRevisions(tx, rooms);
+        const before = await roomPrints(tx, deps.cfg, rooms);
         const split = await splitTable(tx, sendCfg, partyId, tableId.toLowerCase(), billId, {
           expectedPartyRevision,
           operatorId: personId,
         });
         await leaveMergesRestoring(tx, [tableId.toLowerCase()]);
-        return split;
+        const after = await roomPrints(tx, deps.cfg, rooms);
+        return withMovedRooms(split, await moveChangedRooms(tx, revisions, before, after));
       });
       return c.json(result);
     }),
