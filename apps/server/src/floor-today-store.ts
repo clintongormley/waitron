@@ -372,6 +372,14 @@ async function catchUpPass(
   }
   const putBack = [...placedNow].map((target) => target.tableId!);
   if (putBack.length > 0) {
+    const takenBack = tx
+      .select({ id: floorTodaySplitParts.partTableId })
+      .from(floorTodaySplitParts)
+      .where(inArray(floorTodaySplitParts.joinedTableId, putBack));
+    await tx
+      .update(diningTables)
+      .set({ needsClearingSince: null })
+      .where(inArray(diningTables.id, takenBack));
     await tx
       .delete(floorTodaySplitParts)
       .where(inArray(floorTodaySplitParts.joinedTableId, putBack));

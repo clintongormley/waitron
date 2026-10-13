@@ -1522,4 +1522,75 @@ describe("a reset over a joined table split today", () => {
     expect(await splitRowsOf(table.window!)).toEqual([]);
     expect(await todayRow(table.window!)).toMatchObject({ x: 60, width: 6, seats: 6 });
   });
+
+  const MARKED = "2026-10-10T11:00:00.000Z";
+
+  const markNeedsClearing = (tableId: string) =>
+    inTx(v, (tx) =>
+      tx
+        .update(diningTables)
+        .set({ needsClearingSince: MARKED })
+        .where(eq(diningTables.id, tableId)),
+    );
+
+  async function needsClearingSince(tableId: string): Promise<string | null> {
+    const [row] = await inTx(v, (tx) =>
+      tx
+        .select({ since: diningTables.needsClearingSince })
+        .from(diningTables)
+        .where(eq(diningTables.id, tableId)),
+    );
+    return row!.since;
+  }
+
+  it("a reset takes back Counter 5 split off and needing clearing, and clears its mark", async () => {
+    const { zoneId, table } = await longTable();
+    await split(table.long!, [table.c5!], 6);
+    await markNeedsClearing(table.c5!);
+
+    await reset(zoneId);
+
+    expect(await needsClearingSince(table.c5!)).toBeNull();
+    expect(await splitRowsOf(table.long!)).toEqual([]);
+    expect(await flags(table.c5!)).toMatchObject({ joined: true });
+    expect(await todayRow(table.long!)).toMatchObject(WHOLE);
+  });
+
+  it("a reset takes back Counter 4 and Counter 5 split off and needing clearing, and clears both marks", async () => {
+    const { zoneId, table } = await longTable();
+    await split(table.long!, [table.c4!, table.c5!], 2);
+    await markNeedsClearing(table.c4!);
+    await markNeedsClearing(table.c5!);
+
+    await reset(zoneId);
+
+    expect(await needsClearingSince(table.c4!)).toBeNull();
+    expect(await needsClearingSince(table.c5!)).toBeNull();
+    expect(await splitRowsOf(table.long!)).toEqual([]);
+    expect(await todayRow(table.long!)).toMatchObject(WHOLE);
+  });
+
+  it("a reset leaves the mark on a table it does not take back", async () => {
+    const { zoneId, table } = await longTable();
+    await split(table.long!, [table.c5!], 6);
+    await markNeedsClearing(table.c5!);
+    await markNeedsClearing(table.bar!);
+
+    await reset(zoneId);
+
+    expect(await needsClearingSince(table.bar!)).toBe(MARKED);
+  });
+
+  it("a split group that waits keeps its marks", async () => {
+    const { zoneId, table } = await longTable();
+    await split(table.long!, [table.c4!, table.c5!], 2);
+    await markNeedsClearing(table.c5!);
+    await seat(v, table.c4!);
+    const splitBefore = await splitRowsOf(table.long!);
+
+    await reset(zoneId);
+
+    expect(await needsClearingSince(table.c5!)).toBe(MARKED);
+    expect(await splitRowsOf(table.long!)).toEqual(splitBefore);
+  });
 });
