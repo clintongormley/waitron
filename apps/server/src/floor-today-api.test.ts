@@ -351,26 +351,26 @@ describe("today's routes", () => {
   });
 });
 
-describe("the split-off route", () => {
-  const LONG = async () => {
-    const zone = await plannedZone(v, [
-      { key: "c3", label: "Counter 3", seats: 2, place: null },
-      { key: "c4", label: "Counter 4", seats: 6, place: null },
-      { key: "c5", label: "Counter 5", seats: 4, place: null },
-      {
-        key: "long",
-        label: "Long table",
-        seats: 10,
-        place: { x: 10, y: 20, width: 6, height: 2 },
-        partKeys: ["c3", "c4", "c5"],
-      },
-      { key: "bar", label: "Bar", seats: 4, place: { x: 40, y: 0 } },
-    ]);
-    await giveKeptSize(v, zone.master.c3!, { width: 2, height: 2 });
-    await giveKeptSize(v, zone.master.c4!, { width: 2, height: 2 });
-    return zone;
-  };
+const LONG = async () => {
+  const zone = await plannedZone(v, [
+    { key: "c3", label: "Counter 3", seats: 2, place: null },
+    { key: "c4", label: "Counter 4", seats: 6, place: null },
+    { key: "c5", label: "Counter 5", seats: 4, place: null },
+    {
+      key: "long",
+      label: "Long table",
+      seats: 10,
+      place: { x: 10, y: 20, width: 6, height: 2 },
+      partKeys: ["c3", "c4", "c5"],
+    },
+    { key: "bar", label: "Bar", seats: 4, place: { x: 40, y: 0 } },
+  ]);
+  await giveKeptSize(v, zone.master.c3!, { width: 2, height: 2 });
+  await giveKeptSize(v, zone.master.c4!, { width: 2, height: 2 });
+  return zone;
+};
 
+describe("the split-off route", () => {
   it("splits parts off over HTTP and answers 204", async () => {
     const { table } = await LONG();
 
@@ -451,6 +451,102 @@ describe("the split-off route", () => {
 
     expect(
       await refusal(today(table.long!, "split-off", { partIds: [table.c5!], seats: 0 })),
+    ).toEqual({
+      status: 400,
+      body: { error: { code: "management.request_invalid", params: { field: "seats" } } },
+    });
+  });
+});
+
+describe("the join-again route", () => {
+  it("joins Counter 5 again over HTTP and answers 204", async () => {
+    const { table } = await LONG();
+    await expect204(today(table.long!, "split-off", { partIds: [table.c5!], seats: 6 }));
+
+    await expect204(today(table.long!, "join-again", { partIds: [table.c5!] }));
+
+    expect(await todayRow(v, table.long!)).toMatchObject({ width: 6, seats: 10 });
+    expect(await todayRow(v, table.c5!)).toMatchObject({ x: null });
+  });
+
+  it.each<
+    [
+      number,
+      string,
+      (t: Record<string, string>) => Promise<[string, unknown]>,
+      (t: Record<string, string>) => Record<string, unknown>,
+    ]
+  >([
+    [
+      404,
+      "joined_table.not_found",
+      async (t) => {
+        await expect204(today(t.long!, "split-off", { partIds: [t.c5!], seats: 6 }));
+        return [t.bar!, { partIds: [t.c5!] }];
+      },
+      (t) => ({ tableId: t.bar! }),
+    ],
+    [
+      409,
+      "joined_table.nothing_to_join",
+      async (t) => [t.long!, { partIds: [t.c5!] }],
+      (t) => ({ tableId: t.long! }),
+    ],
+    [
+      409,
+      "joined_table.out_of_date",
+      async (t) => {
+        await expect204(today(t.long!, "split-off", { partIds: [t.c5!], seats: 6 }));
+        return [t.long!, { partIds: [t.c4!] }];
+      },
+      (t) => ({ tableId: t.long! }),
+    ],
+    [
+      400,
+      "joined_table.seats_required",
+      async (t) => {
+        await seatAt(t.long!);
+        await expect204(today(t.long!, "split-off", { partIds: [t.c4!, t.c5!] }));
+        return [t.long!, { partIds: [t.c4!, t.c5!] }];
+      },
+      () => ({}),
+    ],
+  ])("answers %i %s, writing nothing", async (status, code, setup, params) => {
+    const { table } = await LONG();
+    const [tableId, body] = await setup(table);
+    const c5Before = await todayRow(v, table.c5!);
+    const longBefore = await todayRow(v, table.long!);
+
+    expect(await refusal(today(tableId, "join-again", body))).toEqual({
+      status,
+      body: { error: { code, params: params(table) } },
+    });
+    expect(await todayRow(v, table.c5!)).toEqual(c5Before);
+    expect(await todayRow(v, table.long!)).toEqual(longBefore);
+  });
+
+  it.each<[string, (t: Record<string, string>) => unknown]>([
+    ["empty", () => []],
+    ["not a list", (t) => t.c5!],
+    ["not a table id", () => ["not-a-uuid"]],
+    ["a repeated table", (t) => [t.c5!, t.c5!]],
+  ])("refuses partIds that is %s", async (_name, partIds) => {
+    const { table } = await LONG();
+    await expect204(today(table.long!, "split-off", { partIds: [table.c5!], seats: 6 }));
+
+    expect(await refusal(today(table.long!, "join-again", { partIds: partIds(table) }))).toEqual({
+      status: 400,
+      body: { error: { code: "management.request_invalid", params: { field: "partIds" } } },
+    });
+    expect(await todayRow(v, table.c5!)).not.toMatchObject({ x: null });
+  });
+
+  it("refuses seats that are not a whole number from 1", async () => {
+    const { table } = await LONG();
+    await expect204(today(table.long!, "split-off", { partIds: [table.c5!], seats: 6 }));
+
+    expect(
+      await refusal(today(table.long!, "join-again", { partIds: [table.c5!], seats: 0 })),
     ).toEqual({
       status: 400,
       body: { error: { code: "management.request_invalid", params: { field: "seats" } } },
