@@ -121,7 +121,7 @@ their full text.
   printer (plan Task 5), W102. Left open by W100 (#1332); the plan is the
   [equipment plan](../superpowers/plans/2026-10-04-device-equipment-and-independent-drawers.md).
   The hardware probe is done on a OnePlus 13 with Chrome 154 and metal-backed NTAG-type stickers
-  ([results](../research/2026-10-12-nfc-probe-oneplus-13.md)), so W102 can be queued: plan Task 5's
+  ([results](../research/2026-10-12-nfc-probe-oneplus-13.md)). Plan Task 5's NFC
   reader path remains open. Printers now have a server-side pick-up role set (receipt and payment
   slip by default); an unnamed authenticated scan applies that set in one transaction, while a
   scan for a named row changes only that row. NFC reading, writing/locking stickers and venue-printer
@@ -217,6 +217,8 @@ on itself.
   uses the saved set; a scan for one row uses only that row. The default is receipt and payment
   slip. The cash drawer is outside this set. You can select None to leave assignments alone on a
   general pick-up; row scans remain available.
+  When A508 adds the table-QR-code role, extend the printer setting's options and its multi-role
+  summary together.
 
 - **An equipment NFC sticker holds a text record, not a web address** (owner, 2026-10-12, W102).
   On the OnePlus 13 probe, a web-address sticker tapped while the installed till was not in front

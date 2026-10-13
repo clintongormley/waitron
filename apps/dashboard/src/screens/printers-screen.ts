@@ -4372,5 +4372,7 @@ declare global {
 }
 
 function samePickupRoles(a: Printer["pickupRoles"], b: Printer["pickupRoles"]): boolean {
-  return a.length === b.length && a.every((role) => b.includes(role));
+  const left = new Set(a);
+  const right = new Set(b);
+  return left.size === right.size && [...left].every((role) => right.has(role));
 }

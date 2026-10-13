@@ -1,7 +1,7 @@
 import "./errors.js";
 import type { EquipmentField } from "./errors.js";
 import { and, desc, eq, inArray, isNull } from "drizzle-orm";
-import { devices, printerHolders, printers } from "@waitron/db";
+import { devices, deviceProfilePrinters, printerHolders, printers } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { persons, sessions } from "@waitron/identity";
 import {
@@ -343,12 +343,27 @@ export async function selectDeviceEquipment(
       .where(and(eq(printers.id, input.selection.id), isNull(printers.deletedAt)));
     if (printer === undefined) throw new AppError("printer.not_found", { id: input.selection.id });
     const [device] = await tx
-      .select({ locationId: devices.locationId })
+      .select({ locationId: devices.locationId, profileId: devices.deviceProfileId })
       .from(devices)
       .where(eq(devices.id, input.deviceId));
+    const field = FIELD[printer.pickupRoles[0] ?? "receipt"];
     if (!printer.active || device?.locationId !== printer.locationId) {
-      throw new AppError("device.binding_invalid", { field: "receiptPrinterId" });
+      throw new AppError("device.binding_invalid", { field });
     }
+    if (printer.pickupRoles.length === 0) {
+      const [listed] = await tx
+        .select({ id: deviceProfilePrinters.printerId })
+        .from(deviceProfilePrinters)
+        .where(
+          and(
+            eq(deviceProfilePrinters.deviceProfileId, device.profileId),
+            eq(deviceProfilePrinters.printerId, input.selection.id),
+            inArray(deviceProfilePrinters.role, ["receipt", "payment_slip"]),
+          ),
+        );
+      if (listed === undefined) throw new AppError("device.binding_invalid", { field });
+    }
+
     for (const role of printer.pickupRoles) {
       await selectDeviceEquipment(tx, { ...input, role });
     }

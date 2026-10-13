@@ -3014,6 +3014,29 @@ describe("a device's current printers", () => {
     expect(await chosenIds(after)).toMatchObject({ receipt: t.counter, payment_slip: t.portable });
   });
 
+  it("a reader scan of a printer id keeps the named reader refusal and changes no assignments", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const t = await listedTill(venue, app);
+    for (const target of [{ kind: "reader" }, { role: "card_terminal" }]) {
+      const res = await send(app, "PUT", "/api/device/equipment", {
+        cookie: `${t.jar}; ${t.session}`,
+        body: { ...target, selection: { id: t.bar }, via: "scan" },
+      });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: { code: "device.binding_invalid", params: { field: "cardReaderId" } },
+      });
+    }
+    const after = await send(app, "GET", "/api/device/equipment", { cookie: t.jar });
+    expect(await chosenIds(after)).toEqual({
+      receipt: t.counter,
+      payment_slip: t.portable,
+      card_terminal: null,
+      cash_drawer: null,
+    });
+  });
+
   it("switches the slip printer to another listed one", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);

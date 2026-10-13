@@ -1804,6 +1804,60 @@ it("transfers a printer on two stations in configuration export", async () => {
   ]);
 });
 
+it("transfers a printer's pick-up set and refuses a drawer role in the uploaded set", async () => {
+  const source = await applyVenue(planVenue(venue("B31415920"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  await withTransaction(suite.db, async (tx) => {
+    await tx
+      .insert(printers)
+      .values({
+        locationId: source.locationId,
+        name: "Slip pickup",
+        transport: "network_tcp",
+        host: "10.0.0.90",
+        pickupRoles: ["payment_slip"],
+      });
+  });
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-13T10:00:00Z"),
+    versions,
+  );
+  expect(transferred.tables.printers![0]!.pickup_roles).toBe('["payment_slip"]');
+  const malformed = {
+    ...transferred,
+    tables: {
+      ...transferred.tables,
+      printers: transferred.tables.printers!.map((row) => ({
+        ...row,
+        pickup_roles: '["cash_drawer"]',
+      })),
+    },
+  };
+  expect(() => validateConfigurationBundle(malformed, ALL_MODULES, versions)).toThrowError(
+    expect.objectContaining({
+      code: "setup.request_invalid",
+      params: { field: "printers.pickup_roles" },
+    }),
+  );
+  await applyVenue(planVenue(venue("B27182810"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx, result) =>
+      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+  });
+  const imported = await targetSuite.db
+    .select({ name: printers.name, pickupRoles: printers.pickupRoles })
+    .from(printers)
+    .where(eq(printers.name, "Slip pickup"));
+  expect(imported).toEqual([{ name: "Slip pickup", pickupRoles: ["payment_slip"] }]);
+});
+
 it("transfers a device profile's receipt and payment-slip printer lists, in order", async () => {
   const source = await applyVenue(planVenue(venue("B13572471"), ALL_MODULES), {
     db: suite.db,

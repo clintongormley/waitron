@@ -452,6 +452,24 @@ function pending() {
 describe("the calibration wizard's Save, for a printer already set up", () => {
   const api = () => stubApi({ listPrinters: vi.fn().mockResolvedValue([calibrated]) });
 
+  it("compares pick-up roles as a set even when a saved role is repeated", async () => {
+    const { el } = await openWizard(
+      stubApi({
+        listPrinters: vi
+          .fn()
+          .mockResolvedValue([{ ...calibrated, pickupRoles: ["receipt", "receipt"] }]),
+      }),
+    );
+    await go(el, "calibration-next");
+    const field = q<HTMLElementTagNameMap["wt-combobox"]>(el, '[name="printer-pickup-roles"]')!;
+    await chooseOptions(field, ["receipt"]);
+    await el.updateComplete;
+    expect(await state(el, "save-printer-p1")).toEqual(quiet);
+    await chooseOptions(field, ["receipt", "payment_slip"]);
+    await el.updateComplete;
+    expect(await state(el, "save-printer-p1")).toEqual(ready);
+  });
+
   it("changing pick-up roles stages just those roles, and undoing the set quiets Save", async () => {
     const { el, api: stub } = await openWizard(api());
     await go(el, "calibration-next");

@@ -781,6 +781,103 @@ describe("readDeviceEquipment", () => {
 });
 
 describe("printer pick-up sets", () => {
+  it("an empty set still requires the profile to offer the printer for a pick-up role", async () => {
+    const venue = await setupVenue(suite.db);
+    const profile = await seedProfile();
+    const printer = await seedPrinter(venue, "Unlisted");
+    const a = await enrol(venue, "A", profile);
+    await suite.db.update(printers).set({ pickupRoles: [] }).where(eq(printers.id, printer));
+    const pickup = () =>
+      inTx((tx) =>
+        selectDeviceEquipment(tx, {
+          deviceId: a,
+          kind: "printer",
+          selection: { id: printer },
+          via: "scan",
+        }),
+      );
+    await expect(pickup()).rejects.toMatchObject({
+      code: "device.binding_invalid",
+      params: { field: "receiptPrinterId" },
+    });
+    await suite.db.update(printers).set({ hasCashDrawer: true }).where(eq(printers.id, printer));
+    await printerLists(profile, { cashDrawerPrinterIds: [printer] });
+    await expect(pickup()).rejects.toMatchObject({ code: "device.binding_invalid" });
+    await printerLists(profile, { paymentSlipPrinterIds: [printer] });
+    await pickup();
+    expect(await columns(a)).toEqual({ receipt: null, slip: null, drawer: null });
+    expect(await printerHoldersOf([printer])).toEqual({});
+  });
+
+  it("a disabled slip-only printer names the slip field", async () => {
+    const venue = await setupVenue(suite.db);
+    const profile = await seedProfile();
+    const printer = await seedPrinter(venue, "Slip");
+    await printerLists(profile, { paymentSlipPrinterIds: [printer] });
+    const a = await enrol(venue, "A", profile);
+    await suite.db
+      .update(printers)
+      .set({ pickupRoles: ["payment_slip"], active: false })
+      .where(eq(printers.id, printer));
+    await expect(
+      inTx((tx) =>
+        selectDeviceEquipment(tx, {
+          deviceId: a,
+          kind: "printer",
+          selection: { id: printer },
+          via: "scan",
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: "device.binding_invalid",
+      params: { field: "paymentSlipPrinterId" },
+    });
+    expect(await columns(a)).toEqual({ receipt: null, slip: null, drawer: null });
+  });
+
+  it("an empty pick-up set refuses foreign-location and deleted printers", async () => {
+    const venue = await setupVenue(suite.db);
+    const profile = await seedProfile();
+    const printer = await seedPrinter(venue, "Handheld", { portable: true });
+    await printerLists(profile, { receiptPrinterIds: [printer] });
+    const a = await enrol(venue, "A", profile);
+    const [otherLocation] = await suite.db
+      .insert(locations)
+      .values({ name: "Other", invoiceLocales: ["en-GB"], operationDescription: "Restaurant" })
+      .returning({ id: locations.id });
+    await suite.db
+      .update(printers)
+      .set({ pickupRoles: [], locationId: otherLocation!.id })
+      .where(eq(printers.id, printer));
+    const pickUp = () =>
+      inTx((tx) =>
+        selectDeviceEquipment(tx, {
+          deviceId: a,
+          kind: "printer",
+          selection: { id: printer },
+          via: "scan",
+        }),
+      );
+    await expect(pickUp()).rejects.toMatchObject({
+      code: "device.binding_invalid",
+      params: { field: "receiptPrinterId" },
+    });
+    await suite.db
+      .update(printers)
+      .set({
+        locationId: venue.cfg.locationId,
+        active: false,
+        deletedAt: "2026-10-13T10:00:00.000Z",
+      })
+      .where(eq(printers.id, printer));
+    await expect(pickUp()).rejects.toMatchObject({
+      code: "printer.not_found",
+      params: { id: printer },
+    });
+    expect(await columns(a)).toEqual({ receipt: null, slip: null, drawer: null });
+    expect(await printerHoldersOf([printer])).toEqual({});
+  });
+
   it("takes both roles from the prior holder, and rolls back both devices on a later role refusal", async () => {
     const venue = await setupVenue(suite.db);
     const profile = await seedProfile();
