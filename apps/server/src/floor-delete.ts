@@ -4,6 +4,7 @@ import {
   floorZones,
   floorPlans,
   floorPlanTableParts,
+  floorPlanTableSizes,
   floorPlanTables,
   floorResetTableParts,
   floorResetTables,
@@ -223,6 +224,9 @@ export function floorDeletionFor(
       await tx
         .delete(floorPlanTableParts)
         .where(inArray(floorPlanTableParts.joinedTableId, masterIds));
+      await tx
+        .delete(floorPlanTableSizes)
+        .where(inArray(floorPlanTableSizes.planTableId, masterIds));
       await tx.delete(floorPlanTables).where(inArray(floorPlanTables.id, masterIds));
       await tx.delete(floorPlans).where(
         inArray(

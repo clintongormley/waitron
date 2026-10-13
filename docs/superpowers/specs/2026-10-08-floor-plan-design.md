@@ -109,6 +109,8 @@ the details one tap away.
     > Superseded 2026-10-12 by A503 part 1 ([design](2026-10-12-a503-joined-tables-design.md)): saved joins, the editor's Joins section and the till's copy of them are gone; a service merge's seats come only from the till, whose seats prompt opens empty.
     >
     > Added 2026-10-12 by A503 part 2 ([design](2026-10-12-a503-joined-tables-design.md)): a joined table is a table on the saved plan made of two or more tables not placed on the plan (`floor_plan_table_parts`); each reset copies its parts (`floor_reset_table_parts`), and a part still joined cannot be seated, joined to a party, moved to, given a bill, merged, put on the map as a spare, named as an order's table or chosen for a department transfer (`table.in_joined_table`). It cannot yet be split.
+    >
+    > Added 2026-10-13 by A503 part 3: Split tables… now splits parts off a joined table for the day (§6.2).
   - **Remove from plan:** the table becomes a spare in the saved plan; today's plan changes at its
     next reset.
   - **Delete:** section 8. It is part of the draft, so Undo brings it back until Save.
@@ -151,6 +153,8 @@ the details one tap away.
 - **Long-press and drag** moves or joins (section 6).
 
 > Added 2026-10-12 by A503 part 2 ([design](2026-10-12-a503-joined-tables-design.md)): a joined table is a table on the saved plan made of two or more tables not placed on the plan (`floor_plan_table_parts`); each reset copies its parts (`floor_reset_table_parts`), and a part still joined cannot be seated, joined to a party, moved to, given a bill, merged, put on the map as a spare, named as an order's table or chosen for a department transfer (`table.in_joined_table`). It cannot yet be split.
+>
+> Added 2026-10-13 by A503 part 3: Split tables… now splits parts off a joined table for the day (§6.2).
 
 ## 6. Today's plan
 
@@ -202,6 +206,13 @@ undone at the next reset anyway.
   - **Reset to saved plan:** asks first.
 - **Back to its saved place** undoes every change to that one table for today.
 
+> Added 2026-10-13 by A503 part 3 ([design](2026-10-12-a503-joined-tables-design.md)): a joined table
+> with two or more parts still joined also offers **Split tables…**, which stands the chosen parts on
+> the map as tables of their own until the reset puts the joined table back whole. Back to its saved
+> place is refused (`joined_table.parts_split_off`) on a joined table while any of its parts is split
+> off, and Take off for today is refused (`table.in_joined_table`) for a part still joined or a joined
+> table with fewer than two parts still joined.
+
 ### 6.3 Reset
 
 - Today's plan resets automatically at the day cutover, and on Reset to saved plan.
@@ -216,6 +227,8 @@ undone at the next reset anyway.
   to saved plan, and for an occupied table when its tab closes after that.
 
 > Added 2026-10-12 by A503 part 2 ([design](2026-10-12-a503-joined-tables-design.md)): a joined table is a table on the saved plan made of two or more tables not placed on the plan (`floor_plan_table_parts`); each reset copies its parts (`floor_reset_table_parts`), and a part still joined cannot be seated, joined to a party, moved to, given a bill, merged, put on the map as a spare, named as an order's table or chosen for a department transfer (`table.in_joined_table`). It cannot yet be split.
+>
+> Added 2026-10-13 by A503 part 3: Split tables… now splits parts off a joined table for the day (§6.2).
 
 ## 7. Seats
 
@@ -273,6 +286,8 @@ on every screen. The commit adding them states this reason.
   > Superseded 2026-10-12 by A503 part 1 ([design](2026-10-12-a503-joined-tables-design.md)): saved joins, the editor's Joins section and the till's copy of them are gone; a service merge's seats come only from the till, whose seats prompt opens empty.
 
   > Added 2026-10-12 by A503 part 2 ([design](2026-10-12-a503-joined-tables-design.md)): a joined table is a table on the saved plan made of two or more tables not placed on the plan (`floor_plan_table_parts`); each reset copies its parts (`floor_reset_table_parts`), and a part still joined cannot be seated, joined to a party, moved to, given a bill, merged, put on the map as a spare, named as an order's table or chosen for a department transfer (`table.in_joined_table`). It cannot yet be split.
+  >
+  > Added 2026-10-13 by A503 part 3: Split tables… now splits parts off a joined table for the day (§6.2).
 - **Today's tables:** one row per live table: seats, fixed, position, size, shape, rotation, taken
   off, and which reset it last caught up with. Each zone records the business day of its today's
   plan and a count of its resets.
@@ -300,6 +315,9 @@ on every screen. The commit adding them states this reason.
 - **The till's table-state read** returns each table's position for today, worked out from the
   saved plan and today's changes, plus merges and spares.
 - **Live updates:** the floor's subscription names the new tables as its sources.
+
+> Added 2026-10-13 by A503 part 3: the till's routes gain `POST /api/tables/:id/today/split-off`
+> (split parts off a joined table), with the same checks.
 
 ## 11. Removed
 

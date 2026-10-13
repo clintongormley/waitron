@@ -33,6 +33,8 @@ import "../widgets/seat-dialog.js";
 import "../widgets/today-seats-dialog.js";
 import "../widgets/bill-choice-dialog.js";
 import "../widgets/join-with-dialog.js";
+import "../widgets/split-joined-dialog.js";
+import type { SplitJoinedDetail, TillSplitJoinedDialog } from "../widgets/split-joined-dialog.js";
 import "../widgets/floor-zone-menu.js";
 import type { JoinWithPickDetail } from "../widgets/join-with-dialog.js";
 import type { BillChoiceDetail } from "../widgets/bill-choice-dialog.js";
@@ -43,7 +45,9 @@ import {
   type DropAction,
   type SheetAction,
   dropAction,
+  onTodaysPlan,
   pendingPlaces,
+  sheetActions,
   spareSpot,
 } from "../state/floor-today.js";
 import { partyPaid, unsentText } from "../widgets/table-details-sheet.js";
@@ -481,6 +485,13 @@ export class TillFloorScreen extends LitElement {
   } | null = null;
   /** Join with…'s table; closed when the table leaves the map. */
   @state() private joiningWith: { tableId: string } | null = null;
+  /** Split tables…'s joined table; closed when the split is done or cancelled, or when the table no
+   * longer offers Split tables…. */
+  @state() private splittingJoined: {
+    tableId: string;
+    busy: boolean;
+    refusal: { code: string; field?: string } | null;
+  } | null = null;
   /** A drop joining two seated parties, waiting for which bills to keep. */
   @state() private askingBills: { api: TillApi; action: JoinAction } | null = null;
 
@@ -540,6 +551,11 @@ export class TillFloorScreen extends LitElement {
     this.#zone = this.#zoneOnScreen();
     if (this.joiningWith !== null && this.#joining(this.joiningWith.tableId) === undefined)
       this.joiningWith = null;
+    if (
+      this.splittingJoined !== null &&
+      this.#splitting(this.splittingJoined.tableId) === undefined
+    )
+      this.splittingJoined = null;
   }
 
   override updated(): void {
@@ -770,6 +786,9 @@ export class TillFloorScreen extends LitElement {
       case "split":
         void this.#settle(this.#split(api, table));
         return;
+      case "split-off":
+        this.splittingJoined = { tableId, busy: false, refusal: null };
+        return;
       case "rotate":
         void this.#settle(api.rotateToday(table.id));
         return;
@@ -811,7 +830,7 @@ export class TillFloorScreen extends LitElement {
   }
 
   /**
-   * One per placed group of the zone, a party linked across groups counting once, its first member
+   * One per group of the zone on today's plan, a party linked across groups counting once, its first member
    * in the map's label order named as the map names it, leaving out every group a drop of `table` on it would do nothing with.
    */
   #joinTargets(table: TableState, from: TodayPlacement): TableState[] {
@@ -819,7 +838,7 @@ export class TillFloorScreen extends LitElement {
     const seen = new Set<string>();
     const targets: TableState[] = [];
     for (const each of [...zoneTables].sort((a, b) => inNumberOrder(a.label, b.label))) {
-      if (each.today?.placement == null) continue;
+      if (!onTodaysPlan(each)) continue;
       const linkId = this.#linkOf(each);
       const group = drawnGroupKey(each, linkId);
       if (seen.has(group)) continue;
@@ -952,6 +971,68 @@ export class TillFloorScreen extends LitElement {
         this.#setPending(null);
       }}
     ></till-today-seats-dialog>`;
+  }
+
+  /** The joined table Split tables… was opened for, while it still offers Split tables…. */
+  #splitting(tableId: string): TableState | undefined {
+    return this.tables.find(
+      (each) => each.id === tableId && sheetActions(each).includes("split-off"),
+    );
+  }
+
+  #splitJoined(): TemplateResult | typeof nothing {
+    const splitting = this.splittingJoined;
+    const joined = splitting === null ? undefined : this.#splitting(splitting.tableId);
+    if (splitting === null || joined === undefined) return nothing;
+    return html`<till-split-joined-dialog
+      .joined=${joined}
+      .parts=${joined.today!.joined!.parts.flatMap((id) =>
+        this.tables.filter((each) => each.id === id),
+      )}
+      .busy=${splitting.busy}
+      .refusal=${splitting.refusal}
+      @split-joined-confirm=${(event: CustomEvent<SplitJoinedDetail>) => {
+        event.stopPropagation();
+        void this.#splitOff(event.currentTarget as TillSplitJoinedDialog, event.detail);
+      }}
+      @split-joined-cancel=${(event: Event) => {
+        event.stopPropagation();
+        this.splittingJoined = null;
+      }}
+    ></till-split-joined-dialog>`;
+  }
+
+  /**
+   * The window stays open while the split is sent, and closes only once it is done. The answer is
+   * applied only to the window that sent it: that window can close while the request runs, and
+   * another can open.
+   */
+  async #splitOff(dialog: TillSplitJoinedDialog, detail: SplitJoinedDetail): Promise<void> {
+    const splitting = this.splittingJoined;
+    const api = this.api;
+    if (splitting === null || splitting.busy || api === undefined) return;
+    const sent = { ...splitting, busy: true, refusal: null };
+    this.splittingJoined = sent;
+    try {
+      await api.splitOffToday(splitting.tableId, {
+        partIds: detail.partIds,
+        ...(detail.seats === null ? {} : { seats: detail.seats }),
+      });
+      if (this.splittingJoined === sent) {
+        dialog.commit();
+        this.splittingJoined = null;
+      }
+    } catch (cause) {
+      const refused = (cause ?? {}) as { code?: string; field?: unknown };
+      const code = refused.code ?? "server.internal";
+      if (this.splittingJoined === sent)
+        this.splittingJoined = {
+          ...splitting,
+          busy: false,
+          refusal: typeof refused.field === "string" ? { code, field: refused.field } : { code },
+        };
+    }
+    this.#requestFloorRefresh();
   }
 
   #billChoice(): TemplateResult | typeof nothing {
@@ -1156,7 +1237,7 @@ export class TillFloorScreen extends LitElement {
             : this.#plannedMap(onMap, unplaced, activeKey)
         }
         ${this.#seatDialog()} ${this.#clearDialog()} ${this.#detailsSheet()} ${this.#seatsPrompt()}
-        ${this.#billChoice()} ${this.#joinWith()}
+        ${this.#splitJoined()} ${this.#billChoice()} ${this.#joinWith()}
       </section>
     `;
   }

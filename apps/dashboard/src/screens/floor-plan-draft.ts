@@ -16,6 +16,8 @@ export interface DraftTable {
   placement: PlanPlacement | null;
   /** A joined table's part keys, possibly too few; null for a table that is not a joined table. */
   parts: readonly string[] | null;
+  /** Read from the plan and never sent: the server works out a kept size itself. */
+  keptSize: { width: number; height: number } | null;
 }
 
 export interface FloorPlanDraft {
@@ -63,6 +65,7 @@ export function draftFromPlan(plan: FloorPlan): FloorPlanDraft {
       fixed: t.fixed,
       placement: t.placement === null ? null : { ...t.placement },
       parts: t.partIds.length === 0 ? null : [...t.partIds],
+      keptSize: t.keptSize === null ? null : { ...t.keptSize },
     })),
   };
 }
@@ -202,17 +205,21 @@ export function changePlacement(
 export function placeTable(draft: FloorPlanDraft, key: string, at?: PlanPlacement): FloorPlanDraft {
   if (draft.tables.find((t) => t.key === key)?.placement != null) return draft;
   if (at !== undefined) return patchTable(draft, key, { placement: at });
+  const size = draft.tables.find((t) => t.key === key)?.keptSize ?? {
+    width: NEW_TABLE_SIZE,
+    height: NEW_TABLE_SIZE,
+  };
   const placed = draft.tables.flatMap((t) =>
     t.placement === null || t.key === key ? [] : [t.placement],
   );
-  const spot = firstFreeSpot(placed);
+  const spot = firstFreeSpot(placed, size);
   if (spot === null) return draft;
   return patchTable(draft, key, {
     placement: {
       x: clampToGrid(spot.x),
       y: clampToGrid(spot.y),
-      width: NEW_TABLE_SIZE,
-      height: NEW_TABLE_SIZE,
+      width: size.width,
+      height: size.height,
       shape: "rect",
       rotation: 0,
     },
@@ -274,6 +281,7 @@ export function addTables(
         fixed: t.fixed,
         placement: null,
         parts: null,
+        keptSize: null,
       })),
     ],
   };
@@ -297,6 +305,7 @@ export function addJoinedTable(
         fixed: false,
         placement: null,
         parts: [...table.parts],
+        keptSize: null,
       },
     ],
   };

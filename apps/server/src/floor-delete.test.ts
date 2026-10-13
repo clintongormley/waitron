@@ -6,12 +6,14 @@ import {
   diningTables,
   floorPlans,
   floorPlanTableParts,
+  floorPlanTableSizes,
   floorPlanTables,
   floorResetTableParts,
   floorResetTables,
   floorTodayTables,
   floorTodayJoins,
   floorTodayJoinTables,
+  floorTodaySplitParts,
   floorTodayZones,
   floorZones,
   locations,
@@ -24,6 +26,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { floorDeletionFor } from "./floor-delete.js";
+import { splitJoinedTable } from "./floor-today-split.js";
 import { leaveTables, finishTable } from "./parties.js";
 import {
   setupPartyVenue,
@@ -37,7 +40,7 @@ import {
   OPERATOR,
   type PartyVenue,
 } from "./testing/party-venue.js";
-import { plannedZone } from "./testing/floor-today-venue.js";
+import { giveKeptSize, plannedZone } from "./testing/floor-today-venue.js";
 import { handOverOrder, placeOrder } from "./working-order.js";
 
 let v: PartyVenue;
@@ -80,11 +83,13 @@ const floorRows = {
   floorPlans,
   floorPlanTables,
   floorPlanTableParts,
+  floorPlanTableSizes,
   floorResetTableParts,
   floorResetTables,
   floorTodayTables,
   floorTodayJoins,
   floorTodayJoinTables,
+  floorTodaySplitParts,
   floorTodayZones,
 };
 async function snapshot(tx: Transaction) {
@@ -505,6 +510,49 @@ describe("floor hierarchy deletion", () => {
     ).toEqual([]);
   });
 
+  it("clears a zone whose saved plan keeps a table's size", async () => {
+    const { zoneId, master } = await plannedZone(
+      v,
+      [
+        { key: "bar", label: "Bar", seats: 4 },
+        { key: "c3", label: "Counter 3", seats: 2, place: null },
+      ],
+      NOW,
+    );
+    await giveKeptSize(v, master.c3!, { width: 2, height: 2 });
+    const masterIds = Object.values(master);
+    await inTx(v, (tx) => seatFor().clear(tx, [zoneId], NOW));
+    expect(
+      await inTx(v, (tx) =>
+        tx
+          .select()
+          .from(floorPlanTableSizes)
+          .where(inArray(floorPlanTableSizes.planTableId, masterIds)),
+      ),
+    ).toEqual([]);
+    expect(
+      await inTx(v, (tx) =>
+        tx.select().from(floorPlanTables).where(inArray(floorPlanTables.id, masterIds)),
+      ),
+    ).toEqual([]);
+    expect(
+      await inTx(v, (tx) => tx.select().from(floorPlans).where(eq(floorPlans.zoneId, zoneId))),
+    ).toEqual([]);
+    expect(
+      await inTx(v, (tx) => tx.select().from(diningTables).where(eq(diningTables.zoneId, zoneId))),
+    ).toEqual([]);
+    expect(
+      await inTx(v, (tx) =>
+        tx.select().from(floorResetTables).where(eq(floorResetTables.zoneId, zoneId)),
+      ),
+    ).toEqual([]);
+    expect(
+      await inTx(v, (tx) =>
+        tx.select().from(floorTodayZones).where(eq(floorTodayZones.zoneId, zoneId)),
+      ),
+    ).toEqual([]);
+  });
+
   it("clears a zone whose saved plan holds Long table made of three tables", async () => {
     const { zoneId, master } = await plannedZone(
       v,
@@ -555,6 +603,34 @@ describe("floor hierarchy deletion", () => {
       await inTx(v, (tx) =>
         tx.select().from(floorResetTables).where(eq(floorResetTables.zoneId, zoneId)),
       ),
+    ).toEqual([]);
+  });
+
+  it("clears a zone whose Long table was split today", async () => {
+    const { zoneId, table } = await plannedZone(
+      v,
+      [
+        { key: "c3", label: "Counter 3", seats: 2, place: null },
+        { key: "c4", label: "Counter 4", seats: 6, place: null },
+        { key: "c5", label: "Counter 5", seats: 4, place: null },
+        {
+          key: "long",
+          label: "Long table",
+          seats: 10,
+          place: { x: 10, y: 20, width: 6, height: 2 },
+          partKeys: ["c3", "c4", "c5"],
+        },
+      ],
+      NOW,
+    );
+    await inTx(v, (tx) =>
+      splitJoinedTable(tx, v.cfg, { tableId: table.long!, partIds: [table.c5!], seats: 6 }),
+    );
+    expect(await inTx(v, (tx) => tx.select().from(floorTodaySplitParts))).not.toEqual([]);
+    await inTx(v, (tx) => seatFor().clear(tx, [zoneId], NOW));
+    expect(await inTx(v, (tx) => tx.select().from(floorTodaySplitParts))).toEqual([]);
+    expect(
+      await inTx(v, (tx) => tx.select().from(diningTables).where(eq(diningTables.zoneId, zoneId))),
     ).toEqual([]);
   });
 

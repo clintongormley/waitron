@@ -18,6 +18,7 @@ const table = (key: string, label: string, seats: number): DraftTable => ({
   fixed: false,
   placement: null,
   parts: null,
+  keptSize: null,
 });
 
 const draft: FloorPlanDraft = {

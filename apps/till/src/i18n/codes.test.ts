@@ -526,3 +526,29 @@ it("says a part of a joined table cannot be used, in English and Spanish", () =>
   expect(codeMessage("table.in_joined_table", "en")).toBe("That table is part of a joined table");
   expect(codeMessage("table.in_joined_table", "es")).toBe("Esa mesa forma parte de una mesa unida");
 });
+
+it("says each joined-table refusal in English and Spanish", () => {
+  const words: [string, string, string][] = [
+    ["joined_table.not_found", "That table is not a joined table", "Esa mesa no es una mesa unida"],
+    [
+      "joined_table.part_invalid",
+      "That table is no longer part of this joined table",
+      "Esa mesa ya no forma parte de esta mesa unida",
+    ],
+    ["joined_table.split_all", "Leave at least one table joined", "Deja al menos una mesa unida"],
+    [
+      "joined_table.seats_required",
+      "Enter the seats for the joined table",
+      "Indica las plazas de la mesa unida",
+    ],
+    [
+      "joined_table.parts_split_off",
+      "Some of its tables are split off",
+      "Algunas de sus mesas están separadas",
+    ],
+  ];
+  for (const [code, en, es] of words) {
+    expect(codeMessage(code, "en")).toBe(en);
+    expect(codeMessage(code, "es")).toBe(es);
+  }
+});

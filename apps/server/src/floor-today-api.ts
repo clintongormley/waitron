@@ -17,6 +17,7 @@ import {
   takeOffToday,
 } from "./floor-today-store.js";
 import { splitFreeMerge, writeMerge } from "./floor-today-merges.js";
+import { splitJoinedTable } from "./floor-today-split.js";
 import type { Logger } from "./logger.js";
 import type { Run, TillApiDeps } from "./till-api.js";
 import { requireSession } from "./till-session.js";
@@ -64,6 +65,19 @@ async function mergeBody(
   if (!JOIN_SIDES.includes(side as JoinSide)) throw invalid("side");
   const seats = body.seats === undefined ? null : whole(body.seats, "seats", 1, 999);
   return { targetId, side: side as JoinSide, seats };
+}
+
+async function splitOffBody(c: Context): Promise<{ partIds: string[]; seats: number | null }> {
+  const body = asObject(await readRawJsonBody<unknown>(c));
+  const raw = body.partIds;
+  if (!Array.isArray(raw) || raw.length === 0) throw invalid("partIds");
+  const partIds = raw.map((partId) => {
+    if (typeof partId !== "string" || !isUuid(partId)) throw invalid("partIds");
+    return partId.toLowerCase();
+  });
+  if (new Set(partIds).size !== partIds.length) throw invalid("partIds");
+  const seats = body.seats === undefined ? null : whole(body.seats, "seats", 1, 999);
+  return { partIds, seats };
 }
 
 /** Today's changes to one table, merging and splitting, and the zone reset; each answers 204. */
@@ -118,6 +132,14 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
     };
   });
   tableRoute("split", () => ({ write: (tx, tableId) => splitFreeMerge(tx, deps.cfg, tableId) }));
+  tableRoute("split-off", async (c) => {
+    const { partIds, seats } = await splitOffBody(c);
+    return {
+      write: (tx, joinedId) =>
+        splitJoinedTable(tx, deps.cfg, { tableId: joinedId, partIds, seats }),
+      others: partIds,
+    };
+  });
 
   app.post("/api/zones/:id/today/reset", (c) =>
     run(c, log, async () => {

@@ -20,6 +20,7 @@ const plan: FloorPlan = {
       fixed: false,
       placement: { x: 2, y: 3, width: 8, height: 8, shape: "rect", rotation: 0 },
       partIds: [],
+      keptSize: null,
     },
   ],
 };

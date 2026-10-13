@@ -96,6 +96,26 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That table is part of a joined table",
     es: "Esa mesa forma parte de una mesa unida",
   },
+  "joined_table.not_found": {
+    en: "That table is not a joined table",
+    es: "Esa mesa no es una mesa unida",
+  },
+  "joined_table.part_invalid": {
+    en: "That table is no longer part of this joined table",
+    es: "Esa mesa ya no forma parte de esta mesa unida",
+  },
+  "joined_table.split_all": {
+    en: "Leave at least one table joined",
+    es: "Deja al menos una mesa unida",
+  },
+  "joined_table.seats_required": {
+    en: "Enter the seats for the joined table",
+    es: "Indica las plazas de la mesa unida",
+  },
+  "joined_table.parts_split_off": {
+    en: "Some of its tables are split off",
+    es: "Algunas de sus mesas están separadas",
+  },
   "merge.seats_required": {
     en: "Enter the seats for this merge",
     es: "Indica las plazas de esta unión",

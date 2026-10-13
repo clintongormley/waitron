@@ -362,6 +362,8 @@ describe("till-held-orders: moving a counter order to a table", () => {
       joinId: null,
       joinSeats: null,
       inJoinedTable,
+      joined: null,
+      splitOffFrom: null,
     });
     const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
       orders: [mesa],

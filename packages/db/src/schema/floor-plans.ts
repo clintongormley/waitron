@@ -140,6 +140,27 @@ export const floorPlanTableParts = table(
   ],
 );
 
+/** The width and height a table off the plan keeps from when it was last placed. */
+export const floorPlanTableSizes = table(
+  "floor_plan_table_sizes",
+  {
+    id: id("id").primaryKey().$defaultFn(newId),
+    planTableId: id("plan_table_id").notNull(),
+    width: smallCount("width").notNull(),
+    height: smallCount("height").notNull(),
+  },
+  (t) => [
+    unique("floor_plan_table_sizes_table_key").on(t.planTableId),
+    check("floor_plan_table_sizes_width_ck", rangeCheck(t.width, 1, 99)),
+    check("floor_plan_table_sizes_height_ck", rangeCheck(t.height, 1, 99)),
+    foreignKey({
+      columns: [t.planTableId],
+      foreignColumns: [floorPlanTables.id],
+      name: "floor_plan_table_sizes_table_fk",
+    }),
+  ],
+);
+
 /**
  * What the zone's last reset copied: one row per planned live table, plus one per table it is to
  * create (`table_id` null).
@@ -291,5 +312,30 @@ export const floorTodayJoinTables = table(
     check("floor_today_join_tables_before_x_ck", rangeCheck(t.beforeX, 0, 999)),
     check("floor_today_join_tables_before_y_ck", rangeCheck(t.beforeY, 0, 999)),
     check("floor_today_join_tables_before_rotation_ck", rotationCheck(t.beforeRotation)),
+  ],
+);
+
+/** A part split off its joined table today. */
+export const floorTodaySplitParts = table(
+  "floor_today_split_parts",
+  {
+    id: id("id").primaryKey().$defaultFn(newId),
+    joinedTableId: id("joined_table_id").notNull(),
+    partTableId: id("part_table_id").notNull(),
+  },
+  (t) => [
+    unique("floor_today_split_parts_part_key").on(t.partTableId),
+    index("floor_today_split_parts_joined_idx").on(t.joinedTableId),
+    check("floor_today_split_parts_not_self_ck", sql`${t.joinedTableId} <> ${t.partTableId}`),
+    foreignKey({
+      columns: [t.joinedTableId],
+      foreignColumns: [diningTables.id],
+      name: "floor_today_split_parts_joined_fk",
+    }),
+    foreignKey({
+      columns: [t.partTableId],
+      foreignColumns: [diningTables.id],
+      name: "floor_today_split_parts_part_fk",
+    }),
   ],
 );

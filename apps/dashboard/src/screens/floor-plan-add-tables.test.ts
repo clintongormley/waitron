@@ -26,6 +26,7 @@ const table = (key: string, label: string): DraftTable => ({
   fixed: false,
   placement: null,
   parts: null,
+  keptSize: null,
 });
 
 const draft: FloorPlanDraft = {
@@ -150,6 +151,7 @@ it("automatic names number on from the highest with the prefix", async () => {
       fixed: false,
       placement: null,
       parts: null,
+      keptSize: null,
     })),
   );
   expect(addDialog(el).open).toBe(false);

@@ -32,8 +32,10 @@ export interface LiveTable {
   tied: boolean;
   /** It has a today's row. */
   hasToday: boolean;
-  /** It is in a today's merge with a held table. */
+  /** It is in a today's merge holding a waiting table: held, refused, or in a waiting split group. */
   mergedWithHeld: boolean;
+  /** It is in a split group, a joined table and the parts split off it today, one of whose members waits or has food on its way. */
+  splitWithBusy: boolean;
 }
 
 export interface ResetPlan {
@@ -77,7 +79,10 @@ export function planReset(input: {
       // The table's state is unknown, so nothing is done to it and no other table takes its target name.
       plan.pending.push(target);
       fixedInUse.add(target.label);
-    } else if (table && (table.held || table.refused || table.mergedWithHeld)) {
+    } else if (
+      table &&
+      (table.held || table.refused || table.mergedWithHeld || table.splitWithBusy)
+    ) {
       plan.pending.push(target);
       if (table.held && !table.hasToday) plan.seed.push(target);
       fixedInUse.add(table.label);

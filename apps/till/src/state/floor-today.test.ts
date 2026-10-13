@@ -2,7 +2,16 @@ import { afterEach, describe, expect, it } from "vitest";
 import { freeSide, touchingPlace } from "@waitron/shared";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import type { TableParty, TableState, TableToday, TodayPlacement } from "../api/client.js";
-import { dropAction, pendingPlaces, spareSpot, sparesOf, takenOffOf } from "./floor-today.js";
+import {
+  dropAction,
+  onTodaysPlan,
+  outOfServiceJoined,
+  pendingPlaces,
+  sheetActions,
+  spareSpot,
+  sparesOf,
+  takenOffOf,
+} from "./floor-today.js";
 
 function place(x: number, y: number, over: Partial<TodayPlacement> = {}): TodayPlacement {
   return { x, y, width: 4, height: 4, shape: "rect", rotation: 0, ...over };
@@ -17,6 +26,8 @@ function today(over: Partial<TableToday> = {}): TableToday {
     joinId: null,
     joinSeats: null,
     inJoinedTable: null,
+    joined: null,
+    splitOffFrom: null,
     ...over,
   };
 }
@@ -418,5 +429,73 @@ describe("spares and taken-off tables", () => {
       today: today({ placement: place(500, 500, square), inJoinedTable: "Long table" }),
     });
     expect(spareSpot([left, right, part])).toEqual({ x: 10, y: 0 });
+  });
+});
+
+describe("a joined table split today", () => {
+  const long = table("long", "Long table", {
+    today: today({
+      placement: place(10, 20, { width: 6, height: 2 }),
+      seats: 10,
+      joined: { parts: ["c3", "c4"], splitOff: ["c5"], apart: false },
+    }),
+  });
+  const c3 = table("c3", "Counter 3", {
+    today: today({ placement: null, seats: 2, inJoinedTable: "Long table" }),
+  });
+  const c4 = table("c4", "Counter 4", {
+    today: today({ placement: null, seats: 6, inJoinedTable: "Long table" }),
+  });
+  const c5 = table("c5", "Counter 5", {
+    today: today({ placement: place(10, 22, { width: 8, height: 8 }), splitOffFrom: "long" }),
+  });
+  const bar = table("bar", "Bar table", {
+    today: today({
+      placement: place(40, 0, { width: 6, height: 2 }),
+      joined: { parts: [], splitOff: ["b1", "b2"], apart: true },
+    }),
+  });
+
+  it("offers Split tables… on Long table while two or more parts are joined, and not once it has come apart", () => {
+    expect(sheetActions(long)).toContain("split-off");
+    const merged = sheetActions(
+      table("long", "Long table", { today: { ...long.today!, joinId: "m1" } }),
+    );
+    expect(merged.indexOf("split-off")).toBe(merged.indexOf("split") + 1);
+    expect(sheetActions(bar)).not.toContain("split-off");
+    const heldWithOnePart = table("long", "Long table", {
+      ...seatedBy(party("p1", ["long"])),
+      today: today({ joined: { parts: ["c3"], splitOff: ["c4", "c5"], apart: false } }),
+    });
+    expect(sheetActions(heldWithOnePart)).not.toContain("split-off");
+    expect(sheetActions(table("t", "1"))).not.toContain("split-off");
+  });
+
+  it("offers neither Back nor Take off on a part split off", () => {
+    expect(sheetActions(c5)).not.toContain("back");
+    expect(sheetActions(c5)).not.toContain("take-off");
+    expect(sheetActions(table("t", "1"))).toEqual(expect.arrayContaining(["back", "take-off"]));
+  });
+
+  it("offers no Back on Long table once a part is split off", () => {
+    expect(sheetActions(long)).not.toContain("back");
+    const whole = table("long", "Long table", {
+      today: today({ joined: { parts: ["c3", "c4", "c5"], splitOff: [], apart: false } }),
+    });
+    expect(sheetActions(whole)).toContain("back");
+  });
+
+  it("keeps a joined table that came apart off the map, out of the spares and out of the pickers", () => {
+    expect(onTodaysPlan(bar)).toBe(false);
+    expect(outOfServiceJoined(bar)).toBe(true);
+    const unplacedBar = table("bar", "Bar table", {
+      today: today({ placement: null, joined: { parts: [], splitOff: ["b1", "b2"], apart: true } }),
+    });
+    expect(sparesOf([unplacedBar, c3, c4])).toEqual([]);
+    expect(outOfServiceJoined(long)).toBe(false);
+    expect(outOfServiceJoined(c5)).toBe(false);
+    expect(outOfServiceJoined(c3)).toBe(true);
+    expect(onTodaysPlan(long)).toBe(true);
+    expect(onTodaysPlan(c5)).toBe(true);
   });
 });

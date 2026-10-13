@@ -98,6 +98,9 @@ refuses or one in an unknown state waits; a free one is put back at once (`planR
   the plan has no size (`floor_plan_tables`' placement check sets all six of x, y, width, height,
   shape and rotation or none, `packages/db/src/schema/floor-plans.ts:52-73`). Owner question 5,
   below, decides where it comes from; the split waits for the answer, nothing before it does.
+  > Added 2026-10-13 by A503 part 3: the split record is `floor_today_split_parts`; a part's size is
+  > read from the saved plan when Split runs: the size the plan places it at, else its
+  > `floor_plan_table_sizes` row, else 8 × 8.
 - New tables are classified `state`. `floor_plan_table_parts` joins configuration transfer
   (`packages/db/src/configuration-transfer.ts:48-51`, which carries the saved plan only); all of them
   join the zone and department delete (`apps/server/src/floor-delete.ts`), the live-subscription
@@ -224,6 +227,11 @@ split today. A split decides only who sits where today.
 - **The reset puts a split joined table back whole only when it and every split-off part are free**
   and in no merge; until then everything stays as it is and the joined table waits, as a held table
   waits today (`planReset`, `apps/server/src/floor-reset-plan.ts:80-96`).
+  > Added 2026-10-13 by A503 part 3 (review 5–9): a merge holds the group back only while one of its
+  > tables waits (guests seated, or a module refusing); a merge nobody sits at is ended by the reset
+  > as any free merge is, and the joined table is put back whole. Food on its way to any table of the
+  > group holds it back too, and with it any merge one of the group's tables is in, until the food is
+  > collected or its order is abandoned.
 
 ### Service merges ask for seats
 
@@ -271,6 +279,8 @@ The four questions this design first raised, answered in the campaign's question
    put it back. Alternative: the joined table's Made of list gives each part a Width and a Height of
    its own, set in the dialog and the form. Parts 1 and 2 of the build do not depend on the answer;
    the split (part 3) does.
+   > Added 2026-10-13 by A503 part 3: the owner chose the default; the saved plan keeps a table's size
+   > in `floor_plan_table_sizes` when it leaves the plan, and the editor puts it back at that size.
 
 ## Path, migrations and testing
 

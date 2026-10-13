@@ -62,6 +62,8 @@ function planned(
       joinId: null,
       joinSeats: null,
       inJoinedTable: null,
+      joined: null,
+      splitOffFrom: null,
       ...over,
     },
     signals: [],
@@ -278,6 +280,21 @@ describe("till-floor-screen: the details sheet's changes for today", () => {
     );
     await press(el, "t1", "join-with");
     expect(targetIds(el)).toEqual(["t3"]);
+  });
+
+  it("Join with… leaves out a joined table that has come apart and a part still joined, though each kept a place", async () => {
+    const el = await mount(
+      [
+        planned("t1", 2),
+        planned("tL", 20, { joined: { parts: [], splitOff: ["t3"], apart: true } }),
+        planned("t3", 30, { splitOffFrom: "tL" }),
+        planned("tM", 40, { joined: { parts: ["t5", "t6"], splitOff: [], apart: false } }),
+        planned("t5", 60, { inJoinedTable: "M" }),
+      ],
+      stubApi(),
+    );
+    await press(el, "t1", "join-with");
+    expect(targetIds(el)).toEqual(["t3", "tM"]);
   });
 
   it("Join with… closed without a pick changes nothing", async () => {

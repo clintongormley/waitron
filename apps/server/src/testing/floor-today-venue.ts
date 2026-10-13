@@ -1,6 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { floorTodayJoinTables, floorTodayJoins, floorTodayTables, floorZones } from "@waitron/db";
+import {
+  floorPlanTableSizes,
+  floorTodayJoinTables,
+  floorTodayJoins,
+  floorTodaySplitParts,
+  floorTodayTables,
+  floorZones,
+} from "@waitron/db";
 import { zoneSalePolicies, zoneServicePolicies } from "@waitron/venue-service";
 import { readZonePlan, saveZonePlan, type ZonePlanSave } from "../floor-plan.js";
 import { ALL_MODULES, enabledTableRemovals } from "../modules.js";
@@ -85,6 +92,24 @@ export async function plannedZone(
     table[entry.key] = plan.tables.find((t) => t.id === ids[entry.key])!.liveTableId!;
   }
   return { zoneId, table, master: ids, revision };
+}
+
+/** Gives master table `masterId` the size it keeps while off the plan. */
+export async function giveKeptSize(
+  v: PartyVenue,
+  masterId: string,
+  size: { width: number; height: number },
+): Promise<void> {
+  await inTx(v, (tx) => tx.insert(floorPlanTableSizes).values({ planTableId: masterId, ...size }));
+}
+
+/** Records `partTableId` as split off joined table `joinedTableId` today, as the split route will. */
+export async function splitOffRow(
+  v: PartyVenue,
+  joinedTableId: string,
+  partTableId: string,
+): Promise<void> {
+  await inTx(v, (tx) => tx.insert(floorTodaySplitParts).values({ joinedTableId, partTableId }));
 }
 
 export async function todayRow(

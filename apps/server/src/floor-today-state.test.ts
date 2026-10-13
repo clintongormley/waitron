@@ -7,7 +7,9 @@ import { floorTodayJoins, floorTodayJoinTables, floorTodayTables, floorZones } f
 import { zoneSalePolicies, zoneServicePolicies } from "@waitron/venue-service";
 import { readZonePlan, saveZonePlan, type ZonePlanSave } from "./floor-plan.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
+import { splitJoinedTable } from "./floor-today-split.js";
 import { inTx, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
+import { giveKeptSize, plannedZone } from "./testing/floor-today-venue.js";
 import { listTablesWithState, type TableState } from "./working-order.js";
 import "./errors.js";
 
@@ -109,6 +111,8 @@ describe("the till's table-state answer carries today's plan", () => {
       joinId,
       joinSeats: 7,
       inJoinedTable: null,
+      joined: null,
+      splitOffFrom: null,
     });
     expect(states.get(b)!.today).toEqual({
       placement: place(20, 5, { width: 10, rotation: 45 }),
@@ -118,6 +122,8 @@ describe("the till's table-state answer carries today's plan", () => {
       joinId,
       joinSeats: 7,
       inJoinedTable: null,
+      joined: null,
+      splitOffFrom: null,
     });
     expect(states.get(spare)!.today).toEqual({
       placement: null,
@@ -127,6 +133,8 @@ describe("the till's table-state answer carries today's plan", () => {
       joinId: null,
       joinSeats: null,
       inJoinedTable: null,
+      joined: null,
+      splitOffFrom: null,
     });
     expect(states.get(off)!.today).toEqual({
       placement: null,
@@ -136,6 +144,8 @@ describe("the till's table-state answer carries today's plan", () => {
       joinId: null,
       joinSeats: null,
       inJoinedTable: null,
+      joined: null,
+      splitOffFrom: null,
     });
   });
 
@@ -174,5 +184,102 @@ describe("the till's table-state answer carries today's plan", () => {
     }
     expect(states.get(liveId(long))!.today.inJoinedTable).toBeNull();
     expect(states.get(liveId(plain))!.today.inJoinedTable).toBeNull();
+  });
+});
+
+/** Long table (10 seats, 6 × 2 at 10, 20) made of Counter 3 (2 × 2 kept), 4 (2 × 2 kept) and 5 (no kept size), and Bar placed. */
+async function longPlusBar() {
+  const zone = await plannedZone(
+    v,
+    [
+      { key: "c3", label: "Counter 3", seats: 2, place: null },
+      { key: "c4", label: "Counter 4", seats: 6, place: null },
+      { key: "c5", label: "Counter 5", seats: 4, place: null },
+      {
+        key: "long",
+        label: "Long table",
+        seats: 10,
+        place: { x: 10, y: 20, width: 6, height: 2 },
+        partKeys: ["c3", "c4", "c5"],
+      },
+      { key: "bar", label: "Bar", seats: 4, place: { x: 40, y: 0 } },
+    ],
+    NOW,
+  );
+  await giveKeptSize(v, zone.master.c3!, { width: 2, height: 2 });
+  await giveKeptSize(v, zone.master.c4!, { width: 2, height: 2 });
+  return zone;
+}
+
+const split = (tableId: string, partIds: string[], seats: number | null) =>
+  inTx(v, (tx) => splitJoinedTable(tx, v.cfg, { tableId, partIds, seats }));
+
+describe("the till's table-state answer says what is joined and what is split off", () => {
+  it("says which parts of Long table are still joined, and which were split off", async () => {
+    const { table } = await longPlusBar();
+    await split(table.long!, [table.c5!], 6);
+
+    const states = await read();
+    const long = states.get(table.long!)!;
+    expect(long.today.joined).toEqual({
+      parts: [table.c3, table.c4],
+      splitOff: [table.c5],
+      apart: false,
+    });
+    expect(long.today.splitOffFrom).toBeNull();
+    expect(states.get(table.c5!)!.today.splitOffFrom).toBe(table.long);
+    expect(states.get(table.c5!)!.today.inJoinedTable).toBeNull();
+    expect(states.get(table.c5!)!.today.joined).toBeNull();
+    expect(states.get(table.c3!)!.today.inJoinedTable).toBe(long.label);
+    expect(states.get(table.c3!)!.today.splitOffFrom).toBeNull();
+    expect(states.get(table.bar!)!.today.joined).toBeNull();
+    expect(states.get(table.bar!)!.today.splitOffFrom).toBeNull();
+  });
+
+  it("says Long table has come apart once one part is left", async () => {
+    const { table } = await longPlusBar();
+    await split(table.long!, [table.c4!, table.c5!], null);
+
+    const states = await read();
+    expect(states.get(table.long!)!.today.joined).toEqual({
+      parts: [],
+      splitOff: [table.c3, table.c4, table.c5],
+      apart: true,
+    });
+    for (const part of [table.c3!, table.c4!, table.c5!]) {
+      expect(states.get(part)!.today.splitOffFrom).toBe(table.long);
+    }
+  });
+
+  it("lists Long table's parts in number order, though they were added last to first", async () => {
+    const { table } = await plannedZone(
+      v,
+      [
+        { key: "c5", label: "Counter 5", seats: 4, place: null },
+        { key: "c4", label: "Counter 4", seats: 6, place: null },
+        { key: "c3", label: "Counter 3", seats: 2, place: null },
+        {
+          key: "long",
+          label: "Long table",
+          seats: 10,
+          place: { x: 10, y: 20, width: 6, height: 2 },
+          partKeys: ["c5", "c4", "c3"],
+        },
+      ],
+      NOW,
+    );
+    await split(table.long!, [table.c3!], 8);
+    expect((await read()).get(table.long!)!.today.joined).toEqual({
+      parts: [table.c4, table.c5],
+      splitOff: [table.c3],
+      apart: false,
+    });
+
+    await split(table.long!, [table.c4!], null);
+    expect((await read()).get(table.long!)!.today.joined).toEqual({
+      parts: [],
+      splitOff: [table.c3, table.c4, table.c5],
+      apart: true,
+    });
   });
 });

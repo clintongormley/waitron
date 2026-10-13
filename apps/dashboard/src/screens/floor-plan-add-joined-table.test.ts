@@ -29,6 +29,7 @@ const table = (key: string, label: string, seats: number | null, more: Partial<D
     fixed: false,
     placement: null,
     parts: null,
+    keptSize: null,
     ...more,
   }) satisfies DraftTable;
 
@@ -251,6 +252,7 @@ it("adds Long table, 10 seats, made of Counter 3, 4 and 5, not placed", async ()
       fixed: false,
       placement: null,
       parts: ["c3", "c4", "c5"],
+      keptSize: null,
     },
   ]);
   await expect.poll(() => dialog(el).open).toBe(false);

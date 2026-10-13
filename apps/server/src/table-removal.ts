@@ -2,6 +2,7 @@ import { and, eq, inArray, or } from "drizzle-orm";
 import {
   diningTables,
   floorResetTables,
+  floorTodaySplitParts,
   floorTodayTables,
   FOREIGN_KEY_VIOLATION,
   isRefusal,
@@ -101,12 +102,35 @@ export async function removeLiveTables(
       await tx.delete(diningTables).where(eq(diningTables.id, tableId));
     } catch (error) {
       if (!isRefusal(error, FOREIGN_KEY_VIOLATION)) throw error;
+      if (await deleteWithItsSplit(tx, tableId)) continue;
       // A refused statement backs out only itself, so the reset row goes back for the next catch-up.
       if (resetRows.length > 0) await tx.insert(floorResetTables).values(resetRows);
       kept.add(tableId);
     }
   }
   return kept;
+}
+
+/** Deletes the table with the split rows naming it, after a refused delete; refused again, the split rows go back. */
+async function deleteWithItsSplit(tx: Transaction, tableId: string): Promise<boolean> {
+  const splitRows = await tx
+    .delete(floorTodaySplitParts)
+    .where(
+      or(
+        eq(floorTodaySplitParts.joinedTableId, tableId),
+        eq(floorTodaySplitParts.partTableId, tableId),
+      ),
+    )
+    .returning();
+  if (splitRows.length === 0) return false;
+  try {
+    await tx.delete(diningTables).where(eq(diningTables.id, tableId));
+    return true;
+  } catch (error) {
+    if (!isRefusal(error, FOREIGN_KEY_VIOLATION)) throw error;
+    await tx.insert(floorTodaySplitParts).values(splitRows);
+    return false;
+  }
 }
 
 export async function tableDeleteRefusals(

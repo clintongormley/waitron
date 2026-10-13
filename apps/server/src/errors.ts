@@ -662,6 +662,16 @@ declare module "@waitron/shared" {
     /** A master-plan save's entry is out of range; `field` is its path, such as `tables.0.seats`. */
     "floor_plan.invalid": { field: string };
     "merge.seats_required": Record<string, never>;
+    /** The path's table is not the joined table of any part in today's copy. */
+    "joined_table.not_found": { tableId: string };
+    /** A table named to split off is not a part of this joined table still joined to it. */
+    "joined_table.part_invalid": { tableId: string; field: "partIds" };
+    /** The split names every part still joined, which would leave the joined table with none. */
+    "joined_table.split_all": { tableId: string; field: "partIds" };
+    /** A split that leaves two or more parts joined must say the joined table's seats. */
+    "joined_table.seats_required": Record<string, never>;
+    /** Back to its saved place is refused for a joined table while any of its parts is split off. */
+    "joined_table.parts_split_off": { tableId: string };
     /** A floor-plan zone name already exists in this venue. `name` is the operator's own text. */
     "zone.name_taken": { name: string };
     /** A kitchen-station name already exists in this venue. `name` is the operator's own text. */

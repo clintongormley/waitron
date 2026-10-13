@@ -42,6 +42,8 @@ function table(
             joinId: null,
             joinSeats: null,
             inJoinedTable: null,
+            joined: null,
+            splitOffFrom: null,
             ...today,
           },
     signals: [],

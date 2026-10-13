@@ -5707,6 +5707,71 @@ it("carries Long table's parts, naming the imported tables", async () => {
     for (const id of [row.id, row.joined_id, row.part_id]) expect(sourceIds).not.toContain(id);
 });
 
+it("carries a kept size, naming the imported table", async () => {
+  const source = await applyVenue(planVenue(venue("B12348765"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  const cfg: TillConfig = {
+    locationId: locationId(source.locationId),
+    nodeId: nodeId(source.nodeId),
+    locale: "es-ES",
+    invoiceLocales: ["es-ES"],
+    tipsEnabled: false,
+    simplifiedInvoiceLimit: null,
+  };
+  const sourceIds = await withTransaction(suite.db, async (tx) => {
+    const department = await createDepartment(tx, cfg, { name: "Sized service" });
+    const zone = await createServiceZone(tx, cfg, {
+      name: "Sized zone",
+      departmentId: department.id,
+    });
+    const { ids } = await saveZonePlan(
+      tx,
+      cfg,
+      enabledTableRemovals(ALL_MODULES),
+      zone.id,
+      {
+        revision: 0,
+        tables: [
+          { key: "c3", label: "Counter 3", fixed: false, seats: 2, placement: null, partKeys: [] },
+        ],
+      },
+      new Date("2026-10-11T12:00:00Z"),
+    );
+    await tx.execute(
+      sql`insert into floor_plan_table_sizes (id, plan_table_id, width, height) values (${randomUUID()}, ${ids.c3!}, 2, 2)`,
+    );
+    return Object.values(ids);
+  });
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-11T12:00:00Z"),
+    versions,
+  );
+  await applyVenue(planVenue(venue("B98765431"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx, result) =>
+      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+  });
+  const rows = await targetSuite.db.execute<{
+    plan_table_id: string;
+    label: string;
+    width: number;
+    height: number;
+  }>(
+    sql`select s.plan_table_id, p.label, s.width, s.height from floor_plan_table_sizes s join floor_plan_tables p on p.id=s.plan_table_id`,
+  );
+  expect(rows.rows).toEqual([
+    { plan_table_id: expect.any(String), label: "Counter 3", width: 2, height: 2 },
+  ]);
+  expect(sourceIds).not.toContain(rows.rows[0]!.plan_table_id);
+});
+
 describe("dated business-day configuration transfer", () => {
   it("exports the active start, leaves history behind and imports a fresh clock", async () => {
     const source = await applyVenue(planVenue(venue("B77112233"), ALL_MODULES), {

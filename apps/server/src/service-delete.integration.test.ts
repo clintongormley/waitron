@@ -821,12 +821,14 @@ const FLOOR_ROWS = [
   "floor_plans",
   "floor_plan_tables",
   "floor_plan_table_parts",
+  "floor_plan_table_sizes",
   "floor_reset_table_parts",
   "floor_reset_tables",
   "floor_today_tables",
   "floor_today_zones",
   "floor_today_joins",
   "floor_today_join_tables",
+  "floor_today_split_parts",
 ] as const;
 const HISTORY_ROWS = [
   "sales",

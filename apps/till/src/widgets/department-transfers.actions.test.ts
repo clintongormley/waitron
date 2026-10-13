@@ -384,6 +384,8 @@ const joinedFloor = (): TableState[] => {
       joinId: null,
       joinSeats: null,
       inJoinedTable,
+      joined: null,
+      splitOffFrom: null,
     },
     party: null,
     signals: [],

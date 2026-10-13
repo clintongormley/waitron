@@ -29,6 +29,7 @@ const table = (
   fixed: false,
   placement: placed ? { x: 0, y: 0, width: 8, height: 8, shape: "rect", rotation: 0 } : null,
   parts: null,
+  keptSize: null,
 });
 
 const draft: FloorPlanDraft = {
@@ -191,6 +192,21 @@ it("pressing an unplaced table with a remembered place puts it back there and se
   expect(changes).toHaveLength(1);
   expect(changes[0]!.tables.find((t) => t.key === "m3")!.placement).toEqual(at);
   expect(selects).toEqual(["m3"]);
+});
+
+it("clicking a table off the plan puts it back at the size it kept", async () => {
+  const kept: DraftTable = { ...table("m3", "Terrace 2"), keptSize: { width: 2, height: 3 } };
+  const el = await open({ draft: { tables: [table("m1", "Terrace 1", true), kept] } });
+  const { changes } = listen(el);
+  toggle(row(el, "Terrace 2")).click();
+  expect(changes[0]!.tables.find((t) => t.key === "m3")!.placement).toEqual({
+    x: 9,
+    y: 0,
+    width: 2,
+    height: 3,
+    shape: "rect",
+    rotation: 0,
+  });
 });
 
 it("pressing a placed table takes it off", async () => {

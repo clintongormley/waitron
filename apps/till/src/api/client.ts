@@ -1870,6 +1870,10 @@ export interface TableToday {
   joinSeats: number | null;
   /** The joined table's name while this table is one of its parts, which the till never offers. */
   inJoinedTable: string | null;
+  /** For a joined table of today's copy: its parts' ids still joined and split off today. */
+  joined: { parts: string[]; splitOff: string[]; apart: boolean } | null;
+  /** For a part split off today, its joined table's id. */
+  splitOffFrom: string | null;
 }
 
 /**
@@ -3659,6 +3663,18 @@ export class TillApi {
   /** End a free merge → `POST /api/tables/:id/today/split`. */
   async splitToday(tableId: string): Promise<void> {
     await this.#todayChange(tableId, "split", {});
+  }
+
+  /** Split parts off a joined table → `POST /api/tables/:id/today/split-off`.
+   * `seats` is left out when unset: the server refuses a null. */
+  async splitOffToday(
+    tableId: string,
+    split: { partIds: string[]; seats?: number },
+  ): Promise<void> {
+    await this.#todayChange(tableId, "split-off", {
+      partIds: split.partIds,
+      ...(split.seats === undefined ? {} : { seats: split.seats }),
+    });
   }
 
   /** Reset a zone to its saved plan → `POST /api/zones/:id/today/reset`. */

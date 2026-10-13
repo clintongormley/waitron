@@ -508,6 +508,8 @@ describe("till-app: seating a party", () => {
       joinId,
       joinSeats: joinId === null ? null : 8,
       inJoinedTable: null,
+      joined: null,
+      splitOffFrom: null,
     });
     const getTablesState = vi
       .fn()
