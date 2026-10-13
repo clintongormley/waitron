@@ -17,8 +17,8 @@ import type { Logger } from "./logger.js";
 import {
   BACKUP_KEY_PREFIX,
   backupArchiveKey,
-  backupArchiveTimestamp,
   dumpFileName,
+  parseBackupArchiveKey,
 } from "./backup-keys.js";
 import { isPlainKey, type StorageBackend, type StorageCall } from "./storage-backend.js";
 import "./errors.js";
@@ -152,9 +152,12 @@ export async function runOnce(
   }
 }
 
-/** Deletes an artifact past EITHER cap: beyond the `retain` newest (`list` is newest-first), or older
- * than `retainDays` by the stamp in its key, never the file's mtime. A listed name the destination
- * cannot address is left where it is, so it cannot stop the rest being pruned. */
+/** S3's multi-object delete takes at most this many keys. */
+const DELETE_BATCH = 1000;
+
+/** Deletes an archive past EITHER cap: beyond the `retain` newest, or older than `retainDays`, both
+ * by the stamp in its key, never the file's mtime. Only a name {@link parseBackupArchiveKey} reads
+ * is an archive; any other name is left where it is and does not take a kept slot. */
 export async function pruneBackend(
   backend: StorageBackend,
   retain: number,
@@ -162,14 +165,17 @@ export async function pruneBackend(
   nowMs: number,
   call: StorageCall,
 ): Promise<void> {
-  const objects = (await backend.list(BACKUP_KEY_PREFIX, call)).filter((obj) =>
-    isPlainKey(obj.key),
-  );
+  const archives = (await backend.list(BACKUP_KEY_PREFIX, call)).flatMap(({ key }) => {
+    const parsed = isPlainKey(key) ? parseBackupArchiveKey(key) : null;
+    return parsed === null ? [] : [{ key, ms: parsed.timestamp.getTime() }];
+  });
+  archives.sort((a, b) => b.ms - a.ms || (a.key < b.key ? 1 : a.key > b.key ? -1 : 0));
   const maxAgeMs = retainDays * 24 * 60 * 60 * 1000;
-  const toDelete = objects.filter(
-    (obj, i) => i >= retain || nowMs - backupArchiveTimestamp(obj.key).getTime() > maxAgeMs,
-  );
-  await Promise.all(toDelete.map((obj) => backend.delete(obj.key, call)));
+  const toDelete = archives
+    .filter((archive, i) => i >= retain || nowMs - archive.ms > maxAgeMs)
+    .map((archive) => archive.key);
+  for (let i = 0; i < toDelete.length; i += DELETE_BATCH)
+    await backend.deleteMany(toDelete.slice(i, i + DELETE_BATCH), call);
 }
 
 /**

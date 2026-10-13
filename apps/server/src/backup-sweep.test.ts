@@ -20,7 +20,7 @@ import {
   runOnce,
 } from "./backup-sweep.js";
 import type { BackupOutcomeHolder } from "./alert-sources.js";
-import { backupArchiveKey } from "./backup-keys.js";
+import { backupArchiveKey, parseBackupArchiveKey } from "./backup-keys.js";
 import { LocalFsBackend } from "./local-fs-backend.js";
 import { ALL_MODULES } from "./modules.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
@@ -84,8 +84,16 @@ class FakeBackend implements StorageBackend {
   }
 }
 
+/** The one archive key a tick stamped 2026-09-05T00:00:00Z stored; its nonce is random. */
+function keyIn(backend: FakeBackend): string {
+  const keys = [...backend.objects.keys()].filter(
+    (k) => parseBackupArchiveKey(k)?.timestamp.getTime() === Date.UTC(2026, 8, 5),
+  );
+  expect(keys).toHaveLength(1);
+  return keys[0];
+}
+
 describe("runOnce (fan-out)", () => {
-  const KEY = "waitron-20260905T000000Z.backup.enc";
   let staging: string;
   let mediaDir: string;
   let stateDir: string;
@@ -124,19 +132,19 @@ describe("runOnce (fan-out)", () => {
 
   const entriesOf = (backend: FakeBackend): Map<string, Buffer> =>
     new Map(
-      unpackArchive(decryptArtifact(backend.objects.get(KEY)!, "recovery-key-1")).map((e) => [
-        e.name,
-        Buffer.from(e.bytes),
-      ]),
+      unpackArchive(decryptArtifact(backend.objects.get(keyIn(backend))!, "recovery-key-1")).map(
+        (e) => [e.name, Buffer.from(e.bytes)],
+      ),
     );
 
   it("encrypts the archive once and fans the SAME ciphertext to every backend", async () => {
     const a = new FakeBackend("a");
     const b = new FakeBackend("b");
     await runOnce(deps([a, b]));
-    expect(a.objects.has(KEY)).toBe(true);
+    const key = keyIn(a);
+    expect(keyIn(b)).toBe(key);
     // Encrypted once: byte-identical ciphertext to every backend.
-    expect(b.objects.get(KEY)!.equals(a.objects.get(KEY)!)).toBe(true);
+    expect(b.objects.get(key)!.equals(a.objects.get(key)!)).toBe(true);
     expect(entriesOf(a).get("db.dump")!.toString()).toBe("DUMP-BYTES");
   });
 
@@ -184,7 +192,7 @@ describe("runOnce (fan-out)", () => {
     await writeFile(join(stateDir, "modules.json"), '{"modules":{}}\n');
     const a = new FakeBackend("a");
     await runOnce(deps([a]));
-    const order = unpackArchive(decryptArtifact(a.objects.get(KEY)!, "recovery-key-1")).map(
+    const order = unpackArchive(decryptArtifact(a.objects.get(keyIn(a))!, "recovery-key-1")).map(
       (e) => e.name,
     );
     expect(order).toEqual([
@@ -323,7 +331,7 @@ describe("runOnce (fan-out)", () => {
       a.objects.set(backupArchiveKey(new Date(d)), Buffer.from("old"));
     await runOnce({ ...deps([a]), retain: 1 });
     expect(a.objects.size).toBe(1);
-    expect(a.objects.has("waitron-20260905T000000Z.backup.enc")).toBe(true);
+    keyIn(a);
   });
 
   it("chmods the staged plaintext copy to 0600 before it is read/encrypted", async () => {
@@ -803,10 +811,11 @@ describe("pruneBackend (dual count + age retention)", () => {
     const backend = new FakeBackend("dual");
     const nowMs = Date.parse("2026-09-20T00:00:00Z");
     const day = 24 * 60 * 60 * 1000;
+    const key = (ms: number) =>
+      backupArchiveKey(new Date(ms), "00000000-0000-4000-8000-000000000000");
     // Seeded oldest-first, so `list` returns them newest-first.
     const ages = [20, 10, 2, 1, 0];
-    for (const d of ages)
-      backend.objects.set(backupArchiveKey(new Date(nowMs - d * day)), Buffer.from(`age-${d}`));
+    for (const d of ages) backend.objects.set(key(nowMs - d * day), Buffer.from(`age-${d}`));
 
     // Age 2d is within the count cap of 3 but past the 1-day age cap.
     await pruneBackend(backend, 3, 1, nowMs, { signal: new AbortController().signal });
@@ -814,13 +823,13 @@ describe("pruneBackend (dual count + age retention)", () => {
     const survivors = [...backend.objects.keys()].sort();
     expect(survivors).toEqual(
       [
-        backupArchiveKey(new Date(nowMs)),
-        backupArchiveKey(new Date(nowMs - 1 * day)), // exactly the age cap, which is kept
+        key(nowMs),
+        key(nowMs - 1 * day), // exactly the age cap, which is kept
       ].sort(),
     );
-    expect(backend.objects.has(backupArchiveKey(new Date(nowMs - 2 * day)))).toBe(false);
-    expect(backend.objects.has(backupArchiveKey(new Date(nowMs - 10 * day)))).toBe(false);
-    expect(backend.objects.has(backupArchiveKey(new Date(nowMs - 20 * day)))).toBe(false);
+    expect(backend.objects.has(key(nowMs - 2 * day))).toBe(false);
+    expect(backend.objects.has(key(nowMs - 10 * day))).toBe(false);
+    expect(backend.objects.has(key(nowMs - 20 * day))).toBe(false);
   });
 
   it("age is read from each key's own stamp, not filesystem mtime", async () => {
@@ -873,6 +882,114 @@ describe("pruneBackend (dual count + age retention)", () => {
     }
   });
 });
+describe("pruneBackend (which names it reads, in what order, and how it deletes)", () => {
+  const call = () => ({ signal: new AbortController().signal });
+  const nowMs = Date.UTC(2026, 9, 13);
+  const day = 24 * 60 * 60 * 1000;
+  const nonce = (n: number) => `00000000-0000-4000-8000-${n.toString(16).padStart(12, "0")}`;
+
+  // Lists in exactly the order given, and records every delete it is asked for.
+  function recordingBackend(listed: string[], list?: () => Promise<StoredObject[]>) {
+    const record = { batches: [] as string[][], singles: [] as string[], maxInFlight: 0 };
+    let inFlight = 0;
+    const backend: StorageBackend = {
+      id: "recording",
+      put: async () => {},
+      putFile: async () => {},
+      getFile: async () => {},
+      get: async () => Buffer.alloc(0),
+      list: list ?? (async () => listed.map((key) => ({ key, size: 0, mtimeMs: 0 }))),
+      delete: async (key) => {
+        record.singles.push(key);
+      },
+      deleteMany: async (keys) => {
+        inFlight++;
+        record.maxInFlight = Math.max(record.maxInFlight, inFlight);
+        await new Promise((r) => setTimeout(r, 1));
+        record.batches.push([...keys]);
+        inFlight--;
+      },
+    };
+    return { backend, record };
+  }
+
+  it("never deletes a malformed, foreign or old-format name, and none of them takes a kept slot", async () => {
+    const newest = backupArchiveKey(new Date(nowMs - 1 * day), nonce(1));
+    const older = backupArchiveKey(new Date(nowMs - 2 * day), nonce(2));
+    const foreign = [
+      "waitron-20261012T235959Z.backup.enc",
+      `waitron-20261012T235959Z-${nonce(0xabc).toUpperCase()}.backup.enc`,
+      `waitron-20261012T235959Z-${nonce(4)}.backup.enc.part`,
+      `waitron-20261332T000000Z-${nonce(5)}.backup.enc`,
+      "waitron-notes.txt",
+    ];
+    const { backend, record } = recordingBackend([...foreign, newest, older]);
+    await pruneBackend(backend, 1, 3650, nowMs, call());
+    expect(record.batches).toEqual([[older]]);
+    expect(record.singles).toEqual([]);
+  });
+
+  it("keeps the larger key of two archives from the same second, whatever order the list gives", async () => {
+    const at = new Date(nowMs - day);
+    const low = backupArchiveKey(at, nonce(1));
+    const high = backupArchiveKey(at, nonce(2));
+    for (const listed of [
+      [low, high],
+      [high, low],
+    ]) {
+      const { backend, record } = recordingBackend(listed);
+      await pruneBackend(backend, 1, 3650, nowMs, call());
+      expect(record.batches).toEqual([[low]]);
+    }
+  });
+
+  it("orders by the stamp in the name, not by the file's mtime", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "backup-prune-order-"));
+    try {
+      const newer = backupArchiveKey(new Date(nowMs - 1 * day), nonce(1));
+      const older = backupArchiveKey(new Date(nowMs - 5 * day), nonce(2));
+      await writeFile(join(dir, newer), "x");
+      await writeFile(join(dir, older), "x");
+      // The older archive was touched last, so a newest-by-mtime list puts it first.
+      await utimes(join(dir, newer), 1000, 1000);
+      await utimes(join(dir, older), 2000, 2000);
+
+      await pruneBackend(new LocalFsBackend("order", dir), 1, 3650, nowMs, call());
+
+      expect(await readdir(dir)).toEqual([newer]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("deletes more than 1,000 expired archives in batches of at most 1,000, one batch at a time", async () => {
+    const keep = backupArchiveKey(new Date(nowMs), nonce(0));
+    const expired = Array.from({ length: 1005 }, (_, i) =>
+      backupArchiveKey(new Date(nowMs - 10 * day - i * 1000), nonce(i + 1)),
+    );
+    const { backend, record } = recordingBackend([keep, ...expired]);
+    await pruneBackend(backend, 5000, 1, nowMs, call());
+    expect(record.batches.map((b) => b.length)).toEqual([1000, 5]);
+    expect(record.batches.flat().sort()).toEqual([...expired].sort());
+    expect(record.maxInFlight).toBe(1);
+    expect(record.singles).toEqual([]);
+  });
+
+  it("asks for no delete when nothing is past either cap", async () => {
+    const { backend, record } = recordingBackend([backupArchiveKey(new Date(nowMs), nonce(1))]);
+    await pruneBackend(backend, 5, 30, nowMs, call());
+    expect(record.batches).toEqual([]);
+  });
+
+  it("deletes nothing and rejects when the listing fails", async () => {
+    const refused = new Error("list refused");
+    const { backend, record } = recordingBackend([], () => Promise.reject(refused));
+    await expect(pruneBackend(backend, 0, 0, nowMs, call())).rejects.toBe(refused);
+    expect(record.batches).toEqual([]);
+    expect(record.singles).toEqual([]);
+  });
+});
+
 // The default manifest builder, which every case above replaces, against a real migrated venue.
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -913,9 +1030,8 @@ describe("runOnce with the real buildManifest (a migrated venue)", () => {
         await writeFile(outFile, "DUMP-BYTES");
       },
     });
-    const key = "waitron-20260905T000000Z.backup.enc";
     const entries = new Map(
-      unpackArchive(decryptArtifact(a.objects.get(key)!, "recovery-key-1")).map((e) => [
+      unpackArchive(decryptArtifact(a.objects.get(keyIn(a))!, "recovery-key-1")).map((e) => [
         e.name,
         Buffer.from(e.bytes),
       ]),
