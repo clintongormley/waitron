@@ -911,8 +911,9 @@ export class TillFloorScreen extends LitElement {
       .filter((each) => each.today?.joinId === joinId)
       .sort((a, b) => inNumberOrder(a.label, b.label))
       .at(-1)!;
-    await api.splitTable(party.id, last.id, null, party.revision);
-    return null;
+    const answer = await api.splitTable(party.id, last.id, null, party.revision);
+    const answered = answer.zoneRevisions?.[last.zoneId];
+    return answered === undefined ? null : { zoneId: last.zoneId, revision: answered };
   }
 
   /** The zone's table Join with… was opened for, while the map draws it. */

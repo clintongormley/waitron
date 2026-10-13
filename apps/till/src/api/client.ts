@@ -3892,7 +3892,11 @@ export class TillApi {
     tableId: string,
     billId: string | null,
     expectedPartyRevision: number,
-  ): Promise<{ partyId: string; mainBillId: string | null }> {
+  ): Promise<{
+    partyId: string;
+    mainBillId: string | null;
+    zoneRevisions?: Record<string, number>;
+  }> {
     return this.#request(`/api/parties/${partyId}/split-table`, "POST", {
       tableId,
       billId,

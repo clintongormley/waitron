@@ -343,6 +343,32 @@ describe("till-floor-screen: the details sheet's changes for today", () => {
     expect(refreshes.count).toBe(1);
   });
 
+  it("a change after Split of a seated merge, before any read, sends the room's revision the split answered", async () => {
+    const P = party("P", 6, ["t5", "t4"]);
+    for (const [answered, sent] of [
+      [{ z1: 8 }, 8],
+      [{ z2: 8 }, 7],
+    ] as const) {
+      const api = stubApi();
+      api.splitTable.mockResolvedValueOnce({
+        partyId: "N",
+        mainBillId: null,
+        zoneRevisions: answered,
+      });
+      const el = await mount(
+        [
+          planned("t5", 22, { joinId: "J", zoneRevision: 7 }, P),
+          planned("t4", 20, { joinId: "J", zoneRevision: 7 }, P),
+        ],
+        api,
+      );
+      await press(el, "t4", "split");
+      await press(el, "t4", "back");
+      expect(api.backToSavedToday).toHaveBeenCalledExactlyOnceWith("t4", sent);
+      cleanupWidgets();
+    }
+  });
+
   it("Rotate, Back and Take off call their routes; Change seats asks first", async () => {
     const api = stubApi();
     const el = await mount([planned("t1", 2, { seats: 6 })], api);
