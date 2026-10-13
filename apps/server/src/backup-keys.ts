@@ -35,9 +35,6 @@ export function parseBackupArchiveKey(key: string): { timestamp: Date; nonce: st
   const timestamp = new Date(Date.UTC(y, mo - 1, d, h, mi, s));
   // Date.UTC rolls an impossible field over (month 13, 30 February), so it would no longer print
   // back as the same stamp.
-  if (
-    basicIsoStamp(timestamp) !== key.slice(BACKUP_KEY_PREFIX.length, BACKUP_KEY_PREFIX.length + 16)
-  )
-    return null;
+  if (!key.startsWith(`${BACKUP_KEY_PREFIX}${basicIsoStamp(timestamp)}-`)) return null;
   return { timestamp, nonce: m[7] };
 }

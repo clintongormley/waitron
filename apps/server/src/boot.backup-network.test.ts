@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
@@ -15,6 +15,7 @@ import { ensureBoxSecrets } from "./box-secrets.js";
 import type { StorageBackend, StorageCall } from "./storage-backend.js";
 import { provisionBillVenue, registroCount, type BillVenue } from "./testing/bill-venue.js";
 import {
+  copyMigrationsRoot,
   fetchHealthOk,
   httpsVia,
   waitForEvent,
@@ -103,10 +104,7 @@ async function tradingEnv(): Promise<{ env: Record<string, string>; scratch: str
   const scratch = await mkdtemp(join(tmpdir(), "waitron-boot-backup-network-"));
   scratches.push(scratch);
   const migrationsRoot = join(scratch, "migrations");
-  for (const [index, set] of manifestSets().entries())
-    await cp(migrations[index]!.migrationsFolder, join(migrationsRoot, set.name), {
-      recursive: true,
-    });
+  await copyMigrationsRoot(migrationsRoot);
   await writeFile(
     join(scratch, "modules.json"),
     JSON.stringify({ modules: { "fiscal-none": false } }),
