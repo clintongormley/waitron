@@ -566,6 +566,15 @@ it.each([
   },
 );
 
+it("announces a product whose name holds a replacement pattern as written", async () => {
+  const { el } = await mount({ products: [product({ name: "Pan $&" })] });
+  await addItem(el, "Pan $&");
+  expect(text(el, "added-status")).toBe(t("extras.product_added").split("{name}").join("Pan $&"));
+  const max = field<HTMLElementTagNameMap["wt-number-stepper"]>(el, "item-0-max-quantity");
+  expect(max.decreaseLabel("Máx $&")).toBe(t("action.decrease").split("{label}").join("Máx $&"));
+  expect(max.increaseLabel("Máx $&")).toBe(t("action.increase").split("{label}").join("Máx $&"));
+});
+
 it("adds nothing when the picker closes without a choice", async () => {
   const { el } = await mount();
   const combobox = await openPicker(el);

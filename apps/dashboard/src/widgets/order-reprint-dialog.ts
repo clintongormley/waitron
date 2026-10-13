@@ -8,7 +8,7 @@ import "@waitron/ui/src/components/wt-spinner.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import type { DashboardApi, OrderRowDto } from "../api/client.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import { t } from "../i18n/t.js";
+import { fill, t } from "../i18n/t.js";
 
 @customElement("dashboard-order-reprint-dialog")
 export class OrderReprintDialog extends LitElement {
@@ -133,14 +133,12 @@ export class OrderReprintDialog extends LitElement {
       ${
         this.row
           ? html`<p>
-              ${t("orders.reprint.bill")
-                .replace("{bill}", bill)
-                .replace("{invoice}", this.row.invoiceNumber ?? "")}
+              ${fill("orders.reprint.bill", { bill, invoice: this.row.invoiceNumber ?? "" })}
             </p>`
           : nothing
       }
       ${this.#renderPrinters()}
-      ${this.sentTo === null ? nothing : html`<p role="status">${t("orders.reprint.sent").replace("{printer}", this.sentTo)}</p>`}
+      ${this.sentTo === null ? nothing : html`<p role="status">${fill("orders.reprint.sent", { printer: this.sentTo })}</p>`}
       ${this.error === null ? nothing : html`<p role="alert">${this.error}</p>`}
       ${
         this.printersFailed

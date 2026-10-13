@@ -453,6 +453,18 @@ describe("backup-screen", () => {
     expect(q(el, "[data-test=retain-days]")).not.toBeNull();
   });
 
+  it("names a retention stepper's buttons by a label holding a replacement pattern as written", async () => {
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api: stubApi() });
+    await flush(el);
+    const stepper = q(el, "[data-test=retain-count]") as HTMLElementTagNameMap["wt-number-stepper"];
+    expect(stepper.decreaseLabel("Copias $&")).toBe(
+      t("action.decrease").split("{label}").join("Copias $&"),
+    );
+    expect(stepper.increaseLabel("Copias $&")).toBe(
+      t("action.increase").split("{label}").join("Copias $&"),
+    );
+  });
+
   it("mints a key by default and shows it with copy + download + the saved-it checkbox", async () => {
     const api = stubApi();
     const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });

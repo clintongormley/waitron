@@ -83,8 +83,7 @@ it("a live policy and receipt read preserves the host-selected dialog's authored
   await expect
     .poll(() => fetchImpl.mock.calls.filter(([path]) => path.endsWith("/bar/receipt")).length)
     .toBe(2);
-  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-  expect(receiptField(el, "operationDescription").value).toBe("New elsewhere");
+  await expect.poll(() => receiptField(el, "operationDescription").value).toBe("New elsewhere");
   expect(receiptField(el, "email").value).toBe("draft@example.com");
   expect(
     el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>("[name=receiptPrintMode]")!

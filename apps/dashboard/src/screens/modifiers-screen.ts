@@ -32,7 +32,7 @@ import type {
 } from "../api/client.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { dashboardPath } from "../navigation.js";
-import { t } from "../i18n/t.js";
+import { fill, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { countOf } from "../widgets/count-text.js";
 
@@ -533,7 +533,7 @@ export class ModifiersScreen extends LitElement {
     ></wt-data-table>`;
   }
   #usedByHeading(list: { name: string }): string {
-    return t("modifiers.used_by_named").replace("{name}", list.name);
+    return fill("modifiers.used_by_named", { name: list.name });
   }
   #deleteWarning(dependants: ListDependants): string {
     const parts = [t("modifiers.delete_warning_intro")];
@@ -683,7 +683,7 @@ export class ModifiersScreen extends LitElement {
         size="standard"
         data-test="delete-dialog"
         .open=${this.deleting !== null}
-        heading=${t("modifiers.delete_named").replace("{name}", this.deleting?.name ?? "")}
+        heading=${fill("modifiers.delete_named", { name: this.deleting?.name ?? "" })}
         @keydown=${(event: KeyboardEvent) => {
           if (this.busy && event.key === "Escape") event.preventDefault();
         }}

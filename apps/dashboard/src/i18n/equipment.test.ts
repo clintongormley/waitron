@@ -10,3 +10,14 @@ it("names the holding device, adds who is signed in on it, and says when nobody 
   );
   expect(holderText(null)).toBe(t("equipment.holder_none"));
 });
+
+it("puts a device name holding a replacement pattern or the person placeholder in as written", () => {
+  expect(
+    holderText({ deviceId: "d1", deviceName: "Móvil {person} $&", personName: "Ana $&" }),
+  ).toBe(
+    t("equipment.holder_with_person")
+      .split("{device}")
+      .map((part) => part.split("{person}").join("Ana $&"))
+      .join("Móvil {person} $&"),
+  );
+});

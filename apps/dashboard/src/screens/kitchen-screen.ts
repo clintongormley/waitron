@@ -16,7 +16,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "../widgets/course-list.js";
-import { t } from "../i18n/t.js";
+import { fill, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import type { BumpMode, DashboardApi, FireControl, KitchenTimingDefaults } from "../api/client.js";
 
@@ -278,7 +278,7 @@ export class KitchenScreen extends LitElement {
       const field = TIMING_FIELDS.find((field) => field === params?.field);
       const message =
         code === "station.thresholds_invalid" && typeof params?.name === "string"
-          ? t("kitchen.timing_station_invalid").replace("{name}", params.name)
+          ? fill("kitchen.timing_station_invalid", { name: params.name })
           : code === "management.request_invalid" && field
             ? t("kitchen.timing_positive")
             : codeMessage(code);

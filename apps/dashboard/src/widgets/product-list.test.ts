@@ -2743,6 +2743,15 @@ describe("the product list as a tree", () => {
     expect(count("f")).toBe(counted(0, 0));
   });
 
+  it("names a category's activator by a name holding a replacement pattern as written", async () => {
+    const { root } = await mountTree({
+      categories: [{ ...drinks, name: "Bebidas $&" }, beer, food],
+    });
+    expect(
+      root.querySelector('tr[data-row-key="folder:d"] .row-activate')!.getAttribute("aria-label"),
+    ).toBe(t("folders.open_named").split("{name}").join("Bebidas $&"));
+  });
+
   it("opens and closes a category from a click or Enter on its row, saying which it will do", async () => {
     const { el, root, table } = await mountTree();
     const activator = () =>

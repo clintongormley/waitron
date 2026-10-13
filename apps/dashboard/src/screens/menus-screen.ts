@@ -78,7 +78,7 @@ import {
   HOME_TILE_MODES,
 } from "@waitron/catalogue/src/device-home.js";
 import { dashboardPath, leftToBrowser } from "../navigation.js";
-import { t } from "../i18n/t.js";
+import { fill, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 
 const TABS = ["structure", "prices", "home", "preview"] as const;
@@ -884,7 +884,7 @@ export class MenusScreen extends LitElement {
                 [
                   ...path,
                   node.includedMenuId
-                    ? t("menus.menu_prefix").replace("{name}", node.internalName ?? "")
+                    ? fill("menus.menu_prefix", { name: node.internalName ?? "" })
                     : (node.internalName ?? ""),
                 ].join(PATH_SEPARATOR),
               );
@@ -925,7 +925,7 @@ export class MenusScreen extends LitElement {
     this.creatingSection = null;
     this.includingMenu = null;
     if (target.menuId === this.menuId)
-      this.memberError = t("menus.list_gone").replace("{name}", target.name);
+      this.memberError = fill("menus.list_gone", { name: target.name });
     return true;
   }
 
@@ -933,7 +933,7 @@ export class MenusScreen extends LitElement {
    * to its list; with the menu's structure unread it cannot tell, and says nothing. */
   #reportSavedToLost(target: ListTarget): void {
     if (target.menuId === this.menuId && this.structure !== null && !this.#holds(target))
-      this.memberError = t("menus.list_gone_saved").replace("{name}", target.name);
+      this.memberError = fill("menus.list_gone_saved", { name: target.name });
   }
 
   /** When a change to `target` is refused while the list on screen is not `target`'s — it is
@@ -941,9 +941,10 @@ export class MenusScreen extends LitElement {
    * refusal, so the refusal is not read as being about what is on screen. Says whether it did. */
   #reportRefusedElsewhere(target: ListTarget, error: unknown): boolean {
     if (target.menuId === this.menuId && target.listId === this.#listId) return false;
-    this.memberError = t("menus.change_not_saved")
-      .replace("{name}", target.name)
-      .replace("{reason}", codeMessage(codeOf(error)));
+    this.memberError = fill("menus.change_not_saved", {
+      name: target.name,
+      reason: codeMessage(codeOf(error)),
+    });
     return true;
   }
 
@@ -1925,9 +1926,10 @@ export class MenusScreen extends LitElement {
       this.shortcutFormError = codeMessage(code);
       return;
     }
-    this.shortcutError = t("home.add_refused")
-      .replace("{name}", names.get(notAdded[0]!) ?? notAdded[0]!)
-      .replace("{reason}", codeMessage(code));
+    this.shortcutError = fill("home.add_refused", {
+      name: names.get(notAdded[0]!) ?? notAdded[0]!,
+      reason: codeMessage(code),
+    });
     void this.#focusInvalid("add-shortcut");
   }
 
@@ -2058,10 +2060,7 @@ export class MenusScreen extends LitElement {
           if (namesThePrice(error, save))
             this.priceRefusals = { ...this.priceRefusals, [save.key]: reason };
           this.priceOutcome = { kind: "refused", save, reason };
-        } else
-          this.memberError = t("menus.change_not_saved")
-            .replace("{name}", save.name)
-            .replace("{reason}", reason);
+        } else this.memberError = fill("menus.change_not_saved", { name: save.name, reason });
       }
       // Saves are answered in the order made, so a refusal under this field came from an earlier
       // save, and the field now holds a price that was stored.
@@ -2293,7 +2292,7 @@ export class MenusScreen extends LitElement {
       .languages=${currentContentLanguages()}
       .value=${this.menuDetails}
       .fieldErrors=${this.menuFormErrors}
-      heading=${this.menuForm?.id ? t("menus.rename_heading").replace("{name}", this.menuForm.name) : t("menus.create")}
+      heading=${this.menuForm?.id ? fill("menus.rename_heading", { name: this.menuForm.name }) : t("menus.create")}
       @wt-submit=${(event: CustomEvent<SectionInput>) => {
         event.stopPropagation();
         void this.#saveMenu(event.detail);
@@ -2711,7 +2710,7 @@ export class MenusScreen extends LitElement {
         {
           listId: target.listId,
           memberId: node.memberId,
-          name: node.includedMenuId ? t("menus.menu_prefix").replace("{name}", name) : name,
+          name: node.includedMenuId ? fill("menus.menu_prefix", { name }) : name,
           list: target.name,
         },
       ];
@@ -3233,7 +3232,7 @@ export class MenusScreen extends LitElement {
         .languages=${currentContentLanguages()}
         .value=${this.editingSection}
         .fieldErrors=${this.newSectionErrors}
-        heading=${this.editingSection ? t("menus.edit_section") : t("menus.new_section_heading").replace("{list}", this.creatingSection?.name ?? "")}
+        heading=${this.editingSection ? t("menus.edit_section") : fill("menus.new_section_heading", { list: this.creatingSection?.name ?? "" })}
         @wt-close=${{
           // The form stops its dialog's close, so it is caught on its way in.
           handleEvent: () => this.#windowClosed(),
@@ -3286,24 +3285,23 @@ export class MenusScreen extends LitElement {
         open: this.deletingSection !== null,
         heading: t("menus.delete_section"),
         body: html`<p>
-          ${t(
+          ${fill(
             this.deletingSection &&
               this.#ownedDescendants(this.#sectionNode(this.deletingSection.id)?.children ?? []) ===
                 1
               ? "menus.delete_section_one"
               : "menus.delete_section_note",
-          )
-            .replace("{name}", this.deletingSection?.internalName ?? "")
-            .replace(
-              "{count}",
-              String(
+            {
+              name: this.deletingSection?.internalName ?? "",
+              count: String(
                 this.deletingSection
                   ? this.#ownedDescendants(
                       this.#sectionNode(this.deletingSection.id)?.children ?? [],
                     )
                   : 0,
               ),
-            )}
+            },
+          )}
         </p>`,
         save: "delete-section-save",
         saveLabel: t("action.delete"),
@@ -3401,10 +3399,7 @@ export class MenusScreen extends LitElement {
       ).replace("{count}", String(keys.length)),
       body: html`<ul data-test="remove-selected-items">
         ${members.map(
-          ({ name, list }) =>
-            html`<li>
-              ${t("menus.remove_selected_from").replace("{name}", name).replace("{list}", list)}
-            </li>`,
+          ({ name, list }) => html`<li>${fill("menus.remove_selected_from", { name, list })}</li>`,
         )}
       </ul>`,
       save: "remove-selected-save",
@@ -3448,7 +3443,7 @@ export class MenusScreen extends LitElement {
       data-test="add-products"
       .open=${target !== null}
       .beforeClose=${leaveCoordinatorFor(this) ? this.#beforeProductsClose : undefined}
-      heading=${t("sections.add_products_heading").replace("{name}", target?.name ?? "")}
+      heading=${fill("sections.add_products_heading", { name: target?.name ?? "" })}
       @keydown=${this.#guardEscape}
       @wt-close=${(event: Event) => {
         event.stopPropagation();

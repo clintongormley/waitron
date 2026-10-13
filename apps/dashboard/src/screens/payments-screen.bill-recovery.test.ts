@@ -173,6 +173,24 @@ describe("bill payment recovery on the Payments screen", () => {
     expect(q(el, "[data-test=bill-load-error]")).not.toBeNull();
   });
 
+  it("names an order label holding a replacement pattern as written in the check and record windows", async () => {
+    const el = await mount(
+      stubApi({
+        listStuckBillPayments: vi.fn().mockResolvedValue([{ ...PAYMENT, label: "Terrace $&" }]),
+      }),
+    );
+    q(el, "[data-test=check-bill-payment-bp-1]")!.click();
+    await flush(el);
+    expect(q(el, "[data-test=bill-check-dialog] p")!.textContent!.trim()).toBe(
+      "Waitron will ask the card provider about Order 12 · Terrace $& and record an outcome only if it can confirm one. If the outcome is unclear, the bill stays locked.",
+    );
+    q(el, "[data-test=attest-bill-payment-bp-1]")!.click();
+    await flush(el);
+    expect(q(el, "[data-test=bill-attest-dialog] p")!.textContent!.trim()).toMatch(
+      /^Check Order 12 · Terrace \$& in the provider's own dashboard/,
+    );
+  });
+
   it("explains when a reader is still processing instead of suggesting another check", async () => {
     const api = stubApi({
       resolveStuckBillPayment: vi.fn().mockRejectedValue({

@@ -1193,6 +1193,37 @@ describe("Valencian names on the content languages screen", () => {
   });
 });
 
+it("puts a language tag holding a replacement pattern into its required-translation warning as written", async () => {
+  const language = "x-$&";
+  const gap = {
+    kind: "product",
+    id: "p",
+    staffName: "STAFF",
+    defaultName: "DEFAULT",
+    reason: "absent",
+  };
+  const el = await mount(
+    api({
+      getContentLanguages: vi
+        .fn()
+        .mockResolvedValue({ defaultLanguage: "es", languages: ["es", language] }),
+      getContentLanguageRules: vi
+        .fn()
+        .mockResolvedValue({ required: [language], official: ["es"] }),
+      getContentTranslationGaps: vi
+        .fn()
+        .mockResolvedValue([{ language, gaps: [gap, { ...gap, id: "q" }] }]),
+    }),
+  );
+  await vi.waitFor(() => expect(q(el, `[data-test="required-gaps-${language}"]`)).not.toBeNull());
+  expect(q(el, `[data-test="required-gaps-${language}"]`)!.textContent!.trim()).toBe(
+    t("content_gaps.required_warning")
+      .split("{count}")
+      .map((part) => part.split("{language}").join(language))
+      .join("2"),
+  );
+});
+
 it.each([
   ["en-GB", "Valencian"],
   ["es-ES", "valenciano"],

@@ -6,7 +6,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import type { CatalogueSummary, MenuStructure, MenuStructureNode } from "../api/client.js";
-import { t } from "../i18n/t.js";
+import { fill, t } from "../i18n/t.js";
 
 export interface PlacementSection {
   id: string;
@@ -226,9 +226,7 @@ export class AddToMenus extends LitElement {
   #placeName(sectionId: string): string {
     const place = this.#places.get(sectionId);
     if (!place) return t("members.missing");
-    return place.topLevel
-      ? t("add_to_menus.place_top_level").replace("{menu}", place.name)
-      : place.name;
+    return place.topLevel ? fill("add_to_menus.place_top_level", { menu: place.name }) : place.name;
   }
 
   #toggle(event: Event, sectionId: string): void {
@@ -286,7 +284,7 @@ export class AddToMenus extends LitElement {
       ${
         sharedWith.length
           ? html`<span class="mark" data-test="shared"
-              >${t("add_to_menus.shared").replace("{menus}", sharedWith.join(", "))}</span
+              >${fill("add_to_menus.shared", { menus: sharedWith.join(", ") })}</span
             >`
           : nothing
       }
@@ -308,7 +306,7 @@ export class AddToMenus extends LitElement {
   #failures() {
     if (!this.failures.length) return nothing;
     return html`<div class="error" role="alert" data-test="placement-error">
-      <p>${t("add_to_menus.failed").replace("{name}", this.productName)}</p>
+      <p>${fill("add_to_menus.failed", { name: this.productName })}</p>
       <ul>
         ${this.failures.map(
           ({ sectionId, reason }) => html`<li>${this.#placeName(sectionId)}: ${reason}</li>`,
@@ -320,14 +318,14 @@ export class AddToMenus extends LitElement {
   #body() {
     if (this.loadError !== null)
       return html`<p class="error" role="alert" data-test="load-error">
-        ${t("add_to_menus.load_error").replace("{name}", this.productName)} ${this.loadError}
+        ${fill("add_to_menus.load_error", { name: this.productName })} ${this.loadError}
       </p>`;
     if (this.menus === null)
       return html`<p class="notice" role="status" data-test="loading">
         ${t("add_to_menus.loading")}
       </p>`;
     return html`${this.#failures()}
-      <p>${t("add_to_menus.intro").replace("{name}", this.productName)}</p>
+      <p>${fill("add_to_menus.intro", { name: this.productName })}</p>
       ${this.#hasShared ? html`<p class="notice">${t("add_to_menus.shared_note")}</p>` : nothing}
       ${this.menus.map(
         (menu) =>
@@ -357,7 +355,7 @@ export class AddToMenus extends LitElement {
       size="standard"
       .open=${this.open}
       .beforeClose=${this.#leave ? this.#beforeClose : undefined}
-      heading=${t("add_to_menus.heading").replace("{name}", this.productName)}
+      heading=${fill("add_to_menus.heading", { name: this.productName })}
       @keydown=${(event: KeyboardEvent) => {
         if (this.busy && event.key === "Escape") event.preventDefault();
       }}

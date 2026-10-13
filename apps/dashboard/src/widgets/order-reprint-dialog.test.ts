@@ -60,6 +60,25 @@ it("prints a duplicate on the selected printer and says where it went", async ()
   await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Copy sent to Kitchen"));
 });
 
+it("puts a bill label holding the invoice placeholder, and a printer name holding a replacement pattern, in as written", async () => {
+  setLocale("en-GB");
+  const api = {
+    getOrderPrinters: vi.fn().mockResolvedValue([{ id: "printer-1", name: "Barra $&" }]),
+    reprintOrder: vi.fn().mockResolvedValue({ jobId: "job-1" }),
+    liveData: new LiveData(),
+  } as unknown as DashboardApi;
+  const { el } = await mountWidget<OrderReprintDialog>("dashboard-order-reprint-dialog", {
+    api,
+    row: { ...row, orderNumber: null, label: "Terraza {invoice} $&" },
+  });
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("wt-combobox")?.value).toBe("printer-1"),
+  );
+  expect(el.shadowRoot!.textContent).toContain("Bill Terraza {invoice} $&, invoice A/12");
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=print]")!.click();
+  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Copy sent to Barra $&"));
+});
+
 it("keeps a refused print open and shows the printer refusal under its control", async () => {
   setLocale("en-GB");
   const api = {

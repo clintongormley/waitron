@@ -116,6 +116,53 @@ describe("staged translation dialog", () => {
       expect(q(el, "[data-test=complete]")!.textContent!.trim()).toBe(sentence);
     },
   );
+  it("puts a name and a language tag holding a replacement pattern in as written", async () => {
+    const { el } = await mount([target("one", { name: "Pan $&" })]);
+    const link = q(el, "wt-data-table")!.shadowRoot!.querySelector("tbody a")!;
+    expect(link.getAttribute("aria-label")).toBe(
+      t("content_gaps.open_named").split("{name}").join("Pan $&"),
+    );
+    cleanupWidgets();
+    const language = "x-$&";
+    const api = {
+      getContentTranslationTargets: vi.fn().mockResolvedValue({ ...result([]), language }),
+    } as unknown as DashboardApi;
+    const mounted = await mountWidget<ContentTranslationsDialog>(
+      "dashboard-content-translations-dialog",
+      { api, language, open: true },
+    );
+    await vi.waitFor(() => expect(q(mounted.el, "[data-test=complete]")).not.toBeNull());
+    expect(q(mounted.el, "[data-test=complete]")!.textContent!.trim()).toBe(
+      t("content_gaps.complete").split("{language}").join(language),
+    );
+  });
+  it("names language tags holding a replacement pattern as written in the table's label and the default-name hint", async () => {
+    const language = "x-$&";
+    const defaultLanguage = "y-$&";
+    const api = {
+      getContentTranslationTargets: vi.fn().mockResolvedValue({
+        ...result([target()]),
+        language,
+        config: { defaultLanguage, languages: [defaultLanguage, language] },
+      }),
+      saveContentTranslations: vi.fn(),
+    } as unknown as DashboardApi;
+    const { el } = await mountWidget<ContentTranslationsDialog>(
+      "dashboard-content-translations-dialog",
+      { api, language, open: true },
+    );
+    await vi.waitFor(() => expect(q(el, "wt-data-table")).not.toBeNull());
+    expect(q(el, "wt-data-table")!.getAttribute("aria-label")).toBe(
+      t("content_gaps.table").split("{language}").join(language),
+    );
+    await edit(el, "one", "Croqueta");
+    const hint = [
+      ...q(el, "wt-data-table")!.shadowRoot!.querySelectorAll('[part="translation-meta"]'),
+    ].find((node) => node.nextElementSibling === field(el, "one", "defaultText"));
+    expect(hint!.textContent!.trim()).toBe(
+      t("translations.default_needed").split("{language}").join(defaultLanguage),
+    );
+  });
   it("reads every opening page through the passive client and saves through the active client", async () => {
     const passive = {
       getContentTranslationTargets: vi

@@ -101,6 +101,10 @@ describe("priceLabel", () => {
     expect(priceLabel("kg")).toBe("Precio por kg");
   });
 
+  it("puts a unit holding a replacement pattern in as written", () => {
+    expect(priceLabel("caja $&")).toBe("Precio por caja $&");
+  });
+
   it("says only Price for a blank unit", () => {
     expect(priceLabel("  ")).toBe("Precio");
     expect(priceLabel("")).toBe("Precio");

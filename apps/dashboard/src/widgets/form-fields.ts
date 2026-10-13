@@ -2,7 +2,7 @@ import { html } from "lit";
 import { currentContentLanguages, type SummaryField } from "@waitron/ui";
 import { contentLanguageCode, formatMoney, resolveContentText } from "@waitron/shared";
 import { MAX_MODIFIER_INTEGER, isProductPrice } from "@waitron/catalogue/src/modifier-limits.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-price-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
@@ -28,7 +28,7 @@ export function wholeWithin(
 export const isModifierQuantity = (text: string) => wholeWithin(text, 1) !== null;
 
 export const priceLabel = (unitLabel: string) =>
-  unitLabel.trim() ? t("editor.price_unit").replace("{unit}", unitLabel) : t("editor.price");
+  unitLabel.trim() ? fill("editor.price_unit", { unit: unitLabel }) : t("editor.price");
 
 /** A price in euros as the dashboard's language writes it. Text that is not a price — a draft still
  * being typed — is shown as it stands. */

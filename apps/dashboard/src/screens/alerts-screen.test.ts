@@ -186,6 +186,23 @@ describe("dashboard-alerts-screen", () => {
     expect(text).toContain("Marta");
   });
 
+  it("names who handled an alert as written when the name holds a replacement pattern", async () => {
+    const api = stubApi({
+      listHandledAlerts: vi
+        .fn()
+        .mockResolvedValue({ visible: true, alerts: [{ ...handled, handledBy: "Marta $&" }] }),
+    });
+    const { el } = await mountWidget<AlertsScreen>("dashboard-alerts-screen", { api });
+    await flush(el);
+    const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
+    const handledTab = [...tabs.shadowRoot!.querySelectorAll<HTMLElement>('[role="tab"]')].find(
+      (t) => t.textContent!.includes("Handled"),
+    )!;
+    await userEvent.click(handledTab);
+    await flush(el);
+    expect(rows(el, "handled-alerts-table")[0]!.textContent!).toContain("Marta $&");
+  });
+
   it("refreshes who handled an alert when a person changes", async () => {
     const renamed: AlertView = { ...handled, handledBy: "Marta Ruiz" };
     const api = stubApi({

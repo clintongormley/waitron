@@ -563,6 +563,21 @@ describe("catalogue-screen", () => {
     }
   });
 
+  it("puts a product name holding a replacement pattern into the Archive heading as written", async () => {
+    const api = stubApi({
+      listProducts: vi.fn().mockResolvedValue([{ ...products[0]!, name: "Croquetas $&" }]),
+    });
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    await flush(el);
+    emit(list(el), "delete-product", { productId: "p1" });
+    await flush(el);
+    expect(
+      el
+        .shadowRoot!.querySelector<HTMLElement>("[data-test=delete-dialog]")!
+        .getAttribute("heading"),
+    ).toBe(t("product.archive_named").split("{name}").join("Croquetas $&"));
+  });
+
   it("names affected extras lists in the product Archive warning", async () => {
     const offered = (id: string, name: string, productId: string): ExtraList => ({
       ...extraLists[0]!,

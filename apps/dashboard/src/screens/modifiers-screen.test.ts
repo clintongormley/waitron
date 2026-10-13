@@ -1547,6 +1547,17 @@ it("dismisses the detail modal when it closes itself", async () => {
 // ---------------------------------------------------------------------------
 // Deleting
 
+it("heads the Used by and Delete windows with a list name holding a replacement pattern as written", async () => {
+  setLocale("en");
+  const el = await mount(
+    api({ listExtraLists: vi.fn().mockResolvedValue([{ ...extraList, name: "Breads $&" }]) }),
+  );
+  await clickInTable(el, "extra-lists", "used-by-extra-e1");
+  expect(detailModal(el).heading).toBe("Used by Breads $&");
+  await clickInTable(el, "extra-lists", "delete-extra-e1");
+  expect(deleteDialog(el).heading).toBe("Delete Breads $&");
+});
+
 it("previews the products a deleted extras list would touch, and NO order count", async () => {
   const client = api({
     getExtraListDependants: vi.fn().mockResolvedValue({

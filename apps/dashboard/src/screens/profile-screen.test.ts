@@ -311,6 +311,17 @@ describe("your profile", () => {
       el.shadowRoot!.querySelector("[data-test=remove-passkey]")!.getAttribute("aria-label"),
     ).toBe(t("profile.remove_passkey_name").replace("{name}", "Work laptop"));
   });
+  it("names a passkey's Remove button by a name holding a replacement pattern as written", async () => {
+    const { el, api } = await mount();
+    const profile = await api.getProfile();
+    Object.assign(el, {
+      profile: { ...profile, passkeys: [{ ...profile.passkeys[0], name: "Portátil $&" }] },
+    });
+    await flush(el);
+    expect(
+      el.shadowRoot!.querySelector("[data-test=remove-passkey]")!.getAttribute("aria-label"),
+    ).toBe(t("profile.remove_passkey_name").split("{name}").join("Portátil $&"));
+  });
   it("writes a passkey's date in the dashboard's language, not the browser's", async () => {
     const createdAt = "2026-09-29T12:00:00Z";
     expect(new Date(createdAt).toLocaleDateString()).not.toBe(

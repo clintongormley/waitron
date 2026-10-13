@@ -50,7 +50,7 @@ import type {
 import { dashboardPath } from "../navigation.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 import { formatAlertTime, sourceLabel } from "../widgets/alert-format.js";
 import "../widgets/equipment-label.js";
 import { holderText } from "../i18n/equipment.js";
@@ -1379,9 +1379,7 @@ export class PaymentsScreen extends LitElement {
           if (!this.billBusy) this.billAction = null;
         }}
       >
-        <p>
-          ${t("payments.bill.check_body").replace("{order}", this.#billOrder(action.target.row))}
-        </p>
+        <p>${fill("payments.bill.check_body", { order: this.#billOrder(action.target.row) })}</p>
         <wt-form-actions slot="footer">
           <wt-button
             slot="cancel"
@@ -1418,9 +1416,7 @@ export class PaymentsScreen extends LitElement {
         if (!this.billBusy && this.billAction === action) this.#closeBillAction();
       }}
     >
-      <p>
-        ${t("payments.bill.attest_body").replace("{order}", this.#billOrder(action.target.row))}
-      </p>
+      <p>${fill("payments.bill.attest_body", { order: this.#billOrder(action.target.row) })}</p>
       <wt-combobox
         class="bill-outcome"
         name="outcome"
@@ -1613,16 +1609,17 @@ export class PaymentsScreen extends LitElement {
     return html`<wt-dialog
       data-test="resolve-dialog"
       .open=${true}
-      heading=${t("payments.stuck.confirm_heading").replace("{provider}", provider)}
+      heading=${fill("payments.stuck.confirm_heading", { provider })}
       @wt-close=${() => {
         this.confirmingStuck = null;
       }}
     >
       <p>
-        ${t("payments.stuck.confirm_body")
-          .replaceAll("{provider}", provider)
-          .replace("{amount}", formatMoney(row.amount, currentLocale()))
-          .replace("{order}", this.#stuckOrder(row))}
+        ${fill("payments.stuck.confirm_body", {
+          provider,
+          amount: formatMoney(row.amount, currentLocale()),
+          order: this.#stuckOrder(row),
+        })}
       </p>
       <wt-form-actions slot="footer">
         <wt-button
@@ -1851,7 +1848,7 @@ export class PaymentsScreen extends LitElement {
                     ?disabled=${this.busy}
                     @click=${(event: Event) => this.#openEditor(reader, "unpair", event)}
                   >
-                    ${t("payments.unpair").replace("{provider}", this.#providerName(reader.provider))}</wt-button
+                    ${fill("payments.unpair", { provider: this.#providerName(reader.provider) })}</wt-button
                   >`
                 : nothing
             }
@@ -1890,7 +1887,7 @@ export class PaymentsScreen extends LitElement {
       }}
     >
       <p>
-        ${t("payments.discovery_intro").replace("{provider}", this.#providerName(this.discoveringId))}
+        ${fill("payments.discovery_intro", { provider: this.#providerName(this.discoveringId) })}
       </p>
       ${
         this.listingFailed
@@ -1972,7 +1969,7 @@ export class PaymentsScreen extends LitElement {
     if (this.editor === null) return nothing;
     const editor = this.editor;
     const { reader, mode } = editor;
-    const unpair = t("payments.unpair").replace("{provider}", this.#providerName(reader.provider));
+    const unpair = fill("payments.unpair", { provider: this.#providerName(reader.provider) });
     const heading =
       mode === "edit"
         ? t("payments.edit_reader")
@@ -2055,7 +2052,7 @@ export class PaymentsScreen extends LitElement {
                               this.alsoUnpair = (event.target as HTMLInputElement).checked;
                             }}
                           />
-                          ${t("payments.also_unpair").replace("{provider}", this.#providerName(reader.provider))}
+                          ${fill("payments.also_unpair", { provider: this.#providerName(reader.provider) })}
                         </label>
                         <p>${t("payments.unpair_warning")}</p>`
                     : nothing

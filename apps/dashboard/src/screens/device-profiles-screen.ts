@@ -25,7 +25,7 @@ import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-spinner.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { bottomMessage } from "../i18n/form-message.js";
 import { ROLES, printerLabel, roleName } from "../i18n/domain.js";
@@ -2055,9 +2055,7 @@ export class DeviceProfilesScreen extends LitElement {
         ...device.lost.stations.map((station) => station.name),
         ...device.lost.zones.map((zone) => zone.name),
       ].join(", ");
-      return t("device_profiles.narrowed_device")
-        .replace("{device}", () => device.deviceName)
-        .replace("{lost}", () => lost);
+      return fill("device_profiles.narrowed_device", { device: device.deviceName, lost });
     });
     return html`<p class="status" role="status" data-test="narrowed-devices">
       ${[t("device_profiles.saved"), ...sentences].join(" ")}
@@ -2116,10 +2114,9 @@ export class DeviceProfilesScreen extends LitElement {
       (entry) => entry.id === this.draftDepartmentId,
     );
     const zones = this.#departmentZones(this.draftDepartmentId);
-    const everyZoneHint = t("device_profiles.every_zone_hint").replace(
-      "{department}",
-      department?.name ?? "",
-    );
+    const everyZoneHint = fill("device_profiles.every_zone_hint", {
+      department: department?.name ?? "",
+    });
     return html`
       <h2 class="section-title">${t("device_profiles.where_heading")}</h2>
       <wt-combobox
@@ -2249,7 +2246,7 @@ export class DeviceProfilesScreen extends LitElement {
         ${
           admitted.length === 0
             ? t("device_profiles.admitted_nobody")
-            : t("device_profiles.admitted_people").replace("{names}", admitted.join(", "))
+            : fill("device_profiles.admitted_people", { names: admitted.join(", ") })
         }
       </p>
       ${

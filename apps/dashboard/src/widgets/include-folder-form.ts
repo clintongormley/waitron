@@ -31,7 +31,7 @@ import { sameValue } from "./product-editor-model.js";
 import { colorField, colorFieldStyles } from "./color-field.js";
 import { optionalTextFields } from "./form-fields.js";
 import type { ImageUploader } from "./image-upload.js";
-import { t } from "../i18n/t.js";
+import { fill, t } from "../i18n/t.js";
 
 /** How one include shows the menu it includes: as a folder, with the names, colour and photo it
  * fixes, or with the included menu's sections directly in its place. */
@@ -332,7 +332,7 @@ export class IncludeFolderForm extends LitElement {
       size="standard"
       .open=${this.open}
       .beforeClose=${this.#leave ? this.#beforeClose : undefined}
-      heading=${t("menus.include_edit_heading").replace("{name}", this.menuName)}
+      heading=${fill("menus.include_edit_heading", { name: this.menuName })}
       @keydown=${(event: KeyboardEvent) => {
         if (this.busy && event.key === "Escape") event.preventDefault();
       }}

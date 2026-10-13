@@ -6,7 +6,7 @@ import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import type { ProductEditorVariant } from "../api/client.js";
-import { t } from "../i18n/t.js";
+import { fill, t } from "../i18n/t.js";
 import { priceText } from "./form-fields.js";
 
 interface VariantRow {
@@ -444,7 +444,7 @@ export class VariantTable extends LitElement {
                   >${t("product.price")}<wt-button
                     variant="secondary"
                     data-test="pricing-unit"
-                    aria-label=${t("editor.change_pricing_unit").replace("{unit}", this.unitLabel)}
+                    aria-label=${fill("editor.change_pricing_unit", { unit: this.unitLabel })}
                     aria-haspopup="dialog"
                     .disabled=${this.busy}
                     @click=${(event: Event) => {

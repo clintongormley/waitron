@@ -38,8 +38,8 @@ beforeEach(() => {
 afterEach(cleanupWidgets);
 
 registerCatalogue({
-  en: { "test.acme.name": "Acme Pay", "test.zeta.name": "Zeta Pay" },
-  es: { "test.acme.name": "Acme Pay", "test.zeta.name": "Zeta Pay" },
+  en: { "test.acme.name": "Acme Pay", "test.zeta.name": "Zeta Pay", "test.pattern.name": "Pay $&" },
+  es: { "test.acme.name": "Acme Pay", "test.zeta.name": "Zeta Pay", "test.pattern.name": "Pay $&" },
 });
 
 const fakePanel = (providerId: string, nameKey: string): CardProviderPanel => ({
@@ -1029,6 +1029,37 @@ describe("reader discovery and status", () => {
     await flush(other.el);
     expect(qCell(other.el, "[data-test=unpair-r-1]")).toBeNull();
   });
+
+  it("puts a provider name holding a replacement pattern into Unpair and its window as written", async () => {
+    const { el } = await mount(
+      stubApi({ listReaders: vi.fn().mockResolvedValue([{ ...READERS[0]!, active: false }]) }),
+      { panels: [fakePanel("acme", "test.pattern.name")] },
+    );
+    await chooseOption(q(el, "wt-combobox[name=reader-status-filter]")!, "disabled");
+    await flush(el);
+    const unpair = t("payments.unpair").split("{provider}").join("Pay $&");
+    expect(qCell(el, "[data-test=unpair-r-1]")!.textContent!.trim()).toBe(unpair);
+    qCell(el, "[data-test=unpair-r-1]")!.click();
+    await flush(el);
+    expect(q(el, "[data-test=reader-editor]")!.getAttribute("heading")).toBe(
+      `${unpair}: Front counter`,
+    );
+  });
+
+  it("puts a provider name holding a replacement pattern into discovery and Disable as written", async () => {
+    const { el } = await mount(stubApi(), { panels: [fakePanel("acme", "test.pattern.name")] });
+    await openAdd(el);
+    expect(q(el, "[data-test=reader-discovery] p")!.textContent!.trim()).toBe(
+      t("payments.discovery_intro").split("{provider}").join("Pay $&"),
+    );
+    q(el, "[data-test=cancel-discovery]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=reader-discovery]")).toBeNull());
+    qCell(el, "[data-test=disable-r-1]")!.click();
+    await flush(el);
+    expect(q(el, "label.unpair-choice")!.textContent!.trim()).toBe(
+      t("payments.also_unpair").split("{provider}").join("Pay $&"),
+    );
+  });
 });
 
 describe("reader dialog request lifetime", () => {
@@ -1528,6 +1559,24 @@ describe("card payments stuck after a restart", () => {
     await flush(el);
     expect(q(el, "[data-test=resolve-dialog]")).toBeNull();
     expect(api.resolveStuckPayment).not.toHaveBeenCalled();
+  });
+
+  it("puts a provider and an order label holding a replacement pattern and later placeholders into the confirmation as written", async () => {
+    const provider = "Pay $& {amount} {order}";
+    const { el } = await mount(
+      stubApi({
+        listStuckPayments: vi
+          .fn()
+          .mockResolvedValue([{ ...STUCK[0]!, provider, label: "Terrace $& {provider}" }]),
+      }),
+    );
+    q(el, "[data-test=resolve-pay-1]")!.click();
+    await flush(el);
+    const dialog = q(el, "[data-test=resolve-dialog]")!;
+    expect(dialog.querySelector("p")!.textContent!.trim()).toBe(
+      `Waitron will ask ${provider} what happened to this €12.50 payment (Order 12 · Terrace $& {provider}). If it went through, the sale is recorded. If it did not, Waitron cancels it at ${provider} where it can still be cancelled, and unlocks the order so it can be paid again, unless another card payment on the order is still unresolved.`,
+    );
+    expect(dialog.getAttribute("heading")).toBe(`Check this payment with ${provider}?`);
   });
 
   it("closes the confirmation when its dialog is dismissed", async () => {

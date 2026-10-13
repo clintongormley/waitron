@@ -50,7 +50,7 @@ import type {
 } from "../api/client.js";
 import { localizedName } from "../i18n/localized.js";
 import { DRAG_THRESHOLD_PX, capturePointer, releasePointer } from "./pointer-drag.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 
 type SectionNode = Extract<DocumentMember, { kind: "section" }>;
@@ -486,10 +486,11 @@ export class DeviceHomePreview extends LitElement {
     const ids = this.#shortcutIds();
     this.#order = reorder(ids, ids.indexOf(memberId), to);
     this.#refocus = memberId;
-    this.announcement = t("action.reordered")
-      .replace("{item}", name)
-      .replace("{index}", String(to + 1))
-      .replace("{total}", String(ids.length));
+    this.announcement = fill("action.reordered", {
+      item: name,
+      index: String(to + 1),
+      total: String(ids.length),
+    });
     this.#send("wt-shortcut-move", { memberId, to });
   }
 
@@ -609,7 +610,7 @@ export class DeviceHomePreview extends LitElement {
   ): { face: TemplateResult; name: string } {
     const { ref } = tile;
     if (!tile.reachable || ref.kind === "missing") {
-      const name = t("home.missing").replace("{name}", tile.missingName ?? tile.name);
+      const name = fill("home.missing", { name: tile.missingName ?? tile.name });
       return {
         name,
         face: html`<div class="tile" data-state="missing">

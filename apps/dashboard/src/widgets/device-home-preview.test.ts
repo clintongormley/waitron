@@ -1429,4 +1429,26 @@ describe("dashboard-device-home-preview editing the shortcuts", () => {
       expect(events).toEqual([]);
     });
   });
+
+  it("names a missing shortcut holding a replacement pattern as written", async () => {
+    const gone = shortcut("sc-gone", { kind: "missing", name: "Soup" }, "Soup", {
+      reachable: false,
+      missingName: "Old soup $&",
+    });
+    const { el } = await mount({ shortcuts: [gone] });
+    expect(tiles(el, "shortcuts")[0]!.querySelector(".name")!.textContent!.trim()).toBe(
+      "Missing: Old soup $&",
+    );
+  });
+
+  it("announces a reorder with a name holding a replacement pattern and another placeholder as written", async () => {
+    const chips = shortcut(
+      "sc-chips",
+      { kind: "product", productId: "p-chips" },
+      "Chips $& {index} {total}",
+    );
+    const { el } = await mount({ shortcuts: [LEMONADE, chips] });
+    await press(el, "sc-chips", "ArrowLeft");
+    expect(status(el)).toBe("Chips $& {index} {total} moved to position 1 of 2");
+  });
 });

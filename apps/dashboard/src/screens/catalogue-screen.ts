@@ -26,7 +26,7 @@ import type {
 } from "../api/client.js";
 import type { ProductEditorDraft } from "../widgets/product-editor-model.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import { t } from "../i18n/t.js";
+import { fill, t } from "../i18n/t.js";
 import { dashboardPath } from "../navigation.js";
 import { ProductChildCreate, type ProductChildKind } from "../state/product-child-create.js";
 import {
@@ -800,11 +800,12 @@ export class CatalogueScreen extends LitElement {
         size="compact"
         data-test="delete-dialog"
         .open=${this.deletingProduct !== null}
-        heading=${t(
+        heading=${fill(
           this.deletingProduct?.isVariant
             ? "product.archive_variant_named"
             : "product.archive_named",
-        ).replace("{name}", this.deletingProduct?.name ?? "")}
+          { name: this.deletingProduct?.name ?? "" },
+        )}
         @wt-close=${(event: Event) => {
           event.stopPropagation();
           if (!this.busy) this.#closeDelete();

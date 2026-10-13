@@ -4429,3 +4429,79 @@ it("A462 Structure explicit current reveals through a closed root without openin
   expect(drawn(el)).toContain("m-drinks/m-beer/m-lager-2");
   expect(table(el).isExpanded("m-fav")).toBe(false);
 });
+
+describe("names holding replacement patterns or another placeholder", () => {
+  const burger = "Burger $& {index} {total}";
+  const lemon = "Lemon $& {section} {list}";
+  const drinks = "Drinks $& {list}";
+  const lunch = "Lunch $& {name}";
+
+  beforeEach(() => {
+    const before = currentLocale();
+    setLocale("en");
+    onTestFinished(() => setLocale(before));
+  });
+
+  function trapNodes(): MenuStructureNode[] {
+    const section = drinksNode("m-drinks");
+    section.internalName = drinks;
+    section.children = section.children!.map((child) =>
+      child.memberId === "m-beer" ? { ...child, internalName: "Beer $&" } : child,
+    );
+    return [productNode("m-burger", "p-burger"), section, { ...wines(), internalName: "Wines $&" }];
+  }
+
+  const mountTrap = (props: Partial<MenuStructureTable> = {}) =>
+    mount({
+      nodes: trapNodes(),
+      products: [
+        product("p-lager", "Lager"),
+        product("p-lemonade", lemon),
+        product("p-burger", burger),
+        product("p-rioja", "Rioja"),
+      ],
+      menuName: lunch,
+      ...props,
+    });
+
+  it("announces a reorder with the name as written", async () => {
+    const el = await mountTrap();
+    await press(el, "m-burger", "ArrowDown");
+    expect(announced(el)).toBe(`${burger} moved to position 2 of 3`);
+  });
+
+  it("announces a move into a section with both names as written", async () => {
+    const el = await mountTrap();
+    await toggle(el, "m-drinks");
+    await press(el, "m-drinks/m-lemonade", "ArrowRight");
+    expect(announced(el)).toBe(`${lemon} moved into Beer $&`);
+  });
+
+  it("announces a move out of a section with both names as written", async () => {
+    const el = await mountTrap();
+    await toggle(el, "m-drinks");
+    await press(el, "m-drinks/m-lemonade", "ArrowLeft");
+    expect(announced(el)).toBe(`${lemon} moved out to ${lunch}`);
+  });
+
+  it("labels a row's toggle, Remove, colour, included menu and row box with the names as written", async () => {
+    const el = await mountTrap();
+    expect(row(el, "m-drinks")!.querySelector(".row-activate")!.getAttribute("aria-label")).toBe(
+      `Show what is in ${drinks}`,
+    );
+    expect(item(el, "remove-m-burger").textContent!.trim()).toBe(`Remove from ${lunch}`);
+    expect(
+      row(el, "m-drinks")!
+        .querySelector('[data-test="color-m-drinks"]')!
+        .getAttribute("aria-label"),
+    ).toBe(`Change the colour of ${drinks}`);
+    expect(nameOf(el, "included-wine")).toBe("Menu: Wines $&");
+    expect(item(el, "source-included-wine").textContent!.trim()).toBe("Open Wines $&");
+    await toggle(el, "m-drinks");
+    el.selecting = true;
+    await settle(el);
+    expect(item(el, "select-m-drinks/m-lemonade").getAttribute("aria-label")).toBe(
+      `${lemon}, in ${drinks}`,
+    );
+  });
+});

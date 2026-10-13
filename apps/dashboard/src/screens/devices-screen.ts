@@ -41,7 +41,7 @@ import {
   type CardProviderPanel,
   t as tRaw,
 } from "@waitron/dashboard-kit";
-import { currentLocale, t } from "../i18n/t.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { formatIsoMinute } from "../date-utils.js";
 import { printerLabel } from "../i18n/domain.js";
@@ -151,7 +151,7 @@ function equipmentSentence(error: unknown, field: EditField): string | undefined
   const code = codeOf(error);
   const params = (error as { params?: Record<string, unknown> } | null)?.params ?? {};
   if (code === "device.equipment_held" && typeof params.holderDeviceName === "string")
-    return t("devices.err_equipment_held").replace("{device}", params.holderDeviceName);
+    return fill("devices.err_equipment_held", { device: params.holderDeviceName });
   if (code === "reader.payment_in_progress") return t("devices.err_reader_busy");
   if (code === "device.binding_invalid" && field === "reader")
     return t("devices.err_reader_not_allowed");
@@ -256,10 +256,9 @@ function pairAction(request: JoinRequestRow): string {
 }
 
 function pairTitle(request: JoinRequestRow): string {
-  return (request.returning ? t("devices.enable_title") : t("devices.pair_title")).replace(
-    "{name}",
-    waitingName(request),
-  );
+  return fill(request.returning ? "devices.enable_title" : "devices.pair_title", {
+    name: waitingName(request),
+  });
 }
 
 /** The table's equipment columns, one per role, drawn after Shows. */
@@ -1087,10 +1086,9 @@ export class DevicesScreen extends LitElement {
   #screenLine(screen: ResolvedKitchenScreen): string {
     const kind = t(`device_profiles.kitchen_screen.${screen.kind}`);
     const gone = (names: string[]) =>
-      t(names.length === 1 ? "devices.readout_gone_one" : "devices.readout_gone_many").replace(
-        "{names}",
-        names.join(", "),
-      );
+      fill(names.length === 1 ? "devices.readout_gone_one" : "devices.readout_gone_many", {
+        names: names.join(", "),
+      });
     if (!screen.available) return `${kind} ${gone([kind])}`;
     const named = (slots: readonly ScreenSlot[], every: boolean, label: string) =>
       every
@@ -1394,12 +1392,12 @@ export class DevicesScreen extends LitElement {
     const holder = this.#printerHolder(printer, drawer);
     return holder === null
       ? printerLabel(printer)
-      : `${printerLabel(printer)} (${t("equipment.carried_by").replace("{device}", holder)})`;
+      : `${printerLabel(printer)} (${fill("equipment.carried_by", { device: holder })})`;
   }
 
   /** What Use default gives this device: the profile's default, unless another device carries it. */
   #useDefaultLabel(name: string | null): string {
-    return t("devices.use_default").replace("{name}", name ?? t("equipment.none"));
+    return fill("devices.use_default", { name: name ?? t("equipment.none") });
   }
 
   /**
@@ -1459,7 +1457,7 @@ export class DevicesScreen extends LitElement {
     if (row?.paymentInProgressDeviceIds.some((id) => id !== own))
       return `${this.#readerLabel(reader)} (${t("equipment.busy")})`;
     if (row?.holder && row.holder.deviceId !== own)
-      return `${this.#readerLabel(reader)} (${t("equipment.carried_by").replace("{device}", row.holder.deviceName)})`;
+      return `${this.#readerLabel(reader)} (${fill("equipment.carried_by", { device: row.holder.deviceName })})`;
     return this.#readerLabel(reader);
   }
 
@@ -1893,7 +1891,7 @@ export class DevicesScreen extends LitElement {
       .rowKey=${(d: DeviceRow) => d.id}
       .rowClick=${(d: DeviceRow) => this.#openEdit(d)}
       .rowClickable=${(d: DeviceRow) => d.active}
-      .rowClickLabel=${(d: DeviceRow) => t("devices.edit_title").replace("{name}", d.label)}
+      .rowClickLabel=${(d: DeviceRow) => fill("devices.edit_title", { name: d.label })}
       .emptyMessage=${t("devices.no_devices")}
     ></wt-data-table>`;
   }
@@ -1950,7 +1948,7 @@ export class DevicesScreen extends LitElement {
         cell: (request) =>
           request.pairingBy && !request.pairingBy.mine
             ? html`<span part="being-paired" data-test=${`being-paired-${request.id}`}
-                >${t("devices.being_paired_by").replace("{name}", request.pairingBy.name)}</span
+                >${fill("devices.being_paired_by", { name: request.pairingBy.name })}</span
               >`
             : html`<wt-button
                 size="sm"
@@ -1977,7 +1975,7 @@ export class DevicesScreen extends LitElement {
     return html`<wt-modal
       size="compact"
       data-test="joined-modal"
-      heading=${t(this.added.enabled ? "devices.enabled" : "devices.added").replace("{name}", this.added.name)}
+      heading=${fill(this.added.enabled ? "devices.enabled" : "devices.added", { name: this.added.name })}
       description=${t("devices.add_another_question")}
       .open=${true}
       .opener=${this.renderRoot.querySelector<HTMLElement>(".heading [data-test=open-add-device]")}
@@ -2034,7 +2032,7 @@ export class DevicesScreen extends LitElement {
         this.askedAgain === null
           ? nothing
           : html`<p class="hint" role="status" data-test="asked-again">
-              ${t("devices.asked_again").replace("{name}", this.askedAgain)}
+              ${fill("devices.asked_again", { name: this.askedAgain })}
             </p>`
       }
       ${this.#renderWaiting()}
@@ -2635,7 +2633,7 @@ export class DevicesScreen extends LitElement {
     return html`<wt-modal
       size="standard"
       data-test="edit-device-modal"
-      heading=${t("devices.edit_title").replace("{name}", device.label)}
+      heading=${fill("devices.edit_title", { name: device.label })}
       .open=${true}
       .dismissible=${!this.editSaving}
       .beforeClose=${this.#editLeave ? this.#beforeEditClose : undefined}

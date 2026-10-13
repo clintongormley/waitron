@@ -129,6 +129,19 @@ describe("allergen-dietary-picker", () => {
     );
   });
 
+  it("puts a value holding a replacement pattern into the line's name as written", async () => {
+    const { el } = await mountWidget<AllergenDietaryPicker>("dashboard-allergen-dietary-picker", {
+      value: { allergens: ["$&"], dietary: [] },
+    });
+    expect(line(el, "allergens").getAttribute("aria-label")).toBe(
+      t("modifiers.edit_named")
+        .split("{label}")
+        .map((part) => part.split("{value}").join(allergenName("$&")))
+        .join(t("modifiers.allergens")),
+    );
+    expect(allergenName("$&")).toBe("$&");
+  });
+
   it("reads the line's name and empty wording from the strings in English and Spanish", async () => {
     const original = currentLocale();
     try {

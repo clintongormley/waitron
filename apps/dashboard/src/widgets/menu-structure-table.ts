@@ -46,7 +46,7 @@ import {
 } from "@waitron/catalogue/src/include-folder-presentation.js";
 import type { Presentation } from "@waitron/catalogue/src/section-types.js";
 import type { CategorySummary, MenuStructureNode, Product } from "../api/client.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 import { leftToBrowser } from "../navigation.js";
 
 /** A section node's own customer-facing presentation, before any include's folder applies. */
@@ -857,10 +857,11 @@ export class MenuStructureTable extends LitElement {
       ),
     ];
     this.#refocus = { key: row.key, copy: grips.indexOf(event.currentTarget as HTMLElement) };
-    this.announcement = t("action.reordered")
-      .replace("{item}", row.name)
-      .replace("{index}", String(at + 1))
-      .replace("{total}", String(shown.length));
+    this.announcement = fill("action.reordered", {
+      item: row.name,
+      index: String(at + 1),
+      total: String(shown.length),
+    });
   }
 
   /** Like indenting in an outline: into the section drawn directly above, at its end. */
@@ -873,7 +874,7 @@ export class MenuStructureTable extends LitElement {
       row,
       above.path,
       undefined,
-      t("action.moved_into").replace("{item}", row.name).replace("{section}", above.name),
+      fill("action.moved_into", { item: row.name, section: above.name }),
     );
   }
 
@@ -886,7 +887,7 @@ export class MenuStructureTable extends LitElement {
       row,
       section.path.slice(0, -1),
       position,
-      t("action.moved_out").replace("{item}", row.name).replace("{list}", section.holder),
+      fill("action.moved_out", { item: row.name, list: section.holder }),
     );
   }
 
@@ -1095,7 +1096,7 @@ export class MenuStructureTable extends LitElement {
         const key = path.join("/");
         const staffName = memberName(node.ref, this.#productNames, this.#sectionNames);
         const name = node.includedMenuId
-          ? t("menus.menu_prefix").replace("{name}", staffName)
+          ? fill("menus.menu_prefix", { name: staffName })
           : staffName;
         rows.push({ kind: "member", key, parentKey, path, node, name, holder, list, readOnly });
         walk(
@@ -1224,7 +1225,7 @@ export class MenuStructureTable extends LitElement {
       part="swatch-button"
       type="button"
       data-test=${`color-${key}`}
-      aria-label=${t("folders.edit_color").replace("{name}", name)}
+      aria-label=${fill("folders.edit_color", { name })}
       ?disabled=${this.busy}
       @click=${() => this.#send("wt-member-edit", { sectionId, path: row.path })}
     >
@@ -1280,10 +1281,9 @@ export class MenuStructureTable extends LitElement {
       return html`<a
           data-test=${`source-${key}`}
           href=${`/manage/menus/menu/${node.includedMenuId}/view/structure`}
-          >${t("menus.open_included").replace(
-            "{name}",
-            memberName(node.ref, this.#productNames, this.#sectionNames),
-          )}</a
+          >${fill("menus.open_included", {
+            name: memberName(node.ref, this.#productNames, this.#sectionNames),
+          })}</a
         >${this.#button(`edit-${key}`, t("action.edit"), "secondary", () =>
           this.#send("wt-include-edit", {
             path: row.path.slice(0, -1),
@@ -1314,7 +1314,7 @@ export class MenuStructureTable extends LitElement {
             >${t("product.edit")}</a
           >`
         : nothing
-    }${this.#remove(row, t("members.remove_from").replace("{list}", row.holder))}`;
+    }${this.#remove(row, fill("members.remove_from", { list: row.holder }))}`;
   }
 
   /** Never marked current: the top level is the current place when no row is marked. */
@@ -1463,7 +1463,7 @@ export class MenuStructureTable extends LitElement {
         .rowActivation=${(row: TableRow) =>
           row.kind === "member" && row.node.ref.kind === "section" ? "toggle" : "none"}
         .rowToggleLabel=${(row: TableRow, expanded: boolean) =>
-          t(expanded ? "menus.collapse" : "menus.expand").replace("{name}", row.name)}
+          fill(expanded ? "menus.collapse" : "menus.expand", { name: row.name })}
         .rows=${rows}
         .columns=${this.#columns()}
         .rowKey=${rowKey}
@@ -1477,7 +1477,7 @@ export class MenuStructureTable extends LitElement {
         .selectionLabel=${(row: TableRow) =>
           row.kind === "root"
             ? row.name
-            : t("menus.selection_label").replace("{name}", row.name).replace("{list}", row.holder)}
+            : fill("menus.selection_label", { name: row.name, list: row.holder })}
         @wt-selection-change=${(event: CustomEvent<{ selected: string[] }>) => {
           event.stopPropagation();
           this.#send("wt-selection-change", { selected: event.detail.selected });

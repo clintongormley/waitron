@@ -124,6 +124,23 @@ it.each([
   expect((q(el, `wt-input[name="${name}"]`) as WtInput).error).toBe(t(message));
   expect(a.setKitchenTimingDefaults).not.toHaveBeenCalled();
 });
+it("names a station whose name holds a replacement pattern as written", async () => {
+  const a = api({
+    setKitchenTimingDefaults: vi.fn().mockRejectedValueOnce({
+      code: "station.thresholds_invalid",
+      params: { field: "overdueAfterMinutes", stationId: "grill", name: "Plancha $&" },
+    }),
+  });
+  const el = await mount(a);
+  await open(el);
+  await change(el, "overdueAfterMinutes", "8");
+  await save(el);
+  await vi.waitFor(() =>
+    expect((q(el, 'wt-input[name="overdueAfterMinutes"]') as WtInput).error).toBe(
+      t("kitchen.timing_station_invalid").split("{name}").join("Plancha $&"),
+    ),
+  );
+});
 it("names the station a venue change would break, marks the returned field and permits retry", async () => {
   const a = api({
     setKitchenTimingDefaults: vi

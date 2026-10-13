@@ -2818,6 +2818,68 @@ describe("the Edit dialog", () => {
       expect(q(el, "[data-test=edit-device-modal]")).not.toBeNull();
     });
 
+    it("puts a device label and a holder name holding a replacement pattern into the heading and the refusal as written", async () => {
+      const api = equipmentApi({
+        listDevices: vi.fn().mockResolvedValue([{ ...onDefault, label: "Caja $&" }, kitchen]),
+        updateDevice: vi.fn().mockRejectedValue({
+          code: "device.equipment_held",
+          params: {
+            field: "receiptPrinterId",
+            holderDeviceId: "d7",
+            holderDeviceName: "Móvil $&",
+            holderPersonName: "Ana",
+          },
+        }),
+      });
+      const el = await openEdit(api);
+      expect(q(el, "[data-test=edit-device-modal]")!.getAttribute("heading")).toBe(
+        t("devices.edit_title").split("{name}").join("Caja $&"),
+      );
+      await chooseOption(q(el, "[data-test=edit-receipt-printer]")!, "pr2");
+      await flush(el);
+      await save(el);
+      await vi.waitFor(() =>
+        expect(field(el, "edit-receipt-printer").error).toBe(
+          t("devices.err_equipment_held").split("{device}").join("Móvil $&"),
+        ),
+      );
+    });
+
+    it("puts a default printer, a printer's holder and a reader's holder holding a replacement pattern into the choices as written", async () => {
+      const el = await openEdit(
+        equipmentApi({
+          listPrinters: vi.fn().mockResolvedValue([
+            { ...editPrinters[0]!, name: "Cocina $&" },
+            {
+              ...portableTerraza,
+              holder: { ...portableTerraza.holder!, deviceName: "Móvil $&" },
+            },
+            editPrinters[2],
+          ]),
+          listReaderHolders: vi.fn().mockResolvedValue([
+            {
+              readerId: "r2",
+              holder: { deviceId: "d7", deviceName: "Lector $&", personName: null },
+              paymentInProgressDeviceIds: [],
+            },
+          ]),
+        }),
+      );
+      const receipt = field(el, "edit-receipt-printer");
+      expect(receipt.options[0]).toEqual({
+        value: "",
+        label: t("devices.use_default").split("{name}").join("Cocina $&"),
+      });
+      expect(receipt.options.find((option) => option.value === "pr2")).toEqual({
+        value: "pr2",
+        label: `Terraza (${t("equipment.carried_by").split("{device}").join("Móvil $&")})`,
+      });
+      expect(field(el, "edit-reader").options.find((option) => option.value === "r2")).toEqual({
+        value: "r2",
+        label: `Bar (Zeta Pay) (${t("equipment.carried_by").split("{device}").join("Lector $&")})`,
+      });
+    });
+
     it("a printer the device itself carries is not labelled as carried", async () => {
       const mine: Printer = {
         ...portableTerraza,
@@ -3354,6 +3416,37 @@ describe("add a device", () => {
       t("devices.being_paired_by").replace("{name}", "Ana"),
     );
     expect(d(el, "[data-test=pair-r1]")).toBeNull();
+  });
+
+  it("puts names holding a replacement pattern into the waiting list, the Pair title and the added heading as written", async () => {
+    const api = stubApi({
+      joinRequests: vi.fn().mockResolvedValue([
+        { ...pending[0]!, label: "Barra $&" },
+        { ...pending[1]!, pairingBy: { name: "Ana $&", mine: false } },
+      ]),
+      acceptDeviceJoinRequest: vi
+        .fn()
+        .mockResolvedValue({ deviceId: "d9", name: "Barra $&", formFactor: "kds" }),
+    });
+    const el = await openAdd(api);
+
+    expect(d(el, "[data-test=being-paired-r2]")?.textContent?.trim()).toBe(
+      t("devices.being_paired_by").split("{name}").join("Ana $&"),
+    );
+    await openPair(el);
+    expect(q(el, "[data-test=pair-modal]")!.getAttribute("heading")).toBe(
+      t("devices.pair_title").split("{name}").join("Barra $&"),
+    );
+    await vi.waitFor(() => expect(q(el, `[data-choice="${REAL_NUMBER}"]`)).not.toBeNull());
+    q(el, `[data-choice="${REAL_NUMBER}"]`)!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=pair-name]")).not.toBeNull());
+    await flush(el);
+    await chooseOption(q(el, "[data-test=pair-profile]")!, "dp1");
+    q(el, "[data-test=pair-submit]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=joined-modal]")).not.toBeNull());
+    expect(q(el, "[data-test=joined-modal]")!.getAttribute("heading")).toBe(
+      t("devices.added").split("{name}").join("Barra $&"),
+    );
   });
 
   it("a row this login is already pairing opens straight at its settings", async () => {
@@ -4745,6 +4838,29 @@ describe("add a device", () => {
         },
       );
 
+      it("names a device holding a replacement pattern as written in its Enable title and when it asks again", async () => {
+        const renamed: JoinRequestRow = {
+          ...returning,
+          returning: { ...returning.returning!, name: "Pase $&" },
+        };
+        const api = Object.assign(waiting(renamed), { liveData: new LiveData() });
+        const el = await openAdd(api);
+        await openPair(el, "d2");
+        expect(q(el, "[data-test=pair-modal]")!.getAttribute("heading")).toBe(
+          t("devices.enable_title").split("{name}").join("Pase $&"),
+        );
+
+        vi.mocked(api.joinRequests).mockResolvedValue(
+          asks({ ...renamed, createdAt: "2026-09-08T10:06:00.000Z" }),
+        );
+        api.liveData.refresh();
+        await vi.waitFor(() =>
+          expect(text(el, "[data-test=asked-again]")).toBe(
+            t("devices.asked_again").split("{name}").join("Pase $&"),
+          ),
+        );
+      });
+
       it("an unchanged ask keeps the dialog open, and Cancel still discards it", async () => {
         const api = live();
         const el = await openAdd(api);
@@ -5675,6 +5791,27 @@ describe("a device's kitchen screens", () => {
       }
     });
   }
+
+  it("the device list names a station no longer available holding a replacement pattern as written", async () => {
+    const row = kds("k2", [
+      {
+        kind: "station",
+        available: true,
+        everyStation: false,
+        everyZone: true,
+        profileEveryStation: false,
+        stations: [slot("s1"), { ...slot("s3", false), name: "Deli $&" }],
+        zones: null,
+      },
+    ]);
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
+      api: ksApi([row]),
+    });
+    await flush(el);
+    expect(deepText(el, "[data-test=device-screen-k2-station]")).toBe(
+      `${t("device_profiles.kitchen_screen.station")}: Cocina ${t("devices.readout_gone_one").split("{names}").join("Deli $&")}`,
+    );
+  });
 });
 
 class DeleteLeaveFixture extends LitElement {
