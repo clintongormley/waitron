@@ -48,11 +48,16 @@ const ON: StreamSettingsView = {
 const SECRET = "not-a-real-secret-0123456789";
 
 function stubApi(settings: StreamSettingsView, overrides: Partial<DashboardApi> = {}) {
+  const getStreamSettings = vi.fn().mockResolvedValue(settings);
   return {
-    getStreamSettings: vi.fn().mockResolvedValue(settings),
+    getStreamSettings,
     saveStreamSettings: vi.fn().mockResolvedValue(ON),
     testStreamBucket: vi.fn().mockResolvedValue({ ok: true }),
-    turnOffStream: vi.fn().mockResolvedValue(OFF),
+    // As on the server, a later read of the settings answers what Turn off returned.
+    turnOffStream: vi.fn(() => {
+      getStreamSettings.mockResolvedValue(OFF);
+      return Promise.resolve(OFF);
+    }),
     getRecoveryKit: vi.fn().mockResolvedValue({ kit: "KIT", keyFingerprint: "ab12cd34" }),
     liveData: new LiveData(),
     ...overrides,

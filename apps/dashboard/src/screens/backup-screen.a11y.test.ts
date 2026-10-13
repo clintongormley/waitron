@@ -102,7 +102,47 @@ describe.each(["light", "dark"] as const)("backup-screen a11y (%s theme)", (them
       theme,
     );
     await flush(el);
-    expect(q(el, "[data-test=stream-unavailable]")).not.toBeNull();
+    const box = q(el, "[data-test=archive-destination]") as HTMLElementTagNameMap["wt-combobox"];
+    expect(box.options.find((o) => o.value === "stream-bucket")?.disabled).toBe(true);
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders a chosen bucket-copy bucket that has gone, marked after Save, accessibly", async () => {
+    const getStreamSettings = vi.fn().mockResolvedValue({
+      isPrimary: true,
+      configured: true,
+      bucket: {
+        endpoint: null,
+        region: "eu-north-1",
+        bucket: "stream-bucket",
+        prefix: "venues",
+        accessKeyId: "AKIASTREAM",
+      },
+      status: { state: "streaming" },
+      recoveryKeySet: true,
+      keyFingerprint: "ab12cd34",
+      revision: "11111111-2222-4333-8444-555555555555",
+    });
+    const api = stubApi({ ...OFF, recoveryKeySet: true }, { getStreamSettings });
+    const { el, host } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api }, theme);
+    await flush(el);
+    await chooseOption(q(el, "[data-test=archive-destination]")!, "stream-bucket");
+    getStreamSettings.mockResolvedValue({
+      isPrimary: true,
+      configured: false,
+      bucket: null,
+      status: { state: "off" },
+      recoveryKeySet: true,
+      keyFingerprint: "ab12cd34",
+      revision: null,
+    });
+    api.liveData.invalidate([{ type: "backup_status" }]);
+    await flush(el);
+    q(el, "[data-test=apply]")!.click();
+    await flush(el);
+    expect(q(el, "[data-test=stream-unavailable]")).toBeNull();
+    const box = q(el, "[data-test=archive-destination]") as HTMLElementTagNameMap["wt-combobox"];
+    expect(box.error).not.toBe("");
     await expectNoA11yViolations(host);
   });
 

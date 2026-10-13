@@ -83,6 +83,17 @@ export function matchesStream(d: BackupDestinationView, stream: StreamBucket | n
   );
 }
 
+export function sameStreamBucket(a: StreamBucket | null, b: StreamBucket | null): boolean {
+  if (a === null || b === null) return a === b;
+  return (
+    a.endpoint === b.endpoint &&
+    a.region === b.region &&
+    a.bucket === b.bucket &&
+    normalisePrefix(a.prefix) === normalisePrefix(b.prefix) &&
+    a.accessKeyId === b.accessKeyId
+  );
+}
+
 export function openingDestination(
   status: BackupStatusView,
   stream: StreamBucket | null,

@@ -36,6 +36,7 @@ import {
   heldBucket,
   keepsHeldSecret,
   openingDestination,
+  sameStreamBucket,
   streamLocation,
   type CustomBucket,
   type DestinationChoice,
@@ -253,6 +254,8 @@ export class BackupScreen extends LitElement {
       .pack {
         margin: 0;
         white-space: pre-wrap;
+        word-break: normal;
+        overflow-wrap: break-word;
       }
       .key-actions {
         display: flex;
@@ -292,7 +295,7 @@ export class BackupScreen extends LitElement {
   );
 
   @state() private status?: BackupStatusView;
-  /** Read only to offer and describe the stream's bucket; it never rewrites a staged draft. */
+  /** Read only to offer and describe the stream's bucket; it never rewrites a changed draft. */
   @state() private stream?: StreamSettingsView;
   @state() private streamUnread = false;
   /** Settles once the stream's first read has answered or failed, so Edit prefills from it. */
@@ -498,8 +501,11 @@ export class BackupScreen extends LitElement {
     void this.#load();
     this.#streamRead = this.#streamQueries
       .watch("getStreamSettings", [], (value) => {
+        const before = this.stream;
         this.stream = value;
         this.streamUnread = false;
+        if (before !== undefined && !sameStreamBucket(before.bucket, value.bucket))
+          this.#reopenUnchanged();
       })
       .catch(() => undefined);
   }
@@ -625,8 +631,17 @@ export class BackupScreen extends LitElement {
     return required && this.custom[field].trim() === "";
   }
 
+  /** The stream's bucket was chosen, and has gone since. */
+  get #streamGone(): boolean {
+    return this.choice === "stream-bucket" && (this.stream?.bucket ?? null) === null;
+  }
+
   get #destinationMissing(): boolean {
-    return this.#folderMissing || CUSTOM_FIELDS.some((f) => this.#customMissing(f.field));
+    return (
+      this.#folderMissing ||
+      this.#streamGone ||
+      CUSTOM_FIELDS.some((f) => this.#customMissing(f.field))
+    );
   }
 
   get #folderHeld(): boolean {
@@ -863,6 +878,19 @@ export class BackupScreen extends LitElement {
     if (generation !== this.#generation || s === undefined) return;
     if (!s.storedDisabled || s.enabled || !s.isPrimary || s.managedByEnvironment) return;
     if (!afterTurnOff && this.#archiveScope?.isDirty()) return;
+    this.#prefillFromStatus(s);
+    this.#archiveScope?.commit(this.#archiveValue());
+  }
+
+  /** The stream's bucket changed under a prefilled form nobody has changed: open it again as a fresh
+   * load would, so a stored bucket no longer the stream's shows as another bucket. */
+  #reopenUnchanged(): void {
+    const s = this.status;
+    if (s === undefined || this.submitting || this.#archiveScope?.isDirty()) return;
+    if (!this.editSettings) {
+      void this.#openStoredOff(false);
+      return;
+    }
     this.#prefillFromStatus(s);
     this.#archiveScope?.commit(this.#archiveValue());
   }
@@ -1272,7 +1300,6 @@ export class BackupScreen extends LitElement {
               ? html`<p class="hint" data-test="not-primary">${t("backup.status.not_primary")}</p>`
               : nothing
         }
-        ${s.destinations.some((d) => d.kind === "s3") ? this.#renderPack() : nothing}
         ${writable && (!s.enabled || this.configureAfterApply) ? this.#renderConfigure() : nothing}
         ${writable && s.enabled && this.editSettings ? this.#renderEditSettings() : nothing}
         ${
@@ -1284,7 +1311,13 @@ export class BackupScreen extends LitElement {
                   @click=${() => void this.#startEdit()}
                   >${t("backup.edit.button")}</wt-button
                 >
-                ${this.#renderTurnOff()} ${this.#renderRotate()}`
+                ${this.#renderTurnOff()}`
+            : nothing
+        }
+        ${s.destinations.some((d) => d.kind === "s3") ? this.#renderPack() : nothing}
+        ${
+          writable && s.enabled && !this.editSettings && !this.configureAfterApply
+            ? this.#renderRotate()
             : nothing
         }
       </div>
@@ -1417,6 +1450,7 @@ export class BackupScreen extends LitElement {
       : this.stream !== undefined && bucket === null
         ? t("backup.destination.stream_unavailable")
         : null;
+    const streamMarked = this.folderAttempted && this.#streamGone;
     const folderMessage = this.folderRefused
       ? t("backup.destination.folder_refused")
       : this.#folderHeld
@@ -1440,6 +1474,7 @@ export class BackupScreen extends LitElement {
           { value: "custom-s3", label: t("backup.destination.choice_custom") },
         ]}
         .value=${this.choice}
+        .error=${streamMarked ? (unavailable ?? t("backup.destination.stream_unavailable")) : ""}
         @wt-change=${(e: CustomEvent<{ value: string }>) => {
           e.stopPropagation();
           this.choice = e.detail.value as DestinationChoice;
@@ -1448,7 +1483,7 @@ export class BackupScreen extends LitElement {
         }}
       ></wt-combobox>
       ${
-        unavailable === null
+        unavailable === null || this.choice !== "stream-bucket" || streamMarked
           ? nothing
           : html`<p
               class="hint"

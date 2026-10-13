@@ -53,13 +53,16 @@ function stubApi(overrides: Partial<DashboardApi> = {}, settings = OFF): Dashboa
   const getStreamSettings = vi.fn().mockResolvedValue(settings);
   return {
     getStreamSettings,
-    // As on the server, a later read of the settings answers what Save returned.
+    // As on the server, a later read of the settings answers what Save or Turn off returned.
     saveStreamSettings: vi.fn(() => {
       getStreamSettings.mockResolvedValue(ON);
       return Promise.resolve(ON);
     }),
     testStreamBucket: vi.fn().mockResolvedValue({ ok: true }),
-    turnOffStream: vi.fn().mockResolvedValue(OFF),
+    turnOffStream: vi.fn(() => {
+      getStreamSettings.mockResolvedValue(OFF);
+      return Promise.resolve(OFF);
+    }),
     getRecoveryKit: vi.fn().mockResolvedValue({ kit: KIT, keyFingerprint: "ab12cd34" }),
     liveData: new LiveData(),
     ...overrides,
@@ -907,6 +910,29 @@ describe("stream-settings-panel: once set up", () => {
     expect(invalidate).toHaveBeenCalledWith([{ type: "backup_status" }]);
   });
 
+  it("tells the Backups screen to read the bucket copy again once Turn off has stopped it", async () => {
+    const api = stubApi({}, ON);
+    const invalidate = vi.spyOn(api.liveData, "invalidate");
+    const { el } = await mount(api);
+    await press(el, "turn-off");
+    await press(el, "turn-off");
+    expect(api.turnOffStream).toHaveBeenCalledOnce();
+    expect(invalidate).toHaveBeenCalledWith([{ type: "backup_status" }]);
+  });
+
+  it("does not tell the Backups screen anything when Turn off is refused", async () => {
+    const api = stubApi(
+      { turnOffStream: vi.fn().mockRejectedValue({ code: "backup.reload_in_progress" }) },
+      ON,
+    );
+    const invalidate = vi.spyOn(api.liveData, "invalidate");
+    const { el } = await mount(api);
+    await press(el, "turn-off");
+    await press(el, "turn-off");
+    expect(api.turnOffStream).toHaveBeenCalledOnce();
+    expect(invalidate).not.toHaveBeenCalled();
+  });
+
   it("does not tell the Backups screen anything when Save is refused", async () => {
     const api = stubApi({
       saveStreamSettings: vi.fn().mockRejectedValue({ code: "backup.reload_in_progress" }),
@@ -1232,6 +1258,7 @@ describe("stream-settings-panel: once set up", () => {
     await press(el, "turn-off");
     await press(el, "turn-off");
     expect(api.turnOffStream).toHaveBeenCalledOnce();
+    vi.mocked(api.getStreamSettings).mockResolvedValue(OFF);
     finish(OFF);
     await flush(el);
     expect(field(el, "bucket-region")).not.toBeNull();

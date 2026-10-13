@@ -556,6 +556,8 @@ export class StreamSettingsPanel extends LitElement {
       if (!current()) return;
       this.settings = settings;
       this.#trackShownForm(settings);
+      // The Backups screen offers this bucket as a destination, so it must see it go now.
+      this.api.liveData.invalidate([{ type: "backup_status" }]);
       this.#dropKit();
     } catch (error) {
       if (current()) this.#fail(error);

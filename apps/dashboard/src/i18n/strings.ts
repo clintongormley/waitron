@@ -1562,7 +1562,7 @@ export const en = {
   "backup.turn_off.cancel": "Cancel",
   "backup.pack.title": "Archive recovery pack",
   "backup.pack.explanation": "Restoring a backup from the bucket on a new box asks for this pack.",
-  "backup.pack.show": "Download archive recovery pack",
+  "backup.pack.show": "Show archive recovery pack",
   "backup.pack.warning":
     "Anyone holding this pack can open this venue's backups made under the current recovery key. Keep it as safe as the recovery key: offline, and never in the bucket itself.",
   "backup.pack.copy": "Copy",
@@ -4353,7 +4353,7 @@ export const es: Record<StringKey, string> = {
     "Una ruta completa en esta caja; por ejemplo, una memoria USB conectada o un disco montado.",
   "backup.destination.choice": "Guardar las copias en",
   "backup.destination.choice_local": "Una carpeta de esta caja",
-  "backup.destination.choice_stream": "El bucket de la copia en el bucket",
+  "backup.destination.choice_stream": "El bucket de la copia continua",
   "backup.destination.choice_custom": "Otro bucket compatible con S3",
   "backup.destination.secret_keep": "Déjala vacía para conservar la clave guardada.",
   "backup.destination.secret_needed":
@@ -4420,7 +4420,7 @@ export const es: Record<StringKey, string> = {
   "backup.pack.title": "Paquete de recuperación de las copias",
   "backup.pack.explanation":
     "Para restaurar en una caja nueva una copia del bucket se pide este paquete.",
-  "backup.pack.show": "Descargar el paquete de recuperación de las copias",
+  "backup.pack.show": "Mostrar el paquete de recuperación de las copias",
   "backup.pack.warning":
     "Quien tenga este paquete puede abrir las copias de este local hechas con la clave de recuperación actual. Guárdalo con el mismo cuidado que la clave de recuperación: fuera de línea y nunca en el propio bucket.",
   "backup.pack.copy": "Copiar",

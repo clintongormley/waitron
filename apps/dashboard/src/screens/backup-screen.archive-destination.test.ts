@@ -2,12 +2,13 @@ import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import type {
   BackupDestinationStatus,
   BackupStatusView,
   BackupWriteAnswer,
   DashboardApi,
+  StreamSettingsView,
 } from "../api/client.js";
 import "./backup-screen.js";
 import type { BackupScreen } from "./backup-screen.js";
@@ -495,15 +496,33 @@ describe("choosing where backups go", () => {
     expect(box.options.map((o) => o.value)).toEqual(["local-fs", "stream-bucket", "custom-s3"]);
   });
 
-  it("with no bucket copy set up, the bucket choice is unavailable and the form says why", async () => {
+  it("with no bucket copy set up, the bucket choice is unavailable and its own description says why", async () => {
     const { el } = await mount(OFF_WITH_KEY);
     await vi.waitFor(() => expect(choice(el)).not.toBeNull());
     const option = choice(el)!.options.find((o) => o.value === "stream-bucket")!;
     expect(option.disabled).toBe(true);
     expect(option.description).toBe(t("backup.destination.stream_unavailable"));
-    expect(text(q(el, "[data-test=stream-unavailable]")!).trim()).toBe(
-      t("backup.destination.stream_unavailable"),
-    );
+  });
+
+  it.each(["local-fs", "custom-s3"])(
+    "with no bucket copy set up and %s chosen, no line under the choice talks about the bucket copy",
+    async (value) => {
+      const { el } = await mount(OFF_WITH_KEY);
+      await vi.waitFor(() => expect(choice(el)).not.toBeNull());
+      await settle();
+      await choose(el, value);
+      expect(q(el, "[data-test=stream-unavailable]")).toBeNull();
+    },
+  );
+
+  it("names the bucket copy's bucket in natural Spanish", () => {
+    const before = currentLocale();
+    try {
+      setLocale("es");
+      expect(t("backup.destination.choice_stream")).toBe("El bucket de la copia continua");
+    } finally {
+      setLocale(before);
+    }
   });
 
   it("names the folder field, marks it required, and hides it for the bucket choice", async () => {
@@ -606,13 +625,14 @@ describe("choosing where backups go", () => {
     const { el } = await mount(OFF_WITH_KEY, {
       getStreamSettings: vi.fn().mockRejectedValue({ code: "server.unreachable" }),
     });
-    await vi.waitFor(() => expect(q(el, "[data-test=stream-unread]")).not.toBeNull());
+    await vi.waitFor(() =>
+      expect(choice(el)!.options.find((o) => o.value === "stream-bucket")!.description).toBe(
+        t("backup.destination.stream_unread"),
+      ),
+    );
     const option = choice(el)!.options.find((o) => o.value === "stream-bucket")!;
     expect(option.disabled).toBe(true);
-    expect(option.description).toBe(t("backup.destination.stream_unread"));
-    expect(text(q(el, "[data-test=stream-unread]")!).trim()).toBe(
-      t("backup.destination.stream_unread"),
-    );
+    expect(q(el, "[data-test=stream-unread]")).toBeNull();
     expect(banner(el)).toBeNull();
   });
 
@@ -1262,6 +1282,38 @@ describe("recovery pack", () => {
     expect(body).toBe(PACK_FILE);
   });
 
+  it("names its action for showing the pack, which the download link then saves", async () => {
+    const { el } = await mount(TWO);
+    expect(text(q(el, "[data-test=show-pack]")!).trim()).toBe(t("backup.pack.show"));
+    const before = currentLocale();
+    try {
+      setLocale("en");
+      expect(t("backup.pack.show")).toBe("Show archive recovery pack");
+      setLocale("es");
+      expect(t("backup.pack.show")).toBe("Mostrar el paquete de recuperación de las copias");
+    } finally {
+      setLocale(before);
+    }
+  });
+
+  it("sits below the settings actions, so they do not read as part of it", async () => {
+    const { el } = await mount(TWO);
+    const pack = q(el, "[data-test=show-pack]")!;
+    for (const action of ["edit-settings", "turn-off"]) {
+      const position = q(el, `[data-test=${action}]`)!.compareDocumentPosition(pack);
+      expect(position & Node.DOCUMENT_POSITION_FOLLOWING, action).toBeTruthy();
+    }
+  });
+
+  it("wraps the pack's sentences at spaces, breaking only a word longer than the line", async () => {
+    const { el } = await mount(TWO, { getArchiveRecoveryPack: vi.fn().mockResolvedValue(PACK) });
+    await showPack(el);
+    const style = getComputedStyle(q(el, "[data-test=pack]")!);
+    expect(style.wordBreak).toBe("normal");
+    expect(style.overflowWrap).toBe("break-word");
+    expect(style.whiteSpace).toBe("pre-wrap");
+  });
+
   it("copies the pack's text as the server wrote it", async () => {
     const { el } = await mount(TWO, { getArchiveRecoveryPack: vi.fn().mockResolvedValue(PACK) });
     await showPack(el);
@@ -1877,6 +1929,146 @@ describe("turning stored settings back on", () => {
     });
     expect((q(el, "[data-test=destination]") as Field).value).toBe("/mnt/usb/moved");
     expect(await buttonState(el, "apply")).toEqual(["primary", false]);
+  });
+});
+
+describe("the bucket copy turned off on the same page", () => {
+  const STREAM_GONE: StreamSettingsView = {
+    isPrimary: true,
+    configured: false,
+    bucket: null,
+    status: { state: "off" },
+    recoveryKeySet: true,
+    keyFingerprint: "ab12cd34",
+    revision: null,
+  };
+
+  /** The panel's turn-off answers, and later reads of its settings find, no bucket copy. */
+  function streamTurnsOff(): Partial<DashboardApi> {
+    const getStreamSettings = vi.fn().mockResolvedValue(STREAM_ON);
+    return {
+      getStreamSettings,
+      turnOffStream: vi.fn(() => {
+        getStreamSettings.mockResolvedValue(STREAM_GONE);
+        return Promise.resolve(STREAM_GONE);
+      }),
+    };
+  }
+
+  async function turnOffStreamInPanel(el: BackupScreen) {
+    const panel = q(el, "dashboard-stream-settings")!;
+    for (let i = 0; i < 2; i++) {
+      await vi.waitFor(() =>
+        expect(panel.shadowRoot!.querySelector("[data-test=turn-off]")).not.toBeNull(),
+      );
+      panel.shadowRoot!.querySelector<HTMLElement>("[data-test=turn-off]")!.click();
+      await settle();
+      await el.updateComplete;
+    }
+  }
+
+  async function streamOption(el: BackupScreen) {
+    await el.updateComplete;
+    return choice(el)!.options.find((o) => o.value === "stream-bucket")!;
+  }
+
+  async function mountReady(status: BackupStatusView, overrides: Partial<DashboardApi>) {
+    const opened = await mount(status, overrides);
+    await vi.waitFor(() => expect(q(opened.el, "[data-test=apply]")).not.toBeNull());
+    await vi.waitFor(async () => expect((await streamOption(opened.el)).disabled).toBeFalsy());
+    await settle();
+    await opened.el.updateComplete;
+    return opened;
+  }
+
+  async function comboError(el: BackupScreen): Promise<string> {
+    const box = choice(el)!;
+    await box.updateComplete;
+    return box.error;
+  }
+
+  it("the destination choice learns at once that the bucket copy's bucket is gone", async () => {
+    const { el } = await mountReady(OFF_WITH_KEY, streamTurnsOff());
+    await turnOffStreamInPanel(el);
+    await vi.waitFor(async () => expect((await streamOption(el)).disabled).toBe(true));
+    expect((await streamOption(el)).description).toBe(t("backup.destination.stream_unavailable"));
+  });
+
+  it("stored settings on the bucket copy's bucket, untouched, open again on another bucket with its values and an empty secret, and turn on as that bucket", async () => {
+    const { el, api } = await mountReady(storedOff(ON_STREAM_BUCKET), streamTurnsOff());
+    expect(choice(el)!.value).toBe("stream-bucket");
+    await turnOffStreamInPanel(el);
+    await vi.waitFor(() => expect(choice(el)!.value).toBe("custom-s3"));
+    expect(customField(el, "name").value).toBe("stream-bucket");
+    expect(customField(el, "access-key-id").value).toBe("AKIASTREAM");
+    expect(customField(el, "secret-access-key").value).toBe("");
+    expect(q(el, "[data-test=stream-location]")).toBeNull();
+    expect(await buttonState(el, "apply")).toEqual(["primary", false]);
+    q(el, "[data-test=apply]")!.click();
+    await vi.waitFor(() => expect(api.applyBackup).toHaveBeenCalledOnce());
+    expect(vi.mocked(api.applyBackup).mock.calls[0]![0].destination).toEqual({
+      kind: "custom-s3",
+      region: "eu-north-1",
+      bucket: "stream-bucket",
+      prefix: "venues",
+      accessKeyId: "AKIASTREAM",
+    });
+  });
+
+  it("stored settings on the bucket copy's bucket open again on another bucket when only the bucket copy's read has answered", async () => {
+    const { el, api } = await mountReady(storedOff(ON_STREAM_BUCKET), {
+      getStreamSettings: vi.fn().mockResolvedValue(STREAM_ON),
+    });
+    expect(choice(el)!.value).toBe("stream-bucket");
+    vi.mocked(api.getBackupStatus).mockReturnValue(new Promise(() => {}));
+    vi.mocked(api.getStreamSettings).mockResolvedValue(STREAM_GONE);
+    api.liveData.invalidate([{ type: "backup_status" }]);
+    await vi.waitFor(() => expect(choice(el)!.value).toBe("custom-s3"));
+    expect(customField(el, "access-key-id").value).toBe("AKIASTREAM");
+  });
+
+  it("a bucket-copy choice the owner made stays chosen, says it is unavailable, and Save sends nothing", async () => {
+    const { el, api } = await mountReady(OFF_WITH_KEY, streamTurnsOff());
+    await choose(el, "stream-bucket");
+    await turnOffStreamInPanel(el);
+    await vi.waitFor(async () => expect((await streamOption(el)).disabled).toBe(true));
+    expect(choice(el)!.value).toBe("stream-bucket");
+    expect(text(q(el, "[data-test=stream-unavailable]")!).trim()).toBe(
+      t("backup.destination.stream_unavailable"),
+    );
+    expect(q(el, "[data-test=stream-location]")).toBeNull();
+    q(el, "[data-test=apply]")!.click();
+    await settle();
+    await el.updateComplete;
+    expect(api.applyBackup).not.toHaveBeenCalled();
+    expect(await comboError(el)).toBe(t("backup.destination.stream_unavailable"));
+    expect(await bottomOf(el, "apply-actions")).toBe(t("form.fix_fields"));
+    expect(await buttonState(el, "apply")).toEqual(["primary", true]);
+    await choose(el, "local-fs");
+    expect(await comboError(el)).toBe("");
+  });
+
+  it("stored settings the owner has changed since keep the bucket-copy choice and their change, and Save sends nothing", async () => {
+    const { el, api } = await mountReady(storedOff(ON_STREAM_BUCKET), streamTurnsOff());
+    await setRetainCount(el, "9");
+    await turnOffStreamInPanel(el);
+    await vi.waitFor(async () => expect((await streamOption(el)).disabled).toBe(true));
+    expect(choice(el)!.value).toBe("stream-bucket");
+    expect((q(el, "[data-test=retain-count]") as Field).value).toBe("9");
+    q(el, "[data-test=apply]")!.click();
+    await settle();
+    await el.updateComplete;
+    expect(api.applyBackup).not.toHaveBeenCalled();
+    expect(await comboError(el)).toBe(t("backup.destination.stream_unavailable"));
+  });
+
+  it("an untouched settings editor on the bucket copy's bucket opens again on another bucket, with Save quiet", async () => {
+    const { el } = await openEdit(ON_STREAM_BUCKET, streamTurnsOff());
+    expect(choice(el)!.value).toBe("stream-bucket");
+    await turnOffStreamInPanel(el);
+    await vi.waitFor(() => expect(choice(el)!.value).toBe("custom-s3"));
+    expect(customField(el, "access-key-id").value).toBe("AKIASTREAM");
+    expect(await buttonState(el, "save-settings")).toEqual(["secondary", true]);
   });
 });
 
