@@ -3730,7 +3730,8 @@ export class TillApi {
 
   /**
    * `tableId` joins the party → `POST /api/parties/:id/join`; a party seated there joins with every
-   * table it holds. Rejects as {@link moveGuests} does, and `service_zone.join_mismatch`.
+   * table it holds. Rejects as {@link moveGuests} does, and `service_zone.join_mismatch`; with a
+   * merge, also `floor_today.out_of_date` when the room has changed since `zoneRevision`.
    */
   joinTables(
     partyId: string,

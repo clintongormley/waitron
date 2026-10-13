@@ -1041,8 +1041,6 @@ export class TillFloorScreen extends LitElement {
     );
   }
 
-  /** Every floor write: its answer is carried, a refusal says its words and drops `#pending`, then
-   * the floor is re-read. */
   async #settle(
     call: Promise<FloorAnswer | null>,
     asks: (refused: { code?: string; field?: unknown }) => boolean = () => false,

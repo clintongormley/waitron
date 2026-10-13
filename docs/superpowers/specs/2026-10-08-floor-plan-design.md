@@ -166,8 +166,12 @@ undone at the next reset anyway.
 > each room has a revision that every reset moves by one, as does each request, or catch-up
 > outside a reset, that changes its plan for the day. The floor read carries it on each table,
 > the table routes and the zone reset answer it as it stands after the change, and a change sent
-> from an older one is refused (`floor_today.out_of_date`). Since part 2b the till always sends
-> it, and a change without one is refused.
+> from an older one is refused (`floor_today.out_of_date`). Until part 2b a change that sends none
+> is still applied.
+
+> Added 2026-10-13 by A579 part 2b: the till sends the revision with every table route, the zone
+> reset and a party join that makes a merge, and any of those that sends none is refused
+> (`management.request_invalid`); only the zone reset may send `null`.
 
 ### 6.1 Moving and joining
 

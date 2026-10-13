@@ -1670,8 +1670,8 @@ sent revision that is not the room's revision after the catch-up, before their o
 party join refuses it the same way (`floor_today.out_of_date`, `refuseStale` in
 `apps/server/src/floor-revision.ts`, called by `changeRoom` and the zone reset route in
 `apps/server/src/floor-today-api.ts` and by `movingRooms` in `apps/server/src/till-api.ts`). A
-refusal rolls back the catch-up with everything else. The till always sends the revision, and a
-table route, the zone reset or a party join with a merge that sends none is refused
+refusal rolls back the catch-up with everything else. The till sends the revision with a table
+route, the zone reset and a party join with a merge, and any of those that sends none is refused
 (`management.request_invalid`, `requiredRevision` in `apps/server/src/floor-revision.ts`); the
 zone reset alone may send `null`, for a read that held no table of the zone with a today's row.
 
