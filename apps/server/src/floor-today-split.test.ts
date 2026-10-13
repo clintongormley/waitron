@@ -628,3 +628,48 @@ describe("guests at a joined table that is split", () => {
     }).toEqual(before);
   });
 });
+
+describe("taking a joined table's tables off for today", () => {
+  const takeOff = (tableId: string) => inTx(v, (tx) => takeOffToday(tx, v.cfg, tableId));
+
+  it("refuses a part still joined to Long table, writing nothing", async () => {
+    const { table } = await LONG_PLUS_BAR();
+    const before = await everything();
+
+    const error = await refusalOf(takeOff(table.c4!));
+
+    expect(error?.code).toBe("table.in_joined_table");
+    expect(error?.params).toEqual({ tableId: table.c4! });
+    expect(await everything()).toEqual(before);
+  });
+
+  it("refuses Long table once it has come apart, writing nothing", async () => {
+    const { table } = await LONG_PLUS_BAR();
+    await splitOffRow(v, table.long!, table.c4!);
+    await splitOffRow(v, table.long!, table.c5!);
+    const before = await everything();
+
+    const error = await refusalOf(takeOff(table.long!));
+
+    expect(error?.code).toBe("table.in_joined_table");
+    expect(error?.params).toEqual({ tableId: table.long! });
+    expect(await everything()).toEqual(before);
+  });
+
+  it("takes off a part split off Long table", async () => {
+    const { table } = await LONG_PLUS_BAR();
+    await split(table.long!, [table.c5!], 6);
+
+    await takeOff(table.c5!);
+
+    expect((await todayRow(v, table.c5!))?.takenOff).toBe(true);
+  });
+
+  it("takes off Long table whole", async () => {
+    const { table } = await LONG_PLUS_BAR();
+
+    await takeOff(table.long!);
+
+    expect((await todayRow(v, table.long!))?.takenOff).toBe(true);
+  });
+});

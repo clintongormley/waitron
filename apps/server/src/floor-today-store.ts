@@ -604,6 +604,7 @@ export async function takeOffToday(
   const today = await todayOf(tx, cfg, tableId);
   if (today.row.takenOff) return;
   if (today.merge !== null) throw new AppError("table.merged", { tableId });
+  await refuseInJoinedTable(tx, [tableId]);
   await refuseUnfree(tx, [tableId]);
   await refuseDeliveryPending(tx, tableId);
   await tx
