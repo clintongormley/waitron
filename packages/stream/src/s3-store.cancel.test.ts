@@ -105,6 +105,25 @@ describe("a read cancelled after its headers have arrived", () => {
     await vi.waitFor(() => expect(observed.closed).toBe(true));
   });
 
+  it("on the production handler, stops a listing whose page stalls and closes its connection", async () => {
+    const observed = { closed: false };
+    const headersSent = signalled();
+    const config = await bucket((request, response) => {
+      request.socket.once("close", () => (observed.closed = true));
+      response.writeHead(200, { ...xml, "content-length": "1000" });
+      response.write('<?xml version="1.0" encoding="UTF-8"?><ListBucketResult>');
+      headersSent.resolve();
+    });
+    const store = createS3ObjectStore(config);
+    const controller = new AbortController();
+    const call = outcome(store.list("venues/", { signal: controller.signal }));
+    await headersSent.promise;
+    await delay(100);
+    controller.abort();
+    expect(await call).toEqual(cancelled("list", "venues/"));
+    await vi.waitFor(() => expect(observed.closed).toBe(true));
+  });
+
   it("stops a body that trickles a byte at a time and closes its connection", async () => {
     const observed = { closed: false };
     const firstByte = signalled();
