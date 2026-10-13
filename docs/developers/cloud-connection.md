@@ -170,8 +170,8 @@ browser receives the code, link, deadline and approved snapshot details, while t
 and temporary storage credentials stay on the server. A managed restore excludes the captured
 `backup.env`, so the replacement does not inherit the backup settings kept in that file. It does
 inherit the database and the vault key, and with them the settings the database holds sealed: the
-bucket copy's settings (`backup.stream`) and the archive settings saved from the dashboard
-(`backup.archive`), each with its bucket's access keys.
+bucket copy's settings (`backup.stream`) with its bucket's access keys, and the archive settings
+saved from the dashboard (`backup.archive`) with the access keys of any bucket they name.
 
 The Cloud account page authorizes a target to read one snapshot. It does not confirm that local
 restore has finished. Waitron stages and validates the encrypted archive, restarts, runs cold

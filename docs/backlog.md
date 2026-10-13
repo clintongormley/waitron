@@ -106,8 +106,9 @@ spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
 
 4. **What a standalone box still lacks before a real venue runs it** (under _The box: backups,
    upgrades and recovery_, except the certificate, under _Fiscal records, invoices and the asesor_):
-   - an off-box home for the backup archive — the bucket stream of `venue.db` is built, but
-     archives can only be saved on the box itself (`LocalFsBackend`);
+   - an off-box home for the backup archive on the Backups screen — the environment and the
+     authenticated backup routes can name an S3 bucket (A538), but the screen still offers only a
+     local folder;
    - installing or renewing the AEAT certificate after setup — today only the setup wizard can
      set it, and nothing watches when it expires;
    - upgrade testing with rows the product itself writes and a real older database —

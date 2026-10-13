@@ -1173,8 +1173,8 @@ declare module "@waitron/shared" {
     };
     /**
      * A backup admin route body failed shape validation before any write; or `field: "config"` when
-     * `rotate` finds no destination loaded and no key held. `field` names the offending field, never
-     * the value, which could be the recovery key. */
+     * `rotate` finds no readable archive record, no destination loaded and no key held. `field`
+     * names the offending field, never the value, which could be the recovery key. */
     "backup.request_invalid": { field: string };
     /** The stream settings' Test, or the same check Save runs first, refused the owner's bucket.
      * `reason` is `probeBucket`'s short reason (`@waitron/stream`), naming which check failed. */
