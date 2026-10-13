@@ -1049,6 +1049,18 @@ test("a column named in columnErrors marks its heading and describes its day wit
     "Check this day's time ranges and periods.",
   );
   expect(day("mon").hasAttribute("aria-describedby")).toBe(false);
+  expect(heading("mon").innerText.trim()).toBe("Monday");
+  const loose = (key: string) =>
+    [...heading(key).childNodes]
+      .filter((node) => node.nodeType === Node.TEXT_NODE)
+      .map((node) => node.textContent)
+      .join("")
+      .trim();
+  expect(loose("mon")).toBe("");
+  expect(loose("thu")).toBe("");
+  expect(
+    [...heading("thu").querySelectorAll(":scope > span")].map((span) => span.textContent),
+  ).toEqual(["Thursday", "Check this day's time ranges and periods."]);
   el.columnErrors = new Map();
   await el.updateComplete;
   expect(heading("thu").hasAttribute("data-error")).toBe(false);

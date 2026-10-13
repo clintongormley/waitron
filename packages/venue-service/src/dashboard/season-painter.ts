@@ -108,6 +108,9 @@ function shownIn(model: Model, departmentId: string, zoneId: string) {
     zoneId: department?.zones.find(({ id }) => id === zoneId)?.id ?? "",
   };
 }
+/** Department columns erase on Closed, so a Closed paint is never a department slot. */
+const isPeriodPaint = (paint: Paint): paint is Paint & { periodId: string } =>
+  paint.periodId !== null;
 function refusalReason(code: string, reason: unknown): string {
   if (reason === "end_offset") return t("menu.offset_timetable");
   if (reason === "clock_skips") return t("menu.time_skipped");
@@ -258,6 +261,8 @@ export class SeasonPainter extends LitElement {
   @state() private periodBusy = false;
   private baseline: Draft = new Map();
   private seededSeason?: string;
+  /** The model every week of the baseline was last taken from; a clean draft catches up to a newer one. */
+  private followed?: Model;
   /** A period just created, chosen in its own department until the model lists it. */
   private created?: { id: string; departmentId: string };
   /** Edits a refresh dropped because what they belonged to is gone; shown beside Save. */
@@ -293,7 +298,7 @@ export class SeasonPainter extends LitElement {
       }
     }
     if (this.seededSeason !== this.seasonId) this.reseed();
-    else if (changes.has("model")) {
+    else if (changes.has("model") || (this.followed !== this.model && !this.anyEdited())) {
       const before = shownIn(previous, this.departmentId, this.zoneId);
       this.refresh(previous);
       const after = shownIn(this.model, this.departmentId, this.zoneId);
@@ -362,6 +367,7 @@ export class SeasonPainter extends LitElement {
     this.refused = undefined;
     this.revision = this.model.clockRevision;
     this.seededSeason = this.seasonId;
+    this.followed = this.model;
     const fresh = seed(this.model, this.seasonId);
     this.draft = copyDraft(fresh);
     this.commitBaseline(fresh);
@@ -391,6 +397,7 @@ export class SeasonPainter extends LitElement {
       draft.set(key, copyWeek(week));
       baseline.set(key, week);
     }
+    if ([...baseline].every(([key, week]) => week === fresh.get(key))) this.followed = this.model;
     this.draft = draft;
     this.commitBaseline(baseline);
     const notices = [
@@ -502,11 +509,9 @@ export class SeasonPainter extends LitElement {
             departmentId,
             days: days(departmentKey(departmentId)).map(({ weekday, paint }) => ({
               weekday,
-              slots: paint.map(({ periodId, startsAt, endsAt }) => ({
-                periodId: periodId as string,
-                startsAt,
-                endsAt,
-              })),
+              slots: paint
+                .filter(isPeriodPaint)
+                .map(({ periodId, startsAt, endsAt }) => ({ periodId, startsAt, endsAt })),
             })),
           })),
           zones: zones.map((zoneId) => ({
@@ -529,14 +534,15 @@ export class SeasonPainter extends LitElement {
     const baseline = copyDraft(this.baseline);
     for (const [key, week] of sent) if (baseline.has(key)) baseline.set(key, week);
     this.commitBaseline(baseline);
+    this.followed = this.model;
     this.api.rereadWatches();
   }
   /** A refusal naming `departments.<i>` or `zones.<i>` shows that week, marking the day it names. */
   private refuse(error: unknown, departments: string[], zones: string[]) {
     const code = codeOf(error);
     const params = (error as { params?: { field?: unknown; reason?: unknown } } | null)?.params;
-    if (code === "hours.clock_changed") {
-      this.refused = { message: t("hours.clock_changed") };
+    if (code === "hours.clock_changed" || code === "hours.clock_change_pending") {
+      this.refused = { message: t(code) };
       return;
     }
     const match = /^(departments|zones)\.(\d+)(?=\.|$)(?:\.days\.(\d+)(?=\.|$))?/.exec(
@@ -553,10 +559,10 @@ export class SeasonPainter extends LitElement {
     const name = ownerName(this.model, owner);
     const reason = refusalReason(code, params?.reason);
     this.refused = {
-      message: format("painter.refused_in", {
-        where: weekday === undefined ? name : `${name}, ${weekdayLabel(weekday)}`,
-        message: reason,
-      }),
+      message:
+        weekday === undefined
+          ? format("painter.refused_in", { name, message: reason })
+          : format("painter.refused_on", { name, day: weekdayLabel(weekday), message: reason }),
       owner,
       column: weekday === undefined ? undefined : String(weekday),
       reason,
@@ -615,7 +621,7 @@ export class SeasonPainter extends LitElement {
         data-test="previous-season"
         variant="ghost"
         aria-label=${t("painter.previous_season")}
-        ?disabled=${single}
+        ?disabled=${single || this.saving}
         @click=${() => void this.step(-1)}
         >‹</wt-button
       >
@@ -630,7 +636,7 @@ export class SeasonPainter extends LitElement {
         data-test="next-season"
         variant="ghost"
         aria-label=${t("painter.next_season")}
-        ?disabled=${single}
+        ?disabled=${single || this.saving}
         @click=${() => void this.step(1)}
         >›</wt-button
       >
@@ -645,6 +651,7 @@ export class SeasonPainter extends LitElement {
         label=${t("painter.department")}
         hide-label
         search="never"
+        ?disabled=${this.saving}
         .value=${zone ? `zone:${zone.id}` : department.id}
         .options=${this.model.departments
           .filter(({ active }) => active)

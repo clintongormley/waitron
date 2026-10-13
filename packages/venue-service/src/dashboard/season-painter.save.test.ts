@@ -427,3 +427,53 @@ it("several edited departments made inactive are told together", async () => {
     "Bar and Café are no longer active; their changes were dropped.",
   );
 });
+
+it("a pending business-day change has its own message", async () => {
+  const { painter, writes } = await mount(withBar(), [{ code: "hours.clock_change_pending" }]);
+  await drag(painter, "3", 7 * 60, 9 * 60);
+  await save(painter, writes);
+  expect(frame(painter).refusal).toBe(
+    "Cancel the pending business-day change before editing hours.",
+  );
+});
+
+it("the season steps and the picker are disabled while a save is in flight", async () => {
+  let succeed!: () => void;
+  const late = new Promise<void>((resolve) => {
+    succeed = resolve;
+  });
+  const { painter, writes } = await mount(withBar(), [late]);
+  await drag(painter, "3", 7 * 60, 9 * 60);
+  const steps = () =>
+    ["previous-season", "next-season"].map(
+      (test) => (button(painter, test) as HTMLElementTagNameMap["wt-button"]).disabled,
+    );
+  const picker = () =>
+    painter.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=department]")!;
+  expect(steps()).toEqual([false, false]);
+  expect(picker().disabled).toBe(false);
+  saveButton(painter).click();
+  await expect.poll(() => writes.length).toBe(1);
+  await settle(painter);
+  expect(steps()).toEqual([true, true]);
+  expect(picker().disabled).toBe(true);
+  succeed();
+  await expect.poll(() => frame(painter).busy).toBe(false);
+  await settle(painter);
+  expect(steps()).toEqual([false, false]);
+  expect(picker().disabled).toBe(false);
+});
+
+it("after a save, the painting stays even though the last model refresh came before it", async () => {
+  const { painter, writes } = await mount();
+  button(painter, "paint-p2").click();
+  await settle(painter);
+  await drag(painter, "3", 14 * 60, 17 * 60);
+  painter.model = withBar();
+  await settle(painter);
+  await save(painter, writes);
+  expect(frame(painter).dirty).toBe(false);
+  expect(grid(painter).days.get("3")).toEqual([
+    { periodId: "p2", startsAt: "20:00", endsAt: "23:00" },
+  ]);
+});

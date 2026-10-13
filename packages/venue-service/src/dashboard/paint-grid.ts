@@ -788,8 +788,7 @@ export class PaintGrid extends LitElement {
                         >${this.columnErrors.get(column.key)}</span
                       >`
                     : nothing
-                }
-                ><slot name=${`column-menu-${column.key}`}
+                }<slot name=${`column-menu-${column.key}`}
                   ><wt-row-actions
                     icon="kebab"
                     align="end"

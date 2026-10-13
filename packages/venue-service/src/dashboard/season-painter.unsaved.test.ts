@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { LitElement, html } from "lit";
 import { applyTokens, LeaveController } from "@waitron/ui";
 import { setLocale } from "@waitron/dashboard-kit";
@@ -9,6 +9,7 @@ import {
   grid,
   painterApi,
   painterModel,
+  pick,
   settle,
 } from "../testing/season-painter-fixture.js";
 import "./season-painter.js";
@@ -16,7 +17,7 @@ import "./season-painter.js";
 class PainterApp extends LitElement {
   readonly leave = new LeaveController(this);
   readonly api = painterApi();
-  readonly model = painterModel();
+  model = painterModel();
   override render() {
     return html`<season-painter
         .api=${this.api}
@@ -113,4 +114,67 @@ it("✕ with edits asks first", async () => {
   frame(painter).shadowRoot!.querySelector<HTMLElement>("[data-test=dismiss]")!.click();
   await choose("discard");
   await expect.poll(() => painter.open).toBe(false);
+});
+
+const dismiss = (painter: SeasonPainter) =>
+  frame(painter).shadowRoot!.querySelector<HTMLElement>("[data-test=dismiss]")!.click();
+
+it("after ✕ and Discard, the next save sends the clock revision the model now holds", async () => {
+  const painter = await mount();
+  const sent = vi.spyOn(painter.api, "saveSeasonWeeks");
+  await paintWednesday(painter);
+  app.model = { ...painterModel(), clockRevision: 11 };
+  app.requestUpdate();
+  await app.updateComplete;
+  await settle(painter);
+  dismiss(painter);
+  await choose("discard");
+  await expect.poll(() => painter.open).toBe(false);
+  painter.open = true;
+  await settle(painter);
+  await paintWednesday(painter);
+  save(painter).click();
+  await expect.poll(() => sent.mock.calls.length).toBe(1);
+  expect(sent.mock.calls[0]![2]).toBe(11);
+});
+
+it("Discard clears a removal notice and a refused save's message", async () => {
+  const painter = await mount();
+  await pick(painter, "zone:z2");
+  await drag(painter, "4", 0, 3 * 60);
+  await pick(painter, "d1");
+  await paintWednesday(painter);
+  const next = painterModel();
+  const restaurant = next.departments[0]!;
+  app.model = {
+    ...next,
+    departments: [
+      { ...restaurant, zones: restaurant.zones.filter(({ id }) => id !== "z2") },
+      ...next.departments.slice(1),
+    ],
+  };
+  app.requestUpdate();
+  await app.updateComplete;
+  await settle(painter);
+  expect(frame(painter).refusal).toBe("Terrace was removed; its changes were dropped.");
+  const discard = async () => {
+    const left = app.leave.coordinator.request({
+      scopes: "all",
+      reason: "navigation",
+      proceed() {},
+    });
+    await choose("discard");
+    await left;
+    await settle(painter);
+  };
+  await discard();
+  expect(frame(painter).refusal).toBe("");
+  vi.spyOn(painter.api, "saveSeasonWeeks").mockRejectedValueOnce({ code: "season.not_found" });
+  await paintWednesday(painter);
+  save(painter).click();
+  await expect.poll(() => frame(painter).refusal).toBe("This could not be saved. Try again.");
+  await expect.poll(() => frame(painter).busy).toBe(false);
+  await discard();
+  expect(frame(painter).refusal).toBe("");
+  expect(frame(painter).open).toBe(true);
 });
