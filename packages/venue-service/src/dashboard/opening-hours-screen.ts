@@ -1074,6 +1074,7 @@ export class OpeningHoursScreen extends LitElement {
                       ? html`${this.yearReadError ? html`<p role="alert" data-test="year-read-error">${this.yearReadError}</p>` : nothing}
                           <opening-hours-year
                             .model=${this.yearModel}
+                            .year=${this.shownYear()}
                             .api=${this.api}
                             .areaApi=${this.areaWrites}
                             .specialDays=${this.knownSpecialDays}

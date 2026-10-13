@@ -233,6 +233,9 @@ export class OpeningHoursYearView extends LitElement {
 
   /** The year as the server reads it; the host fetches a new one on `year-change`. */
   @property({ attribute: false }) model?: OpeningHoursYear;
+  /** The year the host asked for, ahead of `model` while its read is pending; ‹ › step from it so
+   *  presses during the wait add up. 0 steps from `model`. */
+  @property({ type: Number }) year = 0;
   /** The season writes the chips send. */
   @property({ attribute: false }) api?: SeasonWrites;
   @property({ attribute: false }) areaApi?: HolidayAreaWrites;
@@ -553,7 +556,7 @@ export class OpeningHoursYearView extends LitElement {
         variant="secondary"
         data-test=${test}
         aria-label=${t(label)}
-        @click=${() => this.#emit("year-change", { year: model.year + by })}
+        @click=${() => this.#emit("year-change", { year: (this.year || model.year) + by })}
         >${glyph}</wt-button
       >`;
     return html`<div class="head">

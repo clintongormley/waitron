@@ -2134,6 +2134,22 @@ describe("Year view", () => {
     },
   );
 
+  it("steps ‹ and › from the year asked for while that year is still loading", async () => {
+    const { view } = await heldMount("/manage/opening-hours/view/year/year/2027", (path) =>
+      /year=20(28|29)$/.test(path),
+    );
+    await expect.poll(() => view().model?.year).toBe(2027);
+    const press = (test: string) =>
+      userEvent.click(view().shadowRoot!.querySelector<HTMLElement>(`[data-test=${test}]`)!);
+    await press("next-year");
+    await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/year/year/2028");
+    await press("next-year");
+    await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/year/year/2029");
+    expect(view().model?.year).toBe(2027);
+    await press("previous-year");
+    await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/year/year/2028");
+  });
+
   it("stops drawing the last year when the next year cannot be read", async () => {
     vi.setSystemTime(new Date("2026-10-12T12:00:00Z"));
     history.replaceState(null, "", "/manage/opening-hours/view/year/year/2027");
