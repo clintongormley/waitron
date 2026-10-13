@@ -4,6 +4,7 @@ import {
   partyTables,
   floorTodayJoins,
   floorTodayJoinTables,
+  floorTodaySplitParts,
   floorTodayTables,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -16,6 +17,10 @@ import {
   todayOf,
   type Today,
 } from "./floor-today-table.js";
+import { partsOf, type Part } from "./floor-today-parts.js";
+import { placementColumns, placementOf, refuseDeliveryPending } from "./floor-today-store.js";
+import type { Placement } from "./floor-reset-plan.js";
+import { partPlaces } from "./joined-split-layout.js";
 import { holderOf } from "./parties.js";
 import { joinTables } from "./table-actions.js";
 import type { OriginConfig, TillConfig } from "./till-config.js";
@@ -150,7 +155,10 @@ export async function partyRevision(tx: Transaction, partyId: string): Promise<n
   return party!.revision;
 }
 
-/** `moving` joins `target`'s merge (or a new one), touching it on `side`; with `free`, neither table may be held or need clearing. */
+/**
+ * `moving` joins `target`'s merge (or a new one), touching it on `side`; with `free`, neither table may be held or need clearing.
+ * A joined table never goes in a merge: its tables still joined are split off it and go in instead.
+ */
 export async function writeMerge(
   tx: Transaction,
   cfg: TillConfig,
@@ -176,6 +184,11 @@ export async function writeMerge(
   if (args.seats === null) throw new AppError("merge.seats_required", {});
   const { seats } = args;
 
+  const movingParts = await partsOf(tx, moving.tableId);
+  const targetParts = await partsOf(tx, target.tableId);
+  if (movingParts.length > 0) await refuseDeliveryPending(tx, moving.tableId);
+  if (targetParts.length > 0) await refuseDeliveryPending(tx, target.tableId);
+
   let joinId = target.merge?.joinId;
   if (joinId === undefined) {
     const [join] = await tx
@@ -183,21 +196,74 @@ export async function writeMerge(
       .values({ zoneId, seats })
       .returning({ id: floorTodayJoins.id });
     joinId = join!.id;
-    await tx.insert(floorTodayJoinTables).values(beforeRow(joinId, target));
+    if (targetParts.length === 0) {
+      await tx.insert(floorTodayJoinTables).values(beforeRow(joinId, target));
+    }
   } else {
     await tx.update(floorTodayJoins).set({ seats }).where(eq(floorTodayJoins.id, joinId));
   }
-  await tx.insert(floorTodayJoinTables).values(beforeRow(joinId, moving));
+
+  const targetRow = placementOf(target.row)!;
+  const targetTables = laidInside(targetRow, targetParts);
+  for (const laid of targetTables) {
+    await standApart(tx, joinId, target.tableId, laid.tableId, laid.place, laid.place);
+  }
+
   const goes = { width: moving.row.width!, height: moving.row.height! };
   const against = placeOf(target.row);
-  const side = freeSide(
-    against,
-    goes,
-    (target.merge?.members ?? [target.row]).filter((m) => m.x !== null).map(placeOf),
-    args.side,
-  );
+  const members =
+    targetParts.length > 0
+      ? targetTables.map((laid) => laid.place)
+      : (target.merge?.members ?? [target.row]).filter((m) => m.x !== null).map(placeOf);
+  const side = freeSide(against, goes, members, args.side);
   const at = touchingPlace(against, goes, side);
-  await tx.update(floorTodayTables).set(at).where(eq(floorTodayTables.id, moving.row.id));
+
+  if (movingParts.length === 0) {
+    await tx.insert(floorTodayJoinTables).values(beforeRow(joinId, moving));
+    await tx.update(floorTodayTables).set(at).where(eq(floorTodayTables.id, moving.row.id));
+    return;
+  }
+  const outline = placementOf(moving.row)!;
+  const from = laidInside(outline, movingParts);
+  const to = laidInside({ ...outline, ...at }, movingParts);
+  for (const [index, laid] of to.entries()) {
+    await standApart(tx, joinId, moving.tableId, laid.tableId, laid.place, from[index]!.place);
+  }
+}
+
+/** Each table of the joined table still joined, in number order, where it stands inside `outline`. */
+function laidInside(
+  outline: Placement,
+  parts: readonly Part[],
+): { tableId: string; place: Placement }[] {
+  const covered = parts.findIndex((part) => !part.splitOff);
+  const places = partPlaces(outline, parts, covered);
+  return parts.flatMap((part, index) =>
+    part.stillJoined ? [{ tableId: part.tableId, place: places[index]! }] : [],
+  );
+}
+
+/** `partId` is split off `joinedId`, stands at `place` and joins the merge as having stood at `before`. */
+async function standApart(
+  tx: Transaction,
+  joinId: string,
+  joinedId: string,
+  partId: string,
+  place: Placement,
+  before: Placement,
+): Promise<void> {
+  await tx.insert(floorTodaySplitParts).values({ joinedTableId: joinedId, partTableId: partId });
+  await tx
+    .update(floorTodayTables)
+    .set({ ...placementColumns(place), takenOff: false })
+    .where(eq(floorTodayTables.tableId, partId));
+  await tx.insert(floorTodayJoinTables).values({
+    joinId,
+    tableId: partId,
+    beforeX: before.x,
+    beforeY: before.y,
+    beforeRotation: before.rotation,
+  });
 }
 
 function placeOf(row: Today["row"]): JoinPlace {

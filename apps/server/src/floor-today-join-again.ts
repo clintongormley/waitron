@@ -11,7 +11,7 @@ import {
 import type { TableRemoval } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { catchUpZone, foodComingTo, placementColumns, placementOf } from "./floor-today-store.js";
-import { partsOf } from "./floor-today-split.js";
+import { partsOf } from "./floor-today-parts.js";
 import { todayOf } from "./floor-today-table.js";
 import { joinedPlaceAfter } from "./joined-split-layout.js";
 import { holdersOf } from "./parties.js";
