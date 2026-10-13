@@ -339,6 +339,81 @@ describe("till-floor-screen: joining a joined table again", () => {
     expect(windowOf(el)).toBeNull();
   });
 
+  it("a floor read during the request keeps the window as it was sent; when it no longer applies, a refusal shows on the floor", async () => {
+    const api = stubApi();
+    const answer = holdAnswer(api);
+    const el = await mount(counter3Busy(), api);
+    const opened = (await pressJoinAgain(el, "c4"))!;
+    send(opened, "join-again-confirm", { seats: 6 });
+    await settle(el);
+
+    el.tables = allFree();
+    await settle(el);
+    expect(windowOf(el)).toBe(opened);
+    expect(opened.busy).toBe(true);
+    expect(apartIds(el)).toEqual(["c3"]);
+
+    answer.refuse({ code: "joined_table.out_of_date" });
+    await settle(el);
+    expect(windowOf(el)).toBeNull();
+    expect(floorRefusal(el)).toBe(codeMessage("joined_table.out_of_date"));
+  });
+
+  it("a floor read during the request that still leaves a table apart keeps the window, and a refusal shows at its foot over the new read", async () => {
+    const api = stubApi();
+    const answer = holdAnswer(api);
+    const el = await mount(oneOfTwoBusy("c4"), api);
+    const opened = (await pressJoinAgain(el, "c5"))!;
+    send(opened, "join-again-confirm", { seats: 6 });
+    await settle(el);
+
+    el.tables = oneOfTwoBusy("c5");
+    await settle(el);
+    expect(windowOf(el)).toBe(opened);
+    expect(apartIds(el)).toEqual(["c4"]);
+
+    answer.refuse({ code: "joined_table.out_of_date" });
+    await settle(el);
+    expect(windowOf(el)).toBe(opened);
+    expect(apartIds(el)).toEqual(["c5"]);
+    await opened.updateComplete;
+    expect(footError(el)).toBe(codeMessage("joined_table.out_of_date"));
+    expect(floorRefusal(el)).toBeNull();
+  });
+
+  it("a done answer closes a window kept through a floor read that made it obsolete", async () => {
+    const api = stubApi();
+    const answer = holdAnswer(api);
+    const el = await mount(counter3Busy(), api);
+    const opened = (await pressJoinAgain(el, "c4"))!;
+    const commit = vi.spyOn(opened, "commit");
+    send(opened, "join-again-confirm", { seats: 6 });
+    await settle(el);
+    el.tables = allFree();
+    await settle(el);
+
+    answer.done();
+    await settle(el);
+    expect(commit).toHaveBeenCalledOnce();
+    expect(windowOf(el)).toBeNull();
+    expect(floorRefusal(el)).toBeNull();
+  });
+
+  it("a refusal whose window closed because its joined table left the floor read shows on the floor", async () => {
+    const api = stubApi();
+    const answer = holdAnswer(api);
+    const el = await mount(counter3Busy(), api);
+    send((await pressJoinAgain(el, "c4"))!, "join-again-confirm", { seats: 6 });
+    await settle(el);
+    el.tables = counter3Busy().filter((each) => each.id !== "long");
+    await settle(el);
+    expect(windowOf(el)).toBeNull();
+
+    answer.refuse({ code: "joined_table.out_of_date" });
+    await settle(el);
+    expect(floorRefusal(el)).toBe(codeMessage("joined_table.out_of_date"));
+  });
+
   it.each([
     ["refused", (answer: Answer) => answer.refuse({ code: "joined_table.out_of_date" })],
     ["done", (answer: Answer) => answer.done()],
@@ -370,6 +445,7 @@ describe("till-floor-screen: joining a joined table again", () => {
       expect(bar.busy).toBe(false);
       expect(bar.refusal).toBeNull();
       expect(stepper.value).toBe("5");
+      expect(floorRefusal(el)).toBeNull();
     },
   );
 
