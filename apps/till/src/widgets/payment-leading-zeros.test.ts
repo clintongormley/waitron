@@ -72,6 +72,27 @@ function capture<T>(dialog: Dialog, name: string): T[] {
 }
 
 describe.each(["en", "es"] as const)("leading-zero amounts in %s", (locale) => {
+  it.each(["05,50", "05.50"])("sends %s as a canonical bill-payment card tip", async (tip) => {
+    setLocale(locale);
+    const { el } = await mountWidget<TillBillPayDialog>("till-bill-pay-dialog", {
+      balance,
+      lines: [],
+      way: "contribution",
+    });
+    const asked = capture<PayRequest>(el, "bill-pay-preview");
+    await type(el, "amount", "10");
+    await click(el, 'input[name="method"][value="card"]');
+    await type(el, "cardTip", tip);
+    await click(el, "[data-pay-continue]");
+    expect(asked).toEqual([
+      {
+        choice: { kind: "contribution", amount: "10" },
+        pay: { method: "card", addedTip: "5.50" },
+        card: { entry: "manual" },
+      },
+    ]);
+  });
+
   it.each(["000", "0000000005.50", "05.501", "05,50.00"])(
     "keeps invalid payment amount %s beside its field without sending a request",
     async (amount) => {
