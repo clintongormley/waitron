@@ -35,8 +35,6 @@ import { realSleep } from "./loop.js";
 import type { Logger } from "./logger.js";
 import "./errors.js";
 
-/** A SYNC, config-derived snapshot of the backup duty — no I/O. The routes and the box-status shell
- * read this; `status()` layers the async freshness on top. */
 /** Where a destination is, never what opens it: a bucket's keys stay on the box. */
 export type DestinationView =
   | { id: string; kind: "local-fs"; dir: string }
@@ -63,6 +61,8 @@ export function destinationView(d: BackupDestination): DestinationView {
   };
 }
 
+/** A SYNC, config-derived snapshot of the backup duty — no I/O. The routes and the box-status shell
+ * read this; `status()` layers the async freshness on top. */
 export interface BackupRuntimeStatus {
   enabled: boolean;
   isPrimary: boolean;

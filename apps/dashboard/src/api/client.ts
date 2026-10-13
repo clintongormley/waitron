@@ -1612,8 +1612,6 @@ export interface ServerListing {
   nodes: ServerRow[];
 }
 
-/** Never carries the recovery key: the server strips it (`projectStatus`,
- * `apps/server/src/backup-api.ts`). */
 /** LOCAL copy of the server's `DestinationView` (`apps/server/src/backup-supervisor.ts`). */
 export type BackupDestinationView =
   | { id: string; kind: "local-fs"; dir: string }
@@ -1627,6 +1625,8 @@ export type BackupDestinationView =
       credentialPresent: true;
     };
 
+/** Never carries the recovery key: the server strips it (`projectStatus`,
+ * `apps/server/src/backup-api.ts`). */
 export interface BackupStatusView {
   enabled: boolean;
   isPrimary: boolean;
