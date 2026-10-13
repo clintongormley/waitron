@@ -70,7 +70,7 @@ interface Rejoin {
  * joined table none of whose tables is still joined, next to each other in its order and each
  * standing where its layout from the first of them puts it, with nobody seated and no food on its
  * way to them, the joined table is put back over them; otherwise they stay a group of `seats`.
- * Guests at the group leave the ticked tables, as Move guests leaves tables, and the kitchen is told;
+ * Guests at the group leave the ticked tables, as Move guests leaves tables;
  * ticking every table a party holds is refused `tab.already_open`.
  */
 async function splitGroup(

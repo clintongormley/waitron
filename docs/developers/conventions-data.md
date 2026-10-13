@@ -1650,7 +1650,8 @@ waiting together while any of them is held by a party, refused by a module, merg
 table, or has food on its way to it; a merge in which no table is held by a party, refused by a module
 or in a split group that waits is ended as any free merge is. Its parts
 not split off stay joined meanwhile, and the split ends when the reset puts the joined table back,
-or, for the tables it takes back, when Join again does
+or, for the tables it takes back, when Join again does, or when Split tables… on a group puts it
+back over the tables that stay (`splitGroup`, which also clears their "needs clearing" marks)
 (`splitWithBusy`, `apps/server/src/floor-reset-plan.ts:38`; `waitingTogether`,
 `apps/server/src/floor-today-store.ts:486`). When the reset, or a later catch-up of its pending
 rows, puts a split joined table back whole, it clears the "needs clearing" mark of each table split

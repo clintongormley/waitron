@@ -137,12 +137,12 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Indica las plazas de esta unión",
   },
   "merge.member_invalid": {
-    en: "That table is no longer in this group",
-    es: "Esa mesa ya no está en este grupo",
+    en: "That table is no longer joined to these tables",
+    es: "Esa mesa ya no está unida a estas mesas",
   },
   "merge.split_all": {
-    en: "Leave at least one table in the group",
-    es: "Deja al menos una mesa en el grupo",
+    en: "Leave at least one table joined",
+    es: "Deja al menos una mesa unida",
   },
   "table.not_on_today_plan": {
     en: "That table is not on today's plan",
