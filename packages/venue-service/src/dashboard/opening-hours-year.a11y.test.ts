@@ -23,7 +23,7 @@ function yearModel(overrides: Partial<OpeningHoursYear> = {}): OpeningHoursYear 
   const days: OpeningHoursYearDay[] = [];
   for (let date = "2027-01-01"; date <= "2027-12-31"; date = addDays(date, 1)) {
     const mmdd = date.slice(5);
-    const holiday = date === "2027-01-06";
+    const holiday = date === "2027-01-06" || date === "2027-12-08" || date === "2027-12-20";
     const special = date >= "2027-12-13" && date <= "2027-12-24";
     const closed = date === "2027-12-25" || date === "2027-12-26";
     days.push({
@@ -114,6 +114,8 @@ describe.each(["light", "dark"] as const)("Opening hours year accessibility (%s)
       if (state !== "a year with no list" || mark !== "public_holiday")
         expect(el.shadowRoot!.querySelector(`td[data-tone="${mark}"]`)).not.toBeNull();
     expect(el.shadowRoot!.querySelector("td[data-closed]")).not.toBeNull();
+    if (state !== "a year with no list")
+      expect(el.shadowRoot!.querySelector("td.mark-holiday.mark-special")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 });

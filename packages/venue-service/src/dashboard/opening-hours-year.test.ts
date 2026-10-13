@@ -29,15 +29,31 @@ const holiday = (date: LocalDate, name: string): HolidayFact => ({
   sourceId: "official",
 });
 
-/** 2027 with a public holiday on 6 January, a special day on 12 May, a closed day on 26 December. */
+const everyHoliday = [
+  holiday("2027-01-06", "Epiphany"),
+  holiday("2027-12-08", "Immaculate Conception"),
+];
+
+/** 2027 with a public holiday on 6 January, a special day on 12 May, a special day on the public
+ *  holiday of 8 December and a closed day on 26 December. */
 function yearModel(overrides: Partial<OpeningHoursYear> = {}): OpeningHoursYear {
   const days: OpeningHoursYearDay[] = [];
   for (let date = "2027-01-01"; date <= "2027-12-31"; date = addDays(date, 1)) {
     const mmdd = date.slice(5);
     const seasonId =
       mmdd >= "12-01" || mmdd < "03-01" ? "w" : mmdd < "06-01" ? "sp" : mmdd < "09-01" ? "su" : "a";
-    const holidays = date === "2027-01-06" ? [holiday(date, "Epiphany")] : [];
-    const specialDay = date === "2027-05-12" ? { id: "fair", name: "Town fair" } : null;
+    const holidays =
+      date === "2027-01-06"
+        ? [holiday(date, "Epiphany")]
+        : date === "2027-12-08"
+          ? [holiday(date, "Immaculate Conception")]
+          : [];
+    const specialDay =
+      date === "2027-05-12"
+        ? { id: "fair", name: "Town fair" }
+        : date === "2027-12-08"
+          ? { id: "market", name: "Christmas market" }
+          : null;
     const closed = date === "2027-12-26";
     days.push({
       date,
@@ -172,6 +188,12 @@ describe("Opening hours year", () => {
     const el = await mount();
     expect(cell(el, "2027-01-06").dataset.tone).toBe("public_holiday");
     expect(cell(el, "2027-05-12").dataset.tone).toBe("special_day");
+    const marks = (date: LocalDate) =>
+      ["mark-holiday", "mark-special"].filter((mark) => cell(el, date).classList.contains(mark));
+    expect(marks("2027-01-06")).toEqual(["mark-holiday"]);
+    expect(marks("2027-05-12")).toEqual(["mark-special"]);
+    expect(marks("2027-12-08")).toEqual(["mark-holiday", "mark-special"]);
+    expect(marks("2027-12-26")).toEqual([]);
     expect(cell(el, "2027-12-26").hasAttribute("data-closed")).toBe(true);
     expect(cell(el, "2027-12-27").hasAttribute("data-closed")).toBe(false);
     expect(cell(el, "2027-12-27").dataset.tone).toBe("standard");
@@ -246,7 +268,7 @@ describe("Opening hours year", () => {
     add.click();
     expect(sent).toHaveLength(1);
     expect(sent[0]).toMatchObject({ kind: "open", date: "", specialDay: null, holidays: [] });
-    expect(sent[0]!.visibleHolidays).toEqual([holiday("2027-01-06", "Epiphany")]);
+    expect(sent[0]!.visibleHolidays).toEqual(everyHoliday);
     expect(sent[0]!.returnTo()).toBe(add);
   });
 
@@ -286,7 +308,7 @@ describe("Opening hours year", () => {
       date: "2027-01-06",
       specialDay: null,
       holidays: [holiday("2027-01-06", "Epiphany")],
-      visibleHolidays: [holiday("2027-01-06", "Epiphany")],
+      visibleHolidays: everyHoliday,
     });
   });
 
@@ -360,6 +382,21 @@ describe("Opening hours year", () => {
     expect(root(el).querySelector('[data-test="missing-holiday"]')).toBeNull();
   });
 
+  it("says town holidays are not in the official lists for each way the list lacks them", async () => {
+    for (const local of ["none_entered", "address_unresolved", "unsupported_country"] as const) {
+      const model = yearModel();
+      model.holidayCoverage = [{ ...model.holidayCoverage[0]!, local }];
+      const el = await mount(model);
+      expect(root(el).querySelector('[data-test="town-holidays"]'), local).not.toBeNull();
+    }
+    const other = await mount(
+      yearModel({
+        holidayCoverage: [{ ...yearModel().holidayCoverage[0]!, year: 2028 }],
+      }),
+    );
+    expect(root(other).querySelector('[data-test="town-holidays"]')).toBeNull();
+  });
+
   it("says when the year's public holidays are not available yet, under the legend", async () => {
     const model = yearModel({ publicHolidaysAvailable: false });
     model.holidayCoverage = [{ ...model.holidayCoverage[0]!, nationalRegional: "missing_year" }];
@@ -367,6 +404,17 @@ describe("Opening hours year", () => {
     const line = root(el).querySelector('[data-test="holidays-unavailable"]')!;
     expect(text(line)).toBe("Public holidays for 2027 are not available yet");
     expect(line.previousElementSibling?.classList.contains("legend")).toBe(true);
+    const warned = await mount(
+      yearModel({
+        publicHolidaysAvailable: false,
+        missingHolidays: [
+          { specialDayId: "vs", name: "Good Friday", holidayName: "Viernes Santo" },
+        ],
+      }),
+    );
+    const under = root(warned).querySelector('[data-test="holidays-unavailable"]')!;
+    expect(under.previousElementSibling?.classList.contains("legend")).toBe(true);
+    expect(under.nextElementSibling?.querySelector('[data-test="missing-holiday"]')).not.toBeNull();
     expect(root(el).querySelector('[data-test="coverage"]')).toBeNull();
   });
 
@@ -375,14 +423,31 @@ describe("Opening hours year", () => {
       yearModel({
         missingHolidays: [
           { specialDayId: "vs", name: "Viernes Santo", holidayName: "Viernes Santo" },
-          { specialDayId: "cm", name: "Carnival", holidayName: "Carnaval" },
+          { specialDayId: "cm", name: "Carnival closure", holidayName: "Carnaval" },
         ],
+        area: {
+          readiness: "ready",
+          addressKey: "city",
+          options: [{ key: "aran", name: "Aran" }],
+          required: true,
+          chosen: null,
+        },
       }),
     );
-    expect([...root(el).querySelectorAll('[data-test="missing-holiday"]')].map(text)).toEqual([
-      "Viernes Santo (Every year) has no public holiday of that name in 2027",
-      "Carnival (Every year) has no public holiday of that name in 2027",
+    const lines = [...root(el).querySelectorAll('[data-test="missing-holiday"]')];
+    expect(lines.map(text)).toEqual([
+      "Viernes Santo (Every year) has no public holiday of that name in 2027.",
+      "Carnaval (Every year) has no public holiday of that name in 2027.",
     ]);
+    // Directly under the legend, before the holiday-area chooser and the coverage lines.
+    expect(lines[0]!.parentElement!.previousElementSibling?.classList.contains("legend")).toBe(
+      true,
+    );
+    for (const after of ["[name=holidayArea]", '[data-test="coverage"]'])
+      expect(
+        lines[1]!.compareDocumentPosition(root(el).querySelector(after)!) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
   });
 
   it("asks for the holiday area when the province needs one", async () => {
@@ -470,7 +535,7 @@ describe("Opening hours year", () => {
       "Los festivos oficiales de 2027 aún no están disponibles",
     );
     expect(text(root(el).querySelector('[data-test="missing-holiday"]'))).toBe(
-      "Viernes Santo (Cada año) no tiene ningún festivo con ese nombre en 2027",
+      "Viernes Santo (cada año): en 2027 no hay ningún festivo con ese nombre.",
     );
     expect(text(root(el).querySelector('[data-test="town-holidays"]'))).toBe(
       "Las fiestas locales no están en las listas oficiales: añádelas como días especiales.",

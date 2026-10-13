@@ -5,6 +5,7 @@ import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import { holidayDateName } from "../holiday-naming.js";
+import type { HolidayCoverage } from "../holiday-types.js";
 import type { LocalDate } from "../hours-types.js";
 import { addDays } from "../hours-rules.js";
 import type { OpeningHoursYear, OpeningHoursYearDay } from "../opening-hours-calendar.js";
@@ -19,6 +20,16 @@ import type { SpecialDaysApi } from "./special-days-client.js";
 import { t } from "./strings.js";
 
 type Key = Parameters<typeof t>[0];
+
+/** Whether a year's official list leaves local holidays out; no `local` state says it carries them. */
+function listLacksLocalHolidays(local: HolidayCoverage["local"]): boolean {
+  switch (local) {
+    case "address_unresolved":
+    case "unsupported_country":
+    case "none_entered":
+      return true;
+  }
+}
 export type HolidayAreaWrites = Pick<SpecialDaysApi, "saveHolidayArea" | "rereadWatches">;
 
 const MONTHS = Array.from({ length: 12 }, (_, index) => String(index + 1).padStart(2, "0"));
@@ -179,13 +190,26 @@ export class OpeningHoursYearView extends LitElement {
         background: var(--wt-color-season-4);
         color: var(--wt-color-on-season-4);
       }
-      td[data-tone="public_holiday"] .day {
+      td.mark-holiday .day {
         border-color: var(--wt-color-palette-red);
         font-weight: var(--wt-font-weight-bold);
       }
-      td[data-tone="special_day"] .day {
+      td.mark-special .day {
         border-color: var(--wt-color-palette-purple);
         font-weight: var(--wt-font-weight-bold);
+      }
+      td.mark-holiday.mark-special .day {
+        position: relative;
+      }
+      td.mark-holiday.mark-special .day::after {
+        content: "";
+        position: absolute;
+        inset-block-start: var(--wt-space-1);
+        inset-inline-end: var(--wt-space-1);
+        width: var(--wt-space-2);
+        height: var(--wt-space-2);
+        border-radius: var(--wt-radius-full);
+        background: var(--wt-color-palette-red);
       }
       td[data-closed] .day {
         background: var(--wt-color-day-closed);
@@ -375,6 +399,14 @@ export class OpeningHoursYearView extends LitElement {
                 if (!date.startsWith(key)) return html`<td></td>`;
                 const day = days.get(date);
                 return html`<td
+                  class=${
+                    [
+                      day?.tone === "public_holiday" ? "mark-holiday" : "",
+                      day?.specialDay ? "mark-special" : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ") || nothing
+                  }
                   data-date=${date}
                   data-tint=${(day?.seasonId && tints.get(day.seasonId)) || nothing}
                   data-tone=${day?.tone ?? "standard"}
@@ -495,13 +527,23 @@ export class OpeningHoursYearView extends LitElement {
     return html`<ul class="note notes">
       ${national ? html`<li data-test="coverage">${national}</li>` : nothing}
       ${
-        // Every `local` state the read reports means the official list carries no local holidays.
-        coverage ? html`<li data-test="town-holidays">${t("year.town_holidays")}</li>` : nothing
+        coverage && listLacksLocalHolidays(coverage.local)
+          ? html`<li data-test="town-holidays">${t("year.town_holidays")}</li>`
+          : nothing
       }
+    </ul>`;
+  }
+
+  #warnings(model: OpeningHoursYear) {
+    if (!model.missingHolidays.length) return nothing;
+    return html`<ul class="note notes">
       ${model.missingHolidays.map(
         (missing) =>
           html`<li class="warning" data-test="missing-holiday">
-            ${format("year.missing_holiday", { name: missing.name, year })}
+            ${format("venue.readiness.holiday_missing", {
+              name: missing.holidayName,
+              year: String(model.year),
+            })}
           </li>`,
       )}
     </ul>`;
@@ -568,7 +610,7 @@ export class OpeningHoursYearView extends LitElement {
               ${format("year.holidays_unavailable", { year: String(model.year) })}
             </p>`
       }
-      ${this.#area(model)} ${this.#notes(model)}
+      ${this.#warnings(model)} ${this.#area(model)} ${this.#notes(model)}
       <div class="months">
         ${MONTHS.map((month) => this.#month(model, month, days, tints, stop))}
       </div>`;
