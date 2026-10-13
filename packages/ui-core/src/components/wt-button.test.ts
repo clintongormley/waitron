@@ -284,3 +284,64 @@ test("updates and clears the inner button's accessible description", async () =>
   el.removeAttribute("aria-description");
   await expect.element(page.elementLocator(inner)).toHaveAccessibleDescription("");
 });
+
+function paintDistinctColourTokens(): void {
+  host.style.setProperty("--wt-color-primary", "rgb(41, 42, 43)");
+  host.style.setProperty("--wt-color-on-primary", "rgb(51, 52, 53)");
+  host.style.setProperty("--wt-color-danger", "rgb(61, 62, 63)");
+  host.style.setProperty("--wt-color-on-danger", "rgb(71, 72, 73)");
+  host.style.setProperty("--wt-color-primary-disabled", "rgb(81, 82, 83)");
+  host.style.setProperty("--wt-color-on-primary-disabled", "rgb(91, 92, 93)");
+  host.style.setProperty("--wt-color-danger-disabled", "rgb(101, 102, 103)");
+  host.style.setProperty("--wt-color-on-danger-disabled", "rgb(111, 112, 113)");
+  host.style.setProperty("--wt-opacity-disabled", "0.3");
+}
+
+function paint(el: Element): { background: string; text: string; opacity: string } {
+  const style = getComputedStyle(el.shadowRoot!.querySelector("button")!);
+  return { background: style.backgroundColor, text: style.color, opacity: style.opacity };
+}
+
+test.each([
+  ["primary", "rgb(81, 82, 83)", "rgb(91, 92, 93)"],
+  ["danger", "rgb(101, 102, 103)", "rgb(111, 112, 113)"],
+] as const)(
+  "a disabled %s button paints its own disabled colour pair at full opacity",
+  async (variant, background, text) => {
+    const el = await mount(`<wt-button variant="${variant}" disabled>x</wt-button>`);
+    paintDistinctColourTokens();
+    expect(paint(el)).toEqual({ background, text, opacity: "1" });
+    expect(getComputedStyle(el.shadowRoot!.querySelector("button")!).cursor).toBe("not-allowed");
+  },
+);
+
+test.each([
+  ["primary", "rgb(41, 42, 43)", "rgb(51, 52, 53)"],
+  ["danger", "rgb(61, 62, 63)", "rgb(71, 72, 73)"],
+] as const)(
+  "a loading %s button keeps its own colours, faded, even when also disabled",
+  async (variant, background, text) => {
+    const loading = await mount(`<wt-button variant="${variant}" loading>x</wt-button>`);
+    paintDistinctColourTokens();
+    expect(paint(loading)).toEqual({ background, text, opacity: "0.3" });
+
+    const both = await mount(`<wt-button variant="${variant}" loading disabled>x</wt-button>`);
+    paintDistinctColourTokens();
+    expect(paint(both)).toEqual({ background, text, opacity: "0.3" });
+  },
+);
+
+test("a primary button takes its colour back when disabled is removed", async () => {
+  const el = (await mount('<wt-button variant="primary" disabled>x</wt-button>')) as HTMLElement & {
+    updateComplete: Promise<unknown>;
+  };
+  paintDistinctColourTokens();
+  expect(paint(el).background).toBe("rgb(81, 82, 83)");
+  el.removeAttribute("disabled");
+  await el.updateComplete;
+  expect(paint(el)).toEqual({
+    background: "rgb(41, 42, 43)",
+    text: "rgb(51, 52, 53)",
+    opacity: "1",
+  });
+});

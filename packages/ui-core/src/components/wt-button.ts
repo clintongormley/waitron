@@ -93,6 +93,19 @@ export class WtButton extends LitElement {
         color: var(--wt-color-text);
       }
 
+      /* Final colours, so no fade on top; a loading button keeps its own colour, faded. */
+      :host([variant="primary"][disabled]:not([loading])) button {
+        background: var(--wt-color-primary-disabled);
+        color: var(--wt-color-on-primary-disabled);
+        opacity: 1;
+      }
+
+      :host([variant="danger"][disabled]:not([loading])) button {
+        background: var(--wt-color-danger-disabled);
+        color: var(--wt-color-on-danger-disabled);
+        opacity: 1;
+      }
+
       /* For a button standing in as a MENU ITEM (e.g. inside wt-row-actions' popover, which already
          stretches a slotted button to the popover's full width) — a centered label reads oddly once
          the button is wider than its text, unlike an ordinary button sized to its own content. */
