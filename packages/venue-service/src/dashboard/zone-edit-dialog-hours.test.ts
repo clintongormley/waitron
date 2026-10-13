@@ -55,6 +55,14 @@ it("summarises the current season's closed times and names the season", async ()
   await mount(twoSeasons("winter"));
   await expect.poll(summary).toBe("Winter: closed from 23:30 Monday to Thursday");
 });
+it("links to the season painter on this zone in the venue's current season", async () => {
+  await mount(twoSeasons("winter"));
+  const href = () =>
+    el.shadowRoot!.querySelector("[data-test=zone-opening-hours]")?.getAttribute("href");
+  await expect
+    .poll(href)
+    .toBe("/manage/opening-hours/view/season/season/winter/department/d1/zone/z1");
+});
 it("names the season in Spanish with the season's stored name", async () => {
   setLocale("es-ES");
   await mount(twoSeasons("winter"));

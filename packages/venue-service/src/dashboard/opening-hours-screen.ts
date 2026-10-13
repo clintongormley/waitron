@@ -17,8 +17,8 @@ import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "./period-editor.js";
-import "./opening-hours-week.js";
-import "./opening-hours-zone-week.js";
+import "./season-painter.js";
+import type { PainterNavigation } from "./season-painter.js";
 import "./opening-hours-day.js";
 import "./opening-hours-all.js";
 import "./opening-hours-station.js";
@@ -62,6 +62,8 @@ type OpenSpecialDay = Omit<SpecialDayAction, "specialDay"> & {
   offerEditDate?: boolean;
 };
 type Deletion = { period: Period };
+/** What a painter address names, as written; `painterTarget` resolves it against the model. */
+type PainterAddress = { seasonId: string; departmentId: string; zoneId: string };
 
 @customElement("dashboard-opening-hours-screen")
 export class OpeningHoursScreen extends LitElement {
@@ -149,16 +151,20 @@ export class OpeningHoursScreen extends LitElement {
   @state() private specialReadError = "";
   private detach?: () => void;
   private generation = {};
+  /** Set while the address is the season painter's; the view underneath stays as it was. */
+  @state() private painter?: PainterAddress;
+  /** The address of the view the painter opened over, or none on a direct load. */
+  private baseHref?: string;
   private readonly url = new UrlStateController(this, () => this.followUrl(), {
     basePath: "/manage",
     primary: "dashboard",
     children: {
       "opening-hours": {
         view: "view",
+        season: "season",
         department: "department",
         zone: "zone",
         station: "station",
-        season: "season",
         date: "date",
         year: "year",
         month: "month",
@@ -168,6 +174,17 @@ export class OpeningHoursScreen extends LitElement {
   private followUrl() {
     if (this.url.read("dashboard") !== "opening-hours") return;
     const view = this.url.read("view");
+    const named = {
+      seasonId: this.url.read("season") ?? "",
+      departmentId: this.url.read("department") ?? "",
+      zoneId: this.url.read("zone") ?? "",
+    };
+    if (view === "season") {
+      this.painter = named;
+      if (this.baseHref === undefined) this.view = "year";
+      this.namePainterTarget();
+      return;
+    }
     const shown: View =
       view === "year" ||
       view === "month" ||
@@ -181,15 +198,20 @@ export class OpeningHoursScreen extends LitElement {
               !this.namesWeek(new URL(navigationGuardFor(window)?.href ?? location.href))
             ? "year"
             : "week";
+    const href = navigationGuardFor(window)?.href ?? location.href;
+    const stationId = this.url.read("station") ?? new URL(href).searchParams.get("station") ?? "";
+    if (shown === "week" && !stationId && named.departmentId !== "all") {
+      this.replaceAddress(this.painterUrl(named));
+      return;
+    }
+    this.painter = undefined;
+    this.baseHref = href;
     if (shown !== this.view) this.specialReadError = "";
     this.view = shown;
-    this.departmentId = this.url.read("department") ?? "";
-    this.zoneId = this.url.read("zone") ?? "";
-    this.requestedSeason = this.url.read("season") ?? "";
-    this.stationId =
-      this.url.read("station") ??
-      new URL(navigationGuardFor(window)?.href ?? location.href).searchParams.get("station") ??
-      "";
+    this.departmentId = named.departmentId;
+    this.zoneId = named.zoneId;
+    this.requestedSeason = named.seasonId;
+    this.stationId = stationId;
     this.requestedYear = parseCalendarYear(this.url.read("year")) ?? 0;
     this.requestedMonth = parseCalendarMonth(this.url.read("month")) ?? "";
     const date = this.url.read("date") ?? "";
@@ -219,7 +241,9 @@ export class OpeningHoursScreen extends LitElement {
     );
     this.detach = this.api.watchOpeningHours(
       (model) => {
+        const first = !this.model;
         this.model = model;
+        if (first) this.namePainterTarget();
         if (
           !this.season ||
           (!model.seasons.some((season) => season.id === this.season) &&
@@ -478,6 +502,8 @@ export class OpeningHoursScreen extends LitElement {
   }
   private async writeAddress(url: URL, replace = false) {
     const generation = this.generation;
+    const view = this.view;
+    const painter = this.painter;
     const guard = navigationGuardFor(window);
     if (guard) {
       await guard.write(url, replace);
@@ -485,7 +511,13 @@ export class OpeningHoursScreen extends LitElement {
       return;
     }
     const proceed = () => {
-      if (!this.isConnected || generation !== this.generation || this.view !== "week") return;
+      if (
+        !this.isConnected ||
+        generation !== this.generation ||
+        this.view !== view ||
+        this.painter !== painter
+      )
+        return;
       if (replace) history.replaceState(history.state, "", url);
       else history.pushState(history.state, "", url);
       this.followUrl();
@@ -493,6 +525,116 @@ export class OpeningHoursScreen extends LitElement {
     const coordinator = leaveCoordinatorFor(this);
     if (coordinator) await coordinator.request({ scopes: "all", reason: "navigation", proceed });
     else proceed();
+  }
+  /** Rewrites the address in place without the leave question: the painter keeps its draft across
+   *  a department switch, and a guarded write would offer to discard it. */
+  private replaceAddress(url: URL) {
+    const guard = navigationGuardFor(window);
+    if (guard && !leaveCoordinatorFor(this)?.isDirty()) {
+      void guard.write(url, true);
+      return;
+    }
+    history.replaceState(history.state, "", url);
+    guard?.reset();
+    this.followUrl();
+  }
+  private painterUrl({ seasonId, departmentId, zoneId }: PainterAddress) {
+    const url = new URL(navigationGuardFor(window)?.href ?? location.href);
+    const parts = [
+      ["view", "season"],
+      ["season", seasonId],
+      ["department", departmentId],
+      ["zone", zoneId],
+    ].filter(([, value]) => value);
+    url.pathname = `/manage/opening-hours/${parts.map(([key, value]) => `${key}/${encodeURIComponent(value!)}`).join("/")}`;
+    url.searchParams.delete("station");
+    return url;
+  }
+  /** Opens the painter on `seasonId` for the department the screen shows, over the current view. */
+  private openPainter(seasonId: string) {
+    const department = this.department();
+    void this.writeAddress(
+      this.painterUrl({
+        seasonId,
+        departmentId: department?.active ? department.id : "",
+        zoneId: "",
+      }),
+    );
+  }
+  private painterTarget(model: OpeningHoursModel, named: PainterAddress) {
+    const active = model.departments.filter((department) => department.active);
+    const department = active.find((candidate) => candidate.id === named.departmentId) ?? active[0];
+    return {
+      seasonId: chosenSeasonId(model.seasons, model.currentSeasonId, named.seasonId),
+      departmentId: department?.id ?? "",
+      zoneId: department?.zones.find((zone) => zone.id === named.zoneId)?.id ?? "",
+    };
+  }
+  /** Puts what the painter shows in the address when it names a season, department or zone it
+   *  cannot show. Only on arrival: a refresh that removes the shown season is the painter's to tell. */
+  private namePainterTarget() {
+    const named = this.painter;
+    if (!named || !this.model) return;
+    const target = this.painterTarget(this.model, named);
+    if (
+      target.seasonId !== named.seasonId ||
+      target.departmentId !== named.departmentId ||
+      target.zoneId !== named.zoneId
+    )
+      this.replaceAddress(this.painterUrl(target));
+  }
+  /** A painter the screen has already let go of may still finish an update and announce it. */
+  private currentPainter(event: Event) {
+    return (
+      this.isConnected &&
+      this.painter !== undefined &&
+      event.currentTarget === this.shadowRoot?.querySelector("season-painter")
+    );
+  }
+  private seasonPainter() {
+    if (!this.painter || !this.model) return nothing;
+    const target = this.painterTarget(this.model, this.painter);
+    return html`<season-painter
+      .open=${true}
+      .api=${this.api}
+      .model=${this.model}
+      .seasonId=${target.seasonId}
+      .departmentId=${target.departmentId}
+      .zoneId=${target.zoneId}
+      @painter-navigate=${(event: CustomEvent<PainterNavigation>) => {
+        event.stopPropagation();
+        if (!this.currentPainter(event)) return;
+        const { seasonId, departmentId, zoneId } = event.detail;
+        this.replaceAddress(this.painterUrl({ seasonId, departmentId, zoneId: zoneId ?? "" }));
+      }}
+      @painter-close=${(event: Event) => {
+        event.stopPropagation();
+        if (!this.currentPainter(event)) return;
+        this.replaceAddress(
+          new URL(this.baseHref ?? "/manage/opening-hours/view/year", location.href),
+        );
+      }}
+      @click=${(event: MouseEvent) => {
+        const link = event
+          .composedPath()
+          .find(
+            (node): node is HTMLAnchorElement =>
+              node instanceof HTMLAnchorElement && node.dataset["test"] === "periods-link",
+          );
+        if (
+          !link ||
+          event.defaultPrevented ||
+          event.button !== 0 ||
+          event.metaKey ||
+          event.ctrlKey ||
+          event.shiftKey ||
+          event.altKey
+        )
+          return;
+        event.preventDefault();
+        void this.writeAddress(new URL(link.href));
+      }}
+    ></season-painter>`;
   }
   private menuLabel(id: string) {
     const menu = this.model!.menus.find((m) => m.id === id);
@@ -883,6 +1025,11 @@ export class OpeningHoursScreen extends LitElement {
     this.namedAction = undefined;
     this.followUrl();
   }
+  private openSeasonWeek(event: CustomEvent<{ seasonId: string }>) {
+    event.stopPropagation();
+    if (!this.isConnected || this.readOnly || this.painter) return;
+    this.openPainter(event.detail.seasonId);
+  }
   private openOrdinary(event: CustomEvent<OrdinaryDateOpen>) {
     event.stopPropagation();
     if (
@@ -922,18 +1069,7 @@ export class OpeningHoursScreen extends LitElement {
         @ordinary-date-close=${leave}
         @ordinary-date-edit-week=${(event: CustomEvent<{ seasonId: string }>) => {
           if (!leave(event)) return;
-          void Promise.resolve(
-            this.url.write({
-              dashboard: "opening-hours",
-              view: "week",
-              season: event.detail.seasonId,
-              zone: null,
-              station: null,
-              month: null,
-              date: null,
-              year: null,
-            }),
-          ).then(() => this.followUrl());
+          this.openPainter(event.detail.seasonId);
         }}
         @ordinary-date-make-special=${(event: CustomEvent<{ date: string }>) => {
           if (!leave(event)) return;
@@ -1005,6 +1141,7 @@ export class OpeningHoursScreen extends LitElement {
         @special-day-action=${this.openNamedDay}
         @ordinary-date-open=${this.openOrdinary}
         @season-dialog-open=${() => this.readKnownSpecialDays()}
+        @season-week-open=${this.openSeasonWeek}
         @season-changed=${(event: Event) => {
           event.stopPropagation();
           this.api.rereadWithSpecialDays();
@@ -1163,7 +1300,7 @@ export class OpeningHoursScreen extends LitElement {
                 .value=${this.view === "month" || this.view === "date" ? "year" : this.view}
                 .items=${[
                   { key: "year", label: t("opening.tab.year") },
-                  { key: "week", label: t("hours.tab.week") },
+                  ...(this.view === "week" ? [{ key: "week", label: t("hours.tab.week") }] : []),
                   { key: "periods", label: t("opening.tab.periods") },
                 ]}
                 @wt-tab-change=${(event: CustomEvent<{ value: View }>) => {
@@ -1193,6 +1330,7 @@ export class OpeningHoursScreen extends LitElement {
                             .readOnly=${this.readOnly}
                             @special-day-action=${this.openNamedDay}
                             @season-dialog-open=${() => this.readKnownSpecialDays()}
+                            @season-week-open=${this.openSeasonWeek}
                             @season-changed=${(event: Event) => {
                               event.stopPropagation();
                               this.api.rereadWithSpecialDays();
@@ -1248,35 +1386,7 @@ export class OpeningHoursScreen extends LitElement {
                               void this.chooseDepartment(event.detail.departmentId);
                             }}
                           ></opening-hours-all>`
-                        : this.view === "week" && this.zone()
-                          ? keyed(
-                              `${this.zone()!.id}:${this.season}`,
-                              html`<opening-hours-zone-week
-                                .api=${this.api}
-                                .department=${department!}
-                                .zone=${this.zone()!}
-                                .seasonId=${this.season}
-                                .clockRevision=${this.model.clockRevision}
-                                .businessDayClock=${this.model.businessDayClock}
-                                .dayCutover=${this.model.dayCutover}
-                                .readOnly=${this.readOnly}
-                              ></opening-hours-zone-week>`,
-                            )
-                          : this.view === "week" && department
-                            ? keyed(
-                                `${department.id}:${this.season}`,
-                                html`<opening-hours-week
-                                  .api=${this.api}
-                                  .department=${department}
-                                  .seasonId=${this.season}
-                                  .menus=${this.model!.menus}
-                                  .clockRevision=${this.model!.clockRevision}
-                                  .businessDayClock=${this.model!.businessDayClock}
-                                  .dayCutover=${this.model!.dayCutover}
-                                  .readOnly=${this.readOnly}
-                                ></opening-hours-week>`,
-                              )
-                            : nothing
+                        : nothing
                   }
                 </div>
                 <div slot="periods">
@@ -1285,7 +1395,7 @@ export class OpeningHoursScreen extends LitElement {
               </wt-tabs>`
       }
       ${this.specialReadError ? html`<p role="alert" data-test="special-read-error">${this.specialReadError}</p>` : nothing}
-      ${this.namedDialog()} ${this.ordinaryDialog()}
+      ${this.namedDialog()} ${this.ordinaryDialog()} ${this.seasonPainter()}
       ${
         this.editor
           ? keyed(

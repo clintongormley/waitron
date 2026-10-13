@@ -536,3 +536,20 @@ it("withdraws a delete confirmation and says so when another session deletes its
   expect(api.deleteSeason).not.toHaveBeenCalled();
   expect(changed).toEqual([]);
 });
+
+it("asks for a season's week from the chip's name, naming it, and opens no dialog", async () => {
+  await mount();
+  const asked: CustomEvent<{ seasonId: string }>[] = [];
+  document.body.addEventListener("season-week-open", (event) =>
+    asked.push(event as CustomEvent<{ seasonId: string }>),
+  );
+  const week = chips()[3]!.querySelector<HTMLElement>("[data-test=season-week]")!;
+  expect(week.textContent!.trim()).toBe("Winter · 1 Dec – 29 Feb");
+  expect(week.getAttribute("aria-label")).toBe("Winter · 1 Dec – 29 Feb: edit the week");
+  week.click();
+  await settle();
+  expect(asked.map((event) => [event.detail, event.bubbles, event.composed])).toEqual([
+    [{ seasonId: "w" }, true, true],
+  ]);
+  expect(el.shadowRoot!.querySelector("season-dialog")).toBeNull();
+});

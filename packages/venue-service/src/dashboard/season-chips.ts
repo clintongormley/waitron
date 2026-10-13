@@ -30,8 +30,9 @@ const refusalOf = (error: unknown): Refusal => ({
       : undefined,
 });
 
-/** The venue's seasons as tinted chips; a chip and "+ Season" open the season dialog, whose writes this
- *  element sends itself, announcing each with `season-changed` so its host re-reads. */
+/** The venue's seasons as tinted chips. A chip's name asks for its week (`season-week-open`); its ✎
+ *  and "+ Season" open the season dialog, whose writes this element sends itself, announcing each
+ *  with `season-changed` so its host re-reads. */
 @customElement("season-chips")
 export class SeasonChips extends LitElement {
   static override styles = [
@@ -59,10 +60,15 @@ export class SeasonChips extends LitElement {
         border-radius: var(--wt-radius-full);
         font: inherit;
       }
-      button.chip {
+      .chip button {
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: inherit;
+        font: inherit;
         cursor: pointer;
       }
-      button.chip:focus-visible {
+      .chip button:focus-visible {
         outline: var(--wt-field-line-width-active) solid var(--wt-color-focus);
         outline-offset: var(--wt-focus-offset);
       }
@@ -104,6 +110,15 @@ export class SeasonChips extends LitElement {
       returnTo: event.currentTarget as HTMLElement,
     };
     this.dispatchEvent(new CustomEvent("season-dialog-open", { bubbles: true, composed: true }));
+  }
+  private openWeek(season: SeasonChip) {
+    this.dispatchEvent(
+      new CustomEvent<{ seasonId: string }>("season-week-open", {
+        detail: { seasonId: season.id },
+        bubbles: true,
+        composed: true,
+      }),
+    );
   }
   private close(opening: Opening) {
     if (this.opening !== opening) return;
@@ -219,16 +234,24 @@ export class SeasonChips extends LitElement {
           const tint = tints.get(season.id);
           return this.readOnly
             ? html`<span class="chip" data-season=${season.id} data-tint=${tint}>${label}</span>`
-            : html`<button
-                type="button"
-                class="chip"
-                data-season=${season.id}
-                data-tint=${tint}
-                aria-label=${format("season.edit_named", { name: season.name, ...range })}
-                @click=${(event: Event) => this.open(season, event)}
-              >
-                <span>${label}</span> <span aria-hidden="true">✎</span>
-              </button>`;
+            : html`<span class="chip" data-season=${season.id} data-tint=${tint}
+                ><button
+                  type="button"
+                  data-test="season-week"
+                  aria-label=${format("season.week_named", { name: season.name, ...range })}
+                  @click=${() => this.openWeek(season)}
+                >
+                  ${label}
+                </button>
+                <button
+                  type="button"
+                  data-test="season-edit"
+                  aria-label=${format("season.edit_named", { name: season.name, ...range })}
+                  @click=${(event: Event) => this.open(season, event)}
+                >
+                  ✎
+                </button></span
+              >`;
         })}
         ${
           this.readOnly

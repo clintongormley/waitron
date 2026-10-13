@@ -8,10 +8,10 @@ export const dashboardPath: UrlPathConfig = {
     catalogue: { product: "product", category: "category" },
     "opening-hours": {
       view: "view",
+      season: "season",
       department: "department",
       zone: "zone",
       station: "station",
-      season: "season",
       date: "date",
       year: "year",
       month: "month",
