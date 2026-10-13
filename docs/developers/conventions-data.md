@@ -654,9 +654,28 @@ same file is the writer behind the API; a configuration import inserts a bundle'
 and Every year switch, and the Day tab writes one date's paint (see
 [design-system.md](design-system.md), "Calendar").
 
-Deleting a period is refused `menu_period.in_use` while a season week or a special-day date's paint
-places it, past dates included; the refusal lists each use (`periodUses` and `deleteMenuPeriod` in
-`packages/venue-service/src/menu-timetable.ts`).
+`DELETE …/menu-periods/:periodId` refuses a period `menu_period.in_use` while a season week or a
+special-day date's paint places it, past dates included; the refusal lists each use (`periodUses`
+and `deleteMenuPeriod` in `packages/venue-service/src/menu-timetable.ts`).
+
+**2026-10-13, A506-10.** `POST …/menu-periods/:periodId/delete` deletes a period in use
+(`deletePeriod`, `packages/venue-service/src/period-delete.ts`), taking the clock revision as the
+other hours writes do. `GET …/menu-periods/painted-in` lists where each period is painted, and
+`GET …/menu-periods/:periodId/delete-impact` counts what the delete dialog shows: while the
+venue's clock can be read, neither counts a one-off special day with no date today or later, and
+the impact says only whether the period has a keep-open extension today, though the delete changes
+those special days' paint and every day's extension too. With a replacement, which must be another
+period of the same department, every range painting the period, in season weeks
+and on special-day dates past or future, names the replacement, and on each day that held the
+period touching ranges of one period then join; a routing-cell line naming it names the
+replacement, except in a cell that already has a line for the replacement, which keeps that line
+and loses the period's; and every keep-open extension of it names the replacement, and where one of the replacement's
+ranges that day covers the extension's start, the extension then starts at that range's end, or is
+deleted when the range already reaches the extension's end. Without one,
+its painted ranges are deleted, a special-day date left with no paint loses its `department_days`
+row so the season shows through, and its routing lines and extensions go with the period through
+their cascading foreign keys. It all runs in the caller's transaction, and ends with an end-offset
+check over the period's department that refuses `menu_timetable.invalid` (`reason: "end_offset"`).
 
 A configuration transfer carries both tables under the importing venue's location
 (`VENUE_SERVICE_CONFIGURATION_TRANSFER`). The import refuses, as `setup.request_invalid` naming
@@ -670,7 +689,8 @@ transfer" in `apps/server/src/configuration-transfer.test.ts`.
 ### Earlier W98 menu timetable model
 
 **2026-10-13, A506-5:** `special_dates`, `menu_day_timetables` and `menu_slots` are dropped, and
-`menu_period.in_use` reads season weeks and special-day paint; see "Special days" above.
+`menu_period.in_use` reads season weeks and special-day paint, and since A506-10
+`POST …/menu-periods/:periodId/delete` deletes a period in use; see "Special days" above.
 
 W98 keeps each department's menu timetable in four venue-service tables, all classified `state`
 (`packages/venue-service/src/schema/menus.ts`): `menu_periods` (a named period such as "Mañanas"

@@ -102,7 +102,7 @@ export async function placeOpenPeriod(
   );
 }
 
-async function requirePeriod(tx: Transaction, cfg: VenueScope, periodId: string) {
+export async function requirePeriod(tx: Transaction, cfg: VenueScope, periodId: string) {
   const [row] = await tx
     .select({
       id: menuPeriods.id,
@@ -204,6 +204,16 @@ async function endOffsetClash(
 /** The first sending cutoff that runs into what follows it, over every department. */
 export function scheduleEndOffsetClash(tx: Transaction, cfg: VenueScope, clock?: BusinessDayClock) {
   return endOffsetClash(tx, cfg, undefined, false, clock);
+}
+
+/** The first sending cutoff in one department's schedule that runs into what follows it. */
+export function departmentEndOffsetClash(
+  tx: Transaction,
+  cfg: VenueScope,
+  departmentId: string,
+  clock?: BusinessDayClock,
+) {
+  return endOffsetClash(tx, cfg, departmentId, false, clock);
 }
 
 export async function assertPeriodEndOffsets(tx: Transaction, cfg: VenueScope): Promise<void> {
@@ -763,10 +773,11 @@ function routingRowPlaces(folders: readonly Folder[]) {
 }
 
 /** Each period's routing cells that hold a line for it, in the Routing tab's row order, then by
- * zone (Every zone first). */
-async function readRoutingUses(
+ * zone (Every zone first); `periodId`'s alone when given. */
+export async function readRoutingUses(
   tx: Transaction,
   cfg: VenueScope,
+  periodId?: string,
 ): Promise<Map<string, PeriodRoutingUse[]>> {
   const rows = await tx
     .select({
@@ -783,7 +794,12 @@ async function readRoutingUses(
     .innerJoin(routingCells, eq(routingCells.id, routingCellPeriods.cellId))
     .leftJoin(products, eq(products.id, routingCells.productId))
     .leftJoin(floorZones, eq(floorZones.id, routingCells.zoneId))
-    .where(eq(routingCells.locationId, cfg.locationId));
+    .where(
+      and(
+        eq(routingCells.locationId, cfg.locationId),
+        periodId === undefined ? undefined : eq(routingCellPeriods.periodId, periodId),
+      ),
+    );
   if (rows.length === 0) return new Map();
   const folders = await tx
     .select({ id: categories.id, name: categories.name, parentId: categoryDetails.parentId })
