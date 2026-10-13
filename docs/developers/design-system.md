@@ -1939,28 +1939,24 @@ Dragging stages a closed range; opening a closed block edits its two times or de
 no period choice. Copy this day and Clear change only the closed ranges. One Save writes all
 seven weekdays of the picked season; a refusal naming a submitted day appears in that day's header and leaves the
 staged week available to retry. Its Save follows the draft comparison below, including after
-removal and reconnect. A real week is read-only and draws each date as the till sells it: a
-special-day date's zone paint over its season's closures, over the department's painted periods,
-and a date Closed all day empty. Each column's Open day link opens that date on the Day tab.
+removal and reconnect.
 
 The Opening hours normal-week editor stages its seven days before one Save. A Season picker beside
 the department picker chooses which season's week the tab edits: the address's season when the
 venue has it, else the current season, else the first. Save writes that season alone, and an
-unsaved draft asks before the picker changes season. In a real week each date follows its own
-season, and the picker is not offered. Each day's menu
+unsaved draft asks before the picker changes season. Each day's menu
 copies its ranges to selected weekdays or clears them locally. A range dialog stages its two
 times and period; Add period… opens the period editor above it, then returns to the same range.
 Save on the week waits while a child chooser is open. A server refusal that names a day sits in
 that day's header, with the form's generic message immediately above Save; the refusal leaves
-Save available for retry. A venue viewer gets the grid without day menus or Save. Real week
-starts at the venue's current business week, Monday first; Previous cannot go earlier. The URL
-holds `week=<Monday's date>`, and each column names its calendar date. A real week is read-only:
-each date is drawn as the till sells it, special days on their dates, including later years of a
-repeat, with their paint over the season's day. A column's header names the date's special day and
-says Closed when the date is Closed all day, and its Open day link opens that date on the Day tab,
-where special-day dates are edited. A range explains endpoints the venue clock repeats on their
-calendar morning; its ending changeover belongs to the next morning. The Day tab starts on your
-venue's business date; Previous cannot go earlier. Each active department is followed by a narrow
+Save available for retry. A venue viewer gets the grid without day menus or Save.
+
+The per-date editor (`opening-hours-day.ts`) paints one date of a special day. A special day's
+Edit hours on this date opens it at `/view/date/date/<yyyy-mm-dd>`; with no date, or one that is
+not a date, it starts on the venue's business date. Above it, ‹ and the date's month and year go
+back to that month. A range explains endpoints the venue clock repeats on their calendar morning;
+its ending changeover belongs to the next morning. Previous cannot go earlier than the venue's
+business date. Each active department is followed by a narrow
 column for each of its active zones. Previous/next date actions ask before discarding a staged
 draft. A date that is not a special-day date is read-only: when a season holds it, it shows
 “Follows the {season} week”, and its heading offers Make this a special day… once its calendar
@@ -3427,13 +3423,13 @@ commit with Save, bind it to that Save even when its preview updates as you type
 
 ### Worked-out prep-station times
 
-Choose a prep station in Opening hours' picker to see its read-only Week view. The normal week
-shows department columns and period ranges derived from routed products and the zones that can
-order them. Browse dated weeks to include special-day paint and closures. These are planned times;
+Choose a prep station in Opening hours' picker to see its read-only Week view: the normal week
+of the season this week's Monday falls in, with department columns and period ranges derived from routed products and
+the zones that can order them. These are planned times;
 today's station closures and service extensions do not change them. A default station shows
 "Always open: this is the default station", without a grid (`opening-hours-station.ts`).
 Deleted stations are absent from the picker, and their old configuration id is not found. Special
-days are made in Opening hours' Year, and their paint on its Day tab.
+days are made in Opening hours' Year or month, and their paint in its per-date editor.
 The separate Station hours page and its station-cell editors are retired.
 
 ### Tabbed management pages
@@ -3571,19 +3567,19 @@ an active station's drag grip stays before its name. The Routes tab's All catego
 also sets the default station, for someone with `venue.configure`. The page is offered only to
 someone with `venue_service.manage`; a supervisor is not offered it.
 
-Department opening hours belong to `/manage/opening-hours`, with Year, Week, Periods and Day
-tabs. The page opens on Year when its address names no view and no department, zone, station,
-season or week, and on an old `/view/calendar` address; otherwise on Week
-(`opening-hours-screen.ts`). `/view/year/year/<yyyy>` picks a year, and choosing another tab drops
-it; `/department/<id>` selects the department and `/view/periods` selects its periods, and on the Week
+Department opening hours belong to `/manage/opening-hours`, with Year, Week and Periods tabs; the
+month (`/view/month`) and the per-date editor (`/view/date`) show under the Year tab. The page
+opens on Year when its address names no view and no department, zone, station or season, and on
+an old `/view/calendar` address; otherwise on Week (`opening-hours-screen.ts`). A `week=` in the
+address is ignored. `/view/year/year/<yyyy>` picks a year, and choosing another tab drops it; `/department/<id>` selects the department and `/view/periods` selects its periods, and on the Week
 tab `/season/<id>` selects the season (in the standard week only; the fallback is in Forms above). The Week
-and Day editing contract is in Forms above. After provisioning, setup's completion screen shows
+and per-date editing contract is in Forms above. After provisioning, setup's completion screen shows
 the first saved Open schedule, when it is still Monday to Friday, 09:00–17:00, with a link to
 Opening hours' Year.
 
 - **Year.** Pick a date: a plain date offers Make this a special day…, and a special-day date
-  Edit and Delete; + Special day opens an empty dialog. ‹ › step years, a month's name opens the
-  Day tab on its first day, and the season chips rename, move, add and delete seasons
+  Edit and Delete; + Special day opens an empty dialog. ‹ › step years, a month's name opens that
+  month (below), and the season chips rename, move, add and delete seasons
   (`season-chips.ts`). Make and Edit open the special-day dialog (`special-day-dialog.ts`, hosted by
   `opening-hours-screen.ts`, under `packages/venue-service/src/dashboard/`): a required name;
   Dates, one row each with its own Closed all day switch and a remove button, with + Add dates…
@@ -3591,10 +3587,26 @@ Opening hours' Year.
   On a public holiday a new day starts with the holiday's name, and the dialog notes that Every
   year follows the holiday's name to its date each year; when a special day of that name already
   exists, the dialog first offers Add to <name> or a new special day. Delete asks first, and says
-  so when the day repeats every year. A date's hours are painted on the Day tab, not in the dialog.
+  so when the day repeats every year. A date's hours are painted in the per-date editor (Forms
+  above), which a saved special day's Edit hours on this date opens, not in the dialog.
   The Year keeps the address's year across refreshes and offers one keyboard Tab stop in its
   grid. On a special day that is also a public holiday, the date panel and the day's accessible
   name give the holiday's name beside the special day's; the grid itself shows only the marks.
+- **Month.** `/view/month/month/<yyyy-mm>` (`opening-hours-month.ts`); with no month, the month
+  holding the venue's today. It draws the whole Monday-to-Sunday weeks covering the month, the
+  neighbouring months' dates faint, and each date heading carries only the day's number (the
+  column heading names the weekday) and a Today marker. Each date shows its special day's or
+  public holiday's name and a bar of hours per active department, or, with one department picked,
+  a bar for it and one per zone with the zone's closed time drawn as a gap. A row with no hours
+  that day says "<name> closed", and a date closed all day shows only its name with Closed. ‹ and the year go back to the Year, ‹ › step months, and the month has the
+  department picker, + Special day, the season chips and a Rows legend. Arrow keys move between
+  dates, with one Tab stop. A special-day or public-holiday date opens the special-day dialog as
+  the Year does. An ordinary date opens the ordinary-date dialog (`ordinary-date-dialog.ts`): it
+  says which season's week the date follows and offers Edit the <season> week (the Week tab on
+  that season), Make this a special day… (the special-day dialog on a new day holding the date)
+  and a list of existing special days, where choosing one opens that day's dialog with the date
+  added as an unsaved change. A venue viewer gets the month read-only: its dates are not buttons
+  and + Special day is not offered.
 - **Seasons.** The Year's season chips (`season-chips.ts`) list the venue's seasons in start
   order, each written as its name and first and last day. Each chip is a button that opens the
   season dialog (`season-dialog.ts`) on that season (its ✎ is decoration, hidden from screen

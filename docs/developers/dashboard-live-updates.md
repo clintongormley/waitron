@@ -71,6 +71,9 @@ its read-ordering tests remain while Opening hours uses the calendar.
 names. The Hours read counts above describe the retired page, not the current Calendar.
 2026-10-13, A506-6: the Calendar is gone. The Year reads `/opening-hours/year` through
 `OpeningHoursApi.watchYear` on the `named-days` dependencies.
+2026-10-13, A506-7: the Month reads `/opening-hours/month` through `OpeningHoursApi.watchMonth`
+on the `opening-hours-month` dependencies (`packages/venue-service/src/dashboard/live-queries.ts`):
+the `named-days` tables plus `zone_service_policies` and `floor_zones`.
 
 Use passive requests for automatic refreshes so leaving a dashboard open does not keep its session
 alive. `DashboardQueries` handles that distinction for core screens. A module using `request`

@@ -107,13 +107,16 @@ A506-6 landed in #1609: seasons are added, renamed, moved and deleted from the s
 their dialog (+ Season), and a move or a deletion is refused when a period's end offset would
 run into the next day's hours; Opening hours opens on the Year, which replaced the Calendar
 tab, and setup's Done link opens it.
+A506-7 landed in #NNNN: a month view, reached from the Year, draws each date's hours as a bar per
+department and opens a dialog on an ordinary date; it replaced the Day tab and the Real week
+switch, and the dated week code went.
 
 **Left open by A506-1, for the later parts.**
 - No test yet gives a second department its own paint on the same special day.
 
 **Left open by A506-3, for the later parts.**
-- Still open after A506-6, whose season writes check but never bump the clock revision: a Day-tab
-  draft takes its season when Save is pressed; once a season's start can move, a draft built for one
+- Still open after A506-6, whose season writes check but never bump the clock revision: a per-date
+  editor's draft takes its season when Save is pressed; once a season's start can move, a draft built for one
   season could be saved under the next. Season edits should bump the clock
   revision or refuse a draft built before them.
 - With no season in the address, a Week tab left open across a season change keeps showing the old
@@ -194,10 +197,10 @@ tab, and setup's Done link opens it.
   roughly 860 µs per call, measured over 2000 calls on a Madrid test venue during the A506-5
   finish-branch review. One way to remove it is a cache that outlives the transaction.
 - The dashboard's day models (`CalendarDay` in `packages/venue-service/src/hours-types.ts`, which the
-  Day and Week tabs read, and the Year's `OpeningHoursYearDay` in
+  per-date editor reads, and the Year's `OpeningHoursYearDay` in
   `packages/venue-service/src/opening-hours-calendar.ts`) drop each date's stored special-day date,
   so the dashboard re-derives which stored date applies (`specialOn`,
-  `packages/venue-service/src/dashboard/special-date.ts`) and the week views fetch each special day's detail separately; returning the stored date in the model
+  `packages/venue-service/src/dashboard/special-date.ts`) and the per-date editor fetches the special day's detail separately; returning the stored date in the model
   would leave one copy of the rule. The "Add to" offer reads every special day with every date
   (`GET …/special-days`) to show a name and a latest date.
 
@@ -301,9 +304,9 @@ closed, as today.
   leaving with unsaved painting asks first.
 
 **Taken in from older entries.**
-- Real-week headings: a date heading must not repeat the weekday, and the date and Today marker
-  stay readable in EN/ES, both themes, at 1280 and 390. Receipt: Lane D
-  `receipts/a366-2/task22-review.md` and `receipts/a366-2/finish-visuals`.
+- Look at the month's date headings and Today marker in EN/ES, both themes, at 1280 and 390 px
+  (left open by A506-7, #NNNN). Its tests check that a heading carries only the day's number in
+  EN and ES, run axe in both themes and check the month fits 390 px; nobody has looked at it yet.
 
 **For the spec to settle** (settled in the spec's sections 8, 9, 10.2, 12 and 14; its review found the
 kind has three readers, not one, and that `station-times.ts` reads the week only through routing's
@@ -316,8 +319,7 @@ period order — spec section 2).
   complete list.
 - Deleting a period in use: the mockup shows one answer (above); the spec confirms it, and what a
   routing cell naming the period becomes (the 2026-10-07 spec, section 8, only warns).
-- Where the read-only prep station times live, now that the tabs go; and whether the month's "All
-  departments" picker is enough of the old All departments view.
+- Where the read-only prep station times live, now that the tabs go.
 - What the till sells at a moment is decided by these hours, so the sale-path resolver's
   season-then-special-day layering needs real-database tests across a season boundary and across
   midnight.

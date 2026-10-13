@@ -10,10 +10,11 @@ number does not cap special days.
 A public holiday is information: reading one does not write a special day or change opening hours.
 On a public date, Make this a special day… opens the special-day dialog with the holiday's name
 filled in; you choose its dates, whether it repeats every year, and whether each date is Closed all
-day. The Year's reader is `readOpeningHoursYear` in
-`packages/venue-service/src/opening-hours-calendar.ts`, and the Week's real week reads
-`readSpecialDaysModel` in `packages/venue-service/src/named-days.ts`; the dialog and the Year are
-`special-day-dialog.ts` and `opening-hours-year.ts` in `packages/venue-service/src/dashboard/`.
+day. The Year's and the month's readers are `readOpeningHoursYear` and `readOpeningHoursMonth` in
+`packages/venue-service/src/opening-hours-calendar.ts`, and the per-date editor reads
+`readSpecialDaysModel` in `packages/venue-service/src/named-days.ts`; the dialog, the Year and the
+month are `special-day-dialog.ts`, `opening-hours-year.ts` and `opening-hours-month.ts` in
+`packages/venue-service/src/dashboard/`.
 
 A special-day date saved on a public holiday records that holiday's official name
 (`special_day_dates.holiday_name`); a date the special day already held keeps the name it was saved
