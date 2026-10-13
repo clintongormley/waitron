@@ -1,5 +1,12 @@
 # A503: joined tables replace saved joins
 
+> Added 2026-10-13 by A579 ([design](2026-10-13-a579-flattened-joined-tables-design.md)): that
+> design replaces, under "The till", the Default for a joined table in a service merge (pushing a
+> joined table into a group now splits it, and the group holds its real tables), **Join again**
+> (now Reset table, which moves the joined table to its saved place and keeps the check on the
+> tables it expects back, beside a new revision for the room), what Join again counts as free, and
+> the reset's handling of a split-off table that needs clearing; its "What this replaces" lists each.
+
 A short design, asked for by the owner before a plan (`docs/backlog/till.md`, "A503"). It replaces
 the floor plan's saved joins with **joined tables**: a table, set up in the editor, that is made of
 other tables. Points marked **Default** are the driver's choice and stand unless the owner overrides
