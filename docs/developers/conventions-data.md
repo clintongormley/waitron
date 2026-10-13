@@ -469,7 +469,8 @@ The old Station hours page, client, wire types, readers and writers are removed.
 exports omit those tables; import refuses them with `setup.request_invalid`, field `tables`.
 Named days retained their calendar facts and department/zone schedules; they no longer copied,
 validated or returned station cells. (2026-10-13, A506-5: named days are gone; the Calendar uses
-`SpecialDaysApi`, `packages/venue-service/src/dashboard/special-days-client.ts`.)
+`SpecialDaysApi`, `packages/venue-service/src/dashboard/special-days-client.ts`. A506-6 replaced the
+Calendar with the Year view.)
 
 Core migration `0131_station_retention_and_dashboard_moves.sql` adds held-dish retention and
 permits a person-only move, refusing a move with neither person nor device. The populated upgrade
@@ -650,9 +651,9 @@ Whether a date falls on a day is decided in one place, `specialDateIn` and `shar
 name (`special_day_dates.holiday_name`) and, after its first year, falls where the shipped calendar
 puts that name, or nowhere (see [public-holidays.md](public-holidays.md)). `saveSpecialDay` in the
 same file is the writer behind the API; a configuration import inserts a bundle's rows directly
-(below). In the dashboard, the Calendar's special-day dialog writes a special day's name, dates
-and Every year switch, and the Day tab writes one date's paint (see
-[design-system.md](design-system.md), "Calendar").
+(below). In the dashboard, the special-day dialog, opened from the Year or the Day tab, writes a
+special day's name, dates and Every year switch, and the Day tab writes one date's paint (see
+[design-system.md](design-system.md), "Year").
 
 `DELETE …/menu-periods/:periodId` refuses a period `menu_period.in_use` while a season week or a
 special-day date's paint places it, past dates included; the refusal lists each use (`periodUses`

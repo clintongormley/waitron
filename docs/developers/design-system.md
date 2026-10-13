@@ -177,18 +177,20 @@ their own values, so a deployment rule that overrides `--wt-color-primary` or `-
 must set the matching hover token too, in both
 themes; and `THEMEABLE_TOKENS` does not list them either, so a tenant theme cannot set them.
 
-Opening hours → Calendar (`packages/venue-service/src/dashboard/hours-calendar.ts`) paints a
-national or regional public holiday red and a special day purple. The public holiday takes
-precedence for the fill when a special day shares its date; both names remain visible (`tone` in
-`calendarDays`, `packages/venue-service/src/hours.ts`). An ordinary open day uses
-`--wt-color-day-standard`, and an ordinary closed day `--wt-color-day-closed`. A special-day or
-public date keeps its fill even when closed, adding Closed in words. Text uses the corresponding
-`--wt-color-on-palette-…` or `--wt-color-on-day-…` token. Colour is never the only signal.
+Opening hours → Year (`packages/venue-service/src/dashboard/opening-hours-year.ts`) fills a day
+with its season's tint (`--wt-color-season-1` to `--wt-color-season-4`, given by start order and
+cycled, `season-tint.ts`), `--wt-color-day-standard` where no season holds it, and
+`--wt-color-day-closed` when it is closed. A public holiday is outlined red
+(`--wt-color-palette-red`) and a special day purple; a special day on a public holiday keeps the
+purple outline and adds a red dot. Text uses the matching `--wt-color-on-…` token. Each day's
+button names its special day, its holidays and Closed in words, so colour is never the only
+signal.
 
 **2026-10-09, A366 slice 2:** the date colour picker and transitional stored `colour` are retired
 (venue-service's `schema/hours.ts`, deleted in A506-5, and migration `0038_clammy_klaw.sql`). The palette
 below remains available as shared tokens; Calendar's named mode uses only the red, purple, blue,
-standard and Closed fills. (2026-10-13, A506-5: the blue Working day fill went with named days.) The earlier six-colour date choice is recorded in the historical
+standard and Closed fills. (2026-10-13, A506-5: the blue Working day fill went with named days.
+A506-6 replaced the Calendar with the Year, above.) The earlier six-colour date choice is recorded in the historical
 [Hours plan](../superpowers/plans/2026-10-05-hours.md).
 
 | Fill                        | Light     | Text on it | Dark      | Text on it |
@@ -1935,7 +1937,7 @@ venue's business date; Previous cannot go earlier. Each active department is fol
 column for each of its active zones. Previous/next date actions ask before discarding a staged
 draft. A date that is not a special-day date is read-only: when a season holds it, it shows
 “Follows the {season} week”, and its heading offers Make this a special day… once its calendar
-facts load, opening the special-day dialog (see Calendar below) with a public holiday's name
+facts load, opening the special-day dialog (see Year below) with a public holiday's name
 filled in. On a special-day date the heading names the special day; dragging stages paint over the
 season's day, department ranges in a department's column and closed times in a zone's, and opening
 a block edits its times or deletes it. One Save sends the date's changed department and zone paint
@@ -3394,7 +3396,7 @@ order them. Browse dated weeks to include special-day paint and closures. These 
 today's station closures and service extensions do not change them. A default station shows
 "Always open: this is the default station", without a grid (`opening-hours-station.ts`).
 Deleted stations are absent from the picker, and their old configuration id is not found. Special
-days are made in Opening hours' Calendar, and their paint on its Day tab.
+days are made in Opening hours' Year, and their paint on its Day tab.
 The separate Station hours page and its station-cell editors are retired.
 
 ### Tabbed management pages
@@ -3532,15 +3534,19 @@ an active station's drag grip stays before its name. The Routes tab's All catego
 also sets the default station, for someone with `venue.configure`. The page is offered only to
 someone with `venue_service.manage`; a supervisor is not offered it.
 
-Department opening hours belong to `/manage/opening-hours`, with Week, Periods, Day and Calendar
-tabs; `/department/<id>` selects the department and `/view/periods` selects its periods, and on the Week
+Department opening hours belong to `/manage/opening-hours`, with Year, Week, Periods and Day
+tabs. The page opens on Year when its address names no view and no department, zone, station,
+season or week; otherwise on Week (`opening-hours-screen.ts`). `/view/year/year/<yyyy>` picks a
+year; `/department/<id>` selects the department and `/view/periods` selects its periods, and on the Week
 tab `/season/<id>` selects the season (in the standard week only; the fallback is in Forms above). The Week
 and Day editing contract is in Forms above. After provisioning, setup's completion screen shows
 the first saved Open schedule, when it is still Monday to Friday, 09:00–17:00, with a link to
 that department's Opening hours.
 
-- **Calendar.** Pick a date: a plain date offers Make this a special day…, and a special-day date
-  Edit and Delete. Make and Edit open the special-day dialog (`special-day-dialog.ts`, hosted by
+- **Year.** Pick a date: a plain date offers Make this a special day…, and a special-day date
+  Edit and Delete; + Special day opens an empty dialog. ‹ › step years, a month's name opens the
+  Day tab on its first day, and the season chips rename, move, add and delete seasons
+  (`season-chips.ts`). Make and Edit open the special-day dialog (`special-day-dialog.ts`, hosted by
   `opening-hours-screen.ts`, under `packages/venue-service/src/dashboard/`): a required name;
   Dates, one row each with its own Closed all day switch and a remove button, with + Add dates…
   taking a first and an optional last date, at most 366 dates at a time; and an Every year switch.
@@ -3548,13 +3554,13 @@ that department's Opening hours.
   year follows the holiday's name to its date each year; when a special day of that name already
   exists, the dialog first offers Add to <name> or a new special day. Delete asks first, and says
   so when the day repeats every year. A date's hours are painted on the Day tab, not in the dialog.
-  Calendar keeps a selected month across date refreshes and offers one keyboard Tab stop in its
+  The Year keeps the address's year across refreshes and offers one keyboard Tab stop in its
   grid. Public holiday names remain visible beside a special day's name.
 - **Local holidays.** Public holidays come only from the country's shipped calendar; add your
-  town's holidays as special days. There is no separate Local holidays editor. The country's
-  yearly number is shown as a hint and caps nothing. Calendar reports official and local coverage
-  for each year; local coverage never counts special days. Choose a holiday area here when the
-  official list needs it. `hours-calendar.ts` renders the area control and coverage, and
+  town's holidays as special days. There is no separate Local holidays editor. The Year reports
+  the shown year's official coverage and, when the year has a coverage entry, says Town holidays
+  are not in the official lists — add them as special days. Choose a holiday area here when the
+  official list needs it. `opening-hours-year.ts` renders the area control and coverage, and
   `packages/venue-service/src/holidays.ts` reads the country calendar.
 
 In Opening hours, a period stays on one line in the week grid and date panel, so hours wrap only
