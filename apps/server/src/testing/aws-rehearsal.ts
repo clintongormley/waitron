@@ -1,4 +1,5 @@
-import { dirname, isAbsolute, relative, resolve } from "node:path";
+import { realpath } from "node:fs/promises";
+import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isUnset } from "../env-value.js";
 
@@ -12,12 +13,19 @@ export const AWS_REHEARSAL_LIMITS = {
   teardownMs: 120_000,
 } as const;
 
+/** The plan's upload-plus-retention and restore-transfer budget; a scenario may pass its own. */
+export const AWS_REHEARSAL_SCENARIO_DEADLINE_MS = 15 * 60_000;
+
+/** Room in a test's time limit for building fixtures before its scenario deadline starts. */
+export const AWS_REHEARSAL_SETUP_MARGIN_MS = 5 * 60_000;
+
 export type AwsRehearsalRefusalReason =
   | "opt-in-missing"
   | "profile-mismatch"
   | "variable-unset"
   | "file-not-absolute"
   | "file-inside-repository"
+  | "file-unreadable"
   | "profile-section-missing"
   | "credentials-missing"
   | "session-token-unsupported"
@@ -70,18 +78,34 @@ function required(env: Env, name: string): string {
   return value;
 }
 
-function outsideRepository(env: Env, name: string): string {
+function absolutePath(env: Env, name: string): string {
   const path = required(env, name);
-  if (!isAbsolute(path))
+  if (!isAbsolute(path)) {
     throw new AwsRehearsalRefused("file-not-absolute", `${name} must be an absolute path`);
-  const fromRoot = relative(REPOSITORY_ROOT, resolve(path));
-  if (fromRoot === "" || (!fromRoot.startsWith("..") && !isAbsolute(fromRoot))) {
+  }
+  return path;
+}
+
+/** Compares real paths, so a link outside the root that points inside it is refused. */
+export async function assertOutsideDirectory(
+  name: string,
+  path: string,
+  root: string,
+): Promise<void> {
+  let realFile: string;
+  try {
+    realFile = await realpath(path);
+  } catch {
+    throw new AwsRehearsalRefused("file-unreadable", `${name} must name an existing file`);
+  }
+  const fromRoot = relative(await realpath(root), realFile);
+  const outside = fromRoot === ".." || fromRoot.startsWith(`..${sep}`) || isAbsolute(fromRoot);
+  if (!outside) {
     throw new AwsRehearsalRefused(
       "file-inside-repository",
       `${name} must be outside the repository`,
     );
   }
-  return path;
 }
 
 function parseIni(text: string): Map<string, Map<string, string>> {
@@ -140,8 +164,10 @@ export async function loadRehearsalProfile(
     );
   }
   const region = required(env, "AWS_REGION");
-  const credentialsPath = outsideRepository(env, "AWS_SHARED_CREDENTIALS_FILE");
-  const configPath = outsideRepository(env, "AWS_CONFIG_FILE");
+  const credentialsPath = absolutePath(env, "AWS_SHARED_CREDENTIALS_FILE");
+  const configPath = absolutePath(env, "AWS_CONFIG_FILE");
+  await assertOutsideDirectory("AWS_SHARED_CREDENTIALS_FILE", credentialsPath, REPOSITORY_ROOT);
+  await assertOutsideDirectory("AWS_CONFIG_FILE", configPath, REPOSITORY_ROOT);
 
   const credentials = section(
     await deps.readFile(credentialsPath),

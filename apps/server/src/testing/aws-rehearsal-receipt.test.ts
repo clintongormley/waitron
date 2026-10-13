@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -14,6 +14,9 @@ const ACCESS_KEY_ID = "AKIAIOSFODNN7EXAMPLE";
 const SIGNED_URL =
   "https://waitron-rehearsal-waitron-abc123def456.s3.eu-north-1.amazonaws.com/k?X-Amz-Signature=deadbeef";
 const BUCKET = "waitron-rehearsal-waitron-abc123def456";
+// A real secret's shape with no "/" or "+", so the token alphabet alone admits it.
+const PLAIN_SECRET = "wJalrXUtnFEMIK7MDENGbPxRfiCYEXAMPLEKEY12";
+const KEYS = { accessKeyId: ACCESS_KEY_ID, secretAccessKey: PLAIN_SECRET };
 
 const header = {
   runId: "run-1",
@@ -121,7 +124,7 @@ describe("sanitizeEvent", () => {
 
 describe("createReceiptLog", () => {
   it("never serialises a refused event", () => {
-    const log = createReceiptLog(header);
+    const log = createReceiptLog(header, KEYS);
     log.record({ scenario: "s", phase: "p", outcome: "ok", api: "PutObject", httpStatus: 200 });
     expect(() => log.record({ scenario: "s", phase: SECRET, outcome: "ok" })).toThrow(
       "receipt field refused: phase",
@@ -140,7 +143,7 @@ describe("createReceiptLog", () => {
   });
 
   it("vets teardown entries like events", () => {
-    const log = createReceiptLog(header);
+    const log = createReceiptLog(header, KEYS);
     log.teardown({ step: "delete-bucket", outcome: "failed", errorName: "<b>", httpStatus: 409 });
     log.teardown({ step: "delete-objects", outcome: "ok", count: 2, errorName: "BucketNotEmpty" });
     expect(log.finish(finishParts).teardown).toEqual([
@@ -191,23 +194,24 @@ describe("createReceiptLog", () => {
     ["cleanup command", { cleanupCommand: `cleanup ${SIGNED_URL}` }, "cleanupCommand"],
     ["finishedAt", { finishedAt: SECRET }, "header.finishedAt"],
   ])("refuses a bad %s in the receipt", (_label, override, key) => {
-    const log = createReceiptLog(header);
+    const log = createReceiptLog(header, KEYS);
     const error = refusalOf(() => log.finish({ ...finishParts, ...override } as never));
     expect(error.message).toBe(`receipt field refused: ${key}`);
   });
 
   it("refuses a bad header", () => {
-    expect(refusalOf(() => createReceiptLog({ ...header, region: SIGNED_URL })).message).toBe(
+    expect(refusalOf(() => createReceiptLog({ ...header, region: SIGNED_URL }, KEYS)).message).toBe(
       "receipt field refused: header.region",
     );
     expect(
-      refusalOf(() => createReceiptLog({ ...header, limits: { archiveBytes: SECRET } as never }))
-        .message,
+      refusalOf(() =>
+        createReceiptLog({ ...header, limits: { archiveBytes: SECRET } as never }, KEYS),
+      ).message,
     ).toBe("receipt field refused: header.limits");
   });
 
   it("keeps an unowned candidate and opaque upload ids", () => {
-    const receipt = createReceiptLog(header).finish({
+    const receipt = createReceiptLog(header, KEYS).finish({
       ...finishParts,
       ownership: { bucket: null, state: "unowned-candidate", candidate: BUCKET },
       remaining: { bucket: BUCKET, uploadIds: ["2~iCw_lDY8VoNTLVzOhy1YR.KD0Xb-x"] },
@@ -282,10 +286,106 @@ describe("writeReceipt", () => {
   it("writes the receipt as JSON named after its run id", async () => {
     const dir = await mkdtemp(join(tmpdir(), "aws-receipt-"));
     try {
-      const receipt = createReceiptLog(header).finish(finishParts);
-      const path = await writeReceipt(dir, receipt);
+      const receipt = createReceiptLog(header, KEYS).finish(finishParts);
+      const path = await writeReceipt(dir, receipt, KEYS);
       expect(path).toBe(join(dir, "aws-rehearsal-run-1.json"));
       expect(JSON.parse(await readFile(path, "utf8"))).toEqual(receipt);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("the loaded key pair never reaches the receipt", () => {
+  const CAPITAL_SECRET = "WJalrXUtnFEMIK7MDENGbPxRfiCYEXAMPLEKEY12";
+  const keys = { accessKeyId: ACCESS_KEY_ID, secretAccessKey: PLAIN_SECRET };
+  const capitalKeys = { accessKeyId: ACCESS_KEY_ID, secretAccessKey: CAPITAL_SECRET };
+  const event = { scenario: "s", phase: "p", outcome: "ok" };
+
+  function expectClean(error: Error, ...values: string[]): void {
+    for (const value of values) expect(error.message).not.toContain(value);
+  }
+
+  it.each(["scenario", "phase", "objectRole", "api"])(
+    "refuses the plain secret in event field %s",
+    (key) => {
+      const log = createReceiptLog(header, keys);
+      for (const value of [PLAIN_SECRET, `x-${PLAIN_SECRET}`]) {
+        const error = refusalOf(() => log.record({ ...event, [key]: value }));
+        expect(error.message).toBe(`receipt field refused: ${key}`);
+        expectClean(error, PLAIN_SECRET);
+      }
+      expect(JSON.stringify(log.finish(finishParts))).not.toContain(PLAIN_SECRET);
+    },
+  );
+
+  it("never echoes a capital-first secret as an error name", () => {
+    const log = createReceiptLog(header, capitalKeys);
+    const error = refusalOf(() => log.record({ ...event, errorName: CAPITAL_SECRET }));
+    expect(error.message).toBe("receipt field refused: errorName");
+    expectClean(error, CAPITAL_SECRET);
+    const teardownError = refusalOf(() =>
+      log.teardown({ step: "inventory", outcome: "failed", errorName: CAPITAL_SECRET }),
+    );
+    expect(teardownError.message).toBe("receipt field refused: errorName");
+    expect(JSON.stringify(log.finish(finishParts))).not.toContain(CAPITAL_SECRET);
+  });
+
+  it("refuses the access key id inside a longer token", () => {
+    const log = createReceiptLog(header, keys);
+    const error = refusalOf(() =>
+      log.record({ ...event, phase: `k${ACCESS_KEY_ID.toLowerCase()}` }),
+    );
+    expect(error.message).toBe("receipt field refused: phase");
+    expect(() => log.record({ ...event, phase: `k${ACCESS_KEY_ID}` })).toThrow(
+      "receipt field refused: phase",
+    );
+  });
+
+  it("refuses the secret in the header", () => {
+    const error = refusalOf(() => createReceiptLog({ ...header, commit: PLAIN_SECRET }, keys));
+    expect(error.message).toBe("receipt field refused: header.commit");
+    expectClean(error, PLAIN_SECRET);
+  });
+
+  it.each([
+    ["remaining.uploadIds", { remaining: { bucket: BUCKET, uploadIds: [PLAIN_SECRET] } }],
+    ["cleanupCommand", { cleanupCommand: `cleanup --key fixture/${PLAIN_SECRET}` }],
+    ["header.finishedAt", { finishedAt: PLAIN_SECRET }],
+  ])("refuses the secret in %s", (key, override) => {
+    const log = createReceiptLog(header, keys);
+    const error = refusalOf(() => log.finish({ ...finishParts, ...override } as never));
+    expect(error.message).toBe(`receipt field refused: ${key}`);
+    expectClean(error, PLAIN_SECRET);
+  });
+
+  it("refuses an empty key pair, which would match every string", () => {
+    expect(() =>
+      createReceiptLog(header, { accessKeyId: "", secretAccessKey: PLAIN_SECRET }),
+    ).toThrow("receipt field refused: keys");
+  });
+
+  it("refuses an api outside the S3 list", () => {
+    const log = createReceiptLog(header, keys);
+    for (const api of ["PutObjekt", "AssumeRole"]) {
+      expect(() => log.record({ ...event, api })).toThrow("receipt field refused: api");
+    }
+  });
+
+  it("writeReceipt refuses a hand-built receipt carrying either value", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "aws-receipt-"));
+    try {
+      const receipt = createReceiptLog(header, keys).finish(finishParts);
+      for (const value of [PLAIN_SECRET, ACCESS_KEY_ID]) {
+        const tampered = { ...receipt, remaining: { bucket: null, uploadIds: [value] } };
+        const error = await writeReceipt(dir, tampered, keys).then(
+          () => new Error("expected a refusal"),
+          (thrown: unknown) => thrown as Error,
+        );
+        expect(error.message).toBe("receipt field refused: receipt");
+        expectClean(error, value);
+      }
+      expect(await readdir(dir)).toEqual([]);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

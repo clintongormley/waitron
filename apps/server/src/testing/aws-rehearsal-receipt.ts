@@ -173,6 +173,36 @@ function bucketName(value: unknown, key: string): string | null {
   return value;
 }
 
+export interface ReceiptKeyPair {
+  accessKeyId: string;
+  secretAccessKey: string;
+}
+
+/** Lower-cased, so a containment test also catches a case-changed copy. */
+type Forbidden = readonly string[];
+
+function forbiddenFrom(keys: ReceiptKeyPair): Forbidden {
+  const values = [keys.accessKeyId, keys.secretAccessKey];
+  if (!values.every((value) => typeof value === "string" && value.length > 0)) {
+    throw refused("keys");
+  }
+  return values.map((value) => value.toLowerCase());
+}
+
+function carriesKey(value: unknown, forbidden: Forbidden): boolean {
+  if (typeof value !== "string") return false;
+  const lower = value.toLowerCase();
+  return forbidden.some((secret) => lower.includes(secret));
+}
+
+/** Checks every string, or string in an array, directly under `input` — before any shape rule. */
+function refuseKeyPair(input: Record<string, unknown>, forbidden: Forbidden, prefix = ""): void {
+  for (const [key, value] of Object.entries(input)) {
+    const strings = Array.isArray(value) ? value : [key, value];
+    if (strings.some((item) => carriesKey(item, forbidden))) throw refused(`${prefix}${key}`);
+  }
+}
+
 function onlyKeys(input: Record<string, unknown>, allowed: readonly string[], prefix = ""): void {
   for (const key of Object.keys(input))
     if (!allowed.includes(key)) throw refused(`${prefix}${key}`);
@@ -192,15 +222,16 @@ const EVENT_KEYS = [
   "outcome",
 ] as const;
 
-export function sanitizeEvent(input: unknown): AwsReceiptEvent {
+export function sanitizeEvent(input: unknown, forbidden: Forbidden = []): AwsReceiptEvent {
   if (!isRecord(input)) throw refused("event");
   onlyKeys(input, EVENT_KEYS);
+  refuseKeyPair(input, forbidden);
   const event: AwsReceiptEvent = {
     scenario: token(input.scenario, "scenario"),
     phase: token(input.phase, "phase"),
     outcome: oneOf(input.outcome, EVENT_OUTCOMES, "outcome"),
   };
-  if (input.api !== undefined) event.api = token(input.api, "api");
+  if (input.api !== undefined) event.api = oneOf(input.api, RECEIPT_APIS, "api");
   if (input.objectRole !== undefined) event.objectRole = token(input.objectRole, "objectRole");
   if (input.count !== undefined) event.count = integer(input.count, 0, "count");
   if (input.bytes !== undefined) event.bytes = integer(input.bytes, 0, "bytes");
@@ -216,9 +247,10 @@ export function sanitizeEvent(input: unknown): AwsReceiptEvent {
   return event;
 }
 
-function sanitizeTeardown(input: unknown): TeardownEntry {
+function sanitizeTeardown(input: unknown, forbidden: Forbidden): TeardownEntry {
   if (!isRecord(input)) throw refused("teardown");
   onlyKeys(input, ["step", "outcome", "count", "errorName", "httpStatus"]);
+  refuseKeyPair(input, forbidden);
   const entry: TeardownEntry = {
     step: oneOf(input.step, TEARDOWN_STEPS, "step"),
     outcome: oneOf(input.outcome, TEARDOWN_OUTCOMES, "outcome"),
@@ -231,6 +263,7 @@ function sanitizeTeardown(input: unknown): TeardownEntry {
 
 function sanitizeHeader(
   input: Omit<AwsReceiptHeader, "finishedAt">,
+  forbidden: Forbidden,
 ): Omit<AwsReceiptHeader, "finishedAt"> {
   if (!isRecord(input)) throw refused("header");
   const keys = [
@@ -243,8 +276,11 @@ function sanitizeHeader(
     "startedAt",
   ] as const;
   onlyKeys(input, [...keys, "limits"], "header.");
+  refuseKeyPair(input, forbidden, "header.");
   const limits = input.limits;
   if (!isRecord(limits)) throw refused("header.limits");
+  if (Object.keys(limits).some((name) => carriesKey(name, forbidden)))
+    throw refused("header.limits");
   const cleanLimits: Record<string, number> = {};
   for (const [name, value] of Object.entries(limits)) {
     if (!TOKEN.test(name) || typeof value !== "number" || !Number.isFinite(value))
@@ -256,9 +292,10 @@ function sanitizeHeader(
   return header;
 }
 
-function sanitizeOwnership(input: unknown): AwsReceiptOwnership {
+function sanitizeOwnership(input: unknown, forbidden: Forbidden): AwsReceiptOwnership {
   if (!isRecord(input)) throw refused("ownership");
   onlyKeys(input, ["bucket", "state", "candidate"], "ownership.");
+  refuseKeyPair(input, forbidden, "ownership.");
   const ownership: AwsReceiptOwnership = {
     bucket: bucketName(input.bucket, "ownership.bucket"),
     state: oneOf(input.state, OWNERSHIP_STATES, "ownership.state"),
@@ -270,9 +307,10 @@ function sanitizeOwnership(input: unknown): AwsReceiptOwnership {
   return ownership;
 }
 
-function sanitizeRemaining(input: unknown): AwsReceiptRemaining {
+function sanitizeRemaining(input: unknown, forbidden: Forbidden): AwsReceiptRemaining {
   if (!isRecord(input)) throw refused("remaining");
   onlyKeys(input, ["bucket", "uploadIds"], "remaining.");
+  refuseKeyPair(input, forbidden, "remaining.");
   const uploadIds = input.uploadIds;
   if (
     !Array.isArray(uploadIds) ||
@@ -306,19 +344,26 @@ export function actionTable(
   }));
 }
 
-export function createReceiptLog(header: Omit<AwsReceiptHeader, "finishedAt">): ReceiptLog {
-  const cleanHeader = sanitizeHeader(header);
+/** `keys` are the loaded credentials, held only to refuse any field that contains either value. */
+export function createReceiptLog(
+  header: Omit<AwsReceiptHeader, "finishedAt">,
+  keys: ReceiptKeyPair,
+): ReceiptLog {
+  const forbidden = forbiddenFrom(keys);
+  const cleanHeader = sanitizeHeader(header, forbidden);
   const events: AwsReceiptEvent[] = [];
   const teardown: TeardownEntry[] = [];
   return {
     record(event) {
-      events.push(sanitizeEvent(event));
+      events.push(sanitizeEvent(event, forbidden));
     },
     teardown(entry) {
-      teardown.push(sanitizeTeardown(entry));
+      teardown.push(sanitizeTeardown(entry, forbidden));
     },
     finish(parts) {
+      if (carriesKey(parts.finishedAt, forbidden)) throw refused("header.finishedAt");
       const cleanupCommand = parts.cleanupCommand;
+      if (carriesKey(cleanupCommand, forbidden)) throw refused("cleanupCommand");
       if (
         cleanupCommand !== null &&
         (typeof cleanupCommand !== "string" || !CLEANUP_COMMAND.test(cleanupCommand))
@@ -327,20 +372,26 @@ export function createReceiptLog(header: Omit<AwsReceiptHeader, "finishedAt">): 
       }
       return {
         header: { ...cleanHeader, finishedAt: token(parts.finishedAt, "header.finishedAt") },
-        ownership: sanitizeOwnership(parts.ownership),
+        ownership: sanitizeOwnership(parts.ownership, forbidden),
         events: [...events],
         teardown: [...teardown],
         actions: actionTable(events, parts.sourceOnly ?? []),
-        remaining: sanitizeRemaining(parts.remaining),
+        remaining: sanitizeRemaining(parts.remaining, forbidden),
         cleanupCommand,
       };
     },
   };
 }
 
-export async function writeReceipt(dir: string, receipt: AwsReceipt): Promise<string> {
-  await mkdir(dir, { recursive: true });
+export async function writeReceipt(
+  dir: string,
+  receipt: AwsReceipt,
+  keys: ReceiptKeyPair,
+): Promise<string> {
+  const text = `${JSON.stringify(receipt, null, 2)}\n`;
+  if (carriesKey(text, forbiddenFrom(keys))) throw refused("receipt");
   const path = join(dir, `aws-rehearsal-${token(receipt.header.runId, "header.runId")}.json`);
-  await writeFile(path, `${JSON.stringify(receipt, null, 2)}\n`);
+  await mkdir(dir, { recursive: true });
+  await writeFile(path, text);
   return path;
 }

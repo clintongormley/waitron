@@ -1,11 +1,15 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import rehearsalConfig from "../../vitest.aws-rehearsal.config.js";
 import {
   AWS_REHEARSAL_LIMITS,
+  AWS_REHEARSAL_SCENARIO_DEADLINE_MS,
+  AWS_REHEARSAL_SETUP_MARGIN_MS,
   AWS_REHEARSAL_PROFILE,
   AwsRehearsalRefused,
+  assertOutsideDirectory,
   assertRehearsalOptIn,
   loadRehearsalProfile,
 } from "./aws-rehearsal.js";
@@ -132,13 +136,13 @@ describe("loadRehearsalProfile", () => {
     ],
     [
       "credentials file inside the repository",
-      { AWS_SHARED_CREDENTIALS_FILE: join(REPO_ROOT, "apps/server/credentials") },
+      { AWS_SHARED_CREDENTIALS_FILE: join(REPO_ROOT, "apps/server/package.json") },
       "file-inside-repository",
       "AWS_SHARED_CREDENTIALS_FILE",
     ],
     [
       "config file at the repository root",
-      { AWS_CONFIG_FILE: join(REPO_ROOT, "aws-config") },
+      { AWS_CONFIG_FILE: join(REPO_ROOT, "package.json") },
       "file-inside-repository",
       "AWS_CONFIG_FILE",
     ],
@@ -234,5 +238,81 @@ describe("loadRehearsalProfile", () => {
     const error = await refusal(loadRehearsalProfile(env(), deps));
     expect(error.reason).toBe(reason);
     expect(error.message).toContain(name);
+  });
+});
+
+describe("the rehearsal config's time limits", () => {
+  it("defaults a scenario to the plan's 15-minute transfer budget", () => {
+    expect(AWS_REHEARSAL_SCENARIO_DEADLINE_MS).toBe(15 * 60_000);
+  });
+
+  it("gives a test its scenario deadline plus teardown plus the setup margin", () => {
+    const test = rehearsalConfig.test!;
+    expect(test.testTimeout).toBe(
+      AWS_REHEARSAL_SCENARIO_DEADLINE_MS +
+        AWS_REHEARSAL_LIMITS.teardownMs +
+        AWS_REHEARSAL_SETUP_MARGIN_MS,
+    );
+    expect(test.hookTimeout).toBe(AWS_REHEARSAL_LIMITS.teardownMs + AWS_REHEARSAL_SETUP_MARGIN_MS);
+    expect(AWS_REHEARSAL_SETUP_MARGIN_MS).toBeGreaterThan(0);
+  });
+
+  it("checks the opt-in once for the whole run", () => {
+    expect(rehearsalConfig.test!.globalSetup).toEqual([
+      "src/testing/aws-rehearsal-global-setup.ts",
+    ]);
+  });
+});
+
+describe("assertOutsideDirectory", () => {
+  let root: string;
+  let outside: string;
+
+  beforeEach(async () => {
+    root = join(dir, "repo");
+    outside = join(dir, "home");
+    await mkdir(join(root, "nested"), { recursive: true });
+    await mkdir(outside);
+  });
+
+  async function refusedWith(path: string, rootPath = root): Promise<AwsRehearsalRefused> {
+    const error = await refusal(assertOutsideDirectory("AWS_CONFIG_FILE", path, rootPath));
+    expect(error.message).toContain("AWS_CONFIG_FILE");
+    return error;
+  }
+
+  it("accepts a file outside, and one in a sibling whose name extends the root's", async () => {
+    await writeFile(join(outside, "config"), "");
+    await mkdir(`${root}-other`);
+    await writeFile(join(`${root}-other`, "config"), "");
+    await expect(
+      assertOutsideDirectory("AWS_CONFIG_FILE", join(outside, "config"), root),
+    ).resolves.toBeUndefined();
+    await expect(
+      assertOutsideDirectory("AWS_CONFIG_FILE", join(`${root}-other`, "config"), root),
+    ).resolves.toBeUndefined();
+  });
+
+  it("refuses a file named ..creds at the root", async () => {
+    await writeFile(join(root, "..creds"), "");
+    expect((await refusedWith(join(root, "..creds"))).reason).toBe("file-inside-repository");
+  });
+
+  it("refuses a link outside that points inside", async () => {
+    await writeFile(join(root, "nested", "config"), "");
+    await symlink(join(root, "nested", "config"), join(outside, "config"));
+    expect((await refusedWith(join(outside, "config"))).reason).toBe("file-inside-repository");
+  });
+
+  it("refuses a file inside a root named through a link", async () => {
+    await writeFile(join(root, "config"), "");
+    await symlink(root, join(outside, "repo-link"));
+    expect((await refusedWith(join(root, "config"), join(outside, "repo-link"))).reason).toBe(
+      "file-inside-repository",
+    );
+  });
+
+  it("refuses a file that does not exist without naming its path", async () => {
+    expect((await refusedWith(join(outside, "missing"))).reason).toBe("file-unreadable");
   });
 });

@@ -3,6 +3,7 @@ import { readdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { stripVTControlCharacters } from "node:util";
 
 const PACKAGE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const VITEST = join(
@@ -80,6 +81,9 @@ describe("AWS rehearsal test selection", () => {
     };
     const result = vitest(["run", "--config", "vitest.aws-rehearsal.config.ts"], env);
     expect(result.status).not.toBe(0);
-    expect(`${result.stdout}${result.stderr}`).toContain("opt-in-missing");
+    const output = stripVTControlCharacters(`${result.stdout}${result.stderr}`);
+    expect(output).toContain("opt-in-missing");
+    // The global setup refuses before any test file is collected, so no test result is reported.
+    expect(output).not.toMatch(/Tests\s+\d+ (failed|passed)/);
   });
 });
