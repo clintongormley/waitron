@@ -4187,6 +4187,15 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   counts `NoSuchKey` as deleted; share them, deciding whether the bucket stream takes those checks
   too.
 
+- **The Backups screen does not yet read what A538-4 added to the backup routes** (plan Task 6).
+  It needs English and Spanish wording for `backup.archive_namespace_overlap`,
+  `backup.archive_settings_invalid`, `backup.archive_test_failed` and
+  `backup.rotation_metadata_failed`; `backup.archive_settings_unusable` is worded only as an alert
+  (`alert-messages.ts`). It must show a write's `reloadErrorCode` (the settings were saved, but the
+  box could not load them) and the status's `loadErrorCode` (archives are off because the stored
+  settings cannot be used), and on `backup.rotation_metadata_failed` it must replace a displayed
+  recovery key or fingerprint with the new one, which is already in effect. Left open by A538-4.
+
 - **A backup that fails before reaching any destination tells the owner nothing about why.** When
   a run stops early, for example on `backup.staging_space_low` or `recovery.state_incomplete`, it is
   only logged as `backup.failed` with its code. No
