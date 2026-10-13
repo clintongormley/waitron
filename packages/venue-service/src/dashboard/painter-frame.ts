@@ -1,5 +1,5 @@
 import { LitElement, css, html, nothing } from "lit";
-import { customElement, property } from "lit/decorators.js";
+import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
   saveActionState,
@@ -56,6 +56,17 @@ export class PainterFrame extends LitElement {
             "link link link";
           column-gap: var(--wt-space-2);
         }
+        /* Beside a third button the heading would be squeezed to a word's width or less. */
+        .bar[data-actions] {
+          grid-template-areas:
+            "close actions actions"
+            "title title title"
+            "picker picker picker"
+            "link link link";
+        }
+        .bar[data-actions] .actions {
+          justify-self: end;
+        }
         /* Room on a phone for the heading beside Cancel and Save. */
         wt-button::part(button) {
           padding-inline: var(--wt-space-2);
@@ -82,6 +93,9 @@ export class PainterFrame extends LitElement {
       .link {
         grid-area: link;
         justify-self: end;
+      }
+      .link ::slotted(a) {
+        color: var(--wt-color-primary-text);
       }
       .actions {
         grid-area: actions;
@@ -124,6 +138,9 @@ export class PainterFrame extends LitElement {
   /** Nothing can be changed, so only ✕ is offered. */
   @property({ type: Boolean }) readOnly = false;
 
+  /** The `actions` slot holds something, which takes the heading's room on a phone. */
+  @state() private hasActions = false;
+
   private readonly beforeClose = async (reason: LeaveReason): Promise<boolean> => {
     if (this.busy) return false;
     if (!this.scope || !this.coordinator) return true;
@@ -160,7 +177,7 @@ export class PainterFrame extends LitElement {
     >
       <div class="frame">
         <header>
-          <div class="bar">
+          <div class="bar" ?data-actions=${this.hasActions && !this.readOnly}>
             <wt-button
               class="close"
               data-test="dismiss"
@@ -177,7 +194,13 @@ export class PainterFrame extends LitElement {
               this.readOnly
                 ? nothing
                 : html`<div class="actions">
-                    <slot name="actions"></slot>
+                    <slot
+                      name="actions"
+                      @slotchange=${(event: Event) => {
+                        this.hasActions =
+                          (event.target as HTMLSlotElement).assignedElements().length > 0;
+                      }}
+                    ></slot>
                     <wt-button
                       data-test="cancel"
                       variant="secondary"

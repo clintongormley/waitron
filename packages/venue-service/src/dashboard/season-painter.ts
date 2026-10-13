@@ -1,6 +1,5 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { keyed } from "lit/directives/keyed.js";
 import { codeOf, currentLocale } from "@waitron/dashboard-kit";
 import {
   baseStyles,
@@ -11,13 +10,12 @@ import {
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
-import type { MenuPeriodInput, OpeningHoursModel } from "../menu-timetable-types.js";
+import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import { WEEK_DISPLAY_ORDER } from "../hours-types.js";
 import { rebaseDays, samePaint, type Paint } from "../paint-model.js";
 import { seasonLastDay } from "../season-rules.js";
 import type { OpeningHoursApi } from "./opening-hours-client.js";
 import type { PaintChange, PaintColumn } from "./paint-grid.js";
-import type { PeriodEditor } from "./period-editor.js";
 import { format, formatMonthDay } from "./hours-view.js";
 import { chosenSeasonId, seasonWeek } from "./season-choice.js";
 import { seasonTints, seasonTintStyles } from "./season-tint.js";
@@ -25,15 +23,13 @@ import { weekdayLabel } from "./season-week-view.js";
 import { t } from "./strings.js";
 import { periodColourStyles } from "./period-colour-styles.js";
 import { paintRow, paintRowStyles } from "./paint-row.js";
-import { refusalOf } from "./refusal.js";
 import { ownerName, refusalReason } from "./painter-labels.js";
 import "./painter-frame.js";
 import "./paint-grid.js";
-import "./period-editor.js";
+import { PeriodEditing, periodsLink } from "./period-editing.js";
 
 type Model = OpeningHoursModel;
 type Department = Model["departments"][number];
-type Period = Department["periods"][number];
 /** Paint per weekday key ("1" Monday … "0" Sunday). */
 type Week = Map<string, Paint[]>;
 /** One week per department (`d:<id>`) and per zone (`z:<id>`) of the season being painted. */
@@ -165,9 +161,6 @@ export class SeasonPainter extends LitElement {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
       }
-      a {
-        color: var(--wt-color-primary-text);
-      }
     `,
   ];
 
@@ -183,8 +176,13 @@ export class SeasonPainter extends LitElement {
   /** A period id, or `null` for Closed; a zone always paints Closed. */
   @state() private chosen: string | null | undefined = undefined;
   @state() private draft: Draft = new Map();
-  @state() private editor?: { period?: Period; departmentId: string; clockRevision: number };
-  @state() private periodBusy = false;
+  private periods = new PeriodEditing(this, {
+    api: () => this.api,
+    model: () => this.model,
+    chose: (id) => {
+      this.chosen = id;
+    },
+  });
   private baseline: Draft = new Map();
   private seededSeason?: string;
   /** The model every week of the baseline was last taken from; a clean draft catches up to a newer one. */
@@ -192,8 +190,6 @@ export class SeasonPainter extends LitElement {
   /** The weeks a save sent, taken in only from a model read after `barrier` (`ModelWatches.reread`)
    *  and while no save is in flight. */
   private confirming?: { sent: Draft; barrier: number };
-  /** A period just created, chosen in its own department until the model lists it. */
-  private created?: { id: string; departmentId: string };
   /** Edits a refresh dropped because what they belonged to is gone; shown beside Save. */
   @state() private notice = "";
   @state() private refused?: Refused;
@@ -243,14 +239,6 @@ export class SeasonPainter extends LitElement {
         this.navigate();
       }
     }
-    if (
-      this.created &&
-      this.model.departments.some(
-        ({ id, periods }) =>
-          id === this.created!.departmentId && periods.some(({ id }) => id === this.created!.id),
-      )
-    )
-      this.created = undefined;
     if (this.isConnected && !this.scope) {
       const { scope, coordinator } = draftScopeFor(this, {
         id: {},
@@ -378,12 +366,8 @@ export class SeasonPainter extends LitElement {
   }
   private effectiveChosen(department: Department, zoned: boolean): string | null {
     if (zoned || this.chosen === null) return null;
-    const created = this.created;
-    if (
-      (created?.departmentId === department.id && this.chosen === created.id) ||
-      department.periods.some(({ id }) => id === this.chosen)
-    )
-      return this.chosen!;
+    if (this.chosen !== undefined && this.periods.paints(department, this.chosen))
+      return this.chosen;
     return department.periods[0]?.id ?? null;
   }
   private navigate() {
@@ -539,46 +523,6 @@ export class SeasonPainter extends LitElement {
     this.pick(zoned ? `zone:${id}` : id);
   }
 
-  private openPeriod(department: Department, period?: Period) {
-    if (this.editor || this.periodBusy) return;
-    this.editor = { period, departmentId: department.id, clockRevision: this.model.clockRevision };
-  }
-  private async savePeriod(
-    event: CustomEvent<{ periodId: string | null; input: MenuPeriodInput }>,
-  ) {
-    event.stopPropagation();
-    const editor = this.editor;
-    const component = event.currentTarget as PeriodEditor;
-    if (
-      !editor ||
-      this.periodBusy ||
-      !this.isConnected ||
-      component !== this.renderRoot.querySelector("period-editor")
-    )
-      return;
-    const { periodId, input } = event.detail;
-    this.periodBusy = true;
-    component.refusal = undefined;
-    let created: string | undefined;
-    try {
-      if (periodId === null)
-        created = (await this.api.createPeriod(editor.departmentId, input, editor.clockRevision))
-          .id;
-      else await this.api.updatePeriod(periodId, input, editor.clockRevision);
-    } catch (error) {
-      if (this.editor === editor && this.isConnected) component.refusal = refusalOf(error);
-      return;
-    } finally {
-      if (this.editor === editor) this.periodBusy = false;
-    }
-    if (created !== undefined) {
-      this.created = { id: created, departmentId: editor.departmentId };
-      this.chosen = created;
-    }
-    if (this.editor === editor && component.commitSubmitted(input)) this.editor = undefined;
-    this.api.rereadWatches();
-  }
-
   private seasonChip() {
     const seasons = this.model.seasons;
     const season = seasons.find(({ id }) => id === this.seasonId);
@@ -648,53 +592,16 @@ export class SeasonPainter extends LitElement {
     return paintRow({
       slot: "row",
       pots: [
-        ...(zoned
-          ? []
-          : department.periods.map((period) => ({
-              ...period,
-              edit: () => this.openPeriod(department, period),
-            }))),
+        ...(zoned ? [] : this.periods.pots(department)),
         { id: null, name: t("hours.closed") },
       ],
       chosen,
       choose: (id) => {
         this.chosen = id;
       },
-      after: zoned
-        ? nothing
-        : html`<button
-            type="button"
-            class="new"
-            data-test="new-period"
-            @click=${() => this.openPeriod(department)}
-          >
-            ${t("painter.new_period")}
-          </button>`,
+      newPeriod: zoned ? undefined : () => this.periods.open(department),
     });
   }
-  private periodEditor() {
-    const editor = this.editor;
-    const department = this.model.departments.find(({ id }) => id === editor?.departmentId);
-    if (!editor || !department) return nothing;
-    return keyed(
-      editor,
-      html`<period-editor
-        .open=${true}
-        .period=${editor.period}
-        .departmentName=${department.name}
-        .usedColours=${department.periods.map(({ colour }) => colour)}
-        .menus=${this.model.menus}
-        .busy=${this.periodBusy}
-        .submitLabel=${editor.period ? "" : t("painter.add_and_paint")}
-        @period-save=${this.savePeriod}
-        @period-close=${(event: Event) => {
-          event.stopPropagation();
-          if (this.editor === editor && !this.periodBusy) this.editor = undefined;
-        }}
-      ></period-editor>`,
-    );
-  }
-
   /** Kept per locale, so the grid sees the same columns from one render to the next. */
   private weekColumns?: { locale: string; columns: readonly PaintColumn[] };
   private columns(): readonly PaintColumn[] {
@@ -734,13 +641,7 @@ export class SeasonPainter extends LitElement {
           this.forget();
         }}
       >
-        ${this.seasonChip()}${this.picker(department)}
-        <a
-          slot="link"
-          data-test="periods-link"
-          href=${`/manage/opening-hours/view/periods/department/${encodeURIComponent(department.id)}`}
-          >${t("opening.tab.periods")}</a
-        >
+        ${this.seasonChip()}${this.picker(department)} ${periodsLink(department.id)}
         ${this.readOnly ? nothing : this.paintRow(department, chosen, zone !== undefined)}
         <paint-grid
           .target=${`${this.seasonId}/${key}`}
@@ -761,7 +662,7 @@ export class SeasonPainter extends LitElement {
           @paint-change=${(event: CustomEvent<PaintChange>) => this.paint(key, event)}
         ></paint-grid>
       </painter-frame>
-      ${this.periodEditor()}`;
+      ${this.periods.render()}`;
   }
 }
 

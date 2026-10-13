@@ -17,7 +17,7 @@ import "@waitron/ui/src/components/wt-input.js";
 import { layerPaint, stepSpan } from "../day-paint.js";
 import { holidayDateName } from "../holiday-naming.js";
 import type { HolidayFact, LocalDate } from "../hours-types.js";
-import { isLocalDate } from "../hours-rules.js";
+import { addDays, isLocalDate } from "../hours-rules.js";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import type { SeasonDays } from "../opening-hours-calendar.js";
 import type { Paint } from "../paint-model.js";
@@ -27,6 +27,7 @@ import type { AddDates } from "./add-dates-calendar.js";
 import type { OpeningHoursApi } from "./opening-hours-client.js";
 import type { PaintChange, PaintColumn, PaintPeriod } from "./paint-grid.js";
 import { paintRow, paintRowStyles } from "./paint-row.js";
+import { PeriodEditing, periodsLink } from "./period-editing.js";
 import { periodColourStyles } from "./period-colour-styles.js";
 import { ownerName, refusalReason } from "./painter-labels.js";
 import {
@@ -35,6 +36,7 @@ import {
   formatDate,
   formatLongDate,
   formatMonthDay,
+  formatShortDate,
   formatWeekday,
 } from "./hours-view.js";
 import { t } from "./strings.js";
@@ -173,6 +175,16 @@ const byStart = (cutover: string) => (a: Paint, b: Paint) =>
   stepSpan(a, cutover)[0] - stepSpan(b, cutover)[0];
 const columnLabel = (date: LocalDate) =>
   `${formatWeekday(date, "short")} ${formatMonthDay(date.slice(5))}`;
+/** Sorted dates as runs of consecutive dates, each its first and last date. */
+function runsOf(dates: readonly LocalDate[]): [LocalDate, LocalDate][] {
+  const runs: [LocalDate, LocalDate][] = [];
+  for (const date of dates) {
+    const last = runs.at(-1);
+    if (last && addDays(last[1], 1) === date) last[1] = date;
+    else runs.push([date, date]);
+  }
+  return runs;
+}
 
 /**
  * One special day in a full-screen painter: its name, dates and Every year in a side panel, and a
@@ -326,6 +338,10 @@ export class SpecialDayPainter extends LitElement {
       .note {
         margin-block-start: var(--wt-space-2);
       }
+      .empty {
+        padding: var(--wt-space-4);
+        color: var(--wt-color-text-muted);
+      }
       .error {
         color: var(--wt-color-danger);
       }
@@ -361,6 +377,13 @@ export class SpecialDayPainter extends LitElement {
 
   /** A period id, {@link ZONE_OPEN}, `null` for Closed, or `undefined` for the first period. */
   @state() private chosen: string | null | undefined = undefined;
+  private periods = new PeriodEditing(this, {
+    api: () => this.api,
+    model: () => this.model,
+    chose: (id) => {
+      this.chosen = id;
+    },
+  });
   /** Each date's season hours, without any special day; drawn faded under the paint. */
   @state() private seasonDays: ReadonlyMap<LocalDate, SeasonDay> = new Map();
   @state() private seasonFailed = false;
@@ -841,12 +864,15 @@ export class SpecialDayPainter extends LitElement {
       ),
     });
   }
-  private removeDate(date: LocalDate) {
+  /** Removes the dates from `first` to `last`, with their paint. */
+  private removeDates(first: LocalDate, last: LocalDate) {
+    const gone = (date: LocalDate) => date >= first && date <= last;
     const paint = copyPaint(this.draft.paint);
-    for (const days of paint.values()) days.delete(date);
+    for (const days of paint.values())
+      for (const date of days.keys()) if (gone(date)) days.delete(date);
     this.change({
       ...this.draft,
-      dates: this.draft.dates.filter((entry) => entry.date !== date),
+      dates: this.draft.dates.filter((entry) => !gone(entry.date)),
       paint,
     });
   }
@@ -869,7 +895,8 @@ export class SpecialDayPainter extends LitElement {
   private effectiveChosen(department: Department, zoned: boolean): string | null {
     if (zoned) return this.chosen === ZONE_OPEN ? ZONE_OPEN : null;
     if (this.chosen === null) return null;
-    if (department.periods.some(({ id }) => id === this.chosen)) return this.chosen!;
+    if (this.chosen !== undefined && this.periods.paints(department, this.chosen))
+      return this.chosen;
     return department.periods[0]?.id ?? null;
   }
   private pick(value: string) {
@@ -972,12 +999,17 @@ export class SpecialDayPainter extends LitElement {
       }}
     ></wt-combobox>`;
   }
+  private linkFor() {
+    const department = this.department();
+    return department ? periodsLink(department.id) : nothing;
+  }
   private pickerFor() {
     const department = this.department();
     return department ? this.picker(department, this.zone(department)) : nothing;
   }
   private paintArea(locked: boolean) {
     const department = this.department();
+    const shut = this.closedDates();
     const notices = html`${
       this.seasonFailed
         ? html`<p class="notice error" role="status" data-test="season-error">
@@ -1010,50 +1042,79 @@ export class SpecialDayPainter extends LitElement {
         ? new Map([[this.refused.column, this.refused.mark ?? this.refused.message]])
         : NOTHING_BY_KEY;
     const cutover = this.cutover();
+    const empty = !this.draft.dates.length;
+    const noDates =
+      this.loading || this.loadFailed
+        ? nothing
+        : html`<p class="empty" data-test="no-dates">${t("special.no_dates")}</p>`;
     if (!department)
-      return html`${notices}<paint-grid
-          .target=${this.seeded ?? ""}
-          .columns=${this.columns()}
-          .closedErases=${false}
-          .cutover=${cutover}
-          .readOnly=${true}
-          .columnErrors=${columnErrors(undefined)}
-          >${ticks}</paint-grid
-        >`;
+      return html`${notices}${
+        empty
+          ? noDates
+          : html`<paint-grid
+              .target=${this.seeded ?? ""}
+              .columns=${this.columns()}
+              .closedErases=${false}
+              .closedAllDay=${shut}
+              .cutover=${cutover}
+              .readOnly=${true}
+              .columnErrors=${columnErrors(undefined)}
+              >${ticks}</paint-grid
+            >`
+      }`;
     const zone = this.zone(department);
     const owner = zone ? zoneKey(zone.id) : departmentKey(department.id);
     const chosen = this.effectiveChosen(department, zone !== undefined);
     const periods: readonly PaintPeriod[] = zone
       ? [...department.periods, { id: ZONE_OPEN, name: t("special.open"), colour: "green" }]
       : department.periods;
+    const stopped = this.loading || this.loadFailed || this.offered !== undefined;
     return html`${notices}${
-        this.readOnly
-          ? nothing
-          : paintRow({
-              pots: [
-                ...(zone ? [periods.at(-1)!] : periods),
-                { id: null, name: t("hours.closed") },
-              ],
-              chosen,
-              choose: (id) => {
-                this.chosen = id;
-              },
-            })
-      }<paint-grid
-        .target=${`${this.seeded ?? ""}/${owner}`}
-        .columns=${this.columns()}
-        .days=${this.draft.paint.get(owner) ?? NOTHING_BY_KEY}
-        .underlay=${this.underlay(department, zone?.id, cutover)}
-        .periods=${periods}
-        .chosen=${chosen}
-        .closedErases=${false}
-        .paintable=${zone ? ZONE_PAINTABLE : undefined}
-        .cutover=${cutover}
-        .readOnly=${this.readOnly || this.loading || this.loadFailed || this.offered !== undefined}
-        .columnErrors=${columnErrors(owner)}
-        @paint-change=${(event: CustomEvent<PaintChange>) => this.paint(owner, event)}
-        >${ticks}</paint-grid
-      >`;
+      this.readOnly
+        ? nothing
+        : paintRow({
+            pots: [
+              ...(zone ? [periods.at(-1)!] : this.periods.pots(department)),
+              { id: null, name: t("hours.closed") },
+            ],
+            chosen,
+            choose: (id) => {
+              this.chosen = id;
+            },
+            newPeriod: zone ? undefined : () => this.periods.open(department),
+            disabled: stopped,
+          })
+    }${
+      empty
+        ? noDates
+        : html`<paint-grid
+            .target=${`${this.seeded ?? ""}/${owner}`}
+            .columns=${this.columns()}
+            .days=${this.draft.paint.get(owner) ?? NOTHING_BY_KEY}
+            .underlay=${this.underlay(department, zone?.id, cutover)}
+            .periods=${periods}
+            .chosen=${chosen}
+            .closedErases=${false}
+            .closedAllDay=${shut}
+            .paintable=${zone ? ZONE_PAINTABLE : undefined}
+            .cutover=${cutover}
+            .readOnly=${this.readOnly || stopped}
+            .columnErrors=${columnErrors(owner)}
+            @paint-change=${(event: CustomEvent<PaintChange>) => this.paint(owner, event)}
+            >${ticks}</paint-grid
+          >`
+    }`;
+  }
+
+  /** The dates ticked Closed, kept while they stay so the grid sees the same set. */
+  private shutDates?: { key: string; dates: ReadonlySet<LocalDate> };
+  private closedDates(): ReadonlySet<LocalDate> {
+    const dates = this.draft.dates
+      .filter(({ closedAllDay }) => closedAllDay)
+      .map(({ date }) => date);
+    const key = dates.join(",");
+    if (this.shutDates?.key !== key) this.shutDates = { key, dates: new Set(dates) };
+    return this.shutDates.dates;
   }
 
   /** Kept while the dates and the language stay, so the grid sees the same columns. */
@@ -1087,6 +1148,8 @@ export class SpecialDayPainter extends LitElement {
     );
     const leap =
       this.draft.repeatsYearly && this.draft.dates.some(({ date }) => date.endsWith("-02-29"));
+    const dates = this.draft.dates.map(({ date }) => date);
+    const years = new Set(dates.map((date) => date.slice(0, 4))).size > 1;
     const nameError = errors.name ?? (this.refused?.field === "name" ? this.refused.message : "");
     const repeat = (value: boolean, label: "special.no" | "special.yes") =>
       html`<label
@@ -1116,23 +1179,29 @@ export class SpecialDayPainter extends LitElement {
       <div>
         <p class="label" id="dates-label">${t("special.dates")}</p>
         <ul aria-labelledby="dates-label">
-          ${this.draft.dates.map(
-            ({ date }) =>
-              html`<li class="chip" data-test="date-chip" data-date=${date}>
-                ${formatDate(date)}${
-                  locked
-                    ? nothing
-                    : html`<button
-                        type="button"
-                        data-test="remove-date"
-                        aria-label=${format("special.remove_date", { date: formatLongDate(date) })}
-                        @click=${() => this.removeDate(date)}
-                      >
-                        ×
-                      </button>`
-                }
-              </li>`,
-          )}
+          ${runsOf(dates).map(([first, last]) => {
+            const span = (show: (date: LocalDate) => string) =>
+              first === last ? show(first) : `${show(first)} – ${show(last)}`;
+            return html`<li
+              class="chip"
+              data-test="date-chip"
+              data-date=${first}
+              data-dates=${dates.filter((date) => date >= first && date <= last).join(" ")}
+            >
+              <span data-test="date-label">${span((date) => formatShortDate(date, years))}</span>${
+                locked
+                  ? nothing
+                  : html`<button
+                      type="button"
+                      data-test="remove-date"
+                      aria-label=${format("special.remove_date", { date: span(formatLongDate) })}
+                      @click=${() => this.removeDates(first, last)}
+                    >
+                      ×
+                    </button>`
+              }
+            </li>`;
+          })}
         </ul>
         ${
           errors.dates
@@ -1276,13 +1345,13 @@ export class SpecialDayPainter extends LitElement {
               >`
             : nothing
         }
-        ${this.pickerFor()}
+        ${this.pickerFor()}${this.linkFor()}
         <div class="body">
           ${this.offered ? this.offer(this.offered) : this.panel(locked)}
-          <div class="dates">${this.paintArea(locked)}</div>
+          <div class="dates">${this.paintArea(locked || this.offered !== undefined)}</div>
         </div>
       </painter-frame>
-      ${this.deleteDialog()}`;
+      ${this.deleteDialog()}${this.periods.render()}`;
   }
 }
 

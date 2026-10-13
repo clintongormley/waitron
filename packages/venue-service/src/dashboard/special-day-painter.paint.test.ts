@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { applyTokens } from "@waitron/ui";
 import { setLocale } from "@waitron/dashboard-kit";
@@ -320,6 +320,20 @@ describe("the department and zone picker", () => {
     ).toBe(false);
   });
 
+  it("with no active department and no dates says to add dates, and links to no Periods page", async () => {
+    painter = document.createElement("special-day-painter");
+    painter.api = specialDayApi([], {});
+    const model = painterModel();
+    painter.model = { ...model, departments: model.departments.filter(({ active }) => !active) };
+    painter.specialDayId = null;
+    painter.open = true;
+    document.body.append(painter);
+    await settle(painter);
+    expect(part(painter, "no-dates")).not.toBeNull();
+    expect(grid(painter)).toBeNull();
+    expect(part(painter, "periods-link")).toBeNull();
+  });
+
   it("ignores a pick of a department or zone it does not list", async () => {
     const { painter } = await mount();
     await pick(painter, "zone:z9");
@@ -412,5 +426,161 @@ describe("the department and zone picker", () => {
     expect(grid(painter).days.get(DEC_14)).toEqual([
       { periodId: "open", startsAt: "21:00", endsAt: "22:00" },
     ]);
+  });
+});
+
+describe("a date ticked Closed", () => {
+  const column = (el: SpecialDayPainter, date: string) =>
+    grid(el).shadowRoot!.querySelector<HTMLElement>(`.day[data-column="${date}"]`)!;
+  const tick = (el: SpecialDayPainter, date: string) =>
+    el.shadowRoot!.querySelector<HTMLInputElement>(`input[name="closed.${date}"]`)!;
+
+  it("draws closed all day across its column, over its season and its paint, and unticking shows the paint again", async () => {
+    const { painter, writes } = await mount();
+    expect(column(painter, DEC_25).querySelector(".all-closed")!.textContent!.trim()).toBe(
+      "Closed all day",
+    );
+    expect(column(painter, DEC_25).querySelector(".underlay")).toBeNull();
+    chip(painter, "paint-p2").click();
+    await drag(painter, DEC_14, at("19:00"), at("22:00"));
+    tick(painter, DEC_14).click();
+    await settle(painter);
+    expect(column(painter, DEC_14).querySelector(".all-closed")).not.toBeNull();
+    expect(column(painter, DEC_14).querySelector(".block")).toBeNull();
+    expect(grid(painter).days.get(DEC_14)).toEqual([dinner("19:00", "22:00")]);
+    await drag(painter, DEC_14, at("12:00"), at("14:00"));
+    expect(grid(painter).days.get(DEC_14)).toEqual([dinner("19:00", "22:00")]);
+    tick(painter, DEC_14).click();
+    await settle(painter);
+    expect(column(painter, DEC_14).querySelector(".all-closed")).toBeNull();
+    expect(column(painter, DEC_14).querySelector("button.block")!.textContent).toContain(
+      "19:00–22:00",
+    );
+    expect(column(painter, DEC_14).querySelector(".underlay")).not.toBeNull();
+    expect(writes).toEqual([]);
+  });
+
+  it("keeps the ticked date's paint in the draft and sends it with the tick", async () => {
+    const { painter, writes } = await mount();
+    chip(painter, "paint-p2").click();
+    await drag(painter, DEC_15, at("19:00"), at("22:00"));
+    tick(painter, DEC_15).click();
+    await settle(painter);
+    saveButton(painter).click();
+    await expect.poll(() => writes.length).toBe(1);
+    expect(writes[0]!.body).toMatchObject({
+      dates: [
+        { date: DEC_14, closedAllDay: false },
+        { date: DEC_15, closedAllDay: true },
+        { date: DEC_25, closedAllDay: true },
+      ],
+      paint: [{ departmentId: "d1", date: DEC_15, ranges: [dinner("19:00", "22:00")] }],
+    });
+  });
+
+  it("draws a zone's ticked date closed too", async () => {
+    const { painter } = await mount();
+    await pick(painter, "zone:z2");
+    expect(column(painter, DEC_25).querySelector(".all-closed")).not.toBeNull();
+    expect(column(painter, DEC_14).querySelector(".all-closed")).toBeNull();
+  });
+});
+
+describe("periods from the painter", () => {
+  const editorOf = (el: SpecialDayPainter) => el.shadowRoot!.querySelector("period-editor");
+  async function openEditor(el: SpecialDayPainter, test: string) {
+    chip(el, test).click();
+    await settle(el);
+    const editor = editorOf(el)!;
+    await editor.updateComplete;
+    return editor;
+  }
+
+  it("links the bar to the department's Periods page, as the season painter does", async () => {
+    const { painter } = await mount();
+    const link = painter.shadowRoot!.querySelector<HTMLAnchorElement>("a[data-test=periods-link]")!;
+    expect(link.slot).toBe("link");
+    expect(link.textContent!.trim()).toBe("Periods");
+    expect(link.getAttribute("href")).toBe("/manage/opening-hours/view/periods/department/d1");
+    await pick(painter, "zone:z2");
+    expect(
+      painter
+        .shadowRoot!.querySelector<HTMLAnchorElement>("a[data-test=periods-link]")!
+        .getAttribute("href"),
+    ).toBe("/manage/opening-hours/view/periods/department/d1");
+  });
+
+  it("+ New period opens the period editor, saves the period on its own, keeps the painting and chooses it", async () => {
+    const { painter, writes } = await mount({
+      answer: ({ url }) => (url.endsWith("/menu-periods") ? { id: "p-new" } : undefined),
+    });
+    chip(painter, "paint-p2").click();
+    await drag(painter, DEC_14, at("19:00"), at("22:00"));
+    const editor = await openEditor(painter, "new-period");
+    expect(editor.period).toBeUndefined();
+    const submit = editor.shadowRoot!.querySelector<HTMLElement>("[data-test=save-period]")!;
+    expect(submit.textContent!.trim()).toBe("Add and paint with it");
+    for (const [name, value] of [
+      ["name", "Christmas"],
+      ["menuId", "m1"],
+    ])
+      editor
+        .shadowRoot!.querySelector(`[name=${name}]`)!
+        .dispatchEvent(
+          new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+        );
+    await editor.updateComplete;
+    const reread = vi.spyOn(painter.api, "rereadWatches");
+    submit.click();
+    await expect.poll(() => editorOf(painter)).toBeNull();
+    expect(writes).toHaveLength(1);
+    expect(writes[0]).toMatchObject({
+      url: "/management-api/venue-service/departments/d1/menu-periods",
+      method: "POST",
+      body: { name: "Christmas", expectedClockRevision: 4 },
+    });
+    expect(reread).toHaveBeenCalledTimes(1);
+    expect(grid(painter).chosen).toBe("p-new");
+    const next = painterModel();
+    (next.departments[0]!.periods as unknown[]).push({
+      ...next.departments[0]!.periods[0]!,
+      id: "p-new",
+      name: "Christmas",
+      colour: "blue",
+    });
+    painter.model = next;
+    await settle(painter);
+    expect(chip(painter, "paint-p-new").getAttribute("aria-pressed")).toBe("true");
+    expect(grid(painter).days.get(DEC_14)).toEqual([dinner("19:00", "22:00")]);
+    expect(saveButton(painter).disabled).toBe(false);
+  });
+
+  it("✎ on a period chip opens the period editor with that period", async () => {
+    const { painter } = await mount();
+    const editor = await openEditor(painter, "edit-p2");
+    expect(editor.period?.id).toBe("p2");
+    expect(editor.departmentName).toBe("Restaurant");
+  });
+
+  it("a zone offers neither ✎ nor + New period", async () => {
+    const { painter } = await mount();
+    await pick(painter, "zone:z2");
+    expect(part(painter, "new-period")).toBeNull();
+    expect(part(painter, "edit-open")).toBeNull();
+    expect(painter.shadowRoot!.querySelector("[data-test^=edit-]")).toBeNull();
+  });
+
+  it("read-only, there is no ✎ and no + New period, and the Periods link stays", async () => {
+    painter = document.createElement("special-day-painter");
+    painter.api = specialDayApi([], { days: { sd1: storedDay() }, season: winterDinner });
+    painter.model = painterModel();
+    painter.specialDayId = "sd1";
+    painter.readOnly = true;
+    painter.open = true;
+    document.body.append(painter);
+    await loaded(painter);
+    expect(part(painter, "new-period")).toBeNull();
+    expect(part(painter, "edit-p1")).toBeNull();
+    expect(part(painter, "periods-link")).not.toBeNull();
   });
 });

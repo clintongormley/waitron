@@ -1381,3 +1381,39 @@ test("a heading with nothing slotted under it is as tall as before", async () =>
   await el.updateComplete;
   expect(heading("thu").getBoundingClientRect().height).toBe(plain);
 });
+
+test("a column in closedAllDay draws closed all day over its underlay and paint, keeps its paint, and paints nothing", async () => {
+  const el = await grid(
+    { mon: [], thu: [lunch] },
+    { closedErases: false, underlay: new Map([["thu", [{ ...lunch, periodId: "dinner" }]]]) },
+  );
+  const seen = changes(el);
+  const day = (key: string) =>
+    el.shadowRoot!.querySelector<HTMLElement>(`.day[data-column="${key}"]`)!;
+  el.closedAllDay = new Set(["thu"]);
+  await el.updateComplete;
+  expect(day("thu").querySelector(".all-closed")!.textContent!.trim()).toBe("Closed all day");
+  expect(day("thu").querySelector(".block")).toBeNull();
+  expect(day("mon").querySelector(".all-closed")).toBeNull();
+  await drag(el, "thu", 120, 240);
+  expect(el.shadowRoot!.querySelector(".preview")).toBeNull();
+  expect(seen).toEqual([]);
+  await drag(el, "mon", 120, 240);
+  expect(seen.map(({ key }) => key)).toEqual(["mon"]);
+  el.closedAllDay = new Set();
+  await el.updateComplete;
+  expect(day("thu").querySelector(".all-closed")).toBeNull();
+  expect(block(el, "thu").textContent).toContain("13:00–16:00");
+  expect(day("thu").querySelector(".underlay")).not.toBeNull();
+});
+
+test("a marked heading leaves what is slotted under it in the text colour", async () => {
+  const el = await grid();
+  const marked = await tickUnder(el, "thu");
+  const plain = await tickUnder(el, "mon");
+  el.columnErrors = new Map([["thu", "Check this day."]]);
+  await el.updateComplete;
+  const heading = el.shadowRoot!.querySelector<HTMLElement>('.heading[data-column="thu"]')!;
+  expect(getComputedStyle(heading).color).not.toBe(getComputedStyle(marked).color);
+  expect(getComputedStyle(marked).color).toBe(getComputedStyle(plain).color);
+});

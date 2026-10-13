@@ -172,8 +172,8 @@ const nameOf = (painter: SpecialDayPainter) =>
   painter.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=name]")
     ?.value;
 const chips = (painter: SpecialDayPainter) =>
-  [...painter.shadowRoot!.querySelectorAll<HTMLElement>("[data-test=date-chip]")].map(
-    (chip) => chip.dataset.date,
+  [...painter.shadowRoot!.querySelectorAll<HTMLElement>("[data-test=date-chip]")].flatMap((chip) =>
+    chip.dataset.dates!.split(" "),
   );
 async function cancel(painter: SpecialDayPainter) {
   frame(painter).shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!.click();

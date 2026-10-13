@@ -79,10 +79,23 @@ const holiday = (date: string, name: string): HolidayFact => ({
   scope: "national",
   sourceId: "es",
 });
+/** Every date the chips hold, a run's dates each. */
 const chips = (el: SpecialDayPainter) =>
-  [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-test=date-chip]")].map(
-    (chip) => chip.dataset.date,
+  [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-test=date-chip]")].flatMap((chip) =>
+    chip.dataset.dates!.split(" "),
   );
+const chipLabels = (el: SpecialDayPainter) =>
+  [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-test=date-chip]")].map((chip) =>
+    chip.querySelector("[data-test=date-label]")!.textContent!.trim(),
+  );
+const removeRun = async (el: SpecialDayPainter, first: string) => {
+  el.shadowRoot!.querySelector<HTMLElement>(
+    `[data-test=date-chip][data-date="${first}"] [data-test=remove-date]`,
+  )!.click();
+  await settle(el);
+};
+const dated = (...dates: string[]) =>
+  storedDay({ dates: dates.map((date) => ({ date, closedAllDay: false })) });
 const tick = (el: SpecialDayPainter, date: string) =>
   el.shadowRoot!.querySelector<HTMLInputElement>(`input[name="closed.${date}"]`)!;
 const saveButton = (el: SpecialDayPainter) =>
@@ -236,7 +249,8 @@ describe("a new special day", () => {
   it("starts with no dates when opened on none", async () => {
     const { painter } = await mount({ specialDayId: null });
     expect(chips(painter)).toEqual([]);
-    expect(grid(painter).columns).toEqual([]);
+    expect(grid(painter)).toBeNull();
+    expect(part(painter, "no-dates")).not.toBeNull();
   });
 });
 
@@ -520,14 +534,9 @@ describe("dates", () => {
     expect(painter.shadowRoot!.querySelector("add-dates-calendar")!.selected).toEqual(
       chips(painter),
     );
-    painter
-      .shadowRoot!.querySelector<HTMLElement>(
-        '[data-test=date-chip][data-date="2026-12-15"] [data-test=remove-date]',
-      )!
-      .click();
-    await settle(painter);
-    expect(chips(painter)).toEqual(["2026-12-10", "2026-12-14", "2026-12-25", "2026-12-31"]);
-    expect(grid(painter).columns.map(({ key }) => key)).not.toContain("2026-12-15");
+    await removeRun(painter, "2026-12-10");
+    expect(chips(painter)).toEqual(["2026-12-14", "2026-12-15", "2026-12-25", "2026-12-31"]);
+    expect(grid(painter).columns.map(({ key }) => key)).not.toContain("2026-12-10");
   });
 
   it("the calendar opens on the first date's month and marks dates other special days hold, not this one's", async () => {
@@ -859,13 +868,20 @@ describe("edges", () => {
   };
 
   it("removing a date takes its stored paint with it: adding the date back is still a change", async () => {
-    const { painter } = await mount({ days: { sd1: paintedDay() } });
-    await removeChip(painter, "2026-12-15");
-    await addDates(painter, ["2026-12-15"]);
+    const apart = {
+      ...paintedDay(),
+      dates: ["2026-12-14", "2026-12-16", "2026-12-25"].map((date) => ({
+        date,
+        closedAllDay: date === "2026-12-25",
+      })),
+    };
+    const { painter } = await mount({ days: { sd1: apart } });
+    await removeChip(painter, "2026-12-16");
+    await addDates(painter, ["2026-12-16"]);
     expect(saveButton(painter).disabled).toBe(true);
     await removeChip(painter, "2026-12-14");
     await addDates(painter, ["2026-12-14"]);
-    expect(chips(painter)).toEqual(["2026-12-14", "2026-12-15", "2026-12-25"]);
+    expect(chips(painter)).toEqual(["2026-12-14", "2026-12-16", "2026-12-25"]);
     expect(saveButton(painter).disabled).toBe(false);
   });
 
@@ -959,4 +975,149 @@ describe("edges", () => {
     expect(painter.shadowRoot!.querySelector("wt-dialog")).toBeNull();
     expect(painter.open).toBe(true);
   });
+});
+
+describe("the date chips", () => {
+  const december = (from: number, to: number) =>
+    Array.from({ length: to - from + 1 }, (_, i) => `2026-12-${String(from + i).padStart(2, "0")}`);
+
+  it("show consecutive dates as one run, and a date on its own as a single chip, in short dates", async () => {
+    const { painter } = await mount({ days: { sd1: dated(...december(14, 23), "2026-12-25") } });
+    expect(chipLabels(painter)).toEqual(["14 Dec – 23 Dec", "25 Dec"]);
+    const remove = painter.shadowRoot!.querySelector<HTMLElement>(
+      '[data-test=date-chip][data-date="2026-12-14"] [data-test=remove-date]',
+    )!;
+    expect(remove.getAttribute("aria-label")).toBe(
+      "Remove Monday, 14 December 2026 – Wednesday, 23 December 2026",
+    );
+  });
+
+  it("removing a run removes every date in it, and its columns", async () => {
+    const { painter } = await mount({ days: { sd1: dated(...december(14, 23), "2026-12-25") } });
+    await removeRun(painter, "2026-12-14");
+    expect(chips(painter)).toEqual(["2026-12-25"]);
+    expect(grid(painter).columns.map(({ key }) => key)).toEqual(["2026-12-25"]);
+    expect(saveButton(painter).disabled).toBe(false);
+  });
+
+  it("read in Spanish, and with the year when the dates fall in more than one year", async () => {
+    setLocale("es");
+    const { painter } = await mount({
+      days: { sd1: dated("2026-12-14", "2026-12-15", "2026-12-31", "2027-01-01", "2027-01-06") },
+    });
+    expect(chipLabels(painter)).toEqual([
+      "14 dic 2026 – 15 dic 2026",
+      "31 dic 2026 – 1 ene 2027",
+      "6 ene 2027",
+    ]);
+    painter.remove();
+    const single = await mount({ days: { sd1: dated("2026-12-14", "2026-12-15") } });
+    expect(chipLabels(single.painter)).toEqual(["14 dic – 15 dic"]);
+  });
+
+  it("a date added next to a run joins it", async () => {
+    const { painter } = await mount();
+    expect(chipLabels(painter)).toEqual(["14 Dec – 15 Dec", "25 Dec"]);
+    await addDates(painter, ["2026-12-16", "2026-12-24"]);
+    expect(chipLabels(painter)).toEqual(["14 Dec – 16 Dec", "24 Dec – 25 Dec"]);
+  });
+});
+
+describe("no dates yet", () => {
+  it("says to add dates where the grid would be, in the dashboard's language", async () => {
+    const { painter } = await mount({ specialDayId: null });
+    expect(part(painter, "no-dates")!.textContent!.trim()).toBe("Add dates to paint them.");
+    expect(grid(painter)).toBeNull();
+    await addDates(painter, ["2026-12-24"]);
+    expect(part(painter, "no-dates")).toBeNull();
+    expect(grid(painter).columns.map(({ key }) => key)).toEqual(["2026-12-24"]);
+    painter.remove();
+    setLocale("es");
+    const spanish = await mount({ specialDayId: null });
+    expect(part(spanish.painter, "no-dates")!.textContent!.trim()).toBe(
+      "Añade fechas para pintarlas.",
+    );
+  });
+
+  it("says nothing while a stored day is still being read", async () => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    painter = document.createElement("special-day-painter");
+    painter.api = specialDayApi([], { days: { sd1: storedDay() } });
+    const api = painter.api.specialDays;
+    const read = api.readSpecialDay.bind(api);
+    api.readSpecialDay = async (id, options) => {
+      await held;
+      return read(id, options);
+    };
+    painter.model = painterModel();
+    painter.specialDayId = "sd1";
+    painter.open = true;
+    document.body.append(painter);
+    await settle(painter);
+    expect(part(painter, "loading")).not.toBeNull();
+    expect(part(painter, "no-dates")).toBeNull();
+    release();
+    await loaded(painter);
+    expect(part(painter, "no-dates")).toBeNull();
+  });
+});
+
+it("a refused date marks its heading, and the Closed tick under it keeps its own colour", async () => {
+  const { painter, writes } = await mount({
+    answer: () => ({
+      code: "special_day.date_taken",
+      params: { date: "2026-12-15", name: "Staff party", specialDayId: "sd7" },
+    }),
+  });
+  await typeName(painter, "Renamed");
+  await save(painter, writes);
+  const heading = (date: string) =>
+    grid(painter).shadowRoot!.querySelector<HTMLElement>(`.heading[data-column="${date}"]`)!;
+  const label = (date: string) => tick(painter, date).closest("label")!;
+  expect(heading("2026-12-15").hasAttribute("data-error")).toBe(true);
+  expect(getComputedStyle(heading("2026-12-15")).color).not.toBe(
+    getComputedStyle(heading("2026-12-14")).color,
+  );
+  expect(getComputedStyle(label("2026-12-15")).color).toBe(
+    getComputedStyle(label("2026-12-14")).color,
+  );
+});
+
+it("while the offer to add to a same-named day is shown, the paint row and the Closed ticks are quiet and cannot change", async () => {
+  const { painter, lists } = await mount({
+    specialDayId: null,
+    date: "2026-12-25",
+    holidays: [holiday("2026-12-25", "Navidad")],
+    days: {
+      sd2: storedDay({
+        id: "sd2",
+        name: "Navidad",
+        dates: [{ date: "2025-12-25", closedAllDay: false }],
+      }),
+    },
+  });
+  await Promise.allSettled(lists);
+  await settle(painter);
+  expect(part(painter, "offer")).not.toBeNull();
+  const row = part(painter, "paint-row")!;
+  const buttons = [...row.querySelectorAll<HTMLButtonElement>("button")];
+  expect(buttons.length).toBeGreaterThan(0);
+  expect(buttons.every((button) => button.disabled)).toBe(true);
+  for (const quiet of row.querySelectorAll(".pot, .new"))
+    expect(Number(getComputedStyle(quiet).opacity)).toBeLessThan(1);
+  const box = tick(painter, "2026-12-25");
+  expect(box.disabled).toBe(true);
+  box.click();
+  await settle(painter);
+  expect(box.checked).toBe(false);
+  expect(saveButton(painter).disabled).toBe(true);
+  part(painter, "new-instead")!.click();
+  await settle(painter);
+  expect(tick(painter, "2026-12-25").disabled).toBe(false);
+  expect(
+    [...part(painter, "paint-row")!.querySelectorAll<HTMLButtonElement>("button")].some(
+      (button) => button.disabled,
+    ),
+  ).toBe(false);
 });

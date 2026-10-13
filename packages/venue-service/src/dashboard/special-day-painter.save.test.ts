@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { applyTokens } from "@waitron/ui";
 import { setLocale } from "@waitron/dashboard-kit";
 import type { LocalDate } from "../hours-types.js";
+import type { Paint } from "../paint-model.js";
 import type { SpecialDayDetail, SpecialDayInput } from "../special-days.js";
 import { formatDate } from "./hours-view.js";
 import { t } from "./strings.js";
@@ -99,16 +100,18 @@ async function paintDinner(el: SpecialDayPainter, date: LocalDate) {
   await settle(el);
   await drag(el, date, at("19:00"), at("22:00"));
 }
-async function clear(el: SpecialDayPainter, date: LocalDate) {
+/** Sets a date's paint as the grid's ⋮ Copy to… would: a date ticked Closed cannot be dragged on. */
+async function setPaint(el: SpecialDayPainter, date: LocalDate, day: Paint[]) {
   grid(el).dispatchEvent(
     new CustomEvent("paint-change", {
-      detail: { key: date, day: [] },
+      detail: { key: date, day },
       bubbles: true,
       composed: true,
     }),
   );
   await settle(el);
 }
+const clear = (el: SpecialDayPainter, date: LocalDate) => setPaint(el, date, []);
 
 describe("Save sends only the paint the draft changed", () => {
   it("a draft that edits only Restaurant on one date sends exactly one paint entry", async () => {
@@ -125,7 +128,7 @@ describe("Save sends only the paint the draft changed", () => {
   it("Restaurant on two dates and Terrace on one send exactly those three entries", async () => {
     const { painter, writes } = await mount();
     await paintDinner(painter, DEC_14);
-    await drag(painter, DEC_25, at("19:00"), at("22:00"));
+    await setPaint(painter, DEC_25, [dinner("19:00", "22:00")]);
     await pick(painter, "zone:z2");
     await drag(painter, DEC_15, at("21:00"), at("22:00"));
     await save(painter, writes);
@@ -201,15 +204,21 @@ describe("Save sends only the paint the draft changed", () => {
   });
 
   it("a removed date sends no paint, whether stored or painted", async () => {
+    const DEC_16 = "2026-12-16";
     const { painter, writes } = await mount({
       days: {
         sd1: storedDay({
+          dates: [
+            { date: DEC_14, closedAllDay: false },
+            { date: DEC_16, closedAllDay: false },
+            { date: DEC_25, closedAllDay: true },
+          ],
           paint: [{ departmentId: "d1", date: DEC_25, ranges: [dinner("20:00", "21:00")] }],
         }),
       },
     });
-    await paintDinner(painter, DEC_15);
-    for (const date of [DEC_15, DEC_25])
+    await paintDinner(painter, DEC_16);
+    for (const date of [DEC_16, DEC_25])
       painter
         .shadowRoot!.querySelector<HTMLElement>(`[data-date="${date}"] [data-test=remove-date]`)!
         .click();
@@ -350,7 +359,7 @@ describe("a refused save", () => {
       ],
     });
     await paintDinner(painter, DEC_14);
-    await drag(painter, DEC_25, at("19:00"), at("22:00"));
+    await setPaint(painter, DEC_25, [dinner("19:00", "22:00")]);
     await pick(painter, "zone:z2");
     await drag(painter, DEC_15, at("21:00"), at("22:00"));
     await save(painter, writes);

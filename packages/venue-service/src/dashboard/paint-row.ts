@@ -1,4 +1,4 @@
-import { css, html, nothing, type TemplateResult } from "lit";
+import { css, html, nothing } from "lit";
 import type { CalendarColour } from "../hours-types.js";
 import { format } from "./hours-view.js";
 import { t } from "./strings.js";
@@ -43,9 +43,20 @@ export const paintRowStyles = css`
     .pots > * {
       flex: none;
     }
+    /* A scroller with nothing to focus in it cannot be scrolled by keyboard; nothing here acts. */
+    .paint[data-disabled] .pots {
+      overflow-x: clip;
+    }
     .hint {
       margin-inline-start: 0;
     }
+  }
+  .paint[data-disabled] .pot,
+  .paint[data-disabled] .new {
+    opacity: var(--wt-opacity-disabled);
+  }
+  .paint[data-disabled] button {
+    cursor: default;
   }
   .pot {
     display: inline-flex;
@@ -110,12 +121,19 @@ export function paintRow(options: {
   pots: readonly PaintPot[];
   chosen: string | null;
   choose: (id: string | null) => void;
-  /** Placed after the chips, such as a "+ New period" button. */
-  after?: TemplateResult | typeof nothing;
+  /** Offers "+ New period" after the chips. */
+  newPeriod?: () => void;
+  /** Nothing can be painted yet: every button is disabled and the chips are drawn quiet. */
+  disabled?: boolean;
   slot?: string;
 }) {
-  const { pots, chosen, choose, after = nothing, slot } = options;
-  return html`<div slot=${slot ?? nothing} class="paint" data-test="paint-row">
+  const { pots, chosen, choose, newPeriod, disabled = false, slot } = options;
+  return html`<div
+    slot=${slot ?? nothing}
+    class="paint"
+    data-test="paint-row"
+    ?data-disabled=${disabled}
+  >
     <div class="pots">
       <span class="label">${t("painter.paint")}</span>
       ${pots.map(
@@ -125,6 +143,7 @@ export function paintRow(options: {
               type="button"
               data-test=${pot.id === null ? "paint-closed" : `paint-${pot.id}`}
               aria-pressed=${chosen === pot.id ? "true" : "false"}
+              ?disabled=${disabled}
               @click=${() => choose(pot.id)}
             >
               <span
@@ -140,6 +159,7 @@ export function paintRow(options: {
                     class="edit"
                     data-test=${`edit-${pot.id}`}
                     aria-label=${format("painter.edit_period", { name: pot.name })}
+                    ?disabled=${disabled}
                     @click=${pot.edit}
                   >
                     ✎
@@ -148,7 +168,19 @@ export function paintRow(options: {
             }
           </span>`,
       )}
-      ${after}
+      ${
+        newPeriod
+          ? html`<button
+              type="button"
+              class="new"
+              data-test="new-period"
+              ?disabled=${disabled}
+              @click=${newPeriod}
+            >
+              ${t("painter.new_period")}
+            </button>`
+          : nothing
+      }
     </div>
     <span class="hint" data-test="hint">${t("painter.hint")}</span>
   </div>`;

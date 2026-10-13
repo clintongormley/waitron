@@ -111,6 +111,7 @@ export class PaintGrid extends LitElement {
         grid-column: 1 / -1;
         padding-block-end: var(--wt-space-1);
         font-weight: var(--wt-font-weight-normal);
+        color: var(--wt-color-text);
       }
       .heading[data-error] {
         color: var(--wt-color-danger);
@@ -312,6 +313,9 @@ export class PaintGrid extends LitElement {
   @property({ attribute: false }) columnErrors: ReadonlyMap<string, string> = new Map();
   /** What a selected block may change to; every period and Closed when unset. */
   @property({ attribute: false }) paintable: readonly (string | null)[] | undefined = undefined;
+  /** Columns drawn closed all day, hiding their underlay and paint, which stay in `days`; nothing
+   *  paints there. */
+  @property({ attribute: false }) closedAllDay: ReadonlySet<string> = new Set();
   /** Shows the week only: nothing paints, and no block or day offers a menu. */
   @property({ type: Boolean }) readOnly = false;
   /** What the days belong to. When it changes, a stroke, menu or chooser begun on the old days
@@ -379,7 +383,13 @@ export class PaintGrid extends LitElement {
 
   #start(event: PointerEvent, key: string): void {
     this.#dragged = false;
-    if (this.readOnly || event.button !== 0 || this.chosen === undefined || this.#gesture !== null)
+    if (
+      this.readOnly ||
+      event.button !== 0 ||
+      this.chosen === undefined ||
+      this.#gesture !== null ||
+      this.closedAllDay.has(key)
+    )
       return;
     const column = event.currentTarget as HTMLElement;
     this.#gesture = {
@@ -852,7 +862,8 @@ export class PaintGrid extends LitElement {
             )}
           </div>
           ${this.columns.map((column) => {
-            const day = this.#day(column.key);
+            const shut = this.closedAllDay.has(column.key);
+            const day = shut ? [] : this.#day(column.key);
             return html`<div
               class="day"
               role="group"
@@ -875,9 +886,9 @@ export class PaintGrid extends LitElement {
                     style=${styleMap({ top: `${(minute / DAY) * 100}%` })}
                   ></div>`,
               )}
-              ${(this.underlay.get(column.key) ?? []).map((paint) => this.#underlay(paint))}
+              ${shut ? nothing : (this.underlay.get(column.key) ?? []).map((paint) => this.#underlay(paint))}
               ${
-                this.closedErases && day.length === 0
+                shut || (this.closedErases && day.length === 0)
                   ? html`<div class="all-closed">${t("paint.closed_all_day")}</div>`
                   : nothing
               }
