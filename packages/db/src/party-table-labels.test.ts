@@ -297,6 +297,28 @@ describe("party table labels", () => {
       );
     });
 
+    it("lists a group's name for each party seated at one of its tables", async () => {
+      const s = randomUUID().slice(0, 6);
+      const [bar, c3] = [randomUUID(), randomUUID()];
+      const first = await party([{ id: bar, label: `Bar ${s}`, ...AT }]);
+      const second = await party([{ id: c3, label: `Counter 3 ${s}`, ...AT }]);
+      await group([bar, c3], `García birthday ${s}`);
+      expect(await inTx((tx) => partyTableLabels(tx, [first, second]))).toEqual(
+        new Map([
+          [first, [`García birthday ${s}`]],
+          [second, [`García birthday ${s}`]],
+        ]),
+      );
+    });
+
+    it("lists both of two tables in no group whose shown names are the same", async () => {
+      const { ids, labels, partyId } = await longTable();
+      await nameToday(ids.c4, labels.bar);
+      expect(await inTx((tx) => partyTableLabels(tx, [partyId]))).toEqual(
+        new Map([[partyId, [labels.bar, labels.c3, labels.bar, labels.c5]]]),
+      );
+    });
+
     it("answers each table's shown name, its saved label when it has no today's row", async () => {
       const { s, ids, labels } = await longTable();
       await group([ids.c3, ids.c4], `García birthday ${s}`);
