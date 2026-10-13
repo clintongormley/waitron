@@ -4216,11 +4216,13 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   Backups screen downloads it as written; the kit's heading and note come from the screen's strings
   (`stream.kit.file_heading`, `stream.kit.file_note`). Left open by A538-5.
 
-- **The Backups screen offers one destination, not a bucket and a folder together.** The A538
-  design proposes that the dashboard manage one archive bucket plus optional local copies; the
-  screen offers a single choice, and turning stored settings back on opens on the first stored
-  destination only (`openingDestination`, `apps/dashboard/src/screens/backup-destination-model.ts`).
-  Decision needed from the owner; until then, a single choice. Left open by A538-6.
+- **The Backups screen offers one destination, not a bucket and a folder together.** The approved
+  A538 design says the dashboard manages one archive bucket plus optional local copies, but the
+  apply route stores one destination (`apps/server/src/backup-api.ts`), the screen offers a single
+  choice, and turning stored settings back on opens on the first stored destination only
+  (`openingDestination`, `apps/dashboard/src/screens/backup-destination-model.ts`). Whether the
+  dashboard should store both is an open owner question, asked 2026-10-13; until it is answered, a
+  single choice. Left open by A538-6.
 
 - **A recovery kit can carry a recovery key its own restore refuses.** `parseRecoveryKit`
   (`packages/stream/src/kit.ts`) refuses a recovery key holding a C0 control character or DEL, which
@@ -4495,10 +4497,6 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 
 - **Task 8a** (#627, the server side of the bucket-copy settings): the dead-process pointer write
   under Task 6 applies here too. Left open by SQLite slice 2.
-
-- **Task 8b** (#628, the Backups screen's bucket-copy panel). Open: a change of the secret access
-  key alone, made in another tab, still leaves the old kit showing, because a settings read does not
-  carry the secret. Left open by SQLite slice 2.
 
 - **When the key rename and the put-back both fail, the new certificate is left beside the old key**
   (the listener refuses the pair). Publishing the pair through one atomic switch (for example a

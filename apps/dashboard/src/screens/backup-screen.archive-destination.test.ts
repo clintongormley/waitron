@@ -1669,6 +1669,69 @@ describe("switching off", () => {
     expect(await buttonState(el, "turn-off")).toEqual(["danger", true]);
   });
 
+  it("while its request is out, Edit settings and Show the current key cannot be pressed", async () => {
+    const { el } = await mount(LOCAL_ONLY, {
+      disableBackup: vi.fn().mockReturnValue(new Promise(() => undefined)),
+    });
+    await press(el, "turn-off");
+    await press(el, "turn-off");
+    expect(await buttonState(el, "edit-settings")).toEqual(["secondary", true]);
+    expect(await buttonState(el, "show-old-key")).toEqual(["secondary", true]);
+  });
+
+  it("keeps its own colour while its own request is sent, whatever else is pressed", async () => {
+    const { el, api } = await mount(TWO, {
+      disableBackup: vi.fn().mockReturnValue(new Promise(() => undefined)),
+      getArchiveRecoveryPack: vi.fn().mockReturnValue(new Promise(() => undefined)),
+    });
+    await press(el, "turn-off");
+    await press(el, "turn-off");
+    for (const other of ["edit-settings", "show-old-key", "show-pack", "configuration-export"]) {
+      await press(el, other);
+      expect(await buttonState(el, "turn-off"), other).toEqual(["danger", true]);
+    }
+    await settle();
+    expect(api.getBackupRecoveryKey).not.toHaveBeenCalled();
+  });
+
+  it("an Edit pressed while the turn-off is out does not open the settings editor once backups are back on", async () => {
+    let answer!: (value: BackupStatusView) => void;
+    const { el, api } = await mount(LOCAL_ONLY, {
+      disableBackup: vi
+        .fn()
+        .mockReturnValue(new Promise<BackupStatusView>((resolve) => (answer = resolve))),
+    });
+    await press(el, "turn-off");
+    await press(el, "turn-off");
+    await press(el, "edit-settings");
+    answer(storedOff(LOCAL_ONLY));
+    await vi.waitFor(() => expect(q(el, "[data-test=apply]")).not.toBeNull());
+    await settle();
+    await el.updateComplete;
+    q(el, "[data-test=apply]")!.click();
+    await vi.waitFor(() => expect(api.applyBackup).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(q(el, "[data-test=edit-settings]")).not.toBeNull());
+    expect(q(el, "[data-test=edit-title]")).toBeNull();
+  });
+
+  for (const [other, overrides] of [
+    [
+      "show-pack",
+      { getArchiveRecoveryPack: vi.fn().mockReturnValue(new Promise(() => undefined)) },
+    ],
+    ["show-old-key", {}],
+    ["configuration-export", {}],
+  ] as const) {
+    it(`pressing ${other} disarms it`, async () => {
+      const { el, api } = await mount(TWO, { disableBackup: vi.fn(), ...overrides });
+      await press(el, "turn-off");
+      await press(el, other);
+      expect(await buttonState(el, "turn-off")).toEqual(["ghost", false]);
+      expect(q(el, "[data-test=turn-off-explain]")).toBeNull();
+      expect(api.disableBackup).not.toHaveBeenCalled();
+    });
+  }
+
   it("an answer whose reload failed says the box could not load the settings", async () => {
     const { el } = await mount(LOCAL_ONLY, {
       disableBackup: vi.fn().mockResolvedValue({
@@ -1706,6 +1769,14 @@ describe("switching off", () => {
       source: "environment",
       revision: null,
     } as BackupStatusView);
+    expect(q(el, "[data-test=show-pack]")).not.toBeNull();
+    expect(q(el, "[data-test=turn-off]")).toBeNull();
+    expect(q(el, "[data-test=edit-settings]")).toBeNull();
+  });
+
+  it("is not offered on a node that is not the primary", async () => {
+    const { el } = await mount({ ...TWO, isPrimary: false });
+    expect(q(el, "[data-test=not-primary]")).not.toBeNull();
     expect(q(el, "[data-test=show-pack]")).not.toBeNull();
     expect(q(el, "[data-test=turn-off]")).toBeNull();
     expect(q(el, "[data-test=edit-settings]")).toBeNull();
@@ -1795,6 +1866,17 @@ describe("turning stored settings back on", () => {
     await typeFolder(el, "/mnt/usb/other");
     await read(el, api, { ...storedOff(LOCAL_ONLY), revision: NEW_REVISION });
     expect((q(el, "[data-test=destination]") as Field).value).toBe("/mnt/usb/other");
+  });
+
+  it("a later read naming other stored settings, with nothing typed, fills the form in from them", async () => {
+    const { el, api } = await openOff(LOCAL_ONLY);
+    await read(el, api, {
+      ...storedOff(LOCAL_ONLY),
+      revision: NEW_REVISION,
+      destinations: [{ id: "primary", kind: "local-fs", dir: "/mnt/usb/moved" }],
+    });
+    expect((q(el, "[data-test=destination]") as Field).value).toBe("/mnt/usb/moved");
+    expect(await buttonState(el, "apply")).toEqual(["primary", false]);
   });
 });
 

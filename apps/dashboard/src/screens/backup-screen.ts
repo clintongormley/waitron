@@ -376,7 +376,6 @@ export class BackupScreen extends LitElement {
   /** The stored policy is one the form cannot write, so the editor shows defaults in its place and
    * saving it as shown changes the box. */
   #policyReplaced = false;
-  #storedOffOpened = false;
   /** The status watcher asks for a key at most once, so a failing mint is not retried on every
    * refresh: the mint is a POST, and a POST is never passive session activity. */
   #watcherAsked = false;
@@ -549,7 +548,6 @@ export class BackupScreen extends LitElement {
         this.status = value;
         this.refreshErrorKey = null;
         if (!value.enabled) this.turnOffArmed = false;
-        if (!value.storedDisabled) this.#storedOffOpened = false;
         await this.#openStoredOff(false);
         await this.#mintIfNone();
       });
@@ -857,16 +855,14 @@ export class BackupScreen extends LitElement {
     }
   }
 
-  /** Turning stored settings back on starts from them, once: a later read never replaces what was
-   * typed since. */
+  /** Fills the turn-on form from the switched-off stored settings, unless the form holds a change. */
   async #openStoredOff(afterTurnOff: boolean): Promise<void> {
     const generation = this.#generation;
     await this.#streamRead;
     const s = this.status;
     if (generation !== this.#generation || s === undefined) return;
     if (!s.storedDisabled || s.enabled || !s.isPrimary || s.managedByEnvironment) return;
-    if (!afterTurnOff && (this.#storedOffOpened || this.#archiveScope?.isDirty())) return;
-    this.#storedOffOpened = true;
+    if (!afterTurnOff && this.#archiveScope?.isDirty()) return;
     this.#prefillFromStatus(s);
     this.#archiveScope?.commit(this.#archiveValue());
   }
@@ -906,8 +902,14 @@ export class BackupScreen extends LitElement {
     this.packUrl = null;
   }
 
+  /** Takes back an armed turn-off, except while the turn-off's own request is out. */
+  #disarmTurnOff(): void {
+    if (!this.submitting) this.turnOffArmed = false;
+  }
+
   async #showPack(): Promise<void> {
     if (this.packLoading) return;
+    this.#disarmTurnOff();
     this.#dropPack();
     this.packLoading = true;
     const request = this.#packRequest;
@@ -935,6 +937,8 @@ export class BackupScreen extends LitElement {
   }
 
   async #showOldKey(): Promise<void> {
+    if (this.submitting) return;
+    this.#disarmTurnOff();
     const generation = this.#generation;
     this.errorKey = null;
     try {
@@ -946,7 +950,8 @@ export class BackupScreen extends LitElement {
   }
 
   async #startEdit(): Promise<void> {
-    this.turnOffArmed = false;
+    if (this.submitting) return;
+    this.#disarmTurnOff();
     const generation = this.#generation;
     if (
       this.#leave &&
@@ -1124,6 +1129,7 @@ export class BackupScreen extends LitElement {
 
   async #exportConfiguration(): Promise<void> {
     if (this.exportingConfiguration) return;
+    this.#disarmTurnOff();
     this.configurationRequestFailed = false;
     this.configurationAttempted = true;
     if (this.#configurationFieldError() !== null) {
@@ -1274,6 +1280,7 @@ export class BackupScreen extends LitElement {
             ? html`<wt-button
                   variant="secondary"
                   data-test="edit-settings"
+                  ?disabled=${this.submitting}
                   @click=${() => void this.#startEdit()}
                   >${t("backup.edit.button")}</wt-button
                 >
@@ -1908,6 +1915,7 @@ export class BackupScreen extends LitElement {
         <wt-button
           variant="secondary"
           data-test="show-old-key"
+          ?disabled=${this.submitting}
           @click=${() => void this.#showOldKey()}
           >${t("backup.rotate.show_old")}</wt-button
         >
