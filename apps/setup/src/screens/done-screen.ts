@@ -189,10 +189,7 @@ export class SetupDoneScreen extends LitElement {
           ? nothing
           : html`<wt-card data-test="opening-hours">
               <p>${t("done.opening_hours")}</p>
-              <a
-                href=${`/manage/opening-hours/department/${encodeURIComponent(this.openingHours.departmentId)}`}
-                >${t("done.change_opening_hours")}</a
-              >
+              <a href="/manage/opening-hours/view/year">${t("done.change_opening_hours")}</a>
             </wt-card>`
       }
       ${this.rebuilt ? this.#deviceSteps() : nothing} ${this.#breakGlass()}
