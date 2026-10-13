@@ -35,7 +35,7 @@ import { realSleep } from "./loop.js";
 import type { Logger } from "./logger.js";
 import "./errors.js";
 
-/** Where a destination is, never what opens it: a bucket's keys stay on the box. */
+/** Where a destination is and which access key id it uses, never the secret that opens it. */
 export type DestinationView =
   | { id: string; kind: "local-fs"; dir: string }
   | {
@@ -44,6 +44,8 @@ export type DestinationView =
       endpoint: string | null;
       region: string;
       bucket: string;
+      prefix: string;
+      accessKeyId: string;
       namespace: string;
       credentialPresent: true;
     };
@@ -56,6 +58,8 @@ export function destinationView(d: BackupDestination): DestinationView {
     endpoint: d.bucket.endpoint ?? null,
     region: d.bucket.region,
     bucket: d.bucket.bucket,
+    prefix: d.bucket.prefix,
+    accessKeyId: d.bucket.accessKeyId,
     namespace: archiveNamespace(d.bucket.prefix, d.venueId),
     credentialPresent: true,
   };

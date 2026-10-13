@@ -106,9 +106,6 @@ spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
 
 4. **What a standalone box still lacks before a real venue runs it** (under _The box: backups,
    upgrades and recovery_, except the certificate, under _Fiscal records, invoices and the asesor_):
-   - an off-box home for the backup archive on the Backups screen — the environment and the
-     authenticated backup routes can name an S3 bucket (A538), but the screen still offers only a
-     local folder;
    - installing or renewing the AEAT certificate after setup — today only the setup wizard can
      set it, and nothing watches when it expires;
    - upgrade testing with rows the product itself writes and a real older database —
@@ -4184,8 +4181,7 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 
 - **S3-compatible bucket, then Google Drive.** The bucket stream of `venue.db` is built (slice 2).
   The archive's bucket destination (`S3Backend` over `S3FileStore`) is built, and the
-  environment or the authenticated backup routes can name one; the Backups screen still offers only
-  a local folder (plan Task 6).
+  environment, the authenticated backup routes or the Backups screen can name one.
   A538's [draft design](superpowers/specs/2026-10-12-a538-archive-s3-design.md) and
   [implementation plan](superpowers/plans/2026-10-12-a538-archive-s3.md): the owner approved the
   proposed defaults on 2026-10-12. Plan Task 1, which makes the bucket stream's calls cancellable,
@@ -4195,31 +4191,32 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   which stores the archive choice sealed in the vault, lets the environment or the backup routes
   name a bucket, and keeps every destination across a key rotation (A538-4), and Task 5, which
   restores one archive from the bucket with an archive recovery pack and no stream settings
-  (`waitron-restore restore --from-archive`, `GET /api/backup/archive-recovery-pack`; A538-5).
-  Tasks 6 to 10 and the real-AWS evidence are open.
+  (`waitron-restore restore --from-archive`, `GET /api/backup/archive-recovery-pack`; A538-5), and
+  Task 6, which lets the Backups screen choose a folder, the bucket copy's bucket or another bucket,
+  show the archive recovery pack, and turn scheduled backups off and back on (A538-6).
+  Tasks 7 to 10 and the real-AWS evidence are open.
   `S3FileStore`'s listing and batch delete repeat `S3ObjectStore`'s (`packages/stream/src/s3-store.ts`)
   with different error codes, and only the file store's refuses a repeated key or bad size and
   counts `NoSuchKey` as deleted; share them, deciding whether the bucket stream takes those checks
   too.
 
-- **The Backups screen does not yet read what A538-4 added to the backup routes** (plan Task 6).
-  It needs English and Spanish wording for `backup.archive_test_failed` and
-  `backup.rotation_metadata_failed`; `backup.archive_settings_unusable` is worded only as an alert
-  (`alert-messages.ts`). It must show a write's `reloadErrorCode` (the settings were saved, but the
-  box could not load them) and the status's `loadErrorCode` (archives are off because the stored
-  settings cannot be used), and on `backup.rotation_metadata_failed` it must replace a displayed
-  recovery key or fingerprint with the new one, which is already in effect. It offers no control for
-  `POST /api/backup/disable` and does not show `storedDisabled` (archives stored switched off).
-  Left open by A538-4. It also needs a Download archive recovery pack action over
-  `GET /api/backup/archive-recovery-pack`, which answers `keyFingerprint`, `keyRotatedAt` and
-  `revision` so a displayed pack can be marked stale; that route's `backup.recovery_key_missing`
-  refusal would show the existing "Enter a recovery key" wording, written for the form. Under
-  environment management the pack route answers no `revision`, so a bucket changed in the
-  environment marks no pack stale. The pack file's explanatory text is written by the server in
-  English only (`encodeArchiveRecoveryPack`); the recovery kit's file text is built by the dashboard
-  in English and Spanish. Decide which owns it when the button lands. Left open by A538-5. When
-  the button lands, remove deploy/README.md's line saying the Backups screen does not offer the
-  pack yet.
+- **`backup.archive_settings_unusable` is worded only as an alert** (`alert-messages.ts`), not on
+  the Backups screen. Left open by A538-4.
+
+- **Under environment management a shown archive recovery pack goes stale only when the key
+  changes.** The pack route answers no `revision` there, so a bucket changed in the environment
+  leaves the shown pack in place (`#dropStalePack`, `apps/dashboard/src/screens/backup-screen.ts`).
+  Left open by A538-5 and A538-6d.
+
+- **The archive recovery pack file is in English only, while the bucket copy's kit file is
+  translated.** The server writes the pack's explanatory text (`encodeArchiveRecoveryPack`) and the
+  Backups screen downloads it as written; the kit's heading and note come from the screen's strings
+  (`stream.kit.file_heading`, `stream.kit.file_note`). Left open by A538-5.
+
+- **The Backups screen offers one destination, not a bucket and a folder together.** The A538
+  design says one archive bucket plus optional local copies; the apply route stores one
+  (`apps/server/src/backup-api.ts`), and turning stored settings back on opens on the first only
+  (`openingDestination`). Open owner question, asked 2026-10-13. Left open by A538-6.
 
 - **A recovery kit can carry a recovery key its own restore refuses.** `parseRecoveryKit`
   (`packages/stream/src/kit.ts`) refuses a recovery key holding a C0 control character or DEL, which
@@ -4264,12 +4261,8 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   destination records an outcome and no alert names the cause; what the owner sees is
   `backup.destination_overdue`, once the last archive is old enough. Left open by A538-3.
 
-- **The Backups page shows only the first destination's freshness, and "No backup has run yet"
-  whenever that destination's `lastBackupAt` is null, including when the box could not list it; a
-  pruning failure is shown nowhere.** Backup status carries `readErrorCode` and `pruneErrorCode`
-  per destination, but the screen reads neither (`backup-screen.ts`). Since A538-3a counts only
-  names `parseBackupArchiveKey` reads, a folder holding only old-format archive names also reads as
-  never backed up. Left open by A538-3; plan Task 6 covers the screen.
+- **A destination holding only old-format archive names reads as never backed up.** Since A538-3a
+  the status counts only names `parseBackupArchiveKey` reads. Left open by A538-3.
 
 - **No test covers the supervisor ignoring results from a backup run a reload replaced.**
   `backup-supervisor.ts` drops `onUploaded`/`onDestinationResult` reports once that run's
@@ -4408,10 +4401,26 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   `backup.effective_mismatch` (read from the route, not run). Left open by SQLite slice 2 Task 2a
   (#557, a recovery key that does not need an archive destination).
 
-- **The bucket copy panel's refusal for a too-short key names the "Turn on backups" button but does
-  not link or scroll to it.** Left open by SQLite slice 2 Task 2a (#557, a recovery key that does
-  not need an archive destination).
-  [Detail](backlog/box.md#the-bucket-copy-panels-refusal-for-a-too-short-key-names-the-turn-on-backups-button-but-does-not-link-or-scroll-to-it)
+- **A too-short recovery key's refusals do not link to the button they name**, and with archives
+  on the one they name, "Change the recovery key", cannot finish, because showing the current key
+  refuses a too-short one. Left open by SQLite slice 2
+  Task 2a (#557, a recovery key that does not need an archive destination) and A538-6d.
+  [Detail](backlog/box.md#a-too-short-recovery-key-the-refusals-do-not-link-to-the-button-they-name-and-change-the-recovery-key-cannot-finish)
+
+- **A relative backup folder is accepted.** The Backups screen's hint asks for a full path, but
+  the server resolves whatever it is given (`resolveArchiveChoice`, `apps/server/src/archive-settings.ts`),
+  so `backups-relative` saved as a folder under the server's working directory (seen on the dev
+  stack during A538-6's visual check). That line came in with #1628 (A538-4).
+
+- **The Backups screen's bucket fields copy the bucket copy panel's.** The field table, the
+  required checks and the reveal button exist in both `apps/dashboard/src/screens/backup-screen.ts`
+  (`CUSTOM_FIELDS`) and `stream-settings-panel.ts` (`FIELDS`), and `normalisePrefix` in
+  `backup-destination-model.ts` copies the stream package's (`packages/stream/src/names.ts`). Share
+  them. Left open by A538-6.
+
+- **At phone width the configuration export's passphrase labels overlap "Show password"** on the
+  Backups screen (seen at 390 px during A538-6's visual check, both themes). I believe this predates
+  A538-6: the export section came in with #296.
 
 - **The status watcher does not retry its own failed mint** (the mint is a POST, never passive
   session activity), so the screen then offers no key until it is reopened. Left open by SQLite
@@ -4497,11 +4506,6 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 
 - **Task 8a** (#627, the server side of the bucket-copy settings): the dead-process pointer write
   under Task 6 applies here too. Left open by SQLite slice 2.
-
-- **Task 8b** (#628, the Backups screen's bucket-copy panel). Open: the Backups screen's own card
-  width is still a `34rem` literal, which the no-hardcoded-chrome rule forbids in a view and no
-  guard reads; and a change of the secret access key alone, made in another tab, still leaves the
-  old kit showing, because a settings read does not carry the secret. Left open by SQLite slice 2.
 
 - **When the key rename and the put-back both fail, the new certificate is left beside the old key**
   (the listener refuses the pair). Publishing the pair through one atomic switch (for example a

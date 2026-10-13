@@ -346,6 +346,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
       : { held: loadedKey !== undefined, key: loadedKey };
     return {
       ...projectStatus(await deps.supervisor.status()),
+      venueId: deps.venueId,
       ...(fileKey.key === undefined
         ? {}
         : { keyFingerprint: keyFingerprint(fileKey.key), keyRotatedAt: loadKeyRotatedAt(env) }),

@@ -997,8 +997,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "La clave de recuperación es demasiado corta",
   },
   "backup.recovery_key_missing": {
-    en: "Enter a recovery key",
-    es: "Introduce una clave de recuperación",
+    en: "This box holds no recovery key.",
+    es: "Esta caja no tiene clave de recuperación.",
   },
   "backup.destinations_invalid": {
     en: "Check the backup destination",
@@ -1039,6 +1039,30 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "backup.archive_namespace_overlap": {
     en: "The bucket copy and the scheduled backups would write into each other's folder in this bucket. Choose a different folder for one of them.",
     es: "La copia en el bucket y las copias programadas escribirían una en la carpeta de la otra en este bucket. Elige otra carpeta para una de ellas.",
+  },
+  "backup.archive_test_failed": {
+    en: "The backup bucket failed the test, so nothing was saved. Check the address, the key and the bucket's permissions.",
+    es: "El bucket de las copias no ha superado la prueba, así que no se ha guardado nada. Revisa la dirección, la clave y los permisos del bucket.",
+  },
+  "backup.destination_timed_out": {
+    en: "The backup destination took too long to answer, so the box stopped waiting for it.",
+    es: "El destino de las copias ha tardado demasiado en responder, así que la caja ha dejado de esperarlo.",
+  },
+  "backup.destination_cancelled": {
+    en: "The backup was stopped part-way because backups were restarting or switching off.",
+    es: "La copia se ha detenido a medias porque las copias se estaban reiniciando o apagando.",
+  },
+  "backup.destination_key_invalid": {
+    en: "A file or folder name at the backup destination is not one the box can safely use.",
+    es: "Un nombre de archivo o de carpeta en el destino de las copias no es uno que la caja pueda usar con seguridad.",
+  },
+  "backup.destination_object_too_large": {
+    en: "A file sent to or read from the backup destination was larger than the box allows.",
+    es: "Un archivo enviado al destino de las copias o leído de él superaba el tamaño que admite la caja.",
+  },
+  "backup.rotation_metadata_failed": {
+    en: "The new recovery key is in use, but the box could not record the change in the backup settings.",
+    es: "La nueva clave de recuperación ya está en uso, pero la caja no ha podido anotar el cambio en los ajustes de las copias.",
   },
   "backup.archive_settings_invalid": {
     en: "The saved settings for scheduled backups are not valid. Save them again on the Backups screen.",

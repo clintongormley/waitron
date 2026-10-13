@@ -1471,7 +1471,6 @@ export const en = {
   "backup.status.state": "Backups",
   "backup.status.on": "On",
   "backup.status.off": "Off",
-  "backup.status.where": "Saved to",
   "backup.status.last": "Last backup",
   "backup.status.never": "No backup has run yet",
   "backup.status.stale": "out of date",
@@ -1485,10 +1484,44 @@ export const en = {
     "Backups on this box are managed by its environment — there is nothing to change here.",
   "backup.status.not_primary":
     "This node isn't the venue's primary, so backups are changed from the primary node.",
+  "backup.status.stored_off": "Switched off — the saved destination is kept",
+  "backup.status.load_failed": "Backups are off because the saved settings can't be used.",
+  "backup.reload_failed_after_save": "Saved, but the box could not load the new settings.",
+  "backup.destination.local": "On this box",
+  "backup.destination.off_box": "Off the box",
+  "backup.destination.stored": "Stored a backup under the current key",
+  "backup.destination.failed": "The last backup here failed",
+  "backup.destination.unreadable": "Could not check this destination",
+  "backup.destination.prune_failed": "Old backups here could not be removed",
   "backup.destination.title": "Where to save backups",
   "backup.destination.label": "Backup folder",
   "backup.destination.hint":
     "A full path on this box — for example an attached USB drive or a mounted disk.",
+  "backup.destination.choice": "Save backups to",
+  "backup.destination.choice_local": "A folder on this box",
+  "backup.destination.choice_stream": "The bucket copy's bucket",
+  "backup.destination.choice_custom": "Another S3-compatible bucket",
+  "backup.destination.secret_keep": "Leave empty to keep the saved secret.",
+  "backup.destination.secret_needed":
+    "The bucket or access key changed, so enter the secret access key.",
+  "backup.destination.secret_characters":
+    "Use only unaccented letters, digits, spaces and basic keyboard symbols, with no space at the start or end. A single quote (') cannot be used.",
+  "backup.destination.stream_unavailable": "Set up the bucket copy below to use its bucket.",
+  "backup.destination.stream_unread":
+    "The bucket copy's settings could not be read, so its bucket cannot be chosen now.",
+  "backup.destination.stream_snapshot":
+    "Saving copies the bucket copy's current bucket settings. Changing or removing the bucket copy later does not move these backups; save this choice again to follow a change.",
+  "backup.destination.stream_replaces":
+    "Backups go only to this bucket, not to a folder on this box.",
+  "backup.destination.stream_location": "Backups will be stored in",
+  "backup.destination.folder_required": "Enter the folder to save backups in.",
+  "backup.destination.folder_refused":
+    "The box cannot use this folder. Remove any tab, line break or other control character.",
+  "backup.destination.stream_prefix_refused":
+    "Backups cannot use the bucket copy's folder inside its bucket. Choose a folder on this box.",
+  "backup.archive_test.timed_out": "The bucket took too long to answer.",
+  "backup.archive_test.read_mismatch": "The test file read back was not the one written.",
+  "backup.archive_test.not_listed": "The test file was written but the bucket did not list it.",
   "backup.key.title": "Recovery key",
   "backup.key.existing":
     "Backups will use the recovery key this box already has. If you set up the bucket copy, it is the key inside your recovery kit. To change it, turn backups on, then use “Change the recovery key”.",
@@ -1522,6 +1555,26 @@ export const en = {
   "backup.edit.title": "Change backup settings",
   "backup.edit.save": "Save changes",
   "backup.edit.cancel": "Cancel",
+  "backup.turn_off.button": "Turn off scheduled backups",
+  "backup.turn_off.confirm": "Turn off scheduled backups?",
+  "backup.turn_off.explain":
+    "Scheduled backups stop. The saved destination and recovery key are kept, and nothing already stored is deleted.",
+  "backup.turn_off.cancel": "Cancel",
+  "backup.pack.title": "Archive recovery pack",
+  "backup.pack.explanation": "Restoring a backup from the bucket on a new box asks for this pack.",
+  "backup.pack.show": "Show archive recovery pack",
+  "backup.pack.warning":
+    "Anyone holding this pack can open this venue's backups made under the current recovery key. Keep it as safe as the recovery key: offline, and never in the bucket itself.",
+  "backup.pack.copy": "Copy",
+  "backup.pack.download": "Download pack file",
+  "backup.pack.key_missing":
+    "This box holds no recovery key, so there is no archive recovery pack.",
+  "backup.pack.key_too_short":
+    "The recovery key this box holds is too short to make a recovery pack. Use “Change the recovery key” on this page: the new key replaces the short one.",
+  "backup.pack.key_too_short_off":
+    "The recovery key this box holds is too short to make a recovery pack. Use “Turn on backups” on this page: the new key it saves replaces the short one.",
+  "backup.pack.key_too_short_managed":
+    "The recovery key this box holds is too short to make a recovery pack. This box's backup settings come from its environment, so a longer key has to be set there.",
   "backup.rotate.title": "Change the recovery key",
   "backup.rotate.warning":
     "Backups taken before now still need the OLD key — keep it safe too. Changing the key does not re-encrypt older backups.",
@@ -1585,6 +1638,8 @@ export const en = {
     "This box holds no recovery key, so there is no recovery kit to show.",
   "stream.error.recovery_key_too_short":
     "The recovery key this box holds is too short, so the bucket copy cannot use it. Use “Turn on backups” above: the new key it saves replaces the short one.",
+  "stream.error.recovery_key_too_short_archives_on":
+    "The recovery key this box holds is too short, so the bucket copy cannot use it. Use “Change the recovery key” above: the new key replaces the short one.",
   "stream.error.recovery_key_too_short_managed":
     "The recovery key this box holds is too short, so the bucket copy cannot use it. This box's backup settings come from its environment, so a longer key has to be set there.",
   "stream.error.recovery_key_too_short_unknown":
@@ -4268,7 +4323,6 @@ export const es: Record<StringKey, string> = {
   "backup.status.state": "Copias de seguridad",
   "backup.status.on": "Activadas",
   "backup.status.off": "Desactivadas",
-  "backup.status.where": "Se guardan en",
   "backup.status.last": "Última copia",
   "backup.status.never": "Aún no se ha hecho ninguna copia",
   "backup.status.stale": "desactualizada",
@@ -4282,10 +4336,48 @@ export const es: Record<StringKey, string> = {
     "Las copias de seguridad de esta caja las gestiona su entorno; aquí no hay nada que cambiar.",
   "backup.status.not_primary":
     "Este nodo no es el principal del local, así que las copias de seguridad se cambian desde el nodo principal.",
+  "backup.status.stored_off": "Desactivadas; el destino guardado se conserva",
+  "backup.status.load_failed":
+    "Las copias están desactivadas porque no se pueden usar los ajustes guardados.",
+  "backup.reload_failed_after_save":
+    "Se ha guardado, pero la caja no ha podido cargar los ajustes nuevos.",
+  "backup.destination.local": "En esta caja",
+  "backup.destination.off_box": "Fuera de la caja",
+  "backup.destination.stored": "Ha guardado una copia con la clave actual",
+  "backup.destination.failed": "La última copia aquí ha fallado",
+  "backup.destination.unreadable": "No se ha podido comprobar este destino",
+  "backup.destination.prune_failed": "No se han podido borrar las copias antiguas de aquí",
   "backup.destination.title": "Dónde guardar las copias",
   "backup.destination.label": "Carpeta de copias",
   "backup.destination.hint":
     "Una ruta completa en esta caja; por ejemplo, una memoria USB conectada o un disco montado.",
+  "backup.destination.choice": "Guardar las copias en",
+  "backup.destination.choice_local": "Una carpeta de esta caja",
+  "backup.destination.choice_stream": "El bucket de la copia continua",
+  "backup.destination.choice_custom": "Otro bucket compatible con S3",
+  "backup.destination.secret_keep": "Déjala vacía para conservar la clave guardada.",
+  "backup.destination.secret_needed":
+    "El bucket o la clave de acceso han cambiado: escribe la clave de acceso secreta.",
+  "backup.destination.secret_characters":
+    "Usa solo letras sin tilde, cifras, espacios y símbolos básicos del teclado, sin espacios al principio ni al final. No se puede usar la comilla simple (').",
+  "backup.destination.stream_unavailable":
+    "Configura abajo la copia en el bucket para usar su bucket.",
+  "backup.destination.stream_unread":
+    "No se han podido leer los ajustes de la copia en el bucket, así que ahora no se puede elegir su bucket.",
+  "backup.destination.stream_snapshot":
+    "Al guardar se copian los ajustes actuales del bucket de la copia en el bucket. Si después cambias o quitas la copia en el bucket, estas copias no se mueven; vuelve a guardar esta opción para seguir el cambio.",
+  "backup.destination.stream_replaces":
+    "Las copias van solo a este bucket, no a una carpeta de esta caja.",
+  "backup.destination.stream_location": "Las copias se guardarán en",
+  "backup.destination.folder_required": "Escribe la carpeta donde guardar las copias.",
+  "backup.destination.folder_refused":
+    "La caja no puede usar esta carpeta. Quita cualquier tabulador, salto de línea u otro carácter de control.",
+  "backup.destination.stream_prefix_refused":
+    "Las copias no pueden usar la carpeta de la copia en el bucket dentro de su bucket. Elige una carpeta de esta caja.",
+  "backup.archive_test.timed_out": "El bucket ha tardado demasiado en responder.",
+  "backup.archive_test.read_mismatch": "El archivo de prueba leído no era el que se escribió.",
+  "backup.archive_test.not_listed":
+    "El archivo de prueba se escribió, pero el bucket no lo ha listado.",
   "backup.key.title": "Clave de recuperación",
   "backup.key.existing":
     "Las copias usarán la clave de recuperación que este equipo ya tiene. Si has configurado la copia en el bucket, es la clave que va dentro de tu kit de recuperación. Para cambiarla, activa las copias y después usa «Cambiar la clave de recuperación».",
@@ -4320,6 +4412,27 @@ export const es: Record<StringKey, string> = {
   "backup.edit.title": "Cambiar los ajustes de copia",
   "backup.edit.save": "Guardar cambios",
   "backup.edit.cancel": "Cancelar",
+  "backup.turn_off.button": "Desactivar las copias programadas",
+  "backup.turn_off.confirm": "¿Desactivar las copias programadas?",
+  "backup.turn_off.explain":
+    "Las copias programadas se detienen. Se conservan el destino guardado y la clave de recuperación, y no se borra nada de lo ya guardado.",
+  "backup.turn_off.cancel": "Cancelar",
+  "backup.pack.title": "Paquete de recuperación de las copias",
+  "backup.pack.explanation":
+    "Para restaurar en una caja nueva una copia del bucket se pide este paquete.",
+  "backup.pack.show": "Mostrar el paquete de recuperación de las copias",
+  "backup.pack.warning":
+    "Quien tenga este paquete puede abrir las copias de este local hechas con la clave de recuperación actual. Guárdalo con el mismo cuidado que la clave de recuperación: fuera de línea y nunca en el propio bucket.",
+  "backup.pack.copy": "Copiar",
+  "backup.pack.download": "Descargar el archivo del paquete",
+  "backup.pack.key_missing":
+    "Esta caja no tiene clave de recuperación, así que no hay paquete de recuperación de las copias.",
+  "backup.pack.key_too_short":
+    "La clave de recuperación que tiene esta caja es demasiado corta para hacer un paquete de recuperación. Usa «Cambiar la clave de recuperación» en esta página: la clave nueva sustituye a la corta.",
+  "backup.pack.key_too_short_off":
+    "La clave de recuperación que tiene esta caja es demasiado corta para hacer un paquete de recuperación. Usa «Activar las copias» en esta página: la clave nueva que guarda sustituye a la corta.",
+  "backup.pack.key_too_short_managed":
+    "La clave de recuperación que tiene esta caja es demasiado corta para hacer un paquete de recuperación. Los ajustes de copia de esta caja vienen de su entorno, así que hay que poner allí una clave más larga.",
   "backup.rotate.title": "Cambiar la clave de recuperación",
   "backup.rotate.warning":
     "Las copias hechas antes de ahora siguen necesitando la clave ANTIGUA; guárdala también. Cambiar la clave no vuelve a cifrar las copias anteriores.",
@@ -4383,6 +4496,8 @@ export const es: Record<StringKey, string> = {
     "Este equipo no tiene clave de recuperación, así que no hay kit de recuperación que mostrar.",
   "stream.error.recovery_key_too_short":
     "La clave de recuperación que tiene este equipo es demasiado corta, así que la copia en el bucket no puede usarla. Usa «Activar las copias» más arriba: la clave nueva que guarda sustituye a la corta.",
+  "stream.error.recovery_key_too_short_archives_on":
+    "La clave de recuperación que tiene este equipo es demasiado corta, así que la copia en el bucket no puede usarla. Usa «Cambiar la clave de recuperación» más arriba: la clave nueva sustituye a la corta.",
   "stream.error.recovery_key_too_short_managed":
     "La clave de recuperación que tiene este equipo es demasiado corta, así que la copia en el bucket no puede usarla. Los ajustes de copia de este equipo vienen de su entorno, así que hay que poner allí una clave más larga.",
   "stream.error.recovery_key_too_short_unknown":

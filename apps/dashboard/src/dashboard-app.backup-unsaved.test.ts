@@ -52,6 +52,7 @@ async function mount(path = "/manage/backup") {
         enabled: false,
         isPrimary: true,
         managedByEnvironment: false,
+        loadErrorCode: null,
         destinations: [],
         backupStatus: { configured: false },
         archiveUnderCurrentKey: false,

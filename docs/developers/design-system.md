@@ -2135,6 +2135,9 @@ These open already savable:
 - the backup settings editor, when the stored schedule is not a wall-clock one, or no retention is
   stored: the form cannot show what is running, so it opens with its own defaults and Save ready
   (`#policyReplaced` in `apps/dashboard/src/screens/backup-screen.ts`);
+- the Backups screen's Turn on backups when the stored settings are switched off: the form opens
+  filled in from them, and turning them back on is itself the change (`#applyAction` in
+  `apps/dashboard/src/screens/backup-screen.ts`);
 - the printers' name dialog (Add, or Enable for a switched-off printer): pressing it is the add;
 - the calibration wizard when an add opened it: after a fresh add it confirms a new printer's
   default settings, and after a re-add pressing Save is what keeps the printer on, because closing

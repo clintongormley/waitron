@@ -53,13 +53,16 @@ function stubApi(overrides: Partial<DashboardApi> = {}, settings = OFF): Dashboa
   const getStreamSettings = vi.fn().mockResolvedValue(settings);
   return {
     getStreamSettings,
-    // As on the server, a later read of the settings answers what Save returned.
+    // As on the server, a later read of the settings answers what Save or Turn off returned.
     saveStreamSettings: vi.fn(() => {
       getStreamSettings.mockResolvedValue(ON);
       return Promise.resolve(ON);
     }),
     testStreamBucket: vi.fn().mockResolvedValue({ ok: true }),
-    turnOffStream: vi.fn().mockResolvedValue(OFF),
+    turnOffStream: vi.fn(() => {
+      getStreamSettings.mockResolvedValue(OFF);
+      return Promise.resolve(OFF);
+    }),
     getRecoveryKit: vi.fn().mockResolvedValue({ kit: KIT, keyFingerprint: "ab12cd34" }),
     liveData: new LiveData(),
     ...overrides,
@@ -907,6 +910,29 @@ describe("stream-settings-panel: once set up", () => {
     expect(invalidate).toHaveBeenCalledWith([{ type: "backup_status" }]);
   });
 
+  it("tells the Backups screen to read the bucket copy again once Turn off has stopped it", async () => {
+    const api = stubApi({}, ON);
+    const invalidate = vi.spyOn(api.liveData, "invalidate");
+    const { el } = await mount(api);
+    await press(el, "turn-off");
+    await press(el, "turn-off");
+    expect(api.turnOffStream).toHaveBeenCalledOnce();
+    expect(invalidate).toHaveBeenCalledWith([{ type: "backup_status" }]);
+  });
+
+  it("does not tell the Backups screen anything when Turn off is refused", async () => {
+    const api = stubApi(
+      { turnOffStream: vi.fn().mockRejectedValue({ code: "backup.reload_in_progress" }) },
+      ON,
+    );
+    const invalidate = vi.spyOn(api.liveData, "invalidate");
+    const { el } = await mount(api);
+    await press(el, "turn-off");
+    await press(el, "turn-off");
+    expect(api.turnOffStream).toHaveBeenCalledOnce();
+    expect(invalidate).not.toHaveBeenCalled();
+  });
+
   it("does not tell the Backups screen anything when Save is refused", async () => {
     const api = stubApi({
       saveStreamSettings: vi.fn().mockRejectedValue({ code: "backup.reload_in_progress" }),
@@ -1043,6 +1069,56 @@ describe("stream-settings-panel: once set up", () => {
       }
     },
   );
+
+  it.each([
+    ["en-GB", "save"],
+    ["en-GB", "kit"],
+    ["es-ES", "save"],
+    ["es-ES", "kit"],
+  ] as const)(
+    "in %s, with archives on, points a %s refused for a too-short key at Change the recovery key, not Turn on backups",
+    async (locale, which) => {
+      const before = currentLocale();
+      setLocale(locale);
+      try {
+        const refusal = { code: "backup.recovery_key_too_short", params: { min: 12 } };
+        const api =
+          which === "save"
+            ? stubApi({ saveStreamSettings: vi.fn().mockRejectedValue(refusal) })
+            : stubApi({ getRecoveryKit: vi.fn().mockRejectedValue(refusal) }, ON);
+        const { el } = await mount(api, { managedByEnvironment: false, archivesEnabled: true });
+        if (which === "save") {
+          fillRequired(el);
+          await press(el, "save");
+        } else {
+          await press(el, "show-kit");
+        }
+        const alert = text(el, "[role=alert]");
+        expect(alert).toContain(t("backup.rotate.title"));
+        expect(alert).not.toContain(t("backup.apply"));
+      } finally {
+        setLocale(before);
+      }
+    },
+  );
+
+  it("with archives off, points a too-short key's refusal at Turn on backups", async () => {
+    const refusal = { code: "backup.recovery_key_too_short", params: { min: 12 } };
+    const api = stubApi({ getRecoveryKit: vi.fn().mockRejectedValue(refusal) }, ON);
+    const { el } = await mount(api, { managedByEnvironment: false, archivesEnabled: false });
+    await press(el, "show-kit");
+    const alert = text(el, "[role=alert]");
+    expect(alert).toContain(t("backup.apply"));
+    expect(alert).not.toContain(t("backup.rotate.title"));
+  });
+
+  it("with archives on but the environment owning the settings, sends a too-short key's refusal to the environment", async () => {
+    const refusal = { code: "backup.recovery_key_too_short", params: { min: 12 } };
+    const api = stubApi({ getRecoveryKit: vi.fn().mockRejectedValue(refusal) }, ON);
+    const { el } = await mount(api, { managedByEnvironment: true, archivesEnabled: true });
+    await press(el, "show-kit");
+    expect(text(el, "[role=alert]")).toBe(t("stream.error.recovery_key_too_short_managed"));
+  });
 
   it("explains, in this panel's words, a kit refused because the box holds no recovery key", async () => {
     const api = stubApi(
@@ -1182,6 +1258,7 @@ describe("stream-settings-panel: once set up", () => {
     await press(el, "turn-off");
     await press(el, "turn-off");
     expect(api.turnOffStream).toHaveBeenCalledOnce();
+    vi.mocked(api.getStreamSettings).mockResolvedValue(OFF);
     finish(OFF);
     await flush(el);
     expect(field(el, "bucket-region")).not.toBeNull();

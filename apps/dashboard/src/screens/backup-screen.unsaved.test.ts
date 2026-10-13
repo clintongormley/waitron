@@ -29,6 +29,7 @@ afterEach(() => {
 });
 type Screen = HTMLElementTagNameMap["dashboard-backup-screen"];
 const off: BackupStatusView = {
+  venueId: "c0000000-0000-4000-8000-000000000002",
   enabled: false,
   isPrimary: true,
   managedByEnvironment: false,
@@ -100,6 +101,10 @@ async function click(screen: Screen, name: string) {
   field(screen, name).click();
   await screen.updateComplete;
 }
+/** The form's bottom message, inside the named `wt-form-actions`. */
+function bottomMessage(screen: Screen, actions: string) {
+  return field(screen, actions).shadowRoot?.querySelector("[role=alert]") ?? null;
+}
 function unload() {
   const event = new Event("beforeunload", { cancelable: true });
   window.dispatchEvent(event);
@@ -135,6 +140,19 @@ it("default configuration and generated-key output leave without warning", async
   expect(await leave(app)).toBe("proceeded");
   expect(unload()).toBe(false);
 });
+it("stored settings switched off open filled in without warning, and a changed folder warns", async () => {
+  const { app, screen } = await mount({ ...on, enabled: false, storedDisabled: true });
+  await expect.poll(() => field(screen, "destination")?.value).toBe("/mnt/usb/waitron");
+  expect(unload()).toBe(false);
+  expect(await leave(app)).toBe("proceeded");
+  await change(screen, "destination", "/mnt/changed");
+  expect(unload()).toBe(true);
+  const discarded = leave(app);
+  await choose(app, "discard");
+  expect(await discarded).toBe("proceeded");
+  await screen.updateComplete;
+  expect(field(screen, "destination").value).toBe("/mnt/usb/waitron");
+});
 it("destination edits warn, Keep preserves the native value, and Discard restores the opening", async () => {
   const { app, screen } = await mount();
   await change(screen, "destination", "/mnt/changed");
@@ -151,6 +169,93 @@ it("destination edits warn, Keep preserves the native value, and Discard restore
   await screen.updateComplete;
   expect(field(screen, "destination").value).toBe("");
   expect(unload()).toBe(false);
+});
+it("a changed destination choice warns, and Discard restores the opening choice", async () => {
+  const { app, screen } = await mount(off, {
+    getStreamSettings: (async () => ({
+      isPrimary: true,
+      configured: true,
+      bucket: {
+        endpoint: null,
+        region: "eu-north-1",
+        bucket: "stream-bucket",
+        prefix: "venues",
+        accessKeyId: "AKIASTREAM",
+      },
+      status: { state: "off" },
+      recoveryKeySet: true,
+      keyFingerprint: null,
+      revision: "11111111-2222-4333-8444-555555555555",
+    })) as unknown as DashboardApi["getStreamSettings"],
+  });
+  await change(screen, "archive-destination", "stream-bucket");
+  expect(unload()).toBe(true);
+  const discarded = leave(app);
+  await choose(app, "discard");
+  expect(await discarded).toBe("proceeded");
+  await screen.updateComplete;
+  expect(field(screen, "archive-destination").value).toBe("local-fs");
+  expect(field(screen, "destination")).not.toBeNull();
+  expect(unload()).toBe(false);
+});
+it("a typed bucket secret alone warns on leave, and Discard empties it", async () => {
+  const stored: BackupStatusView = {
+    ...on,
+    destinations: [
+      {
+        id: "bucket",
+        kind: "s3",
+        endpoint: null,
+        region: "eu-north-1",
+        bucket: "owner-bucket",
+        prefix: "waitron",
+        accessKeyId: "AKIAOWNER",
+        namespace: "waitron/archives/c0000000-0000-4000-8000-000000000002/",
+        credentialPresent: true,
+      },
+    ],
+  };
+  const { app, screen } = await mount(stored);
+  await click(screen, "edit-settings");
+  await expect
+    .poll(() => screen.shadowRoot!.querySelector("[data-test=archive-bucket-secret-access-key]"))
+    .not.toBeNull();
+  expect(unload()).toBe(false);
+  await change(screen, "archive-bucket-secret-access-key", "SECRET-1");
+  expect(unload()).toBe(true);
+  const discarded = leave(app);
+  await choose(app, "discard");
+  expect(await discarded).toBe("proceeded");
+  await screen.updateComplete;
+  expect(field(screen, "archive-bucket-secret-access-key").value).toBe("");
+  expect(unload()).toBe(false);
+});
+it("a secret typed before the form's draft is taken again is not restored by Discard", async () => {
+  let status: BackupStatusView = off;
+  const { app, screen, api } = await mount(off, {
+    getBackupStatus: async () => status,
+  });
+  await change(screen, "archive-destination", "custom-s3");
+  await change(screen, "archive-bucket-secret-access-key", "SECRET-1");
+  await change(screen, "archive-destination", "local-fs");
+  status = { ...off, isPrimary: false };
+  api.liveData.invalidate([{ type: "backup_status" }]);
+  await expect
+    .poll(() => screen.shadowRoot!.querySelector("[data-test=archive-destination]"))
+    .toBeNull();
+  status = off;
+  api.liveData.invalidate([{ type: "backup_status" }]);
+  await expect
+    .poll(() => screen.shadowRoot!.querySelector("[data-test=archive-destination]"))
+    .not.toBeNull();
+  await change(screen, "destination", "/mnt/changed");
+  expect(unload()).toBe(true);
+  const discarded = leave(app);
+  await choose(app, "discard");
+  expect(await discarded).toBe("proceeded");
+  await screen.updateComplete;
+  await change(screen, "archive-destination", "custom-s3");
+  expect(field(screen, "archive-bucket-secret-access-key").value).toBe("");
 });
 it("settings Cancel protects changed values but normalized retention and weekday reverts close directly", async () => {
   const { app, screen } = await mount(on);
@@ -193,7 +298,7 @@ it("a refused settings write keeps the unsaved draft", async () => {
   await edit(screen);
   await change(screen, "destination", "/mnt/changed");
   await click(screen, "save-settings");
-  await expect.poll(() => screen.shadowRoot!.querySelector(".error")).not.toBeNull();
+  await expect.poll(() => bottomMessage(screen, "settings-actions")).not.toBeNull();
   expect(unload()).toBe(true);
   const pending = leave(app);
   await choose(app, "keep");
@@ -295,7 +400,7 @@ it("archive setup commits an accepted write while a refused write still warns", 
   const { app, screen } = await mount(off, {
     applyBackup: async (body) => {
       expect(body).toEqual({
-        destinationDir: "/mnt/new",
+        destination: { kind: "local-fs", dir: "/mnt/new" },
         schedule: { kind: "wall-clock", days: "daily", at: "auto" },
         retention: { count: 7, days: 30 },
       });
@@ -305,7 +410,7 @@ it("archive setup commits an accepted write while a refused write still warns", 
   });
   await change(screen, "destination", " /mnt/new ");
   await click(screen, "apply");
-  await expect.poll(() => screen.shadowRoot!.querySelector(".error")).not.toBeNull();
+  await expect.poll(() => bottomMessage(screen, "apply-actions")).not.toBeNull();
   expect(unload()).toBe(true);
   const kept = leave(app);
   await choose(app, "keep");

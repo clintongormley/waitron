@@ -230,6 +230,27 @@ it("has English and Spanish copy for an archive recovery pack asked for with no 
   expect(codeMessage(code, "es")).not.toBe(codeMessage(code, "en"));
 });
 
+it("has English and Spanish copy for a failed archive bucket test and a key change whose record failed", () => {
+  for (const code of ["backup.archive_test_failed", "backup.rotation_metadata_failed"]) {
+    expect(codeMessage(code, "en"), code).not.toBe(codeMessage("test.unmapped_code", "en"));
+    expect(codeMessage(code, "es"), code).not.toBe(codeMessage("test.unmapped_code", "es"));
+    expect(codeMessage(code, "es"), code).not.toBe(codeMessage(code, "en"));
+  }
+});
+
+it("has English and Spanish copy for each way one backup destination's call can fail", () => {
+  for (const code of [
+    "backup.destination_timed_out",
+    "backup.destination_cancelled",
+    "backup.destination_key_invalid",
+    "backup.destination_object_too_large",
+  ]) {
+    expect(codeMessage(code, "en"), code).not.toBe(codeMessage("test.unmapped_code", "en"));
+    expect(codeMessage(code, "es"), code).not.toBe(codeMessage("test.unmapped_code", "es"));
+    expect(codeMessage(code, "es"), code).not.toBe(codeMessage(code, "en"));
+  }
+});
+
 it("has English and Spanish copy for the two refusals that keep variants out of extras lists", () => {
   for (const code of ["extras.product_has_variants", "product.offered_as_extra"]) {
     expect(codeMessage(code, "en")).not.toBe(codeMessage("test.unmapped_code", "en"));
@@ -650,4 +671,11 @@ it("has English and Spanish copy for every refusal of Print on A4 and Download P
     expect(codeMessage(code, "es"), code).not.toBe(codeMessage("test.unmapped_code", "es"));
     expect(codeMessage(code, "es"), code).not.toBe(codeMessage(code, "en"));
   }
+});
+
+it("says a box holds no recovery key rather than asking for one to be entered, since Edit and the recovery pack reach it", () => {
+  expect(codeMessage("backup.recovery_key_missing", "en")).toBe("This box holds no recovery key.");
+  expect(codeMessage("backup.recovery_key_missing", "es")).toBe(
+    "Esta caja no tiene clave de recuperación.",
+  );
 });

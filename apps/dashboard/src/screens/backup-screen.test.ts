@@ -12,6 +12,7 @@ import type { WtInput } from "@waitron/ui";
 afterEach(cleanupWidgets);
 
 const OFF: BackupStatusView = {
+  venueId: "c0000000-0000-4000-8000-000000000002",
   enabled: false,
   isPrimary: true,
   managedByEnvironment: false,
@@ -27,6 +28,7 @@ const OFF: BackupStatusView = {
 };
 
 const ENABLED: BackupStatusView = {
+  venueId: "c0000000-0000-4000-8000-000000000002",
   enabled: true,
   isPrimary: true,
   managedByEnvironment: false,
@@ -178,7 +180,7 @@ describe("backup-screen", () => {
     await flush(el);
     // No `recoveryKey` at all: the server uses the one it holds.
     expect(api.applyBackup).toHaveBeenCalledWith({
-      destinationDir: "/mnt/usb/waitron",
+      destination: { kind: "local-fs", dir: "/mnt/usb/waitron" },
       schedule: { kind: "wall-clock", days: "daily", at: "auto" },
       retention: { count: 7, days: 30 },
     });
@@ -205,7 +207,7 @@ describe("backup-screen", () => {
     apply().click();
     await flush(el);
     expect(api.applyBackup).toHaveBeenCalledWith({
-      destinationDir: "/mnt/usb/waitron",
+      destination: { kind: "local-fs", dir: "/mnt/usb/waitron" },
       recoveryKey: "MINTED-KEY-abcdef012345",
       schedule: { kind: "wall-clock", days: "daily", at: "auto" },
       retention: { count: 7, days: 30 },
@@ -224,6 +226,22 @@ describe("backup-screen", () => {
     const panel = q(el, "dashboard-stream-settings") as StreamSettingsPanel;
     expect(apply.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(panel.managedByEnvironment).toBe(false);
+  });
+
+  it("tells the bucket-copy panel whether archives are on, so a too-short key's refusal names the action shown", async () => {
+    const off = stubApi({}, { ...OFF, recoveryKeySet: true, recoveryKeyTooShort: true });
+    const { el: offEl } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api: off });
+    await flush(offEl);
+    expect((q(offEl, "dashboard-stream-settings") as StreamSettingsPanel).archivesEnabled).toBe(
+      false,
+    );
+    const on = stubApi({}, ENABLED);
+    const { el: onEl } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api: on });
+    await flush(onEl);
+    expect(q(onEl, "[data-test=rotate]")!.textContent!.trim()).toBe(t("backup.rotate.title"));
+    expect((q(onEl, "dashboard-stream-settings") as StreamSettingsPanel).archivesEnabled).toBe(
+      true,
+    );
   });
 
   it("tells the bucket-copy panel the environment owns a too-short key, where there is no button to replace it", async () => {
@@ -341,6 +359,47 @@ describe("backup-screen", () => {
       { timeout: 2_000 },
     );
     expect(api.getRecoveryKit).toHaveBeenCalledOnce();
+  });
+
+  it("treats a key change whose settings record failed as done: the old key goes, the next read shows the new key, and a fresh key is made", async () => {
+    const api = stubApi(
+      {
+        rotateBackupKey: vi.fn().mockRejectedValue({
+          code: "backup.rotation_metadata_failed",
+          params: {
+            effectiveKeyChanged: true,
+            keyFingerprint: "ffee0011",
+            keyRotatedAt: "2026-10-13T09:00:00Z",
+          },
+        }),
+      },
+      ENABLED,
+    );
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+    await flush(el);
+    q(el, "[data-test=show-old-key]")!.click();
+    await flush(el);
+    tickCheckbox(el, "[data-test=saved-it]");
+    await el.updateComplete;
+    const mints = vi.mocked(api.mintBackupKey).mock.calls.length;
+    const reads = vi.mocked(api.getBackupStatus).mock.calls.length;
+    vi.mocked(api.getBackupStatus).mockResolvedValue({
+      ...ENABLED,
+      keyFingerprint: "ffee0011",
+      keyRotatedAt: "2026-10-13T09:00:00Z",
+    });
+    vi.mocked(api.mintBackupKey).mockResolvedValue({ key: "NEXT-KEY-0123456789ab" });
+    q(el, "[data-test=rotate-confirm]")!.click();
+    await vi.waitFor(() =>
+      expect(vi.mocked(api.getBackupStatus).mock.calls.length).toBeGreaterThan(reads),
+    );
+    await flush(el);
+    expect(q(el, "[data-test=old-key]")).toBeNull();
+    expect(alertText(el)).toContain(codeMessage("backup.rotation_metadata_failed"));
+    expect(q(el, "[data-test=status]")!.textContent).toContain("ffee0011");
+    expect(vi.mocked(api.mintBackupKey).mock.calls.length).toBeGreaterThan(mints);
+    expect(q(el, "[data-test=minted-key]")!.textContent).toContain("NEXT-KEY-0123456789ab");
+    expect(q(el, "[data-test=rotate-confirm]")!.hasAttribute("disabled")).toBe(true);
   });
 
   it("exports prepared configuration under a confirmed passphrase", async () => {
@@ -471,6 +530,8 @@ describe("backup-screen", () => {
           endpoint: null,
           region: "eu-north-1",
           bucket: "owner-bucket",
+          prefix: "waitron",
+          accessKeyId: "AKIAOWNER",
           namespace: "waitron/archives/c0000000-0000-4000-8000-000000000002/",
           credentialPresent: true,
         },
@@ -571,7 +632,7 @@ describe("backup-screen", () => {
     q(el, "[data-test=apply]")!.click();
     await flush(el);
     expect(api.applyBackup).toHaveBeenCalledWith({
-      destinationDir: "/mnt/usb/waitron",
+      destination: { kind: "local-fs", dir: "/mnt/usb/waitron" },
       recoveryKey: "MINTED-KEY-abcdef012345",
       schedule: { kind: "wall-clock", days: "daily", at: "auto" },
       retention: { count: 7, days: 30 },
@@ -645,7 +706,7 @@ describe("backup-screen", () => {
     q(el, "[data-test=apply]")!.click();
     await flush(el);
     expect(api.applyBackup).toHaveBeenCalledWith({
-      destinationDir: "/mnt/disk/waitron",
+      destination: { kind: "local-fs", dir: "/mnt/disk/waitron" },
       recoveryKey: "correct-horse-battery-staple",
       schedule: { kind: "wall-clock", days: [2, 3, 4, 5, 6], at: { hour: 2, minute: 30 } },
       retention: { count: 5, days: 14 },
@@ -782,7 +843,7 @@ describe("backup-screen", () => {
     await flush(el);
     // Re-applied under the SAME (current) key — the running schedule/retention are preserved.
     expect(api.applyBackup).toHaveBeenCalledWith({
-      destinationDir: "/mnt/usb/waitron-2",
+      destination: { kind: "local-fs", dir: "/mnt/usb/waitron-2" },
       recoveryKey: "OLD-KEY-xyz789012345",
       schedule: { kind: "wall-clock", days: "daily", at: "auto" },
       retention: { count: 7, days: 30 },
@@ -1379,12 +1440,13 @@ describe("backup-screen failures and edit-mode prefill", () => {
     const { el, api } = await enterEdit(ENABLED);
     setInput(el, "[data-test=destination]", "   ");
     await el.updateComplete;
-    expect(q(el, "[data-test=save-settings]")!.hasAttribute("disabled")).toBe(true);
+    expect(q(el, "[data-test=save-settings]")!.hasAttribute("disabled")).toBe(false);
 
     q(el, "[data-test=save-settings]")!.click();
     await el.updateComplete;
 
     expect(api.applyBackup).not.toHaveBeenCalled();
+    expect(q(el, "[data-test=save-settings]")!.hasAttribute("disabled")).toBe(true);
   });
 
   it("cancels edit mode back to the status view, clearing the banner", async () => {
@@ -1431,7 +1493,7 @@ describe("backup-screen failures and edit-mode prefill", () => {
 
     await vi.waitFor(() =>
       expect(api.applyBackup).toHaveBeenCalledExactlyOnceWith({
-        destinationDir: "/mnt/usb/waitron",
+        destination: { kind: "local-fs", dir: "/mnt/usb/waitron" },
         recoveryKey: "OLD-KEY-xyz789012345",
         schedule: { kind: "wall-clock", days: [0, 3], at: { hour: 2, minute: 5 } },
         retention: { count: 8, days: 30 },
@@ -1454,7 +1516,7 @@ describe("backup-screen failures and edit-mode prefill", () => {
 
     await vi.waitFor(() =>
       expect(api.applyBackup).toHaveBeenCalledWith({
-        destinationDir: "/mnt/usb/new",
+        destination: { kind: "local-fs", dir: "/mnt/usb/new" },
         recoveryKey: "OLD-KEY-xyz789012345",
         schedule: { kind: "wall-clock", days: "daily", at: "auto" },
         retention: { count: 7, days: 30 },
@@ -1807,7 +1869,7 @@ describe("backup-screen retention boxes", () => {
     );
   });
 
-  it("a refusal naming another field stays in the page message, not under the boxes", async () => {
+  it("a refusal naming a field the form does not show goes in the bottom message, not under the boxes", async () => {
     const api = stubApi({
       applyBackup: vi.fn().mockRejectedValue({
         code: "backup.request_invalid",
@@ -1820,7 +1882,8 @@ describe("backup-screen retention boxes", () => {
     q(el, "[data-test=apply]")!.click();
     await flush(el);
 
-    expect(alertText(el)).toBe(codeMessage("backup.request_invalid"));
+    expect(await bottomOf(el, "apply-actions")).toBe(codeMessage("backup.request_invalid"));
+    expect(alertText(el)).toBeUndefined();
     expect(boxError(el, "count")).toBeNull();
     expect(boxError(el, "days")).toBeNull();
   });

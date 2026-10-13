@@ -244,6 +244,8 @@ export class StreamSettingsPanel extends LitElement {
   @property({ attribute: false }) api!: DashboardApi;
   /** Whether the box's environment owns the backup settings: true, false, or undefined when not known. */
   @property({ attribute: false }) managedByEnvironment: boolean | undefined = undefined;
+  /** Whether scheduled backups are on, which decides what replaces a too-short key. */
+  @property({ attribute: false }) archivesEnabled: boolean | undefined = undefined;
 
   readonly #queries = new DashboardQueries(
     this,
@@ -554,6 +556,8 @@ export class StreamSettingsPanel extends LitElement {
       if (!current()) return;
       this.settings = settings;
       this.#trackShownForm(settings);
+      // The Backups screen offers this bucket as a destination, so it must see it go now.
+      this.api.liveData.invalidate([{ type: "backup_status" }]);
       this.#dropKit();
     } catch (error) {
       if (current()) this.#fail(error);
@@ -621,6 +625,7 @@ export class StreamSettingsPanel extends LitElement {
         return t("stream.error.recovery_key_too_short_unknown");
       }
       if (this.managedByEnvironment) return t("stream.error.recovery_key_too_short_managed");
+      if (this.archivesEnabled) return t("stream.error.recovery_key_too_short_archives_on");
     }
     const panelKey = PANEL_CODE_KEYS[failure.code];
     if (panelKey !== undefined) return t(panelKey);

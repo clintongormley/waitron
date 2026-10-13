@@ -15,7 +15,7 @@ function refusal(code: string, status: number): Response {
 }
 
 const BACKUP_BODY: BackupApplyBody = {
-  destinationDir: "/mnt/usb",
+  destination: { kind: "local-fs", dir: "/mnt/usb" },
   recoveryKey: "correct horse battery staple",
   schedule: { kind: "wall-clock", days: "daily", at: { hour: 3, minute: 0 } },
   retention: { count: 7, days: 30 },
@@ -513,6 +513,40 @@ describe("DashboardApi routes", () => {
       ["/api/backup/recovery-key", "GET", undefined],
       ["/api/backup/rotate", "POST", { recoveryKey: "a fresh key" }],
     ]);
+  });
+
+  it("sends each archive destination choice to apply as it was given", async () => {
+    const choices: BackupApplyBody["destination"][] = [
+      { kind: "local-fs", dir: "/mnt/usb" },
+      { kind: "stream-bucket" },
+      {
+        kind: "custom-s3",
+        endpoint: "https://s3.example.test",
+        region: "eu-west-1",
+        bucket: "archive-bucket",
+        prefix: "venue",
+        accessKeyId: "AKIACUSTOM",
+        secretAccessKey: "",
+      },
+    ];
+    const fetchImpl = vi.fn().mockImplementation(async () => jsonResponse({ enabled: true }));
+    const api = new DashboardApi("", fetchImpl);
+    for (const destination of choices) await api.applyBackup({ ...BACKUP_BODY, destination });
+    expect(callsOf(fetchImpl)).toEqual(
+      choices.map((destination) => ["/api/backup/apply", "POST", { ...BACKUP_BODY, destination }]),
+    );
+  });
+
+  it("switches scheduled backups off through the disable route and returns its answer", async () => {
+    const answer = {
+      enabled: false,
+      storedDisabled: true,
+      reloadErrorCode: "backup.reload_failed",
+    };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(answer));
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.disableBackup()).resolves.toEqual(answer);
+    expect(callsOf(fetchImpl)).toEqual([["/api/backup/disable", "POST", undefined]]);
   });
 
   it("drives the bucket copy's settings, test, switch-off and recovery kit routes", async () => {

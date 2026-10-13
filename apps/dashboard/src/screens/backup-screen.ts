@@ -1,5 +1,7 @@
 import { DashboardQueries } from "../api/query-controller.js";
-import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
+import { dashboardQuery } from "../api/live-queries.js";
+import { QueryController } from "@waitron/dashboard-kit";
+import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing, svg } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
@@ -7,6 +9,7 @@ import {
   focusFirstInvalid,
   leaveCoordinatorFor,
   saveActionState,
+  submitOnEnter,
   type DraftScope,
   type LeaveCoordinator,
 } from "@waitron/ui";
@@ -20,11 +23,28 @@ import { currentLocale, fill, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import "./stream-settings-panel.js";
 import type {
+  ArchiveRecoveryPackAnswer,
   BackupApplyBody,
+  BackupDestinationStatus,
+  BackupDestinationView,
   BackupSchedule,
   BackupStatusView,
+  BackupWriteAnswer,
   DashboardApi,
+  StreamSettingsView,
 } from "../api/client.js";
+import {
+  EMPTY_CUSTOM,
+  destinationBody,
+  hasUnusableFolder,
+  heldBucket,
+  keepsHeldSecret,
+  openingDestination,
+  sameStreamBucket,
+  streamLocation,
+  type CustomBucket,
+  type DestinationChoice,
+} from "./backup-destination-model.js";
 
 /** Mirrors the server's `MIN_PASSPHRASE_LENGTH` (`apps/server/src/recovery-bundle.ts`) for fast
  * feedback on a PASTED key; the server stays the authority. */
@@ -32,7 +52,9 @@ const MIN_KEY_LENGTH = 12;
 
 interface ArchiveDraft {
   mode: "configure" | "settings" | "rotate";
-  destinationDir: string;
+  choice: DestinationChoice;
+  folder: string;
+  custom: CustomBucket;
   daysMode: "daily" | "weekdays";
   weekdays: number[];
   timeMode: "auto" | "fixed";
@@ -42,6 +64,7 @@ interface ArchiveDraft {
   pastedKey: string;
   advancedPaste: boolean;
 }
+type FormFields = Omit<ArchiveDraft, "mode" | "pastedKey" | "advancedPaste">;
 interface ExportDraft {
   passphrase: string;
   confirm: string;
@@ -51,7 +74,7 @@ function archivePayload(value: ArchiveDraft): unknown {
   const pastedKey = value.advancedPaste ? value.pastedKey : "";
   if (value.mode === "rotate") return { pastedKey };
   return {
-    destinationDir: value.destinationDir.trim(),
+    destination: destinationBody(value.choice, value.folder, value.custom),
     days: value.daysMode === "daily" ? "daily" : [...value.weekdays].sort((a, b) => a - b),
     at: value.timeMode === "auto" ? "auto" : value.atTime,
     count: parseRetention(value.retainCount) ?? value.retainCount,
@@ -66,6 +89,62 @@ function parseRetention(text: string): number | null {
   const n = Number(text);
   return Number.isSafeInteger(n) && n > 0 ? n : null;
 }
+
+/** Refusals that name nothing the form shows a field for: they go in the form's bottom message. */
+const FORM_REFUSALS = new Set([
+  "backup.stream_not_configured",
+  "backup.archive_namespace_overlap",
+  "backup.archive_test_failed",
+  "backup.stream_settings_unreadable",
+]);
+
+type CustomField = keyof CustomBucket;
+
+interface CustomFieldRow {
+  field: CustomField;
+  name: string;
+  labelKey: Parameters<typeof t>[0];
+  requiredKey?: Parameters<typeof t>[0];
+}
+
+/** The server names a refused bucket setting by its `custom-s3` key, which is also this form's key. */
+const CUSTOM_FIELDS: CustomFieldRow[] = [
+  { field: "endpoint", name: "endpoint", labelKey: "stream.form.endpoint" },
+  {
+    field: "region",
+    name: "region",
+    labelKey: "stream.form.region",
+    requiredKey: "stream.form.region_required",
+  },
+  {
+    field: "bucket",
+    name: "name",
+    labelKey: "stream.form.bucket",
+    requiredKey: "stream.form.bucket_required",
+  },
+  { field: "prefix", name: "prefix", labelKey: "stream.form.prefix" },
+  {
+    field: "accessKeyId",
+    name: "access-key-id",
+    labelKey: "stream.form.access_key_id",
+    requiredKey: "stream.form.access_key_id_required",
+  },
+  {
+    field: "secretAccessKey",
+    name: "secret-access-key",
+    labelKey: "stream.form.secret_access_key",
+  },
+];
+
+const isCustomField = (value: unknown): value is CustomField =>
+  CUSTOM_FIELDS.some((f) => f.field === value);
+
+/** Only a probe reason with a sentence of its own is shown, never the param's own text. */
+const TEST_REASON_KEYS: Readonly<Record<string, Parameters<typeof t>[0]>> = {
+  timed_out: "backup.archive_test.timed_out",
+  read_mismatch: "backup.archive_test.read_mismatch",
+  not_listed: "backup.archive_test.not_listed",
+};
 
 const decreaseLabel = (label: string) => fill("action.decrease", { label });
 const increaseLabel = (label: string) => fill("action.increase", { label });
@@ -89,6 +168,13 @@ export class BackupScreen extends LitElement {
       :host {
         display: block;
       }
+      .secret-toggle svg {
+        display: block;
+        width: var(--wt-font-size-lg);
+        height: var(--wt-font-size-lg);
+        fill: none;
+        stroke: currentColor;
+      }
       .title {
         margin: 0 0 var(--wt-space-4);
         font-size: var(--wt-font-size-lg);
@@ -100,7 +186,7 @@ export class BackupScreen extends LitElement {
         color: var(--wt-color-text);
       }
       .card {
-        max-width: 34rem;
+        max-width: var(--wt-form-max-width);
         display: flex;
         flex-direction: column;
         gap: var(--wt-space-3);
@@ -129,6 +215,12 @@ export class BackupScreen extends LitElement {
       .stale {
         color: var(--wt-color-danger);
       }
+      .status > div {
+        display: contents;
+      }
+      .line {
+        display: block;
+      }
       .field-label {
         display: block;
         margin-bottom: var(--wt-space-1);
@@ -138,6 +230,11 @@ export class BackupScreen extends LitElement {
       .hint {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
+      }
+      .location {
+        display: block;
+        color: var(--wt-color-text);
+        overflow-wrap: anywhere;
       }
       .weekdays {
         display: flex;
@@ -160,6 +257,12 @@ export class BackupScreen extends LitElement {
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-md);
         color: var(--wt-color-text);
+      }
+      .pack {
+        margin: 0;
+        white-space: pre-wrap;
+        word-break: normal;
+        overflow-wrap: break-word;
       }
       .key-actions {
         display: flex;
@@ -190,21 +293,55 @@ export class BackupScreen extends LitElement {
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
-  readonly #queries = new DashboardQueries(
+  readonly #queries = new QueryController(
     this,
-    () => this.api,
+    () => this.api.liveData,
     (error) => {
       this.refreshErrorKey = codeOf(error);
     },
   );
+  /** Counts write answers taken, so a status read that began before one cannot replace it. */
+  #writeAnswers = 0;
 
   @state() private status?: BackupStatusView;
+  /** It never rewrites a changed draft. */
+  @state() private stream?: StreamSettingsView;
+  @state() private streamUnread = false;
+  /** Settles once the stream's first read has answered or failed, so Edit prefills from it. */
+  #streamRead: Promise<void> = Promise.resolve();
+  readonly #streamQueries = new DashboardQueries(
+    this,
+    () => this.api,
+    () => {
+      if (this.stream === undefined) this.streamUnread = true;
+    },
+  );
   @state() private errorKey: string | null = null;
   /** Kept apart from `errorKey` so a later good read clears its own failure and never an action's. */
   @state() private refreshErrorKey: string | null = null;
 
   // The configure and rotate forms share this draft: only ONE of them renders at a time.
-  @state() private destinationDir = "";
+  @state() private choice: DestinationChoice = "local-fs";
+  @state() private folder = "";
+  /** The server refused the folder, and it has not changed since. */
+  @state() private folderRefused = false;
+  /** Another bucket's fields. The secret lives in memory only, and is cleared once saved. */
+  @state() private custom: CustomBucket = { ...EMPTY_CUSTOM };
+  /** The bucket field the server refused, until that field changes. */
+  @state() private customRefused: CustomField | null = null;
+  @state() private secretSentRefused = false;
+  /** The server refused to keep the saved secret for this place. */
+  @state() private secretDemanded = false;
+  @state() private secretVisible = false;
+  /** A refusal naming no field the form shows, for the bottom message until the next submission;
+   * `sentence` replaces the code's own message. */
+  @state() private formRefusal: {
+    code: string;
+    reason: string | null;
+    sentence?: Parameters<typeof t>[0];
+  } | null = null;
+  /** A write stood but the box could not load it; kept until the next write. */
+  @state() private reloadErrorCode: string | null = null;
   @state() private mintedKey: string | null = null;
   @state() private advancedPaste = false;
   @state() private pastedKey = "";
@@ -216,7 +353,7 @@ export class BackupScreen extends LitElement {
   @state() private atTime = "03:00";
   @state() private retainCount = "7";
   @state() private retainDays = "30";
-  @state() private policyAttempted = false;
+  @state() private attempted = false;
   /** The server refused the retention the boxes hold, and neither box has changed since. */
   @state() private retentionRefused = false;
 
@@ -230,8 +367,18 @@ export class BackupScreen extends LitElement {
   @state() private exportingConfiguration = false;
 
   @state() private oldKey: string | null = null;
+  /** Held in this element alone, never in storage. */
+  @state() private pack: ArchiveRecoveryPackAnswer | null = null;
+  @state() private packUrl: string | null = null;
+  @state() private packFailure: string | null = null;
+  @state() private packLoading = false;
+  @state() private turnOffArmed = false;
+  /** Every pack fetch takes the next number; only the latest, unchanged since, may show its answer. */
+  #packRequest = 0;
 
   @state() private editSettings = false;
+  /** A Turn off takes the next number, so an editor opening begun before it never opens. */
+  #editOpenings = 0;
   @state() private configureAfterApply = false;
   #configureUsesHeldKey = false;
   /** Fetched on entering edit mode so a settings change re-applies under the SAME key. Held off the
@@ -267,15 +414,23 @@ export class BackupScreen extends LitElement {
         : this.configureAfterApply || !this.status?.enabled
           ? "configure"
           : "rotate",
-      destinationDir: this.destinationDir,
+      ...this.#fields(),
+      pastedKey: this.pastedKey,
+      advancedPaste: this.advancedPaste,
+    };
+  }
+
+  #fields(): FormFields {
+    return {
+      choice: this.choice,
+      folder: this.folder,
+      custom: { ...this.custom },
       daysMode: this.daysMode,
       weekdays: [...this.weekdays],
       timeMode: this.timeMode,
       atTime: this.atTime,
       retainCount: this.retainCount,
       retainDays: this.retainDays,
-      pastedKey: this.pastedKey,
-      advancedPaste: this.advancedPaste,
     };
   }
 
@@ -298,10 +453,17 @@ export class BackupScreen extends LitElement {
     this.#archiveScope = draftScopeFor<ArchiveDraft>(this, {
       id: this,
       current: () => this.#archiveValue(),
-      snapshot: (value) => ({ ...value, weekdays: [...value.weekdays] }),
+      // A secret is never a baseline: a saved one is held by the box, and Discard never restores one.
+      snapshot: (value) => ({
+        ...value,
+        custom: { ...value.custom, secretAccessKey: "" },
+        weekdays: [...value.weekdays],
+      }),
       equal: (a, b) => sameValue(archivePayload(a), archivePayload(b)),
       restore: (value) => {
-        this.destinationDir = value.destinationDir;
+        this.choice = value.choice;
+        this.folder = value.folder;
+        this.custom = { ...value.custom };
         this.daysMode = value.daysMode;
         this.weekdays = [...value.weekdays];
         this.timeMode = value.timeMode;
@@ -318,7 +480,9 @@ export class BackupScreen extends LitElement {
     this.#trackArchive();
     if (
       [
-        "destinationDir",
+        "choice",
+        "folder",
+        "custom",
         "daysMode",
         "weekdays",
         "timeMode",
@@ -349,6 +513,15 @@ export class BackupScreen extends LitElement {
     });
     this.#trackArchive();
     void this.#load();
+    this.#streamRead = this.#streamQueries
+      .watch("getStreamSettings", [], (value) => {
+        const before = this.stream;
+        this.stream = value;
+        this.streamUnread = false;
+        if (before !== undefined && !sameStreamBucket(before.bucket, value.bucket))
+          this.#reopenUnchanged();
+      })
+      .catch(() => undefined);
   }
 
   override disconnectedCallback(): void {
@@ -363,6 +536,8 @@ export class BackupScreen extends LitElement {
     this.configurationConfirm = "";
     this.pastedKey = "";
     this.advancedPaste = false;
+    this.custom = { ...this.custom, secretAccessKey: "" };
+    this.secretVisible = false;
     this.savedIt = false;
     this.#reuseKey = null;
     this.editSettings = false;
@@ -372,6 +547,7 @@ export class BackupScreen extends LitElement {
     this.#configureUsesHeldKey = false;
     this.mintedKey = null;
     this.oldKey = null;
+    this.#dropPack();
     this.#watcherAsked = false;
     this.#minting = null;
     for (const url of this.#blobUrls.values()) URL.revokeObjectURL(url);
@@ -382,16 +558,31 @@ export class BackupScreen extends LitElement {
   async #load(): Promise<void> {
     this.refreshErrorKey = null;
     this.errorKey = null;
+    const query = dashboardQuery(this.api, "getBackupStatus", []);
     try {
-      await this.#queries.watch("getBackupStatus", [], async (value) => {
-        if (this.#archiveMode === "configure" && this.#archiveScope?.isDirty() && value.enabled) {
-          this.#configureUsesHeldKey = this.#reusesHeldKey;
-          this.configureAfterApply = true;
-        }
-        this.status = value;
-        this.refreshErrorKey = null;
-        await this.#mintIfNone();
-      });
+      await this.#queries.watch(
+        "getBackupStatus",
+        {
+          ...query,
+          key: `${query.key}:write-stamped`,
+          read: async () => {
+            const writeAnswers = this.#writeAnswers;
+            return { writeAnswers, value: await query.read() };
+          },
+        },
+        async ({ writeAnswers, value }) => {
+          this.refreshErrorKey = null;
+          if (writeAnswers !== this.#writeAnswers) return;
+          if (this.#archiveMode === "configure" && this.#archiveScope?.isDirty() && value.enabled) {
+            this.#configureUsesHeldKey = this.#reusesHeldKey;
+            this.configureAfterApply = true;
+          }
+          this.#dropStalePack(value);
+          this.status = value;
+          if (!value.enabled) this.turnOffArmed = false;
+          await Promise.all([this.#openStoredOff(false), this.#mintIfNone()]);
+        },
+      );
     } catch (error) {
       this.refreshErrorKey = codeOf(error);
     }
@@ -446,17 +637,48 @@ export class BackupScreen extends LitElement {
   }
 
   get #policyHeld(): boolean {
-    return this.policyAttempted && this.#retentionInvalid;
+    return this.attempted && this.#retentionInvalid;
+  }
+
+  get #folderMissing(): boolean {
+    return this.choice === "local-fs" && this.folder.trim() === "";
+  }
+
+  get #secretRequired(): boolean {
+    return this.secretDemanded || !keepsHeldSecret(this.custom, heldBucket(this.status));
+  }
+
+  #customRequired(f: CustomFieldRow): boolean {
+    return f.field === "secretAccessKey" ? this.#secretRequired : f.requiredKey !== undefined;
+  }
+
+  #customMissing(f: CustomFieldRow): boolean {
+    return (
+      this.choice === "custom-s3" && this.#customRequired(f) && this.custom[f.field].trim() === ""
+    );
+  }
+
+  get #streamGone(): boolean {
+    return this.choice === "stream-bucket" && (this.stream?.bucket ?? null) === null;
+  }
+
+  get #destinationMissing(): boolean {
+    return (
+      this.#folderMissing || this.#streamGone || CUSTOM_FIELDS.some((f) => this.#customMissing(f))
+    );
+  }
+
+  get #destinationHeld(): boolean {
+    return this.attempted && this.#destinationMissing;
   }
 
   get #applyDisabled(): boolean {
-    if (this.#reusesHeldKey)
-      return this.submitting || this.destinationDir.trim() === "" || this.#policyHeld;
+    if (this.#reusesHeldKey) return this.submitting || this.#destinationHeld || this.#policyHeld;
     return (
       this.submitting ||
       this.#policyHeld ||
       !this.savedIt ||
-      this.destinationDir.trim() === "" ||
+      this.#destinationHeld ||
       this.#effectiveKey === ""
     );
   }
@@ -472,19 +694,17 @@ export class BackupScreen extends LitElement {
   }
 
   get #saveSettingsDisabled(): boolean {
-    return (
-      this.submitting ||
-      this.destinationDir.trim() === "" ||
-      this.#reuseKey === null ||
-      this.#policyHeld
-    );
+    return this.submitting || this.#destinationHeld || this.#reuseKey === null || this.#policyHeld;
   }
 
-  /** Marks the policy as submitted; `false` when a retention box fails the form's own check. */
-  #checkPolicy(): boolean {
-    this.policyAttempted = true;
+  /** Marks the form as submitted; `false` when a field fails the form's own check. */
+  #checkForm(): boolean {
+    this.attempted = true;
     this.retentionRefused = false;
-    if (!this.#retentionInvalid) return true;
+    this.folderRefused = false;
+    this.customRefused = null;
+    this.formRefusal = null;
+    if (!this.#retentionInvalid && !this.#destinationMissing) return true;
     this.#focusFirstInvalidBox();
     return false;
   }
@@ -500,12 +720,33 @@ export class BackupScreen extends LitElement {
     return { count: parseRetention(this.retainCount)!, days: parseRetention(this.retainDays)! };
   }
 
-  #onApplyRefused(error: unknown): void {
+  #onApplyRefused(error: unknown, sent: BackupApplyBody["destination"]): void {
     const code = codeOf(error);
     const field = (error as { params?: { field?: unknown } } | null)?.params?.field;
-    if (code === "backup.request_invalid" && field === "retention") {
-      this.retentionRefused = true;
-      this.#focusFirstInvalidBox();
+    if (code === "backup.request_invalid") {
+      if (field === "retention") {
+        this.retentionRefused = true;
+        this.#focusFirstInvalidBox();
+      } else if (sent.kind === "custom-s3" && isCustomField(field)) {
+        this.customRefused = field;
+        if (field === "secretAccessKey") {
+          this.secretSentRefused = sent.secretAccessKey !== undefined;
+          if (!this.secretSentRefused) this.secretDemanded = true;
+        }
+        this.#focusFirstInvalidBox();
+      } else if (field === "dir") {
+        this.folderRefused = true;
+        this.#focusFirstInvalidBox();
+      } else if (field === "prefix" && sent.kind === "stream-bucket") {
+        this.formRefusal = {
+          code,
+          reason: null,
+          sentence: "backup.destination.stream_prefix_refused",
+        };
+      } else this.formRefusal = { code, reason: null };
+    } else if (FORM_REFUSALS.has(code)) {
+      const reason = (error as { params?: { reason?: unknown } }).params?.reason;
+      this.formRefusal = { code, reason: typeof reason === "string" ? reason : null };
     } else this.errorKey = code;
   }
 
@@ -529,30 +770,42 @@ export class BackupScreen extends LitElement {
     return false;
   }
 
-  async #apply(): Promise<void> {
-    const sendsKey = !this.#reusesHeldKey;
-    if (saveActionState(this.#archiveScope).unchanged) return;
-    if (this.#applyDisabled || (sendsKey && this.#pastedKeyTooShort())) return;
-    if (!this.#checkPolicy()) return;
-    this.errorKey = null;
-    this.refreshErrorKey = null;
-    this.submitting = true;
-    const body: BackupApplyBody = {
-      destinationDir: this.destinationDir.trim(),
-      ...(sendsKey ? { recoveryKey: this.#effectiveKey } : {}),
+  #applyBody(recoveryKey?: string): BackupApplyBody {
+    return {
+      destination: destinationBody(this.choice, this.folder, this.custom),
+      ...(recoveryKey === undefined ? {} : { recoveryKey }),
       schedule: this.#buildSchedule(),
       retention: this.#retention(),
     };
+  }
+
+  #afterApply(status: BackupWriteAnswer): void {
+    this.custom = { ...this.custom, secretAccessKey: "" };
+    this.secretVisible = false;
+    this.secretDemanded = false;
+    this.reloadErrorCode = status.reloadErrorCode ?? null;
+  }
+
+  async #apply(): Promise<void> {
+    const sendsKey = !this.#reusesHeldKey;
+    if (this.#applyAction().unchanged) return;
+    if (this.#applyDisabled || (sendsKey && this.#pastedKeyTooShort())) return;
+    if (!this.#checkForm()) return;
+    this.errorKey = null;
+    this.refreshErrorKey = null;
+    this.submitting = true;
+    const body = this.#applyBody(sendsKey ? this.#effectiveKey : undefined);
     const submitted = this.#archiveValue();
     const generation = this.#generation;
     const scope = this.#archiveScope;
     try {
       const status = await this.api.applyBackup(body);
       if (generation !== this.#generation) return;
+      this.#afterApply(status);
       scope?.commit(submitted);
       this.configureAfterApply = scope?.isDirty() ?? false;
       this.#configureUsesHeldKey = this.configureAfterApply && !sendsKey;
-      this.status = status;
+      this.#takeWriteAnswer(status);
       // The bucket copy's panel reads the same key.
       if (sendsKey) this.api.liveData.invalidate([{ type: "backup_status" }]);
       this.savedIt = false;
@@ -562,7 +815,7 @@ export class BackupScreen extends LitElement {
         await this.#mint();
       }
     } catch (error) {
-      if (generation === this.#generation) this.#onApplyRefused(error);
+      if (generation === this.#generation) this.#onApplyRefused(error, body.destination);
     } finally {
       if (generation === this.#generation) this.submitting = false;
     }
@@ -570,16 +823,34 @@ export class BackupScreen extends LitElement {
 
   async #rotate(): Promise<void> {
     if (this.#rotateDisabled || this.#pastedKeyTooShort()) return;
+    this.turnOffArmed = false;
     this.errorKey = null;
     this.refreshErrorKey = null;
     this.submitting = true;
     const submitted = this.#archiveValue();
     const generation = this.#generation;
     const scope = this.#archiveScope;
+    let reloadErrorCode: string | null;
     try {
       const status = await this.api.rotateBackupKey({ recoveryKey: this.#effectiveKey });
       if (generation !== this.#generation) return;
-      this.status = status;
+      reloadErrorCode = status.reloadErrorCode ?? null;
+      this.#takeWriteAnswer(status);
+    } catch (error) {
+      if (generation !== this.#generation) return;
+      if (codeOf(error) !== "backup.rotation_metadata_failed") {
+        this.errorKey = codeOf(error);
+        this.submitting = false;
+        return;
+      }
+      // The new key is in effect: the box changed it before the record failed.
+      this.errorKey = "backup.rotation_metadata_failed";
+      const params = (error as { params?: { reloadErrorCode?: unknown } }).params;
+      reloadErrorCode = typeof params?.reloadErrorCode === "string" ? params.reloadErrorCode : null;
+      this.#dropPack();
+    }
+    try {
+      this.reloadErrorCode = reloadErrorCode;
       scope?.commit(submitted);
       // The bucket copy's kit carries the key, so its panel has to read the new one now.
       this.api.liveData.invalidate([{ type: "backup_status" }]);
@@ -591,14 +862,153 @@ export class BackupScreen extends LitElement {
       }
       this.oldKey = null;
       await this.#mint();
-    } catch (error) {
-      if (generation === this.#generation) this.errorKey = codeOf(error);
     } finally {
       if (generation === this.#generation) this.submitting = false;
     }
   }
 
+  async #turnOff(): Promise<void> {
+    if (this.submitting) return;
+    if (!this.turnOffArmed) {
+      this.turnOffArmed = true;
+      return;
+    }
+    this.errorKey = null;
+    this.refreshErrorKey = null;
+    this.submitting = true;
+    this.#editOpenings++;
+    const generation = this.#generation;
+    try {
+      const status = await this.api.disableBackup();
+      if (generation !== this.#generation) return;
+      this.reloadErrorCode = status.reloadErrorCode ?? null;
+      this.#takeWriteAnswer(status);
+      this.api.liveData.invalidate([{ type: "backup_status" }]);
+      this.turnOffArmed = false;
+      this.editSettings = false;
+      this.#reuseKey = null;
+      this.secretVisible = false;
+      await this.#openStoredOff(true);
+    } catch (error) {
+      if (generation !== this.#generation) return;
+      this.errorKey = codeOf(error);
+      this.turnOffArmed = false;
+    } finally {
+      if (generation === this.#generation) this.submitting = false;
+    }
+  }
+
+  /** Fills the turn-on form from the switched-off stored settings, unless the form holds a change. */
+  async #openStoredOff(afterTurnOff: boolean): Promise<void> {
+    const generation = this.#generation;
+    await this.#streamRead;
+    const s = this.status;
+    if (generation !== this.#generation || s === undefined) return;
+    if (!s.storedDisabled || s.enabled || !s.isPrimary || s.managedByEnvironment) return;
+    if (!afterTurnOff) {
+      if (this.#archiveScope?.isDirty()) return;
+      if (sameValue(this.#fieldsFrom(s), this.#fields())) return;
+    }
+    this.#prefillAndCommit(s);
+  }
+
+  /** The stream's bucket changed under a prefilled form nobody has changed: open it again as a fresh
+   * load would, so a stored bucket no longer the stream's shows as another bucket. */
+  #reopenUnchanged(): void {
+    const s = this.status;
+    if (s === undefined || this.submitting || this.#archiveScope?.isDirty()) return;
+    if (!this.editSettings) {
+      void this.#openStoredOff(false);
+      return;
+    }
+    this.#prefillAndCommit(s);
+  }
+
+  #prefillAndCommit(s: BackupStatusView): void {
+    this.#prefillFromStatus(s);
+    this.#archiveScope?.commit(this.#archiveValue());
+  }
+
+  /** A write's answer is the box's state after it; a status read begun before it is taken may be
+   * older, so it is dropped. */
+  #takeWriteAnswer(status: BackupStatusView): void {
+    this.#writeAnswers++;
+    this.#dropStalePack(status);
+    this.status = status;
+  }
+
+  /** A pack, or its refusal, is for one key and one stored record, and only while a bucket is
+   * listed: a read naming another key or record, or no bucket, takes it away. */
+  #dropStalePack(value: BackupStatusView): void {
+    const pack = this.pack;
+    const shown = this.status;
+    if (pack === null && !this.packLoading && this.packFailure === null) return;
+    const changed =
+      !value.destinations.some((d) => d.kind === "s3") ||
+      (pack === null
+        ? shown !== undefined && !this.#sameKeyAndRecord(shown, value)
+        : value.keyFingerprint !== pack.keyFingerprint ||
+          value.keyRotatedAt !== pack.keyRotatedAt ||
+          (pack.revision ?? null) !== value.revision);
+    if (!changed) return;
+    this.#dropPack();
+  }
+
+  #sameKeyAndRecord(a: BackupStatusView, b: BackupStatusView): boolean {
+    return (
+      a.keyFingerprint === b.keyFingerprint &&
+      a.keyRotatedAt === b.keyRotatedAt &&
+      a.revision === b.revision
+    );
+  }
+
+  /** Also discards the answer of any pack fetch still running, and a shown refusal. */
+  #dropPack(): void {
+    this.#packRequest++;
+    this.packLoading = false;
+    this.pack = null;
+    this.packFailure = null;
+    if (this.packUrl !== null) URL.revokeObjectURL(this.packUrl);
+    this.packUrl = null;
+  }
+
+  /** Takes back an armed turn-off, except while the turn-off's own request is out. */
+  #disarmTurnOff(): void {
+    if (!this.submitting) this.turnOffArmed = false;
+  }
+
+  async #showPack(): Promise<void> {
+    if (this.packLoading) return;
+    this.#disarmTurnOff();
+    this.#dropPack();
+    this.packLoading = true;
+    const request = this.#packRequest;
+    try {
+      const answer = await this.api.getArchiveRecoveryPack();
+      if (request !== this.#packRequest) return;
+      this.pack = answer;
+      this.packUrl = URL.createObjectURL(new Blob([answer.pack], { type: "text/plain" }));
+    } catch (error) {
+      if (request === this.#packRequest) this.packFailure = codeOf(error);
+    } finally {
+      if (request === this.#packRequest) this.packLoading = false;
+    }
+  }
+
+  #packFailureText(code: string): string {
+    const s = this.status;
+    if (code === "backup.recovery_key_missing") return t("backup.pack.key_missing");
+    if (code === "backup.recovery_key_too_short" && s !== undefined) {
+      if (s.managedByEnvironment) return t("backup.pack.key_too_short_managed");
+      if (s.isPrimary)
+        return t(s.enabled ? "backup.pack.key_too_short" : "backup.pack.key_too_short_off");
+    }
+    return codeMessage(code);
+  }
+
   async #showOldKey(): Promise<void> {
+    if (this.submitting) return;
+    this.#disarmTurnOff();
     const generation = this.#generation;
     this.errorKey = null;
     try {
@@ -610,24 +1020,30 @@ export class BackupScreen extends LitElement {
   }
 
   async #startEdit(): Promise<void> {
+    if (this.submitting) return;
+    this.#disarmTurnOff();
     const generation = this.#generation;
+    const openings = this.#editOpenings;
     if (
       this.#leave &&
       (await this.#leave.request({ scopes: [this], reason: "navigation", proceed() {} })) !==
         "proceeded"
     )
       return;
-    if (generation === this.#generation) await this.#openSettings();
+    if (generation === this.#generation && openings === this.#editOpenings)
+      await this.#openSettings();
   }
 
   async #openSettings(): Promise<void> {
     const generation = this.#generation;
+    const openings = this.#editOpenings;
     const opening = archivePayload(this.#archiveValue());
     this.errorKey = null;
     try {
-      const { key } = await this.api.getBackupRecoveryKey();
+      const [{ key }] = await Promise.all([this.api.getBackupRecoveryKey(), this.#streamRead]);
       if (
         generation !== this.#generation ||
+        openings !== this.#editOpenings ||
         !sameValue(opening, archivePayload(this.#archiveValue()))
       )
         return;
@@ -636,8 +1052,12 @@ export class BackupScreen extends LitElement {
         return;
       }
       this.#reuseKey = key;
-      this.policyAttempted = false;
+      this.attempted = false;
       this.retentionRefused = false;
+      this.folderRefused = false;
+      this.customRefused = null;
+      this.formRefusal = null;
+      this.secretVisible = false;
       if (this.status) this.#prefillFromStatus(this.status);
       this.editSettings = true;
     } catch (error) {
@@ -648,23 +1068,19 @@ export class BackupScreen extends LitElement {
   async #saveSettings(): Promise<void> {
     if (this.#settingsAction().unchanged) return;
     if (this.#saveSettingsDisabled || this.#reuseKey === null) return;
-    if (!this.#checkPolicy()) return;
+    if (!this.#checkForm()) return;
     this.errorKey = null;
     this.refreshErrorKey = null;
     this.submitting = true;
-    const body: BackupApplyBody = {
-      destinationDir: this.destinationDir.trim(),
-      recoveryKey: this.#reuseKey,
-      schedule: this.#buildSchedule(),
-      retention: this.#retention(),
-    };
+    const body = this.#applyBody(this.#reuseKey);
     const submitted = this.#archiveValue();
     const generation = this.#generation;
     const scope = this.#archiveScope;
     try {
       const status = await this.api.applyBackup(body);
       if (generation !== this.#generation) return;
-      this.status = status;
+      this.#afterApply(status);
+      this.#takeWriteAnswer(status);
       scope?.commit(submitted);
       this.#policyReplaced = false;
       if (!scope?.isDirty()) {
@@ -672,7 +1088,7 @@ export class BackupScreen extends LitElement {
         this.#reuseKey = null;
       }
     } catch (error) {
-      if (generation === this.#generation) this.#onApplyRefused(error);
+      if (generation === this.#generation) this.#onApplyRefused(error, body.destination);
     } finally {
       if (generation === this.#generation) this.submitting = false;
     }
@@ -682,33 +1098,52 @@ export class BackupScreen extends LitElement {
     const proceed = () => {
       this.editSettings = false;
       this.#reuseKey = null;
+      this.secretVisible = false;
       this.errorKey = null;
+      this.formRefusal = null;
     };
     if (this.#leave) void this.#leave.request({ scopes: [this], reason: "cancel", proceed });
     else proceed();
   }
 
-  /** A non-`wall-clock` running schedule (the box-image `interval` form the UI cannot author) leaves
-   * the schedule controls at their defaults. */
   #prefillFromStatus(s: BackupStatusView): void {
     this.#policyReplaced = s.schedule?.kind !== "wall-clock" || !s.retention;
-    const first = s.destinations[0];
-    this.destinationDir = first?.kind === "local-fs" ? first.dir : "";
+    this.secretDemanded = false;
+    const f = this.#fieldsFrom(s);
+    this.choice = f.choice;
+    this.folder = f.folder;
+    this.custom = f.custom;
+    this.daysMode = f.daysMode;
+    this.weekdays = f.weekdays;
+    this.timeMode = f.timeMode;
+    this.atTime = f.atTime;
+    this.retainCount = f.retainCount;
+    this.retainDays = f.retainDays;
+  }
+
+  /** What the form holds once filled from `s`. A non-`wall-clock` running schedule (the box-image
+   * `interval` form the UI cannot author) leaves the schedule controls as they are. */
+  #fieldsFrom(s: BackupStatusView): FormFields {
+    const fields: FormFields = {
+      ...this.#fields(),
+      ...openingDestination(s, this.stream?.bucket ?? null),
+    };
     if (s.schedule?.kind === "wall-clock") {
-      this.daysMode = s.schedule.days === "daily" ? "daily" : "weekdays";
-      if (Array.isArray(s.schedule.days)) this.weekdays = [...s.schedule.days];
+      fields.daysMode = s.schedule.days === "daily" ? "daily" : "weekdays";
+      if (Array.isArray(s.schedule.days)) fields.weekdays = [...s.schedule.days];
       if (s.schedule.at === "auto") {
-        this.timeMode = "auto";
+        fields.timeMode = "auto";
       } else {
-        this.timeMode = "fixed";
+        fields.timeMode = "fixed";
         const pad = (n: number) => String(n).padStart(2, "0");
-        this.atTime = `${pad(s.schedule.at.hour)}:${pad(s.schedule.at.minute)}`;
+        fields.atTime = `${pad(s.schedule.at.hour)}:${pad(s.schedule.at.minute)}`;
       }
     }
     if (s.retention) {
-      this.retainCount = String(s.retention.count);
-      this.retainDays = String(s.retention.days);
+      fields.retainCount = String(s.retention.count);
+      fields.retainDays = String(s.retention.days);
     }
+    return fields;
   }
 
   /** Of the key BEING downloaded, not the running key's server fingerprint: on a rotate the new key's
@@ -754,9 +1189,15 @@ export class BackupScreen extends LitElement {
     });
   }
 
+  #submitOnEnter(event: KeyboardEvent): void {
+    const action = this.editSettings ? "save-settings" : "apply";
+    submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>(`[data-test=${action}]`));
+  }
+
   #onDestination(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
-    this.destinationDir = event.detail.value;
+    this.folder = event.detail.value;
+    this.folderRefused = false;
   }
 
   #onPaste(event: CustomEvent<{ value: string }>): void {
@@ -774,6 +1215,7 @@ export class BackupScreen extends LitElement {
 
   async #exportConfiguration(): Promise<void> {
     if (this.exportingConfiguration) return;
+    this.#disarmTurnOff();
     this.configurationRequestFailed = false;
     this.configurationAttempted = true;
     if (this.#configurationFieldError() !== null) {
@@ -821,6 +1263,7 @@ export class BackupScreen extends LitElement {
         <dashboard-stream-settings
           .api=${this.api}
           .managedByEnvironment=${s?.managedByEnvironment}
+          .archivesEnabled=${s?.enabled}
         ></dashboard-stream-settings>
       </div>
     `;
@@ -902,6 +1345,13 @@ export class BackupScreen extends LitElement {
       <div class="card" id="backup-body">
         ${this.#renderStatus(s)}
         ${
+          this.reloadErrorCode === null
+            ? nothing
+            : html`<p class="error" role="status" data-test="reload-failed">
+                ${t("backup.reload_failed_after_save")} ${codeMessage(this.reloadErrorCode)}
+              </p>`
+        }
+        ${
           s.managedByEnvironment
             ? html`<p class="hint" data-test="managed">${t("backup.status.managed")}</p>`
             : !s.isPrimary
@@ -915,10 +1365,17 @@ export class BackupScreen extends LitElement {
             ? html`<wt-button
                   variant="secondary"
                   data-test="edit-settings"
+                  ?disabled=${this.submitting}
                   @click=${() => void this.#startEdit()}
                   >${t("backup.edit.button")}</wt-button
                 >
-                ${this.#renderRotate()}`
+                ${this.#renderTurnOff()}`
+            : nothing
+        }
+        ${s.destinations.some((d) => d.kind === "s3") ? this.#renderPack() : nothing}
+        ${
+          writable && s.enabled && !this.editSettings && !this.configureAfterApply
+            ? this.#renderRotate()
             : nothing
         }
       </div>
@@ -928,82 +1385,318 @@ export class BackupScreen extends LitElement {
   #renderStatus(s: BackupStatusView): TemplateResult {
     return html`
       <dl class="status" data-test="status">
-        <dt>${t("backup.status.state")}</dt>
-        <dd>
-          ${
-            s.enabled
-              ? html`<span class="on">${t("backup.status.on")}</span>`
-              : html`<span class="off">${t("backup.status.off")}</span>`
-          }
-        </dd>
+        <div>
+          <dt>${t("backup.status.state")}</dt>
+          <dd>
+            ${
+              s.enabled
+                ? html`<span class="on">${t("backup.status.on")}</span>`
+                : html`<span class="off"
+                    >${s.storedDisabled ? t("backup.status.stored_off") : t("backup.status.off")}</span
+                  >`
+            }
+            ${
+              s.loadErrorCode
+                ? html`<span class="line stale" data-test="load-failed"
+                    >${t("backup.status.load_failed")} ${codeMessage(s.loadErrorCode)}</span
+                  >`
+                : nothing
+            }
+          </dd>
+        </div>
         ${
           s.destinations.length > 0
-            ? html`<dt>${t("backup.status.where")}</dt>
-                <dd>
-                  ${s.destinations
-                    .map((d) => (d.kind === "local-fs" ? d.dir : `${d.bucket}/${d.namespace}`))
-                    .join(", ")}
-                </dd>`
-            : nothing
+            ? s.destinations.map((d) => this.#renderDestinationRow(s, d))
+            : html`<div>
+                <dt>${t("backup.status.last")}</dt>
+                <dd>${t("backup.status.never")}</dd>
+              </div>`
         }
-        <dt>${t("backup.status.last")}</dt>
-        <dd>${this.#renderFreshness(s)}</dd>
         ${
           s.keyFingerprint
-            ? html`<dt>${t("backup.status.fingerprint")}</dt>
-                <dd>${s.keyFingerprint}</dd>`
+            ? html`<div>
+                <dt>${t("backup.status.fingerprint")}</dt>
+                <dd>${s.keyFingerprint}</dd>
+              </div>`
             : nothing
         }
         ${
           s.keyRotatedAt
-            ? html`<dt>${t("backup.status.rotated")}</dt>
+            ? html`<div>
+                <dt>${t("backup.status.rotated")}</dt>
                 <dd data-test="key-rotated">
                   ${new Date(s.keyRotatedAt).toLocaleString(currentLocale())}
-                </dd>`
+                </dd>
+              </div>`
             : nothing
         }
         ${
           s.enabled
-            ? html`<dt>${t("backup.status.archive_current")}</dt>
+            ? html`<div>
+                <dt>${t("backup.status.archive_current")}</dt>
                 <dd data-test="archive-current">
                   ${
                     s.archiveUnderCurrentKey
                       ? t("backup.status.archive_yes")
                       : t("backup.status.archive_no")
                   }
-                </dd>`
+                </dd>
+              </div>`
             : nothing
         }
       </dl>
     `;
   }
 
-  #renderFreshness(s: BackupStatusView): TemplateResult {
-    if (!s.backupStatus.configured) return html`${t("backup.status.never")}`;
-    const first = s.backupStatus.destinations[0];
-    if (first === undefined || first.lastBackupAt === null)
-      return html`${t("backup.status.never")}`;
-    const when = new Date(first.lastBackupAt).toLocaleString(currentLocale());
-    return first.stale
+  #renderDestinationRow(s: BackupStatusView, d: BackupDestinationView): TemplateResult {
+    const local = d.kind === "local-fs";
+    const outcome = s.backupStatus.configured
+      ? s.backupStatus.destinations.find((r) => r.id === d.id)
+      : undefined;
+    return html`
+      <div
+        class="destination"
+        data-test="destination-row"
+        data-destination=${d.id}
+        data-place=${local ? "local" : "off-box"}
+      >
+        <dt>${local ? t("backup.destination.local") : t("backup.destination.off_box")}</dt>
+        <dd>
+          <span class="line">${local ? d.dir : `${d.bucket}/${d.namespace}`}</span>
+          ${s.backupStatus.configured ? this.#renderOutcome(outcome) : nothing}
+        </dd>
+      </div>
+    `;
+  }
+
+  /** One destination's own result: another destination's success is never shown as this one's. */
+  #renderOutcome(r: BackupDestinationStatus | undefined): TemplateResult {
+    if (r?.readErrorCode)
+      return html`<span class="line stale"
+        >${t("backup.destination.unreadable")} ${codeMessage(r.readErrorCode)}</span
+      >`;
+    const result = r?.uploadErrorCode
+      ? html`<span class="line stale"
+          >${t("backup.destination.failed")} ${codeMessage(r.uploadErrorCode)}</span
+        >`
+      : r?.storedUnderCurrentKey
+        ? html`<span class="line">${t("backup.destination.stored")}</span>`
+        : nothing;
+    const prune = r?.pruneErrorCode
+      ? html`<span class="line stale"
+          >${t("backup.destination.prune_failed")} ${codeMessage(r.pruneErrorCode)}</span
+        >`
+      : nothing;
+    return html`${result}<span class="line"
+        >${t("backup.status.last")}: ${this.#renderFreshness(r)}</span
+      >${prune}`;
+  }
+
+  #renderFreshness(r: BackupDestinationStatus | undefined): TemplateResult {
+    if (r === undefined || r.lastBackupAt === null) return html`${t("backup.status.never")}`;
+    const when = new Date(r.lastBackupAt).toLocaleString(currentLocale());
+    if (r.uploadErrorCode) return html`${when}`;
+    return r.stale
       ? html`${when} — <span class="stale">${t("backup.status.stale")}</span>`
       : html`${when} — ${t("backup.status.fresh")}`;
   }
 
   #renderDestinationField(): TemplateResult {
+    const bucket = this.stream?.bucket ?? null;
+    const unavailable = this.streamUnread
+      ? t("backup.destination.stream_unread")
+      : this.stream !== undefined && bucket === null
+        ? t("backup.destination.stream_unavailable")
+        : null;
+    const streamMarked = this.attempted && this.#streamGone;
+    const folderMessage = this.folderRefused
+      ? t("backup.destination.folder_refused")
+      : this.#destinationHeld
+        ? t("backup.destination.folder_required")
+        : "";
     return html`
       <h2>${t("backup.destination.title")}</h2>
-      <wt-input
-        data-test="destination"
-        label=${t("backup.destination.label")}
-        .value=${this.destinationDir}
-        @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onDestination(e)}
-      ></wt-input>
-      <p class="hint">${t("backup.destination.hint")}</p>
+      <wt-combobox
+        data-test="archive-destination"
+        name="archive-destination"
+        search="never"
+        label=${t("backup.destination.choice")}
+        .options=${[
+          { value: "local-fs", label: t("backup.destination.choice_local") },
+          {
+            value: "stream-bucket",
+            label: t("backup.destination.choice_stream"),
+            disabled: bucket === null,
+            ...(unavailable === null ? {} : { description: unavailable }),
+          },
+          { value: "custom-s3", label: t("backup.destination.choice_custom") },
+        ]}
+        .value=${this.choice}
+        .error=${streamMarked ? (unavailable ?? t("backup.destination.stream_unavailable")) : ""}
+        @wt-change=${(e: CustomEvent<{ value: string }>) => {
+          e.stopPropagation();
+          this.choice = e.detail.value as DestinationChoice;
+          this.folderRefused = false;
+          this.customRefused = null;
+        }}
+      ></wt-combobox>
+      ${
+        unavailable === null || this.choice !== "stream-bucket" || streamMarked
+          ? nothing
+          : html`<p
+              class="hint"
+              data-test=${this.streamUnread ? "stream-unread" : "stream-unavailable"}
+            >
+              ${unavailable}
+            </p>`
+      }
+      ${
+        this.choice === "local-fs"
+          ? html`<wt-input
+              data-test="destination"
+              name="backup-folder"
+              required
+              label=${t("backup.destination.label")}
+              hint=${t("backup.destination.hint")}
+              error=${folderMessage}
+              .value=${this.folder}
+              @keydown=${(e: KeyboardEvent) => this.#submitOnEnter(e)}
+              @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onDestination(e)}
+            ></wt-input>`
+          : this.choice === "stream-bucket"
+            ? this.#renderStreamChoice(bucket)
+            : this.#renderCustomChoice()
+      }
     `;
   }
 
+  #renderStreamChoice(bucket: NonNullable<StreamSettingsView["bucket"]> | null): TemplateResult {
+    return html`
+      <p class="hint" data-test="stream-replaces">${t("backup.destination.stream_replaces")}</p>
+      <p class="hint" data-test="stream-snapshot">${t("backup.destination.stream_snapshot")}</p>
+      ${
+        bucket === null || this.status === undefined
+          ? nothing
+          : html`<p data-test="stream-location">
+              <span class="field-label">${t("backup.destination.stream_location")}</span>
+              <span class="location">${streamLocation(bucket, this.status.venueId)}</span>
+            </p>`
+      }
+    `;
+  }
+
+  #refusalMessage(field: CustomField): string {
+    switch (field) {
+      case "endpoint":
+        return t("stream.form.endpoint_invalid");
+      case "bucket":
+        return t("stream.field.bucket_characters");
+      case "accessKeyId":
+        return t("stream.field.key_characters");
+      case "prefix":
+        return t(
+          hasUnusableFolder(this.custom.prefix.trim())
+            ? "stream.field.prefix_folders"
+            : "stream.field.check",
+        );
+      case "secretAccessKey":
+        return t(
+          this.secretSentRefused
+            ? "backup.destination.secret_characters"
+            : "stream.form.secret_access_key_required",
+        );
+      default:
+        return t("stream.field.check");
+    }
+  }
+
+  #customMessage(f: CustomFieldRow): string {
+    if (this.customRefused === f.field) return this.#refusalMessage(f.field);
+    if (!this.attempted || !this.#customMissing(f)) return "";
+    if (f.field === "secretAccessKey")
+      return heldBucket(this.status) === null || this.secretDemanded
+        ? t("stream.form.secret_access_key_required")
+        : t("backup.destination.secret_needed");
+    return f.requiredKey === undefined ? "" : t(f.requiredKey);
+  }
+
+  #renderCustomField(f: CustomFieldRow): TemplateResult {
+    const secret = f.field === "secretAccessKey";
+    const required = this.#customRequired(f);
+    const toggleLabel = t(
+      this.secretVisible ? "stream.form.hide_secret" : "stream.form.show_secret",
+    );
+    return html`<wt-input
+      name="archive-bucket-${f.name}"
+      data-test="archive-bucket-${f.name}"
+      label=${t(f.labelKey)}
+      .required=${required}
+      type=${secret && !this.secretVisible ? "password" : "text"}
+      autocomplete=${secret ? "new-password" : "off"}
+      hint=${
+        secret && !required && this.customRefused !== "secretAccessKey"
+          ? t("backup.destination.secret_keep")
+          : ""
+      }
+      .value=${this.custom[f.field]}
+      .error=${this.#customMessage(f)}
+      @keydown=${(event: KeyboardEvent) => this.#submitOnEnter(event)}
+      @wt-change=${(event: CustomEvent<{ value: string }>) => {
+        event.stopPropagation();
+        this.custom = { ...this.custom, [f.field]: event.detail.value };
+        if (this.customRefused === f.field) this.customRefused = null;
+        if (!secret && this.secretDemanded) {
+          this.secretDemanded = false;
+          if (this.customRefused === "secretAccessKey") this.customRefused = null;
+        }
+      }}
+      >${
+        secret
+          ? html`<wt-button
+              slot="end"
+              variant="ghost"
+              class="secret-toggle"
+              data-test="toggle-archive-secret"
+              aria-label=${toggleLabel}
+              @click=${() => (this.secretVisible = !this.secretVisible)}
+              ><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                <path d="M1 8s2.5-4 7-4 7 4 7 4-2.5 4-7 4-7-4-7-4Z"></path>
+                <circle cx="8" cy="8" r="2"></circle>
+                ${this.secretVisible ? svg`<path d="m2 2 12 12"></path>` : nothing}
+              </svg></wt-button
+            >`
+          : nothing
+      }</wt-input
+    >`;
+  }
+
+  #renderCustomChoice(): TemplateResult {
+    const bucket = this.custom.bucket.trim();
+    return html`
+      ${CUSTOM_FIELDS.map((f) => this.#renderCustomField(f))}
+      ${
+        bucket === "" || this.status === undefined
+          ? nothing
+          : html`<p data-test="custom-location">
+              <span class="field-label">${t("backup.destination.stream_location")}</span>
+              <span class="location"
+                >${streamLocation({ bucket, prefix: this.custom.prefix.trim() }, this.status.venueId)}</span
+              >
+            </p>`
+      }
+    `;
+  }
+
+  /** Stored settings that are switched off can be turned back on as they are. */
+  #applyAction() {
+    const s = this.status;
+    return saveActionState(this.#archiveScope, {
+      savableAtOpen: s?.storedDisabled === true && !s.enabled,
+    });
+  }
+
   #renderConfigure(): TemplateResult {
-    const s = saveActionState(this.#archiveScope);
+    const s = this.#applyAction();
     return html`
       ${this.#renderDestinationField()}
 
@@ -1183,12 +1876,26 @@ export class BackupScreen extends LitElement {
   }
 
   #retentionMessage(text: string): string | null {
-    const invalid = this.policyAttempted && parseRetention(text) === null;
+    const invalid = this.attempted && parseRetention(text) === null;
     return invalid || this.retentionRefused ? t("backup.retention_invalid") : null;
   }
 
   #policyBottom(): string {
-    return this.#policyHeld || this.retentionRefused ? t("form.fix_fields") : "";
+    const marked =
+      this.#policyHeld ||
+      this.retentionRefused ||
+      this.#destinationHeld ||
+      this.folderRefused ||
+      this.customRefused !== null;
+    const refusal = this.formRefusal;
+    const reasonKey = refusal?.reason == null ? undefined : TEST_REASON_KEYS[refusal.reason];
+    return [
+      ...(refusal === null
+        ? []
+        : [refusal.sentence === undefined ? codeMessage(refusal.code) : t(refusal.sentence)]),
+      ...(reasonKey === undefined ? [] : [t(reasonKey)]),
+      ...(marked ? [t("form.fix_fields")] : []),
+    ].join(" ");
   }
 
   #renderRetentionBox(box: "count" | "days"): TemplateResult {
@@ -1214,6 +1921,87 @@ export class BackupScreen extends LitElement {
     `;
   }
 
+  #renderPack(): TemplateResult {
+    const pack = this.pack;
+    return html`
+      <h2>${t("backup.pack.title")}</h2>
+      <p class="hint">${t("backup.pack.explanation")}</p>
+      <div class="key-actions">
+        <wt-button
+          variant="secondary"
+          data-test="show-pack"
+          ?disabled=${this.packLoading}
+          @click=${() => void this.#showPack()}
+          >${t("backup.pack.show")}</wt-button
+        >
+      </div>
+      ${
+        this.packFailure === null
+          ? nothing
+          : html`<p class="error" role="alert" data-test="pack-failure">
+              ${this.#packFailureText(this.packFailure)}
+            </p>`
+      }
+      ${
+        pack === null || this.packUrl === null
+          ? nothing
+          : html`<p class="warning" role="note" data-test="pack-warning">
+                ${t("backup.pack.warning")}
+              </p>
+              <pre class="key pack" data-test="pack">${pack.pack}</pre>
+              <div class="key-actions">
+                <wt-button
+                  variant="secondary"
+                  data-test="copy-pack"
+                  @click=${() => this.#copy(pack.pack)}
+                  >${t("backup.pack.copy")}</wt-button
+                >
+                <a
+                  class="download"
+                  data-test="download-pack"
+                  download=${`waitron-archive-recovery-pack-${pack.keyFingerprint}.txt`}
+                  href=${this.packUrl}
+                  >${t("backup.pack.download")}</a
+                >
+              </div>`
+      }
+    `;
+  }
+
+  #renderTurnOff(): TemplateResult {
+    const armed = this.turnOffArmed;
+    return html`
+      ${
+        armed
+          ? html`<p class="hint" role="note" data-test="turn-off-explain">
+              ${t("backup.turn_off.explain")}
+            </p>`
+          : nothing
+      }
+      <div class="key-actions">
+        <wt-button
+          variant=${armed ? "danger" : "ghost"}
+          data-armed=${armed ? "true" : nothing}
+          data-test="turn-off"
+          ?disabled=${this.submitting}
+          @click=${() => void this.#turnOff()}
+          >${t(armed ? "backup.turn_off.confirm" : "backup.turn_off.button")}</wt-button
+        >
+        ${
+          armed
+            ? html`<wt-button
+                variant="ghost"
+                data-test="turn-off-cancel"
+                ?disabled=${this.submitting}
+                @click=${() => (this.turnOffArmed = false)}
+                >${t("backup.turn_off.cancel")}</wt-button
+              >`
+            : nothing
+        }
+      </div>
+    `;
+  }
+
   #renderRotate(): TemplateResult {
     return html`
       <h2 data-test="rotate">${t("backup.rotate.title")}</h2>
@@ -1222,6 +2010,7 @@ export class BackupScreen extends LitElement {
         <wt-button
           variant="secondary"
           data-test="show-old-key"
+          ?disabled=${this.submitting}
           @click=${() => void this.#showOldKey()}
           >${t("backup.rotate.show_old")}</wt-button
         >

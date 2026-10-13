@@ -278,16 +278,26 @@ unpack`'s destination refusals (a symbolic link, another user's folder, not a fo
   test titles still say "before connecting" and "before opening a connection", and one title
   ("rather than opening the working directory") rests on the false reason above.
 
-## The bucket copy panel's refusal for a too-short key names the "Turn on backups" button but does not link or scroll to it
+## A too-short recovery key: the refusals do not link to the button they name, and Change the recovery key cannot finish
 
-**Task 2a** (#557, a recovery key that does not need an archive destination). Open:
+**Task 2a** (#557, a recovery key that does not need an archive destination; A538-6d). Open:
 
-- The bucket copy panel's refusal for a too-short key names the "Turn on backups" button but does
-  not link or scroll to it. The panel picks its message from `managedByEnvironment` alone, so with a
-  key hand-edited too short in `backup.env` it can name a button that does not help: with archives
-  on it names a button that is not shown; with archives off, until the next status read reports the
-  key too short, the button sends no new key (it reuses the held one) — after that read the screen
-  makes one.
+- The bucket copy panel's refusal for a too-short key, and the recovery pack's, name a button
+  ("Turn on backups" with archives off, "Change the recovery key" with them on) but do not link or
+  scroll to it (`#failureText` in `apps/dashboard/src/screens/stream-settings-panel.ts`,
+  `#packFailureText` in `apps/dashboard/src/screens/backup-screen.ts`).
+- With archives on and a key hand-edited too short in `backup.env`, the panel and the recovery
+  pack's refusal name "Change the recovery key", but that form waits for "Show the current key"
+  (`#rotateWaiting`, `apps/dashboard/src/screens/backup-screen.ts`), and
+  `GET /api/backup/recovery-key` refuses a too-short key with `backup.recovery_key_too_short`
+  (`apps/server/src/backup-api.ts`; the case "reports a too-short key in backup.env as set…" in
+  `apps/server/src/backup-api.route.test.ts`), so the form cannot finish. The server's rotate
+  replaces a too-short key ("rotate replaces a too-short key held with no destination", same
+  file). Both cases run with no destination.
+  Decision needed: may the key change skip showing the old key when the held key is too
+  short, given archives made under the key loaded at start need that key?
+- With archives off, until the next status read reports the key too short, "Turn on backups" sends
+  no new key (it reuses the held one); after that read the screen makes one.
 
 ## Every synchronous `deriveKey` caller still blocks the event loop while it derives
 
