@@ -685,7 +685,7 @@ declare module "@waitron/shared" {
     "floor_plan.invalid": { field: string };
     /**
      * The till's read of today's room is older than the room: `revision` is the room's current one;
-     * the till re-reads the floor and tries again.
+     * the caller re-reads the floor before trying again.
      */
     "floor_today.out_of_date": { zoneId: string; revision: number };
     "merge.seats_required": Record<string, never>;

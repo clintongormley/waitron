@@ -234,6 +234,7 @@ export const floorTodayZones = table(
     id: id("id").primaryKey().$defaultFn(newId),
     zoneId: id("zone_id").notNull(),
     businessDay: day("business_day").notNull(),
+    // Stored as `generation`: renaming the column would need a migration.
     revision: count("generation").notNull().default(0),
   },
   (t) => [

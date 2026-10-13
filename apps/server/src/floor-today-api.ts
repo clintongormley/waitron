@@ -106,7 +106,6 @@ async function hasTodayRow(tx: Transaction, locationId: string, zoneId: string):
   return row !== undefined;
 }
 
-/** A till body, `{}` when it sent none. */
 async function bodyOf(c: Context): Promise<Record<string, unknown>> {
   const raw = await readRawJsonBody<unknown>(c);
   return raw === null ? {} : asObject(raw);
@@ -116,7 +115,7 @@ async function bodyOf(c: Context): Promise<Record<string, unknown>> {
 export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, run: Run): void {
   const removals = deps.tableRemovals ?? [];
 
-  /** The room's write, refused when `sent` is not its revision now; moves it when the write changed the room (D1, D2, D5). */
+  /** The room's write, refused when `sent` is not its revision now; moves it when the write changed the room. */
   const changeRoom = async (
     tx: Transaction,
     zoneId: string,
