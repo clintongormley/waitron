@@ -231,8 +231,8 @@ split today. A split decides only who sits where today.
   > stands on today's map, it keeps its turn and is laid out from where it stands, over the places
   > its tables had there: from the first to the last of those joined once more and those still
   > joined, or, when every table is back, from the first at its saved size. When it had come apart,
-  > was taken off or has no place today, it is laid out the same way from its saved place (whole:
-  > its saved place). A table taken back gets its own saved seats. The request names the tables the
+  > was taken off or has no place today, it is laid out the same way from its saved place, when it
+  > has one (whole: its saved place). A table taken back gets its own saved seats. The request names the tables the
   > till expects back and is refused `joined_table.out_of_date` when they differ from those the
   > server finds free. It ends with the zone's catch-up (`catchUpZone`), so tables taken back after
   > "Reset to saved plan" count as joined again at once (`joinAgain`,

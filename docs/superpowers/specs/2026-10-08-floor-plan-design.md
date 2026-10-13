@@ -217,7 +217,8 @@ undone at the next reset anyway.
 > with tables split off, and each of those split-off tables that is free, also offers **Join
 > again**, when that would leave two or more of its tables joined; it puts the free split-off tables
 > back into the joined table. A table split off offers neither Back to its saved place nor Take off
-> for today, and the server refuses both on it (`table.split_off`).
+> for today, and the server refuses both on it (`table.split_off`). Join again ends the split for
+> the tables it takes back.
 
 ### 6.3 Reset
 

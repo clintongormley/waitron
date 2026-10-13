@@ -1614,7 +1614,8 @@ refused `table.in_joined_table` on the same paths (`joinedOutOfService`,
 waiting together while any of them is held by a party, refused by a module, merged with a waiting
 table, or has food on its way to it; a merge in which no table is held by a party, refused by a module
 or in a split group that waits is ended as any free merge is. Its parts
-not split off stay joined meanwhile, and the split ends when the reset puts the joined table back
+not split off stay joined meanwhile, and the split ends when the reset puts the joined table back,
+or, for the tables it takes back, when Join again does
 (`splitWithBusy`, `apps/server/src/floor-reset-plan.ts:38`; `waitingTogether`,
 `apps/server/src/floor-today-store.ts:464`).
 When deleting a table is refused, `removeLiveTables` deletes the split rows naming it and tries again,
