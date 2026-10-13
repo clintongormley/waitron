@@ -178,6 +178,17 @@ it("does not enrol a key using the fingerprint in its own file", async () => {
   });
 });
 
+it("refuses a private signing key in the public-key file even when its fingerprint matches", async () => {
+  await withFiles(async (paths) => {
+    await writeFile(paths.custodianPath, JSON.stringify({ ...custodian, publicKey: privateKey }));
+    await expect(attempt(paths)).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "reservation_untrusted" },
+    });
+    expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+  });
+});
+
 it("rereads current confirmation on a retry rather than trusting a prior file snapshot", async () => {
   await withFiles(async (paths) => {
     const source = sources.createPaperAllocationSource({
