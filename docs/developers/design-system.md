@@ -1873,8 +1873,9 @@ form's own checks disable the action; an error that comes back from a request ne
 
 A form's submit button says Save whether the form creates or edits. "Add …" belongs to the dialog's
 title and to the button that opens a create dialog. A one-click action whose whole effect is adding
-keeps Add: a discovered printer's or card reader's Add, the home shortcut picker, and the till
-(owner, 2026-10-12, A546).
+keeps Add: a discovered printer's or card reader's Add, the home shortcut picker and the till's Add
+bill (owner, 2026-10-12, A546). The till's other buttons that put something on the order — the
+modifier picker's Add and a weighed item's Add — keep it too (A546's default).
 
 - mark every required field with `required`; `wt-input` renders the visible asterisk and forwards
   the native constraint. A field with `hide-label` draws no asterisk, so where one sits in a table
