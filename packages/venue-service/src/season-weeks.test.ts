@@ -24,6 +24,7 @@ import {
   saveMenuPeriod,
   updateMenuPeriod,
 } from "./menu-timetable.js";
+import type { MenuWeekDay } from "./menu-timetable-types.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { configureZone, createDepartment, type VenueScope } from "./operations.js";
 import {
@@ -912,6 +913,36 @@ describe("saveSeasonWeeks", () => {
         periodId: p.terrace.period,
       },
     });
+    expect(await stored(p)).toEqual(before);
+  });
+
+  it("lets a failure that is not a refusal through unchanged, writing nothing", async () => {
+    const p = await painted();
+    const before = await stored(p);
+    const dinner = { periodId: p.dinner, startsAt: "20:00", endsAt: "23:00" };
+    const failure = new TypeError("unreadable day");
+    const unreadable = Object.defineProperty({}, "weekday", {
+      get() {
+        throw failure;
+      },
+    }) as MenuWeekDay;
+    await expect(
+      scoped((tx) =>
+        saveSeasonWeeks(
+          tx,
+          p.cfg,
+          p.winter,
+          {
+            departments: [
+              { departmentId: p.departmentId, days: menuWeek([dinner]) },
+              { departmentId: p.terrace.id, days: [unreadable, ...menuWeek([]).slice(1)] },
+            ],
+          },
+          AT,
+          0,
+        ),
+      ),
+    ).rejects.toBe(failure);
     expect(await stored(p)).toEqual(before);
   });
 

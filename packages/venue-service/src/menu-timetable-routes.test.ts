@@ -1060,6 +1060,26 @@ describe("the season weeks route", () => {
     expect(await r.model()).toEqual(before);
   });
 
+  it("refuses an entry with no days through its week's own code, named by its place", async () => {
+    const r = await routed();
+    const before = await r.model();
+    await answers(
+      await r.send("PUT", `/seasons/${r.season}/weeks`, r.manager, {
+        departments: [{ departmentId: r.restaurant }],
+      }),
+      400,
+      { code: "menu_timetable.invalid", params: { field: "departments.0.days" } },
+    );
+    await answers(
+      await r.send("PUT", `/seasons/${r.season}/weeks`, r.manager, {
+        zones: [{ zoneId: r.barra }],
+      }),
+      400,
+      { code: "zone_closed_time.invalid", params: { field: "zones.0.days" } },
+    );
+    expect(await r.model()).toEqual(before);
+  });
+
   it("refuses a save with no clock revision or a stale one, changing nothing", async () => {
     const r = await routed();
     await scoped((tx) =>

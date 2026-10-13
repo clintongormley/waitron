@@ -3,7 +3,7 @@ import type { Transaction } from "@waitron/db";
 import { readLocationClock } from "@waitron/reporting";
 import { AppError } from "@waitron/shared";
 import { assertBusinessDayScheduleWrite, sameScheduleRanges } from "./business-day-schedule.js";
-import { stageMenuWeek } from "./menu-timetable.js";
+import { assertWeekEndOffsets, stageMenuWeek } from "./menu-timetable.js";
 import type { MenuWeekDay } from "./menu-timetable-types.js";
 import { resolveZoneContext, storedTime, wireTime, type VenueScope } from "./operations.js";
 import {
@@ -293,7 +293,11 @@ async function within<T>(prefix: string, fn: () => Promise<T>): Promise<T> {
     if (!(error instanceof AppError)) throw error;
     const field = (error.params as { field?: unknown }).field;
     if (typeof field !== "string") throw error;
-    throw new AppError(error.code, { ...error.params, field: `${prefix}${field}` });
+    throw new AppError(
+      error.code,
+      { ...error.params, field: `${prefix}${field}` },
+      { reason: error.reason },
+    );
   }
 }
 
@@ -313,22 +317,27 @@ export async function saveSeasonWeeks(
   at: Date,
   expectedClockRevision: number,
 ): Promise<void> {
-  await seasonsNaming(tx, cfg, seasonId);
+  const season = (await seasonsNaming(tx, cfg, seasonId)).own;
   const clock = await readLocationClock(tx, cfg.locationId);
   const departmentWeeks = [];
-  for (const [index, entry] of (input.departments ?? []).entries())
+  for (const [index, entry] of (input.departments ?? []).entries()) {
+    const prefix = `departments.${index}.`;
+    const staged = await within(prefix, () =>
+      stageMenuWeek(tx, cfg, entry.departmentId, entry.days, clock, season),
+    );
     departmentWeeks.push({
-      prefix: `departments.${index}.`,
-      ...(await within(`departments.${index}.`, () =>
-        stageMenuWeek(tx, cfg, entry.departmentId, entry.days, clock, seasonId),
-      )),
+      ...staged,
+      departmentId: entry.departmentId,
+      clashField: (clash: Parameters<typeof staged.clashField>[0]) =>
+        `${prefix}${staged.clashField(clash)}`,
     });
+  }
   const zoneWeeks = [];
   for (const [index, entry] of (input.zones ?? []).entries()) {
     await resolveZoneContext(tx, cfg, entry.zoneId);
     zoneWeeks.push(
       await within(`zones.${index}.`, () =>
-        stageZoneClosedWeek(tx, cfg, entry.zoneId, entry.days, clock, seasonId),
+        stageZoneClosedWeek(tx, cfg, entry.zoneId, entry.days, clock, season),
       ),
     );
   }
@@ -341,5 +350,5 @@ export async function saveSeasonWeeks(
     clock,
   );
   for (const week of [...departmentWeeks, ...zoneWeeks]) await week.write();
-  for (const week of departmentWeeks) await within(week.prefix, week.checkEndOffsets);
+  await assertWeekEndOffsets(tx, cfg, clock, departmentWeeks);
 }

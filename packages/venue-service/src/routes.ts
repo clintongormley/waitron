@@ -368,7 +368,7 @@ function requireWeekList(
     if (extra !== undefined)
       throw new AppError("management.request_invalid", { field: `${at}.${extra}` });
     const record = entry as Record<string, unknown>;
-    const id = requireBodyUuid(record[idKey], `${at}.${idKey}`).toLowerCase();
+    const id = requireBodyUuid(record[idKey], `${at}.${idKey}`);
     if (seen.has(id)) throw new AppError("management.request_invalid", { field: `${at}.${idKey}` });
     seen.add(id);
     return { id, days: record.days };

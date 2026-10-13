@@ -58,7 +58,7 @@ export async function stageZoneClosedWeek(
   zoneId: string,
   days: unknown,
   clock: BusinessDayClock,
-  seasonId: string | undefined,
+  season: string | Season | undefined,
 ): Promise<{ changed: boolean; write: () => Promise<void> }> {
   if (!Array.isArray(days) || days.length !== 7)
     throw new AppError("zone_closed_time.invalid", { field: "days" });
@@ -80,7 +80,7 @@ export async function stageZoneClosedWeek(
     );
     week.set(weekday, parsed[0]!);
   }
-  const targets = await targetSeasons(tx, cfg, seasonId);
+  const targets = typeof season === "object" ? [season] : await targetSeasons(tx, cfg, season);
   const seasonWeek = [0, 1, 2, 3, 4, 5, 6].map((weekday) =>
     joinTouching(week.get(weekday)!, () => true),
   );
