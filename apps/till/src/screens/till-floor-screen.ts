@@ -533,8 +533,8 @@ export class TillFloorScreen extends LitElement {
   } | null = null;
   /** Join with…'s table; closed when the table leaves the map. */
   @state() private joiningWith: { tableId: string } | null = null;
-  /** Split tables…'s joined table, while its window is open; `#splitShown` says when a floor read
-   * closes it. */
+  /** The table Split tables… was opened on, while its window is open; `#splitShown` says when a
+   * floor read closes it. */
   @state() private splittingJoined: SplittingJoined | null = null;
   /** Join again's joined table, while its window is open; `#joinAgainShown` says when a floor read
    * closes it. */

@@ -3821,8 +3821,8 @@ export class TillApi {
     );
   }
 
-  /** Split parts off a joined table → `POST /api/tables/:id/today/split-off`.
-   * `seats` is left out when unset: the server refuses a null. */
+  /** Split tables… → `POST /api/tables/:id/today/split-off`: parts off a joined table, or tables off
+   * a group. `seats` is left out when unset: the server refuses a null. */
   splitOffToday(
     tableId: string,
     split: { partIds: string[]; seats?: number },

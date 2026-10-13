@@ -1840,7 +1840,7 @@ export const es: Record<StringKey, string> = {
   "floor.seats": "{n} plazas",
   "floor.seats_one": "1 plaza",
   "floor.seats_title": "Plazas para {table}",
-  "floor.seats_staying": "Plazas de lo que queda",
+  "floor.seats_staying": "Plazas para lo que queda",
   "floor.seats_label": "Plazas",
   "floor.seats_invalid": "Escribe de 1 a 999",
   "floor.seats_join": "Unir",

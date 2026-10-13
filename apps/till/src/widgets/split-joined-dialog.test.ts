@@ -566,7 +566,7 @@ describe("on a group", () => {
     setLocale("es-ES");
     const el = await mountGroup();
     await choose(el, ["c5"]);
-    expect(seatsField(el)!.label).toBe("Plazas de lo que queda");
+    expect(seatsField(el)!.label).toBe("Plazas para lo que queda");
     el.refusal = { code: "tab.already_open" };
     await el.updateComplete;
     expect(pick(el).error).toBe("Deja una de las mesas de los clientes.");

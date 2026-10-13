@@ -246,8 +246,8 @@ undone at the next reset anyway.
 > (owner question 3).
 
 > Superseded 2026-10-13 by A579 part 3c ([design](2026-10-13-a579-flattened-joined-tables-design.md)):
-> the group's **Split** goes. **Split tables…** on any table of a group lists the group's tables, and
-> each ticked one leaves as a table leaves a group.
+> the group's **Split** goes. **Split tables…** on a table of a group lists the group's tables, except on a
+> joined table with tables still joined, which lists those; each ticked one leaves as a table leaves a group.
 
 ### 6.3 Reset
 
@@ -403,6 +403,7 @@ Each claim is checked by running something, not by reading.
 - **Joins:** seats from a saved join, and the till asking without one; free + free, seated + free,
   seated + seated; Split puts each table back; a fixed table never moves, including when a move is
   sent straight to the route; a fixed join ends when the party leaves.
+  > Changed 2026-10-13 by A579 part 3c: the group's Split is gone; Split tables… on a group puts each ticked table back.
   > Superseded 2026-10-12 by A503 part 1 ([design](2026-10-12-a503-joined-tables-design.md)): saved joins, the editor's Joins section and the till's copy of them are gone; a service merge's seats come only from the till, whose seats prompt opens empty.
 - **Spares and reset:** a placed spare is unplaced again at reset; an occupied table waits for its
   tab to close.
