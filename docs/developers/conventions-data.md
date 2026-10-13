@@ -660,13 +660,17 @@ and `deleteMenuPeriod` in `packages/venue-service/src/menu-timetable.ts`).
 
 **2026-10-13, A506-10.** `POST …/menu-periods/:periodId/delete` deletes a period in use
 (`deletePeriod`, `packages/venue-service/src/period-delete.ts`), taking the clock revision as the
-other hours writes do; `GET …/menu-periods/painted-in` and
-`GET …/menu-periods/:periodId/delete-impact` read what it would touch. With a replacement, which
+other hours writes do. `GET …/menu-periods/painted-in` lists where each period is painted, and
+`GET …/menu-periods/:periodId/delete-impact` counts what the delete dialog shows: neither counts a
+past one-off special day, and the impact names only today's keep-open extension, though the delete
+rewrites both. With a replacement, which
 must be another period of the same department, every range painting the period, in season weeks
 and on special-day dates past or future, names the replacement, and on each day that held the
 period touching ranges of one period then join; a routing-cell line naming it names the
 replacement, except in a cell that already has a line for the replacement, which keeps that line
-and loses the period's; and every keep-open extension of it names the replacement. Without one,
+and loses the period's; and every keep-open extension of it names the replacement, and where one of the replacement's
+ranges that day covers the extension's start, the extension then starts at that range's end, or is
+deleted when the range already reaches the extension's end. Without one,
 its painted ranges are deleted, a special-day date left with no paint loses its `department_days`
 row so the season shows through, and its routing lines and extensions go with the period through
 their cascading foreign keys. It all runs in the caller's transaction, and ends with an end-offset
@@ -684,7 +688,8 @@ transfer" in `apps/server/src/configuration-transfer.test.ts`.
 ### Earlier W98 menu timetable model
 
 **2026-10-13, A506-5:** `special_dates`, `menu_day_timetables` and `menu_slots` are dropped, and
-`menu_period.in_use` reads season weeks and special-day paint; see "Special days" above.
+`menu_period.in_use` reads season weeks and special-day paint, and since A506-10
+`POST …/menu-periods/:periodId/delete` deletes a period in use; see "Special days" above.
 
 W98 keeps each department's menu timetable in four venue-service tables, all classified `state`
 (`packages/venue-service/src/schema/menus.ts`): `menu_periods` (a named period such as "Mañanas"

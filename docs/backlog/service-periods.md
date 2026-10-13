@@ -100,8 +100,9 @@ A506-5 landed in #1603: the Calendar edits special days through the special-day 
 days, the venue as a holiday source and the four old hours tables (`special_dates`,
 `menu_day_timetables`, `menu_slots`, `zone_closed_times`) are gone.
 A506-10 landed in #NNNN: a period in use can be deleted through the API, with another period of
-its department taking over its paint, routing lines and keep-open extension, or with none; two
-reads list where each period is painted and what a delete would touch. The Periods page that uses
+its department taking over its paint, routing lines and keep-open extensions, or with none; two
+reads list where each period is painted and what the delete dialog shows (past one-off special days
+left out). The Periods page that uses
 them is A506-11, and the old refusing delete stays until then.
 
 **Left open by A506-1, for the later parts.**

@@ -142,7 +142,10 @@ export async function readPaintedIn(
   return paintedIn(tx, cfg, await businessDayAt(tx, cfg, at));
 }
 
-/** What deleting `periodId` would change, counted as Painted in lists it. */
+/**
+ * What the delete dialog shows for `periodId`: seasons and special days counted as Painted in
+ * lists them, and today's extension only.
+ */
 export async function periodDeleteImpact(
   tx: Transaction,
   cfg: VenueScope,
