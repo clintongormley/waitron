@@ -112,6 +112,45 @@ describe("a file of at most 8 MiB", () => {
     expect(bucket.objects.get("a.enc")!.body.equals(body)).toBe(true);
   });
 
+  it.each([
+    ["throttled with 429", 429, "TooManyRequests"],
+    ["told its request timed out", 400, "RequestTimeout"],
+    ["throttled by name", 400, "SlowDown"],
+  ])("is sent again from the file when %s", async (_case, status, code) => {
+    let attempts = 0;
+    const bucket = await bucketWith({
+      answer: (seen, _request, response) => {
+        if (seen.kind !== "put") return false;
+        attempts += 1;
+        if (attempts > 1) return false;
+        response.writeHead(status, xml);
+        response.end(errorXml(code));
+        return true;
+      },
+    });
+    const { path, body } = await patterned(await scratch(), 1000);
+    await storeFor(bucket).putFile("a.enc", path, live());
+    expect(kinds(bucket)).toEqual(["put", "put"]);
+    expect(bucket.objects.get("a.enc")!.body.equals(body)).toBe(true);
+  });
+
+  it("answered 501 is not sent again", async () => {
+    const bucket = await bucketWith({
+      answer: (seen, _request, response) => {
+        if (seen.kind !== "put") return false;
+        response.writeHead(501, xml);
+        response.end(errorXml("NotImplemented"));
+        return true;
+      },
+    });
+    const { path } = await patterned(await scratch(), 1000);
+    expect(await outcome(storeFor(bucket).putFile("a.enc", path, live()))).toEqual({
+      code: "backup.destination_request_failed",
+      params: { operation: "put", key: "a.enc", status: 501, name: "NotImplemented" },
+    });
+    expect(kinds(bucket).filter((kind) => kind === "put")).toEqual(["put"]);
+  });
+
   it("refused outright is not sent again and deletes nothing", async () => {
     const bucket = await bucketWith({
       answer: (seen, _request, response) => {

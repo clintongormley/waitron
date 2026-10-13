@@ -90,6 +90,33 @@ const MAX_PARTS = 10_000;
 /** Attempts at sending a body read from the file, the first included. */
 const ATTEMPTS = 3;
 const RETRY_BACKOFF_MS = 200;
+/**
+ * What a body read from the file is sent again for: the statuses and error names that the client's
+ * retry, in @smithy/core 3.35.0, counts as throttling or transient
+ * (dist-es/submodules/retry/service-error-classification/constants.js:10-27, and 429 at
+ * service-error-classification.js:19). Its other grounds, such as a corrected clock skew, are not
+ * copied. An answer on neither list, such as 501 NotImplemented, is not sent again.
+ */
+const RETRIED_STATUSES = new Set([429, 500, 502, 503, 504]);
+const RETRIED_NAMES = new Set([
+  "BandwidthLimitExceeded",
+  "EC2ThrottledException",
+  "LimitExceededException",
+  "PriorRequestNotComplete",
+  "ProvisionedThroughputExceededException",
+  "RequestLimitExceeded",
+  "RequestThrottled",
+  "RequestThrottledException",
+  "SlowDown",
+  "ThrottledException",
+  "Throttling",
+  "ThrottlingException",
+  "TooManyRequestsException",
+  "TransactionInProgressException",
+  "TimeoutError",
+  "RequestTimeout",
+  "RequestTimeoutException",
+]);
 /** How long cleanup after a failed upload may take, counted from the failure. */
 const CLEANUP_MS = 10_000;
 const DELETE_BATCH_KEYS = 1000;
@@ -240,7 +267,8 @@ export function createS3FileStore(
         const status = statusOf(error);
         if (signal.aborted || status === null || status >= 500) uncertain();
         if (signal.aborted) throw cancelled(operation, key);
-        const retryable = status === null || status >= 500 || status === 429;
+        const retryable =
+          status === null || RETRIED_STATUSES.has(status) || RETRIED_NAMES.has(nameOf(error));
         if (!retryable || attempt === ATTEMPTS)
           throw requestFailed(operation, key, status, nameOf(error));
         await wait(RETRY_BACKOFF_MS * attempt, signal);
