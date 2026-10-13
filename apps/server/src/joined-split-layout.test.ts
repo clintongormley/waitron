@@ -6,6 +6,7 @@ import {
   type LaidPart,
   partPlaces,
   remainingPlace,
+  standsIn,
   wholePlace,
 } from "./joined-split-layout.js";
 
@@ -271,5 +272,53 @@ describe("joinedPlaceOver", () => {
     expect(back).toMatchObject({ width: 6, height: 2, shape: "rect", rotation: 90 });
     expect(Math.abs(back.x - outline.x)).toBeLessThanOrEqual(1);
     expect(Math.abs(back.y - outline.y)).toBeLessThanOrEqual(1);
+  });
+});
+
+describe("standsIn", () => {
+  const bar = (x: number, y: number, rotation = 0): Placement => ({
+    x,
+    y,
+    width: 2,
+    height: 2,
+    shape: "rect",
+    rotation,
+  });
+
+  it("a table over part of Long table's saved place stands in it", () => {
+    expect(standsIn(LONG, bar(11, 20))).toBe(true);
+  });
+
+  it("a table touching Long table's right edge does not", () => {
+    expect(standsIn(LONG, bar(16, 20))).toBe(false);
+  });
+
+  it("Bar pushed onto Long table's left side, touching it, does not", () => {
+    expect(standsIn(LONG, bar(8, 20))).toBe(false);
+  });
+
+  it("a table over one square of Long table's corner, both ways, does", () => {
+    expect(standsIn(LONG, bar(15, 21))).toBe(true);
+  });
+
+  it("a table touching Long table's corner does not", () => {
+    expect(standsIn(LONG, bar(16, 21))).toBe(false);
+  });
+
+  it("a turned Bar centred on Long table's centre does", () => {
+    expect(standsIn(LONG, bar(12, 20, 45))).toBe(true);
+  });
+
+  it("a turned Bar whose corner only reaches Long table's edge does not", () => {
+    expect(standsIn(LONG, bar(12, 19 - Math.SQRT2, 45))).toBe(false);
+  });
+
+  it("a turned Bar whose corner reaches half a square into Long table does not", () => {
+    expect(standsIn(LONG, bar(12, 19.5 - Math.SQRT2, 45))).toBe(false);
+  });
+
+  it("a table inside a turned Long table's bounding box but clear of its sides does not", () => {
+    expect(standsIn({ ...LONG, rotation: 45 }, bar(14, 18))).toBe(false);
+    expect(standsIn(bar(14, 18), { ...LONG, rotation: 45 })).toBe(false);
   });
 });
