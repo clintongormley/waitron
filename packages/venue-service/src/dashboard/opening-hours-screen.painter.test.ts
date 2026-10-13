@@ -433,6 +433,39 @@ describe("links into the painter", () => {
       .toBe("/manage/opening-hours/view/week/department/all");
     await expect.poll(() => painterOf(el)).toBeNull();
   });
+
+  it("a season chip asking for a week while the painter is open changes nothing", async () => {
+    const el = await mount("/manage/opening-hours/view/year/year/2027");
+    const seasonChips = await chips(el);
+    seasonChips
+      .shadowRoot!.querySelector<HTMLElement>("[data-season=spring] [data-test=season-week]")!
+      .click();
+    const painter = await shownPainter(el);
+    const pushed = pushedPaths();
+    seasonChips
+      .shadowRoot!.querySelector<HTMLElement>("[data-season=winter] [data-test=season-week]")!
+      .click();
+    await settle(painter);
+    expect(location.pathname).toBe("/manage/opening-hours/view/season/season/spring/department/d1");
+    expect(pushed()).toEqual([]);
+    expect(painterOf(el)).toBe(painter);
+    expect(painter.seasonId).toBe("spring");
+  });
+
+  it("a painter address on a venue with no active department names no department and draws nothing", async () => {
+    const el = await mount("/manage/opening-hours/view/season/season/winter/department/d1", () => {
+      const model = withBar();
+      return {
+        ...model,
+        departments: model.departments.map((department) => ({ ...department, active: false })),
+      };
+    });
+    await expect.poll(() => painterOf(el)).not.toBeNull();
+    const painter = painterOf(el)!;
+    await painter.updateComplete;
+    expect([painter.seasonId, painter.departmentId, painter.zoneId]).toEqual(["winter", "", ""]);
+    expect(painter.shadowRoot!.querySelector("painter-frame")).toBeNull();
+  });
 });
 
 describe("leaving a painter with edits", () => {

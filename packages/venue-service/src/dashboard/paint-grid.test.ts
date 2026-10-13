@@ -1213,3 +1213,106 @@ test("read-only, the heading row keeps the height it has with the ⋮", async ()
   await el.updateComplete;
   expect(heading()).toBeCloseTo(editable, 0);
 });
+
+test("unticking the only ticked day disables Copy again, and Copy then copies only the days still ticked", async () => {
+  const el = await grid(week);
+  const seen = changes(el);
+  await openChooser(el, "mon");
+  await userEvent.click(choice(el, "tue"));
+  await userEvent.click(choice(el, "wed"));
+  await userEvent.click(choice(el, "tue"));
+  await el.updateComplete;
+  expect(choice(el, "tue").checked).toBe(false);
+  expect(chooserButton(el, "Copy").disabled).toBe(false);
+  await userEvent.click(choice(el, "wed"));
+  await el.updateComplete;
+  expect(chooserButton(el, "Copy").disabled).toBe(true);
+  expect(chooserButton(el, "Copy").variant).toBe("secondary");
+  await userEvent.click(choice(el, "Thursday"));
+  await el.updateComplete;
+  await userEvent.click(chooserButton(el, "Copy"));
+  expect(seen).toEqual([{ key: "thu", day: [breakfast, lunch] }]);
+});
+
+test("a second pointer moving and lifting during a drag neither stretches nor ends it", async () => {
+  const el = await grid({ mon: [] }, { chosen: "dinner" });
+  const seen = changes(el);
+  const day = el.shadowRoot!.querySelector<HTMLElement>('.day[data-column="mon"]')!;
+  const other = (type: string, minute: number) => {
+    const box = day.getBoundingClientRect();
+    window.dispatchEvent(
+      new PointerEvent(type, {
+        bubbles: true,
+        composed: true,
+        pointerId: 8,
+        button: 0,
+        clientX: box.left + box.width / 2,
+        clientY: box.top + (minute / 1440) * box.height,
+      }),
+    );
+  };
+  point(el, "mon", 840, "pointerdown");
+  point(el, "mon", 960, "pointermove");
+  await el.updateComplete;
+  other("pointermove", 1200);
+  other("pointerup", 1200);
+  await el.updateComplete;
+  expect(seen).toEqual([]);
+  expect(el.shadowRoot!.querySelector(".preview")!.textContent).toContain("Dinner 20:00–22:00");
+  point(el, "mon", 960, "pointerup");
+  await el.updateComplete;
+  expect(seen).toEqual([
+    { key: "mon", day: [{ periodId: "dinner", startsAt: "20:00", endsAt: "22:00" }] },
+  ]);
+});
+
+test("a column the days map does not hold draws as an empty day and paints into it", async () => {
+  const el = await grid({ mon: [] }, { chosen: "dinner" });
+  el.columns = [
+    { key: "mon", label: "Monday" },
+    { key: "tue", label: "Tuesday" },
+  ];
+  await el.updateComplete;
+  const seen = changes(el);
+  const tuesday = el.shadowRoot!.querySelector<HTMLElement>('.day[data-column="tue"]')!;
+  expect(tuesday.querySelector(".all-closed")).not.toBeNull();
+  expect(tuesday.querySelectorAll(".block")).toHaveLength(0);
+  await drag(el, "tue", 840, 960);
+  expect(seen).toEqual([
+    { key: "tue", day: [{ periodId: "dinner", startsAt: "20:00", endsAt: "22:00" }] },
+  ]);
+});
+
+test("Enter on another block while a block's menu is open moves the menu to that block", async () => {
+  const el = await grid({ thu: [lunch, dinner] });
+  block(el, "thu").focus();
+  await userEvent.keyboard("{Enter}");
+  await el.updateComplete;
+  expect(menu(el).matches(":popover-open")).toBe(true);
+  expect(menu(el).getAttribute("aria-label")).toBe("Lunch 13:00–16:00");
+  menuButton(el, "Delete").focus();
+  await userEvent.tab();
+  expect(deepActive()).toBe(block(el, "thu", 1));
+  await userEvent.keyboard("{Enter}");
+  await el.updateComplete;
+  expect(menu(el).matches(":popover-open")).toBe(true);
+  expect(menu(el).getAttribute("aria-label")).toBe(`Dinner ${dinner.startsAt}–${dinner.endsAt}`);
+  expect(block(el, "thu").getAttribute("aria-expanded")).toBe("false");
+  expect(block(el, "thu", 1).getAttribute("aria-expanded")).toBe("true");
+});
+
+test("a Closed stretch in the underlay is drawn hatched, named Closed, with no period colour", async () => {
+  const closed: Paint = { periodId: null, startsAt: "06:00", endsAt: "09:00" };
+  const el = await grid(
+    { zone: [] },
+    { closedErases: false, underlay: new Map([["zone", [closed, lunch]]]) },
+  );
+  const [first, second] = el.shadowRoot!.querySelectorAll<HTMLElement>(
+    '.day[data-column="zone"] .underlay',
+  );
+  expect(first!.classList.contains("closed")).toBe(true);
+  expect(first!.hasAttribute("data-colour")).toBe(false);
+  expect(first!.textContent!.trim()).toBe("Closed");
+  expect(second!.classList.contains("closed")).toBe(false);
+  expect(second!.getAttribute("data-colour")).toBe("green");
+});

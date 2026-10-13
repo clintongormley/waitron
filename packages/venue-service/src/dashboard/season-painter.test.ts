@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { applyTokens } from "@waitron/ui";
 import { setLocale } from "@waitron/dashboard-kit";
@@ -616,4 +616,154 @@ it("at 1280×900 the grid fills the space under the paint row, still showing the
   } finally {
     await page.viewport(old[0]!, old[1]!);
   }
+});
+
+it("a refresh that removes two edited zones names both in one notice", async () => {
+  const { painter } = await mount();
+  await pick(painter, "zone:z1");
+  await drag(painter, "3", 0, 3 * 60);
+  await pick(painter, "zone:z2");
+  await drag(painter, "4", 0, 3 * 60);
+  await pick(painter, "d1");
+  expect(painter.edited()).toEqual({ departments: [], zones: ["z1", "z2"] });
+  const next = painterModel();
+  painter.model = {
+    ...next,
+    departments: [{ ...next.departments[0]!, zones: [] }, ...next.departments.slice(1)],
+  };
+  await settle(painter);
+  expect(frame(painter).refusal).toBe(
+    "Dining room and Terrace were removed; their changes were dropped.",
+  );
+  expect(painter.edited()).toEqual({ departments: [], zones: [] });
+  expect(frame(painter).dirty).toBe(false);
+});
+
+it("a department id the venue does not hold shows its first active department", async () => {
+  const { painter } = await mount({ model: withBar() });
+  painter.departmentId = "gone";
+  await settle(painter);
+  expect(picker(painter).value).toBe("d1");
+  expect(grid(painter).days.get("1")).toEqual([
+    { periodId: "p1", startsAt: "13:00", endsAt: "16:00" },
+  ]);
+  expect(grid(painter).chosen).toBe("p1");
+});
+
+it("a refresh that leaves no active department draws nothing and navigates to no department", async () => {
+  const { painter } = await mount();
+  const navigations: unknown[] = [];
+  painter.addEventListener("painter-navigate", (event) =>
+    navigations.push((event as CustomEvent).detail),
+  );
+  const next = painterModel();
+  painter.model = {
+    ...next,
+    departments: next.departments.map((department) => ({ ...department, active: false })),
+  };
+  await painter.updateComplete;
+  expect(painter.shadowRoot!.querySelector("painter-frame")).toBeNull();
+  expect(navigations).toEqual([{ seasonId: "winter", departmentId: "", zoneId: null }]);
+});
+
+it("a department with no periods opens with Closed chosen", async () => {
+  const model = withBar();
+  const { painter } = await mount({
+    model: {
+      ...model,
+      departments: model.departments.map((department) =>
+        department.id === "d3" ? { ...department, periods: [] } : department,
+      ),
+    },
+  });
+  await pick(painter, "d3");
+  expect(grid(painter).chosen).toBeNull();
+  expect(chip(painter, "paint-closed")!.getAttribute("aria-pressed")).toBe("true");
+  expect(chip(painter, "paint-q1")).toBeNull();
+});
+
+it("with one season, ‹ and › activated by script stay on the season and navigate nowhere", async () => {
+  const model = painterModel();
+  const { painter } = await mount({
+    model: { ...model, seasons: model.seasons.filter(({ id }) => id === "winter") },
+  });
+  const navigations: unknown[] = [];
+  painter.addEventListener("painter-navigate", (event) =>
+    navigations.push((event as CustomEvent).detail),
+  );
+  await drag(painter, "3", 7 * 60, 9 * 60);
+  chip(painter, "previous-season")!.click();
+  chip(painter, "next-season")!.click();
+  await settle(painter);
+  expect(frame(painter).heading).toBe("Winter week");
+  expect(navigations).toEqual([]);
+  expect(painter.edited()).toEqual({ departments: ["d1"], zones: [] });
+});
+
+it("✎ and + New period do nothing while a period editor is open", async () => {
+  const { painter } = await mount();
+  const editor = await openEditor(painter, "edit-p1");
+  chip(painter, "edit-p2")!.click();
+  chip(painter, "new-period")!.click();
+  await settle(painter);
+  expect(editorOf(painter)).toBe(editor);
+  expect(editor.period?.id).toBe("p1");
+});
+
+/** Opens ✎ Lunch, renames it Brunch and submits; the PATCH is answered by `answer`. */
+async function renameLunch(painter: SeasonPainter, answer: () => unknown) {
+  const writes: Write[] = [];
+  painter.api = painterApi(writes, answer);
+  const reread = vi.spyOn(painter.api, "rereadWatches");
+  const editor = await openEditor(painter, "edit-p1");
+  editor
+    .shadowRoot!.querySelector("[name=name]")!
+    .dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "Brunch" }, bubbles: true, composed: true }),
+    );
+  await editor.updateComplete;
+  editor.shadowRoot!.querySelector<HTMLElement>("[data-test=save-period]")!.click();
+  await expect.poll(() => writes.length).toBe(1);
+  return { editor, writes, reread };
+}
+
+it("✎ saving a period closes the editor, rereads, and keeps that period chosen", async () => {
+  const { painter } = await mount();
+  const { writes, reread } = await renameLunch(painter, () => ({}));
+  await expect.poll(() => editorOf(painter)).toBeNull();
+  expect(writes[0]).toMatchObject({
+    url: "/management-api/venue-service/menu-periods/p1",
+    method: "PATCH",
+  });
+  expect(writes[0]!.body).toMatchObject({ name: "Brunch", expectedClockRevision: 4 });
+  expect(reread).toHaveBeenCalledTimes(1);
+  expect(grid(painter).chosen).toBe("p1");
+});
+
+it("closing the period editor while its save is in flight keeps it open until the save lands", async () => {
+  const { painter } = await mount();
+  let answer!: () => void;
+  const { editor } = await renameLunch(
+    painter,
+    () => new Promise<void>((resolve) => (answer = resolve)),
+  );
+  await expect.poll(() => editor.busy).toBe(true);
+  editor.dispatchEvent(new CustomEvent("period-close", { bubbles: true, composed: true }));
+  await settle(painter);
+  expect(editorOf(painter)).toBe(editor);
+  answer();
+  await expect.poll(() => editorOf(painter)).toBeNull();
+});
+
+it("a period save refused after the painter left the page puts no refusal on the editor", async () => {
+  const { painter } = await mount();
+  let refuse!: (error: unknown) => void;
+  const late = new Promise((_, reject) => (refuse = reject));
+  const { editor, reread } = await renameLunch(painter, () => late);
+  painter.remove();
+  refuse({ code: "menu_period.name_taken" });
+  await late.catch(() => undefined);
+  await editor.updateComplete;
+  expect(editor.refusal).toBeUndefined();
+  expect(reread).not.toHaveBeenCalled();
 });

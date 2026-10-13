@@ -666,3 +666,89 @@ it("a refresh that keeps the department being painted keeps a held stroke", asyn
     { periodId: "p1", startsAt: "13:00", endsAt: "15:00" },
   ]);
 });
+
+const withoutTerrace = (model = withBar()): OpeningHoursModel => {
+  const restaurant = model.departments[0]!;
+  return {
+    ...model,
+    departments: [
+      { ...restaurant, zones: restaurant.zones.filter(({ id }) => id !== "z2") },
+      ...model.departments.slice(1),
+    ],
+  };
+};
+const withoutBar = (model = withBar()): OpeningHoursModel => ({
+  ...model,
+  departments: model.departments.filter(({ id }) => id !== "d3"),
+});
+
+it.each([
+  {
+    gone: "Terrace",
+    edit: async (el: SeasonPainter) => {
+      await pick(el, "zone:z2");
+      await drag(el, "4", 0, 3 * 60);
+    },
+    refresh: withoutTerrace,
+    refusal: { code: "zone_closed_time.invalid", params: { field: "zones.0.days.3" } },
+    reason: "These closed times overlap or are not in 15-minute steps.",
+  },
+  {
+    gone: "Bar",
+    edit: async (el: SeasonPainter) => {
+      await pick(el, "d3");
+      await drag(el, "3", 7 * 60, 9 * 60);
+    },
+    refresh: withoutBar,
+    refusal: { code: "menu_timetable.invalid", params: { field: "departments.0.days.2" } },
+    reason: "Check this day's time ranges and periods.",
+  },
+])(
+  "a refusal naming $gone, removed while the save was in flight, shows beside Save and leaves the painter on Restaurant",
+  async ({ gone, edit, refresh, refusal, reason }) => {
+    let refuse!: (error: unknown) => void;
+    const late = new Promise((_, reject) => (refuse = reject));
+    const { painter, writes, navigations } = await mount(withBar(), [late]);
+    await edit(painter);
+    await pick(painter, "d1");
+    navigations.length = 0;
+    saveButton(painter).click();
+    await expect.poll(() => writes.length).toBe(1);
+    painter.model = refresh();
+    await settle(painter);
+    expect(frame(painter).refusal).toBe(`${gone} was removed; its changes were dropped.`);
+    refuse(refusal);
+    await late.catch(() => undefined);
+    await expect.poll(() => frame(painter).busy).toBe(false);
+    await settle(painter);
+    expect(frame(painter).refusal).toContain(reason);
+    expect(navigations).toEqual([]);
+    expect(grid(painter).closedErases).toBe(true);
+    expect(grid(painter).days.get("1")).toEqual([
+      { periodId: "p1", startsAt: "13:00", endsAt: "16:00" },
+    ]);
+    expect(grid(painter).columnErrors.size).toBe(0);
+  },
+);
+
+it("a save that lands after its edited zone was removed leaves nothing to save", async () => {
+  let succeed!: () => void;
+  const late = new Promise<void>((resolve) => (succeed = resolve));
+  const { painter, writes, reread } = await mount(withBar(), [late]);
+  await pick(painter, "zone:z2");
+  await drag(painter, "4", 0, 3 * 60);
+  await pick(painter, "d1");
+  saveButton(painter).click();
+  await expect.poll(() => writes.length).toBe(1);
+  painter.model = withoutTerrace();
+  await settle(painter);
+  succeed();
+  await late;
+  await expect.poll(() => frame(painter).busy).toBe(false);
+  await settle(painter);
+  expect(reread).toHaveBeenCalledTimes(1);
+  expect(painter.edited()).toEqual({ departments: [], zones: [] });
+  expect(frame(painter).dirty).toBe(false);
+  expect(saveButton(painter).disabled).toBe(true);
+  expect(frame(painter).refusal).toBe("Terrace was removed; its changes were dropped.");
+});

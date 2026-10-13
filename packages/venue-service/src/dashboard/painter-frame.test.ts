@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { setLocale } from "@waitron/dashboard-kit";
+import type { LeaveCoordinator } from "@waitron/ui";
 import { cleanup, host, mount } from "@waitron/ui/src/test-helpers.js";
 import type { PainterFrame } from "./painter-frame.js";
 import type { PaintGrid } from "./paint-grid.js";
@@ -148,6 +149,40 @@ test("while a save is in flight Save shows it, and nothing closes the frame", as
   expect(saves).toHaveLength(0);
   expect(await modal(frame).requestClose("escape")).toBe(false);
   expect(frame.open).toBe(true);
+});
+
+test("while a save is in flight, ✕ and Cancel activated by script still leave the frame open", async () => {
+  const { frame } = await open(true);
+  const closes: Event[] = [];
+  frame.addEventListener("painter-close", (event) => closes.push(event));
+  frame.busy = true;
+  await frame.updateComplete;
+  dismiss(frame).click();
+  cancel(frame).click();
+  await frame.updateComplete;
+  await modal(frame).updateComplete;
+  expect(frame.open).toBe(true);
+  expect(modal(frame).open).toBe(true);
+  expect(closes).toHaveLength(0);
+});
+
+test("an Escape in the same moment a save starts, before the frame redraws, neither asks nor closes", async () => {
+  const { frame } = await open(true);
+  const asked: unknown[] = [];
+  frame.coordinator = {
+    request: async (request: unknown) => {
+      asked.push(request);
+      return "proceeded";
+    },
+  } as unknown as LeaveCoordinator;
+  await frame.updateComplete;
+  frame.busy = true;
+  expect(modal(frame).dismissible).toBe(true);
+  expect(await modal(frame).requestClose("escape")).toBe(false);
+  await frame.updateComplete;
+  expect(asked).toEqual([]);
+  expect(frame.open).toBe(true);
+  expect(modal(frame).open).toBe(true);
 });
 
 test("a refusal shows beside Save", async () => {
