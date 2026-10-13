@@ -1667,6 +1667,10 @@ joined table. A table pushed onto it joins the merge with the joined table whole
 split down to one is refused `tab.already_open` while a party holds a table of the merge, and
 otherwise ends the merge first, putting its tables back where they stood (`splitJoinedTable`,
 `apps/server/src/floor-today-split.ts`).
+Split tables… on a table in a group goes to `splitGroup` unless the table is a joined table with
+tables still joined, which keeps `splitJoinedTable` (`splitOff`, `apps/server/src/floor-today-split-group.ts`).
+A ticked table not in the group is refused `merge.member_invalid`, and ticking every table
+`merge.split_all`.
 When deleting a table is refused, `removeLiveTables` deletes the split rows naming it and tries again,
 and puts them back if that is refused too (`apps/server/src/table-removal.ts:115`).
 

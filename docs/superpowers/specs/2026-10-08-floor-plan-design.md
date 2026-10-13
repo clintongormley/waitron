@@ -233,6 +233,14 @@ undone at the next reset anyway.
 > for today, and the server refuses both on it (`table.split_off`). Join again ends the split for
 > the tables it takes back.
 
+> Added 2026-10-13 by A579 part 3b ([design](2026-10-13-a579-flattened-joined-tables-design.md)):
+> Split tables… also splits tables off a group (the server does; the till offers it from part 3c).
+> Each ticked table leaves the group as a table leaves a group, back where it stood before it. With
+> guests seated, a ticked table comes off without them, needing clearing where the venue uses it,
+> and what stays stays a group with the guests (owner question 2). With nobody seated, when what
+> stays is two or more tables of one joined table, standing in its row, with no food on its way,
+> that joined table is put back over them, whole when all its tables stay (owner question 3).
+
 ### 6.3 Reset
 
 - Today's plan resets automatically at the day cutover, and on Reset to saved plan.
