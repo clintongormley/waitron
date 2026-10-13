@@ -87,7 +87,7 @@ it("bounds previous at the business week and preserves query/hash when stepping"
 
 it("starts a Monday before cutover in the previous business week", async () => {
   vi.setSystemTime(new Date("2026-10-12T03:00:00Z"));
-  history.replaceState(null, "", "/manage/opening-hours?keep=yes");
+  history.replaceState(null, "", "/manage/opening-hours/view/week?keep=yes");
   await mount();
   emit(screen.shadowRoot!.querySelector("[name=realWeek]")!, "wt-change", { checked: true });
   await expect.poll(() => location.search).toBe("?keep=yes&week=2026-10-05");

@@ -93,7 +93,7 @@ let seasonalModel: unknown;
 let app: WeekLeaveApp;
 const originalUrl = location.href;
 beforeEach(() => {
-  history.replaceState(null, "", "/manage/opening-hours");
+  history.replaceState(null, "", "/manage/opening-hours/view/week");
 });
 afterEach(() => {
   seasonalModel = undefined;
@@ -160,7 +160,7 @@ describe.each(["en", "es"])("Week draft (%s)", (locale) => {
       }),
     );
     await choose("keep");
-    expect(location.pathname).toBe("/manage/opening-hours");
+    expect(location.pathname).toBe("/manage/opening-hours/view/week");
     expect(screen.shadowRoot!.querySelector("opening-hours-week")).toBe(week);
     expect(
       week.shadowRoot!.querySelector<HTMLElementTagNameMap["service-grid"]>("service-grid")!
@@ -339,13 +339,15 @@ describe.each(["en", "es"])("Changing season (%s)", (locale) => {
         .shadowRoot!.querySelector<HTMLElementTagNameMap["service-grid"]>("service-grid")!;
     pick();
     await choose("keep");
-    expect(location.pathname).toBe("/manage/opening-hours");
+    expect(location.pathname).toBe("/manage/opening-hours/view/week");
     expect(screen.shadowRoot!.querySelector("opening-hours-week")).toBe(week);
     expect(picker().value).toBe("winter");
     expect(grid().columns[0]!.slots[0]!.endsAt).toBe("15:00");
     pick();
     await choose("discard");
-    await expect.poll(() => location.pathname).toBe("/manage/opening-hours/season/summer");
+    await expect
+      .poll(() => location.pathname)
+      .toBe("/manage/opening-hours/view/week/season/summer");
     await expect.poll(() => picker().value).toBe("summer");
     await expect.poll(() => grid().columns[0]!.slots[0]!.startsAt).toBe("11:00");
     expect(unload()).toBe(false);
@@ -422,8 +424,13 @@ function twoSeasons(seasonIds: string[], currentSeasonId: string) {
 }
 describe("A reread under an unsaved draft", () => {
   it.each([
-    ["the current season is unchanged", "/manage/opening-hours", ["autumn", "winter"], "autumn"],
-    ["the current season moves", "/manage/opening-hours", ["autumn", "winter"], "winter"],
+    [
+      "the current season is unchanged",
+      "/manage/opening-hours/view/week",
+      ["autumn", "winter"],
+      "autumn",
+    ],
+    ["the current season moves", "/manage/opening-hours/view/week", ["autumn", "winter"], "winter"],
     [
       "the addressed season is deleted",
       "/manage/opening-hours/view/week/season/autumn",

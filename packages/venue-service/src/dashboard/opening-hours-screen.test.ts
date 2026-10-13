@@ -6,6 +6,7 @@ import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { applyTokens, NavigationGuard, type WtDataTable } from "@waitron/ui";
 import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
+import type { OpeningHoursYear } from "../opening-hours-calendar.js";
 import type { SpecialDaysModel } from "../holiday-types.js";
 import type { SpecialDayDetail } from "../special-days.js";
 import { OpeningHoursApi } from "./opening-hours-client.js";
@@ -134,7 +135,7 @@ it("selects a linked inactive department and keeps view and department in the ad
   await el.updateComplete;
   expect(location.pathname).toBe("/manage/opening-hours/view/periods/department/restaurant");
   const tabs = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-tabs"]>("wt-tabs")!;
-  expect(tabs.items.map((item) => item.key)).toEqual(["week", "periods", "day", "calendar"]);
+  expect(tabs.items.map((item) => item.key)).toEqual(["year", "week", "periods", "day"]);
   tabs.dispatchEvent(
     new CustomEvent("wt-tab-change", { detail: { value: "day" }, bubbles: true, composed: true }),
   );
@@ -1290,151 +1291,150 @@ it("passes the week's calendar and its special days to All departments", async (
   expect(all.shadowRoot!.querySelector("service-grid")!.columns).toHaveLength(14);
 });
 
-it("restores the Calendar month URL and writes month navigation without a department picker", async () => {
-  history.replaceState(null, "", "/manage/opening-hours/view/calendar/month/2027-02?keep=yes");
-  const ranges: string[] = [];
+function yearRead(
+  year: number,
+  days: OpeningHoursYear["days"] = [],
+  overrides: Partial<OpeningHoursYear> = {},
+): OpeningHoursYear {
+  return {
+    businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
+    clockRevision: 0,
+    currentBusinessDay: "2026-10-07",
+    pending: null,
+    year,
+    timeZone: "Europe/Madrid",
+    today: "2026-10-07",
+    seasons: [],
+    days,
+    publicHolidaysAvailable: true,
+    missingHolidays: [],
+    holidayCoverage: [],
+    area: {
+      addressKey: "fixture-address",
+      readiness: "ready",
+      options: [],
+      required: false,
+      chosen: null,
+    },
+    ...overrides,
+  };
+}
+const yearHeading = (el: Screen) =>
+  el.shadowRoot!.querySelector("opening-hours-year")?.shadowRoot?.querySelector("[data-test=year]")
+    ?.textContent;
+
+it("restores the Year URL and writes year navigation without a department picker", async () => {
+  vi.setSystemTime(new Date("2026-10-12T12:00:00Z"));
+  history.replaceState(null, "", "/manage/opening-hours/view/year/year/2027?keep=yes");
+  const years: string[] = [];
   const el = await mount((async (path: string) => {
-    if (path.includes("named-days?")) {
-      ranges.push(path);
-      return {
-        businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
-        clockRevision: 0,
-        currentBusinessDay: "2026-10-07",
-        pending: null,
-        timeZone: "Europe/Madrid",
-        dayCutover: "06:00",
-        civilDate: "2026-10-07",
-        clockReadable: true,
-        days: [],
-        holidayCoverage: [],
-        holidaySources: [],
-        area: {
-          addressKey: "fixture-address",
-          readiness: "ready",
-          options: [],
-          required: false,
-          chosen: null,
-        },
-        localHolidaysPerYear: 2,
-      };
+    const asked = /\/opening-hours\/year\?year=(\d+)$/.exec(path);
+    if (asked) {
+      years.push(asked[1]!);
+      return yearRead(Number(asked[1]));
     }
+    if (path.endsWith("/special-days")) return [];
     return model();
   }) as DashboardRequest);
   expect(el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-tabs"]>("wt-tabs")!.value).toBe(
-    "calendar",
+    "year",
   );
-  const calendar =
-    el.shadowRoot!.querySelector<HTMLElementTagNameMap["hours-calendar"]>("hours-calendar");
-  expect(calendar).not.toBeNull();
-  await expect.poll(() => calendar!.shadowRoot?.textContent).toContain("February 2027");
+  const year = el.shadowRoot!.querySelector("opening-hours-year");
+  expect(year).not.toBeNull();
+  await expect.poll(() => yearHeading(el)).toBe("2027");
   expect(el.shadowRoot!.querySelector("[name=departmentId]")).toBeNull();
-  expect(ranges[0]).toContain("from=2027-02-01&to=2027-02-28");
-  (calendar!.shadowRoot!.querySelector("[data-test=next-month]") as HTMLElement).click();
-  await expect
-    .poll(() => location.pathname)
-    .toBe("/manage/opening-hours/view/calendar/month/2027-03");
+  expect(years[0]).toBe("2027");
+  (year!.shadowRoot!.querySelector("[data-test=next-year]") as HTMLElement).click();
+  await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/year/year/2028");
   expect(location.search).toBe("?keep=yes");
-  expect(el.shadowRoot!.querySelector("hours-calendar")).toBe(calendar);
-  history.replaceState(null, "", "/manage/opening-hours/view/calendar/month/2026-12");
+  await expect.poll(() => yearHeading(el)).toBe("2028");
+  expect(el.shadowRoot!.querySelector("opening-hours-year")).toBe(year);
+  history.replaceState(null, "", "/manage/opening-hours/view/year/year/2025");
   window.dispatchEvent(new PopStateEvent("popstate"));
-  await expect.poll(() => calendar!.shadowRoot?.textContent).toContain("December 2026");
-  expect(el.shadowRoot!.querySelector("hours-calendar")).toBe(calendar);
-  history.replaceState(null, "", "/manage/opening-hours/view/calendar/month/2027-13");
+  await expect.poll(() => yearHeading(el)).toBe("2025");
+  expect(el.shadowRoot!.querySelector("opening-hours-year")).toBe(year);
+  history.replaceState(null, "", "/manage/opening-hours/view/year/year/2027-13");
   window.dispatchEvent(new PopStateEvent("popstate"));
-  await expect.poll(() => calendar!.shadowRoot?.textContent).not.toContain("Invalid Date");
+  await expect.poll(() => yearHeading(el)).toBe("2026");
+  expect(years).toEqual(["2027", "2028", "2025", "2026"]);
 });
 
-describe("Calendar venue month fallback", () => {
-  function calendarModel(civilDate: string | null = "2026-10-31") {
+describe("Year venue year fallback", () => {
+  /** At 2027-01-01T12:00Z the venue's business day is still 2026-12-31; the browser's is 2027. */
+  function venueModel(readable = true, timeZone = "Pacific/Pago_Pago") {
     return {
-      businessDayClock: { timeZone: "America/New_York", dayCutover: "06:00", cutoverChanges: [] },
-      clockRevision: 0,
-      currentBusinessDay: "2026-10-12",
-      pending: null,
-      timeZone: "America/New_York",
-      dayCutover: "06:00",
-      civilDate,
-      clockReadable: civilDate !== null,
-      days: [],
-      holidayCoverage: [],
-      holidaySources: [],
-      area: {
-        addressKey: "fixture-address",
-        readiness: "ready",
-        options: [],
-        required: false,
-        chosen: null,
-      },
-      localHolidaysPerYear: 2,
+      ...model(),
+      businessDayClock: { timeZone, dayCutover: "06:00", cutoverChanges: [] },
+      timeZone,
+      clockReadable: readable,
     };
   }
-  const heading = (el: Screen) =>
-    el.shadowRoot!.querySelector("hours-calendar")?.shadowRoot?.querySelector("[data-test=month]")
-      ?.textContent;
-  it("replaces the browser bootstrap month with the venue's month when no month is selected", async () => {
-    vi.setSystemTime(new Date("2026-11-01T12:00:00Z"));
-    history.replaceState(null, "", "/manage/opening-hours/view/calendar");
-    const reads: string[] = [];
-    const el = await mount((async (path: string) => {
-      if (path.includes("named-days?")) {
-        reads.push(path);
-        return calendarModel();
+  function yearRequest(years: string[], opening: () => OpeningHoursModel) {
+    return (async (path: string) => {
+      const asked = /\/opening-hours\/year\?year=(\d+)$/.exec(path);
+      if (asked) {
+        years.push(asked[1]!);
+        return yearRead(Number(asked[1]));
       }
-      return model();
-    }) as DashboardRequest);
-    await expect.poll(() => heading(el)).toContain("October 2026");
-    expect(reads[0]).toContain("from=2026-10-26&to=2026-12-06");
-    expect(reads.at(-1)).toContain("from=2026-09-28&to=2026-11-01");
-    expect(reads).toHaveLength(2);
-    expect(location.pathname).toBe("/manage/opening-hours/view/calendar");
+      if (path.endsWith("/special-days")) return [];
+      return opening();
+    }) as DashboardRequest;
+  }
+  it("replaces the browser's year with the venue's year when no year is chosen", async () => {
+    vi.setSystemTime(new Date("2027-01-01T12:00:00Z"));
+    history.replaceState(null, "", "/manage/opening-hours/view/year");
+    const years: string[] = [];
+    const el = await mount(yearRequest(years, () => venueModel()));
+    await expect.poll(() => yearHeading(el)).toBe("2026");
+    expect(years).toEqual(["2026"]);
+    expect(location.pathname).toBe("/manage/opening-hours/view/year");
   });
-  it("uses the venue month after an invalid-month popstate", async () => {
-    vi.setSystemTime(new Date("2026-11-01T12:00:00Z"));
-    history.replaceState(null, "", "/manage/opening-hours/view/calendar/month/2027-02");
-    const el = await mount((async (path: string) =>
-      path.includes("named-days?") ? calendarModel() : model()) as DashboardRequest);
-    await expect.poll(() => heading(el)).toContain("February 2027");
-    history.replaceState(null, "", "/manage/opening-hours/view/calendar/month/2027-13");
+  it("uses the venue's year after an invalid-year popstate", async () => {
+    vi.setSystemTime(new Date("2027-01-01T12:00:00Z"));
+    history.replaceState(null, "", "/manage/opening-hours/view/year/year/2028");
+    const el = await mount(yearRequest([], () => venueModel()));
+    await expect.poll(() => yearHeading(el)).toBe("2028");
+    history.replaceState(null, "", "/manage/opening-hours/view/year/year/2028x");
     window.dispatchEvent(new PopStateEvent("popstate"));
-    await expect.poll(() => heading(el)).toContain("October 2026");
+    await expect.poll(() => yearHeading(el)).toBe("2026");
   });
-  it("keeps a valid explicit month across later venue-date reads", async () => {
-    vi.setSystemTime(new Date("2026-11-01T12:00:00Z"));
-    history.replaceState(null, "", "/manage/opening-hours/view/calendar/month/2027-02");
-    let civilDate = "2026-10-31";
-    const el = await mount((async (path: string) =>
-      path.includes("named-days?") ? calendarModel(civilDate) : model()) as DashboardRequest);
-    await expect.poll(() => heading(el)).toContain("February 2027");
-    civilDate = "2026-09-30";
-    el.api.specialDays.rereadWatches();
+  it("keeps a valid explicit year across later venue-date reads", async () => {
+    vi.setSystemTime(new Date("2027-01-01T12:00:00Z"));
+    history.replaceState(null, "", "/manage/opening-hours/view/year/year/2028");
+    let timeZone = "Pacific/Pago_Pago";
+    const years: string[] = [];
+    const el = await mount(yearRequest(years, () => venueModel(true, timeZone)));
+    await expect.poll(() => yearHeading(el)).toBe("2028");
+    timeZone = "Pacific/Kiritimati";
+    el.api.rereadWatches();
     await new Promise((resolve) => setTimeout(resolve, 0));
     await el.updateComplete;
-    expect(heading(el)).toContain("February 2027");
+    expect(yearHeading(el)).toBe("2028");
+    expect(new Set(years)).toEqual(new Set(["2028"]));
   });
-  it("keeps an operator's month choice when the venue's first readable date arrives", async () => {
-    vi.setSystemTime(new Date("2026-11-01T12:00:00Z"));
-    history.replaceState(null, "", "/manage/opening-hours/view/calendar");
-    let civilDate: string | null = null;
-    const el = await mount((async (path: string) =>
-      path.includes("named-days?") ? calendarModel(civilDate) : model()) as DashboardRequest);
-    await expect.poll(() => heading(el)).toContain("November 2026");
-    el.shadowRoot!.querySelector("hours-calendar")!
-      .shadowRoot!.querySelector<HTMLElement>("[data-test=next-month]")!
+  it("keeps an operator's year choice when the venue's first readable date arrives", async () => {
+    vi.setSystemTime(new Date("2027-01-01T12:00:00Z"));
+    history.replaceState(null, "", "/manage/opening-hours/view/year");
+    let readable = false;
+    const el = await mount(yearRequest([], () => venueModel(readable)));
+    await expect.poll(() => yearHeading(el)).toBe("2027");
+    el.shadowRoot!.querySelector("opening-hours-year")!
+      .shadowRoot!.querySelector<HTMLElement>("[data-test=next-year]")!
       .click();
-    await expect.poll(() => heading(el)).toContain("December 2026");
-    civilDate = "2026-10-31";
-    el.api.specialDays.rereadWatches();
+    await expect.poll(() => yearHeading(el)).toBe("2028");
+    readable = true;
+    el.api.rereadWatches();
     await new Promise((resolve) => setTimeout(resolve, 0));
     await el.updateComplete;
-    expect(heading(el)).toContain("December 2026");
-    expect(location.pathname).toBe("/manage/opening-hours/view/calendar/month/2026-12");
-    history.replaceState(null, "", "/manage/opening-hours/view/calendar/month/2027-13");
+    expect(yearHeading(el)).toBe("2028");
+    expect(location.pathname).toBe("/manage/opening-hours/view/year/year/2028");
+    history.replaceState(null, "", "/manage/opening-hours/view/year/year/2028x");
     window.dispatchEvent(new PopStateEvent("popstate"));
-    await expect.poll(() => heading(el)).toContain("October 2026");
+    await expect.poll(() => yearHeading(el)).toBe("2026");
   });
 });
 
-describe("Calendar special-day actions", () => {
+describe("Year special-day actions", () => {
   const stored = {
     id: "annual/day",
     name: "Anniversary",
@@ -1466,7 +1466,7 @@ describe("Calendar special-day actions", () => {
     repeatsYearly: false,
     dates: [{ date: "2024-10-12", closedAllDay: false }],
   };
-  async function calendarMount(
+  async function yearMount(
     options: {
       withFeast?: boolean;
       refuse?: unknown;
@@ -1482,7 +1482,7 @@ describe("Calendar special-day actions", () => {
       listFails = false,
       oneOff = false,
     } = options;
-    history.replaceState(null, "", "/manage/opening-hours/view/calendar/month/2026-10");
+    history.replaceState(null, "", "/manage/opening-hours/view/year/year/2026");
     const writes: unknown[][] = [];
     let reads = 0;
     let stationReads = 0;
@@ -1507,64 +1507,50 @@ describe("Calendar special-day actions", () => {
         return { ...structuredClone(stored), repeatsYearly: !oneOff };
       }
       if (path.endsWith("/special-days/feast%2F2025")) return structuredClone(feast);
-      if (path.includes("/named-days?")) {
+      if (path.endsWith("/opening-hours/year?year=2026")) {
         reads++;
-        return {
-          businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
-          clockRevision: 0,
-          currentBusinessDay: "2026-10-07",
-          pending: null,
-          timeZone: "Europe/Madrid",
-          dayCutover: "06:00",
-          civilDate: "2026-10-07",
-          clockReadable: true,
-          days: [
-            {
-              date: "2026-10-13",
-              specialDay: { id: stored.id, name: stored.name },
-              holidays: [],
-              tone: "special_day",
-              closed: false,
-            },
-            {
-              date: "2026-10-12",
-              specialDay: null,
-              holidays: [
-                {
-                  id: "public",
-                  date: "2026-10-12",
-                  name: "Public feast",
-                  scope: "national",
-                  sourceId: "official",
-                },
-              ],
-              tone: "public_holiday",
-              closed: false,
-            },
-          ],
-          holidayCoverage: [],
-          holidaySources: [],
-          area: {
-            addressKey: "fixture-address",
-            readiness: "ready",
-            options: [],
-            required: false,
-            chosen: null,
+        return yearRead(2026, [
+          {
+            date: "2026-10-13",
+            seasonId: null,
+            specialDay: { id: stored.id, name: stored.name },
+            holidays: [],
+            tone: "special_day",
+            closed: false,
           },
-          localHolidaysPerYear: 2,
-        };
+          {
+            date: "2026-10-12",
+            seasonId: null,
+            specialDay: null,
+            holidays: [
+              {
+                id: "public",
+                date: "2026-10-12",
+                name: "Public feast",
+                scope: "national",
+                sourceId: "official",
+              },
+            ],
+            tone: "public_holiday",
+            closed: false,
+          },
+        ]);
       }
       return model();
     }) as DashboardRequest);
-    const cal = el.shadowRoot!.querySelector("hours-calendar")!;
+    const cal = el.shadowRoot!.querySelector("opening-hours-year")!;
     await expect
       .poll(() => cal.shadowRoot!.querySelector("td[data-date='2026-10-13']"))
       .not.toBeNull();
     return { el, cal, writes, reads: () => reads, stationReads: () => stationReads };
   }
-  async function action(cal: HTMLElementTagNameMap["hours-calendar"], date: string, kind: string) {
+  async function action(
+    cal: HTMLElementTagNameMap["opening-hours-year"],
+    date: string,
+    kind: string,
+  ) {
     const trigger = cal.shadowRoot!.querySelector<HTMLElement>(`td[data-date='${date}'] button`);
-    expect(trigger, "the calendar offers the date").not.toBeNull();
+    expect(trigger, "the year offers the date").not.toBeNull();
     trigger!.click();
     await cal.updateComplete;
     const button = cal.shadowRoot!.querySelector<HTMLElement>(`[data-test=special-${kind}]`);
@@ -1594,7 +1580,7 @@ describe("Calendar special-day actions", () => {
     form.shadowRoot!.querySelector<HTMLElement>("[data-test=save-special-day]")!.click();
 
   it("Edit opens the stored special day and a name change sends its dates unchanged and no paint", async () => {
-    const { el, cal, writes, reads, stationReads } = await calendarMount();
+    const { el, cal, writes, reads, stationReads } = await yearMount();
     await action(cal, "2026-10-13", "edit");
     const form = await dialog(el);
     expect(form.specialDay?.id).toBe("annual/day");
@@ -1620,7 +1606,7 @@ describe("Calendar special-day actions", () => {
     expect(stationReads()).toBe(0);
   });
   it("a public holiday opens pre-filled with its name and date and creates a special day", async () => {
-    const { el, cal, writes, reads } = await calendarMount();
+    const { el, cal, writes, reads } = await yearMount();
     await action(cal, "2026-10-12", "add");
     const form = await dialog(el);
     expect(form.shadowRoot!.querySelector("[data-test=add-to]")).toBeNull();
@@ -1643,7 +1629,7 @@ describe("Calendar special-day actions", () => {
     await expect.poll(reads).toBe(2);
   });
   it("Add to <name> saves the venue's latest same-named special day with the date added and nothing else changed", async () => {
-    const { el, cal, writes, reads } = await calendarMount({ withFeast: true });
+    const { el, cal, writes, reads } = await yearMount({ withFeast: true });
     await action(cal, "2026-10-12", "add");
     const form = await dialog(el);
     await expect.poll(() => form.shadowRoot!.querySelector("[data-test=add-to]")).not.toBeNull();
@@ -1672,7 +1658,7 @@ describe("Calendar special-day actions", () => {
     await expect.poll(reads).toBe(2);
   });
   it("opens a public holiday's dialog with no offer when the special-day list cannot be read", async () => {
-    const { el, cal } = await calendarMount({ withFeast: true, listFails: true });
+    const { el, cal } = await yearMount({ withFeast: true, listFails: true });
     await action(cal, "2026-10-12", "add");
     const form = await dialog(el);
     expect(form.shadowRoot!.querySelector("[data-test=add-to]")).toBeNull();
@@ -1680,7 +1666,7 @@ describe("Calendar special-day actions", () => {
     expect(el.shadowRoot!.querySelector("[data-test=special-read-error]")).toBeNull();
   });
   it("shows a refused Add to in the offer, keeping the dialog open", async () => {
-    const { el, cal, writes } = await calendarMount({
+    const { el, cal, writes } = await yearMount({
       withFeast: true,
       refuse: { code: "hours.clock_changed" },
     });
@@ -1694,8 +1680,8 @@ describe("Calendar special-day actions", () => {
       .toBe("The change could not be saved.");
     expect(el.shadowRoot!.querySelector("special-day-dialog")).toBe(form);
   });
-  it("shows the holiday-name note when a date added in the dialog is a holiday the month shows", async () => {
-    const { el, cal } = await calendarMount();
+  it("shows the holiday-name note when a date added in the dialog is a holiday the year shows", async () => {
+    const { el, cal } = await yearMount();
     await action(cal, "2026-10-11", "add");
     const form = await dialog(el);
     expect(form.shadowRoot!.querySelector("[data-test=holiday-note]")).toBeNull();
@@ -1707,7 +1693,7 @@ describe("Calendar special-day actions", () => {
     expect(form.shadowRoot!.querySelector("[data-test=holiday-note]")).not.toBeNull();
   });
   it("says when the special day cannot be read, and clears it on another tab", async () => {
-    const { el, cal } = await calendarMount({ readFails: true });
+    const { el, cal } = await yearMount({ readFails: true });
     await action(cal, "2026-10-13", "edit");
     await expect
       .poll(() => el.shadowRoot!.querySelector("[data-test=special-read-error]")?.textContent)
@@ -1720,8 +1706,8 @@ describe("Calendar special-day actions", () => {
       .poll(() => el.shadowRoot!.querySelector("[data-test=special-read-error]"))
       .toBeNull();
   });
-  it("Make on a plain date creates a special day and refreshes the month", async () => {
-    const { el, cal, writes, reads } = await calendarMount();
+  it("Make on a plain date creates a special day and refreshes the year", async () => {
+    const { el, cal, writes, reads } = await yearMount();
     await action(cal, "2026-10-16", "add");
     const form = await dialog(el);
     await change(form, "name", "World cup final");
@@ -1743,7 +1729,7 @@ describe("Calendar special-day actions", () => {
     await expect.poll(reads).toBe(2);
   });
   it("Delete names the repeating special day, warns that every year goes and refreshes", async () => {
-    const { el, cal, writes, reads } = await calendarMount();
+    const { el, cal, writes, reads } = await yearMount();
     await action(cal, "2026-10-13", "delete");
     await expect
       .poll(() => el.shadowRoot!.querySelector("[data-test=delete-special-day]"))
@@ -1765,7 +1751,7 @@ describe("Calendar special-day actions", () => {
     await expect.poll(reads).toBe(2);
   });
   it("a refused Delete says so and stays open; Cancel then closes it without another write", async () => {
-    const { el, cal, writes } = await calendarMount({ refuse: { code: "hours.clock_changed" } });
+    const { el, cal, writes } = await yearMount({ refuse: { code: "hours.clock_changed" } });
     await action(cal, "2026-10-13", "delete");
     await expect
       .poll(() => el.shadowRoot!.querySelector("[data-test=delete-special-day]"))
@@ -1784,7 +1770,7 @@ describe("Calendar special-day actions", () => {
     expect(writes).toHaveLength(1);
   });
   it("Delete names a one-off special day with no every-year warning", async () => {
-    const { el, cal } = await calendarMount({ oneOff: true });
+    const { el, cal } = await yearMount({ oneOff: true });
     await action(cal, "2026-10-13", "delete");
     await expect
       .poll(() =>
@@ -1793,7 +1779,7 @@ describe("Calendar special-day actions", () => {
       .toBe("Delete Anniversary?");
   });
   it("closing the Delete confirmation from the dialog itself deletes nothing", async () => {
-    const { el, cal, writes } = await calendarMount();
+    const { el, cal, writes } = await yearMount();
     await action(cal, "2026-10-13", "delete");
     await expect
       .poll(() => el.shadowRoot!.querySelector("[data-test=delete-special-day]"))
@@ -1880,13 +1866,14 @@ it("an opened period keeps its revision through a passive replacement and submit
 });
 it("pre-fills the holiday's name when the sender names only the date's own holidays, as the Day view does", async () => {
   const { namedWeekModel } = await import("../testing/real-week-model.js");
-  history.replaceState(null, "", "/manage/opening-hours/view/calendar");
+  history.replaceState(null, "", "/manage/opening-hours/view/year");
   const el = await mount((async (path, method) => {
     if (method !== "GET") throw new Error(`unexpected ${method} ${path}`);
     if (path.endsWith("/special-days")) return [];
+    if (path.includes("/opening-hours/year?")) return yearRead(2026);
     return structuredClone(path.includes("named-days?") ? namedWeekModel() : model());
   }) as DashboardRequest);
-  const child = el.shadowRoot!.querySelector("hours-calendar")!;
+  const child = el.shadowRoot!.querySelector("opening-hours-year")!;
   child.dispatchEvent(
     new CustomEvent("special-day-action", {
       detail: {
@@ -1914,7 +1901,7 @@ it("pre-fills the holiday's name when the sender names only the date's own holid
     editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!.value,
   ).toBe("Town feast");
 });
-it("an opened Calendar editor keeps its revision through a passive replacement", async () => {
+it("a special-day editor opened from the Year keeps its revision through a passive replacement", async () => {
   const { namedWeekModel } = await import("../testing/real-week-model.js");
   const data = model();
   data.clockRevision = 7;
@@ -1922,16 +1909,19 @@ it("an opened Calendar editor keeps its revision through a passive replacement",
   calendar.clockRevision = 7;
   const writes: unknown[] = [];
   let openingReads = 0;
-  history.replaceState(null, "", "/manage/opening-hours/view/calendar");
+  history.replaceState(null, "", "/manage/opening-hours/view/year");
   const el = await mount((async (path, method, body) => {
     if (method === "GET") {
       if (path.endsWith("/opening-hours")) openingReads++;
+      if (path.endsWith("/special-days")) return [];
+      if (path.includes("/opening-hours/year?"))
+        return yearRead(2026, [], { clockRevision: calendar.clockRevision });
       return structuredClone(path.includes("named-days?") ? calendar : data);
     }
     writes.push(body);
     throw { code: "hours.clock_changed" };
   }) as DashboardRequest);
-  const child = el.shadowRoot!.querySelector("hours-calendar")!;
+  const child = el.shadowRoot!.querySelector("opening-hours-year")!;
   child.dispatchEvent(
     new CustomEvent("special-day-action", {
       detail: { kind: "open", date: "2026-11-04", holidays: [], returnTo: () => child },
@@ -1967,7 +1957,7 @@ it("an opened Calendar editor keeps its revision through a passive replacement",
 });
 
 describe("Year view", () => {
-  type YearModel = import("../opening-hours-calendar.js").OpeningHoursYear;
+  type YearModel = OpeningHoursYear;
   function yearModel(year: number, overrides: Partial<YearModel> = {}): YearModel {
     return {
       businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
@@ -2012,27 +2002,30 @@ describe("Year view", () => {
     let openingReads = 0;
     let listReads: unknown[] = [];
     let failures = failYear;
-    const el = await mount((async (path: string, method: string, body: unknown, options) => {
-      if (method !== "GET") {
-        writes.push([path, method, body]);
-        return { id: "new" };
-      }
-      const asked = /\/opening-hours\/year\?year=(\d+)$/.exec(path);
-      if (asked) {
-        years.push(asked[1]!);
-        if (failures-- > 0) throw { code: "connection.failed" };
-        return yearModel(Number(asked[1]));
-      }
-      if (path.endsWith("/special-days")) {
-        listReads = [...listReads, options];
-        return [
-          { id: "annual/day", name: "Anniversary", repeatsYearly: true, dates: [] },
-          { id: "later", name: "Later fair", repeatsYearly: true, dates: [] },
-        ];
-      }
-      if (path.endsWith("/opening-hours")) openingReads++;
-      return model();
-    }) as DashboardRequest, readOnly);
+    const el = await mount(
+      (async (path: string, method: string, body: unknown, options) => {
+        if (method !== "GET") {
+          writes.push([path, method, body]);
+          return { id: "new" };
+        }
+        const asked = /\/opening-hours\/year\?year=(\d+)$/.exec(path);
+        if (asked) {
+          years.push(asked[1]!);
+          if (failures-- > 0) throw { code: "connection.failed" };
+          return yearModel(Number(asked[1]));
+        }
+        if (path.endsWith("/special-days")) {
+          listReads = [...listReads, options];
+          return [
+            { id: "annual/day", name: "Anniversary", repeatsYearly: true, dates: [] },
+            { id: "later", name: "Later fair", repeatsYearly: true, dates: [] },
+          ];
+        }
+        if (path.endsWith("/opening-hours")) openingReads++;
+        return model();
+      }) as DashboardRequest,
+      readOnly,
+    );
     const view = () => el.shadowRoot!.querySelector("opening-hours-year");
     return {
       el,

@@ -11,7 +11,7 @@ const originalUrl = location.href;
 let screen: HTMLElementTagNameMap["dashboard-opening-hours-screen"];
 beforeEach(() => {
   setLocale("en");
-  history.replaceState(null, "", "/manage/opening-hours");
+  history.replaceState(null, "", "/manage/opening-hours/view/week");
 });
 afterEach(() => {
   screen?.remove();
@@ -915,10 +915,10 @@ describe("the season picker", () => {
     },
   );
   it.each([
-    ["no season in the address", "/manage/opening-hours", "winter", "winter"],
+    ["no season in the address", "/manage/opening-hours/view/week", "winter", "winter"],
     ["an unknown season", "/manage/opening-hours/view/week/season/gone", "winter", "winter"],
     ["a named season", "/manage/opening-hours/view/week/season/summer", "winter", "summer"],
-    ["no current season", "/manage/opening-hours", null, "spring"],
+    ["no current season", "/manage/opening-hours/view/week", null, "spring"],
     [
       "an unknown season and no current one",
       "/manage/opening-hours/view/week/season/gone",
@@ -944,10 +944,12 @@ describe("the season picker", () => {
     );
     emit(seasonPicker(), "wt-change", { value: "gone" });
     await screen.updateComplete;
-    expect(location.pathname).toBe("/manage/opening-hours");
+    expect(location.pathname).toBe("/manage/opening-hours/view/week");
     expect(seasonPicker().value).toBe("winter");
     emit(seasonPicker(), "wt-change", { value: "summer" });
-    await expect.poll(() => location.pathname).toBe("/manage/opening-hours/season/summer");
+    await expect
+      .poll(() => location.pathname)
+      .toBe("/manage/opening-hours/view/week/season/summer");
     await expect.poll(() => seasonPicker().value).toBe("summer");
     await expect.poll(() => grid(editor())?.columns[0]!.slots[0]!.startsAt).toBe("11:00");
     const week = editor();

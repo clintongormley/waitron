@@ -216,6 +216,7 @@ it("declares no Station hours destination while retaining Opening hours navigati
     month: "month",
     season: "season",
     date: "date",
+    year: "year",
   });
 });
 
