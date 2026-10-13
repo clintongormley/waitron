@@ -30,8 +30,8 @@ const refusalOf = (error: unknown): Refusal => ({
       : undefined,
 });
 
-/** The venue's seasons as tinted chips. A chip's name asks for its week (`season-week-open`); its ✎
- *  and "+ Season" open the season dialog, whose writes this element sends itself, announcing each
+/** The venue's seasons as tinted chips. A chip's name asks for its week (`season-week-open`), also
+ *  when read-only; its ✎ and "+ Season" open the season dialog, whose writes this element sends itself, announcing each
  *  with `season-changed` so its host re-reads. */
 @customElement("season-chips")
 export class SeasonChips extends LitElement {
@@ -232,17 +232,21 @@ export class SeasonChips extends LitElement {
           };
           const label = format("season.chip", { name: season.name, ...range });
           const tint = tints.get(season.id);
+          const week = html`<button
+            type="button"
+            data-test="season-week"
+            aria-label=${format(this.readOnly ? "season.week_shown" : "season.week_named", {
+              name: season.name,
+              ...range,
+            })}
+            @click=${() => this.openWeek(season)}
+          >
+            ${label}
+          </button>`;
           return this.readOnly
-            ? html`<span class="chip" data-season=${season.id} data-tint=${tint}>${label}</span>`
+            ? html`<span class="chip" data-season=${season.id} data-tint=${tint}>${week}</span>`
             : html`<span class="chip" data-season=${season.id} data-tint=${tint}
-                ><button
-                  type="button"
-                  data-test="season-week"
-                  aria-label=${format("season.week_named", { name: season.name, ...range })}
-                  @click=${() => this.openWeek(season)}
-                >
-                  ${label}
-                </button>
+                >${week}
                 <button
                   type="button"
                   data-test="season-edit"

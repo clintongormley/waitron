@@ -565,3 +565,23 @@ it("names the chip's week in Spanish, starting with what it shows", async () => 
   expect(shown).toMatch(/^Winter · /);
   expect(week.getAttribute("aria-label")).toBe(`${shown}, editar la semana`);
 });
+
+it("read-only, a chip's name still asks for its week, named as showing it", async () => {
+  el = document.createElement("season-chips");
+  el.seasons = four;
+  el.readOnly = true;
+  document.body.append(el);
+  await el.updateComplete;
+  const asked: CustomEvent<{ seasonId: string }>[] = [];
+  document.body.addEventListener("season-week-open", (event) =>
+    asked.push(event as CustomEvent<{ seasonId: string }>),
+  );
+  const week = chips()[3]!.querySelector<HTMLElement>("[data-test=season-week]")!;
+  expect(week.textContent!.trim()).toBe("Winter · 1 Dec – 29 Feb");
+  expect(week.getAttribute("aria-label")).toBe("Winter · 1 Dec – 29 Feb, show the week");
+  expect(chips()[3]!.querySelector("[data-test=season-edit]")).toBeNull();
+  week.click();
+  await el.updateComplete;
+  expect(asked.map((event) => event.detail)).toEqual([{ seasonId: "w" }]);
+  expect(el.shadowRoot!.querySelector("season-dialog")).toBeNull();
+});

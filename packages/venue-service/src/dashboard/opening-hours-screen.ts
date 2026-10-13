@@ -1065,7 +1065,7 @@ export class OpeningHoursScreen extends LitElement {
   }
   private openSeasonWeek(event: CustomEvent<{ seasonId: string }>) {
     event.stopPropagation();
-    if (!this.isConnected || this.readOnly || this.painter) return;
+    if (!this.isConnected || this.painter) return;
     void this.openPainter(event.detail.seasonId);
   }
   private openOrdinary(event: CustomEvent<OrdinaryDateOpen>) {

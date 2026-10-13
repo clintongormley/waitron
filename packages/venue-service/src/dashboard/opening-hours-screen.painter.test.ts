@@ -608,6 +608,38 @@ describe("leaving a painter with edits", () => {
 });
 
 describe("a viewer's painter", () => {
+  it("a read-only season chip's name opens that season's read-only week, with no ✎", async () => {
+    const el = await mount("/manage/opening-hours/view/year/year/2027", undefined, [], true);
+    const seasonChips = await expect
+      .poll(() =>
+        el
+          .shadowRoot!.querySelector("opening-hours-year")
+          ?.shadowRoot?.querySelector("season-chips")
+          ?.shadowRoot?.querySelector("[data-season=spring]"),
+      )
+      .toBeTruthy()
+      .then(() =>
+        el
+          .shadowRoot!.querySelector("opening-hours-year")!
+          .shadowRoot!.querySelector("season-chips")!,
+      );
+    expect(seasonChips.shadowRoot!.querySelector("[data-test=season-edit]")).toBeNull();
+    seasonChips
+      .shadowRoot!.querySelector<HTMLElement>("[data-season=spring] [data-test=season-week]")!
+      .click();
+    await expect
+      .poll(() => location.pathname)
+      .toBe("/manage/opening-hours/view/season/season/spring/department/d1");
+    const painter = await shownPainter(el);
+    expect(painter.seasonId).toBe("spring");
+    expect(painter.readOnly).toBe(true);
+    expect(frame(painter).shadowRoot!.querySelector("[data-test=save]")).toBeNull();
+    expect(seasonChips.shadowRoot!.querySelector("season-dialog")).toBeNull();
+    frame(painter).shadowRoot!.querySelector<HTMLElement>("[data-test=dismiss]")!.click();
+    await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/year/year/2027");
+    await expect.poll(() => painterOf(el)).toBeNull();
+  });
+
   it("an old department Week address opens a painter with no Save, whose drag changes and sends nothing", async () => {
     const writes: unknown[] = [];
     const el = await mount(
