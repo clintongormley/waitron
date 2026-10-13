@@ -90,14 +90,10 @@ export function decodeArchiveRecoveryPack(input: string): ArchiveRecoveryPack {
   ) {
     refuse("shape");
   }
-  // Stricter than the settings routes, as the stream kit is: no pack this server issues has these.
+  // `readBucketConfig` would read an empty endpoint as none; every bucket a pack is built from has
+  // already been through it, so no pack this server issues carries one.
   const b = raw.bucket;
-  if (
-    !isRecord(b) ||
-    !hasExactKeys(b, BUCKET_FIELDS, ["endpoint"]) ||
-    b.prefix === "-" ||
-    b.endpoint === ""
-  ) {
+  if (!isRecord(b) || !hasExactKeys(b, BUCKET_FIELDS, ["endpoint"]) || b.endpoint === "") {
     refuse("shape");
   }
   let bucket: BucketConfig;

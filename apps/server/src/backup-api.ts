@@ -18,7 +18,6 @@ import {
   isRecord,
   archiveRecord,
   parseSchedule,
-  readArchiveSettings,
   readHeldArchiveSettings,
   requestInvalid,
   resolveArchiveChoice,
@@ -31,10 +30,10 @@ import {
   DEFAULT_DESTINATION_TIMEOUT_MS,
   MAX_DESTINATION_TIMEOUT_MS,
   MIN_DESTINATION_TIMEOUT_MS,
-  loadBackupSettings,
   loadKeyRotatedAt,
   loadRecoveryKey,
   mintRecoveryKey,
+  parseDestinations,
   readHeldKey,
   resolveBackupConfig,
   type BackupSchedule,
@@ -499,32 +498,36 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
 
   // One box env read gives both the key and, under environment management, the bucket, and the
   // turn keeps a Save or rotation from landing between this read and the record's: either could
-  // pair a bucket with a key its archives were not written under. Logs nothing.
+  // pair a bucket with a key its archives were not written under. The bucket is found before the
+  // key is read, so a box with neither is told about the bucket. With several buckets in the
+  // environment, the pack names the first listed. Nothing of the pack is logged: the error boundary
+  // logs a refusal's code and params and a failure's code, and no param here carries a secret.
   app.get("/api/backup/archive-recovery-pack", (c) =>
     run(c, log, async () => {
       await authorize(c);
       return deps.turns(async () => {
         const env = await deps.readBoxEnv();
+        let destinations: readonly BackupDestination[];
+        let revision: string | undefined;
+        if (deps.supervisor.current().managedByEnvironment) {
+          destinations = parseDestinations(env, deps.venueId);
+        } else {
+          const read = await readHeldSettings();
+          if ("unreadable" in read) {
+            throw new AppError("backup.archive_settings_unreadable", { reason: read.unreadable });
+          }
+          destinations = read.settings?.destinations ?? [];
+          revision = read.settings?.revision;
+        }
+        const destination = destinations.find((d) => d.kind === "s3");
+        if (destination === undefined) {
+          throw new AppError("backup.archive_bucket_not_configured", {});
+        }
         const { held, key: recoveryKey } = await readHeldKey(async () => loadRecoveryKey(env));
         if (!held) throw new AppError("backup.recovery_key_missing", {});
         if (recoveryKey === undefined) {
           throw new AppError("backup.recovery_key_too_short", { min: MIN_PASSPHRASE_LENGTH });
         }
-        const config = await loadBackupSettings({
-          managedByEnvironment: deps.supervisor.current().managedByEnvironment,
-          env,
-          readSealed: () => readArchiveSettings(deps.db, deps.ring),
-          venueId: deps.venueId,
-        });
-        const notConfigured = () => new AppError("backup.archive_bucket_not_configured", {});
-        if (config === undefined) throw notConfigured();
-        if ("loadErrorCode" in config) {
-          throw new AppError("backup.archive_settings_unreadable", {
-            reason: config.loadErrorCode,
-          });
-        }
-        const destination = config.destinations.find((d) => d.kind === "s3");
-        if (destination === undefined) throw notConfigured();
         const { bucket, venueId } = destination;
         const pack = encodeArchiveRecoveryPack({
           version: 1,
@@ -540,7 +543,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
           pack,
           keyFingerprint: keyFingerprint(recoveryKey),
           ...(keyRotatedAt === undefined ? {} : { keyRotatedAt }),
-          ...(config.revision === undefined ? {} : { revision: config.revision }),
+          ...(revision === undefined ? {} : { revision }),
         });
       });
     }),

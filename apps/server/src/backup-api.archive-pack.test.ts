@@ -118,6 +118,8 @@ interface Rig {
   turns?: Turns;
   log?: Logger;
   onReadEnv?: () => void;
+  /** The key the supervisor reports it loaded, whatever the key file holds. */
+  loadedKey?: string;
 }
 
 async function rig(opts: Rig = {}) {
@@ -126,7 +128,10 @@ async function rig(opts: Rig = {}) {
   const key = opts.key === undefined ? KEY : opts.key;
   if (key !== null) await writeRecoveryKey(stateDir, { recoveryKey: key, keyRotatedAt: undefined });
   const supervisor = {
-    current: () => ({ managedByEnvironment: isBackupManagedByEnvironment(base) }),
+    current: () => ({
+      managedByEnvironment: isBackupManagedByEnvironment(base),
+      recoveryKey: opts.loadedKey,
+    }),
   } as unknown as BackupSupervisor;
   const app = new Hono();
   mountBackupApi(
@@ -245,6 +250,59 @@ describe("GET /api/backup/archive-recovery-pack", () => {
     await refusal(await get(), 409, "backup.recovery_key_missing");
   }, 60_000);
 
+  it("never falls back to the key the supervisor loaded", async () => {
+    await store();
+    const { get } = await rig({ key: null, loadedKey: KEY });
+    await refusal(await get(), 409, "backup.recovery_key_missing");
+  }, 60_000);
+
+  it("names the missing bucket before the missing key", async () => {
+    await refusal(
+      await (await rig({ key: null })).get(),
+      409,
+      "backup.archive_bucket_not_configured",
+    );
+    await store({ ...RECORD, destinations: [{ kind: "local-fs", id: "primary", dir: tmpdir() }] });
+    await refusal(
+      await (await rig({ key: null })).get(),
+      409,
+      "backup.archive_bucket_not_configured",
+    );
+  }, 60_000);
+
+  it("names the missing bucket before the missing key while the environment owns the settings", async () => {
+    const { get } = await rig({ base: { WAITRON_BACKUP_DIR: tmpdir() }, key: null });
+    await refusal(await get(), 409, "backup.archive_bucket_not_configured");
+  }, 60_000);
+
+  it("names the unreadable record before the missing key", async () => {
+    await withTransaction(suite.db, (tx) =>
+      putCredential(tx, RING, { purpose: ARCHIVE_PURPOSE, value: { settings: "{}" } }),
+    );
+    const res = await (await rig({ key: null })).get();
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({
+      error: {
+        code: "backup.archive_settings_unreadable",
+        params: { reason: "backup.archive_settings_invalid" },
+      },
+    });
+  }, 60_000);
+
+  it("serves a bucket whose selected folder is a hyphen", async () => {
+    const bucket = { ...BUCKET, prefix: "-" };
+    await store({
+      ...RECORD,
+      destinations: [{ kind: "s3", id: "bucket", bucket, venueId: VENUE }],
+    });
+    const res = await (await rig()).get();
+    expect(res.status).toBe(200);
+    expect(decodeArchiveRecoveryPack((await res.json()).pack)).toMatchObject({
+      bucket,
+      archivePrefix: `-/archives/${VENUE}/`,
+    });
+  }, 60_000);
+
   it("refuses a held key under the length floor", async () => {
     await store();
     const { stateDir, get } = await rig({ key: null });
@@ -275,6 +333,25 @@ describe("GET /api/backup/archive-recovery-pack", () => {
       recoveryKey: KEY,
     });
     expect(body.revision).toBeUndefined();
+  }, 60_000);
+
+  it("names the environment's first bucket when it lists several", async () => {
+    const first = { ...BUCKET, bucket: "first-bucket", prefix: "-" };
+    const second = { ...BUCKET, bucket: "second-bucket", prefix: "" };
+    const base = {
+      WAITRON_BACKUP_DIR: tmpdir(),
+      WAITRON_BACKUP_DESTINATIONS: JSON.stringify([
+        { kind: "s3", id: "one", ...first },
+        { kind: "s3", id: "two", ...second },
+      ]),
+      WAITRON_BACKUP_RECOVERY_KEY: KEY,
+    };
+    const res = await (await rig({ base, key: null })).get();
+    expect(res.status).toBe(200);
+    expect(decodeArchiveRecoveryPack((await res.json()).pack)).toMatchObject({
+      bucket: first,
+      archivePrefix: `-/archives/${VENUE}/`,
+    });
   }, 60_000);
 
   it("refuses when the environment owns the settings and names no bucket", async () => {

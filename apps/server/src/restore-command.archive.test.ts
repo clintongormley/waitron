@@ -351,6 +351,15 @@ describe("waitron-restore restore --from-archive", () => {
     }
   });
 
+  it("restores through a pack whose selected folder is a hyphen", async () => {
+    const archivePrefix = archiveNamespace("-", "venue-1");
+    const f = await fixture({ ...PACK, bucket: { ...PACK.bucket, prefix: "-" }, archivePrefix });
+    const { code } = await run(f);
+    expect(code).toBe(0);
+    expect(f.storeCalls).toEqual([`open:${archivePrefix}`, `list:${KEY}`, `getFile:${KEY}`]);
+    expect(archivePrefix).toBe("-/archives/venue-1/");
+  });
+
   it.each<[string, (f: Fixture) => Promise<ArchiveRecoveryPack | void>]>([
     ["a pack holding another recovery key", async () => ({ ...PACK, recoveryKey: "not-the-key" })],
     [

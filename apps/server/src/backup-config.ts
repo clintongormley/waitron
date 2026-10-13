@@ -168,7 +168,9 @@ function bucketPlace(b: BucketConfig): string {
   return JSON.stringify([endpoint, b.region, b.bucket, normalisePrefix(b.prefix)]);
 }
 
-function parseDestinations(env: Env, venueId: string): BackupDestination[] {
+/** The environment's destinations, in the order listed: `WAITRON_BACKUP_DIR` first, then
+ * `WAITRON_BACKUP_DESTINATIONS`. Unlike {@link loadBackupConfig}, requires no recovery key. */
+export function parseDestinations(env: Env, venueId: string): BackupDestination[] {
   const out: BackupDestination[] = [];
   const dir = env.WAITRON_BACKUP_DIR;
   if (!isUnset(dir)) out.push({ kind: "local-fs", id: "primary", dir: resolve(dir) });

@@ -86,6 +86,16 @@ describe("archive recovery pack", () => {
     expect(decodeArchiveRecoveryPack(token(root))).toEqual(root);
   });
 
+  // An archive Save and the environment's destinations both accept a folder of "-".
+  it("round-trips a pack whose selected folder is a hyphen", () => {
+    const hyphen = {
+      ...pack(),
+      bucket: { ...pack().bucket, prefix: "-" },
+      archivePrefix: "-/archives/venue-1/",
+    };
+    expect(decodeArchiveRecoveryPack(encodeArchiveRecoveryPack(hyphen))).toEqual(hyphen);
+  });
+
   it("refuses text holding no token", () => {
     expectRefused(() => decodeArchiveRecoveryPack("just some words"), "not_found");
   });
@@ -121,14 +131,6 @@ describe("archive recovery pack", () => {
     [
       "a bucket missing its secret",
       { ...pack(), bucket: { ...pack().bucket, secretAccessKey: "" } },
-    ],
-    [
-      "a prefix of a hyphen",
-      {
-        ...pack(),
-        bucket: { ...pack().bucket, prefix: "-" },
-        archivePrefix: "-/archives/venue-1/",
-      },
     ],
     ["an empty endpoint", { ...pack(), bucket: { ...pack().bucket, endpoint: "" } }],
     ["an empty recovery key", { ...pack(), recoveryKey: "" }],
