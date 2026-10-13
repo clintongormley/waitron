@@ -44,7 +44,10 @@ interface Stretch {
 const DAY = 1440;
 const ROWS = 96;
 /** The most an autoscroll moves in one frame, in pixels. */
-const MAX_SCROLL_STEP = 24;
+const MAX_SCROLL_STEP = 12;
+/** How long a drag rests inside an edge band before it scrolls, so a short stroke near an edge
+ *  paints only what was dragged. */
+const BAND_DWELL_MS = 350;
 
 /** Delete or Backspace with no Cmd, Ctrl or Alt held. */
 function isDeleteKey(event: KeyboardEvent): boolean {
@@ -313,6 +316,9 @@ export class PaintGrid extends LitElement {
   #dragged = false;
   #pointerY = 0;
   #frame: number | null = null;
+  /** The edge band the pointer is in (-1 top, 1 bottom, 0 neither) and the frame time it entered;
+   *  `-Infinity` once it has been past that edge, so coming back into the band keeps scrolling. */
+  #edge: { side: number; since: number | null } = { side: 0, since: null };
 
   override disconnectedCallback(): void {
     this.#stop();
@@ -381,8 +387,9 @@ export class PaintGrid extends LitElement {
     if (gesture === null || event.pointerId !== gesture.pointerId) return;
     this.#pointerY = event.clientY;
     this.#stretchTo(event.clientY);
-    if (this.#scrollStep() !== 0 && this.#frame === null)
-      this.#frame = requestAnimationFrame(this.#autoscroll);
+    const side = Math.sign(this.#edgeDepth().depth);
+    if (side !== this.#edge.side) this.#edge = { side, since: null };
+    if (side !== 0 && this.#frame === null) this.#frame = requestAnimationFrame(this.#autoscroll);
   };
   #stretchTo(clientY: number): void {
     const gesture = this.#gesture!;
@@ -396,28 +403,36 @@ export class PaintGrid extends LitElement {
     else if (preview?.key !== gesture.key || preview.start !== start || preview.end !== end)
       this.preview = { key: gesture.key, start, end };
   }
-  /** Pixels to scroll this frame: negative near or above the column headings, positive near or
-   *  below the bottom. The band inside each edge, an hour of rows, lets a grid that runs to the
-   *  edge of the screen scroll. */
-  #scrollStep(): number {
+  /** How far, in pixels, the pointer is past the inner line of an edge band: negative at the top
+   *  (below the column headings), positive at the bottom, 0 between. Each band is an hour of rows
+   *  deep, so a grid that runs to the edge of the screen can still scroll. */
+  #edgeDepth(): { depth: number; band: number } {
     const scroll = this.renderRoot.querySelector<HTMLElement>(".scroll");
     const day = this.renderRoot.querySelector<HTMLElement>(".day");
-    if (scroll === null || day === null) return 0;
+    if (scroll === null || day === null) return { depth: 0, band: 0 };
     const band = day.getBoundingClientRect().height / 24;
     const top =
       (this.renderRoot.querySelector<HTMLElement>(".heading")?.getBoundingClientRect().bottom ??
         scroll.getBoundingClientRect().top) + band;
     const bottom = scroll.getBoundingClientRect().bottom - band;
-    const beyond =
+    const depth =
       this.#pointerY < top ? this.#pointerY - top : Math.max(this.#pointerY - bottom, 0);
-    return Math.sign(beyond) * Math.min(Math.ceil(Math.abs(beyond) / 2), MAX_SCROLL_STEP);
+    return { depth, band };
   }
-  #autoscroll = (): void => {
+  #autoscroll = (now: number): void => {
     this.#frame = null;
-    const step = this.#scrollStep();
-    if (this.#gesture === null || step === 0) return;
-    this.renderRoot.querySelector<HTMLElement>(".scroll")!.scrollTop += step;
-    this.#stretchTo(this.#pointerY);
+    if (this.#gesture === null) return;
+    const { depth, band } = this.#edgeDepth();
+    const side = Math.sign(depth);
+    if (side === 0) return;
+    const into = Math.abs(depth);
+    if (into > band) this.#edge.since = -Infinity;
+    this.#edge.since ??= now;
+    if (now - this.#edge.since >= BAND_DWELL_MS) {
+      const step = Math.max(1, Math.round((MAX_SCROLL_STEP * Math.min(into, band)) / band));
+      this.renderRoot.querySelector<HTMLElement>(".scroll")!.scrollTop += side * step;
+      this.#stretchTo(this.#pointerY);
+    }
     this.#frame = requestAnimationFrame(this.#autoscroll);
   };
   #release = (event: PointerEvent): void => {
@@ -455,6 +470,7 @@ export class PaintGrid extends LitElement {
     window.removeEventListener("pointercancel", this.#abort);
     if (this.#frame !== null) cancelAnimationFrame(this.#frame);
     this.#frame = null;
+    this.#edge = { side: 0, since: null };
     const gesture = this.#gesture;
     this.#gesture = null;
     this.preview = null;

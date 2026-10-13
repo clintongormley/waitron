@@ -8,6 +8,7 @@ import "./paint-grid.js";
 import "@waitron/ui/src/components/wt-modal.js";
 
 afterEach(() => {
+  vi.restoreAllMocks();
   cleanup();
   setLocale("en");
 });
@@ -872,17 +873,132 @@ test("taking the grid off the page ends an autoscroll", async () => {
   expect(el.shadowRoot!.querySelector(".preview")).toBeNull();
 });
 
-test("autoscroll starts inside a band about an hour deep at each edge, for a grid that fills the screen", async () => {
+/** Animation frames the test runs itself, each at a timestamp it chooses. */
+function controlFrames() {
+  let queue: FrameRequestCallback[] = [];
+  let now = 1000;
+  vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+    queue.push(callback);
+    return queue.length;
+  });
+  vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {
+    queue = [];
+  });
+  return {
+    run(count: number, ms = 16) {
+      for (let i = 0; i < count; i++) {
+        now += ms;
+        const due = queue;
+        queue = [];
+        for (const callback of due) callback(now);
+      }
+    },
+  };
+}
+function pressAt(el: PaintGrid, clientY: number) {
+  el.shadowRoot!.querySelector('.day[data-column="mon"]')!.dispatchEvent(
+    new PointerEvent("pointerdown", {
+      bubbles: true,
+      composed: true,
+      pointerId: 7,
+      button: 0,
+      clientY,
+    }),
+  );
+}
+function headingBottom(el: PaintGrid) {
+  return el
+    .shadowRoot!.querySelector<HTMLElement>('.heading[data-column="mon"]')!
+    .getBoundingClientRect().bottom;
+}
+/** A short stroke inside an edge band, held for 8 frames (128 ms), paints exactly what was dragged. */
+async function shortStrokeHeld(el: PaintGrid, scroll: HTMLElement, from: number, to: number) {
+  const frames = controlFrames();
+  const seen = changes(el);
+  const before = scroll.scrollTop;
+  pressAt(el, from);
+  pointAt(to);
+  await el.updateComplete;
+  const dragged = el.shadowRoot!.querySelector(".preview")?.textContent?.trim();
+  expect(dragged).toBeDefined();
+  frames.run(8);
+  await el.updateComplete;
+  expect(scroll.scrollTop).toBe(before);
+  expect(el.shadowRoot!.querySelector(".preview")?.textContent?.trim()).toBe(dragged);
+  pointAt(to, "pointerup");
+  expect(seen).toHaveLength(1);
+  const painted = seen[0]!.day.find(({ periodId }) => periodId === "dinner")!;
+  expect(dragged).toContain(`${painted.startsAt}–${painted.endsAt}`);
+  return painted;
+}
+const minutes = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3));
+
+test("a one-row stroke in the bottom visible hour paints only that row and does not scroll", async () => {
   const { el, scroll } = await tallGrid();
-  const box = scroll.getBoundingClientRect();
+  const bottom = scroll.getBoundingClientRect().bottom;
+  const painted = await shortStrokeHeld(el, scroll, bottom - 15, bottom - 10);
+  expect(minutes(painted.endsAt) - minutes(painted.startsAt)).toBeLessThanOrEqual(15);
+});
+
+test("a stroke from just above the bottom band into it does not scroll", async () => {
+  const { el, scroll } = await tallGrid();
+  const bottom = scroll.getBoundingClientRect().bottom;
+  const painted = await shortStrokeHeld(el, scroll, bottom - 23, bottom - 15);
+  expect(minutes(painted.endsAt) - minutes(painted.startsAt)).toBeLessThanOrEqual(15);
+});
+
+test("a one-row upward stroke in the top visible hour paints only that row and does not scroll", async () => {
+  const { el, scroll } = await tallGrid();
+  scroll.scrollTop = 150;
+  await frame();
+  const top = headingBottom(el);
+  const painted = await shortStrokeHeld(el, scroll, top + 15, top + 10);
+  expect(minutes(painted.endsAt) - minutes(painted.startsAt)).toBeLessThanOrEqual(15);
+});
+
+test("held inside a band, the drag scrolls only after a short dwell; past the edge it scrolls at once", async () => {
+  const { el, scroll } = await tallGrid();
+  const frames = controlFrames();
+  const bottom = scroll.getBoundingClientRect().bottom;
   point(el, "mon", 60, "pointerdown");
-  pointAt(box.bottom - 6);
-  await vi.waitFor(() => expect(scroll.scrollTop).toBeGreaterThan(20));
-  const heading = el.shadowRoot!.querySelector<HTMLElement>('.heading[data-column="mon"]')!;
-  pointAt(heading.getBoundingClientRect().bottom + 6);
+  pointAt(bottom - 6);
+  frames.run(12);
+  expect(scroll.scrollTop).toBe(0);
+  frames.run(20);
+  expect(scroll.scrollTop).toBeGreaterThan(0);
   const down = scroll.scrollTop;
-  await vi.waitFor(() => expect(scroll.scrollTop).toBeLessThan(down - 10));
-  pointAt(heading.getBoundingClientRect().bottom + 6, "pointerup");
+  pointAt(headingBottom(el) + 6);
+  frames.run(12);
+  expect(scroll.scrollTop).toBe(down);
+  frames.run(20);
+  expect(scroll.scrollTop).toBeLessThan(down);
+  pointAt(bottom - 60);
+  frames.run(2);
+  const still = scroll.scrollTop;
+  pointAt(bottom + 30);
+  frames.run(1);
+  expect(scroll.scrollTop).toBeGreaterThan(still);
+  pointAt(bottom + 30, "pointerup");
+});
+
+test("inside a band the scroll is slow at the inner line and full speed at the edge", async () => {
+  const { el, scroll } = await tallGrid();
+  const frames = controlFrames();
+  const bottom = scroll.getBoundingClientRect().bottom;
+  point(el, "mon", 60, "pointerdown");
+  pointAt(bottom - 18);
+  frames.run(30);
+  const slowFrom = scroll.scrollTop;
+  frames.run(1);
+  const slow = scroll.scrollTop - slowFrom;
+  pointAt(bottom);
+  frames.run(1);
+  const fastFrom = scroll.scrollTop;
+  frames.run(1);
+  const fast = scroll.scrollTop - fastFrom;
+  expect(slow).toBeGreaterThan(0);
+  expect(fast).toBeGreaterThan(slow * 3);
+  pointAt(bottom, "pointerup");
 });
 
 test("a drag held past the edge at the end of the scroll stops redrawing", async () => {
