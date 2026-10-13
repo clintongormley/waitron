@@ -107,6 +107,7 @@ interface SplitShown {
   parts: TableState[];
   name: string;
   asksSeats(staying: readonly string[]): boolean;
+  guestsMoveTo(ticked: readonly string[]): string[];
 }
 
 interface SplittingJoined {
@@ -1087,8 +1088,10 @@ export class TillFloorScreen extends LitElement {
       joined,
       this.tables.filter((each) => each.zoneId === joined.zoneId),
     );
-    if (group !== null)
-      return { joined, parts: group.members, name: group.name, asksSeats: group.asksSeats };
+    if (group !== null) {
+      const { members, name, asksSeats, guestsMoveTo } = group;
+      return { joined, parts: members, name, asksSeats, guestsMoveTo };
+    }
     return {
       joined,
       parts: joined.today!.joined!.parts.flatMap((id) =>
@@ -1096,6 +1099,7 @@ export class TillFloorScreen extends LitElement {
       ),
       name: joined.label,
       asksSeats: (staying) => staying.length >= 2,
+      guestsMoveTo: () => [],
     };
   }
 
@@ -1108,6 +1112,7 @@ export class TillFloorScreen extends LitElement {
       .parts=${shown.parts}
       .name=${shown.name}
       .asksSeats=${shown.asksSeats}
+      .guestsMoveTo=${shown.guestsMoveTo}
       .seatsRequired=${splitting.seatsRequired}
       .busy=${splitting.sent !== null}
       .refusal=${splitting.refusal}

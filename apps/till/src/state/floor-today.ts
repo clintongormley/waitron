@@ -331,6 +331,10 @@ export interface GroupSplit {
   members: TableState[];
   name: string;
   asksSeats(staying: readonly string[]): boolean;
+  /** For each party a ticked table holds, the tables it keeps, as `splitGroup` leaves them. A party
+   * that would keep none is refused by the server, and one keeping a table off `zoneTables` is left
+   * out rather than named wrongly. */
+  guestsMoveTo(ticked: readonly string[]): string[];
 }
 
 /** Split tables… on a table in a group: its members in number order, its name, and whether the
@@ -358,9 +362,22 @@ export function groupSplitOf(
       joined.splitOff.every((id) => staying.includes(id))
     );
   };
+  const guestsMoveTo = (ticked: readonly string[]): string[] => {
+    const parties = new Map<string, TableParty>();
+    for (const each of members) {
+      if (ticked.includes(each.id) && each.party !== null) parties.set(each.party.id, each.party);
+    }
+    return [...parties.values()].flatMap((party) => {
+      const kept = party.tableIds.filter((id) => !ticked.includes(id));
+      const tables = zoneTables.filter((each) => kept.includes(each.id));
+      if (kept.length === 0 || tables.length !== kept.length) return [];
+      return [mergeLabel(tables.map((each) => each.label).sort(inNumberOrder))];
+    });
+  };
   return {
     members,
     name: mergeLabel(members.map((each) => each.label)),
     asksSeats: (staying) => staying.length >= 2 && !rejoins(staying),
+    guestsMoveTo,
   };
 }

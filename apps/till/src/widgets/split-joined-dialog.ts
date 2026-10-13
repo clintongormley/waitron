@@ -63,6 +63,8 @@ export class TillSplitJoinedDialog extends LitElement {
   /** Whether the tables left would need their seats, given their ids. */
   @property({ attribute: false }) asksSeats: (staying: readonly string[]) => boolean = (staying) =>
     staying.length >= 2;
+  /** In a group's window, where the guests go for the tables ticked, one name per party. */
+  @property({ attribute: false }) guestsMoveTo: (ticked: readonly string[]) => string[] = () => [];
   /** Asks the seats whatever is ticked, as when the server refused a split for want of them. */
   @property({ type: Boolean }) seatsRequired = false;
   @property({ type: Boolean }) busy = false;
@@ -218,6 +220,11 @@ export class TillSplitJoinedDialog extends LitElement {
       invalid || partsMessage !== "" || seatsMessage !== "" ? t("form.fix_fields") : refusalText;
     const actionState = saveActionState(this.#scope);
     const left = this.#left();
+    const guestsMove = splitsGroup(this.joined)
+      ? this.guestsMoveTo(this.#chosen())
+      : this.joined.party !== null && left.length === 1
+        ? [left[0]!.label]
+        : [];
     const heading = (key: "floor.split_title" | "floor.seats_title") =>
       t(key).replace("{table}", () => this.name);
     return html`<wt-dialog
@@ -272,13 +279,12 @@ export class TillSplitJoinedDialog extends LitElement {
             ? nothing
             : html`<p data-reserved>${t("floor.reserved")} ${this.joined.nextReservation.time}</p>`
         }
-        ${
-          this.joined.party !== null && left.length === 1
-            ? html`<p data-guests-move>
-                ${t("floor.split_guests_move").replace("{table}", () => left[0]!.label)}
-              </p>`
-            : nothing
-        }
+        ${guestsMove.map(
+          (to) =>
+            html`<p data-guests-move>
+              ${t("floor.split_guests_move").replace("{table}", () => to)}
+            </p>`,
+        )}
         <wt-form-actions .error=${footError}>
           <wt-button
             slot="cancel"

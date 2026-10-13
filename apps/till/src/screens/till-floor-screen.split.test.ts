@@ -577,6 +577,36 @@ describe("till-floor-screen: Split tables… on a group", () => {
     expect(windowOf(el)).toBeNull();
   });
 
+  it("tells the window where the guests go when a ticked table holds them", async () => {
+    const seated = groupFloor().map((each) =>
+      each.id === "bar" || each.id === "c3"
+        ? {
+            ...each,
+            condition: "held" as const,
+            state: "open-tab" as const,
+            party: {
+              id: "p1",
+              revision: 1,
+              guestCount: 4,
+              state: "open" as const,
+              name: null,
+              displayName: "Bar+Counter 3",
+              mainBillId: null,
+              outstanding: "0.00",
+              billCount: 1,
+              tableIds: ["bar", "c3"],
+              unsentDrafts: [],
+              reminder: null,
+            },
+          }
+        : each,
+    );
+    const el = await mount(seated, stubApi());
+    const opened = await openSplit(el, "c4");
+    expect(opened.guestsMoveTo(["bar"])).toEqual(["Counter 3"]);
+    expect(opened.guestsMoveTo(["c4"])).toEqual([]);
+  });
+
   it("on a joined table in a group with tables still joined, opens the joined table's window", async () => {
     const api = stubApi();
     const tables = atRevision(

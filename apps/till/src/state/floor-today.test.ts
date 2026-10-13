@@ -714,6 +714,35 @@ describe("Split tables… on a group", () => {
     expect(groupSplitOf(bar, withTerrace)!.asksSeats(["c3", "c4", "c5", "t9"])).toBe(true);
   });
 
+  describe("where the guests go", () => {
+    const seatedAt = (...ids: string[]) => {
+      const p = party("p", ids);
+      return zone.map((each) =>
+        ids.includes(each.id) ? { ...each, ...seatedBy(p), today: each.today } : each,
+      );
+    };
+
+    it("names the tables a party keeps when a table it holds is ticked", () => {
+      const seated = seatedAt("bar", "c3", "c4");
+      const moves = groupSplitOf(bar, seated)!.guestsMoveTo;
+      expect(moves(["bar"])).toEqual(["Counter 3+4"]);
+      expect(moves(["c3", "c5"])).toEqual(["Bar+Counter 4"]);
+    });
+
+    it("names nothing when no ticked table holds a party, or the party would keep none", () => {
+      const moves = groupSplitOf(bar, seatedAt("bar", "c3"))!.guestsMoveTo;
+      expect(moves(["c4", "c5"])).toEqual([]);
+      expect(moves(["bar", "c3"])).toEqual([]);
+      expect(groupSplitOf(bar, zone)!.guestsMoveTo(["bar"])).toEqual([]);
+    });
+
+    it("names nothing for a party that keeps a table off this zone's tables", () => {
+      const p = party("p", ["bar", "elsewhere"]);
+      const seated = zone.map((each) => (each.id === "bar" ? { ...each, ...seatedBy(p) } : each));
+      expect(groupSplitOf(bar, seated)!.guestsMoveTo(["bar"])).toEqual([]);
+    });
+  });
+
   it("names a joined table by its tables when a table is dropped on it", () => {
     const whole = table("long", "Long table", {
       today: today({

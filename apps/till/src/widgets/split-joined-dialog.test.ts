@@ -451,6 +451,25 @@ describe("on a group", () => {
     expect(seen.confirmed).toEqual([{ partIds: ["bar"], seats: 10 }]);
   });
 
+  it("says where the guests go when a ticked table holds them, as its host names it", async () => {
+    const el = await mountGroup({
+      guestsMoveTo: (ticked) => (ticked.includes("c3") ? ["Counter 4"] : []),
+    });
+    await choose(el, ["c5"]);
+    expect(text(el)).not.toContain("Guests move");
+    await choose(el, ["c3"]);
+    expect(el.shadowRoot!.querySelector("[data-guests-move]")!.textContent!.trim()).toBe(
+      "Guests move to Counter 4",
+    );
+  });
+
+  it("says nothing of guests when Bar's guests keep Bar and the counters are ticked", async () => {
+    const seated = { ...bar, party: { ...party, tableIds: ["bar"] } };
+    const el = await mountGroup({ joined: seated });
+    await choose(el, ["c3", "c4", "c5"]);
+    expect(text(el)).not.toContain("Guests move");
+  });
+
   it("labels Seats as a joined table's when the joined table in a group still has tables joined", async () => {
     const el = await mount({
       joined: longTable({
