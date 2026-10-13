@@ -4,6 +4,7 @@ import { currentLocale, setLocale } from "../i18n/t.js";
 import type { TableParty, TableState, TableToday, TodayPlacement } from "../api/client.js";
 import {
   dropAction,
+  joinAgainOf,
   onTodaysPlan,
   outOfServiceJoined,
   pendingPlaces,
@@ -497,5 +498,114 @@ describe("a joined table split today", () => {
     expect(outOfServiceJoined(c3)).toBe(true);
     expect(onTodaysPlan(long)).toBe(true);
     expect(onTodaysPlan(c5)).toBe(true);
+  });
+
+  it("offers Join again on Long table and on Counter 5 while Counter 5 is free", () => {
+    const zone = [long, c3, c4, c5];
+    const offered = sheetActions(long, zone);
+    expect(offered.indexOf("join-again")).toBe(offered.indexOf("split-off") + 1);
+    expect(sheetActions(c5, zone)).toContain("join-again");
+    expect(sheetActions(long)).not.toContain("join-again");
+  });
+
+  const busy: [string, Partial<TableState>][] = [
+    ["seated", seatedBy(party("p1", ["c5"]))],
+    ["needing clearing", { condition: "needs_clearing" }],
+    ["merged", { today: { ...c5.today!, joinId: "m1" } }],
+    ["with food on its way", { pendingDeliveries: 1 }],
+  ];
+
+  it.each(busy)(
+    "offers no Join again on a table split off that is not free, nor on a joined table none of whose split-off tables is free: Counter 5 %s",
+    (_, over) => {
+      const busyC5 = table("c5", "Counter 5", { ...c5, ...over });
+      const zone = [long, c3, c4, busyC5];
+      expect(sheetActions(busyC5, zone)).not.toContain("join-again");
+      expect(sheetActions(long, zone)).not.toContain("join-again");
+    },
+  );
+
+  it.each(busy)(
+    "offers Join again on a free table split off, but not on one that is busy, while another is free: Counter 5 %s",
+    (_, over) => {
+      const standing = table("long", "Long table", {
+        today: today({
+          placement: place(10, 20, { width: 6, height: 2 }),
+          seats: 10,
+          joined: { parts: ["c3", "c6"], splitOff: ["c4", "c5"], apart: false },
+        }),
+      });
+      const freeC4 = table("c4", "Counter 4", {
+        today: today({ placement: place(30, 22), splitOffFrom: "long" }),
+      });
+      const busyC5 = table("c5", "Counter 5", { ...c5, ...over });
+      const zone = [standing, c3, freeC4, busyC5];
+      expect(sheetActions(busyC5, zone)).not.toContain("join-again");
+      expect(sheetActions(freeC4, zone)).toContain("join-again");
+      expect(sheetActions(standing, zone)).toContain("join-again");
+    },
+  );
+
+  describe("Bar table, come apart", () => {
+    const comeApart = (splitOff: string[]) =>
+      table("bar", "Bar table", {
+        today: today({
+          placement: place(40, 0, { width: 6, height: 2 }),
+          joined: { parts: [], splitOff, apart: true },
+        }),
+      });
+    const barPart = (id: string, label: string, over: Partial<TableState> = {}) =>
+      table(id, label, {
+        ...over,
+        today: today({ placement: place(40, 10), splitOffFrom: "bar", ...over.today }),
+      });
+
+    it("names why each table stays apart, and says whether every table comes back", () => {
+      const bar3 = comeApart(["b1", "b2", "b3"]);
+      const b1 = barPart("b1", "Bar 1", seatedBy(party("p1", ["b1"])));
+      const b2 = barPart("b2", "Bar 2");
+      const b3 = barPart("b3", "Bar 3");
+      expect(joinAgainOf(b2, [bar3, b1, b2, b3])).toEqual({
+        joined: bar3,
+        back: [b2, b3],
+        apart: [{ table: b1, reason: "guests" }],
+        whole: false,
+      });
+      const reasons: [Partial<TableState>, string][] = [
+        [{ condition: "needs_clearing" }, "clearing"],
+        [
+          { today: today({ placement: place(40, 10), splitOffFrom: "bar", joinId: "m1" }) },
+          "merged",
+        ],
+        [{ pendingDeliveries: 1 }, "food"],
+        [
+          {
+            ...seatedBy(party("p1", ["b1"])),
+            today: today({ placement: place(40, 10), splitOffFrom: "bar", joinId: "m1" }),
+          },
+          "guests",
+        ],
+      ];
+      for (const [over, reason] of reasons) {
+        const apartB1 = barPart("b1", "Bar 1", over);
+        expect(joinAgainOf(b2, [bar3, apartB1, b2, b3])?.apart).toEqual([
+          { table: apartB1, reason },
+        ]);
+      }
+      const freeB1 = barPart("b1", "Bar 1");
+      expect(joinAgainOf(b2, [bar3, freeB1, b2, b3])).toEqual({
+        joined: bar3,
+        back: [freeB1, b2, b3],
+        apart: [],
+        whole: true,
+      });
+    });
+
+    it("offers no Join again when fewer than two tables would be joined", () => {
+      const bar2 = comeApart(["b1", "b2"]);
+      const b1 = barPart("b1", "Bar 1", seatedBy(party("p1", ["b1"])));
+      const b2 = barPart("b2", "Bar 2");
+      expect(joinAgainOf(b2, [bar2, b1, b2])).toBeNull();
+    });
   });
 });

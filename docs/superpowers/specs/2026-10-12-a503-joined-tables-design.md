@@ -213,6 +213,9 @@ split today. A split decides only who sits where today.
   part is drawn on top of the remaining joined table until staff move it.
 - A part split off offers neither "Back to its saved place" (it has none) nor "Take off for today":
   it goes back through Join again or the reset.
+  > Added 2026-10-13 by A503 part 4: the server refuses both on a table split off
+  > (`table.split_off`, `refuseSplitOff`, `apps/server/src/floor-today-store.ts`); Put back is not
+  > refused.
 - **Join again** (**Owner**), on the joined table itself or on any of its free split-off parts, puts
   back that one joined table and touches no other table in the zone. **Default:** it takes back every
   split-off part that is free (no party, not needing clearing, in no merge), with no choosing, and
@@ -224,6 +227,17 @@ split today. A split decides only who sits where today.
   again asks its seats as Split does. A party already at the joined table keeps it. Pushing the same
   tables together by hand makes an ordinary service merge instead, which never comes back under the
   joined table's name.
+  > Added 2026-10-13 by A503 part 4: "free" also means no food on its way. When the joined table
+  > stands on today's map, it keeps its turn and is laid out from where it stands, over the places
+  > its tables had there: from the first to the last of those joined once more and those still
+  > joined, or, when every table is back, from the first at its saved size. When it had come apart,
+  > was taken off or has no place today, it is laid out the same way from its saved place, when it
+  > has one (whole: its saved place). A table taken back gets its own saved seats. The request names the tables the
+  > till expects back and is refused `joined_table.out_of_date` when they differ from those the
+  > server finds free. It ends with the zone's catch-up (`catchUpZone`), so tables taken back after
+  > "Reset to saved plan" count as joined again at once (`joinAgain`,
+  > `apps/server/src/floor-today-join-again.ts`; `joinedPlaceAfter`,
+  > `apps/server/src/joined-split-layout.ts`).
 - **The reset puts a split joined table back whole only when it and every split-off part are free**
   and in no merge; until then everything stays as it is and the joined table waits, as a held table
   waits today (`planReset`, `apps/server/src/floor-reset-plan.ts:80-96`).
@@ -302,3 +316,4 @@ The four questions this design first raised, answered in the campaign's question
   3. The till's Split: splitting parts off, the party staying or moving, the layout (after owner
      question 5).
   4. Join again and the reset waiting for free parts.
+     > Added 2026-10-13 by A503 part 4: built; the reset half was built in part 3.

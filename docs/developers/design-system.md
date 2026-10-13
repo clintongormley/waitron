@@ -2069,7 +2069,8 @@ and nothing guards it across screens:
   invoice recipient dialog; the extras picker when it edits a line (adding a dish never waits for a
   change, through `savableAtOpen`); the station dialog's Make at (its Move keeps today's look); the
   floor's seats dialog, opened by Change seats, or empty by a merge (`apps/till/src/widgets/today-seats-dialog.ts`);
-  the floor's Split tables window (`apps/till/src/widgets/split-joined-dialog.ts`).
+  the floor's Split tables window (`apps/till/src/widgets/split-joined-dialog.ts`); the floor's Join again window
+  (`apps/till/src/widgets/join-again-dialog.ts`).
   Every other till dialog that tracks unsaved changes takes an action — pay, refund, override, enrol,
   seat, send — and keeps its own rules; the list, with the reason for each, is in
   [the Batch 5 table](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-5--the-till-app-lane-c-a331-5).

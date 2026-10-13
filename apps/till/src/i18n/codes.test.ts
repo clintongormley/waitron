@@ -552,3 +552,27 @@ it("says each joined-table refusal in English and Spanish", () => {
     expect(codeMessage(code, "es")).toBe(es);
   }
 });
+
+it("says each Join again refusal in English and Spanish", () => {
+  const words: [string, string, string][] = [
+    [
+      "joined_table.nothing_to_join",
+      "Nothing to join again now",
+      "Ahora no hay nada que volver a unir",
+    ],
+    [
+      "joined_table.out_of_date",
+      "Its tables have changed. Check and try again",
+      "Sus mesas han cambiado. Revísalo e inténtalo de nuevo",
+    ],
+    [
+      "table.split_off",
+      "That table was split off. Join it again first",
+      "Esa mesa está separada. Vuelve a unirla primero",
+    ],
+  ];
+  for (const [code, en, es] of words) {
+    expect(codeMessage(code, "en")).toBe(en);
+    expect(codeMessage(code, "es")).toBe(es);
+  }
+});

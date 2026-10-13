@@ -213,6 +213,13 @@ undone at the next reset anyway.
 > off, and Take off for today is refused (`table.in_joined_table`) for a part still joined or a joined
 > table with fewer than two parts still joined.
 
+> Added 2026-10-13 by A503 part 4 ([design](2026-10-12-a503-joined-tables-design.md)): a joined table
+> with tables split off, and each of those split-off tables that is free, also offers **Join
+> again**, when that would leave two or more of its tables joined; it puts the free split-off tables
+> back into the joined table. A table split off offers neither Back to its saved place nor Take off
+> for today, and the server refuses both on it (`table.split_off`). Join again ends the split for
+> the tables it takes back.
+
 ### 6.3 Reset
 
 - Today's plan resets automatically at the day cutover, and on Reset to saved plan.
@@ -318,6 +325,9 @@ on every screen. The commit adding them states this reason.
 
 > Added 2026-10-13 by A503 part 3: the till's routes gain `POST /api/tables/:id/today/split-off`
 > (split parts off a joined table), with the same checks.
+
+> Added 2026-10-13 by A503 part 4: and `POST /api/tables/:id/today/join-again` (join a split joined
+> table's free tables again), with the same checks.
 
 ## 11. Removed
 

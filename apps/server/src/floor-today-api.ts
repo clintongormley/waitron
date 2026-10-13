@@ -17,6 +17,7 @@ import {
   takeOffToday,
 } from "./floor-today-store.js";
 import { splitFreeMerge, writeMerge } from "./floor-today-merges.js";
+import { joinAgain } from "./floor-today-join-again.js";
 import { splitJoinedTable } from "./floor-today-split.js";
 import type { Logger } from "./logger.js";
 import type { Run, TillApiDeps } from "./till-api.js";
@@ -67,7 +68,7 @@ async function mergeBody(
   return { targetId, side: side as JoinSide, seats };
 }
 
-async function splitOffBody(c: Context): Promise<{ partIds: string[]; seats: number | null }> {
+async function partsBody(c: Context): Promise<{ partIds: string[]; seats: number | null }> {
   const body = asObject(await readRawJsonBody<unknown>(c));
   const raw = body.partIds;
   if (!Array.isArray(raw) || raw.length === 0) throw invalid("partIds");
@@ -133,10 +134,22 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
   });
   tableRoute("split", () => ({ write: (tx, tableId) => splitFreeMerge(tx, deps.cfg, tableId) }));
   tableRoute("split-off", async (c) => {
-    const { partIds, seats } = await splitOffBody(c);
+    const { partIds, seats } = await partsBody(c);
     return {
       write: (tx, joinedId) =>
         splitJoinedTable(tx, deps.cfg, { tableId: joinedId, partIds, seats }),
+      others: partIds,
+    };
+  });
+  tableRoute("join-again", async (c) => {
+    const { partIds, seats } = await partsBody(c);
+    return {
+      write: (tx, joinedId) =>
+        joinAgain(tx, deps.cfg, removals, deps.clock.now().instant, {
+          tableId: joinedId,
+          partIds,
+          seats,
+        }),
       others: partIds,
     };
   });

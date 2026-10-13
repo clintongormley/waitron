@@ -1,3 +1,4 @@
+import { NEW_TABLE_SIZE } from "@waitron/shared";
 import type { Placement } from "./floor-reset-plan.js";
 
 export interface LaidPart {
@@ -77,4 +78,43 @@ export function remainingPlace(
   const last = parts[to]!;
   const width = Math.min(slotStart(parts, to) + last.width - start, MAX_WIDTH);
   return slotPlace(frame, row, start, width, row.height);
+}
+
+/** The joined table whole again: its left end kept, at `size`, with the row's shape and turn. */
+export function wholePlace(
+  row: Placement,
+  parts: readonly LaidPart[],
+  covered: number,
+  size: { width: number; height: number },
+): Placement {
+  return slotPlace(frameOf(row, parts, covered), row, 0, size.width, size.height);
+}
+
+/** Where a joined table stands after Join again. */
+export function joinedPlaceAfter(args: {
+  row: Placement | null;
+  standing: boolean;
+  saved: Placement | null;
+  parts: readonly LaidPart[];
+  covered: number;
+  staying: readonly number[];
+  whole: boolean;
+}): Placement | null {
+  const { row, standing, saved, parts, covered, staying, whole } = args;
+  const from = standing && row !== null && covered >= 0 ? row : null;
+  if (whole) {
+    if (from === null) return saved;
+    const size = saved ?? { width: NEW_TABLE_SIZE, height: NEW_TABLE_SIZE };
+    return wholePlace(from, parts, covered, { width: size.width, height: size.height });
+  }
+  const origin =
+    from !== null
+      ? { at: from, covered }
+      : saved !== null
+        ? { at: saved, covered: 0 }
+        : row !== null
+          ? { at: row, covered: 0 }
+          : null;
+  if (origin === null) return null;
+  return remainingPlace(origin.at, parts, origin.covered, staying[0]!, staying.at(-1)!);
 }

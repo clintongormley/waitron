@@ -49,6 +49,7 @@ const ACTION_LABELS = {
   "join-with": "floor.join_with",
   split: "floor.split",
   "split-off": "floor.split_tables",
+  "join-again": "floor.join_again",
   rotate: "floor.rotate",
   seats: "floor.change_seats",
   back: "floor.back_to_saved",
@@ -109,6 +110,8 @@ export class TillTableDetailsSheet extends LitElement {
   @property({ attribute: false }) now?: number;
   /** Today's changes are offered on the floor only; the order screen's status pin leaves this off. */
   @property({ type: Boolean }) actions = false;
+  /** The zone's tables, which Join again reads to find the joined table and its split-off tables. */
+  @property({ attribute: false }) tables: readonly TableState[] = [];
 
   #emit(type: string, detail?: unknown): void {
     this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
@@ -130,7 +133,7 @@ export class TillTableDetailsSheet extends LitElement {
   }
 
   #todayActions(table: TableState): TemplateResult | typeof nothing {
-    const offered = this.actions ? sheetActions(table) : [];
+    const offered = this.actions ? sheetActions(table, this.tables) : [];
     if (offered.length === 0) return nothing;
     return html`<div class="today-actions">
       ${offered.map(

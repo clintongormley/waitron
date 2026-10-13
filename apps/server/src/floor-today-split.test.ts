@@ -15,7 +15,7 @@ import { writeClearingWorkflow } from "@waitron/venue-service";
 import type { AppError } from "@waitron/shared";
 import { writeMerge } from "./floor-today-merges.js";
 import { foodOnItsWay } from "./delivery-release.js";
-import { backToSaved, moveToday, takeOffToday } from "./floor-today-store.js";
+import { backToSaved, moveToday, putBackToday, takeOffToday } from "./floor-today-store.js";
 import { readZonePlan, saveZonePlan } from "./floor-plan.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { splitJoinedTable } from "./floor-today-split.js";
@@ -689,13 +689,64 @@ describe("taking a joined table's tables off for today", () => {
     expect(await everything()).toEqual(before);
   });
 
-  it("takes off a part split off Long table", async () => {
+  it("refuses Take off on a part split off Long table, writing nothing", async () => {
     const { table } = await LONG_PLUS_BAR();
     await split(table.long!, [table.c5!], 6);
+    const before = await everything();
 
-    await takeOff(table.c5!);
+    const error = await refusalOf(takeOff(table.c5!));
 
-    expect((await todayRow(v, table.c5!))?.takenOff).toBe(true);
+    expect(error?.code).toBe("table.split_off");
+    expect(error?.params).toEqual({ tableId: table.c5! });
+    expect(await everything()).toEqual(before);
+  });
+
+  it("refuses Back to its saved place on a part split off Long table, writing nothing", async () => {
+    const { table } = await LONG_PLUS_BAR();
+    await split(table.long!, [table.c5!], 6);
+    const before = await everything();
+
+    const error = await refusalOf(inTx(v, (tx) => backToSaved(tx, v.cfg, table.c5!)));
+
+    expect(error?.code).toBe("table.split_off");
+    expect(error?.params).toEqual({ tableId: table.c5! });
+    expect(await everything()).toEqual(before);
+  });
+
+  it("answers table.merged first to Take off on a part split off that is pushed together with Bar", async () => {
+    const { table } = await LONG_PLUS_BAR();
+    await split(table.long!, [table.c5!], 6);
+    await inTx(v, (tx) =>
+      writeMerge(tx, v.cfg, {
+        movingId: table.c5!,
+        targetId: table.bar!,
+        side: "right",
+        seats: 10,
+        free: true,
+      }),
+    );
+    const before = await everything();
+
+    const error = await refusalOf(takeOff(table.c5!));
+
+    expect(error?.code).toBe("table.merged");
+    expect(error?.params).toEqual({ tableId: table.c5! });
+    expect(await everything()).toEqual(before);
+  });
+
+  it("puts back a part split off that an older till took off", async () => {
+    const { table } = await LONG_PLUS_BAR();
+    await split(table.long!, [table.c5!], 6);
+    await inTx(v, (tx) =>
+      tx
+        .update(floorTodayTables)
+        .set({ takenOff: true })
+        .where(eq(floorTodayTables.tableId, table.c5!)),
+    );
+
+    await inTx(v, (tx) => putBackToday(tx, v.cfg, table.c5!));
+
+    expect((await todayRow(v, table.c5!))?.takenOff).toBe(false);
   });
 
   it("takes off Long table whole", async () => {

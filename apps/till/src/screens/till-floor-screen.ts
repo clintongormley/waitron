@@ -35,6 +35,8 @@ import "../widgets/bill-choice-dialog.js";
 import "../widgets/join-with-dialog.js";
 import "../widgets/split-joined-dialog.js";
 import type { SplitJoinedDetail, TillSplitJoinedDialog } from "../widgets/split-joined-dialog.js";
+import "../widgets/join-again-dialog.js";
+import type { JoinAgainDetail, TillJoinAgainDialog } from "../widgets/join-again-dialog.js";
 import "../widgets/floor-zone-menu.js";
 import type { JoinWithPickDetail } from "../widgets/join-with-dialog.js";
 import type { BillChoiceDetail } from "../widgets/bill-choice-dialog.js";
@@ -45,6 +47,8 @@ import {
   type DropAction,
   type SheetAction,
   dropAction,
+  joinAgainOf,
+  type JoinAgainPlan,
   onTodaysPlan,
   pendingPlaces,
   sheetActions,
@@ -80,6 +84,25 @@ export interface FloorRefreshDetail {
 }
 
 type JoinAction = Extract<DropAction, { kind: "join" }>;
+
+interface SplitShown {
+  joined: TableState;
+  parts: TableState[];
+}
+
+interface SplittingJoined {
+  tableId: string;
+  /** What the window showed when Split was pressed, until its answer arrives. */
+  sent: SplitShown | null;
+  refusal: { code: string; field?: string } | null;
+}
+
+interface JoiningAgain {
+  tableId: string;
+  /** The plan sent, until its answer arrives. */
+  sent: JoinAgainPlan | null;
+  refusal: { code: string; field?: string } | null;
+}
 
 const asksSeats = (refused: { code?: string }): boolean => refused.code === "merge.seats_required";
 
@@ -485,13 +508,12 @@ export class TillFloorScreen extends LitElement {
   } | null = null;
   /** Join with…'s table; closed when the table leaves the map. */
   @state() private joiningWith: { tableId: string } | null = null;
-  /** Split tables…'s joined table; closed when the split is done or cancelled, or when the table no
-   * longer offers Split tables…. */
-  @state() private splittingJoined: {
-    tableId: string;
-    busy: boolean;
-    refusal: { code: string; field?: string } | null;
-  } | null = null;
+  /** Split tables…'s joined table, while its window is open; `#splitShown` says when a floor read
+   * closes it. */
+  @state() private splittingJoined: SplittingJoined | null = null;
+  /** Join again's joined table, while its window is open; `#joinAgainShown` says when a floor read
+   * closes it. */
+  @state() private joiningAgain: JoiningAgain | null = null;
   /** A drop joining two seated parties, waiting for which bills to keep. */
   @state() private askingBills: { api: TillApi; action: JoinAction } | null = null;
 
@@ -551,11 +573,16 @@ export class TillFloorScreen extends LitElement {
     this.#zone = this.#zoneOnScreen();
     if (this.joiningWith !== null && this.#joining(this.joiningWith.tableId) === undefined)
       this.joiningWith = null;
-    if (
-      this.splittingJoined !== null &&
-      this.#splitting(this.splittingJoined.tableId) === undefined
-    )
+    if (this.splittingJoined !== null && this.#splitShown(this.splittingJoined) === undefined) {
+      if (this.splittingJoined.refusal !== null)
+        this.refusal = codeMessage(this.splittingJoined.refusal.code);
       this.splittingJoined = null;
+    }
+    if (this.joiningAgain !== null && this.#joinAgainShown(this.joiningAgain) === undefined) {
+      if (this.joiningAgain.refusal !== null)
+        this.refusal = codeMessage(this.joiningAgain.refusal.code);
+      this.joiningAgain = null;
+    }
   }
 
   override updated(): void {
@@ -681,6 +708,7 @@ export class TillFloorScreen extends LitElement {
       .heading=${this.#detailsHeading(table)}
       .now=${this.#drawnAt}
       .actions=${this.canChangeToday}
+      .tables=${this.tables}
       @today-action=${(event: Event) => this.#onTodayAction(event)}
       @details-close=${(event: Event) => {
         event.stopPropagation();
@@ -787,8 +815,18 @@ export class TillFloorScreen extends LitElement {
         void this.#settle(this.#split(api, table));
         return;
       case "split-off":
-        this.splittingJoined = { tableId, busy: false, refusal: null };
+        this.splittingJoined = { tableId, sent: null, refusal: null };
         return;
+      case "join-again": {
+        const plan = joinAgainOf(table, this.tables);
+        if (plan === null) return;
+        if (plan.whole)
+          void this.#settle(
+            api.joinAgainToday(plan.joined.id, { partIds: plan.back.map((each) => each.id) }),
+          );
+        else this.joiningAgain = { tableId: plan.joined.id, sent: null, refusal: null };
+        return;
+      }
       case "rotate":
         void this.#settle(api.rotateToday(table.id));
         return;
@@ -980,16 +1018,30 @@ export class TillFloorScreen extends LitElement {
     );
   }
 
+  /** While its split is out, the window keeps what it showed unless its joined table has left the
+   * floor read; otherwise it shows the joined table as the floor reads it now. */
+  #splitShown(splitting: SplittingJoined): SplitShown | undefined {
+    if (splitting.sent !== null)
+      return this.tables.some((each) => each.id === splitting.tableId) ? splitting.sent : undefined;
+    const joined = this.#splitting(splitting.tableId);
+    return joined === undefined
+      ? undefined
+      : {
+          joined,
+          parts: joined.today!.joined!.parts.flatMap((id) =>
+            this.tables.filter((each) => each.id === id),
+          ),
+        };
+  }
+
   #splitJoined(): TemplateResult | typeof nothing {
     const splitting = this.splittingJoined;
-    const joined = splitting === null ? undefined : this.#splitting(splitting.tableId);
-    if (splitting === null || joined === undefined) return nothing;
+    const shown = splitting === null ? undefined : this.#splitShown(splitting);
+    if (splitting === null || shown === undefined) return nothing;
     return html`<till-split-joined-dialog
-      .joined=${joined}
-      .parts=${joined.today!.joined!.parts.flatMap((id) =>
-        this.tables.filter((each) => each.id === id),
-      )}
-      .busy=${splitting.busy}
+      .joined=${shown.joined}
+      .parts=${shown.parts}
+      .busy=${splitting.sent !== null}
       .refusal=${splitting.refusal}
       @split-joined-confirm=${(event: CustomEvent<SplitJoinedDetail>) => {
         event.stopPropagation();
@@ -1003,34 +1055,114 @@ export class TillFloorScreen extends LitElement {
   }
 
   /**
-   * The window stays open while the split is sent, and closes only once it is done. The answer is
-   * applied only to the window that sent it: that window can close while the request runs, and
-   * another can open.
+   * The window stays open while the split is sent. The answer is applied only to the window that
+   * sent it: that window closes if its joined table leaves the floor read meanwhile, and another
+   * can open. A refusal shows in the window while the floor still offers Split tables…, and
+   * otherwise on the floor, unless another Split tables… window has opened.
    */
   async #splitOff(dialog: TillSplitJoinedDialog, detail: SplitJoinedDetail): Promise<void> {
     const splitting = this.splittingJoined;
+    const shown = splitting === null ? undefined : this.#splitShown(splitting);
     const api = this.api;
-    if (splitting === null || splitting.busy || api === undefined) return;
-    const sent = { ...splitting, busy: true, refusal: null };
-    this.splittingJoined = sent;
+    if (splitting === null || shown === undefined || splitting.sent !== null || api === undefined)
+      return;
+    const sending = { ...splitting, sent: shown, refusal: null };
+    this.splittingJoined = sending;
     try {
       await api.splitOffToday(splitting.tableId, {
         partIds: detail.partIds,
         ...(detail.seats === null ? {} : { seats: detail.seats }),
       });
-      if (this.splittingJoined === sent) {
+      if (this.splittingJoined === sending) {
         dialog.commit();
         this.splittingJoined = null;
       }
     } catch (cause) {
       const refused = (cause ?? {}) as { code?: string; field?: unknown };
       const code = refused.code ?? "server.internal";
-      if (this.splittingJoined === sent)
+      if (this.splittingJoined === sending && this.#splitting(splitting.tableId) !== undefined)
         this.splittingJoined = {
           ...splitting,
-          busy: false,
+          sent: null,
           refusal: typeof refused.field === "string" ? { code, field: refused.field } : { code },
         };
+      else if (this.splittingJoined === sending || this.splittingJoined === null) {
+        this.splittingJoined = null;
+        this.refusal = codeMessage(code);
+      }
+    }
+    this.#requestFloorRefresh();
+  }
+
+  /** Join again's plan for the joined table it was opened for, while some of its tables stay apart. */
+  #joiningAgain(tableId: string): JoinAgainPlan | undefined {
+    const joined = this.tables.find((each) => each.id === tableId);
+    const plan = joined === undefined ? null : joinAgainOf(joined, this.tables);
+    return plan === null || plan.whole ? undefined : plan;
+  }
+
+  /** While its request is out, the window keeps the plan it sent unless its joined table has left
+   * the floor read; otherwise it shows the plan the floor reads now. */
+  #joinAgainShown(joining: JoiningAgain): JoinAgainPlan | undefined {
+    if (joining.sent === null) return this.#joiningAgain(joining.tableId);
+    return this.tables.some((each) => each.id === joining.tableId) ? joining.sent : undefined;
+  }
+
+  #joinAgain(): TemplateResult | typeof nothing {
+    const joining = this.joiningAgain;
+    const plan = joining === null ? undefined : this.#joinAgainShown(joining);
+    if (joining === null || plan === undefined) return nothing;
+    return html`<till-join-again-dialog
+      .joined=${plan.joined}
+      .apart=${plan.apart}
+      .busy=${joining.sent !== null}
+      .refusal=${joining.refusal}
+      @join-again-confirm=${(event: CustomEvent<JoinAgainDetail>) => {
+        event.stopPropagation();
+        void this.#sendJoinAgain(event.currentTarget as TillJoinAgainDialog, event.detail);
+      }}
+      @join-again-cancel=${(event: Event) => {
+        event.stopPropagation();
+        this.joiningAgain = null;
+      }}
+    ></till-join-again-dialog>`;
+  }
+
+  /**
+   * As `#splitOff`: the window stays open until the answer, which applies only to the window that
+   * sent it. The tables sent are the plan's as the floor reads them at the press, so a poll since
+   * the window opened is what the server is asked to check against.
+   */
+  async #sendJoinAgain(dialog: TillJoinAgainDialog, detail: JoinAgainDetail): Promise<void> {
+    const joining = this.joiningAgain;
+    const plan = joining === null ? undefined : this.#joiningAgain(joining.tableId);
+    const api = this.api;
+    if (joining === null || plan === undefined || joining.sent !== null || api === undefined)
+      return;
+    const sending = { ...joining, sent: plan, refusal: null };
+    this.joiningAgain = sending;
+    try {
+      await api.joinAgainToday(joining.tableId, {
+        partIds: plan.back.map((each) => each.id),
+        seats: detail.seats,
+      });
+      if (this.joiningAgain === sending) {
+        dialog.commit();
+        this.joiningAgain = null;
+      }
+    } catch (cause) {
+      const refused = (cause ?? {}) as { code?: string; field?: unknown };
+      const code = refused.code ?? "server.internal";
+      if (this.joiningAgain === sending && this.#joiningAgain(joining.tableId) !== undefined)
+        this.joiningAgain = {
+          ...joining,
+          sent: null,
+          refusal: typeof refused.field === "string" ? { code, field: refused.field } : { code },
+        };
+      else if (this.joiningAgain === sending || this.joiningAgain === null) {
+        this.joiningAgain = null;
+        this.refusal = codeMessage(code);
+      }
     }
     this.#requestFloorRefresh();
   }
@@ -1237,7 +1369,7 @@ export class TillFloorScreen extends LitElement {
             : this.#plannedMap(onMap, unplaced, activeKey)
         }
         ${this.#seatDialog()} ${this.#clearDialog()} ${this.#detailsSheet()} ${this.#seatsPrompt()}
-        ${this.#splitJoined()} ${this.#billChoice()} ${this.#joinWith()}
+        ${this.#splitJoined()} ${this.#joinAgain()} ${this.#billChoice()} ${this.#joinWith()}
       </section>
     `;
   }

@@ -21,17 +21,18 @@ import { partPlaces, remainingPlace, type LaidPart } from "./joined-split-layout
 import type { TillConfig } from "./till-config.js";
 import "./errors.js";
 
-interface Part extends LaidPart {
+export interface Part extends LaidPart {
   label: string;
   stillJoined: boolean;
   splitOff: boolean;
+  savedSeats: number | null;
 }
 
 const joinedRow = aliasedTable(floorResetTables, "joined_row");
 const partRow = aliasedTable(floorResetTables, "part_row");
 
 /** Every part of the joined table in today's copy that has a live table, in number order. */
-async function partsOf(tx: Transaction, tableId: string): Promise<Part[]> {
+export async function partsOf(tx: Transaction, tableId: string): Promise<Part[]> {
   const rows = await tx
     .select({
       tableId: diningTables.id,
@@ -40,6 +41,7 @@ async function partsOf(tx: Transaction, tableId: string): Promise<Part[]> {
       placedHeight: floorPlanTables.height,
       keptWidth: floorPlanTableSizes.width,
       keptHeight: floorPlanTableSizes.height,
+      savedSeats: partRow.seats,
       stillJoined: sql<number>`${stillJoinedPart(diningTables.id)}`,
       splitOff: sql<number>`${exists(
         tx
@@ -63,6 +65,7 @@ async function partsOf(tx: Transaction, tableId: string): Promise<Part[]> {
       height: row.placedHeight ?? row.keptHeight ?? NEW_TABLE_SIZE,
       stillJoined: Boolean(row.stillJoined),
       splitOff: Boolean(row.splitOff),
+      savedSeats: row.savedSeats,
     }))
     .sort((a, b) => compareLabels(a.label, b.label));
 }

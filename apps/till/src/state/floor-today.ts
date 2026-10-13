@@ -226,11 +226,60 @@ export function spareSpot(zoneTables: readonly TableState[]): { x: number; y: nu
   };
 }
 
-export type SheetAction =
-  "join-with" | "split" | "split-off" | "rotate" | "seats" | "back" | "take-off";
+export type ApartReason = "guests" | "clearing" | "merged" | "food";
 
-/** Slice 4 decisions 12 and 16: the details sheet's changes for today that apply to `table`, in order. */
-export function sheetActions(table: TableState): SheetAction[] {
+export interface JoinAgainPlan {
+  joined: TableState;
+  back: TableState[];
+  apart: { table: TableState; reason: ApartReason }[];
+  whole: boolean;
+}
+
+/** What Join again on `table` would do: `table` is the joined table or a free table split off it.
+ * `null` when it offers nothing. */
+export function joinAgainOf(
+  table: TableState,
+  zoneTables: readonly TableState[],
+): JoinAgainPlan | null {
+  const today = table.today;
+  if (today === null) return null;
+  const joined =
+    today.joined !== null
+      ? table
+      : today.splitOffFrom !== null
+        ? zoneTables.find((each) => each.id === today.splitOffFrom)
+        : undefined;
+  const state = joined?.today?.joined;
+  if (joined === undefined || state == null) return null;
+  if (joined !== table && apartReason(table) !== null) return null;
+  const byId = new Map(zoneTables.map((each) => [each.id, each]));
+  const splitOff = state.splitOff.flatMap((id) => byId.get(id) ?? []);
+  const back = splitOff.filter((each) => apartReason(each) === null);
+  if (back.length === 0 || state.parts.length + back.length < 2) return null;
+  const apart = splitOff.flatMap((each) => {
+    const reason = apartReason(each);
+    return reason === null ? [] : [{ table: each, reason }];
+  });
+  return { joined, back, apart, whole: apart.length === 0 };
+}
+
+function apartReason(table: TableState): ApartReason | null {
+  if (table.condition === "held") return "guests";
+  if (table.condition === "needs_clearing") return "clearing";
+  if (table.today?.joinId != null) return "merged";
+  if (table.pendingDeliveries > 0) return "food";
+  return null;
+}
+
+export type SheetAction =
+  "join-with" | "split" | "split-off" | "join-again" | "rotate" | "seats" | "back" | "take-off";
+
+/** Slice 4 decisions 12 and 16: the details sheet's changes for today that apply to `table`, in
+ * order. Join again is offered only when `zoneTables` holds the joined table and its split-off tables. */
+export function sheetActions(
+  table: TableState,
+  zoneTables: readonly TableState[] = [],
+): SheetAction[] {
   const today = table.today;
   if (today === null || today.placement === null || today.takenOff) return [];
   const merged = today.joinId !== null;
@@ -243,6 +292,7 @@ export function sheetActions(table: TableState): SheetAction[] {
     ["join-with", !merged && !clearing],
     ["split", merged],
     ["split-off", joined !== null && joined.parts.length >= 2],
+    ["join-again", joinAgainOf(table, zoneTables) !== null],
     ["rotate", !today.fixed && !merged],
     ["seats", true],
     ["back", !splitOff && (joined === null || joined.splitOff.length === 0)],

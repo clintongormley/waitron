@@ -59,6 +59,22 @@ const floor = () => [
   part("c5", "Counter 5"),
 ];
 
+/** Another till has split every table off Long table. */
+const splitDownToNone = () => [
+  longTable([], ["c3", "c4", "c5"]),
+  table("c3", "Counter 3", 10, { splitOffFrom: "long" }),
+  table("c4", "Counter 4", 20, { splitOffFrom: "long" }),
+  table("c5", "Counter 5", 30, { splitOffFrom: "long" }),
+];
+
+/** Another till has split Counter 5 off Long table. */
+const c5SplitOff = () => [
+  longTable(["c3", "c4"], ["c5"]),
+  part("c3", "Counter 3"),
+  part("c4", "Counter 4"),
+  table("c5", "Counter 5", 30, { splitOffFrom: "long" }),
+];
+
 const barTable = () =>
   table("bar", "Bar table", 40, {
     seats: 6,
@@ -279,6 +295,98 @@ describe("till-floor-screen: splitting tables off a joined table", () => {
     expect(windowOf(el)).toBeNull();
   });
 
+  it("a floor read during the split keeps the window as it was sent; when it no longer applies, a refusal shows on the floor", async () => {
+    const api = stubApi();
+    const answer = holdAnswer(api);
+    const el = await mount(floor(), api);
+    const opened = await openSplit(el);
+    send(opened, "split-joined-confirm", { partIds: ["c5"], seats: 6 });
+    await settle(el);
+
+    el.tables = splitDownToNone();
+    await settle(el);
+    expect(windowOf(el)).toBe(opened);
+    expect(opened.busy).toBe(true);
+    expect(opened.parts.map((each) => each.id)).toEqual(["c3", "c4", "c5"]);
+
+    answer.refuse({ code: "joined_table.part_invalid", field: "partIds" });
+    await settle(el);
+    expect(windowOf(el)).toBeNull();
+    expect(floorRefusal(el)).toBe(codeMessage("joined_table.part_invalid"));
+  });
+
+  it("a floor read during the split that still offers Split tables… keeps the window, and a refusal shows in it over the new read", async () => {
+    const api = stubApi();
+    const answer = holdAnswer(api);
+    const el = await mount(floor(), api);
+    const opened = await openSplit(el);
+    send(opened, "split-joined-confirm", { partIds: ["c5"], seats: 6 });
+    await settle(el);
+
+    el.tables = c5SplitOff();
+    await settle(el);
+    expect(windowOf(el)).toBe(opened);
+    expect(opened.parts.map((each) => each.id)).toEqual(["c3", "c4", "c5"]);
+
+    answer.refuse({ code: "table.in_joined_table" });
+    await settle(el);
+    expect(windowOf(el)).toBe(opened);
+    expect(opened.parts.map((each) => each.id)).toEqual(["c3", "c4"]);
+    await opened.updateComplete;
+    expect(footError(el)).toBe(codeMessage("table.in_joined_table"));
+    expect(floorRefusal(el)).toBeNull();
+  });
+
+  it("a refusal shown in the window moves to the floor when the next floor read closes the window", async () => {
+    const api = stubApi();
+    api.splitOffToday.mockRejectedValueOnce({ code: "table.in_joined_table" });
+    const el = await mount(floor(), api);
+    const opened = await openSplit(el);
+    send(opened, "split-joined-confirm", { partIds: ["c5"], seats: 6 });
+    await settle(el);
+    expect(windowOf(el)).toBe(opened);
+    expect(opened.refusal).toEqual({ code: "table.in_joined_table" });
+    expect(floorRefusal(el)).toBeNull();
+
+    el.tables = splitDownToNone();
+    await settle(el);
+    expect(windowOf(el)).toBeNull();
+    expect(floorRefusal(el)).toBe(codeMessage("table.in_joined_table"));
+  });
+
+  it("a done answer closes a window kept through a floor read that made it obsolete", async () => {
+    const api = stubApi();
+    const answer = holdAnswer(api);
+    const el = await mount(floor(), api);
+    const opened = await openSplit(el);
+    const commit = vi.spyOn(opened, "commit");
+    send(opened, "split-joined-confirm", { partIds: ["c5"], seats: 6 });
+    await settle(el);
+    el.tables = splitDownToNone();
+    await settle(el);
+
+    answer.done();
+    await settle(el);
+    expect(commit).toHaveBeenCalledOnce();
+    expect(windowOf(el)).toBeNull();
+    expect(floorRefusal(el)).toBeNull();
+  });
+
+  it("a refusal whose window closed because its joined table left the floor read shows on the floor", async () => {
+    const api = stubApi();
+    const answer = holdAnswer(api);
+    const el = await mount(floor(), api);
+    send(await openSplit(el), "split-joined-confirm", { partIds: ["c5"], seats: 6 });
+    await settle(el);
+    el.tables = floor().filter((each) => each.id !== "long");
+    await settle(el);
+    expect(windowOf(el)).toBeNull();
+
+    answer.refuse({ code: "table.in_joined_table" });
+    await settle(el);
+    expect(floorRefusal(el)).toBe(codeMessage("table.in_joined_table"));
+  });
+
   it.each([
     [
       "refused",
@@ -313,6 +421,7 @@ describe("till-floor-screen: splitting tables off a joined table", () => {
       expect(bar.busy).toBe(false);
       expect(bar.refusal).toBeNull();
       expect(pick.values).toEqual(["b1"]);
+      expect(floorRefusal(el)).toBeNull();
     },
   );
 
