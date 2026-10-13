@@ -8,6 +8,8 @@ export type BucketOperation = "get" | "put" | "list" | "delete";
 export type DestinationOperation =
   "put" | "create_upload" | "upload_part" | "complete_upload" | "get" | "list" | "delete";
 
+export type DestinationCleanup = "abort_upload" | "delete_object";
+
 /**
  * This package's codes in the shared registry. They sit in the `backup.*` family with the archive's
  * codes (apps/server/src/errors.ts) because the stream is the venue's other kind of backup. No param
@@ -69,13 +71,14 @@ declare module "@waitron/shared" {
     /** After a failed upload, the store could not abandon its own multipart upload, or delete its
      * own key when the bucket may have stored it, within its cleanup budget. Reported in place of
      * the failure that caused the cleanup, because something of this upload may be left in the
-     * bucket. `status` and `name` describe the cleanup request, as `backup.stream_request_failed`'s
-     * do. */
+     * bucket. `unresolved` names every step left unfinished, abandoning the upload before deleting
+     * the key, so a whole object the bucket may hold is named even when the abandonment failed too.
+     * The steps run side by side under one budget, counted from the failure; a step it ran out on
+     * is `status` null and `name` "AbortError". Otherwise each step's `status` and `name` describe
+     * its request, as `backup.stream_request_failed`'s do. */
     "backup.destination_cleanup_failed": {
       key: string;
-      cleanup: "abort_upload" | "delete_object";
-      status: number | null;
-      name: string;
+      unresolved: { cleanup: DestinationCleanup; status: number | null; name: string }[];
     };
     /** A key, a listing prefix or the configured prefix is empty where it must not be, absolute,
      * holds a control character or an empty, `.` or `..` segment; or a listing named a key outside

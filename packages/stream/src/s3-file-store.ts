@@ -23,7 +23,7 @@ import type {
 import { AppError } from "@waitron/shared";
 import { loggableErrorName, type AnswerRefusal } from "./bucket-error-names.js";
 import "./errors.js";
-import type { DestinationOperation } from "./errors.js";
+import type { DestinationCleanup, DestinationOperation } from "./errors.js";
 import { normalisePrefix } from "./names.js";
 import {
   createBucketClient,
@@ -254,37 +254,50 @@ export function createS3FileStore(
     }
   }
 
-  /** Runs one cleanup request on a signal of its own, answering what went wrong, or null. */
+  type CleanupSend = (abortSignal: AbortSignal | undefined) => Promise<unknown>;
+
+  /**
+   * Runs `steps` side by side on one signal of their own, cancelled `cleanupMs` after they start,
+   * answering every step left unresolved, in the order given, or null.
+   */
   async function cleanUp(
     key: string,
-    cleanup: "abort_upload" | "delete_object",
-    send: (abortSignal: AbortSignal | undefined) => Promise<unknown>,
+    steps: [DestinationCleanup, CleanupSend][],
   ): Promise<AppError | null> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), cleanupMs);
     try {
-      await sendUnlessCancelled(send, controller.signal, "delete", key);
-      return null;
-    } catch (error) {
-      const name = nameOf(error);
-      // Already gone: completed or abandoned for an upload; never stored, or deleted, for a key.
-      if (!controller.signal.aborted && (name === "NoSuchUpload" || name === "NoSuchKey"))
-        return null;
-      return new AppError("backup.destination_cleanup_failed", {
-        key,
-        cleanup,
-        status: controller.signal.aborted ? null : statusOf(error),
-        name: loggableErrorName(controller.signal.aborted ? "AbortError" : name),
-      });
+      const outcomes = await Promise.all(
+        steps.map(async ([cleanup, send]) => {
+          try {
+            await sendUnlessCancelled(send, controller.signal, "delete", key);
+            return null;
+          } catch (error) {
+            const name = nameOf(error);
+            const timedOut = controller.signal.aborted;
+            // Already gone: completed or abandoned for an upload; never stored, or deleted, for a key.
+            if (!timedOut && (name === "NoSuchUpload" || name === "NoSuchKey")) return null;
+            return {
+              cleanup,
+              status: timedOut ? null : statusOf(error),
+              name: loggableErrorName(timedOut ? "AbortError" : name),
+            };
+          }
+        }),
+      );
+      const unresolved = outcomes.filter((outcome) => outcome !== null);
+      if (unresolved.length === 0) return null;
+      return new AppError("backup.destination_cleanup_failed", { key, unresolved });
     } finally {
       clearTimeout(timer);
     }
   }
 
-  const deleteOwnKey = (key: string) =>
-    cleanUp(key, "delete_object", (abortSignal) =>
+  const deleteStep = (key: string): [DestinationCleanup, CleanupSend] => [
+    "delete_object",
+    (abortSignal) =>
       client.send(new DeleteObjectCommand({ Bucket: bucket, Key: at(key) }), { abortSignal }),
-    );
+  ];
 
   async function putWhole(key: string, handle: FileHandle, size: number, signal: AbortSignal) {
     let mayBeStored = false;
@@ -302,7 +315,7 @@ export function createS3FileStore(
         () => (mayBeStored = true),
       );
     } catch (error) {
-      if (mayBeStored) throw (await deleteOwnKey(key)) ?? error;
+      if (mayBeStored) throw (await cleanUp(key, [deleteStep(key)])) ?? error;
       throw error;
     }
   }
@@ -380,14 +393,15 @@ export function createS3FileStore(
         throw failure(signal, "complete_upload", key, error);
       }
     } catch (error) {
-      const abandoned = await cleanUp(key, "abort_upload", (abortSignal) =>
-        client.send(new AbortMultipartUploadCommand({ Bucket: bucket, Key: at(key), UploadId }), {
-          abortSignal,
-        }),
-      );
+      const abandon: [DestinationCleanup, CleanupSend] = [
+        "abort_upload",
+        (abortSignal) =>
+          client.send(new AbortMultipartUploadCommand({ Bucket: bucket, Key: at(key), UploadId }), {
+            abortSignal,
+          }),
+      ];
       // A completion that failed may still have stored the object, as when its answer is lost.
-      const deleted = completing ? await deleteOwnKey(key) : null;
-      throw abandoned ?? deleted ?? error;
+      throw (await cleanUp(key, completing ? [abandon, deleteStep(key)] : [abandon])) ?? error;
     }
   }
 

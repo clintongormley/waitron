@@ -183,7 +183,10 @@ describe("a file of at most 8 MiB", () => {
     const { path } = await patterned(await scratch(), 10);
     expect(await outcome(storeFor(bucket).putFile("a.enc", path, live()))).toEqual({
       code: "backup.destination_cleanup_failed",
-      params: { key: "a.enc", cleanup: "delete_object", status: 403, name: "AccessDenied" },
+      params: {
+        key: "a.enc",
+        unresolved: [{ cleanup: "delete_object", status: 403, name: "AccessDenied" }],
+      },
     });
   });
 
@@ -320,10 +323,42 @@ describe("a file over 8 MiB", () => {
     const started = Date.now();
     expect(await outcome(storeFor(bucket, 150).putFile("a.enc", path, live()))).toEqual({
       code: "backup.destination_cleanup_failed",
-      params: { key: "a.enc", cleanup: "abort_upload", status: null, name: "AbortError" },
+      params: {
+        key: "a.enc",
+        unresolved: [{ cleanup: "abort_upload", status: null, name: "AbortError" }],
+      },
     });
     expect(Date.now() - started).toBeLessThan(2_000);
     await expect.poll(() => bucket.seen.at(-1)!.closedEarly).toBe(true);
+  });
+
+  it("whose completion breaks off and whose cleanup is never answered spends one cleanup budget and names both steps", async () => {
+    let cleanupStarted = 0;
+    const bucket = await bucketWith({
+      answer: (seen, request) => {
+        if (seen.kind === "complete") {
+          request.socket.destroy();
+          return true;
+        }
+        if (seen.kind !== "abort" && seen.kind !== "delete") return false;
+        cleanupStarted ||= Date.now();
+        return true;
+      },
+    });
+    const { path } = await patterned(await scratch(), 9 * MiB);
+    const ended = await outcome(storeFor(bucket, 400).putFile("a.enc", path, live()));
+    expect(Date.now() - cleanupStarted).toBeLessThan(400 + 150);
+    expect(ended).toEqual({
+      code: "backup.destination_cleanup_failed",
+      params: {
+        key: "a.enc",
+        unresolved: [
+          { cleanup: "abort_upload", status: null, name: "AbortError" },
+          { cleanup: "delete_object", status: null, name: "AbortError" },
+        ],
+      },
+    });
+    expect(kinds(bucket).slice(-2).sort()).toEqual(["abort", "delete"]);
   });
 
   it("whose completion is not known to have failed abandons the upload and deletes its own key", async () => {
@@ -344,7 +379,7 @@ describe("a file over 8 MiB", () => {
       code: "backup.destination_request_failed",
       params: { operation: "complete_upload", key: "a.enc", status: 404, name: "NoSuchUpload" },
     });
-    expect(kinds(bucket).slice(-2)).toEqual(["abort", "delete"]);
+    expect(kinds(bucket).slice(-2).sort()).toEqual(["abort", "delete"]);
     // The completion went through, so the bucket answers the abandonment NoSuchUpload.
     expect(abortsSent(bucket)).toEqual([bucket.record.createdIds[0]]);
     expect([...bucket.objects.keys()]).toEqual(["older.enc"]);
