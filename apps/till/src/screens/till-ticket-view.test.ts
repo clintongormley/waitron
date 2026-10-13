@@ -2136,6 +2136,32 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
   });
 
   it.each([
+    ["could be retried", true],
+    ["was waiting for an automatic retry", false],
+  ])(
+    "says delivered, and offers no receipt retry, once an email original completed after the receipt original failed and %s",
+    async (_name, canRetry) => {
+      const email = attempt({ id: "d2", medium: "email", status: "sent" });
+      const { el } = await mountF1({
+        deliveries: {
+          current: email,
+          originalCompleted: true,
+          actions: noActions,
+          history: [email, attempt({ id: null, medium: "receipt", status: "failed" })],
+        },
+        originalReceiptPrint: { status: "failed", jobId: "original", canRetry },
+      });
+      const section = () => button(el, "original-delivery")!.textContent!;
+      expect(section()).toContain("Full invoice delivered");
+      expect(section()).not.toContain("Full invoice not delivered");
+      expect(section()).not.toContain("Printing failed");
+      expect(line(el)).toBe("Sent by email.");
+      expect(button(el, "retry-receipt")).toBeNull();
+      expect(button(el, "print-receipt")).toBeNull();
+    },
+  );
+
+  it.each([
     ["an A4", {}],
     ["an email", { medium: "email" }],
   ] as const)(

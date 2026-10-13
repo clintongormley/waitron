@@ -1220,6 +1220,30 @@ describe("POST /api/sales/:id/deliveries (email)", () => {
   });
 });
 
+describe("a receipt original that failed before an email original was sent", () => {
+  it("reads as resendable on its own, and is refused a resend once the email completed the original", async () => {
+    const v = await venue();
+    const { orderId, saleId } = await invoice(v);
+    const original = await receiptOriginal(v, saleId, { status: "failed", attempts: 5 });
+    await endedEmail(v, orderId, "sent");
+
+    expect((await send(v, "GET", `/api/sales/${orderId}/receipt`)).body).toMatchObject({
+      status: "failed",
+      canRetry: true,
+    });
+    expect((await send(v, "GET", `/api/sales/${orderId}/deliveries`)).body).toMatchObject({
+      originalCompleted: true,
+      actions: { retryOriginal: null },
+    });
+    const jobs = await jobsOf(saleId);
+    expect(await send(v, "POST", `/api/sales/${orderId}/receipt/retry`)).toEqual({
+      status: 409,
+      body: { error: { code: "print_job.not_resendable", params: { id: original } } },
+    });
+    expect(await jobsOf(saleId)).toEqual(jobs);
+  });
+});
+
 describe("POST /api/sales/:id/deliveries/:deliveryId/retry (email again)", () => {
   it("requires a session and the device's print-receipt action, writing nothing", async () => {
     const v = await venue();
