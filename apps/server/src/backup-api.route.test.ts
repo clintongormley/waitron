@@ -18,7 +18,7 @@ import type { StreamView } from "@waitron/stream";
 import { mountBackupApi, type BackupApiDeps } from "./backup-api.js";
 import { sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import { parseBackupArchiveKey } from "./backup-keys.js";
+import { backupArchiveKey, parseBackupArchiveKey } from "./backup-keys.js";
 import { readStreamSettings, streamSettingsPayload } from "./stream-host.js";
 import { createTurns, type Turns } from "./backup-turns.js";
 import {
@@ -1697,6 +1697,16 @@ describe("backup admin routes", () => {
     }, 60_000);
 
     it("Save tests the bucket with one object it then deletes alone", async () => {
+      const archive = backupArchiveKey(new Date());
+      const seeded = [archive, "waitron-probe-other", "notes.txt"];
+      for (const key of seeded) bucket.objects.set(key, Buffer.from(key));
+      // A real listing under the probe's name also returns any longer key that starts with it.
+      const put = bucket.put.bind(bucket);
+      bucket.put = async (key, bytes, call) => {
+        await put(key, bytes, call);
+        if (key.startsWith("waitron-probe-"))
+          bucket.objects.set(`${key}-neighbour`, Buffer.from(""));
+      };
       const { post } = await primaryApp();
       const res = await post(
         "/api/backup/apply",
@@ -1705,9 +1715,12 @@ describe("backup admin routes", () => {
       expect(res.status).toBe(200);
       const { key, calls } = probeCalls();
       expect(parseBackupArchiveKey(key)).toBeNull();
+      expect(parseBackupArchiveKey(archive)).not.toBeNull();
       expect(calls).toEqual([`put ${key}`, `get ${key}`, `list ${key}`, `deleteMany ${key}`]);
       expect(bucket.deleted.filter((keys) => keys.includes(key))).toEqual([[key]]);
+      expect(bucket.deleted).toEqual([[key]]);
       expect(bucket.objects.has(key)).toBe(false);
+      expect([...bucket.objects.keys()].sort()).toEqual([...seeded, `${key}-neighbour`].sort());
     }, 60_000);
 
     it("a bucket that fails the test is refused, with the test object still deleted", async () => {
