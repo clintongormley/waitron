@@ -490,6 +490,79 @@ describe("till-schedule-screen", () => {
     expect(listMySwaps).toHaveBeenCalledTimes(2);
   });
 
+  it("clears a list's failure line and the banner when an action's reload loads that list", async () => {
+    const api = stubApi({
+      listMyShifts: vi.fn().mockRejectedValueOnce(new Error("network")).mockResolvedValue(shifts),
+    });
+    const { el } = await mount(api);
+    expect(root(el).querySelector(".shifts .list-failed")).not.toBeNull();
+    setInput(el, "wt-input.abs-from", "2026-07-01");
+    setInput(el, "wt-input.abs-to", "2026-07-05");
+    await el.updateComplete;
+    root(el).querySelector<HTMLElement>("wt-button.abs-submit")!.click();
+    await vi.waitFor(() => expect(api.listMyShifts).toHaveBeenCalledTimes(2));
+    await flush(el);
+    expect(root(el).querySelector(".list-failed")).toBeNull();
+    expect(root(el).textContent).not.toContain(t("schedule.load_failed"));
+    expect(root(el).querySelector("wt-button.retry")).toBeNull();
+    expect(root(el).querySelectorAll(".shift")).toHaveLength(1);
+  });
+
+  it("still ignores Try again while a newer load runs, after an older load finishes", async () => {
+    let answerFirst: (rows: MyShift[]) => void = () => {};
+    const listMyShifts = vi
+      .fn()
+      .mockReturnValueOnce(new Promise<MyShift[]>((resolve) => (answerFirst = resolve)))
+      .mockReturnValueOnce(new Promise<MyShift[]>(() => {}))
+      .mockResolvedValue(shifts);
+    const api = stubApi({
+      listMyShifts,
+      listMySwaps: vi.fn().mockRejectedValue(new Error("network")),
+    });
+    const { el } = await mount(api);
+    setInput(el, "wt-input.abs-from", "2026-07-01");
+    setInput(el, "wt-input.abs-to", "2026-07-05");
+    await el.updateComplete;
+    root(el).querySelector<HTMLElement>("wt-button.abs-submit")!.click();
+    await vi.waitFor(() => expect(listMyShifts).toHaveBeenCalledTimes(2));
+    answerFirst(shifts);
+    await flush(el);
+    root(el).querySelector<HTMLElement>("wt-button.retry")!.click();
+    await flush(el);
+    expect(listMyShifts).toHaveBeenCalledTimes(2);
+  });
+
+  it("ignores a failure that arrives from before the screen was reopened", async () => {
+    let failFirst: (error: Error) => void = () => {};
+    const listMySwaps = vi
+      .fn()
+      .mockReturnValueOnce(new Promise<MySwap[]>((_, reject) => (failFirst = reject)))
+      .mockResolvedValue(swaps);
+    const { el, host } = await mount(stubApi({ listMySwaps }));
+    el.remove();
+    host.appendChild(el);
+    await flush(el);
+    expect(listMySwaps).toHaveBeenCalledTimes(2);
+    failFirst(new Error("network"));
+    await flush(el);
+    expect(root(el).querySelector(".list-failed")).toBeNull();
+    expect(root(el).textContent).not.toContain(t("schedule.load_failed"));
+    expect(root(el).querySelectorAll(".swap")).toHaveLength(1);
+  });
+
+  it("does not load when Try again is pressed after the screen has been removed", async () => {
+    const api = stubApi({
+      listMySwaps: vi.fn().mockRejectedValueOnce(new Error("network")).mockResolvedValue(swaps),
+    });
+    const { el } = await mount(api);
+    const retry = root(el).querySelector<HTMLElement>("wt-button.retry")!;
+    el.remove();
+    retry.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(api.listMySwaps).toHaveBeenCalledOnce();
+    expect(api.listMyShifts).toHaveBeenCalledOnce();
+  });
+
   it("announces the loading line as a status while the first load is pending", async () => {
     const api = stubApi({ listMyShifts: vi.fn().mockReturnValue(new Promise(() => {})) });
     const { el } = await mount(api);
