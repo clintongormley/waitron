@@ -1,0 +1,296 @@
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { applyTokens } from "@waitron/ui";
+import { setLocale } from "@waitron/dashboard-kit";
+import type { SeasonChips, SeasonChip, SeasonWrites } from "./season-chips.js";
+import type { SeasonDialog } from "./season-dialog.js";
+import "./season-chips.js";
+
+const winter = { id: "w", name: "Winter", startsOn: "12-01", lastDay: "02-29" };
+const spring = { id: "sp", name: "Spring", startsOn: "03-01", lastDay: "05-31" };
+const summer = { id: "su", name: "Summer", startsOn: "06-01", lastDay: "08-31" };
+const autumn = { id: "a", name: "Autumn", startsOn: "09-01", lastDay: "11-30" };
+const four: SeasonChip[] = [spring, summer, autumn, winter];
+
+let el: SeasonChips;
+beforeEach(() => setLocale("en"));
+afterEach(() => {
+  el?.remove();
+  setLocale("en");
+});
+
+function fakeApi(overrides: Partial<SeasonWrites> = {}) {
+  return {
+    saveSeason: vi.fn(async (id: string, input: { name: string; startsOn: string }) => ({
+      id,
+      ...input,
+    })),
+    addSeason: vi.fn(async (input: { name: string; startsOn: string }) => ({ id: "n", ...input })),
+    deleteSeason: vi.fn(async () => {}),
+    readSeasonDeleteImpact: vi.fn(async () => ({
+      departments: [
+        { id: "b", name: "Bar" },
+        { id: "k", name: "Kitchen" },
+      ],
+    })),
+    ...overrides,
+  };
+}
+async function mount(seasons: SeasonChip[] = four, api = fakeApi(), revision = 7) {
+  el = document.createElement("season-chips");
+  el.seasons = seasons;
+  el.clockRevision = revision;
+  el.api = api;
+  el.specialDays = [{ id: "sd1", name: "Christmas dinners" }];
+  applyTokens(el);
+  document.body.append(el);
+  await el.updateComplete;
+  return { api, changed: changes() };
+}
+function changes() {
+  const seen: unknown[] = [];
+  el.addEventListener("season-changed", (event) => seen.push(event));
+  return seen;
+}
+const chips = () => [...el.shadowRoot!.querySelectorAll<HTMLButtonElement>("[data-season]")];
+const dialog = () => el.shadowRoot!.querySelector<SeasonDialog>("season-dialog")!;
+const dq = <T extends Element = HTMLElement>(selector: string) =>
+  dialog().shadowRoot!.querySelector<T>(selector);
+async function settle() {
+  await el.updateComplete;
+  const shown = el.shadowRoot!.querySelector<SeasonDialog>("season-dialog");
+  await shown?.updateComplete;
+}
+async function openChip(name: string) {
+  chips()
+    .find((chip) => chip.textContent!.includes(name))!
+    .click();
+  await settle();
+}
+async function openAdd() {
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-season]")!.click();
+  await settle();
+}
+async function change(name: string, value: string) {
+  dq(`[name="${name}"]`)!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+  );
+  await settle();
+}
+const save = () => dq<HTMLElementTagNameMap["wt-button"]>("[data-test=save-season]")!;
+async function click(selector: string) {
+  dq(selector)!.click();
+  await settle();
+}
+const footerError = () => dq<HTMLElementTagNameMap["wt-form-actions"]>("wt-form-actions")!.error;
+const fieldError = (name: string) =>
+  dq<HTMLElementTagNameMap["wt-input"]>(`[name="${name}"]`)!.error;
+
+it("labels each chip from the server's last day and tints it by start order, repeating after four", async () => {
+  const fifth = { id: "x", name: "Late summer", startsOn: "08-01", lastDay: "08-31" };
+  await mount([spring, summer, { ...fifth }, autumn, winter]);
+  expect(chips().map((chip) => chip.textContent!.replace(/\s+/g, " ").trim())).toEqual([
+    "Spring · 1 Mar – 31 May ✎",
+    "Summer · 1 Jun – 31 Aug ✎",
+    "Late summer · 1 Aug – 31 Aug ✎",
+    "Autumn · 1 Sept – 30 Nov ✎",
+    "Winter · 1 Dec – 29 Feb ✎",
+  ]);
+  expect(chips().map((chip) => chip.dataset.tint)).toEqual(["1", "2", "3", "4", "1"]);
+  expect(chips()[0]!.getAttribute("aria-label")).toBe("Edit Spring, 1 Mar – 31 May");
+});
+
+it("renames a season through the api with its start and the clock revision, then says it changed", async () => {
+  const { api, changed } = await mount();
+  await openChip("Winter");
+  expect(dq<HTMLElementTagNameMap["wt-input"]>("[name=name]")!.value).toBe("Winter");
+  expect(save().disabled).toBe(true);
+  expect(save().variant).toBe("secondary");
+  await change("name", " Cold season ");
+  expect(save().disabled).toBe(false);
+  await click("[data-test=save-season]");
+  await expect.poll(() => changed.length).toBe(1);
+  expect(api.saveSeason).toHaveBeenCalledWith("w", { name: "Cold season", startsOn: "12-01" }, 7);
+  expect((changed[0] as CustomEvent).bubbles).toBe(true);
+  expect((changed[0] as CustomEvent).composed).toBe(true);
+  await settle();
+  expect(el.shadowRoot!.querySelector("season-dialog")).toBeNull();
+});
+
+it("moves a season's start by day and month, keeping the day inside a shorter month", async () => {
+  const { api, changed } = await mount();
+  await openChip("Spring");
+  await change("startDay", "31");
+  await change("startMonth", "04");
+  expect(dq<HTMLElementTagNameMap["wt-combobox"]>("[name=startDay]")!.value).toBe("30");
+  await change("startMonth", "02");
+  expect(dq<HTMLElementTagNameMap["wt-combobox"]>("[name=startDay]")!.value).toBe("28");
+  expect(
+    dq<HTMLElementTagNameMap["wt-combobox"]>("[name=startDay]")!
+      .options.map((o) => o.value)
+      .at(-1),
+  ).toBe("28");
+  await click("[data-test=save-season]");
+  await expect.poll(() => changed.length).toBe(1);
+  expect(api.saveSeason).toHaveBeenCalledWith("sp", { name: "Spring", startsOn: "02-28" }, 7);
+});
+
+it("adds a season from an empty dialog, sending its name and start", async () => {
+  const { api, changed } = await mount();
+  await openAdd();
+  expect(dq<HTMLElementTagNameMap["wt-input"]>("[name=name]")!.value).toBe("");
+  expect(dq("[data-test=delete-season]")).toBeNull();
+  expect(save().disabled).toBe(true);
+  await change("name", "Mid autumn");
+  await change("startMonth", "10");
+  await change("startDay", "15");
+  await click("[data-test=save-season]");
+  await expect.poll(() => changed.length).toBe(1);
+  expect(api.addSeason).toHaveBeenCalledWith({ name: "Mid autumn", startsOn: "10-15" }, 7);
+  expect(api.saveSeason).not.toHaveBeenCalled();
+});
+
+it("asks for a name and a start before sending a new season", async () => {
+  const { api } = await mount();
+  await openAdd();
+  await change("name", " ");
+  await click("[data-test=save-season]");
+  expect(fieldError("name")).not.toBe("");
+  expect(dq("[data-error=startsOn]")!.textContent).toBe("Choose a day and a month.");
+  expect(api.addSeason).not.toHaveBeenCalled();
+});
+
+it("has no Delete when the venue has one season", async () => {
+  await mount([{ ...winter, startsOn: "01-01", lastDay: "12-31" }]);
+  await openChip("Winter");
+  expect(dq("[data-test=delete-season]")).toBeNull();
+});
+
+it("confirms a delete naming the departments that lose hours, then deletes with the revision", async () => {
+  const { api, changed } = await mount();
+  await openChip("Spring");
+  await click("[data-test=delete-season]");
+  await expect
+    .poll(() => dq("[data-test=delete-confirm-text]")?.textContent ?? "")
+    .toContain("Bar, Kitchen");
+  expect(api.readSeasonDeleteImpact).toHaveBeenCalledWith("sp");
+  expect(dq("[data-test=delete-confirm-text]")!.textContent!.replace(/\s+/g, " ").trim()).toBe(
+    "Delete Spring? Its days join Winter. The hours Bar, Kitchen set in it are lost.",
+  );
+  expect(api.deleteSeason).not.toHaveBeenCalled();
+  await click("[data-test=confirm-delete-season]");
+  await expect.poll(() => changed.length).toBe(1);
+  expect(api.deleteSeason).toHaveBeenCalledWith("sp", 7);
+});
+
+it("says no hours are lost when no department painted the season, and Back returns to the form", async () => {
+  const api = fakeApi({ readSeasonDeleteImpact: vi.fn(async () => ({ departments: [] })) });
+  await mount(four, api);
+  await openChip("Winter");
+  await change("name", "Cold");
+  await click("[data-test=delete-season]");
+  await expect
+    .poll(() => dq("[data-test=delete-confirm-text]")?.textContent ?? "")
+    .toContain("No department has hours in it.");
+  expect(dq("[data-test=delete-confirm-text]")!.textContent).toContain("Its days join Autumn.");
+  await click("[data-test=cancel-delete-season]");
+  expect(dq<HTMLElementTagNameMap["wt-input"]>("[name=name]")!.value).toBe("Cold");
+  expect(api.deleteSeason).not.toHaveBeenCalled();
+});
+
+it.each([
+  [{ field: "name", reason: "taken" }, "name", "Another season has this name."],
+  [{ field: "startsOn", reason: "taken" }, "startsOn", "Another season starts on this day."],
+  [{ field: "startsOn" }, "startsOn", "Choose a day and a month."],
+])("shows season.invalid %o under the field it names", async (params, where, message) => {
+  const api = fakeApi({
+    saveSeason: vi.fn(async () => {
+      throw { code: "season.invalid", params };
+    }),
+  });
+  const { changed } = await mount(four, api);
+  await openChip("Spring");
+  await change("name", "Summer");
+  await click("[data-test=save-season]");
+  await expect
+    .poll(() =>
+      where === "name" ? fieldError("name") : (dq("[data-error=startsOn]")?.textContent ?? ""),
+    )
+    .toBe(message);
+  expect(changed).toEqual([]);
+  expect(footerError()).toBe("Correct the highlighted fields to continue.");
+});
+
+it.each([
+  [
+    { date: "2026-12-24", specialDayId: "sd1" },
+    "A period’s end offset would run into Christmas dinners on Thu, 24 Dec 2026.",
+  ],
+  [{ seasonId: "a", weekday: 5 }, "A period’s end offset would run into Autumn on Friday."],
+])("shows an end-offset refusal %o beside Save and keeps the draft", async (clash, message) => {
+  const api = fakeApi({
+    saveSeason: vi.fn(async () => {
+      throw {
+        code: "season.invalid",
+        params: {
+          field: "startsOn",
+          reason: "end_offset",
+          departmentId: "k",
+          periodId: "p",
+          ...clash,
+        },
+      };
+    }),
+  });
+  const { changed } = await mount(four, api);
+  await openChip("Autumn");
+  await change("startDay", "15");
+  await click("[data-test=save-season]");
+  await expect.poll(() => footerError()).toBe(message);
+  expect(dq("[data-error=startsOn]")).toBeNull();
+  expect(dq<HTMLElementTagNameMap["wt-combobox"]>("[name=startDay]")!.value).toBe("15");
+  expect(dialog().open).toBe(true);
+  expect(changed).toEqual([]);
+});
+
+it("shows a changed business-day start beside Save", async () => {
+  const api = fakeApi({
+    addSeason: vi.fn(async () => {
+      throw { code: "hours.clock_changed" };
+    }),
+  });
+  await mount(four, api);
+  await openAdd();
+  await change("name", "Mid autumn");
+  await change("startMonth", "10");
+  await change("startDay", "15");
+  await click("[data-test=save-season]");
+  await expect.poll(() => footerError()).toBe("The business-day start changed. Reload hours.");
+});
+
+it("shows a refused delete in the confirmation", async () => {
+  const api = fakeApi({
+    deleteSeason: vi.fn(async () => {
+      throw { code: "season.invalid", params: { field: "seasonId", reason: "last" } };
+    }),
+  });
+  const { changed } = await mount(four, api);
+  await openChip("Spring");
+  await click("[data-test=delete-season]");
+  await expect.poll(() => dq("[data-test=confirm-delete-season]")).not.toBeNull();
+  await click("[data-test=confirm-delete-season]");
+  await expect
+    .poll(() => dq("[data-error=delete]")?.textContent ?? "")
+    .toBe("A venue keeps at least one season.");
+  expect(changed).toEqual([]);
+});
+
+it("offers no editing when read-only", async () => {
+  el = document.createElement("season-chips");
+  el.seasons = four;
+  el.readOnly = true;
+  document.body.append(el);
+  await el.updateComplete;
+  expect(chips().map((chip) => chip.tagName)).toEqual(["SPAN", "SPAN", "SPAN", "SPAN"]);
+  expect(el.shadowRoot!.querySelector("[data-test=add-season]")).toBeNull();
+  expect(el.shadowRoot!.textContent).not.toContain("✎");
+});

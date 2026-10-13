@@ -1,0 +1,242 @@
+import { LitElement, css, html, nothing } from "lit";
+import { customElement, property, state } from "lit/decorators.js";
+import { keyed } from "lit/directives/keyed.js";
+import { codeOf } from "@waitron/dashboard-kit";
+import { baseStyles } from "@waitron/ui";
+import "@waitron/ui/src/components/wt-button.js";
+import type { OpeningHoursApi, SeasonDeleteImpact, SeasonInput } from "./opening-hours-client.js";
+import { format, formatMonthDay } from "./hours-view.js";
+import type { SeasonChip, SeasonDialog } from "./season-dialog.js";
+import "./season-dialog.js";
+import { t } from "./strings.js";
+
+export type { SeasonChip } from "./season-dialog.js";
+export type SeasonWrites = Pick<
+  OpeningHoursApi,
+  "saveSeason" | "addSeason" | "deleteSeason" | "readSeasonDeleteImpact"
+>;
+type Refusal = { code: string; params?: Record<string, unknown> };
+/** One opening of the dialog: the season it edits, or none for "+ Season". */
+type Opening = { season?: SeasonChip; returnTo: HTMLElement | null };
+
+const TINTS = 4;
+const byStart = (seasons: readonly SeasonChip[]) =>
+  [...seasons].sort((a, b) => (a.startsOn < b.startsOn ? -1 : Number(a.startsOn > b.startsOn)));
+const refusalOf = (error: unknown): Refusal => ({
+  code: codeOf(error),
+  params:
+    typeof error === "object" && error !== null
+      ? (error as { params?: Record<string, unknown> }).params
+      : undefined,
+});
+
+/** The venue's seasons as tinted chips; ✎ and "+ Season" open the season dialog, whose writes this
+ *  element sends itself, announcing each with `season-changed` so its host re-reads. */
+@customElement("season-chips")
+export class SeasonChips extends LitElement {
+  static override styles = [
+    baseStyles,
+    css`
+      :host {
+        display: block;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-2);
+      }
+      .label {
+        color: var(--wt-color-text-muted);
+      }
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--wt-space-1);
+        padding: var(--wt-space-1) var(--wt-space-3);
+        border: 1px solid;
+        border-radius: var(--wt-radius-full);
+        font: inherit;
+      }
+      button.chip {
+        cursor: pointer;
+      }
+      button.chip:focus-visible {
+        outline: var(--wt-field-line-width-active) solid var(--wt-color-focus);
+        outline-offset: var(--wt-focus-offset);
+      }
+      .chip[data-tint="1"] {
+        background: var(--wt-color-season-1);
+        color: var(--wt-color-on-season-1);
+        border-color: var(--wt-color-season-1-line);
+      }
+      .chip[data-tint="2"] {
+        background: var(--wt-color-season-2);
+        color: var(--wt-color-on-season-2);
+        border-color: var(--wt-color-season-2-line);
+      }
+      .chip[data-tint="3"] {
+        background: var(--wt-color-season-3);
+        color: var(--wt-color-on-season-3);
+        border-color: var(--wt-color-season-3-line);
+      }
+      .chip[data-tint="4"] {
+        background: var(--wt-color-season-4);
+        color: var(--wt-color-on-season-4);
+        border-color: var(--wt-color-season-4-line);
+      }
+    `,
+  ];
+  /** Each season with its last day as the server reads it, so 29 February in a leap year. */
+  @property({ attribute: false }) seasons: readonly SeasonChip[] = [];
+  /** The clock revision the shown seasons were read at; every write sends it. */
+  @property({ type: Number }) clockRevision = 0;
+  @property({ attribute: false }) api?: SeasonWrites;
+  /** Special days by id, so an end-offset refusal can name one. */
+  @property({ attribute: false }) specialDays: readonly { id: string; name: string }[] = [];
+  @property({ type: Boolean }) readOnly = false;
+  @state() private opening?: Opening;
+  @state() private busy = false;
+  @state() private refusal?: Refusal;
+  @state() private impact?: SeasonDeleteImpact;
+
+  override disconnectedCallback() {
+    this.opening = undefined;
+    this.busy = false;
+    super.disconnectedCallback();
+  }
+  private open(season: SeasonChip | undefined, event: Event) {
+    if (this.readOnly || this.busy || this.opening || !this.api) return;
+    this.refusal = undefined;
+    this.impact = undefined;
+    this.opening = { season, returnTo: event.currentTarget as HTMLElement };
+  }
+  private close(opening: Opening) {
+    if (this.opening !== opening) return;
+    this.opening = undefined;
+    this.impact = undefined;
+    this.refusal = undefined;
+    void this.updateComplete.then(() => opening.returnTo?.focus());
+  }
+  /** Runs one request for `opening`, keeping a refusal on the dialog; the result once it is still current. */
+  private async run<T>(
+    opening: Opening,
+    request: () => Promise<T>,
+  ): Promise<{ value: T } | undefined> {
+    this.busy = true;
+    this.refusal = undefined;
+    try {
+      return { value: await request() };
+    } catch (error) {
+      if (this.opening === opening) this.refusal = refusalOf(error);
+      return undefined;
+    } finally {
+      this.busy = false;
+    }
+  }
+  private async written(opening: Opening, request: () => Promise<unknown>) {
+    const done = await this.run(opening, request);
+    if (!done || this.opening !== opening || !this.isConnected) return;
+    this.close(opening);
+    this.dispatchEvent(new CustomEvent("season-changed", { bubbles: true, composed: true }));
+  }
+  private async onSave(event: CustomEvent<{ id: string | null; input: SeasonInput }>) {
+    event.stopPropagation();
+    const opening = this.opening;
+    const api = this.api;
+    if (!opening || !api || this.busy) return;
+    const { id, input } = event.detail;
+    const revision = this.clockRevision;
+    await this.written(opening, () =>
+      id === null ? api.addSeason(input, revision) : api.saveSeason(id, input, revision),
+    );
+  }
+  private async onDelete(event: CustomEvent<{ id: string }>) {
+    event.stopPropagation();
+    const opening = this.opening;
+    const api = this.api;
+    if (!opening || !api || this.busy) return;
+    const done = await this.run(opening, () => api.readSeasonDeleteImpact(event.detail.id));
+    if (done && this.opening === opening) this.impact = done.value;
+  }
+  private async onConfirmDelete(event: CustomEvent<{ id: string }>) {
+    event.stopPropagation();
+    const opening = this.opening;
+    const api = this.api;
+    if (!opening || !api || this.busy || !this.impact) return;
+    const revision = this.clockRevision;
+    await this.written(opening, () => api.deleteSeason(event.detail.id, revision));
+  }
+  private dialog() {
+    const opening = this.opening;
+    if (!opening) return nothing;
+    return keyed(
+      opening,
+      html`<season-dialog
+        .open=${true}
+        .season=${opening.season}
+        .seasons=${this.seasons}
+        .specialDays=${this.specialDays}
+        .busy=${this.busy}
+        .refusal=${this.refusal}
+        .confirmDelete=${this.impact}
+        @season-save=${this.onSave}
+        @season-delete=${this.onDelete}
+        @season-delete-confirm=${this.onConfirmDelete}
+        @season-delete-cancel=${(event: Event) => {
+          event.stopPropagation();
+          if (this.opening === opening && !this.busy) {
+            this.impact = undefined;
+            this.refusal = undefined;
+          }
+        }}
+        @season-close=${(event: Event) => {
+          event.stopPropagation();
+          if (event.currentTarget === this.shadowRoot?.querySelector<SeasonDialog>("season-dialog"))
+            this.close(opening);
+        }}
+      ></season-dialog>`,
+    );
+  }
+  override render() {
+    return html`<div class="row">
+        <span class="label">${t("season.seasons")}</span>
+        ${byStart(this.seasons).map((season, index) => {
+          const range = {
+            from: formatMonthDay(season.startsOn),
+            to: formatMonthDay(season.lastDay),
+          };
+          const label = format("season.chip", { name: season.name, ...range });
+          const tint = String((index % TINTS) + 1);
+          return this.readOnly
+            ? html`<span class="chip" data-season=${season.id} data-tint=${tint}>${label}</span>`
+            : html`<button
+                type="button"
+                class="chip"
+                data-season=${season.id}
+                data-tint=${tint}
+                aria-label=${format("season.edit_named", { name: season.name, ...range })}
+                @click=${(event: Event) => this.open(season, event)}
+              >
+                <span>${label}</span> <span aria-hidden="true">✎</span>
+              </button>`;
+        })}
+        ${
+          this.readOnly
+            ? nothing
+            : html`<wt-button
+                data-test="add-season"
+                variant="secondary"
+                @click=${(event: Event) => this.open(undefined, event)}
+                >${t("season.add")}</wt-button
+              >`
+        }
+      </div>
+      ${this.dialog()}`;
+  }
+}
+declare global {
+  interface HTMLElementTagNameMap {
+    "season-chips": SeasonChips;
+  }
+}

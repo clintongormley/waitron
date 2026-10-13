@@ -25,7 +25,13 @@ export function formatDate(date: LocalDate): string {
 
 /** A day of the year from its MM-DD, "1 Dec", in the dashboard's language. */
 export function formatMonthDay(monthDay: string): string {
-  return dateFormat({ day: "numeric", month: "short" }).format(asUtc(`2001-${monthDay}`));
+  // A leap year, so a leap year's last day of February, 02-29, reads as itself.
+  return dateFormat({ day: "numeric", month: "short" }).format(asUtc(`2000-${monthDay}`));
+}
+
+/** A month's name from its number, 1 to 12, "December", in the dashboard's language. */
+export function formatMonthName(month: number): string {
+  return dateFormat({ month: "long" }).format(asUtc(`2001-${String(month).padStart(2, "0")}-01`));
 }
 
 /** A date written out in full, "Monday, 12 October 2026", for a name read aloud. */
