@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
-import { codeMessage, registerCodeMessages, type DashboardRequest } from "@waitron/dashboard-kit";
+import {
+  codeMessage,
+  currentLocale,
+  registerCodeMessages,
+  setLocale,
+  type DashboardRequest,
+} from "@waitron/dashboard-kit";
 import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { t } from "./strings.js";
@@ -112,6 +118,18 @@ describe("stripe-add-reader", () => {
     });
     expect(onAdded).toHaveBeenCalledTimes(1);
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("submits a new reader with Save", async () => {
+    const before = currentLocale();
+    setLocale("en-GB");
+    try {
+      const request = vi.fn() as unknown as DashboardRequest;
+      const { el } = await mountWidget<StripeAddReader>("stripe-add-reader", { request });
+      expect(q(el, "[data-test=add]")!.textContent!.trim()).toBe("Save");
+    } finally {
+      setLocale(before);
+    }
   });
 
   it("blocks the add until the name and reference are filled", async () => {

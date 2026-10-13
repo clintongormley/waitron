@@ -239,7 +239,7 @@ export class StripeAddReader extends LitElement {
             ?loading=${this.busy}
             ?disabled=${blocked}
             @click=${(e: Event) => void this.#add(e, opening)}
-            >${t("payments.stripe.add")}</wt-button
+            >${t("payments.stripe.save")}</wt-button
           >
         </wt-form-actions>
       </wt-dialog>

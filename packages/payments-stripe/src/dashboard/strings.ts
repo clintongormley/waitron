@@ -21,7 +21,7 @@ const en = {
   "payments.stripe.reader_id_unknown": "Stripe has no reader with this ID",
   "payments.stripe.reader_name_required": "Give the reader a name",
   "payments.stripe.reader_id_required": "Enter the reader's Stripe ID",
-  "payments.stripe.add": "Add",
+  "payments.stripe.save": "Save",
   "payments.stripe.cancel": "Cancel",
 } as const;
 
@@ -45,7 +45,7 @@ const es: Record<keyof typeof en, string> = {
   "payments.stripe.reader_id_unknown": "Stripe no tiene ningún lector con este ID",
   "payments.stripe.reader_name_required": "Ponle un nombre al lector",
   "payments.stripe.reader_id_required": "Introduce el ID de Stripe del lector",
-  "payments.stripe.add": "Añadir",
+  "payments.stripe.save": "Guardar",
   "payments.stripe.cancel": "Cancelar",
 };
 
