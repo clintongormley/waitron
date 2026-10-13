@@ -138,7 +138,7 @@ it("says so when no table is off the plan", async () => {
   expect(madeOf(el).placeholder).toBe("No tables off the plan.");
 });
 
-it("opens empty, with Add quiet and disabled", async () => {
+it("opens empty, with Save quiet and disabled", async () => {
   const el = await openAdd();
   expect(dialog(el).open).toBe(true);
   expect(field(el, "table-name").value).toBe("");
@@ -148,9 +148,9 @@ it("opens empty, with Add quiet and disabled", async () => {
   expect(addButton(el).disabled).toBe(true);
 });
 
-// A host `.click()` reaches Add's listener even while its inner button is disabled, so this proves
+// A host `.click()` reaches Save's listener even while its inner button is disabled, so this proves
 // the handler itself does nothing for an untouched window.
-it("Add pressed while unchanged does nothing", async () => {
+it("Save pressed while unchanged does nothing", async () => {
   const el = await openAdd();
   const { changes } = listen(el);
   await pressAdd(el);
@@ -174,7 +174,7 @@ it("names every field", async () => {
   expect(names).toEqual(["table-name", "seats", "made-of"]);
 });
 
-it("after a change, Add with fields missing explains each field and keeps Add disabled until fixed", async () => {
+it("after a change, Save with fields missing explains each field and keeps Save disabled until fixed", async () => {
   const el = await openAdd();
   const { changes } = listen(el);
   await set(el, "table-name", "Long table");
@@ -197,7 +197,7 @@ it("after a change, Add with fields missing explains each field and keeps Add di
   expect(changes).toEqual([]);
 });
 
-it("a refused Add moves focus to the first field it marks", async () => {
+it("a refused Save moves focus to the first field it marks", async () => {
   const el = await openAdd();
   await set(el, "table-name", "Long table");
   await pressAdd(el);

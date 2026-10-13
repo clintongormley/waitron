@@ -150,7 +150,7 @@ describe("canvas-editor-screen list mode", () => {
     expect(input.value).toBe(`Counter till${t("canvas_editor.copy_suffix", "es-ES")}`);
   });
 
-  it("submits a new canvas's name and form factor with Save", async () => {
+  it("labels the new canvas dialog's submit Save", async () => {
     const before = currentLocale();
     setLocale("en-GB");
     try {

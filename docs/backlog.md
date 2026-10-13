@@ -3891,6 +3891,12 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   before service."), and the purchase dialog's edit heading reads "Edit purchase invoice" while its
   create heading is now "Add invoice". Left open by A450 (#1484).
 
+- **Opening hours' create texts say "New …" and "+ …"** — `season.new` ("New season"),
+  `special.new` ("New special day"), `season.add` ("+ Season") and `year.add_special`
+  ("+ Special day") in `packages/venue-service/src/dashboard/strings.ts`, against
+  design-system.md → Wording's "Add …". The two "+" labels come from the A506 seasons spec.
+  Seen by A546's review; not changed there.
+
 - **The service status screen's colour field label is cut to "C…" at 390 px** — seen on A450's
   look pass (#1484), not changed; not checked whether it predates that branch.
 

@@ -1871,12 +1871,6 @@ A396). Its unchanged Save stays quiet and disabled; an edit stays blocked until 
 Besides an unchanged draft, a save already in progress or a nested window open (below), only the
 form's own checks disable the action; an error that comes back from a request never does (owner rule, 2026-09-29).
 
-A form's submit button says Save whether the form creates or edits. "Add …" belongs to the dialog's
-title and to the button that opens a create dialog. A one-click action whose whole effect is adding
-keeps Add: a discovered printer's or card reader's Add, the home shortcut picker and the till's Add
-bill (owner, 2026-10-12, A546). The till's other buttons that put something on the order — the
-modifier picker's Add and a weighed item's Add — keep it too (A546's default).
-
 - mark every required field with `required`; `wt-input` renders the visible asterisk and forwards
   the native constraint. A field with `hide-label` draws no asterisk, so where one sits in a table
   column with a visible heading, that heading carries the `*` while any row's field is required (the
@@ -1914,6 +1908,13 @@ modifier picker's Add and a weighed item's Add — keep it too (A546's default).
 - reopening or resetting a form starts it again: no messages; a form that saves (below) has its
   action quiet and disabled until something changes (enabled at once if it opens already savable),
   and any other form has it enabled unless it waits for a choice, a selection or a load (below).
+
+A form's submit button says Save whether the form creates or edits. "Add …" belongs to the dialog's
+title and to the button that opens a create dialog. The owner kept Add on a discovered printer's
+Add, the home shortcut picker and the till's Add bill (owner, 2026-10-12, A546). A546 also kept it,
+without an owner decision, on a discovered card reader's Add, the Add products and Add to menus
+pickers, the Add under the special-day dialog's + Add dates…, the till's modifier picker when
+adding a dish, and a weighed item's Add. Nothing guards it across screens.
 
 The zone's normal-week editor draws seven closed-time columns over its department's periods in the same season.
 Dragging stages a closed range; opening a closed block edits its two times or deletes it, with
@@ -2053,7 +2054,7 @@ and nothing guards it across screens:
   Move and Delete dialog and the image picker act on what is selected rather than save a draft, so
   they keep their own rules; the reason for each is in
   [the Batch 2a notes](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-2a--catalogue-and-menus-forms-outside-lane-ds-preview-bundle-15-files);
-- batch 3a: the service-status rows and Add; the
+- batch 3a: the service-status rows and the new status's Save; the
   kitchen's late flags; the venue details editor; My schedule's cover and time-off requests; the
   receipts page; the backup screen's turn-on form and settings editor; the bucket copy form; your
   profile's details and its credential dialogs; the edit-person and new-person dialogs; the purchase
@@ -2119,7 +2120,7 @@ These open already savable:
 - each reader's Add (Enable for a disabled one) in "Add a card reader", holding the provider's name;
 - the canvas Duplicate dialog, holding `<name> (copy)`;
 - the floor plan editor's Add tables dialog, holding one table, four seats and the zone's name as
-  the prefix: pressing Add is the add (`apps/dashboard/src/screens/floor-plan-add-tables.ts`);
+  the prefix: pressing Save is the add (`apps/dashboard/src/screens/floor-plan-add-tables.ts`);
 - the routing cell editor on an inherited cell: Save pins the inherited choice as the cell's own
   (`savableAtOpen`, `packages/venue-service/src/dashboard/routing-cell-editor.ts`);
 - the option window when it opens showing a refusal the options list handed it: pressing Save
@@ -2129,7 +2130,7 @@ These open already savable:
 - a new canvas's editor, with no flag: its draft has no stored canvas to compare with, so it counts
   as changed from the start.
 
-Stripe Connect/Add and SumUp Connect/Pair/Try again are provider operations. Their actions keep
+Stripe's Connect and its add-reader Save, and SumUp's Connect, Pair and Try again, are provider operations. Their actions keep
 their existing validation and retry behavior. See the
 [Batch 4a classifications](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-4a--module-forms-lane-e-a331-4a)
 for each provider call path.
@@ -3114,7 +3115,8 @@ rather than assuming this composition applies unchanged.
 - **Keep text as short as its meaning allows** (owner, 2026-10-09, A443). Leave out what the reader
   can infer: the kitchen ticket's rest-of-order heading reads just "Also on this order" (A366-4A).
 - **An action label starts with a verb** (owner, 2026-10-09, A443): Add, Delete, Move, Remove, Save. A
-  button or menu item that creates something reads "Add …" / "Añadir …", never "New …" / "Nuevo …"
+  button or menu item that creates something — other than a form's submit (Forms, above) — reads
+  "Add …" / "Añadir …", never "New …" / "Nuevo …"
   — "Add" is a verb like "Delete"; "New" is an adjective. A create action never says "Create" /
   "Crear", and the dialog it opens is headed "Add …" to match it (owner, 2026-10-09, A450).
 

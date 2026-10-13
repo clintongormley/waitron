@@ -299,7 +299,7 @@ it("opens afresh after an add", async () => {
   expect(preview(el)).toBe("Terrace 12");
 });
 
-it("a refused Add moves focus to the first field it marks", async () => {
+it("a refused Save moves focus to the first field it marks", async () => {
   const el = await openAdd();
   await setNames(el, ["Patio 1", "Terrace 2"]);
   await pressAdd(el);

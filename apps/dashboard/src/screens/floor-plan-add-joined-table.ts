@@ -78,7 +78,7 @@ export class FloorPlanAddJoinedTable extends LitElement {
   @property({ attribute: false }) draftParent: object | undefined;
 
   @state() private form: JoinedForm | null = null;
-  /** Set by a refused Add; from then on the dialog shows its problems as they are fixed. */
+  /** Set by a refused Save; from then on the dialog shows its problems as they are fixed. */
   @state() private checked = false;
 
   readonly #id = {};
