@@ -21,7 +21,12 @@ import { AppError } from "@waitron/shared";
 import { parseBackupArchiveKey } from "./backup-keys.js";
 import { readStreamSettings, streamSettingsPayload } from "./stream-host.js";
 import { createTurns, type Turns } from "./backup-turns.js";
-import { deleteCredential, loadKeyRing, putCredential } from "@waitron/credentials";
+import {
+  deleteCredential,
+  loadKeyRing,
+  putCredential,
+  tryGetCredential,
+} from "@waitron/credentials";
 import { mountStreamApi } from "./stream-api.js";
 import {
   isBackupManagedByEnvironment,
@@ -30,11 +35,7 @@ import {
   resolveBackupConfig,
   type BackupConfig,
 } from "./backup-config.js";
-import {
-  ARCHIVE_PURPOSE,
-  readArchiveSettings,
-  type ArchiveSettings,
-} from "./archive-settings.js";
+import { ARCHIVE_PURPOSE, readArchiveSettings, type ArchiveSettings } from "./archive-settings.js";
 import type {
   BackupDestination,
   StorageBackend,
@@ -2027,6 +2028,52 @@ describe("backup admin routes", () => {
         });
         expect(await fileKey(sc.stateDir)).toBe(KEY_2);
         expect((await readSealed())!.revision).not.toBe(sealed.revision);
+      }, 60_000);
+
+      it("a record stored while nothing is loaded still gets a new revision and a reload", async () => {
+        const { sup, post } = await primaryApp();
+        const reload = vi
+          .spyOn(sup, "reload")
+          .mockRejectedValueOnce(
+            new AppError("backup.destinations_invalid", { reason: "bad_entry" }),
+          );
+        const applied = await post(
+          "/api/backup/apply",
+          applyBody({ kind: "local-fs", dir: makeDestDir() }),
+        );
+        expect(await applied.json()).toMatchObject({
+          reloadErrorCode: "backup.destinations_invalid",
+        });
+        expect(sup.current().destinations).toEqual([]);
+        const sealed = (await readSealed())!;
+        const res = await post("/api/backup/rotate", { recoveryKey: KEY_2 });
+        expect(res.status).toBe(200);
+        const after = (await readSealed())!;
+        expect(after.revision).not.toBe(sealed.revision);
+        expect({ ...after, revision: sealed.revision }).toEqual(sealed);
+        expect(reload).toHaveBeenCalledTimes(2);
+        expect(sup.current().recoveryKey).toBe(KEY_2);
+      }, 60_000);
+
+      it("an unreadable record is left as it is, and its code is reported beside the new key", async () => {
+        const { sc, post } = await primaryApp();
+        await writeRecoveryKey(sc.stateDir, { recoveryKey: KEY_1, keyRotatedAt: undefined });
+        await withTransaction(suite.db, (tx) =>
+          putCredential(tx, RING, { purpose: ARCHIVE_PURPOSE, value: { settings: "{}" } }),
+        );
+        const stored = () =>
+          withTransaction(suite.db, (tx) =>
+            tryGetCredential(tx, RING, { purpose: ARCHIVE_PURPOSE }),
+          );
+        const before = await stored();
+        const res = await post("/api/backup/rotate", { recoveryKey: KEY_2 });
+        expect(res.status).toBe(200);
+        expect(await res.json()).toMatchObject({
+          loadErrorCode: "backup.archive_settings_invalid",
+          recoveryKeySet: true,
+        });
+        expect(await fileKey(sc.stateDir)).toBe(KEY_2);
+        expect(await stored()).toEqual(before);
       }, 60_000);
 
       it("a key file that cannot be written changes nothing, and says no key changed", async () => {

@@ -324,6 +324,17 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
     }
   };
 
+  const readRecord = async (): Promise<{
+    held: ArchiveSettings | null;
+    unreadableCode: string | undefined;
+  }> => {
+    try {
+      return { held: await readArchiveSettings(deps.db, deps.ring), unreadableCode: undefined };
+    } catch (error) {
+      return { held: null, unreadableCode: codeOf(error) };
+    }
+  };
+
   // The box env (`backup.env` under the raw environment, as a reload reads it) is authoritative: after
   // a failed reload the supervisor still holds the key it loaded before the key file changed.
   const heldKey = async (): Promise<string | undefined> =>
@@ -477,7 +488,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
   );
 
   // Rotation writes the key to `backup.env`, then stores the held settings unchanged under a new
-  // revision. A box holding a key whose supervisor has no destination LOADED is not reloaded.
+  // revision and reloads. With no readable record and nothing loaded, only the key file changes.
   app.post("/api/backup/rotate", (c) =>
     run(c, log, async () => {
       await authorize(c);
@@ -487,17 +498,20 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
       return deps.turns(async () => {
         guardWritable(); // Again: role or env ownership may have changed while this write waited.
         const keyRotatedAt = new Date().toISOString();
-        const cur = deps.supervisor.current();
         loadRecoveryKey({ WAITRON_BACKUP_RECOVERY_KEY: recoveryKey });
-        if (cur.destinations.length === 0) {
+        const { held, unreadableCode } = await readRecord();
+        // An unreadable record is never rewritten, so its key changes the key-only way.
+        if (held === null && deps.supervisor.current().destinations.length === 0) {
           if (!(await keyPresent())) throw requestInvalid("config");
           await persist(() => writeRecoveryKey(deps.stateDir, { recoveryKey, keyRotatedAt }));
           if ((await deps.readRecoveryKey()) !== recoveryKey) {
             throw new AppError("backup.effective_mismatch", {});
           }
-          return c.json(await statusBody({ held: true, key: recoveryKey }));
+          return c.json({
+            ...(await statusBody({ held: true, key: recoveryKey })),
+            ...(unreadableCode === undefined ? {} : { loadErrorCode: unreadableCode }),
+          });
         }
-        const held = await readArchiveSettings(deps.db, deps.ring);
         await persist(() => writeRecoveryKey(deps.stateDir, { recoveryKey, keyRotatedAt }));
         // The key file is authoritative from here: a failure below never puts the old key back.
         if (held !== null) {
