@@ -57,10 +57,14 @@ class SplitJoinedLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
   closes = 0;
   confirmed: SplitJoinedDetail[] = [];
+  joined = joined;
+  parts = parts;
+  name = "Long table";
   override render() {
     return html`<till-split-joined-dialog
-        .joined=${joined}
-        .parts=${parts}
+        .joined=${this.joined}
+        .parts=${this.parts}
+        .name=${this.name}
         @split-joined-cancel=${() => this.closes++}
         @split-joined-confirm=${(e: CustomEvent<SplitJoinedDetail>) => this.confirmed.push(e.detail)}
       ></till-split-joined-dialog
@@ -76,8 +80,8 @@ customElements.define("split-joined-leave-test-app", SplitJoinedLeaveApp);
 beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
 
-async function mount() {
-  const { el: app } = await mountWidget<SplitJoinedLeaveApp>("split-joined-leave-test-app", {});
+async function mount(props: Partial<SplitJoinedLeaveApp> = {}) {
+  const { el: app } = await mountWidget<SplitJoinedLeaveApp>("split-joined-leave-test-app", props);
   const form = app.shadowRoot!.querySelector<TillSplitJoinedDialog>("till-split-joined-dialog")!;
   await form.updateComplete;
   await form.shadowRoot!.querySelector("wt-dialog")!.updateComplete;
@@ -148,4 +152,15 @@ it("after commit() nothing is left unsaved", async () => {
   cancel(form);
   await expect.poll(() => app.closes).toBe(1);
   expect((await question(app)).open).toBe(false);
+});
+
+it("closing a group's window with a table ticked asks first", async () => {
+  const bar = table("bar", "Bar", today(4, { joinId: "g" }));
+  const c3 = table("c3", "Counter 3", today(2, { joinId: "g", splitOffFrom: "long" }));
+  const { app, form } = await mount({ joined: bar, parts: [bar, c3], name: "Bar+Counter 3" });
+  await choose(form, ["bar"]);
+  expect(unload()).toBe(true);
+  cancel(form);
+  expect((await question(app)).open).toBe(true);
+  expect(app.closes).toBe(0);
 });

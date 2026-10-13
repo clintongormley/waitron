@@ -57,6 +57,13 @@ export class TillSplitJoinedDialog extends LitElement {
 
   @property({ attribute: false }) joined!: TableState;
   @property({ attribute: false }) parts: TableState[] = [];
+  /** The window's heading names this: the joined table's label, or the group's name. */
+  @property() name = "";
+  /** Whether the tables left would need their seats, given their ids. */
+  @property({ attribute: false }) asksSeats: (staying: readonly string[]) => boolean = (staying) =>
+    staying.length >= 2;
+  /** Asks the seats whatever is ticked, as when the server refused a split for want of them. */
+  @property({ type: Boolean }) seatsRequired = false;
   @property({ type: Boolean }) busy = false;
   @property({ attribute: false }) refusal: { code: string; field?: string } | null = null;
 
@@ -124,7 +131,12 @@ export class TillSplitJoinedDialog extends LitElement {
   }
 
   #asksSeats(): boolean {
-    return this.#left().length >= 2;
+    return this.seatsRequired || this.asksSeats(this.#left().map((part) => part.id));
+  }
+
+  /** `joined` is the table the window was opened on; one in a group splits the group. */
+  #group(): boolean {
+    return this.joined.today?.joinId != null;
   }
 
   #partsError(): string {
@@ -211,7 +223,7 @@ export class TillSplitJoinedDialog extends LitElement {
     const actionState = saveActionState(this.#scope);
     const left = this.#left();
     const heading = (key: "floor.split_title" | "floor.seats_title") =>
-      t(key).replace("{table}", () => this.joined.label);
+      t(key).replace("{table}", () => this.name);
     return html`<wt-dialog
       ${trackDialog()}
       .open=${this.active}
@@ -249,7 +261,7 @@ export class TillSplitJoinedDialog extends LitElement {
                 required
                 .min=${1}
                 .max=${SEATS_MAX}
-                .label=${heading("floor.seats_title")}
+                .label=${this.#group() ? t("floor.seats_staying") : heading("floor.seats_title")}
                 .decreaseLabel=${(label: string) => t("action.decrease").replace("{label}", label)}
                 .increaseLabel=${(label: string) => t("action.increase").replace("{label}", label)}
                 .value=${live(this.seats)}

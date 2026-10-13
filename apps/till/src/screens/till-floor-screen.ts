@@ -1094,6 +1094,7 @@ export class TillFloorScreen extends LitElement {
     return html`<till-split-joined-dialog
       .joined=${shown.joined}
       .parts=${shown.parts}
+      .name=${shown.joined.label}
       .busy=${splitting.sent !== null}
       .refusal=${splitting.refusal}
       @split-joined-confirm=${(event: CustomEvent<SplitJoinedDetail>) => {
