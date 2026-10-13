@@ -552,11 +552,10 @@ export async function ensureToday(
       await resetZoneFor(tx, cfg, removals, zoneId, day, now);
       continue;
     }
-    const from = await roomRevision(tx, zoneId);
     const before = (await roomPrints(tx, cfg, [zoneId])).get(zoneId);
     await catchUpZone(tx, cfg, removals, zoneId, now);
     if ((await roomPrints(tx, cfg, [zoneId])).get(zoneId) !== before) {
-      await moveRoom(tx, zoneId, from);
+      await moveRoom(tx, zoneId, await roomRevision(tx, zoneId));
     }
   }
 }

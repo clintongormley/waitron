@@ -179,6 +179,7 @@ describe("the room's revision", () => {
     await resave(zoneId, (tables) =>
       tables.map((t) => (t.id === master.bar ? { ...t, label: renamed } : t)),
     );
+    expect((await tableRow(v, table.bar!)).label).not.toBe(renamed);
     const revision = await revisionOf(zoneId);
 
     await onNextDay(async () => {

@@ -41,7 +41,7 @@ export async function roomRevisions(
 }
 
 /**
- * What each room's plan for the day holds (D1), one comparable string per zone in `zoneIds`. Two
+ * What each room's plan for the day holds, one comparable string per zone in `zoneIds`. Two
  * reads with no write between must print alike, or every poll would move the room.
  */
 export async function roomPrints(
@@ -86,7 +86,7 @@ export async function roomPrints(
   return new Map([...byZone].map(([zoneId, zoneRows]) => [zoneId, JSON.stringify(zoneRows)]));
 }
 
-/** Sets the room's revision to `from + 1` and answers it (D2); a room with no row answers `from`. */
+/** Sets the room's revision to `from + 1` and answers it; a room with no row answers `from`. */
 export async function moveRoom(tx: Transaction, zoneId: string, from: number): Promise<number> {
   const moved = await tx
     .update(floorTodayZones)
