@@ -1506,12 +1506,19 @@ export interface DeviceEquipment {
 
 /** `PUT /api/device/equipment`'s body. A `scan`, or a `list` choice sent with `takeOver`, takes an
  * item another device holds; a `list` choice without it is refused `device.equipment_held`. */
-export interface EquipmentChange {
-  role: EquipmentRole;
-  selection: "default" | { id: string };
-  via: "scan" | "list";
-  takeOver?: boolean;
-}
+export type EquipmentChange =
+  | {
+      role: EquipmentRole;
+      selection: "default" | { id: string };
+      via: "scan" | "list";
+      takeOver?: boolean;
+    }
+  | {
+      role?: undefined;
+      kind: "printer" | "reader";
+      selection: { id: string };
+      via: "scan";
+    };
 
 /** A station the display works, including recorded work on a historical station. */
 export interface DeviceWorkedStation {

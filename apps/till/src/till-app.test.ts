@@ -16826,6 +16826,47 @@ describe("the device's equipment, chosen from the header", () => {
     return el;
   }
 
+  it("an NFC printer tap reaches the app's selection queue without naming a row", async () => {
+    const { installNfc, FakeNdefReader, NFC_EQUIPMENT, PRINTER_ID } =
+      await import("../test/equipment-nfc.js");
+    installNfc();
+    try {
+      const stored: DeviceEquipment = {
+        roles: NFC_EQUIPMENT.roles.map((role) =>
+          role.role === "receipt" || role.role === "payment_slip"
+            ? {
+                ...role,
+                selection: "item",
+                chosenId: PRINTER_ID,
+                chosen: role.choices[0]!,
+                resolved: { id: PRINTER_ID, name: "Portable printer", available: true },
+              }
+            : role,
+        ),
+      };
+      const setDeviceEquipment = vi.fn().mockResolvedValue(stored);
+      const el = await openEquipment({
+        getDeviceEquipment: vi.fn().mockResolvedValue(NFC_EQUIPMENT),
+        setDeviceEquipment,
+      });
+      await vi.waitFor(() => expect(FakeNdefReader.instances.at(-1)?.signal).toBeDefined());
+      FakeNdefReader.instances.at(-1)!.read(`waitron-equipment:printer:${PRINTER_ID}`);
+      await flush(el);
+      expect(setDeviceEquipment.mock.calls).toEqual([
+        [
+          { kind: "printer", selection: { id: PRINTER_ID }, via: "scan" },
+          { signal: expect.any(AbortSignal) },
+        ],
+      ]);
+      expect(equipmentDialog(el)!.equipment).toEqual(stored);
+      emit(equipmentDialog(el)!, "close");
+      await flush(el);
+      expect(FakeNdefReader.instances.at(-1)!.signal!.aborted).toBe(true);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("opens the dialog with the device's equipment as the server answers it", async () => {
     const el = await openEquipment();
 
