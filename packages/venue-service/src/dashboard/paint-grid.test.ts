@@ -1066,3 +1066,53 @@ test("a column named in columnErrors marks its heading and describes its day wit
   expect(heading("thu").hasAttribute("data-error")).toBe(false);
   expect(day("thu").hasAttribute("aria-describedby")).toBe(false);
 });
+
+test("read-only: a drag paints nothing, blocks open no menu, Delete removes nothing, and no day has a ⋮", async () => {
+  const el = await grid();
+  el.readOnly = true;
+  await el.updateComplete;
+  const changed = changes(el);
+  await drag(el, "mon", 120, 240);
+  expect(el.shadowRoot!.querySelector(".preview")).toBeNull();
+  const shown = el.shadowRoot!.querySelector<HTMLElement>('.day[data-column="thu"] .block')!;
+  expect(shown.tagName).toBe("DIV");
+  expect(shown.textContent!.replace(/\s+/g, " ").trim()).toBe("Lunch 13:00–16:00");
+  expect(el.shadowRoot!.querySelector('.day[data-column="thu"]')!.getAttribute("aria-label")).toBe(
+    "Thursday",
+  );
+  expect(el.shadowRoot!.querySelectorAll("button.block")).toHaveLength(0);
+  shown.click();
+  shown.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete", bubbles: true }));
+  await el.updateComplete;
+  expect(menu(el).matches(":popover-open")).toBe(false);
+  expect(el.shadowRoot!.querySelector("wt-row-actions")).toBeNull();
+  expect(changed).toEqual([]);
+});
+
+test("turning read-only closes an open block menu and a Copy to… chooser", async () => {
+  const el = await grid();
+  block(el, "thu").click();
+  await expect.poll(() => menu(el).matches(":popover-open")).toBe(true);
+  el.readOnly = true;
+  await el.updateComplete;
+  expect(menu(el).matches(":popover-open")).toBe(false);
+  el.readOnly = false;
+  await el.updateComplete;
+  el.shadowRoot!.querySelector<HTMLElement>(
+    '.heading[data-column="mon"] wt-row-actions wt-button',
+  )!.click();
+  const chooser = el.shadowRoot!.querySelector<HTMLElement>(".chooser")!;
+  await expect.poll(() => chooser.matches(":popover-open")).toBe(true);
+  el.readOnly = true;
+  await el.updateComplete;
+  expect(chooser.matches(":popover-open")).toBe(false);
+});
+
+test("read-only: the grid's scrolling region takes the keyboard focus, and only then", async () => {
+  const el = await grid();
+  const region = el.shadowRoot!.querySelector<HTMLElement>(".scroll")!;
+  expect(region.hasAttribute("tabindex")).toBe(false);
+  el.readOnly = true;
+  await el.updateComplete;
+  expect(region.tabIndex).toBe(0);
+});

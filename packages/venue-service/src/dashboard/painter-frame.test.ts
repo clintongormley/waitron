@@ -234,3 +234,18 @@ describe.each(["en", "es"] as const)("the bar's width (%s)", (locale) => {
     }
   });
 });
+
+test("read-only: only ✕ is offered, and it closes without asking", async () => {
+  const { frame } = await open();
+  frame.readOnly = true;
+  await frame.updateComplete;
+  expect(part(frame, "[data-test=cancel]")).toBeNull();
+  expect(part(frame, "[data-test=save]")).toBeNull();
+  expect(part(frame, ".actions")).toBeNull();
+  const saves: Event[] = [];
+  frame.addEventListener("painter-save", (event) => saves.push(event));
+  const done = closed(frame);
+  dismiss(frame).click();
+  await done;
+  expect(saves).toEqual([]);
+});

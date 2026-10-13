@@ -387,3 +387,37 @@ it("paints each period chip's swatch in the period's palette colour", async () =
   expect(getComputedStyle(probe).backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
   probe.remove();
 });
+
+it("read-only: only ✕, no paint row, a grid that cannot paint, and the seasons and picker still move", async () => {
+  painter = document.createElement("season-painter");
+  const writes: Write[] = [];
+  painter.api = painterApi(writes);
+  painter.model = painterModel();
+  painter.seasonId = "winter";
+  painter.departmentId = "d1";
+  painter.readOnly = true;
+  painter.open = true;
+  applyTokens(painter);
+  document.body.append(painter);
+  await settle(painter);
+  const navigations: unknown[] = [];
+  painter.addEventListener("painter-navigate", (event) =>
+    navigations.push((event as CustomEvent).detail),
+  );
+  expect(frame(painter).readOnly).toBe(true);
+  expect(grid(painter).readOnly).toBe(true);
+  for (const test of ["hint", "paint-closed", "paint-p1", "edit-p1", "new-period"])
+    expect(chip(painter, test)).toBeNull();
+  expect(painter.shadowRoot!.querySelector("[slot=row]")).toBeNull();
+  await drag(painter, "3", 120, 240);
+  expect(painter.edited()).toEqual({ departments: [], zones: [] });
+  chip(painter, "next-season")!.click();
+  await settle(painter);
+  await pick(painter, "zone:z2");
+  expect(navigations).toEqual([
+    { seasonId: "spring", departmentId: "d1", zoneId: null },
+    { seasonId: "spring", departmentId: "d1", zoneId: "z2" },
+  ]);
+  expect(grid(painter).readOnly).toBe(true);
+  expect(writes).toEqual([]);
+});

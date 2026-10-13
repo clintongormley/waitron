@@ -601,6 +601,7 @@ export class OpeningHoursScreen extends LitElement {
       .seasonId=${target.seasonId}
       .departmentId=${target.departmentId}
       .zoneId=${target.zoneId}
+      .readOnly=${this.readOnly}
       @painter-navigate=${(event: CustomEvent<PainterNavigation>) => {
         event.stopPropagation();
         if (!this.currentPainter(event)) return;

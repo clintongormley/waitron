@@ -121,6 +121,8 @@ export class PainterFrame extends LitElement {
   @property({ type: Boolean }) busy = false;
   /** The message shown beside Save: a refused save, or a notice from the host. */
   @property() refusal = "";
+  /** Nothing can be changed, so only ✕ is offered. */
+  @property({ type: Boolean }) readOnly = false;
 
   private readonly beforeClose = async (reason: LeaveReason): Promise<boolean> => {
     if (this.busy) return false;
@@ -171,23 +173,27 @@ export class PainterFrame extends LitElement {
             <h2>${this.heading}</h2>
             <div class="picker"><slot name="picker"></slot></div>
             <div class="link"><slot name="link"></slot></div>
-            <div class="actions">
-              <wt-button
-                data-test="cancel"
-                variant="secondary"
-                ?disabled=${this.busy}
-                @click=${() => this.close()}
-                >${t("hours.cancel")}</wt-button
-              >
-              <wt-button
-                data-test="save"
-                variant=${action.variant}
-                ?disabled=${action.unchanged}
-                ?loading=${this.busy}
-                @click=${() => this.save()}
-                >${t("hours.save")}</wt-button
-              >
-            </div>
+            ${
+              this.readOnly
+                ? nothing
+                : html`<div class="actions">
+                    <wt-button
+                      data-test="cancel"
+                      variant="secondary"
+                      ?disabled=${this.busy}
+                      @click=${() => this.close()}
+                      >${t("hours.cancel")}</wt-button
+                    >
+                    <wt-button
+                      data-test="save"
+                      variant=${action.variant}
+                      ?disabled=${action.unchanged}
+                      ?loading=${this.busy}
+                      @click=${() => this.save()}
+                      >${t("hours.save")}</wt-button
+                    >
+                  </div>`
+            }
           </div>
           ${
             this.refusal

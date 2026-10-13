@@ -305,6 +305,8 @@ export class PaintGrid extends LitElement {
   @property({ attribute: false }) columnErrors: ReadonlyMap<string, string> = new Map();
   /** What a selected block may change to; every period and Closed when unset. */
   @property({ attribute: false }) paintable: readonly (string | null)[] | undefined = undefined;
+  /** Shows the week only: nothing paints, and no block or day offers a menu. */
+  @property({ type: Boolean }) readOnly = false;
 
   @state() private preview: Stretch | null = null;
   @state() private selected: { key: string; startsAt: string } | null = null;
@@ -326,6 +328,11 @@ export class PaintGrid extends LitElement {
   protected override willUpdate(changes: PropertyValues<this>): void {
     if (changes.has("days") && this.selected !== null && this.#selectedIndex() < 0)
       this.#closeMenu();
+    if (changes.has("readOnly") && this.readOnly) {
+      this.#stop();
+      this.#closeMenu();
+      this.#closeChooser(false);
+    }
   }
 
   #day(key: string): readonly Paint[] {
@@ -369,7 +376,8 @@ export class PaintGrid extends LitElement {
 
   #start(event: PointerEvent, key: string): void {
     this.#dragged = false;
-    if (event.button !== 0 || this.chosen === undefined || this.#gesture !== null) return;
+    if (this.readOnly || event.button !== 0 || this.chosen === undefined || this.#gesture !== null)
+      return;
     const column = event.currentTarget as HTMLElement;
     this.#gesture = {
       pointerId: event.pointerId,
@@ -618,6 +626,16 @@ export class PaintGrid extends LitElement {
   #block(column: PaintColumn, paint: Paint, index: number) {
     const [start, end] = stepSpan(paint, this.cutover);
     const name = this.#name(paint.periodId);
+    if (this.readOnly)
+      return html`<div
+        class=${paint.periodId === null ? "block closed" : "block"}
+        data-index=${index}
+        data-starts=${paint.startsAt}
+        data-colour=${this.#colour(paint.periodId) ?? nothing}
+        style=${this.#position(start, end)}
+      >
+        <span>${name}</span> ${paint.startsAt}–${paint.endsAt}
+      </div>`;
     const expanded = this.selected?.key === column.key && this.selected.startsAt === paint.startsAt;
     return html`<button
       type="button"
@@ -767,7 +785,13 @@ export class PaintGrid extends LitElement {
   override render() {
     const first = (60 - (clockMinutes(this.cutover) % 60)) % 60;
     const hours = Array.from({ length: Math.ceil((DAY - first) / 60) }, (_, i) => first + i * 60);
-    return html`<div class="scroll" role="region" aria-label=${t("paint.grid")}>
+    // With no button inside, a read-only grid's scrolling region takes the focus itself.
+    return html`<div
+        class="scroll"
+        role="region"
+        aria-label=${t("paint.grid")}
+        tabindex=${ifDefined(this.readOnly ? "0" : undefined)}
+      >
         <div
           class="layout"
           style=${styleMap({
@@ -788,24 +812,28 @@ export class PaintGrid extends LitElement {
                         >${this.columnErrors.get(column.key)}</span
                       >`
                     : nothing
-                }<slot name=${`column-menu-${column.key}`}
-                  ><wt-row-actions
-                    icon="kebab"
-                    align="end"
-                    label=${t("paint.day_options").replace("{day}", column.label)}
-                    ><wt-button
-                      variant="secondary"
-                      align="start"
-                      @click=${() => void this.#openChooser(column.key)}
-                      >${t("paint.copy_to")}</wt-button
-                    ><wt-button
-                      variant="secondary"
-                      align="start"
-                      @click=${() => this.#clear(column.key)}
-                      >${t("paint.clear")}</wt-button
-                    ></wt-row-actions
-                  ></slot
-                >
+                }${
+                  this.readOnly
+                    ? nothing
+                    : html`<slot name=${`column-menu-${column.key}`}
+                        ><wt-row-actions
+                          icon="kebab"
+                          align="end"
+                          label=${t("paint.day_options").replace("{day}", column.label)}
+                          ><wt-button
+                            variant="secondary"
+                            align="start"
+                            @click=${() => void this.#openChooser(column.key)}
+                            >${t("paint.copy_to")}</wt-button
+                          ><wt-button
+                            variant="secondary"
+                            align="start"
+                            @click=${() => this.#clear(column.key)}
+                            >${t("paint.clear")}</wt-button
+                          ></wt-row-actions
+                        ></slot
+                      >`
+                }
               </div>`,
           )}
           <div class="times" aria-hidden="true">

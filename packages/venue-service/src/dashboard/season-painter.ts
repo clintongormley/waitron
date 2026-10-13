@@ -254,6 +254,8 @@ export class SeasonPainter extends LitElement {
   @property() seasonId = "";
   @property() departmentId = "";
   @property() zoneId = "";
+  /** For a person who may only look: no paint row, no Save, and a grid that cannot change. */
+  @property({ type: Boolean }) readOnly = false;
   /** A period id, or `null` for Closed; a zone always paints Closed. */
   @state() private chosen: string | null | undefined = undefined;
   @state() private draft: Draft = new Map();
@@ -774,6 +776,7 @@ export class SeasonPainter extends LitElement {
         .dirty=${this.scope?.isDirty() ?? false}
         .busy=${this.saving}
         .refusal=${this.refused?.message ?? this.notice}
+        .readOnly=${this.readOnly}
         @painter-save=${() => void this.save()}
         @painter-close=${() => {
           this.open = false;
@@ -789,7 +792,7 @@ export class SeasonPainter extends LitElement {
           href=${`/manage/opening-hours/view/periods/department/${encodeURIComponent(department.id)}`}
           >${t("opening.tab.periods")}</a
         >
-        ${this.paintRow(department, chosen, zone !== undefined)}
+        ${this.readOnly ? nothing : this.paintRow(department, chosen, zone !== undefined)}
         <paint-grid
           .columns=${columns}
           .days=${this.draft.get(key) ?? new Map()}
@@ -798,6 +801,7 @@ export class SeasonPainter extends LitElement {
           .chosen=${chosen}
           .cutover=${this.model.dayCutover}
           .closedErases=${zone === undefined}
+          .readOnly=${this.readOnly}
           .paintable=${zone ? [null] : undefined}
           .columnErrors=${
             this.refused?.owner === key && this.refused.column !== undefined

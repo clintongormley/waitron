@@ -14,7 +14,7 @@ afterEach(() => {
 });
 
 describe.each(["light", "dark"] as const)("painter frame (%s)", (theme) => {
-  test.each(["clean", "dirty", "refused", "saving"])("%s", async (state) => {
+  test.each(["clean", "dirty", "refused", "saving", "read-only"])("%s", async (state) => {
     await mountThemed(
       `<painter-frame heading="Winter week">
         <span slot="picker">Winter · 1 Dec – 28 Feb</span>
@@ -28,6 +28,7 @@ describe.each(["light", "dark"] as const)("painter frame (%s)", (theme) => {
     frame.scope = { id: {} };
     frame.dirty = state !== "clean";
     frame.busy = state === "saving";
+    frame.readOnly = state === "read-only";
     if (state === "refused") frame.refusal = "The change could not be saved.";
     frame.open = true;
     await frame.updateComplete;

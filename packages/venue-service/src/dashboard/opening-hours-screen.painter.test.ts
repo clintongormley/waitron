@@ -79,10 +79,16 @@ afterEach(() => {
   history.replaceState(null, "", originalUrl);
 });
 
-async function mount(address: string, model = () => withBar()) {
+async function mount(
+  address: string,
+  model = () => withBar(),
+  writes: unknown[] = [],
+  readOnly = false,
+) {
   history.replaceState(null, "", address);
   const el = document.createElement("dashboard-opening-hours-screen") as Screen;
-  el.api = new OpeningHoursApi(request(model));
+  el.api = new OpeningHoursApi(request(model, writes));
+  el.readOnly = readOnly;
   applyTokens(el);
   hosts.push(el);
   document.body.append(el);
@@ -512,5 +518,47 @@ describe("leaving a painter with edits", () => {
     } finally {
       guard.dispose();
     }
+  });
+});
+
+describe("a viewer's painter", () => {
+  it("an old department Week address opens a painter with no Save, whose drag changes and sends nothing", async () => {
+    const writes: unknown[] = [];
+    const el = await mount(
+      "/manage/opening-hours/view/week/department/d1",
+      undefined,
+      writes,
+      true,
+    );
+    await expect
+      .poll(() => location.pathname)
+      .toBe("/manage/opening-hours/view/season/season/winter/department/d1");
+    const painter = await shownPainter(el);
+    expect(painter.readOnly).toBe(true);
+    expect(frame(painter).shadowRoot!.querySelector("[data-test=save]")).toBeNull();
+    expect(painter.shadowRoot!.querySelector("[data-test=hint]")).toBeNull();
+    await drag(painter, "3", 120, 240);
+    expect(painter.edited()).toEqual({ departments: [], zones: [] });
+    await settle(painter);
+    expect(writes).toEqual([]);
+  });
+
+  it("a department heading on All departments opens a read-only painter", async () => {
+    const el = await mount("/manage/opening-hours/view/week/department/all", undefined, [], true);
+    const all = await expect
+      .poll(() => el.shadowRoot!.querySelector("opening-hours-all"))
+      .not.toBeNull()
+      .then(() => el.shadowRoot!.querySelector("opening-hours-all")!);
+    const heading = await expect
+      .poll(() => all.shadowRoot!.querySelector<HTMLAnchorElement>('a[href$="/department/d1"]'))
+      .not.toBeNull()
+      .then(() => all.shadowRoot!.querySelector<HTMLAnchorElement>('a[href$="/department/d1"]')!);
+    heading.click();
+    await expect
+      .poll(() => location.pathname)
+      .toBe("/manage/opening-hours/view/season/season/winter/department/d1");
+    const painter = await shownPainter(el);
+    expect(painter.readOnly).toBe(true);
+    expect(frame(painter).shadowRoot!.querySelector("[data-test=save]")).toBeNull();
   });
 });

@@ -21,6 +21,7 @@ describe.each(["light", "dark"] as const)("paint grid (%s)", (theme) => {
     "column-menu",
     "chooser",
     "refused",
+    "read-only",
   ])("%s", async (state) => {
     const el = (await mountThemed("<paint-grid></paint-grid>", theme)) as PaintGrid;
     const painted = state !== "empty";
@@ -32,6 +33,7 @@ describe.each(["light", "dark"] as const)("paint grid (%s)", (theme) => {
     el.cutover = "06:00";
     el.chosen = "blue";
     el.closedErases = state !== "zone";
+    el.readOnly = state === "read-only";
     el.days = new Map([
       ["mon", []],
       [

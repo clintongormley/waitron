@@ -15,21 +15,25 @@ afterEach(() => {
 });
 
 describe.each(["light", "dark"] as const)("season painter (%s)", (theme) => {
-  test.each(["department", "zone", "period editor"])("%s", async (state) => {
-    await mountThemed(`<season-painter></season-painter>`, theme);
-    const painter = host.querySelector<SeasonPainter>("season-painter")!;
-    painter.api = painterApi();
-    painter.model = painterModel();
-    painter.seasonId = "winter";
-    painter.departmentId = "d1";
-    painter.open = true;
-    await settle(painter);
-    if (state === "zone") await pick(painter, "zone:z2");
-    if (state === "period editor") {
-      painter.shadowRoot!.querySelector<HTMLElement>('[data-test="edit-p1"]')!.click();
-      await painter.updateComplete;
-      await painter.shadowRoot!.querySelector("period-editor")!.updateComplete;
-    }
-    await expectNoA11yViolations(host);
-  });
+  test.each(["department", "zone", "period editor", "read-only", "read-only zone"])(
+    "%s",
+    async (state) => {
+      await mountThemed(`<season-painter></season-painter>`, theme);
+      const painter = host.querySelector<SeasonPainter>("season-painter")!;
+      painter.api = painterApi();
+      painter.model = painterModel();
+      painter.seasonId = "winter";
+      painter.departmentId = "d1";
+      painter.open = true;
+      painter.readOnly = state.startsWith("read-only");
+      await settle(painter);
+      if (state === "zone" || state === "read-only zone") await pick(painter, "zone:z2");
+      if (state === "period editor") {
+        painter.shadowRoot!.querySelector<HTMLElement>('[data-test="edit-p1"]')!.click();
+        await painter.updateComplete;
+        await painter.shadowRoot!.querySelector("period-editor")!.updateComplete;
+      }
+      await expectNoA11yViolations(host);
+    },
+  );
 });
