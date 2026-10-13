@@ -104,7 +104,7 @@ export function joinedPlaceOver(
     : remainingPlace(anchor, parts, first, first, staying.at(-1)!);
 }
 
-/** Where a joined table stands after Join again. */
+/** Where a joined table stands after Join again or Reset table takes tables back into it. */
 export function joinedPlaceAfter(args: {
   row: Placement | null;
   standing: boolean;
@@ -131,4 +131,49 @@ export function joinedPlaceAfter(args: {
           : null;
   if (origin === null) return null;
   return remainingPlace(origin.at, parts, origin.covered, staying[0]!, staying.at(-1)!);
+}
+
+type Point = [number, number];
+
+/** The box's corners, turned about its centre. */
+function cornersOf(place: Placement): { corners: Point[]; axes: Point[] } {
+  const turn = (place.rotation * Math.PI) / 180;
+  const cos = Math.cos(turn);
+  const sin = Math.sin(turn);
+  const centreX = place.x + place.width / 2;
+  const centreY = place.y + place.height / 2;
+  const corners = (
+    [
+      [-1, -1],
+      [1, -1],
+      [1, 1],
+      [-1, 1],
+    ] as const
+  ).map(([sx, sy]): Point => {
+    const dx = (sx * place.width) / 2;
+    const dy = (sy * place.height) / 2;
+    return [centreX + dx * cos - dy * sin, centreY + dx * sin + dy * cos];
+  });
+  return {
+    corners,
+    axes: [
+      [cos, sin],
+      [-sin, cos],
+    ],
+  };
+}
+
+/** Whether the two turned boxes overlap by at least one square along each of their four sides' directions. */
+export function standsIn(place: Placement, other: Placement): boolean {
+  const a = cornersOf(place);
+  const b = cornersOf(other);
+  return [...a.axes, ...b.axes].every(([ax, ay]) => {
+    const along = (corners: Point[]) => corners.map(([x, y]) => x * ax + y * ay);
+    const onA = along(a.corners);
+    const onB = along(b.corners);
+    const overlap =
+      Math.min(Math.max(...onA), Math.max(...onB)) - Math.max(Math.min(...onA), Math.min(...onB));
+    // Slack for rounding: the 195° pair in standsIn's tests overlaps by exactly one square and computes as 0.9999999999999982.
+    return overlap >= 1 - 1e-9;
+  });
 }

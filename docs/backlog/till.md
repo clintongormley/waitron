@@ -320,6 +320,17 @@ Found by A579 part 3b's review: Split tables… ticking that table would have le
 no table; it is now refused `merge.strands_party`. Next: decide whether the moved bill's party takes the
 whole group, as seating at one of its tables does.
 
+## A600. The floor-wide reset and its catch-up do not look at what stands in a saved place
+
+**A600 (2026-10-13).** Reset table (A579 part 4a) refuses to put a joined table back over another
+table standing in its saved place (`table.place_taken`). Reset to saved plan and the catch-up that
+applies it decide each table from its own state only (`planReset`,
+`apps/server/src/floor-reset-plan.ts`; `catchUpPass`, `apps/server/src/floor-today-store.ts`). From
+reading them, not running them, the A579 design believes a table that waited (guests, or held by a
+module) can be put back over a free table moved into its place, and that the reset can put a table
+back over one that waits there. Next: reproduce both in a test, then decide what the reset does with
+a table in the way.
+
 ## A598. A table held by guests when its joined table went live is neither joined nor split off
 
 **A598 (2026-10-13).** Split tables… on a joined table leaves a table that a party held when the

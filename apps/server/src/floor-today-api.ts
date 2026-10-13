@@ -25,6 +25,7 @@ import {
 } from "./floor-today-store.js";
 import { writeMerge } from "./floor-today-merges.js";
 import { joinAgain } from "./floor-today-join-again.js";
+import { resetTable } from "./floor-today-reset-table.js";
 import { splitOff } from "./floor-today-split-group.js";
 import type { Logger } from "./logger.js";
 import type { Run, TillApiDeps } from "./till-api.js";
@@ -203,6 +204,18 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
     return {
       write: (tx, joinedId) =>
         joinAgain(tx, deps.cfg, removals, deps.clock.now().instant, {
+          tableId: joinedId,
+          partIds,
+          seats,
+        }),
+      others: partIds,
+    };
+  });
+  tableRoute("reset", (body) => {
+    const { partIds, seats } = partsBody(body);
+    return {
+      write: (tx, joinedId) =>
+        resetTable(tx, deps.cfg, removals, deps.clock.now().instant, {
           tableId: joinedId,
           partIds,
           seats,
