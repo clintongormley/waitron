@@ -417,6 +417,30 @@ describe.each(["light", "dark"] as const)("season colours (%s)", (theme) => {
     expect(new Set(SEASON_FILLS.map((fill) => token(el, fill))).size).toBe(SEASON_FILLS.length);
   });
 
+  test("run green, amber, peach, blue, so the default seasons from Spring read as the mockup's", () => {
+    const hue = (hex: string) => {
+      const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+      const max = Math.max(r!, g!, b!);
+      const span = max - Math.min(r!, g!, b!);
+      const sector =
+        max === r ? (g! - b!) / span : max === g ? (b! - r!) / span + 2 : (r! - g!) / span + 4;
+      return (sector * 60 + 360) % 360;
+    };
+    const el = mount(theme);
+    const bands = [
+      [90, 170],
+      [30, 60],
+      [0, 30],
+      [190, 250],
+    ];
+    for (const [index, fill] of SEASON_FILLS.entries())
+      for (const name of [fill, `${fill}-line`]) {
+        const [from, to] = bands[index]!;
+        expect(hue(token(el, name)), name).toBeGreaterThanOrEqual(from!);
+        expect(hue(token(el, name)), name).toBeLessThan(to!);
+      }
+  });
+
   test("the OS preference gives them the same values as the explicit theme", async () => {
     const names = SEASON_FILLS.flatMap((fill) => [fill, onFill(fill), `${fill}-line`]);
     await commands.emulateColorScheme(theme === "light" ? "dark" : "light");

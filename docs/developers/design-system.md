@@ -218,15 +218,17 @@ a fifth season onwards. The season's name and dates are always written on the ch
 
 | Fill                  | Light     | Line      | Text on it | Dark      | Line      | Text on it |
 | --------------------- | --------- | --------- | ---------- | --------- | --------- | ---------- |
-| `--wt-color-season-1` | `#dbe7f9` | `#3d6fc4` | `#16181d`  | `#1c2a44` | `#7aa2ff` | `#eceef2`  |
-| `--wt-color-season-2` | `#dcf1dc` | `#3c8a4a` | `#16181d`  | `#1d3a23` | `#4ac08d` | `#eceef2`  |
-| `--wt-color-season-3` | `#fbecc0` | `#a87a12` | `#16181d`  | `#3f3315` | `#f5b34a` | `#eceef2`  |
-| `--wt-color-season-4` | `#f9dccd` | `#b8603a` | `#16181d`  | `#45281c` | `#f09a74` | `#eceef2`  |
+| `--wt-color-season-1` | `#dcf1dc` | `#3c8a4a` | `#16181d`  | `#1d3a23` | `#4ac08d` | `#eceef2`  |
+| `--wt-color-season-2` | `#fbecc0` | `#a87a12` | `#16181d`  | `#3f3315` | `#f5b34a` | `#eceef2`  |
+| `--wt-color-season-3` | `#f9dccd` | `#b8603a` | `#16181d`  | `#45281c` | `#f09a74` | `#eceef2`  |
+| `--wt-color-season-4` | `#dbe7f9` | `#3d6fc4` | `#16181d`  | `#1c2a44` | `#7aa2ff` | `#eceef2`  |
 
 The "season colours" cases in `packages/ui-core/src/tokens/colors.test.ts` hold, in both themes,
 that each text colour is 4.5:1 or more on its fill, that each line is 3:1 or more from its fill and
-from `--wt-color-surface`, that the four fills differ, and that the `prefers-color-scheme` blocks
-give the same values as the explicit themes.
+from `--wt-color-surface`, that the four fills differ, that they run green, amber, peach and blue
+by hue, and that the `prefers-color-scheme` blocks give the same values as the explicit themes. The
+order is chosen so a venue's default seasons, which start with Spring on 1 March, show Spring green,
+Summer amber, Autumn peach and Winter blue.
 
 The till's table map paints a table's fill from `--wt-color-table-<fill>` and its text from
 `--wt-color-on-table-<fill>`, through `floorMapFillStyles` (`packages/ui/src/floor-map-fills.ts`), a
@@ -3555,7 +3557,8 @@ that department's Opening hours.
   exists, the dialog first offers Add to <name> or a new special day. Delete asks first, and says
   so when the day repeats every year. A date's hours are painted on the Day tab, not in the dialog.
   The Year keeps the address's year across refreshes and offers one keyboard Tab stop in its
-  grid. Public holiday names remain visible beside a special day's name.
+  grid. On a special day that is also a public holiday, the date panel and the day's accessible
+  name give the holiday's name beside the special day's; the grid itself shows only the marks.
 - **Local holidays.** Public holidays come only from the country's shipped calendar; add your
   town's holidays as special days. There is no separate Local holidays editor. The Year reports
   the shown year's official coverage and, when the year has a coverage entry, says Town holidays

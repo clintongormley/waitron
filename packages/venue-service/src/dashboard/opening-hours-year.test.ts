@@ -312,6 +312,18 @@ describe("Opening hours year", () => {
     });
   });
 
+  it("names the public holiday beside a special day on the same date, in the panel and the day's name", async () => {
+    const el = await mount();
+    expect(dayButton(el, "2027-12-08").getAttribute("aria-label")).toBe(
+      "Wednesday, 8 December 2027, Christmas market, Immaculate Conception",
+    );
+    expect(text(dayButton(el, "2027-12-08"))).toBe("8");
+    dayButton(el, "2027-12-08").click();
+    await el.updateComplete;
+    expect(text(panel(el)!.querySelector("h3"))).toContain("Christmas market");
+    expect([...panel(el)!.querySelectorAll("p")].map(text)).toContain("Immaculate Conception");
+  });
+
   it("offers an ordinary date as a special day; the panel closes on the same date", async () => {
     const el = await mount();
     const sent = actions(el);
