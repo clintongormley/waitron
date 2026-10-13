@@ -2088,6 +2088,114 @@ describe("Year view", () => {
     expect(listReads()).toEqual([{ passive: true }]);
   });
 
+  async function heldMount(address: string, hold: (path: string) => boolean) {
+    vi.setSystemTime(new Date("2026-10-12T12:00:00Z"));
+    history.replaceState(null, "", address);
+    const held: { path: string; release: (value: unknown) => void }[] = [];
+    const el = await mount((async (path: string) => {
+      const asked = /\/opening-hours\/year\?year=(\d+)$/.exec(path);
+      const answer = asked
+        ? yearModel(Number(asked[1]))
+        : path.endsWith("/special-days")
+          ? []
+          : model();
+      if (!hold(path)) return answer;
+      return new Promise((release) => held.push({ path, release }));
+    }) as DashboardRequest);
+    const view = () => el.shadowRoot!.querySelector("opening-hours-year")!;
+    return { el, view, held };
+  }
+
+  it.each(["slow", "instant"])(
+    "keeps keyboard focus on › while the next year loads (%s read)",
+    async (speed) => {
+      const { el, view, held } = await heldMount(
+        "/manage/opening-hours/view/year/year/2027",
+        (path) => speed === "slow" && path.endsWith("year=2028"),
+      );
+      await expect.poll(() => view().model?.year).toBe(2027);
+      const next = () => view().shadowRoot!.querySelector<HTMLElement>("[data-test=next-year]")!;
+      const focused = () => view().shadowRoot!.activeElement?.getAttribute("data-test");
+      next().focus();
+      expect(focused()).toBe("next-year");
+      next().click();
+      await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/year/year/2028");
+      if (speed === "slow") {
+        await expect.poll(() => held.length).toBe(1);
+        await el.updateComplete;
+        await view().updateComplete;
+        expect(focused()).toBe("next-year");
+        held[0]!.release(yearModel(2028));
+      }
+      await expect.poll(() => view().model?.year).toBe(2028);
+      await view().updateComplete;
+      expect(el.shadowRoot!.activeElement).toBe(view());
+      expect(focused()).toBe("next-year");
+    },
+  );
+
+  it("stops drawing the last year when the next year cannot be read", async () => {
+    vi.setSystemTime(new Date("2026-10-12T12:00:00Z"));
+    history.replaceState(null, "", "/manage/opening-hours/view/year/year/2027");
+    const el = await mount((async (path: string) => {
+      const asked = /\/opening-hours\/year\?year=(\d+)$/.exec(path);
+      if (asked?.[1] === "2028") throw { code: "connection.failed" };
+      if (asked) return yearModel(Number(asked[1]));
+      return path.endsWith("/special-days") ? [] : model();
+    }) as DashboardRequest);
+    const view = () => el.shadowRoot!.querySelector("opening-hours-year")!;
+    await expect.poll(() => view().model?.year).toBe(2027);
+    view().shadowRoot!.querySelector<HTMLElement>("[data-test=next-year]")!.click();
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("[data-test=year-read-error]")?.textContent)
+      .toBe("Opening hours could not be loaded. It will be tried again.");
+    await el.updateComplete;
+    expect(view().model).toBeUndefined();
+    expect(view().shadowRoot!.querySelector("table, [data-test=year]")).toBeNull();
+  });
+
+  it("applies only the newest special-day list when an older read answers last", async () => {
+    const { view, held } = await heldMount("/manage/opening-hours/view/year/year/2027", (path) =>
+      path.endsWith("/special-days"),
+    );
+    await expect.poll(() => view().model?.year).toBe(2027);
+    const chips = view().shadowRoot!.querySelector("season-chips")!;
+    const open = () => chips.shadowRoot!.querySelector<HTMLElement>("[data-season=all]")!.click();
+    open();
+    await expect.poll(() => held.length).toBe(1);
+    await chips.updateComplete;
+    chips
+      .shadowRoot!.querySelector("season-dialog")!
+      .dispatchEvent(new CustomEvent("season-close"));
+    await chips.updateComplete;
+    open();
+    await expect.poll(() => held.length).toBe(2);
+    const list = (id: string, name: string) => [{ id, name, repeatsYearly: true, dates: [] }];
+    held[1]!.release(list("new", "New fair"));
+    await expect.poll(() => view().specialDays).toEqual([{ id: "new", name: "New fair" }]);
+    held[0]!.release(list("old", "Old fair"));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await view().updateComplete;
+    expect(view().specialDays).toEqual([{ id: "new", name: "New fair" }]);
+  });
+
+  it("drops the year from the address when another tab is chosen, as a month's name does", async () => {
+    const { el, view } = await yearMount("/manage/opening-hours/view/year/year/2027?keep=yes");
+    await expect.poll(() => view()?.model?.year).toBe(2027);
+    tabs(el).dispatchEvent(new CustomEvent("wt-tab-change", { detail: { value: "periods" } }));
+    await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/periods");
+    expect(location.search).toBe("?keep=yes");
+    tabs(el).dispatchEvent(new CustomEvent("wt-tab-change", { detail: { value: "year" } }));
+    await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/year");
+    await expect.poll(() => view()?.model?.year).toBe(2026);
+  });
+
+  it("opens the Year from an old Calendar address", async () => {
+    const { el, view } = await yearMount("/manage/opening-hours/view/calendar");
+    expect(tabs(el).value).toBe("year");
+    await expect.poll(() => view()?.model?.year).toBe(2026);
+  });
+
   it("passes read-only to the year view", async () => {
     const { view } = await yearMount("/manage/opening-hours/view/year", true);
     await expect.poll(() => view()?.model).toBeDefined();

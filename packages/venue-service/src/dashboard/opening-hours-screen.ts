@@ -117,6 +117,7 @@ export class OpeningHoursScreen extends LitElement {
   @state() private knownSpecialDays: readonly { id: string; name: string }[] = [];
   private yearDetach?: () => void;
   private watchedYear = 0;
+  private knownSpecialDaysRead = {};
   @state() private weekStart = "";
   @state() private namedWeek?: SpecialDaysModel;
   @state() private weekSpecials: ReadonlyMap<string, SpecialDayDetail> = new Map();
@@ -156,10 +157,12 @@ export class OpeningHoursScreen extends LitElement {
     const shown: View =
       view === "year" || view === "periods" || view === "day" || view === "week"
         ? view
-        : view === null &&
-            !this.namesWeek(new URL(navigationGuardFor(window)?.href ?? location.href))
+        : view === "calendar"
           ? "year"
-          : "week";
+          : view === null &&
+              !this.namesWeek(new URL(navigationGuardFor(window)?.href ?? location.href))
+            ? "year"
+            : "week";
     if (shown !== this.view) this.specialReadError = "";
     this.view = shown;
     this.departmentId = this.url.read("department") ?? "";
@@ -422,9 +425,12 @@ export class OpeningHoursScreen extends LitElement {
     this.yearDetach?.();
     this.yearDetach = undefined;
     this.watchedYear = year;
-    this.yearModel = undefined;
     this.yearReadError = "";
-    if (!year) return;
+    // The last year stays drawn until the next one arrives, so the pressed ‹ or › keeps focus.
+    if (!year) {
+      this.yearModel = undefined;
+      return;
+    }
     const current = () => this.isConnected && this.watchedYear === year;
     this.yearDetach = this.api.watchYear(
       year,
@@ -432,21 +438,23 @@ export class OpeningHoursScreen extends LitElement {
         if (!current()) return;
         this.yearModel = model;
         this.yearReadError = "";
-        this.readKnownSpecialDays(year);
       },
       () => {
-        if (current()) this.yearReadError = t("opening.load_error");
+        if (!current()) return;
+        this.yearReadError = t("opening.load_error");
+        if (this.yearModel?.year !== year) this.yearModel = undefined;
       },
       () => {
         if (current()) this.yearReadError = "";
       },
     );
   }
-  /** Feeds only the season chips' naming of a refusal, so a failed read keeps the last list. */
-  private readKnownSpecialDays(year: number) {
+  /** Feeds only the season dialog's naming of a refusal, so a failed read keeps the last list. */
+  private readKnownSpecialDays() {
+    const read = (this.knownSpecialDaysRead = {});
     void this.api.specialDays.listSpecialDays({ passive: true }).then(
       (days) => {
-        if (this.isConnected && this.watchedYear === year)
+        if (this.isConnected && this.knownSpecialDaysRead === read)
           this.knownSpecialDays = days.map(({ id, name }) => ({ id, name }));
       },
       () => {},
@@ -1054,7 +1062,11 @@ export class OpeningHoursScreen extends LitElement {
                 @wt-tab-change=${(event: CustomEvent<{ value: View }>) => {
                   if (event.target !== event.currentTarget) return;
                   (event.currentTarget as HTMLElementTagNameMap["wt-tabs"]).value = this.view;
-                  void this.url.write({ dashboard: "opening-hours", view: event.detail.value });
+                  void this.url.write({
+                    dashboard: "opening-hours",
+                    view: event.detail.value,
+                    year: null,
+                  });
                   this.followUrl();
                 }}
               >
@@ -1069,6 +1081,7 @@ export class OpeningHoursScreen extends LitElement {
                             .specialDays=${this.knownSpecialDays}
                             .readOnly=${this.readOnly}
                             @special-day-action=${this.openNamedDay}
+                            @season-dialog-open=${() => this.readKnownSpecialDays()}
                             @season-changed=${(event: Event) => {
                               event.stopPropagation();
                               this.api.rereadWithSpecialDays();

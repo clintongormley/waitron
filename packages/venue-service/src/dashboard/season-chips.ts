@@ -109,6 +109,7 @@ export class SeasonChips extends LitElement {
     this.refusal = undefined;
     this.impact = undefined;
     this.opening = { season, returnTo: event.currentTarget as HTMLElement };
+    this.dispatchEvent(new CustomEvent("season-dialog-open", { bubbles: true, composed: true }));
   }
   private close(opening: Opening) {
     if (this.opening !== opening) return;

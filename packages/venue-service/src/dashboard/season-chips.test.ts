@@ -380,3 +380,23 @@ it("uses one verb for delete in Spanish", async () => {
     "Se pierden los horarios de Bar y Kitchen en ella.",
   );
 });
+
+it("says when its dialog opens, so the host can read the special days a refusal may name", async () => {
+  await mount();
+  const opened: Event[] = [];
+  const listen = (event: Event) => opened.push(event);
+  document.body.addEventListener("season-dialog-open", listen);
+  try {
+    await openChip("Winter");
+    expect(opened).toHaveLength(1);
+    expect([opened[0]!.bubbles, opened[0]!.composed]).toEqual([true, true]);
+    await openAdd();
+    expect(opened).toHaveLength(1);
+    dialog().dispatchEvent(new CustomEvent("season-close"));
+    await settle();
+    await openAdd();
+    expect(opened).toHaveLength(2);
+  } finally {
+    document.body.removeEventListener("season-dialog-open", listen);
+  }
+});
