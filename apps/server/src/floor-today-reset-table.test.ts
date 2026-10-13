@@ -418,6 +418,29 @@ describe("Reset table refused, nothing written", () => {
     expect(await everything()).toEqual(before);
   });
 
+  for (const [first, second] of [
+    ["c3", "c4"],
+    ["c4", "c3"],
+  ] as const) {
+    it(`Counter 3 and 4 in a group with Bar where guests sit, renamed "Table 01" on ${first} and "Table 1" on ${second}, which the till lists as equal: refused naming ${first} first`, async () => {
+      const { table } = await LONG_TABLE();
+      await merge(table.bar!, table.long!, "left");
+      await seat(v, table.bar!);
+      await ok(splitOff(table.bar!, [table.c5!], 10));
+      const suffix = randomUUID().slice(0, 6);
+      await relabel(table[first]!, `Table 01 ${suffix}`);
+      await relabel(table[second]!, `Table 1 ${suffix}`);
+      expect(compareLabels(`Table 01 ${suffix}`, `Table 1 ${suffix}`)).toBe(0);
+      const before = await everything();
+
+      await refused(reset(table.long!, [table.c5!]), 409, "joined_table.tables_in_group", {
+        tableId: table.long!,
+        partIds: [table[first]!, table[second]!],
+      });
+      expect(await everything()).toEqual(before);
+    });
+  }
+
   it("nothing to take back: Long table whole", async () => {
     const { table } = await LONG_TABLE();
     const before = await everything();
@@ -489,6 +512,35 @@ describe("Reset table refused, nothing written", () => {
       { zoneId, revision },
     );
     expect(await everything()).toEqual(before);
+  });
+});
+
+describe("Reset table from two tills at once", () => {
+  it("two tills press Reset table on Long table at once: one is applied, the other is told the floor has changed", async () => {
+    const { table, zoneId } = await c5SplitOff();
+    const revision = await readRevision(table.long!);
+    const press = () =>
+      app.request(`/api/tables/${table.long!}/today/reset`, {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify({ zoneRevision: revision, partIds: [table.c5!] }),
+      });
+
+    const answers = await Promise.all([press(), press()]);
+
+    expect(answers.map((answer) => answer.status).sort()).toEqual([200, 409]);
+    await refused(
+      answers.find((answer) => answer.status === 409)!,
+      409,
+      "floor_today.out_of_date",
+      { zoneId, revision: revision + 1 },
+    );
+    expect(await zoneRevisionOf(v, zoneId)).toBe(revision + 1);
+    expect(await placeOf(table.long!)).toEqual(LONG_SAVED);
+    expect(await seatsOf(table.long!)).toBe(10);
+    expect(await placeOf(table.c5!)).toEqual(NO_PLACE);
+    expect(await seatsOf(table.c5!)).toBe(4);
+    expect(await splitRowsOf(table.long!)).toEqual([]);
   });
 });
 

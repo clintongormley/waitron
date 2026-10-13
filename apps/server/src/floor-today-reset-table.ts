@@ -60,7 +60,10 @@ export async function resetTable(
       .from(floorTodayJoinTables)
       .where(inArray(floorTodayJoinTables.tableId, splitOffIds));
     const inGroup = new Set(grouped.map((row) => row.id));
-    const blocking = splitOffIds.filter((id) => held.has(id) && inGroup.has(id));
+    const blocking = parts
+      .filter((part) => held.has(part.tableId) && inGroup.has(part.tableId))
+      .sort(byNumberOrder)
+      .map((part) => part.tableId);
     if (blocking.length > 0) {
       throw new AppError("joined_table.tables_in_group", { tableId, partIds: blocking });
     }
@@ -131,6 +134,11 @@ export async function resetTable(
   await catchUpZone(tx, cfg, removals, today.zoneId, now);
 }
 
+// `compareLabels` reads "Table 01" and "Table 1" as equal, so the exact strings break the tie.
+function byNumberOrder(a: { label: string }, b: { label: string }): number {
+  return compareLabels(a.label, b.label) || (a.label < b.label ? -1 : a.label > b.label ? 1 : 0);
+}
+
 async function apartNow(tx: Transaction, tableId: string): Promise<boolean> {
   const [{ apart }] = await tx
     .select({ apart: joinedTableApart(diningTables.id).mapWith(Boolean) })
@@ -170,8 +178,7 @@ async function refusePlaceTaken(
     );
   const standing = rows
     .filter((row) => !own.has(row.id) && standsIn(place, placementOf(row)!))
-    // `compareLabels` reads "Table 01" and "Table 1" as equal, so the exact strings break the tie.
-    .sort((a, b) => compareLabels(a.label, b.label) || (a.label < b.label ? -1 : 1));
+    .sort(byNumberOrder);
   if (standing.length > 0) {
     throw new AppError("table.place_taken", { tableId, standingId: standing[0]!.id });
   }
