@@ -4,6 +4,7 @@ import {
   partyTables,
   floorTodayJoins,
   floorTodayJoinTables,
+  floorResetTables,
   floorTodaySplitParts,
   floorTodayTables,
 } from "@waitron/db";
@@ -191,6 +192,8 @@ export async function writeMerge(
   const targetParts = await partsOf(tx, target.tableId);
   if (movingParts.length > 0) await refuseDeliveryPending(tx, moving.tableId);
   if (targetParts.length > 0) await refuseDeliveryPending(tx, target.tableId);
+  await splitInUse(tx, moving.tableId, movingParts);
+  await splitInUse(tx, target.tableId, targetParts);
 
   let joinId = target.merge?.joinId;
   if (joinId === undefined) {
@@ -260,6 +263,29 @@ function laidInside(
   return parts.flatMap((part, index) =>
     part.stillJoined ? [{ tableId: part.tableId, place: places[index]! }] : [],
   );
+}
+
+/**
+ * Each table of the joined table in use, so neither still joined nor split off, is split off where
+ * it stands and stays out of the group: the joined table is apart from now on, so once free the
+ * table is an ordinary one. Marking its reset row placed stops the catch-up taking it off the map
+ * when it frees.
+ */
+async function splitInUse(
+  tx: Transaction,
+  joinedId: string,
+  parts: readonly Part[],
+): Promise<void> {
+  for (const part of parts) {
+    if (part.stillJoined || part.splitOff) continue;
+    await tx
+      .insert(floorTodaySplitParts)
+      .values({ joinedTableId: joinedId, partTableId: part.tableId });
+    await tx
+      .update(floorResetTables)
+      .set({ placed: true })
+      .where(eq(floorResetTables.tableId, part.tableId));
+  }
 }
 
 /** `partId` is split off `joinedId`, stands at `place` and joins the merge as having stood at `before`. */
