@@ -1,3 +1,9 @@
+import {
+  compareEvents,
+  effectiveClockEntries,
+  uncountedAutomaticEntryIds,
+  originalEntry,
+} from "./effective-entries.js";
 import type { RecordAttribution } from "./record-types.js";
 /**
  * Overtime has TWO lawful readings, and the code returns BOTH rather than choosing: which one binds
@@ -137,63 +143,16 @@ function groupByPerson(entries: readonly TimeEntryRecord[]): Map<string, TimeEnt
 }
 
 /**
- * The total order `(recordedAt, nodeId, sequenceNo)` (spec §4.2). A single tuple compare, NOT a
- * "same-node → sequenceNo, else recordedAt" special case, which is not transitive across three
- * entries spanning two chains.
- */
-function laterThan(a: TimeEntryRecord, b: TimeEntryRecord): boolean {
-  if (a.recordedAt !== b.recordedAt) return a.recordedAt > b.recordedAt;
-  if (a.nodeId !== b.nodeId) return a.nodeId > b.nodeId;
-  return a.sequenceNo > b.sequenceNo;
-}
-
-/**
- * Latest approved correction wins, following a chain when a correction is itself corrected. A
- * correction is chained under its OWN recording node, so two nodes' corrections of one target can sit
- * in different chains — hence `laterThan`'s cross-chain order rather than `sequenceNo` alone.
- *
- * No cycle guard: each correction has exactly one target, so a walk that starts at a base event
- * cannot return to an entry it has passed.
- */
-function applyCorrections(entries: readonly TimeEntryRecord[]): TimeEntryRecord[] {
-  const latestApprovedByTarget = new Map<string, TimeEntryRecord>();
-  for (const e of entries) {
-    if (e.entryKind !== "correction" || e.correctionStatus !== "approved") continue;
-    if (e.correctsEntryId === undefined || e.correctsEntryId === null) continue;
-    const current = latestApprovedByTarget.get(e.correctsEntryId);
-    if (current === undefined || laterThan(e, current)) {
-      latestApprovedByTarget.set(e.correctsEntryId, e);
-    }
-  }
-
-  return entries
-    .filter((e) => e.entryKind !== "correction")
-    .map((base) => {
-      let effective = base;
-      for (
-        let next = latestApprovedByTarget.get(effective.entryId);
-        next !== undefined;
-        next = latestApprovedByTarget.get(effective.entryId)
-      ) {
-        effective = next;
-      }
-      return effective === base
-        ? base
-        : { ...base, eventAt: effective.eventAt, offsetMinutes: effective.offsetMinutes };
-    });
-}
-
-/**
  * Sorts each person's events by `event_at` BEFORE pairing: offline capture appends in ingest order,
  * which need not be event-time order. A stray event with no matching open shift is dropped rather
  * than throwing, so a projection over historical data stays total.
  */
 export function projectWorkSessions(entries: readonly TimeEntryRecord[]): WorkSession[] {
   const sessions: WorkSession[] = [];
-  for (const [personId, personEntries] of groupByPerson(applyCorrections(entries))) {
-    const ordered = [...personEntries].sort(
-      (a, b) => Date.parse(a.eventAt) - Date.parse(b.eventAt),
-    );
+  const uncounted = uncountedAutomaticEntryIds(entries);
+  const byId = new Map(entries.map((e) => [e.entryId, e]));
+  for (const [personId, personEntries] of groupByPerson(effectiveClockEntries(entries))) {
+    const ordered = [...personEntries].sort(compareEvents);
     let open: OpenShift | undefined;
     for (const e of ordered) {
       switch (e.entryKind) {
@@ -211,7 +170,13 @@ export function projectWorkSessions(entries: readonly TimeEntryRecord[]): WorkSe
           break;
         case "out":
           if (open !== undefined) {
-            sessions.push(closeShift(personId, open, e));
+            if (
+              originalEntry(e, byId).extension?.authorKind === "automatic" &&
+              open.breakStartedAt !== undefined
+            ) {
+              open.breakMs += Date.parse(e.eventAt) - Date.parse(open.breakStartedAt);
+            }
+            if (!uncounted.has(e.entryId)) sessions.push(closeShift(personId, open, e));
             open = undefined;
           }
           break;

@@ -53,6 +53,9 @@ export type {
   ClockEventInput,
   CorrectionApprovalInput,
   CorrectionRequestInput,
+  CorrectionDecisionInput,
+  AutomaticCloseInput,
+  AutomaticConfirmationInput,
   WorkSummaryQuery,
   WorkSummaryRuleset,
 } from "./clocking.js";

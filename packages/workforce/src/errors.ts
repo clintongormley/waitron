@@ -13,6 +13,9 @@ declare module "@waitron/shared" {
     /** A clock-in while clocked in, or a break-start while already on break. */
     "attendance.already_open": { personId: string };
     "attendance.invalid": { reason: string };
+    "attendance.not_permitted": { personId: string };
+    "attendance.not_pending": { entryId: string };
+    "correction.invalid": { reason: string };
     /** A clock-out or break with no open shift, or a break-end with no open break. */
     "attendance.no_open_entry": { personId: string };
     /** `appendToChain` (../chain.ts) exhausted `MAX_APPEND_ATTEMPTS`, each attempt refused by

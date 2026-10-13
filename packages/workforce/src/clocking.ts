@@ -1,10 +1,29 @@
-import { and, eq, gte, lt, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { isUniqueViolation, newId, nowIso, type Transaction } from "@waitron/db";
-import { AppError, jobOrigin } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import type { Origin } from "@waitron/shared";
 import { assertLocationExists, assertPersonExists } from "./body-ids.js";
 import { appendToChain } from "./chain.js";
-import { timeEntries } from "./schema/time-entries.js";
+import {
+  requestCorrection,
+  approveCorrection,
+  decideCorrection,
+  authorKindFor,
+} from "./corrections.js";
+import type {
+  CorrectionRequestInput,
+  CorrectionApprovalInput,
+  CorrectionDecisionInput,
+} from "./corrections.js";
+export type {
+  CorrectionRequestInput,
+  CorrectionApprovalInput,
+  CorrectionDecisionInput,
+} from "./corrections.js";
+import { recordAutomaticClose, confirmAutomaticEntry } from "./automatic-entries.js";
+import type { AutomaticCloseInput, AutomaticConfirmationInput } from "./automatic-entries.js";
+export type { AutomaticCloseInput, AutomaticConfirmationInput } from "./automatic-entries.js";
+import { readRecordedEntries } from "./record-reads.js";
 import {
   dailyContractedTargetMinutes,
   projectWorkSessions,
@@ -59,28 +78,6 @@ export interface WorkSummaryRuleset {
   /** When non-null it IS the daily-accrual target; null derives it as the weekly working time ÷
    * `workingDaysPerWeek`. */
   dailyTargetMinutes: number | null;
-}
-
-/** A request to correct an entry's timestamp — an append, never an edit of the target. */
-export interface CorrectionRequestInput {
-  /** The RECORDING node, whose chain gets the correction; it need not be the target's node. */
-  nodeId: string;
-  /** A base clock event, or an earlier correction. */
-  correctsEntryId: string;
-  at: string;
-  offsetMinutes: number;
-  reason: string;
-  actorPersonId: string;
-  origin: Origin;
-}
-
-/** A supervisor's approval of a requested correction — the second append that gives it effect. */
-export interface CorrectionApprovalInput {
-  nodeId: string;
-  /** The `requested` correction to approve. */
-  correctionId: string;
-  /** Must hold a supervisor/manager/admin role. */
-  approverPersonId: string;
 }
 
 export interface PublishRosterInput {
@@ -156,8 +153,6 @@ export interface UpdateShiftInput {
 type ShiftState = "out" | "working" | "on_break";
 
 type LiveEntryKind = "in" | "out" | "break_start" | "break_end";
-
-const SUPERVISOR_ROLES = new Set(["supervisor", "manager", "admin"]);
 
 const MS_PER_DAY = 86_400_000;
 
@@ -273,97 +268,41 @@ export class WorkforceBackend {
     }));
   }
 
-  /** Every person's entries at the location, over the same ±1-day-widened window as
-   * `entriesInPeriod`, corrections included. */
   private async entriesForLocationInPeriod(
     tx: Transaction,
     locationId: string,
     period: Period,
   ): Promise<TimeEntryRecord[]> {
-    const windowStart = shiftDay(period.start, -1);
-    const windowEnd = shiftDay(period.end, 1);
-    const rows = await tx
-      .select({
-        entryId: timeEntries.id,
-        personId: timeEntries.personId,
-        locationId: timeEntries.locationId,
-        nodeId: timeEntries.nodeId,
-        entryKind: timeEntries.entryKind,
-        eventAt: timeEntries.eventAt,
-        recordedAt: timeEntries.recordedAt,
-        offsetMinutes: timeEntries.eventOffsetMinutes,
-        sequenceNo: timeEntries.sequenceNo,
-        correctsEntryId: timeEntries.correctsEntryId,
-        correctionStatus: timeEntries.correctionStatus,
-      })
-      .from(timeEntries)
-      .where(
-        and(
-          eq(timeEntries.locationId, locationId),
-          gte(timeEntries.eventAt, windowStart),
-          lt(timeEntries.eventAt, windowEnd),
-        ),
-      );
-    return rows;
+    const start = shiftDay(period.start, -1),
+      end = shiftDay(period.end, 1);
+    return (await readRecordedEntries(tx, { locationId })).filter(
+      (e) => e.eventAt >= start && e.eventAt < end,
+    );
   }
 
-  /**
-   * Has NO effect on the projection until approved (`approveCorrection`). Person and location are
-   * copied from the target. Throws `correction.target_not_found` if the target does not exist.
-   */
-  async requestCorrection(tx: Transaction, input: CorrectionRequestInput): Promise<string> {
-    const target = await this.entryById(tx, input.correctsEntryId);
-    return this.appendCorrection(tx, {
-      nodeId: input.nodeId,
-      personId: target.personId,
-      locationId: target.locationId,
-      correctsEntryId: input.correctsEntryId,
-      at: input.at,
-      offsetMinutes: input.offsetMinutes,
-      reason: input.reason,
-      actorPersonId: input.actorPersonId,
-      status: "requested",
-      origin: input.origin,
-    });
+  requestCorrection(tx: Transaction, input: CorrectionRequestInput): Promise<string> {
+    return requestCorrection(tx, input);
   }
-
-  /**
-   * The request row cannot be updated, so approval is a SECOND append: an `approved` correction of
-   * the same entry the request targeted, carrying the same value.
-   *
-   * Throws `correction.not_permitted` if the approver's role is not supervisor/manager/admin,
-   * `correction.target_not_found` if no such correction row exists, and `correction.not_pending` if
-   * the target already carries an approved correction.
-   */
-  async approveCorrection(tx: Transaction, input: CorrectionApprovalInput): Promise<string> {
-    const role = await this.roleOf(tx, input.approverPersonId);
-    if (role === undefined || !SUPERVISOR_ROLES.has(role)) {
-      throw new AppError("correction.not_permitted", {
-        personId: input.approverPersonId,
-      });
-    }
-    const request = await this.correctionById(tx, input.correctionId);
-    // The request row stays `requested` forever, so an approved correction of the same target is the
-    // only "already approved" signal.
-    if (await this.hasApprovedCorrection(tx, request.correctsEntryId)) {
-      throw new AppError("correction.not_pending", {
-        correctionId: input.correctionId,
-      });
-    }
-    return this.appendCorrection(tx, {
-      nodeId: input.nodeId,
-      personId: request.personId,
-      locationId: request.locationId,
-      // The ORIGINAL entry, not the request row: an approval of the unapproved request would never
-      // be applied by the projection.
-      correctsEntryId: request.correctsEntryId,
-      at: request.eventAt,
-      offsetMinutes: request.offsetMinutes,
-      reason: request.reason,
-      actorPersonId: input.approverPersonId,
-      status: "approved",
-      origin: jobOrigin("dashboard"),
-    });
+  approveCorrection(tx: Transaction, input: CorrectionApprovalInput): Promise<string> {
+    return approveCorrection(tx, input);
+  }
+  proposeCorrection(tx: Transaction, input: CorrectionRequestInput): Promise<string> {
+    return requestCorrection(tx, input, true);
+  }
+  acceptCorrection(tx: Transaction, input: CorrectionDecisionInput): Promise<string> {
+    return decideCorrection(tx, input, "accept");
+  }
+  disagreeCorrection(tx: Transaction, input: CorrectionDecisionInput): Promise<string> {
+    return decideCorrection(tx, input, "disagree");
+  }
+  declineCorrection(tx: Transaction, input: CorrectionDecisionInput): Promise<string> {
+    return decideCorrection(tx, input, "decline");
+  }
+  recordAutomaticClose(tx: Transaction, input: AutomaticCloseInput): Promise<string> {
+    return recordAutomaticClose(tx, input);
+  }
+  confirmAutomaticEntry(tx: Transaction, input: AutomaticConfirmationInput): Promise<string> {
+    return confirmAutomaticEntry(tx, input);
   }
 
   /**
@@ -643,114 +582,19 @@ export class WorkforceBackend {
         eventOffsetMinutes: input.offsetMinutes,
         recordedByPersonId: input.recordedByPersonId ?? input.personId,
         origin: input.origin,
+        extension: {
+          authorKind: await authorKindFor(
+            tx,
+            input.recordedByPersonId ?? input.personId,
+            input.personId,
+          ),
+          direction: null,
+          missingEntryKind: null,
+          respondsToEntryId: null,
+          payPeriodClosureId: null,
+        },
       },
     );
-  }
-
-  /** Throws `correction.target_not_found`. */
-  private async entryById(
-    tx: Transaction,
-    entryId: string,
-  ): Promise<{ personId: string; locationId: string }> {
-    const { rows } = await tx.execute<{ person_id: string; location_id: string }>(sql`
-      select person_id, location_id from time_entries
-      where id = ${entryId}
-      limit 1`);
-    const entry = rows[0];
-    if (entry === undefined) {
-      throw new AppError("correction.target_not_found", { entryId });
-    }
-    return { personId: entry.person_id, locationId: entry.location_id };
-  }
-
-  /** Whatever its `correction_status`, so an already-`approved` row reaches `approveCorrection`'s
-   * `not_pending` guard rather than reading as not found. */
-  private async correctionById(
-    tx: Transaction,
-    correctionId: string,
-  ): Promise<{
-    personId: string;
-    locationId: string;
-    correctsEntryId: string;
-    eventAt: string;
-    offsetMinutes: number;
-    reason: string;
-  }> {
-    const { rows } = await tx.execute<{
-      person_id: string;
-      location_id: string;
-      corrects_entry_id: string;
-      event_at: string;
-      event_offset_minutes: number;
-      correction_reason: string;
-    }>(sql`
-      select person_id, location_id, corrects_entry_id, event_at,
-        event_offset_minutes, correction_reason
-      from time_entries
-      where id = ${correctionId} and entry_kind = 'correction'
-      limit 1`);
-    const row = rows[0];
-    if (row === undefined) {
-      throw new AppError("correction.target_not_found", { entryId: correctionId });
-    }
-    return {
-      personId: row.person_id,
-      locationId: row.location_id,
-      correctsEntryId: row.corrects_entry_id,
-      eventAt: row.event_at,
-      offsetMinutes: row.event_offset_minutes,
-      reason: row.correction_reason,
-    };
-  }
-
-  /** A further correction of an already-corrected value targets the approval, a distinct entry. */
-  private async hasApprovedCorrection(tx: Transaction, targetEntryId: string): Promise<boolean> {
-    const { rows } = await tx.execute<{ one: number }>(sql`
-      select 1 as one from time_entries
-      where corrects_entry_id = ${targetEntryId}
-        and entry_kind = 'correction' and correction_status = 'approved'
-      limit 1`);
-    return rows.length > 0;
-  }
-
-  private async roleOf(tx: Transaction, personId: string): Promise<string | undefined> {
-    const { rows } = await tx.execute<{ role: string }>(sql`
-      select role from persons where id = ${personId} limit 1`);
-    return rows[0]?.role;
-  }
-
-  private async appendCorrection(
-    tx: Transaction,
-    params: {
-      nodeId: string;
-      personId: string;
-      locationId: string;
-      correctsEntryId: string;
-      at: string;
-      offsetMinutes: number;
-      reason: string;
-      actorPersonId: string;
-      status: "requested" | "approved";
-      origin: Origin;
-    },
-  ): Promise<string> {
-    const { id } = await appendToChain(
-      tx,
-      { nodeId: params.nodeId, locationId: params.locationId },
-      {
-        personId: params.personId,
-        entryKind: "correction",
-        eventAt: params.at,
-        eventOffsetMinutes: params.offsetMinutes,
-        recordedByPersonId: params.actorPersonId,
-        origin: params.origin,
-        correctsEntryId: params.correctsEntryId,
-        correctionReason: params.reason,
-        correctionStatus: params.status,
-        correctionActorId: params.actorPersonId,
-      },
-    );
-    return id;
   }
 
   private async contractedMinutesPerWeek(tx: Transaction, personId: string): Promise<number> {
@@ -770,35 +614,11 @@ export class WorkforceBackend {
     tx: Transaction,
     query: WorkSummaryQuery,
   ): Promise<TimeEntryRecord[]> {
-    // Widened a day each side (max wall offset ±14h < 1 day) so a session whose LOCAL date is in the
-    // period is fetched; `summarisePeriod` does the exact filter.
-    const windowStart = shiftDay(query.period.start, -1);
-    const windowEnd = shiftDay(query.period.end, 1);
-    // A correction is filtered by its CORRECTED time, so one whose corrected time falls outside the
-    // window is not fetched.
-    const rows = await tx
-      .select({
-        entryId: timeEntries.id,
-        personId: timeEntries.personId,
-        locationId: timeEntries.locationId,
-        nodeId: timeEntries.nodeId,
-        entryKind: timeEntries.entryKind,
-        eventAt: timeEntries.eventAt,
-        recordedAt: timeEntries.recordedAt,
-        offsetMinutes: timeEntries.eventOffsetMinutes,
-        sequenceNo: timeEntries.sequenceNo,
-        correctsEntryId: timeEntries.correctsEntryId,
-        correctionStatus: timeEntries.correctionStatus,
-      })
-      .from(timeEntries)
-      .where(
-        and(
-          eq(timeEntries.personId, query.personId),
-          gte(timeEntries.eventAt, windowStart),
-          lt(timeEntries.eventAt, windowEnd),
-        ),
-      );
-    return rows;
+    const start = shiftDay(query.period.start, -1),
+      end = shiftDay(query.period.end, 1);
+    return (await readRecordedEntries(tx, { personId: query.personId })).filter(
+      (e) => e.eventAt >= start && e.eventAt < end,
+    );
   }
 
   private alreadyOpen(input: ClockEventInput): AppError {
