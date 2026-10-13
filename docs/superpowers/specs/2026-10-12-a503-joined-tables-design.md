@@ -230,7 +230,8 @@ split today. A split decides only who sits where today.
   > Added 2026-10-13 by A503 part 3 (review 5–9): a merge holds the group back only while one of its
   > tables waits (guests seated, or a module refusing); a merge nobody sits at is ended by the reset
   > as any free merge is, and the joined table is put back whole. Food on its way to any table of the
-  > group holds it back too, until the food is collected.
+  > group holds it back too, and with it any merge one of the group's tables is in, until the food is
+  > collected or its order is abandoned.
 
 ### Service merges ask for seats
 

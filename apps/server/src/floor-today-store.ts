@@ -459,7 +459,7 @@ function mergesOf(
 /**
  * Grows `waiting` until it is closed under both ties: a merge with a waiting table waits whole, and
  * so does a split group with a waiting member or a member in `foodComing`. Applying any table of
- * either would move a waiting one.
+ * either would move a waiting table or one food is on its way to.
  */
 function waitingTogether(
   tables: readonly { id: string; splitOffFrom: string | null }[],

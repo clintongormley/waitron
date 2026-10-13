@@ -1612,7 +1612,8 @@ joined table with fewer than two parts still joined, that no party holds and no 
 refused `table.in_joined_table` on the same paths (`joinedOutOfService`,
 `packages/db/src/joined-parts.ts:47`). The reset keeps a joined table and the parts split off it
 waiting together while any of them is held by a party, refused by a module, merged with a waiting
-table, or has food on its way to it; a merge nobody sits at is ended as any free merge is. Its parts
+table, or has food on its way to it; a merge in which no table is held by a party, refused by a module
+or in a split group that waits is ended as any free merge is. Its parts
 not split off stay joined meanwhile, and the split ends when the reset puts the joined table back
 (`splitWithBusy`, `apps/server/src/floor-reset-plan.ts:38`; `waitingTogether`,
 `apps/server/src/floor-today-store.ts:464`).
