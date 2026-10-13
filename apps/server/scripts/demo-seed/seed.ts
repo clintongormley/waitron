@@ -7,7 +7,7 @@ import { deviceProfiles, floorZones, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { validateCapabilities } from "@waitron/layouts";
 import { readLocationClock } from "@waitron/reporting";
-import { replaceZoneClosedWeek } from "@waitron/venue-service";
+import { replaceZoneClosedWeek, saveSpecialDay, venueLocalMoment } from "@waitron/venue-service";
 import { locationId as brandLocationId } from "@waitron/shared";
 import type { CountryDemoIdentity } from "@waitron/country";
 import { createPrinter } from "@waitron/printing";
@@ -138,16 +138,31 @@ export async function seedDemoRestaurant(
       .from(floorZones)
       .where(and(eq(floorZones.locationId, locationId), eq(floorZones.name, terrace.name[locale])));
     if (zone === undefined) throw new Error("seedDemoRestaurant: no Terrace zone");
-    const { dayCutover } = await readLocationClock(tx, locationId);
+    const cfg = { locationId: brandLocationId(locationId) };
+    const clock = await readLocationClock(tx, locationId);
     await replaceZoneClosedWeek(
       tx,
-      { locationId: brandLocationId(locationId) },
+      cfg,
       zone.id,
       [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
         weekday,
-        ranges: [{ startsAt: "23:00", endsAt: dayCutover }],
+        ranges: [{ startsAt: "23:00", endsAt: clock.dayCutover }],
       })),
-      await readBusinessDayScheduleRevision(tx, { locationId: brandLocationId(locationId) }),
+      await readBusinessDayScheduleRevision(tx, cfg),
+    );
+    const at = new Date();
+    const year = venueLocalMoment(at, clock)!.civilDate.slice(0, 4);
+    await saveSpecialDay(
+      tx,
+      cfg,
+      null,
+      {
+        name: "Christmas Day",
+        repeatsYearly: true,
+        dates: [{ date: `${year}-12-25`, closedAllDay: true }],
+      },
+      at,
+      await readBusinessDayScheduleRevision(tx, cfg),
     );
   });
   return { passStationIds };

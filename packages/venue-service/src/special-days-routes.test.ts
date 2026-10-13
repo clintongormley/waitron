@@ -202,6 +202,52 @@ describe("the special-day routes", () => {
     expect(await response.json()).toEqual(expectedDetail(r, day.id));
   });
 
+  it("GET lists the venue's special days with their dates for a venue viewer, by name", async () => {
+    const r = await routed();
+    const navidad = await seeded(r);
+    const fair = await scoped((tx) =>
+      saveSpecialDay(
+        tx,
+        r.cfg,
+        null,
+        {
+          name: "Feria",
+          repeatsYearly: true,
+          dates: [{ date: "2030-04-20", closedAllDay: true }],
+        },
+        new Date(),
+        0,
+      ),
+    );
+    const response = await r.send("GET", "", r.supervisor);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual([
+      {
+        id: fair.id,
+        name: "Feria",
+        repeatsYearly: true,
+        dates: [{ date: "2030-04-20", closedAllDay: true }],
+      },
+      {
+        id: navidad.id,
+        name: "Navidad",
+        repeatsYearly: false,
+        dates: [
+          { date: "2030-12-24", closedAllDay: false },
+          { date: "2030-12-25", closedAllDay: true },
+        ],
+      },
+    ]);
+  });
+
+  it("GET lists nothing for a venue with no special days, and refuses a request with no session", async () => {
+    const r = await routed();
+    const response = await r.send("GET", "", r.manager);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual([]);
+    expect((await r.send("GET", "", "")).status).toBe(401);
+  });
+
   it("PUT updates a special day and keeps paint the body leaves out", async () => {
     const r = await routed();
     const day = await seeded(r);

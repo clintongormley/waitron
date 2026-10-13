@@ -29,7 +29,6 @@ export function fixture(): OpeningHoursModel {
     dayCutover: "06:00",
     seasons: [{ id: "autumn", name: "Autumn", startsOn: "09-01" }],
     currentSeasonId: "autumn",
-    namedDays: [],
     menus: [{ id: "m1", name: "Lunch menu", active: true, includes: [] }],
     departments: [
       {
@@ -58,7 +57,6 @@ export function fixture(): OpeningHoursModel {
             })),
           },
         ],
-        dates: [],
       },
     ],
   };

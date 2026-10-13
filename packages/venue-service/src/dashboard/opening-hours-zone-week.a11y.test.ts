@@ -44,7 +44,6 @@ describe.each(["en", "es"])("Zone week %s", (locale) => {
               ],
             },
           ],
-          dates: [],
         };
         week.zone = {
           id: "z1",
@@ -55,7 +54,6 @@ describe.each(["en", "es"])("Zone week %s", (locale) => {
               week: [{ weekday: 1, ranges: [{ startsAt: "11:00", endsAt: "12:00" }] }],
             },
           ],
-          dates: [],
         };
         week.seasonId = "s";
         week.readOnly = state === "viewer";

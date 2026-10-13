@@ -79,7 +79,6 @@ describe.each(["en", "es"] as const)("Station week %s", (locale) => {
             timeZone: "Europe/Madrid",
             clockReadable: true,
             dayCutover: "06:00",
-            namedDays: [],
             menus: [],
             departments: [
               {
@@ -87,7 +86,6 @@ describe.each(["en", "es"] as const)("Station week %s", (locale) => {
                 name: locale === "en" ? "Restaurant" : "Restaurante",
                 active: true,
                 zones: [],
-                dates: [],
                 periods: [
                   {
                     id: "lunch",
@@ -106,7 +104,6 @@ describe.each(["en", "es"] as const)("Station week %s", (locale) => {
                 name: "Bar",
                 active: true,
                 zones: [],
-                dates: [],
                 periods: [
                   {
                     id: "dinner",

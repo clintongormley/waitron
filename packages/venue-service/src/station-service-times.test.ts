@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import {
   CATALOGUE_MIGRATIONS,
   addProductToMenu,
@@ -22,13 +22,13 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { configureZone, createDepartment } from "./operations.js";
-import { replaceMenuWeek, saveMenuPeriod, saveSpecialDateMenus } from "./menu-timetable.js";
+import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import { setRoutingCell } from "./routing-store.js";
-import { saveSpecialDate } from "./hours.js";
-import { replaceZoneClosedWeek, saveZoneClosedDate } from "./zone-closed-times.js";
+import { replaceZoneClosedWeek } from "./zone-closed-times.js";
 import { closeStationForToday } from "./station-times.js";
 import { stationServiceTimes } from "./station-service-times.js";
 import { readSeasons } from "./seasons.js";
+import { saveSpecialDay, type SpecialDayInput } from "./special-days.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
@@ -143,40 +143,111 @@ const planned = (f: Awaited<ReturnType<typeof fixture>>, ranges = [f.lunchRange]
   always: null,
   days: [{ date: day, departments: [{ departmentId: f.department, ranges }] }],
 });
+const specialDay = (
+  db: Transaction,
+  f: Awaited<ReturnType<typeof fixture>>,
+  input: SpecialDayInput,
+) => saveSpecialDay(db, f.cfg, null, input, at, 0);
+/** A second department whose Monday 15:00-17:00 service reaches the station through its own zone. */
+async function paintableTakeaway(db: Transaction, f: Awaited<ReturnType<typeof fixture>>) {
+  const takeaway = (await createDepartment(db, f.cfg, { name: "Takeaway", orderStart: "table" }))
+    .id;
+  const [counter] = await db
+    .insert(floorZones)
+    .values({ ...f.cfg, name: "Counter" })
+    .returning();
+  await configureZone(db, f.cfg, { zoneId: counter!.id, departmentId: takeaway });
+  const period = (
+    await saveMenuPeriod(
+      db,
+      f.cfg,
+      takeaway,
+      { name: "Lunch", menuId: f.menu, staffMenuIds: [], colour: "blue" },
+      0,
+    )
+  ).id;
+  await replaceMenuWeek(
+    db,
+    f.cfg,
+    takeaway,
+    week("slots", [{ periodId: period, startsAt: "15:00", endsAt: "17:00" }]),
+    at,
+    0,
+  );
+  await setRoutingCell(
+    db,
+    f.cfg,
+    { row: { kind: "category", categoryId: f.category }, zoneId: counter!.id },
+    { kind: "station", stationId: f.station },
+  );
+  return takeaway;
+}
+it("shows a special date's painted Dinner 19:00-01:00 for a station routed only during Dinner", async () =>
+  tx(async (db) => {
+    const f = await fixture(db);
+    const dinner = (
+      await saveMenuPeriod(
+        db,
+        f.cfg,
+        f.department,
+        { name: "Dinner", menuId: f.menu, staffMenuIds: [], colour: "red" },
+        0,
+      )
+    ).id;
+    await setRoutingCell(
+      db,
+      f.cfg,
+      { row: { kind: "category", categoryId: f.category }, zoneId: f.terrace },
+      { kind: "no_preparation" },
+      [{ periodId: dinner, target: { kind: "station", stationId: f.station } }],
+    );
+    await specialDay(db, f, {
+      name: "Late opening",
+      repeatsYearly: false,
+      dates: [{ date: day, closedAllDay: false }],
+      paint: [
+        {
+          departmentId: f.department,
+          date: day,
+          ranges: [{ periodId: dinner, startsAt: "19:00", endsAt: "01:00" }],
+        },
+      ],
+    });
+    expect(await stationServiceTimes(db, f.cfg, f.station, day, day)).toEqual(
+      planned(f, [{ periodId: dinner, startsAt: "19:00", endsAt: "01:00" }]),
+    );
+  }));
 it("shows only Lunch when the period line sends Cocktails there only during Lunch", async () =>
   tx(async (db) => {
     const f = await fixture(db);
     expect(await stationServiceTimes(db, f.cfg, f.station, day, day)).toEqual(planned(f));
   }));
-it("applies named-day own ranges and dated zone closures", async () =>
+it("applies a special day's painted ranges and zone closures", async () =>
   tx(async (db) => {
     const f = await fixture(db);
-    const named = await saveSpecialDate(
-      db,
-      f.cfg,
-      null,
-      { date: day, name: "Celebration", ownHours: true, closeWholeVenue: false },
-      at,
-      undefined,
-      0,
-    );
-    await saveSpecialDateMenus(
-      db,
-      f.cfg,
-      named.id,
-      f.department,
-      [{ periodId: f.lunch, startsAt: "13:00", endsAt: "17:00" }],
-      at,
-      0,
-    );
-    await saveZoneClosedDate(
-      db,
-      f.cfg,
-      named.id,
-      f.terrace,
-      [{ startsAt: "15:00", endsAt: "06:00" }],
-      0,
-    );
+    await specialDay(db, f, {
+      name: "Celebration",
+      repeatsYearly: false,
+      dates: [{ date: day, closedAllDay: false }],
+      paint: [
+        {
+          departmentId: f.department,
+          date: day,
+          ranges: [
+            { periodId: null, startsAt: "12:00", endsAt: "13:00" },
+            { periodId: f.lunch, startsAt: "13:00", endsAt: "17:00" },
+            { periodId: null, startsAt: "17:00", endsAt: "18:00" },
+          ],
+        },
+      ],
+      zonePaint: [
+        {
+          zoneId: f.terrace,
+          date: day,
+          ranges: [{ kind: "closed", startsAt: "15:00", endsAt: "06:00" }],
+        },
+      ],
+    });
     expect(await stationServiceTimes(db, f.cfg, f.station, day, day)).toEqual(
       planned(f, [{ periodId: f.lunch, startsAt: "13:00", endsAt: "15:00" }]),
     );
@@ -285,15 +356,11 @@ it.each([
       await db.delete(sectionMembers).where(eq(sectionMembers.productId, f.product));
     }
     if (kind === "whole venue closed")
-      await saveSpecialDate(
-        db,
-        f.cfg,
-        null,
-        { date: day, name: "Closed", ownHours: false, closeWholeVenue: true },
-        at,
-        undefined,
-        0,
-      );
+      await specialDay(db, f, {
+        name: "Closed",
+        repeatsYearly: false,
+        dates: [{ date: day, closedAllDay: true }],
+      });
     if (kind === "whole zone closed")
       await replaceZoneClosedWeek(
         db,
@@ -375,18 +442,22 @@ it("reads products from staff menus and routes a variant by its parent's categor
     );
     expect(await stationServiceTimes(db, f.cfg, f.station, day, day)).toEqual(planned(f));
   }));
-it("a repeating own-hours day uses its occurrence, with an unsaved department still following the week", async () =>
+it("a repeating special day uses its occurrence, with an unpainted department still following the week", async () =>
   tx(async (db) => {
     const f = await fixture(db);
-    await saveSpecialDate(
-      db,
-      f.cfg,
-      null,
-      { date: day, name: "Annual day", repeats: true, ownHours: true, closeWholeVenue: false },
-      at,
-      undefined,
-      0,
-    );
+    const takeaway = await paintableTakeaway(db, f);
+    await specialDay(db, f, {
+      name: "Annual day",
+      repeatsYearly: true,
+      dates: [{ date: day, closedAllDay: false }],
+      paint: [
+        {
+          departmentId: takeaway,
+          date: day,
+          ranges: [{ periodId: null, startsAt: "15:00", endsAt: "17:00" }],
+        },
+      ],
+    });
     expect(await stationServiceTimes(db, f.cfg, f.station, "2037-10-12", "2037-10-12")).toEqual({
       always: null,
       days: [
@@ -491,24 +562,14 @@ it("reads the last valid calendar date without stepping beyond its requested ran
     });
   }));
 
-it("the normal week ignores a named-day closure while the dated week applies it", async () =>
+it("the normal week ignores a special day's closure while the dated week applies it", async () =>
   tx(async (db) => {
     const f = await fixture(db);
-    await saveSpecialDate(
-      db,
-      f.cfg,
-      null,
-      {
-        date: day,
-        name: "Closed Monday",
-        closeWholeVenue: true,
-        ownHours: false,
-        repeats: false,
-      },
-      at,
-      undefined,
-      0,
-    );
+    await specialDay(db, f, {
+      name: "Closed Monday",
+      repeatsYearly: false,
+      dates: [{ date: day, closedAllDay: true }],
+    });
     expect(await stationServiceTimes(db, f.cfg, f.station, day, day)).toEqual({
       always: null,
       days: [{ date: day, departments: [] }],
@@ -619,4 +680,25 @@ it("in normal mode shows, on every date, the week of the season holding the firs
     expect(
       await stationServiceTimes(db, f.cfg, f.station, "2030-12-01", "2030-12-02", "normal"),
     ).toEqual({ always: null, days: seasonDates.slice(6).map(lunchOn(f, ["2030-12-02"])) });
+  }));
+
+it("reads the seasons and each season week once over a 42-day range, dated or normal", async () =>
+  tx(async (db) => {
+    const f = await fixture(db);
+    const session = (db as unknown as { session: { prepareQuery: (...args: never[]) => unknown } })
+      .session;
+    for (const mode of ["dated", "normal"] as const) {
+      const spy = vi.spyOn(session, "prepareQuery");
+      try {
+        await stationServiceTimes(db, f.cfg, f.station, "2030-11-01", "2030-12-12", mode);
+        const texts = spy.mock.calls.map(([query]) => (query as unknown as { sql: string }).sql);
+        for (const table of ["seasons", "department_days", "zone_days"])
+          expect(
+            texts.filter((text) => text.includes(`from "${table}"`)),
+            `${mode} ${table}`,
+          ).toHaveLength(1);
+      } finally {
+        spy.mockRestore();
+      }
+    }
   }));

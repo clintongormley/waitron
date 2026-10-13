@@ -1,7 +1,6 @@
 import type { BusinessDayScheduleStatus } from "./service-day-context.js";
 // Public-holiday types and constants only, safe to import in the browser.
-import type { NamedDayKind } from "./named-day-rules.js";
-import type { HolidayFact, LocalDate } from "./hours-types.js";
+import type { CalendarDay, HolidayFact, LocalDate } from "./hours-types.js";
 
 export interface HolidayCoverage {
   year: number;
@@ -10,14 +9,14 @@ export interface HolidayCoverage {
   regionCode: string | null;
   nationalRegional:
     "complete" | "missing_year" | "unknown_region" | "area_required" | "unsupported_country";
-  local: "address_unresolved" | "unsupported_country" | "none_entered" | "owner_entered";
+  local: "address_unresolved" | "unsupported_country" | "none_entered";
   dataVersion: string | null;
   sourceIds: readonly string[];
 }
 
 export interface HolidaySource {
   id: string;
-  kind: "official" | "owner";
+  kind: "official";
   title: string;
   url: string | null;
   sha256: string | null;
@@ -48,29 +47,12 @@ export interface HolidayAreaModel {
   chosen: string | null;
 }
 
-export interface NamedDay {
-  id: string;
-  date: LocalDate;
-  name: string;
-  kind: NamedDayKind;
-  repeats: boolean;
-  ownHours: boolean;
-  closeWholeVenue: boolean;
-}
-export interface NamedCalendarDay {
-  date: LocalDate;
-  namedDay: NamedDay | null;
-  holidays: readonly HolidayFact[];
-  tone: "public_holiday" | "own_holiday" | "working_day" | "closed" | "standard";
-  ownHours: boolean;
-  closed: boolean;
-}
-export interface NamedDaysModel extends BusinessDayScheduleStatus {
+export interface SpecialDaysModel extends BusinessDayScheduleStatus {
   timeZone: string;
   dayCutover: string;
   civilDate: LocalDate | null;
   clockReadable: boolean;
-  days: readonly NamedCalendarDay[];
+  days: readonly CalendarDay[];
   holidayCoverage: readonly HolidayCoverage[];
   holidaySources: readonly HolidaySource[];
   area: {

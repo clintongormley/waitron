@@ -74,7 +74,7 @@ declare module "@waitron/shared" {
       date?: string;
       specialDayId?: string;
     };
-    /** Deleting a named period that `uses` still place, past special dates and special-day dates included. */
+    /** Deleting a named period that `uses` still place, past special-day dates included. */
     "menu_period.in_use": { periodId: string; uses: MenuPeriodUse[] };
     /** Another of the department's named periods already has `name`, as trimmed. */
     "menu_period.name_taken": { departmentId: string; name: string };
@@ -153,13 +153,8 @@ declare module "@waitron/shared" {
     "order.service_context_missing": { workingOrderId: string };
     "kitchen_notice.not_found": { noticeId: string };
     "kitchen_notice.invalid": { field: "direction" | "cancelledExtra" | "reroutedTo" };
-    /**
-     * `field` is the request path of the refused value, such as `days.2.cell.periods.0.opensAt`.
-     * A clash with the hours either side also names the other date and the subject.
-     */
-    "hours.invalid": { field: string; date?: string; subjectId?: string };
-    "special_date.not_found": { specialDateId: string };
-    "special_date.date_taken": { date: string };
+    /** `field` is the request path of the refused value, such as `days.2.cell.periods.0.opensAt`. */
+    "hours.invalid": { field: string };
     "season.not_found": { seasonId: string };
     "special_day.invalid": {
       field: string;
@@ -170,16 +165,9 @@ declare module "@waitron/shared" {
       periodId?: string;
     };
     "special_day.not_found": { specialDayId: string };
-    /** Another special day, or a named day (`specialDateId`), already holds `date` (the first day
-     *  the two would share). */
-    "special_day.date_taken": {
-      date: string;
-      name: string;
-      specialDayId?: string;
-      specialDateId?: string;
-    };
+    /** Another special day already holds `date` (the first day the two would share). */
+    "special_day.date_taken": { date: string; name: string; specialDayId: string };
     "zone_closed_time.invalid": { field: string; reason?: "empty" | "order" | "step" | "overlap" };
-    "special_date.keeps_week": { specialDateId: string };
     "station.always_open": { stationId: string };
     "holiday.invalid": { field: string };
     /** A configuration import's hours or holiday row holds a value a save would refuse; `field` is

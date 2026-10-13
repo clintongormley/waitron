@@ -68,17 +68,13 @@ export interface SeasonSchedule {
   week: readonly (readonly ServiceRange[])[];
 }
 
-/** A named day; `slots` null when it keeps its season's hours. A special-day date instead carries
- *  `paint`, laid over its season's day, and `closeWholeVenue` for its Closed-all-day tick; a
- *  repeating one says where it falls in a year through `occursIn` rather than `repeatOn`. */
+/** A special-day date: its `paint` is laid over its season's day, and `closeWholeVenue` is its
+ *  Closed-all-day tick; a repeating one says where it falls in a year through `occursIn`. */
 export interface DatedSchedule {
   date: LocalDate;
   closeWholeVenue: boolean;
-  repeatOn?: string | null;
   occursIn?: (year: number) => LocalDate | null;
-  ownHours?: boolean;
-  slots: readonly ServiceRange[] | null;
-  paint?: readonly PaintRange[];
+  paint: readonly PaintRange[];
   specialDayId?: string;
 }
 
@@ -127,7 +123,7 @@ export function findSeasonEndOffsetClash(
     for (const change of clock.cutoverChanges)
       years.add(Number(change.effectiveBusinessDay.slice(0, 4)));
   for (const day of dated) {
-    if (day.repeatOn == null && day.occursIn === undefined) continue;
+    if (day.occursIn === undefined) continue;
     const firstYear = Number(day.date.slice(0, 4));
     for (let year = firstYear; year < Math.min(firstYear + 400, 10000); year++) years.add(year);
     if (typeof clock !== "string")
@@ -137,35 +133,23 @@ export function findSeasonEndOffsetClash(
       }
   }
   const occurrences = dated.flatMap((day) =>
-    day.occursIn !== undefined
-      ? [...years].flatMap((year) => {
+    day.occursIn === undefined
+      ? [day]
+      : [...years].flatMap((year) => {
           const date = day.occursIn!(year);
           return date === null ? [] : [{ ...day, date }];
-        })
-      : day.repeatOn == null
-        ? [day]
-        : [...years].flatMap((year) => {
-            const date = `${String(year).padStart(4, "0")}-${day.repeatOn}`;
-            return date >= day.date &&
-              new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) === date
-              ? [{ ...day, date }]
-              : [];
-          }),
+        }),
   );
-  const special = new Map(occurrences.map((day) => [day.date, day]));
   const seasonOf = (date: LocalDate) => seasonOnSorted(ordered, date);
   const seasonal = (date: LocalDate): readonly ServiceRange[] => {
     const season = seasonOf(date);
     return season === null ? [] : weekOf(season, weekdayOf(date));
   };
-  // The first entry in `dated` that holds a date: on that date, or repeating from on or before it.
+  // The first entry in `dated` that holds a date: on that date, or repeating onto it.
   const firstOnDate = new Map<LocalDate, number>();
-  const repeatsOn = new Map<string, number[]>();
   dated.forEach((entry, index) => {
     if (entry.occursIn === undefined && !firstOnDate.has(entry.date))
       firstOnDate.set(entry.date, index);
-    if (entry.repeatOn != null)
-      repeatsOn.set(entry.repeatOn, [...(repeatsOn.get(entry.repeatOn) ?? []), index]);
   });
   const occursInYear = new Map<number, Map<LocalDate, number>>();
   const occursOn = (date: LocalDate): number => {
@@ -181,27 +165,20 @@ export function findSeasonEndOffsetClash(
     }
     return index.get(date) ?? Infinity;
   };
-  const storedIndex = (date: LocalDate): number => {
-    const repeat = repeatsOn.get(date.slice(5))?.find((index) => dated[index]!.date <= date);
-    return Math.min(firstOnDate.get(date) ?? Infinity, repeat ?? Infinity, occursOn(date));
-  };
+  const storedIndex = (date: LocalDate): number =>
+    Math.min(firstOnDate.get(date) ?? Infinity, occursOn(date));
   const storedOn = (date: LocalDate): DatedSchedule | undefined => dated[storedIndex(date)];
   // A repeating date falls on up to 400 years of dates but only (season, weekday) varies its day.
   const layered = new Map<string, readonly ServiceRange[]>();
   const effective = (date: LocalDate, cutover: string): readonly ServiceRange[] => {
     const index = storedIndex(date);
     const stored = dated[index];
-    if (stored?.paint !== undefined) {
-      if (stored.closeWholeVenue) return [];
-      const key = `${index}|${seasonOf(date)?.seasonId}|${weekdayOf(date)}|${cutover}`;
-      const day = layered.get(key) ?? layerPaint(seasonal(date), stored.paint, cutover);
-      layered.set(key, day);
-      return day;
-    }
-    if (special.get(date)?.closeWholeVenue === true) return [];
-    return stored === undefined || stored.ownHours === false
-      ? seasonal(date)
-      : (stored.slots ?? seasonal(date));
+    if (stored === undefined) return seasonal(date);
+    if (stored.closeWholeVenue) return [];
+    const key = `${index}|${seasonOf(date)?.seasonId}|${weekdayOf(date)}|${cutover}`;
+    const day = layered.get(key) ?? layerPaint(seasonal(date), stored.paint, cutover);
+    layered.set(key, day);
+    return day;
   };
   // Less than one day's grace can meet only a placement on this or the next business day.
   const boundaries = new Set(occurrences.flatMap(({ date }) => [addDays(date, -1), date]));

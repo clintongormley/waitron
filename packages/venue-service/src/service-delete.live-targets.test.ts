@@ -16,12 +16,11 @@ import { locationId } from "@waitron/shared";
 import * as service from "./index.js";
 
 import { readDepartmentLogoRasters } from "./department-receipts.js";
-import { saveZoneClosedDate } from "./zone-closed-times.js";
+import { saveSpecialDay } from "./special-days.js";
 import { placeOpenPeriod } from "./menu-timetable.js";
 import { VENUE_SERVICE_PROVISIONING } from "./provisioning.js";
 import { departments, zoneServicePolicies } from "./schema/service.js";
 import { menuPeriods } from "./schema/menus.js";
-import { specialDates } from "./schema/hours.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, service.VENUE_SERVICE_MIGRATIONS],
@@ -62,10 +61,6 @@ async function fixture() {
       },
       0,
     );
-    const [day] = await tx
-      .insert(specialDates)
-      .values({ ...cfg, name: "Event", date: "2026-10-12", ownHours: true })
-      .returning();
     await service.writeDepartmentReceipt(tx, cfg, gone.id, { email: "history@example.com" });
     await tx.update(departments).set({ active: false }).where(eq(departments.id, gone.id));
     await tx.update(floorZones).set({ active: false }).where(eq(floorZones.id, zone.id));
@@ -77,7 +72,6 @@ async function fixture() {
       liveZone: liveZone.id,
       menu: menu!.id,
       period: period.id,
-      day: day!.id,
     };
   });
 }
@@ -174,7 +168,20 @@ const actions: [string, string, (tx: Transaction, f: Fixture) => Promise<unknown
   [
     "menu date",
     "department.not_found",
-    (tx, f) => service.saveSpecialDateMenus(tx, f.cfg, f.day, f.gone, [], at, 0),
+    (tx, f) =>
+      saveSpecialDay(
+        tx,
+        f.cfg,
+        null,
+        {
+          name: "Navidad",
+          repeatsYearly: false,
+          dates: [{ date: "2030-12-25", closedAllDay: false }],
+          paint: [{ departmentId: f.gone, date: "2030-12-25", ranges: [] }],
+        },
+        at,
+        0,
+      ),
   ],
   [
     "receipt read",
@@ -230,7 +237,20 @@ const actions: [string, string, (tx: Transaction, f: Fixture) => Promise<unknown
   [
     "zone closed date",
     "service_zone.not_found",
-    (tx, f) => saveZoneClosedDate(tx, f.cfg, f.day, f.zone, [], 0, at),
+    (tx, f) =>
+      saveSpecialDay(
+        tx,
+        f.cfg,
+        null,
+        {
+          name: "Navidad",
+          repeatsYearly: false,
+          dates: [{ date: "2030-12-25", closedAllDay: false }],
+          zonePaint: [{ zoneId: f.zone, date: "2030-12-25", ranges: [] }],
+        },
+        at,
+        0,
+      ),
   ],
 ];
 describe("deleted service targets", () => {

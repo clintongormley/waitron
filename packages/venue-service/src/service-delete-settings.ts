@@ -11,8 +11,7 @@ import {
   deviceProfileZones,
 } from "./schema/service.js";
 import { routingCells, routingCellPeriods } from "./schema/routing.js";
-import { menuPeriods, menuPeriodStaffMenus, menuDayTimetables, menuSlots } from "./schema/menus.js";
-import { zoneClosedTimes } from "./schema/zone-closed-times.js";
+import { menuPeriods, menuPeriodStaffMenus } from "./schema/menus.js";
 import { zoneExtensions } from "./schema/zone-extensions.js";
 import { periodExtensions } from "./schema/period-extensions.js";
 import { departmentDayRanges, departmentDays, zoneDayRanges, zoneDays } from "./schema/seasons.js";
@@ -82,10 +81,6 @@ async function settings(
     .select()
     .from(zoneSalePolicies)
     .where(inArray(zoneSalePolicies.zoneId, zoneIds));
-  const closed = await tx
-    .select()
-    .from(zoneClosedTimes)
-    .where(inArray(zoneClosedTimes.zoneId, zoneIds));
   const extensions = await tx
     .select()
     .from(zoneExtensions)
@@ -185,14 +180,6 @@ async function settings(
     .select()
     .from(menuPeriodStaffMenus)
     .where(eq(menuPeriodStaffMenus.departmentId, departmentId ?? ""));
-  const timetables = await tx
-    .select()
-    .from(menuDayTimetables)
-    .where(eq(menuDayTimetables.departmentId, departmentId ?? ""));
-  const slots = await tx
-    .select()
-    .from(menuSlots)
-    .where(eq(menuSlots.departmentId, departmentId ?? ""));
   const departmentSeasons = await tx
     .selectDistinct({ seasonId: departmentDays.seasonId })
     .from(departmentDays)
@@ -299,12 +286,9 @@ async function settings(
       ),
     },
     { key: "zone_policies", count: policies.length + overrides.length, targets: [] },
-    { key: "zone_closed_times", count: closed.length, targets: [] },
     { key: "zone_extensions", count: extensions.length, targets: [] },
     { key: "department_periods", count: departmentPeriods.length, targets: [] },
     { key: "staff_menus", count: staff.length, targets: [] },
-    { key: "timetables", count: timetables.length, targets: [] },
-    { key: "slots", count: slots.length, targets: [] },
     {
       key: "seasons",
       count: new Set([...departmentSeasons, ...zoneSeasons].map((row) => row.seasonId)).size,
@@ -375,7 +359,6 @@ export async function clearServiceDeleteSettings(
     ),
   );
   await tx.delete(zoneExtensions).where(inArray(zoneExtensions.zoneId, selected.zoneIds));
-  await tx.delete(zoneClosedTimes).where(inArray(zoneClosedTimes.zoneId, selected.zoneIds));
   await tx.delete(zoneDays).where(inArray(zoneDays.zoneId, selected.zoneIds));
   await tx.delete(zoneSalePolicies).where(inArray(zoneSalePolicies.zoneId, selected.zoneIds));
   for (const start of selected.starts)
@@ -402,13 +385,9 @@ export async function clearServiceDeleteSettings(
     await tx
       .delete(periodExtensions)
       .where(eq(periodExtensions.departmentId, selected.departmentId));
-    await tx.delete(menuSlots).where(eq(menuSlots.departmentId, selected.departmentId));
     await tx
       .delete(menuPeriodStaffMenus)
       .where(eq(menuPeriodStaffMenus.departmentId, selected.departmentId));
-    await tx
-      .delete(menuDayTimetables)
-      .where(eq(menuDayTimetables.departmentId, selected.departmentId));
     await tx.delete(departmentDays).where(eq(departmentDays.departmentId, selected.departmentId));
     await tx.delete(menuPeriods).where(eq(menuPeriods.departmentId, selected.departmentId));
     await tx

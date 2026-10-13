@@ -68,6 +68,7 @@ export const specialDayDates = table(
     locationId: id("location_id").notNull(),
     date: day("date").notNull(),
     closedAllDay: flag("closed_all_day").notNull().default(false),
+    holidayName: label("holiday_name"),
   },
   (t) => [
     foreignKey({

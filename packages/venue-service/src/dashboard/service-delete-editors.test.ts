@@ -11,7 +11,8 @@ import "./department-settings.js";
 import "./venue-departments-shell.js";
 import "./zone-edit-dialog.js";
 import "./opening-hours-screen.js";
-import { realWeekModel, namedWeekModel } from "../testing/real-week-model.js";
+import { namedWeekModel } from "../testing/real-week-model.js";
+import { everyDateSpecial } from "../testing/special-day-fixture.js";
 
 const originalUrl = location.href;
 class App extends LitElement {
@@ -125,15 +126,12 @@ function hoursFixture(): OpeningHoursModel {
     dayCutover: "06:00",
     seasons: [{ id: "autumn", name: "Autumn", startsOn: "09-01" }],
     currentSeasonId: "autumn",
-    namedDays: [],
     menus: [{ id: "m1", name: "Menu", active: true, includes: [] }],
     departments: ["d1", "d2"].map((id, index) => ({
       id,
       name: id,
       active: true,
-      zones: [
-        { id: `z${index + 1}`, name: `Zone ${index + 1}`, seasonWeeks: [], week: [], dates: [] },
-      ],
+      zones: [{ id: `z${index + 1}`, name: `Zone ${index + 1}`, seasonWeeks: [] }],
       periods: [
         {
           id: `p${index + 1}`,
@@ -157,7 +155,6 @@ function hoursFixture(): OpeningHoursModel {
           ],
         },
       ],
-      dates: [],
     })),
   };
 }
@@ -173,7 +170,11 @@ async function hours(
   const writes: unknown[][] = [];
   const api = new OpeningHoursApi(
     withOpeningStations((async (path, method, body) => {
-      if (method === "GET") return path.includes("/named-days?") ? namedWeekModel() : model;
+      if (method === "GET")
+        return (
+          (view === "day" && everyDateSpecial(path)) ||
+          (path.includes("/named-days?") ? namedWeekModel() : model)
+        );
       writes.push([path, method, body]);
       return write();
     }) as DashboardRequest),
@@ -191,6 +192,12 @@ async function hours(
   }
   return { screen, writes, model, replace };
 }
+const DAY_WRITE = "/management-api/venue-service/special-days/day-2026-10-12";
+/** A write's path and the departments its paint names. */
+const painted = ([path, , body]: unknown[]) => [
+  path,
+  (body as { paint: { departmentId: string }[] }).paint.map((entry) => entry.departmentId),
+];
 it.each(["department", "period"])(
   "remote %s deletion retires the dirty retained menu-period editor",
   async (kind) => {
@@ -402,61 +409,6 @@ it.each(["keep", "discard"] as const)(
     expect(app.leave.coordinator.isDirty([day])).toBe(true);
   },
 );
-async function realDate(write?: () => Promise<unknown>) {
-  vi.useFakeTimers({ toFake: ["Date"] });
-  vi.setSystemTime(new Date("2026-10-12T12:00:00Z"));
-  const result = await hours("week", realWeekModel(), write);
-  history.replaceState(null, "", "/manage/opening-hours/view/week/department/d1?week=2026-10-12");
-  window.dispatchEvent(new PopStateEvent("popstate"));
-  await result.screen.updateComplete;
-  const owner = result.screen.shadowRoot!.querySelector("opening-hours-week")!;
-  await owner.updateComplete;
-  const grid = owner.shadowRoot!.querySelector("service-grid")!;
-  await grid.updateComplete;
-  emit(grid, "grid-block-change", { columnKey: "2", index: 0, startsAt: "12:00", endsAt: "17:00" });
-  await owner.updateComplete;
-  expect(app.leave.coordinator.isDirty()).toBe(true);
-  return { ...result, owner };
-}
-it.each(["keep", "discard"] as const)(
-  "department deletion cancels real-date %s without letting the retained date owner reopen",
-  async (decision) => {
-    const { screen, model, replace, owner } = await realDate();
-    const outcome = app.leave.coordinator.request({
-      scopes: "all",
-      reason: "navigation",
-      proceed: () => {},
-    });
-    await app.updateComplete;
-    const question = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
-    await question.updateComplete;
-    expect(question.open).toBe(true);
-    const stale = question.shadowRoot!.querySelector<HTMLElement>(`[data-choice=${decision}]`)!;
-    await replace({ ...model, departments: [] });
-    stale.click();
-    expect(await outcome).toBe("stale");
-    expect(owner.isConnected).toBe(false);
-    expect(screen.shadowRoot!.querySelector("opening-hours-week")).toBeNull();
-    expect(app.leave.coordinator.isDirty()).toBe(false);
-  },
-);
-it("a departed real-date save's refusal cannot revive its removed parent editor", async () => {
-  let refuse!: (reason: unknown) => void;
-  const { screen, model, replace, owner, writes } = await realDate(
-    () =>
-      new Promise((_done, reject) => {
-        refuse = reject;
-      }),
-  );
-  owner.shadowRoot!.querySelector<HTMLElement>("[data-test=save-date][data-day='2']")!.click();
-  await expect.poll(() => writes.length).toBe(1);
-  await replace({ ...model, departments: [] });
-  refuse({ code: "menu_timetable.invalid", params: { field: "slots.0.endsAt" } });
-  await new Promise((done) => setTimeout(done, 0));
-  expect(owner.isConnected).toBe(false);
-  expect(screen.shadowRoot!.querySelector("opening-hours-week")).toBeNull();
-  expect(app.leave.coordinator.isDirty()).toBe(false);
-});
 it("a late period save cannot revive the removed department's retained dialog", async () => {
   let finish!: () => void;
   const { screen, model, replace, writes } = await hours(
@@ -512,9 +464,7 @@ it.each(["success", "refusal"] as const)(
       day.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save-day]")!;
     save.click();
     await expect.poll(() => pending.length).toBe(1);
-    expect(writes.map(([path]) => path)).toEqual([
-      "/management-api/venue-service/departments/d1/menu-week",
-    ]);
+    expect(writes.map(painted)).toEqual([[DAY_WRITE, ["d1", "d2"]]]);
     await replace({ ...model, departments: model.departments.slice(1) });
     await day.updateComplete;
     expect(screen.shadowRoot!.querySelector("opening-hours-day")).toBe(day);
@@ -529,17 +479,17 @@ it.each(["success", "refusal"] as const)(
     if (result === "success") pending[0]!.resolve();
     else
       pending[0]!.reject({
-        code: "menu_timetable.invalid",
-        params: { field: "days.1.slots.0.endsAt" },
+        code: "special_day.invalid",
+        params: { field: "paint.0.ranges.0.endsAt" },
       });
     await new Promise((done) => setTimeout(done, 0));
     await day.updateComplete;
     expect(save.disabled).toBe(true);
     save.click();
     await day.updateComplete;
-    expect(writes.map(([path]) => path)).toEqual([
-      "/management-api/venue-service/departments/d1/menu-week",
-      "/management-api/venue-service/departments/d2/menu-week",
+    expect(writes.map(painted)).toEqual([
+      [DAY_WRITE, ["d1", "d2"]],
+      [DAY_WRITE, ["d2"]],
     ]);
     pending[1]!.resolve();
     await new Promise((done) => setTimeout(done, 0));
@@ -554,10 +504,10 @@ it.each(["success", "refusal"] as const)(
     expect(save.disabled).toBe(false);
     save.click();
     await expect.poll(() => pending.length).toBe(3);
-    expect(writes.map(([path]) => path)).toEqual([
-      "/management-api/venue-service/departments/d1/menu-week",
-      "/management-api/venue-service/departments/d2/menu-week",
-      "/management-api/venue-service/departments/d2/menu-week",
+    expect(writes.map(painted)).toEqual([
+      [DAY_WRITE, ["d1", "d2"]],
+      [DAY_WRITE, ["d2"]],
+      [DAY_WRITE, ["d2"]],
     ]);
     pending[2]!.resolve();
     await new Promise((done) => setTimeout(done, 0));
@@ -601,9 +551,9 @@ it("a reconnected day owner can save its retained draft after an old pending wri
   expect(save.disabled).toBe(true);
   save.click();
   await day.updateComplete;
-  expect(writes.map(([path]) => path)).toEqual([
-    "/management-api/venue-service/departments/d1/menu-week",
-    "/management-api/venue-service/departments/d1/menu-week",
+  expect(writes.map(painted)).toEqual([
+    [DAY_WRITE, ["d1"]],
+    [DAY_WRITE, ["d1"]],
   ]);
   pending[1]!();
   await new Promise((done) => setTimeout(done, 0));

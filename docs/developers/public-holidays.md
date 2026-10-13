@@ -1,33 +1,48 @@
 # Public holidays
 
-You plan holidays in Opening hours → Calendar (`/manage/opening-hours/view/calendar`). The official
-national and regional dates come from the country's shipped calendar. Add your town's holidays
-as your own named days with kind Holiday, alongside other holidays you choose for your venue.
-Your own days belong to the venue, rather than to a saved town address. Their dates can repeat
-annually, and the country's local-holiday number does not cap them.
+You plan holidays in Opening hours → Calendar (`/manage/opening-hours/view/calendar`). Public
+holidays come only from the country's shipped calendar: its national and regional dates. The venue
+is not a holiday source. To change the venue's hours on a day, your town's holiday included, make
+that day a special day (see "Special days" in [conventions-data.md](conventions-data.md)). A
+special day belongs to the venue, not to a saved town address, and the country's local-holiday
+number does not cap special days.
 
-A public holiday is information: reading one does not write a named day or change opening hours.
-Add on a public date starts the named-day draft with its public name and Holiday kind; you decide
-whether to keep the normal week, give the date its own hours, or close the venue. The reader is
-`readNamedDaysModel` in `packages/venue-service/src/named-days.ts`; the editor and Calendar actions
-are in `packages/venue-service/src/dashboard/named-day-editor.ts` and `hours-calendar.ts`.
+A public holiday is information: reading one does not write a special day or change opening hours.
+On a public date, Make this a special day… opens the special-day dialog with the holiday's name
+filled in; you choose its dates, whether it repeats every year, and whether each date is Closed all
+day. The reader is `readSpecialDaysModel` in `packages/venue-service/src/named-days.ts`; the dialog
+and the Calendar are `special-day-dialog.ts` and `hours-calendar.ts` in
+`packages/venue-service/src/dashboard/`.
+
+A special-day date saved on a public holiday records that holiday's official name
+(`special_day_dates.holiday_name`); a date the special day already held keeps the name it was saved
+with (`saveSpecialDay` in `packages/venue-service/src/special-days.ts`). On a special day that
+repeats every year, such a date falls in each later year on the date the country calendar gives a
+holiday of that name, and in no year whose shipped data lacks that name, a year with no shipped
+data included; any other repeating date falls on the same month and day (`specialDateIn`, same
+file; "applies nothing in a year whose list lacks the name, or that has no list" in
+`special-days.holiday-name.test.ts`). The readiness list warns `special_day.holiday_missing` for
+each such date the venue's current or next year places nowhere (`missingHolidays`,
+`special-days.ts`). A configuration bundle carries no holiday lists, so its import compares such a
+date with the others in its first year only (`validateSpecialDays`,
+`packages/venue-service/src/configuration-transfer.ts`).
 
 ## Where each part lives
 
 - `CountryHolidayCalendar` in `packages/country/src/holidays.ts` describes shipped facts and their
-  coverage. A pack without it supplies no official holidays; you can still add your own days.
+  coverage. A pack without it supplies no official holidays; you can still add special days.
 - Spain's data lives in `packages/country-es/src/data/`: `es-2026.ts` holds the rows, `regions.ts`
   maps provinces and territorial areas, and `sources.ts` holds source addresses and hashes.
   The archived pages and their provenance remain in `packages/country-es/src/data/sources/`.
-- Own days live in `special_dates`, declared in `packages/venue-service/src/schema/hours.ts`.
-  `saveSpecialDate` in `hours.ts` validates their kind, repeat, own-hours and closure choices.
-  `packages/venue-service/drizzle/0036_hard_jubilee.sql` retires `local_holidays` and the transitional colour.
+- Special days live in `special_days` and `special_day_dates`, declared in
+  `packages/venue-service/src/schema/seasons.ts`; `saveSpecialDay` in `special-days.ts` validates
+  them. `packages/venue-service/drizzle/0038_clammy_klaw.sql` dropped `local_holidays`.
 - `holiday_geographies` in `packages/venue-service/src/schema/holidays.ts` retains the holiday-area
   choice for an address. `readHolidayAreaModel` and `saveHolidayArea` in `holidays.ts` read and write
   that choice; the area control is in Calendar. The routes in `routes.ts` require `venue.view`
   for reads and `venue_service.manage` for writes.
 
-## Official dates follow your address; own days follow your venue
+## Official dates follow your address; special days follow your venue
 
 `readAddress` and `readHolidays` in `packages/venue-service/src/holidays.ts` resolve the country
 from the taxpayer, the province from the pack's province list, and the city from the location.
@@ -38,11 +53,11 @@ are shown. The 2026 territorial source notes remain in the archived sources READ
 An area's identity uses country, province and normalized city. Changing the address stops using
 that area's choice, but keeps it stored for a later matching address. `holidayCityKey` normalizes
 Unicode, trims and collapses spaces, and lowercases; accents and punctuation still count.
-Your own holidays are not filtered by that identity (`readHolidays` reads `special_dates` by
-`locationId`). You can add them even without a recognized holiday address or country calendar.
+Special days are not filtered by that identity, and you can add them without a recognized holiday
+address or country calendar.
 
 Each read supplies coverage for every year it spans. Calendar reports official and local coverage
-independently (`hours-calendar.ts`, the named-month and retained date-panel renderers).
+independently (`hours-calendar.ts`).
 
 | `nationalRegional` | Meaning |
 | --- | --- |
@@ -52,44 +67,40 @@ independently (`hours-calendar.ts`, the named-month and retained date-panel rend
 | `unknown_region` | The province cannot be resolved for official data. |
 | `unsupported_country` | The country has no shipped holiday calendar. |
 
-`local` is `owner_entered` if an own Holiday occurs anywhere in that year, including a yearly
-repeat. Otherwise the reader reports `address_unresolved`, `unsupported_country` or `none_entered`
-from the holiday address and calendar. Those states say that no own holidays have been entered;
-none prevents you adding one. A January read can therefore report owner-entered coverage for an
-own holiday in December. `holidays.test.ts` exercises that year-wide read and annual repeats.
-Working days do not count as local holidays, and own holidays do not become official facts.
+`local` is `address_unresolved`, `unsupported_country` or `none_entered`, from the holiday address
+and calendar alone (`readHolidays`). A special day never counts as a local holiday and never becomes
+an official fact, whatever its name: "does not count a special day as a local holiday, whatever its
+name" in `packages/venue-service/src/holidays.test.ts`.
 
 ## The local number is information
 
 `localEntryLimit` remains in the country contract and reaches Calendar as `localHolidaysPerYear`.
 Spain's 2 comes from BOE-A-2025-21667: "hasta dos días de cada año natural con carácter de fiestas
 locales". The source is archived in `packages/country-es/src/data/sources/BOE-A-2025-21667.xml`.
-It is guidance about the public calendar, not a limit on your own named holidays.
-`saveSpecialDate` and configuration validation do not count own holidays against it; the
-three-own-holidays case in `packages/venue-service/src/holidays.test.ts` exercises the writer.
-An own holiday is your assertion; these paths do not check a municipal list.
+It is guidance about the public calendar, not a limit on special days: Calendar shows it as a hint
+(`calendar.local_hint`, `hours-calendar.ts`), and `saveSpecialDay` never reads it. A special day is your assertion; nothing checks
+it against a municipal list.
 
 ## What a configuration transfer carries
 
 `VENUE_SERVICE_CONFIGURATION_TRANSFER` in `packages/venue-service/src/configuration-transfer.ts`
-carries named days and retained holiday-area geographies, without local-holiday entries or the
-retired colour. It also carries dated department schedules, zone closed times, and seasons with
-their department and zone weeks (see "Seasons and season weeks" in
-[conventions-data.md](conventions-data.md)), and special days with their dates and paint (see
-"Special days" there). Public facts,
-source hashes and shipped data versions come from the receiving build's pack.
+carries retained holiday-area geographies, seasons with their department and zone weeks (see
+"Seasons and season weeks" in [conventions-data.md](conventions-data.md)), and special days with
+their dates, holiday names and paint (see "Special days" there). Public facts, source hashes and
+shipped data versions come from the receiving build's pack.
 
 `validateHolidayConfiguration` validates geographies and area choices against the receiving packs;
-`validateNamedDaysConfiguration` validates named-day fields and colliding occurrences. Named-day
-and zone configuration tests are in `packages/venue-service/src/configuration-transfer.test.ts`.
-Retiring the old table and colour requires a venue reset; it does not migrate the old local entries
-into named days. Historical plans describe the earlier allowance and address-owned entries; their
-2026-10-09 pointers identify this replacement.
+`validateSeasonWeeks` validates special days, their dates and their paint. The cases are in
+`packages/venue-service/src/configuration-transfer.test.ts`.
+
+**2026-10-13, A506-5:** named days, and the `special_dates` table that held the venue's own
+holidays, were dropped; dropping them needs a venue reset, and nothing carries them into special
+days. Historical plans describe the earlier models; their dated pointers identify each replacement.
 
 ## Earlier source verification and its limits
 
-The dated observations below retain the 2026-10-06 source receipts. For the current named-day
-model, use the sections above; the old local-entry storage and allowance no longer apply.
+The dated observations below retain the 2026-10-06 source receipts. For the current model, use the
+sections above; the old local-entry storage and allowance no longer apply.
 
 The 2026 data was checked against the archived annex by a test, not by reading:
 
@@ -160,15 +171,21 @@ These steps assume Spain; another country follows the same shape with its own of
    pass. Record the counts and the comparison result in the pull request. A data-only update needs
    no database migration.
 6. **Ship.** Open a signed-off pull request through the usual review, hook and CI. Update the
-   coverage only for the years and regions you compared. Reading the new shipped data does not
-   author named days: `readHolidays` in `packages/venue-service/src/holidays.ts` reads the country
-   calendar and stored named days, and returns facts and coverage. Run the holiday suites above
-   to check the current reader; the earlier local-table receipt below is historical.
+   coverage only for the years and regions you compared. Reading the new shipped data writes no
+   special day: `readHolidays` in `packages/venue-service/src/holidays.ts` reads the country
+   calendar alone, and returns facts and coverage. It can move a special day, though: a repeating
+   date saved on a public holiday falls wherever the shipped data puts that holiday's name
+   (`specialDateIn`, `packages/venue-service/src/special-days.ts`), so renaming a holiday or
+   moving its date in the data moves or drops that date in the years it covers after the year the
+   date was saved in. Run the holiday suites above to check the current reader; the earlier
+   local-table receipt below is historical.
 
 ### Earlier data-revision receipt
 
 **2026-10-09, A366 slice 2:** the 2026-10-06 data-revision experiment described here used
 `local_holidays`, which the slice now retires. It is not evidence about today's named-day writes.
+**2026-10-13, A506-5:** `special_dates` is dropped too. The case now finds the venue's
+`holiday_geographies` and `special_days` rows unchanged.
 
 The earlier receipt asserted: "reads a
    data revision's facts, version and allowance, leaving every stored row as it was"

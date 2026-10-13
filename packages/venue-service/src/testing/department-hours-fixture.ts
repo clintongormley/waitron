@@ -17,7 +17,6 @@ export function departmentHoursModel(): OpeningHoursModel {
     menus: [],
     seasons: [AUTUMN],
     currentSeasonId: AUTUMN.id,
-    namedDays: [],
     departments: [
       {
         id: "d1",
@@ -25,19 +24,16 @@ export function departmentHoursModel(): OpeningHoursModel {
         active: true,
         periods: [],
         seasonWeeks: [{ seasonId: AUTUMN.id, week: [] }],
-        dates: [],
         zones: [
           {
             id: "z1",
             name: "Terrace",
-            dates: [],
             seasonWeeks: [{ seasonId: AUTUMN.id, week: terraceWeek() }],
           },
           {
             id: "z2",
             name: "Bar",
             seasonWeeks: [{ seasonId: AUTUMN.id, week: [] }],
-            dates: [],
           },
         ],
       },

@@ -25,15 +25,15 @@ import {
 import type { ModuleRouteContext } from "@waitron/module";
 import { locationId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
-import type { HolidayGeography, HolidayRead, NamedDaysModel } from "./holiday-types.js";
+import type { HolidayGeography, HolidayRead, SpecialDaysModel } from "./holiday-types.js";
 import { readHolidays } from "./holidays.js";
-import { saveSpecialDate } from "./hours.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import type { VenueScope } from "./operations.js";
 import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
 import { VENUE_SERVICE_ROUTES } from "./routes.js";
 import { holidayGeographies } from "./schema/holidays.js";
-import { specialDates } from "./schema/hours.js";
+import { specialDays } from "./schema/seasons.js";
+import { saveSpecialDay } from "./special-days.js";
 
 registerModulePermissions(VENUE_SERVICE_PERMISSIONS);
 
@@ -182,29 +182,20 @@ async function rows(fx: Fixture) {
     .orderBy(asc(holidayGeographies.id));
   const entries = await db
     .select()
-    .from(specialDates)
-    .where(inArray(specialDates.locationId, ids))
-    .orderBy(asc(specialDates.id));
+    .from(specialDays)
+    .where(inArray(specialDays.locationId, ids))
+    .orderBy(asc(specialDays.id));
   return { geographies, entries };
 }
 
 async function create(fx: Fixture, date: string, name: string) {
   return direct((tx) =>
-    saveSpecialDate(
+    saveSpecialDay(
       tx,
       fx.cfg,
       null,
-      {
-        date,
-        name,
-        kind: "holiday",
-        repeats: false,
-        ownHours: false,
-        closeWholeVenue: false,
-        cells: [],
-      },
+      { name, repeatsYearly: false, dates: [{ date, closedAllDay: false }] },
       new Date("2026-01-01T12:00:00Z"),
-      undefined,
       0,
     ),
   );
@@ -224,21 +215,16 @@ describe("reading holidays", () => {
     expect(response.status).toBe(200);
     const read = (await response.json()) as HolidayRead;
     expect(read).toEqual(expected);
-    // Spain's 2026 data lists 12 October nationally; the venue's own entry follows it.
+    // Spain's 2026 data lists 12 October nationally; the venue's special day is not a holiday.
     expect(read.facts.map(({ date, name, scope }) => [date, name, scope])).toEqual([
       ["2026-10-12", "Fiesta Nacional de España", "national"],
     ]);
     expect(read.coverage).toMatchObject([
       { year: 2026, country: "ES", provinceCode: "41", nationalRegional: "complete" },
     ]);
-    expect(read.coverage[0]!.local).toBe("owner_entered");
-    expect(read.sources.find(({ kind }) => kind === "owner")).toEqual({
-      id: `owner:named-days:${fx.cfg.locationId}`,
-      kind: "owner",
-      title: "Venue's own holidays",
-      url: null,
-      sha256: null,
-    });
+    expect(read.coverage[0]!.local).toBe("none_entered");
+    expect(read.coverage[0]!.sourceIds).toEqual(read.sources.map(({ id }) => id));
+    expect(read.sources.map(({ kind }) => kind)).toEqual(["official"]);
     expect(
       (await send(fx, "GET", "/holidays?from=2026-10-01&to=2026-10-31", fx.manager)).status,
     ).toBe(200);
@@ -304,7 +290,7 @@ describe("the Calendar and holidays", () => {
         to: "2026-10-13",
       },
     ]);
-    const model = (await response.json()) as NamedDaysModel;
+    const model = (await response.json()) as SpecialDaysModel;
     expect(model.days.map(({ date, holidays }) => ({ date, holidays }))).toEqual([
       { date: "2026-10-11", holidays: [] },
       { date: "2026-10-12", holidays: expected.facts.filter((f) => f.date === "2026-10-12") },
@@ -314,7 +300,12 @@ describe("the Calendar and holidays", () => {
     expect(model.days[2]!.holidays).toHaveLength(0);
     expect(model.holidayCoverage).toEqual(expected.coverage);
     expect(model.holidaySources).toEqual(expected.sources);
-    expect(model.holidaySources.length).toBeGreaterThan(1);
+    expect(model.holidaySources.map(({ kind }) => kind)).toEqual(["official"]);
+    expect(model.days.map(({ specialDay }) => specialDay?.name ?? null)).toEqual([
+      null,
+      null,
+      "Feria",
+    ]);
   });
 });
 
@@ -324,7 +315,7 @@ describe("holiday area", () => {
     const local = async () =>
       (await (
         await send(fx, "GET", "/named-days?from=2026-01-01&to=2026-12-31", fx.manager)
-      ).json()) as NamedDaysModel;
+      ).json()) as SpecialDaysModel;
     const fresh = await local();
     expect(fresh.area.options.map(({ key }) => key)).toEqual(["aran", "lleida-except-aran"]);
     expect(fresh.area.required).toBe(true);

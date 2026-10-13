@@ -1,13 +1,21 @@
 import { and, eq, sql } from "drizzle-orm";
 import { kitchenStations, products, type Transaction } from "@waitron/db";
 import { effectiveProductColumns, parentJoin, parentProducts } from "@waitron/catalogue";
+import { readLocationClock } from "@waitron/reporting";
 import { AppError } from "@waitron/shared";
 import type { VenueScope } from "./operations.js";
 import type { LocalDate } from "./hours-types.js";
-import { addDays, isLocalDate, weekdayOf } from "./hours-rules.js";
-import { occursOn } from "./named-day-rules.js";
+import { addDays, isLocalDate } from "./hours-rules.js";
+import {
+  readDayPlan,
+  resolveDepartmentsDays,
+  resolveZoneClosedDays,
+  type DayPlan,
+} from "./day-resolver.js";
 import { seasonOn } from "./season-rules.js";
-import { readOpeningHoursModel } from "./menu-timetable.js";
+import { readActiveDepartments, readActivePeriods } from "./menu-timetable.js";
+import { readSeasons } from "./seasons.js";
+import { readServiceZones } from "./zone-closed-times.js";
 import { periodProductIds } from "./routing-periods.js";
 import { loadRoutingRules } from "./routing-store.js";
 import { selectRoutingCell } from "./routing.js";
@@ -93,12 +101,16 @@ export async function stationServiceTimes(
   if (station.isDefault) return { always: "default", days: [] };
 
   // Planning excludes daily station overrides and kept-open extensions.
-  const model = await readOpeningHoursModel(tx, cfg, new Date(`${from}T00:00:00Z`));
-  const departments = model.departments.filter((department) => department.active);
-  const offered = await periodProductIds(
-    tx,
-    departments.flatMap((department) => department.periods),
-  );
+  const clock = await readLocationClock(tx, cfg.locationId);
+  const periods = await readActivePeriods(tx, cfg);
+  const zones = await readServiceZones(tx, cfg);
+  const departments = (await readActiveDepartments(tx, cfg)).map((department) => ({
+    id: department.id,
+    periods: periods.filter((period) => period.departmentId === department.id),
+    zones: zones.filter((zone) => zone.departmentId === department.id),
+  }));
+  const seasons = await readSeasons(tx, cfg);
+  const offered = await periodProductIds(tx, periods);
   const productRows = await tx
     .select({
       routedId: sql<string>`coalesce(${products.parentId}, ${products.id})`,
@@ -140,52 +152,59 @@ export async function stationServiceTimes(
       reaches.set(period.id, zones);
     }
   }
-  const days: StationServiceDay[] = [];
-  for (let index = 0; index < dayCount; index++) {
-    const date = addDays(from, index);
-    const context = serviceDayWallContext(model.businessDayClock, date);
-    const cutover = context.dayCutover;
-    const named =
-      week === "normal" ? undefined : model.namedDays.find((day) => occursOn(day, date));
-    const weekday = weekdayOf(date);
-    const seasonId = seasonOn(model.seasons, week === "normal" ? from : date)?.id;
-    const results: StationServiceDay["departments"][number][] = [];
-    if (!named?.closeWholeVenue)
-      for (const department of departments) {
-        const own = named?.ownHours
-          ? department.dates.find((day) => day.specialDateId === named.id)
-          : undefined;
-        const slots =
-          own?.slots ??
-          department.seasonWeeks
-            .find((entry) => entry.seasonId === seasonId)
-            ?.week.find((day) => day.weekday === weekday)!.slots ??
-          [];
-        const byPeriod = new Map<string, Span[]>();
-        for (const slot of slots) {
-          const shares = byPeriod.get(slot.periodId) ?? [];
-          for (const zone of department.zones) {
-            if (!reaches.get(slot.periodId)?.has(zone.id)) continue;
-            const closed = named?.ownHours
-              ? (zone.dates.find((day) => day.specialDateId === named.id)?.ranges ?? [])
-              : (zone.seasonWeeks
-                  .find((entry) => entry.seasonId === seasonId)
-                  ?.week.find((day) => day.weekday === weekday)!.ranges ?? []);
-            shares.push(...subtract(plannedSpan(slot, context), closed, context));
-          }
-          byPeriod.set(slot.periodId, shares);
+  const dates = Array.from({ length: dayCount }, (_, index) => addDays(from, index));
+  const normalSeasonId = seasonOn(seasons, from)?.id ?? null;
+  const plan: DayPlan =
+    week === "normal"
+      ? {
+          seasonIdOn: new Map(dates.map((date) => [date, normalSeasonId])),
+          special: new Map(dates.map((date) => [date, null])),
         }
-        const ranges = [...byPeriod]
-          .flatMap(([periodId, shares]) =>
-            union(shares).map(({ start, end }) => ({
-              periodId,
-              startsAt: timeAt(start, cutover),
-              endsAt: timeAt(end, cutover),
-            })),
-          )
-          .sort((a, b) => rangeSpan(a, cutover).start - rangeSpan(b, cutover).start);
-        if (ranges.length > 0) results.push({ departmentId: department.id, ranges });
+      : await readDayPlan(tx, cfg, dates, seasons);
+  const departmentDays = await resolveDepartmentsDays(
+    tx,
+    cfg,
+    departments.map((department) => department.id),
+    dates,
+    clock,
+    plan,
+  );
+  const zoneDays = await resolveZoneClosedDays(
+    tx,
+    cfg,
+    departments.flatMap((department) => department.zones.map((zone) => zone.id)),
+    dates,
+    clock,
+    plan,
+  );
+  const days: StationServiceDay[] = [];
+  for (const date of dates) {
+    const context = serviceDayWallContext(clock, date);
+    const cutover = context.dayCutover;
+    const results: StationServiceDay["departments"][number][] = [];
+    for (const department of departments) {
+      const slots = departmentDays.get(department.id)!.get(date)!.ranges;
+      const byPeriod = new Map<string, Span[]>();
+      for (const slot of slots) {
+        const shares = byPeriod.get(slot.periodId) ?? [];
+        for (const zone of department.zones) {
+          if (!reaches.get(slot.periodId)?.has(zone.id)) continue;
+          const closed = zoneDays.get(zone.id)!.get(date)!;
+          shares.push(...subtract(plannedSpan(slot, context), closed, context));
+        }
+        byPeriod.set(slot.periodId, shares);
       }
+      const ranges = [...byPeriod]
+        .flatMap(([periodId, shares]) =>
+          union(shares).map(({ start, end }) => ({
+            periodId,
+            startsAt: timeAt(start, cutover),
+            endsAt: timeAt(end, cutover),
+          })),
+        )
+        .sort((a, b) => rangeSpan(a, cutover).start - rangeSpan(b, cutover).start);
+      if (ranges.length > 0) results.push({ departmentId: department.id, ranges });
+    }
     days.push({ date, departments: results });
   }
   return { always: null, days };

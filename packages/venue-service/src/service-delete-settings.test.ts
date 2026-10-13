@@ -29,8 +29,7 @@ import {
   deviceProfileZones,
 } from "./schema/service.js";
 import { routingCells, routingCellPeriods } from "./schema/routing.js";
-import { menuPeriods, menuPeriodStaffMenus, menuDayTimetables, menuSlots } from "./schema/menus.js";
-import { zoneClosedTimes } from "./schema/zone-closed-times.js";
+import { menuPeriods, menuPeriodStaffMenus } from "./schema/menus.js";
 import { zoneExtensions } from "./schema/zone-extensions.js";
 import { periodExtensions } from "./schema/period-extensions.js";
 import {
@@ -46,7 +45,6 @@ import {
   deviceKitchenScreens,
   deviceProfileKitchenScreens,
 } from "./schema/kitchen-screens.js";
-import { specialDates } from "./schema/hours.js";
 import {
   departmentDayRanges,
   departmentDays,
@@ -350,27 +348,6 @@ it("delete removes only owned configuration and keeps every unaffected row", asy
         menuId: menu!.id,
       })),
     );
-    const [date] = await tx
-      .insert(specialDates)
-      .values({ ...f.cfg, date: "2026-10-12", name: "Holiday", ownHours: true })
-      .returning();
-    const days = await tx
-      .insert(menuDayTimetables)
-      .values([
-        { departmentId: f.department, weekday: 1 },
-        { departmentId: f.department, specialDateId: date!.id },
-        { departmentId: f.alpha, weekday: 1 },
-      ])
-      .returning();
-    await tx.insert(menuSlots).values(
-      days.map((day, i) => ({
-        timetableId: day.id,
-        departmentId: day.departmentId,
-        periodId: i === 2 ? p3 : p1,
-        startsAt: "09:00:00",
-        endsAt: "17:00:00",
-      })),
-    );
     await tx.insert(periodExtensions).values([
       {
         departmentId: f.department,
@@ -396,11 +373,6 @@ it("delete removes only owned configuration and keeps every unaffected row", asy
         endsAt: "18:00:00",
       })),
     );
-    await tx.insert(zoneClosedTimes).values([
-      { zoneId: f.gone, weekday: 1, startsAt: "10:00:00", endsAt: "11:00:00" },
-      { zoneId: f.gone, specialDateId: date!.id, startsAt: "12:00:00", endsAt: "13:00:00" },
-      { zoneId: f.elsewhere, weekday: 1, startsAt: "10:00:00", endsAt: "11:00:00" },
-    ]);
     await tx.insert(departmentTransferDesks).values([
       { departmentId: f.department, receivingProfileId: f.explicit },
       { departmentId: f.alpha, receivingProfileId: f.explicit },
@@ -418,18 +390,14 @@ it("delete removes only owned configuration and keeps every unaffected row", asy
       children: routingCellPeriods,
       periods: menuPeriods,
       staff: menuPeriodStaffMenus,
-      days: menuDayTimetables,
-      slots: menuSlots,
       extensions: periodExtensions,
       policies: zoneServicePolicies,
       overrides: zoneSalePolicies,
-      closed: zoneClosedTimes,
       zoneExtensions,
       sales: departmentSalePolicies,
       desks: departmentTransferDesks,
       routes: departmentTransferDestinations,
       receipts: departmentReceipts,
-      dates: specialDates,
       menus: catalogues,
     };
     const before: Record<string, Record<string, unknown>[]> = {};
@@ -441,12 +409,9 @@ it("delete removes only owned configuration and keeps every unaffected row", asy
       { key: "routing_periods", count: 3, targets: [] },
       { key: "profile_zones", count: 2, targets: [] },
       { key: "zone_policies", count: 4, targets: [] },
-      { key: "zone_closed_times", count: 2, targets: [] },
       { key: "zone_extensions", count: 1, targets: [] },
       { key: "department_periods", count: 2, targets: [] },
       { key: "staff_menus", count: 2, targets: [] },
-      { key: "timetables", count: 2, targets: [] },
-      { key: "slots", count: 2, targets: [] },
       { key: "period_extensions", count: 1, targets: [] },
       { key: "department_policy", count: 1, targets: [] },
       { key: "transfer_desks", count: 1, targets: [{ id: f.explicit, name: "Explicit" }] },
@@ -470,7 +435,7 @@ it("delete removes only owned configuration and keeps every unaffected row", asy
     );
     for (const [key, table] of Object.entries(tables)) {
       if (["cells", "children", "routes", "policies"].includes(key)) continue;
-      const removedIds = key === "closed" ? [f.gone] : [f.gone, f.department];
+      const removedIds = [f.gone, f.department];
       expect(await tx.select().from(table), key).toEqual(
         before[key]!.filter(
           (row) =>
@@ -629,44 +594,12 @@ async function paintSeasons(tx: Transaction) {
   return { f, season: (name: string) => seasonsByName.get(name)!, week, closure };
 }
 
-const seasonLines = (impact: { key: string }[]) =>
-  impact.filter((item) => ["timetables", "slots", "seasons"].includes(item.key));
+const seasonLines = (impact: { key: string }[]) => impact.filter((item) => item.key === "seasons");
 
-it("the delete impact counts a week saved with no season once per season, beside a named day's own timetables, slots and closures", async () => {
+it("the delete impact counts a week saved with no season once per season", async () => {
   await run(async (tx) => {
     const { f, week } = await paintSeasons(tx);
     await week();
-    expect(await tx.select().from(menuDayTimetables)).toEqual([]);
-    const [named] = await tx
-      .insert(specialDates)
-      .values({ ...f.cfg, date: "2030-01-08", name: "Holiday", ownHours: true })
-      .returning();
-    const [timetable] = await tx
-      .insert(menuDayTimetables)
-      .values({ departmentId: f.department, specialDateId: named!.id })
-      .returning();
-    const [lunch] = await tx
-      .select()
-      .from(menuPeriods)
-      .where(eq(menuPeriods.departmentId, f.department));
-    await tx.insert(menuSlots).values(
-      [
-        ["09:00:00", "11:00:00"],
-        ["13:00:00", "16:00:00"],
-      ].map(([startsAt, endsAt]) => ({
-        timetableId: timetable!.id,
-        departmentId: f.department,
-        periodId: lunch!.id,
-        startsAt: startsAt!,
-        endsAt: endsAt!,
-      })),
-    );
-    await tx.insert(zoneClosedTimes).values({
-      zoneId: f.gone,
-      specialDateId: named!.id,
-      startsAt: "22:00:00",
-      endsAt: "23:30:00",
-    });
 
     const impact = await readServiceDeleteSettings(
       tx,
@@ -674,14 +607,7 @@ it("the delete impact counts a week saved with no season once per season, beside
       [f.gone, f.forbidden, f.allowed],
       f.department,
     );
-    expect(seasonLines(impact)).toEqual([
-      { key: "timetables", count: 1, targets: [] },
-      { key: "slots", count: 2, targets: [] },
-      { key: "seasons", count: 4, targets: [] },
-    ]);
-    expect(impact.filter((item) => item.key === "zone_closed_times")).toEqual([
-      { key: "zone_closed_times", count: 1, targets: [] },
-    ]);
+    expect(seasonLines(impact)).toEqual([{ key: "seasons", count: 4, targets: [] }]);
   });
 });
 
@@ -690,8 +616,6 @@ it("the delete impact counts one season for a week painted in Winter only, with 
     const { f, season, week, closure } = await paintSeasons(tx);
     await week(season("Winter"));
     await closure(season("Winter"));
-    expect(await tx.select().from(menuDayTimetables)).toEqual([]);
-    expect(await tx.select().from(zoneClosedTimes)).toEqual([]);
 
     expect(
       seasonLines(

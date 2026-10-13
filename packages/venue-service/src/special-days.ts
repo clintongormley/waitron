@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, lte, ne, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, lte, ne, or, sql } from "drizzle-orm";
 import { floorZones, newId, type Transaction } from "@waitron/db";
 import { readLocationClock } from "@waitron/reporting";
 import { AppError, isUuid, type BusinessDayClock, type ErrorParams } from "@waitron/shared";
@@ -7,7 +7,7 @@ import type { PaintRange, ZonePaint } from "./day-paint.js";
 import { isReadableClock, venueLocalMoment } from "./hours-clock.js";
 import { isLocalDate } from "./hours-rules.js";
 import type { LocalDate } from "./hours-types.js";
-import { nextOccurrence, occurrenceIn, repeatKey } from "./named-day-rules.js";
+import { nextOccurrence, occurrenceIn, repeatKey } from "./repeat-rules.js";
 import { storedTime, wireTime, type VenueScope } from "./operations.js";
 import {
   departmentDayRanges,
@@ -18,9 +18,9 @@ import {
   zoneDayRanges,
   zoneDays,
 } from "./schema/seasons.js";
-import { specialDates } from "./schema/hours.js";
 import { menuPeriods } from "./schema/menus.js";
 import { departments, zoneServicePolicies } from "./schema/service.js";
+import { readHolidayDates } from "./holidays.js";
 import { scheduleEndOffsetClash } from "./menu-timetable.js";
 import { joinTouching } from "./season-weeks.js";
 import { scheduleCutovers } from "./service-day-context.js";
@@ -30,18 +30,107 @@ import "./errors.js";
 export interface SpecialDayDateRule {
   date: LocalDate;
   repeats: boolean;
+  /** The official name of the public holiday on `date` when it was saved, if any. */
+  holidayName?: string | null;
+}
+
+/** Official public holidays by year, then by name, each at its date that year. */
+export type HolidayDates = ReadonlyMap<number, ReadonlyMap<string, LocalDate>>;
+
+export const NO_HOLIDAY_DATES: HolidayDates = new Map();
+
+const yearOf = (date: LocalDate) => Number(date.slice(0, 4));
+
+const followsHoliday = (rule: SpecialDayDateRule) =>
+  rule.repeats && rule.holidayName !== undefined && rule.holidayName !== null;
+
+/** The holiday lists the rules need over `years` (by default their `holidayHorizon`): none, and
+ *  nothing read, when no rule is a repeating date that follows a holiday's name. */
+export async function holidayDatesFor(
+  tx: Transaction,
+  cfg: VenueScope,
+  rules: readonly SpecialDayDateRule[],
+  [fromYear, toYear]: readonly [number, number] = holidayHorizon(rules),
+): Promise<HolidayDates> {
+  const named = rules.filter(followsHoliday);
+  if (named.length === 0) return NO_HOLIDAY_DATES;
+  const first = Math.min(...named.map((rule) => yearOf(rule.date))) + 1;
+  return readHolidayDates(tx, cfg, Math.max(fromYear, first), toYear);
+}
+
+const yearsInOrder = new WeakMap<HolidayDates, readonly number[]>();
+
+/** The years `holidays` holds, ascending; sorted once per map. */
+function holidayYears(holidays: HolidayDates): readonly number[] {
+  let years = yearsInOrder.get(holidays);
+  if (years === undefined) {
+    years = [...holidays.keys()].sort((a, b) => a - b);
+    yearsInOrder.set(holidays, years);
+  }
+  return years;
+}
+
+/** The official name of the first public holiday on `date`, or null. */
+function holidayNameOn(holidays: HolidayDates, date: LocalDate): string | null {
+  for (const [name, on] of holidays.get(yearOf(date)) ?? []) if (on === date) return name;
+  return null;
+}
+
+/** The years a check over every future occurrence walks, from the earliest date: 400 from it, or
+ *  from `walkFrom` when that is later. No years without rules. */
+export function holidayHorizon(
+  rules: readonly { date: LocalDate }[],
+  walkFrom = -Infinity,
+): [number, number] {
+  if (rules.length === 0) return [1, 0];
+  const first = Math.min(...rules.map((rule) => yearOf(rule.date)));
+  return [first, Math.min(Math.max(first, walkFrom) + 400, 9999)];
 }
 
 /** Where a special-day date falls in `year`: a one-off only in its own year, a repeating one from
- *  its first year on, and a 29 February only in leap years. Null when it does not fall in `year`. */
-export function specialDateIn(rule: SpecialDayDateRule, year: number): LocalDate | null {
-  return occurrenceIn(rule, year);
+ *  its first year on, and a 29 February only in leap years. A repeating date saved on a public
+ *  holiday falls, after its first year, where `holidays` puts a holiday of that name that year, and
+ *  nowhere when there is none. Null when it does not fall in `year`. */
+export function specialDateIn(
+  rule: SpecialDayDateRule,
+  year: number,
+  holidays: HolidayDates,
+): LocalDate | null {
+  if (!followsHoliday(rule) || year <= yearOf(rule.date)) return occurrenceIn(rule, year);
+  return holidays.get(year)?.get(rule.holidayName!) ?? null;
 }
 
-/** The first day two special-day dates would both stand on, or null when they never meet. */
-export function sharedSpecialDate(a: SpecialDayDateRule, b: SpecialDayDateRule): LocalDate | null {
-  if (specialDateIn(a, Number(b.date.slice(0, 4))) === b.date) return b.date;
-  if (specialDateIn(b, Number(a.date.slice(0, 4))) === a.date) return a.date;
+/** The first day two special-day dates would both stand on, or null when they never meet. A date
+ *  following a holiday's name is compared in every year `holidays` holds as well. */
+export function sharedSpecialDate(
+  a: SpecialDayDateRule,
+  b: SpecialDayDateRule,
+  holidays: HolidayDates,
+): LocalDate | null {
+  if (specialDateIn(a, yearOf(b.date), holidays) === b.date) return b.date;
+  if (specialDateIn(b, yearOf(a.date), holidays) === a.date) return a.date;
+  if (!a.repeats || !b.repeats || (!followsHoliday(a) && !followsHoliday(b))) return null;
+  const after = Math.max(yearOf(a.date), yearOf(b.date));
+  for (const year of holidayYears(holidays)) {
+    if (year <= after) continue;
+    const date = specialDateIn(a, year, holidays);
+    if (date !== null && date === specialDateIn(b, year, holidays)) return date;
+  }
+  return null;
+}
+
+/** The first day on or after `from` a special-day date stands on, or null. */
+function nextSpecialDate(
+  rule: SpecialDayDateRule,
+  from: LocalDate,
+  holidays: HolidayDates,
+): LocalDate | null {
+  if (!followsHoliday(rule)) return nextOccurrence(rule, from);
+  if (rule.date >= from) return rule.date;
+  for (const year of holidayYears(holidays)) {
+    const date = specialDateIn(rule, year, holidays);
+    if (date !== null && date >= from) return date;
+  }
   return null;
 }
 
@@ -52,8 +141,9 @@ export function firstSkippedEnd<T extends ClosedRange>(
   rule: SpecialDayDateRule,
   from: LocalDate,
   ranges: readonly T[],
+  holidays: HolidayDates,
 ): { range: T; end: "startsAt" | "endsAt"; date: LocalDate } | null {
-  const date = rule.repeats ? (nextOccurrence(rule, from) ?? rule.date) : rule.date;
+  const date = rule.repeats ? (nextSpecialDate(rule, from, holidays) ?? rule.date) : rule.date;
   for (const range of ranges)
     for (const end of ["startsAt", "endsAt"] as const)
       if (clockTimeSkippedInDay(clock, date, range[end], end === "endsAt"))
@@ -63,6 +153,7 @@ export function firstSkippedEnd<T extends ClosedRange>(
 
 export interface SpecialDayOccurrence {
   specialDayId: string;
+  name: string;
   dateId: string;
   storedDate: LocalDate;
   closedAllDay: boolean;
@@ -83,10 +174,12 @@ export async function specialDaysOn(
   const dates = await tx
     .select({
       specialDayId: specialDayDates.specialDayId,
+      name: specialDays.name,
       dateId: specialDayDates.id,
       date: specialDayDates.date,
       closedAllDay: specialDayDates.closedAllDay,
       repeats: specialDays.repeatsYearly,
+      holidayName: specialDayDates.holidayName,
     })
     .from(specialDayDates)
     .innerJoin(specialDays, eq(specialDays.id, specialDayDates.specialDayId))
@@ -97,19 +190,25 @@ export async function specialDaysOn(
           inArray(specialDayDates.date, ordered),
           and(
             eq(specialDays.repeatsYearly, true),
-            inArray(sql`substr(${specialDayDates.date}, 6)`, [...new Set(ordered.map(repeatKey))]),
+            or(
+              inArray(sql`substr(${specialDayDates.date}, 6)`, [
+                ...new Set(ordered.map(repeatKey)),
+              ]),
+              isNotNull(specialDayDates.holidayName),
+            ),
             lte(specialDayDates.date, ordered[ordered.length - 1]!),
           ),
         ),
       ),
     )
     .orderBy(asc(specialDayDates.date), asc(specialDayDates.id));
+  const holidays = await holidayDatesFor(tx, cfg, dates, [
+    yearOf(ordered[0]!),
+    yearOf(ordered[ordered.length - 1]!),
+  ]);
   const matched = new Map<LocalDate, (typeof dates)[number]>();
   for (const day of ordered) {
-    const row = dates.find(
-      (row) =>
-        specialDateIn({ date: row.date, repeats: row.repeats }, Number(day.slice(0, 4))) === day,
-    );
+    const row = dates.find((row) => specialDateIn(row, yearOf(day), holidays) === day);
     if (row !== undefined) matched.set(day, row);
   }
   if (matched.size === 0) return found;
@@ -161,6 +260,7 @@ export async function specialDaysOn(
   for (const [day, row] of matched)
     found.set(day, {
       specialDayId: row.specialDayId,
+      name: row.name,
       dateId: row.dateId,
       storedDate: row.date,
       closedAllDay: row.closedAllDay,
@@ -170,11 +270,59 @@ export async function specialDaysOn(
   return found;
 }
 
+export interface MissingHoliday {
+  specialDayId: string;
+  holidayName: string;
+  year: number;
+}
+
+/** Each repeating date following a holiday's name that the list for the venue's current or next
+ *  year places nowhere, that year having no holiday of the name or no list. */
+export async function missingHolidays(
+  tx: Transaction,
+  cfg: VenueScope,
+  at: Date,
+): Promise<MissingHoliday[]> {
+  const rows = await tx
+    .select({
+      specialDayId: specialDayDates.specialDayId,
+      date: specialDayDates.date,
+      holidayName: specialDayDates.holidayName,
+    })
+    .from(specialDayDates)
+    .innerJoin(specialDays, eq(specialDays.id, specialDayDates.specialDayId))
+    .where(
+      and(
+        eq(specialDayDates.locationId, cfg.locationId),
+        eq(specialDays.repeatsYearly, true),
+        isNotNull(specialDayDates.holidayName),
+      ),
+    )
+    .orderBy(asc(specialDayDates.date), asc(specialDayDates.id));
+  if (rows.length === 0) return [];
+  const clock = await readLocationClock(tx, cfg.locationId);
+  const today = venueLocalMoment(at, clock)?.civilDate ?? at.toISOString().slice(0, 10);
+  const years = [yearOf(today), yearOf(today) + 1];
+  const rules = rows.map((row) => ({ ...row, repeats: true }));
+  const holidays = await holidayDatesFor(tx, cfg, rules, [years[0]!, years[1]!]);
+  const missing = new Map<string, MissingHoliday>();
+  for (const year of years)
+    for (const rule of rules)
+      if (year > yearOf(rule.date) && specialDateIn(rule, year, holidays) === null)
+        missing.set(`${rule.specialDayId}|${rule.holidayName}|${year}`, {
+          specialDayId: rule.specialDayId,
+          holidayName: rule.holidayName!,
+          year,
+        });
+  return [...missing.values()];
+}
+
 export interface SpecialDaySchedule {
   specialDayId: string;
   name: string;
   date: LocalDate;
   repeats: boolean;
+  holidayName: string | null;
   closedAllDay: boolean;
   /** By department. */
   paint: ReadonlyMap<string, PaintRange[]>;
@@ -194,6 +342,7 @@ export async function readSpecialDaySchedules(
       name: specialDays.name,
       date: specialDayDates.date,
       repeats: specialDays.repeatsYearly,
+      holidayName: specialDayDates.holidayName,
       closedAllDay: specialDayDates.closedAllDay,
     })
     .from(specialDayDates)
@@ -242,8 +391,21 @@ export interface SpecialDayInput {
   zonePaint?: readonly { zoneId: string; date: LocalDate; ranges: readonly ZonePaint[] }[];
 }
 
-export interface SpecialDayDetail extends Omit<SpecialDayInput, "paint" | "zonePaint"> {
+/** A stored date; `holidayName` is the public holiday it was saved on, absent on an ordinary date. */
+export interface StoredSpecialDayDate {
+  date: LocalDate;
+  closedAllDay: boolean;
+  holidayName?: string;
+}
+
+export interface SpecialDaySummary {
   id: string;
+  name: string;
+  repeatsYearly: boolean;
+  dates: StoredSpecialDayDate[];
+}
+
+export interface SpecialDayDetail extends SpecialDaySummary {
   paint: { departmentId: string; date: LocalDate; ranges: PaintRange[] }[];
   zonePaint: { zoneId: string; date: LocalDate; ranges: ZonePaint[] }[];
 }
@@ -387,15 +549,11 @@ function parseInput(value: unknown, clock: BusinessDayClock) {
     if (typeof entry.closedAllDay !== "boolean") invalid(`dates.${index}.closedAllDay`);
     return { date: entry.date, closedAllDay: entry.closedAllDay };
   });
+  // A repeating day's dates meeting in a later year is refused by the save, once it knows which
+  // dates follow a holiday's name.
   dates.forEach((entry, index) => {
-    for (const earlier of dates.slice(0, index))
-      if (
-        sharedSpecialDate(
-          { date: earlier.date, repeats: repeatsYearly },
-          { date: entry.date, repeats: repeatsYearly },
-        ) !== null
-      )
-        invalid(`dates.${index}.date`, { reason: "overlap" });
+    if (dates.slice(0, index).some((earlier) => earlier.date === entry.date))
+      invalid(`dates.${index}.date`, { reason: "overlap" });
   });
   const held = new Set(dates.map((entry) => entry.date));
   const cutoversOf = cutoversFor(clock, repeatsYearly);
@@ -498,16 +656,18 @@ async function assertOwnPeriods(
 function assertNoSkippedTimes(
   clock: BusinessDayClock,
   today: LocalDate | null,
-  repeats: boolean,
+  ruleOf: (date: LocalDate) => SpecialDayDateRule,
+  holidays: HolidayDates,
   entries: readonly ParsedEntry<ClosedRange>[],
 ): void {
   if (!isReadableClock(clock)) return;
   for (const entry of entries) {
     const skipped = firstSkippedEnd(
       clock,
-      { date: entry.date, repeats },
+      ruleOf(entry.date),
       today ?? entry.date,
       entry.ranges,
+      holidays,
     );
     if (skipped !== null)
       entry.refuse(`ranges.${skipped.range.position}.${skipped.end}`, {
@@ -517,21 +677,24 @@ function assertNoSkippedTimes(
   }
 }
 
-/** Refuses a date that another special day, or a named day, of the venue also stands on. */
+/** Refuses a date that another special day of the venue also stands on;
+ *  `holidays` covers the rules' years through `holidayHorizon`. */
 async function assertDatesFree(
   tx: Transaction,
   cfg: VenueScope,
   ownId: string | null,
-  repeats: boolean,
-  dates: readonly LocalDate[],
+  rules: readonly SpecialDayDateRule[],
+  holidays: HolidayDates,
 ): Promise<void> {
-  if (dates.length === 0) return;
+  if (rules.length === 0) return;
+  const dates = rules.map((rule) => rule.date);
   const others = await tx
     .select({
       specialDayId: specialDays.id,
       name: specialDays.name,
       repeats: specialDays.repeatsYearly,
       date: specialDayDates.date,
+      holidayName: specialDayDates.holidayName,
     })
     .from(specialDayDates)
     .innerJoin(specialDays, eq(specialDays.id, specialDayDates.specialDayId))
@@ -539,45 +702,23 @@ async function assertDatesFree(
       and(
         eq(specialDayDates.locationId, cfg.locationId),
         ownId === null ? undefined : ne(specialDays.id, ownId),
-        inArray(sql`substr(${specialDayDates.date}, 6)`, [...new Set(dates.map(repeatKey))]),
+        // A date following a holiday's name can meet any month and day in a later year.
+        rules.some(followsHoliday)
+          ? undefined
+          : or(
+              inArray(sql`substr(${specialDayDates.date}, 6)`, [...new Set(dates.map(repeatKey))]),
+              and(eq(specialDays.repeatsYearly, true), isNotNull(specialDayDates.holidayName)),
+            ),
       ),
     )
     .orderBy(asc(specialDayDates.date));
-  for (const date of dates)
+  for (const rule of rules)
     for (const other of others) {
-      const shared = sharedSpecialDate({ date, repeats }, other);
+      const shared = sharedSpecialDate(rule, other, holidays);
       if (shared !== null)
         throw new AppError("special_day.date_taken", {
           date: shared,
           specialDayId: other.specialDayId,
-          name: other.name,
-        });
-    }
-  const named = await tx
-    .select({
-      specialDateId: specialDates.id,
-      name: specialDates.name,
-      date: specialDates.date,
-      repeatOn: specialDates.repeatOn,
-    })
-    .from(specialDates)
-    .where(
-      and(
-        eq(specialDates.locationId, cfg.locationId),
-        inArray(sql`substr(${specialDates.date}, 6)`, [...new Set(dates.map(repeatKey))]),
-      ),
-    )
-    .orderBy(asc(specialDates.date));
-  for (const date of dates)
-    for (const other of named) {
-      const shared = sharedSpecialDate(
-        { date, repeats },
-        { date: other.date, repeats: other.repeatOn !== null },
-      );
-      if (shared !== null)
-        throw new AppError("special_day.date_taken", {
-          date: shared,
-          specialDateId: other.specialDateId,
           name: other.name,
         });
     }
@@ -608,6 +749,51 @@ async function checkScheduleAfterWrite(
     });
 }
 
+const storedDate = (row: {
+  date: LocalDate;
+  closedAllDay: boolean;
+  holidayName: string | null;
+}): StoredSpecialDayDate => ({
+  date: row.date,
+  closedAllDay: row.closedAllDay,
+  ...(row.holidayName === null ? {} : { holidayName: row.holidayName }),
+});
+
+/** Every special day of the venue with its dates, by name then id; no paint. */
+export async function listSpecialDays(
+  tx: Transaction,
+  cfg: VenueScope,
+): Promise<SpecialDaySummary[]> {
+  const days = await tx
+    .select({
+      id: specialDays.id,
+      name: specialDays.name,
+      repeatsYearly: specialDays.repeatsYearly,
+    })
+    .from(specialDays)
+    .where(eq(specialDays.locationId, cfg.locationId))
+    .orderBy(asc(specialDays.name), asc(specialDays.id));
+  if (days.length === 0) return [];
+  const dates = await tx
+    .select({
+      specialDayId: specialDayDates.specialDayId,
+      date: specialDayDates.date,
+      closedAllDay: specialDayDates.closedAllDay,
+      holidayName: specialDayDates.holidayName,
+    })
+    .from(specialDayDates)
+    .where(
+      inArray(
+        specialDayDates.specialDayId,
+        days.map((day) => day.id),
+      ),
+    )
+    .orderBy(asc(specialDayDates.date));
+  const byDay = new Map(days.map((day) => [day.id, [] as StoredSpecialDayDate[]]));
+  for (const row of dates) byDay.get(row.specialDayId)!.push(storedDate(row));
+  return days.map((day) => ({ ...day, dates: byDay.get(day.id)! }));
+}
+
 export async function readSpecialDay(
   tx: Transaction,
   cfg: VenueScope,
@@ -619,6 +805,7 @@ export async function readSpecialDay(
       id: specialDayDates.id,
       date: specialDayDates.date,
       closedAllDay: specialDayDates.closedAllDay,
+      holidayName: specialDayDates.holidayName,
     })
     .from(specialDayDates)
     .where(eq(specialDayDates.specialDayId, id))
@@ -628,7 +815,7 @@ export async function readSpecialDay(
     id: day.id,
     name: day.name,
     repeatsYearly: day.repeatsYearly,
-    dates: dates.map((row) => ({ date: row.date, closedAllDay: row.closedAllDay })),
+    dates: dates.map(storedDate),
     paint: [],
     zonePaint: [],
   };
@@ -741,20 +928,29 @@ export async function saveSpecialDay(
     parsed.cutoversOf,
     readZoneRange,
   );
+  const keptNames = new Map(
+    (stored?.dates ?? []).map((entry) => [entry.date, entry.holidayName ?? null]),
+  );
+  const holidays = await readHolidayDates(tx, cfg, ...holidayHorizon(parsed.dates));
+  const rules = parsed.dates.map(({ date }): SpecialDayDateRule => ({
+    date,
+    repeats: parsed.repeatsYearly,
+    holidayName: keptNames.has(date) ? keptNames.get(date)! : holidayNameOn(holidays, date),
+  }));
+  rules.forEach((rule, index) => {
+    for (const earlier of rules.slice(0, index))
+      if (sharedSpecialDate(earlier, rule, holidays) !== null)
+        invalid(`dates.${index}.date`, { reason: "overlap" });
+  });
+  const ruleOf = new Map(rules.map((rule) => [rule.date, rule]));
   const today = venueLocalMoment(at, clock)?.civilDate ?? null;
-  assertNoSkippedTimes(clock, today, parsed.repeatsYearly, [
+  assertNoSkippedTimes(clock, today, (date) => ruleOf.get(date)!, holidays, [
     ...parsed.paint,
     ...parsed.zonePaint,
     ...retainedPaint,
     ...retainedZonePaint,
   ]);
-  await assertDatesFree(
-    tx,
-    cfg,
-    id,
-    parsed.repeatsYearly,
-    parsed.dates.map((entry) => entry.date),
-  );
+  await assertDatesFree(tx, cfg, id, rules, holidays);
 
   const values = { name: parsed.name, repeatsYearly: parsed.repeatsYearly };
   const specialDayId = id ?? newId();
@@ -786,7 +982,13 @@ export async function saveSpecialDay(
   }
   const added = parsed.dates
     .filter((entry) => !dateIds.has(entry.date))
-    .map((entry) => ({ ...entry, id: newId(), specialDayId, locationId: cfg.locationId }));
+    .map((entry) => ({
+      ...entry,
+      id: newId(),
+      specialDayId,
+      locationId: cfg.locationId,
+      holidayName: ruleOf.get(entry.date)!.holidayName,
+    }));
   if (added.length > 0) await tx.insert(specialDayDates).values(added);
   for (const row of added) dateIds.set(row.date, row.id);
 

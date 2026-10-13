@@ -51,11 +51,10 @@ import {
   readOpeningHoursModel,
   replaceMenuWeek,
   saveMenuPeriod,
-  saveSpecialDateMenus,
   updateMenuPeriod,
 } from "./menu-timetable.js";
 import { CALENDAR_COLOURS, type CalendarColour } from "./hours-types.js";
-import type { MenuSlot, MenuWeekDay } from "./menu-timetable-types.js";
+import type { MenuWeekDay } from "./menu-timetable-types.js";
 import { KITCHEN_TICKET_GROUPINGS, type KitchenTicketGrouping } from "./schema/settings.js";
 import { MANAGE_VENUE_SERVICE } from "./permissions.js";
 import {
@@ -65,10 +64,7 @@ import {
   setRoutingCell,
 } from "./routing-store.js";
 import type { RouteTarget } from "./routing.js";
-import { VENUE_SERVICE_CALENDAR_PARTICIPANTS } from "./calendar-participants.js";
-import { duplicateHolidayNamedSpecialDates, readHolidays, saveHolidayArea } from "./holidays.js";
-import { deleteSpecialDate, saveSpecialDate } from "./hours.js";
-import type { LocalDate, SpecialDateInput } from "./hours-types.js";
+import { readHolidays, saveHolidayArea } from "./holidays.js";
 import type { CellAddress, PeriodLine, RoutingChange } from "./routing-types.js";
 import {
   listDepartmentTransferProfiles,
@@ -76,9 +72,14 @@ import {
   setDepartmentTransferSettings,
 } from "./department-transfers.js";
 import "./errors.js";
-import { replaceZoneClosedWeek, saveZoneClosedDate } from "./zone-closed-times.js";
+import { replaceZoneClosedWeek } from "./zone-closed-times.js";
 import { parseEndOffsetMinutes } from "./period-end-offset.js";
-import { deleteSpecialDay, readSpecialDay, saveSpecialDay } from "./special-days.js";
+import {
+  deleteSpecialDay,
+  listSpecialDays,
+  readSpecialDay,
+  saveSpecialDay,
+} from "./special-days.js";
 
 const STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.required": 401,
@@ -124,11 +125,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "hours.clock_change_pending": 409,
   "hours.clock_changed": 409,
   "venue.business_day_hours_conflict": 409,
-  "special_date.not_found": 404,
   "season.not_found": 404,
-  "special_date.date_taken": 409,
   "zone_closed_time.invalid": 400,
-  "special_date.keeps_week": 409,
   "station.always_open": 409,
   "holiday.invalid": 400,
   "special_day.invalid": 400,
@@ -334,7 +332,7 @@ function requirePreviewChange(body: Record<string, unknown>): RoutingChange {
 }
 
 import { stationServiceTimes } from "./station-service-times.js";
-import { readNamedDaysModel } from "./named-days.js";
+import { readSpecialDaysModel } from "./named-days.js";
 
 export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
   mount(app, ctx: ModuleRouteContext, log: Logger): void {
@@ -389,7 +387,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const to = c.req.query("to") ?? "";
         const at = new Date();
         return c.json(
-          await viewed(sessionId, (tx) => readNamedDaysModel(tx, ctx.cfg, from, to, at)),
+          await viewed(sessionId, (tx) => readSpecialDaysModel(tx, ctx.cfg, from, to, at)),
         );
       }),
     );
@@ -415,88 +413,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       }),
     );
 
-    app.post("/management-api/venue-service/special-dates", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const body = await readJsonBody<SpecialDateInput & { expectedClockRevision: number }>(c);
-        return c.json(
-          await gated(sessionId, (tx) =>
-            saveSpecialDate(
-              tx,
-              ctx.cfg,
-              null,
-              body,
-              new Date(),
-              VENUE_SERVICE_CALENDAR_PARTICIPANTS,
-              body.expectedClockRevision as number,
-            ),
-          ),
-          201,
-        );
-      }),
-    );
-
-    app.put("/management-api/venue-service/special-dates/:id", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const id = requireUuidParam(c.req.param("id"), "SpecialDateId");
-        const body = await readJsonBody<SpecialDateInput & { expectedClockRevision: number }>(c);
-        return c.json(
-          await gated(sessionId, (tx) =>
-            saveSpecialDate(
-              tx,
-              ctx.cfg,
-              id,
-              body,
-              new Date(),
-              VENUE_SERVICE_CALENDAR_PARTICIPANTS,
-              body.expectedClockRevision as number,
-            ),
-          ),
-        );
-      }),
-    );
-
-    app.post("/management-api/venue-service/special-dates/:id/duplicate", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const id = requireUuidParam(c.req.param("id"), "SpecialDateId");
-        const body = await readJsonBody<Record<string, unknown>>(c);
-        const copies = await gated(sessionId, (tx) => {
-          onlyKeys(body, ["dates", "expectedClockRevision"]);
-          return duplicateHolidayNamedSpecialDates(
-            tx,
-            ctx.cfg,
-            id,
-            body.dates as readonly LocalDate[],
-            new Date(),
-            VENUE_SERVICE_CALENDAR_PARTICIPANTS,
-            body.expectedClockRevision as number,
-          );
-        });
-        return c.json(copies, 201);
-      }),
-    );
-
-    app.delete("/management-api/venue-service/special-dates/:id", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const id = requireUuidParam(c.req.param("id"), "SpecialDateId");
-        const body = await readJsonBody<{ expectedClockRevision: number }>(c);
-        await gated(sessionId, (tx) =>
-          deleteSpecialDate(
-            tx,
-            ctx.cfg,
-            id,
-            new Date(),
-            VENUE_SERVICE_CALENDAR_PARTICIPANTS,
-            body.expectedClockRevision as number,
-          ),
-        );
-        return c.body(null, 204);
-      }),
-    );
-
     const SPECIAL_DAY_KEYS = [
       "name",
       "repeatsYearly",
@@ -505,6 +421,13 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       "zonePaint",
       "expectedClockRevision",
     ] as const;
+
+    app.get("/management-api/venue-service/special-days", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        return c.json(await viewed(sessionId, (tx) => listSpecialDays(tx, ctx.cfg)));
+      }),
+    );
 
     app.get("/management-api/venue-service/special-days/:id", (c) =>
       run(c, log, async () => {
@@ -1178,50 +1101,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
             body.expectedClockRevision as number,
             new Date(),
             { seasonId: requireBodyUuid(body.seasonId, "seasonId") },
-          ),
-        );
-        return c.body(null, 204);
-      }),
-    );
-    app.put("/management-api/venue-service/special-dates/:id/zone-closed-times/:zoneId", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const id = requireUuidParam(c.req.param("id"), "SpecialDateId");
-        const zoneId = requireUuidParam(c.req.param("zoneId"), "ZoneId");
-        const body = await readJsonBody<Record<string, unknown>>(c);
-        onlyKeys(body, ["ranges", "expectedClockRevision"]);
-        await gated(sessionId, (tx) =>
-          saveZoneClosedDate(
-            tx,
-            ctx.cfg,
-            id,
-            zoneId,
-            body.ranges,
-            body.expectedClockRevision as number,
-          ),
-        );
-        return c.body(null, 204);
-      }),
-    );
-
-    const dateTimetable =
-      "/management-api/venue-service/special-dates/:id/menu-timetables/:departmentId";
-    app.put(dateTimetable, (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const id = requireUuidParam(c.req.param("id"), "SpecialDateId");
-        const departmentId = requireUuidParam(c.req.param("departmentId"), "DepartmentId");
-        const body = await readJsonBody<Record<string, unknown>>(c);
-        onlyKeys(body, ["slots", "expectedClockRevision"]);
-        await gated(sessionId, (tx) =>
-          saveSpecialDateMenus(
-            tx,
-            ctx.cfg,
-            id,
-            departmentId,
-            body.slots as MenuSlot[],
-            new Date(),
-            body.expectedClockRevision as number,
           ),
         );
         return c.body(null, 204);

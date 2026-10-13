@@ -116,7 +116,6 @@ async function mount(options: { permissions?: string[]; required?: boolean; path
       "/management-api/alerts": { visible: false, alerts: [] },
       "/management-api/venue-service/opening-hours": {
         departments: [],
-        namedDays: [],
         menus: [],
         timeZone: "Europe/Madrid",
         clockReadable: true,

@@ -26,15 +26,12 @@ it("refreshes the routing grid and the operations screen on a routing cell chang
     "device_profile_kitchen_screen_stations",
     "device_profile_kitchen_screen_zones",
     "station_day_states",
-    "special_dates",
     "locations",
     "location_business_day_settings",
     "location_day_cutover_changes",
     "routing_cell_periods",
     "menu_periods",
     "menu_period_staff_menus",
-    "menu_slots",
-    "menu_day_timetables",
     "departments",
     "zone_service_policies",
     "sections",
@@ -50,6 +47,7 @@ it("refreshes the routing grid and the operations screen on a routing cell chang
   ]);
   expect(QUERY_DEPENDENCIES.operations).toEqual([
     "department_receipts",
+    "tenants",
     "locations",
     "location_business_day_settings",
     "location_day_cutover_changes",
@@ -59,8 +57,6 @@ it("refreshes the routing grid and the operations screen on a routing cell chang
     "zone_sale_policies",
     "menu_periods",
     "menu_period_staff_menus",
-    "menu_day_timetables",
-    "menu_slots",
     "routing_cells",
     "service_settings",
     "catalogues",
@@ -73,6 +69,7 @@ it("refreshes the routing grid and the operations screen on a routing cell chang
     "sections",
     "section_members",
     "menu_items",
+    "holiday_geographies",
     "seasons",
     "department_days",
     "department_day_ranges",
@@ -87,15 +84,11 @@ it("refreshes Opening hours from its periods, ranges, dates, menu names and the 
   expect(QUERY_DEPENDENCIES["opening-hours"]).toEqual([
     "menu_periods",
     "menu_period_staff_menus",
-    "menu_day_timetables",
-    "menu_slots",
-    "special_dates",
     "departments",
     "catalogues",
     "locations",
     "location_business_day_settings",
     "location_day_cutover_changes",
-    "zone_closed_times",
     "zone_service_policies",
     "floor_zones",
     "routing_cells",
@@ -157,13 +150,10 @@ it.each(["zone-delete-impact", "department-delete-impact"] as const)(
       "routing_cell_periods",
       "zone_service_policies",
       "zone_sale_policies",
-      "zone_closed_times",
       "zone_extensions",
       "department_sale_policies",
       "menu_periods",
       "menu_period_staff_menus",
-      "menu_day_timetables",
-      "menu_slots",
       "department_days",
       "department_day_ranges",
       "zone_days",
@@ -191,7 +181,7 @@ it.each(["opening-hours", "operations", "routing", "named-days"] as const)(
   },
 );
 
-it.each(["opening-hours", "operations", "routing", "named-days", "holidays"] as const)(
+it.each(["opening-hours", "operations", "routing", "named-days"] as const)(
   "refreshes %s when a special day or one of its dates changes",
   (interest) => {
     expect(QUERY_DEPENDENCIES[interest]).toEqual(

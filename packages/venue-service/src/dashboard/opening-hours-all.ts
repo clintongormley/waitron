@@ -5,7 +5,10 @@ import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import { t } from "./strings.js";
-import { dateInWeek, namedOn, realDayLabel, seasonIdOf } from "./real-week.js";
+import { dateFacts, dateInWeek, realDayLabel, seasonIdOf } from "./real-week.js";
+import { paintedSlots } from "./special-date.js";
+import type { SpecialDaysModel } from "../holiday-types.js";
+import type { SpecialDayDetail } from "../special-days.js";
 import { seasonWeek } from "./season-choice.js";
 import "./service-grid.js";
 
@@ -31,33 +34,38 @@ export class OpeningHoursAll extends LitElement {
   @property() weekStart = "";
   @property() seasonId = "";
   @property({ attribute: false }) seasons: OpeningHoursModel["seasons"] = [];
-  @property({ attribute: false }) namedDays: OpeningHoursModel["namedDays"] = [];
+  @property({ attribute: false }) calendar?: SpecialDaysModel;
+  @property({ attribute: false }) specials: ReadonlyMap<string, SpecialDayDetail> = new Map();
   override render() {
     const departments = this.departments.filter((department) => department.active);
     const weekdays = [1, 2, 3, 4, 5, 6, 0];
     const columns = weekdays.flatMap((weekday) =>
       departments.map((department) => {
-        const named = this.weekStart ? namedOn(this.namedDays, this.weekStart, weekday) : undefined;
+        const facts = this.weekStart
+          ? dateFacts(this.calendar, this.specials, dateInWeek(this.weekStart, weekday))
+          : undefined;
+        const clock =
+          this.weekStart && this.businessDayClock
+            ? serviceDayContext(this.businessDayClock, dateInWeek(this.weekStart, weekday))
+            : undefined;
         const week = seasonWeek(
           department.seasonWeeks,
           seasonIdOf(this.seasons, this.seasonId, this.weekStart, weekday),
         );
         return {
           key: `${weekday}:${department.id}`,
-          clock:
-            this.weekStart && this.businessDayClock
-              ? serviceDayContext(this.businessDayClock, dateInWeek(this.weekStart, weekday))
-              : undefined,
+          clock,
           label: this.weekStart
-            ? realDayLabel(this.weekStart, weekday, named)
+            ? realDayLabel(this.weekStart, weekday, facts)
             : t(`hours.day.${weekday}` as Parameters<typeof t>[0]),
-          slots: named?.closeWholeVenue
+          slots: facts?.closed
             ? []
-            : named?.ownHours
-              ? (department.dates.find((day) => day.specialDateId === named.id)?.slots ??
-                week.find((day) => day.weekday === weekday)?.slots ??
-                [])
-              : (week.find((day) => day.weekday === weekday)?.slots ?? []),
+            : paintedSlots(
+                week.find((day) => day.weekday === weekday)?.slots ?? [],
+                facts?.special,
+                department.id,
+                clock?.dayCutover ?? this.dayCutover,
+              ),
           periods: department.periods,
           editable: false,
           narrow: true,

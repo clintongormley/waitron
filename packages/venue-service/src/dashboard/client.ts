@@ -68,6 +68,12 @@ export type VenueReadinessIssue =
       zoneName: string;
       menuId: string;
       menuName: string;
+    }
+  | {
+      code: "special_day.holiday_missing";
+      specialDayId: string;
+      holidayName: string;
+      year: number;
     };
 export interface NamedRow {
   id: string;

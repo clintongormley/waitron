@@ -1,24 +1,19 @@
 import type {
-  DateCell,
   HourPeriod,
   HoursSubject,
-  DateHoursCell,
   WeekCell,
   WeekDay,
 } from "./testing/legacy-station-types.js";
 import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
 import { Hono } from "hono";
-import { afterEach, beforeAll, describe, expect, it, onTestFinished, vi } from "vitest";
+import { beforeAll, describe, expect, it, onTestFinished, vi } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
   catalogues,
   kitchenStations,
   locations,
-  locationBusinessDaySettings,
-  locationDayCutoverChanges,
-  tenants,
   withTransaction,
   type Database,
 } from "@waitron/db";
@@ -33,35 +28,22 @@ import {
   startManagementSession,
 } from "@waitron/identity";
 import type { ModuleRouteContext } from "@waitron/module";
-import type { NamedDaysModel } from "./holiday-types.js";
+import type { SpecialDaysModel } from "./holiday-types.js";
 import { readCalendarDays } from "./hours.js";
-import { readNamedDaysModel } from "./named-days.js";
-import { readOpeningHoursModel } from "./menu-timetable.js";
-import { AppError, locationId } from "@waitron/shared";
+import { readSpecialDaysModel } from "./named-days.js";
+import { saveSpecialDay } from "./special-days.js";
+import { locationId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
-import { readSpecialDate, saveSpecialDate, type SpecialDateParticipant } from "./hours.js";
-import {
-  WEEK_DISPLAY_ORDER,
-  type SpecialDate,
-  type SpecialDateInput as NamedDayInput,
-} from "./hours-types.js";
+import { WEEK_DISPLAY_ORDER } from "./hours-types.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import type { VenueScope } from "./operations.js";
 import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
 import { routingModel } from "./routing-store.js";
 import { VENUE_SERVICE_ROUTES } from "./routes.js";
-import { specialDates } from "./schema/hours.js";
+import { specialDayDates, specialDays } from "./schema/seasons.js";
 import { departments } from "./schema/service.js";
-import { replaceMenuWeek, saveMenuPeriod, saveSpecialDateMenus } from "./menu-timetable.js";
+import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import { setStationToday } from "./station-times.js";
-import { clockChangeAfter, minutesAfter } from "./testing/clock-change.js";
-
-type SpecialDateInput = NamedDayInput & { cells: DateHoursCell[] };
-
-const participants = vi.hoisted(() => [] as SpecialDateParticipant[]);
-vi.mock("./calendar-participants.js", () => ({
-  VENUE_SERVICE_CALENDAR_PARTICIPANTS: participants,
-}));
 
 registerModulePermissions(VENUE_SERVICE_PERMISSIONS);
 
@@ -77,9 +59,6 @@ let db: Database;
 beforeAll(() => {
   db = suite.db;
 });
-afterEach(() => {
-  participants.splice(0);
-});
 
 const BASE = "/management-api/venue-service";
 const noopLog: Logger = () => {};
@@ -93,7 +72,6 @@ interface Fixture {
   kitchen: HoursSubject;
   otherDepartment: HoursSubject;
   departmentIds: { restaurant: string; deli: string };
-  otherDateId: string;
   manager: string;
   supervisor: string;
   staff: string;
@@ -132,15 +110,6 @@ async function fixture(): Promise<Fixture> {
         { locationId: location!.id, name: "Kitchen", isDefault: true, displayOrder: 0 },
       ])
       .returning();
-    const otherDate = await saveSpecialDate(
-      tx,
-      { locationId: locationId(other!.id) },
-      null,
-      { date: "2030-10-15", name: "Elsewhere", closeWholeVenue: false, cells: [] },
-      new Date(),
-      undefined,
-      0,
-    );
     const person = async (role: "manager" | "supervisor" | "staff") => {
       const [row] = await tx
         .insert(persons)
@@ -191,7 +160,6 @@ async function fixture(): Promise<Fixture> {
       bar: { kind: "station" as const, id: bar!.id },
       kitchen: { kind: "station" as const, id: kitchen!.id },
       otherDepartment: { kind: "station" as const, id: foreignStation!.id },
-      otherDateId: otherDate.id,
       manager: await person("manager"),
       supervisor: await person("supervisor"),
       staff: await person("staff"),
@@ -261,30 +229,49 @@ const period = (opensAt: string, closesAt: string, id = randomUUID()): HourPerio
 });
 const closed: WeekCell = { mode: "closed", periods: [] };
 const periods = (...list: HourPeriod[]): WeekCell => ({ mode: "periods", periods: list });
-const datePeriods = (...list: HourPeriod[]): DateCell => ({ mode: "periods", periods: list });
 /** Monday-first, every day Closed unless `cells` names it by weekday. */
 const week = (cells: Partial<Record<number, WeekCell>> = {}): WeekDay[] =>
   WEEK_DISPLAY_ORDER.map((weekday) => ({ weekday, cell: cells[weekday] ?? closed }));
 const unsetWeek = (): WeekDay[] =>
   [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, cell: { mode: "not_set", periods: [] } }));
 
-const input = (overrides: Partial<SpecialDateInput> = {}): SpecialDateInput => ({
-  date: "2030-10-15",
-  name: "Staff party",
-  closeWholeVenue: false,
-  cells: [],
-  ...overrides,
-});
-
 const venueDates = (fx: Fixture) =>
   db
-    .select({ id: specialDates.id, date: specialDates.date, name: specialDates.name })
-    .from(specialDates)
-    .where(eq(specialDates.locationId, fx.cfg.locationId))
-    .orderBy(asc(specialDates.date));
+    .select({ id: specialDays.id, date: specialDayDates.date, name: specialDays.name })
+    .from(specialDayDates)
+    .innerJoin(specialDays, eq(specialDays.id, specialDayDates.specialDayId))
+    .where(eq(specialDayDates.locationId, fx.cfg.locationId))
+    .orderBy(asc(specialDayDates.date));
 
-const createDate = (fx: Fixture, value: SpecialDateInput) =>
-  withTransaction(db, (tx) => saveSpecialDate(tx, fx.cfg, null, value, new Date(), undefined, 0));
+const createDay = (
+  fx: Fixture,
+  date: string,
+  options: {
+    name?: string;
+    closedAllDay?: boolean;
+    repeatsYearly?: boolean;
+    paint?: {
+      departmentId: string;
+      ranges: { periodId: string | null; startsAt: string; endsAt: string }[];
+    }[];
+    at?: Date;
+  } = {},
+) =>
+  withTransaction(db, (tx) =>
+    saveSpecialDay(
+      tx,
+      fx.cfg,
+      null,
+      {
+        name: options.name ?? "Staff party",
+        repeatsYearly: options.repeatsYearly ?? false,
+        dates: [{ date, closedAllDay: options.closedAllDay ?? false }],
+        paint: (options.paint ?? []).map((entry) => ({ ...entry, date })),
+      },
+      options.at ?? new Date(),
+      0,
+    ),
+  );
 
 describe("reading Hours", () => {
   it.each([
@@ -299,10 +286,7 @@ describe("reading Hours", () => {
         vi.useRealTimers();
       });
       const fx = await fixture();
-      const party = await createDate(
-        fx,
-        input({ cells: [{ subject: fx.bar, cell: { mode: "closed", periods: [] } }] }),
-      );
+      const party = await createDay(fx, "2030-10-15");
       const response = await send(
         fx,
         "GET",
@@ -310,7 +294,7 @@ describe("reading Hours", () => {
         fx.supervisor,
       );
       expect(response.status).toBe(200);
-      const model = (await response.json()) as NamedDaysModel;
+      const model = (await response.json()) as SpecialDaysModel;
       expect(model.civilDate).toBe("2026-10-12");
       expect(model).toEqual({
         businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
@@ -322,38 +306,15 @@ describe("reading Hours", () => {
         civilDate: "2026-10-12",
         clockReadable: true,
         days: [
-          {
-            date: "2030-10-14",
-            namedDay: null,
-            holidays: [],
-            tone: "standard",
-            ownHours: false,
-            closed: false,
-          },
+          { date: "2030-10-14", specialDay: null, holidays: [], tone: "standard", closed: false },
           {
             date: "2030-10-15",
-            namedDay: {
-              kind: "working_day",
-              repeats: false,
-              ownHours: false,
-              id: party.id,
-              date: "2030-10-15",
-              name: "Staff party",
-              closeWholeVenue: false,
-            },
+            specialDay: { id: party.id, name: "Staff party" },
             holidays: [],
-            tone: "working_day",
-            ownHours: false,
+            tone: "special_day",
             closed: false,
           },
-          {
-            date: "2030-10-16",
-            namedDay: null,
-            holidays: [],
-            tone: "standard",
-            ownHours: false,
-            closed: false,
-          },
+          { date: "2030-10-16", specialDay: null, holidays: [], tone: "standard", closed: false },
         ],
         // No tenant row is stored here, so there is no country to read holidays for.
         holidayCoverage: [
@@ -454,16 +415,19 @@ describe("reading Hours", () => {
       );
       return period;
     });
-    const special = await createDate(fx, input({ date: "2030-10-14", cells: [] }));
-    await db.update(specialDates).set({ ownHours: true }).where(eq(specialDates.id, special.id));
-    await withTransaction(db, (tx) =>
-      saveSpecialDateMenus(tx, fx.cfg, special.id, fx.departmentIds.deli, [], new Date(), 0),
-    );
+    await createDay(fx, "2030-10-14", {
+      paint: [
+        {
+          departmentId: fx.departmentIds.deli,
+          ranges: [{ periodId: null, startsAt: "09:00", endsAt: "17:00" }],
+        },
+      ],
+    });
     const model = (await (
       await send(fx, "GET", "/named-days?from=2030-10-14&to=2030-10-15", fx.manager)
-    ).json()) as NamedDaysModel;
+    ).json()) as SpecialDaysModel;
     expect(model.days.map((day) => day.closed)).toEqual([true, true]);
-    expect(model.days.map((day) => day.tone)).toEqual(["working_day", "closed"]);
+    expect(model.days.map((day) => day.tone)).toEqual(["special_day", "closed"]);
     await db
       .update(departments)
       .set({ active: false })
@@ -471,7 +435,10 @@ describe("reading Hours", () => {
     const deli = await withTransaction(db, (tx) =>
       readCalendarDays(tx, fx.cfg, "2030-10-14", "2030-10-15"),
     );
-    expect(deli.map((day) => day.tone)).toEqual(["closed", "closed"]);
+    expect(deli.map((day) => [day.tone, day.closed])).toEqual([
+      ["special_day", true],
+      ["closed", true],
+    ]);
     await withTransaction(db, (tx) =>
       replaceMenuWeek(
         tx,
@@ -489,20 +456,20 @@ describe("reading Hours", () => {
     const open = await withTransaction(db, (tx) =>
       readCalendarDays(tx, fx.cfg, "2030-10-14", "2030-10-15"),
     );
-    expect(open.map((day) => day.tone)).toEqual(["closed", "standard"]);
+    expect(open.map((day) => [day.tone, day.closed])).toEqual([
+      ["special_day", true],
+      ["standard", false],
+    ]);
   });
 
   it("reads the model in the same number of statements whatever the range and its special dates", async () => {
     const fx = await fixture();
     for (const date of ["2030-11-03", "2030-11-10", "2030-11-17", "2030-11-24"])
-      await createDate(
-        fx,
-        input({ date, cells: [{ subject: fx.deli, cell: { mode: "closed", periods: [] } }] }),
-      );
+      await createDay(fx, date, { name: date, closedAllDay: true });
     const statements = (from: string, to: string) =>
       withTransaction(db, async (tx) => {
         const reads = vi.spyOn(tx, "select");
-        const model = await readNamedDaysModel(tx, fx.cfg, from, to, new Date());
+        const model = await readSpecialDaysModel(tx, fx.cfg, from, to, new Date());
         const count = reads.mock.calls.length;
         reads.mockRestore();
         return { count, days: model.days.length };
@@ -514,36 +481,22 @@ describe("reading Hours", () => {
     expect(long.count).toBe(short.count);
   });
 
-  it("keeps named days in the timetable and limits the Calendar to its requested range", async () => {
+  it("limits the Calendar to its requested range", async () => {
     const fx = await fixture();
     /** Sunday 6 October 2030, 12:00 in Madrid. */
     const at = new Date("2030-10-06T10:00:00Z");
-    const closedBar = [{ subject: fx.bar, cell: { mode: "closed", periods: [] } as DateCell }];
-    const saved: Record<string, SpecialDate> = {};
-    for (const date of ["2030-10-04", "2030-10-05", "2030-10-14", "2032-12-25"])
-      saved[date] = await withTransaction(db, (tx) =>
-        saveSpecialDate(
-          tx,
-          fx.cfg,
-          null,
-          input({ date, name: date, cells: closedBar }),
-          at,
-          undefined,
-          0,
-        ),
-      );
+    const days: Record<string, string> = {};
+    for (const date of ["2030-10-12", "2030-10-15", "2030-10-16"])
+      days[date] = (await createDay(fx, date, { name: date, at })).id;
     const read = () =>
-      withTransaction(db, (tx) => readNamedDaysModel(tx, fx.cfg, "2030-10-13", "2030-10-15", at));
+      withTransaction(db, (tx) => readSpecialDaysModel(tx, fx.cfg, "2030-10-13", "2030-10-15", at));
 
     const model = await read();
     expect(model.civilDate).toBe("2030-10-06");
-    expect(
-      (await withTransaction(db, (tx) => readOpeningHoursModel(tx, fx.cfg, at))).namedDays,
-    ).toEqual([saved["2030-10-05"], saved["2030-10-14"], saved["2032-12-25"]]);
-    expect(model.days.map((day) => day.namedDay?.id ?? null)).toEqual([
+    expect(model.days.map((day) => day.specialDay?.id ?? null)).toEqual([
       null,
-      saved["2030-10-14"]!.id,
       null,
+      days["2030-10-15"],
     ]);
     for (const field of ["specialDates", "specialCells", "subjects", "week"])
       expect(model).not.toHaveProperty(field);
@@ -554,14 +507,11 @@ describe("reading Hours", () => {
     const unreadable = await read();
     expect([unreadable.civilDate, unreadable.clockReadable]).toEqual([null, false]);
     expect(unreadable.days).toEqual(model.days);
-    expect(
-      (await withTransaction(db, (tx) => readOpeningHoursModel(tx, fx.cfg, at))).namedDays,
-    ).toEqual([saved["2030-10-04"], saved["2030-10-05"], saved["2030-10-14"], saved["2032-12-25"]]);
   });
 });
 
 describe("writing Hours", () => {
-  it("the retired station week writer answers 404 and keeps named days for every session", async () => {
+  it("the retired station week writer answers 404 and keeps special days for every session", async () => {
     const fx = await fixture();
     const bodies = [
       { subject: fx.deli, days: week({ 5: periods(period("18:00", "22:00")) }) },
@@ -579,367 +529,6 @@ describe("writing Hours", () => {
       }
     }
   });
-
-  it("creates, edits, duplicates and deletes a special date under one stable id", async () => {
-    const fx = await fixture();
-    const created = await send(fx, "POST", "/special-dates", fx.manager, input());
-    expect(created.status).toBe(201);
-    const date = (await created.json()) as SpecialDate;
-    expect(date).toEqual({
-      kind: "working_day",
-      repeats: false,
-      ownHours: false,
-      id: expect.any(String),
-      date: "2030-10-15",
-      name: "Staff party",
-      closeWholeVenue: false,
-    });
-
-    const edited = await send(
-      fx,
-      "PUT",
-      `/special-dates/${date.id}`,
-      fx.manager,
-      input({
-        name: "Team dinner",
-        cells: [{ subject: fx.bar, cell: { mode: "all_day", periods: [] } }],
-      }),
-    );
-    expect(edited.status).toBe(200);
-    expect(await edited.json()).toEqual({ ...date, name: "Team dinner" });
-
-    const copied = await send(fx, "POST", `/special-dates/${date.id}/duplicate`, fx.manager, {
-      dates: ["2030-10-22", "2030-10-29"],
-    });
-    expect(copied.status).toBe(201);
-    const copies = (await copied.json()) as SpecialDate[];
-    expect(copies).toEqual([
-      { ...date, id: expect.any(String), date: "2030-10-22", name: "Team dinner" },
-      { ...date, id: expect.any(String), date: "2030-10-29", name: "Team dinner" },
-    ]);
-    expect(new Set([date.id, ...copies.map((copy) => copy.id)]).size).toBe(3);
-    expect(await withTransaction(db, (tx) => readSpecialDate(tx, fx.cfg, copies[1]!.id))).toEqual({
-      ...copies[1],
-    });
-
-    const deleted = await send(fx, "DELETE", `/special-dates/${date.id}`, fx.manager);
-    expect(deleted.status).toBe(204);
-    expect(await venueDates(fx)).toEqual([
-      { id: copies[0]!.id, date: "2030-10-22", name: "Team dinner" },
-      { id: copies[1]!.id, date: "2030-10-29", name: "Team dinner" },
-    ]);
-    await refused(await send(fx, "DELETE", `/special-dates/${date.id}`, fx.manager), 404, {
-      code: "special_date.not_found",
-      params: { specialDateId: date.id },
-    });
-  });
-
-  it("takes only the target dates when duplicating", async () => {
-    const fx = await fixture();
-    const source = await createDate(fx, input());
-    for (const body of [
-      { dates: ["2030-10-22"], name: "Renamed" },
-      { dates: ["2030-10-22"], cells: [] },
-    ])
-      await refused(
-        await send(fx, "POST", `/special-dates/${source.id}/duplicate`, fx.manager, body),
-        400,
-        { code: "management.request_invalid", params: { field: Object.keys(body)[1] } },
-      );
-    await refused(
-      await send(fx, "POST", `/special-dates/${source.id}/duplicate`, fx.manager, {}),
-      400,
-      { code: "hours.invalid", params: { field: "dates" } },
-    );
-    expect(await venueDates(fx)).toEqual([
-      { id: source.id, date: "2030-10-15", name: "Staff party" },
-    ]);
-  });
-
-  it("names a copy on a holiday after the holiday, from target dates alone", async () => {
-    const fx = await fixture();
-    const tenantBefore = await db.select().from(tenants);
-    onTestFinished(() =>
-      withTransaction(db, async (tx) => {
-        await tx.delete(tenants);
-        if (tenantBefore.length > 0) await tx.insert(tenants).values(tenantBefore);
-      }),
-    );
-    await withTransaction(db, async (tx) => {
-      await tx
-        .insert(tenants)
-        .values({ id: 1, country: "ES", taxId: "B00000000", legalName: "Invented SL" })
-        .onConflictDoUpdate({ target: tenants.id, set: { country: "ES" } });
-      await tx
-        .update(locations)
-        .set({ province: "Sevilla", city: "Sevilla" })
-        .where(eq(locations.id, fx.cfg.locationId));
-    });
-    const source = await createDate(fx, input());
-    const copied = await send(fx, "POST", `/special-dates/${source.id}/duplicate`, fx.manager, {
-      dates: ["2026-12-25", "2030-10-22"],
-    });
-    expect(copied.status).toBe(201);
-    // Spain's 2026 data lists 25 December as "Natividad del Señor", a national holiday.
-    expect(((await copied.json()) as SpecialDate[]).map(({ date, name }) => [date, name])).toEqual([
-      ["2026-12-25", "Natividad del Señor"],
-      ["2030-10-22", "Staff party"],
-    ]);
-  });
-
-  it("hands every copy and every delete to the module's calendar participants in the request's transaction", async () => {
-    const fx = await fixture();
-    const source = await createDate(fx, input());
-    const calls: string[] = [];
-    participants.push({
-      async copy(tx, cfg, sourceId, targetId) {
-        const [target] = await tx
-          .select({ date: specialDates.date })
-          .from(specialDates)
-          .where(eq(specialDates.id, targetId));
-        calls.push(`copy ${cfg.locationId === fx.cfg.locationId} ${sourceId} ${target!.date}`);
-      },
-      async beforeDelete(_tx, _cfg, id) {
-        calls.push(`delete ${id}`);
-      },
-    });
-    const copied = await send(fx, "POST", `/special-dates/${source.id}/duplicate`, fx.manager, {
-      dates: ["2030-10-22"],
-    });
-    expect(copied.status).toBe(201);
-    expect((await send(fx, "DELETE", `/special-dates/${source.id}`, fx.manager)).status).toBe(204);
-    expect(calls).toEqual([`copy true ${source.id} 2030-10-22`, `delete ${source.id}`]);
-  });
-
-  it("hands a date move to the participants in the request's transaction, and rolls it back when one refuses", async () => {
-    const fx = await fixture();
-    const source = await createDate(fx, input());
-    const calls: string[] = [];
-    participants.push({
-      async copy() {},
-      async beforeDelete() {},
-      async beforeMove(tx, cfg, id, toDate) {
-        const [stored] = await tx
-          .select({ date: specialDates.date })
-          .from(specialDates)
-          .where(eq(specialDates.id, id));
-        calls.push(`move ${cfg.locationId === fx.cfg.locationId} ${id} ${stored!.date} ${toDate}`);
-        if (toDate === "2030-10-23") throw new Error("menu move refused");
-      },
-    });
-    const moved = await send(fx, "PUT", `/special-dates/${source.id}`, fx.manager, {
-      ...input(),
-      date: "2030-10-22",
-    });
-    expect(moved.status).toBe(200);
-    // A save that keeps the date is no move.
-    const renamed = await send(fx, "PUT", `/special-dates/${source.id}`, fx.manager, {
-      ...input(),
-      date: "2030-10-22",
-      name: "Staff lunch",
-    });
-    expect(renamed.status).toBe(200);
-    const refused = await send(fx, "PUT", `/special-dates/${source.id}`, fx.manager, {
-      ...input(),
-      date: "2030-10-23",
-    });
-    expect(refused.status).toBe(500);
-    expect(calls).toEqual([
-      `move true ${source.id} 2030-10-15 2030-10-22`,
-      `move true ${source.id} 2030-10-22 2030-10-23`,
-    ]);
-    expect(await venueDates(fx)).toEqual([
-      { id: source.id, date: "2030-10-22", name: "Staff lunch" },
-    ]);
-  });
-
-  it("rolls back the whole copy when a participant refuses", async () => {
-    const fx = await fixture();
-    const source = await createDate(fx, input());
-    participants.push({
-      async copy() {
-        throw new Error("menu copy failed");
-      },
-      async beforeDelete() {},
-    });
-    const response = await send(fx, "POST", `/special-dates/${source.id}/duplicate`, fx.manager, {
-      dates: ["2030-10-22"],
-    });
-    expect(response.status).toBe(500);
-    expect(await venueDates(fx)).toEqual([
-      { id: source.id, date: "2030-10-15", name: "Staff party" },
-    ]);
-  });
-});
-
-describe("Hours write refusals", () => {
-  it("refuses a malformed id, another venue's date and an unknown one", async () => {
-    const fx = await fixture();
-    for (const [method, path, body] of [
-      ["PUT", "/special-dates/not-a-uuid", input()],
-      ["POST", "/special-dates/not-a-uuid/duplicate", { dates: ["2030-10-22"] }],
-      ["DELETE", "/special-dates/not-a-uuid", undefined],
-    ] as const)
-      await refused(await send(fx, method, path, fx.manager, body), 400, {
-        code: "shared.invalid_id",
-      });
-    for (const id of [fx.otherDateId, randomUUID()])
-      for (const [method, path, body] of [
-        ["PUT", `/special-dates/${id}`, input({ date: "2030-11-01" })],
-        ["POST", `/special-dates/${id}/duplicate`, { dates: ["2030-11-02"] }],
-        ["DELETE", `/special-dates/${id}`, undefined],
-      ] as const)
-        await refused(await send(fx, method, path, fx.manager, body), 404, {
-          code: "special_date.not_found",
-          params: { specialDateId: id },
-        });
-    expect(await venueDates(fx)).toEqual([]);
-  });
-
-  it("refuses a date another special date already holds", async () => {
-    const fx = await fixture();
-    const held = await createDate(fx, input());
-    const other = await createDate(fx, input({ date: "2030-10-20" }));
-    await refused(await send(fx, "POST", "/special-dates", fx.manager, input()), 409, {
-      code: "special_date.date_taken",
-      params: { date: "2030-10-15" },
-    });
-    await refused(await send(fx, "PUT", `/special-dates/${other.id}`, fx.manager, input()), 409, {
-      code: "special_date.date_taken",
-      params: { date: "2030-10-15" },
-    });
-    await refused(
-      await send(fx, "POST", `/special-dates/${other.id}/duplicate`, fx.manager, {
-        dates: ["2030-10-25", "2030-10-15"],
-      }),
-      409,
-      { code: "special_date.date_taken", params: { date: "2030-10-15" } },
-    );
-    expect(await venueDates(fx)).toEqual([
-      { id: held.id, date: "2030-10-15", name: "Staff party" },
-      { id: other.id, date: "2030-10-20", name: "Staff party" },
-    ]);
-  });
-
-  it("refuses a bad field, naming it, and keeps what was stored", async () => {
-    const fx = await fixture();
-    for (const body of [
-      { subject: fx.deli, days: week({ 1: periods(period("12:00", "12:00")) }) },
-      { subject: fx.otherDepartment, days: week() },
-    ])
-      expect((await send(fx, "PUT", "/hours/week", fx.manager, body)).status).toBe(404);
-    await refused(
-      await send(fx, "POST", "/special-dates", fx.manager, input({ name: "  " })),
-      400,
-      { code: "hours.invalid", params: { field: "name" } },
-    );
-    expect(await venueDates(fx)).toEqual([]);
-  });
-
-  it("duplicates named days without retired station-hour clashes or skipped-minute checks", async () => {
-    const fx = await fixture();
-    const late = await createDate(
-      fx,
-      input({
-        date: "2030-10-14",
-        cells: [{ subject: fx.bar, cell: datePeriods(period("22:00", "03:00")) }],
-      }),
-    );
-    const lateResponse = await send(fx, "POST", `/special-dates/${late.id}/duplicate`, fx.manager, {
-      dates: ["2030-10-28", "2030-10-22"],
-    });
-    expect(lateResponse.status).toBe(201);
-    const lateCopies = (await lateResponse.json()) as SpecialDate[];
-    expect(lateCopies).toEqual([
-      { ...late, id: expect.any(String), date: "2030-10-28" },
-      { ...late, id: expect.any(String), date: "2030-10-22" },
-    ]);
-    const forward = clockChangeAfter("Europe/Madrid", "2030-01-01T00:00:00Z", "forward");
-    const early = await createDate(
-      fx,
-      input({
-        date: "2030-01-07",
-        cells: [
-          {
-            subject: fx.deli,
-            cell: datePeriods(
-              period(minutesAfter(forward.before, 1), minutesAfter(forward.before, 30)),
-            ),
-          },
-        ],
-      }),
-    );
-    const earlyResponse = await send(
-      fx,
-      "POST",
-      `/special-dates/${early.id}/duplicate`,
-      fx.manager,
-      {
-        dates: [forward.date],
-      },
-    );
-    expect(earlyResponse.status).toBe(201);
-    const earlyCopies = (await earlyResponse.json()) as SpecialDate[];
-    expect(earlyCopies).toEqual([{ ...early, id: expect.any(String), date: forward.date }]);
-    for (const copy of [...lateCopies, ...earlyCopies])
-      expect(await withTransaction(db, (tx) => readSpecialDate(tx, fx.cfg, copy.id))).toEqual({
-        ...copy,
-      });
-    expect(await venueDates(fx)).toEqual([
-      { id: early.id, date: "2030-01-07", name: "Staff party" },
-      { id: earlyCopies[0]!.id, date: forward.date, name: "Staff party" },
-      { id: late.id, date: "2030-10-14", name: "Staff party" },
-      { id: lateCopies[1]!.id, date: "2030-10-22", name: "Staff party" },
-      { id: lateCopies[0]!.id, date: "2030-10-28", name: "Staff party" },
-    ]);
-  });
-
-  it("does not write a default-station schedule through either former input", async () => {
-    const fx = await fixture();
-    expect(
-      (await send(fx, "PUT", "/hours/week", fx.manager, { subject: fx.kitchen, days: week() }))
-        .status,
-    ).toBe(404);
-    const response = await send(
-      fx,
-      "POST",
-      "/special-dates",
-      fx.manager,
-      input({ cells: [{ subject: fx.kitchen, cell: { mode: "closed", periods: [] } }] }),
-    );
-    expect(response.status).toBe(201);
-    const saved = (await response.json()) as SpecialDate;
-    expect(saved).toMatchObject({ date: "2030-10-15", name: "Staff party", repeats: false });
-    expect(await venueDates(fx)).toEqual([{ id: saved.id, date: saved.date, name: saved.name }]);
-  });
-
-  it("lets only a venue service manager write, however the request reaches the server", async () => {
-    const fx = await fixture();
-    const source = await createDate(fx, input());
-    const writes = [
-      ["POST", "/special-dates", input({ date: "2030-11-01" })],
-      ["PUT", `/special-dates/${source.id}`, input({ name: "Renamed" })],
-      ["POST", `/special-dates/${source.id}/duplicate`, { dates: ["2030-11-02"] }],
-      ["DELETE", `/special-dates/${source.id}`, undefined],
-    ] as const;
-    for (const [method, path, body] of writes) {
-      await refused(await send(fx, method, path, fx.supervisor, body), 403, {
-        code: "authorization.not_permitted",
-      });
-      await refused(await send(fx, method, path, fx.staff, body), 403, {
-        code: "authorization.not_permitted",
-      });
-      await refused(await send(fx, method, path, undefined, body), 401, {
-        code: "management_session.required",
-      });
-      await refused(await send(fx, method, path, fx.expired, body), 401, {
-        code: "management_session.expired",
-      });
-    }
-    expect(await venueDates(fx)).toEqual([
-      { id: source.id, date: "2030-10-15", name: "Staff party" },
-    ]);
-  });
 });
 
 describe("Hours when the venue's clock changes", () => {
@@ -956,24 +545,11 @@ describe("Hours when the venue's clock changes", () => {
     });
 
   const model = (fx: Fixture, at: Date) =>
-    withTransaction(db, (tx) => readNamedDaysModel(tx, fx.cfg, "2026-10-12", "2026-10-18", at));
+    withTransaction(db, (tx) => readSpecialDaysModel(tx, fx.cfg, "2026-10-12", "2026-10-18", at));
 
-  it("moves the civil date with a new time zone, keeping named days without closing stations", async () => {
+  it("moves the civil date with a new time zone, keeping special days without closing stations", async () => {
     const fx = await fixture();
-    await withTransaction(db, async (tx) => {
-      await saveSpecialDate(
-        tx,
-        fx.cfg,
-        null,
-        input({
-          date: "2026-10-15",
-          cells: [{ subject: fx.bar, cell: { mode: "closed", periods: [] } }],
-        }),
-        new Date("2026-10-01T10:00:00Z"),
-        undefined,
-        0,
-      );
-    });
+    await createDay(fx, "2026-10-15", { at: new Date("2026-10-01T10:00:00Z") });
     const madrid = await model(fx, AT);
     expect(madrid.civilDate).toBe("2026-10-15");
     expect(await barStatus(fx, AT)).toEqual({ open: true, why: "open" });
@@ -1020,89 +596,12 @@ describe("station-only Hours request boundary", () => {
       ).status,
     ).toBe(404);
   });
-  it("ignores a former department station-cell field while creating the named day", async () => {
-    const fx = await fixture();
-    const response = await send(
-      fx,
-      "POST",
-      "/special-dates",
-      fx.manager,
-      input({
-        cells: [
-          {
-            subject: { kind: "department" as never, id: fx.departmentIds.restaurant },
-            cell: { mode: "closed", periods: [] },
-          },
-        ],
-      }),
-    );
-    expect(response.status).toBe(201);
-    const saved = (await response.json()) as SpecialDate;
-    expect(saved).toMatchObject({ date: "2030-10-15", name: "Staff party" });
-    expect(await venueDates(fx)).toEqual([{ id: saved.id, date: saved.date, name: saved.name }]);
-  });
-});
-
-it("rolls back a posted named day when an after-change participant refuses", async () => {
-  const fx = await fixture();
-  participants.push({
-    async copy() {},
-    async beforeDelete() {},
-    async afterChange() {
-      throw new AppError("hours.invalid", { field: "date" });
-    },
-  });
-  await refused(await send(fx, "POST", "/special-dates", fx.manager, input()), 400, {
-    code: "hours.invalid",
-    params: { field: "date" },
-  });
-  expect(await venueDates(fx)).toEqual([]);
-});
-
-describe("named-day HTTP writes", () => {
-  it("returns recurring named-day metadata and refuses a later clashing occurrence", async () => {
-    const fx = await fixture();
-    const created = await send(fx, "POST", "/special-dates", fx.manager, {
-      ...input({ date: "2030-12-25" }),
-      kind: "holiday",
-      repeats: true,
-      ownHours: true,
-    });
-    expect(created.status).toBe(201);
-    expect(await created.json()).toMatchObject({
-      date: "2030-12-25",
-      kind: "holiday",
-      repeats: true,
-      ownHours: true,
-    });
-    await refused(
-      await send(fx, "POST", "/special-dates", fx.manager, input({ date: "2031-12-25" })),
-      409,
-      { code: "special_date.date_taken", params: { date: "2031-12-25" } },
-    );
-    expect(await venueDates(fx)).toHaveLength(1);
-  });
-  it.each(["kind", "repeats", "ownHours"])(
-    "rejects an explicit null %s with a field refusal",
-    async (field) => {
-      const fx = await fixture();
-      await refused(
-        await send(fx, "POST", "/special-dates", fx.manager, { ...input(), [field]: null }),
-        400,
-        { code: "hours.invalid", params: { field } },
-      );
-      expect(await venueDates(fx)).toEqual([]);
-    },
-  );
 });
 
 describe("named-days Calendar route", () => {
   it("returns the venue-scoped model for a venue viewer", async () => {
     const fx = await fixture();
-    const day = await createDate(
-      fx,
-      input({ kind: "holiday", repeats: true, closeWholeVenue: true }),
-    );
+    const day = await createDay(fx, "2030-10-15", { repeatsYearly: true, closedAllDay: true });
     const response = await send(
       fx,
       "GET",
@@ -1114,28 +613,12 @@ describe("named-days Calendar route", () => {
     expect(model.days).toEqual([
       {
         date: "2031-10-15",
-        namedDay: {
-          id: day.id,
-          date: "2030-10-15",
-          name: "Staff party",
-          kind: "holiday",
-          repeats: true,
-          ownHours: false,
-          closeWholeVenue: true,
-        },
+        specialDay: { id: day.id, name: "Staff party" },
         holidays: [],
-        tone: "own_holiday",
-        ownHours: false,
+        tone: "special_day",
         closed: true,
       },
-      {
-        date: "2031-10-16",
-        namedDay: null,
-        holidays: [],
-        tone: "standard",
-        ownHours: false,
-        closed: false,
-      },
+      { date: "2031-10-16", specialDay: null, holidays: [], tone: "standard", closed: false },
     ]);
   });
   it("requires the existing venue view authorization", async () => {
@@ -1167,6 +650,33 @@ describe("named-days Calendar route", () => {
   });
 });
 
+describe("retired special-date routes", () => {
+  it("answers the unmatched-route 404 to every special-date writer for a manager and leaves a special day as it was", async () => {
+    const fx = await fixture();
+    const day = await createDay(fx, "2030-10-15", { name: "Staff party" });
+    const row = () => db.select().from(specialDays).where(eq(specialDays.id, day.id));
+    const before = await row();
+    expect(before).toHaveLength(1);
+    const body = { date: "2030-10-15", name: "Renamed party", closeWholeVenue: false };
+    for (const [method, path, sent] of [
+      ["POST", "/special-dates", { ...body, date: "2030-10-16" }],
+      ["PUT", `/special-dates/${day.id}`, body],
+      ["POST", `/special-dates/${day.id}/duplicate`, { dates: ["2030-10-17"] }],
+      ["DELETE", `/special-dates/${day.id}`, undefined],
+    ] as const) {
+      const response = await send(fx, method, path, fx.manager, sent);
+      expect({ method, path, status: response.status, body: await response.text() }).toEqual({
+        method,
+        path,
+        status: 404,
+        body: "404 Not Found",
+      });
+      expect(await row()).toEqual(before);
+    }
+    expect(await venueDates(fx)).toEqual([{ id: day.id, date: "2030-10-15", name: "Staff party" }]);
+  });
+});
+
 describe("retired station-hours range route", () => {
   it.each([
     "/hours?from=2030-10-14&to=2030-10-16",
@@ -1174,43 +684,11 @@ describe("retired station-hours range route", () => {
     "/hours?from=2030-02-30&to=2030-03-02",
   ])("answers 404 for %s without changing saved data for any session", async (path) => {
     const fx = await fixture();
-    await createDate(fx, input({ closeWholeVenue: true }));
+    await createDay(fx, "2030-10-15", { closedAllDay: true });
     const beforeDates = await venueDates(fx);
     for (const cookie of [fx.manager, fx.supervisor, fx.staff, fx.expired, undefined]) {
       expect((await send(fx, "GET", path, cookie)).status).toBe(404);
       expect(await venueDates(fx)).toEqual(beforeDates);
     }
   });
-});
-
-it("returns the pending-clock refusal from an authenticated time writer", async () => {
-  const fx = await fixture();
-  const before = await db
-    .select()
-    .from(specialDates)
-    .where(eq(specialDates.locationId, fx.cfg.locationId));
-  await withTransaction(db, async (tx) => {
-    await tx
-      .insert(locationBusinessDaySettings)
-      .values({ locationId: fx.cfg.locationId, revision: 1 });
-    await tx.insert(locationDayCutoverChanges).values({
-      locationId: fx.cfg.locationId,
-      effectiveBusinessDay: "2030-10-16",
-      dayCutover: "07:00:00",
-    });
-  });
-  await refused(
-    await send(fx, "POST", "/special-dates", fx.manager, {
-      date: "2030-10-16",
-      name: "Future",
-      ownHours: false,
-      closeWholeVenue: false,
-      expectedClockRevision: 1,
-    }),
-    409,
-    { code: "hours.clock_change_pending", params: { effectiveBusinessDay: "2030-10-16" } },
-  );
-  expect(
-    await db.select().from(specialDates).where(eq(specialDates.locationId, fx.cfg.locationId)),
-  ).toEqual(before);
 });

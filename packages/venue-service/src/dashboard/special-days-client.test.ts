@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { LiveData, type DashboardRequest } from "@waitron/dashboard-kit";
-import * as clients from "./named-days-client.js";
-import type { NamedDaysModel } from "../holiday-types.js";
+import * as clients from "./special-days-client.js";
+import type { SpecialDaysModel } from "../holiday-types.js";
 
-const model: NamedDaysModel = {
+const model: SpecialDaysModel = {
   businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
   clockRevision: 0,
   currentBusinessDay: "2026-10-09",
@@ -24,15 +24,15 @@ const model: NamedDaysModel = {
   },
   localHolidaysPerYear: 2,
 };
-describe("NamedDaysApi", () => {
+describe("SpecialDaysApi", () => {
   it("reads independent date ranges passively and refreshes when their sources change", async () => {
     const live = new LiveData();
     const request = vi.fn(async () => model);
-    expect(clients).toHaveProperty("NamedDaysApi", expect.any(Function));
-    const api = new clients.NamedDaysApi(request as DashboardRequest, live);
+    expect(clients).toHaveProperty("SpecialDaysApi", expect.any(Function));
+    const api = new clients.SpecialDaysApi(request as DashboardRequest, live);
     const apply = vi.fn();
-    const stop = api.watchNamedDays("2026-10-01", "2026-10-31", apply, vi.fn(), vi.fn());
-    const other = api.watchNamedDays("2026-11-01", "2026-11-30", vi.fn(), vi.fn(), vi.fn());
+    const stop = api.watchSpecialDays("2026-10-01", "2026-10-31", apply, vi.fn(), vi.fn());
+    const other = api.watchSpecialDays("2026-11-01", "2026-11-30", vi.fn(), vi.fn(), vi.fn());
     try {
       await vi.waitFor(() => expect(apply).toHaveBeenCalledWith(model));
       expect(request.mock.calls).toEqual([
@@ -51,9 +51,6 @@ describe("NamedDaysApi", () => {
       ]);
       expect(live.interests).toEqual(
         [
-          "special_dates",
-          "menu_day_timetables",
-          "menu_slots",
           "departments",
           "tenants",
           "locations",
@@ -80,110 +77,67 @@ describe("NamedDaysApi", () => {
   });
 });
 
-it("edits calendar metadata without reading or resending retained station cells", async () => {
-  const { parseSpecialDateInput } = await import("../hours-rules.js");
+const facts = {
+  name: "Christmas dinners",
+  repeatsYearly: false,
+  dates: [{ date: "2026-12-20", closedAllDay: true }],
+};
+it("sends a special day's facts to its routes with the clock revision and nothing else", async () => {
   const requests: unknown[][] = [];
-  const api = new clients.NamedDaysApi((async (path, method, body, options) => {
+  const saved = { id: "a/b", ...facts, paint: [], zonePaint: [] };
+  const api = new clients.SpecialDaysApi((async (path, method, body, options) => {
     requests.push([path, method, body, options]);
-    if (method === "GET") throw new Error("station source offline");
-    parseSpecialDateInput(body);
-    return {};
+    return method === "DELETE" ? undefined : saved;
   }) as DashboardRequest);
-  const input = {
-    date: "2026-10-02",
-    name: "Edited",
-    kind: "holiday" as const,
-    repeats: false,
-    ownHours: false,
-    closeWholeVenue: false,
-  };
-  await api.saveDay("source", input, () => true, 0);
+  expect(await api.saveSpecialDay(null, facts, () => true, 3)).toEqual(saved);
+  expect(await api.saveSpecialDay("a/b", facts, () => true, 3)).toEqual(saved);
+  expect(await api.readSpecialDay("a/b")).toEqual(saved);
+  expect(await api.deleteSpecialDay("a/b", 3)).toBeUndefined();
   expect(requests).toEqual([
     [
-      "/management-api/venue-service/special-dates/source",
+      "/management-api/venue-service/special-days",
+      "POST",
+      { ...facts, expectedClockRevision: 3 },
+      undefined,
+    ],
+    [
+      "/management-api/venue-service/special-days/a%2Fb",
       "PUT",
-      { ...input, expectedClockRevision: 0 },
+      { ...facts, expectedClockRevision: 3 },
+      undefined,
+    ],
+    ["/management-api/venue-service/special-days/a%2Fb", "GET", undefined, undefined],
+    [
+      "/management-api/venue-service/special-days/a%2Fb",
+      "DELETE",
+      { expectedClockRevision: 3 },
       undefined,
     ],
   ]);
 });
-it("a failed calendar write preserves its refusal without a station-source read", async () => {
+it("a failed special-day write passes its refusal on", async () => {
   const methods: unknown[] = [];
-  const api = new clients.NamedDaysApi((async (_path, method) => {
+  const api = new clients.SpecialDaysApi((async (_path, method) => {
     methods.push(method);
     throw new Error("write offline");
   }) as DashboardRequest);
-  await expect(
-    api.saveDay(
-      "source",
-      {
-        date: "2026-10-02",
-        name: "Edited",
-        kind: "holiday",
-        repeats: false,
-        ownHours: false,
-        closeWholeVenue: false,
-      },
-      () => true,
-      0,
-    ),
-  ).rejects.toThrow("write offline");
+  await expect(api.saveSpecialDay("source", facts, () => true, 0)).rejects.toThrow("write offline");
   expect(methods).toEqual(["PUT"]);
 });
-it("an editor that has left cannot begin a calendar write", async () => {
+it("a dialog that has left cannot begin a special-day write", async () => {
   const methods: unknown[] = [];
-  const api = new clients.NamedDaysApi((async (_path, method) => {
+  const api = new clients.SpecialDaysApi((async (_path, method) => {
     methods.push(method);
     return {};
   }) as DashboardRequest);
-  await api.saveDay(
-    "source",
-    {
-      date: "2026-10-02",
-      name: "Edited",
-      kind: "holiday",
-      repeats: false,
-      ownHours: false,
-      closeWholeVenue: false,
-    },
-    () => false,
-    0,
-  );
+  expect(await api.saveSpecialDay("source", facts, () => false, 0)).toBeUndefined();
   expect(methods).toEqual([]);
 });
 
-it("calendar metadata edits need no station-cell snapshot", async () => {
-  const { parseSpecialDateInput } = await import("../hours-rules.js");
-  const requests: unknown[][] = [];
-  const api = new clients.NamedDaysApi((async (path, method, body, options) => {
-    requests.push([path, method, body, options]);
-    if (method === "GET") throw new Error("no station-cell snapshot");
-    parseSpecialDateInput(body);
-    return {};
-  }) as DashboardRequest);
-  const input = {
-    date: "2026-10-02",
-    name: "Edited",
-    kind: "holiday" as const,
-    repeats: false,
-    ownHours: false,
-    closeWholeVenue: false,
-  };
-  await api.saveDay("source", input, () => true, 0);
-  expect(requests).toEqual([
-    [
-      "/management-api/venue-service/special-dates/source",
-      "PUT",
-      { ...input, expectedClockRevision: 0 },
-      undefined,
-    ],
-  ]);
-});
-
-it("the replacement named-day watch reads passively, reports failure and recovery, and stops when detached", async () => {
+it("the special-days watch reads passively, reports failure and recovery, and stops when detached", async () => {
   const live = new LiveData();
   const updated = { ...model, area: { ...model.area, chosen: "aran" } };
-  const answers: (NamedDaysModel | Error)[] = [model, new Error("offline"), updated];
+  const answers: (SpecialDaysModel | Error)[] = [model, new Error("offline"), updated];
   const request = vi.fn(async () => {
     const next = answers.shift()!;
     if (next instanceof Error) throw next;
@@ -192,7 +146,7 @@ it("the replacement named-day watch reads passively, reports failure and recover
   const apply = vi.fn();
   const failed = vi.fn();
   const recovered = vi.fn();
-  const stop = new clients.NamedDaysApi(request as DashboardRequest, live).watchNamedDays(
+  const stop = new clients.SpecialDaysApi(request as DashboardRequest, live).watchSpecialDays(
     "2026-10-01",
     "2026-10-31",
     apply,
@@ -215,18 +169,18 @@ it("the replacement named-day watch reads passively, reports failure and recover
   expect(recovered).toHaveBeenCalledTimes(1);
   stop();
   expect(live.interests).toEqual([]);
-  live.invalidate([{ type: "special_dates" }]);
+  live.invalidate([{ type: "special_days" }]);
   live.refresh();
   await new Promise((resolve) => setTimeout(resolve, 20));
   expect(request).toHaveBeenCalledTimes(3);
 });
 
-it("the replacement named-day watch rereads after a write with live data and without it", async () => {
+it("the special-days watch rereads after a write with live data and without it", async () => {
   for (const live of [new LiveData(), undefined]) {
     const request = vi.fn(async () => model);
-    const api = new clients.NamedDaysApi(request as DashboardRequest, live);
+    const api = new clients.SpecialDaysApi(request as DashboardRequest, live);
     const apply = vi.fn();
-    const stop = api.watchNamedDays("2026-10-01", "2026-10-31", apply, vi.fn(), vi.fn());
+    const stop = api.watchSpecialDays("2026-10-01", "2026-10-31", apply, vi.fn(), vi.fn());
     await vi.waitFor(() => expect(apply).toHaveBeenCalledTimes(1));
     api.rereadWatches();
     await vi.waitFor(() => expect(apply).toHaveBeenCalledTimes(2));
@@ -241,7 +195,7 @@ it("retired station rows do not start another Calendar read", async () => {
   const live = new LiveData();
   const request = vi.fn(async () => model);
   const apply = vi.fn();
-  const stop = new clients.NamedDaysApi(request as DashboardRequest, live).watchNamedDays(
+  const stop = new clients.SpecialDaysApi(request as DashboardRequest, live).watchSpecialDays(
     "2026-10-01",
     "2026-10-31",
     apply,
@@ -261,7 +215,7 @@ it("retired station rows do not start another Calendar read", async () => {
     for (let turn = 0; turn < 20; turn++) await Promise.resolve();
     expect(request).toHaveBeenCalledTimes(1);
     expect(apply).toHaveBeenCalledTimes(1);
-    live.invalidate([{ type: "special_dates" }]);
+    live.invalidate([{ type: "special_days" }]);
     await vi.waitFor(() => expect(apply).toHaveBeenCalledTimes(2));
     expect(request).toHaveBeenCalledTimes(2);
   } finally {
@@ -282,8 +236,8 @@ it("a Calendar reread leaves a station-only observer's snapshot alone", async ()
   );
   const request = vi.fn(async () => model);
   const apply = vi.fn();
-  const api = new clients.NamedDaysApi(request as DashboardRequest, live);
-  const stop = api.watchNamedDays("2026-10-01", "2026-10-31", apply, vi.fn(), vi.fn());
+  const api = new clients.SpecialDaysApi(request as DashboardRequest, live);
+  const stop = api.watchSpecialDays("2026-10-01", "2026-10-31", apply, vi.fn(), vi.fn());
   try {
     await vi.waitFor(() => expect(station.snapshot.value).toBe(1));
     await vi.waitFor(() => expect(apply).toHaveBeenCalledTimes(1));
@@ -298,4 +252,16 @@ it("a Calendar reread leaves a station-only observer's snapshot alone", async ()
     stop();
     station.unsubscribe();
   }
+});
+it("lists the venue's special days with one GET", async () => {
+  const requests: unknown[][] = [];
+  const list = [{ id: "a", name: "Navidad", repeatsYearly: false, dates: facts.dates }];
+  const api = new clients.SpecialDaysApi((async (path, method, body, options) => {
+    requests.push([path, method, body, options]);
+    return list;
+  }) as DashboardRequest);
+  expect(await api.listSpecialDays()).toEqual(list);
+  expect(requests).toEqual([
+    ["/management-api/venue-service/special-days", "GET", undefined, undefined],
+  ]);
 });

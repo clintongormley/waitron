@@ -6,9 +6,84 @@ import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
 import { mountThemed, expectNoA11yViolations } from "@waitron/ui/src/a11y-helpers.js";
 import { realWeekModel, namedWeekModel } from "../testing/real-week-model.js";
+import type { SpecialDaysModel } from "../holiday-types.js";
+import type { SpecialDayDetail } from "../special-days.js";
 import { OpeningHoursApi } from "./opening-hours-client.js";
+import { t } from "./strings.js";
 import "./opening-hours-screen.js";
 registerIcons(DROPDOWN_ICONS);
+const anniversary: SpecialDayDetail = {
+  id: "anniversary",
+  name: "Anniversary",
+  repeatsYearly: true,
+  dates: [{ date: "2025-10-13", closedAllDay: false }],
+  paint: [
+    {
+      departmentId: "d1",
+      date: "2025-10-13",
+      ranges: [{ periodId: "p1", startsAt: "14:00", endsAt: "16:00" }],
+    },
+  ],
+  zonePaint: [],
+};
+const stocktake: SpecialDayDetail = {
+  id: "stocktake",
+  name: "Stocktake",
+  repeatsYearly: false,
+  dates: [{ date: "2026-10-15", closedAllDay: true }],
+  paint: [
+    {
+      departmentId: "d1",
+      date: "2026-10-15",
+      ranges: [{ periodId: "p1", startsAt: "12:00", endsAt: "13:00" }],
+    },
+  ],
+  zonePaint: [
+    {
+      zoneId: "z1",
+      date: "2026-10-15",
+      ranges: [{ kind: "closed", startsAt: "22:00", endsAt: "23:00" }],
+    },
+  ],
+};
+/** The week of 12 Oct 2026 with Anniversary painted on Tuesday 13 and Stocktake closing Thursday 15. */
+function specialWeek(): SpecialDaysModel {
+  return {
+    ...namedWeekModel(),
+    days: [
+      {
+        date: "2026-10-13",
+        specialDay: { id: anniversary.id, name: anniversary.name },
+        holidays: [],
+        tone: "special_day",
+        closed: false,
+      },
+      {
+        date: "2026-10-15",
+        specialDay: { id: stocktake.id, name: stocktake.name },
+        holidays: [],
+        tone: "special_day",
+        closed: true,
+      },
+    ],
+  };
+}
+const answer = (path: string, model: unknown) =>
+  path.includes("named-days?")
+    ? specialWeek()
+    : path.endsWith("/special-days/anniversary")
+      ? structuredClone(anniversary)
+      : path.endsWith("/special-days/stocktake")
+        ? structuredClone(stocktake)
+        : structuredClone(model);
+const expectSpecialColumns = async (view: Element) => {
+  const grid = view.shadowRoot!.querySelector("service-grid")!;
+  await expect.poll(() => grid.columns[1]!.label).toContain("Anniversary");
+  expect(grid.columns[3]!.label).toContain("Stocktake");
+  expect(grid.columns[3]!.label.endsWith(` · ${t("hours.closed")}`)).toBe(true);
+  expect(grid.columns[3]!.slots).toEqual([]);
+  expect(view.shadowRoot!.querySelectorAll("[data-test=day-link]")).toHaveLength(7);
+};
 const original = location.href;
 afterEach(async () => {
   cleanup();
@@ -29,10 +104,7 @@ describe.each(["en", "es"] as const)("Real weeks %s", (locale) => {
       const model = realWeekModel();
       const screen = document.createElement("dashboard-opening-hours-screen");
       screen.api = new OpeningHoursApi(
-        withOpeningStations((async (path) =>
-          path.includes("named-days?")
-            ? namedWeekModel()
-            : structuredClone(model)) as DashboardRequest),
+        withOpeningStations((async (path) => answer(path, model)) as DashboardRequest),
       );
       wrapper.appendChild(screen);
       await expect
@@ -41,13 +113,12 @@ describe.each(["en", "es"] as const)("Real weeks %s", (locale) => {
       const department = screen.shadowRoot!.querySelector("opening-hours-week")!;
       await department.updateComplete;
       await expect
-        .poll(
-          () =>
-            department.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
-              "[data-test=own-date]",
-            )!.disabled,
-        )
-        .toBe(false);
+        .poll(() => department.shadowRoot!.querySelectorAll("[data-test=day-link]").length)
+        .toBe(7);
+      await expectSpecialColumns(department);
+      await expect
+        .poll(() => department.shadowRoot!.querySelector("service-grid")!.columns[1]!.slots)
+        .toEqual([{ periodId: "p1", startsAt: "10:00", endsAt: "16:00" }]);
       await expectNoA11yViolations(host);
       await page.screenshot({
         path: `../__screenshots__/task22-${locale}-${theme}-${width}-department.png`,
@@ -64,6 +135,7 @@ describe.each(["en", "es"] as const)("Real weeks %s", (locale) => {
         .not.toBeNull();
       const zone = screen.shadowRoot!.querySelector("opening-hours-zone-week")!;
       await zone.updateComplete;
+      await expectSpecialColumns(zone);
       await expectNoA11yViolations(host);
       await page.screenshot({
         path: `../__screenshots__/task22-${locale}-${theme}-${width}-zone.png`,

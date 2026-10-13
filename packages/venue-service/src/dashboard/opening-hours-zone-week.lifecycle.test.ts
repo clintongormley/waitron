@@ -18,7 +18,6 @@ async function mount(real = false, refusal?: unknown) {
   week.department = data.departments[0]!;
   week.zone = week.department.zones[0]!;
   week.seasonId = data.seasons[0]!.id;
-  week.namedDays = data.namedDays;
   week.weekStart = real ? "2026-10-12" : "";
   week.api = new OpeningHoursApi((async (path, method, body) => {
     if (method === "GET") return data;
@@ -167,50 +166,6 @@ it("copying blocks grid edits and a retained confirmation cannot copy after acce
   expect(ranges()).toEqual([{ startsAt: "22:00", endsAt: "06:00" }]);
   expect(week.shadowRoot!.querySelector("range-dialog")).toBeNull();
   expect(writes).toEqual([]);
-});
-
-it.each(["ranges.0.endsAt", "specialDateId"])(
-  "a dated refusal for %s marks its day and retains retry",
-  async (field) => {
-    const writes = await mount(true, { code: "zone_closed_time.invalid", params: { field } });
-    emit(grid(), "grid-block-change", {
-      columnKey: "2",
-      index: 0,
-      startsAt: "22:00",
-      endsAt: "06:00",
-    });
-    await week.updateComplete;
-    const save = week.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
-      "[data-test=save-date][data-day='2']",
-    )!;
-    save.click();
-    await expect
-      .poll(() => week.shadowRoot!.querySelector("[data-day-error='2']")?.textContent)
-      .toContain("These closed times overlap");
-    expect(save.disabled).toBe(false);
-    expect(ranges()).toEqual([{ startsAt: "22:00", endsAt: "06:00" }]);
-    expect(writes).toEqual([
-      [
-        "/management-api/venue-service/special-dates/annual%2Fday/zone-closed-times/z1",
-        "PUT",
-        { ranges: [{ startsAt: "22:00", endsAt: "06:00" }] },
-      ],
-    ]);
-  },
-);
-
-it("a clean dated snapshot can retire an own-hours Save and offers the existing day's own-hours editor", async () => {
-  await mount(true);
-  week.namedDays = week.namedDays.map((day) => ({ ...day, ownHours: false }));
-  await week.updateComplete;
-  expect(week.shadowRoot!.querySelector("[data-test=save-date]")).toBeNull();
-  const events: unknown[] = [];
-  week.addEventListener("named-calendar-action", (event) =>
-    events.push((event as CustomEvent).detail),
-  );
-  week.shadowRoot!.querySelector<HTMLElement>("[data-test=own-date][data-day='2']")!.click();
-  expect(events).toHaveLength(1);
-  expect(events[0]).toMatchObject({ kind: "own", date: "2026-10-13", day: { id: "annual/day" } });
 });
 
 it("a real week ignores range events for plain and whole-venue-closed dates", async () => {

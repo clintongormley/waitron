@@ -18,7 +18,6 @@ function settingsApi(request: DashboardRequest) {
         clockReadable: true,
         dayCutover: "06:00",
         menus: [],
-        namedDays: [],
         departments: [],
       });
     if (path.endsWith("/floor-plan")) return Promise.resolve(structuredClone(placedZonePlan));

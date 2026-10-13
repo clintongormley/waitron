@@ -3,23 +3,21 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { applyTokens } from "@waitron/ui";
 import { OpeningHoursApi } from "./opening-hours-client.js";
-import type { NamedDaysModel } from "../holiday-types.js";
+import type { SpecialDaysModel } from "../holiday-types.js";
 import {
   realWeekModel as fixture,
   namedWeekModel as calendarFixture,
 } from "../testing/real-week-model.js";
+import type { SpecialDayDetail } from "../special-days.js";
+import {
+  PARTY_DATE,
+  paintDayModel,
+  paintDayRequest,
+  partyDetail,
+} from "../testing/special-day-fixture.js";
 import "./opening-hours-screen.js";
 let screen: HTMLElementTagNameMap["dashboard-opening-hours-screen"];
 const original = location.href;
-const annual = {
-  id: "annual/day",
-  date: "2025-10-13",
-  name: "Anniversary",
-  kind: "working_day" as const,
-  repeats: true,
-  ownHours: true,
-  closeWholeVenue: false,
-};
 
 function emit(target: Element, name: string, detail: unknown) {
   target.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
@@ -40,7 +38,7 @@ async function mount(
   write: (path: string, method: string, body: unknown) => Promise<unknown> = async () => {},
   zone = false,
   data = fixture(),
-  named: () => Promise<NamedDaysModel> = async () => calendarFixture(),
+  named: () => Promise<SpecialDaysModel> = async () => calendarFixture(),
 ) {
   if (zone)
     history.replaceState(
@@ -54,7 +52,9 @@ async function mount(
       method === "GET"
         ? path.includes("named-days?")
           ? named()
-          : structuredClone(data)
+          : path.endsWith("/special-days")
+            ? []
+            : structuredClone(data)
         : write(path, method, body)) as DashboardRequest),
   );
   applyTokens(screen);
@@ -71,67 +71,6 @@ async function mount(
   await week.updateComplete;
   return week;
 }
-it("applies repeating own ranges on the occurrence weekday and locks plain and closed dates", async () => {
-  const week = await mount();
-  const grid = week.shadowRoot!.querySelector("service-grid")!;
-  expect(grid.columns).toHaveLength(7);
-  expect(grid.columns[1]!.label).toContain("13");
-  expect(grid.columns[1]!.label).toContain("Anniversary");
-  expect(grid.columns[1]!.slots).toEqual([{ periodId: "p1", startsAt: "12:00", endsAt: "16:00" }]);
-  expect(grid.columns.map((c) => c.editable)).toEqual([
-    false,
-    true,
-    true,
-    false,
-    false,
-    false,
-    false,
-  ]);
-  expect(grid.columns[3]!.slots).toEqual([]);
-  expect(grid.columns[3]!.label).toContain("Closed");
-  expect(week.shadowRoot!.querySelector("[data-test=own-date][data-day='1']")).not.toBeNull();
-  expect(week.shadowRoot!.querySelector("[data-test=own-date][data-day='4']")).toBeNull();
-  emit(grid, "grid-block-change", { columnKey: "1", index: 0, startsAt: "10:00", endsAt: "18:00" });
-  await week.updateComplete;
-  expect(grid.columns[0]!.slots).toEqual([{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }]);
-});
-it("saves one own date while the other remains staged and independently savable", async () => {
-  const writes: unknown[][] = [];
-  const week = await mount(async (...args) => {
-    writes.push(args);
-  });
-  const grid = week.shadowRoot!.querySelector("service-grid")!;
-  for (const day of [2, 3])
-    emit(grid, "grid-block-change", {
-      columnKey: String(day),
-      index: 0,
-      startsAt: "12:00",
-      endsAt: "17:00",
-    });
-  await week.updateComplete;
-  const save = (day: number) =>
-    week.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
-      `[data-test=save-date][data-day='${day}']`,
-    )!;
-  expect(save(2), "date owns a Save action").not.toBeNull();
-  expect(save(3).disabled).toBe(false);
-  save(2).click();
-  await expect
-    .poll(() => writes)
-    .toEqual([
-      [
-        "/management-api/venue-service/special-dates/annual%2Fday/menu-timetables/d1",
-        "PUT",
-        {
-          expectedClockRevision: 0,
-          slots: [{ periodId: "p1", startsAt: "12:00", endsAt: "17:00" }],
-        },
-      ],
-    ]);
-  await expect.poll(() => save(2).disabled).toBe(true);
-  expect(save(3).disabled).toBe(false);
-  expect(grid.columns[2]!.slots[0]!.endsAt).toBe("17:00");
-});
 it("bounds previous at the business week and preserves query/hash when stepping", async () => {
   await mount();
   const previous = screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
@@ -145,130 +84,7 @@ it("bounds previous at the business week and preserves query/hash when stepping"
   screen.shadowRoot!.querySelector<HTMLElement>("[data-test=previous-week]")!.click();
   await expect.poll(() => location.search).toBe("?week=2026-10-12&keep=yes");
 });
-it("opens the named-day editor for a plain date with own hours staged", async () => {
-  const week = await mount();
-  const action = week.shadowRoot!.querySelector<HTMLElement>("[data-test=own-date][data-day='1']");
-  expect(action, "plain date has own-hours action").not.toBeNull();
-  action!.click();
-  await expect.poll(() => screen.shadowRoot!.querySelector("named-day-editor")).not.toBeNull();
-  const form = screen.shadowRoot!.querySelector("named-day-editor")!;
-  await form.updateComplete;
-  expect(form.date).toBe("2026-10-12");
-  expect(form.ownHours).toBe(true);
-  expect(form.day).toBeUndefined();
-});
-it("shows dated department periods behind dated zone closures and saves only that zone date", async () => {
-  const writes: unknown[][] = [];
-  const week = await mount(async (...args) => {
-    writes.push(args);
-  }, true);
-  const grid = week.shadowRoot!.querySelector("service-grid")!;
-  expect(grid.columns[1]!.slots).toEqual([{ periodId: "p1", startsAt: "12:00", endsAt: "16:00" }]);
-  expect(grid.columns[1]!.closed).toEqual([{ startsAt: "23:00", endsAt: "06:00" }]);
-  expect(grid.columns[0]!.editable).toBe(false);
-  emit(grid, "grid-block-change", { columnKey: "2", index: 0, startsAt: "22:30", endsAt: "06:00" });
-  await week.updateComplete;
-  const save = week.shadowRoot!.querySelector<HTMLElement>("[data-test=save-date][data-day='2']");
-  expect(save, "zone date has Save").not.toBeNull();
-  save!.click();
-  await expect
-    .poll(() => writes)
-    .toEqual([
-      [
-        "/management-api/venue-service/special-dates/annual%2Fday/zone-closed-times/z1",
-        "PUT",
-        { expectedClockRevision: 0, ranges: [{ startsAt: "22:30", endsAt: "06:00" }] },
-      ],
-    ]);
-});
 
-it("prefills a public holiday's name and holiday kind for own hours", async () => {
-  const week = await mount(undefined, false, fixture(), async () => ({
-    ...calendarFixture(),
-    days: [
-      {
-        date: "2026-10-12",
-        namedDay: null,
-        holidays: [
-          {
-            id: "public",
-            date: "2026-10-12",
-            name: "National feast",
-            scope: "national",
-            sourceId: "official",
-          },
-        ],
-        tone: "public_holiday",
-        ownHours: false,
-        closed: false,
-      },
-    ],
-  }));
-  await screen.updateComplete;
-  week.shadowRoot!.querySelector<HTMLElement>("[data-test=own-date][data-day='1']")!.click();
-  await expect.poll(() => screen.shadowRoot!.querySelector("named-day-editor")).not.toBeNull();
-  const form = screen.shadowRoot!.querySelector("named-day-editor")!;
-  await form.updateComplete;
-  expect(
-    form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!.value,
-  ).toBe("National feast");
-  expect(
-    form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=kind]")!.value,
-  ).toBe("holiday");
-});
-it("waits for calendar facts before opening an unnamed date's editor", async () => {
-  let resolve!: (model: NamedDaysModel) => void;
-  const week = await mount(
-    undefined,
-    false,
-    fixture(),
-    () =>
-      new Promise((done) => {
-        resolve = done;
-      }),
-  );
-  const action = week.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
-    "[data-test=own-date][data-day='1']",
-  )!;
-  expect(action.disabled).toBe(true);
-  action.click();
-  emit(action, "click", {});
-  await screen.updateComplete;
-  expect(screen.shadowRoot!.querySelector("named-day-editor")).toBeNull();
-  resolve(calendarFixture());
-  await expect.poll(() => action.disabled).toBe(false);
-});
-it("registers an independently savable date after a clean named-day snapshot changes", async () => {
-  const data = fixture();
-  const week = await mount(undefined, false, data);
-  const added = { ...annual, id: "new", date: "2026-10-12", repeats: false };
-  data.namedDays = [...data.namedDays, added];
-  data.departments = [
-    {
-      ...data.departments[0]!,
-      dates: [
-        ...data.departments[0]!.dates,
-        { specialDateId: "new", slots: [{ periodId: "p1", startsAt: "11:00", endsAt: "15:00" }] },
-      ],
-    },
-  ];
-  screen.api.rereadWatches();
-  await expect
-    .poll(() => week.shadowRoot!.querySelector("service-grid")!.columns[0]!.editable)
-    .toBe(true);
-  emit(week.shadowRoot!.querySelector("service-grid")!, "grid-block-change", {
-    columnKey: "1",
-    index: 0,
-    startsAt: "11:00",
-    endsAt: "16:00",
-  });
-  await week.updateComplete;
-  expect(
-    week.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
-      "[data-test=save-date][data-day='1']",
-    )!.disabled,
-  ).toBe(false);
-});
 it("starts a Monday before cutover in the previous business week", async () => {
   vi.setSystemTime(new Date("2026-10-12T03:00:00Z"));
   history.replaceState(null, "", "/manage/opening-hours?keep=yes");
@@ -291,128 +107,6 @@ it("replaces an earlier valid Monday with the current business Monday", async ()
   await expect.poll(() => location.search).toBe("?week=2026-10-12&keep=yes");
 });
 
-it("explains a zone date whose named day now keeps the week and leaves retry available", async () => {
-  const week = await mount(async () => {
-    throw { code: "special_date.keeps_week", params: { specialDateId: "annual/day" } };
-  }, true);
-  emit(week.shadowRoot!.querySelector("service-grid")!, "grid-block-change", {
-    columnKey: "2",
-    index: 0,
-    startsAt: "22:30",
-    endsAt: "06:00",
-  });
-  await week.updateComplete;
-  const save = week.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
-    "[data-test=save-date][data-day='2']",
-  )!;
-  save.click();
-  await expect
-    .poll(
-      () =>
-        week.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>(
-          "[slot=header-2] wt-form-actions",
-        )!.error,
-    )
-    .toBe("This named day keeps the normal week. Give it its own hours first.");
-  expect(save.disabled).toBe(false);
-});
-it("reuses a repeating normal-hours day's editor and stored first date", async () => {
-  const data = fixture();
-  data.namedDays = [{ ...annual, ownHours: false }];
-  const week = await mount(undefined, false, data);
-  week.shadowRoot!.querySelector<HTMLElement>("[data-test=own-date][data-day='2']")!.click();
-  await expect.poll(() => screen.shadowRoot!.querySelector("named-day-editor")).not.toBeNull();
-  const form = screen.shadowRoot!.querySelector("named-day-editor")!;
-  await form.updateComplete;
-  expect(form.day?.id).toBe("annual/day");
-  expect(
-    form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=date]")!.value,
-  ).toBe("2025-10-13");
-  expect(form.shadowRoot!.textContent).toContain("This changes the day every year");
-  expect(form.ownHours).toBe(true);
-});
-it("a viewer has no own-date or Save action and ignores forged range edits", async () => {
-  const writes: unknown[][] = [];
-  const week = await mount(async (...args) => {
-    writes.push(args);
-  });
-  screen.readOnly = true;
-  await screen.updateComplete;
-  await week.updateComplete;
-  expect(week.shadowRoot!.querySelector("[data-test=own-date]")).toBeNull();
-  expect(week.shadowRoot!.querySelector("[data-test=save-date]")).toBeNull();
-  expect(week.shadowRoot!.querySelector("service-grid")!.columns.every((c) => !c.editable)).toBe(
-    true,
-  );
-  emit(week.shadowRoot!.querySelector("service-grid")!, "grid-block-change", {
-    columnKey: "2",
-    index: 0,
-    startsAt: "12:00",
-    endsAt: "17:00",
-  });
-  await week.updateComplete;
-  expect(week.shadowRoot!.querySelector("service-grid")!.columns[1]!.slots[0]!.endsAt).toBe(
-    "16:00",
-  );
-  expect(writes).toEqual([]);
-});
-it("does not write an unchanged date when an enabled rendered Save lags a reverted edit", async () => {
-  const writes: unknown[][] = [];
-  const week = await mount(async (...args) => {
-    writes.push(args);
-  });
-  const grid = week.shadowRoot!.querySelector("service-grid")!;
-  emit(grid, "grid-block-change", { columnKey: "2", index: 0, startsAt: "12:00", endsAt: "17:00" });
-  await week.updateComplete;
-  const save = week.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
-    "[data-test=save-date][data-day='2']",
-  )!;
-  expect(save.disabled).toBe(false);
-  emit(grid, "grid-block-change", { columnKey: "2", index: 0, startsAt: "12:00", endsAt: "16:00" });
-  save.click();
-  await week.updateComplete;
-  await Promise.resolve();
-  expect(writes).toEqual([]);
-  expect(save.disabled).toBe(true);
-});
-
-it("keeps a staged date's original named-day target through a replacement snapshot", async () => {
-  const data = fixture(),
-    writes: unknown[][] = [];
-  const week = await mount(
-    async (...args) => {
-      writes.push(args);
-    },
-    false,
-    data,
-  );
-  emit(week.shadowRoot!.querySelector("service-grid")!, "grid-block-change", {
-    columnKey: "2",
-    index: 0,
-    startsAt: "12:00",
-    endsAt: "17:00",
-  });
-  await week.updateComplete;
-  data.namedDays = data.namedDays.map((day) =>
-    day.id === "annual/day" ? { ...day, id: "replacement", name: "Another day" } : day,
-  );
-  screen.api.rereadWatches();
-  await expect.poll(() => week.namedDays[0]!.id).toBe("replacement");
-  week.shadowRoot!.querySelector<HTMLElement>("[data-test=save-date][data-day='2']")!.click();
-  await expect
-    .poll(() => writes)
-    .toEqual([
-      [
-        "/management-api/venue-service/special-dates/annual%2Fday/menu-timetables/d1",
-        "PUT",
-        {
-          expectedClockRevision: 0,
-          slots: [{ periodId: "p1", startsAt: "12:00", endsAt: "17:00" }],
-        },
-      ],
-    ]);
-});
-
 function seasonBoundaryModel() {
   const data = fixture();
   const slots = (hour: string) =>
@@ -430,12 +124,10 @@ function seasonBoundaryModel() {
     { id: "winter", name: "Winter", startsOn: "12-01" },
   ];
   data.currentSeasonId = "autumn";
-  data.namedDays = [];
   const [department] = data.departments;
   data.departments = [
     {
       ...department!,
-      dates: [],
       seasonWeeks: [
         { seasonId: "autumn", week: slots("14") },
         { seasonId: "winter", week: slots("15") },
@@ -443,7 +135,6 @@ function seasonBoundaryModel() {
       zones: [
         {
           ...department!.zones[0]!,
-          dates: [],
           seasonWeeks: [
             { seasonId: "autumn", week: ranges("22") },
             { seasonId: "winter", week: ranges("23") },
@@ -519,4 +210,176 @@ it.each([
   };
   expect(await saveIn(path)).not.toBeNull();
   expect(await saveIn(`${path}?week=2030-11-25`)).toBeNull();
+});
+
+const paintedParty = (): SpecialDayDetail => ({
+  ...partyDetail(),
+  paint: [
+    {
+      departmentId: "restaurant",
+      date: PARTY_DATE,
+      ranges: [{ periodId: null, startsAt: "22:00", endsAt: "23:30" }],
+    },
+  ],
+  zonePaint: [
+    {
+      zoneId: "terrace",
+      date: PARTY_DATE,
+      ranges: [{ kind: "open", startsAt: "22:00", endsAt: "23:00" }],
+    },
+  ],
+});
+async function mountPainted(address: string, tag: string, reads: string[] = []) {
+  history.replaceState(null, "", address);
+  const request = paintDayRequest([], undefined, paintDayModel(), paintedParty());
+  screen = document.createElement("dashboard-opening-hours-screen");
+  screen.api = new OpeningHoursApi((async (path, method, body) => {
+    if (method === "GET" && path.includes("/special-days/")) reads.push(path);
+    return request(path, method, body);
+  }) as DashboardRequest);
+  applyTokens(screen);
+  document.body.append(screen);
+  await expect.poll(() => screen.shadowRoot?.querySelector(tag)).not.toBeNull();
+  const view = screen.shadowRoot!.querySelector(tag) as HTMLElement & {
+    updateComplete: Promise<unknown>;
+  };
+  await view.updateComplete;
+  return view;
+}
+const dinner = (startsAt: string, endsAt: string) => ({ periodId: "dinner", startsAt, endsAt });
+it.each([
+  ["department", "/manage/opening-hours/view/week/department/restaurant", "opening-hours-week"],
+  [
+    "zone",
+    "/manage/opening-hours/view/week/department/restaurant/zone/terrace",
+    "opening-hours-zone-week",
+  ],
+])(
+  "in the real week a %s's dated columns are read-only and each links to its date's Day view",
+  async (_, path, tag) => {
+    const view = await mountPainted(`${path}?week=2026-10-12`, tag);
+    const grid = view.shadowRoot!.querySelector("service-grid")!;
+    expect(grid.columns.map((column) => column.editable)).toEqual(Array(7).fill(false));
+    expect(view.shadowRoot!.querySelector("[data-test=save-date]")).toBeNull();
+    expect(view.shadowRoot!.querySelector("[data-test=save-week]")).toBeNull();
+    expect(view.shadowRoot!.querySelector("[data-test=own-date]")).toBeNull();
+    const links = [
+      ...view.shadowRoot!.querySelectorAll<HTMLAnchorElement>("a[data-test=day-link]"),
+    ];
+    expect(links.map((link) => new URL(link.href).pathname)).toEqual(
+      ["12", "13", "14", "15", "16", "17", "18"].map(
+        (day) => `/manage/opening-hours/view/day/date/2026-10-${day}`,
+      ),
+    );
+    links[1]!.click();
+    await expect.poll(() => screen.shadowRoot!.querySelector("opening-hours-day")).not.toBeNull();
+    expect(location.pathname).toContain("/view/day/");
+    expect(location.pathname).toContain("/date/2026-10-13");
+    const day = screen.shadowRoot!.querySelector("opening-hours-day")!;
+    expect(day.date).toBe(PARTY_DATE);
+  },
+);
+it("a viewer still has each dated column's Day link", async () => {
+  const view = await mountPainted(
+    "/manage/opening-hours/view/week/department/restaurant?week=2026-10-12",
+    "opening-hours-week",
+  );
+  screen.readOnly = true;
+  await screen.updateComplete;
+  await view.updateComplete;
+  expect(view.shadowRoot!.querySelectorAll("a[data-test=day-link]")).toHaveLength(7);
+});
+it("the Day view opens on the address's date", async () => {
+  await mountPainted("/manage/opening-hours/view/day/date/2026-10-14", "opening-hours-day");
+  expect(screen.shadowRoot!.querySelector("opening-hours-day")!.date).toBe("2026-10-14");
+});
+it("a special date's column draws its stored paint over the season and names it; an ordinary date draws the season", async () => {
+  const reads: string[] = [];
+  const view = await mountPainted(
+    "/manage/opening-hours/view/week/department/restaurant?week=2026-10-12",
+    "opening-hours-week",
+    reads,
+  );
+  const grid = view.shadowRoot!.querySelector("service-grid")!;
+  await expect.poll(() => grid.columns[1]!.slots).toEqual([dinner("20:00", "22:00")]);
+  expect(grid.columns[1]!.label).toContain("Party");
+  expect(grid.columns[2]!.slots).toEqual([dinner("20:00", "23:30")]);
+  expect(grid.columns[2]!.label).not.toContain("Party");
+  expect(reads).toEqual(["/management-api/venue-service/special-days/party"]);
+});
+it("a special date's zone column draws its stored zone paint over the department's painted hours", async () => {
+  const view = await mountPainted(
+    "/manage/opening-hours/view/week/department/restaurant/zone/terrace?week=2026-10-12",
+    "opening-hours-zone-week",
+  );
+  const grid = view.shadowRoot!.querySelector("service-grid")!;
+  await expect
+    .poll(() => grid.columns[1]!.closed)
+    .toEqual([{ startsAt: "23:00", endsAt: "23:30" }]);
+  expect(grid.columns[1]!.slots).toEqual([dinner("20:00", "22:00")]);
+  expect(grid.columns[1]!.label).toContain("Party");
+  expect(grid.columns[2]!.closed).toEqual([{ startsAt: "22:00", endsAt: "23:30" }]);
+  expect(grid.columns[2]!.slots).toEqual([dinner("20:00", "23:30")]);
+});
+it("the All view draws a special date's stored paint over the season and names it", async () => {
+  const view = await mountPainted(
+    "/manage/opening-hours/view/week/department/all?week=2026-10-12",
+    "opening-hours-all",
+  );
+  const grid = view.shadowRoot!.querySelector("service-grid")!;
+  const column = (key: string) => grid.columns.find((entry) => entry.key === key)!;
+  await expect.poll(() => column("2:restaurant").slots).toEqual([dinner("20:00", "22:00")]);
+  expect(column("2:restaurant").label).toContain("Party");
+  expect(column("2:bar").slots).toEqual([
+    { periodId: "drinks", startsAt: "18:00", endsAt: "02:00" },
+  ]);
+  expect(column("3:restaurant").slots).toEqual([dinner("20:00", "23:30")]);
+});
+it("a date the calendar marks closed all day draws no hours and says Closed", async () => {
+  history.replaceState(
+    null,
+    "",
+    "/manage/opening-hours/view/week/department/restaurant?week=2026-10-12",
+  );
+  const closed = { ...paintedParty(), dates: [{ date: PARTY_DATE, closedAllDay: true }] };
+  const request = paintDayRequest([], undefined, paintDayModel(), closed);
+  screen = document.createElement("dashboard-opening-hours-screen");
+  screen.api = new OpeningHoursApi(request);
+  document.body.append(screen);
+  await expect.poll(() => screen.shadowRoot?.querySelector("opening-hours-week")).not.toBeNull();
+  const grid = screen
+    .shadowRoot!.querySelector("opening-hours-week")!
+    .shadowRoot!.querySelector("service-grid")!;
+  await expect.poll(() => grid.columns[1]!.label).toContain("Closed");
+  expect(grid.columns[1]!.slots).toEqual([]);
+});
+it("says the week could not be loaded when a special day's read fails", async () => {
+  history.replaceState(
+    null,
+    "",
+    "/manage/opening-hours/view/week/department/restaurant?week=2026-10-12",
+  );
+  const request = paintDayRequest([], undefined, paintDayModel(), paintedParty());
+  screen = document.createElement("dashboard-opening-hours-screen");
+  screen.api = new OpeningHoursApi((async (path, method, body) => {
+    if (path.includes("/special-days/")) throw new Error("offline");
+    return request(path, method, body);
+  }) as DashboardRequest);
+  document.body.append(screen);
+  await expect
+    .poll(() => screen.shadowRoot?.querySelector("[role=alert]")?.textContent)
+    .toBe("Opening hours could not be loaded. It will be tried again.");
+});
+it("leaves a modified click on a Day link to the browser", async () => {
+  const view = await mountPainted(
+    "/manage/opening-hours/view/week/department/restaurant?week=2026-10-12",
+    "opening-hours-week",
+  );
+  const link = view.shadowRoot!.querySelector<HTMLAnchorElement>("a[data-test=day-link]")!;
+  const click = new MouseEvent("click", { bubbles: true, cancelable: true, ctrlKey: true });
+  link.addEventListener("click", (event) => event.preventDefault(), { once: true });
+  link.dispatchEvent(click);
+  await screen.updateComplete;
+  expect(screen.shadowRoot!.querySelector("opening-hours-day")).toBeNull();
+  expect(location.pathname).toBe("/manage/opening-hours/view/week/department/restaurant");
 });

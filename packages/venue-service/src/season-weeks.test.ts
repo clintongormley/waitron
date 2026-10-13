@@ -36,8 +36,6 @@ import {
   writeZoneSeasonWeeks,
 } from "./season-weeks.js";
 import { readSeasons } from "./seasons.js";
-import { menuDayTimetables, menuSlots } from "./schema/menus.js";
-import { zoneClosedTimes } from "./schema/zone-closed-times.js";
 import type { ServiceRange } from "./service-day.js";
 import { readZoneClosedTimes, replaceZoneClosedWeek } from "./zone-closed-times.js";
 
@@ -632,27 +630,5 @@ describe("season tables only", () => {
     const weeks = await scoped((tx) => readDepartmentSeasonWeeks(tx, v.cfg, [v.departmentId]));
     expect([...weeks.get(v.departmentId)!.keys()]).not.toContain(Winter);
     expect(weeks.get(v.departmentId)!.size).toBe(3);
-  });
-
-  it("a week written with no season named leaves no weekday row in the old tables", async () => {
-    const v = await venue();
-    const lunch = { periodId: v.lunch, startsAt: "13:00", endsAt: "16:00" };
-    const night = { startsAt: "23:00", endsAt: "02:00" };
-    await scoped((tx) => replaceMenuWeek(tx, v.cfg, v.departmentId, menuWeek([lunch]), AT, 0));
-    await scoped((tx) => replaceZoneClosedWeek(tx, v.cfg, v.zoneId, closedWeek([night]), 0, AT));
-    expect(await departmentTuesdays(v)).toEqual(everySeason([lunch]));
-    expect(await zoneTuesdays(v)).toEqual(everySeason([night]));
-    expect(
-      await db
-        .select()
-        .from(menuDayTimetables)
-        .where(eq(menuDayTimetables.departmentId, v.departmentId)),
-    ).toEqual([]);
-    expect(
-      await db.select().from(menuSlots).where(eq(menuSlots.departmentId, v.departmentId)),
-    ).toEqual([]);
-    expect(
-      await db.select().from(zoneClosedTimes).where(eq(zoneClosedTimes.zoneId, v.zoneId)),
-    ).toEqual([]);
   });
 });

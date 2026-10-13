@@ -7702,7 +7702,6 @@ describe("mounted public department dialogs", () => {
           clockReadable: true,
           dayCutover: "06:00",
           menus: [],
-          namedDays: [],
           seasons: [],
           currentSeasonId: null,
           departments: model.departments.map(({ id, name, active }) => ({
@@ -7712,7 +7711,6 @@ describe("mounted public department dialogs", () => {
             zones: [],
             periods: [],
             seasonWeeks: [],
-            dates: [],
           })),
         } as never;
       if (url.endsWith("/transfers"))

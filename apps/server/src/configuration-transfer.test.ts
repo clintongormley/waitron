@@ -117,10 +117,7 @@ import {
   readHolidays,
   readHolidayAreaModel,
   readProfileServiceAccess,
-  readSpecialDate,
-  readCalendarDays,
   saveHolidayArea,
-  saveSpecialDate,
   saveMenuPeriod,
   replaceMenuWeek,
   replaceZoneClosedWeek,
@@ -4070,12 +4067,22 @@ it("carries a cell's period choices with their cell, including a period whose me
   ]);
 });
 
-describe("named days in a configuration transfer", () => {
+async function insertSpecialDay(
+  tx: Parameters<Parameters<typeof withTransaction>[1]>[0],
+  cfg: { locationId: string },
+  day: { date: string; name: string; closedAllDay?: boolean },
+) {
+  const id = randomUUID();
+  await tx.execute(sql`insert into special_days (id, location_id, name, repeats_yearly)
+    values (${id}, ${cfg.locationId}, ${day.name}, 0)`);
+  await tx.execute(sql`insert into special_day_dates (id, special_day_id, location_id, date, closed_all_day)
+    values (${randomUUID()}, ${id}, ${cfg.locationId}, ${day.date}, ${day.closedAllDay ? 1 : 0})`);
+  return { id };
+}
+
+describe("special days in a configuration transfer", () => {
   /** Tuesday 6 October 2026, 12:00 in Madrid. */
   const AT = new Date("2026-10-06T10:00:00Z");
-  const p = (opensAt: string, closesAt: string) => ({ id: randomUUID(), opensAt, closesAt });
-  const CLOSED = { mode: "closed" as const, periods: [] as [] };
-  const ALL_DAY = { mode: "all_day" as const, periods: [] as [] };
 
   interface Named {
     cfg: { locationId: ReturnType<typeof locationId> };
@@ -4095,27 +4102,21 @@ describe("named days in a configuration transfer", () => {
     };
   }
 
-  async function namedDaysByName(db: typeof suite.db, located: { locationId: string }) {
-    const venue = await named(db, located);
-    return withTransaction(db, async (tx) => {
-      const dateRows = await tx.execute<{ id: string }>(
-        sql`select id from special_dates where location_id = ${located.locationId} order by date`,
-      );
-      const dates = [];
-      for (const { id } of dateRows.rows) {
-        const date = await readSpecialDate(tx, venue.cfg, id);
-        dates.push({
-          date: date.date,
-          name: date.name,
-          kind: date.kind,
-          closeWholeVenue: date.closeWholeVenue,
-        });
-      }
-      return { dates };
-    });
+  async function specialDaysByName(db: typeof suite.db, located: { locationId: string }) {
+    const rows = await db.execute<{ date: string; name: string; closed_all_day: number }>(sql`
+      select d.date, s.name, d.closed_all_day from special_day_dates d
+      join special_days s on s.id = d.special_day_id
+      where d.location_id = ${located.locationId} order by d.date`);
+    return {
+      dates: rows.rows.map((row) => ({
+        date: row.date,
+        name: row.name,
+        closeWholeVenue: row.closed_all_day === 1,
+      })),
+    };
   }
 
-  async function preparedWithNamedDays(taxId: string) {
+  async function preparedWithSpecialDays(taxId: string) {
     const source = await applyVenue(planVenue(venue(taxId), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
@@ -4133,55 +4134,15 @@ describe("named days in a configuration transfer", () => {
       ]);
     });
     const { cfg, stations } = await named(suite.db, source);
-    const restaurant = { kind: "station" as const, id: stations.get("Pass")! };
-    const deli = { kind: "station" as const, id: stations.get("Grill")! };
     const bar = { kind: "station" as const, id: stations.get("Bar")! };
     await withTransaction(suite.db, async (tx) => {
-      await saveSpecialDate(
-        tx,
-        cfg,
-        null,
-        {
-          date: "2026-12-24",
-          name: "Christmas Eve",
-          closeWholeVenue: false,
-          cells: [
-            { subject: restaurant, cell: { mode: "periods", periods: [p("12:00", "18:00")] } },
-            { subject: bar, cell: CLOSED },
-          ],
-        },
-        AT,
-        undefined,
-        0,
-      );
-      await saveSpecialDate(
-        tx,
-        cfg,
-        null,
-        {
-          date: "2026-12-25",
-          name: "Christmas",
-          closeWholeVenue: true,
-          cells: [{ subject: deli, cell: ALL_DAY }],
-        },
-        AT,
-        undefined,
-        0,
-      );
-      await saveSpecialDate(
-        tx,
-        cfg,
-        null,
-        {
-          date: "2027-01-01",
-          name: "New Year",
-          closeWholeVenue: false,
-          cells: [{ subject: bar, cell: ALL_DAY }],
-        },
-        AT,
-        undefined,
-        0,
-      );
+      await insertSpecialDay(tx, cfg, { date: "2026-12-24", name: "Christmas Eve" });
+      await insertSpecialDay(tx, cfg, {
+        date: "2026-12-25",
+        name: "Christmas",
+        closedAllDay: true,
+      });
+      await insertSpecialDay(tx, cfg, { date: "2027-01-01", name: "New Year" });
       await setStationToday(tx, cfg, bar.id, "closed", AT);
     });
     const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
@@ -4195,266 +4156,15 @@ describe("named days in a configuration transfer", () => {
     "hours_week_periods",
     "special_date_hours",
     "special_date_hours_periods",
-  ])("exports named days without retired %s", async (table) => {
-    const { transferred } = await preparedWithNamedDays("B44009911");
+  ])("exports special days without retired %s", async (table) => {
+    const { transferred } = await preparedWithSpecialDays("B44009911");
     expect(transferred.tables).not.toHaveProperty(table);
-    expect(transferred.tables.special_dates).toHaveLength(3);
+    expect(transferred.tables.special_days).toHaveLength(3);
     expect(transferred.tables).not.toHaveProperty("station_day_states");
   });
 
-  async function preparedWithZoneClosures() {
-    const { source } = await preparedWithNamedDays("B44007711");
-    const cfg = { locationId: locationId(source.locationId) };
-    const ids = await withTransaction(suite.db, async (tx) => {
-      const department = await createDepartment(tx, cfg, {
-        name: "Outdoor service",
-        orderStart: "table",
-      });
-      const zone = await createServiceZone(tx, cfg, {
-        name: "Terrace",
-        departmentId: department.id,
-      });
-      const day = await saveSpecialDate(
-        tx,
-        cfg,
-        null,
-        {
-          date: "2027-01-06",
-          name: "Own Terrace day",
-          kind: "holiday",
-          repeats: true,
-          ownHours: true,
-          closeWholeVenue: false,
-          cells: [],
-        },
-        AT,
-        undefined,
-        0,
-      );
-      await tx.execute(sql`insert into zone_closed_times (id, zone_id, weekday, special_date_id, starts_at, ends_at)
-        values (${randomUUID()}, ${zone.id}, 5, null, '23:00:00', '04:00:00'),
-        (${randomUUID()}, ${zone.id}, null, ${day.id}, '22:00:00', '04:00:00')`);
-      return { zoneId: zone.id, dayId: day.id };
-    });
-    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
-    const transferred = await buildConfigurationBundle(suite.db, source, ALL_MODULES, AT, versions);
-    return { versions, transferred, ...ids };
-  }
-
-  it("round-trips Terrace named-day zone closed times with fresh linked ids, leaving the old week row behind", async () => {
-    const { versions, transferred, zoneId, dayId } = await preparedWithZoneClosures();
-    expect(transferred.tables.zone_closed_times).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          zone_id: zoneId,
-          weekday: 5,
-          special_date_id: null,
-          starts_at: "23:00:00",
-          ends_at: "04:00:00",
-        }),
-        expect.objectContaining({
-          zone_id: zoneId,
-          weekday: null,
-          special_date_id: dayId,
-          starts_at: "22:00:00",
-          ends_at: "04:00:00",
-        }),
-      ]),
-    );
-    await applyVenue(planVenue(venue("B44007722"), ALL_MODULES), {
-      db: targetSuite.db,
-      modules: ALL_MODULES,
-      beforeCommit: (tx, result) =>
-        importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
-    });
-    const imported = await targetSuite.db.execute<{
-      id: string;
-      zone_id: string;
-      weekday: number | null;
-      special_date_id: string | null;
-      starts_at: string;
-      ends_at: string;
-      name: string;
-      date: string | null;
-    }>(sql`
-      select c.*, z.name, d.date from zone_closed_times c
-      join floor_zones z on z.id = c.zone_id
-      left join special_dates d on d.id = c.special_date_id order by c.starts_at`);
-    expect(imported.rows).toEqual([
-      expect.objectContaining({
-        name: "Terrace",
-        weekday: null,
-        date: "2027-01-06",
-        starts_at: "22:00:00",
-        ends_at: "04:00:00",
-      }),
-    ]);
-    for (const row of imported.rows) {
-      expect(row.zone_id).not.toBe(zoneId);
-      expect(transferred.tables.zone_closed_times!.map((source) => source.id)).not.toContain(
-        row.id,
-      );
-    }
-    expect(imported.rows[0]!.special_date_id).not.toBe(dayId);
-  });
-
-  it.each(["foreign-zone", "both-days", "neither-day", "keeps-week", "overlap", "off-step"])(
-    "refuses imported zone closed times %s without retaining a target venue",
-    async (problem) => {
-      const { versions, transferred, zoneId, dayId } = await preparedWithZoneClosures();
-      const edited = structuredClone(transferred);
-      edited.tables.zone_closed_times ??= [
-        {
-          id: randomUUID(),
-          zone_id: zoneId,
-          weekday: 5,
-          special_date_id: null,
-          starts_at: "23:00:00",
-          ends_at: "04:00:00",
-        },
-      ];
-      const row = edited.tables.zone_closed_times[0]!;
-      let field = "zone_closed_times";
-      if (problem === "foreign-zone") {
-        row.zone_id = randomUUID();
-        field += ".zone_id";
-      }
-      if (problem === "both-days") row.special_date_id = dayId;
-      if (problem === "neither-day") {
-        row.weekday = null;
-        row.special_date_id = null;
-      }
-      if (problem === "keeps-week") {
-        row.weekday = null;
-        row.special_date_id = dayId;
-        edited.tables.special_dates!.find((day) => day.id === dayId)!.own_hours = 0;
-        field += ".special_date_id";
-      }
-      // A weekday row's range is not checked, since the import drops it.
-      const named = edited.tables.zone_closed_times.find((r) => r.special_date_id === dayId)!;
-      if (problem === "overlap")
-        edited.tables.zone_closed_times.push({ ...named, id: randomUUID(), starts_at: "23:15:00" });
-      if (problem === "off-step") named.starts_at = "22:05:00";
-      const error = { code: "setup.request_invalid", params: { field } };
-      expect(() => validateConfigurationBundle(edited, ALL_MODULES, versions)).toThrowError(
-        expect.objectContaining(error),
-      );
-      await expect(
-        applyVenue(planVenue(venue("B44007722"), ALL_MODULES), {
-          db: targetSuite.db,
-          modules: ALL_MODULES,
-          beforeCommit: (tx, result) =>
-            importConfigurationTables(tx, edited, result, ALL_MODULES, versions),
-        }),
-      ).rejects.toMatchObject(error);
-      expect(
-        (await targetSuite.db.execute<{ n: number }>(sql`select count(*) as n from tenants`)).rows,
-      ).toEqual([{ n: 0 }]);
-    },
-  );
-
-  it("round-trips a repeating named day with its kind and own hours", async () => {
-    const source = await applyVenue(planVenue(venue("B44008811"), ALL_MODULES), {
-      db: suite.db,
-      modules: ALL_MODULES,
-    });
-    await withTransaction(suite.db, (tx) =>
-      saveSpecialDate(
-        tx,
-        { locationId: locationId(source.locationId) },
-        null,
-        {
-          date: "2026-12-25",
-          name: "Own Christmas",
-          kind: "holiday",
-          repeats: true,
-          ownHours: true,
-          closeWholeVenue: false,
-          cells: [],
-        },
-        AT,
-        undefined,
-        0,
-      ),
-    );
-    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
-    const transferred = await buildConfigurationBundle(suite.db, source, ALL_MODULES, AT, versions);
-    expect(transferred.tables.special_dates).toEqual([
-      expect.objectContaining({
-        kind: "holiday",
-        repeat_on: "12-25",
-        own_hours: 1,
-      }),
-    ]);
-    const target = await applyVenue(planVenue(venue("B44008822"), ALL_MODULES), {
-      db: targetSuite.db,
-      modules: ALL_MODULES,
-      beforeCommit: (tx, result) =>
-        importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
-    });
-    const imported = await targetSuite.db.execute<{ id: string }>(sql`
-      select id from special_dates where location_id = ${target.locationId}`);
-    const day = await withTransaction(targetSuite.db, (tx) =>
-      readSpecialDate(tx, { locationId: locationId(target.locationId) }, imported.rows[0]!.id),
-    );
-    expect(day).toMatchObject({
-      date: "2026-12-25",
-      name: "Own Christmas",
-      kind: "holiday",
-      repeats: true,
-      ownHours: true,
-      closeWholeVenue: false,
-    });
-    expect(day.id).not.toBe(transferred.tables.special_dates![0]!.id);
-  });
-
-  it.each(["kind", "repeat_on", "own_hours", "clash"])(
-    "refuses invalid named-day %s before retaining a target venue",
-    async (field) => {
-      const { versions, transferred } = await preparedWithNamedDays("B44009911");
-      const edited = structuredClone(transferred);
-      const row = edited.tables.special_dates![0]!;
-      let errorField = "special_dates";
-      if (field === "kind") row.kind = "other";
-      if (field === "repeat_on") {
-        row.repeat_on = "12-23";
-        errorField = "special_dates.repeat_on";
-      }
-      if (field === "own_hours") {
-        row.own_hours = 1;
-        row.close_whole_venue = 1;
-      }
-      if (field === "clash") {
-        row.repeat_on = "12-24";
-        edited.tables.special_dates!.push({
-          ...row,
-          id: randomUUID(),
-          date: "2027-12-24",
-          repeat_on: null,
-        });
-        errorField = "special_dates.date";
-      }
-      const refusal = { code: "setup.request_invalid", params: { field: errorField } };
-      expect(() => validateConfigurationBundle(edited, ALL_MODULES, versions)).toThrowError(
-        expect.objectContaining(refusal),
-      );
-      await expect(
-        applyVenue(planVenue(venue("B44009922"), ALL_MODULES), {
-          db: targetSuite.db,
-          modules: ALL_MODULES,
-          beforeCommit: (tx, result) =>
-            importConfigurationTables(tx, edited, result, ALL_MODULES, versions),
-        }),
-      ).rejects.toMatchObject(refusal);
-      const persisted = await targetSuite.db.execute<{ n: number }>(
-        sql`select count(*) as n from tenants`,
-      );
-      expect(persisted.rows).toEqual([{ n: 0 }]);
-    },
-  );
-
   it("carries special dates with fresh ids while leaving station schedules behind", async () => {
-    const { source, versions, transferred } = await preparedWithNamedDays("B44001122");
+    const { source, versions, transferred } = await preparedWithSpecialDays("B44001122");
     expect(transferred.tables).not.toHaveProperty("station_day_states");
     for (const table of [
       "station_fallbacks",
@@ -4472,19 +4182,17 @@ describe("named days in a configuration transfer", () => {
         importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
     });
 
-    const expected = await namedDaysByName(suite.db, source);
+    const expected = await specialDaysByName(suite.db, source);
     expect(expected.dates.map((date) => date.date)).toEqual([
       "2026-12-24",
       "2026-12-25",
       "2027-01-01",
     ]);
-    const actual = await namedDaysByName(targetSuite.db, target);
+    const actual = await specialDaysByName(targetSuite.db, target);
     expect(actual.dates).toEqual(expected.dates);
 
-    const sourceIds = new Set(transferred.tables.special_dates!.map((row) => row.id));
-    const imported = await targetSuite.db.execute<{ id: string }>(
-      sql`select id from special_dates`,
-    );
+    const sourceIds = new Set(transferred.tables.special_days!.map((row) => row.id));
+    const imported = await targetSuite.db.execute<{ id: string }>(sql`select id from special_days`);
     expect(imported.rows).toHaveLength(sourceIds.size);
     for (const row of imported.rows) {
       expect(sourceIds.has(row.id)).toBe(false);
@@ -4497,7 +4205,19 @@ describe("named days in a configuration transfer", () => {
     expect(dayStates.rows[0]!.n).toBe(0);
   });
 
-  it("leaves default station hours behind while keeping its named day and open state", async () => {
+  const namedOn = async (
+    tx: Parameters<Parameters<typeof withTransaction>[1]>[0],
+    cfg: { locationId: string },
+    date: string,
+  ) =>
+    (
+      await tx.execute<{ date: string; name: string }>(sql`
+        select d.date, s.name from special_day_dates d
+        join special_days s on s.id = d.special_day_id
+        where d.location_id = ${cfg.locationId} and d.date = ${date}`)
+    ).rows[0] ?? null;
+
+  it("leaves default station hours behind while keeping its special day and open state", async () => {
     const source = await applyVenue(planVenue(venue("B44002211"), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
@@ -4508,20 +4228,7 @@ describe("named days in a configuration transfer", () => {
     const { cfg, stations } = await named(suite.db, source);
     const pase = { kind: "station" as const, id: stations.get("Pase")! };
     await withTransaction(suite.db, async (tx) => {
-      await saveSpecialDate(
-        tx,
-        cfg,
-        null,
-        {
-          date: "2026-12-31",
-          name: "New Year's Eve",
-          closeWholeVenue: false,
-          cells: [{ subject: pase, cell: CLOSED }],
-        },
-        AT,
-        undefined,
-        0,
-      );
+      await insertSpecialDay(tx, cfg, { date: "2026-12-31", name: "New Year's Eve" });
       await setDefaultStation(
         tx,
         {
@@ -4549,70 +4256,21 @@ describe("named days in a configuration transfer", () => {
     const imported = await named(targetSuite.db, target);
     const importedPase = { kind: "station" as const, id: imported.stations.get("Pase")! };
     const read = await withTransaction(targetSuite.db, async (tx) => ({
-      eve: await readCalendarDays(tx, imported.cfg, "2026-12-31", "2026-12-31"),
-      tuesday: await readCalendarDays(tx, imported.cfg, "2026-10-06", "2026-10-06"),
+      eve: await namedOn(tx, imported.cfg, "2026-12-31"),
+      tuesday: await namedOn(tx, imported.cfg, "2026-10-06"),
       // 23:00 in Madrid on New Year's Eve, and noon on an ordinary Tuesday.
       states: [
         await stationStates(tx, imported.cfg, new Date("2026-12-31T22:00:00Z")),
         await stationStates(tx, imported.cfg, AT),
       ],
     }));
-    expect(read.eve[0]!.specialDate).toMatchObject({
+    expect(read.eve).toMatchObject({
       date: "2026-12-31",
       name: "New Year's Eve",
     });
-    expect(read.tuesday[0]!.specialDate).toBeNull();
+    expect(read.tuesday).toBeNull();
     for (const states of read.states)
       expect(states.get(importedPase.id)).toMatchObject({ isDefault: true, open: true });
-  });
-
-  it("carries a past named date without the retired station schedule clash", async () => {
-    const source = await applyVenue(planVenue(venue("B44005511"), ALL_MODULES), {
-      db: suite.db,
-      modules: ALL_MODULES,
-    });
-    await withTransaction(suite.db, (tx) =>
-      tx.insert(kitchenStations).values({ locationId: source.locationId, name: "Pass" }),
-    );
-    const { cfg, stations } = await named(suite.db, source);
-    const restaurant = { kind: "station" as const, id: stations.get("Pass")! };
-    await withTransaction(suite.db, async (tx) => {
-      await saveSpecialDate(
-        tx,
-        cfg,
-        null,
-        {
-          date: "2026-09-25",
-          name: "Late night",
-          closeWholeVenue: false,
-          cells: [
-            { subject: restaurant, cell: { mode: "periods", periods: [p("22:00", "03:00")] } },
-          ],
-        },
-        AT,
-        undefined,
-        0,
-      );
-    });
-    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
-    const transferred = await buildConfigurationBundle(suite.db, source, ALL_MODULES, AT, versions);
-    expect(transferred.venue.location.timeZone).toBe("Europe/Madrid");
-    for (const createdAt of ["2026-09-26T21:59:59.999Z", "2026-09-26T22:00:00.000Z"])
-      expect(() =>
-        validateConfigurationBundle({ ...transferred, createdAt }, ALL_MODULES, versions),
-      ).not.toThrow();
-
-    expect(() => validateConfigurationBundle(transferred, ALL_MODULES, versions)).not.toThrow();
-    const target = await applyVenue(planVenue(venue("B44005522"), ALL_MODULES), {
-      db: targetSuite.db,
-      modules: ALL_MODULES,
-      beforeCommit: (tx, result) =>
-        importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
-    });
-    const expected = await namedDaysByName(suite.db, source);
-    expect(expected.dates.map((date) => date.date)).toEqual(["2026-09-25"]);
-    const actual = await namedDaysByName(targetSuite.db, target);
-    expect(actual.dates).toEqual(expected.dates);
   });
 
   it.each([
@@ -4622,7 +4280,7 @@ describe("named days in a configuration transfer", () => {
     "special_date_hours",
     "special_date_hours_periods",
   ] as const)("refuses retired %s rows without retaining the target taxpayer", async (table) => {
-    const { versions, transferred } = await preparedWithNamedDays("B44006611");
+    const { versions, transferred } = await preparedWithSpecialDays("B44006611");
     const edited = structuredClone(transferred);
     edited.tables[table] = [
       { id: randomUUID(), station_id: edited.tables.kitchen_stations![0]!.id },
@@ -4646,7 +4304,7 @@ describe("named days in a configuration transfer", () => {
   });
 
   it("refuses a reintroduced station-hours table and writes no venue", async () => {
-    const { versions, transferred } = await preparedWithNamedDays("B44003311");
+    const { versions, transferred } = await preparedWithSpecialDays("B44003311");
     const edited: ConfigurationBundle = {
       ...transferred,
       tables: { ...transferred.tables, hours_week_periods: [] },
@@ -4671,7 +4329,7 @@ describe("named days in a configuration transfer", () => {
   });
 
   it("refuses a bundle exported before the hours tables existed, as an older venue-service schema", async () => {
-    const { versions, transferred } = await preparedWithNamedDays("B44004411");
+    const { versions, transferred } = await preparedWithSpecialDays("B44004411");
     const journal = JSON.parse(
       await readFile(
         new URL("../../../packages/venue-service/drizzle/meta/_journal.json", import.meta.url),
@@ -4720,7 +4378,8 @@ describe("public holidays in a configuration transfer", () => {
       select id, city from locations`);
     const city = new Map(ids.rows.map((row) => [row.id, row.city]));
     const entries = await db.execute<{ location_id: string; date: string; name: string }>(sql`
-      select location_id, date, name from special_dates order by date, name`);
+      select d.location_id, d.date, s.name from special_day_dates d
+      join special_days s on s.id = d.special_day_id order by d.date, s.name`);
     return {
       geographies: geographies.rows,
       entries: entries.rows.map((row) => ({
@@ -4741,21 +4400,7 @@ describe("public holidays in a configuration transfer", () => {
       await tx.execute(
         sql`insert into holiday_geographies (id, location_id, country, province_code, city, city_key) values (${randomUUID()}, ${cfg.locationId}, 'ES', '28', 'Madrid', 'madrid')`,
       );
-      await saveSpecialDate(
-        tx,
-        cfg,
-        null,
-        {
-          date: "2026-01-06",
-          name: "Reyes",
-          kind: "holiday",
-          closeWholeVenue: true,
-          cells: [],
-        },
-        AT,
-        undefined,
-        0,
-      );
+      await insertSpecialDay(tx, cfg, { date: "2026-01-06", name: "Reyes", closedAllDay: true });
     });
     await moveTo(suite.db, source, "Lleida", "Vielha e Mijaran");
     await withTransaction(suite.db, async (tx) => {
@@ -4842,7 +4487,7 @@ describe("public holidays in a configuration transfer", () => {
       expect.objectContaining({
         year: 2026,
         nationalRegional: "complete",
-        local: "owner_entered",
+        local: "none_entered",
         dataVersion: "ES-2026.1",
       }),
     ]);
@@ -4853,7 +4498,9 @@ describe("public holidays in a configuration transfer", () => {
       name: string;
       close_whole_venue: number;
     }>(sql`
-      select id, location_id, name, close_whole_venue from special_dates where date = '2026-01-06'`);
+      select s.id, d.location_id, s.name, d.closed_all_day as close_whole_venue
+      from special_day_dates d join special_days s on s.id = d.special_day_id
+      where d.date = '2026-01-06'`);
     expect(special.rows).toEqual([
       {
         id: expect.any(String),
@@ -4863,7 +4510,7 @@ describe("public holidays in a configuration transfer", () => {
       },
     ]);
     expect(special.rows[0]!.id).toMatch(UUID);
-    expect(transferred.tables.special_dates!.map((row) => row.id)).not.toContain(
+    expect(transferred.tables.special_days!.map((row) => row.id)).not.toContain(
       special.rows[0]!.id,
     );
 
@@ -4917,9 +4564,14 @@ describe("public holidays in a configuration transfer", () => {
       select
         (select cast(count(*) as int) from tenants where tax_id = ${target.taxId}) as tenants,
         (select cast(count(*) as int) from holiday_geographies) as geographies,
-        (select cast(count(*) as int) from special_dates) as entries,
-        (select cast(count(*) as int) from special_dates) as special_dates`);
-    expect(persisted.rows[0]).toEqual({ tenants: 0, geographies: 0, entries: 0, special_dates: 0 });
+        (select cast(count(*) as int) from special_days) as entries,
+        (select cast(count(*) as int) from special_day_dates) as special_day_dates`);
+    expect(persisted.rows[0]).toEqual({
+      tenants: 0,
+      geographies: 0,
+      entries: 0,
+      special_day_dates: 0,
+    });
   });
 
   it("refuses a retired local-holiday table in a bundle and writes no venue", async () => {
@@ -6235,217 +5887,6 @@ describe("seasons in a configuration transfer", () => {
       order by s.starts_on`);
     return rows.rows;
   }
-
-  // At the 06:00 changeover a weekday range ending 07:00 crosses it; the import drops the row
-  // unchecked, so it refuses nothing.
-  it.each([
-    ["within the changeover", "02:00:00", "23:00:00"],
-    ["a menu range crossing the changeover", "07:00:00", "23:00:00"],
-    ["a zone closure crossing the changeover", "02:00:00", "07:00:00"],
-  ])(
-    "leaves a bundle's old weekday rows behind (%s), keeps its named-day rows, and serves the week from its seasons",
-    async (_, slotEnd, closureEnd) => {
-      const source = await applyVenue(planVenue(venue("B35792470"), ALL_MODULES), {
-        db: suite.db,
-        modules: ALL_MODULES,
-      });
-      const scope = { locationId: brandLocationId(source.locationId) };
-      await withTransaction(suite.db, async (tx) => {
-        const department = await createDepartment(tx, scope, {
-          name: "Weekday rows",
-          orderStart: "table",
-        });
-        const { id: dinner } = await saveMenuPeriod(
-          tx,
-          scope,
-          department.id,
-          {
-            name: "Dinner",
-            menuId: (await createCatalogue(tx, { name: "Weekday rows menu" })).id,
-            staffMenuIds: [],
-          },
-          0,
-        );
-        await replaceMenuWeek(
-          tx,
-          scope,
-          department.id,
-          saturday([{ periodId: dinner, startsAt: "20:00", endsAt: "02:00" }]).map(
-            (slots, weekday) => ({ weekday, slots }),
-          ),
-          WINTER_SATURDAY,
-          0,
-        );
-        const zone = await createServiceZone(tx, scope, {
-          name: "Weekday terrace",
-          departmentId: department.id,
-        });
-        await tx.execute(sql`insert into zone_closed_times (id, zone_id, weekday, special_date_id, starts_at, ends_at)
-        values (${randomUUID()}, ${zone.id}, 6, null, '20:00:00', ${closureEnd})`);
-        const saturdayTimetable = randomUUID();
-        await tx.execute(sql`insert into menu_day_timetables (id, department_id, weekday, special_date_id)
-        values (${saturdayTimetable}, ${department.id}, 6, null)`);
-        await tx.execute(sql`insert into menu_slots (id, timetable_id, department_id, period_id, starts_at, ends_at)
-        values (${randomUUID()}, ${saturdayTimetable}, ${department.id}, ${dinner}, '20:00:00', ${slotEnd})`);
-        const named = await saveSpecialDate(
-          tx,
-          scope,
-          null,
-          {
-            date: "2027-01-06",
-            name: "Own hours day",
-            kind: "holiday",
-            repeats: false,
-            ownHours: true,
-            closeWholeVenue: false,
-            cells: [],
-          },
-          WINTER_SATURDAY,
-          undefined,
-          0,
-        );
-        const timetable = randomUUID();
-        await tx.execute(sql`insert into menu_day_timetables (id, department_id, weekday, special_date_id)
-        values (${timetable}, ${department.id}, null, ${named.id})`);
-        await tx.execute(sql`insert into menu_slots (id, timetable_id, department_id, period_id, starts_at, ends_at)
-        values (${randomUUID()}, ${timetable}, ${department.id}, ${dinner}, '19:00:00', '23:00:00')`);
-        await tx.execute(sql`insert into zone_closed_times (id, zone_id, weekday, special_date_id, starts_at, ends_at)
-        values (${randomUUID()}, ${zone.id}, null, ${named.id}, '21:00:00', '23:00:00')`);
-      });
-      const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
-      const bundle = await buildConfigurationBundle(
-        suite.db,
-        source,
-        ALL_MODULES,
-        new Date("2026-10-07T10:00:00Z"),
-        versions,
-      );
-      expect(bundle.tables.menu_day_timetables!.some((row) => row.weekday === 6)).toBe(true);
-      expect(bundle.tables.zone_closed_times!.some((row) => row.weekday === 6)).toBe(true);
-      const target = await applyVenue(planVenue(venue("B35792471"), ALL_MODULES), {
-        db: targetSuite.db,
-        modules: ALL_MODULES,
-        beforeCommit: (tx, result) =>
-          importConfigurationTables(tx, bundle, result, ALL_MODULES, versions),
-      });
-
-      const weekdayRows = await targetSuite.db.execute<{
-        timetables: number;
-        closures: number;
-      }>(sql`
-      select (select count(*) from menu_day_timetables where weekday is not null) as timetables,
-        (select count(*) from zone_closed_times where weekday is not null) as closures`);
-      expect(weekdayRows.rows).toEqual([{ timetables: 0, closures: 0 }]);
-      const namedHours = await targetSuite.db.execute(sql`
-      select d.date, s.starts_at, s.ends_at from menu_day_timetables t
-      join special_dates d on d.id=t.special_date_id join menu_slots s on s.timetable_id=t.id
-      join departments dep on dep.id=t.department_id where dep.name='Weekday rows'`);
-      expect(namedHours.rows).toEqual([
-        { date: "2027-01-06", starts_at: "19:00:00", ends_at: "23:00:00" },
-      ]);
-      const namedClosures = await targetSuite.db.execute(sql`
-      select d.date, c.starts_at, c.ends_at from zone_closed_times c
-      join special_dates d on d.id=c.special_date_id join floor_zones z on z.id=c.zone_id
-      where z.name='Weekday terrace'`);
-      expect(namedClosures.rows).toEqual([
-        { date: "2027-01-06", starts_at: "21:00:00", ends_at: "23:00:00" },
-      ]);
-      const targetScope = { locationId: brandLocationId(target.locationId) };
-      const [department] = await targetSuite.db
-        .select({ id: departments.id })
-        .from(departments)
-        .where(eq(departments.name, "Weekday rows"));
-      const zone = await targetSuite.db.execute<{ id: string }>(
-        sql`select id from floor_zones where name='Weekday terrace'`,
-      );
-      const answers = await withTransaction(targetSuite.db, async (tx) => ({
-        service: await VENUE_SERVICE.resolveDepartmentService(
-          tx,
-          targetScope,
-          department!.id,
-          WINTER_SATURDAY,
-        ),
-        closed: await VENUE_SERVICE.closedZoneIdsAt(tx, targetScope, WINTER_SATURDAY, [
-          zone.rows[0]!.id,
-        ]),
-      }));
-      expect(answers.service).toMatchObject({ open: true, periodName: "Dinner" });
-      expect([...answers.closed]).toEqual([]);
-    },
-  );
-
-  it.each([
-    ["menu_slots", "starts_at"],
-    ["menu_slots", "ends_at"],
-    ["zone_closed_times", "starts_at"],
-    ["zone_closed_times", "ends_at"],
-  ] as const)(
-    "refuses an old weekday %s row off the quarter-hour at %s as a bad request, not a database error",
-    async (table, column) => {
-      const source = await applyVenue(planVenue(venue("B35792470"), ALL_MODULES), {
-        db: suite.db,
-        modules: ALL_MODULES,
-      });
-      const scope = { locationId: brandLocationId(source.locationId) };
-      await withTransaction(suite.db, async (tx) => {
-        const department = await createDepartment(tx, scope, {
-          name: "Off-step rows",
-          orderStart: "table",
-        });
-        const { id: dinner } = await saveMenuPeriod(
-          tx,
-          scope,
-          department.id,
-          {
-            name: "Dinner",
-            menuId: (await createCatalogue(tx, { name: "Off-step menu" })).id,
-            staffMenuIds: [],
-          },
-          0,
-        );
-        const zone = await createServiceZone(tx, scope, {
-          name: "Off-step terrace",
-          departmentId: department.id,
-        });
-        const timetable = randomUUID();
-        await tx.execute(sql`insert into menu_day_timetables (id, department_id, weekday, special_date_id)
-          values (${timetable}, ${department.id}, 6, null)`);
-        await tx.execute(sql`insert into menu_slots (id, timetable_id, department_id, period_id, starts_at, ends_at)
-          values (${randomUUID()}, ${timetable}, ${department.id}, ${dinner}, '20:00:00', '23:00:00')`);
-        await tx.execute(sql`insert into zone_closed_times (id, zone_id, weekday, special_date_id, starts_at, ends_at)
-          values (${randomUUID()}, ${zone.id}, 6, null, '20:00:00', '23:00:00')`);
-      });
-      const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
-      const bundle = await buildConfigurationBundle(
-        suite.db,
-        source,
-        ALL_MODULES,
-        new Date("2026-10-07T10:00:00Z"),
-        versions,
-      );
-      const weekdayDays = new Set(
-        bundle.tables
-          .menu_day_timetables!.filter((row) => row.weekday !== null)
-          .map((row) => row.id),
-      );
-      const row =
-        table === "menu_slots"
-          ? bundle.tables.menu_slots!.find((slot) => weekdayDays.has(slot.timetable_id))!
-          : bundle.tables.zone_closed_times!.find((closure) => closure.weekday !== null)!;
-      row[column] = column === "starts_at" ? "20:05:00" : "22:55:00";
-      await expect(
-        applyVenue(planVenue(venue("B35792471"), ALL_MODULES), {
-          db: targetSuite.db,
-          modules: ALL_MODULES,
-          beforeCommit: (tx, result) =>
-            importConfigurationTables(tx, bundle, result, ALL_MODULES, versions),
-        }),
-      ).rejects.toMatchObject({ code: "setup.request_invalid", params: { field: table } });
-      expect(
-        (await targetSuite.db.execute<{ n: number }>(sql`select count(*) as n from tenants`)).rows,
-      ).toEqual([{ n: 0 }]);
-    },
-  );
 
   it("refuses a bundle whose grace reaches the next season's first day, and writes nothing", async () => {
     const source = await applyVenue(planVenue(venue("B35792472"), ALL_MODULES), {

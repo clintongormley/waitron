@@ -1,3 +1,4 @@
+import { everyDateSpecial } from "../testing/special-day-fixture.js";
 import { withOpeningStations } from "../testing/opening-hours-stations-request.js";
 import { LitElement, html } from "lit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -19,6 +20,8 @@ class DayLeaveApp extends LitElement {
         return;
       }
       if (this.failRead) throw new Error("offline");
+      const special = everyDateSpecial(path);
+      if (special) return special;
       return {
         businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
         clockRevision: 0,
@@ -30,7 +33,6 @@ class DayLeaveApp extends LitElement {
         menus: [],
         seasons: [{ id: "autumn", name: "Autumn", startsOn: "09-01" }],
         currentSeasonId: "autumn",
-        namedDays: [],
         departments: [
           {
             id: "d1",
@@ -47,7 +49,6 @@ class DayLeaveApp extends LitElement {
                   },
                 ],
                 week: [{ weekday: 1, ranges: [{ startsAt: "23:00", endsAt: "06:00" }] }],
-                dates: [],
               },
             ],
             periods: [
@@ -69,7 +70,6 @@ class DayLeaveApp extends LitElement {
                 ],
               },
             ],
-            dates: [],
           },
         ],
       };
@@ -203,20 +203,20 @@ describe.each(["en", "es"])("Day draft (%s)", (locale) => {
       .poll(() => screen.shadowRoot!.querySelector("[data-test=read-error]"))
       .not.toBeNull();
     expect(app.writes[0]).toEqual([
-      "/management-api/venue-service/departments/d1/menu-week",
+      "/management-api/venue-service/special-days/day-2026-10-12",
       "PUT",
       {
-        expectedClockRevision: 0,
-        seasonId: "autumn",
-        days: [
-          { weekday: 0, slots: [] },
-          { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "15:00" }] },
-          { weekday: 2, slots: [] },
-          { weekday: 3, slots: [] },
-          { weekday: 4, slots: [] },
-          { weekday: 5, slots: [] },
-          { weekday: 6, slots: [] },
+        name: "Special 2026-10-12",
+        repeatsYearly: false,
+        dates: [{ date: "2026-10-12", closedAllDay: false }],
+        paint: [
+          {
+            departmentId: "d1",
+            date: "2026-10-12",
+            ranges: [{ periodId: "p1", startsAt: "14:00", endsAt: "15:00" }],
+          },
         ],
+        expectedClockRevision: 0,
       },
     ]);
     expect(unload()).toBe(false);

@@ -1,13 +1,9 @@
 import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
-import type {
-  MenuPeriodInput,
-  MenuSlot,
-  MenuWeekDay,
-  OpeningHoursModel,
-} from "../menu-timetable-types.js";
+import type { MenuPeriodInput, MenuWeekDay, OpeningHoursModel } from "../menu-timetable-types.js";
 import type { ClosedRange } from "../service-day.js";
+import type { SpecialDayDetail, SpecialDayInput } from "../special-days.js";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
-import { NamedDaysApi } from "./named-days-client.js";
+import { SpecialDaysApi } from "./special-days-client.js";
 import { ModelWatches } from "./model-watch.js";
 
 import type { StationServiceTimes } from "../station-service-times.js";
@@ -24,13 +20,13 @@ const at = (id: string) => encodeURIComponent(id);
 
 export class OpeningHoursApi {
   readonly #watches: ModelWatches;
-  readonly namedDays: NamedDaysApi;
+  readonly specialDays: SpecialDaysApi;
   constructor(
     private readonly request: DashboardRequest,
     readonly liveData?: LiveData,
   ) {
     this.#watches = new ModelWatches(liveData);
-    this.namedDays = new NamedDaysApi(request, liveData);
+    this.specialDays = new SpecialDaysApi(request, liveData);
   }
   watchOpeningHours(
     apply: (model: OpeningHoursModel) => void,
@@ -94,6 +90,10 @@ export class OpeningHoursApi {
   rereadWatches(): void {
     this.#watches.reread(QUERY_DEPENDENCIES["opening-hours"]);
   }
+  rereadWithSpecialDays(): void {
+    this.specialDays.rereadWatches();
+    this.rereadWatches();
+  }
   createPeriod(
     departmentId: string,
     input: MenuPeriodInput,
@@ -141,28 +141,19 @@ export class OpeningHoursApi {
       expectedClockRevision,
     });
   }
-  saveZoneDate(
-    specialDateId: string,
-    zoneId: string,
-    ranges: readonly ClosedRange[],
+  /** Saves the special day as stored with `paint` replacing what it names; an empty list is left out. */
+  saveDatePaint(
+    detail: SpecialDayDetail,
+    { paint, zonePaint }: Required<Pick<SpecialDayInput, "paint" | "zonePaint">>,
     expectedClockRevision: number,
-  ): Promise<void> {
-    return this.request(
-      `${BASE}/special-dates/${at(specialDateId)}/zone-closed-times/${at(zoneId)}`,
-      "PUT",
-      { ranges, expectedClockRevision },
-    );
-  }
-  saveDateMenus(
-    specialDateId: string,
-    departmentId: string,
-    slots: readonly MenuSlot[],
-    expectedClockRevision: number,
-  ): Promise<void> {
-    return this.request(
-      `${BASE}/special-dates/${at(specialDateId)}/menu-timetables/${at(departmentId)}`,
-      "PUT",
-      { slots, expectedClockRevision },
-    );
+  ): Promise<SpecialDayDetail> {
+    return this.request(`${BASE}/special-days/${at(detail.id)}`, "PUT", {
+      name: detail.name,
+      repeatsYearly: detail.repeatsYearly,
+      dates: detail.dates.map(({ date, closedAllDay }) => ({ date, closedAllDay })),
+      ...(paint.length ? { paint } : {}),
+      ...(zonePaint.length ? { zonePaint } : {}),
+      expectedClockRevision,
+    });
   }
 }

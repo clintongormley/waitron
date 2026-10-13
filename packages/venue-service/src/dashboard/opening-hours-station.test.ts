@@ -29,14 +29,12 @@ const model = {
   clockReadable: true,
   dayCutover: "06:00",
   menus: [],
-  namedDays: [],
   departments: [
     {
       id: "dining",
       name: "Dining",
       active: true,
       zones: [],
-      dates: [],
       periods: [
         {
           id: "lunch",

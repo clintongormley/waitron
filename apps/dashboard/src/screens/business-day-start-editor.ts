@@ -341,7 +341,6 @@ export class BusinessDayStartEditor extends LitElement {
     const line = [
       conflict.departmentName ?? conflict.departmentId,
       conflict.zoneName ?? conflict.zoneId,
-      conflict.specialDateName ?? conflict.specialDateId,
       conflict.date ?? weekday,
       conflict.periodName ?? conflict.periodId,
       conflict.startsAt && conflict.endsAt ? `${conflict.startsAt}–${conflict.endsAt}` : undefined,

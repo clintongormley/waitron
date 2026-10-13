@@ -1,7 +1,6 @@
 import type { BusinessDayScheduleStatus } from "./service-day-context.js";
 // Browser-safe: types only, no database or server imports.
 import type { ClosedRange, ServiceRange } from "./service-day.js";
-import type { NamedDay } from "./holiday-types.js";
 import type { CalendarColour, LocalDate } from "./hours-types.js";
 
 export interface MenuPeriodInput {
@@ -25,7 +24,6 @@ export interface MenuWeekDay {
 
 export type MenuPeriodUse =
   | { kind: "week"; weekday: number }
-  | { kind: "special_date"; specialDateId: string; date: LocalDate }
   | { kind: "special_day"; specialDayId: string; name: string; date: LocalDate };
 
 export interface DepartmentService {
@@ -57,7 +55,6 @@ export interface OpeningHoursModel extends BusinessDayScheduleStatus {
   clockReadable: boolean;
   dayCutover: string;
   menus: readonly { id: string; name: string; active: boolean; includes: readonly string[] }[];
-  namedDays: readonly NamedDay[];
   /** Ordered by `startsOn`. */
   seasons: readonly { id: string; name: string; startsOn: string }[];
   /** The season of the business day `at` falls in; null when the clock cannot be read or the venue has no seasons. */
@@ -74,7 +71,6 @@ export interface OpeningHoursModel extends BusinessDayScheduleStatus {
         seasonId: string;
         week: readonly { weekday: number; ranges: readonly ClosedRange[] }[];
       }[];
-      dates: readonly { specialDateId: string; ranges: readonly ClosedRange[] }[];
     }[];
     periods: readonly {
       id: string;
@@ -92,6 +88,5 @@ export interface OpeningHoursModel extends BusinessDayScheduleStatus {
       seasonId: string;
       week: readonly { weekday: number; slots: readonly ServiceRange[] }[];
     }[];
-    dates: readonly { specialDateId: string; slots: readonly ServiceRange[] }[];
   }[];
 }

@@ -1,26 +1,34 @@
 import { currentLocale } from "@waitron/dashboard-kit";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, visuallyHiddenStyles } from "@waitron/ui";
+import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
-import type { HolidayCoverage, NamedDay, NamedDaysModel } from "../holiday-types.js";
+import type { HolidayCoverage, SpecialDaysModel } from "../holiday-types.js";
 import { holidayDateName } from "../holiday-naming.js";
 import type { HolidayFact, LocalDate } from "../hours-types.js";
 import { addDays, weekdayOf } from "../hours-rules.js";
 import { browserToday, format, formatDate, formatLongDate } from "./hours-view.js";
-import type { NamedDaysApi } from "./named-days-client.js";
-import "@waitron/ui/src/components/wt-icon.js";
+import type { SpecialDaysApi } from "./special-days-client.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import { t } from "./strings.js";
 
 /** A month, `YYYY-MM`. */
 export type Month = string;
 
-export interface NamedCalendarAction {
-  kind: "add" | "edit" | "own" | "copy" | "delete";
+export interface SpecialDayRef {
+  id: string;
+  name: string;
+}
+
+/** A request to open the special-day dialog on `date`, or to delete the special day holding it. */
+export interface SpecialDayAction {
+  kind: "open" | "delete";
   date: LocalDate;
-  day?: NamedDay;
+  /** Absent when the sender does not know; the host then looks the date up itself. */
+  specialDay?: SpecialDayRef | null;
   holidays: readonly HolidayFact[];
+  /** Every public holiday the sender shows, for the dialog's note on dates added there. */
+  visibleHolidays?: readonly HolidayFact[];
   returnTo: () => HTMLElement | null;
 }
 
@@ -55,7 +63,7 @@ const formatUtc = (date: LocalDate, options: Intl.DateTimeFormatOptions) =>
     new Date(`${date}T00:00:00Z`),
   );
 
-/** A Monday-first month of named days with the chosen date's actions. */
+/** A Monday-first month of special days and public holidays with the chosen date's actions. */
 @customElement("hours-calendar")
 export class HoursCalendar extends LitElement {
   static override styles = [
@@ -152,13 +160,9 @@ export class HoursCalendar extends LitElement {
         background: var(--wt-color-palette-red);
         color: var(--wt-color-on-palette-red);
       }
-      .grid td[data-tone="own_holiday"] {
+      .grid td[data-tone="special_day"] {
         background: var(--wt-color-palette-purple);
         color: var(--wt-color-on-palette-purple);
-      }
-      .grid td[data-tone="working_day"] {
-        background: var(--wt-color-palette-blue);
-        color: var(--wt-color-on-palette-blue);
       }
       .day {
         display: flex;
@@ -186,12 +190,6 @@ export class HoursCalendar extends LitElement {
       .named-day {
         color: inherit;
         cursor: default;
-      }
-      .own-hours wt-icon {
-        color: inherit;
-      }
-      .own-hours {
-        display: inline-flex;
       }
       .day:focus-visible {
         outline: var(--wt-field-line-width-active) solid var(--wt-color-focus);
@@ -283,9 +281,6 @@ export class HoursCalendar extends LitElement {
       .range {
         white-space: nowrap;
       }
-      .visually-hidden {
-        ${visuallyHiddenStyles}
-      }
       .facts,
       .coverage {
         margin: 0 0 var(--wt-space-2);
@@ -314,8 +309,8 @@ export class HoursCalendar extends LitElement {
     `,
   ];
 
-  @property({ attribute: false }) namedApi?: NamedDaysApi;
-  @state() private namedModel?: NamedDaysModel;
+  @property({ attribute: false }) namedApi?: SpecialDaysApi;
+  @state() private namedModel?: SpecialDaysModel;
   @state() private areaError = "";
   @state() private areaBusy = false;
   @property({ type: Boolean }) readOnly = false;
@@ -356,7 +351,7 @@ export class HoursCalendar extends LitElement {
     this.#watchedMonth = this.shownMonth;
     const dates = monthGrid(this.shownMonth);
     if (this.namedApi) {
-      this.#detach = this.namedApi.watchNamedDays(
+      this.#detach = this.namedApi.watchSpecialDays(
         dates[0]!,
         dates.at(-1)!,
         (model) => {
@@ -479,8 +474,7 @@ export class HoursCalendar extends LitElement {
       <ul class="legend">
         ${[
           ["red", "calendar.public"],
-          ["purple", "calendar.own_holiday"],
-          ["blue", "calendar.working"],
+          ["purple", "calendar.special_day"],
           ["closed", "hours.calendar.legend_closed"],
           ["standard", "hours.calendar.legend_standard"],
         ].map(
@@ -525,7 +519,7 @@ export class HoursCalendar extends LitElement {
                               type="button"
                               class="day named-day"
                               tabindex=${date === stop ? 0 : -1}
-                              aria-label=${[formatLongDate(date), day?.namedDay?.name, holidayDateName([...(day?.holidays ?? [])], date, ""), day?.closed ? t("hours.closed") : "", day?.ownHours ? t("calendar.own_hours") : ""].filter(Boolean).join(", ")}
+                              aria-label=${[formatLongDate(date), day?.specialDay?.name, holidayDateName([...(day?.holidays ?? [])], date, ""), day?.closed ? t("hours.closed") : ""].filter(Boolean).join(", ")}
                               aria-pressed=${date === this.selected ? "true" : "false"}
                               aria-current=${date === model.civilDate ? "date" : nothing}
                               @click=${() => this.#open(date)}
@@ -535,7 +529,7 @@ export class HoursCalendar extends LitElement {
                             >
                               <span class="number"
                                 >${formatUtc(date, date.startsWith(this.shownMonth) ? { day: "numeric" } : { day: "numeric", month: "short" })}</span
-                              >${day?.namedDay ? html`<span>${day.namedDay.name}</span>` : nothing}${day?.holidays.length ? html`<span>${holidayDateName([...day.holidays], date, "")}</span>` : nothing}${day?.closed ? html`<span>${t("hours.closed")}</span>` : nothing}${day?.ownHours ? html`<span class="own-hours"><wt-icon name="clock" size="sm"></wt-icon><span class="visually-hidden">${t("calendar.own_hours")}</span></span>` : nothing}
+                              >${day?.specialDay ? html`<span>${day.specialDay.name}</span>` : nothing}${day?.holidays.length ? html`<span>${holidayDateName([...day.holidays], date, "")}</span>` : nothing}${day?.closed ? html`<span>${t("hours.closed")}</span>` : nothing}
                             </button>
                           </td>`;
                         })}
@@ -547,26 +541,27 @@ export class HoursCalendar extends LitElement {
       }
     </div>`;
   }
-  #namedPanel(model: NamedDaysModel) {
+  #namedPanel(model: SpecialDaysModel) {
     const date = this.selected;
     if (!date) return html`<p>${t("hours.calendar.pick")}</p>`;
     const entry = model.days.find((day) => day.date === date);
-    const day = entry?.namedDay ?? undefined;
-    const action = (kind: NamedCalendarAction["kind"], label: Key) =>
+    const day = entry?.specialDay ?? null;
+    const action = (kind: SpecialDayAction["kind"], test: string, label: Key) =>
       html`<wt-button
         variant="secondary"
-        data-test=${`named-${kind}`}
+        data-test=${test}
         @click=${(event: Event) => {
           event.stopPropagation();
           if (this.readOnly || !this.isConnected || !this.namedModel) return;
           const trigger = event.currentTarget as HTMLElement;
           this.dispatchEvent(
-            new CustomEvent<NamedCalendarAction>("named-calendar-action", {
+            new CustomEvent<SpecialDayAction>("special-day-action", {
               detail: {
                 kind,
                 date,
-                day: day ? structuredClone(day) : undefined,
+                specialDay: day ? { ...day } : null,
                 holidays: structuredClone(entry?.holidays ?? []),
+                visibleHolidays: structuredClone(model.days.flatMap((other) => other.holidays)),
                 returnTo: () => (trigger.isConnected ? trigger : this.#dayButton(date)),
               },
               bubbles: true,
@@ -578,9 +573,9 @@ export class HoursCalendar extends LitElement {
       >`;
     return html`<h2 tabindex="-1">${formatDate(date)}${day ? ` · ${day.name}` : ""}</h2>
       ${entry?.holidays.map((holiday) => html`<p>${holiday.name}</p>`)}
-      ${this.readOnly ? nothing : html`<div class="actions">${day ? html`${action("edit", "hours.edit")}${action("copy", "named.copy")}${action("delete", "hours.delete")}` : action("add", "named.add")}${action("own", "named.give_own")}</div>`}`;
+      ${this.readOnly ? nothing : html`<div class="actions">${day ? html`${action("open", "special-edit", "hours.edit")}${action("delete", "special-delete", "hours.delete")}` : action("open", "special-add", "special.make")}</div>`}`;
   }
-  #areaAddress(readiness: NamedDaysModel["area"]["readiness"]): string {
+  #areaAddress(readiness: SpecialDaysModel["area"]["readiness"]): string {
     switch (readiness) {
       case "missing_city":
         return t("holidays.area_needs_city");
@@ -594,7 +589,7 @@ export class HoursCalendar extends LitElement {
         return "";
     }
   }
-  #namedArea(model: NamedDaysModel) {
+  #namedArea(model: SpecialDaysModel) {
     const explanation =
       model.area.readiness === "ready"
         ? nothing

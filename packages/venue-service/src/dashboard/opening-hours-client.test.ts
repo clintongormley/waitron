@@ -15,7 +15,6 @@ const model: OpeningHoursModel = {
   departments: [],
   seasons: [],
   currentSeasonId: null,
-  namedDays: [],
 };
 const base = "/management-api/venue-service";
 
@@ -36,7 +35,6 @@ describe("OpeningHoursApi", () => {
     expect(await api.updatePeriod("p/1", input, 0)).toBeUndefined();
     await api.deletePeriod("p/1");
     await api.saveWeek("d/1", "s-1", [{ weekday: 1, slots: [slot] }], 0);
-    await api.saveDateMenus("s/1", "d/1", [slot], 0);
     expect(request.mock.calls).toEqual([
       [`${base}/departments/d%2F1/menu-periods`, "POST", { ...input, expectedClockRevision: 0 }],
       [`${base}/menu-periods/p%2F1`, "PATCH", { ...input, expectedClockRevision: 0 }],
@@ -46,12 +44,36 @@ describe("OpeningHoursApi", () => {
         "PUT",
         { expectedClockRevision: 0, seasonId: "s-1", days: [{ weekday: 1, slots: [slot] }] },
       ],
-      [
-        `${base}/special-dates/s%2F1/menu-timetables/d%2F1`,
-        "PUT",
-        { expectedClockRevision: 0, slots: [slot] },
-      ],
     ]);
+  });
+
+  it("re-reads both the opening hours and the special-day calendar after a special-day write", async () => {
+    const request = vi.fn(async (path: string) =>
+      path.includes("named-days") ? { days: [] } : model,
+    );
+    const api = new OpeningHoursApi(request as DashboardRequest);
+    const hours = vi.fn();
+    const calendar = vi.fn();
+    const stopHours = api.watchOpeningHours(hours, vi.fn(), vi.fn());
+    const stopCalendar = api.specialDays.watchSpecialDays(
+      "2026-10-01",
+      "2026-10-31",
+      calendar,
+      vi.fn(),
+      vi.fn(),
+    );
+    try {
+      await vi.waitFor(() =>
+        expect([hours.mock.calls.length, calendar.mock.calls.length]).toEqual([1, 1]),
+      );
+      api.rereadWithSpecialDays();
+      await vi.waitFor(() =>
+        expect([hours.mock.calls.length, calendar.mock.calls.length]).toEqual([2, 2]),
+      );
+    } finally {
+      stopHours();
+      stopCalendar();
+    }
   });
 
   it("reads opening hours passively with staff-menu dependencies and refreshes after writes", async () => {
@@ -66,15 +88,11 @@ describe("OpeningHoursApi", () => {
         [
           "menu_periods",
           "menu_period_staff_menus",
-          "menu_day_timetables",
-          "menu_slots",
-          "special_dates",
           "departments",
           "catalogues",
           "locations",
           "location_business_day_settings",
           "location_day_cutover_changes",
-          "zone_closed_times",
           "zone_service_policies",
           "floor_zones",
           "routing_cells",
@@ -116,7 +134,6 @@ describe("OpeningHoursApi", () => {
             active: true,
             zones: [],
             seasonWeeks: [],
-            dates: [],
             periods: [
               {
                 id: "p1",
@@ -180,14 +197,8 @@ it("encodes zone closing-time writes and preserves their bodies", async () => {
   const ranges = [{ startsAt: "23:00", endsAt: "06:00" }];
   const days = [{ weekday: 1, ranges }];
   await api.saveZoneWeek("z/1", "s-1", days, 0);
-  await api.saveZoneDate("s/1", "z/1", ranges, 0);
   expect(request.mock.calls).toEqual([
     [`${base}/zones/z%2F1/closed-week`, "PUT", { expectedClockRevision: 0, seasonId: "s-1", days }],
-    [
-      `${base}/special-dates/s%2F1/zone-closed-times/z%2F1`,
-      "PUT",
-      { expectedClockRevision: 0, ranges },
-    ],
   ]);
 });
 

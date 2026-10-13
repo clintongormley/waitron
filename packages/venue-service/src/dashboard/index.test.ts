@@ -207,10 +207,8 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
           name: "Restaurant",
           active: true,
           periods: [],
-          dates: [],
         },
       ],
-      specialDates: [],
     };
     const fetchImpl = vi.fn((path: string) =>
       Promise.resolve({

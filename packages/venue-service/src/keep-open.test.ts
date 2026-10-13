@@ -21,7 +21,7 @@ import {
 } from "./menu-timetable.js";
 import { localTimeOccurrences } from "./hours-occurrences.js";
 import { periodExtensions } from "./schema/period-extensions.js";
-import { specialDates } from "./schema/hours.js";
+import { specialDayDates, specialDays } from "./schema/seasons.js";
 import { VENUE_SERVICE } from "./service.js";
 import * as keep from "./keep-open.js";
 import { zoneExtensions } from "./schema/zone-extensions.js";
@@ -264,12 +264,13 @@ describe("keeping a period open today", () => {
     });
     await run(async (tx) => {
       await keepPeriodOpen(tx, f.cfg, f.zoneId, { periodId: f.lunch, until: "16:00" }, at("13:50"));
-      await tx.insert(specialDates).values({
-        ...f.cfg,
-        date: "2026-10-09",
-        name: "Closed",
-        closeWholeVenue: true,
-      });
+      const [day] = await tx
+        .insert(specialDays)
+        .values({ ...f.cfg, name: "Closed" })
+        .returning({ id: specialDays.id });
+      await tx
+        .insert(specialDayDates)
+        .values({ ...f.cfg, specialDayId: day!.id, date: "2026-10-09", closedAllDay: true });
     });
     expect(await run((tx) => readKeepOpen(tx, f.cfg, f.zoneId, at("14:20")))).toEqual({
       period: null,
@@ -799,7 +800,7 @@ it("shows the effective extension after a manager moves the closure start", asyn
   ).toMatchObject({ closesAt: "01:30", extendedUntil: "01:30", running: true });
 });
 
-it("reads the clock, the seasons and the named days once for a zone's keep-open choices", async () => {
+it("reads the clock, the seasons and the special days once for a zone's keep-open choices", async () => {
   const f = await zoneFixture();
   await run(async (tx) => {
     const session = (tx as unknown as { session: { prepareQuery: (...args: never[]) => unknown } })
@@ -810,7 +811,7 @@ it("reads the clock, the seasons and the named days once for a zone's keep-open 
       expect(zone).toMatchObject({ endsAt: "23:30", running: true });
       const sql = spy.mock.calls.map(([q]) => (q as unknown as { sql: string }).sql);
       expect(sql.filter((q) => q.includes('from "seasons"'))).toHaveLength(1);
-      expect(sql.filter((q) => q.includes('from "special_dates"'))).toHaveLength(1);
+      expect(sql.filter((q) => q.includes('from "special_day_dates"'))).toHaveLength(1);
       expect(sql.filter((q) => q.includes('from "locations"'))).toHaveLength(1);
     } finally {
       spy.mockRestore();
@@ -818,7 +819,7 @@ it("reads the clock, the seasons and the named days once for a zone's keep-open 
   });
 });
 
-it("reads the clock, the seasons and the named days once for a period's and a zone's keep-open choices", async () => {
+it("reads the clock, the seasons and the special days once for a period's and a zone's keep-open choices", async () => {
   const f = await zoneFixture();
   await run(async (tx) => {
     const session = (tx as unknown as { session: { prepareQuery: (...args: never[]) => unknown } })
@@ -830,7 +831,7 @@ it("reads the clock, the seasons and the named days once for a period's and a zo
       expect(answer.zone).toMatchObject({ endsAt: "23:30", running: true });
       const sql = spy.mock.calls.map(([q]) => (q as unknown as { sql: string }).sql);
       expect(sql.filter((q) => q.includes('from "seasons"'))).toHaveLength(1);
-      expect(sql.filter((q) => q.includes('from "special_dates"'))).toHaveLength(1);
+      expect(sql.filter((q) => q.includes('from "special_day_dates"'))).toHaveLength(1);
       expect(sql.filter((q) => q.includes('from "locations"'))).toHaveLength(1);
     } finally {
       spy.mockRestore();
@@ -855,12 +856,7 @@ it("reads a floor closing summary without building period choices", async () => 
       });
       const sql = spy.mock.calls.map(([q]) => (q as unknown as { sql: string }).sql);
       expect(
-        sql.some(
-          (q) =>
-            q.includes('"menu_periods"') ||
-            q.includes('"menu_slots"') ||
-            q.includes('"period_extensions"'),
-        ),
+        sql.some((q) => q.includes('"menu_periods"') || q.includes('"period_extensions"')),
       ).toBe(false);
     } finally {
       spy.mockRestore();

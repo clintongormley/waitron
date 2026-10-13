@@ -48,6 +48,7 @@ const provisionVenue = createDemoVenueProvisioner(() => suite.db, {
 describe("seedDemoRestaurant", () => {
   afterEach(() => {
     vi.unstubAllEnvs();
+    vi.useRealTimers();
   });
 
   it.each(["06:00", "05:00"])(
@@ -142,6 +143,37 @@ describe("seedDemoRestaurant", () => {
     const { rows: separate } = await suite.db.execute<{ count: number }>(sql`
       select cast(count(*) as integer) as count from sqlite_master where type = 'table' and name = 'hours_week_cells'`);
     expect(separate).toEqual([{ count: 0 }]);
+  });
+
+  it("seeds Christmas Day as a closed special day that repeats every year", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-10-06T10:00:00Z") });
+    const venue = await provisionVenue();
+    await seedDemoRestaurant(suite.db, {
+      venue,
+      locale: LOCALE,
+      salesDays: 0,
+      departmentTradingNames: DEPARTMENT_TRADING_NAMES,
+      dataSet: CASA_DELGADO_ES,
+    });
+    const { rows } = await suite.db.execute<{
+      name: string;
+      repeats_yearly: number;
+      date: string;
+      closed_all_day: number;
+      holiday_name: string | null;
+    }>(sql`
+      select s.name, s.repeats_yearly, d.date, d.closed_all_day, d.holiday_name
+      from special_days s join special_day_dates d on d.special_day_id = s.id
+      where s.location_id = ${venue.locationId}`);
+    expect(rows).toEqual([
+      {
+        name: "Christmas Day",
+        repeats_yearly: 1,
+        date: "2026-12-25",
+        closed_all_day: 1,
+        holiday_name: "Natividad del Señor",
+      },
+    ]);
   });
 
   it("gives the kitchen display profile the pass levers", async () => {

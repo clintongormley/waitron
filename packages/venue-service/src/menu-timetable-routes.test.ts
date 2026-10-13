@@ -30,9 +30,9 @@ import {
 import type { ModuleRouteContext } from "@waitron/module";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
-import { saveSpecialDate } from "./hours.js";
 import { readOpeningHoursModel, saveMenuPeriod } from "./menu-timetable.js";
 import type { MenuSlot, OpeningHoursModel } from "./menu-timetable-types.js";
+import { saveSpecialDay } from "./special-days.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { configureZone, createDepartment } from "./operations.js";
 import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
@@ -110,19 +110,17 @@ async function routed() {
       )
     ).id;
     const christmas = (
-      await saveSpecialDate(
+      await saveSpecialDay(
         tx,
         cfg,
         null,
         {
-          date: "2030-12-25",
           name: "Navidad",
-          closeWholeVenue: false,
-          ownHours: true,
-          cells: [],
+          repeatsYearly: false,
+          dates: [{ date: "2030-12-25", closedAllDay: false }],
+          paint: [],
         },
         new Date(),
-        undefined,
         0,
       )
     ).id;
@@ -245,7 +243,7 @@ describe("the opening-hours routes", () => {
     await answers(await r.send("GET", "/opening-hours", r.staff), 403);
   });
 
-  it("create, rename and delete a named period, and save the week, a special date's timetable", async () => {
+  it("create, rename and delete a named period, and save the week", async () => {
     const r = await routed();
     const created = await r.send("POST", `/departments/${r.restaurant}/menu-periods`, r.manager, {
       staffMenuIds: [],
@@ -276,9 +274,6 @@ describe("the opening-hours routes", () => {
       }),
       204,
     );
-    const christmas = [{ periodId: r.mananas, startsAt: "10:00", endsAt: "13:00" }];
-    const dateTimetable = `/special-dates/${r.christmas}/menu-timetables/${r.restaurant}`;
-    await answers(await r.send("PUT", dateTimetable, r.manager, { slots: christmas }), 204);
     await answers(
       await r.send("PUT", `/zones/${r.barra}/period-menus/${r.mananas}`, r.manager, {
         menuId: r.cafe,
@@ -293,8 +288,6 @@ describe("the opening-hours routes", () => {
         .find((entry) => entry.seasonId === model.currentSeasonId)!
         .week.find((day) => day.weekday === 1)!.slots,
     ).toEqual(monday);
-    expect(restaurant.dates).toEqual([{ specialDateId: r.christmas, slots: christmas }]);
-    expect(model.namedDays.find((date) => date.id === r.christmas)!.name).toBe("Navidad");
 
     await answers(
       await r.send("PUT", `/zones/${r.barra}/period-menus/${r.mananas}`, r.manager, {
@@ -302,23 +295,9 @@ describe("the opening-hours routes", () => {
       }),
       404,
     );
-    await answers(await r.send("DELETE", dateTimetable, r.manager), 404);
-    await answers(
-      await r.send("PUT", `/special-dates/${r.christmas}`, r.manager, {
-        date: "2030-12-25",
-        name: "Navidad",
-        colour: "red",
-        closeWholeVenue: false,
-        ownHours: false,
-        cells: [],
-      }),
-      200,
-    );
     await answers(await r.send("DELETE", `/menu-periods/${mediodia.id}`, r.manager), 204);
     model = await r.model();
-    expect(restaurantOf(model, r).dates).toEqual([]);
     expect(restaurantOf(model, r).periods.map((period) => period.id)).toEqual([r.mananas]);
-    expect(model.namedDays.find((date) => date.id === r.christmas)!.name).toBe("Navidad");
   });
 
   it("change only what a period update sends, keeping a rename made in the meantime", async () => {
@@ -408,7 +387,6 @@ describe("the opening-hours routes", () => {
       ["PATCH", `/menu-periods/${r.mananas}`, { name: "Tardes", menuId: r.cafe, staffMenuIds: [] }],
       ["DELETE", `/menu-periods/${r.mananas}`, undefined],
       ["PUT", `/departments/${r.restaurant}/menu-week`, { days: week([]) }],
-      ["PUT", `/special-dates/${r.christmas}/menu-timetables/${r.restaurant}`, { slots: [] }],
     ];
     for (const [method, path, body] of writes) {
       const response = await r.send(method, path, r.supervisor, body);
@@ -464,13 +442,6 @@ describe("the opening-hours routes", () => {
       { code: "menu_timetable.invalid", params: { field: "days.1.slots", reason: "empty" } },
     );
     await answers(
-      await r.send("PUT", `/special-dates/${unknown}/menu-timetables/${r.restaurant}`, r.manager, {
-        slots: [],
-      }),
-      404,
-      { code: "special_date.not_found", params: { specialDateId: unknown } },
-    );
-    await answers(
       await r.send("PUT", `/departments/${r.restaurant}/menu-week`, r.manager, {
         days: week([{ periodId: r.mananas, startsAt: "09:00", endsAt: "12:00" }]),
       }),
@@ -506,7 +477,6 @@ describe("the opening-hours routes", () => {
       ],
       ["PATCH", `/menu-periods/${r.mananas}`, { name: "X", menuId: "x" }, "menuId"],
       ["PUT", `/departments/${r.restaurant}/menu-week`, { days: [], extra: 1 }, "extra"],
-      ["PUT", `/special-dates/${r.christmas}/menu-timetables/${r.restaurant}`, { at: 1 }, "at"],
     ] as const)
       await answers(await r.send(method, path, r.manager, body), 400, {
         code: "management.request_invalid",
@@ -517,7 +487,6 @@ describe("the opening-hours routes", () => {
       ["PATCH", "/menu-periods/x"],
       ["DELETE", "/menu-periods/x"],
       ["PUT", "/departments/x/menu-week"],
-      ["PUT", `/special-dates/x/menu-timetables/${r.restaurant}`],
     ] as const) {
       const response = await r.send(method, path, r.manager, method === "DELETE" ? undefined : {});
       expect(response.status, `${method} ${path}`).toBe(400);
@@ -770,29 +739,25 @@ it("reports offset placement refusals on the submitted field and retains the com
   expect(await r.model()).toEqual(before);
 });
 
-it("refuses dated writes on a day keeping the week and no longer offers per-department clearing", async () => {
+it("answers the unmatched-route 404 to the retired dated timetable and zone closure writers for a real date", async () => {
   const r = await routed();
-  await answers(
-    await r.send("PUT", `/special-dates/${r.christmas}`, r.manager, {
-      date: "2030-12-25",
-      name: "Navidad",
-      colour: "red",
-      closeWholeVenue: false,
-      ownHours: false,
-      cells: [],
-    }),
-    200,
-  );
-  const path = `/special-dates/${r.christmas}/menu-timetables/${r.restaurant}`;
-  await answers(await r.send("PUT", path, r.manager, { slots: [] }), 409, {
-    code: "special_date.keeps_week",
-    params: { specialDateId: r.christmas },
-  });
-  await answers(await r.send("DELETE", path, r.manager), 404);
+  const before = await r.model();
+  for (const [path, sent] of [
+    [`/special-dates/${r.christmas}/menu-timetables/${r.restaurant}`, { slots: [] }],
+    [`/special-dates/${r.christmas}/zone-closed-times/${r.barra}`, { ranges: [] }],
+  ] as const) {
+    const response = await r.send("PUT", path, r.manager, sent);
+    expect({ path, status: response.status, body: await response.text() }).toEqual({
+      path,
+      status: 404,
+      body: "404 Not Found",
+    });
+  }
+  expect(await r.model()).toEqual(before);
 });
 
 describe("zone closed-time routes", () => {
-  it("writes a week and a named day and reads their zone ranges", async () => {
+  it("writes a week and reads its zone ranges", async () => {
     const r = await routed();
     const ranges = [{ startsAt: "23:00", endsAt: "06:00" }];
     const days = [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
@@ -800,12 +765,6 @@ describe("zone closed-time routes", () => {
       ranges: weekday === 1 ? ranges : [],
     }));
     await answers(await r.send("PUT", `/zones/${r.barra}/closed-week`, r.manager, { days }), 204);
-    await answers(
-      await r.send("PUT", `/special-dates/${r.christmas}/zone-closed-times/${r.barra}`, r.manager, {
-        ranges: [{ startsAt: "06:00", endsAt: "06:00" }],
-      }),
-      204,
-    );
     const response = await r.send("GET", "/opening-hours", r.supervisor);
     expect(response.status).toBe(200);
     const saved = (await response.json()) as OpeningHoursModel;
@@ -817,16 +776,9 @@ describe("zone closed-time routes", () => {
           seasonId: season.id,
           week: season.id === r.season ? days : days.map((day) => ({ ...day, ranges: [] })),
         })),
-        dates: [{ specialDateId: r.christmas, ranges: [{ startsAt: "06:00", endsAt: "06:00" }] }],
       },
     ]);
     await answers(await r.send("PUT", `/zones/${r.barra}/closed-week`, r.staff, { days }), 403);
-    await answers(
-      await r.send("PUT", `/special-dates/${r.christmas}/zone-closed-times/${r.barra}`, r.staff, {
-        ranges: [],
-      }),
-      403,
-    );
     await answers(
       await r.send("PUT", `/zones/${r.barra}/closed-week`, r.manager, {
         days: [

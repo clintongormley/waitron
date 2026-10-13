@@ -67,7 +67,7 @@ describe("station reopening without hours", () => {
         queries.filter(
           (query) =>
             /^select\b/i.test(query) &&
-            /"(?:routing_cells|categories|category_details|station_day_states|hours_week_cells|hours_week_periods|special_dates|special_date_hours|special_date_hours_periods|station_fallbacks)"/.test(
+            /"(?:routing_cells|categories|category_details|station_day_states|hours_week_cells|hours_week_periods|special_date_hours|special_date_hours_periods|station_fallbacks)"/.test(
               query,
             ),
         ),

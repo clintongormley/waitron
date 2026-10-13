@@ -15,6 +15,7 @@ import {
   type ZoneFloorPlan,
 } from "./client.js";
 import { DepartmentsZonesDrag } from "./departments-zones-drag.js";
+import { format } from "./hours-view.js";
 import { t } from "./strings.js";
 
 export type DepartmentZoneRow =
@@ -438,6 +439,16 @@ export class DepartmentsList extends LitElement {
         >
       </div>
       ${model.readiness.some((issue) => issue.code === "venue.default_station_missing") ? html`<p class="issue" data-test="default-station-missing">${t("venue.readiness.default_station_missing")} <a href="/manage/prep-stations">${t("nav.prep_stations")}</a></p>` : nothing}
+      ${model.readiness.map((issue) =>
+        issue.code === "special_day.holiday_missing"
+          ? html`<p class="issue" data-test="holiday-missing">
+              ${format("venue.readiness.holiday_missing", {
+                name: issue.holidayName,
+                year: String(issue.year),
+              })}
+            </p>`
+          : nothing,
+      )}
       ${model.departments.length > 0 && model.readiness.some((issue) => issue.code === "venue.department_missing") ? html`<p class="issue" data-test="no-enabled-department">${t("venue.no_enabled_department")}</p>` : nothing}
       ${this.moveFailure ? html`<p role="alert">${this.moveFailure}</p>` : nothing}
       <wt-data-table

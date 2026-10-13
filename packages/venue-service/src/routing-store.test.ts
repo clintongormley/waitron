@@ -70,9 +70,9 @@ import {
 } from "./menu-timetable.js";
 import type { CellAddress, RoutingCell, RoutingMove } from "./routing-types.js";
 import { closeStationForToday, setStationToday } from "./station-times.js";
-import { saveSpecialDate } from "./hours.js";
+import { saveSpecialDay } from "./special-days.js";
 import { ensureDefaultSeasons } from "./seasons.js";
-import { specialDates } from "./schema/hours.js";
+import { specialDayDates, specialDays } from "./schema/seasons.js";
 import { offerMenuThroughZone } from "./testing/zone-menus.js";
 
 const suite = useVenueDb({
@@ -2971,24 +2971,20 @@ describe("hours from special dates", () => {
     date: string,
     stationId: string,
   ) =>
-    saveSpecialDate(
+    saveSpecialDay(
       tx,
       cfg as never,
       null,
       {
-        date,
-        name: `Closed ${date}`,
-        closeWholeVenue: false,
-        cells: [
-          { subject: { kind: "station", id: stationId }, cell: { mode: "closed", periods: [] } },
-        ],
+        name: `Closed ${date} ${stationId}`,
+        repeatsYearly: false,
+        dates: [{ date, closedAllDay: false }],
       },
       SAVED_AT,
-      undefined,
       0,
     );
 
-  it("named dates do not close a station on either Friday", async () =>
+  it("special dates do not close a station on either Friday", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
       await tx
@@ -3047,8 +3043,8 @@ describe("hours from special dates", () => {
     }));
 });
 
-describe("routing on repeating named days", () => {
-  it("named days no longer close prep stations", async () =>
+describe("routing on repeating special days", () => {
+  it("a repeating Closed-all-day special day does not close prep stations", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
       await tx
@@ -3056,12 +3052,15 @@ describe("routing on repeating named days", () => {
         .set({ timeZone: "Europe/Madrid", dayCutover: "06:00:00" })
         .where(eq(locations.id, f.cfg.locationId));
       await setCategoryCell(tx, f.cfg, f.cocktails, station(f.terraceBar));
-      await tx.insert(specialDates).values({
+      const [navidad] = await tx
+        .insert(specialDays)
+        .values({ locationId: f.cfg.locationId, name: "Navidad", repeatsYearly: true })
+        .returning({ id: specialDays.id });
+      await tx.insert(specialDayDates).values({
+        specialDayId: navidad!.id,
         locationId: f.cfg.locationId,
         date: "2026-12-25",
-        name: "Navidad",
-        repeatOn: "12-25",
-        closeWholeVenue: true,
+        closedAllDay: true,
       });
       for (const instant of ["2026-12-25T12:00:00Z", "2027-12-25T12:00:00Z"]) {
         const resolver = await routingAt(tx, f.cfg, new Date(instant));

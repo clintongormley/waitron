@@ -82,7 +82,6 @@ it("Today keeps chronological ownership in a repeated hour instead of applying t
     menus: [],
     seasons: [],
     currentSeasonId: null,
-    namedDays: [],
     departments: [],
     timeZone: "Europe/Madrid",
     dayCutover: "02:30",
@@ -113,7 +112,6 @@ it("dated department columns carry their own historical, transition and future c
       name: "Restaurant",
       active: true,
       seasonWeeks: [],
-      dates: [],
       periods: [],
     },
   });
@@ -151,7 +149,6 @@ it("normal-week columns keep their explicit reference instead of choosing a hist
         name: "Restaurant",
         active: true,
         seasonWeeks: [],
-        dates: [],
         periods: [],
       },
     ],
@@ -208,7 +205,6 @@ it("the Day view uses its selected business date for every department and zone c
     menus: [],
     seasons: [],
     currentSeasonId: null,
-    namedDays: [],
     departments: [
       {
         id: "d",
@@ -216,8 +212,7 @@ it("the Day view uses its selected business date for every department and zone c
         active: true,
         periods: [],
         seasonWeeks: [],
-        dates: [],
-        zones: [{ id: "z", name: "Terrace", seasonWeeks: [], dates: [] }],
+        zones: [{ id: "z", name: "Terrace", seasonWeeks: [] }],
       },
     ],
   };
@@ -282,7 +277,6 @@ for (const kind of ["all", "station"] as const) {
         name: "Restaurant",
         active: true,
         seasonWeeks: [],
-        dates: [],
         periods: [],
       },
     ];

@@ -1,5 +1,6 @@
 import { rangeSpanInDay } from "./service-day.js";
 import { readServiceDayPlan } from "./day-resolver.js";
+import { missingHolidays } from "./special-days.js";
 import {
   closedZoneIdsIn,
   zoneClosureDays,
@@ -252,12 +253,20 @@ export type VenueReadinessIssue =
       zoneName: string;
       menuId: string;
       menuName: string;
+    }
+  | {
+      code: "special_day.holiday_missing";
+      specialDayId: string;
+      holidayName: string;
+      year: number;
     };
 
-/** Describe configuration that prevents an active zone from accepting new orders. */
+/** Describe configuration that prevents an active zone from accepting new orders, and each
+ *  repeating holiday date that will not apply in the current or next year. */
 export async function listVenueReadiness(
   tx: Transaction,
   cfg: VenueScope,
+  at: Date = new Date(),
 ): Promise<VenueReadinessIssue[]> {
   const [defaultStation] = await tx
     .select({ id: kitchenStations.id })
@@ -270,8 +279,13 @@ export async function listVenueReadiness(
       ),
     )
     .limit(1);
-  const issues: VenueReadinessIssue[] =
-    defaultStation === undefined ? [{ code: "venue.default_station_missing" }] : [];
+  const issues: VenueReadinessIssue[] = [
+    ...(defaultStation === undefined ? [{ code: "venue.default_station_missing" as const }] : []),
+    ...(await missingHolidays(tx, cfg, at)).map((missing) => ({
+      code: "special_day.holiday_missing" as const,
+      ...missing,
+    })),
+  ];
   const activeDepartments = await tx
     .select({ id: departments.id, name: departments.name })
     .from(departments)

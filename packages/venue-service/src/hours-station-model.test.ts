@@ -1,12 +1,11 @@
-import { specialDates } from "./schema/hours.js";
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { CORE_MIGRATIONS, kitchenStations, locations, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId } from "@waitron/shared";
-import { readSpecialDate, duplicateSpecialDate, saveSpecialDate } from "./hours.js";
-import { readNamedDaysModel } from "./named-days.js";
+import { readSpecialDaysModel } from "./named-days.js";
+import { specialDayDates, specialDays } from "./schema/seasons.js";
 import { readOpeningHoursModel } from "./menu-timetable.js";
 import { routingModel } from "./routing-store.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
@@ -41,22 +40,28 @@ async function fixture() {
         isDefault: true,
       })
       .returning();
-    const [special] = await tx
-      .insert(specialDates)
-      .values({
-        locationId: cfg.locationId,
-        date: "2026-10-09",
-        name: "Festival",
-        closeWholeVenue: false,
-      })
-      .returning();
-    return { cfg, other: other!.id, department: department!.id, special: special!.id };
+    return { cfg, other: other!.id, department: department!.id };
+  });
+}
+
+/** A special day "Festival" on 2026-10-09, written straight to its tables. */
+async function festival(f: Awaited<ReturnType<typeof fixture>>) {
+  return withTransaction(suite.db, async (tx) => {
+    const [day] = await tx
+      .insert(specialDays)
+      .values({ locationId: f.cfg.locationId, name: "Festival", repeatsYearly: false })
+      .returning({ id: specialDays.id });
+    await tx
+      .insert(specialDayDates)
+      .values({ specialDayId: day!.id, locationId: f.cfg.locationId, date: "2026-10-09" });
+    return day!.id;
   });
 }
 
 describe("Calendar without a station-hours page model", () => {
-  it("keeps local stations separate from named-day Calendar facts", async () => {
+  it("keeps local stations separate from special-day Calendar facts", async () => {
     const f = await fixture();
+    const special = await festival(f);
     const ids = await withTransaction(suite.db, async (tx) => {
       const [bar, prep, kitchen] = await tx
         .insert(kitchenStations)
@@ -70,7 +75,7 @@ describe("Calendar without a station-hours page model", () => {
       return { bar: bar!.id, prep: prep!.id, kitchen: kitchen!.id };
     });
     const model = await withTransaction(suite.db, (tx) =>
-      readNamedDaysModel(tx, f.cfg, "2026-10-09", "2026-10-09", at),
+      readSpecialDaysModel(tx, f.cfg, "2026-10-09", "2026-10-09", at),
     );
     for (const field of ["subjects", "week", "specialCells", "specialDates"])
       expect(model).not.toHaveProperty(field);
@@ -83,15 +88,7 @@ describe("Calendar without a station-hours page model", () => {
       (await suite.db.select().from(kitchenStations)).find((row) => row.id === ids.prep),
     ).toMatchObject({ id: ids.prep, name: "Prep", active: false, locationId: f.cfg.locationId });
     expect(routing.stationTimes.map((row) => row.stationId)).not.toContain(ids.prep);
-    expect(model.days[0]!.namedDay).toEqual({
-      kind: "working_day",
-      repeats: false,
-      ownHours: false,
-      id: f.special,
-      date: "2026-10-09",
-      name: "Festival",
-      closeWholeVenue: false,
-    });
+    expect(model.days[0]!.specialDay).toEqual({ id: special, name: "Festival" });
     expect([model.timeZone, model.dayCutover, model.civilDate, model.clockReadable]).toEqual([
       "Europe/Madrid",
       "04:30",
@@ -100,129 +97,24 @@ describe("Calendar without a station-hours page model", () => {
     ]);
   });
 
-  it("keeps named dates without station-hour fields when the venue has no stations", async () => {
+  it("keeps special days without station-hour fields when the venue has no stations", async () => {
     const f = await fixture();
+    const special = await festival(f);
     const model = await withTransaction(suite.db, (tx) =>
-      readNamedDaysModel(tx, f.cfg, "2026-10-09", "2026-10-09", at),
+      readSpecialDaysModel(tx, f.cfg, "2026-10-09", "2026-10-09", at),
     );
     for (const field of ["subjects", "week", "specialCells", "specialDates"])
       expect(model).not.toHaveProperty(field);
     expect(model.days).toEqual([
       {
         date: "2026-10-09",
-        namedDay: {
-          kind: "working_day",
-          repeats: false,
-          ownHours: false,
-          id: f.special,
-          date: "2026-10-09",
-          name: "Festival",
-          closeWholeVenue: false,
-        },
+        specialDay: { id: special, name: "Festival" },
         holidays: [],
-        tone: "working_day",
+        tone: "special_day",
         closed: true,
-        ownHours: false,
       },
     ]);
   });
-});
-
-describe("named-day writers", () => {
-  it("edits the named day without inspecting former department station-cell fields", async () => {
-    const f = await fixture();
-    const edited = await withTransaction(suite.db, (tx) =>
-      saveSpecialDate(
-        tx,
-        f.cfg,
-        f.special,
-        {
-          kind: "working_day",
-          repeats: false,
-          ownHours: false,
-          date: "2026-10-09",
-          name: "Changed",
-          closeWholeVenue: false,
-          cells: [
-            {
-              subject: { kind: "department" as never, id: f.department },
-              cell: { mode: "closed", periods: [] },
-            },
-          ],
-        },
-        at,
-        undefined,
-        0,
-      ),
-    );
-    expect(edited).toEqual({
-      id: f.special,
-      kind: "working_day",
-      repeats: false,
-      ownHours: false,
-      date: "2026-10-09",
-      name: "Changed",
-      closeWholeVenue: false,
-    });
-    expect(
-      (await suite.db.select().from(specialDates)).find((row) => row.id === f.special),
-    ).toMatchObject({ name: "Changed" });
-  });
-});
-
-describe("named-day readers", () => {
-  it("reads and copies named-day facts while preserving the original", async () => {
-    const f = await fixture();
-    const read = await withTransaction(suite.db, (tx) => readSpecialDate(tx, f.cfg, f.special));
-    expect(read).toEqual({
-      id: f.special,
-      date: "2026-10-09",
-      name: "Festival",
-      kind: "working_day",
-      repeats: false,
-      ownHours: false,
-      closeWholeVenue: false,
-    });
-    const [copy] = await withTransaction(suite.db, (tx) =>
-      duplicateSpecialDate(tx, f.cfg, f.special, ["2026-10-16"], at, undefined, 0),
-    );
-    const copied = await withTransaction(suite.db, (tx) => readSpecialDate(tx, f.cfg, copy!.id));
-    expect(copied).toEqual({ ...read, id: copy!.id, date: "2026-10-16" });
-    expect(await withTransaction(suite.db, (tx) => readSpecialDate(tx, f.cfg, f.special))).toEqual(
-      read,
-    );
-  });
-});
-
-it("renames a named date while preserving its other calendar facts", async () => {
-  const f = await fixture();
-  const saved = await withTransaction(suite.db, (tx) =>
-    saveSpecialDate(
-      tx,
-      f.cfg,
-      f.special,
-      {
-        date: "2026-10-09",
-        name: "Renamed",
-        closeWholeVenue: false,
-        cells: [],
-      },
-      at,
-      undefined,
-      0,
-    ),
-  );
-  expect(saved).toEqual({
-    kind: "working_day",
-    repeats: false,
-    ownHours: false,
-    id: f.special,
-    date: "2026-10-09",
-    name: "Renamed",
-    closeWholeVenue: false,
-  });
-  const read = await withTransaction(suite.db, (tx) => readSpecialDate(tx, f.cfg, f.special));
-  expect(read).toEqual(saved);
 });
 
 it("keeps local department names in the Opening hours model without station columns", async () => {

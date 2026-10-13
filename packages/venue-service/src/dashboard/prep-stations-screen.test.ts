@@ -667,72 +667,6 @@ it("makes a nondefault station the default", async () => {
   await settle(el);
   expect(a.setDefaultStation).toHaveBeenCalledWith("terrace");
 });
-it.each([
-  [
-    "en",
-    "date",
-    "Bar would go back to its saved hours, which overlap a day next to the special date on Sun, 10 Jun 2096. Move or delete that special date on the Hours page first.",
-  ],
-  [
-    "en",
-    "opensAt",
-    "Bar would go back to its saved hours, and its hours on the special date Sun, 10 Jun 2096 use a time the clock skips. Move or delete that special date on the Hours page first.",
-  ],
-  [
-    "es",
-    "date",
-    "Bar volvería a su horario guardado, que se solapa con un día junto a la fecha especial del dom, 10 jun 2096. Cambia de día o borra primero esa fecha especial en la página Horarios.",
-  ],
-  [
-    "es",
-    "closesAt",
-    "Bar volvería a su horario guardado, y su horario en la fecha especial del dom, 10 jun 2096 usa una hora que el reloj se salta. Cambia de día o borra primero esa fecha especial en la página Horarios.",
-  ],
-] as const)(
-  "in %s, explains a Make default refused by the saved hours (%s) the default would resume",
-  async (locale, field, message) => {
-    setLocale(locale);
-    const changed = {
-      ...view,
-      stations: [
-        ...view.stations,
-        { ...view.stations[0]!, id: "terrace", name: "Terrace", isDefault: false, displayOrder: 2 },
-      ],
-    };
-    const a = api({
-      load: vi.fn().mockResolvedValue(changed),
-      setDefaultStation: vi.fn().mockRejectedValue({
-        code: "hours.invalid",
-        params: { field, date: "2096-06-10", subjectId: "bar" },
-      }),
-    });
-    const el = await mount(a);
-    q(el, '[data-test="make-default-terrace"]')!.click();
-    await vi.waitFor(() => expect(q(el, '[role="alert"]')?.textContent?.trim()).toBe(message));
-  },
-);
-it.each([
-  ["a station it does not show", { field: "date", date: "2096-06-10", subjectId: "gone" }],
-  ["no date", { field: "date", subjectId: "bar" }],
-])("falls back to the generic message for an hours refusal naming %s", async (_, params) => {
-  setLocale("en");
-  const changed = {
-    ...view,
-    stations: [
-      ...view.stations,
-      { ...view.stations[0]!, id: "terrace", name: "Terrace", isDefault: false, displayOrder: 2 },
-    ],
-  };
-  const a = api({
-    load: vi.fn().mockResolvedValue(changed),
-    setDefaultStation: vi.fn().mockRejectedValue({ code: "hours.invalid", params }),
-  });
-  const el = await mount(a);
-  q(el, '[data-test="make-default-terrace"]')!.click();
-  await vi.waitFor(() =>
-    expect(q(el, '[role="alert"]')?.textContent?.trim()).toBe("The change could not be saved."),
-  );
-});
 it("saves station name and order through their own controls and thresholds together through the editor", async () => {
   const next = withUpstairs({ open: true, why: "open" });
   const a = api({ load: vi.fn().mockResolvedValue(next), reorderStations: vi.fn() });
@@ -3770,8 +3704,8 @@ describe("Routing grid", () => {
   it("Make default from All × Every zone calls the default route and maps its refusal", async () => {
     const { a, el } = await mountGrid({
       setDefaultStation: vi.fn().mockRejectedValue({
-        code: "hours.invalid",
-        params: { field: "date", date: "2096-06-10", subjectId: "bar" },
+        code: "station.not_found",
+        params: { stationId: "kitchen" },
       }),
     });
     await chooseCell(el, "all", "every", "Kitchen");
@@ -3779,9 +3713,7 @@ describe("Routing grid", () => {
     expect(a.preview).not.toHaveBeenCalled();
     expect(a.setCell).not.toHaveBeenCalled();
     await vi.waitFor(() =>
-      expect(q(el, '[role="alert"]')?.textContent?.trim()).toBe(
-        "Bar would go back to its saved hours, which overlap a day next to the special date on Sun, 10 Jun 2096. Move or delete that special date on the Hours page first.",
-      ),
+      expect(q(el, '[role="alert"]')?.textContent?.trim()).toBe("The change could not be saved."),
     );
   });
 
