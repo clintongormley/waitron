@@ -3,11 +3,12 @@ import type { Transaction } from "@waitron/db";
 import { readLocationClock } from "@waitron/reporting";
 import { AppError, cutoverForBusinessDay, type BusinessDayClock } from "@waitron/shared";
 import { assertBusinessDayScheduleWrite } from "./business-day-schedule.js";
+import { resolveDepartmentDays } from "./day-resolver.js";
 import type { LocalDate } from "./hours-types.js";
 import { departmentEndOffsetClash, readRoutingUses, requirePeriod } from "./menu-timetable.js";
 import { invalidTimetable } from "./menu-timetable-rules.js";
 import type { PeriodRoutingUse } from "./menu-timetable-types.js";
-import type { VenueScope } from "./operations.js";
+import { storedTime, wireTime, type VenueScope } from "./operations.js";
 import { menuPeriods } from "./schema/menus.js";
 import { periodExtensions } from "./schema/period-extensions.js";
 import { routingCellPeriods } from "./schema/routing.js";
@@ -251,6 +252,7 @@ export async function deletePeriod(
       .set({ periodId: replacementId })
       .where(eq(departmentDayRanges.periodId, periodId));
     await joinTouchingRanges(tx, dayIds, clock);
+    await fitExtensionsToReplacement(tx, cfg, period.departmentId, periodId, replacementId, clock);
     await tx
       .update(periodExtensions)
       .set({ periodId: replacementId })
@@ -263,6 +265,59 @@ export async function deletePeriod(
       reason: "end_offset",
       ...clash,
     });
+}
+
+/** Starts each of `periodId`'s extensions where the replacement's time covering its start now
+ *  ends, as keepPeriodOpen would write it for the replacement, and drops one that time covers. */
+async function fitExtensionsToReplacement(
+  tx: Transaction,
+  cfg: VenueScope,
+  departmentId: string,
+  periodId: string,
+  replacementId: string,
+  clock: BusinessDayClock,
+): Promise<void> {
+  const extensions = await tx
+    .select({
+      id: periodExtensions.id,
+      businessDay: periodExtensions.businessDay,
+      startsAt: periodExtensions.startsAt,
+      endsAt: periodExtensions.endsAt,
+    })
+    .from(periodExtensions)
+    .where(eq(periodExtensions.periodId, periodId));
+  if (extensions.length === 0) return;
+  const days = await resolveDepartmentDays(
+    tx,
+    cfg,
+    departmentId,
+    [...new Set(extensions.map((row) => row.businessDay))],
+    clock,
+  );
+  for (const row of extensions) {
+    const cutover = cutoverForBusinessDay(clock, row.businessDay);
+    const extension = rangeSpan(
+      { startsAt: wireTime(row.startsAt), endsAt: wireTime(row.endsAt) },
+      cutover,
+    );
+    const covering = days
+      .get(row.businessDay)!
+      .ranges.map((range) => ({ range, span: rangeSpan(range, cutover) }))
+      .find(
+        ({ range, span }) =>
+          range.periodId === replacementId &&
+          span.start <= extension.start &&
+          extension.start < span.end,
+      );
+    if (covering === undefined) continue;
+    if (covering.span.end >= extension.end)
+      await tx.delete(periodExtensions).where(eq(periodExtensions.id, row.id));
+    else
+      await tx
+        .update(periodExtensions)
+        .set({ startsAt: storedTime(covering.range.endsAt) })
+        .where(eq(periodExtensions.id, row.id));
+  }
 }
 
 /** Joins touching ranges of one period within each of `dayIds`' days, ordered from the day's

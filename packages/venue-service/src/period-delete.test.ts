@@ -11,6 +11,7 @@ import {
 import {
   CORE_MIGRATIONS,
   categories,
+  floorZones,
   kitchenStations,
   locations,
   withTransaction,
@@ -22,16 +23,18 @@ import { readLocationClock } from "@waitron/reporting";
 import { AppError, locationId as brandLocationId } from "@waitron/shared";
 import { resolveDepartmentDays } from "./day-resolver.js";
 import { localTimeOccurrences } from "./hours-occurrences.js";
+import { keepPeriodOpen, readKeepOpen } from "./keep-open.js";
 import {
   readRoutingUses,
   replaceMenuWeek,
+  resolveDepartmentService,
   saveMenuPeriod,
   scheduleEndOffsetClash,
   updateMenuPeriod,
 } from "./menu-timetable.js";
 import type { MenuSlot } from "./menu-timetable-types.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import { createDepartment } from "./operations.js";
+import { configureZone, createDepartment } from "./operations.js";
 import { deletePeriod, periodDeleteImpact, readPaintedIn } from "./period-delete.js";
 import { menuPeriods } from "./schema/menus.js";
 import { periodExtensions } from "./schema/period-extensions.js";
@@ -673,6 +676,134 @@ describe("deleting a period", () => {
         "2026-10-01 Afternoon 16:00-16:30",
         `${TODAY} Afternoon 16:00-17:00`,
       ]);
+    });
+
+    describe("when the period was kept open today into the replacement's time", () => {
+      const local = (time: string) => localTimeOccurrences(TODAY, time, ZONE)[0]!;
+
+      /** Wednesday: Lunch 12:00-16:00, Afternoon 16:00-20:00, Dinner 20:00-23:00; Lunch kept
+       *  open at 15:00 until `until`, then deleted with Afternoon in its place. */
+      async function keptOpenThenReplaced(until: string) {
+        const v = await venue();
+        const zoneId = await scoped(async (tx) => {
+          const [zone] = await tx
+            .insert(floorZones)
+            .values({ locationId: v.locationId, name: "Dining" })
+            .returning({ id: floorZones.id });
+          await configureZone(tx, v.cfg, { zoneId: zone!.id, departmentId: v.restaurant });
+          await replaceMenuWeek(
+            tx,
+            v.cfg,
+            v.restaurant,
+            [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+              weekday,
+              slots:
+                weekday === 3
+                  ? [
+                      slot(v.lunch, "12:00", "16:00"),
+                      slot(v.afternoon, "16:00", "20:00"),
+                      slot(v.dinner, "20:00", "23:00"),
+                    ]
+                  : [],
+            })),
+            WRITE_AT,
+            0,
+            { seasonId: v.seasons.autumn },
+          );
+          return zone!.id;
+        });
+        await scoped((tx) =>
+          keepPeriodOpen(tx, v.cfg, zoneId, { periodId: v.lunch, until }, local("15:00")),
+        );
+        await scoped((tx) => deletePeriod(tx, v.cfg, v.lunch, v.afternoon, local("15:00"), 0));
+        const till = (time: string) =>
+          scoped(async (tx) => ({
+            service: await resolveDepartmentService(tx, v.cfg, v.restaurant, local(time)),
+            keepOpen: (await readKeepOpen(tx, v.cfg, zoneId, local(time))).period,
+          }));
+        const extensions = async () =>
+          (
+            await db
+              .select({
+                businessDay: periodExtensions.businessDay,
+                periodId: periodExtensions.periodId,
+                startsAt: periodExtensions.startsAt,
+                endsAt: periodExtensions.endsAt,
+              })
+              .from(periodExtensions)
+              .where(eq(periodExtensions.departmentId, v.restaurant))
+          ).map(
+            (row) =>
+              `${row.businessDay} ${row.periodId === v.afternoon ? "Afternoon" : row.periodId} ${hhmm(row.startsAt)}-${hhmm(row.endsAt)}`,
+          );
+        return { v, till, extensions };
+      }
+
+      it("shows Afternoon running to its own 20:00 end when Lunch was kept open to 17:00", async () => {
+        const { v, till, extensions } = await keptOpenThenReplaced("17:00");
+
+        expect(await extensions()).toEqual([]);
+
+        for (const [time, firstChoice] of [
+          ["16:30", "20:15"],
+          ["18:00", "20:15"],
+        ] as const) {
+          const { service, keepOpen } = await till(time);
+          expect({ time, open: service.open, periodId: service.periodId }).toEqual({
+            time,
+            open: true,
+            periodId: v.afternoon,
+          });
+          expect(service.keepOpen).toEqual({
+            periodId: v.afternoon,
+            periodName: "Afternoon",
+            endsAt: "20:00",
+            running: true,
+            extendedUntil: null,
+          });
+          expect({ time, ...keepOpen, choices: keepOpen!.choices[0] }).toMatchObject({
+            time,
+            id: v.afternoon,
+            endsAt: "20:00",
+            running: true,
+            extendedUntil: null,
+            choices: firstChoice,
+          });
+        }
+      });
+
+      it("shows Afternoon kept open to 21:00 when Lunch was kept open past Afternoon's end", async () => {
+        const { v, till, extensions } = await keptOpenThenReplaced("21:00");
+
+        expect(await extensions()).toEqual([`${TODAY} Afternoon 20:00-21:00`]);
+
+        for (const [time, firstChoice] of [
+          ["16:30", "20:15"],
+          ["20:30", "20:45"],
+        ] as const) {
+          const { service, keepOpen } = await till(time);
+          expect({ time, open: service.open, periodId: service.periodId }).toEqual({
+            time,
+            open: true,
+            periodId: v.afternoon,
+          });
+          expect(service.keepOpen).toEqual({
+            periodId: v.afternoon,
+            periodName: "Afternoon",
+            endsAt: "21:00",
+            running: true,
+            extendedUntil: "21:00",
+          });
+          expect({ time, ...keepOpen, choices: keepOpen!.choices[0] }).toMatchObject({
+            time,
+            id: v.afternoon,
+            endsAt: "21:00",
+            running: true,
+            extendedUntil: "21:00",
+            choices: firstChoice,
+          });
+        }
+      });
     });
   });
 
