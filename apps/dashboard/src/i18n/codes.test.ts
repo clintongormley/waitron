@@ -242,7 +242,6 @@ it("has English and Spanish copy for every code in the bucket-copy routes' statu
     "backup.stream_test_failed",
     "backup.stream_not_configured",
     "backup.archive_namespace_overlap",
-    "backup.archive_settings_invalid",
     "backup.archive_settings_unreadable",
     "backup.stream_signer_missing",
     "backup.recovery_key_missing",

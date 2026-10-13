@@ -2465,7 +2465,11 @@ describe("backup admin routes", () => {
         const { sc, sup, status, saved } = await savedInBucket();
         await writeFile(join(sc.stateDir, "backup.env"), "");
         expect(sup.current().keyFingerprint).toBe(keyFingerprint(KEY_1));
-        expect((await status()).keyFingerprint).toBe(saved.keyFingerprint);
+        expect(await status()).toMatchObject({
+          keyFingerprint: saved.keyFingerprint,
+          recoveryKeySet: true,
+          recoveryKeyTooShort: false,
+        });
       }, 60_000);
 
       it("a record stored while nothing is loaded still gets a new revision and a reload", async () => {

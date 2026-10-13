@@ -92,7 +92,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "backup.stream_test_failed": 422,
   "backup.stream_not_configured": 409,
   "backup.archive_namespace_overlap": 400,
-  "backup.archive_settings_invalid": 500,
   "backup.archive_settings_unreadable": 409,
   "backup.stream_signer_missing": 409,
   "backup.recovery_key_missing": 409,
