@@ -204,6 +204,15 @@ switch, and the dated week code went.
   would leave one copy of the rule. The "Add to" offer reads every special day with every date
   (`GET …/special-days`) to show a name and a latest date.
 
+**Left open by A506-7, for the later parts.**
+- Public holidays' names show in Spanish in the English interface (seen on the month view, #NNNN):
+  the official lists carry one name per holiday. Believed to predate A506-7; not checked against
+  the year view's history.
+- At 390 px a long name in a month cell breaks mid-word ("Christ|mas"): the dashboard page declares
+  no language, so the browser cannot hyphenate.
+- The special-day dialog's note under "Every year" (`special.holiday_note`, from #1603) says "each
+  year" twice in English and reads as awkwardly in Spanish.
+
 **Left open by A506-6, for the later parts.**
 - A season dialog whose season another session deletes says "This season no longer exists." but
   stays open with Save and Delete still live (`season-dialog.ts`, #1616); the zone and department
@@ -304,9 +313,6 @@ closed, as today.
   leaving with unsaved painting asks first.
 
 **Taken in from older entries.**
-- Look at the month's date headings and Today marker in EN/ES, both themes, at 1280 and 390 px
-  (left open by A506-7, #NNNN). Its tests check that a heading carries only the day's number in
-  EN and ES, run axe in both themes and check the month fits 390 px; nobody has looked at it yet.
 
 **For the spec to settle** (settled in the spec's sections 8, 9, 10.2, 12 and 14; its review found the
 kind has three readers, not one, and that `station-times.ts` reads the week only through routing's
