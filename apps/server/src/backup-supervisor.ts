@@ -19,8 +19,8 @@ import { codeOf } from "@waitron/server-kit";
 import { buildBackupBackend } from "./backup-backends.js";
 import type { BackupConfig, BackupSchedule } from "./backup-config.js";
 import type { ScheduleClock } from "./backup-schedule.js";
-import { readBackupStatus, type BackupStatus } from "./backup-status.js";
-import { runBackupSweep } from "./backup-sweep.js";
+import { readBackupStatus, type DestinationStatus } from "./backup-status.js";
+import { runBackupSweep, type DestinationResult } from "./backup-sweep.js";
 import type { BackupOutcomeHolder } from "./alert-sources.js";
 import type { StorageBackend } from "./storage-backend.js";
 import type { DeploymentEnvironment } from "./config.js";
@@ -43,6 +43,19 @@ export interface BackupRuntimeStatus {
   /** The effective running recovery key, for `GET recovery-key`. Never logged. */
   recoveryKey: string | undefined;
 }
+
+/** A destination's freshness plus what the CURRENT sweep did there: `storedUnderCurrentKey` once
+ * it stored, and the latest upload and pruning codes. */
+export type SupervisedDestinationStatus = DestinationStatus & {
+  storedUnderCurrentKey: boolean;
+  uploadErrorCode: string | null;
+  pruneErrorCode: string | null;
+};
+
+export type SupervisedBackupStatus =
+  { configured: false } | { configured: true; destinations: SupervisedDestinationStatus[] };
+
+type SweepRecord = Omit<SupervisedDestinationStatus, keyof DestinationStatus>;
 
 export interface BackupSupervisorDeps {
   /** Re-reads the box-env files from DISK each reload — closing over a boot-time value would make
@@ -68,6 +81,8 @@ export interface BackupSupervisorDeps {
   /** DI for tests; defaults to `openVenueDatabase`. */
   openVenue?: (directory: string) => Promise<VenueDatabase>;
   onScheduled?: (at: number | null) => void;
+  /** DI for tests; defaults to `readBackupStatus`'s own limit. */
+  statusReadTimeoutMs?: number;
   now?: () => Date;
   sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
 }
@@ -91,6 +106,8 @@ export class BackupSupervisor {
    * in-process proof that an artifact exists under the CURRENT key. `archiveUnderCurrentKey` is this
    * flag. */
   #storedUnderCurrentKey = false;
+  /** Per destination, what the running sweep has reported since the last reload. */
+  #sweepRecords = new Map<string, SweepRecord>();
 
   constructor(deps: BackupSupervisorDeps) {
     this.#deps = deps;
@@ -103,6 +120,7 @@ export class BackupSupervisor {
     this.#reloading = true;
     try {
       this.#storedUnderCurrentKey = false;
+      this.#sweepRecords = new Map();
       await this.#teardown();
       // A `stop()` may have run while we awaited the teardown, which already left no worker/handle.
       if (this.#stopped) return;
@@ -161,6 +179,10 @@ export class BackupSupervisor {
           // still store an archive under the OLD key during that wait.
           if (!controller.signal.aborted) this.#storedUnderCurrentKey = true;
         },
+        onDestinationResult: (result) => {
+          // Guarded like `onStored`: a replaced sweep can still report a store under the OLD key.
+          if (!controller.signal.aborted) this.#recordResult(result);
+        },
         sleep: this.#deps.sleep ?? realSleep,
         now: this.#deps.now,
         log: this.#deps.log,
@@ -192,14 +214,49 @@ export class BackupSupervisor {
 
   /** `current()` plus the async per-destination freshness read and the derived `archiveUnderCurrentKey`. */
   async status(): Promise<
-    BackupRuntimeStatus & { backupStatus: BackupStatus; archiveUnderCurrentKey: boolean }
+    BackupRuntimeStatus & { backupStatus: SupervisedBackupStatus; archiveUnderCurrentKey: boolean }
   > {
     const base = this.current();
     const cfg = this.#config;
     const now = this.#now();
     const backends = cfg?.destinations.map(buildBackupBackend) ?? [];
-    const backupStatus = await readBackupStatus(backends, cfg?.staleAfterMs ?? 0, now);
+    let read;
+    try {
+      read = await readBackupStatus(
+        backends,
+        cfg?.staleAfterMs ?? 0,
+        now,
+        this.#deps.statusReadTimeoutMs,
+      );
+    } finally {
+      this.#closeBackends(backends);
+    }
+    const records = this.#sweepRecords;
+    const backupStatus: SupervisedBackupStatus = read.configured
+      ? {
+          configured: true,
+          destinations: read.destinations.map((d) => ({
+            ...d,
+            ...(records.get(d.id) ?? {
+              storedUnderCurrentKey: false,
+              uploadErrorCode: null,
+              pruneErrorCode: null,
+            }),
+          })),
+        }
+      : read;
     return { ...base, backupStatus, archiveUnderCurrentKey: this.#storedUnderCurrentKey };
+  }
+
+  /** A store stays counted for the rest of the sweep; an upload code is cleared only by a later
+   * store, and a pruning code only by a later store whose pruning succeeded. */
+  #recordResult(result: DestinationResult): void {
+    const prev = this.#sweepRecords.get(result.id);
+    this.#sweepRecords.set(result.id, {
+      storedUnderCurrentKey: (prev?.storedUnderCurrentKey ?? false) || result.stored,
+      uploadErrorCode: result.uploadErrorCode,
+      pruneErrorCode: result.stored ? result.pruneErrorCode : (prev?.pruneErrorCode ?? null),
+    });
   }
 
   async stop(): Promise<void> {
@@ -214,7 +271,15 @@ export class BackupSupervisor {
   async #teardown(): Promise<void> {
     this.#controller?.abort();
     if (this.#worker !== undefined) await this.#worker.catch(() => {});
-    for (const backend of this.#backends.splice(0)) {
+    this.#closeBackends(this.#backends.splice(0));
+    if (this.#db !== undefined) await this.#db.close().catch(() => {});
+    this.#controller = undefined;
+    this.#worker = undefined;
+    this.#db = undefined;
+  }
+
+  #closeBackends(backends: StorageBackend[]): void {
+    for (const backend of backends) {
       try {
         backend.close();
       } catch (err) {
@@ -224,10 +289,6 @@ export class BackupSupervisor {
         });
       }
     }
-    if (this.#db !== undefined) await this.#db.close().catch(() => {});
-    this.#controller = undefined;
-    this.#worker = undefined;
-    this.#db = undefined;
   }
 
   #now(): Date {

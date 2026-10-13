@@ -33,7 +33,16 @@ const ENABLED: BackupStatusView = {
   backupStatus: {
     configured: true,
     destinations: [
-      { id: "primary", lastBackupAt: "2026-09-09T02:00:00Z", ageSeconds: 3600, stale: false },
+      {
+        id: "primary",
+        lastBackupAt: "2026-09-09T02:00:00Z",
+        ageSeconds: 3600,
+        stale: false,
+        readErrorCode: null,
+        storedUnderCurrentKey: true,
+        uploadErrorCode: null,
+        pruneErrorCode: null,
+      },
     ],
   },
   archiveUnderCurrentKey: true,
@@ -790,7 +799,16 @@ describe("backup-screen", () => {
       backupStatus: {
         configured: true,
         destinations: [
-          { id: "primary", lastBackupAt: "2026-08-01T02:00:00Z", ageSeconds: 999999, stale: true },
+          {
+            id: "primary",
+            lastBackupAt: "2026-08-01T02:00:00Z",
+            ageSeconds: 999999,
+            stale: true,
+            readErrorCode: null,
+            storedUnderCurrentKey: false,
+            uploadErrorCode: null,
+            pruneErrorCode: null,
+          },
         ],
       },
     };

@@ -13,6 +13,7 @@ import { createHealthState } from "./health.js";
 import { readBackupStatus, type BackupStatus } from "./backup-status.js";
 import { mountBoxStatusApi } from "./box-status.js";
 import { buildBackupBackend } from "./backup-backends.js";
+import { backupArchiveKey } from "./backup-keys.js";
 import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
 import { FIXTURE_CERT_PEM } from "./testing/tls-fixture.js";
@@ -200,7 +201,7 @@ describe("GET /api/box/status", () => {
   it("flows the per-destination backup shape through the route, reading a .backup.enc artifact as FRESH", async () => {
     const now = new Date("2026-08-29T10:00:00Z");
     const dir = mkdtempSync(join(tmpdir(), "box-status-backup-"));
-    const artifact = join(dir, "waitron-20260829T095900Z.backup.enc");
+    const artifact = join(dir, backupArchiveKey(new Date("2026-08-29T09:59:00Z")));
     writeFileSync(artifact, "ciphertext");
     const mtime = new Date(now.getTime() - 30_000); // 30s old — inside the 60s stale window
     utimesSync(artifact, mtime, mtime);
@@ -219,7 +220,13 @@ describe("GET /api/box/status", () => {
     expect(body.backup).toEqual({
       configured: true,
       destinations: [
-        { id: "primary", lastBackupAt: mtime.toISOString(), ageSeconds: 30, stale: false },
+        {
+          id: "primary",
+          lastBackupAt: mtime.toISOString(),
+          ageSeconds: 30,
+          stale: false,
+          readErrorCode: null,
+        },
       ],
     });
   });

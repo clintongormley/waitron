@@ -13,6 +13,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { decryptArtifact } from "./artifact-cipher.js";
 import { unpackArchive } from "./backup-archive.js";
 import type { BackupConfig } from "./backup-config.js";
+import { backupArchiveKey } from "./backup-keys.js";
 import { BackupSupervisor, keyFingerprint } from "./backup-supervisor.js";
 import { LocalFsBackend } from "./local-fs-backend.js";
 import { ALL_MODULES } from "./modules.js";
@@ -343,7 +344,10 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
     try {
       await sup.reload();
       await waitForEvent(refs, "backup.failed");
-      await writeFile(join(dest, "waitron-20200101T000000Z.backup.enc"), "old-key-ciphertext");
+      await writeFile(
+        join(dest, backupArchiveKey(new Date("2020-01-01T00:00:00Z"))),
+        "old-key-ciphertext",
+      );
       const s = await sup.status();
       // Visible to the freshness read…
       expect(s.backupStatus.configured).toBe(true);

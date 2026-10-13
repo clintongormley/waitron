@@ -1527,6 +1527,12 @@ export type BackupDestinationStatus = {
   lastBackupAt: string | null;
   ageSeconds: number | null;
   stale: boolean;
+  /** Why this destination could not be listed; it then reads stale with null times. */
+  readErrorCode: string | null;
+  /** This destination stored an archive since the running backup config was applied. */
+  storedUnderCurrentKey: boolean;
+  uploadErrorCode: string | null;
+  pruneErrorCode: string | null;
 };
 
 export type BackupFreshness =
