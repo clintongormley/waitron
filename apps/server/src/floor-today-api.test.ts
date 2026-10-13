@@ -104,6 +104,7 @@ interface FloorToday {
   placement: { x: number; y: number; rotation: number } | null;
   seats: number | null;
   takenOff: boolean;
+  zoneRevision: number;
 }
 
 async function floorToday(tableId: string): Promise<FloorToday | null> {
@@ -483,7 +484,7 @@ describe("today's routes", () => {
     expect((await floorToday(table.seated!))?.placement).toMatchObject({ x: 70, y: 70 });
   });
 
-  it("catches today's plan up before a change, so the change survives the next read", async () => {
+  it("a change sent from a read after the catch-up is applied, and survives the next read", async () => {
     const { zoneId, table, master, revision } = await plannedZone(v, [
       { key: "t", label: "T", place: { x: 0, y: 0 } },
     ]);
@@ -508,9 +509,17 @@ describe("today's routes", () => {
     await expectRevision(v, resetZoneToday(zoneId), zoneId);
     expect((await todayRow(v, table.t!))?.x).toBe(0);
     await finish(partyId);
-    const caughtUp = (await zoneRevisionOf(v, zoneId))! + 1;
+    const stored = (await zoneRevisionOf(v, zoneId))!;
+    const read = (await floorToday(table.t!))!;
+    expect(read.placement).toMatchObject({ x: 50, y: 0 });
+    expect(read.zoneRevision).toBe(stored + 1);
 
-    await expectRevision(v, today(table.t!, "move", { x: 30, y: 0, zoneRevision: caughtUp }));
+    await expectRevision(
+      v,
+      today(table.t!, "move", { x: 30, y: 0, zoneRevision: read.zoneRevision }),
+      zoneId,
+      stored + 2,
+    );
 
     expect((await floorToday(table.t!))?.placement).toMatchObject({ x: 30, y: 0 });
   });
