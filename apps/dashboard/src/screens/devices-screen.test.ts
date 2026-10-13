@@ -2848,16 +2848,14 @@ describe("the Edit dialog", () => {
     it("puts a default printer, a printer's holder and a reader's holder holding a replacement pattern into the choices as written", async () => {
       const el = await openEdit(
         equipmentApi({
-          listPrinters: vi
-            .fn()
-            .mockResolvedValue([
-              { ...editPrinters[0]!, name: "Cocina $&" },
-              {
-                ...portableTerraza,
-                holder: { ...portableTerraza.holder!, deviceName: "Móvil $&" },
-              },
-              editPrinters[2],
-            ]),
+          listPrinters: vi.fn().mockResolvedValue([
+            { ...editPrinters[0]!, name: "Cocina $&" },
+            {
+              ...portableTerraza,
+              holder: { ...portableTerraza.holder!, deviceName: "Móvil $&" },
+            },
+            editPrinters[2],
+          ]),
           listReaderHolders: vi.fn().mockResolvedValue([
             {
               readerId: "r2",
