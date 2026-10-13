@@ -480,8 +480,10 @@ describe("Split tables… on a group with nobody seated", () => {
   it("two counters split off a Long table that still stands over the other two stay a group with Bar gone", async () => {
     const { table } = await LONG_OF_FOUR();
     await ok(splitOff(table.long!, [table.c5!, table.c6!], 4));
-    await merge(table.bar!, table.c5!, "right", 6);
-    await merge(table.c6!, table.c5!, "left", 6);
+    await merge(table.c6!, table.c5!, "right", 6);
+    await merge(table.bar!, table.c6!, "right", 6);
+    expect(await placeOf(table.c5!)).toEqual({ x: 14, y: 20, width: 2, height: 2 });
+    expect(await placeOf(table.c6!)).toEqual({ x: 16, y: 20, width: 2, height: 2 });
     expect(await groupOf(table.c5!)).toEqual({
       seats: 6,
       members: [table.bar!, table.c5!, table.c6!].sort(),
