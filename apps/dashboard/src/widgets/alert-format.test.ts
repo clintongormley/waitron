@@ -113,6 +113,11 @@ it("names a destination with no navigation label by its screen name", () => {
   expect(goToLabel("no-such-screen")).toBe("Go to no-such-screen");
 });
 
+it("names a destination whose screen name holds a replacement pattern as written", () => {
+  setLocale("en-GB");
+  expect(goToLabel("screen-$&")).toBe("Go to screen-$&");
+});
+
 it("formats a time, and nothing for no time", () => {
   expect(formatAlertTime(null)).toBe("");
   // The browser project pins Chromium to UTC (vitest.config.ts), so a UTC instant reads as written.

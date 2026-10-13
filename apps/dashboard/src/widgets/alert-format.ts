@@ -1,5 +1,5 @@
 import { t as tKit } from "@waitron/dashboard-kit";
-import { currentLocale, t } from "../i18n/t.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 import type { AlertView, DashboardApi } from "../api/client.js";
 
 const INCIDENT_PREFIX = "incident:";
@@ -65,5 +65,5 @@ export function formatAlertTime(iso: string | null): string {
 export function goToLabel(screen: string): string {
   const key = `nav.${screen}`;
   const label = tKit(key);
-  return t("alerts.go_to").replace("{screen}", label === key ? screen : label);
+  return fill("alerts.go_to", { screen: label === key ? screen : label });
 }
