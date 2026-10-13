@@ -431,7 +431,7 @@ describe("parseArchiveSettings", () => {
     expect(JSON.stringify(params)).not.toContain("custom-secret");
   });
 
-  const storedBucket = (bucket as { bucket: Record<string, unknown> }).bucket;
+  const storedBucket = (bucket as { bucket: object }).bucket;
   it.each([
     ["an endpoint that is not a URL", { endpoint: "not a url" }],
     ["an ftp endpoint", { endpoint: "ftp://s3.example.test" }],
