@@ -295,8 +295,6 @@ const en = {
   "venue.business_day_hours_conflict": "Adjust the conflicting hours first.",
   "hours.invalid":
     "Check the highlighted hours: periods must not overlap, including past midnight.",
-  "hours.date_taken": "{date} already has special hours.",
-  "hours.date_not_found": "This special date no longer exists.",
   "hours.always_open": "The default station is always open, so its hours cannot change.",
   "holidays.not_found": "This local holiday no longer exists.",
   "holidays.geography_not_found": "These local holidays have already been removed.",
@@ -447,9 +445,6 @@ const en = {
   "hours.tab.week": "Standard week",
   "hours.tab.dates": "Special dates",
   "hours.tab.station_week": "Week",
-  "hours.tab.named_days": "Named days",
-  "hours.repeating_days_week": "Repeating named days follow each prep station’s standard week.",
-  "hours.named_days_calendar": "Add, copy or delete named days in Opening hours → Calendar.",
   "hours.show_inactive": "Show inactive",
   "hours.clock_note": "Times are the venue's local time ({timeZone}).",
   "hours.clock_unreadable":
@@ -551,17 +546,13 @@ const en = {
   "hours.add_date": "Add a date",
   "hours.close_venue": "Close the whole venue on a date",
   "hours.add_heading": "Add a special date",
-  "hours.edit_heading": "Edit named day",
   "hours.close_heading": "Close the whole venue",
-  "hours.whole_venue_note":
-    "Every department and prep station is closed on this named day, except the default station, which is always open. Manage this closure in Opening hours → Calendar.",
   "hours.default_station": "{name}: Always open (default station)",
   "hours.actions": "Actions",
   "hours.row_actions": "Actions: {name}",
   "hours.edit": "Edit",
   "hours.duplicate": "Duplicate",
   "hours.delete": "Delete",
-  "hours.no_dates": "No named days yet.",
   "hours.duplicate_heading": "Duplicate {name}",
   "hours.duplicate_note":
     "Copies the colour and every cell to each date. A date that is a public holiday, local ones included, takes the holiday's name; any other date keeps this name.",
@@ -1062,8 +1053,6 @@ const es: Record<keyof typeof en, string> = {
   "venue.business_day_hours_conflict": "Ajusta primero los horarios en conflicto.",
   "hours.invalid":
     "Revisa los horarios marcados: los periodos no pueden solaparse, tampoco pasada la medianoche.",
-  "hours.date_taken": "El {date} ya tiene un horario especial.",
-  "hours.date_not_found": "Esta fecha especial ya no existe.",
   "hours.always_open":
     "La estación predeterminada siempre está abierta; su horario no se puede cambiar.",
   "holidays.not_found": "Este festivo local ya no existe.",
@@ -1218,11 +1207,6 @@ const es: Record<keyof typeof en, string> = {
   "hours.tab.week": "Semana habitual",
   "hours.tab.dates": "Fechas especiales",
   "hours.tab.station_week": "Semana",
-  "hours.tab.named_days": "Días con nombre",
-  "hours.repeating_days_week":
-    "Los días con nombre que se repiten siguen la semana habitual de cada estación de preparación.",
-  "hours.named_days_calendar":
-    "Añade, copia o elimina días con nombre en Horario de apertura → Calendario.",
   "hours.show_inactive": "Mostrar inactivos",
   "hours.clock_note": "Las horas son las del establecimiento ({timeZone}).",
   "hours.clock_unreadable":
@@ -1327,17 +1311,13 @@ const es: Record<keyof typeof en, string> = {
   "hours.add_date": "Añadir una fecha",
   "hours.close_venue": "Cerrar todo el establecimiento una fecha",
   "hours.add_heading": "Añadir una fecha especial",
-  "hours.edit_heading": "Editar día con nombre",
   "hours.close_heading": "Cerrar todo el establecimiento",
-  "hours.whole_venue_note":
-    "Todos los departamentos y estaciones de preparación cierran este día con nombre, salvo la estación predeterminada, que siempre está abierta. Gestiona este cierre en Horario de apertura → Calendario.",
   "hours.default_station": "{name}: Siempre abierta (estación predeterminada)",
   "hours.actions": "Acciones",
   "hours.row_actions": "Acciones: {name}",
   "hours.edit": "Editar",
   "hours.duplicate": "Duplicar",
   "hours.delete": "Borrar",
-  "hours.no_dates": "Todavía no hay días con nombre.",
   "hours.duplicate_heading": "Duplicar {name}",
   "hours.duplicate_note":
     "Copia el color y cada celda en cada fecha. Una fecha que es festivo, también local, toma el nombre del festivo; cualquier otra fecha conserva este nombre.",
