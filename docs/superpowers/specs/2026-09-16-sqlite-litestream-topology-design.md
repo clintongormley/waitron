@@ -704,6 +704,8 @@ no-tenant-column guard.
 > one-off upload ran before each restore, so "restored completely" cannot tell the daemon kept up from
 > the upload catching up (the same note). The side file
 > is bounded instead by stopping Litestream at a size limit (#590).
+>
+> **2026-10-13 (A549).** while Litestream runs, its own checkpoints restart the side file; the pause bounds it when they do not ([testing-guide.md](../../developers/testing-guide.md), "A copy behind, the side file's bound, and the guards").
 
 ---
 

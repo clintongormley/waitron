@@ -37,3 +37,37 @@ export function readSideFile(path: string): {
     };
   }
 }
+
+/**
+ * How many whole frames have been written since the side file's last restart, or null with no
+ * header. A restart writes from the first frame again under a new salt, so the frames written since
+ * are the leading run whose salt matches the header's; the frames after it are older.
+ */
+export function framesUnderHeader(path: string): number | null {
+  const side = readSideFile(path);
+  if (side.header === null || side.bytes === null) return null;
+  const frameBytes = 24 + side.header.pageBytes;
+  const salt = Buffer.from(side.header.salt, "hex");
+  let file: number;
+  try {
+    file = openSync(path, "r");
+  } catch {
+    return null;
+  }
+  try {
+    const whole = Math.floor((side.bytes - 32) / frameBytes);
+    const frameSalt = Buffer.alloc(8);
+    const current = (frame: number) =>
+      readSync(file, frameSalt, 0, 8, 32 + frame * frameBytes + 8) === 8 && frameSalt.equals(salt);
+    let low = 0;
+    let high = whole;
+    while (low < high) {
+      const middle = Math.ceil((low + high) / 2);
+      if (current(middle - 1)) low = middle;
+      else high = middle - 1;
+    }
+    return low;
+  } finally {
+    closeSync(file);
+  }
+}

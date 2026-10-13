@@ -4309,6 +4309,15 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 - **Whether Litestream uploads anything while the side file is unchanged is not measured.** Left
   open by SQLite slice 2 Task 7 (#619, how current the bucket copy is).
 
+- **While the bucket is away, Litestream's local level-0 folder grows with nothing measuring or
+  limiting it** (`.venue.db-litestream/ltx/0/`): 61 MB over 1,595 sales in about 60 s, with the stream
+  pause test's sellers slowed to about CI's rate (an 80 ms wait before each sale) on the owner's Mac. A venue's real rate and the box's disk were not
+  measured. Left open by A549.
+
+- **Whether the side file grows, and the pause fires, in a real network outage was not run.** A549
+  stopped the bucket server; with a refused or timed-out connection, Litestream's start-up check
+  errors and drops its read transaction to retry (`db.go` v0.5.17, `init`). Left open by A549.
+
 - **Task 8a** (#627, the server side of the bucket-copy settings): the dead-process pointer write
   under Task 6 applies here too. Left open by SQLite slice 2.
 
@@ -4833,13 +4842,10 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   the Waitron servers' own ports in the loop and pause tests are drawn the same way, and a lost one
   fails the boot loudly (`server.listen_failed`) rather than silently; not changed.
 
-- **Why the stream pause test's file growth differs between runs remains unexplained (A529).**
-  Main run `38203241435` timed out after 3,897 sales below the 16 MiB limit; the next three passed.
-  The test now logs request and gate timings, file size and WAL header identity during each phase,
-  plus stream/S3 context on failure. Next: use a failing run's samples to distinguish repeated file
-  reuse from slow requests or waits around a measurement. No deadline, limit or existing assertion
-  was relaxed.
-  [Detail](backlog/ci.md#why-the-side-files-growth-per-sale-differs-so-much-between-runs-is-not-tested)
+- **What moved the odds before the stream pause test's fill timed out on main on 2026-10-12 (runs
+  `38203241435` and `38288894550`) is not established.** The fill raced Litestream's own
+  checkpoints; what moved the odds (pages written per sale, runner
+  speed) was not measured. Left open by A549.
 
 - **The case "refused while the run is stopping" catches a removed stop check only through the order
   two pending steps finish in,** so re-run that removal if `#bucketAnswers` is restructured. Left

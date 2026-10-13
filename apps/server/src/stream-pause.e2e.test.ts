@@ -1,6 +1,8 @@
 // The stream's pause at the side-file limit, end to end, with the real pinned Litestream, a real
 // S3-compatible server and sales posted to the running server's own sale route:
 //   - the bucket is frozen, so every call to it goes unanswered;
+//   - Litestream is killed, and the one the supervisor starts in its place holds its read
+//     transaction while it waits on the frozen bucket, so nothing can restart the side file;
 //   - sales grow the side file past the limit, and the supervisor stops Litestream and folds the
 //     file back in the server's own write queue while three sales at a time post on one till
 //     session;
@@ -65,7 +67,7 @@ import {
   type S3TestServer,
 } from "./testing/s3-test-server.js";
 import { freePort } from "./testing/free-ports.js";
-import { readSideFile } from "./testing/stream-pause-diagnostics.js";
+import { framesUnderHeader, readSideFile } from "./testing/stream-pause-diagnostics.js";
 
 const INSTALL = "node scripts/setup-litestream.mjs && node scripts/setup-s3-test-server.mjs";
 const REQUIRED = process.env.CI === "true" || process.env.WAITRON_REQUIRE_STREAM_BINARIES === "1";
@@ -80,7 +82,7 @@ const DEVICE_TOKEN = "stream-pause-e2e-device-token";
  */
 const WAL_LIMIT_BYTES = 16 * 1024 * 1024;
 
-// `waitFor` checks each POINTER, RESUME and UPLOAD wait's deadline between probes, the helper
+// `waitFor` checks each POINTER, RESTART, RESUME and UPLOAD wait's deadline between probes, the helper
 // enforces the S3 server's start, and `restoreGeneration` its RESTORE_MS ceiling; the fill and the
 // wait for the fold-back each check a deadline between sales. BOOT_MS is a budget nothing here enforces, and UNTIMED_MS covers
 // migrations, provisioning and the close. The case's timeout is the sum, because Vitest's timer
@@ -89,7 +91,7 @@ const WAL_LIMIT_BYTES = 16 * 1024 * 1024;
 // Litestream's stop, which escalates to SIGKILL after five seconds.
 const POINTER_WAIT_MS = 30_000;
 const BOOT_MS = 30_000;
-/** A loaded CI runner took more than 30 s to reach the limit (testing-guide.md, the pause test). */
+/** CI run 36210908359 had not reached the limit after 30 s (testing-guide.md, the pause test). */
 const FILL_WAIT_MS = 180_000;
 const FOLD_SLACK_MS = 15_000;
 const RESUME_WAIT_MS = 30_000;
@@ -97,6 +99,14 @@ const UPLOAD_WAIT_MS = 30_000;
 const RESTORE_MS = 30_000;
 const UNTIMED_MS = 60_000;
 const POLL_MS = 250;
+/** The supervisor restarts an exited Litestream after its first backoff, one second. */
+const RESTART_WAIT_MS = 10_000;
+/**
+ * With no reader holding the side file, SQLite's automatic checkpoint restarts it once it holds
+ * 1,000 frames (its default; the store sets none), so twice that under one header means something
+ * holds it.
+ */
+const HELD_FRAMES = 2 * 1_000;
 /**
  * How long before the supervisor's side-file check the sellers start again, so they are selling
  * at it.
@@ -118,6 +128,7 @@ const PAUSE_TIMEOUT_MS =
   BOOT_MS +
   2 * POINTER_WAIT_MS +
   (2 * TIMED_SALES + 1) * SALE_BUDGET_MS +
+  RESTART_WAIT_MS +
   FILL_WAIT_MS +
   TICK_MS +
   FOLD_SLACK_MS +
@@ -581,17 +592,66 @@ describe("the stream's pause at the side-file limit, with sales on the server's 
         ]),
       ).toBe("unanswered");
 
-      // 7. Sales grow the side file past the limit while Litestream still runs against the frozen
-      //    bucket. A supervisor measurement landing after the fill passed the limit but before
-      //    step 8 would pause the stream early, so near one the sellers post nothing from `bound`
-      //    plus LEAD_MS before it until LEAD_MS after it. That holds while each sale beats the
-      //    bound, as step 9 asserts, and the measurement is less than LEAD_MS late.
+      // 7. Litestream is killed, and the supervisor starts a new one against the frozen bucket. The
+      //    new one takes its read transaction, then waits on the bucket in its start-up check
+      //    (`init` in Litestream 0.5.17's `db.go`), so nothing can restart the side file; a running
+      //    Litestream keeps checkpointing locally without the bucket, restarting the side file.
+      const logDir = join(stateDir, "logs");
+      const pidPath = join(stateDir, "stream", "litestream.pid");
+      const readPid = async () => {
+        const pid = Number.parseInt(await readFile(pidPath, "utf8").catch(() => ""), 10);
+        return Number.isSafeInteger(pid) && pid > 1 ? pid : undefined;
+      };
+      const exits = async () =>
+        (await streamEvents(logDir)).filter((line) => line.event === "stream.litestream_exited")
+          .length;
+      const firstLitestream = await readPid();
+      expect(firstLitestream, "no Litestream PID recorded").toBeDefined();
+      const exitsBefore = await exits();
+      process.kill(firstLitestream!, "SIGKILL");
+      await waitFor("the supervisor to start a new Litestream", RESTART_WAIT_MS, async () => {
+        const pid = await readPid();
+        return pid !== undefined && pid !== firstLitestream && (await exits()) > exitsBefore
+          ? pid
+          : undefined;
+      });
+
+      // 8. Sales grow the side file past the limit while the new Litestream holds its read
+      //    transaction; a restart of the side file once it is held fails the fill at once. A
+      //    supervisor measurement landing after the fill passed the limit but before step 9 would
+      //    pause the stream early, so near one the sellers post nothing from `bound` plus LEAD_MS
+      //    before it until LEAD_MS after it. That holds while each sale beats the bound, as step 10
+      //    asserts, and the measurement is less than LEAD_MS late.
       const fillStarted = Date.now();
       const walAtFill = await fileBytes(walPath);
+      let held: { checkpointSequence: number; salt: string } | undefined;
+      const checkHeld = (): void => {
+        const header = readSideFile(walPath).header;
+        if (held === undefined) {
+          const frames = framesUnderHeader(walPath);
+          if (header !== null && frames !== null && frames >= HELD_FRAMES) {
+            held = { checkpointSequence: header.checkpointSequence, salt: header.salt };
+            console.log(
+              "stream pause: the side file is held",
+              JSON.stringify({ ...held, frames, elapsedMs: Date.now() - fillStarted }),
+            );
+          }
+          return;
+        }
+        if (header?.checkpointSequence !== held.checkpointSequence || header.salt !== held.salt) {
+          throw new Error(
+            `the side file was restarted during the fill: something is still checkpointing ` +
+              `(held at ${JSON.stringify(held)}, now ${JSON.stringify(header)})`,
+          );
+        }
+      };
       const filling = (
         await sellAtOnce(
           walAtFill,
-          (sale) => sale.walAfter >= WAL_LIMIT_BYTES,
+          (sale) => {
+            checkHeld();
+            return sale.walAfter >= WAL_LIMIT_BYTES;
+          },
           { at: fillStarted + FILL_WAIT_MS, what: "the side file to reach the limit" },
           async () => {
             const check = checkAfter(Date.now());
@@ -602,9 +662,10 @@ describe("the stream's pause at the side-file limit, with sales on the server's 
         )
       ).flat();
       const fillMs = Date.now() - fillStarted;
+      expect(held, "the fill ended before the side file was seen held").toBeDefined();
       expect(stream().state).toBe("streaming");
 
-      // 8. The sellers start again just before the supervisor's next measurement and sell until one
+      // 9. The sellers start again just before the supervisor's next measurement and sell until one
       //    of them sees the file folded back: the only thing in the server's own code that shrinks
       //    it is the stream's fold-back (`checkpointTruncate`, from `stream-host.ts`). Each seller's
       //    sales tile the time it sold, so each has exactly one sale whose two measurements straddle
@@ -625,8 +686,8 @@ describe("the stream's pause at the side-file limit, with sales on the server's 
       expect(across.map((sales) => sales.length)).toEqual(Array<number>(SELLERS).fill(1));
       expect(stream()).toMatchObject({ state: "paused", reason: "side_file_limit", generation });
 
-      // 9. Sales while paused: Litestream is stopped and the supervisor is waiting on its question
-      //    to the frozen bucket, which holds the pause.
+      // 10. Sales while paused: Litestream is stopped and the supervisor is waiting on its question
+      //     to the frozen bucket, which holds the pause.
       const duringPause = (
         await sellAtOnce(await fileBytes(walPath), (_, sold) => sold >= TIMED_SALES)
       ).flat();
@@ -649,7 +710,7 @@ describe("the stream's pause at the side-file limit, with sales on the server's 
         ...duringPause.map((sale) => Number(sale.invoiceNumber.split("/")[1])),
       );
 
-      // 10. The bucket answers again: the pause ends, Litestream restarts into the same generation,
+      // 11. The bucket answers again: the pause ends, Litestream restarts into the same generation,
       //     and a sale made while the bucket was frozen and Litestream stopped reaches it.
       s3.resume();
       const resumedAt = performance.now();
@@ -697,8 +758,9 @@ describe("the stream's pause at the side-file limit, with sales on the server's 
         },
       );
 
-      // 11. One pause in the whole run, at this limit, and it ended.
-      const events = await streamEvents(join(stateDir, "logs"));
+      // 12. One pause in the whole run, at this limit, and it ended; the only Litestream exit since
+      //     step 7 is the kill's.
+      const events = await streamEvents(logDir);
       const paused = events.filter((line) => line.event === "stream.paused");
       expect(paused).toEqual([
         expect.objectContaining({ generation, limitBytes: WAL_LIMIT_BYTES }),
@@ -706,6 +768,7 @@ describe("the stream's pause at the side-file limit, with sales on the server's 
       expect(events.map((line) => line.event).slice(events.indexOf(paused[0]!))).toContain(
         "stream.resumed",
       );
+      expect(await exits()).toBe(exitsBefore + 1);
     },
     PAUSE_TIMEOUT_MS,
   );
