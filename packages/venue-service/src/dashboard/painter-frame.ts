@@ -63,7 +63,7 @@ export class PainterFrame extends LitElement {
       .close {
         grid-area: close;
       }
-      h1 {
+      h2 {
         grid-area: title;
         margin: 0;
         font-size: var(--wt-font-size-lg);
@@ -168,7 +168,7 @@ export class PainterFrame extends LitElement {
               @click=${() => this.close()}
               ><wt-icon name="close"></wt-icon
             ></wt-button>
-            <h1>${this.heading}</h1>
+            <h2>${this.heading}</h2>
             <div class="picker"><slot name="picker"></slot></div>
             <div class="link"><slot name="link"></slot></div>
             <div class="actions">
@@ -177,7 +177,7 @@ export class PainterFrame extends LitElement {
                 variant="secondary"
                 ?disabled=${this.busy}
                 @click=${() => this.close()}
-                >${t("prep.cancel")}</wt-button
+                >${t("hours.cancel")}</wt-button
               >
               <wt-button
                 data-test="save"
@@ -185,7 +185,7 @@ export class PainterFrame extends LitElement {
                 ?disabled=${action.unchanged}
                 ?loading=${this.busy}
                 @click=${() => this.save()}
-                >${t("prep.save")}</wt-button
+                >${t("hours.save")}</wt-button
               >
             </div>
           </div>

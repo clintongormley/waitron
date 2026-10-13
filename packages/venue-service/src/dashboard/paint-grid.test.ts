@@ -943,7 +943,7 @@ test("a one-row stroke in the bottom visible hour paints only that row and does 
 test("a stroke from just above the bottom band into it does not scroll", async () => {
   const { el, scroll } = await tallGrid();
   const bottom = scroll.getBoundingClientRect().bottom;
-  const painted = await shortStrokeHeld(el, scroll, bottom - 23, bottom - 15);
+  const painted = await shortStrokeHeld(el, scroll, bottom - 21, bottom - 13);
   expect(minutes(painted.endsAt) - minutes(painted.startsAt)).toBeLessThanOrEqual(15);
 });
 

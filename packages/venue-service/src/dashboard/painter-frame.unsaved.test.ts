@@ -130,6 +130,7 @@ it.each([
   await choose("discard");
   await close;
   expect(frame.open).toBe(false);
+  expect(painter.draft).toBe("a");
   await expect.poll(() => app.shadowRoot!.activeElement).toBe(opener);
 });
 

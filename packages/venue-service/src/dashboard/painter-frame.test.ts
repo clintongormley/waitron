@@ -76,7 +76,7 @@ test("opens as a modal dialog covering the page, named by its heading", async ()
   expect(dialog.matches(":modal")).toBe(true);
   expect(modal(frame).size).toBe("full");
   expect(modal(frame).getAttribute("aria-label")).toBe("Winter week");
-  expect(part(frame, "h1").textContent).toBe("Winter week");
+  expect(part(frame, "h2").textContent).toBe("Winter week");
 });
 
 test("the bar stays in view while the paint grid scrolls, and the grid fills the space under it", async () => {
@@ -103,6 +103,7 @@ test("the bar stays in view while the paint grid scrolls, and the grid fills the
       Math.abs(box.bottom - part(frame, ".frame").getBoundingClientRect().bottom),
     ).toBeLessThan(1);
     expect(content.getBoundingClientRect().top).toBeGreaterThanOrEqual(box.top - 1);
+    expect(Math.abs(content.getBoundingClientRect().bottom - box.bottom)).toBeLessThan(1);
     expect(content.scrollHeight).toBeGreaterThan(content.clientHeight);
     expect(body.scrollHeight, "the dialog body itself has nothing to scroll").toBe(
       body.clientHeight,
@@ -199,7 +200,7 @@ describe.each(["en", "es"] as const)("the bar's width (%s)", (locale) => {
       await page.viewport(width, 800);
       setLocale(locale);
       const { frame } = await open();
-      const required = [dismiss(frame), part(frame, "h1"), cancel(frame), save(frame)];
+      const required = [dismiss(frame), part(frame, "h2"), cancel(frame), save(frame)];
       for (const each of required) {
         const box = each.getBoundingClientRect();
         expect(box.width).toBeGreaterThan(0);
@@ -207,7 +208,7 @@ describe.each(["en", "es"] as const)("the bar's width (%s)", (locale) => {
         expect(box.right).toBeLessThanOrEqual(width + 1);
         expect(box.top).toBeGreaterThanOrEqual(0);
       }
-      const title = part(frame, "h1");
+      const title = part(frame, "h2");
       expect(title.scrollWidth, "the heading is not cut short").toBeLessThanOrEqual(
         title.clientWidth,
       );

@@ -83,6 +83,7 @@ export class PaintGrid extends LitElement {
       font-family: var(--wt-font-family);
     }
     .scroll {
+      box-sizing: border-box;
       overflow: auto;
       max-block-size: 100%;
       border: 1px solid var(--wt-color-border);
