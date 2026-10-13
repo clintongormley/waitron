@@ -102,7 +102,7 @@ export async function placeOpenPeriod(
   );
 }
 
-async function requirePeriod(tx: Transaction, cfg: VenueScope, periodId: string) {
+export async function requirePeriod(tx: Transaction, cfg: VenueScope, periodId: string) {
   const [row] = await tx
     .select({
       id: menuPeriods.id,
@@ -764,7 +764,7 @@ function routingRowPlaces(folders: readonly Folder[]) {
 
 /** Each period's routing cells that hold a line for it, in the Routing tab's row order, then by
  * zone (Every zone first). */
-async function readRoutingUses(
+export async function readRoutingUses(
   tx: Transaction,
   cfg: VenueScope,
 ): Promise<Map<string, PeriodRoutingUse[]>> {
