@@ -29,7 +29,7 @@ const hooks = vi.hoisted(() => ({
   during: undefined as ((call: string, path: string) => void) | undefined,
   failNextWrite: false,
   endless: undefined as Readable | undefined,
-  growing: { bytesAsked: 0, readFileCalls: 0 },
+  growing: { bytesAsked: 0, readFileCalls: 0, reportedSize: 1 },
 }));
 vi.mock("node:fs", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:fs")>();
@@ -84,7 +84,8 @@ vi.mock("node:fs/promises", async (importOriginal) => {
       if (!String(args[0]).endsWith(GROWING_KEY)) return handle;
       return new Proxy(handle, {
         get(target, prop) {
-          if (prop === "stat") return async () => ({ ...(await target.stat()), size: 1 });
+          if (prop === "stat")
+            return async () => ({ ...(await target.stat()), size: hooks.growing.reportedSize });
           if (prop === "read")
             return (buffer: Buffer, offset: number, length: number, position: number) => {
               hooks.growing.bytesAsked += length;
@@ -121,7 +122,7 @@ afterEach(() => {
   hooks.during = undefined;
   hooks.failNextWrite = false;
   hooks.endless = undefined;
-  hooks.growing = { bytesAsked: 0, readFileCalls: 0 };
+  hooks.growing = { bytesAsked: 0, readFileCalls: 0, reportedSize: 1 };
 });
 
 describe("LocalFsBackend", () => {
@@ -150,7 +151,7 @@ describe("LocalFsBackend", () => {
     });
   });
 
-  it("get refuses a file that grew past the bound after its size was read, holding at most one byte over it", async () => {
+  it("get refuses a file that grew past the bound after its size was read, reading at most one byte over it", async () => {
     const be = new LocalFsBackend("d1", dir);
     await writeFile(join(dir, GROWING_KEY), Buffer.alloc(SMALL_OBJECT_MAX_BYTES + 4 * 1024 * 1024));
     await expect(be.get(GROWING_KEY, call)).rejects.toMatchObject({
@@ -159,6 +160,20 @@ describe("LocalFsBackend", () => {
     });
     expect(hooks.growing.readFileCalls).toBe(0);
     expect(hooks.growing.bytesAsked).toBeGreaterThan(0);
+    expect(hooks.growing.bytesAsked).toBeLessThanOrEqual(SMALL_OBJECT_MAX_BYTES + 1);
+  });
+
+  it("get returns a file that grew after its size was read but stayed small", async () => {
+    const be = new LocalFsBackend("d1", dir);
+    await writeFile(join(dir, GROWING_KEY), "grown-but-small");
+    expect((await be.get(GROWING_KEY, call)).toString()).toBe("grown-but-small");
+  });
+
+  it("get returns a file that grew to exactly the bound after its size was read", async () => {
+    hooks.growing.reportedSize = SMALL_OBJECT_MAX_BYTES - 1;
+    const be = new LocalFsBackend("d1", dir);
+    await writeFile(join(dir, GROWING_KEY), Buffer.alloc(SMALL_OBJECT_MAX_BYTES, 7));
+    expect((await be.get(GROWING_KEY, call)).length).toBe(SMALL_OBJECT_MAX_BYTES);
     expect(hooks.growing.bytesAsked).toBeLessThanOrEqual(SMALL_OBJECT_MAX_BYTES + 1);
   });
 

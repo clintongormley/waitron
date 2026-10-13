@@ -1,5 +1,5 @@
 // Every case injects the archive step, which the supervisor binds to the venue store's `archiveTo`.
-import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -847,6 +847,27 @@ describe("pruneBackend (dual count + age retention)", () => {
       });
 
       expect((await readdir(dir)).sort()).toEqual([fresh, oldOdd].sort());
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not count a name the destination cannot address toward the kept newest", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "backup-prune-odd-slot-"));
+    try {
+      const nowMs = Date.UTC(2026, 9, 13);
+      const plain = backupArchiveKey(new Date(Date.UTC(2026, 9, 10)));
+      const odd = "waitron-20261011T000000Z-a\\b.backup.enc";
+      await writeFile(join(dir, plain), "x");
+      await writeFile(join(dir, odd), "x");
+      await utimes(join(dir, plain), 1000, 1000);
+      await utimes(join(dir, odd), 2000, 2000);
+
+      await pruneBackend(new LocalFsBackend("odd", dir), 1, 3650, nowMs, {
+        signal: new AbortController().signal,
+      });
+
+      expect((await readdir(dir)).sort()).toEqual([plain, odd].sort());
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
