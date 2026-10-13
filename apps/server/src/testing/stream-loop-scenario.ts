@@ -7,6 +7,7 @@ import { X509Certificate } from "node:crypto";
 import { copyFile, cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { setTimeout as delay } from "node:timers/promises";
 import { connect as tlsConnect } from "node:tls";
 import { eq } from "drizzle-orm";
 import { expect } from "vitest";
@@ -99,6 +100,11 @@ export interface StreamLoopFixture {
   /** An existing folder the scenario may fill; the caller removes it. */
   scratch: string;
   litestreamBin: string;
+  /**
+   * Aborting it closes whichever of the two servers is running, at once, and ends the scenario at its
+   * next wait or stage.
+   */
+  signal?: AbortSignal;
   /** Appended to the conditional-write probe's failure message. */
   describeTransport(): string;
   /** Hangs every bucket call until `resume`; without it stage 8b's sales run unbounded. */
@@ -107,7 +113,7 @@ export interface StreamLoopFixture {
 }
 
 /** One event per stage: a stage ends when the next begins, or when `end` names its outcome. */
-function stageClock(record: StreamLoopFixture["record"]) {
+function stageClock(record: StreamLoopFixture["record"], signal: AbortSignal | undefined) {
   let current: { phase: StreamLoopPhase; started: number } | undefined;
   const end = (outcome: StreamLoopEvent["outcome"]): void => {
     if (current === undefined) return;
@@ -118,6 +124,7 @@ function stageClock(record: StreamLoopFixture["record"]) {
   return {
     begin(phase: StreamLoopPhase): void {
       end("ok");
+      signal?.throwIfAborted();
       current = { phase, started: performance.now() };
     },
     end,
@@ -137,18 +144,20 @@ async function boxDirs(parent: string, name: string): Promise<BoxDirs> {
   return dirs;
 }
 
-async function waitFor<T>(
+async function waitUntil<T>(
   what: string,
   timeoutMs: number,
   probe: () => Promise<T | undefined>,
+  signal: AbortSignal | undefined,
 ): Promise<T> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
+    signal?.throwIfAborted();
     const value = await probe();
     if (value !== undefined) return value;
     if (Date.now() >= deadline)
       throw new Error(`timed out after ${timeoutMs}ms waiting for ${what}`);
-    await new Promise((resolve) => setTimeout(resolve, POLL_MS));
+    await delay(POLL_MS, undefined, signal === undefined ? {} : { signal });
   }
 }
 
@@ -217,10 +226,42 @@ function differingTables(a: Map<string, string[]>, b: Map<string, string[]>): st
 }
 
 export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise<void> {
-  const { bucket, scratch, litestreamBin } = fixture;
-  const clock = stageClock(fixture.record);
+  const { bucket, scratch, litestreamBin, signal } = fixture;
+  const clock = stageClock(fixture.record, signal);
+  const waitFor = <T>(what: string, timeoutMs: number, probe: () => Promise<T | undefined>) =>
+    waitUntil(what, timeoutMs, probe, signal);
   let serverA: StartedServer | undefined;
   let serverB: StartedServer | undefined;
+  // Each server is taken before it is closed, so an abort and the body never close one twice.
+  const closeRunning = async (): Promise<unknown[]> => {
+    const closeFailures: unknown[] = [];
+    for (const take of [
+      () => {
+        const server = serverA;
+        serverA = undefined;
+        return server;
+      },
+      () => {
+        const server = serverB;
+        serverB = undefined;
+        return server;
+      },
+    ]) {
+      const server = take();
+      if (server === undefined) continue;
+      try {
+        await server.close();
+      } catch (error) {
+        closeFailures.push(error);
+      }
+    }
+    return closeFailures;
+  };
+  let abortClose: Promise<unknown[]> | undefined;
+  const onAbort = (): void => {
+    abortClose = closeRunning();
+  };
+  signal?.addEventListener("abort", onAbort, { once: true });
   const failures: unknown[] = [];
   try {
     clock.begin("probe");
@@ -410,8 +451,9 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
 
     clock.begin("rebuild");
     // 5. A dies: its server stops and its whole folder is gone. The kit is all that is left.
-    await serverA.close();
+    const closingA = serverA;
     serverA = undefined;
+    await closingA.close();
     const leafA = new X509Certificate(
       await readFile(join(dirsA.state, "tls", "server.crt"), "utf8"),
     );
@@ -584,8 +626,9 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
     clock.end(freeze === undefined ? "skipped" : "ok");
     clock.begin("restore-compare");
     // 9. B stops cleanly; a restore of its generation holds exactly what its database holds.
-    await serverB.close();
+    const closingB = serverB;
     serverB = undefined;
+    await closingB.close();
     const restoredB = join(await mkdtemp(join(scratch, "restored-b-")), "venue.db");
     await restoreGeneration({
       litestreamBin,
@@ -648,21 +691,10 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
   } catch (error) {
     clock.end("failed");
     failures.push(error);
-  }
-  // Each close runs even when an earlier one rejects.
-  for (const close of [
-    async () => {
-      if (serverA !== undefined) await serverA.close();
-    },
-    async () => {
-      if (serverB !== undefined) await serverB.close();
-    },
-  ]) {
-    try {
-      await close();
-    } catch (error) {
-      failures.push(error);
-    }
+  } finally {
+    signal?.removeEventListener("abort", onAbort);
+    if (abortClose !== undefined) failures.push(...(await abortClose));
+    failures.push(...(await closeRunning()));
   }
   if (failures.length === 1) throw failures[0];
   if (failures.length > 1) throw new AggregateError(failures, "stream loop failed");

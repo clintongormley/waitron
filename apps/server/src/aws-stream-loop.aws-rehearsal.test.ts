@@ -25,6 +25,7 @@ describe("AWS rehearsal: the stream loop against Amazon S3", () => {
           scratch,
           litestreamBin: litestream.bin,
           describeTransport: () => `Amazon S3, region ${ctx.region}`,
+          signal: ctx.signal,
           record: (event) => ctx.record({ scenario: "loop", ...event }),
         }),
       );

@@ -187,6 +187,7 @@ function harness(
         killed.push([pid, signal]);
       },
       sleep: async () => {},
+      settleMs: 10,
       print: (line) => printed.push(line),
       ...extra,
     },
@@ -578,6 +579,69 @@ describe("withAwsRehearsal — teardown after a failure", () => {
     const { parsed } = await receipt();
     expect(parsed.events).toContainEqual(
       expect.objectContaining({ phase: "deadline", outcome: "failed" }),
+    );
+  });
+
+  it("lets a scenario that honours its signal settle before teardown starts", async () => {
+    let settled = false;
+    const settledAtTeardown: boolean[] = [];
+    const h = harness(
+      {
+        ListMultipartUploads: () => {
+          settledAtTeardown.push(settled);
+          return { ...ok(), Uploads: [] };
+        },
+      },
+      { deadlineMs: 20, settleMs: 5_000 },
+    );
+    const error = await rejection(
+      withAwsRehearsal(
+        (ctx) =>
+          new Promise<never>((_, reject) => {
+            ctx.signal.addEventListener("abort", () => {
+              setTimeout(() => {
+                settled = true;
+                reject(new Error("scenario stopped"));
+              }, 20);
+            });
+          }),
+        h.deps,
+      ),
+    );
+    expect(error.message).toContain("deadline");
+    expect(settledAtTeardown[0]).toBe(true);
+    expect(h.fake.names().at(-1)).toBe("DeleteBucket");
+    const { parsed } = await receipt();
+    expect(parsed.events).toContainEqual(
+      expect.objectContaining({ phase: "settle", outcome: "ok" }),
+    );
+  });
+
+  it("starts teardown after the grace when a scenario never settles", async () => {
+    let teardownAt: number | undefined;
+    const h = harness(
+      {
+        ListMultipartUploads: () => {
+          teardownAt ??= performance.now();
+          return { ...ok(), Uploads: [] };
+        },
+      },
+      { deadlineMs: 20, settleMs: 200 },
+    );
+    let abortedAt: number | undefined;
+    await rejection(
+      withAwsRehearsal((ctx) => {
+        ctx.signal.addEventListener("abort", () => {
+          abortedAt = performance.now();
+        });
+        return new Promise<never>(() => {});
+      }, h.deps),
+    );
+    expect(teardownAt! - abortedAt!).toBeGreaterThanOrEqual(190);
+    expect(teardownAt! - abortedAt!).toBeLessThan(2_000);
+    const { parsed } = await receipt();
+    expect(parsed.events).toContainEqual(
+      expect.objectContaining({ phase: "settle", outcome: "failed" }),
     );
   });
 

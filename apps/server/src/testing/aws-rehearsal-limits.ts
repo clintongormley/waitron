@@ -13,3 +13,6 @@ export const AWS_REHEARSAL_SCENARIO_DEADLINE_MS = 15 * 60_000;
 
 /** Room in a test's time limit for building fixtures before its scenario deadline starts. */
 export const AWS_REHEARSAL_SETUP_MARGIN_MS = 5 * 60_000;
+
+/** How long a scenario whose signal the deadline aborted may take to stop before teardown starts. */
+export const AWS_REHEARSAL_SETTLE_MS = 60_000;

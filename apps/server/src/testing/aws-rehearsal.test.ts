@@ -7,6 +7,7 @@ import {
   AWS_REHEARSAL_LIMITS,
   AWS_REHEARSAL_SCENARIO_DEADLINE_MS,
   AWS_REHEARSAL_SETUP_MARGIN_MS,
+  AWS_REHEARSAL_SETTLE_MS,
   AWS_REHEARSAL_PROFILE,
   AwsRehearsalRefused,
   assertOutsideDirectory,
@@ -250,9 +251,11 @@ describe("the rehearsal config's time limits", () => {
     const test = rehearsalConfig.test!;
     expect(test.testTimeout).toBe(
       AWS_REHEARSAL_SCENARIO_DEADLINE_MS +
+        AWS_REHEARSAL_SETTLE_MS +
         AWS_REHEARSAL_LIMITS.teardownMs +
         AWS_REHEARSAL_SETUP_MARGIN_MS,
     );
+    expect(AWS_REHEARSAL_SETTLE_MS).toBe(60_000);
     expect(test.hookTimeout).toBe(AWS_REHEARSAL_LIMITS.teardownMs + AWS_REHEARSAL_SETUP_MARGIN_MS);
     expect(AWS_REHEARSAL_SETUP_MARGIN_MS).toBeGreaterThan(0);
   });

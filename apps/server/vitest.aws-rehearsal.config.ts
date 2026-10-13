@@ -3,9 +3,10 @@ import {
   AWS_REHEARSAL_LIMITS,
   AWS_REHEARSAL_SCENARIO_DEADLINE_MS,
   AWS_REHEARSAL_SETUP_MARGIN_MS,
+  AWS_REHEARSAL_SETTLE_MS,
 } from "./src/testing/aws-rehearsal-limits.js";
 
-// A test holds setup, its scenario deadline and teardown in its body; a hook holds teardown or setup.
+// A test holds setup, its scenario deadline, the scenario's settling grace and teardown in its body; a hook holds teardown or setup.
 export default defineConfig({
   test: {
     globals: true,
@@ -15,6 +16,7 @@ export default defineConfig({
     maxWorkers: 1,
     testTimeout:
       AWS_REHEARSAL_SCENARIO_DEADLINE_MS +
+      AWS_REHEARSAL_SETTLE_MS +
       AWS_REHEARSAL_LIMITS.teardownMs +
       AWS_REHEARSAL_SETUP_MARGIN_MS,
     hookTimeout: AWS_REHEARSAL_LIMITS.teardownMs + AWS_REHEARSAL_SETUP_MARGIN_MS,

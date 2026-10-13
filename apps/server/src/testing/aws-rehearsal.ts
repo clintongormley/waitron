@@ -32,6 +32,7 @@ import { isUnset } from "../env-value.js";
 import {
   AWS_REHEARSAL_LIMITS,
   AWS_REHEARSAL_SCENARIO_DEADLINE_MS,
+  AWS_REHEARSAL_SETTLE_MS,
 } from "./aws-rehearsal-limits.js";
 import {
   AWS_REHEARSAL_PROFILE,
@@ -56,6 +57,7 @@ export {
   AWS_REHEARSAL_LIMITS,
   AWS_REHEARSAL_SCENARIO_DEADLINE_MS,
   AWS_REHEARSAL_SETUP_MARGIN_MS,
+  AWS_REHEARSAL_SETTLE_MS,
 } from "./aws-rehearsal-limits.js";
 
 export type AwsRehearsalRefusalReason =
@@ -298,6 +300,7 @@ export interface AwsRehearsalDeps extends TeardownDeps, RehearsalProfileDeps {
   commit(): string;
   receiptDir: string;
   deadlineMs: number;
+  settleMs: number;
   print(line: string): void;
 }
 
@@ -745,6 +748,7 @@ function defaultDeps(env: Env): AwsRehearsalDeps {
     kill: (pid, signal) => process.kill(pid, signal),
     sleep: (ms) => delay(ms),
     deadlineMs: AWS_REHEARSAL_SCENARIO_DEADLINE_MS,
+    settleMs: AWS_REHEARSAL_SETTLE_MS,
     teardownMs: AWS_REHEARSAL_LIMITS.teardownMs,
     print: (line) => process.stdout.write(`${line}\n`),
   };
@@ -863,6 +867,22 @@ export async function withAwsRehearsal<T>(
   } finally {
     client.destroy?.();
   }
+}
+
+/** Whether `running` settled, either way, within `ms`. */
+async function settleWithin(running: Promise<unknown>, ms: number): Promise<boolean> {
+  let timer: NodeJS.Timeout | undefined;
+  const settled = await Promise.race([
+    running.then(
+      () => true,
+      () => true,
+    ),
+    new Promise<false>((resolve) => {
+      timer = setTimeout(() => resolve(false), ms);
+    }),
+  ]);
+  clearTimeout(timer);
+  return settled;
 }
 
 /** Names only a refused field or an error code, never a value. */
@@ -1048,8 +1068,10 @@ async function runOwned<T>(
       };
       const started = deps.now();
       let timer: NodeJS.Timeout | undefined;
+      let deadlinePassed = false;
       const deadline = new Promise<never>((_, reject) => {
         timer = setTimeout(() => {
+          deadlinePassed = true;
           controller.abort();
           record({
             scenario: "lifecycle",
@@ -1070,6 +1092,17 @@ async function runOwned<T>(
       } finally {
         clearTimeout(timer);
         controller.abort();
+        if (deadlinePassed) {
+          // A scenario still running would race teardown for its bucket.
+          const settleStarted = deps.now();
+          const settled = await settleWithin(running, deps.settleMs);
+          record({
+            scenario: "lifecycle",
+            phase: "settle",
+            elapsedMs: Math.max(0, deps.now() - settleStarted),
+            outcome: settled ? "ok" : "failed",
+          });
+        }
       }
     } catch (error) {
       failure = error;

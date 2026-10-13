@@ -378,9 +378,9 @@ schedule are kept. If that second write fails, the new key is already in effect:
 read is never rewritten: rotation then changes only the key, and answers the read's error code as
 `loadErrorCode`.
 
-The tests check the bucket copy against versitygw, a local stand-in for S3. A rehearsal against Amazon
-S3 itself runs only by hand: see
-[aws-backup-rehearsal.md](../../docs/developers/aws-backup-rehearsal.md).
+The stream tests (`src/stream-loop.e2e.test.ts` and `src/stream-pause.e2e.test.ts`) run the bucket
+copy against versitygw, a local stand-in for S3. The same loop runs against Amazon S3 itself only in
+the hand-run rehearsal: see [aws-backup-rehearsal.md](../../docs/developers/aws-backup-rehearsal.md).
 
 ## What `/health` means
 

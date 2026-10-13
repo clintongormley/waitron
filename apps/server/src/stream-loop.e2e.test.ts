@@ -7,7 +7,8 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, describe, it } from "vitest";
+import { setTimeout as delay } from "node:timers/promises";
+import { afterAll, describe, expect, it } from "vitest";
 import {
   READY_TIMEOUT_MS as S3_READY_MS,
   VERSITYGW_VERSION,
@@ -16,13 +17,20 @@ import {
   startS3TestServer,
   type S3TestServer,
 } from "./testing/s3-test-server.js";
-import { STREAM_LOOP_SCENARIO_MS, runStreamLoopScenario } from "./testing/stream-loop-scenario.js";
+import {
+  STREAM_LOOP_PHASES,
+  STREAM_LOOP_SCENARIO_MS,
+  runStreamLoopScenario,
+  type StreamLoopEvent,
+} from "./testing/stream-loop-scenario.js";
 
 const INSTALL = "node scripts/setup-litestream.mjs && node scripts/setup-s3-test-server.mjs";
 const REQUIRED = process.env.CI === "true" || process.env.WAITRON_REQUIRE_STREAM_BINARIES === "1";
 
 // The helper enforces the S3 server's start; the scenario's own waits are in its sum.
 const LOOP_TIMEOUT_MS = S3_READY_MS + STREAM_LOOP_SCENARIO_MS;
+// After an abort the scenario may still be inside one restore, which its abort cannot cut short.
+const ABORT_SETTLE_MS = 60_000;
 
 const litestream = await resolveLitestream(process.env);
 const versitygw = await resolveVersitygw(process.env);
@@ -34,10 +42,26 @@ if (missing.length > 0 && !REQUIRED) {
 describe("the stream loop: stream, rebuild from the bucket, sell under a fresh chain, stream again", () => {
   let scratch: string | undefined;
   let s3: S3TestServer | undefined;
+  const stop = new AbortController();
+  let running: Promise<void> | undefined;
 
   afterAll(async () => {
-    // Each cleanup runs even when an earlier one rejects, so a failed stop cannot leave scratch behind.
     const failures: unknown[] = [];
+    // A test that hit its time limit is still running: its servers close before versitygw stops.
+    stop.abort();
+    if (running !== undefined) {
+      const settled = await Promise.race([
+        running.then(
+          () => true,
+          () => true,
+        ),
+        delay(ABORT_SETTLE_MS, false),
+      ]);
+      if (!settled) {
+        failures.push(new Error(`the stream loop did not stop within ${ABORT_SETTLE_MS} ms`));
+      }
+    }
+    // Each cleanup runs even when an earlier one rejects, so a failed stop cannot leave scratch behind.
     for (const cleanup of [
       async () => {
         if (s3 !== undefined) await s3.stop();
@@ -70,7 +94,8 @@ describe("the stream loop: stream, rebuild from the bucket, sell under a fresh c
       scratch = await mkdtemp(join(tmpdir(), "waitron-stream-loop-"));
       const server = await startS3TestServer({ bin: versitygw.bin, root: join(scratch, "s3") });
       s3 = server;
-      await runStreamLoopScenario({
+      const events: StreamLoopEvent[] = [];
+      running = runStreamLoopScenario({
         bucket: {
           endpoint: server.endpoint,
           region: server.region,
@@ -83,7 +108,13 @@ describe("the stream loop: stream, rebuild from the bucket, sell under a fresh c
         litestreamBin: litestream.bin,
         describeTransport: () => `versitygw ${VERSITYGW_VERSION}. Server log: ${server.log()}`,
         freeze: { pause: () => server.pause(), resume: () => server.resume() },
+        signal: stop.signal,
+        record: (event) => events.push(event),
       });
+      await running;
+      expect(events.map(({ phase, outcome }) => [phase, outcome])).toEqual(
+        STREAM_LOOP_PHASES.map((phase) => [phase, "ok"]),
+      );
     },
     LOOP_TIMEOUT_MS,
   );
