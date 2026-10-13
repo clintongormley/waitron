@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
+import { page } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -234,3 +235,47 @@ it("speaks Spanish", async () => {
   await press(el);
   expect(seatsField(el).error).toBe("Escribe de 1 a 999");
 });
+
+for (const [width, height] of [
+  [1280, 720],
+  [390, 844],
+] as const) {
+  it(`keeps one width at ${width}px, with its stays-apart lines inside the field's edge and its label whole`, async () => {
+    await page.viewport(width, height);
+    try {
+      for (const locale of ["en", "es"] as const) {
+        setLocale(locale);
+        const el = await mount({
+          apart: [
+            away("t1", "Terrace corner table by the fountain", "guests"),
+            away("t2", "Counter 4", "food"),
+            away("t3", "Window table beside the old bar", "clearing"),
+          ],
+        });
+        const window = el
+          .shadowRoot!.querySelector("wt-dialog")!
+          .shadowRoot!.querySelector("dialog")!;
+        const label = seatsField(el).shadowRoot!.querySelector<HTMLElement>(".field-label-text")!;
+        const empty = window.getBoundingClientRect().width;
+        expect(label.scrollWidth).toBeLessThanOrEqual(label.clientWidth);
+        const fieldRight = seatsField(el)
+          .shadowRoot!.querySelector(".field")!
+          .getBoundingClientRect().right;
+        const shown = [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-stays-apart]")];
+        expect(shown).toHaveLength(3);
+        for (const line of shown) {
+          expect(line.scrollWidth).toBeLessThanOrEqual(line.clientWidth);
+          expect(line.getBoundingClientRect().right).toBeLessThanOrEqual(fieldRight + 0.5);
+        }
+        expect(window.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+        await typeSeats(el, "0");
+        await press(el);
+        expect(seatsField(el).error).not.toBe("");
+        expect(window.getBoundingClientRect().width).toBeCloseTo(empty, 0);
+        cleanupWidgets();
+      }
+    } finally {
+      await page.viewport(1280, 720);
+    }
+  });
+}
