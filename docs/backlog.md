@@ -4808,6 +4808,14 @@ the tree. What remains, largest first:
 
 ### CI, tests and developer tooling
 
+- **Two row-reorder cursor tests leave "help" as the page's cursor when they fail mid-drag (found
+  by A580's review).** `reorder-table.test.ts`'s "sets a grabbing cursor on the page body…" and
+  "puts the page's cursor back only when the last of two overlapping drags ends" reset the cursor in
+  their own `finally`, and the shared `cleanup` then removes the dragging table, whose release puts
+  back the "help" it saved — so the next test starts with it. Found by reading; the same shape in
+  A580's new floor-plan cases failed that way under a forced failure. Next: reset through
+  `onTestFinished`, as `wt-floor-plan-canvas.test.ts`'s cursor cases now do.
+
 - **Server suites write to the venue database while their in-process server runs (found by
   A538-5f).** Nine suites, as of 2026-10-13. Each can fail `database is locked` whenever the write
   meets one of the server's open transactions
