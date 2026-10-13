@@ -430,7 +430,8 @@ not where staff moved it" (`apps/server/src/floor-today-reset-table.test.ts`) ex
 
 - The Spanish `joined_table.out_of_date` sentence ("Sus mesas han cambiado. Revísalo e inténtalo de
   nuevo", `apps/till/src/i18n/codes.ts`) wraps to two lines at 390 px. A579 part 4b's look did not
-  shoot it; its three new floor sentences fit at 390 px in Spanish
+  shoot it; the three of its four new floor sentences it shot (all but `floor.table_in_group`, the one-table
+  form) fit at 390 px in Spanish
   (`~/waitron-campaign-c/a579-4b-shots`).
 - In the Reset table window (the Join again window before A579) the lines naming each table that
   stays apart sit below the Seats field (`apps/till/src/widgets/reset-table-dialog.ts`), so the

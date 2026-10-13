@@ -591,7 +591,7 @@ it("says the floor changed under a till, in English and Spanish", () => {
   );
 });
 
-it("says each Reset table refusal about what the table holds now, in English and Spanish", () => {
+it("says Reset table's refusals, and Back's and Take off's on a table split off, in English and Spanish", () => {
   const words: [string, string, string][] = [
     ["joined_table.nothing_to_join", "Nothing to reset now", "Ahora no hay nada que restablecer"],
     [

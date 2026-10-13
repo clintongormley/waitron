@@ -1720,7 +1720,10 @@ today's map whose box overlaps that place by at least one square along each side
 `apps/server/src/joined-split-layout.ts`); a table that only touches the edge, the joined table and
 the tables it takes back do not count, and a table left apart does. When too few tables would come
 back and a table split off it is held in a group, it refuses `joined_table.tables_in_group`, naming
-those tables; otherwise `joined_table.nothing_to_join`.
+those tables; otherwise `joined_table.nothing_to_join`. It writes no reset row of its own and ends
+with the zone's catch-up (`catchUpZone`), so a table it takes back after Reset to saved plan counts
+as a part still joined in the same transaction, and a later reset still holds the tables it left
+apart.
 
 Measured on 2026-10-11, Node v26.7.0, after applying every manifest migration to `node:sqlite`:
 `pragma_foreign_key_list` reports six incoming keys, all `ON DELETE NO ACTION`:

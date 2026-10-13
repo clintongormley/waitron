@@ -261,8 +261,8 @@ undone at the next reset anyway.
 
 > Changed 2026-10-13 by A579 part 4b: the till offers **Reset table** where it offered Join again, and
 > also on a free table split off a joined table whose other split-off tables are in a group with guests,
-> where the server refuses it (`joined_table.tables_in_group`); the till's sentence names those tables,
-> and their group when they are all in one. When every table comes back it is one tap; with some apart, its window
+> where the server refuses it (`joined_table.tables_in_group`); when those tables are all in one group,
+> the till's sentence names them and the group; otherwise it shows the plain sentence, which names neither. When every table comes back it is one tap; with some apart, its window
 > names them and asks the seats.
 
 ### 6.3 Reset

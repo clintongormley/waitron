@@ -618,7 +618,7 @@ describe("till-floor-screen: Reset table's refusals name the tables", () => {
     expect(floorRefusal(el)).toBe(words);
   });
 
-  it("names no group when the tables in the refusal are in different groups", async () => {
+  it("names neither the tables nor a group when the tables in the refusal are in different groups", async () => {
     const api = stubApi();
     api.resetTableToday.mockRejectedValueOnce({
       code: "joined_table.tables_in_group",
