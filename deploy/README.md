@@ -403,7 +403,7 @@ command against it treat that entrypoint differently:
   The same `--entrypoint node` applies to `docker compose run app /app/bin-rejoin.js …`, to
   `/app/bin-recovery.js unpack …`, and to any bare `docker run` against this image.
 
-- **A restore takes one of two sources.** `restore <backup-file>` restores an encrypted backup
+- **A restore takes one of three sources.** `restore <backup-file>` restores an encrypted backup
   file, with its recovery key in `WAITRON_BACKUP_RECOVERY_KEY`. `restore --from-bucket <kit-file>`
   rebuilds the box from the copy the old box kept in the owner's bucket; the recovery kit file
   holds the bucket's key and the recovery key, so nothing secret goes on the command line. The file
@@ -423,6 +423,16 @@ command against it treat that entrypoint differently:
   same check. Each form takes only its own flags, each once: `--confirm-venue` belongs to the
   bucket form alone, and a backup file given together with `--from-bucket` is refused. Anything
   else prints the usage line and exits 2.
+
+  `restore --from-archive <pack-file> --archive-key <name>` downloads one archive from the bucket
+  named in an archive recovery pack file, and restores it as `restore <backup-file>` does, with
+  the same check on the old box. The pack holds the bucket's key and the recovery key, so it is as
+  secret as the recovery kit: keep it off the box, and make it visible and readable inside the
+  container as the kit is above, or the command stops with `cannot read pack file: <path>`.
+  `<name>` is the archive's file name as the bucket lists it. This form takes neither a backup
+  file, `--from-bucket` nor `--confirm-venue`, and uses the pack's recovery key even when
+  `WAITRON_BACKUP_RECOVERY_KEY` is set. An archive file downloaded from the bucket by hand restores with `restore <backup-file>`
+  and the recovery key alone, in `WAITRON_BACKUP_RECOVERY_KEY`.
 
   A restore moves the old database into a hidden folder in the venue folder
   (`/var/lib/waitron/state/venue/` inside the container), named `.venue.db-replaced-` and six
