@@ -318,3 +318,34 @@ describe("trading with dashboard archive settings the box cannot use", () => {
     );
   }, 60_000);
 });
+
+describe("trading with environment backup settings beside a sealed record", () => {
+  it("takes the environment's settings and never reads a sealed record that would not decrypt", async () => {
+    let cookie = "";
+    await bootAndTrade(
+      async (scratch) => {
+        const otherRing = loadKeyRing({
+          WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 6).toString("base64"),
+          WAITRON_CREDENTIALS_KEY_VERSION: "1",
+        });
+        await storeArchiveRecord(otherRing, join(scratch, "sealed-backups"));
+        cookie = await managerCookie();
+        return {
+          WAITRON_BACKUP_DIR: join(scratch, "env-backups"),
+          WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!",
+        };
+      },
+      async (lines, { base, via }) => {
+        expect(await waitForEvent(lines, "backup.destination_completed")).toMatchObject({
+          destination: "primary",
+        });
+        const status = await fetch(`${base}/api/backup/status`, { ...via, headers: { cookie } });
+        expect(await status.json()).toMatchObject({
+          enabled: true,
+          source: "environment",
+          loadErrorCode: null,
+        });
+      },
+    );
+  }, 60_000);
+});
