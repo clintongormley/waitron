@@ -508,7 +508,7 @@ describe("dates and pages", () => {
 
 describe("rows written within one millisecond, read in the order they were written", () => {
   const AT = "2026-09-26T09:59:00.000Z";
-  const detailOf = (id: string) => inTx(venue, (tx) => readOrderDetail(tx, id, "all"));
+  const detailOf = (id: string) => inTx(venue, (tx) => readOrderDetail(tx, id, "all", false));
   const saleOf = async (billId: string) => {
     const [sale] = await inTx(venue, (tx) =>
       tx.select({ id: sales.id }).from(sales).where(eq(sales.workingOrderId, billId)),
