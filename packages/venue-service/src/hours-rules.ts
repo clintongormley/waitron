@@ -40,13 +40,22 @@ export function rangeDates(from: unknown, to: unknown): LocalDate[] {
   return dates;
 }
 
+/** Midnight UTC of a date; unlike `Date.UTC`, which reads years 0 to 99 as 1900 to 1999. */
+function utcDay(y: number, m: number, d: number): Date {
+  const date = new Date(0);
+  date.setUTCFullYear(y, m - 1, d);
+  return date;
+}
+
 export function addDays(date: LocalDate, days: number): LocalDate {
   const [y, m, d] = date.split("-").map(Number) as [number, number, number];
-  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+  return utcDay(y, m, d + days)
+    .toISOString()
+    .slice(0, 10);
 }
 
 /** Sunday 0, Monday 1. */
 export function weekdayOf(date: LocalDate): number {
   const [y, m, d] = date.split("-").map(Number) as [number, number, number];
-  return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  return utcDay(y, m, d).getUTCDay();
 }
