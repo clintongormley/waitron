@@ -6,7 +6,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-tabs.js";
 import { dashboardPath } from "../navigation.js";
-import { t } from "../i18n/t.js";
+import { fill, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { alertMessage, hasAlertMessage } from "../i18n/alerts.js";
 import { DashboardQueries } from "../api/query-controller.js";
@@ -211,9 +211,10 @@ export class AlertsScreen extends LitElement {
         label: t("alerts.col_handled"),
         choosable: "shown",
         cell: (a) =>
-          t("alerts.handled_by")
-            .replace("{time}", formatAlertTime(a.handledAt ?? null))
-            .replace("{person}", a.handledBy ?? t("alerts.someone")),
+          fill("alerts.handled_by", {
+            time: formatAlertTime(a.handledAt ?? null),
+            person: a.handledBy ?? t("alerts.someone"),
+          }),
       },
     ];
   }

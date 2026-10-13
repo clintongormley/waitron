@@ -24,7 +24,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-tabs.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import type { DashboardApi, OwnProfile } from "../api/client.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { classifyPasskeyRegistrationError } from "../passkey-errors.js";
@@ -926,7 +926,7 @@ export class ProfileScreen extends LitElement {
                             data-test="remove-passkey"
                             class="card-action accent-danger"
                             ?disabled=${this.busy}
-                            aria-label=${t("profile.remove_passkey_name").replace("{name}", name)}
+                            aria-label=${fill("profile.remove_passkey_name", { name })}
                             @click=${() => this.#edit("remove", key.id)}
                             >${t("action.remove")}</wt-button
                           >`

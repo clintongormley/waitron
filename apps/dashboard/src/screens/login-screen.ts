@@ -22,7 +22,7 @@ import {
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
-import { t } from "../i18n/t.js";
+import { fill, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { classifyPasskeyRegistrationError, classifyPasskeySignInError } from "../passkey-errors.js";
@@ -1562,7 +1562,7 @@ export class LoginScreen extends LitElement {
                             <h1>${t("login.check_email")}</h1>
                             ${this.#renderLoginContext()}
                             <p data-test="reset-sent" role="status">
-                              ${t("login.reset_sent").replace("{email}", this.email)}
+                              ${fill("login.reset_sent", { email: this.email })}
                             </p>
                             <p class="alternative-hint">${t("login.reset_delivery_hint")}</p>
                             <wt-form-actions .error=${form.bottom}>

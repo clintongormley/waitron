@@ -1215,6 +1215,17 @@ describe("login-screen", () => {
     expect(navigate).toHaveBeenCalledWith("https://accounts.google.test/login");
   });
 
+  it("puts an email address holding a replacement pattern into the confirmation as written", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+    await openPassword(el, "b$&@x.com");
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=reset-by-email]")!.click();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=reset-sent]")!.textContent!.trim()).toBe(
+      t("login.reset_sent").split("{email}").join("b$&@x.com"),
+    );
+  });
+
   it("shows a separate email confirmation and allows resending only after a minute", async () => {
     vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
     const api = stubApi();
