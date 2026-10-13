@@ -4199,6 +4199,17 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   `POST /api/backup/disable` and does not show `storedDisabled` (archives stored switched off).
   Left open by A538-4.
 
+- **A backup destination that fails to build leaves archives reported as on.** In
+  `BackupSupervisor.reload()` (`apps/server/src/backup-supervisor.ts`) the venue handle is assigned
+  before `buildBackupBackend` runs for each destination, so a throw there leaves `current().enabled`
+  true with no sweep running. Reported by A538-4's second Codex review; the driver read the order
+  but did not reproduce the throw. Build the backends before adopting the handle, or undo on failure.
+
+- **Should a managed Cloud restore drop the two sealed bucket records?** A restored or replacement
+  box inherits both `backup.archive` and `backup.stream` (bucket keys included), measured in
+  A538-4's review against the managed restore cases; `docs/developers/cloud-connection.md` says so.
+  Kept as is pending the owner's answer (lane B `questions.md`, 2026-10-13).
+
 - **The bucket copy's settings screen cannot repair a stored record that cannot be decrypted.**
   `GET /api/backup/stream` (`readStored`, called by `view`, in `apps/server/src/stream-api.ts`) tolerates only
   `server.credential_unusable`; `credentials.decrypt_failed`, `credentials.malformed_payload` and
