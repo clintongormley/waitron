@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LiveData, type DashboardRequest } from "@waitron/dashboard-kit";
 import type { SpecialDaysModel } from "../holiday-types.js";
+import { OpeningHoursApi } from "./opening-hours-client.js";
 import { SpecialDaysApi } from "./special-days-client.js";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
 
@@ -19,7 +20,7 @@ const model = (civilDate: string): SpecialDaysModel => ({
   area: { addressKey: "fixture", readiness: "ready", options: [], required: false, chosen: null },
   localHolidaysPerYear: 2,
 });
-const NAMED_PATH = "/management-api/venue-service/named-days?from=2030-10-01&to=2030-10-31";
+const YEAR_PATH = "/management-api/venue-service/opening-hours/year?year=2030";
 afterEach(() => {
   vi.useRealTimers();
 });
@@ -27,14 +28,13 @@ async function settled(): Promise<void> {
   for (let turn = 0; turn < 20; turn++) await Promise.resolve();
 }
 
-describe("SpecialDaysApi.watchSpecialDays", () => {
-  it("subscribes to exactly the Calendar sources and reads passively", async () => {
+describe("OpeningHoursApi.watchYear", () => {
+  it("subscribes to exactly the special-day calendar's sources and reads passively", async () => {
     const liveData = new LiveData();
     const request = vi.fn(async () => model("2030-10-06"));
     const apply = vi.fn();
-    const detach = new SpecialDaysApi(request as DashboardRequest, liveData).watchSpecialDays(
-      "2030-10-01",
-      "2030-10-31",
+    const detach = new OpeningHoursApi(request as DashboardRequest, liveData).watchYear(
+      2030,
       apply,
       vi.fn(),
       vi.fn(),
@@ -56,7 +56,7 @@ describe("SpecialDaysApi.watchSpecialDays", () => {
       "special_days",
       "special_day_dates",
     ]);
-    expect(request.mock.calls).toEqual([[NAMED_PATH, "GET", undefined, { passive: true }]]);
+    expect(request.mock.calls).toEqual([[YEAR_PATH, "GET", undefined, { passive: true }]]);
     detach();
   });
 
@@ -76,9 +76,8 @@ describe("SpecialDaysApi.watchSpecialDays", () => {
     const apply = vi.fn();
     const failed = vi.fn();
     const recovered = vi.fn();
-    const detach = new SpecialDaysApi(request as DashboardRequest, liveData).watchSpecialDays(
-      "2030-10-01",
-      "2030-10-31",
+    const detach = new OpeningHoursApi(request as DashboardRequest, liveData).watchYear(
+      2030,
       apply,
       failed,
       recovered,
@@ -97,7 +96,7 @@ describe("SpecialDaysApi.watchSpecialDays", () => {
     expect(recovered).toHaveBeenCalledTimes(1);
     expect(apply).toHaveBeenCalledTimes(3);
 
-    // Service settings are outside the Calendar read.
+    // Service settings are outside the year read.
     liveData.invalidate([{ type: "service_settings" }]);
     detach();
     expect(liveData.interests).toEqual([]);
@@ -108,15 +107,15 @@ describe("SpecialDaysApi.watchSpecialDays", () => {
     expect(apply).toHaveBeenCalledTimes(3);
   });
 
-  it("gives a second watcher of an already loaded range that model at once, without another read", async () => {
+  it("gives a second watcher of an already loaded year that model at once, without another read", async () => {
     const liveData = new LiveData();
     const request = vi.fn(async () => model("2030-10-06"));
-    const api = new SpecialDaysApi(request as DashboardRequest, liveData);
+    const api = new OpeningHoursApi(request as DashboardRequest, liveData);
     const first = vi.fn();
-    const detachFirst = api.watchSpecialDays("2030-10-01", "2030-10-31", first, vi.fn(), vi.fn());
+    const detachFirst = api.watchYear(2030, first, vi.fn(), vi.fn());
     await vi.waitFor(() => expect(first).toHaveBeenCalledTimes(1));
     const second = vi.fn();
-    const detachSecond = api.watchSpecialDays("2030-10-01", "2030-10-31", second, vi.fn(), vi.fn());
+    const detachSecond = api.watchYear(2030, second, vi.fn(), vi.fn());
     await vi.waitFor(() => expect(second).toHaveBeenCalledWith(model("2030-10-06")));
     expect(request).toHaveBeenCalledTimes(1);
     expect(first).toHaveBeenCalledTimes(1);
@@ -132,9 +131,8 @@ describe("SpecialDaysApi.watchSpecialDays", () => {
       .mockResolvedValueOnce(model("2030-10-06"))
       .mockResolvedValueOnce(model("2030-10-07"));
     const apply = vi.fn();
-    const detach = new SpecialDaysApi(request as DashboardRequest, liveData).watchSpecialDays(
-      "2030-10-01",
-      "2030-10-31",
+    const detach = new OpeningHoursApi(request as DashboardRequest, liveData).watchYear(
+      2030,
       apply,
       vi.fn(),
       vi.fn(),
@@ -158,9 +156,8 @@ describe("SpecialDaysApi.watchSpecialDays", () => {
     const request = vi.fn(async () => model("2030-10-06"));
     const apply = vi.fn();
     const failed = vi.fn();
-    const detach = new SpecialDaysApi(request as DashboardRequest).watchSpecialDays(
-      "2030-10-01",
-      "2030-10-31",
+    const detach = new OpeningHoursApi(request as DashboardRequest).watchYear(
+      2030,
       apply,
       failed,
       vi.fn(),
@@ -174,7 +171,7 @@ describe("SpecialDaysApi.watchSpecialDays", () => {
     vi.advanceTimersByTime(60_000);
     await settled();
     expect(request).toHaveBeenCalledTimes(2);
-    expect(request.mock.calls[1]).toEqual([NAMED_PATH, "GET", undefined, { passive: true }]);
+    expect(request.mock.calls[1]).toEqual([YEAR_PATH, "GET", undefined, { passive: true }]);
     expect(failed).not.toHaveBeenCalled();
   });
 
@@ -189,9 +186,8 @@ describe("SpecialDaysApi.watchSpecialDays", () => {
     );
     const apply = vi.fn();
     const failed = vi.fn();
-    const detach = new SpecialDaysApi(request as DashboardRequest).watchSpecialDays(
-      "2030-10-01",
-      "2030-10-31",
+    const detach = new OpeningHoursApi(request as DashboardRequest).watchYear(
+      2030,
       apply,
       failed,
       vi.fn(),
@@ -214,9 +210,8 @@ describe("SpecialDaysApi.watchSpecialDays", () => {
     const answers: ((value: SpecialDaysModel) => void)[] = [];
     const request = vi.fn(() => new Promise<SpecialDaysModel>((resolve) => answers.push(resolve)));
     const apply = vi.fn();
-    const detach = new SpecialDaysApi(request as DashboardRequest).watchSpecialDays(
-      "2030-10-01",
-      "2030-10-31",
+    const detach = new OpeningHoursApi(request as DashboardRequest).watchYear(
+      2030,
       apply,
       vi.fn(),
       vi.fn(),
@@ -232,46 +227,31 @@ describe("SpecialDaysApi.watchSpecialDays", () => {
   });
 });
 
-describe("SpecialDaysApi.rereadWatches", () => {
-  it("has every Calendar watch read once more through live data, and reads nothing with neither live data nor a watch", async () => {
+describe("rereading the year after a special-day write", () => {
+  it("has every year watch read once more through live data, and a special-days client with neither live data nor a watch reads nothing", async () => {
     const liveData = new LiveData();
     const request = vi.fn(async (path: string) =>
-      model(path.includes("2030-11") ? "2030-11-06" : "2030-10-06"),
+      model(path.includes("2031") ? "2031-10-06" : "2030-10-06"),
     );
-    const api = new SpecialDaysApi(request as DashboardRequest, liveData);
-    const october = vi.fn();
-    const november = vi.fn();
-    const detachOctober = api.watchSpecialDays(
-      "2030-10-01",
-      "2030-10-31",
-      october,
-      vi.fn(),
-      vi.fn(),
-    );
-    const detachNovember = api.watchSpecialDays(
-      "2030-11-01",
-      "2030-11-30",
-      november,
-      vi.fn(),
-      vi.fn(),
-    );
+    const api = new OpeningHoursApi(request as DashboardRequest, liveData);
+    const first = vi.fn();
+    const second = vi.fn();
+    const detachFirst = api.watchYear(2030, first, vi.fn(), vi.fn());
+    const detachSecond = api.watchYear(2031, second, vi.fn(), vi.fn());
     await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(2));
-    api.rereadWatches();
+    api.specialDays.rereadWatches();
     await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(4));
     await vi.waitFor(() =>
-      expect([october.mock.calls.length, november.mock.calls.length]).toEqual([2, 2]),
+      expect([first.mock.calls.length, second.mock.calls.length]).toEqual([2, 2]),
     );
     expect(
       request.mock.calls
         .slice(2)
         .map(([path]) => path)
         .sort(),
-    ).toEqual([
-      NAMED_PATH,
-      "/management-api/venue-service/named-days?from=2030-11-01&to=2030-11-30",
-    ]);
-    detachOctober();
-    detachNovember();
+    ).toEqual([YEAR_PATH, "/management-api/venue-service/opening-hours/year?year=2031"]);
+    detachFirst();
+    detachSecond();
 
     const alone = vi.fn(async () => model("2030-10-06"));
     new SpecialDaysApi(alone as DashboardRequest).rereadWatches();
@@ -283,23 +263,23 @@ describe("SpecialDaysApi.rereadWatches", () => {
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
     const answers: ((value: SpecialDaysModel) => void)[] = [];
     const request = vi.fn(() => new Promise<SpecialDaysModel>((resolve) => answers.push(resolve)));
-    const api = new SpecialDaysApi(request as DashboardRequest);
+    const api = new OpeningHoursApi(request as DashboardRequest);
     const apply = vi.fn();
-    const detach = api.watchSpecialDays("2030-10-01", "2030-10-31", apply, vi.fn(), vi.fn());
+    const detach = api.watchYear(2030, apply, vi.fn(), vi.fn());
     answers[0]!(model("2030-10-06"));
     await settled();
     // A timer read starts, then a write's reread starts and answers first.
     vi.advanceTimersByTime(60_000);
-    api.rereadWatches();
+    api.rereadWithSpecialDays();
     expect(request).toHaveBeenCalledTimes(3);
-    expect(request.mock.calls[2]).toEqual([NAMED_PATH, "GET", undefined, { passive: true }]);
+    expect(request.mock.calls[2]).toEqual([YEAR_PATH, "GET", undefined, { passive: true }]);
     answers[2]!(model("2030-10-08"));
     await settled();
     answers[1]!(model("2030-10-07"));
     await settled();
     expect(apply.mock.calls).toEqual([[model("2030-10-06")], [model("2030-10-08")]]);
     detach();
-    api.rereadWatches();
+    api.rereadWithSpecialDays();
     expect(request).toHaveBeenCalledTimes(3);
   });
 
@@ -312,15 +292,15 @@ describe("SpecialDaysApi.rereadWatches", () => {
     const request = vi.fn(
       () => new Promise<SpecialDaysModel>((resolve, reject) => answers.push({ resolve, reject })),
     );
-    const api = new SpecialDaysApi(request as DashboardRequest);
+    const api = new OpeningHoursApi(request as DashboardRequest);
     const apply = vi.fn();
     const failed = vi.fn();
     const recovered = vi.fn();
-    const detach = api.watchSpecialDays("2030-10-01", "2030-10-31", apply, failed, recovered);
+    const detach = api.watchYear(2030, apply, failed, recovered);
     answers[0]!.resolve(model("2030-10-06"));
     await settled();
     vi.advanceTimersByTime(60_000);
-    api.rereadWatches();
+    api.rereadWithSpecialDays();
     answers[2]!.reject({ code: "connection.failed" });
     await settled();
     answers[1]!.resolve(model("2030-10-07"));
@@ -340,14 +320,14 @@ describe("SpecialDaysApi.rereadWatches", () => {
     const request = vi.fn(
       () => new Promise<SpecialDaysModel>((resolve, reject) => answers.push({ resolve, reject })),
     );
-    const api = new SpecialDaysApi(request as DashboardRequest);
+    const api = new OpeningHoursApi(request as DashboardRequest);
     const apply = vi.fn();
     const failed = vi.fn();
-    const detach = api.watchSpecialDays("2030-10-01", "2030-10-31", apply, failed, vi.fn());
+    const detach = api.watchYear(2030, apply, failed, vi.fn());
     answers[0]!.resolve(model("2030-10-06"));
     await settled();
     vi.advanceTimersByTime(60_000);
-    api.rereadWatches();
+    api.rereadWithSpecialDays();
     vi.advanceTimersByTime(60_000);
     answers[2]!.reject({ code: "connection.failed" });
     await settled();
@@ -360,4 +340,66 @@ describe("SpecialDaysApi.rereadWatches", () => {
     expect(failed).not.toHaveBeenCalled();
     detach();
   });
+});
+
+it("retired station rows do not start another year read", async () => {
+  const live = new LiveData();
+  const request = vi.fn(async () => model("2026-10-09"));
+  const apply = vi.fn();
+  const stop = new OpeningHoursApi(request as DashboardRequest, live).watchYear(
+    2026,
+    apply,
+    vi.fn(),
+    vi.fn(),
+  );
+  try {
+    await vi.waitFor(() => expect(apply).toHaveBeenCalledTimes(1));
+    live.invalidate([
+      { type: "special_date_hours" },
+      { type: "special_date_hours_periods" },
+      { type: "hours_week_cells" },
+      { type: "hours_week_periods" },
+      { type: "station_fallbacks" },
+      { type: "station_day_states" },
+    ]);
+    for (let turn = 0; turn < 20; turn++) await Promise.resolve();
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(apply).toHaveBeenCalledTimes(1);
+    live.invalidate([{ type: "special_days" }]);
+    await vi.waitFor(() => expect(apply).toHaveBeenCalledTimes(2));
+    expect(request).toHaveBeenCalledTimes(2);
+  } finally {
+    stop();
+  }
+});
+
+it("a special-day reread leaves a station-only observer's snapshot alone", async () => {
+  const live = new LiveData();
+  let stationReads = 0;
+  const station = live.observe(
+    {
+      key: "station-only-control",
+      dependencies: [{ type: "kitchen_stations" }],
+      read: async () => ++stationReads,
+    },
+    () => {},
+  );
+  const request = vi.fn(async () => model("2026-10-09"));
+  const apply = vi.fn();
+  const api = new OpeningHoursApi(request as DashboardRequest, live);
+  const stop = api.watchYear(2026, apply, vi.fn(), vi.fn());
+  try {
+    await vi.waitFor(() => expect(station.snapshot.value).toBe(1));
+    await vi.waitFor(() => expect(apply).toHaveBeenCalledTimes(1));
+    api.specialDays.rereadWatches();
+    await vi.waitFor(() => expect(apply).toHaveBeenCalledTimes(2));
+    expect(stationReads).toBe(1);
+    expect(station.snapshot.value).toBe(1);
+    live.invalidate([{ type: "kitchen_stations" }]);
+    await vi.waitFor(() => expect(station.snapshot.value).toBe(2));
+    expect(apply).toHaveBeenCalledTimes(2);
+  } finally {
+    stop();
+    station.unsubscribe();
+  }
 });

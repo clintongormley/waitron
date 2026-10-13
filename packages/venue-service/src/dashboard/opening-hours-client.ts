@@ -4,7 +4,6 @@ import type { OpeningHoursMonth, OpeningHoursYear, SeasonDays } from "../opening
 import type { MenuPeriodInput, MenuWeekDay, OpeningHoursModel } from "../menu-timetable-types.js";
 import type { Season } from "../season-rules.js";
 import type { ClosedRange } from "../service-day.js";
-import type { SpecialDayDetail, SpecialDayInput } from "../special-days.js";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
 import { SpecialDaysApi } from "./special-days-client.js";
 import { ModelWatches } from "./model-watch.js";
@@ -222,20 +221,5 @@ export class OpeningHoursApi {
   }
   readSeasonDeleteImpact(id: string): Promise<SeasonDeleteImpact> {
     return this.request(`${BASE}/seasons/${at(id)}/delete-impact`, "GET");
-  }
-  /** Saves the special day as stored with `paint` replacing what it names; an empty list is left out. */
-  saveDatePaint(
-    detail: SpecialDayDetail,
-    { paint, zonePaint }: Required<Pick<SpecialDayInput, "paint" | "zonePaint">>,
-    expectedClockRevision: number,
-  ): Promise<SpecialDayDetail> {
-    return this.request(`${BASE}/special-days/${at(detail.id)}`, "PUT", {
-      name: detail.name,
-      repeatsYearly: detail.repeatsYearly,
-      dates: detail.dates.map(({ date, closedAllDay }) => ({ date, closedAllDay })),
-      ...(paint.length ? { paint } : {}),
-      ...(zonePaint.length ? { zonePaint } : {}),
-      expectedClockRevision,
-    });
   }
 }

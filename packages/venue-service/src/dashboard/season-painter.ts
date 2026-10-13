@@ -26,6 +26,7 @@ import { t } from "./strings.js";
 import { periodColourStyles } from "./period-colour-styles.js";
 import { paintRow, paintRowStyles } from "./paint-row.js";
 import { refusalOf } from "./refusal.js";
+import { ownerName, refusalReason } from "./painter-labels.js";
 import "./painter-frame.js";
 import "./paint-grid.js";
 import "./period-editor.js";
@@ -85,13 +86,6 @@ function listOf(names: readonly string[]): string {
     type: "conjunction",
   }).format(names);
 }
-export function ownerName(model: Model, key: string): string {
-  const id = key.slice(2);
-  if (key.startsWith("d:")) return model.departments.find((entry) => entry.id === id)?.name ?? "";
-  return (
-    model.departments.flatMap(({ zones }) => zones).find((entry) => entry.id === id)?.name ?? ""
-  );
-}
 /** The department, active or not, whose week holds `key`'s, when it is still in the model. */
 function departmentOf(model: Model, key: string): Department | undefined {
   const id = key.slice(2);
@@ -110,16 +104,6 @@ function shownIn(model: Model, departmentId: string, zoneId: string) {
 /** Department columns erase on Closed, so a Closed paint is never a department slot. */
 const isPeriodPaint = (paint: Paint): paint is Paint & { periodId: string } =>
   paint.periodId !== null;
-export function refusalReason(code: string, reason: unknown, period: Period | undefined): string {
-  if (reason === "end_offset")
-    return period
-      ? format("menu.offset_timetable_named", { period: period.name })
-      : t("menu.offset_timetable");
-  if (reason === "clock_skips") return t("menu.time_skipped");
-  if (code === "zone_closed_time.invalid") return t("opening.closed_invalid");
-  if (code === "menu_timetable.invalid") return t("opening.check_day");
-  return t("menu.save_error");
-}
 function seed(model: Model, seasonId: string): Draft {
   const draft: Draft = new Map();
   for (const department of model.departments.filter(({ active }) => active)) {

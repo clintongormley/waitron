@@ -39,7 +39,7 @@ import type {
   PeriodRoutingUse,
 } from "../menu-timetable-types.js";
 import type { OpeningHoursApi, OpeningStation } from "./opening-hours-client.js";
-import { businessDateToday } from "./opening-hours-day.js";
+import { businessDateToday } from "./business-date.js";
 import { isLocalDate, parseCalendarMonth, parseCalendarYear } from "../hours-rules.js";
 import { browserToday, format, formatDate } from "./hours-view.js";
 import { t } from "./strings.js";

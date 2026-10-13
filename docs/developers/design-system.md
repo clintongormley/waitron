@@ -1933,8 +1933,7 @@ A form's submit button says Save whether the form creates or edits. "Add …" be
 title and to the button that opens a create dialog. The owner kept Add on a discovered printer's
 Add, the home shortcut picker and the till's Add bill (owner, 2026-10-12, A546). A546 also kept it,
 without an owner decision, on a discovered card reader's Add, the Add products and Add to menus
-pickers, the Add under the special-day dialog's + Add dates…, the till's modifier picker when
-adding a dish, and a weighed item's Add. The period dialog opened from a painter's + New period says "Add and
+pickers, the till's modifier picker when adding a dish, and a weighed item's Add. The period dialog opened from a painter's + New period says "Add and
 paint with it" (the opening-hours seasons spec, mockup 9). Nothing guards it across screens.
 
 The season painter (`season-painter.ts`, under `packages/venue-service/src/dashboard/`) edits one
@@ -1959,24 +1958,32 @@ edits and says so beside Save. The grid fits seven days in 1280 px; at phone wid
 sideways with its time column pinned. A venue viewer gets ✕ alone, no paint row, and a grid that
 does not change.
 
-The per-date editor (`opening-hours-day.ts`) paints one date of a special day. A special day's
-Edit hours on this date opens it at `/view/date/date/<yyyy-mm-dd>`; with no date, or one that is
-not a date, it starts on the venue's business date. Above it, ‹ and the date's month and year go
-back to that month. A range explains endpoints the venue clock repeats on their calendar morning;
-its ending changeover belongs to the next morning. Previous cannot go earlier than the venue's
-business date. Each active department is followed by a narrow
-column for each of its active zones. Previous/next date actions ask before discarding a staged
-draft. A date that is not a special-day date is read-only: when a season holds it, it shows
-“Follows the {season} week”, and its heading offers Make this a special day… once its calendar
-facts load, opening the special-day dialog (see Year below) with a public holiday's name
-filled in. On a special-day date the heading names the special day; dragging stages paint over the
-season's day, department ranges in a department's column and closed times in a zone's, and opening
-a block edits its times or deletes it. One Save sends the date's changed department and zone paint
-to its special day in one request (`saveDatePaint`, `opening-hours-client.ts`). A date Closed all
-day says Closed and offers no editing action. A refusal naming a shown department or zone sits
-beside it, with the generic message above Save; a skipped-time refusal says the clock skips that
-time on that date. A refusal keeps the draft and Save available to retry. A dirty draft keeps its
-original department, zone and special-day facts through background reads and reconnect.
+The special-day painter (`special-day-painter.ts`) edits one special day in the same frame. Its bar
+holds ✕, the day's name as heading ("New special day" before it has one), Delete on a stored day,
+the department-or-zone picker, and Cancel and Save. A side panel holds the required name, the
+dates as chips each with a remove button, + Add dates…, and Every year as No or Yes. + Add dates…
+opens a month to pick from (`add-dates-calendar.ts`): a click adds a date, a shift-click or Range
+adds every date between it and the last one clicked, at most 366 at a time, and a date another
+special day holds is marked with that day's name but still offered. Every year notes that it
+follows the holiday's name to its date each year when a stored date was saved on a public holiday
+or a new date is one, and warns that 29 February repeats only in leap years. The grid has a column
+per date, headed by its short weekday, day and month, with a Closed tick under each heading that
+shuts the whole date.
+Each date's season hours are drawn faded under the paint; what is painted replaces them for that
+stretch. A department paints its periods and Closed; a zone paints Open and Closed over its
+department's day, with the zone's season closures drawn as Closed. A date's ⋮ offers Copy to… and
+Clear. The grid is drawn from the first date's changeover; when the dates' changeovers differ, a
+notice says so. Opened on a public holiday with no special day, a new day starts with the holiday's
+name and date and can be saved as it opened; when a special day of that name exists, the painter
+first offers Add to <name>, which opens the one with the latest date with this date added as an
+unsaved change, or New special day. Save stays quiet until the draft changes and sends the name,
+Every year, the dates and their Closed ticks, and paint only for each department or zone and date
+whose paint differs from what is saved; the painter stays open and the answer becomes the saved
+state. A refusal is told beside Save and keeps the draft; one that names a department's or zone's
+paint switches the picker to it and marks that date's heading, and a date another special day
+holds says "<name> already holds <date>." and marks that date's column when it is one. Delete asks first, saying
+so when the day repeats every year, and closes the painter. A venue viewer gets the painter
+read-only: no paint row, no Delete, and nothing in the panel or grid changes.
 
 A form that saves opens with its primary action (Save, Add…) disabled and drawn
 `secondary`. As soon as its draft differs from what was opened, the action is enabled and drawn
@@ -3440,7 +3447,7 @@ the zones that can order them. These are planned times;
 today's station closures and service extensions do not change them. A default station shows
 "Always open: this is the default station", without a grid (`opening-hours-station.ts`).
 Deleted stations are absent from the picker, and their old configuration id is not found. Special
-days are made in Opening hours' Year or month, and their paint in its per-date editor.
+days are made and painted in Opening hours' special-day painter, opened from the Year or the month.
 The separate Station hours page and its station-cell editors are retired.
 
 ### Tabbed management pages
@@ -3579,7 +3586,7 @@ also sets the default station, for someone with `venue.configure`. The page is o
 someone with `venue_service.manage`; a supervisor is not offered it.
 
 Department opening hours belong to `/manage/opening-hours`, with Year and Periods tabs; the month
-(`/view/month`) and the per-date editor (`/view/date`) show under the Year tab, and a Standard
+(`/view/month`) shows under the Year tab, and a Standard
 week tab shows only a station's or All departments' read-only week (`?station=<id>`,
 `/view/week/department/all`). The page opens on Year when its address names no view and no
 department, zone, station or season, and on an old `/view/calendar` address
@@ -3592,22 +3599,24 @@ it was opened from, or the Year on a direct load, and closing it returns there. 
 gives the current one, a missing department the first active one, and a zone the department does
 not have the department's own week. Any other week address opens the painter in its place
 unless it names a station or All departments: `/view/week`, with or without a department, an
-address with no view naming a season, a department or a zone, and an unknown view. After provisioning, setup's completion screen shows
+address with no view naming a season, a department or a zone, and an unknown view. The
+special-day painter (Forms above) has its own address too: `/view/special-day` for a new day,
+with `/date/<yyyy-mm-dd>` for a new day holding that date, and
+`/view/special-day/special-day/<id>` for a stored one, where `/date/<yyyy-mm-dd>` adds that date to
+its draft as an unsaved change. It opens over the view it was opened from, or the Year on a direct
+load, and closing it returns there; a new day saved takes its own day's address without a new
+history entry. An old `/view/date/date/<yyyy-mm-dd>` address is replaced by the month of that date,
+and `/view/date` with no date or a bad one by the month view. After provisioning, setup's completion screen shows
 the first saved Open schedule, when it is still Monday to Friday, 09:00–17:00, with a link to
 Opening hours' Year.
 
 - **Year.** Pick a date: a plain date offers Make this a special day…, and a special-day date
-  Edit and Delete; + Special day opens an empty dialog. ‹ › step years, a month's name opens that
+  Edit and Delete; + Special day opens the special-day painter on an empty new day. ‹ › step years, a month's name opens that
   month (below), and the season chips rename, move, add and delete seasons
-  (`season-chips.ts`), and a chip's name opens the season painter. Make and Edit open the special-day dialog (`special-day-dialog.ts`, hosted by
-  `opening-hours-screen.ts`, under `packages/venue-service/src/dashboard/`): a required name;
-  Dates, one row each with its own Closed all day switch and a remove button, with + Add dates…
-  taking a first and an optional last date, at most 366 dates at a time; and an Every year switch.
-  On a public holiday a new day starts with the holiday's name, and the dialog notes that Every
-  year follows the holiday's name to its date each year; when a special day of that name already
-  exists, the dialog first offers Add to <name> or a new special day. Delete asks first, and says
-  so when the day repeats every year. A date's hours are painted in the per-date editor (Forms
-  above), which a saved special day's Edit hours on this date opens, not in the dialog.
+  (`season-chips.ts`), and a chip's name opens the season painter. Make opens the special-day painter (Forms above,
+  hosted by `opening-hours-screen.ts`) on a new day holding the date, pre-filled when the date is
+  a public holiday, and Edit opens it on the stored day. The Year's Delete asks in its own
+  confirmation, saying so when the day repeats every year, and opens no painter.
   The Year keeps the address's year across refreshes and offers one keyboard Tab stop in its
   grid. On a special day that is also a public holiday, the date panel and the day's accessible
   name give the holiday's name beside the special day's; the grid itself shows only the marks.
@@ -3620,12 +3629,12 @@ Opening hours' Year.
   a bar for it and one per zone with the zone's closed time drawn as a gap. A row with no hours
   that day says "<name> closed". A date closed all day adds Closed to its first name, or reads Closed with none, draws its names in the closed date's colour, and at phone width shows its names alone. ‹ and the year go back to the Year, ‹ › step months, and the month has the
   department picker, + Special day, the season chips and a Rows legend. Arrow keys move between
-  dates, with one Tab stop. A special-day or public-holiday date opens the special-day dialog as
-  the Year does. An ordinary date opens the ordinary-date dialog (`ordinary-date-dialog.ts`): it
+  dates, with one Tab stop. A special-day date opens the special-day painter on its day, and a
+  public holiday with no special day opens it on a new day pre-filled with the holiday. An ordinary date opens the ordinary-date dialog (`ordinary-date-dialog.ts`): it
   says which season's week the date follows and offers Edit the <season> week (the season
-  painter on that season), Make this a special day… (the special-day dialog on a new day holding the date)
-  and a special-day picker with Add, which opens the chosen day's dialog with the date added as an
-  unsaved change. A venue viewer gets the month read-only: its dates are not buttons
+  painter on that season), Make this a special day… (the special-day painter on a new day holding
+  the date) and a special-day picker with Add, which opens the painter on the chosen day with the
+  date added as an unsaved change. A venue viewer gets the month read-only: its dates are not buttons
   and + Special day is not offered.
 - **Seasons.** The Year's season chips (`season-chips.ts`) list the venue's seasons in start
   order, each written as its name and first and last day. A chip's name opens the season

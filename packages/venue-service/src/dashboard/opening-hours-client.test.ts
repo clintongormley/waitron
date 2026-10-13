@@ -199,21 +199,15 @@ describe("OpeningHoursApi", () => {
     ]);
   });
 
-  it("re-reads both the opening hours and the special-day calendar after a special-day write", async () => {
+  it("re-reads both the opening hours and the year after a special-day write", async () => {
     const request = vi.fn(async (path: string) =>
-      path.includes("named-days") ? { days: [] } : model,
+      path.includes("/year?") ? { year: 2026, days: [] } : model,
     );
     const api = new OpeningHoursApi(request as DashboardRequest);
     const hours = vi.fn();
     const calendar = vi.fn();
     const stopHours = api.watchOpeningHours(hours, vi.fn(), vi.fn());
-    const stopCalendar = api.specialDays.watchSpecialDays(
-      "2026-10-01",
-      "2026-10-31",
-      calendar,
-      vi.fn(),
-      vi.fn(),
-    );
+    const stopCalendar = api.watchYear(2026, calendar, vi.fn(), vi.fn());
     try {
       await vi.waitFor(() =>
         expect([hours.mock.calls.length, calendar.mock.calls.length]).toEqual([1, 1]),

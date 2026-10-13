@@ -1,9 +1,8 @@
 import { expect, it } from "vitest";
 import { LiveData, type DashboardRequest } from "@waitron/dashboard-kit";
 import { OpeningHoursApi } from "./opening-hours-client.js";
-import { SpecialDaysApi } from "./special-days-client.js";
 for (const type of ["location_business_day_settings", "location_day_cutover_changes"]) {
-  for (const kind of ["hours", "calendar"]) {
+  for (const kind of ["hours", "year"]) {
     it(`${kind} rereads ${type} changes passively`, async () => {
       const live = new LiveData();
       const methods: unknown[][] = [];
@@ -20,9 +19,8 @@ for (const type of ["location_business_day_settings", "location_day_cutover_chan
               () => {},
               () => {},
             )
-          : new SpecialDaysApi(request, live).watchSpecialDays(
-              "2026-11-01",
-              "2026-11-30",
+          : new OpeningHoursApi(request, live).watchYear(
+              2026,
               (model) => revisions.push(model.clockRevision),
               () => {},
               () => {},

@@ -1,7 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { applyTokens } from "@waitron/ui";
-import { businessDateToday } from "./opening-hours-day.js";
-import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import "./service-grid.js";
 const hosts: HTMLElement[] = [];
 afterEach(() => {
@@ -71,26 +69,6 @@ it("uses each column's start for keyboard range selection", async () => {
   cell.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
   expect(ranges).toEqual([{ columnKey: "new", startsAt: "07:00", endsAt: "07:15" }]);
 });
-it("Today keeps chronological ownership in a repeated hour instead of applying today's scalar start", () => {
-  vi.useFakeTimers();
-  vi.setSystemTime(new Date("2026-10-25T00:45:00Z"));
-  const model = {
-    clockReadable: true,
-    clockRevision: 4,
-    currentBusinessDay: "2026-10-24",
-    pending: null,
-    menus: [],
-    seasons: [],
-    currentSeasonId: null,
-    departments: [],
-    timeZone: "Europe/Madrid",
-    dayCutover: "02:30",
-    businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "02:30", cutoverChanges: [] },
-  } as OpeningHoursModel;
-  expect(businessDateToday(model)).toBe("2026-10-24");
-  vi.setSystemTime(new Date("2026-10-25T01:45:00Z"));
-  expect(businessDateToday(model)).toBe("2026-10-25");
-});
 it("the All departments week draws undated columns at the venue's changeover", async () => {
   await import("./opening-hours-all.js");
   const el = document.createElement("opening-hours-all");
@@ -140,52 +118,6 @@ it("the range editor refuses an endpoint beyond the selected short column's boun
     el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=endsAt]")!.error,
   ).toBeTruthy();
 });
-it("the per-date editor uses its selected business date for every department and zone column", async () => {
-  const { OpeningHoursApi } = await import("./opening-hours-client.js");
-  const el = document.createElement("opening-hours-day");
-  const model: OpeningHoursModel = {
-    businessDayClock: {
-      timeZone: "Europe/Madrid",
-      dayCutover: "05:00",
-      cutoverChanges: [{ effectiveBusinessDay: "2026-11-04", dayCutover: "03:00" }],
-    },
-    clockRevision: 4,
-    currentBusinessDay: "2026-11-01",
-    pending: null,
-    timeZone: "Europe/Madrid",
-    clockReadable: true,
-    dayCutover: "03:00",
-    menus: [],
-    seasons: [],
-    currentSeasonId: null,
-    departments: [
-      {
-        id: "d",
-        name: "Restaurant",
-        active: true,
-        periods: [],
-        seasonWeeks: [],
-        zones: [{ id: "z", name: "Terrace", seasonWeeks: [] }],
-      },
-    ],
-  };
-  Object.assign(el, {
-    api: new OpeningHoursApi(async () => ({ days: [] }) as never),
-    model,
-    date: "2026-11-03",
-    readOnly: true,
-  });
-  applyTokens(el);
-  document.body.append(el);
-  hosts.push(el);
-  await el.updateComplete;
-  const columns = el.shadowRoot!.querySelector("service-grid")!.columns;
-  expect(columns.map((column) => column.clock)).toEqual([
-    expect.objectContaining({ dayCutover: "05:00", endMinute: 1320 }),
-    expect.objectContaining({ dayCutover: "05:00", endMinute: 1320 }),
-  ]);
-});
-
 it("labels actual dated column bounds and both transition lengths without labelling a normal-week reference", async () => {
   const el = await grid();
   const columns = el.columns.map((column) => ({

@@ -28,7 +28,7 @@ import type { OpeningHoursApi } from "./opening-hours-client.js";
 import type { PaintChange, PaintColumn, PaintPeriod } from "./paint-grid.js";
 import { paintRow, paintRowStyles } from "./paint-row.js";
 import { periodColourStyles } from "./period-colour-styles.js";
-import { ownerName, refusalReason } from "./season-painter.js";
+import { ownerName, refusalReason } from "./painter-labels.js";
 import {
   browserToday,
   format,
