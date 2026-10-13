@@ -1112,4 +1112,21 @@ describe("the season weeks route", () => {
       await answers(await r.send("PUT", `/seasons/${r.season}/weeks`, person, body(r)), 403);
     expect(await r.model()).toEqual(before);
   });
+
+  it("refuses someone who may not manage venue service before reading the body", async () => {
+    const r = await routed();
+    const before = await r.model();
+    const path = `/seasons/${r.season}/weeks`;
+    const refused = await r.send("PUT", path, r.supervisor, body(r));
+    expect(refused.status).toBe(403);
+    const { error } = (await refused.json()) as { error: Record<string, unknown> };
+    for (const malformed of [
+      { zones: "x" },
+      { departments: [{ departmentId: "x" }] },
+      { ...body(r), stray: true },
+      { ...body(r), expectedClockRevision: "x" },
+    ])
+      await answers(await r.send("PUT", path, r.supervisor, malformed), 403, error);
+    expect(await r.model()).toEqual(before);
+  });
 });

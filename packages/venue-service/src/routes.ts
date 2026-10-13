@@ -1252,12 +1252,12 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const sessionId = requireManagementSession(c);
         const seasonId = requireUuidParam(c.req.param("seasonId"), "SeasonId");
         const body = await readJsonBody<Record<string, unknown>>(c);
-        onlyKeys(body, ["departments", "zones", "expectedClockRevision"]);
-        const departments = requireWeekList(body.departments, "departments", "departmentId");
-        const zones = requireWeekList(body.zones, "zones", "zoneId");
-        const revision = requireClockRevision(body);
-        await gated(sessionId, (tx) =>
-          saveSeasonWeeks(
+        await gated(sessionId, (tx) => {
+          onlyKeys(body, ["departments", "zones", "expectedClockRevision"]);
+          const departments = requireWeekList(body.departments, "departments", "departmentId");
+          const zones = requireWeekList(body.zones, "zones", "zoneId");
+          const revision = requireClockRevision(body);
+          return saveSeasonWeeks(
             tx,
             ctx.cfg,
             seasonId,
@@ -1273,8 +1273,8 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
             },
             new Date(),
             revision,
-          ),
-        );
+          );
+        });
         return c.body(null, 204);
       }),
     );
