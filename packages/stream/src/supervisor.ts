@@ -609,7 +609,6 @@ export class StreamSupervisor {
       });
       // Only these ticks hold a read to its deadline, and a pause stops them.
       reading?.cancel.abort();
-      reading = undefined;
       await this.#pauseAndResume(generation, walBytes, signal);
     }
   }

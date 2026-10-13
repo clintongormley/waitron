@@ -522,8 +522,8 @@ describe("opening a generation", () => {
     expect(h.supervisor.status().state).toBe("off");
   });
 
-  // `stop()` leaves behind a run blocked on a bucket call. If that call answers later, the run must
-  // not go on to start a Litestream nothing would ever stop.
+  // `stop()` leaves behind a run blocked on a bucket call that ignores its cancel. If that call
+  // answers later, the run must not go on to start a Litestream nothing would ever stop.
   it("starts nothing when a claim answers after stop gave up waiting for it", async () => {
     const h = await harness();
     let release!: () => void;

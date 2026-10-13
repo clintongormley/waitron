@@ -37,8 +37,8 @@ export interface ObjectStore {
    * Deletes every key, however the store deletes several keys. Rejects at the first failure, naming
    * the key refused or, when the answer does not say which of its keys (a whole request failed, or
    * a refusal names none it sent), the first key that request carried. After a failure it starts no
-   * further deletes and answers only when those already sent have settled; once cancelled, it starts
-   * no further deletes.
+   * further deletes and answers only when those already sent have settled. Once cancelled, the S3
+   * store starts no further deletes.
    */
   deleteMany(keys: string[], call?: StoreCall): Promise<void>;
 }

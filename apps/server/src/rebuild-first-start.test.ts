@@ -576,9 +576,11 @@ describe("readBucketPointerTerm", () => {
     const store = createMemoryObjectStore();
     const bound = 123_457;
     const live = new Set<number>();
+    let created = 0;
     const timers = createHook({
       init(id, type, _trigger, resource) {
         if (type === "Timeout" && (resource as { _idleTimeout?: number })._idleTimeout === bound) {
+          created += 1;
           live.add(id);
         }
       },
@@ -591,6 +593,7 @@ describe("readBucketPointerTerm", () => {
         await readBucketPointerTerm(suite.db, RING, { openStore: () => store, timeoutMs: bound }),
       ).toBeNull();
       await new Promise((resolve) => setImmediate(resolve));
+      expect(created).toBe(1);
       expect(live.size).toBe(0);
     } finally {
       timers.disable();

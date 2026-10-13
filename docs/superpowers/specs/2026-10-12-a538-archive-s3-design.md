@@ -2,6 +2,8 @@
 
 **Status: needs-owner-review.** Draft dated 2026-10-12. Every new choice below is **proposed**, not owner-approved. Please review before **17 October 2026**. This document authorizes neither a build nor a live run. The [implementation plan](../plans/2026-10-12-a538-archive-s3.md) uses native inline execution after approval.
 
+_2026-10-13: the owner approved the four proposed defaults as written on 2026-10-12, and plan Task 1 is built as A538-1._
+
 Your database already streams to a bucket, but your scheduled recovery archives still have only a local destination. A lost box needs both an off-box archive and recovery instructions you saved elsewhere. Add an S3 archive destination, keep local archives available, and run a small rehearsal against Amazon S3 to replace specific untested claims with recorded answers.
 
 ## 1. Scope and evidence boundary
@@ -148,7 +150,7 @@ Receipts contain commit, Node/SDK/Litestream versions, UTC time, region, run ID,
 3. Approve 15-minute transfer/retention, 30-second status and 10-second cleanup defaults, configurable transfer budget, bounded multipart memory and the proposed transfer ceiling?
 4. Approve the small S3-only rehearsal, including the temporary listing-only deny policy on its own disposable bucket? SSE-S3 is the default; no outside-S3 work is proposed.
 
-All four remain unanswered. Build and rehearsal remain pending owner approval.
+All four remain unanswered. Build and rehearsal remain pending owner approval. _(2026-10-13: answered; see the status line.)_
 
 ## 8. Backlog source inventory and dispositions
 
