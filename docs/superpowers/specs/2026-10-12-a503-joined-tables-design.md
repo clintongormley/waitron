@@ -228,6 +228,7 @@ split today. A split decides only who sits where today.
   > Added 2026-10-13 by A503 part 4: the server refuses both on a table split off
   > (`table.split_off`, `refuseSplitOff`, `apps/server/src/floor-today-store.ts`); Put back is not
   > refused.
+  > Reset table (A579 part 4a) and Split tables… on a group also take one back.
 - **Join again** (**Owner**), on the joined table itself or on any of its free split-off parts, puts
   back that one joined table and touches no other table in the zone. **Default:** it takes back every
   split-off part that is free (no party, not needing clearing, in no merge), with no choosing, and
