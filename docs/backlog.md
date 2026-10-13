@@ -2276,11 +2276,14 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   the `productId` check may leave them green. **Next action:** delete it and see; if they stay
   green, give the line a real `menuItemId` too.
 
-- `apps/server/src/orders-list.ts` (#1027) sorts bill payments and their refunds by `created_at, id`
-  and tenders by `id` alone; ids are `randomUUID()`, so a tie, and the tenders' whole order, comes
-  out random. The plan asked for `created_at, rowid` in `readBillPayments`. **Next action:** a
-  `rowid` tie-break, with a test whose ids sort against the writing order. Left open by service Task
-  14 (#721, several payments against one bill, the server).
+- **Five reads of a party's tables still break a `joined_at` tie by the membership's random id**:
+  `partyTableLabels` (`packages/db/src/party-table-labels.ts`), `partyZone` and `memberTables`
+  (`apps/server/src/parties.ts`), and one read each in `apps/server/src/watch-zones.ts` and
+  `apps/server/src/working-order.ts`. Tables that join a party in one millisecond — merge members
+  joined in a loop by `seatMergeMembers` or `joinMergeMembers` (`apps/server/src/floor-today-merges.ts`)
+  can — are listed in a random order, while the Orders screen's
+  `readPartyTables` breaks the same tie by `rowid`. **Next action:** the same `rowid` tie-break, with
+  a test whose ids sort against the writing order. Left open by A533.
 
 - **A collect straight after Place order does not re-read the kitchen queue.** Left open by service
   Task 16 (#981). [Detail](backlog/till.md#task-16-981-counter-handover-with-b25-b26-b29-b30)
@@ -5358,11 +5361,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   module lacks its transfer declaration** — left open by A261-2e's review (#1277). Reachability with
   the installed module list is unverified; distinguish that local build defect from an incompatible
   artifact if it can reach setup.
-
-- **`listOrders`'s `orderIn` filter (`apps/server/src/orders-list.ts`) is applied to `r.id`**,
-  which for a sale row of the union is the sale's id, not its order's: today's only caller
-  asks for collectable rows, so nothing reaches it, but a caller without `collectable: true`
-  would get every sale row unfiltered. Left open by W97 (#1311).
 
 - **SP-4 — the module UI surface on the TILL** (card-registry inversion, self-sourcing cards); the
   dashboard half is done. Migrate the remaining core dashboard screens onto the module UI seat and off
