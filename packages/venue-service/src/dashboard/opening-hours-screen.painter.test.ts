@@ -231,6 +231,43 @@ describe("links into the painter", () => {
     await expect.poll(() => painterOf(el)).toBeNull();
   });
 
+  it("closing a painter opened in the app goes back, so the first Back after it leaves the year", async () => {
+    history.replaceState(null, "", "/manage/before");
+    history.pushState(null, "", "/manage/opening-hours/view/year/year/2027");
+    const el = await mount("/manage/opening-hours/view/year/year/2027");
+    const seasonChips = await chips(el);
+    const length = history.length;
+    seasonChips
+      .shadowRoot!.querySelector<HTMLElement>("[data-season=spring] [data-test=season-week]")!
+      .click();
+    await cancel(await shownPainter(el));
+    await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/year/year/2027");
+    await expect.poll(() => painterOf(el)).toBeNull();
+    expect(history.length).toBe(length + 1);
+    history.back();
+    await expect.poll(() => location.pathname).toBe("/manage/before");
+  });
+
+  it("the All departments season picker writes its season before the department, and reads it back", async () => {
+    const el = await mount("/manage/opening-hours/view/week/department/all");
+    await expect.poll(() => el.shadowRoot!.querySelector("opening-hours-all")).not.toBeNull();
+    el.shadowRoot!.querySelector("[name=seasonId]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "spring" }, bubbles: true, composed: true }),
+    );
+    await expect
+      .poll(() => location.pathname)
+      .toBe("/manage/opening-hours/view/week/season/spring/department/all");
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("opening-hours-all")!.seasonId)
+      .toBe("spring");
+    history.replaceState(null, "", "/manage/opening-hours/view/week/season/winter/department/all");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("opening-hours-all")!.seasonId)
+      .toBe("winter");
+    expect(painterOf(el)).toBeNull();
+  });
+
   it("a season chip's ✎ still opens the season dialog and not the painter", async () => {
     const el = await mount("/manage/opening-hours/view/year/year/2027");
     const seasonChips = await chips(el);
@@ -392,6 +429,86 @@ describe("leaving a painter with edits", () => {
       ).toBe(false);
       expect(painter.departmentId).toBe("d3");
       expect(painter.edited()).toEqual({ departments: ["d1"], zones: [] });
+    } finally {
+      guard.dispose();
+    }
+  });
+
+  it.each([
+    ["after painting", true],
+    ["before painting (control)", false],
+  ])("a department switch %s keeps the Year behind the painter for Back", async (_, paintFirst) => {
+    history.replaceState(null, "", "/manage/before");
+    let app!: PainterApp;
+    const guard = new NavigationGuard(window, {
+      isDirty: () => app?.leave.coordinator.isDirty() ?? false,
+      request: (proceed, signal) =>
+        app.leave.coordinator.request({ scopes: "all", reason: "navigation", proceed, signal }),
+    });
+    try {
+      await guard.write("/manage/opening-hours/view/year");
+      ({ app } = await mountApp());
+      const el = app.shadowRoot!.querySelector("dashboard-opening-hours-screen")!;
+      await guard.write("/manage/opening-hours/view/season/season/winter/department/d1");
+      const painter = await shownPainter(el);
+      const switchTo = async (departmentId: string) => {
+        painter.shadowRoot!.querySelector("[name=department]")!.dispatchEvent(
+          new CustomEvent("wt-change", {
+            detail: { value: departmentId },
+            bubbles: true,
+            composed: true,
+          }),
+        );
+        await expect
+          .poll(() => location.pathname)
+          .toBe(`/manage/opening-hours/view/season/season/winter/department/${departmentId}`);
+      };
+      if (paintFirst) await drag(painter, "3", 120, 240);
+      await switchTo("d3");
+      if (!paintFirst) await drag(painter, "3", 120, 240);
+      expect(painter.edited().departments.length).toBe(1);
+      history.back();
+      await choose(app, "keep");
+      expect(location.pathname).toBe(
+        "/manage/opening-hours/view/season/season/winter/department/d3",
+      );
+      history.back();
+      await choose(app, "discard");
+      await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/year");
+      await expect.poll(() => painterOf(el)).toBeNull();
+    } finally {
+      guard.dispose();
+    }
+  });
+
+  it("Cancel with edits asks once, then goes back to the view the painter opened over", async () => {
+    history.replaceState(null, "", "/manage/before");
+    let app!: PainterApp;
+    const guard = new NavigationGuard(window, {
+      isDirty: () => app?.leave.coordinator.isDirty() ?? false,
+      request: (proceed, signal) =>
+        app.leave.coordinator.request({ scopes: "all", reason: "navigation", proceed, signal }),
+    });
+    try {
+      await guard.write("/manage/opening-hours/view/year");
+      ({ app } = await mountApp());
+      const el = app.shadowRoot!.querySelector("dashboard-opening-hours-screen")!;
+      await guard.write("/manage/opening-hours/view/season/season/winter/department/d1");
+      const length = history.length;
+      const painter = await shownPainter(el);
+      await drag(painter, "3", 120, 240);
+      frame(painter).shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!.click();
+      await choose(app, "discard");
+      await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/year");
+      await expect.poll(() => painterOf(el)).toBeNull();
+      await app.updateComplete;
+      expect(
+        app.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-unsaved-changes"]>(
+          "wt-unsaved-changes",
+        )!.open,
+      ).toBe(false);
+      expect(history.length).toBe(length);
+      expect(app.writes).toEqual([]);
     } finally {
       guard.dispose();
     }

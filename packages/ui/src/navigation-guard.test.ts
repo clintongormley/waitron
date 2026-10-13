@@ -456,3 +456,47 @@ it("unguarded observers receive the actual traversal event while accepted writes
   await guard.write("/guarded/accepted-observer");
   expect(reports).toEqual([traversal, undefined]);
 });
+
+it("rewrite replaces the accepted entry's address in place and keeps its history position", async () => {
+  const f = fixture();
+  await guard.write("/guarded/b?dev=1#keep");
+  const position = history.state.__wtNavigation;
+  const length = history.length;
+  f.edit();
+  expect(guard.rewrite("/guarded/b2?dev=1#keep")).toBe("proceeded");
+  expect(f.answers).toEqual([]);
+  expect(location.pathname).toBe("/guarded/b2");
+  expect(guard.href).toBe(new URL("/guarded/b2?dev=1#keep", location.origin).href);
+  expect(history.state.__wtNavigation).toEqual(position);
+  expect(history.state.marker).toBe("original");
+  expect(history.length).toBe(length);
+  expect(f.routes).toEqual(["/guarded/b", "/guarded/b2"]);
+  history.back();
+  await expect.poll(() => f.answers.length).toBe(1);
+  expect(location.pathname).toBe("/guarded/b2");
+  f.answers[0]!("keep");
+  await idle();
+  expect(location.pathname).toBe("/guarded/b2");
+  expect(f.value).toBe("edited");
+  history.back();
+  await expect.poll(() => f.answers.length).toBe(2);
+  f.answers[1]!("discard");
+  await expect.poll(() => f.view.textContent).toBe("/guarded/a");
+  history.forward();
+  await expect.poll(() => location.pathname).toBe("/guarded/b2");
+});
+
+it("rewrite answers busy while a leave question is open, and stale once disposed", async () => {
+  const f = fixture();
+  f.edit();
+  void guard.write("/guarded/b");
+  expect(guard.rewrite("/guarded/c")).toBe("busy");
+  expect(location.pathname).toBe("/guarded/a");
+  f.answers[0]!("keep");
+  await idle();
+  expect(() => guard.rewrite("https://example.invalid/elsewhere")).toThrow("stay in this app");
+  guard.dispose();
+  expect(guard.rewrite("/guarded/d")).toBe("stale");
+  expect(location.pathname).toBe("/guarded/a");
+  expect(f.routes).toEqual([]);
+});

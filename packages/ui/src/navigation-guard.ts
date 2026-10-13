@@ -172,6 +172,19 @@ export class NavigationGuard {
     return this.decide(attempt, () => this.writeAccepted(attempt.destination, replace));
   }
 
+  /** Changes the current entry's address without the leave question, keeping its history position
+   *  so Back and Forward still measure their distance from it, as `reset()` would not. */
+  rewrite(href: string | URL): LeaveOutcome {
+    if (this.disposed) return "stale";
+    if (this.pending) return "busy";
+    const url = new URL(href, this.accepted.href);
+    if (url.origin !== this.target.location.origin)
+      throw new Error("Navigation must stay in this app");
+    this.target.history.replaceState(this.accepted.state, "", url.href);
+    this.publish({ ...this.accepted, href: url.href });
+    return "proceeded";
+  }
+
   private writeAccepted(entry: Entry, replace: boolean): void {
     const at = {
       ...this.accepted.position!,

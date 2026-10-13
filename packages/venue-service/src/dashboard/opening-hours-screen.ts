@@ -530,12 +530,12 @@ export class OpeningHoursScreen extends LitElement {
    *  a department switch, and a guarded write would offer to discard it. */
   private replaceAddress(url: URL) {
     const guard = navigationGuardFor(window);
-    if (guard && !leaveCoordinatorFor(this)?.isDirty()) {
-      void guard.write(url, true);
+    if (guard) {
+      if (leaveCoordinatorFor(this)?.isDirty()) guard.rewrite(url);
+      else void guard.write(url, true);
       return;
     }
     history.replaceState(history.state, "", url);
-    guard?.reset();
     this.followUrl();
   }
   private painterUrl({ seasonId, departmentId, zoneId }: PainterAddress) {
@@ -610,9 +610,10 @@ export class OpeningHoursScreen extends LitElement {
       @painter-close=${(event: Event) => {
         event.stopPropagation();
         if (!this.currentPainter(event)) return;
-        this.replaceAddress(
-          new URL(this.baseHref ?? "/manage/opening-hours/view/year", location.href),
-        );
+        // Opened over a view this screen drew, the painter's entry sits on top of that view's,
+        // and replacing it would leave the view's address in history twice.
+        if (this.baseHref !== undefined) history.back();
+        else this.replaceAddress(new URL("/manage/opening-hours/view/year", location.href));
       }}
       @click=${(event: MouseEvent) => {
         const link = event
