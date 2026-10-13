@@ -18,7 +18,7 @@ import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
-import { partyRevision } from "./floor-today-merges.js";
+import { partyRevision } from "./parties.js";
 import { inTx, setupPartyVenue, tableRow, type PartyVenue } from "./testing/party-venue.js";
 import {
   mergeOf,

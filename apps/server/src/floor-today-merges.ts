@@ -1,6 +1,5 @@
 import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
 import {
-  parties,
   partyTables,
   floorTodayJoins,
   floorTodayJoinTables,
@@ -22,7 +21,7 @@ import { partsOf, passGuests, type Part } from "./floor-today-parts.js";
 import { placementColumns, placementOf, refuseDeliveryPending } from "./floor-today-store.js";
 import type { Placement } from "./floor-reset-plan.js";
 import { partPlaces } from "./joined-split-layout.js";
-import { holderOf } from "./parties.js";
+import { holderOf, partyRevision } from "./parties.js";
 import { joinTables, type SlipsLater } from "./table-actions.js";
 import type { OriginConfig, TillConfig } from "./till-config.js";
 import "./errors.js";
@@ -147,15 +146,6 @@ export async function joinMergeMembers(
       slipsLater,
     });
   }
-}
-
-/** The party's revision as it stands in the transaction now. */
-export async function partyRevision(tx: Transaction, partyId: string): Promise<number> {
-  const [party] = await tx
-    .select({ revision: parties.revision })
-    .from(parties)
-    .where(eq(parties.id, partyId));
-  return party!.revision;
 }
 
 /**

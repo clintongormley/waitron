@@ -101,6 +101,8 @@ table taken back gets its saved seats; one tap, no confirming window, when every
    leaves one (`passGuestsTo`, `floor-today-split.ts:74-91`), and the group's guests then hold all
    four tables.
 
+   > Changed 2026-10-13 by A579 part 3a: now `passGuests`, `apps/server/src/floor-today-parts.ts`.
+
 Dragging Long table onto Bar does the same, except that the three counters move together, keeping
 their places side by side, until the nearest touches Bar. A joined table with tables already split
 off brings only the tables still joined to it: Long table with Counter 5 split off brings Counter 3

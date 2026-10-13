@@ -2,7 +2,6 @@ import { aliasedTable, and, eq, exists, inArray, isNull, max, sql } from "drizzl
 import {
   diningTables,
   nowIso,
-  parties,
   partyTables,
   floorPlanTableSizes,
   floorPlanTables,
@@ -15,7 +14,7 @@ import {
 import { NEW_TABLE_SIZE, compareLabels } from "@waitron/shared";
 import type { LaidPart } from "./joined-split-layout.js";
 import { enqueueMovedSlipsFor, readPartiesSentWork } from "./kitchen-print.js";
-import { checkAndBumpParty, holderOf, leaveTables } from "./parties.js";
+import { checkAndBumpParty, holderOf, leaveTables, partyRevision } from "./parties.js";
 import type { TillConfig } from "./till-config.js";
 
 export interface Part extends LaidPart {
@@ -87,11 +86,7 @@ export async function passGuests(
     .set({ needsClearingSince: null })
     .where(inArray(diningTables.id, [...toTableIds]));
   const before = slips === "now" ? await readPartiesSentWork(tx, cfg, [partyId]) : null;
-  const [party] = await tx
-    .select({ revision: parties.revision })
-    .from(parties)
-    .where(eq(parties.id, partyId));
-  await checkAndBumpParty(tx, partyId, party!.revision, "open");
+  await checkAndBumpParty(tx, partyId, await partyRevision(tx, partyId), "open");
   const [latest] = await tx
     .select({ joinedAt: max(partyTables.joinedAt) })
     .from(partyTables)

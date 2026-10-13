@@ -111,8 +111,6 @@ the details one tap away.
     > Added 2026-10-12 by A503 part 2 ([design](2026-10-12-a503-joined-tables-design.md)): a joined table is a table on the saved plan made of two or more tables not placed on the plan (`floor_plan_table_parts`); each reset copies its parts (`floor_reset_table_parts`), and a part still joined cannot be seated, joined to a party, moved to, given a bill, merged, put on the map as a spare, named as an order's table or chosen for a department transfer (`table.in_joined_table`). It cannot yet be split.
     >
     > Added 2026-10-13 by A503 part 3: Split tables… now splits parts off a joined table for the day (§6.2).
-    >
-    > Superseded 2026-10-13 by A579 part 3a ([design](2026-10-13-a579-flattened-joined-tables-design.md)): pushing a joined table into a group splits it; the group holds its real tables.
   - **Remove from plan:** the table becomes a spare in the saved plan; today's plan changes at its
     next reset.
   - **Delete:** section 8. It is part of the draft, so Undo brings it back until Save.
@@ -203,6 +201,8 @@ undone at the next reset anyway.
 > seats from that copy; a join saved during the day waits for the next reset.
 
 > Superseded 2026-10-12 by A503 part 1 ([design](2026-10-12-a503-joined-tables-design.md)): saved joins, the editor's Joins section and the till's copy of them are gone; a service merge's seats come only from the till, whose seats prompt opens empty.
+
+> Superseded 2026-10-13 by A579 part 3a ([design](2026-10-13-a579-flattened-joined-tables-design.md)): pushing a joined table into a group splits it; the group holds its real tables.
 
 ### 6.2 The other changes
 

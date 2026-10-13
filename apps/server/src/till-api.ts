@@ -142,6 +142,7 @@ import {
   readPartyBills,
   seatTable,
   setPartyName,
+  partyRevision,
   partyRevisionOfOrder,
   partyZone,
 } from "./parties.js";
@@ -154,7 +155,6 @@ import {
   joinMergeMembers,
   leaveMergesRestoring,
   mergeMembers,
-  partyRevision,
   writeMerge,
 } from "./floor-today-merges.js";
 import type { TableActionOptions } from "./table-actions.js";
