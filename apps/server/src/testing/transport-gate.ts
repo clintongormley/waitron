@@ -50,6 +50,9 @@ function splitTarget(target: string): { host: string; port: number } | null {
   return { host: match[1]!, port: Number(match[2]) };
 }
 
+const closedWhileWaiting = (count: number) =>
+  new Error(`transport gate: closed while waiting for ${count} held CONNECTs`);
+
 export async function startTransportGate(options: {
   allow(host: string, port: number): boolean;
 }): Promise<TransportGate> {
@@ -62,7 +65,9 @@ export async function startTransportGate(options: {
   const pending: Pending[] = [];
   const tunnelEnds = new Set<Duplex>();
   const owned = new Set<Duplex>();
-  const heldWaiters = new Set<() => void>();
+  const heldWaiters = new Set<{ count: number; check(): void; stop(error: Error): void }>();
+  /** A CONNECT's own bytes, kept while its dial completed under a hold. */
+  const heldHeads = new Map<Duplex, Buffer>();
 
   const own = (socket: Duplex) => {
     owned.add(socket);
@@ -70,7 +75,7 @@ export async function startTransportGate(options: {
   };
 
   const notifyHeld = () => {
-    for (const check of [...heldWaiters]) check();
+    for (const waiter of [...heldWaiters]) waiter.check();
   };
 
   // Hand-driven rather than `pipe()`: a pipe resumes its source on the destination's `drain`, which
@@ -95,7 +100,14 @@ export async function startTransportGate(options: {
     entry.client.on("close", () => upstream.destroy());
     upstream.once("connect", () => {
       entry.client.write("HTTP/1.1 200 Connection established\r\n\r\n");
-      if (entry.head.length > 0) upstream.write(entry.head);
+      if (entry.head.length > 0) {
+        if (holding) {
+          heldHeads.set(upstream, entry.head);
+          upstream.once("close", () => heldHeads.delete(upstream));
+        } else {
+          upstream.write(entry.head);
+        }
+      }
       for (const end of [entry.client, upstream]) {
         tunnelEnds.add(end);
         end.once("close", () => tunnelEnds.delete(end));
@@ -158,6 +170,8 @@ export async function startTransportGate(options: {
         entry.client.removeAllListeners("end");
         dial(entry);
       }
+      for (const [upstream, head] of heldHeads) upstream.write(head);
+      heldHeads.clear();
       for (const end of tunnelEnds) end.resume();
     },
     heldCount: () => pending.length,
@@ -165,28 +179,39 @@ export async function startTransportGate(options: {
     refused: () => [...refusedList],
     forwarded: () => dialled,
     waitForHeld(count, timeoutMs) {
+      if (closed) return Promise.reject(closedWhileWaiting(count));
       return new Promise<void>((resolve, reject) => {
-        const check = () => {
-          if (pending.length < count) return;
-          clearTimeout(timer);
-          heldWaiters.delete(check);
-          resolve();
+        const waiter = {
+          count,
+          check() {
+            if (pending.length < count) return;
+            clearTimeout(timer);
+            heldWaiters.delete(waiter);
+            resolve();
+          },
+          stop(error: Error) {
+            clearTimeout(timer);
+            heldWaiters.delete(waiter);
+            reject(error);
+          },
         };
-        const timer = setTimeout(() => {
-          heldWaiters.delete(check);
-          reject(
-            new Error(
-              `transport gate: ${pending.length} of ${count} CONNECTs held after ${timeoutMs} ms`,
+        const timer = setTimeout(
+          () =>
+            waiter.stop(
+              new Error(
+                `transport gate: ${pending.length} of ${count} CONNECTs held after ${timeoutMs} ms`,
+              ),
             ),
-          );
-        }, timeoutMs);
-        heldWaiters.add(check);
-        check();
+          timeoutMs,
+        );
+        heldWaiters.add(waiter);
+        waiter.check();
       });
     },
     async close() {
       if (closed) return;
       closed = true;
+      for (const waiter of [...heldWaiters]) waiter.stop(closedWhileWaiting(waiter.count));
       pending.splice(0);
       for (const socket of owned) socket.destroy();
       await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -299,7 +324,15 @@ export function gatedRequestHandler(
 export function gatedSpawn(gate: TransportGate, onChild?: (pid: number) => void): SpawnFn {
   return (bin, args, env) => {
     const child = spawnLitestream(bin, args, { ...env, HTTPS_PROXY: gate.url });
-    if (onChild && child.pid !== undefined) onChild(child.pid);
+    if (onChild && child.pid !== undefined) {
+      try {
+        onChild(child.pid);
+      } catch (error) {
+        // Nothing else holds the handle, so nothing else could stop the child.
+        child.kill();
+        throw error;
+      }
+    }
     return child;
   };
 }

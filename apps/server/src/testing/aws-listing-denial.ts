@@ -102,6 +102,8 @@ async function pollUntil(
     if (elapsedMs + LISTING_DENIAL_POLL_MS >= budget)
       return { met: false, last, attempts, elapsedMs };
     await deps.sleep(LISTING_DENIAL_POLL_MS, ctx.signal);
+    const woke = Math.max(0, deps.now() - started);
+    if (woke >= budget) return { met: false, last, attempts, elapsedMs: woke };
   }
 }
 
@@ -153,13 +155,19 @@ export async function withListingDenied(
     if (unresolved !== undefined) throw unresolved;
     return;
   }
-  // The first failure stays the one thrown, so a caller sees what went wrong in the work itself;
-  // teardown removes the policy again whatever happened here.
+  // Teardown removes the policy again whatever happened here.
   const { error } = failure;
-  if (unresolved !== undefined && error instanceof Error && error.cause === undefined) {
-    error.cause = unresolved;
+  if (unresolved === undefined) throw error;
+  // `Reflect.set` answers false rather than throwing on a frozen error.
+  if (
+    error instanceof Error &&
+    error.cause === undefined &&
+    Reflect.set(error, "cause", unresolved)
+  ) {
+    throw error;
   }
-  throw error;
+  const named = error instanceof Error ? error.message : String(error);
+  throw new AggregateError([error, unresolved], `${named}; then ${unresolved.message}`);
 }
 
 /** Removes the policy and runs the positive control; answers the error naming what is unresolved. */

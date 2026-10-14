@@ -480,6 +480,94 @@ describe("withListingDenied", () => {
     expect((failure.cause as Error).message).toMatch(/unresolved/);
   });
 
+  it("keeps the frozen work's error first and still reports a later control failure", async () => {
+    const failure = Object.freeze(new Error("the work failed"));
+    const { error } = await run([DENIED], async () => {
+      throw failure;
+    });
+    expect(error).toBeInstanceOf(AggregateError);
+    const errors = (error as AggregateError).errors as Error[];
+    expect(errors[0]).toBe(failure);
+    expect(errors[1]!.message).toMatch(/unresolved/);
+    expect(error!.message).toMatch(/^the work failed/);
+  });
+
+  /**
+   * Answers from `before` until the policy is removed and from `after` once it is, the last of each
+   * repeating. The first sleep of the `late` control wakes a whole budget late.
+   */
+  function lateWaking(
+    log: string[],
+    before: ListAnswer[],
+    after: ListAnswer[],
+    late: "negative" | "positive",
+  ): ListingDenialDeps {
+    let at = 0;
+    const listed = { before: 0, after: 0 };
+    let overslept = false;
+    const removed = () => log.includes("delete");
+    return {
+      async list() {
+        const phase = removed() ? "after" : "before";
+        const answers = phase === "after" ? after : before;
+        const answer = answers[Math.min(listed[phase], answers.length - 1)]!;
+        listed[phase] += 1;
+        log.push(answer.ok ? "list:ok" : `list:${answer.status}`);
+        return answer;
+      },
+      now: () => at,
+      async sleep(ms) {
+        const inLate = (late === "positive") === removed();
+        at += ms + (inLate && !overslept ? AWS_REHEARSAL_LIMITS.denialControlMs : 0);
+        if (inLate) overslept = true;
+      },
+    };
+  }
+
+  it.each([
+    [
+      "negative",
+      [OK, DENIED],
+      [OK],
+      "deny-unmeasured",
+      "the listing refusal is unmeasured: no 403 within 60000 ms (last answer success)",
+      ["list:ok", "list:ok"],
+    ],
+    [
+      "positive",
+      [DENIED],
+      [DENIED, OK],
+      "deny-positive-control",
+      "listing denial unresolved: the policy was removed, but the listing still answered 403 after 60000 ms",
+      ["list:403", "list:403"],
+    ],
+  ] as const)(
+    "starts no %s-control listing once a late wake-up has spent the budget",
+    async (late, before, after, phase, message, lists) => {
+      const log: string[] = [];
+      const h = harness(log);
+      const error = await rejection(
+        withAwsRehearsal(async (ctx) => {
+          ctx.prefix("pause");
+          await withListingDenied(
+            ctx,
+            EXACT,
+            async () => {},
+            lateWaking(log, [...before], [...after], late),
+          );
+        }, h.deps),
+      );
+      expect(error.message).toBe(message);
+      expect(log.filter((entry) => entry.startsWith("list"))).toEqual(lists);
+      const events = denialEvents((await receipt()).events);
+      expect(events.find((event) => event.phase === phase)).toMatchObject({
+        outcome: "failed",
+        attempts: 1,
+        elapsedMs: LISTING_DENIAL_POLL_MS + AWS_REHEARSAL_LIMITS.denialControlMs,
+      });
+    },
+  );
+
   it("names the unresolved state when the listing never comes back", async () => {
     const { error, events } = await run([DENIED]);
     expect(error?.message).toBe(

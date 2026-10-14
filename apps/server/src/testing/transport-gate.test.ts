@@ -19,7 +19,7 @@ const tls = mintSelfSignedServerCert({
   now: new Date(),
 });
 
-let target: Server;
+let target: Server | undefined;
 let targetPort: number;
 let targetRequests = 0;
 let targetConnections = 0;
@@ -44,13 +44,16 @@ beforeAll(async () => {
     });
   });
   target.on("secureConnection", () => targetConnections++);
-  await new Promise<void>((resolve) => target.listen(0, "127.0.0.1", resolve));
-  targetPort = (target.address() as { port: number }).port;
+  const started = target;
+  await new Promise<void>((resolve) => started.listen(0, "127.0.0.1", resolve));
+  targetPort = (started.address() as { port: number }).port;
 });
 
 afterAll(async () => {
-  target.closeAllConnections();
-  await new Promise<void>((resolve) => target.close(() => resolve()));
+  const started = target;
+  if (started === undefined) return;
+  started.closeAllConnections();
+  await new Promise<void>((resolve) => started.close(() => resolve()));
 });
 
 const gates: TransportGate[] = [];
@@ -128,11 +131,14 @@ async function countingTarget() {
   };
 }
 
-/** Opens a CONNECT to `127.0.0.1:port` through the gate; resolves once the gate answers 200. */
-function rawTunnel(g: TransportGate, port: number): Promise<Socket> {
+/**
+ * Opens a CONNECT to `127.0.0.1:port` through the gate, with `head` sent in the same write;
+ * resolves once the gate answers 200.
+ */
+function rawTunnel(g: TransportGate, port: number, head = ""): Promise<Socket> {
   return new Promise((resolve, reject) => {
     const socket = connect(Number(new URL(g.url).port), "127.0.0.1", () =>
-      socket.write(`CONNECT 127.0.0.1:${port} HTTP/1.1\r\nHost: 127.0.0.1:${port}\r\n\r\n`),
+      socket.write(`CONNECT 127.0.0.1:${port} HTTP/1.1\r\nHost: 127.0.0.1:${port}\r\n\r\n${head}`),
     );
     let answer = "";
     const onData = (chunk: Buffer) => {
@@ -257,12 +263,12 @@ describe("startTransportGate", () => {
     }
   });
 
-  it("stops a tunnel whose dial completes after a fresh hold", async () => {
+  it("stops a tunnel whose dial completes after a fresh hold, the CONNECT's own bytes included", async () => {
     const tcp = await countingTarget();
     try {
       const g = await gate((_host, port) => port === tcp.port);
       g.hold();
-      const opened = rawTunnel(g, tcp.port);
+      const opened = rawTunnel(g, tcp.port, "early");
       await g.waitForHeld(1, 5_000);
       g.release();
       g.hold();
@@ -272,7 +278,7 @@ describe("startTransportGate", () => {
       expect(tcp.state.received).toBe(0);
 
       g.release();
-      await vi.waitFor(() => expect(tcp.state.received).toBe(4), { timeout: 5_000 });
+      await vi.waitFor(() => expect(tcp.state.received).toBe(9), { timeout: 5_000 });
       client.destroy();
     } finally {
       await tcp.close();
@@ -321,6 +327,23 @@ describe("startTransportGate", () => {
     await expect(g.waitForHeld(1, 50)).rejects.toThrow(/50 ms/);
   });
 
+  it("close() rejects a pending waitForHeld at once and leaves no timer behind", async () => {
+    const g = await gate();
+    const timers = () =>
+      process.getActiveResourcesInfo().filter((resource) => resource === "Timeout").length;
+    const before = timers();
+    const waiter = g.waitForHeld(1, 5_000).then(
+      () => "resolved",
+      (error: Error) => error.message,
+    );
+    await g.close();
+    expect(timers()).toBe(before);
+    expect(await within(waiter, 100)).toBe(
+      "transport gate: closed while waiting for 1 held CONNECTs",
+    );
+    await expect(g.waitForHeld(1, 5_000)).rejects.toThrow(/closed/);
+  });
+
   it("close() ends held CONNECTs and open tunnels, and can be called twice", async () => {
     const g = await gate();
     const handler = handlerFor(g);
@@ -356,6 +379,31 @@ describe("gatedSpawn", () => {
     expect(gatedKeys.filter((key) => !plainKeys.includes(key))).toEqual(["HTTPS_PROXY"]);
     expect(plainKeys.filter((key) => !gatedKeys.includes(key))).toEqual([]);
     expect(pids).toEqual([gated.pid]);
+  });
+
+  it("stops the child and rethrows when reporting its pid throws", async () => {
+    const g = await gate();
+    let pid: number | undefined;
+    expect(() =>
+      gatedSpawn(g, (childPid) => {
+        pid = childPid;
+        throw new Error("tracking refused");
+      })(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {}),
+    ).toThrow("tracking refused");
+    expect(pid).toBeDefined();
+    const alive = () => {
+      try {
+        process.kill(pid!, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    try {
+      await vi.waitFor(() => expect(alive()).toBe(false), { timeout: 5_000 });
+    } finally {
+      if (alive()) process.kill(pid!, "SIGKILL");
+    }
   });
 
   it("hands the gate's url as HTTPS_PROXY", async () => {
