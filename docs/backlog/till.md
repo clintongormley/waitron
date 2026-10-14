@@ -1419,11 +1419,12 @@ From **Variants as products (#511–#556) — what is left open.** How the model
   or not, keeps "Table Counter 4 needs clearing", never the group's name, because Mark cleared
   clears only that table (one `tableId`, one row on the server). Owner may overturn it.
 - **A refusal not about the name stays in the Rename window (A638, owner 2026-10-14, overturning
-  A581 part 4's D13).** "The floor has changed" or any other refusal shows at the window's foot and
-  keeps what the waiter typed, so Save can be pressed again, as Split tables… and Reset table do; a
-  name in use or too long stays under the field. The window still closes when its table leaves the
-  floor read, stops offering Rename or its group changes, and a refusal shown in it then moves to the
-  floor (`#rename`, `apps/till/src/screens/till-floor-screen.ts`).
+  A581 part 4's decision to close the window).** "The floor has changed" or any other refusal shows
+  at the window's foot and keeps what the waiter typed, so Save can be pressed again, as Split
+  tables… and Reset table do; a name in use or too long stays under the field. The window still
+  closes when its table leaves the floor read, stops offering Rename or its group changes, and a
+  refusal shown in it then moves to the floor (`#rename` and `willUpdate`,
+  `apps/till/src/screens/till-floor-screen.ts`).
 - **A joined table replaces a saved join (A503, owner 2026-10-11).** A table made of other tables
   is set up in the floor plan editor and starts each day as one table; the till splits it and joins
   it again, and the reset puts it back whole once its tables are free

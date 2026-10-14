@@ -1431,7 +1431,8 @@ export class TillFloorScreen extends LitElement {
   }
 
   /** A refusal shows in the window, keeping what was typed, while the window would still be shown
-   * before Save; otherwise the window closes and the refusal shows on the floor. */
+   * before Save; otherwise it shows on the floor and the window closes, unless another Rename window
+   * has opened. */
   async #rename(dialog: TillTodayNameDialog, name: string | null): Promise<void> {
     const renaming = this.renaming;
     const shown = renaming === null ? undefined : this.#renameShown(renaming);

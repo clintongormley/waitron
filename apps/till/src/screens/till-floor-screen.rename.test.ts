@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import { nextFloorMoment } from "../state/floor-today.js";
@@ -143,8 +144,12 @@ const windowOf = (el: TillFloorScreen) =>
 const fieldOf = (opened: HTMLElementTagNameMap["till-today-name-dialog"]) =>
   opened.shadowRoot!.querySelector("wt-input")!;
 
-const footOf = (opened: HTMLElementTagNameMap["till-today-name-dialog"]) =>
-  opened.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-form-actions")!.error;
+const footError = (opened: HTMLElementTagNameMap["till-today-name-dialog"]) =>
+  opened.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>("wt-form-actions")!
+    .error;
+
+const saveButton = (opened: HTMLElementTagNameMap["till-today-name-dialog"]) =>
+  opened.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-rename-save]")!;
 
 const shown = (opened: HTMLElementTagNameMap["till-today-name-dialog"]) => ({
   heading: opened.shadowRoot!.querySelector("wt-dialog")!.heading,
@@ -307,7 +312,7 @@ describe("till-floor-screen: Rename", () => {
     expect(windowOf(el)).toBeNull();
   });
 
-  it("keeps the window open with an out-of-date refusal at its foot and what the waiter typed, and Save can be pressed again", async () => {
+  it("keeps the window open with an out-of-date refusal at its foot and what the waiter typed; typing clears it and a real press of Save sends the new name", async () => {
     const api = stubApi();
     api.nameToday.mockRejectedValueOnce({ code: "floor_today.out_of_date", status: 409 });
     const el = await mount(bar(), api);
@@ -323,16 +328,27 @@ describe("till-floor-screen: Rename", () => {
     expect(windowOf(el)).toBe(opened);
     expect(opened.busy).toBe(false);
     expect(opened.refusal).toEqual({ code: "floor_today.out_of_date" });
-    expect(footOf(opened)).toBe("The floor has changed. Check and try again");
+    expect(footError(opened)).toBe("The floor has changed. Check and try again");
     expect(fieldOf(opened).error).toBe("");
     expect(fieldOf(opened).value).toBe("García birthday");
     expect(commit).not.toHaveBeenCalled();
     expect(floorRefusal(el)).toBeNull();
     expect(refreshes.count).toBe(1);
+    const save = saveButton(opened);
+    await save.updateComplete;
+    const inner = save.shadowRoot!.querySelector("button")!;
+    expect({ disabled: save.disabled, innerDisabled: inner.disabled }).toEqual({
+      disabled: false,
+      innerDisabled: false,
+    });
 
-    send(opened, "today-name-confirm", { name: "García birthday" });
+    await typeName(opened, "García party");
+    expect(footError(opened)).toBe("");
+
+    await userEvent.click(page.elementLocator(inner));
     await settle(el);
 
+    expect(api.nameToday).toHaveBeenLastCalledWith("bar", "García party", 7);
     expect(api.nameToday).toHaveBeenCalledTimes(2);
     expect(windowOf(el)).toBeNull();
     expect(commit).toHaveBeenCalledOnce();
@@ -350,7 +366,7 @@ describe("till-floor-screen: Rename", () => {
     await opened.updateComplete;
 
     expect(windowOf(el)).toBe(opened);
-    expect(footOf(opened)).toBe("La sala ha cambiado. Revísala y vuelve a intentarlo");
+    expect(footError(opened)).toBe("La sala ha cambiado. Revísala y vuelve a intentarlo");
   });
 
   it("keeps a refusal naming another field in the window, at its foot", async () => {
@@ -369,26 +385,55 @@ describe("till-floor-screen: Rename", () => {
 
     expect(windowOf(el)).toBe(opened);
     expect(opened.refusal).toEqual({ code: "floor_today.out_of_date", field: "zoneRevision" });
-    expect(footOf(opened)).toBe("The floor has changed. Check and try again");
+    expect(footError(opened)).toBe("The floor has changed. Check and try again");
     expect(fieldOf(opened).error).toBe("");
     expect(floorRefusal(el)).toBeNull();
   });
 
-  it("moves an out-of-date refusal in the window to the floor when the table stops offering Rename", async () => {
-    const api = stubApi();
-    api.nameToday.mockRejectedValueOnce({ code: "floor_today.out_of_date", status: 409 });
-    const el = await mount(bar(), api);
-    const opened = await pressRename(el, "bar");
-    send(opened, "today-name-confirm", { name: "Window" });
-    await settle(el);
-    expect(windowOf(el)).toBe(opened);
+  it.each([
+    {
+      when: "stops offering Rename",
+      start: bar,
+      tableId: "bar",
+      next: () => [table("bar", "Bar", 40, { takenOff: true }), table("c3", "Counter 3", 10)],
+    },
+    { when: "joins a group", start: bar, tableId: "bar", next: barJoined },
+    {
+      when: "leaves the floor read",
+      start: bar,
+      tableId: "bar",
+      next: () => [table("c3", "Counter 3", 10)],
+    },
+    {
+      when: "leaves its group",
+      start: () => group(),
+      tableId: "c4",
+      next: () =>
+        group().map((each) =>
+          each.id === "c4" ? { ...each, today: { ...each.today!, joinId: null } } : each,
+        ),
+    },
+  ])(
+    "moves an out-of-date refusal kept in the window to the floor when its table $when",
+    async ({ start, tableId, next }) => {
+      const api = stubApi();
+      api.nameToday.mockRejectedValueOnce({ code: "floor_today.out_of_date", status: 409 });
+      const el = await mount(start(), api);
+      const opened = await pressRename(el, tableId);
+      send(opened, "today-name-confirm", { name: "Window" });
+      await settle(el);
+      await opened.updateComplete;
+      expect(windowOf(el)).toBe(opened);
+      expect(footError(opened)).toBe("The floor has changed. Check and try again");
+      expect(floorRefusal(el)).toBeNull();
 
-    el.tables = [table("bar", "Bar", 40, { takenOff: true }), table("c3", "Counter 3", 10)];
-    await settle(el);
+      el.tables = next();
+      await settle(el);
 
-    expect(windowOf(el)).toBeNull();
-    expect(floorRefusal(el)).toBe("The floor has changed. Check and try again");
-  });
+      expect(windowOf(el)).toBeNull();
+      expect(floorRefusal(el)).toBe("The floor has changed. Check and try again");
+    },
+  );
 
   it("an out-of-date refusal whose table joined a group during the request shows on the floor", async () => {
     const api = stubApi();
