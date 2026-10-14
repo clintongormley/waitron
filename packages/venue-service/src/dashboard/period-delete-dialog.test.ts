@@ -95,9 +95,9 @@ it("counts one season, one special day and several cells in the singular and plu
   expect(text).toContain("Named in 2 routing cells: Gin · Terrace, All categories · Every zone.");
 });
 
-it("a period painted nowhere and named nowhere asks only Delete Lunch?", async () => {
+it("a period painted nowhere and named nowhere says only that no hours change", async () => {
   const el = await mount(impactOf());
-  expect(body(el)).toBe("");
+  expect(body(el)).toBe("Not painted anywhere. No hours change.");
   expect(picker(el)).toBeNull();
   expect(heading(el)).toBe("Delete Lunch?");
   expect(confirm(el).textContent!.trim()).toBe("Delete Lunch");
@@ -283,6 +283,9 @@ it("Spanish: Eliminar Lunch y Sin categoría · Terraza", async () => {
   expect(text).toContain("Se eliminan sus líneas de asignación.");
   expect(picker(el)!.label).toBe("Sustituir por");
   expect(picker(el)!.options[0]).toEqual({ value: "", label: "Ninguno" });
+  el.impact = impactOf();
+  await el.updateComplete;
+  expect(body(el)).toBe("Sin pintar en ningún sitio. No cambia ningún horario.");
 });
 
 it("while loading Confirm is quiet (secondary) and disabled; a failed read shows Retry, which emits period-delete-retry", async () => {

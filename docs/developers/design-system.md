@@ -4128,7 +4128,8 @@ Painted in chips are plain text and it has no Delete….
 The delete dialog (`period-delete-dialog.ts`) asks "Delete {name}?" and reads what the delete
 changes: how many seasons and repeating or still-to-come special days paint the period, the
 routing cells that name it, and whether today's later opening of it ends or moves to the
-replacement. When the period is painted or kept open today and the
+replacement. When it changes none of these, it says the period is painted nowhere and no hours
+change. When the period is painted or kept open today and the
 department has another period, a Replace with choice offers them, with None first. The delete button names the period.
 Cases: the `periods-screen*.test.ts`, `period-dialog*.test.ts` and `period-delete-dialog*.test.ts`
 files.

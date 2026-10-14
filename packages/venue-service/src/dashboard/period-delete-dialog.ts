@@ -32,9 +32,6 @@ export class PeriodDeleteDialog extends LitElement {
         gap: var(--wt-space-3);
         padding-block: var(--wt-space-3);
       }
-      .body:empty {
-        display: none;
-      }
       p {
         margin: 0;
       }
@@ -119,7 +116,7 @@ export class PeriodDeleteDialog extends LitElement {
       value === 1
         ? t(`${key}_one` as Parameters<typeof t>[0])
         : format(key as Parameters<typeof t>[0], { count: String(value) });
-    return [
+    const lines = [
       impact.seasons > 0 ? count("period.delete_seasons", impact.seasons) : "",
       impact.specialDays > 0 ? count("period.delete_special_days", impact.specialDays) : "",
       uses.length > 0
@@ -140,6 +137,7 @@ export class PeriodDeleteDialog extends LitElement {
           : t("period.delete_kept_ends")
         : "",
     ].filter(Boolean);
+    return lines.length ? lines : [t("period.delete_nothing")];
   }
   private picker(impact: PeriodDeleteImpact) {
     const painted = impact.seasons + impact.specialDays > 0;
