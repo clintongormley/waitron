@@ -7,6 +7,7 @@ export {
   attendanceMail,
 } from "./schema/attendance.js";
 export { enqueueAttendanceDay } from "./attendance-state.js";
+export { retireObsoleteRotaQuestions } from "./attendance-rota.js";
 export {
   upsertAttendanceQuestion,
   listPendingAttendanceQuestions,

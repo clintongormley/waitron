@@ -9,6 +9,7 @@ import {
   attendanceSourceState,
   attendanceOperationFacts,
   enqueueAttendanceDay,
+  retireObsoleteRotaQuestions,
   type AttendanceDay,
 } from "@waitron/workforce";
 
@@ -465,12 +466,13 @@ export async function nextAttendanceDay(
     if (work.startAt !== bounds.startAt || work.endAt !== bounds.endAt)
       throw new AppError("attendance.invalid", { reason: "saved attendance bounds changed" });
   }
-  return work
-    ? {
-        locationId: work.locationId,
-        businessDay: work.businessDay,
-        startAt: work.startAt,
-        endAt: work.endAt,
-      }
-    : null;
+  if (!work) return null;
+  const day = {
+    locationId: work.locationId,
+    businessDay: work.businessDay,
+    startAt: work.startAt,
+    endAt: work.endAt,
+  };
+  await retireObsoleteRotaQuestions(tx, day);
+  return day;
 }

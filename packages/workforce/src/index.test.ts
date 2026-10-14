@@ -19,6 +19,7 @@ describe("the public surface", () => {
         "upsertAttendanceQuestion",
         "listPendingAttendanceQuestions",
         "mergeAttendanceQuestions",
+        "retireObsoleteRotaQuestions",
         "employments",
         "payPeriodSettings",
         "payPeriodClosures",
