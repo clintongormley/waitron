@@ -13,7 +13,8 @@ import {
   dispatchSetupGoto,
 } from "../events.js";
 import { SetupApi, type ApiError } from "../api/client.js";
-import "./recovery-copy.js";
+import type { RecoveryEntryField } from "./recovery-allocation.js";
+import { SetupRecoveryCopy } from "./recovery-copy.js";
 import { t, format } from "../i18n/t.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { oldBoxQuestion } from "./old-box-question.js";
@@ -30,7 +31,8 @@ interface BucketForm {
   environment: "production" | "preproduction";
 }
 
-export type BucketField = "kit" | "environment" | "oldBoxGone" | "venueConfirmed";
+export type BucketField =
+  "kit" | "environment" | "oldBoxGone" | "venueConfirmed" | RecoveryEntryField;
 
 /**
  * Rebuild this server from the owner's bucket. It asks for the recovery kit and
@@ -81,6 +83,7 @@ export class SetupRestoreBucketScreen extends LitElement {
   @state() private oldBoxGone = false;
   @state() private venueConfirmed = false;
   @state() private attempted = false;
+  @state() private recoveryInvalid = false;
   /** The owner pressed Restore after `errorMessage` arrived, so it no longer applies. */
   @state() private refusalDismissed = false;
   @state() private fieldRefusalDismissed = false;
@@ -233,7 +236,11 @@ export class SetupRestoreBucketScreen extends LitElement {
 
   get #incomplete(): boolean {
     return (
-      this.#kitMissing || !this.acknowledged || this.#oldBoxUnanswered || this.#venueUnconfirmed
+      this.#kitMissing ||
+      !this.acknowledged ||
+      this.recoveryInvalid ||
+      this.#oldBoxUnanswered ||
+      this.#venueUnconfirmed
     );
   }
 
@@ -244,7 +251,16 @@ export class SetupRestoreBucketScreen extends LitElement {
       void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
       return;
     }
+    const credentials = this.shadowRoot!.querySelector<SetupRecoveryCopy>(
+      "setup-recovery-copy",
+    )?.readCredentials({
+      bucketKit: this.kit,
+      environment: this.environment,
+      oldBoxGone: this.#askingOldBox && this.oldBoxGone,
+    });
+    if (credentials === null) return;
     dispatchBucketRestoreRequested(this, {
+      ...credentials,
       kit: this.kit,
       environment: this.environment,
       oldBoxGone: this.#askingOldBox && this.oldBoxGone,
@@ -406,6 +422,16 @@ export class SetupRestoreBucketScreen extends LitElement {
         },
       })}
       <setup-recovery-copy
+        .errorMessage=${!this.refusalDismissed && !this.fieldRefusalDismissed ? this.errorMessage : undefined}
+        .refusedField=${this.invalidField}
+        @recovery-field-edited=${(event: CustomEvent<{ field: RecoveryEntryField }>) => {
+          event.stopPropagation();
+          if (event.detail.field === this.invalidField) this.fieldRefusalDismissed = true;
+        }}
+        @recovery-invalid=${(event: CustomEvent<{ invalid: boolean }>) => {
+          event.stopPropagation();
+          this.recoveryInvalid = event.detail.invalid;
+        }}
         .api=${this.api}
         .bucketKit=${this.kit}
         .environment=${this.environment}

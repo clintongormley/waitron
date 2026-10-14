@@ -1,6 +1,22 @@
 // The restore, restore-bucket, cloud-restore, live-source, configuration-preview and fiscal-test screens.
 
 export const restoreEn = {
+  "restore.allocation_heading": "Recovery allocation",
+  "restore.allocation_intro":
+    "Use the current outside recovery record. An old pack cannot replace it.",
+  "restore.allocation_record": "Recovery record",
+  "restore.allocation_placeholder": "Paste the recovery record from your custodian or phone.",
+  "restore.allocation_node_key": "Selected backup’s node recovery key",
+  "restore.allocation_invalid": "Check the recovery record and its selected backup.",
+  "restore.allocation_key_missing": "Enter the node recovery key from the selected backup’s paper.",
+  "restore.allocation_isolated": "The old machine is offline and no other recovery is running.",
+  "restore.allocation_isolation_missing": "Confirm that this is the only recovery.",
+  "restore.allocation_retained":
+    "I have retained the consumed allocation and incident record outside this box.",
+  "restore.allocation_retention_missing":
+    "Retain the allocation and incident record before continuing.",
+  "restore.allocation_clear": "Clear recovery details",
+
   "restore.preview_action": "Review backup",
   "restore.preview_heading": "Selected backup",
   "restore.preview_source": "Source",
@@ -153,6 +169,23 @@ export const restoreEn = {
 } as const;
 
 export const restoreEs: Record<keyof typeof restoreEn, string> = {
+  "restore.allocation_heading": "Asignación de recuperación",
+  "restore.allocation_intro":
+    "Usa el registro externo actual de recuperación. Un paquete antiguo no lo sustituye.",
+  "restore.allocation_record": "Registro de recuperación",
+  "restore.allocation_placeholder": "Pega el registro de recuperación de tu custodio o teléfono.",
+  "restore.allocation_node_key": "Clave de recuperación del nodo de la copia elegida",
+  "restore.allocation_invalid": "Revisa el registro de recuperación y la copia elegida.",
+  "restore.allocation_key_missing": "Introduce la clave del nodo del papel de la copia elegida.",
+  "restore.allocation_isolated":
+    "El equipo anterior está desconectado y no hay otra recuperación en curso.",
+  "restore.allocation_isolation_missing": "Confirma que esta es la única recuperación.",
+  "restore.allocation_retained":
+    "He guardado la asignación consumida y el registro del incidente fuera de este equipo.",
+  "restore.allocation_retention_missing":
+    "Guarda la asignación y el registro del incidente antes de continuar.",
+  "restore.allocation_clear": "Borrar datos de recuperación",
+
   "restore.preview_action": "Revisar copia",
   "restore.preview_heading": "Copia seleccionada",
   "restore.preview_source": "Origen",

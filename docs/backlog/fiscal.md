@@ -1039,3 +1039,15 @@ are supplied. The browser API client supports the same inputs; the screens do no
 yet. A completed setup request refuses a changed operation or node key. Focused route and
 real-listener cases cover forwarding, malformed fields and keeping the node key out of the public
 marker and logs. Outside allocation collection and the complete recovery journeys remain open.
+
+
+**2026-10-14 recovery-entry checkpoint (candidate only):** the selected-copy panel accepts a
+public recovery operation and a separate node key. Archive, bucket and Cloud screens forward
+both through the existing public routes. The browser checks the selected node and archive or
+prepared-stream digest, asks for isolation and outside-record retention, and clears the new
+credentials on discard, disconnection and a refused request. The source and authentication
+checks on the server still decide whether activation can proceed. This is document entry, not
+an allocation issuer or current-register collector: the configured outside paper source still
+rereads its separate files. Emergency/phone evidence collection, keeping an existing identity
+and the complete interruption/retry/burn journeys remain Task 6 work. The operator must not
+interpret a pasted record or a checked box as independent outside authority.

@@ -17,7 +17,8 @@ import { t } from "../i18n/t.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { oldBoxQuestion } from "./old-box-question.js";
 import { SetupApi } from "../api/client.js";
-import "./recovery-copy.js";
+import type { RecoveryEntryField } from "./recovery-allocation.js";
+import { SetupRecoveryCopy } from "./recovery-copy.js";
 
 interface RestoreForm {
   artifact?: File;
@@ -25,7 +26,7 @@ interface RestoreForm {
   environment: "production" | "preproduction";
 }
 
-export type RestoreField = "artifact" | "recoveryKey" | "environment";
+export type RestoreField = "artifact" | "recoveryKey" | "environment" | RecoveryEntryField;
 
 /**
  * The warning asks about any server still RUNNING, never "a primary or a mirror": an adopted mirror
@@ -68,6 +69,7 @@ export class SetupRestoreScreen extends LitElement {
   @state() private acknowledged = false;
   @state() private oldBoxGone = false;
   @state() private attempted = false;
+  @state() private recoveryInvalid = false;
   /** The owner pressed Restore after `errorMessage` arrived, so it no longer applies. */
   @state() private refusalDismissed = false;
   @state() private fieldRefusalDismissed = false;
@@ -168,7 +170,10 @@ export class SetupRestoreScreen extends LitElement {
   }
 
   /** The message under `field`: the client's own when it is missing, else a refusal about it. */
-  #fieldError(field: RestoreField, missing: string | undefined): string | undefined {
+  #fieldError(
+    field: "artifact" | "recoveryKey" | "environment",
+    missing: string | undefined,
+  ): string | undefined {
     if (missing !== undefined) return missing;
     if (this.#refusalUnder() === field) return this.errorMessage;
     if (this.previewRefusal === field) {
@@ -200,6 +205,7 @@ export class SetupRestoreScreen extends LitElement {
       this.artifact === undefined ||
       this.recoveryKey === "" ||
       !this.acknowledged ||
+      this.recoveryInvalid ||
       this.#oldBoxUnanswered
     );
   }
@@ -213,7 +219,16 @@ export class SetupRestoreScreen extends LitElement {
       void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
       return;
     }
+    const credentials = this.shadowRoot!.querySelector<SetupRecoveryCopy>(
+      "setup-recovery-copy",
+    )?.readCredentials({
+      artifact: this.artifact,
+      recoveryKey: this.recoveryKey,
+      environment: this.environment,
+    });
+    if (credentials === null) return;
     dispatchRestoreRequested(this, {
+      ...credentials,
       artifact,
       recoveryKey: this.recoveryKey,
       environment: this.environment,
@@ -329,6 +344,16 @@ export class SetupRestoreScreen extends LitElement {
         >
       </wt-combobox>
       <setup-recovery-copy
+        .errorMessage=${!this.refusalDismissed && !this.fieldRefusalDismissed ? this.errorMessage : undefined}
+        .refusedField=${this.invalidField}
+        @recovery-field-edited=${(event: CustomEvent<{ field: RecoveryEntryField }>) => {
+          event.stopPropagation();
+          if (event.detail.field === this.invalidField) this.fieldRefusalDismissed = true;
+        }}
+        @recovery-invalid=${(event: CustomEvent<{ invalid: boolean }>) => {
+          event.stopPropagation();
+          this.recoveryInvalid = event.detail.invalid;
+        }}
         .api=${this.api}
         .artifact=${this.artifact}
         .recoveryKey=${this.recoveryKey}

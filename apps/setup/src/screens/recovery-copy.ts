@@ -3,8 +3,14 @@ import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import { SetupApi, type ApiError, type RecoveryBackupPreview } from "../api/client.js";
+import {
+  SetupApi,
+  type ApiError,
+  type RecoveryBackupPreview,
+  type RecoveryRestoreCredentials,
+} from "../api/client.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
+import { SetupRecoveryAllocation } from "./recovery-allocation.js";
 import { t } from "../i18n/t.js";
 
 @customElement("setup-recovery-copy")
@@ -37,6 +43,8 @@ export class SetupRecoveryCopy extends LitElement {
       }
     `,
   ];
+  @property() errorMessage?: string;
+  @property() refusedField?: string;
   @property({ attribute: false }) api: SetupApi = new SetupApi();
   @property({ attribute: false }) artifact?: File;
   @property({ attribute: false }) recoveryKey = "";
@@ -49,6 +57,7 @@ export class SetupRecoveryCopy extends LitElement {
   @state() private busy = false;
   @state() private error?: "key" | "environment" | "file" | "kit" | "failed";
   #attempt = 0;
+  #previewCurrent?: () => boolean;
 
   constructor() {
     super();
@@ -79,9 +88,17 @@ export class SetupRecoveryCopy extends LitElement {
   #invalidate(): void {
     this.#attempt += 1;
     this.preview = undefined;
+    this.#previewCurrent = undefined;
     this.error = undefined;
     this.busy = false;
     this.#notifyRefusal();
+    this.dispatchEvent(
+      new CustomEvent("recovery-invalid", {
+        detail: { invalid: false },
+        bubbles: true,
+        composed: true,
+      }),
+    );
   }
   #notifyRefusal(cause?: ApiError): void {
     const field =
@@ -143,7 +160,10 @@ export class SetupRecoveryCopy extends LitElement {
           : cloudPointId !== undefined
             ? await api.previewCloudRestore(cloudPointId)
             : await api.previewRestore(artifact!, recoveryKey, environment);
-      if (current()) this.preview = preview;
+      if (current()) {
+        this.preview = preview;
+        this.#previewCurrent = current;
+      }
     } catch (cause) {
       if (current()) {
         const error = cause as ApiError | undefined;
@@ -165,6 +185,34 @@ export class SetupRecoveryCopy extends LitElement {
     } finally {
       if (current()) this.busy = false;
     }
+  }
+
+  readCredentials(
+    selection: Partial<
+      Pick<
+        SetupRecoveryCopy,
+        | "artifact"
+        | "recoveryKey"
+        | "environment"
+        | "bucketKit"
+        | "cloudPointId"
+        | "selectionId"
+        | "oldBoxGone"
+      >
+    > = {},
+  ): RecoveryRestoreCredentials | undefined | null {
+    const credentials = this.shadowRoot
+      ?.querySelector<SetupRecoveryAllocation>("setup-recovery-allocation")
+      ?.readCredentials();
+    if (credentials === undefined) return;
+    if (
+      !this.#previewCurrent?.() ||
+      Object.entries(selection).some(
+        ([key, value]) => this[key as keyof typeof selection] !== value,
+      )
+    )
+      return null;
+    return credentials;
   }
 
   override render() {
@@ -196,6 +244,11 @@ export class SetupRecoveryCopy extends LitElement {
               <p>${t("restore.preview_older_key")}</p>
               <p>${t("restore.preview_keep_keys")}</p>
               <p>${t("restore.preview_key_separate")}</p>
+              <setup-recovery-allocation
+                .preview=${preview}
+                .errorMessage=${this.errorMessage}
+                .refusedField=${this.refusedField}
+              ></setup-recovery-allocation>
             </section>`
       }
       <wt-form-actions .error=${this.error === undefined ? "" : t(errors[this.error])}>

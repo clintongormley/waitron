@@ -4,7 +4,8 @@ import { baseStyles, focusFirstInvalid } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { SetupApi } from "../api/client.js";
-import "./recovery-copy.js";
+import type { RecoveryEntryField } from "./recovery-allocation.js";
+import { SetupRecoveryCopy } from "./recovery-copy.js";
 import type { CloudRecoveryView } from "../api/client.js";
 import { dispatchSetupGoto } from "../events.js";
 import { errorStyles, fieldStyles } from "../form-styles.js";
@@ -13,7 +14,7 @@ import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { oldBoxQuestion } from "./old-box-question.js";
 
 /** The one field the screen shows that a refusal of the Cloud restore can name. */
-export type CloudField = "oldBoxGone";
+export type CloudField = "oldBoxGone" | RecoveryEntryField;
 
 @customElement("setup-cloud-restore-screen")
 export class SetupCloudRestoreScreen extends LitElement {
@@ -49,6 +50,7 @@ export class SetupCloudRestoreScreen extends LitElement {
   @state() private acknowledged = false;
   @state() private oldBoxGone = false;
   @state() private attempted = false;
+  @state() private recoveryInvalid = false;
   /** The owner pressed an action after `errorMessage` arrived, so it no longer applies. */
   @state() private refusalDismissed = false;
   @state() private fieldRefusalDismissed = false;
@@ -101,7 +103,7 @@ export class SetupCloudRestoreScreen extends LitElement {
       field !== undefined &&
       this.view?.state === "approved" &&
       Boolean(this.view.point) &&
-      this.#askingOldBox
+      (field !== "oldBoxGone" || this.#askingOldBox)
     );
   }
 
@@ -114,7 +116,7 @@ export class SetupCloudRestoreScreen extends LitElement {
   }
 
   get #incomplete(): boolean {
-    return !this.acknowledged || this.#oldBoxUnanswered;
+    return !this.acknowledged || this.recoveryInvalid || this.#oldBoxUnanswered;
   }
 
   #action(action: "start" | "status" | "start-again" | "restore"): void {
@@ -133,11 +135,19 @@ export class SetupCloudRestoreScreen extends LitElement {
         return;
       }
     }
+    const credentials =
+      action === "restore"
+        ? this.shadowRoot!.querySelector<SetupRecoveryCopy>("setup-recovery-copy")?.readCredentials(
+            { cloudPointId: this.view?.point?.id, selectionId: this.#currentApprovalBinding() },
+          )
+        : undefined;
+    if (credentials === null) return;
     this.refusalDismissed = true;
     this.dispatchEvent(
       new CustomEvent("cloud-restore-action", {
         detail: {
           action,
+          ...credentials,
           ...(action === "restore"
             ? { pointId: this.view!.point!.id, oldBoxGone: this.#askingOldBox && this.oldBoxGone }
             : {}),
@@ -212,6 +222,19 @@ export class SetupCloudRestoreScreen extends LitElement {
                         <h2>${t("cloud_restore.approved_heading")}</h2>
                         <p>${t("cloud_restore.captured")} <time>${approved.capturedAt}</time></p>
                         <setup-recovery-copy
+                          .errorMessage=${!this.refusalDismissed && !this.fieldRefusalDismissed ? this.errorMessage : undefined}
+                          .refusedField=${this.invalidField}
+                          @recovery-field-edited=${(
+                            event: CustomEvent<{ field: RecoveryEntryField }>,
+                          ) => {
+                            event.stopPropagation();
+                            if (event.detail.field === this.invalidField)
+                              this.fieldRefusalDismissed = true;
+                          }}
+                          @recovery-invalid=${(event: CustomEvent<{ invalid: boolean }>) => {
+                            event.stopPropagation();
+                            this.recoveryInvalid = event.detail.invalid;
+                          }}
                           .api=${this.api}
                           .cloudPointId=${approved.id}
                           .selectionId=${this.#currentApprovalBinding()}
