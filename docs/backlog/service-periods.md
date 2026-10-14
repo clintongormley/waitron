@@ -113,7 +113,7 @@ switch, and the dashboard's dated week views went.
 A506-8 landed in #1634: a full-screen season painter edits one season's week for every department
 and zone, saving the edited weeks in one request; it replaced the Week tab's editors, and opens
 from a season chip, an ordinary date and a zone's Opening hours link.
-A506-9 (#TBD): the special-day painter replaces the special-day dialog and the per-date editor; it
+A506-9 (#1651): the special-day painter replaces the special-day dialog and the per-date editor; it
 edits one special day's name, dates, Every year and each date's department and zone paint in a
 full-screen painter with its own address, opens from the Year, the month and an ordinary date, and
 saves only the paint the draft changed. An old `/view/date` address opens the month instead.
