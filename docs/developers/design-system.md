@@ -700,7 +700,10 @@ chips share the map's purple tokens. The order pin's swatch follows its displaye
 uses success, forgotten uses danger, and other statuses use their table fill. A single-table details
 heading says "Table 9" / "Mesa 9", or the table's name for today with "Saved as {saved name}" /
 "Guardada como …" beneath it; a named group's heading is its name, with the tapped table's saved name beneath it; a list-view card shows today's name with the saved name small after
-it; Guests has no placeholder.
+it; Guests has no placeholder. Rename, after Change seats on the details sheet, opens the Rename
+window (`apps/till/src/widgets/today-name-dialog.ts`), which names a table, or its group when it is
+in one, for today; its hint names what an empty field puts back ("Leave it empty for Bar+Window"), and
+a name in use or too long is refused under the field with the window kept open.
 
 The floor screen uses today's plan for every zone's map. Its Unplaced tray uses a
 `wt-table-token` with the table's shown name and seat count (`#trayItem`, `apps/till/src/screens/till-floor-screen.ts`).
@@ -1999,7 +2002,7 @@ written per screen (one stated exception, the till's profile dialog, is in the b
   reconnect). Disposing the scope redraws the form, so without that check a form taken out of the
   page takes a new scope while detached, and once put back it does not ask before discarding an
   edit made after that. The till's party name, invoice recipient, extras picker and station
-  dialogs, the dashboard's unit, ingredient, extras list, option
+  dialogs and the floor's Rename window, the dashboard's unit, ingredient, extras list, option
   list and option label forms, recipe editor, Add to menus picker, a section's Add products picker
   and the Home page tab's shortcut picker, the menus screen's section and menu details form and an
   include's Edit dialog, the staff
@@ -2017,7 +2020,7 @@ written per screen (one stated exception, the till's profile dialog, is in the b
   editor, the unit form, the menus screen's section and menu details form, an include's Edit
   dialog, the Home page tab's shortcut picker and the department dialogs, Settings and zone settings do this, each with an edit-first reconnect case. The recipe editor
   clears its choice on removal by design (batch 2a). The till's party name, invoice recipient,
-  extras picker and station dialogs keep it and count it, each with a reconnect case in its
+  extras picker and station dialogs and the floor's Rename window keep it and count it, each with a reconnect case in its
   `*.unsaved.test.ts`. The other forms in the list above are untried;
 - bind the action through `saveActionState(scope)`: `variant=${s.variant}` and
   `?disabled=${s.unchanged || <the form's own conditions>}`;
@@ -2126,7 +2129,8 @@ and nothing guards it across screens:
   change, through `savableAtOpen`); the station dialog's Make at (its Move keeps today's look); the
   floor's seats dialog, opened by Change seats, or empty by a merge (`apps/till/src/widgets/today-seats-dialog.ts`);
   the floor's Split tables window (`apps/till/src/widgets/split-joined-dialog.ts`); the floor's Reset table window
-  (`apps/till/src/widgets/reset-table-dialog.ts`).
+  (`apps/till/src/widgets/reset-table-dialog.ts`); the floor's Rename window
+  (`apps/till/src/widgets/today-name-dialog.ts`).
   Every other till dialog that tracks unsaved changes takes an action — pay, refund, override, enrol,
   seat, send — and keeps its own rules; the list, with the reason for each, is in
   [the Batch 5 table](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-5--the-till-app-lane-c-a331-5).
