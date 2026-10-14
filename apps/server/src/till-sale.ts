@@ -1134,9 +1134,12 @@ async function payIntegrated(
           // Called only to refuse a malformed tip when tips are on; none is charged on a bill that
           // owes nothing.
           tipOf(cfg, req);
+          const attendanceAt = deps.attendance === undefined ? undefined : deps.clock.now().instant;
+          const ticket = await settleOwingNothing(tx, deps, cfg, req.id, outstanding.saleId);
+          await captureWholePayment(tx, deps.attendance, req.id, operatorId, attendanceAt);
           return {
             kind: "owes-nothing" as const,
-            ticket: await settleOwingNothing(tx, deps, cfg, req.id, outstanding.saleId),
+            ticket,
           };
         }
         if (locked.status === "placed") onLive(PLACED_ATTEMPT);
@@ -1190,21 +1193,21 @@ async function payIntegrated(
       // malformed tip when tips are on. A placed order's dishes were sent when it was placed, and a
       // walk-up is created with no party.
       tipOf(cfg, req);
-      return {
-        kind: "owes-nothing" as const,
-        ticket: wasPlaced
-          ? await fileImmediateSale(tx, deps, cfg, req.id, null, order, operatorId)
-          : await fireAndFileSale(
-              tx,
-              deps,
-              cfg,
-              req.id,
-              null,
-              order,
-              locked?.partyId ?? null,
-              operatorId,
-            ),
-      };
+      const attendanceAt = deps.attendance === undefined ? undefined : deps.clock.now().instant;
+      const ticket = wasPlaced
+        ? await fileImmediateSale(tx, deps, cfg, req.id, null, order, operatorId)
+        : await fireAndFileSale(
+            tx,
+            deps,
+            cfg,
+            req.id,
+            null,
+            order,
+            locked?.partyId ?? null,
+            operatorId,
+          );
+      await captureWholePayment(tx, deps.attendance, req.id, operatorId, attendanceAt);
+      return { kind: "owes-nothing" as const, ticket };
     }
     // P3 files THESE gross lines, whatever changes while the reader runs, at the rates of the day it
     // issues the invoice.
@@ -2028,7 +2031,9 @@ async function runCollectOrder(
       // Before the owes-nothing return, so a malformed cash amount is refused whatever is owed.
       const { settledAmount } = settlementFor(req.tender, outstanding.amountDue);
       if (compareDecimal(outstanding.amountDue, ZERO) <= 0) {
-        return settleOwingNothing(tx, deps, cfg, req.id, outstanding.saleId);
+        const ticket = await settleOwingNothing(tx, deps, cfg, req.id, outstanding.saleId);
+        await captureWholePayment(tx, deps.attendance, req.id, operatorId, attendanceAt);
+        return ticket;
       }
       const settledAt = deps.clock.now().instant;
 

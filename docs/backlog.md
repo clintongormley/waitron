@@ -4555,7 +4555,8 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   locks the till and logs out; Log out alone leaves the attendance record open. New Counter
   and Handheld profiles enable clocking; existing profiles opt in through Device profiles.
   My hours is omitted until part 5 supplies its screen.
-  Part 3 has a reviewed [end-of-day plan](superpowers/plans/2026-10-14-a10-3-end-of-day-plan.md); implementation remains open.
+  Part 3 has a reviewed [end-of-day plan](superpowers/plans/2026-10-14-a10-3-end-of-day-plan.md).
+  Remaining work includes command wiring, completed-day discovery, automatic closure and reminder duties.
   Left: end-of-day discovery and questions (part 3), correction screens (part 4), hours screens
   (part 5), and PDF/CSV plus representatives' access (part 6). The
   [design](superpowers/specs/2026-10-12-a10-clocking-in-and-out-design.md) records the legal
