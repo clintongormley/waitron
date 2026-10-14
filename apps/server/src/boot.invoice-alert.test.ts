@@ -3,15 +3,40 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import { invoiceDeliveries, pagePrinters, printAgents, tenants } from "@waitron/db";
+import {
+  invoiceDeliveries,
+  pagePrinters,
+  printAgents,
+  tenants,
+  withTransaction,
+} from "@waitron/db";
 import { hashSecret } from "@waitron/identity";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { Alert } from "@waitron/module";
-import { startServer, type StartedServer } from "./boot.js";
+import type { StartedServer } from "./boot.js";
+import { serverFixture } from "./testing/server-fixture.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 import { freePorts } from "./testing/free-ports.js";
 import { recordSyntheticInvoice } from "./testing/synthetic-invoice.js";
+
+const { beforeServerStarts, startServer } = serverFixture();
+
+vi.mock("./management-api.js", async (original) => {
+  const actual = await original<typeof import("./management-api.js")>();
+  return {
+    ...actual,
+    mountManagementApi: (...args: Parameters<typeof actual.mountManagementApi>) => {
+      const [app, deps] = args;
+      app.post("/__test/invoice-deliveries", async (c) => {
+        const row = await c.req.json<typeof invoiceDeliveries.$inferInsert>();
+        await withTransaction(deps.db, (tx) => tx.insert(invoiceDeliveries).values(row));
+        return c.body(null, 204);
+      });
+      return actual.mountManagementApi(...args);
+    },
+  };
+});
 
 const migrations = migrationOptionsFor(manifestSets(), null);
 const suite = useVenueDb({ migrations });
@@ -21,6 +46,7 @@ type Venue = Awaited<ReturnType<typeof setupVenue>>;
 
 /** A synthetic full invoice in series `FB`, so its number is `FB/1`. */
 async function fullInvoice(venue: Venue): Promise<string> {
+  beforeServerStarts();
   await suite.db.update(tenants).set({ taxpayerDomicile: "Saved issuer address" });
   return (await recordSyntheticInvoice(suite.db, venue.cfg.nodeId, { seriesCode: "FB" })).saleId;
 }
@@ -80,6 +106,7 @@ describe("the running server's undelivered invoice alert", () => {
   it("reports a full invoice whose original failed through the alerts API", async () => {
     const venue = await setupVenue(suite.db);
     const saleId = await fullInvoice(venue);
+    beforeServerStarts();
     await suite.db.insert(invoiceDeliveries).values({
       saleId,
       requestKey: "email-one",
@@ -163,17 +190,22 @@ describe("the running server's undelivered invoice alert", () => {
       });
       expect(renewed.status).toBe(204);
       const due = new Date(Date.now() - 3 * 60_000).toISOString();
-      await suite.db.insert(invoiceDeliveries).values({
-        saleId,
-        requestKey: "a4-one",
-        medium: "a4",
-        designation: "original",
-        status: "queued",
-        generation: 1,
-        pagePrinterId: office!.id,
-        personId: "staff-one",
-        nextAttemptAt: due,
+      const queued = await fetch(`${base}/__test/invoice-deliveries`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          saleId,
+          requestKey: "a4-one",
+          medium: "a4",
+          designation: "original",
+          status: "queued",
+          generation: 1,
+          pagePrinterId: office!.id,
+          personId: "staff-one",
+          nextAttemptAt: due,
+        }),
       });
+      expect(queued.status).toBe(204);
 
       expect(await invoiceAlerts(base, venue)).toEqual([
         {

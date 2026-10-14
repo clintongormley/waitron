@@ -1,18 +1,20 @@
 import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
-import { locationDayCutoverChanges, withTransaction } from "@waitron/db";
 import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { emptyDrainResult, type FiscalDutyDeps } from "@waitron/fiscal";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { Alert } from "@waitron/module";
-import { startServer, type StartedServer } from "./boot.js";
+import type { StartedServer } from "./boot.js";
+import { serverFixture } from "./testing/server-fixture.js";
 import { type BackupSupervisorDeps } from "./backup-supervisor.js";
 import { createCloudSnapshotWorker } from "./cloud-snapshot-worker.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 import { freePorts } from "./testing/free-ports.js";
+
+const { beforeServerStarts, startServer } = serverFixture();
 
 const clocks = vi.hoisted(() => ({ archive: undefined as BackupSupervisorDeps | undefined }));
 vi.mock("./backup-supervisor.js", async (original) => {
@@ -62,11 +64,14 @@ const suite = useVenueDb({ migrations });
 
 describe("boot's authority clock wiring", () => {
   it("raises the drift alert from a sample the fiscal drain observes", async () => {
+    beforeServerStarts();
     const venue = await setupVenue(suite.db);
     const [port] = await freePorts(1);
     let scratch: string | undefined;
     let server: StartedServer | undefined;
     try {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2026-10-14T00:00:00Z"));
       scratch = await mkdtemp(join(tmpdir(), "waitron-boot-clock-wiring-"));
       const migrationsRoot = join(scratch, "migrations");
       for (const [index, set] of manifestSets().entries()) {
@@ -82,6 +87,7 @@ describe("boot's authority clock wiring", () => {
       const env = {
         WAITRON_HTTP_LANDING_PORT: "0",
         WAITRON_HTTP_PORT: String(port),
+        WAITRON_MANAGEMENT_ORIGIN: "https://dashboard.example",
         WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
         WAITRON_CREDENTIALS_KEY_VERSION: "1",
         WAITRON_STATE_DIR: scratch,
@@ -133,13 +139,23 @@ describe("boot's authority clock wiring", () => {
           dayCutover: "05:00",
           cutoverChanges: [],
         });
-      await withTransaction(suite.db, (tx) =>
-        tx.insert(locationDayCutoverChanges).values({
-          locationId: venue.cfg.locationId,
-          effectiveBusinessDay: "2026-11-04",
-          dayCutover: "07:00:00",
-        }),
+      const changed = await fetch(
+        `http://127.0.0.1:${port}/management-api/venue-details/business-day-start`,
+        {
+          method: "PUT",
+          headers: {
+            cookie: venue.managerCookie,
+            origin: "https://dashboard.example",
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            effectiveBusinessDay: "2026-11-04",
+            dayCutover: "07:00",
+            expectedClockRevision: 0,
+          }),
+        },
       );
+      expect(changed.status).toBe(200);
       for (const read of [archiveClock, cloudClock])
         expect(await read()).toEqual({
           timeZone: "Europe/Madrid",
@@ -147,7 +163,11 @@ describe("boot's authority clock wiring", () => {
           cutoverChanges: [{ effectiveBusinessDay: "2026-11-04", dayCutover: "07:00" }],
         });
     } finally {
-      if (server !== undefined) await server.close();
+      try {
+        if (server !== undefined) await server.close();
+      } finally {
+        vi.useRealTimers();
+      }
       drain.calls = [];
       clocks.archive = undefined;
       vi.mocked(createCloudSnapshotWorker).mockClear();

@@ -23,7 +23,7 @@ import {
 import { resolveManagementSession } from "@waitron/identity";
 import { drain } from "@waitron/fiscal-verifactu";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { startServer } from "./boot.js";
+import { serverFixture } from "./testing/server-fixture.js";
 import { runPass, DRAIN_DUTY } from "./pass.js";
 import { singletonPass } from "./singleton-pass.js";
 import { seedFiscalRegistro } from "./testing/fiscal-fixtures.js";
@@ -31,6 +31,8 @@ import { ensureMirrorViewer } from "./mirror-session.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { freePort } from "./testing/free-ports.js";
+
+const { beforeServerStarts, startServer } = serverFixture();
 
 // Mirror-mode server boot. A mirror reads its origin, relay and CA from `mirror_config`. Four venue
 // directories: `mirror` (read-only, refuses writes); `primary`, the same identity booted as primary —
@@ -372,6 +374,7 @@ describe("mirror-mode boot (node_roles.mode = 'mirror')", () => {
   it("a primary boot ends the mirror viewer's session, so a cookie a browser kept from the mirror is refused", async () => {
     // Resolving the token before the boot is the control: without it, a refusal afterwards would
     // look the same whether or not boot acted.
+    beforeServerStarts();
     const token = await ensureMirrorViewer(db.primary);
     await expect(
       withTransaction(db.primary, (tx) => resolveManagementSession(tx, token)),
@@ -393,12 +396,13 @@ describe("mirror-mode boot (node_roles.mode = 'mirror')", () => {
       expect(await read.json()).toEqual({
         error: { code: "management_session.required", params: {} },
       });
-      await expect(
-        withTransaction(db.primary, (tx) => resolveManagementSession(tx, token)),
-      ).rejects.toMatchObject({ code: "management_session.required" });
     } finally {
       await server.close();
     }
+    beforeServerStarts();
+    await expect(
+      withTransaction(db.primary, (tx) => resolveManagementSession(tx, token)),
+    ).rejects.toMatchObject({ code: "management_session.required" });
   }, 60_000);
 
   it("refuses a mirror boot binding a non-loopback host without the WAITRON_MIRROR_ALLOW_EXPOSED opt-in", async () => {

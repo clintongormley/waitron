@@ -5,33 +5,23 @@ their full text.
 
 ## Server suites write to the venue database while their in-process server runs (found by A538-5f)
 
-Nine suites, found 2026-10-13 by reading every `startServer` caller in a test; none of these has
-been seen to fail. Each can fail `database is locked` whenever the write meets one of the server's
-open transactions
+The remaining suites below write beside their in-process server. They were found by reading;
+no locking failure has been reproduced in either. A605 skipped both on 2026-10-14 because the
+retained manual `a493-assertion-ports` worktree changes them. The other listed suites now prepare
+fixtures before boot, check sessions after close, or send live fixture changes through the server.
+You must use the server's database handle for a live fixture request, so its write joins the
+server's queue rather than waiting synchronously on another connection
 ([why](../developers/testing-guide.md#a-test-that-runs-the-server-in-its-own-process-writes-to-the-database-only-while-the-server-is-down)).
-Each line names the write and when the server started (line numbers on main `430839e26`):
 
-- `apps/server/src/boot.clock-wiring.test.ts`: the `locationDayCutoverChanges` insert (136), server
-  started at 97.
-- `apps/server/src/boot.invoice-alert.test.ts`: the `invoiceDeliveries` insert (166) inside
-  `withServer`.
+The original locations below are on main `430839e26`:
+
 - `apps/server/src/boot.invoice-delivery.test.ts`: `claimInvoiceDelivery` and
   `reportInvoiceDelivery` (280, 283), server started at 266.
-- `apps/server/src/boot.venue-details.test.ts`: the `persons` insert in `send()` (133), called after
-  the start at 121.
 - `apps/server/src/boot.test.ts`: `enqueuePrintJob` (425; the comment above it names the risk and
   only narrows it by waiting for the listener); the writes in `assertPassiveManagementReads`
   (277–399, called at 528); the `bookings` insert (1683); `uploadImage` (1996); and in the describe
   whose server starts in `beforeAll` (2695), `invite()`, `deleteCredential`, `putCredential` and
   `uploadImage` (2714–2832).
-- `apps/server/src/boot.mirror.test.ts`: `withTransaction` around `resolveManagementSession` (397)
-  — `withTransaction` takes the write lock with `begin immediate` even for a body that only reads.
-- `apps/server/src/boot.restore.test.ts`: `box.tamper`'s raw `exec` (691), called at 714 while the
-  box runs; the comment on `tamper` (687) says its 5 s timeout lets the DDL wait out a boot duty's
-  write, which a connection on the server's own thread cannot do.
-- `apps/server/src/boot.setup-routes.test.ts`: `stampDeployment` (1087) inside `withSetupBoot`.
-- `apps/server/src/till-reroute-e2e.test.ts`: `setDeploymentMode` and `setSingletonRole` (334, 335)
-  while `serverB` still runs on that database.
 
 Next: move each write before `startServer` or after `close()`, or make it through the server's API.
 `boot.backup-network.test.ts` shows one way to keep a file honest: its helpers call

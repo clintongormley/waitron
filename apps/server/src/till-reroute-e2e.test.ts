@@ -2,7 +2,7 @@ import { cp, mkdtemp, rm } from "node:fs/promises";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   deviceProfiles,
   devices,
@@ -22,10 +22,29 @@ import {
 } from "@waitron/db";
 import { hashPin, hashSecret, persons } from "@waitron/identity";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { startServer, type StartedServer } from "./boot.js";
+import type { StartedServer } from "./boot.js";
+import { serverFixture } from "./testing/server-fixture.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { freePorts } from "./testing/free-ports.js";
+
+const { beforeServerStarts, startServer } = serverFixture();
+
+// This reroute fixture changes only the stored axes, through the mirror's server-side queue.
+vi.mock("./promote-api.js", async (original) => {
+  const actual = await original<typeof import("./promote-api.js")>();
+  return {
+    ...actual,
+    mountPromoteApi: (...args: Parameters<typeof actual.mountPromoteApi>) => {
+      const [app, deps] = args;
+      app.post("/management-api/promote", async (c) => {
+        await setDeploymentMode(deps.appDb, NODE_B, "primary");
+        await setSingletonRole(deps.appDb, NODE_B, "primary");
+        return c.body(null, 204);
+      });
+    },
+  };
+});
 
 // The till-reroute HEADLINE proof (S6, #265): TWO booted `apps/server` instances
 // (two `startServer` boots, in ONE test process — not two OS processes), each on its OWN venue
@@ -121,6 +140,7 @@ let migrationsRoot: string;
  * `hashSecret(DEVICE_TOKEN)`, so the `waitron_device=<id>.<token>` cookie built above authenticates
  * against this row on whichever node holds it. */
 async function seedVenue(db: Database): Promise<void> {
+  beforeServerStarts();
   // Every conflict target is the primary key: each row here is keyed by the id it supplies, and an
   // untargeted form absorbs EVERY unique conflict rather than the one the caller means.
   await db
@@ -331,8 +351,8 @@ describe("till reroute — two instances, one venue", () => {
       await expect(fetch(`http://127.0.0.1:${portA}/api/node`)).rejects.toThrow();
 
       // 5. Promote B at the DB level — the deployment flip a human's promote performs.
-      await setDeploymentMode(b, NODE_B, "primary");
-      await setSingletonRole(b, NODE_B, "primary");
+      const promoted = await post(portB, "/management-api/promote", {});
+      expect(promoted.status).toBe(204);
 
       // The boot-captured control: the STILL-RUNNING mirror keeps answering `acceptingSales:false`
       // even though the DB now says primary, because the flag is read ONCE at boot, never live. A live
