@@ -79,7 +79,7 @@ on the `opening-hours-month` dependencies (`packages/venue-service/src/dashboard
 the `named-days` tables plus `zone_service_policies` and `floor_zones`.
 2026-10-14, A601: `ModelWatches` (`packages/venue-service/src/dashboard/model-watch.ts`) numbers
 each read when it starts. A write's `reread` returns a hold-back point, and this client's watches it
-asks to read again then apply no read that started before it. The season painter takes in the first
+asks to read again then apply no successful read that started before it. The season painter takes in the first
 model read that started after its save answered, while no other save is in flight, day by day: a day
 repainted since the save was sent keeps its new paint (`rebaseDays`,
 `packages/venue-service/src/paint-model.ts`).

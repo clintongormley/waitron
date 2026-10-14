@@ -926,3 +926,101 @@ it("a model that arrives while a later save is refused takes in the earlier save
   expect(grid(painter).days.get("4")).toEqual(earlyThursday);
   expect(painter.edited()).toEqual({ departments: ["d1"], zones: [] });
 });
+
+/** Save 1 sends Restaurant; save 2 sends only Bar and is held while Restaurant follows a read
+ *  made between the two saves (number 15), which has Restaurant's Monday cleared. */
+async function followedDuringSecondSave() {
+  let succeed!: () => void;
+  const late = new Promise<void>((resolve) => (succeed = resolve));
+  const { painter, writes, reread } = await mount(withBar(), [Promise.resolve(), late]);
+  const { at, after } = readNumbers(painter);
+  reread.mockReturnValueOnce(10).mockReturnValueOnce(20);
+  await drag(painter, "3", 60, 180);
+  await save(painter, writes);
+  await pick(painter, "d3");
+  await drag(painter, "1", 60, 180);
+  saveButton(painter).click();
+  await expect.poll(() => writes.length).toBe(2);
+  painter.model = at(
+    withDays(withDays(withBar(), "d1", { 1: [], 3: earlyWednesday }), "d3", { 1: [] }),
+    15,
+  );
+  await settle(painter);
+  await pick(painter, "d1");
+  expect(grid(painter).days.get("1")).toEqual([]);
+  succeed();
+  await expect.poll(() => frame(painter).busy).toBe(false);
+  await settle(painter);
+  return { painter, after, barMonday: [slot("q1", "07:00", "09:00")] };
+}
+
+it("a week only the first of two saves sent, followed during the second, shows the read after both as stored", async () => {
+  const { painter, after, barMonday } = await followedDuringSecondSave();
+  expect(frame(painter).dirty).toBe(false);
+  painter.model = after(
+    withDays(withDays(withBar(), "d1", { 1: mondayDinner, 3: earlyWednesday }), "d3", {
+      1: barMonday,
+    }),
+  );
+  await settle(painter);
+  expect(grid(painter).days.get("1")).toEqual(mondayDinner);
+  expect(frame(painter).dirty).toBe(false);
+});
+
+it("a week only the first of two saves sent keeps paint added after it followed a read during the second", async () => {
+  const { painter, after, barMonday } = await followedDuringSecondSave();
+  await drag(painter, "1", 420, 600);
+  expect(grid(painter).days.get("1")).toEqual(mondayLunch);
+  expect(painter.edited()).toEqual({ departments: ["d1"], zones: [] });
+  painter.model = after(
+    withDays(withDays(withBar(), "d1", { 1: [], 3: earlyWednesday }), "d3", { 1: barMonday }),
+  );
+  await settle(painter);
+  expect(grid(painter).days.get("1")).toEqual(mondayLunch);
+  expect(painter.edited()).toEqual({ departments: ["d1"], zones: [] });
+});
+
+it("a week both saves sent is compared with the second save's copy when the read after them arrives", async () => {
+  const { painter, writes } = await mount();
+  const { after } = readNumbers(painter);
+  await drag(painter, "3", 60, 180);
+  await save(painter, writes);
+  await drag(painter, "4", 60, 180);
+  await save(painter, writes);
+  const thursdayDinner = [slot("p2", "18:00", "21:00")];
+  painter.model = after(withDays(withBar(), "d1", { 3: earlyWednesday, 4: thursdayDinner }));
+  await settle(painter);
+  expect(grid(painter).days.get("4")).toEqual(thursdayDinner);
+  expect(frame(painter).dirty).toBe(false);
+});
+
+it("a save's week taken in from the read after it is clean when nothing was painted since", async () => {
+  const { painter, writes } = await mount();
+  const { after } = readNumbers(painter);
+  await drag(painter, "3", 60, 180);
+  await save(painter, writes);
+  painter.model = after(withDays(withBar(), "d1", { 1: mondayDinner, 3: earlyWednesday }));
+  await settle(painter);
+  expect(grid(painter).days.get("1")).toEqual(mondayDinner);
+  expect(frame(painter).dirty).toBe(false);
+});
+
+it("once a save is taken in, a day painted back to what it sent is kept by the next model", async () => {
+  const { painter, writes } = await mount();
+  const { after } = readNumbers(painter);
+  await drag(painter, "3", 60, 180);
+  await save(painter, writes);
+  await drag(painter, "4", 60, 180);
+  const shortLunch = [slot("p1", "14:00", "15:00")];
+  const stored = () => withDays(withBar(), "d1", { 1: shortLunch, 3: earlyWednesday });
+  painter.model = after(stored());
+  await settle(painter);
+  expect(grid(painter).days.get("1")).toEqual(shortLunch);
+  await drag(painter, "1", 420, 600);
+  expect(grid(painter).days.get("1")).toEqual(mondayLunch);
+  painter.model = after(stored());
+  await settle(painter);
+  expect(grid(painter).days.get("1")).toEqual(mondayLunch);
+  expect(grid(painter).days.get("4")).toEqual(earlyThursday);
+  expect(painter.edited()).toEqual({ departments: ["d1"], zones: [] });
+});

@@ -122,8 +122,9 @@ export class ModelWatches {
    * After a write, has every attached watch read again, so the write shows even when the change
    * feed delivers nothing. With live data it invalidates `dependencies`, and so also rereads every
    * other live query depending on them. Returns the write's hold-back point: no watch it asks to
-   * read again applies a read that started before it. Weaker than that sounds: it holds back only
-   * this object's own watches, and another client object on the same live data still applies them.
+   * read again applies a successful read that started before it. Weaker than that sounds: it holds
+   * back only this object's own watches, and another client object on the same live data still
+   * applies them.
    */
   reread(dependencies: readonly string[]): number {
     const at = ++ticks;

@@ -2,11 +2,11 @@ import { afterEach, expect, it, vi } from "vitest";
 import { LiveData } from "@waitron/dashboard-kit";
 import { ModelWatches } from "./model-watch.js";
 
-type Held<T> = { resolve: (value: T) => void };
+type Held<T> = { resolve: (value: T) => void; reject: (error: unknown) => void };
 
 function heldLoad<T>() {
   const reads: Held<T>[] = [];
-  const load = () => new Promise<T>((resolve) => reads.push({ resolve }));
+  const load = () => new Promise<T>((resolve, reject) => reads.push({ resolve, reject }));
   return { reads, load };
 }
 
@@ -80,3 +80,41 @@ it.each([
     expect(watches.readNumberOf({})).toBeUndefined();
   },
 );
+
+it("without live data, a write's reread holds back every watch, whatever its types", async () => {
+  const watches = new ModelWatches();
+  const { reads, load } = heldLoad<string>();
+  const apply = vi.fn();
+  detaches.push(watches.watch("k", ["u"], load, apply, vi.fn(), vi.fn()));
+  await expect.poll(() => reads.length).toBe(1);
+  watches.reread(["t"]);
+  await expect.poll(() => reads.length).toBe(2);
+  reads[0]!.resolve("before the write");
+  reads[1]!.resolve("after the write");
+  await expect.poll(() => apply.mock.calls.length).toBeGreaterThan(0);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  expect(apply.mock.calls).toEqual([["after the write"]]);
+});
+
+it("a held-back read after a failure does not count as the recovery", async () => {
+  const live = new LiveData();
+  const watches = new ModelWatches(live);
+  const { reads, load } = heldLoad<string>();
+  const apply = vi.fn();
+  const failed = vi.fn();
+  const recovered = vi.fn();
+  detaches.push(watches.watch("k", ["t"], load, apply, failed, recovered));
+  await expect.poll(() => reads.length).toBe(1);
+  reads[0]!.reject(new Error("down"));
+  await expect.poll(() => failed.mock.calls.length).toBe(1);
+  live.invalidate([{ type: "t" }]);
+  await expect.poll(() => reads.length).toBe(2);
+  watches.reread(["t"]);
+  reads[1]!.resolve("before the write");
+  await expect.poll(() => reads.length).toBe(3);
+  expect(apply).not.toHaveBeenCalled();
+  expect(recovered).not.toHaveBeenCalled();
+  reads[2]!.resolve("after the write");
+  await expect.poll(() => apply.mock.calls).toEqual([["after the write"]]);
+  expect(recovered).toHaveBeenCalledTimes(1);
+});

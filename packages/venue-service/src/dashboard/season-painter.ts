@@ -293,7 +293,8 @@ export class SeasonPainter extends LitElement {
   private seededSeason?: string;
   /** The model every week of the baseline was last taken from; a clean draft catches up to a newer one. */
   private followed?: Model;
-  /** The weeks a save sent, taken in only from a model read after `barrier` (`ModelWatches.reread`). */
+  /** The weeks a save sent, taken in only from a model read after `barrier` (`ModelWatches.reread`)
+   *  and while no save is in flight. */
   private confirming?: { sent: Draft; barrier: number };
   /** A period just created, chosen in its own department until the model lists it. */
   private created?: { id: string; departmentId: string };
@@ -402,9 +403,11 @@ export class SeasonPainter extends LitElement {
     this.confirming = undefined;
   }
   private confirmable(): boolean {
-    if (!this.confirming || this.saving) return false;
+    return !this.saving && this.readAfterSave();
+  }
+  private readAfterSave(): boolean {
     const read = this.api.readNumberOf(this.model);
-    return read !== undefined && read > this.confirming.barrier;
+    return read !== undefined && this.confirming !== undefined && read > this.confirming.barrier;
   }
   private reseed() {
     this.forget();
@@ -416,8 +419,9 @@ export class SeasonPainter extends LitElement {
     this.draft = copyDraft(fresh);
     this.commitBaseline(fresh);
   }
-  /** Weeks not edited follow the fresh model; an edited week, and its baseline, stay — unless
-   *  its department or zone is gone or inactive, when its edits are dropped with a notice. */
+  /** Weeks not edited follow the fresh model; an edited week `confirmed` did not send, and its
+   *  baseline, stay — unless its department or zone is gone or inactive, when its edits are
+   *  dropped with a notice. */
   private refresh(previous: Model, confirmed?: Draft) {
     if (!this.anyEdited()) this.revision = this.model.clockRevision;
     const fresh = seed(this.model, this.seasonId);
@@ -447,10 +451,13 @@ export class SeasonPainter extends LitElement {
       draft.set(key, week);
       baseline.set(key, this.baseline.get(key)!);
     }
+    const readAfterSave = this.readAfterSave();
     for (const [key, week] of fresh) {
       if (draft.has(key)) continue;
       draft.set(key, copyWeek(week));
       baseline.set(key, week);
+      // Read after the pending save answered, so this week needs nothing more from it.
+      if (readAfterSave) this.confirming!.sent.delete(key);
     }
     if ([...baseline].every(([key, week]) => week === fresh.get(key))) this.followed = this.model;
     this.draft = draft;

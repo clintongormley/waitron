@@ -275,4 +275,27 @@ describe("rebaseDays", () => {
     for (const day of rebased.values())
       for (const block of day) expect(inputs).not.toContain(block);
   });
+
+  it("a day removed since the save is left out, a day added since is kept, and a day only stored is kept", () => {
+    const stored = new Map([
+      ["2026-12-24", [paint(LUNCH, "13:00", "16:00")]],
+      ["2026-12-25", [paint(LUNCH, "13:00", "16:00")]],
+      ["2026-12-26", [paint("dinner", "18:00", "21:00")]],
+    ]);
+    const sent = new Map([
+      ["2026-12-24", [paint(LUNCH, "13:00", "16:00")]],
+      ["2026-12-25", [paint(LUNCH, "13:00", "16:00")]],
+    ]);
+    const current = new Map([
+      ["2026-12-25", [paint(LUNCH, "13:00", "16:00")]],
+      ["2026-12-31", [paint(AFTERNOON, "15:00", "17:00")]],
+    ]);
+    expect(rebaseDays(stored, sent, current)).toEqual(
+      new Map([
+        ["2026-12-25", [paint(LUNCH, "13:00", "16:00")]],
+        ["2026-12-26", [paint("dinner", "18:00", "21:00")]],
+        ["2026-12-31", [paint(AFTERNOON, "15:00", "17:00")]],
+      ]),
+    );
+  });
 });
