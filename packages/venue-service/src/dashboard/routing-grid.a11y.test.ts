@@ -49,9 +49,9 @@ function routing(overrides: Partial<RoutingView> = {}): RoutingView {
     ],
     defaultStationId: "kitchen",
     stations: [
-      { id: "kitchen", name: "Kitchen", active: true },
-      { id: "bar", name: "Bar", active: true },
-      { id: "old", name: "Old kitchen", active: false },
+      { id: "kitchen", name: "Kitchen", active: true, colour: "orange" },
+      { id: "bar", name: "Bar", active: true, colour: "blue" },
+      { id: "old", name: "Old kitchen", active: false, colour: "brown" },
     ],
     canMakeDefault: true,
     ...overrides,

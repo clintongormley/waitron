@@ -1,4 +1,4 @@
-import type { DeleteImpact, StationThresholds } from "@waitron/shared";
+import type { DeleteImpact, StationColour, StationThresholds } from "@waitron/shared";
 import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
 import type { ResolvedKitchenScreen } from "@waitron/module";
 import type { RouteTarget } from "../routing.js";
@@ -31,6 +31,7 @@ export interface PrepStation {
   overdueAfterMinutes: number;
   forgottenAfterMinutes: number;
   showsRestOfOrder: boolean;
+  colour: StationColour;
   timingDefaults: StationThresholds;
   timingOverrides: { [Field in keyof StationThresholds]: number | null };
 }
@@ -57,6 +58,7 @@ export type StationInput = {
   warmAfterMinutes: number;
   overdueAfterMinutes: number;
   forgottenAfterMinutes: number;
+  colour?: StationColour;
 };
 export class PrepStationsApi {
   constructor(
@@ -116,7 +118,7 @@ export class PrepStationsApi {
   updateStation(
     id: string,
     input: Partial<
-      Pick<StationInput, "name" | "displayOrder"> &
+      Pick<StationInput, "name" | "displayOrder" | "colour"> &
         Pick<PrepStation, "showsRestOfOrder"> & {
           [Field in keyof StationThresholds]: number | null;
         } & {

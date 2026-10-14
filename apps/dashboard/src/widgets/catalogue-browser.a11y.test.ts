@@ -265,8 +265,8 @@ describe.each(["light", "dark"] as const)("catalogue browser (%s)", (theme) => {
               ],
               defaultStationId: "kitchen",
               stations: [
-                { id: "bar", name: "Bar", active: true },
-                { id: "kitchen", name: "Kitchen", active: true },
+                { id: "bar", name: "Bar", active: true, colour: "blue" },
+                { id: "kitchen", name: "Kitchen", active: true, colour: "orange" },
               ],
             },
       },

@@ -52,7 +52,7 @@ const view: PrepStationsView = {
     ],
     canMakeDefault: true,
     defaultStationId: "bar",
-    stations: [{ id: "bar", name: "Bar", active: true }],
+    stations: [{ id: "bar", name: "Bar", active: true, colour: "blue" }],
     stationTimes: [
       {
         stationId: "bar",
@@ -72,6 +72,7 @@ const view: PrepStationsView = {
       id: "bar",
       name: "Bar",
       active: true,
+      colour: "blue",
       isDefault: true,
       displayOrder: 1,
       warmAfterMinutes: 5,
@@ -220,7 +221,7 @@ it.each(["[name^=fallback-]", "[data-test^=change-fallback-]"])(
   async (selector) => {
     const next = withUpstairs({ open: false, why: "closed_by_hand" });
     next.stations.push({ ...upstairs, id: "retired", name: "Retired", active: false });
-    next.routing.stations.push({ id: "retired", name: "Retired", active: false });
+    next.routing.stations.push({ id: "retired", name: "Retired", active: false, colour: "red" });
     const el = await mount(api({ load: vi.fn().mockResolvedValue(next) }));
     const routing = el.shadowRoot!.querySelector('[slot="routing"]')!;
     const grid = (await routingGrid(el))!;
@@ -236,7 +237,7 @@ it.each([
 ] as const)("keeps station action %s in Stations rather than Routing", async (action, why) => {
   const next = withUpstairs({ open: true, why });
   next.stations.push({ ...upstairs, id: "retired", name: "Retired", active: false });
-  next.routing.stations.push({ id: "retired", name: "Retired", active: false });
+  next.routing.stations.push({ id: "retired", name: "Retired", active: false, colour: "red" });
   const el = await mount(api({ load: vi.fn().mockResolvedValue(next) }));
   const routing = el.shadowRoot!.querySelector('[slot="routing"]')!;
   expect(await routingGrid(el)).not.toBeNull();
@@ -403,7 +404,10 @@ function withUpstairs(
     stations: [...view.stations.map((row) => ({ ...row })), { ...upstairs }],
     routing: {
       ...view.routing,
-      stations: [...view.routing.stations, { id: "upstairs", name: "Upstairs bar", active: true }],
+      stations: [
+        ...view.routing.stations,
+        { id: "upstairs", name: "Upstairs bar", active: true, colour: "indigo" },
+      ],
       stationTimes: [
         ...view.routing.stationTimes,
         {
@@ -838,8 +842,8 @@ function fallbackView(): PrepStationsView {
       ...view.routing,
       stations: [
         ...view.routing.stations,
-        { id: "grill", name: "Grill", active: true },
-        { id: "disabled", name: "Closed bar", active: false },
+        { id: "grill", name: "Grill", active: true, colour: "green" },
+        { id: "disabled", name: "Closed bar", active: false, colour: "red" },
       ],
       stationTimes: [
         ...view.routing.stationTimes,
@@ -1181,7 +1185,7 @@ it("Delete ignores a stored inactive fallback and makes one request without chan
     { open: false, why: "closed_by_hand" },
     { fallbackStationId: "old", closedSendsTo: null },
   );
-  next.routing.stations.push({ id: "old", name: "Old bar", active: false });
+  next.routing.stations.push({ id: "old", name: "Old bar", active: false, colour: "brown" });
   const a = api({ load: vi.fn().mockResolvedValue(next), setStationFallback: vi.fn() });
   const el = await mount(a);
   q(el, '[data-test="delete-upstairs"]')!.click();
@@ -2363,7 +2367,7 @@ it.each([
       history.replaceState(null, "", "/manage/prep-stations");
       const next = withUpstairs({ open: true, why: "open" });
       next.stations.push({ ...upstairs, id: "retired", name: "Retired", active: false });
-      next.routing.stations.push({ id: "retired", name: "Retired", active: false });
+      next.routing.stations.push({ id: "retired", name: "Retired", active: false, colour: "red" });
       const { el } = await mountToday(next, {}, theme);
       expect(window.innerWidth).toBe(width);
       const host = el.parentElement!;
@@ -3043,8 +3047,8 @@ describe("Routing grid", () => {
           },
         ],
         stations: [
-          { id: "bar", name: "Bar", active: true },
-          { id: "kitchen", name: "Kitchen", active: true },
+          { id: "bar", name: "Bar", active: true, colour: "blue" },
+          { id: "kitchen", name: "Kitchen", active: true, colour: "orange" },
         ],
       },
       zones: [{ id: "terrace", name: "Terrace" }],

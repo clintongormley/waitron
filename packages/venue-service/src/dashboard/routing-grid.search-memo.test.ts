@@ -42,8 +42,8 @@ const model: RoutingView = {
   cells: [],
   defaultStationId: "kitchen",
   stations: [
-    { id: "kitchen", name: "Kitchen", active: true },
-    { id: "bar", name: "Bar", active: true },
+    { id: "kitchen", name: "Kitchen", active: true, colour: "orange" },
+    { id: "bar", name: "Bar", active: true, colour: "blue" },
   ],
   canMakeDefault: true,
 };

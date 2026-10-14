@@ -40,11 +40,11 @@ const product = (
     variants,
   }) as unknown as Product;
 
-const STATIONS = [
-  { id: "bar", name: "Bar", active: true },
-  { id: "kitchen", name: "Kitchen", active: true },
-  { id: "cocktail", name: "Cocktail bar", active: false },
-  { id: "terrace", name: "Terrace bar", active: true },
+const STATIONS: RoutingModel["stations"] = [
+  { id: "bar", name: "Bar", active: true, colour: "blue" },
+  { id: "kitchen", name: "Kitchen", active: true, colour: "orange" },
+  { id: "cocktail", name: "Cocktail bar", active: false, colour: "purple" },
+  { id: "terrace", name: "Terrace bar", active: true, colour: "teal" },
 ];
 
 function routing(overrides: Partial<RoutingModel> = {}): RoutingModel {

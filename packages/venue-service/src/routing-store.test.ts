@@ -577,12 +577,27 @@ describe("stored preparation rules", () => {
         cells: sortCells(written),
         periods: [],
         defaultStationId: f.bar,
-        stations: [{ id: f.bar, name: "Bar", active: true }],
+        stations: [{ id: f.bar, name: "Bar", active: true, colour: "red" }],
         stationTimes: model.stationTimes,
         todayEnds: model.todayEnds,
         clockReadable: true,
       });
       expect(model.stationTimes.map((times) => times.stationId)).toEqual([f.bar]);
+    }));
+
+  it("the routing model's stations carry their colours", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      await tx.update(kitchenStations).set({ colour: "teal" }).where(eq(kitchenStations.id, f.bar));
+      await tx
+        .update(kitchenStations)
+        .set({ colour: "purple" })
+        .where(eq(kitchenStations.id, f.terraceBar));
+      const model = await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"));
+      expect(model.stations).toEqual([
+        { id: f.bar, name: "Bar", active: true, colour: "teal" },
+        { id: f.terraceBar, name: "Terrace Bar", active: true, colour: "purple" },
+      ]);
     }));
 
   it("routingModel lists stored No category cells, and keeps one when no product is uncategorised", async () =>
@@ -705,6 +720,7 @@ describe("stored preparation rules", () => {
         id: f.terraceBar,
         name: "Terrace Bar",
         active: true,
+        colour: "red",
       });
     }));
 
