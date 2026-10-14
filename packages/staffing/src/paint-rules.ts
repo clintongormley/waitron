@@ -16,7 +16,7 @@ function record(value: unknown, field: string, keys: ReadonlySet<string>): Recor
 
 function uuid(value: unknown, field: string): string {
   if (typeof value !== "string" || !isUuid(value)) throw invalid(field);
-  return value;
+  return value.toLowerCase();
 }
 
 function stepTime(value: unknown, field: string): string {

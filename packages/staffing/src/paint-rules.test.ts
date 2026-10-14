@@ -92,6 +92,12 @@ describe("parseBlocks", () => {
     });
   });
 
+  it("folds an upper-case staff role id to lower case", () => {
+    expect(parseBlocks([block({ staffRoleId: ROLE.toUpperCase() })], "blocks", "06:00")).toEqual([
+      block(),
+    ]);
+  });
+
   it("names the field under the prefix it was given", () => {
     expect(
       refusal(() => parseBlocks([block({ headcount: 0 })], "edits.3.blocks", "06:00")),
@@ -106,6 +112,13 @@ describe("parseArea", () => {
       id: AREA,
     });
     expect(parseArea({ kind: "station", id: AREA }, "area")).toEqual({ kind: "station", id: AREA });
+  });
+
+  it("folds an upper-case id to lower case", () => {
+    expect(parseArea({ kind: "station", id: AREA.toUpperCase() }, "area")).toEqual({
+      kind: "station",
+      id: AREA,
+    });
   });
 
   it.each([

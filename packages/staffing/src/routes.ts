@@ -10,7 +10,18 @@ import {
   requireString,
 } from "@waitron/server-kit";
 import type { Logger } from "@waitron/server-kit";
-import { AppError, normaliseUuid } from "@waitron/shared";
+import { readLocationClock } from "@waitron/reporting";
+import { AppError, isUuid, normaliseUuid } from "@waitron/shared";
+import { parseArea, parseBlocks } from "./paint-rules.js";
+import {
+  listStaffingAreas,
+  readSeasonStaffing,
+  readSpecialDayStaffing,
+  saveSeasonStaffing,
+  saveSpecialDayStaffing,
+  type SeasonStaffingEdit,
+  type SpecialDayStaffingEdit,
+} from "./paint.js";
 import { STAFFING_PERMISSIONS } from "./permissions.js";
 import {
   createStaffRole,
@@ -26,7 +37,8 @@ import "./errors.js";
 
 const [{ permission: MANAGE_STAFFING }] = STAFFING_PERMISSIONS;
 const VIEW_VENUE: Permission = "venue.view";
-const BASE = "/management-api/staffing/staff-roles";
+const ROOT = "/management-api/staffing";
+const BASE = `${ROOT}/staff-roles`;
 const STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.required": 401,
   "management_session.expired": 401,
@@ -38,6 +50,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "staff_role.not_found": 404,
   "staff_role.name_taken": 409,
   "staff_role.in_use": 409,
+  "staffing_area.not_found": 404,
+  "season.not_found": 404,
+  "special_day.not_found": 404,
 };
 const run = createErrorBoundary(STATUS, "staffing.failed");
 // An id in a reorder list that is not one of the venue's roles is a bad request, not a missing page.
@@ -68,6 +83,48 @@ function uuidList(body: Record<string, unknown>, field: string): string[] {
   return value.map((item) => normaliseUuid(requireBodyUuid(item, field), field));
 }
 
+const invalid = (field: string) => new AppError("staffing.invalid", { field });
+
+/** The body's `edits` list, each edit checked to hold only `keys`. */
+function editList(
+  body: Record<string, unknown>,
+  keys: readonly string[],
+): { edit: Record<string, unknown>; field: string }[] {
+  onlyKeys(body, ["edits"]);
+  const { edits } = body;
+  if (!Array.isArray(edits)) throw invalid("edits");
+  return edits.map((edit: unknown, index) => {
+    const field = `edits.${index}`;
+    if (typeof edit !== "object" || edit === null || Array.isArray(edit)) throw invalid(field);
+    const extra = Object.keys(edit).find((key) => !keys.includes(key));
+    if (extra !== undefined) throw invalid(`${field}.${extra}`);
+    return { edit: edit as Record<string, unknown>, field };
+  });
+}
+
+function seasonEdits(body: Record<string, unknown>, cutover: string): SeasonStaffingEdit[] {
+  return editList(body, ["area", "weekday", "blocks"]).map(({ edit, field }) => {
+    const area = parseArea(edit.area, `${field}.area`);
+    const { weekday } = edit;
+    if (typeof weekday !== "number" || !Number.isInteger(weekday) || weekday < 0 || weekday > 6)
+      throw invalid(`${field}.weekday`);
+    return { area, weekday, blocks: parseBlocks(edit.blocks, `${field}.blocks`, cutover) };
+  });
+}
+
+/** `blocks: null` is a value (the date follows the season); a missing `blocks` is refused by
+ *  `parseBlocks` as `undefined`. */
+function specialDayEdits(body: Record<string, unknown>, cutover: string): SpecialDayStaffingEdit[] {
+  return editList(body, ["area", "dateId", "blocks"]).map(({ edit, field }) => {
+    const area = parseArea(edit.area, `${field}.area`);
+    const { dateId } = edit;
+    if (typeof dateId !== "string" || !isUuid(dateId)) throw invalid(`${field}.dateId`);
+    const blocks =
+      edit.blocks === null ? null : parseBlocks(edit.blocks, `${field}.blocks`, cutover);
+    return { area, dateId: dateId.toLowerCase(), blocks };
+  });
+}
+
 export const STAFFING_ROUTES: ModuleRoutes = {
   mount(app, ctx: ModuleRouteContext, log: Logger): void {
     const gatedBy = <T>(
@@ -82,6 +139,60 @@ export const STAFFING_ROUTES: ModuleRoutes = {
     const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
       gatedBy(MANAGE_STAFFING, sessionId, fn);
     const staffRoleIdParam = (raw: string) => normaliseUuid(raw, "StaffRoleId");
+    const cutoverOf = async (tx: Transaction) =>
+      (await readLocationClock(tx, ctx.cfg.locationId)).dayCutover;
+
+    app.get(`${ROOT}/areas`, (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const areas = await gatedBy(VIEW_VENUE, sessionId, (tx) => listStaffingAreas(tx, ctx.cfg));
+        return c.json({ areas });
+      }),
+    );
+
+    app.get(`${ROOT}/seasons/:seasonId`, (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const id = normaliseUuid(c.req.param("seasonId"), "SeasonId");
+        return c.json(
+          await gatedBy(VIEW_VENUE, sessionId, (tx) => readSeasonStaffing(tx, ctx.cfg, id)),
+        );
+      }),
+    );
+
+    app.put(`${ROOT}/seasons/:seasonId`, (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const id = normaliseUuid(c.req.param("seasonId"), "SeasonId");
+        const body = await readJsonBody<Record<string, unknown>>(c);
+        await gated(sessionId, async (tx) =>
+          saveSeasonStaffing(tx, ctx.cfg, id, seasonEdits(body, await cutoverOf(tx))),
+        );
+        return c.body(null, 204);
+      }),
+    );
+
+    app.get(`${ROOT}/special-days/:specialDayId`, (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const id = normaliseUuid(c.req.param("specialDayId"), "SpecialDayId");
+        return c.json(
+          await gatedBy(VIEW_VENUE, sessionId, (tx) => readSpecialDayStaffing(tx, ctx.cfg, id)),
+        );
+      }),
+    );
+
+    app.put(`${ROOT}/special-days/:specialDayId`, (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const id = normaliseUuid(c.req.param("specialDayId"), "SpecialDayId");
+        const body = await readJsonBody<Record<string, unknown>>(c);
+        await gated(sessionId, async (tx) =>
+          saveSpecialDayStaffing(tx, ctx.cfg, id, specialDayEdits(body, await cutoverOf(tx))),
+        );
+        return c.body(null, 204);
+      }),
+    );
 
     app.get(BASE, (c) =>
       run(c, log, async () => {
