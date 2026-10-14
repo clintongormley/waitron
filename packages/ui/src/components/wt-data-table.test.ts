@@ -1533,6 +1533,25 @@ test("every cell of a row carries the part names rowCellParts gives that row, in
   expect(new Set(cellParts(flat, "b"))).toEqual(new Set([null]));
 });
 
+test("a selectable row's checkbox cell carries the part names rowCellParts gives that row", async () => {
+  const selectCellPart = (el: WtDataTable<TreeRow> | WtDataTable<Row>, key: string) =>
+    el.shadowRoot!.querySelector(`tr[data-row-key="${key}"] td.select`)!.getAttribute("part");
+  const tree = await treeTable({
+    selectable: true,
+    rowCellParts: (row) => (row.parent === null ? "group-cell" : ""),
+  });
+  expect(selectCellPart(tree, "food")).toBe("group-cell");
+  expect(selectCellPart(tree, "break")).toBeNull();
+  cleanup();
+  const flat = await table({
+    selectable: true,
+    rowKey: (row) => row.id,
+    rowCellParts: (row) => (row.id === "a" ? "first second" : ""),
+  });
+  expect(selectCellPart(flat, "a")).toBe("first second");
+  expect(selectCellPart(flat, "b")).toBeNull();
+});
+
 // The width compared is the scroll box's inside its border, which is what clientWidth reports here.
 test("the phone indent starts at a 440px box, not at 441px, and a flat table never takes it", async () => {
   const el = await treeTable();

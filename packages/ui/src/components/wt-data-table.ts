@@ -2476,7 +2476,11 @@ export class WtDataTable<Row = unknown> extends LitElement {
    * where the table's own role is overridden to `treegrid` and every cell needs one. */
   #renderSelectCell(key: string, row: Row, isTree: boolean) {
     if (!this.selectable && !this.rowControls) return nothing;
-    return html`<td class="select" role=${isTree ? "gridcell" : nothing}>
+    return html`<td
+      class="select"
+      role=${isTree ? "gridcell" : nothing}
+      part=${this.rowCellParts?.(row) || nothing}
+    >
       <span class="row-controls">
         ${
           this.selectable && this.rowSelectable(row)

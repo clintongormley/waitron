@@ -459,7 +459,10 @@ it("a new revision arriving after an impact read began is not taken from that re
   // Painted in answers first and starts a read; the late page read's new revision starts another.
   await expect.poll(() => answers.length).toBe(3);
   answers[1]!(impactOf({ seasons: 1 }));
-  await expect.poll(() => body(dialog)).toBe("Not painted anywhere. No hours change.");
+  await new Promise((done) => setTimeout(done, 0));
+  await el.updateComplete;
+  await dialog.updateComplete;
+  expect(body(dialog)).toBe("Not painted anywhere. No hours change.");
   confirm(dialog).click();
   await expect.poll(() => sent).toEqual([3]);
   await expect.poll(() => confirm(dialog).loading).toBe(false);
