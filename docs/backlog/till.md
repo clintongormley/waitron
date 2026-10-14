@@ -1416,10 +1416,12 @@ From **Variants as products (#511–#556) — what is left open.** How the model
 
 - **Back to saved place tells the kitchen when a party's tables read differently (A606, owner
   2026-10-14, overturning A581 part 2's default).** A table sent back from a group a party sits at
-  prints a MOVED slip for each of the party's bills with food sent whose table name changed:
-  "García birthday -> Counter 6, Table 9" when a named group of two ends, "García birthday -> Bar,
-  García birthday" when Bar leaves a named group of four (`backToSaved`,
-  `apps/server/src/floor-today-store.ts`). A plain rename for today still prints nothing.
+  prints a MOVED slip for each of the party's bills with work sent whose table name changed:
+  "García birthday -> Counter 6, Table 9" when a named group of two ends (`backToSaved`,
+  `apps/server/src/floor-today-store.ts`). When Bar leaves a named group of four, the other three
+  keep the name and the slip reads "García birthday -> Bar, García birthday". That is lane C's
+  reading, not the owner's: his example assumed the group ended and read "-> Bar, Counter 3,
+  Counter 4, Counter 5". Owner may overturn it. A plain rename for today still prints nothing.
 - **The "needs clearing" window names the one table it clears (A581 part 3, coordinator decision,
   2026-10-14).** A table renamed for today reads "Window needs clearing"; a table in a group, named
   or not, keeps "Table Counter 4 needs clearing", never the group's name, because Mark cleared
