@@ -1977,6 +1977,42 @@ it("transfers a station's rest of the order switch", async () => {
   expect(imported).toEqual([{ showsRestOfOrder: true }]);
 });
 
+it("transfers a station's colour", async () => {
+  const source = await applyVenue(planVenue(venue("B13572468"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  await withTransaction(suite.db, (tx) =>
+    tx.insert(kitchenStations).values({
+      locationId: source.locationId,
+      name: "Barra",
+      colour: "teal",
+    }),
+  );
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-01T12:00:00Z"),
+    versions,
+  );
+  expect(transferred.tables.kitchen_stations).toContainEqual(
+    expect.objectContaining({ name: "Barra", colour: "teal" }),
+  );
+  await applyVenue(planVenue(venue("B97531864"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx, result) =>
+      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+  });
+  const imported = await targetSuite.db
+    .select({ colour: kitchenStations.colour })
+    .from(kitchenStations)
+    .where(eq(kitchenStations.name, "Barra"));
+  expect(imported).toEqual([{ colour: "teal" }]);
+});
+
 it("transfers a printer on two stations in configuration export", async () => {
   const source = await applyVenue(planVenue(venue("B13572470"), ALL_MODULES), {
     db: suite.db,

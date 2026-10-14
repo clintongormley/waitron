@@ -1,3 +1,4 @@
+import { STATION_COLOURS } from "@waitron/shared";
 import { describe, expect, it } from "vitest";
 import {
   CORE_CONFIGURATION_TRANSFER,
@@ -7,6 +8,11 @@ import {
 const refusal = expect.objectContaining({
   code: "setup.request_invalid",
   params: { field: "table_service_statuses.color" },
+});
+
+const stationRefusal = expect.objectContaining({
+  code: "setup.request_invalid",
+  params: { field: "kitchen_stations.colour" },
 });
 
 function status(color?: unknown): Record<string, unknown> {
@@ -61,6 +67,26 @@ describe("validateCoreConfiguration", () => {
     ).not.toThrow();
   });
 
+  it("refuses a station colour a save would refuse", () => {
+    expect(() =>
+      validateCoreConfiguration({ kitchen_stations: [{ colour: "grey" }] }),
+    ).toThrowError(stationRefusal);
+  });
+
+  it("refuses a station with no colour, which the column cannot store", () => {
+    expect(() => validateCoreConfiguration({ kitchen_stations: [{}] })).toThrowError(
+      stationRefusal,
+    );
+  });
+
+  it("accepts each station colour", () => {
+    expect(() =>
+      validateCoreConfiguration({
+        kitchen_stations: STATION_COLOURS.map((colour) => ({ colour })),
+      }),
+    ).not.toThrow();
+  });
+
   it("accepts a bundle with no statuses", () => {
     expect(() => validateCoreConfiguration({})).not.toThrow();
   });
@@ -90,7 +116,9 @@ describe("validateCoreConfiguration", () => {
   it.each(["kitchen_courses", "kitchen_stations"])(
     "refuses a deleted %s configuration row without refusing archived products",
     (table) => {
-      expect(() => validateCoreConfiguration({ [table]: [{ id: "old", active: 0 }] })).toThrowError(
+      expect(() =>
+        validateCoreConfiguration({ [table]: [{ id: "old", active: 0, colour: "red" }] }),
+      ).toThrowError(
         expect.objectContaining({
           code: "setup.request_invalid",
           params: { field: `${table}.active` },
@@ -98,7 +126,7 @@ describe("validateCoreConfiguration", () => {
       );
       expect(() =>
         validateCoreConfiguration({
-          [table]: [{ id: "live", active: 1 }],
+          [table]: [{ id: "live", active: 1, colour: "red" }],
           products: [{ id: "archived", active: 0 }],
         }),
       ).not.toThrow();
