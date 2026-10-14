@@ -253,6 +253,10 @@ refusing delete (`DELETE …/menu-periods/:periodId`, `menu_period.in_use`) are 
   (`willUpdate`, then `dropUnpaintable`, `special-day-painter.ts`), so a draft whose only edits were
   dropped keeps the revision it had. A new public-holiday day, which can be saved as it opened, could
   then be refused with `hours.clock_changed`. Found by reading, not run.
+- A live update that arrives while a special day's save is in flight, when that save is then
+  refused, may never be taken in: the refusal path in `save` (`special-day-painter.ts`) asks for no
+  follow, so a retry could send the old copy of a date another manager changed. The season painter
+  had the same gap and A637 closed it. Found by reading, not run.
 
 **Left open by A506-8, for the later parts.**
 - The painter cannot resize a block by dragging its edge (ruling R1 of A506-8); mockup 3's hint
@@ -268,14 +272,6 @@ refusing delete (`DELETE …/menu-periods/:periodId`, `menu_period.in_use`) are 
   a week changed since the draft was read, or to write only the changed days. Read in the code
   (`save` in `season-painter.ts` sends every day; `saveSeasonWeeks` in `season-weeks.ts`), not run
   against the server.
-- An edited week keeps all its days when a live update changes a day the manager did not paint, so a
-  later Save sends that day's old hours back. The one exception is the first read that started after
-  a save of that week answered, with no other save in flight: it takes in the stored days not
-  repainted since (`rebaseDays`). This is A506-8's rule, asserted by "a live model refresh keeps an
-  edited week and reseeds the ones not edited" in `season-painter.test.ts`. Following unedited days
-  one by one would reverse that assertion, so it is an owner decision. Special days (PR #1651,
-  A506-9) already follow per date: a live update takes the stored paint on every date the draft did
-  not change, asserted in `special-day-painter.races.test.ts`.
 - `ModelWatches.reread` (`model-watch.ts`) holds back reads that started before a save only for its
   own client's watches. Another `OpeningHoursApi` on the same live data still applies them. Read in
   the code, not run.

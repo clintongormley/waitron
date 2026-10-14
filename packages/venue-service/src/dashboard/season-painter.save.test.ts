@@ -839,7 +839,7 @@ it("stepping to another season before the model after a save forgets that save",
   expect(frame(painter).dirty).toBe(false);
 });
 
-it("an edited week the save did not send still stays whole", async () => {
+it("an edited week the save did not send takes the read after the save on the days it did not change", async () => {
   const { painter, writes } = await mount();
   const { after } = readNumbers(painter);
   await drag(painter, "3", 60, 180);
@@ -852,7 +852,7 @@ it("an edited week the save did not send still stays whole", async () => {
     }),
   );
   await settle(painter);
-  expect(grid(painter).days.get("2")).toEqual([]);
+  expect(grid(painter).days.get("2")).toEqual([slot("q1", "10:00", "12:00")]);
   expect(painter.edited()).toEqual({ departments: ["d3"], zones: [] });
 });
 
@@ -1069,8 +1069,9 @@ it("a saved department missing from the draft when the read after the save bring
 });
 
 it("closing the painter before the model after a save forgets that save", async () => {
-  const { painter, writes } = await mount();
-  const { after } = readNumbers(painter);
+  const { painter, writes, reread } = await mount();
+  const { at } = readNumbers(painter);
+  reread.mockReturnValue(10);
   await drag(painter, "3", 60, 180);
   await save(painter, writes);
   frame(painter).shadowRoot!.querySelector<HTMLElement>("[data-test=dismiss]")!.click();
@@ -1078,9 +1079,9 @@ it("closing the painter before the model after a save forgets that save", async 
   painter.open = true;
   await settle(painter);
   await drag(painter, "4", 60, 180);
-  painter.model = after(withDays(withBar(), "d1", { 1: [] }));
+  painter.model = at(withDays(withBar(), "d1", { 1: mondayDinner, 3: earlyWednesday }), 5);
   await settle(painter);
-  expect(grid(painter).days.get("1")).toEqual(mondayLunch);
+  expect(grid(painter).days.get("1")).toEqual(mondayDinner);
   expect(grid(painter).days.get("3")).toEqual(earlyWednesday);
   expect(grid(painter).days.get("4")).toEqual(earlyThursday);
   expect(painter.edited()).toEqual({ departments: ["d1"], zones: [] });

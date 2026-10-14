@@ -158,7 +158,7 @@ it("keeps the draft across the picker: Restaurant's paint is still there after T
   ]);
 });
 
-it("a live model refresh keeps an edited week and reseeds the ones not edited", async () => {
+it("a live model refresh takes the untouched days of an edited week and reseeds the weeks not edited", async () => {
   const { painter } = await mount();
   chip(painter, "paint-p2")!.click();
   await settle(painter);
@@ -172,13 +172,29 @@ it("a live model refresh keeps an edited week and reseeds the ones not edited", 
   });
   painter.model = next;
   await settle(painter);
-  expect(grid(painter).days.get("1")).toEqual([
-    { periodId: "p1", startsAt: "13:00", endsAt: "16:00" },
-  ]);
+  expect(grid(painter).days.get("1")).toEqual([]);
   await pick(painter, "zone:z2");
   expect(grid(painter).days.get("5")).toEqual([
     { periodId: null, startsAt: "10:00", endsAt: "11:00" },
   ]);
+});
+
+it("a live model refresh on an edited zone week takes another day's change and keeps the painted day", async () => {
+  const { painter } = await mount({ zoneId: "z2" });
+  await drag(painter, "4", 0, 3 * 60);
+  const closedMorning = [{ periodId: null, startsAt: "06:00", endsAt: "09:00" }];
+  expect(grid(painter).days.get("4")).toEqual(closedMorning);
+  const next = painterModel();
+  const terrace = next.departments[0]!.zones[1]!.seasonWeeks[1]!.week;
+  (terrace[5]!.ranges as unknown[]).push({ startsAt: "10:00", endsAt: "11:00" });
+  (terrace[4]!.ranges as unknown[]).push({ startsAt: "20:00", endsAt: "22:00" });
+  painter.model = next;
+  await settle(painter);
+  expect(grid(painter).days.get("5")).toEqual([
+    { periodId: null, startsAt: "10:00", endsAt: "11:00" },
+  ]);
+  expect(grid(painter).days.get("4")).toEqual(closedMorning);
+  expect(painter.edited()).toEqual({ departments: [], zones: ["z2"] });
 });
 
 it("+ New period saves the period on its own, keeps the painting and chooses the new period", async () => {
