@@ -791,11 +791,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   `contentTranslations` seat supplies only a kind and an id. Showing a name or editor link needs
   a separate seat design that respects module boundaries; no change is queued.
 
-- **Decide whether untranslated staff-name fallback belongs in the gap report (C122, #1006).**
-  Names absent in every language are listed under non-default languages, but not the default.
-  The owner must decide whether that is useful for venues using only staff names, including a
-  Barcelona venue with Spanish staff names and Catalan as default. A172 left the report unchanged.
-
 - **Sections lack direct editor addresses (C122, #1006).** The report links a section to its
   menu's Structure tab. A420 part 2 replaces that journey for translation edits; other section
   navigation still needs its own decision.
@@ -1028,11 +1023,12 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   copies the saved row as it is, unplanned. The demo seed
   (`apps/server/scripts/demo-seed/seed-catalogue.ts`) runs the check since W109-4 (#1322).
 
-- **A "Translate all" service from Waitron Cloud — OPEN, unqueued (owner 2026-10-06 ~17:23).** A
+- **A "Translate all" service from Waitron Cloud — designed, specs approved 2026-10-14; plans next
+  (owner 2026-10-06 ~17:23).** A
   paid subscriber service in Waitron Cloud (the separate service, not this repository) that
   translates every missing customer-facing name in one go; this repository would only call it,
   behind the subscription. A machine translation needs the venue's review before a diner sees it.
-  **Designed 2026-10-14, awaiting the owner's review of the specs:** Waitron's side in
+  **Designed 2026-10-14; the owner approved both specs the same day:** Waitron's side in
   [the Translate all design](superpowers/specs/2026-10-14-translate-all-design.md), Cloud's side and
   the wire contract in the Cloud repository's `docs/superpowers/specs/2026-10-14-translate-all-design.md`
   and `docs/waitron-integration-contract.md`. For now it is free for connected venues, capped per venue.
@@ -1073,6 +1069,25 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   removed; each is still deleted from its own row's ⋮. **Next action:** the owner says whether a bulk
   Delete is wanted.
 
+- **A682. Translations: nothing required, every missing name reported, all languages side by side
+  (owner, 2026-10-14).**
+  1. No customer-facing name is required. A blank one falls back to the default-language name,
+     then to the staff name. A unit has no staff name to fall back to and stays required today
+     ([products.md](developers/products.md#the-translation-gap-report)), so settle units first.
+  2. The Missing translations report lists every missing value in every enabled language, the
+     default included.
+  3. Changing the default content language is no longer refused over missing text
+     (`listContentTranslationGaps`, `packages/catalogue/src/content-languages.ts`).
+  4. The translations dialog shows one field per enabled language on each row, so a name can be
+     compared and filled in every language at once. Its "Why" filter becomes a "Missing in…"
+     language filter; "Kind" stays.
+  5. On Content languages, the note under a language's count is cut off mid-sentence (the Spanish
+     row: "Spanish stays enabled for venues in this region, and…"). Wrap it.
+
+  This settles the two questions C122 and A172 left for the owner: whether a name blank in every
+  language counts under the default language, and whether "Spanish filled, English blank" is still
+  a gap. Translate all (above) fills the same dialog and needs neither change.
+
 - **Content languages and the image library (#339, #344) — what is left open.**
   [Operator guide](content-and-images.md). **A new picture consumer has to add a real database
   reference, not just store a filename.** **The online language selector has nothing to select for
@@ -1101,12 +1116,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   in-flight check of its own and relies on being drawn disabled. From "Review points left for the
   owner".
   [Detail](backlog/catalogue.md#image-library-547s-review-packagesmediasrcdashboardimage-libraryts-and-image-pickerts)
-
-- **The translation gap report (`listContentTranslationGaps`,
-  `packages/catalogue/src/content-languages.ts`) counts "Spanish filled, English blank" as a gap**;
-  whether it is still a gap once English falls back to the Spanish name is a decision to make with
-  the owner before building (A172 left the report unchanged). Left open by A172 and A172b (a name
-  field's hint shows what a blank field will actually use, #1053, #1061).
 
 - **The Price heading reads "Price per portion" also over a row sold by the unit.** Still open from
   its review: neither screen counts a stored unit seeded as `each` as Each, which `isEachUnit`
@@ -3701,6 +3710,14 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 ### Users, sign-in and the dashboard shell
 
 _Formerly A7, and the dashboard entries in the opening part of the old Track A (before A1); part of A9._ Detail: [backlog/dashboard.md](backlog/dashboard.md).
+
+- **A681. A light / dark / follow-device theme choice in the apps (owner, 2026-10-14).** Today every
+  screen follows the device's own light or dark setting: the token layer honours a `data-theme`
+  attribute (`packages/ui-core/src/tokens/colors.css`), but outside tests and the UI demo nothing in
+  the product sets it. So staff on a locked-down till or a kiosk tablet cannot change it. Add a
+  Theme choice with three options (Light, Dark, Follow device, the default) to the dashboard, the
+  till and setup. It is saved in that browser on that device, not in the venue's database. Open:
+  one choice per device, or one per person on a shared till (suggested: per device).
 
 - **A653 — every long dashboard table scrolls the same way, with less above it (owner,
   2026-10-14; open).** Products keeps its toolbar and column headings in view and scrolls its rows
