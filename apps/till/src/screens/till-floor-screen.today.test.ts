@@ -669,6 +669,13 @@ describe("till-floor-screen: today's names", () => {
     expect(card(el, "tb").querySelector("[data-saved-label]")).toBeNull();
   });
 
+  it("the list card's saved name never breaks inside itself", async () => {
+    const el = await mount([counter4(), bar()], stubApi());
+    await listView(el);
+    const saved = card(el, "t4").querySelector("[data-saved-label]")!;
+    expect(getComputedStyle(saved).whiteSpace).toBe("nowrap");
+  });
+
   it("a party named after its renamed table shows no second name", async () => {
     const el = await mount([counter4(seatedAt("Window", ["t4"])), bar()], stubApi());
     await listView(el);

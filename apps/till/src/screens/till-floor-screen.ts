@@ -353,6 +353,10 @@ export class TillFloorScreen extends LitElement {
         font-size: var(--wt-font-size-sm);
       }
 
+      .saved-label {
+        white-space: nowrap;
+      }
+
       .party-name {
         max-width: 100%;
         font-weight: var(--wt-font-weight-bold);
