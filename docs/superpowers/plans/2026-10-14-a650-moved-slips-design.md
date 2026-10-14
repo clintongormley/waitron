@@ -224,7 +224,8 @@ GROUP 2                                GROUP 2
   printer's glyph table (`packages/printing/src/glyphs.ts:136`, code point `0x00b7`), so
   `prepareText` keeps it (`packages/printing/src/text.ts:33-46`); read, not printed.
 - **Superseded:** "The party's own name is not printed (question 3)" — ruling 3 reversed it. The
-  party's name still does **not** print on ordinary kitchen tickets; §8 question B.
+  party's name still does **not** print on ordinary kitchen tickets; §8 question B. (2026-10-15:
+  A683 now prints it on every kitchen ticket.)
 - **From**: the place names before the action, as tickets print them. **To**: the place names a
   ticket printed now would carry. When the two read the same but the tables differ (the Terraza
   case), each side adds its tables in brackets: `From: Terraza (Mesa 77)`, `To: Terraza (Mesa 78)`.
