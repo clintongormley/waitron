@@ -28,16 +28,19 @@ refused-listing, batch-delete and archive scenarios and the first live run.
 - **Synthetic data only.** The loop scenario provisions a made-up venue ("Stream Loop SL") and records
   test sales in it. No real venue, customer or fiscal data goes near the bucket.
 - **Bounded.** The runner refuses a fixture past its limits before sending it: a 32 MiB archive,
-  1,005 objects for the delete scenario, and 128 MiB uploaded in total. A scenario gets 15 minutes,
-  and teardown gets 2 minutes on top. The loop scenario does not count its bytes against the 128 MiB
+  1,005 objects for the delete scenario, and 128 MiB uploaded in total. Creating and checking the
+  bucket and then the scenario get 15 minutes together, and teardown gets 2 minutes on top; the
+  2 minutes include stopping the child processes the runner was told about. The loop scenario does not count its bytes against the 128 MiB
   limit, because Litestream does its uploads and the runner does not see them.
 
 Two limits matter if something goes wrong:
 
-- **A scenario that passes its deadline gets one minute to stop.** The runner signals the scenario
+- **A run that passes its deadline, or whose test hits Vitest's time limit, gets one minute to stop.** The runner signals the scenario
   to stop. The loop scenario then closes whichever of its two servers is running, which stops that
   server's Litestream, and ends at its next wait. The runner waits up to 60 seconds for that before
-  it starts teardown, and records the wait as the `settle` step. A scenario still running after
+  it starts teardown, and records the wait as the `settle` step. When Vitest's time limit ends the test
+  first, the test file's `afterAll` stops the run the same way and waits for its teardown and
+  receipt; the receipt records that stop as the `interrupt` step. A scenario still running after
   that minute, for example one inside a restore that cannot be cut short, races the teardown, and a
   late Litestream upload can leave the bucket behind. The server does not tell the scenario its
   Litestream child's process id, so the runner has no child of its own to stop. When the bucket is
@@ -74,7 +77,7 @@ The variables the rehearsal's own code reads:
 | `AWS_SHARED_CREDENTIALS_FILE`        | Absolute path to the credentials file, outside the repository. The runner reads the `waitron-rehearsal` profile's static key pair from it. A session token is refused.                                                            |
 | `AWS_CONFIG_FILE`                    | Absolute path to the config file, outside the repository. The profile's region is read from it.                                                                                                                                   |
 | `AWS_PROFILE`                        | Must be `waitron-rehearsal`.                                                                                                                                                                                                       |
-| `AWS_REGION`                         | Must match the profile's region. The bucket is created there.                                                                                                                                                                      |
+| `AWS_REGION`                         | Must match the profile's region. The bucket is created there. `us-east-1` is refused (`region-unsupported`) before any request, because there AWS answers a create for a bucket the account already owns with success, so the run could not tell a fresh bucket from someone else's. |
 | `WAITRON_AWS_REHEARSAL_RECEIPT_DIR`  | Where receipts are written. Unset or empty, they go to `waitron-aws-rehearsal` under your temporary folder. The full path may hold only letters, digits and `. _ @ -` between its slashes and must be at most 40 folders deep. The cleanup command naming a receipt in it must fit in 512 characters, which the run checks before any AWS call; with the default run id that allows a folder path of about 150 characters, depending on the region (155 for `eu-north-1`). |
 | `WAITRON_AWS_REHEARSAL_BUCKET`       | Must be unset or empty. Any other value refuses the run (`supplied-bucket`).                                                                                                                                                       |
 | `WAITRON_LITESTREAM_BIN`             | The Litestream binary the loop scenario runs. Unset or empty, it is `.bin/litestream` at the repository root, where `node scripts/setup-litestream.mjs` puts it. It must report the pinned version, or the loop fails.             |

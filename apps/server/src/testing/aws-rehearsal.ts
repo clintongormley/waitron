@@ -33,6 +33,7 @@ import {
   AWS_REHEARSAL_LIMITS,
   AWS_REHEARSAL_SCENARIO_DEADLINE_MS,
   AWS_REHEARSAL_SETTLE_MS,
+  AWS_REHEARSAL_STOP_WAIT_MS,
 } from "./aws-rehearsal-limits.js";
 import {
   AWS_REHEARSAL_PROFILE,
@@ -47,6 +48,7 @@ import {
   isReceiptUploadId,
   receiptFileName,
   REHEARSAL_BUCKET_PATTERN,
+  type ReceiptLog,
   type TeardownEntry,
   writeReceipt,
 } from "./aws-rehearsal-receipt.js";
@@ -58,6 +60,7 @@ export {
   AWS_REHEARSAL_SCENARIO_DEADLINE_MS,
   AWS_REHEARSAL_SETUP_MARGIN_MS,
   AWS_REHEARSAL_SETTLE_MS,
+  AWS_REHEARSAL_STOP_WAIT_MS,
 } from "./aws-rehearsal-limits.js";
 
 export type AwsRehearsalRefusalReason =
@@ -289,6 +292,8 @@ export interface TeardownDeps {
   sleep(ms: number): Promise<void>;
   now(): number;
   teardownMs: number;
+  /** How long a tracked child gets after SIGTERM before SIGKILL; 5 s when unset. */
+  childGraceMs?: number;
   record?(event: unknown): void;
 }
 
@@ -301,6 +306,8 @@ export interface AwsRehearsalDeps extends TeardownDeps, RehearsalProfileDeps {
   receiptDir: string;
   deadlineMs: number;
   settleMs: number;
+  /** Aborting it ends the run as its deadline does: the scenario is told to stop, then teardown runs. */
+  signal?: AbortSignal;
   print(line: string): void;
 }
 
@@ -330,8 +337,8 @@ const SOURCE_ONLY_APIS = [
   "CompleteMultipartUpload",
 ] as const;
 const LABEL = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
-const RECEIPT_DIR = /^\/[A-Za-z0-9._/@-]{1,300}$/;
-const CHILD_TERM_POLLS = 50;
+const RECEIPT_DIR = /^\/[A-Za-z0-9._/@-]+$/;
+const CHILD_GRACE_MS = 5_000;
 const CHILD_POLL_MS = 100;
 const MAX_LIST_PAGES = 10_000;
 const DELETE_BATCH = 1000;
@@ -401,25 +408,54 @@ function failedEntry(step: TeardownEntry["step"], error: unknown, count?: number
   };
 }
 
-async function stopChildren(pids: readonly number[], deps: TeardownDeps): Promise<TeardownEntry> {
+/** Settles when `wait` does or `signal` aborts, whichever is first. */
+function untilAborted(wait: Promise<unknown>, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal.aborted) {
+      resolve();
+      return;
+    }
+    const done = (): void => {
+      signal.removeEventListener("abort", done);
+      resolve();
+    };
+    signal.addEventListener("abort", done, { once: true });
+    wait.then(done, done);
+  });
+}
+
+async function stopChildren(
+  pids: readonly number[],
+  deps: TeardownDeps,
+  signal: AbortSignal,
+): Promise<TeardownEntry> {
   const live = [...new Set(pids)].filter((pid) => deps.isAlive(pid));
   if (live.length === 0) return { step: "stop-child", outcome: "skipped", count: 0 };
-  let stopped = 0;
-  for (const pid of live) {
-    try {
-      deps.kill(pid, "SIGTERM");
-      for (let poll = 0; poll < CHILD_TERM_POLLS && deps.isAlive(pid); poll += 1) {
-        await deps.sleep(CHILD_POLL_MS);
+  const running = (): number[] => live.filter((pid) => deps.isAlive(pid));
+  const send = (kill: NodeJS.Signals): void => {
+    for (const pid of running()) {
+      try {
+        deps.kill(pid, kill);
+      } catch {
+        // A child that exits between the check and the signal is already stopped.
       }
-      if (deps.isAlive(pid)) deps.kill(pid, "SIGKILL");
-    } catch {
-      // A child that exits between the check and the signal is already stopped.
     }
-    if (!deps.isAlive(pid)) stopped += 1;
-  }
-  return stopped === live.length
-    ? { step: "stop-child", outcome: "ok", count: stopped }
-    : { step: "stop-child", outcome: "failed", count: live.length - stopped };
+  };
+  const polls = Math.ceil((deps.childGraceMs ?? CHILD_GRACE_MS) / CHILD_POLL_MS);
+  // A child that has exited stays visible until this process reaps it, which needs a turn of the loop.
+  const waitForExit = async (): Promise<void> => {
+    for (let poll = 0; poll < polls && !signal.aborted && running().length > 0; poll += 1) {
+      await untilAborted(deps.sleep(CHILD_POLL_MS), signal);
+    }
+  };
+  send("SIGTERM");
+  await waitForExit();
+  send("SIGKILL");
+  await waitForExit();
+  const left = running().length;
+  return left === 0
+    ? { step: "stop-child", outcome: "ok", count: live.length }
+    : { step: "stop-child", outcome: "failed", count: left };
 }
 
 async function abortUploads(
@@ -645,7 +681,10 @@ async function deleteBucket(
   return failedEntry("delete-bucket", result.error);
 }
 
-/** Every command names `target.bucket`; every step runs even when an earlier one failed. */
+/**
+ * Every command names `target.bucket`; every step runs even when an earlier one failed. One budget,
+ * `deps.teardownMs`, bounds stopping children and is the abort signal every command is sent with.
+ */
 export async function teardownOwnedBucket(
   client: AdminClient,
   target: TeardownTarget,
@@ -653,7 +692,7 @@ export async function teardownOwnedBucket(
 ): Promise<TeardownResult> {
   const { bucket } = target;
   const signal = AbortSignal.timeout(deps.teardownMs);
-  const entries: TeardownEntry[] = [await stopChildren(target.pids, deps)];
+  const entries: TeardownEntry[] = [await stopChildren(target.pids, deps, signal)];
   const aborted = await abortUploads(client, bucket, target.uploads, deps, signal);
   entries.push(aborted.entry);
   entries.push(await removePolicy(client, bucket, deps, signal));
@@ -803,6 +842,7 @@ async function preflight(
   client: AdminClient,
   bucket: string,
   deps: Pick<TeardownDeps, "now" | "record">,
+  signal: AbortSignal,
 ): Promise<void> {
   const encryption = await call<GetBucketEncryptionCommandOutput>(
     client,
@@ -810,11 +850,14 @@ async function preflight(
     "GetBucketEncryption",
     "preflight",
     deps,
+    {},
+    signal,
   );
   const rules = encryption.output?.ServerSideEncryptionConfiguration?.Rules ?? [];
   const sseS3 =
     rules.length > 0 &&
     rules.every((rule) => rule.ApplyServerSideEncryptionByDefault?.SSEAlgorithm === "AES256");
+  if (signal.aborted) throw new AwsRehearsalFailed("the rehearsal was stopped during setup");
   if (encryption.error !== undefined || !sseS3) {
     throw new AwsRehearsalRefused(
       "encryption-not-sse-s3",
@@ -827,6 +870,8 @@ async function preflight(
     "GetBucketVersioning",
     "preflight",
     deps,
+    {},
+    signal,
   );
   if (versioning.error !== undefined || versioning.output?.Status !== undefined) {
     throw new AwsRehearsalRefused(
@@ -862,6 +907,15 @@ export async function withAwsRehearsal<T>(
     );
   }
   const profile = await loadRehearsalProfile(env, deps);
+  if (profile.region === "us-east-1") {
+    throw new AwsRehearsalRefused(
+      "region-unsupported",
+      "us-east-1 is refused: there AWS answers a create for a bucket this account already owns with success, so a create cannot prove the bucket is new",
+    );
+  }
+  if (deps.signal?.aborted === true) {
+    throw new AwsRehearsalFailed("the rehearsal was stopped before it started");
+  }
   const client = deps.createAdminClient(profile);
   try {
     return await runOwned(scenario, deps, profile, client, receiptDir);
@@ -895,6 +949,120 @@ function receiptFailureCause(error: unknown): string {
   return typeof code === "string" && /^[A-Z0-9_]{1,32}$/.test(code) ? code : errorNameOf(error);
 }
 
+/**
+ * Records into `log`, and in place of an entry the receipt refuses writes a fixed note and counts
+ * it, so a refused entry never stops teardown or loses the receipt.
+ */
+function containedLog(log: ReceiptLog): {
+  record(event: unknown): void;
+  teardown(entry: TeardownEntry): void;
+  refused(): number;
+} {
+  let refused = 0;
+  const note = (): void => {
+    refused += 1;
+    try {
+      log.record({ scenario: "lifecycle", phase: "record-refused", outcome: "refused" });
+    } catch {
+      // Refused only if a loaded key is part of these fixed words; the count still fails the run.
+    }
+  };
+  return {
+    record(event) {
+      try {
+        log.record(event);
+      } catch {
+        note();
+      }
+    },
+    teardown(entry) {
+      try {
+        log.teardown(entry);
+      } catch {
+        note();
+        try {
+          log.teardown({ step: entry.step, outcome: entry.outcome });
+        } catch {
+          // As above.
+        }
+      }
+    },
+    refused: () => refused,
+  };
+}
+
+function refusedEntriesFailure(refused: number): AwsRehearsalFailed | undefined {
+  return refused === 0
+    ? undefined
+    : new AwsRehearsalFailed(
+        `${refused} receipt entr${refused === 1 ? "y was" : "ies were"} refused and left out of the receipt`,
+      );
+}
+
+interface DeadlineOptions {
+  controller: AbortController;
+  deadlineMs: number;
+  settleMs: number;
+  outside: AbortSignal | undefined;
+  now(): number;
+  record(event: unknown): void;
+}
+
+/**
+ * Runs `body` until it settles, its deadline passes or `outside` aborts. On either stop it aborts
+ * `controller`, rejects, and first gives `body` up to `settleMs` to settle, so a body that stops
+ * within that grace does not race the teardown that follows. `controller` is aborted however `body`
+ * ends.
+ */
+async function runWithDeadline<T>(body: () => Promise<T>, options: DeadlineOptions): Promise<T> {
+  const { controller, outside, now, record } = options;
+  const started = now();
+  const running = Promise.resolve().then(body);
+  // A body that rejects after a stop won the race must not surface as unhandled.
+  running.catch(() => {});
+  let timer: NodeJS.Timeout | undefined;
+  let onOutside: (() => void) | undefined;
+  let stopped = false;
+  const stop = new Promise<never>((_, reject) => {
+    const end = (phase: string, message: string): void => {
+      if (stopped) return;
+      stopped = true;
+      controller.abort();
+      record({
+        scenario: "lifecycle",
+        phase,
+        elapsedMs: Math.max(0, now() - started),
+        outcome: "failed",
+      });
+      reject(new AwsRehearsalFailed(message));
+    };
+    timer = setTimeout(
+      () => end("deadline", `the rehearsal passed its deadline of ${options.deadlineMs} ms`),
+      options.deadlineMs,
+    );
+    onOutside = () => end("interrupt", "the rehearsal was stopped from outside");
+    if (outside?.aborted === true) onOutside();
+    else outside?.addEventListener("abort", onOutside, { once: true });
+  });
+  try {
+    return await Promise.race([running, stop]);
+  } finally {
+    clearTimeout(timer);
+    if (onOutside !== undefined) outside?.removeEventListener("abort", onOutside);
+    controller.abort();
+    if (stopped) {
+      const settleStarted = now();
+      const settled = await settleWithin(running, options.settleMs);
+      record({
+        scenario: "lifecycle",
+        phase: "settle",
+        elapsedMs: Math.max(0, now() - settleStarted),
+        outcome: settled ? "ok" : "failed",
+      });
+    }
+  }
+}
+
 async function runOwned<T>(
   scenario: (ctx: AwsRehearsal) => Promise<T>,
   deps: AwsRehearsalDeps,
@@ -923,26 +1091,12 @@ async function runOwned<T>(
     },
     profile,
   );
-  const record = (event: unknown) => log.record(event);
+  const contained = containedLog(log);
+  const { record } = contained;
   const callDeps = { now: deps.now, record };
+  const controller = new AbortController();
+  const { signal } = controller;
 
-  const created = await call(
-    client,
-    new CreateBucketCommand({
-      Bucket: bucket,
-      ...(region === "us-east-1"
-        ? {}
-        : { CreateBucketConfiguration: { LocationConstraint: region } }),
-    } as CreateBucketCommandInput),
-    "CreateBucket",
-    "create",
-    callDeps,
-  );
-  const ownership = classifyCreate(bucket, created.error);
-
-  let failure: unknown;
-  let result: T | undefined;
-  let teardown: TeardownResult | undefined;
   const pids: number[] = [];
   const uploads: TrackedUpload[] = [];
   let tearingDown = false;
@@ -957,164 +1111,174 @@ async function runOwned<T>(
   const loweredKeys = [profile.accessKeyId, profile.secretAccessKey].map((key) =>
     key.toLowerCase(),
   );
-
-  if (ownership.state !== "owned") {
-    failure = createFailure(ownership, bucket);
-  } else {
-    let uploaded = 0;
-    let objects = 0;
-    const reserveUpload = (bytes: number, role: string): void => {
-      nonNegativeInteger(bytes, "bytes");
-      const overTotal = uploaded + bytes > AWS_REHEARSAL_LIMITS.uploadedBytes;
-      const overArchive = role === "archive" && bytes > AWS_REHEARSAL_LIMITS.archiveBytes;
-      if (overTotal || overArchive) {
+  let uploaded = 0;
+  let objects = 0;
+  const reserveUpload = (bytes: number, role: string): void => {
+    nonNegativeInteger(bytes, "bytes");
+    const overTotal = uploaded + bytes > AWS_REHEARSAL_LIMITS.uploadedBytes;
+    const overArchive = role === "archive" && bytes > AWS_REHEARSAL_LIMITS.archiveBytes;
+    if (overTotal || overArchive) {
+      record({
+        scenario: "lifecycle",
+        phase: "fixture-limit",
+        objectRole: role,
+        bytes,
+        outcome: "refused",
+      });
+      throw new AwsRehearsalRefused(
+        "fixture-limit",
+        overArchive ? "an archive fixture is over its byte limit" : "the upload budget is spent",
+      );
+    }
+    uploaded += bytes;
+  };
+  const issued = new Set<string>();
+  const labels = new Set<string>();
+  const ctx: AwsRehearsal = {
+    runId,
+    bucket,
+    region,
+    signal,
+    prefix(label) {
+      if (!LABEL.test(label) || labels.has(label)) {
+        throw new AwsRehearsalRefused("label-refused", "a prefix label is new and a token");
+      }
+      labels.add(label);
+      const prefix = `rehearsal-${runId}/${label}/`;
+      issued.add(prefix);
+      return prefix;
+    },
+    bucketConfig(prefix) {
+      if (!issued.has(prefix)) {
+        throw new AwsRehearsalRefused("prefix-not-issued", "use a prefix from prefix(label)");
+      }
+      return {
+        region,
+        bucket,
+        prefix,
+        accessKeyId: profile.accessKeyId,
+        secretAccessKey: profile.secretAccessKey,
+      };
+    },
+    reserveUpload,
+    reserveObjects(count) {
+      nonNegativeInteger(count, "count");
+      if (objects + count > AWS_REHEARSAL_LIMITS.deleteObjects) {
         record({
           scenario: "lifecycle",
           phase: "fixture-limit",
-          objectRole: role,
-          bytes,
+          count,
           outcome: "refused",
         });
+        throw new AwsRehearsalRefused("fixture-limit", "the object budget is spent");
+      }
+      objects += count;
+    },
+    trackChild(pid) {
+      refuseOnceTearingDown();
+      if (!Number.isSafeInteger(pid) || pid <= 0) {
+        throw new AwsRehearsalRefused("child-pid-refused", "a child pid is a positive integer");
+      }
+      pids.push(pid);
+    },
+    trackUpload(key, uploadId) {
+      refuseOnceTearingDown();
+      const lowered = typeof uploadId === "string" ? uploadId.toLowerCase() : "";
+      if (!isReceiptUploadId(uploadId) || loweredKeys.some((k) => lowered.includes(k))) {
         throw new AwsRehearsalRefused(
-          "fixture-limit",
-          overArchive ? "an archive fixture is over its byte limit" : "the upload budget is spent",
+          "upload-id-refused",
+          "an upload id the receipt could not carry is not tracked",
         );
       }
-      uploaded += bytes;
-    };
-    try {
-      const nonce = ownershipNonce(runId);
-      const nonceBytes = Buffer.byteLength(nonce);
-      reserveUpload(nonceBytes, "ownership-nonce");
-      const put = await call(
-        client,
-        new PutObjectCommand({
-          Bucket: bucket,
-          Key: AWS_REHEARSAL_NONCE_KEY,
-          Body: nonce,
-          ContentType: "application/json",
-        }),
-        "PutObject",
-        "ownership",
-        callDeps,
-        { objectRole: "ownership-nonce", bytes: nonceBytes },
-      );
-      if (put.error !== undefined) {
-        throw new AwsRehearsalFailed(`writing the ownership nonce to ${bucket} failed`);
-      }
-      await preflight(client, bucket, callDeps);
+      uploads.push({ key, uploadId });
+    },
+    // The scenario's own entries stay strict, so a refused one fails the scenario where it is made.
+    record: (event) => log.record(event),
+  };
 
-      const issued = new Set<string>();
-      const labels = new Set<string>();
-      const controller = new AbortController();
-      const ctx: AwsRehearsal = {
-        runId,
-        bucket,
-        region,
-        signal: controller.signal,
-        prefix(label) {
-          if (!LABEL.test(label) || labels.has(label)) {
-            throw new AwsRehearsalRefused("label-refused", "a prefix label is new and a token");
-          }
-          labels.add(label);
-          const prefix = `rehearsal-${runId}/${label}/`;
-          issued.add(prefix);
-          return prefix;
-        },
-        bucketConfig(prefix) {
-          if (!issued.has(prefix)) {
-            throw new AwsRehearsalRefused("prefix-not-issued", "use a prefix from prefix(label)");
-          }
-          return {
-            region,
-            bucket,
-            prefix,
-            accessKeyId: profile.accessKeyId,
-            secretAccessKey: profile.secretAccessKey,
-          };
-        },
-        reserveUpload,
-        reserveObjects(count) {
-          nonNegativeInteger(count, "count");
-          if (objects + count > AWS_REHEARSAL_LIMITS.deleteObjects) {
-            record({
-              scenario: "lifecycle",
-              phase: "fixture-limit",
-              count,
-              outcome: "refused",
-            });
-            throw new AwsRehearsalRefused("fixture-limit", "the object budget is spent");
-          }
-          objects += count;
-        },
-        trackChild(pid) {
-          refuseOnceTearingDown();
-          if (!Number.isSafeInteger(pid) || pid <= 0) {
-            throw new AwsRehearsalRefused("child-pid-refused", "a child pid is a positive integer");
-          }
-          pids.push(pid);
-        },
-        trackUpload(key, uploadId) {
-          refuseOnceTearingDown();
-          const lowered = typeof uploadId === "string" ? uploadId.toLowerCase() : "";
-          if (!isReceiptUploadId(uploadId) || loweredKeys.some((k) => lowered.includes(k))) {
-            throw new AwsRehearsalRefused(
-              "upload-id-refused",
-              "an upload id the receipt could not carry is not tracked",
-            );
-          }
-          uploads.push({ key, uploadId });
-        },
-        record,
-      };
-      const started = deps.now();
-      let timer: NodeJS.Timeout | undefined;
-      let deadlinePassed = false;
-      const deadline = new Promise<never>((_, reject) => {
-        timer = setTimeout(() => {
-          deadlinePassed = true;
-          controller.abort();
-          record({
-            scenario: "lifecycle",
-            phase: "deadline",
-            elapsedMs: Math.max(0, deps.now() - started),
-            outcome: "failed",
-          });
-          reject(
-            new AwsRehearsalFailed(`the scenario passed its deadline of ${deps.deadlineMs} ms`),
-          );
-        }, deps.deadlineMs);
-      });
-      const running = scenario(ctx);
-      // A scenario that rejects after the deadline won the race must not surface as unhandled.
-      running.catch(() => {});
-      try {
-        result = await Promise.race([running, deadline]);
-      } finally {
-        clearTimeout(timer);
-        controller.abort();
-        if (deadlinePassed) {
-          // A scenario still running would race teardown for its bucket.
-          const settleStarted = deps.now();
-          const settled = await settleWithin(running, deps.settleMs);
-          record({
-            scenario: "lifecycle",
-            phase: "settle",
-            elapsedMs: Math.max(0, deps.now() - settleStarted),
-            outcome: settled ? "ok" : "failed",
-          });
-        }
-      }
-    } catch (error) {
-      failure = error;
+  // Set once CreateBucket answers; a deadline can end the run before it does.
+  let created: CreateOutcome | undefined;
+  const stopIfStopped = (): void => {
+    if (signal.aborted) throw new AwsRehearsalFailed("the rehearsal was stopped during setup");
+  };
+  const setUpAndRun = async (): Promise<T> => {
+    if (signal.aborted) {
+      created = { state: "not-created", bucket: null };
+      throw new AwsRehearsalFailed("the rehearsal was stopped before it created a bucket");
     }
+    const answer = await call(
+      client,
+      new CreateBucketCommand({
+        Bucket: bucket,
+        CreateBucketConfiguration: { LocationConstraint: region },
+      } as CreateBucketCommandInput),
+      "CreateBucket",
+      "create",
+      callDeps,
+      {},
+      signal,
+    );
+    created = classifyCreate(bucket, answer.error);
+    if (created.state !== "owned") throw createFailure(created, bucket);
+    stopIfStopped();
+    const nonce = ownershipNonce(runId);
+    const nonceBytes = Buffer.byteLength(nonce);
+    reserveUpload(nonceBytes, "ownership-nonce");
+    const put = await call(
+      client,
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: AWS_REHEARSAL_NONCE_KEY,
+        Body: nonce,
+        ContentType: "application/json",
+      }),
+      "PutObject",
+      "ownership",
+      callDeps,
+      { objectRole: "ownership-nonce", bytes: nonceBytes },
+      signal,
+    );
+    if (put.error !== undefined) {
+      throw new AwsRehearsalFailed(`writing the ownership nonce to ${bucket} failed`);
+    }
+    stopIfStopped();
+    await preflight(client, bucket, callDeps, signal);
+    stopIfStopped();
+    return scenario(ctx);
+  };
+
+  let failure: unknown;
+  let result: T | undefined;
+  try {
+    result = await runWithDeadline(setUpAndRun, {
+      controller,
+      deadlineMs: deps.deadlineMs,
+      settleMs: deps.settleMs,
+      outside: deps.signal,
+      now: deps.now,
+      record,
+    });
+  } catch (error) {
+    failure = error;
+  }
+  const ownership: CreateOutcome = created ?? {
+    state: "unowned-candidate",
+    bucket: null,
+    candidate: bucket,
+  };
+
+  let teardown: TeardownResult | undefined;
+  if (ownership.state === "owned") {
     tearingDown = true;
     teardown = await teardownOwnedBucket(
       client,
       { bucket, runId, uploads, pids },
-      { ...deps, record },
+      {
+        ...deps,
+        record,
+      },
     );
-    for (const entry of teardown.entries) log.teardown(entry);
+    for (const entry of teardown.entries) contained.teardown(entry);
   }
 
   const remaining = teardown?.remaining ?? { bucket: null, uploadIds: [] };
@@ -1152,6 +1316,9 @@ async function runOwned<T>(
           `teardown failed at ${failedSteps.join(", ")}` +
             (receiptFailure === undefined ? `; receipt: ${receiptPath}` : ""),
         );
+  const problems = [failure, refusedEntriesFailure(contained.refused()), teardownFailure].filter(
+    (error) => error !== undefined,
+  );
   if (receiptFailure !== undefined) {
     const left =
       remaining.bucket ??
@@ -1159,27 +1326,56 @@ async function runOwned<T>(
         ? `${ownership.candidate} (ownership unknown)`
         : "none");
     throw new AggregateError(
-      [failure, teardownFailure, receiptFailure].filter((error) => error !== undefined),
+      [...problems, receiptFailure],
       `the rehearsal's receipt was not written; bucket left: ${left}; ` +
         `failed teardown steps: ${failedSteps.length === 0 ? "none" : failedSteps.join(", ")}`,
     );
   }
   if (printFailure !== undefined) {
-    const errors = [failure, teardownFailure, printFailure].filter((error) => error !== undefined);
-    if (errors.length === 1) throw printFailure;
-    throw new AggregateError(errors, `the rehearsal failed; receipt: ${receiptPath}`);
+    if (problems.length === 0) throw printFailure;
+    throw new AggregateError(
+      [...problems, printFailure],
+      `the rehearsal failed; receipt: ${receiptPath}`,
+    );
   }
-  if (failure !== undefined) {
-    if (teardownFailure !== undefined) {
-      throw new AggregateError(
-        [failure, teardownFailure],
-        `the rehearsal failed and so did its teardown; receipt: ${receiptPath}`,
-      );
-    }
-    throw failure;
+  if (problems.length === 1) throw problems[0];
+  if (problems.length > 1) {
+    throw new AggregateError(
+      problems,
+      teardownFailure === undefined
+        ? `the rehearsal failed; receipt: ${receiptPath}`
+        : `the rehearsal failed and so did its teardown; receipt: ${receiptPath}`,
+    );
   }
-  if (teardownFailure !== undefined) throw teardownFailure;
   return result as T;
+}
+
+/**
+ * Runs one rehearsal for a test file whose test can hit Vitest's time limit, which leaves the run
+ * going after the test has failed. Call `stop()` in `afterAll`: it ends a run still going as its
+ * deadline would, and waits up to `waitMs` for the teardown and the receipt.
+ */
+export function rehearsalLifecycle(overrides: Partial<AwsRehearsalDeps> = {}): {
+  run<T>(scenario: (ctx: AwsRehearsal) => Promise<T>): Promise<T>;
+  stop(waitMs?: number): Promise<void>;
+} {
+  const outside = new AbortController();
+  let running: Promise<unknown> | undefined;
+  return {
+    run(scenario) {
+      const run = withAwsRehearsal(scenario, { ...overrides, signal: outside.signal });
+      running = run;
+      return run;
+    },
+    async stop(waitMs = AWS_REHEARSAL_STOP_WAIT_MS) {
+      outside.abort();
+      if (running !== undefined && !(await settleWithin(running, waitMs))) {
+        throw new AwsRehearsalFailed(
+          `the rehearsal did not finish within ${waitMs} ms of its stop`,
+        );
+      }
+    },
+  };
 }
 
 export interface CleanupResult {
@@ -1322,7 +1518,8 @@ export async function cleanupFromReceipt(
       },
       profile,
     );
-    const record = (event: unknown) => log.record(event);
+    const contained = containedLog(log);
+    const { record } = contained;
     const marker = await call<GetObjectCommandOutput>(
       client,
       new GetObjectCommand({ Bucket: bucket, Key: AWS_REHEARSAL_NONCE_KEY }),
@@ -1355,7 +1552,7 @@ export async function cleanupFromReceipt(
       { bucket, runId, uploads: [], pids: [] },
       { ...deps, record },
     );
-    for (const entry of teardown.entries) log.teardown(entry);
+    for (const entry of teardown.entries) contained.teardown(entry);
     const receipt = log.finish({
       finishedAt: new Date(deps.now()).toISOString(),
       ownership: { state: "owned", bucket },
@@ -1375,7 +1572,10 @@ export async function cleanupFromReceipt(
       );
     }
     deps.print(written);
-    return { ok: teardown.remaining.bucket === null, receiptPath: written };
+    return {
+      ok: teardown.remaining.bucket === null && contained.refused() === 0,
+      receiptPath: written,
+    };
   } finally {
     client.destroy?.();
   }

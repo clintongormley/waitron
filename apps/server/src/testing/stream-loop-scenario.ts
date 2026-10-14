@@ -603,7 +603,7 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
       await freeze.pause();
       try {
         // Long enough for Litestream to be part-way through calls the server will not answer.
-        await new Promise((resolve) => setTimeout(resolve, 2_000));
+        await delay(2_000, undefined, signal ? { signal } : {});
         const stopped: number[] = [];
         for (let i = 0; i < TIMED_SALES; i += 1) {
           const sale = await timedSale(TIMED_SALES + i);

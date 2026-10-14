@@ -1,12 +1,15 @@
+import { spawn } from "node:child_process";
 import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { type AwsReceipt, isReceiptCleanupCommand } from "./aws-rehearsal-receipt.js";
 import {
   AWS_REHEARSAL_LIMITS,
   AWS_REHEARSAL_PROFILE,
   AwsRehearsalRefused,
   cleanupCommandFor,
+  rehearsalLifecycle,
   type AdminClient,
   type AwsRehearsal,
   type AwsRehearsalDeps,
@@ -332,13 +335,6 @@ describe("withAwsRehearsal — the happy path", () => {
     expect(actions.GetObject).toBe("not-exercised");
     expect(text).not.toContain(KEY_ID);
     expect(text).not.toContain(SECRET);
-  });
-
-  it("sends no location constraint in us-east-1", async () => {
-    await writeFile(configFile, "[profile waitron-rehearsal]\nregion = us-east-1\n");
-    const h = harness({}, { env: env({ AWS_REGION: "us-east-1" }) });
-    await withAwsRehearsal(async () => undefined, h.deps);
-    expect(h.fake.calls[0]!.input).toEqual({ Bucket: BUCKET });
   });
 
   it("gives each label one prefix and a bucket config only for an issued prefix", async () => {
@@ -1029,5 +1025,260 @@ describe("fix round 1", () => {
     });
     await withAwsRehearsal(async () => undefined, h.deps);
     expect(h.fake.names().at(-1)).toBe("DeleteBucket");
+  });
+});
+
+describe("finish-branch review: failures that must still reach teardown and the receipt", () => {
+  it("aborts the signal and tears down when the scenario throws before returning a promise", async () => {
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      const h = harness({}, { deadlineMs: 30 });
+      let signal: AbortSignal | undefined;
+      const failure = new Error("sync failure");
+      const error = await rejection(
+        withAwsRehearsal((ctx) => {
+          signal = ctx.signal;
+          throw failure;
+        }, h.deps),
+      );
+      expect(error).toBe(failure);
+      expect(signal!.aborted).toBe(true);
+      expect(h.fake.names().at(-1)).toBe("DeleteBucket");
+      await delay(80);
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+  });
+
+  it("runs every teardown step and writes the receipt when the receipt refuses an error name", async () => {
+    const h = harness({
+      DeleteBucketPolicy: () => {
+        throw sdkError(`Denied${SECRET}`, 403, 1);
+      },
+    });
+    const error = await rejection(
+      withAwsRehearsal(async (ctx) => {
+        h.fake.objects.add(`${ctx.prefix("x")}object`);
+      }, h.deps),
+    );
+    expect(error.message).not.toContain(SECRET);
+    expect(h.fake.names().slice(-3)).toEqual(["DeleteObjects", "DeleteObject", "DeleteBucket"]);
+    const { parsed, text } = await receipt();
+    expect(text).not.toContain(SECRET);
+    expect(parsed.remaining.bucket).toBe(BUCKET);
+    expect(parsed.teardown.find((entry) => entry.step === "remove-policy")).toEqual({
+      step: "remove-policy",
+      outcome: "failed",
+    });
+    expect(parsed.events).toContainEqual({
+      scenario: "lifecycle",
+      phase: "record-refused",
+      outcome: "refused",
+    });
+    expect(parsed.teardown.find((entry) => entry.step === "delete-bucket")!.outcome).toBe("ok");
+  });
+
+  it("reports a refused receipt entry beside the run's own failure", async () => {
+    const h = harness({
+      GetBucketVersioning: () => {
+        throw Object.assign(new Error("x"), { name: `N${SECRET}`, $metadata: {} });
+      },
+    });
+    const error = await rejection(withAwsRehearsal(async () => undefined, h.deps));
+    expect(error).toBeInstanceOf(AggregateError);
+    const errors = (error as AggregateError).errors.map(String);
+    expect(errors[0]).toContain("versioning-not-off");
+    expect(errors[1]).toContain("receipt entr");
+    expect(error.message).not.toContain(SECRET);
+    expect((await receipt()).parsed.remaining.bucket).toBeNull();
+  });
+
+  it("still refuses the scenario's own entry where it is recorded", async () => {
+    const h = harness();
+    const error = await rejection(
+      withAwsRehearsal(async (ctx) => {
+        ctx.record({ scenario: "loop", phase: `p${SECRET}`, outcome: "ok" });
+      }, h.deps),
+    );
+    expect(error.message).toBe("receipt field refused: phase");
+    expect(h.fake.names().at(-1)).toBe("DeleteBucket");
+  });
+
+  it("counts creating, marking and checking the bucket against the deadline", async () => {
+    const h = harness(
+      {
+        GetBucketEncryption: async () => {
+          await delay(80);
+          return {
+            ...ok(),
+            ServerSideEncryptionConfiguration: {
+              Rules: [{ ApplyServerSideEncryptionByDefault: { SSEAlgorithm: "AES256" } }],
+            },
+          };
+        },
+      },
+      { deadlineMs: 5, settleMs: 1_000 },
+    );
+    const scenario = vi.fn(async () => undefined);
+    const error = await rejection(withAwsRehearsal(scenario, h.deps));
+    expect(error.message).toContain("deadline");
+    expect(scenario).not.toHaveBeenCalled();
+    expect(h.fake.names().slice(0, 3)).toEqual([
+      "CreateBucket",
+      "PutObject",
+      "GetBucketEncryption",
+    ]);
+    expect(h.fake.calls[0]!.signal).toBeInstanceOf(AbortSignal);
+    expect(h.fake.names()).not.toContain("GetBucketVersioning");
+    expect(h.fake.names().at(-1)).toBe("DeleteBucket");
+  });
+
+  it("records an unknown creation when the deadline passes before CreateBucket answers", async () => {
+    const h = harness({ CreateBucket: () => new Promise(() => {}) }, { deadlineMs: 5 });
+    const scenario = vi.fn(async () => undefined);
+    const error = await rejection(withAwsRehearsal(scenario, h.deps));
+    expect(error.message).toContain("deadline");
+    expect(scenario).not.toHaveBeenCalled();
+    expect(h.fake.names()).toEqual(["CreateBucket"]);
+    expect(h.fake.calls[0]!.signal!.aborted).toBe(true);
+    expect((await receipt()).parsed.ownership).toEqual({
+      bucket: null,
+      state: "unowned-candidate",
+      candidate: BUCKET,
+    });
+  });
+
+  it("an outside stop ends a running scenario, waits for teardown and the receipt", async () => {
+    const h = harness();
+    const lifecycle = rehearsalLifecycle(h.deps);
+    let signal: AbortSignal | undefined;
+    const run = lifecycle
+      .run((ctx) => {
+        signal = ctx.signal;
+        return new Promise<never>(() => {});
+      })
+      .then(
+        () => undefined,
+        (error: unknown) => error as Error,
+      );
+    await vi.waitFor(() => expect(signal).toBeDefined());
+    await lifecycle.stop();
+    expect(signal!.aborted).toBe(true);
+    expect(h.fake.names().at(-1)).toBe("DeleteBucket");
+    const { parsed } = await receipt();
+    expect(parsed.events).toContainEqual(
+      expect.objectContaining({ phase: "interrupt", outcome: "failed" }),
+    );
+    expect((await run)!.message).toContain("stopped");
+  });
+
+  it("an outside stop after the run finished sends nothing more", async () => {
+    const h = harness();
+    const lifecycle = rehearsalLifecycle(h.deps);
+    await lifecycle.run(async () => "done");
+    const sent = h.fake.calls.length;
+    await lifecycle.stop();
+    expect(h.fake.calls.length).toBe(sent);
+  });
+
+  it("refuses a run whose outside signal is already aborted before building a client", async () => {
+    const h = harness({}, { signal: AbortSignal.abort() });
+    await rejection(withAwsRehearsal(async () => undefined, h.deps));
+    expect(h.createAdminClient).not.toHaveBeenCalled();
+  });
+});
+
+describe("finish-branch review: child shutdown", () => {
+  it("keeps child shutdown inside the teardown budget", async () => {
+    const fake = new FakeAdmin();
+    let alive = true;
+    const started = performance.now();
+    const result = await teardownOwnedBucket(
+      fake,
+      { bucket: BUCKET, runId: RUN_ID, uploads: [], pids: [101, 102, 103] },
+      {
+        now: Date.now,
+        teardownMs: 10,
+        isAlive: () => alive,
+        kill: () => {},
+        sleep: async () => {
+          await delay(60);
+          alive = false;
+        },
+      },
+    );
+    expect(performance.now() - started).toBeLessThan(40);
+    expect(result.entries[0]).toEqual({ step: "stop-child", outcome: "failed", count: 3 });
+  });
+
+  it("records a real child that ignores SIGTERM as stopped once SIGKILL ends it", async () => {
+    const child = spawn(
+      process.execPath,
+      ["-e", "process.on('SIGTERM', () => {}); console.log('ready'); setInterval(() => {}, 1000);"],
+      { stdio: ["ignore", "pipe", "ignore"] },
+    );
+    const exited = new Promise<NodeJS.Signals | null>((resolve) =>
+      child.once("exit", (_code, signal) => resolve(signal)),
+    );
+    try {
+      await new Promise<void>((resolve) => child.stdout!.once("data", () => resolve()));
+      const result = await teardownOwnedBucket(
+        new FakeAdmin(),
+        { bucket: BUCKET, runId: RUN_ID, uploads: [], pids: [child.pid!] },
+        {
+          now: Date.now,
+          teardownMs: 10_000,
+          childGraceMs: 200,
+          isAlive: (pid) => {
+            try {
+              process.kill(pid, 0);
+              return true;
+            } catch {
+              return false;
+            }
+          },
+          kill: (pid, signal) => process.kill(pid, signal),
+          sleep: (ms) => delay(ms),
+        },
+      );
+      expect(result.entries[0]).toEqual({ step: "stop-child", outcome: "ok", count: 1 });
+      expect(await exited).toBe("SIGKILL");
+    } finally {
+      if (child.exitCode === null && child.signalCode === null) process.kill(child.pid!, "SIGKILL");
+    }
+  });
+});
+
+describe("finish-branch review: refusals before any request", () => {
+  it("refuses us-east-1, where re-creating an owned bucket answers success, before any client", async () => {
+    await writeFile(configFile, "[profile waitron-rehearsal]\nregion = us-east-1\n");
+    const h = harness({}, { env: env({ AWS_REGION: "us-east-1" }) });
+    h.fake.objects.add("other-run-data");
+    const error = await rejection(withAwsRehearsal(async () => undefined, h.deps));
+    expect((error as AwsRehearsalRefused).reason).toBe("region-unsupported");
+    expect(error.message).toContain("us-east-1");
+    expect(h.createAdminClient).not.toHaveBeenCalled();
+    expect(h.fake.calls).toEqual([]);
+    expect(h.fake.objects.has("other-run-data")).toBe(true);
+  });
+
+  it("refuses a long receipt folder of allowed characters for its length, not its characters", async () => {
+    const folder = join(dir, "x".repeat(300));
+    const h = harness({}, { receiptDir: folder });
+    const error = await rejection(withAwsRehearsal(async () => undefined, h.deps));
+    expect((error as AwsRehearsalRefused).reason).toBe("receipt-dir-unsupported");
+    expect(error.message).toContain("too long");
+    expect(error.message).not.toContain("may hold only");
+    expect(h.fake.calls).toEqual([]);
+  });
+
+  it("refuses an empty run id as a run id, which the cleanup receipt's name alone would accept", async () => {
+    const h = harness({}, { runId: () => "" });
+    const error = await rejection(withAwsRehearsal(async () => undefined, h.deps));
+    expect((error as AwsRehearsalRefused).reason).toBe("run-id-unsupported");
+    expect(h.fake.calls).toEqual([]);
   });
 });

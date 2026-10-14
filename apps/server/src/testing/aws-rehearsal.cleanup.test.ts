@@ -643,3 +643,29 @@ describe("cleanupFromReceipt fix round 1", () => {
     expect(h.printed).toEqual([]);
   });
 });
+
+describe("cleanupFromReceipt: a receipt entry the receipt refuses", () => {
+  it("still deletes the bucket, writes its receipt without the value and reports failure", async () => {
+    await writeLeft(leftReceipt());
+    const h = harness({
+      DeleteBucketPolicy: () => {
+        throw sdkError(`Denied${SECRET}`, 403);
+      },
+    });
+    const result = await cleanupFromReceipt(receiptPath, h.deps);
+    expect(result.ok).toBe(false);
+    expect(h.fake.names().at(-1)).toBe("DeleteBucket");
+    const text = await readFile(cleanupPath(), "utf8");
+    expect(text).not.toContain(SECRET);
+    const receipt = JSON.parse(text) as AwsReceipt;
+    expect(receipt.teardown.find((entry) => entry.step === "remove-policy")).toEqual({
+      step: "remove-policy",
+      outcome: "failed",
+    });
+    expect(receipt.events).toContainEqual({
+      scenario: "lifecycle",
+      phase: "record-refused",
+      outcome: "refused",
+    });
+  });
+});

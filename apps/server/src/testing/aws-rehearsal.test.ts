@@ -8,6 +8,7 @@ import {
   AWS_REHEARSAL_SCENARIO_DEADLINE_MS,
   AWS_REHEARSAL_SETUP_MARGIN_MS,
   AWS_REHEARSAL_SETTLE_MS,
+  AWS_REHEARSAL_STOP_WAIT_MS,
   AWS_REHEARSAL_PROFILE,
   AwsRehearsalRefused,
   assertOutsideDirectory,
@@ -247,7 +248,7 @@ describe("the rehearsal config's time limits", () => {
     expect(AWS_REHEARSAL_SCENARIO_DEADLINE_MS).toBe(15 * 60_000);
   });
 
-  it("gives a test its scenario deadline plus teardown plus the setup margin", () => {
+  it("gives a test its run deadline plus settling plus teardown plus the setup margin", () => {
     const test = rehearsalConfig.test!;
     expect(test.testTimeout).toBe(
       AWS_REHEARSAL_SCENARIO_DEADLINE_MS +
@@ -256,7 +257,10 @@ describe("the rehearsal config's time limits", () => {
         AWS_REHEARSAL_SETUP_MARGIN_MS,
     );
     expect(AWS_REHEARSAL_SETTLE_MS).toBe(60_000);
-    expect(test.hookTimeout).toBe(AWS_REHEARSAL_LIMITS.teardownMs + AWS_REHEARSAL_SETUP_MARGIN_MS);
+    expect(test.hookTimeout).toBe(AWS_REHEARSAL_STOP_WAIT_MS + AWS_REHEARSAL_SETUP_MARGIN_MS);
+    expect(AWS_REHEARSAL_STOP_WAIT_MS).toBeGreaterThan(
+      AWS_REHEARSAL_SETTLE_MS + AWS_REHEARSAL_LIMITS.teardownMs,
+    );
     expect(AWS_REHEARSAL_SETUP_MARGIN_MS).toBeGreaterThan(0);
   });
 
