@@ -89,6 +89,27 @@ async function splitGroup(
   const staying = merge.members.filter((member) => !ticked.has(member.tableId));
   if (staying.length === 0) throw new AppError("merge.split_all", { tableId, field: "partIds" });
   const holders = await holdersOf(tx, members);
+  const before = await readPartiesSentWork(tx, [...new Set(holders.values())], members);
+  await ungroup(tx, cfg, removals, now, { zoneId, merge, holders }, { tableId, partIds, seats });
+  await enqueueMovedSlipsFor(tx, cfg, before);
+}
+
+/** {@link splitGroup}'s writes; `holders` maps each held table of the group to its party. */
+async function ungroup(
+  tx: Transaction,
+  cfg: TillConfig,
+  removals: readonly TableRemoval[],
+  now: Date,
+  {
+    zoneId,
+    merge,
+    holders,
+  }: { zoneId: string; merge: Merge; holders: ReadonlyMap<string, string> },
+  { partIds, seats }: SplitArgs,
+): Promise<void> {
+  const members = merge.members.map((member) => member.tableId);
+  const ticked = new Set(partIds);
+  const staying = merge.members.filter((member) => !ticked.has(member.tableId));
   if (holders.size > 0) {
     const leaving = partIds.filter((id) => holders.has(id));
     const losing = [...new Set(leaving.map((id) => holders.get(id)!))];
@@ -100,14 +121,11 @@ async function splitGroup(
     if (staying.length >= 2 && seats === null) throw new AppError("merge.seats_required", {});
     const groupSeats = staying.length >= 2 ? seats : null;
     if (leaving.length === 0) return leaveAsGroup(tx, merge.joinId, partIds, groupSeats);
-    const before = await readPartiesSentWork(tx, losing);
     for (const partyId of losing) {
       await checkAndBumpParty(tx, partyId, await partyRevision(tx, partyId), "open");
     }
     await leaveForClearing(tx, leaving, nowIso());
-    await leaveAsGroup(tx, merge.joinId, partIds, groupSeats);
-    await enqueueMovedSlipsFor(tx, cfg, before);
-    return;
+    return leaveAsGroup(tx, merge.joinId, partIds, groupSeats);
   }
 
   const rejoin = staying.length >= 2 ? await rejoining(tx, staying) : null;

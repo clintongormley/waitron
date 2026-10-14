@@ -4,25 +4,30 @@ import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { printJobs, workingOrders } from "@waitron/db";
+import { printJobs, ticketItems } from "@waitron/db";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { createPrinter, prepareText } from "@waitron/printing";
 import { partyTablesName } from "@waitron/shared";
-import { kitchenNotices } from "@waitron/venue-service";
+import {
+  kitchenNotices,
+  setZoneSalePolicyOverride,
+  zoneSalePolicies,
+} from "@waitron/venue-service";
 import { createStation } from "./kitchen.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { moveBill } from "./move-bill.js";
 import { listOrders } from "./orders-list.js";
-import { finishTable } from "./parties.js";
+import { finishTable, holderOf } from "./parties.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
-import type { ExpoOrder } from "./working-order.js";
+import { handOverOrder, type ExpoOrder } from "./working-order.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import {
   billRow,
   commandFor,
+  counterOrder,
   floorRow,
   inTx,
   nameParty,
@@ -46,7 +51,6 @@ import {
 } from "./testing/floor-today-venue.js";
 import { seedSessionDevice } from "./testing/session-device.js";
 import { payWorkingOrder } from "./till-sale.js";
-import { createOpenOrder } from "./working-order.js";
 import { routeProductTo } from "./testing/zone-offers.js";
 import "./errors.js";
 
@@ -608,32 +612,45 @@ describe("back to its saved place on a group renamed for today, as the kitchen s
 });
 
 /**
- * A counter order of one Burger in the counter zone, delivered to `tableId` and paid in cash, which
- * fires the dish. The delivery is written after the order is created, which would otherwise take
- * the table's zone, and a table-service zone does not fire at payment.
+ * A walk-up sale of one Burger delivered to `tableId` in `zoneId` and paid in cash. The sale takes
+ * the table's zone, and a paid walk-up sale fires its dishes only in a zone that starts orders at
+ * the counter and takes payment before the food, so the zone is set that way for the sale and its
+ * settings put back after, as a manager would, since table actions refuse a zone that does not
+ * serve tables.
  */
-async function deliveredCounterOrder(tableId: string): Promise<string> {
+async function deliveredCounterOrder(zoneId: string, tableId: string): Promise<string> {
+  const [saved] = await inTx(v, (tx) =>
+    tx
+      .select({ orderStart: zoneSalePolicies.orderStart, paidWhen: zoneSalePolicies.paidWhen })
+      .from(zoneSalePolicies)
+      .where(eq(zoneSalePolicies.zoneId, zoneId)),
+  );
+  const setZone = (orderStart: typeof saved.orderStart, paidWhen: typeof saved.paidWhen) =>
+    inTx(v, async (tx) => {
+      await setZoneSalePolicyOverride(tx, v.cfg, zoneId, "orderStart", orderStart);
+      await setZoneSalePolicyOverride(tx, v.cfg, zoneId, "paidWhen", paidWhen);
+    });
+  await setZone("counter", "prepay");
   const id = randomUUID();
-  await inTx(v, async (tx) => {
-    await createOpenOrder(
-      tx,
-      v.cfg,
-      id,
-      [{ menuItemId: v.counterItem("Burger"), quantity: "1" }],
-      null,
-      { zoneId: v.counter.zoneId },
-    );
-    await tx
-      .update(workingOrders)
-      .set({ deliveryTableId: tableId })
-      .where(eq(workingOrders.id, id));
-  });
   await payWorkingOrder({ db: v.db, backend: v.backend, clock: v.clock }, v.cfg, {
     id,
-    lines: [],
-    tender: { method: "cash", amount: "12.00" },
+    lines: [{ menuItemId: v.item("Burger"), quantity: "1" }],
+    tender: { method: "cash", amount: "50.00" },
+    deliveryTableId: tableId,
   });
+  await setZone(saved!.orderStart, saved!.paidWhen);
+  expect(await sentCount(id)).toBe(1);
   return id;
+}
+
+async function sentCount(orderId: string): Promise<number> {
+  const rows = await inTx(v, (tx) =>
+    tx
+      .select({ id: ticketItems.id })
+      .from(ticketItems)
+      .where(eq(ticketItems.workingOrderId, orderId)),
+  );
+  return rows.length;
 }
 
 describe("a table or group renamed for today, with dishes sent, as the kitchen sees it", () => {
@@ -651,10 +668,16 @@ describe("a table or group renamed for today, with dishes sent, as the kitchen s
     expect(slips[0]!.join(" ")).toContain(fromTo(fiesta, fiesta2));
   });
 
-  it("renaming a table nobody sits at and no counter order is delivered to prints nothing, while another party has dishes sent", async () => {
-    const { table } = await LONG_TABLE();
+  it("renaming Table 9, which nobody sits at and whose delivered counter order was handed over, prints nothing, while another party has dishes sent", async () => {
+    const { table, zoneId } = await LONG_TABLE();
     const guests = await seat(v, table.c6!, 2);
     await orderForParty(v, guests.partyId, ["Burger"], guests.tabId);
+    const handedOver = await deliveredCounterOrder(zoneId, table.t9!);
+    await inTx(v, (tx) => handOverOrder(tx, v.cfg, handedOver));
+    expect(await billRow(v, handedOver)).toMatchObject({
+      status: "settled",
+      deliveryTableId: table.t9!,
+    });
     const jobsBefore = await allJobCount();
     const noticesBefore = await noticeCount();
 
@@ -665,10 +688,10 @@ describe("a table or group renamed for today, with dishes sent, as the kitchen s
   });
 
   it("a counter order delivered to Counter 6, which nobody sits at, prints one MOVED slip from its old name to its new one", async () => {
-    const { table } = await LONG_TABLE();
+    const { table, zoneId } = await LONG_TABLE();
     const window = suffixed("Window");
     await rename(table.c6!, window);
-    await deliveredCounterOrder(table.c6!);
+    await deliveredCounterOrder(zoneId, table.c6!);
     const patio = suffixed("Patio");
 
     const printed = await jobsFrom(() => rename(table.c6!, patio));
@@ -681,14 +704,14 @@ describe("a table or group renamed for today, with dishes sent, as the kitchen s
 
 describe("a counter order delivered to a table of a group that ends, as the kitchen sees it", () => {
   it("a counter order delivered to Counter 6 prints one MOVED slip from Cumple Ana to Counter 6 when the unseated group ends by Back to saved place", async () => {
-    const { table } = await LONG_TABLE();
+    const { table, zoneId } = await LONG_TABLE();
     await post(
       `/api/tables/${table.t9!}/today/merge`,
       await withRevision(v, table.t9!, { targetId: table.c6!, side: "left", seats: 6 }),
     );
     const cumpleAna = suffixed("Cumple Ana");
     await rename(table.c6!, cumpleAna);
-    await deliveredCounterOrder(table.c6!);
+    await deliveredCounterOrder(zoneId, table.c6!);
 
     const printed = await jobsFrom(async () =>
       post(`/api/tables/${table.t9!}/today/back`, await withRevision(v, table.t9!, {})),
@@ -703,15 +726,105 @@ describe("a counter order delivered to a table of a group that ends, as the kitc
 describe("a counter order delivered to a table split off a seated group, as the kitchen sees it", () => {
   it("a counter order delivered to Table 9 prints one MOVED slip from the group's name to Table 9's own name when Table 9 is split off", async () => {
     const nine = suffixed("Patio");
-    const { table, guests } = await seatedPair({ own: suffixed("Window"), nine });
+    const { table, zoneId, guests } = await seatedPair({ own: suffixed("Window"), nine });
     const name = suffixed("García birthday");
     await rename(table.c6!, name);
-    await deliveredCounterOrder(table.t9!);
+    await deliveredCounterOrder(zoneId, table.t9!);
 
     const printed = await jobsFrom(() => splitTableOff(guests.partyId, table.t9!, null));
 
     const slips = printed.filter(isMovedSlip);
     expect(slips).toHaveLength(1);
     expect(slips[0]!.join(" ")).toContain(fromTo(name, nine));
+  });
+});
+
+/** Table 9 pushed onto free Counter 6 by the floor's merge route, the group named `name`. */
+async function unseatedGroup(name: string) {
+  const zone = await LONG_TABLE();
+  const { table } = zone;
+  await post(
+    `/api/tables/${table.t9!}/today/merge`,
+    await withRevision(v, table.t9!, { targetId: table.c6!, side: "left", seats: 6 }),
+  );
+  await rename(table.c6!, name);
+  return zone;
+}
+
+describe("a counter order delivered to a table an action brings into or takes out of a named group, as the kitchen sees it", () => {
+  it("free Bar, with a counter order delivered to it, pushed onto the unseated group Fiesta by the floor's merge route prints one MOVED slip from Bar to Fiesta", async () => {
+    const fiesta = suffixed("Fiesta");
+    const { table, zoneId } = await unseatedGroup(fiesta);
+    await deliveredCounterOrder(zoneId, table.bar!);
+
+    const printed = await jobsFrom(async () =>
+      post(
+        `/api/tables/${table.bar!}/today/merge`,
+        await withRevision(v, table.bar!, { targetId: table.c6!, side: "right", seats: 10 }),
+      ),
+    );
+
+    expect((await floorRow(v, table.bar!)).today?.joinName).toBe(fiesta);
+    const slips = printed.filter(isMovedSlip);
+    expect(slips).toHaveLength(1);
+    expect(slips[0]!.join(" ")).toContain(fromTo(await labelOf(table.bar!), fiesta));
+  });
+
+  it("the party at the group Fiesta joining free Counter 6, with a counter order delivered to it, merged into the group prints one MOVED slip from Counter 6 to Fiesta", async () => {
+    const { table, zoneId, guests } = await seatedGroup();
+    const fiesta = suffixed("Fiesta");
+    await rename(table.bar!, fiesta);
+    await deliveredCounterOrder(zoneId, table.c6!);
+
+    const printed = await jobsFrom(() => pushOnto(guests.partyId, table.c6!, table.bar!, 16));
+
+    expect((await floorRow(v, table.c6!)).today?.joinName).toBe(fiesta);
+    const slips = printed.filter(isMovedSlip);
+    expect(slips).toHaveLength(1);
+    expect(slips[0]!.join(" ")).toContain(fromTo(await labelOf(table.c6!), fiesta));
+  });
+
+  it("Table 9, with a counter order delivered to it, ticked off the unseated group Cumple by Split tables… prints one MOVED slip from Cumple to Table 9", async () => {
+    const cumple = suffixed("Cumple");
+    const { table, zoneId } = await unseatedGroup(cumple);
+    await deliveredCounterOrder(zoneId, table.t9!);
+
+    const printed = await jobsFrom(async () =>
+      post(
+        `/api/tables/${table.c6!}/today/split-off`,
+        await withRevision(v, table.c6!, { partIds: [table.t9!] }),
+      ),
+    );
+
+    expect((await floorRow(v, table.t9!)).today?.joinName).toBeNull();
+    const slips = printed.filter(isMovedSlip);
+    expect(slips).toHaveLength(1);
+    expect(slips[0]!.join(" ")).toContain(fromTo(cumple, await labelOf(table.t9!)));
+  });
+
+  it("the same, with a party holding Counter 6 alone, prints one MOVED slip from Cumple to Table 9 and one for the party's bill from Cumple to Counter 6", async () => {
+    const cumple = suffixed("Cumple");
+    const { table, zoneId } = await unseatedGroup(cumple);
+    await post(`/api/bills/${await counterOrder(v, "Burger")}/move`, {
+      to: { tableId: table.c6! },
+      otherPartyId: null,
+    });
+    expect(await inTx(v, (tx) => holderOf(tx, table.c6!))).not.toBeNull();
+    expect(await inTx(v, (tx) => holderOf(tx, table.t9!))).toBeNull();
+    await deliveredCounterOrder(zoneId, table.t9!);
+
+    const printed = await jobsFrom(async () =>
+      post(
+        `/api/tables/${table.c6!}/today/split-off`,
+        await withRevision(v, table.c6!, { partIds: [table.t9!] }),
+      ),
+    );
+
+    const slips = printed.filter(isMovedSlip).map((slip) => slip.join(" "));
+    expect(slips).toHaveLength(2);
+    for (const tableId of [table.c6!, table.t9!]) {
+      const to = fromTo(cumple, await labelOf(tableId));
+      expect(slips.filter((slip) => slip.includes(to))).toHaveLength(1);
+    }
   });
 });

@@ -1502,7 +1502,7 @@ From **Variants as products (#511–#556) — what is left open.** How the model
   reading, not the owner's: the owner's example assumed the group ended and read "-> Bar, Counter 3,
   Counter 4, Counter 5". Owner may overturn it. A rename for today prints too (A650 owner ruling 1,
   2026-10-14): a MOVED slip for each bill of a party at the table or its group, and each counter
-  order delivered there, with work sent whose place names changed (`nameToday`,
+  order with food on its way there, with work sent whose place names changed (`nameToday`,
   `apps/server/src/floor-today-name.ts`). The owner found the Bar slip
   misleading (2026-10-14) and ruled on its replacement the same day (A650): a slip only when an
   order left a table, a name on its kitchen paper is gone (so a rename prints) or its dishes moved

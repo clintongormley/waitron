@@ -23,10 +23,11 @@ import {
   seatsToday,
   takeOffToday,
 } from "./floor-today-store.js";
-import { writeMerge } from "./floor-today-merges.js";
+import { mergeMembers, writeMerge } from "./floor-today-merges.js";
 import { resetTable } from "./floor-today-reset-table.js";
 import { splitOff } from "./floor-today-split-group.js";
 import { nameToday } from "./floor-today-name.js";
+import { enqueueMovedSlipsFor, readSentWorkAt } from "./kitchen-print.js";
 import type { Logger } from "./logger.js";
 import type { Run, TillApiDeps } from "./till-api.js";
 import { requireSession } from "./till-session.js";
@@ -187,8 +188,12 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
   tableRoute("merge", (body, tableId) => {
     const { targetId, side, seats } = mergeBody(body, tableId);
     return {
-      write: (tx, movingId) =>
-        writeMerge(tx, deps.cfg, { movingId, targetId, side, seats, free: true }),
+      write: async (tx, movingId) => {
+        const touched = [movingId, targetId, ...(await mergeMembers(tx, targetId))];
+        const before = await readSentWorkAt(tx, [...new Set(touched)]);
+        await writeMerge(tx, deps.cfg, { movingId, targetId, side, seats, free: true });
+        await enqueueMovedSlipsFor(tx, deps.cfg, before);
+      },
       others: [targetId],
     };
   });

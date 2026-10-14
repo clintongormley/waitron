@@ -52,7 +52,8 @@ import { VENUE_SERVICE } from "./modules.js";
 import { printJobInTrouble, printedOrResent } from "./print-job-trouble.js";
 import { readOrderPlaces, type OrderPlaces } from "./order-places.js";
 import { readRestOfOrder } from "./rest-of-order.js";
-import { partyFamilies, partyFamily } from "./parties.js";
+import { holdersOf, partyFamilies, partyFamily } from "./parties.js";
+import { foodOnItsWay } from "./delivery-release.js";
 import type { KitchenTicketItem, MovedSlip } from "./kitchen-ticket.js";
 import type { TillConfig } from "./till-config.js";
 import "./errors.js";
@@ -1332,9 +1333,9 @@ async function printMovedSlips(
 
 /**
  * The sent work of every open, placed or settled bill of `partyIds` and of every party merged into
- * them ({@link partyFamilies}), and of every such counter order delivered to one of those parties'
- * tables or to one of `tableIds`, keyed by order; an order the kitchen has nothing on paper for is
- * left out. Read before a table action changes which tables those bills belong to, or what those
+ * them ({@link partyFamilies}), and of every counter order with food on its way ({@link foodOnItsWay})
+ * to one of those parties' tables or to one of `tableIds`, keyed by order; an order the kitchen has
+ * nothing on paper for is left out. Read before a table action changes which tables those bills belong to, or what those
  * tables are called.
  */
 export async function readPartiesSentWork(
@@ -1359,6 +1360,7 @@ export async function readPartiesSentWork(
       and(
         sendable,
         isNull(workingOrders.partyId),
+        foodOnItsWay(),
         or(
           inArray(workingOrders.deliveryTableId, partiesTables),
           inArray(workingOrders.deliveryTableId, [...tableIds]),
@@ -1382,6 +1384,14 @@ export async function readPartiesSentWork(
     });
   }
   return work;
+}
+
+/** {@link readPartiesSentWork} of the parties at `tableIds` and of the tables themselves. */
+export async function readSentWorkAt(
+  tx: Transaction,
+  tableIds: readonly string[],
+): Promise<Map<string, SentWork>> {
+  return readPartiesSentWork(tx, [...new Set((await holdersOf(tx, tableIds)).values())], tableIds);
 }
 
 /**

@@ -2684,9 +2684,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
               merge === null ? undefined : { mergedInto: new Map<string, string>() };
             const holder = slipsLater === undefined ? null : await holderOf(tx, tableId);
             const before =
-              slipsLater === undefined
+              merge === null
                 ? null
-                : await readPartiesSentWork(tx, holder === null ? [partyId] : [partyId, holder]);
+                : await readPartiesSentWork(tx, holder === null ? [partyId] : [partyId, holder], [
+                    merge.moving,
+                    merge.target,
+                  ]);
             const acted = await act(tx, sendCfg, partyId, tableId, { ...command, slipsLater });
             await joinMergeMembers(tx, sendCfg, acted.partyId, tableId, personId, slipsLater);
             if (merge !== null) {
