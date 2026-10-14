@@ -1766,6 +1766,18 @@ describe("/management-api/stations (KDS-1 config)", () => {
         params: { field: "printMovedSlips" },
       },
     });
+    const numeric = await req(
+      `/stations/${id}`,
+      { method: "PATCH", body: JSON.stringify({ printMovedSlips: 1 }) },
+      managerCookie,
+    );
+    expect(numeric.status).toBe(400);
+    expect(await numeric.json()).toMatchObject({
+      error: {
+        code: "management.request_invalid",
+        params: { field: "printMovedSlips" },
+      },
+    });
     expect((await listStations()).find((station) => station.id === id)).toMatchObject({
       printMovedSlips: false,
     });

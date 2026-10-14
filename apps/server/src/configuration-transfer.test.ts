@@ -39,7 +39,7 @@ import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadKeyRing } from "@waitron/credentials";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { uploadImage, readImageBytes } from "@waitron/media";
 import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
 import { describe, expect, it } from "vitest";
@@ -1975,6 +1975,44 @@ it("transfers a station's rest of the order switch", async () => {
     .from(kitchenStations)
     .where(eq(kitchenStations.name, "Pase"));
   expect(imported).toEqual([{ showsRestOfOrder: true }]);
+});
+
+it("transfers each station's MOVED slips choice, print, don't print or as the venue", async () => {
+  const source = await applyVenue(planVenue(venue("B13572469"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  await withTransaction(suite.db, (tx) =>
+    tx.insert(kitchenStations).values([
+      { locationId: source.locationId, name: "Moved print", printMovedSlips: true },
+      { locationId: source.locationId, name: "Moved quiet", printMovedSlips: false },
+      { locationId: source.locationId, name: "Moved venue", printMovedSlips: null },
+    ]),
+  );
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-01T12:00:00Z"),
+    versions,
+  );
+  await applyVenue(planVenue(venue("B97531865"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx, result) =>
+      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+  });
+  const imported = await targetSuite.db
+    .select({ name: kitchenStations.name, printMovedSlips: kitchenStations.printMovedSlips })
+    .from(kitchenStations)
+    .where(inArray(kitchenStations.name, ["Moved print", "Moved quiet", "Moved venue"]))
+    .orderBy(kitchenStations.name);
+  expect(imported).toEqual([
+    { name: "Moved print", printMovedSlips: true },
+    { name: "Moved quiet", printMovedSlips: false },
+    { name: "Moved venue", printMovedSlips: null },
+  ]);
 });
 
 it("transfers a station's colour", async () => {
