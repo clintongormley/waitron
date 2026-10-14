@@ -150,3 +150,26 @@ produced. It then counted the non-blank lines whose every non-space character li
 changed `.md` file is listed as not compared and never read; a comment read by a tool its
 hand-written list does not name is dropped unseen; and a listed tool comment moved to another line
 without crossing a token passes.
+
+
+## Root instruction receipts retained on 2026-10-14
+
+These excerpts retain the measurements, mechanisms and guard limits from the root
+`CLAUDE.md` before A583 moved their detail here. They do not change the rules.
+
+### Pointers guard limits
+
+`scripts/claude-md-pointers.test.ts` fails if a topic file goes missing or if a path it names does
+not exist — every markdown link, and backticked paths under
+`apps/`, `packages/`, `docs/`, `scripts/`, `deploy/`, `bench/`, `.github/` or `.husky/`. It does NOT
+check a root-level filename such as `eslint.config.js`, a bare directory, or a path whose extension
+is not on its list (`apps/print-agent/src/rfcomm-send.py` and `deploy/apparmor/waitron-print-agent`
+go unchecked), nor the `#anchor` part of a link: the guard is narrower
+than "every pointer", which is exactly the hedge the rule above asks for.
+
+### Always-loaded instruction cost
+
+Cost: `CLAUDE.md` is re-read on every step of
+every session and subagent; on 2026-10-07 the always-loaded files were ESTIMATED, not measured, at
+roughly 14% of the campaign lanes' subagent cost (their size times the lanes' step count since
+2026-10-05, at the cache-read price).

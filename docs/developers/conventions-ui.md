@@ -1109,3 +1109,21 @@ leased but unsent tail without a heartbeat or a new send-admission protocol. It 
 than a batch; physical throughput remains unmeasured. Failed tickets keep creation order within
 their printer, while eligible work at other printers can pass that printer's failed queue.
 Invoice receipts keep their separate eligibility checks in both the pull and that ordering.
+
+
+## Root instruction receipts retained on 2026-10-14
+
+These excerpts retain the measurements, mechanisms and guard limits from the root
+`CLAUDE.md` before A583 moved their detail here. They do not change the rules.
+
+### Cash-drawer guard coverage
+
+Guards, weaker than the rule: the
+drawer cases in `apps/server/src/receipt-print.test.ts`, `apps/server/src/till-api.receipt.test.ts`
+and `apps/server/src/bill-payments-api.test.ts`, the `device.cash_not_allowed` cases in
+`apps/server/src/till-api.fiscal-sale-paths.test.ts` and `bill-payments-api.test.ts`, the cash
+refund case in `apps/server/src/till-api.profile-actions.test.ts`, the calibration case in
+`apps/server/src/print-api.test.ts` and the drawer resend refusal in
+`packages/printing/src/outbox.test.ts` — each holds only the routes or functions it names, and
+nothing stops a new route queuing a `drawer` job without `drawerPrinter` or taking cash without
+`assertTakesCash`.

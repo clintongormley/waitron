@@ -5650,6 +5650,9 @@ already paid for:
   migrations are regenerated on rebase per CLAUDE.md §3's recipe.
 - **Shared files:** `apps/server/src/boot.ts`, `CLAUDE.md`, `packages/db`'s core schema and
   migrations, the dashboard printers screen, and this file (each session edits its own entries).
+- **Instruction housekeeping keeps rules in `CLAUDE.md` and receipts in the developer topic files.**
+  Follow §7; the [receipt and pointer limits](developers/writing-claims.md#root-instruction-receipts-retained-on-2026-10-14)
+  stay with the detail. There is no size gate.
 - **Comments are cut on touch, and pruned deliberately one package per pull request** (CLAUDE.md
   §1) — see _Modules, data and code health_ → _Prune the comments_.
 - **Update this file as entries finish**, in the same PR (_How to keep this file honest_).

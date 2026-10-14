@@ -127,18 +127,12 @@ hook, or how tests are scheduled:
   package, not what the package's Vitest config includes.
 - **Every CI test job — one shard of one package — should finish in about 4 minutes** (owner,
   2026-10-09 and 2026-10-11). Fix a job over it at the cause: a slow file, too few shards, slow
-  setup; never by cutting a check. Cost: `test-server (5)` ran a 5.3-minute median behind two files
-  of about 3 minutes each, one of them slow only in Vitest comparing byte arrays element by
-  element. Guards, weaker than the rule: the reporter's warning on a file over 90 s, which never
-  fails a job, the shard-count pin in `scripts/ci-workflow.test.mjs`, and each test job's 10-minute
-  `timeout-minutes` (its "bounds every test job" case). Receipt:
+  setup; never by cutting a check. Cost: `test-server (5)` ran a 5.3-minute median. Guards, weaker than the rule: the reporter only warns; `scripts/ci-workflow.test.mjs`
+  pins shard counts and 10-minute limits. Receipt:
   [ci-and-gates.md](docs/developers/ci-and-gates.md#every-ci-test-job-should-finish-in-about-4-minutes).
 - **A browser package's shard coverage merges through `scripts/vitest-shard-coverage-merge.mjs`,
-  never a plain `--merge-reports`**, which on Vitest 4.1.11 counts a file some shards never loaded
-  twice and reads functions low. Cost: the venue-service merge failed at 97.44% functions against
-  99.32% unsharded. Guard: the browser-merge case in `scripts/ci-workflow.test.mjs`, weaker than its
-  name — it reads `ci.yml` and package.json as text, and counts a package as browser-mode when its
-  `devDependencies` name `@vitest/browser-playwright`, not by reading its Vitest config. Receipt:
+  never a plain `--merge-reports`**. Cost: the venue-service merge read functions low. Guard: the browser-merge case in `scripts/ci-workflow.test.mjs`, weaker than its
+  name — reads text, not the Vitest config. Receipt:
   [ci-and-gates.md](docs/developers/ci-and-gates.md).
 - **Moving harness code out of a `.test.ts` and into `src/testing/` can put it under coverage and
   mutation**, depending on the package's coverage settings and Stryker `mutate` list; a test file is
@@ -150,10 +144,9 @@ hook, or how tests are scheduled:
   a bundle that renders nothing passes anyway.
 - **esbuild bundles sharp without complaint, and the bundle it builds cannot be loaded.** Every
   Node bundle is built by `scripts/bundle-node.mjs`, which leaves sharp out of all of them, and the
-  box image copies sharp into `/app/node_modules`. Guards: `scripts/deploy-image-env.test.ts`,
-  weaker than its name (it finds a direct `esbuild` call by reading package.json TEXT); the
-  bundle-smoke grep in `.github/workflows/ci.yml`, which reads `dist/server.js` alone; and
-  image-smoke's sharp step.
+  box image copies sharp into `/app/node_modules`. Guards: `scripts/deploy-image-env.test.ts` and bundle-smoke (weaker than their names:
+  read text, with bundle-smoke limited to `dist/server.js`), and image-smoke's sharp step.
+  Detail: [ci-and-gates.md](docs/developers/ci-and-gates.md).
 - **Two pushes to `main` must never share a CI concurrency group.** Cost: a code merge that got NO
   run at all, so check after a merge that its own run exists. Publishing asks
   `scripts/main-tag-guard.sh` before moving `:main`. Guards: `scripts/ci-workflow.test.mjs` (reads
@@ -163,16 +156,12 @@ hook, or how tests are scheduled:
 - **The GHA cache is a shared per-repository budget, evicted least-recently-used.** Name the entries
   a new exporter would compete with before adding it.
 - **Every workflow job carries `timeout-minutes`, except one that calls a reusable workflow, whose
-  called jobs carry it**; GitHub's default is six hours. Cost: PR #1399's image smoke sat 46 minutes
-  on one cache download. Guard: the job-time-limit cases in `scripts/ci-workflow.test.mjs`, weaker
+  called jobs carry it**; GitHub's default is six hours. Cost: PR #1399's image smoke sat 46 minutes. Guard: the job-time-limit cases in `scripts/ci-workflow.test.mjs`, weaker
   than its name — it reads text, does not judge the number, and never reads a called workflow kept
   in another repository.
 - **An apt-get in a workflow, `deploy/Dockerfile`, `deploy/waitron.sh` or the bench's CA probe image
-  runs under an outer `timeout`, and is retried when it stalls or exits non-zero**, because apt's own
-  read timeout did not end a wait on a mirror sending a byte every 5 s. A workflow's
-  `playwright install --with-deps` runs apt too, so it takes the same outer `timeout`. Cost: main run
-  37771042263's image smoke sat silent in `apt-get update` until its 15-minute limit, and `publish`
-  was cancelled with it. Guards: the apt-wait and `--with-deps` cases in `scripts/ci-workflow.test.mjs`
+  runs under an outer `timeout`, and is retried when it stalls or exits non-zero**. A workflow's
+  `playwright install --with-deps` runs apt too, so it takes the same outer `timeout`. Cost: main run 37771042263's image smoke hit its 15-minute limit. Guards: the apt-wait and `--with-deps` cases in `scripts/ci-workflow.test.mjs`
   and the apt-wait cases in `scripts/deploy-image-env.test.ts`, weaker than their names — they read
   text and do not check the retries; the `apt_get` wrapper cases in `scripts/waitron-sh.test.mjs` run
   waitron.sh's retries under stubs. Receipt:
@@ -216,16 +205,12 @@ hook, or how tests are scheduled:
   out in CI five times. Nothing guards it. Receipt:
   [ci-and-gates.md](docs/developers/ci-and-gates.md#the-upgrade-test-keeps-its-database-in-memory-on-linux).
 - **The CI steps that run the stream loop and pause tests and each `test-venue-service` shard set
-  `TMPDIR=/dev/shm`, in CI only.** Cost: a main run failed the pause test's bound of at least
-  1000 ms; a probe reproduced it on one runner in 20, catching a disk stall that held one commit for
-  about a second. A main run's venue-service shard 4 hit its 10-minute limit on a slow runner; that
-  the disk caused it is an inference. Guard: `scripts/ci-workflow.test.mjs`, weaker than its name — it reads
+  `TMPDIR=/dev/shm`, in CI only.** Cost: the pause test failed its bound; a venue-service shard hit its 10-minute limit.
+  The disk explanation for the shard is an inference. Guard: `scripts/ci-workflow.test.mjs`, weaker than its name — it reads
   `ci.yml` as text and never reads the steps' test files. Receipts:
   [testing-guide.md](docs/developers/testing-guide.md), "In CI their temporary files are in memory",
   and [ci-and-gates.md](docs/developers/ci-and-gates.md#the-venue-service-shards-keep-their-test-databases-in-memory).
-- **The stream tests' CI job sets loopback's MTU to 1500 before they run, in CI only.** Cost: the
-  pause test's last restore failed twice in CI, each about 31 s after the stream resumed, just past
-  its 30 s ceiling.
+- **The stream tests' CI job sets loopback's MTU to 1500 before they run, in CI only.** Cost: the pause test's last restore failed twice in CI.
   Guard: `scripts/ci-workflow.test.mjs`, weaker than its name — it reads `ci.yml` as text. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#the-stream-tests-ci-job-gives-loopback-a-normal-networks-packet-size).
 
@@ -638,10 +623,7 @@ browser test** — most of these rules exist because a test passed while proving
   `docker inspect`'s `HostConfig.PortBindings` and `NetworkSettings.Ports` before removing the
   container.
 - **A test that starts the server in its own process writes to the venue database only before
-  `startServer` or after `close()`**: this engine waits for a lock on the one thread both share,
-  so the server's open transaction cannot commit and the test's write fails `database is locked`
-  when its busy wait runs out. Cost: main run 38430159396 failed `boot.backup-network.test.ts`'s
-  hanging-destination case. Guard: that file's `beforeServerStarts`, weaker than the rule — it
+  `startServer` or after `close()`**. Cost: main run 38430159396 failed `boot.backup-network.test.ts`. Guard: that file's `beforeServerStarts`, weaker than the rule — it
   covers the file's two write helpers only, and other suites still write while their server runs
   (backlog). Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#a-test-that-runs-the-server-in-its-own-process-writes-to-the-database-only-while-the-server-is-down).
@@ -691,8 +673,7 @@ browser test** — most of these rules exist because a test passed while proving
 - **A browser test using fake timers must advance an awaited animation frame or restore real timers
   first**, or it stalls on its own paused `requestAnimationFrame`.
 - **A browser test that checks something a screen does on a dialog's `wt-close` waits for that event
-  first, never for `vi.waitFor`'s one second alone.** `wt-dialog` sends it only when Chromium reports the
-  native close, which Chromium queues for the next rendered frame. Cost: a devices-screen test failed
+  first, never for `vi.waitFor`'s one second alone.** Cost: a devices-screen test failed
   A441's CI (#1477). Nothing guards it. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#a-browser-test-waits-for-a-dialogs-close-event-not-a-timer).
 - **A test waits for a browser grant, such as a Web Lock, by tracking the request until it is
@@ -702,9 +683,7 @@ browser test** — most of these rules exist because a test passed while proving
 - **Dispatch events when testing a `composedPath()` guard.** An undispatched `KeyboardEvent` has an
   empty path, so the test can pass without reaching the branch it claims to check.
 - **A click whose outcome depends on whether an update one listener schedules has run before a
-  later listener sees the click is tested with `userEvent.click`, not `element.click()`.** In
-  Chromium a scripted click runs pending microtasks only after the whole dispatch; a real pointer
-  click runs them after each listener. Cost: A505's row menu stayed open on the real page while every scripted test closed it.
+  later listener sees the click is tested with `userEvent.click`, not `element.click()`.** Cost: A505's row menu stayed open on the real page while every scripted test closed it.
   Nothing guards it. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#a-scripted-click-runs-microtasks-only-after-the-whole-dispatch).
 - **Position a native popover before its first paint.** Positioning from the asynchronous `toggle`
@@ -758,9 +737,7 @@ browser test** — most of these rules exist because a test passed while proving
   answered 500 to the first person who opened it.
 - **In `packages/db`, whose Stryker config sets `ignoreStatic`, a test loads a source module with
   `import()` inside a case only when that case asserts on what the module builds as it loads** (as
-  `describeSchemaConformance`'s `reload` does); otherwise it imports at the top of the file. Stryker
-  counts the case as covering the module's load-time code and runs those mutants against it alone. Cost: db's mutation score
-  read about 86% on three weekly runs (A539). Nothing guards it. Receipt:
+  `describeSchemaConformance`'s `reload` does); otherwise it imports at the top of the file. Cost: db's mutation score read about 86% (A539). Nothing guards it. Receipt:
   [ci-and-gates.md](docs/developers/ci-and-gates.md#reading-packagesdbs-score-by-hand).
 - **`toMatchObject` checks only the keys you list**; a key you never list is never checked at all.
 - **A default you did not state is not a value you tested**, and a library default can be computed
@@ -782,15 +759,9 @@ browser test** — most of these rules exist because a test passed while proving
   `device.cash_not_allowed`). The manual open needs a session on an active device, the profile's
   `open-cash-drawer`, and always `cash.drawer` or the PIN of someone holding it, and opens the same
   drawer the automatic paths would; the one exception is the dashboard's "Test open drawer"
-  calibration. Drawer jobs cannot be manually resent. Guards, weaker than the rule: the
-  drawer cases in `apps/server/src/receipt-print.test.ts`, `apps/server/src/till-api.receipt.test.ts`
-  and `apps/server/src/bill-payments-api.test.ts`, the `device.cash_not_allowed` cases in
-  `apps/server/src/till-api.fiscal-sale-paths.test.ts` and `bill-payments-api.test.ts`, the cash
-  refund case in `apps/server/src/till-api.profile-actions.test.ts`, the calibration case in
-  `apps/server/src/print-api.test.ts` and the drawer resend refusal in
-  `packages/printing/src/outbox.test.ts` — each holds only the routes or functions it names, and
-  nothing stops a new route queuing a `drawer` job without `drawerPrinter` or taking cash without
-  `assertTakesCash`. Detail:
+  calibration. Drawer jobs cannot be manually resent. Guards, weaker than the rule: the drawer, cash, refund, calibration and resend suites
+  listed in the detail cover only named routes or functions; nothing stops a new route queuing a
+  `drawer` job without `drawerPrinter` or taking cash without `assertTakesCash`. Detail:
   [conventions-ui.md](docs/developers/conventions-ui.md#a-device-opens-the-drawer-when-its-profile-allows-it-a-handheld-does-what-a-till-does).
 
 - **One database per environment.** A pre-production database is never promoted:
@@ -924,13 +895,9 @@ would otherwise relitigate.
 The receipt goes in the matching topic file under `docs/developers/`. That split is what keeps this
 file loadable: it is read into every session, so a paragraph here is paid for on every turn of every
 session, while a paragraph in a topic file is paid for only when somebody needs it.
-`scripts/claude-md-pointers.test.ts` fails if a topic file goes missing or if a path it names does
-not exist — every markdown link, and backticked paths under
-`apps/`, `packages/`, `docs/`, `scripts/`, `deploy/`, `bench/`, `.github/` or `.husky/`. It does NOT
-check a root-level filename such as `eslint.config.js`, a bare directory, or a path whose extension
-is not on its list (`apps/print-agent/src/rfcomm-send.py` and `deploy/apparmor/waitron-print-agent`
-go unchecked), nor the `#anchor` part of a link: the guard is narrower
-than "every pointer", which is exactly the hedge the rule above asks for.
+Guard: `scripts/claude-md-pointers.test.ts`, weaker than "every pointer": it reads text
+and skips root-level filenames, bare directories, unlisted extensions and link anchors.
+Its path rules and examples are in [writing-claims.md](docs/developers/writing-claims.md).
 
 **Do not add:** one-off bugs with no reusable shape, anything the code or types already state plainly,
 or the narrative of what a session did — that belongs in the commit or the PR thread. **A count is a
@@ -951,7 +918,5 @@ written rule with standing violations needs a guard, not another paragraph.
 its size, and is never purged because it is a few bytes over a number. Keeping it small is regular
 housekeeping: move a receipt to its topic file and delete a superseded rule whenever you touch an
 entry, and run a pruning sweep when the file has grown noticeably — as a loose guide, past roughly
-the size the 2026-10-07 sweep left it (about 71 KB). Cost: this file is re-read on every step of
-every session and subagent; on 2026-10-07 the always-loaded files were ESTIMATED, not measured, at
-roughly 14% of the campaign lanes' subagent cost (their size times the lanes' step count since
-2026-10-05, at the cache-read price).
+the size the 2026-10-07 sweep left it (about 71 KB). Cost: this file is re-read on every step of every session and subagent. The 2026-10-07
+cost estimate is in [writing-claims.md](docs/developers/writing-claims.md).

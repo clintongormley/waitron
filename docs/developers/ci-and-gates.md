@@ -1945,3 +1945,74 @@ passed, but CI failed before building a layer. The driver reproduced `ENV must h
 with `docker build --check -f deploy/Dockerfile .`. Use anchored instruction lines when moving
 Dockerfile declarations, and run that check after changing them. The metadata-order guard now
 requires an actual ARG/LABEL line, but remains a source scan, not Docker's parser.
+
+
+## Root instruction receipts retained on 2026-10-14
+
+These excerpts retain the measurements, mechanisms and guard limits from the root
+`CLAUDE.md` before A583 moved their detail here. They do not change the rules.
+
+### Four-minute test jobs
+
+Cost: `test-server (5)` ran a 5.3-minute median behind two files
+of about 3 minutes each, one of them slow only in Vitest comparing byte arrays element by
+element.
+
+### Four-minute guards
+
+Guards, weaker than the rule: the reporter's warning on a file over 90 s, which never
+fails a job, the shard-count pin in `scripts/ci-workflow.test.mjs`, and each test job's 10-minute
+`timeout-minutes` (its "bounds every test job" case).
+
+### Browser coverage merge
+
+**A browser package's shard coverage merges through `scripts/vitest-shard-coverage-merge.mjs`,
+never a plain `--merge-reports`**, which on Vitest 4.1.11 counts a file some shards never loaded
+twice and reads functions low. Cost: the venue-service merge failed at 97.44% functions against
+99.32% unsharded.
+
+### Browser coverage guard
+
+Guard: the browser-merge case in `scripts/ci-workflow.test.mjs`, weaker than its
+name — it reads `ci.yml` and package.json as text, and counts a package as browser-mode when its
+`devDependencies` name `@vitest/browser-playwright`, not by reading its Vitest config.
+
+### Sharp bundle guards
+
+Guards: `scripts/deploy-image-env.test.ts`,
+weaker than its name (it finds a direct `esbuild` call by reading package.json TEXT); the
+bundle-smoke grep in `.github/workflows/ci.yml`, which reads `dist/server.js` alone; and
+image-smoke's sharp step.
+
+### Workflow job limits
+
+Cost: PR #1399's image smoke sat 46 minutes
+on one cache download.
+
+### Apt read timeout
+
+**An apt-get in a workflow, `deploy/Dockerfile`, `deploy/waitron.sh` or the bench's CA probe image
+runs under an outer `timeout`, and is retried when it stalls or exits non-zero**, because apt's own
+read timeout did not end a wait on a mirror sending a byte every 5 s.
+
+### Apt incident
+
+Cost: main run
+37771042263's image smoke sat silent in `apt-get update` until its 15-minute limit, and `publish`
+was cancelled with it.
+
+### In-memory CI databases
+
+Cost: a main run failed the pause test's bound of at least
+1000 ms; a probe reproduced it on one runner in 20, catching a disk stall that held one commit for
+about a second. A main run's venue-service shard 4 hit its 10-minute limit on a slow runner; that
+the disk caused it is an inference.
+
+### Dynamic imports and mutation
+
+In `packages/db`, whose Stryker config sets `ignoreStatic`, a test loads a source module with
+`import()` inside a case only when that case asserts on what the module builds as it loads
+(as `describeSchemaConformance`'s `reload` does); otherwise it imports at the top of the file.
+Stryker
+counts the case as covering the module's load-time code and runs those mutants against it alone. Cost: db's mutation score
+read about 86% on three weekly runs (A539).
