@@ -1,27 +1,45 @@
-import type { DeleteImpactItem } from "@waitron/shared";
+import { codeMessage } from "@waitron/dashboard-kit";
+import type { DeleteImpactItem, DeleteImpactRefusal } from "@waitron/shared";
 import type { DeleteDialogCopy } from "@waitron/ui";
 import { t, tf, type StringKey } from "./strings.js";
 
 const counted = (one: StringKey, other: StringKey, count: number, names = "") =>
   tf(count === 1 ? one : other, { count: String(count), names });
 
-/** The server's only removed items are a role's painted blocks and its holders. */
+const namesOf = (targets: DeleteImpactItem["targets"]) =>
+  targets.map((target) => target.name).join(", ");
+
 function removed(item: DeleteImpactItem): string {
+  if (item.key === "staff_role_blocks")
+    return counted(
+      "staffing.role.delete_blocks_one",
+      "staffing.role.delete_blocks_other",
+      item.count,
+    );
   if (item.key === "staff_role_holders")
     return counted(
       "staffing.role.delete_holders_one",
       "staffing.role.delete_holders_other",
       item.count,
-      item.targets.map((target) => target.name).join(", "),
+      namesOf(item.targets),
     );
-  return counted(
-    "staffing.role.delete_blocks_one",
-    "staffing.role.delete_blocks_other",
-    item.count,
-  );
+  return tf("staffing.role.delete_other", {
+    names: namesOf(item.targets),
+    count: String(item.count),
+  }).trim();
 }
 
-/** The words of the staff-role delete question; its one refusal is `staff_role.in_use`. */
+function refused(refusal: DeleteImpactRefusal): string {
+  if (refusal.code === "staff_role.in_use")
+    return counted(
+      "staffing.role.delete_shifts_one",
+      "staffing.role.delete_shifts_other",
+      Number(refusal.params.shiftCount),
+    );
+  return codeMessage(refusal.code);
+}
+
+/** The words of the staff-role delete question. */
 export function staffRoleDeleteCopy(): DeleteDialogCopy {
   return {
     heading: t("staffing.role.delete_heading"),
@@ -34,11 +52,6 @@ export function staffRoleDeleteCopy(): DeleteDialogCopy {
     retry: t("staffing.role.delete_retry"),
     loading: t("staffing.role.delete_loading"),
     item: removed,
-    refusal: (refusal) =>
-      counted(
-        "staffing.role.delete_shifts_one",
-        "staffing.role.delete_shifts_other",
-        Number(refusal.params.shiftCount),
-      ),
+    refusal: refused,
   };
 }
