@@ -211,23 +211,6 @@ would be again by any sale written on an order that is not settled. Not re-run s
 decide what the fallback does when the order is not settled (for example, fail and leave the charge
 for reconciliation rather than show a receipt).
 
-## The demo card reader and the test card reader write their payment rows outside the write queue
-
-Left open by A526. `SimulatorPaymentProvider` (`packages/payments/src/simulator.ts`, the "Demo card
-reader" the server itself builds, `apps/server/src/boot.ts`) and the test readers
-`FakePaymentProvider` and `FakeAsyncProvider` (`packages/payments/src/testing/`) write their payment rows with
-`this.db.transaction(...)`, not `withTransaction`, so the write does not wait its turn in the
-store's write queue. When another request's transaction is open on the connection at that moment,
-the write becomes a savepoint inside it (`packages/store/src/node-sqlite-adapter.ts`, read) and is
-rolled back with it if that request fails.
-
-Measured during A526, with the new refusal moved as an experiment ahead of the recovery step, in a
-two-till card-payment test since removed: in all 20 of its rounds the first card payment answered
-`payment.not_found` and left no payment row; the implementer traced this to its captured row having
-been written inside the other request's refused transaction. SumUp and Stripe write through
-`withTransaction` (read). Next: write these readers' rows through `withTransaction`, after checking
-that no caller reaches them from inside a transaction body, where waiting for the queue would wait
-on itself.
 
 ## Decisions and deliberate limits
 

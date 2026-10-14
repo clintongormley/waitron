@@ -3405,12 +3405,6 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   is known. Left open by A526.
   [Detail](backlog/payments.md#finalizecaptures-duplicate-fallback-can-show-a-receipt-for-an-order-that-is-not-settled)
 
-- **The demo card reader and the test card reader write their payment rows outside the write
-  queue**, so a row written while another request's transaction is open is rolled back if that
-  request fails (measured during A526). SumUp and Stripe do not do this. Next: write through
-  `withTransaction`, once no caller is found that reaches them from inside a transaction body. Left
-  open by A526.
-  [Detail](backlog/payments.md#the-demo-card-reader-and-the-test-card-reader-write-their-payment-rows-outside-the-write-queue)
 
 - **An offline card payment that forwarding moved to `settled` with no sale no longer holds its
   placed order**: once no card payment of the order runs in this process, a collect is accepted

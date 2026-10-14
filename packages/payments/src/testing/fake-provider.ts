@@ -2,6 +2,7 @@ import { AppError, decimal } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import { recordIncidentOnce } from "@waitron/core";
 import { jobOrigin, saleId as brandSaleId } from "@waitron/shared";
+import { withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type {
   AbandonedAttemptAudit,
@@ -244,7 +245,7 @@ export class FakePaymentProvider implements PaymentProvider {
     const crash = this.crashNext;
     this.crashNext = null;
     if (crash !== null) {
-      await this.db.transaction(async (tx) => {
+      await withTransaction(this.db, async (tx) => {
         if (crash === "captured") {
           await assertReaderStartable(tx, params.origin, params.readerId);
           await insertCapturedPayment(tx, { ...common, settledAt: new Date() });
@@ -256,7 +257,7 @@ export class FakePaymentProvider implements PaymentProvider {
     }
     if (this.stallNext) {
       this.stallNext = false;
-      await this.db.transaction((tx) => insertAttempting(tx, common));
+      await withTransaction(this.db, (tx) => insertAttempting(tx, common));
       return {
         provider: this.provider,
         paymentRef,
@@ -268,7 +269,7 @@ export class FakePaymentProvider implements PaymentProvider {
     const willFail = this.failNext;
     this.failNext = false;
     const settledAt = willFail ? null : new Date();
-    await this.db.transaction(async (tx) => {
+    await withTransaction(this.db, async (tx) => {
       await assertReaderStartable(tx, params.origin, params.readerId);
       if (willFail) {
         await insertFailedPayment(tx, common);
@@ -291,7 +292,7 @@ export class FakePaymentProvider implements PaymentProvider {
    * `claimAcceptedOffline` in `../store.ts`.
    */
   async forward(now: Date): Promise<ForwardResult> {
-    return this.db.transaction(async (tx) => {
+    return withTransaction(this.db, async (tx) => {
       const claimed = await claimAcceptedOffline(tx, this.provider);
       let forwarded = 0;
       let declined = 0;
@@ -334,7 +335,7 @@ export class FakePaymentProvider implements PaymentProvider {
     this.abandonedAttemptCalls.push({ paymentRef, now });
     const answer = this.abandonedAnswer;
     const key = { provider: this.provider, paymentRef };
-    await this.db.transaction(async (tx) => {
+    await withTransaction(this.db, async (tx) => {
       const row = await getPaymentByRef(tx, key);
       if (row?.state !== "attempting") throw new AppError("payment.not_found", key);
       if (answer.outcome === "unknown") return;
@@ -359,7 +360,7 @@ export class FakePaymentProvider implements PaymentProvider {
   }
 
   async void(ref: string): Promise<PaymentResult> {
-    const row = await this.db.transaction(async (tx) => {
+    const row = await withTransaction(this.db, async (tx) => {
       await this.require(tx, ref);
       return recordVoid(tx, { provider: this.provider, paymentRef: ref });
     });
@@ -372,7 +373,7 @@ export class FakePaymentProvider implements PaymentProvider {
   }
 
   async partialRefund(ref: string, amount: Decimal): Promise<PaymentResult> {
-    const row = await this.db.transaction(async (tx) => {
+    const row = await withTransaction(this.db, async (tx) => {
       await this.require(tx, ref);
       return recordRefund(tx, {
         provider: this.provider,
@@ -384,7 +385,7 @@ export class FakePaymentProvider implements PaymentProvider {
   }
 
   private async reverse(ref: string): Promise<PaymentResult> {
-    const row = await this.db.transaction(async (tx) => {
+    const row = await withTransaction(this.db, async (tx) => {
       const found = await this.require(tx, ref);
       return recordRefund(tx, {
         provider: this.provider,
@@ -397,7 +398,7 @@ export class FakePaymentProvider implements PaymentProvider {
 
   /** On "refuse" writes NOTHING and reports `network_unavailable`. */
   private async collectOffline(params: CollectParams, paymentRef: string): Promise<PaymentResult> {
-    return this.db.transaction(async (tx) => {
+    return withTransaction(this.db, async (tx) => {
       await assertReaderStartable(tx, params.origin, params.readerId);
       const policy = await getPaymentPolicy(tx);
       const decision = resolveOfflineDecision(policy, params.allowOffline ?? false, params.amount);
