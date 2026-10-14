@@ -247,7 +247,10 @@ export class PeriodDialog extends LitElement {
   }
   private get ownErrors(): Partial<Record<Field, string>> {
     const errors: Partial<Record<Field, string>> = {};
-    if (this.choosesDepartment && !this.input.departmentId)
+    if (
+      this.choosesDepartment &&
+      !this.departments!.some(({ id }) => id === this.input.departmentId)
+    )
       errors.departmentId = t("period.department_required");
     if (!this.input.name) errors.name = t("menu.name_required");
     if (!this.input.menuId) errors.menuId = t("menu.menu_required");
@@ -261,6 +264,11 @@ export class PeriodDialog extends LitElement {
     const refusal = this.refusal;
     if (!refusal) return undefined;
     if (refusal.code === "menu_period.name_taken") return "name";
+    if (
+      refusal.code === "department.not_found" &&
+      refusal.params?.departmentId === (this.submitted ?? this.input).departmentId
+    )
+      return "departmentId";
     const field = refusal.params?.field;
     if (
       (refusal.code === "menu_period.invalid" ||
@@ -281,6 +289,7 @@ export class PeriodDialog extends LitElement {
     if (this.refusalField() === field) {
       if (this.refusal?.code === "menu_period.name_taken") return t("menu.name_taken");
       if (this.refusal?.code === "catalogue.not_found") return t("opening.active_menus_required");
+      if (this.refusal?.code === "department.not_found") return t("menu.department_gone");
       if (field === "endOffsetMinutes" && this.refusal?.params?.reason === "placement")
         return t("menu.offset_placement");
       return t("menu.field_refused");

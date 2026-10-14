@@ -985,3 +985,45 @@ it("a missing department marks the field after Save and keeps Save disabled unti
   expect(field(el, "departmentId").error).toBe("");
   expect(save(el).disabled).toBe(false);
 });
+
+it("a chosen department dropped from the list counts as no choice: Save marks it, keeps the other values and stays disabled until one is chosen", async () => {
+  const el = await mountAdd(departments);
+  const writes: { departmentId?: string }[] = [];
+  el.addEventListener("period-save", (e) => writes.push((e as CustomEvent).detail));
+  await change(el, "departmentId", { value: "bar" });
+  await change(el, "name", { value: "Dinner" });
+  await change(el, "menuId", { value: "lunch" });
+  el.departments = [departments[0]!];
+  await el.updateComplete;
+  save(el).click();
+  await el.updateComplete;
+  expect(writes).toEqual([]);
+  expect(field(el, "departmentId").error).toBe("Choose a department.");
+  expect(save(el).disabled).toBe(true);
+  expect(field(el, "name").value).toBe("Dinner");
+  expect(field(el, "menuId").value).toBe("lunch");
+  await change(el, "departmentId", { value: "restaurant" });
+  expect(save(el).disabled).toBe(false);
+  save(el).click();
+  await el.updateComplete;
+  expect(writes.map(({ departmentId }) => departmentId)).toEqual(["restaurant"]);
+});
+
+it("a department.not_found refusal for the chosen department shows under Department, and choosing again clears it", async () => {
+  const el = await mountAdd(departments);
+  await change(el, "departmentId", { value: "bar" });
+  await change(el, "name", { value: "Dinner" });
+  await change(el, "menuId", { value: "lunch" });
+  save(el).click();
+  el.refusal = { code: "department.not_found", params: { departmentId: "bar" } };
+  await el.updateComplete;
+  const bottom = () =>
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>("wt-form-actions")!
+      .error;
+  expect(field(el, "departmentId").error).toBe("This department no longer exists.");
+  expect(bottom()).not.toContain("This department no longer exists.");
+  expect(field(el, "name").error).toBe("");
+  await change(el, "departmentId", { value: "restaurant" });
+  expect(field(el, "departmentId").error).toBe("");
+  expect(bottom()).toBe("");
+});

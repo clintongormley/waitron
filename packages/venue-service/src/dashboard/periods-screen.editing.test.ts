@@ -630,6 +630,40 @@ it("+ Add period on a venue with two departments asks for the department and cre
   await expect.poll(() => dialogOf(el)).toBeNull();
 });
 
+it("+ Add period: a chosen department a live update deactivates is no longer sent, and a department.not_found refusal shows under Department", async () => {
+  const data = twoDepartments();
+  const writes: unknown[] = [];
+  const el = await mount((async (path, method) => {
+    if (method === "GET") return structuredClone(data);
+    writes.push(path);
+    throw { code: "department.not_found", params: { departmentId: "restaurant" } };
+  }) as DashboardRequest);
+  const dialog = await edit(el);
+  const department = () =>
+    dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=departmentId]")!;
+  await change(dialog, "departmentId", "bar");
+  await change(dialog, "name", "Dinner");
+  await change(dialog, "menuId", "lunch");
+  data.departments.find(({ id }) => id === "bar")!.active = false;
+  el.api.rereadWatches();
+  await expect.poll(() => dialog.departments?.map(({ id }) => id)).toEqual(["restaurant"]);
+  await dialog.updateComplete;
+  submit(dialog);
+  await dialog.updateComplete;
+  expect(writes).toEqual([]);
+  expect(department().error).toBe("Choose a department.");
+  expect(saveButton(dialog).disabled).toBe(true);
+  expect(nameField(dialog).value).toBe("Dinner");
+
+  await change(dialog, "departmentId", "restaurant");
+  submit(dialog);
+  await expect
+    .poll(() => writes)
+    .toEqual(["/management-api/venue-service/departments/restaurant/menu-periods"]);
+  await expect.poll(() => department().error).toBe("This department no longer exists.");
+  expect(dialogOf(el)).toBe(dialog);
+});
+
 it("+ Add period is disabled until the periods have been read, and after a failed first read", async () => {
   let fail!: (error: unknown) => void;
   let reads = 0;
