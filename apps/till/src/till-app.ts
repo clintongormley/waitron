@@ -642,6 +642,7 @@ const ACTIONABLE_REFUSALS = new Set([
   "product.unavailable",
   "product.not_sold_separately",
   "sale.total_exceeds_simplified_limit",
+  "department.operation_description_required",
 ]);
 
 /** A refusal for passing the simplified-invoice limit that names the limit, as the server sends it. */
@@ -651,6 +652,17 @@ function overLimitOf(error: unknown): { overLimit: string } | undefined {
     typeof refusal.limit === "string"
     ? { overLimit: refusal.limit }
     : undefined;
+}
+
+/** A settle path's refusal shown in its own words rather than the generic `sale.error`. */
+function settleRefusalOf(
+  error: unknown,
+): { overLimit: string } | { code: "department.operation_description_required" } | undefined {
+  if (
+    (error as { code?: string } | undefined)?.code === "department.operation_description_required"
+  )
+    return { code: "department.operation_description_required" };
+  return overLimitOf(error);
 }
 
 /** Hand-over refusals shown in their code's own words. */
@@ -2116,7 +2128,7 @@ export class TillApp extends LitElement {
   @state() private findingBill = false;
   @state() private findBillBusy = false;
   #invoiceRecoveryVisit = 0;
-  @state() private findBillError?: StringKey | { overLimit: string };
+  @state() private findBillError?: StringKey | { overLimit: string } | { code: string };
   /** The waiting orders whose hand over is out, each pressed once until it answers. */
   #handingOver = new Set<string>();
   /** Each Pay pressed on a waiting order; only the latest one's answer may load the basket. */
@@ -4352,7 +4364,7 @@ export class TillApp extends LitElement {
             ? "take_payment.not_permitted"
             : isPaymentInFlight(error)
               ? "sale.payment_in_flight"
-              : (overLimitOf(error) ?? "sale.error");
+              : (settleRefusalOf(error) ?? "sale.error");
     } finally {
       this.submitting = false;
     }
@@ -4424,7 +4436,7 @@ export class TillApp extends LitElement {
             ? "take_payment.not_permitted"
             : isPaymentInFlight(error)
               ? "sale.payment_in_flight"
-              : (overLimitOf(error) ?? "sale.error");
+              : (settleRefusalOf(error) ?? "sale.error");
     } finally {
       this.submitting = false;
       this.findBillBusy = false;
@@ -9037,7 +9049,7 @@ export class TillApp extends LitElement {
               ? "take_payment.not_permitted"
               : isPaymentInFlight(error)
                 ? "sale.payment_in_flight"
-                : (overLimitOf(error) ?? "sale.error");
+                : (settleRefusalOf(error) ?? "sale.error");
     } finally {
       this.submitting = false;
     }

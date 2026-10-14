@@ -630,6 +630,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This device switched to another profile while the payment was starting. No card was charged. Try again.",
     es: "Este dispositivo ha cambiado a otro perfil mientras se iniciaba el pago. No se ha cobrado ninguna tarjeta. Inténtalo de nuevo.",
   },
+  "department.operation_description_required": {
+    en: "This department has no tax-agency description yet, so it cannot sell. A manager can add it in the dashboard, under Departments and zones.",
+    es: "Este departamento aún no tiene descripción para Hacienda, así que no puede vender. Un responsable puede añadirla en el panel, en Departamentos y zonas.",
+  },
   "device.cash_not_allowed": {
     en: "This device does not take cash. Take cash at a till.",
     es: "Este dispositivo no cobra en efectivo. Cobra en efectivo en una caja.",

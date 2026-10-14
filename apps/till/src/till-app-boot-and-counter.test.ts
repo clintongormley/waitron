@@ -2081,6 +2081,24 @@ describe("till-app simplified-invoice limit", () => {
       "Este pedido supera el máximo que admite esta caja sin una factura completa a nombre del cliente, y no puede emitirla. Quita algo del pedido",
     );
   });
+
+  it("says the department needs a tax-agency description when the server refuses the sale for it", async () => {
+    const { el } = await mountApp({
+      recordSale: vi.fn().mockRejectedValue({
+        code: "department.operation_description_required",
+        departmentId: "143d2fc1-2e8b-4a1f-8ca6-12cd8a1fd63c",
+        status: 409,
+      }),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(c.products[0]!, "1");
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+    const text = banner(el)!.textContent!;
+    expect(text).toContain(codeMessage("department.operation_description_required"));
+    expect(text).not.toContain(t("sale.error"));
+    expect(c.store.lines).toHaveLength(1);
+  });
 });
 
 describe("till-app integrated card collection", () => {

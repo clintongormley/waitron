@@ -2405,6 +2405,26 @@ describe("till-app table ordering: paying the tab", () => {
     expect(ticket(el)).toBeNull();
     expect(tableOrder(el)).not.toBeNull();
   });
+
+  it("says the department needs a tax-agency description when paying the tab is refused for it", async () => {
+    const { el } = await mountApp({
+      recordSale: vi.fn().mockRejectedValue({
+        code: "department.operation_description_required",
+        departmentId: "143d2fc1-2e8b-4a1f-8ca6-12cd8a1fd63c",
+        status: 409,
+      }),
+    });
+    const screen = await toTableOrder(el);
+
+    emit(screen, "pay-tab", { method: "cash", amount: "3.00" });
+    await flush(el);
+
+    const text = banner(el)!.textContent!;
+    expect(text).toContain(codeMessage("department.operation_description_required"));
+    expect(text).not.toContain(t("sale.error"));
+    expect(ticket(el)).toBeNull();
+    expect(tableOrder(el)).not.toBeNull();
+  });
 });
 
 describe("till-app table ordering: logout while a request is waiting for the server", () => {

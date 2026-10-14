@@ -641,3 +641,12 @@ it("says each Reset table refusal in English and Spanish", () => {
     expect(codeMessage(code, "es")).toBe(es);
   }
 });
+
+it("tells staff a department without a tax-agency description cannot sell, and who fixes it, in both languages", () => {
+  expect(codeMessage("department.operation_description_required", "en")).toBe(
+    "This department has no tax-agency description yet, so it cannot sell. A manager can add it in the dashboard, under Departments and zones.",
+  );
+  expect(codeMessage("department.operation_description_required", "es")).toBe(
+    "Este departamento aún no tiene descripción para Hacienda, así que no puede vender. Un responsable puede añadirla en el panel, en Departamentos y zonas.",
+  );
+});
