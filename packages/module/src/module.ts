@@ -1198,6 +1198,12 @@ export type NonDbSource = { readonly kind: "content-addressed-dir"; readonly sou
 export interface ModuleBackupContribution {
   readonly nonDbState?: readonly NonDbSource[];
   readonly restore?: RestoreHook;
+  /** Validate and return public recovery material; no private signing key or claim authority. */
+  readonly recoveryPack?: (
+    tx: Transaction,
+    node: import("./provisioning.js").ProvisionedNode & { readonly venueId: string },
+    input: unknown,
+  ) => Promise<unknown>;
 }
 
 /** One table whose rows may cross from preparation into a fresh production database. */

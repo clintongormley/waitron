@@ -978,3 +978,15 @@ unsuffixed initial series. The concrete proposals and experiments are in
 They are not enabled by this checkpoint. Task 4 still owes their decisions and
 implementation, current-main regeneration/populated upgrade, the Cloud operator
 contract, both FULL reviews, the push hook and current-head CI.
+
+
+## W41s-6 pack-download checkpoint (2026-10-14)
+
+The candidate pack download combines the node key you supply with a module-validated public
+paper-register snapshot, without bucket or subscription settings. It keeps the existing verifier
+and key name. A pack is secret-bearing, and its snapshot does not establish that the outside
+register still makes an allocation available.
+
+The printable handover, selected-backup key name, allocation screen, paper/emergency/phone input
+collection across restore entry points, and interrupted-recovery exercise remain to be built.
+This checkpoint is not the completed offline recovery journey or a usable paper-custodian tool.

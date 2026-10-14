@@ -219,6 +219,7 @@ import { closeListener } from "./close-listener.js";
 import { mountBoxStatusApi } from "./box-status.js";
 import { mountBoxRetireApi } from "./box-retire.js";
 import { mountRecoveryBundleApi } from "./recovery-bundle-api.js";
+import { mountRecoveryPackApi } from "./recovery-pack-api.js";
 import { withRecoveryLock } from "./recovery-lock.js";
 import { readRecoveryState, writeRecoveryState } from "./recovery-state.js";
 import { mountBackupApi } from "./backup-api.js";
@@ -1880,6 +1881,11 @@ async function bootServer(
   mountMembershipRemovalApi(app, { db, ring, nodeId: till.nodeId }, log);
 
   mountRecoveryBundleApi(app, { db, stateDir: config.stateDir, now }, log);
+  mountRecoveryPackApi(
+    app,
+    { db, node: till, venueId: till.locationId, modules: setsToMigrate, now },
+    log,
+  );
   const cloudConnection = cloudOrigin
     ? createCloudConnection({
         stateDir: config.stateDir,
