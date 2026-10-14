@@ -268,16 +268,85 @@ describe("staff-role dialog", () => {
     await vi.waitFor(() => expect(field("wt-input", "name").error).toBe("Enter a name"));
   });
 
-  it("says a refusal about no shown field above the buttons", async () => {
+  it.each([
+    ["a create", undefined, "createStaffRole"],
+    ["an update", waiter, "updateStaffRole"],
+  ] as const)(
+    "puts %s's refusal of the colour under Colour until the colour changes, leaving Save enabled",
+    async (_, staffRole, call) => {
+      const api = await mount(staffRole);
+      api[call].mockRejectedValueOnce({ code: "staffing.invalid", params: { field: "colour" } });
+      await typeName("Head waiter");
+      await press();
+      await vi.waitFor(() =>
+        expect(field("wt-combobox", "colour").error).toBe("Choose one of the colours"),
+      );
+      expect(field("wt-input", "name").error).toBe("");
+      expect(await bottom()).toBe("Correct the highlighted fields to continue.");
+      expect(save().disabled).toBe(false);
+      await typeName("Head waiter 2");
+      expect(field("wt-combobox", "colour").error).toBe("Choose one of the colours");
+      await chooseOption(field("wt-combobox", "colour"), "purple");
+      expect(field("wt-combobox", "colour").error).toBe("");
+      expect(await bottom()).toBe("");
+    },
+  );
+
+  it("puts a refusal of the people under People until they change, leaving Save enabled", async () => {
+    const api = await mount(waiter);
+    api.setHolders.mockRejectedValueOnce({
+      code: "staffing.invalid",
+      params: { field: "personIds" },
+    });
+    await chooseOptions(field("wt-combobox", "people"), ["p-held", "p-ana"]);
+    await press();
+    await vi.waitFor(() =>
+      expect(field("wt-combobox", "people").error).toBe("Some of these people no longer exist"),
+    );
+    expect(await bottom()).toBe("Correct the highlighted fields to continue.");
+    expect(save().disabled).toBe(false);
+    expect(el.open).toBe(true);
+    await chooseOptions(field("wt-combobox", "people"), ["p-held"]);
+    expect(field("wt-combobox", "people").error).toBe("");
+    expect(await bottom()).toBe("");
+  });
+
+  it("says in Spanish which field a refusal names", async () => {
+    setLocale("es");
     const api = await mount(waiter);
     api.updateStaffRole.mockRejectedValueOnce({
       code: "staffing.invalid",
       params: { field: "colour" },
     });
+    api.setHolders.mockRejectedValueOnce({
+      code: "staffing.invalid",
+      params: { field: "personIds" },
+    });
+    await typeName("Jefe de sala");
+    await press();
+    await vi.waitFor(() =>
+      expect(field("wt-combobox", "colour").error).toBe("Elige uno de los colores"),
+    );
+    await chooseOption(field("wt-combobox", "colour"), "purple");
+    await chooseOptions(field("wt-combobox", "people"), ["p-held", "p-ana"]);
+    await press();
+    await vi.waitFor(() =>
+      expect(field("wt-combobox", "people").error).toBe("Algunas de estas personas ya no existen"),
+    );
+    expect(await bottom()).toBe("Corrige los campos marcados para continuar.");
+  });
+
+  it("says a refusal about no shown field above the buttons", async () => {
+    const api = await mount(waiter);
+    api.updateStaffRole.mockRejectedValueOnce({
+      code: "staffing.invalid",
+      params: { field: "position" },
+    });
     await typeName("Head waiter");
     await press();
     await vi.waitFor(async () => expect(await bottom()).toBe("Some of the details are not valid"));
     expect(field("wt-input", "name").error).toBe("");
+    expect(field("wt-combobox", "colour").error).toBe("");
     api.updateStaffRole.mockRejectedValueOnce({
       code: "staff_role.not_found",
       params: { staffRoleId: "role-1" },

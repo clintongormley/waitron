@@ -23,6 +23,7 @@ import { colourName, t, tf } from "./strings.js";
 
 type Draft = { name: string; colour: CalendarColour; holderIds: string[] };
 type Refusal = { code: string; params?: Record<string, unknown> };
+type Field = "name" | "colour" | "people";
 
 const sorted = (ids: readonly string[]) => [...ids].sort();
 const copy = (draft: Draft): Draft => ({ ...draft, holderIds: sorted(draft.holderIds) });
@@ -65,7 +66,7 @@ export class StaffRoleDialog extends LitElement {
   @state() private busy = false;
   @state() private refusal?: Refusal;
   /** Set when a write of the details succeeded and the holders' write after it did not. */
-  @state() private holdersRefused?: string;
+  @state() private holdersRefusal?: Refusal;
   @state() private people?: StaffPerson[];
   @state() private peopleError?: string;
   /** Whether any write succeeded since the dialog opened, so the host knows to read again. */
@@ -115,7 +116,7 @@ export class StaffRoleDialog extends LitElement {
       this.attempted = false;
       this.busy = false;
       this.refusal = undefined;
-      this.holdersRefused = undefined;
+      this.holdersRefusal = undefined;
       this.people = undefined;
       this.peopleError = undefined;
     }
@@ -147,16 +148,30 @@ export class StaffRoleDialog extends LitElement {
       },
     );
   }
-  private get refusedName(): string {
-    const refusal = this.refusal;
-    if (refusal?.code === "staff_role.name_taken") return codeMessage(refusal.code);
-    if (refusal?.code === "staffing.invalid" && refusal.params?.field === "name")
+  /** The shown field a refusal names, and what to say under it; `undefined` for any other refusal. */
+  private refused(refusal: Refusal | undefined): { field: Field; message: string } | undefined {
+    if (refusal?.code === "staff_role.name_taken")
+      return { field: "name", message: codeMessage(refusal.code) };
+    if (refusal?.code !== "staffing.invalid") return undefined;
+    switch (refusal.params?.field) {
+      case "name":
+        return { field: "name", message: t("staffing.role.name_required") };
+      case "colour":
+        return { field: "colour", message: t("staffing.role.colour_invalid") };
+      case "personIds":
+        return { field: "people", message: t("staffing.role.people_invalid") };
+      default:
+        return undefined;
+    }
+  }
+  private fieldError(field: Field): string {
+    for (const refusal of [this.refusal, this.holdersRefusal]) {
+      const named = this.refused(refusal);
+      if (named?.field === field) return named.message;
+    }
+    if (field === "name" && this.attempted && this.draft.name.trim() === "")
       return t("staffing.role.name_required");
     return "";
-  }
-  private get nameError(): string {
-    if (this.refusedName) return this.refusedName;
-    return this.attempted && this.draft.name.trim() === "" ? t("staffing.role.name_required") : "";
   }
   private get failsOwnChecks(): boolean {
     return this.draft.name.trim() === "";
@@ -165,15 +180,19 @@ export class StaffRoleDialog extends LitElement {
     const messages: string[] = [];
     if (this.peopleError)
       messages.push(tf("staffing.role.people_error", { reason: this.peopleError }));
-    if (this.holdersRefused)
-      messages.push(tf("staffing.role.people_not_saved", { reason: this.holdersRefused }));
-    if (this.refusal && this.refusedName === "") messages.push(codeMessage(this.refusal.code));
-    if (this.nameError) messages.push(t("staffing.role.fix_fields"));
+    if (this.holdersRefusal && !this.refused(this.holdersRefusal))
+      messages.push(
+        tf("staffing.role.people_not_saved", { reason: codeMessage(this.holdersRefusal.code) }),
+      );
+    if (this.refusal && !this.refused(this.refusal)) messages.push(codeMessage(this.refusal.code));
+    if ((["name", "colour", "people"] as const).some((field) => this.fieldError(field)))
+      messages.push(t("staffing.role.fix_fields"));
     if (messages.length < 2) return messages.join("");
     return messages.map((message) => (/[.!?]$/.test(message) ? message : `${message}.`)).join(" ");
   }
-  private change(next: Draft, field: "name" | "other") {
-    if (field === "name" && this.refusedName) this.refusal = undefined;
+  private change(next: Draft, field: Field) {
+    if (this.refused(this.refusal)?.field === field) this.refusal = undefined;
+    if (this.refused(this.holdersRefusal)?.field === field) this.holdersRefusal = undefined;
     this.draft = next;
     this.scope?.changed();
   }
@@ -185,7 +204,7 @@ export class StaffRoleDialog extends LitElement {
       return;
     this.attempted = true;
     this.refusal = undefined;
-    this.holdersRefused = undefined;
+    this.holdersRefusal = undefined;
     if (this.failsOwnChecks) {
       void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
       return;
@@ -226,7 +245,8 @@ export class StaffRoleDialog extends LitElement {
       } catch (error) {
         if (generation !== this.generation) return;
         this.busy = false;
-        this.holdersRefused = codeMessage(codeOf(error));
+        const { params } = error as { params?: Record<string, unknown> };
+        this.holdersRefusal = { code: codeOf(error), params };
         return;
       }
       if (generation !== this.generation) return;
@@ -258,7 +278,7 @@ export class StaffRoleDialog extends LitElement {
           label=${t("staffing.role.name")}
           required
           .value=${this.draft.name}
-          .error=${this.nameError}
+          .error=${this.fieldError("name")}
           ?disabled=${this.busy}
           @wt-change=${(event: CustomEvent<{ value: string }>) => {
             event.stopPropagation();
@@ -271,10 +291,11 @@ export class StaffRoleDialog extends LitElement {
           search="never"
           .value=${this.draft.colour}
           .options=${CALENDAR_COLOURS.map((colour) => ({ value: colour, label: colourName(colour) }))}
+          .error=${this.fieldError("colour")}
           ?disabled=${this.busy}
           @wt-change=${(event: CustomEvent<{ value: CalendarColour }>) => {
             event.stopPropagation();
-            this.change({ ...this.draft, colour: event.detail.value }, "other");
+            this.change({ ...this.draft, colour: event.detail.value }, "colour");
           }}
         ></wt-combobox>
         <wt-combobox
@@ -287,10 +308,11 @@ export class StaffRoleDialog extends LitElement {
           .countLabel=${(count: number) => tf("staffing.role.holders_other", { count: String(count) })}
           .values=${this.draft.holderIds}
           .options=${this.peopleOptions()}
+          .error=${this.fieldError("people")}
           ?disabled=${this.busy || this.people === undefined}
           @wt-change=${(event: CustomEvent<{ values: string[] }>) => {
             event.stopPropagation();
-            this.change({ ...this.draft, holderIds: sorted(event.detail.values) }, "other");
+            this.change({ ...this.draft, holderIds: sorted(event.detail.values) }, "people");
           }}
         ></wt-combobox>
       </div>

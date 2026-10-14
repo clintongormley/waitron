@@ -41,8 +41,10 @@ const en = {
   "staffing.role.name": "Name",
   "staffing.role.name_required": "Enter a name",
   "staffing.role.colour": "Colour",
+  "staffing.role.colour_invalid": "Choose one of the colours",
   "staffing.role.people": "People",
   "staffing.role.people_placeholder": "Choose people",
+  "staffing.role.people_invalid": "Some of these people no longer exist",
   "staffing.role.people_error": "Could not load the venue's people: {reason}",
   "staffing.role.people_not_saved":
     "The staff role is saved, but not its people. Save again to retry: {reason}",
@@ -87,8 +89,10 @@ const es: Record<keyof typeof en, string> = {
   "staffing.role.name": "Nombre",
   "staffing.role.name_required": "Escribe un nombre",
   "staffing.role.colour": "Color",
+  "staffing.role.colour_invalid": "Elige uno de los colores",
   "staffing.role.people": "Personas",
   "staffing.role.people_placeholder": "Elige personas",
+  "staffing.role.people_invalid": "Algunas de estas personas ya no existen",
   "staffing.role.people_error": "No se pudieron cargar las personas del local: {reason}",
   "staffing.role.people_not_saved":
     "El rol de personal está guardado, pero no sus personas. Guarda de nuevo para reintentarlo: {reason}",
