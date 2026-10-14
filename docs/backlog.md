@@ -4597,29 +4597,39 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   receipt, losing the earlier attempt's teardown ledger; (3) the receipt reader the cleanup uses is
   more lenient than the writer.
 
-- **Litestream's own requests are outside the Amazon S3 rehearsal's request check.** No Node code
-  sends them, so the check in `apps/server/src/testing/aws-send-gate.ts` never sees them; in the
-  pause scenario a proxy admits only the run's bucket host, in the loop scenario nothing limits
-  them. Open owner question, asked 2026-10-14 (default: leave as is). Left open by A641.
-
 - **The Amazon S3 rehearsal does not track the Litestream processes a restore starts**
   (`packages/stream/src/restore.ts`), so neither its teardown nor its keeper can stop one still
-  running. Left open by A641.
+  running. Left open by A641, #1704.
 
 - **A rehearsal bucket whose ownership marker could not be written back is left to a person.**
   When teardown fails to delete the bucket and then fails to write the marker again, the cleanup
-  command refuses (`ownership-unproven`); the runbook says to delete it by hand. Left open by A641.
+  command refuses (`ownership-unproven`); the runbook says to delete it by hand. Left open by A641, #1704.
 
 - **A rehearsal keeper that cannot reach Amazon S3 when it cleans up after a killed run gives no
   cleanup command.** Its ownership-marker read fails, so it reports a bucket the journal says the
   run owned as of unknown ownership and deletes nothing
-  (`apps/server/src/testing/aws-rehearsal-keeper.ts`). Left open by A641.
+  (`apps/server/src/testing/aws-rehearsal-keeper.ts`). Left open by A641, #1704.
 
 - **A journal the rehearsal keeper refuses leaves the run's scratch folder, secrets included.** A
   journal it cannot read, or one outside its bounds, makes it delete nothing, the scratch folder
   too, so a box's `secrets.env` and `recovery-kit.txt` stay on disk until a person deletes them
   (`readJournalAt` in `apps/server/src/testing/aws-rehearsal-keeper.ts`). The refusal is by
-  design; the folder it leaves is the open part. Left open by A641.
+  design; the folder it leaves is the open part. Left open by A641, #1704.
+
+- **A process whose start time could not be read when the rehearsal tracked it is neither stopped
+  by the keeper nor listed as left behind** — only a log note says so (the `startTime === null`
+  branch in `apps/server/src/testing/aws-rehearsal-keeper.ts`; pinned in its test file). Decide
+  whether it should be listed as left behind. Left open by A641, #1704.
+
+- **The rehearsal send check's `record` mode is used by no run** (`aws-send-gate.ts`): delete it,
+  or document how it refreshes the scenarios' request lists. Left open by A641, #1704.
+
+- **The rehearsal keeper and the cleanup command each read the ownership marker with their own
+  rules** (`aws-rehearsal-keeper.ts`, `cleanupFromReceipt` in `aws-rehearsal.ts`); share one
+  reader. Left open by A641, #1704.
+
+- **The list of tests that need versitygw is kept in three places in `.github/workflows/ci.yml`**,
+  so each new such test edits all three; derive them from one list. Left open by A641, #1704.
 
 - **`backup.archive_settings_unusable` is worded only as an alert** (`alert-messages.ts`), not on
   the Backups screen. Left open by A538-4.

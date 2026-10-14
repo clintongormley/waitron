@@ -432,6 +432,12 @@ this item stays open.)
 
 ## Decisions and deliberate limits
 
+- **Litestream's own requests are outside the Amazon S3 rehearsal's request check (A641, #1704;
+  owner 2026-10-14: leave it so).** No Node code sends them, so the check in
+  `apps/server/src/testing/aws-send-gate.ts` never sees them; in the pause scenario a proxy admits
+  only the run's bucket host, in the loop scenario only the AWS key limits them. The runbook
+  `docs/developers/aws-backup-rehearsal.md` says so.
+
 - **The rehearsal's 128 MiB upload budget counts only the runner's own fixtures (A538-7, #1648).**
   Litestream uploads straight to the bucket, so the stream loop's uploads are not counted; the runbook
   `docs/developers/aws-backup-rehearsal.md` says so. On Amazon S3 the loop's frozen-transport timing
