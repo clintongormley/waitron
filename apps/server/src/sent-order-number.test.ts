@@ -1,33 +1,66 @@
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { setRoutingCell } from "@waitron/venue-service";
+import { products, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { mergeBills, splitBill, transferItems } from "./bill-actions.js";
+import { createStation } from "./kitchen.js";
+import { moveBill } from "./move-bill.js";
 import { placeGroups } from "./order-groups.js";
 import {
   OPERATOR,
   billRow,
   commandFor,
+  counterOrder,
   inTx,
+  revisionOf,
   seat,
   setupPartyVenue,
   type PartyVenue,
 } from "./testing/party-venue.js";
-import { splitLinesWithinOrder } from "./working-order.js";
+import { addExtras } from "./testing/split-extras-venue.js";
+import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
+import { fireLines, splitLinesWithinOrder } from "./working-order.js";
 import "./errors.js";
 
 // ticket_items.sent_order_number: the number of the order a dish the kitchen had seen left.
 let v: PartyVenue;
+let cheese: { listId: string; productId: string };
+/** The tables zone's offers, made again once the Caña offers a Cheese extra. */
+let offers: ZoneOffers;
 useVenueDb({
   resetPerTest: false,
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
   setup: async (db) => {
     v = await setupPartyVenue(db);
+    const [cana] = await db
+      .select({ catalogueId: products.catalogueId })
+      .from(products)
+      .where(eq(products.id, v.productId("Caña")));
+    const { listId, productIds } = await inTx(v, (tx) =>
+      addExtras(tx, v.cfg, cana!.catalogueId, v.productId("Caña"), [
+        { name: "Cheese", customerName: "Queso extra", kitchenName: "QUESO", maxQuantity: 2 },
+      ]),
+    );
+    cheese = { listId, productId: productIds[0]! };
+    // At a station of its own, the Cheese has a kitchen item of its own rather than riding on the
+    // Caña's.
+    await inTx(v, async (tx) => {
+      const { id: stationId } = await createStation(tx, v.cfg, { name: "Quesos" });
+      await setRoutingCell(
+        tx,
+        v.cfg,
+        { row: { kind: "product", productId: cheese.productId }, zoneId: null },
+        { kind: "station", stationId },
+      );
+    });
+    offers = await inTx(v, (tx) => offerProducts(tx, v.cfg, { zone: "tables" }));
   },
 });
 
-type Dish = { name: string; quantity?: string };
+type Dish = { name: string; quantity?: string; cheese?: number };
 
 /** Sends the dishes to `billId` as one group, fired or held; held groups print no HOLD ticket. */
 async function send(partyId: string, billId: string, dishes: Dish[], release: "fire" | "hold") {
@@ -35,7 +68,20 @@ async function send(partyId: string, billId: string, dishes: Dish[], release: "f
     placeGroups(tx, v.cfg, partyId, {
       groups: [
         {
-          lines: dishes.map((d) => ({ menuItemId: v.item(d.name), quantity: d.quantity ?? "1" })),
+          lines: dishes.map((d) => ({
+            menuItemId: offers.offerFor(v.productId(d.name)),
+            quantity: d.quantity ?? "1",
+            ...(d.cheese === undefined
+              ? {}
+              : {
+                  extras: [
+                    {
+                      listId: cheese.listId,
+                      picks: [{ productId: cheese.productId, quantity: d.cheese }],
+                    },
+                  ],
+                }),
+          })),
           release,
         },
       ],
@@ -226,6 +272,74 @@ describe("the order number a moved dish was sent under", () => {
     expect(kitchenItems(b28)).toEqual([
       { name: "Burger", quantity: 1000, sent: null },
       { name: "Burger", quantity: 1000, sent: null },
+    ]);
+  });
+  // A part of a dish with extras cannot move to another bill (`tab.transfer_modifier_line`), so
+  // extras change order only as whole lines.
+  it("is recorded on a moved dish's extras too", async () => {
+    const { partyId, bills } = await party("Mesa sent 8", 3);
+    const [b26, b27, b28] = bills as [string, string, string];
+    await send(partyId, b28, [{ name: "Caña", quantity: "2", cheese: 1 }], "fire");
+    await send(partyId, b27, [{ name: "Caña", cheese: 1 }], "fire");
+    const n27 = await numberOf(b27);
+    const n28 = await numberOf(b28);
+
+    await transfer(partyId, b28, b27, [{ lineNo: lineOf(b28, "Caña") }]);
+    await merge(partyId, b26, b27);
+
+    expect(kitchenItems(b26)).toEqual([
+      { name: "Caña", quantity: 1000, sent: n27 },
+      { name: "Cheese", quantity: 1000, sent: n27 },
+      { name: "Caña", quantity: 2000, sent: n28 },
+      { name: "Cheese", quantity: 2000, sent: n28 },
+    ]);
+  });
+
+  it("is recorded as the counter order's number when a sent counter order merges into a table's bill", async () => {
+    const mesa = await v.table("Mesa sent 9");
+    const { partyId, tabId } = await seat(v, mesa);
+    await send(partyId, tabId, [{ name: "Paella" }], "fire");
+    const counter = await counterOrder(v, "Burger");
+    await inTx(v, async (tx) =>
+      fireLines(
+        tx,
+        v.cfg,
+        counter,
+        await tx
+          .select({
+            id: workingOrderLines.id,
+            productId: workingOrderLines.productId,
+            courseId: workingOrderLines.courseId,
+            parentLineId: workingOrderLines.parentLineId,
+            note: workingOrderLines.note,
+            quantity: workingOrderLines.quantity,
+          })
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.workingOrderId, counter)),
+      ),
+    );
+    const nCounter = await numberOf(counter);
+
+    const expectedOtherPartyRevision = await revisionOf(v, partyId);
+    const result = await inTx(v, (tx) =>
+      moveBill(
+        tx,
+        v.cfg,
+        counter,
+        { tableId: mesa },
+        {
+          bills: "merge",
+          operatorId: OPERATOR,
+          otherPartyId: partyId,
+          expectedOtherPartyRevision,
+        },
+      ),
+    );
+
+    expect(result).toMatchObject({ billId: tabId, merged: true });
+    expect(kitchenItems(tabId)).toEqual([
+      { name: "Paella", quantity: 1000, sent: null },
+      { name: "Burger", quantity: 1000, sent: nCounter },
     ]);
   });
 });

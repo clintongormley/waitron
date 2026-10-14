@@ -3726,8 +3726,11 @@ async function carveLines(
       ticketItemId: ticketItems.id,
       ticketFiredAt: ticketItems.firedAt,
       groupState: orderGroups.state,
+      groupHoldPrintedAt: orderGroups.holdPrintedAt,
+      orderNumber: workingOrders.orderNumber,
     })
     .from(workingOrderLines)
+    .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
     .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
     .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
     .where(eq(workingOrderLines.workingOrderId, fromTabId))
@@ -3855,6 +3858,12 @@ async function carveLines(
 
   const splitFrom = new Map<string, string>();
   const splitLines = new Map<string, SplitRow>();
+  /** The number a copy of `row`'s ticket item takes when it leaves this order, as
+   * {@link seenByKitchen} decides it. */
+  const leavingNumber = (row: SourceLine): number | null =>
+    fromTabId !== toTabId && (row.ticketFiredAt !== null || row.groupHoldPrintedAt !== null)
+      ? row.orderNumber
+      : null;
   // Split line numbers are allocated after the moves, so they do not collide with moved rows.
   if (partials.length > 0) {
     const [{ maxLineNo }] = await tx
@@ -3943,6 +3952,7 @@ async function carveLines(
               toTabId,
               splitChildId,
               child.moved,
+              leavingNumber(child.row),
             );
             splitFrom.set(splitTicketId, child.row.ticketItemId);
             await copyKitchenJobLines(tx, child.row.id, splitChildId);
@@ -3957,6 +3967,7 @@ async function carveLines(
             toTabId,
             splitLineId,
             quantity,
+            leavingNumber(line),
           );
           splitFrom.set(splitTicketId, line.ticketItemId);
           await copyKitchenJobLines(tx, line.id, splitLineId);
@@ -4055,28 +4066,9 @@ export async function splitUnitsWithinOrder(
 }
 
 /**
- * The sent order number a copy of `ticket` moving to `toOrderId` carries: the one it already holds,
- * else its order's number when the kitchen has seen it and it leaves that order, else null.
- */
-async function sentOrderNumberLeaving(
-  tx: Transaction,
-  ticket: typeof ticketItems.$inferSelect,
-  toOrderId: string,
-): Promise<number | null> {
-  if (ticket.sentOrderNumber !== null || ticket.workingOrderId === toOrderId) {
-    return ticket.sentOrderNumber;
-  }
-  const [seen] = await tx
-    .select({ orderNumber: workingOrders.orderNumber })
-    .from(ticketItems)
-    .innerJoin(workingOrders, eq(workingOrders.id, ticketItems.workingOrderId))
-    .where(and(eq(ticketItems.id, ticket.id), seenByKitchen(tx, [ticket.workingOrderLineId])));
-  return seen?.orderNumber ?? null;
-}
-
-/**
  * Give a split row its own copy of the source line's ticket item, asking for the part moved, and take
- * that part off the source's; returns the copy's id. The total the kitchen makes is unchanged.
+ * that part off the source's; returns the copy's id. The total the kitchen makes is unchanged. The
+ * copy keeps the item's sent order number, else takes `leavingNumber`.
  */
 async function splitTicketItem(
   tx: Transaction,
@@ -4085,6 +4077,7 @@ async function splitTicketItem(
   toOrderId: string,
   splitLineId: string,
   moved: string,
+  leavingNumber: number | null,
 ): Promise<string> {
   const [ticket] = await tx.select().from(ticketItems).where(eq(ticketItems.id, ticketItemId));
   const movedThousandths = stringToThousandths(moved);
@@ -4100,7 +4093,7 @@ async function splitTicketItem(
     workingOrderId: toOrderId,
     workingOrderLineId: splitLineId,
     quantity: movedThousandths,
-    sentOrderNumber: await sentOrderNumberLeaving(tx, ticket!, toOrderId),
+    sentOrderNumber: ticket!.sentOrderNumber ?? leavingNumber,
   });
   const passMarks = await tx
     .select()
