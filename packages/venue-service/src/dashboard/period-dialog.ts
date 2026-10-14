@@ -33,6 +33,12 @@ type Department = { id: string; name: string; usedColours: readonly CalendarColo
 const offsetNumber = (text: string): number | undefined =>
   /^[+-]?\d+$/.test(text) ? Number(text) : undefined;
 type Field = keyof Draft;
+const COLOUR_STEPS: Partial<Record<string, 1 | -1>> = {
+  ArrowRight: 1,
+  ArrowDown: 1,
+  ArrowLeft: -1,
+  ArrowUp: -1,
+};
 const copy = (value: Draft): Draft => ({ ...value, staffMenuIds: [...value.staffMenuIds] });
 const unused = (usedColours: readonly CalendarColour[]) =>
   CALENDAR_COLOURS.find((colour) => !usedColours.includes(colour)) ?? CALENDAR_COLOURS[0];
@@ -440,6 +446,7 @@ export class PeriodDialog extends LitElement {
             : t("menu.save_error")
         : "";
     const colourError = this.error("colour");
+    const tabStop = Math.max(0, CALENDAR_COLOURS.indexOf(this.draft.colour));
     const includes = this.menus.find((menu) => menu.id === this.draft.menuId)?.includes ?? [];
     const generation = this.generation;
     const current = () =>
@@ -511,10 +518,27 @@ export class PeriodDialog extends LitElement {
                     aria-label=${t(`hours.colour.${colour}`)}
                     aria-invalid=${colourError && index === 0 ? "true" : nothing}
                     data-colour=${colour}
+                    tabindex=${index === tabStop ? 0 : -1}
                     ?disabled=${this.busy}
                     @click=${(event: Event) => {
                       event.stopPropagation();
                       if (current()) this.changed("colour", colour);
+                    }}
+                    @keydown=${(event: KeyboardEvent) => {
+                      const step = COLOUR_STEPS[event.key];
+                      if (!step) return;
+                      event.preventDefault();
+                      if (!current()) return;
+                      const next =
+                        CALENDAR_COLOURS[
+                          (index + step + CALENDAR_COLOURS.length) % CALENDAR_COLOURS.length
+                        ]!;
+                      this.changed("colour", next);
+                      void this.updateComplete.then(() =>
+                        this.shadowRoot!.querySelector<HTMLElement>(
+                          `[role=radio][data-colour="${next}"]`,
+                        )?.focus(),
+                      );
                     }}
                   ></button>`,
               )}

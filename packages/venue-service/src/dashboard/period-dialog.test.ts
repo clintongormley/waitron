@@ -435,6 +435,54 @@ it("colour is a radio group of the six period colours; choosing one checks only 
   expect(save(el).disabled).toBe(false);
 });
 
+it("the colour group is one tab stop, and the arrow keys move focus and the choice round it", async () => {
+  const el = await mount(true);
+  const focused = () => el.shadowRoot!.activeElement?.getAttribute("data-colour") ?? null;
+  expect(
+    ["red", "amber", "grey", "blue", "green", "purple"].map(
+      (colour) => swatch(el, colour).tabIndex,
+    ),
+  ).toEqual([-1, -1, -1, 0, -1, -1]);
+  swatch(el, "blue").focus();
+  await userEvent.keyboard("{ArrowRight}");
+  await el.updateComplete;
+  expect([checkedColour(el), focused()]).toEqual(["green", "green"]);
+  expect(swatch(el, "green").tabIndex).toBe(0);
+  expect(swatch(el, "blue").tabIndex).toBe(-1);
+  await userEvent.keyboard("{ArrowDown}");
+  await el.updateComplete;
+  await userEvent.keyboard("{ArrowRight}");
+  await el.updateComplete;
+  expect([checkedColour(el), focused()]).toEqual(["red", "red"]);
+  await userEvent.keyboard("{ArrowLeft}");
+  await el.updateComplete;
+  expect([checkedColour(el), focused()]).toEqual(["purple", "purple"]);
+  await userEvent.keyboard("{ArrowUp}");
+  await el.updateComplete;
+  expect([checkedColour(el), focused()]).toEqual(["green", "green"]);
+  expect(save(el).disabled).toBe(false);
+  await userEvent.tab();
+  expect(el.shadowRoot!.activeElement?.getAttribute("role")).not.toBe("radio");
+});
+
+it("with no colour chosen, the first swatch is the group's tab stop", async () => {
+  const el = document.createElement("period-dialog");
+  el.menus = menus;
+  el.departmentName = "Restaurant";
+  el.period = { ...structuredClone(period), colour: "pink" as never };
+  el.open = true;
+  applyTokens(el);
+  hosts.push(el);
+  document.body.append(el);
+  await el.updateComplete;
+  expect(checkedColour(el)).toBeNull();
+  expect(
+    ["red", "amber", "grey", "blue", "green", "purple"].map(
+      (colour) => swatch(el, colour).tabIndex,
+    ),
+  ).toEqual([0, -1, -1, -1, -1, -1]);
+});
+
 it("draws the chosen swatch's ring outside the swatch, clear of its fill", async () => {
   const el = await mount(true);
   const chosen = getComputedStyle(swatch(el, "blue"));
