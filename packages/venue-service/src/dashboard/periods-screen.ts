@@ -37,6 +37,9 @@ type Deletion = {
   readAfter: number;
   /** Whether the latest impact read has yet to answer. */
   reading: boolean;
+  /** Set by a clock-change refusal to the reload's hold-back point, and cleared when an impact
+   *  read succeeds that began with a model whose read started after that point. */
+  reloadedAt?: number;
   impact?: PeriodDeleteImpact;
   readError: string;
   busy: boolean;
@@ -408,6 +411,9 @@ export class PeriodsScreen extends LitElement {
   private async readImpact(deletion: Deletion, automatic = false) {
     const generation = ++deletion.generation;
     const revision = this.model!.clockRevision;
+    const reloaded =
+      deletion.reloadedAt !== undefined &&
+      (this.api.readNumberOf(this.model!) ?? 0) > deletion.reloadedAt;
     deletion.readRevision = revision;
     deletion.readAfter = this.api.nextReadNumber();
     deletion.reading = true;
@@ -429,6 +435,7 @@ export class PeriodsScreen extends LitElement {
     deletion.reading = false;
     deletion.impact = impact;
     deletion.clockRevision = revision;
+    if (reloaded) deletion.reloadedAt = undefined;
     deletion.readError = "";
     this.requestUpdate();
   }
@@ -458,20 +465,21 @@ export class PeriodsScreen extends LitElement {
     deletion.busy = true;
     component.refusal = undefined;
     this.requestUpdate();
+    const sent = deletion.clockRevision;
     try {
-      await this.api.deletePeriod(
-        deletion.period.id,
-        event.detail.replacementPeriodId,
-        deletion.clockRevision,
-      );
+      await this.api.deletePeriod(deletion.period.id, event.detail.replacementPeriodId, sent);
     } catch (error) {
       if (this.deleting !== deletion || !this.isConnected) return;
       component.refusal = refusalOf(error);
-      // The impact is read again once the re-read model answers, so the retry's revision is
-      // taken with an impact read that started after it. A read still in flight is left to
-      // answer, or each Confirm before it answers would start the wait again.
-      if (component.refusal.code === "hours.clock_changed" && !deletion.reading)
-        this.api.rereadWatches();
+      // A further refusal reloads nothing until an impact read begun after the reloaded hours
+      // answers. An impact read on its way that took a revision other than the refused one is
+      // left to answer instead of reloading.
+      if (
+        component.refusal.code === "hours.clock_changed" &&
+        deletion.reloadedAt === undefined &&
+        !(deletion.reading && deletion.readRevision !== sent)
+      )
+        deletion.reloadedAt = this.api.rereadWatches();
       return;
     } finally {
       deletion.busy = false;
