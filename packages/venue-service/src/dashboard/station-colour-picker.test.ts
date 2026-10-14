@@ -40,6 +40,12 @@ const checked = (el: StationColourPicker) =>
   radios(el)
     .filter((button) => button.getAttribute("aria-checked") === "true")
     .map((button) => button.dataset.stationColour);
+/** A host that accepts every change, as both dialogs do while their draft is current. */
+function follow(el: StationColourPicker) {
+  el.addEventListener("station-colour-change", (event) => {
+    el.value = (event as CustomEvent<{ colour: StationColour }>).detail.colour;
+  });
+}
 function changes(el: StationColourPicker) {
   const seen: string[] = [];
   el.addEventListener("station-colour-change", (event) =>
@@ -89,6 +95,7 @@ it("names under each colour the other stations that have it", async () => {
 
 it("moves the choice with the arrow keys, wrapping at both ends, keeping one tab stop", async () => {
   const el = await picker("brown");
+  follow(el);
   const seen = changes(el);
   const focused = () => el.shadowRoot!.activeElement?.getAttribute("data-station-colour") ?? null;
   expect(radios(el).map((button) => button.tabIndex)).toEqual([
@@ -115,14 +122,45 @@ it("moves the choice with the arrow keys, wrapping at both ends, keeping one tab
 
 it("sends station-colour-change on a click", async () => {
   const el = await picker("purple");
+  follow(el);
   const events: CustomEvent[] = [];
   el.addEventListener("station-colour-change", (event) => events.push(event as CustomEvent));
+  const clicks: EventTarget[] = [];
+  el.addEventListener("click", (event) => clicks.push(event.target!));
+  el.parentElement!.addEventListener("click", (event) => clicks.push(event.target!));
   radio(el, "teal").click();
   await el.updateComplete;
   expect(events.map((event) => [event.detail, event.bubbles, event.composed])).toEqual([
     [{ colour: "teal" }, true, true],
   ]);
+  expect(clicks).toEqual([]);
   expect(checked(el)).toEqual(["teal"]);
+});
+
+it("keeps showing its value when the host ignores the change", async () => {
+  const el = await picker("purple");
+  const seen = changes(el);
+  const focused = () => el.shadowRoot!.activeElement?.getAttribute("data-station-colour") ?? null;
+  radio(el, "teal").click();
+  await el.updateComplete;
+  expect([seen, checked(el), el.value]).toEqual([["teal"], ["purple"], "purple"]);
+  radio(el, "purple").focus();
+  await userEvent.keyboard("{ArrowRight}");
+  await el.updateComplete;
+  expect([seen, checked(el), focused()]).toEqual([["teal", "pink"], ["purple"], "pink"]);
+  expect(
+    radios(el)
+      .filter((button) => button.tabIndex === 0)
+      .map((b) => b.dataset.stationColour),
+  ).toEqual(["pink"]);
+  el.value = "lime";
+  await el.updateComplete;
+  expect(checked(el)).toEqual(["lime"]);
+  expect(
+    radios(el)
+      .filter((button) => button.tabIndex === 0)
+      .map((b) => b.dataset.stationColour),
+  ).toEqual(["lime"]);
 });
 
 it("draws an error under the group and disables the tiles while busy", async () => {

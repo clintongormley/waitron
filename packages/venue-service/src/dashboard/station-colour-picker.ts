@@ -1,5 +1,5 @@
 import { LitElement, css, html, nothing } from "lit";
-import { customElement, property } from "lit/decorators.js";
+import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import { STATION_COLOURS, type StationColour } from "@waitron/shared";
 import { format } from "./hours-view.js";
@@ -110,8 +110,15 @@ export class StationColourPicker extends LitElement {
   @property({ type: Boolean }) busy = false;
   @property() error = "";
 
+  /** The tile the arrow keys last moved to; the tab stop until the host sets a new value. */
+  @state() private active: StationColour | undefined;
+
+  override willUpdate(changed: Map<PropertyKey, unknown>) {
+    if (changed.has("value")) this.active = undefined;
+  }
+
+  /** Controlled: the shown choice changes only when the host sets `value`. */
   private choose(colour: StationColour, focus = false) {
-    this.value = colour;
     this.dispatchEvent(
       new CustomEvent("station-colour-change", {
         detail: { colour },
@@ -119,16 +126,18 @@ export class StationColourPicker extends LitElement {
         composed: true,
       }),
     );
-    if (focus)
+    if (focus) {
+      if (this.value !== colour) this.active = colour;
       void this.updateComplete.then(() =>
         this.shadowRoot!.querySelector<HTMLElement>(
           `[role=radio][data-station-colour="${colour}"]`,
         )?.focus(),
       );
+    }
   }
 
   override render(): unknown {
-    const tabStop = Math.max(0, STATION_COLOURS.indexOf(this.value));
+    const tabStop = Math.max(0, STATION_COLOURS.indexOf(this.active ?? this.value));
     return html`<fieldset name="colour">
       <legend>${t("prep.colour")}<span class="required" aria-hidden="true">*</span></legend>
       <div

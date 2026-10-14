@@ -549,3 +549,29 @@ it("Add station with only its colour changed counts as unsaved, asks before clos
   await expect.poll(() => writes.length).toBe(1);
   expect((writes[0] as { colour: unknown }).colour).toBe("teal");
 });
+
+it("Add station counts picking the opened colour again as no change and closes without asking", async () => {
+  const { screen, writes } = await mount();
+  const modal = await open(screen, false);
+  const picker = modal.querySelector("station-colour-picker")!;
+  await picker.updateComplete;
+  const pick = async (colour: string) => {
+    picker
+      .shadowRoot!.querySelector<HTMLElement>(`[role=radio][data-station-colour="${colour}"]`)!
+      .click();
+    await screen.updateComplete;
+    await picker.updateComplete;
+  };
+  expect(picker.value).toBe("red");
+  await pick("teal");
+  expect(unload()).toBe(true);
+  await pick("red");
+  expect(picker.value).toBe("red");
+  expect(unload()).toBe(false);
+  const closed = closeOf(modal);
+  modal.querySelector<HTMLElement>("[slot=cancel]")!.click();
+  await closed;
+  await expect.poll(() => modalIn(screen)).toBeNull();
+  expect((await question()).open).toBe(false);
+  expect(writes).toEqual([]);
+});
