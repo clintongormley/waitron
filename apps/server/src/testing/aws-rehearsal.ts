@@ -1256,6 +1256,7 @@ async function runOwned<T>(
   );
   const issued = new Set<string>();
   const labels = new Set<string>();
+  let markerMissing = false;
   const scratchRoot = join(deps.scratchBase, `waitron-aws-rehearsal-${runId}`);
   const scratchLabels = new Set<string>();
   const scratchMaking: Promise<unknown>[] = [];
@@ -1493,6 +1494,7 @@ async function runOwned<T>(
       signal,
     );
     if (put.error !== undefined) {
+      markerMissing = true;
       throw new AwsRehearsalFailed(`writing the ownership nonce to ${bucket} failed`);
     }
     stopIfStopped();
@@ -1566,7 +1568,7 @@ async function runOwned<T>(
         tearingDown = true;
         teardown = await teardownOwnedBucket(
           client,
-          { bucket, runId, uploads, pids },
+          { bucket, runId, uploads, pids, markerMissing },
           {
             ...deps,
             record,

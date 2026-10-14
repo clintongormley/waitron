@@ -28,6 +28,7 @@ import {
 } from "./aws-rehearsal-receipt.js";
 import {
   AwsRehearsalRefused,
+  cleanupFromReceipt,
   rehearsalLifecycle,
   type AwsRehearsal,
   type AwsRehearsalDeps,
@@ -917,6 +918,37 @@ describe("fix round 1", () => {
     await rejection(withAwsRehearsal(async () => undefined, h.deps));
     const { parsed } = await receipt();
     expect(parsed.events.at(-1)).toMatchObject({ phase: "restore-nonce", outcome: "failed" });
+  });
+
+  it("puts the marker back when its first write failed and the bucket outlives teardown, so the cleanup command works", async () => {
+    let puts = 0;
+    const failing = () => {
+      throw sdkError("InternalError", 500, 3);
+    };
+    const h = harness({
+      PutObject: (input, fake) => {
+        puts += 1;
+        if (puts === 1) throw sdkError("InternalError", 500, 3);
+        fake.objects.set(input.Key as string, String(input.Body));
+        return ok();
+      },
+      ListObjectsV2: failing,
+      DeleteBucket: failing,
+    });
+    await rejection(withAwsRehearsal(async () => undefined, h.deps));
+    const { parsed } = await receipt();
+    expect(parsed.remaining.bucket).toBe(BUCKET);
+    const receiptPath = join(receiptDir, `aws-rehearsal-${RUN_ID}.json`);
+    expect(parsed.cleanupCommand).toBe(cleanupCommandFor("eu-north-1", receiptPath));
+
+    const after = new FakeAdmin({ objects: h.fake.objects });
+    const cleaned = await cleanupFromReceipt(receiptPath, {
+      env: env(),
+      createAdminClient: () => after,
+      print: () => {},
+    });
+    expect(cleaned.ok).toBe(true);
+    expect(after.names()).toContain("DeleteBucket");
   });
 
   it("does not put the marker back when the bucket is already gone", async () => {
