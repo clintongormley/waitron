@@ -5030,6 +5030,18 @@ the tree. What remains, largest first:
 
 ### CI, tests and developer tooling
 
+- **A674. `ci` can fail on a job GitHub has finished but not yet marked finished.** Its second
+  step reads the jobs API and gives up after six tries ten seconds apart (`docs/developers/ci-and-gates.md`,
+  "How the second step reads the API"). Main run 38573258715 (A659's merge, 2026-10-14) failed that
+  way: every step of `test-payments-stripe` (job 115883881130) had ended by 13:39:36Z, yet the API
+  still answered `in_progress` at each try from 13:44:52Z to 13:45:50Z; read again at about 14:10Z it
+  answered `completed`, `success`, `completed_at` 13:39:39Z, and a re-run of `ci` alone passed.
+  So once, the lag was over six minutes, against a window of about one. Next: decide how long `ci`
+  should wait for a job that is not yet completed (for example tries spread over ten minutes, inside
+  the step's five-minute limit raised to match), and change it with its guard in
+  `scripts/ci-workflow.test.mjs`. Until then, such a red run is answered by re-running `ci` alone
+  once the API shows the job completed.
+
 - **A624. The upgrade walk cannot step a new set whose first migration names another set's later
   table.** `scripts/migration-upgrade.test.ts` applies every set's first migration together at its
   first step, so a set added now whose first migration has a foreign key to a table another set
