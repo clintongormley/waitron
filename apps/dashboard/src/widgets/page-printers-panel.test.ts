@@ -11,6 +11,19 @@ import "./page-printers-panel.js";
 
 afterEach(cleanupWidgets);
 
+it("A576 saved queues on one host display their own paths and retain independent ids", async () => {
+  const { el, api } = await mount({
+    rows: [
+      row({ resourcePath: "/printers/kitchen" }),
+      row({ id: "pp2", resourcePath: "/printers/reception", invoicePrinter: false }),
+    ],
+  });
+  expect(text(el, "[data-test=page-printer-address-pp1]")).toBe("10.0.0.56:631/printers/kitchen");
+  expect(text(el, "[data-test=page-printer-address-pp2]")).toBe("10.0.0.56:631/printers/reception");
+  await click(el, "[data-test=print-test-page-pp2]");
+  expect(api.printPagePrinterTestPage).toHaveBeenCalledWith("pp2");
+});
+
 const row = (over: Partial<PagePrinterRow> = {}): PagePrinterRow => ({
   id: "pp1",
   name: "Office",
@@ -137,7 +150,7 @@ it("lists each office printer under the invoice printers heading, with its agent
   expect(text(el, "[data-test=page-printer-agent-pp3]")).toBe(
     t("printers.invoice_printer_agent_gone"),
   );
-  expect(text(el, "[data-test=page-printer-address-pp2]")).toBe("10.0.0.57:631");
+  expect(text(el, "[data-test=page-printer-address-pp2]")).toBe("10.0.0.57:631/ipp/print");
   expect(text(el, "[data-test=page-printer-paper-pp1]")).toBe(t("printers.invoice_printer_a4"));
   expect(text(el, "[data-test=page-printer-paper-pp3]")).toBe(t("printers.invoice_printer_letter"));
 });

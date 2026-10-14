@@ -103,3 +103,11 @@ Inventory base: `07e009986239fc3db91b8f11e8214bf6fe006b82`, both this checkout's
 - [ ] Implementation commits use `git commit -s`; normal push hook runs once, then verify selected package coverage/merge jobs and required CI checks on the current head. Do not bypass hooks, duplicate the CI workspace gate or merge without the runner's already granted landing authorization and H11 lock. The preceding docs-only plan review/landing is separate and does not count as implementation's whole-branch review.
 
 Plan review corrections (2026-10-14): preserve announced server display metadata; retain raw ports independently from queue capability keys; use standing runner landing authorization. Review was read-only; all runtime tests above remain owed.
+
+Execution note, 2026-10-14: raw representations retain their existing row and action keys; IPP-only
+rows use their queue tuple for both. This preserves independently registered raw ports while
+separating the shared queues. Capability lending uses another agent's fresh observation of the
+same queue; separate representations from one agent do not lend capabilities to one another. Qualification mounts the real Printers screen
+and Add dialog in Chromium with controlled API fixtures, rather than starting a development
+stack. It checks actual iframe widths, accessibility and captured views in both languages and
+themes. The physical container check remains owed.

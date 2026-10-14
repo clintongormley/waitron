@@ -101,18 +101,19 @@ export async function sweepPort(opts: SweepOptions): Promise<DiscoveredDevice[]>
     .map((host) => ({ transport: "network_tcp", host, port: opts.port }));
 }
 
-/**
- * One device per raw `host:port`, announced entries first because they carry the printer's own name,
- * make and model. An IPP announcement (`ipp` set) is folded into its host's raw devices, filling in a
- * name, make or model they lack; a host announced only by IPP stays one device, marked `ippOnly`.
- */
+/** A raw port can share an IPP queue's metadata only when its host announces one distinct queue. */
 export function mergeDiscovered(
   announced: DiscoveredDevice[],
   swept: DiscoveredDevice[],
 ): DiscoveredDevice[] {
-  const ippByHost = new Map<string | undefined, DiscoveredDevice>();
+  const ippByHost = new Map<string | undefined, Map<string, DiscoveredDevice>>();
   for (const d of announced) {
-    if (d.ipp !== undefined && !ippByHost.has(d.host)) ippByHost.set(d.host, d);
+    if (d.ipp === undefined) continue;
+    const host = d.host?.toLowerCase();
+    const queues = ippByHost.get(host) ?? new Map<string, DiscoveredDevice>();
+    const endpoint = JSON.stringify([d.ipp.port, d.ipp.resourcePath]);
+    if (!queues.has(endpoint)) queues.set(endpoint, d);
+    ippByHost.set(host, queues);
   }
   const out: DiscoveredDevice[] = [];
   const seen = new Set<string>();
@@ -122,12 +123,15 @@ export function mergeDiscovered(
     const at = `${d.host}:${d.port}`;
     if (seen.has(at)) continue;
     seen.add(at);
-    rawHosts.add(d.host);
-    const ipp = ippByHost.get(d.host);
+    const host = d.host?.toLowerCase();
+    rawHosts.add(host);
+    const queues = ippByHost.get(host);
+    const ipp = queues?.size === 1 ? queues.values().next().value : undefined;
     out.push(ipp === undefined ? d : { ...ipp, ...d });
   }
-  for (const [host, ipp] of ippByHost) {
-    if (!rawHosts.has(host)) out.push({ ...ipp, ippOnly: true });
+  for (const [host, queues] of ippByHost) {
+    if (queues.size === 1 && rawHosts.has(host)) continue;
+    for (const ipp of queues.values()) out.push({ ...ipp, ippOnly: true });
   }
   return out;
 }

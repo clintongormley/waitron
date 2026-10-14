@@ -423,7 +423,9 @@ export class PagePrintersPanel extends LitElement {
         key: "address",
         label: t("printers.address"),
         cell: (row) =>
-          html`<span data-test=${`page-printer-address-${row.id}`}>${row.host}:${row.port}</span>`,
+          html`<span data-test=${`page-printer-address-${row.id}`}
+            >${row.host}:${row.port}${row.resourcePath}</span
+          >`,
       },
       {
         key: "paper",

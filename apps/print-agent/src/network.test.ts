@@ -54,6 +54,50 @@ function txtRdata(pairs: string[]): number[] {
 }
 
 describe("parsePdlResponse", () => {
+  it("A576 keeps both queue labels and the advertised server name separately from the resolved IP", () => {
+    const target = "Back-office PC.local.";
+    const w = new DnsWriter().u16(0).u16(0x8400).u16(0).u16(5).u16(0).u16(0);
+    for (const [name, path] of [
+      ["Kitchen A4", "printers/kitchen"],
+      ["Reception A4", "printers/reception"],
+    ]) {
+      const instance = `${name}._ipp._tcp.local`;
+      const srv = new DnsWriter().u16(0).u16(0).u16(631).name(target).build();
+      w.name(instance)
+        .u16(33)
+        .u16(1)
+        .u32(120)
+        .u16(srv.length)
+        .raw(...srv);
+      const txt = txtRdata([`rp=${path}`]);
+      w.name(instance)
+        .u16(16)
+        .u16(1)
+        .u32(120)
+        .u16(txt.length)
+        .raw(...txt);
+    }
+    w.name(target).u16(1).u16(1).u32(120).u16(4).raw(192, 168, 1, 20);
+    expect(parsePdlResponse(w.build())).toEqual([
+      {
+        transport: "network_tcp",
+        host: "192.168.1.20",
+        port: 631,
+        name: "Kitchen A4",
+        serverName: "Back-office PC",
+        ipp: { port: 631, resourcePath: "/printers/kitchen" },
+      },
+      {
+        transport: "network_tcp",
+        host: "192.168.1.20",
+        port: 631,
+        name: "Reception A4",
+        serverName: "Back-office PC",
+        ipp: { port: 631, resourcePath: "/printers/reception" },
+      },
+    ]);
+  });
+
   it("decodes an SRV+A+TXT _pdl-datastream._tcp announcement into host/port/name/make/model", () => {
     const service = "_pdl-datastream._tcp.local";
     const instance = `HP LaserJet.${service}`;
@@ -227,6 +271,7 @@ describe("parsePdlResponse — IPP announcements", () => {
         host: "192.168.1.60",
         port: 8631,
         name: "Office HP",
+        serverName: "office-printer",
         make: "HP",
         model: "HP Color LaserJet MFP M181fw",
         ipp: { port: 8631, resourcePath: "/ipp/printer" },

@@ -5,6 +5,7 @@ import type { DiscoveredDevice, OfficePrinterReport } from "@waitron/print-agent
 import { describe, expect, it, vi } from "vitest";
 import { queryPrinterCapabilities } from "./ipp-capabilities.js";
 import { createOfficePrinterClassifier, type CapabilitiesQuery } from "./ipp-probe.js";
+import { mergeDiscovered } from "./sweep.js";
 
 /** The HP Color LaserJet MFP M181fw's raw reply to the capability query; see its `.md` beside it. */
 const hpReply = (): Promise<Buffer> =>
@@ -362,6 +363,37 @@ async function fakeIppServer(reply: Buffer): Promise<{
 }
 
 describe("createOfficePrinterClassifier against in-process IPP servers", () => {
+  it("A576 merged queues keep separate answers and cache entries on the same host and port", async () => {
+    const query = vi.fn<CapabilitiesQuery>(async (endpoint) =>
+      endpoint.resourcePath === "/printers/kitchen" ? hpReply() : undefined,
+    );
+    const classify = createOfficePrinterClassifier({ query, now: () => 0 });
+    const queues: DiscoveredDevice[] = ["/printers/kitchen", "/printers/reception"].map(
+      (resourcePath) => ({
+        transport: "network_tcp",
+        host: "192.168.1.20",
+        port: 631,
+        ipp: { port: 631, resourcePath },
+      }),
+    );
+    const devices = mergeDiscovered([...queues, queues[0]!], []);
+    const expected = [
+      {
+        ...queues[0],
+        ippOnly: true,
+        pagePrinter: true,
+        office: hpOffice(631, "/printers/kitchen"),
+      },
+      { ...queues[1], ippOnly: true, office: unanswered(631, "/printers/reception") },
+    ];
+    expect(await classify(devices)).toEqual(expected);
+    expect(await classify(devices)).toEqual(expected);
+    expect(query.mock.calls.map(([e]) => e.resourcePath)).toEqual([
+      "/printers/kitchen",
+      "/printers/reception",
+    ]);
+  });
+
   it("sends one Get-Printer-Attributes per announced queue and nothing else, then reuses the answers", async () => {
     const office = await fakeIppServer(await hpReply());
     const receipt = await fakeIppServer(mediaReply(ROLL_SIZES));

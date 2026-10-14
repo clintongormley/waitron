@@ -1341,11 +1341,16 @@ export class PrintersScreen extends LitElement {
   }
 
   #deviceKey(device: DiscoveredPrinter): string {
+    const queue = device.ipp ?? device.office;
+    if (device.ippOnly && queue)
+      return `ipp:${encodeURIComponent(JSON.stringify([device.host?.toLowerCase(), queue.port, queue.resourcePath]))}`;
     return device.localKey ?? `${device.host}:${device.port ?? 9100}`;
   }
 
   #disabledPrinter(device: DiscoveredPrinter): Printer | undefined {
-    return this.printers.find((printer) => printer.id === device.printerId && !printer.active);
+    return device.ippOnly
+      ? undefined
+      : this.printers.find((printer) => printer.id === device.printerId && !printer.active);
   }
 
   /**
@@ -1387,7 +1392,7 @@ export class PrintersScreen extends LitElement {
   }
 
   #openPagePrinterAdd(device: DiscoveredPrinter, entry: PagePrinterEntry): void {
-    const parts = [this.#discoveredLabel(device), `${entry.host}:${entry.port}`];
+    const parts = [this.#discoveredLabel(device), `${entry.host}:${entry.port}${entry.path}`];
     if (device.agentName)
       parts.push(fill("printers.discovered_seen_on", { agent: device.agentName }));
     this.addingPagePrinter = { entry, description: parts.join(" · ") };
@@ -3666,7 +3671,10 @@ export class PrintersScreen extends LitElement {
   }
 
   #discoveredLabel(device: DiscoveredPrinter): string {
-    if (device.name != null && device.name !== "") return device.name;
+    if (device.name != null && device.name !== "")
+      return device.ippOnly && device.host
+        ? `${device.name} (${device.serverName || device.host})`
+        : device.name;
     const parts = [device.make, device.model].filter((x): x is string => x != null && x !== "");
     if (parts.length > 0) return parts.join(" ");
     return device.localKey ?? device.host ?? "";
@@ -3950,7 +3958,9 @@ export class PrintersScreen extends LitElement {
             <strong>${this.#discoveredLabel(d)}</strong>
             <div part="printer-meta">
               <div>${transportName(d.transport)}</div>
-              <div>${d.host ? `${d.host}:${d.port ?? 9100}` : (d.localKey ?? "—")}</div>
+              <div>
+                ${d.host ? `${d.host}:${d.office?.port ?? d.ipp?.port ?? d.port ?? 9100}${d.office?.resourcePath ?? d.ipp?.resourcePath ?? ""}` : (d.localKey ?? "—")}
+              </div>
               ${d.agentName ? html`<div>${t("printers.discovered_seen_on").replace("{agent}", d.agentName)}</div>` : nothing}
               ${this.#disabledPrinter(d) ? html`<div>${t("printers.enable_hint")}</div>` : nothing}
               ${office.get(d)?.kind === "enable" ? html`<div>${t("printers.page_printer_enable_hint")}</div>` : nothing}

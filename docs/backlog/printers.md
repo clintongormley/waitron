@@ -439,7 +439,7 @@ returns `null`. This checks those readers, not every sale path.
 
 - **One failed office-printer query can flip a marked printer back to addable** until the next query
   30 seconds later, because the server keeps only each agent's latest report — unless another agent
-  reporting the same address has marked it. Accepted as the fail-open cost.
+  reporting the same known queue has marked it. Accepted as the fail-open cost.
 
 - **Two review suggestions on #335 were deliberately not taken** and would be relitigated otherwise:
   renaming the error code `printer.probe_busy` (kept under the domain-naming rule, per #335's
@@ -478,3 +478,21 @@ returns `null`. This checks those readers, not every sale path.
 - **A Valencian venue is not offered Catalan receipts (owner, 2026-10-11).** Content and receipt
   languages match by exact code, so a `ca-ES-valencia` content language does not offer `ca-ES`
   (`offeredReceiptLanguages`, `apps/server/src/venue-locale.ts`).
+
+## Shared office-printer queues
+
+After A576, check two IPP queues on one real print server from the shipped print-agent container.
+Add Kitchen A4 and Reception A4 separately and print distinguishable pages to both. Record the
+announced server name, each queue path and where the paper emerges. Repeat with one queue
+unavailable and an already saved single-queue printer. These physical checks remain open.
+
+The local end-to-end fixture uses two paths on one HTTP listener, the real server routes, agent
+loop and IPP sender. It checks each submission's path, printer URI, media and document bytes,
+queue-scoped polling when both jobs return the same id, and both delivery results. Its saved-row
+control compares the row before and after printing without rediscovery. Neither fixture uses
+physical printers or the shipped container.
+
+The discovery caption uses the announced server hostname, with the local suffix removed, when
+available. It falls back to the routing address when no server name was announced; it does not
+construct a friendly computer name from a printer label. See the
+[identity map and plan](../superpowers/plans/2026-10-14-a576-ipp-queue-identity.md).

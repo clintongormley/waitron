@@ -674,8 +674,7 @@ export function createAgent(opts: AgentOptions): Agent {
         });
       }
     }
-    // Classified after the merge, so a probe target the scan also found keeps its mark and each host
-    // is asked once per pull. A failure reports the devices unmarked and never stops the pull.
+    // Classifying the merged list keeps an announced queue when a raw address probe also finds it.
     if (host.markPagePrinters && scanned.some((device) => device.transport === "network_tcp")) {
       try {
         scanned = await host.markPagePrinters(scanned);
@@ -685,8 +684,7 @@ export function createAgent(opts: AgentOptions): Agent {
         });
       }
     }
-    // A device announced only by IPP has no raw port, so it is never offered as a receipt printer,
-    // however its check went.
+    // Without an unambiguous raw counterpart, an unanswered queue cannot become a receipt printer.
     scanned = scanned.map((device) =>
       device.ippOnly === true && device.ipp !== undefined && device.office === undefined
         ? {

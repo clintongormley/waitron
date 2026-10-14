@@ -251,11 +251,12 @@ interface DiscoveredDeviceWire {
   make?: string;
   model?: string;
   name?: string;
+  serverName?: string;
   /** True when the agent saw A4/letter media over IPP: an office printer, not a receipt printer. */
   pagePrinter?: true;
   /** The IPP queue the host announced over mDNS. */
   ipp?: IppQueue;
-  /** The host announced IPP and no raw queue, so `port` is its IPP port. */
+  /** This queue has no unambiguous raw counterpart; `port` is its IPP port. */
   ippOnly?: true;
   office?: OfficePrinterReport;
   printerLike?: true;
@@ -386,6 +387,7 @@ function screenScanned(raw: unknown): DiscoveredDeviceWire[] {
       make: wireString(d.make),
       model: wireString(d.model),
       name: wireString(d.name),
+      serverName: network ? wireString(d.serverName) : undefined,
       pagePrinter: d.pagePrinter === true ? true : undefined,
       ipp: network ? screenIppQueue(d.ipp) : undefined,
       ippOnly: network && d.ippOnly === true ? true : undefined,
@@ -455,6 +457,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     make?: string;
     model?: string;
     name?: string;
+    serverName?: string;
     pagePrinter?: true;
     ipp?: IppQueue;
     ippOnly?: true;
@@ -482,6 +485,12 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     listedAt(at, now, discoveryUntil);
   const keyOf = (agentId: string, transport: string, locator: string): string =>
     `${agentId}:${transport}:${locator}`;
+  const queueKeyOf = (device: DiscoveredDeviceWire): string | undefined => {
+    const queue = device.ipp ?? device.office;
+    return device.host === undefined || queue === undefined
+      ? undefined
+      : JSON.stringify([device.host.toLowerCase(), queue.port, queue.resourcePath]);
+  };
   const reportedFresh = (
     agentId: string,
     address: string,
@@ -597,18 +606,24 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
 
       const now = Date.now();
       // A visible or scanned report replaces the description, never another kind of report's stamp.
+      const describedThisPull = new Set<string>();
       const remember = (d: DiscoveredDeviceWire, stamp: "scannedAt" | "visibleAt"): void => {
-        const key = keyOf(agentId, d.transport, d.localKey ?? `${d.host}:${d.port}`);
+        const locator = d.ippOnly ? queueKeyOf(d) : undefined;
+        const key = keyOf(agentId, d.transport, locator ?? d.localKey ?? `${d.host}:${d.port}`);
         const prior = discovered.get(key);
         discovered.set(key, {
           agentId,
           ...d,
+          ...(describedThisPull.has(key) && prior?.office?.printable && !d.office?.printable
+            ? { office: prior.office, pagePrinter: prior.pagePrinter }
+            : {}),
           lastSeenAt: now,
           scannedAt: prior?.scannedAt,
           pairedAt: prior?.pairedAt,
           visibleAt: prior?.visibleAt,
           [stamp]: now,
         });
+        describedThisPull.add(key);
       };
       for (const v of visible) remember(v, "visibleAt");
       for (const s of scanned) remember(s, "scannedAt");
@@ -942,25 +957,32 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         if (r.host !== null) byHostPort.set(`${r.host}:${r.port ?? 9100}`, r.id);
       }
       const printerIdOf = (e: DiscoveredEntry): string | null =>
-        (e.localKey !== undefined ? byKey.get(e.localKey) : undefined) ??
-        (e.host !== undefined ? byHostPort.get(`${e.host}:${e.port ?? 9100}`) : undefined) ??
-        null;
-      // Each agent checks on its own and a failed check leaves a device unmarked, so an address is an
-      // office printer for every agent's entry once any agent reporting that address marked it, and
-      // a printable report one agent's query answered stands for the address over any other report.
+        e.ippOnly
+          ? null
+          : ((e.localKey !== undefined ? byKey.get(e.localKey) : undefined) ??
+            (e.host !== undefined ? byHostPort.get(`${e.host}:${e.port ?? 9100}`) : undefined) ??
+            null);
       const pagePrinterAddresses = new Set<string>();
-      const reportsByAddress = new Map<string, OfficePrinterReport>();
+      const reportsByQueue = new Map<string, { agentId: string; office: OfficePrinterReport }[]>();
       for (const e of discovered.values()) {
         if (e.host === undefined) continue;
         const address = addressOf(e.host, e.port);
         if (e.pagePrinter) pagePrinterAddresses.add(address);
-        if (e.office?.printable && !reportsByAddress.get(address)?.printable) {
-          reportsByAddress.set(address, e.office);
+        const queue = queueKeyOf(e);
+        if (queue !== undefined && e.office?.printable) {
+          const reports = reportsByQueue.get(queue) ?? [];
+          reports.push({ agentId: e.agentId, office: e.office });
+          reportsByQueue.set(queue, reports);
         }
       }
       const officeOf = (e: DiscoveredEntry): OfficePrinterReport | undefined => {
         if (e.office?.printable || e.host === undefined) return e.office;
-        return reportsByAddress.get(addressOf(e.host, e.port)) ?? e.office;
+        const queue = queueKeyOf(e);
+        return (
+          (queue === undefined
+            ? undefined
+            : reportsByQueue.get(queue)?.find((r) => r.agentId !== e.agentId)?.office) ?? e.office
+        );
       };
       return c.json(
         [...discovered.values()].map((e) => {
@@ -977,6 +999,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             make: e.make,
             model: e.model,
             name: e.name,
+            serverName: e.serverName,
             pagePrinter:
               e.host !== undefined && pagePrinterAddresses.has(addressOf(e.host, e.port))
                 ? (true as const)
