@@ -667,6 +667,20 @@ describe("today's routes", () => {
 
     expect(await zoneRevisionOf(v, zoneId)).toBeUndefined();
   });
+
+  it("merges two free tables in a zone that takes payment first", async () => {
+    const { zoneId, table } = await plannedZone(v, [
+      { key: "a", place: { x: 0, y: 0 } },
+      { key: "b", place: { x: 20, y: 0 } },
+    ]);
+    await payFirst(zoneId, "prepay");
+
+    await expectRevision(
+      v,
+      today(table.a!, "merge", { targetId: table.b!, side: "right", seats: 8 }),
+      zoneId,
+    );
+  });
 });
 
 describe("the zone reset's revision", () => {
@@ -1182,20 +1196,6 @@ describe("the till's zone list", () => {
       "prepay",
       "ticket_then_pay",
     ]);
-  });
-
-  it("merges two free tables in a zone that takes payment first", async () => {
-    const { zoneId, table } = await plannedZone(v, [
-      { key: "a", place: { x: 0, y: 0 } },
-      { key: "b", place: { x: 20, y: 0 } },
-    ]);
-    await payFirst(zoneId, "prepay");
-
-    await expectRevision(
-      v,
-      today(table.a!, "merge", { targetId: table.b!, side: "right", seats: 8 }),
-      zoneId,
-    );
   });
 });
 

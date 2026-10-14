@@ -581,7 +581,7 @@ export class TillFloorScreen extends LitElement {
   @state() private clearing: TableState | null = null;
   /** The table whose details sheet is open, read afresh from `tables` on each render. */
   @state() private details: { tableId: string } | null = null;
-  /** The floor's last refusal, in its code's words; cleared by the next drop or a change of zone. */
+  /** The floor's last refusal, in its code's words. */
   @state() private refusal: string | null = null;
   /** A merge's seats, or Change seats, waiting for the seats prompt. */
   @state() private askingSeats: {
@@ -850,7 +850,6 @@ export class TillFloorScreen extends LitElement {
     ></till-table-details-sheet>`;
   }
 
-  /** Only an area that does not seat guests can leave Join with… nothing to list. */
   #offersJoinWith(table: TableState): boolean {
     if (seatsGuests(this.zones.find((zone) => zone.id === table.zoneId))) return true;
     const joining = this.#joining(table.id);

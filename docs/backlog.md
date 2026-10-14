@@ -2035,8 +2035,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   The request log is in #1699.
 
 - **A690 — the order screen's Move guests and Move this bill offer free tables in an area that does not
-  seat guests, and the server then refuses them (2026-10-14; open).** Both list every table
-  (`#tableTargets`, `apps/till/src/screens/till-table-order-screen.ts`); a free table in a pay-first
+  seat guests, and the server then refuses them (2026-10-14; open).** Neither list checks the area's
+  service mode (`#tableTargets`, `apps/till/src/screens/till-table-order-screen.ts`); a free table in a pay-first
   area is refused with `service_zone.mode_incompatible` (`refuseUnseatable`, reached from
   `moveGuests` in `apps/server/src/table-actions.ts` and `resolveDestination` in
   `apps/server/src/move-bill.ts`). Left open by A667, which fixed the floor only; the till's zones

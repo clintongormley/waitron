@@ -119,7 +119,7 @@ export class TillTableDetailsSheet extends LitElement {
   @property({ type: Boolean }) actions = false;
   /** The zone's tables, which Reset table reads to find the joined table and its split-off tables. */
   @property({ attribute: false }) tables: readonly TableState[] = [];
-  /** False when Join with… would list nothing the zone can do. */
+  /** False leaves Join with… out. */
   @property({ attribute: false }) offersJoinWith = true;
 
   #emit(type: string, detail?: unknown): void {
