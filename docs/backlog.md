@@ -4218,6 +4218,8 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   hours screens; PDF/CSV and the representatives' export. Part 1 takes the owner's sign-off.
   Owner rulings (2026-10-14): automatic ends count immediately; only admins may self-approve,
   with a stored flag.
+  Part 2 has a reviewed [till-clocking plan](superpowers/plans/2026-10-14-a10-2-till-clock-plan.md);
+  implementation has not started.
   [Detail](backlog/workforce.md#a10-clocking-in-and-out--the-working-time-record)
 
 - **Workforce period reads still load complete history.** Narrow them without losing late or
@@ -5494,6 +5496,11 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 - **`modules.json` has no flow-down channel** from a primary to its standby (matters under
   _Afterwards_, designed now that bookings is genuinely toggleable), and a toggleable module that is
   load-bearing (identity, payments) fails boot loudly if disabled until the wiring inversion.
+
+  Read during A10-2 planning, not run: non-mirror trading startup calls `endMirrorViewer`
+  (`apps/server/src/boot.ts:1333`), which updates identity-owned `management_sessions`
+  (`apps/server/src/mirror-session.ts:70–80`). Probe real startup with identity and its dependants
+  disabled before changing that path; the runtime outcome remains unverified.
 
 - **Country-pack follow-ons:** the authenticated address relay and its first provider adapter; phone
   normalisation in bookings; a supplier country/identifier scheme before validating purchasing tax

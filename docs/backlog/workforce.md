@@ -39,6 +39,9 @@ constraint migration (owner decision, 2026-10-13). The populated old-record migr
 the refused rebuild and unchanged rows/head after rollback; the empty old-schema test upgrades.
 
 
+Part 2 has a reviewed [till-clocking plan](../superpowers/plans/2026-10-14-a10-2-till-clock-plan.md).
+Implementation has not started; parts 2–6 remain open.
+
 ## A10 period read cost
 
 A10-1 narrows ordinary clock state to the latest live instant, targets and acknowledgments to their
