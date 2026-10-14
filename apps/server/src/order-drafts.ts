@@ -29,6 +29,7 @@ import { screenNote } from "./working-order.js";
 import { requireMakeAtStation } from "./dead-ends.js";
 import { requireCourse, requireLiveCourse } from "./kitchen.js";
 import { RETAINED_COURSE } from "./retained-course.js";
+import type { AttendanceRecorder } from "./attendance-capture.js";
 import "./errors.js";
 
 export interface DraftLine {
@@ -101,7 +102,9 @@ export async function saveDraft(
   partyId: string,
   operatorId: string,
   input: SaveDraftInput,
+  attendance?: AttendanceRecorder,
 ): Promise<Draft> {
+  const at = nowIso();
   const lines = parseDraftLines(input.lines);
   await requireOpenParty(tx, partyId);
   let previous: DraftLine[] = [];
@@ -167,7 +170,18 @@ export async function saveDraft(
     draftId,
     normaliseDraftLines(lines.map((line) => ({ ...line, id: newId(), unavailable: false }))),
   );
-  return readOpenDraft(tx, cfg, partyId, draftId, offers);
+  const saved = await readOpenDraft(tx, cfg, partyId, draftId, offers);
+  await captureDraft(
+    tx,
+    attendance,
+    cfg.locationId,
+    operatorId,
+    saved.id,
+    saved.revision,
+    "save",
+    at,
+  );
+  return saved;
 }
 
 /**
@@ -183,7 +197,9 @@ export async function takeOverDraft(
   draftId: string,
   operatorId: string,
   revision: number,
+  attendance?: AttendanceRecorder,
 ): Promise<Draft> {
+  const at = nowIso();
   const draft = await requireDraft(tx, foldIfUuid(draftId), partyId);
   await requireOpenParty(tx, partyId);
   if (draft.ownerId === operatorId) return readOpenDraft(tx, cfg, partyId, draft.id);
@@ -206,6 +222,16 @@ export async function takeOverDraft(
     actorId: operatorId,
     detail: {},
   });
+  await captureDraft(
+    tx,
+    attendance,
+    cfg.locationId,
+    operatorId,
+    draft.id,
+    draft.revision + 1,
+    "take-over",
+    at,
+  );
   if (own === undefined) return readOpenDraft(tx, cfg, partyId, draft.id);
   await addDiscardedDraft(tx, draft.id, own, operatorId, operatorId);
   return readOpenDraft(tx, cfg, partyId, own.id);
@@ -259,7 +285,9 @@ export async function discardPartyDrafts(
   tx: Transaction,
   partyId: string,
   operatorId: string,
+  attendance?: { recorder: AttendanceRecorder; locationId: string },
 ): Promise<void> {
+  const at = nowIso();
   const open = await openDraftsOn(tx, partyId);
   if (open.length === 0) return;
   await discardDrafts(
@@ -277,6 +305,20 @@ export async function discardPartyDrafts(
       detail: {},
     })),
   );
+  if (attendance !== undefined) {
+    for (const draft of open) {
+      await captureDraft(
+        tx,
+        attendance.recorder,
+        attendance.locationId,
+        operatorId,
+        draft.id,
+        draft.revision + 1,
+        "discard",
+        at,
+      );
+    }
+  }
 }
 
 export interface SubmitDraftInput extends PartyCommandArgs {
@@ -305,7 +347,9 @@ export async function submitDraft(
   partyId: string,
   draftId: string,
   input: SubmitDraftInput,
+  attendance?: AttendanceRecorder,
 ): Promise<SubmittedDraft> {
+  const at = nowIso();
   const { operatorId } = input;
   const id = foldIfUuid(draftId);
   const groups = input.groups.map(({ lineIds, release }) => ({
@@ -358,10 +402,42 @@ export async function submitDraft(
         actorId: operatorId,
         detail: { groupIds: placed.groups.map((group) => group.id) },
       });
+      await captureDraft(
+        tx,
+        attendance,
+        cfg.locationId,
+        operatorId,
+        id,
+        draft.revision + 1,
+        "submit",
+        at,
+      );
       return { ...placed, draft: emptied ? null : await readOpenDraft(tx, cfg, partyId, id) };
     },
     cfg.madeHereSink,
   );
+}
+
+async function captureDraft(
+  tx: Transaction,
+  recorder: AttendanceRecorder | undefined,
+  locationId: string,
+  personId: string,
+  draftId: string,
+  revision: number,
+  action: "save" | "take-over" | "submit" | "discard",
+  at: string,
+): Promise<void> {
+  await recorder?.(tx, {
+    source: "draft",
+    key: `${draftId}:${revision}:${action}`,
+    personId,
+    locationId,
+    kind: "order",
+    at,
+    offsetMinutes: 0,
+    outcome: "qualified",
+  });
 }
 
 /** Each party's open drafts holding at least one line, oldest first, in one query. */

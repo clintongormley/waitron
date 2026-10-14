@@ -40,6 +40,7 @@ import {
   loginWithPin,
   permissionsForRole,
   setPersonLocale,
+  sessions,
   withPassiveManagementRead,
 } from "@waitron/identity";
 import type { PinAttempts, PinThrottle } from "@waitron/identity";
@@ -183,6 +184,7 @@ import {
   zonesOf,
 } from "./floor-revision.js";
 import type { SubmitDraftInput } from "./order-drafts.js";
+import type { AttendanceRecorder } from "./attendance-capture.js";
 import { invalid } from "./bill-allocation.js";
 import { printSalePaymentSlip } from "./payment-slip-print.js";
 import { issueIfFullyPaid } from "./bill-payments.js";
@@ -246,6 +248,7 @@ import {
 } from "./zone-access.js";
 
 export interface TillApiDeps {
+  attendance?: AttendanceRecorder;
   liveEvents?: LiveEvents;
   db: Database;
   backend: FiscalBackend;
@@ -1241,8 +1244,31 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           pinThrottle.check(device.deviceId, personId);
           try {
             const opened = await withTransaction(deps.db, async (tx) => {
-              refuseKitchenSignIn(await assertDeviceStillProven(tx, proof));
-              return loginWithPin(tx, { deviceId: device.deviceId, personId, pin, checked });
+              const current = await assertDeviceStillProven(tx, proof);
+              refuseKitchenSignIn(current);
+              const opened = await loginWithPin(tx, {
+                deviceId: device.deviceId,
+                personId,
+                pin,
+                checked,
+              });
+              if (deps.attendance !== undefined) {
+                const [stored] = await tx
+                  .select({ openedAt: sessions.openedAt })
+                  .from(sessions)
+                  .where(eq(sessions.id, opened.id));
+                await deps.attendance(tx, {
+                  source: "session",
+                  key: opened.id,
+                  personId: opened.personId,
+                  locationId: current.locationId,
+                  kind: "sign-in",
+                  at: stored!.openedAt,
+                  offsetMinutes: 0,
+                  outcome: "qualified",
+                });
+              }
+              return opened;
             });
             pinThrottle.clear(device.deviceId, personId);
             return opened;
@@ -3017,7 +3043,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const revision = requireRevision(body.revision);
       const draft = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ partyId }]);
-        return saveDraft(tx, cfg, partyId, personId, { draftId, revision, lines: body.lines });
+        return saveDraft(
+          tx,
+          cfg,
+          partyId,
+          personId,
+          { draftId, revision, lines: body.lines },
+          deps.attendance,
+        );
       });
       return c.json(draft);
     }),
@@ -3034,7 +3067,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const revision = requireRevision(body.revision);
       const draft = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ partyId }]);
-        return takeOverDraft(tx, cfg, partyId, draftId, personId, revision);
+        return takeOverDraft(tx, cfg, partyId, draftId, personId, revision, deps.attendance);
       });
       return c.json(draft);
     }),
@@ -3118,7 +3151,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const sendCfg = sendingCfg(cfg, c, session.device);
       const submitted = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ partyId }]);
-        return submitDraft(tx, sendCfg, partyId, draftId, input);
+        return submitDraft(tx, sendCfg, partyId, draftId, input, deps.attendance);
       });
       return c.json(submitted);
     }),
