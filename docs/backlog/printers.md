@@ -196,7 +196,10 @@ just a green typecheck.
 ## The virtual PDF printer
 
 - **The virtual PDF printer**, and a `print_jobs` retention sweep — nothing deletes a job today.
-  Deleting a print job also deletes its `kitchen_print_jobs` link rows (the key is
+  **Finished jobs are kept for one month** (owner, 2026-10-14); a reprint from the print queue is
+  for something that just failed or went missing, and the Orders screen rebuilds a receipt or
+  invoice from its sale at any age. Receipt copies wait until the `receipt_reprints` question
+  below is settled. Venue-wide retention is A664. Deleting a print job also deletes its `kitchen_print_jobs` link rows (the key is
   `ON DELETE CASCADE`). Deleting a failed job's links clears its printing problem, and deleting a
   printed reprint's links brings back the failures it cleared, so a sweep must remove a bill's
   kitchen print jobs all together or not at all. It must also keep or remove a resend chain
@@ -307,6 +310,16 @@ just a green typecheck.
      (`apps/server/src/invoice-page.ts`); a kitchen ticket, payment slip or report sent to an A4
      printer needs one too, or the A4 printers are left out for those kinds — settle which and say
      so on the screen.
+     **Keeping the stored input cheap to support (owner, 2026-10-14).** A stored input is a format
+     that must stay readable for as long as the job is kept (one month: the retention entry under
+     "The virtual PDF printer"). Two rules keep that cost small. (a) Every builder produces one
+     shared, printer-independent document — a list of text lines, two-column rows, rules, QR codes
+     and logos — and only that is stored; receipts already work this way (`buildReceiptDocument`
+     in `apps/server/src/receipt-document.ts`, laid out by `formatReceipt`). One small format
+     changes far less often than five builders' inputs. (b) The stored document carries a version
+     number. A job whose version the running code cannot read falls back to today's behaviour
+     (its own printer, or one of the same paper width), so an upgrade never needs conversion code
+     and can only narrow the printers offered for older jobs.
   5. **The printer details say where the printer is used, each with a link** (owner, 2026-10-08):
      the device profiles that list it and for what (receipts, payment slips, cash drawer), the
      preparation stations that print to it, and the departments those profiles belong to. A printer
@@ -414,7 +427,10 @@ just a green typecheck.
      (`apps/server/src/receipt-document.ts`) prints the venue's address and then, on a full invoice,
      the registered address (`issuer.domicile`), both unlabelled — the same text twice when they
      match. Print it once when they are the same. When they differ, print both, the registered one
-     labelled «Domicilio fiscal:»: art. 6.1.e requires the issuer's «Domicilio».
+     labelled «Domicilio fiscal:»: art. 6.1.e requires the issuer's «Domicilio». Printing both is
+     deliberate — the venue's address follows the receipt's address switch and the registered
+     address always prints (2026-10-10, A366 slice 7, the note atop
+     [fiscal.md](fiscal.md)); this point changes only the repetition and the label.
   4. **"17,50 € × 2", not "17,50 € / 2"**, wherever a unit price is printed with its quantity.
   5. **VAT rates with significant digits only**, in the receipt language's decimal mark: "10%",
      "17,5%". Today each item prints "10.00%" and the summary "10%".

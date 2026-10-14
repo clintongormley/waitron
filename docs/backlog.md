@@ -3031,7 +3031,7 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   printer counted by that printer's stuck alert in the same way, because nothing reprints there._
 
 - **The virtual PDF printer**, and a `print_jobs` retention sweep — nothing deletes a job today.
-  [Detail](backlog/printers.md#the-virtual-pdf-printer)
+  Finished jobs are to be kept one month (owner, 2026-10-14). [Detail](backlog/printers.md#the-virtual-pdf-printer)
 
 - **Shared office-printer queues need physical qualification after A576.** From the shipped
   print-agent container, discover two queues on one computer, add both and print distinguishable
@@ -5786,6 +5786,13 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 ### Data protection and legal compliance
 
 _Formerly entries spread across the old sections._
+
+- **A664 — archive or delete a venue's old data once it no longer has to be kept (owner,
+  2026-10-14; open).** Nothing is deleted on a schedule today. First find, from primary sources,
+  how long each kind of record must be kept, and how long personal data may be; then design what
+  happens to each table after that. Fiscal records are append-only and hash-chained, so this needs
+  a spec agreed with the owner and the asesor before any code.
+  [Detail](backlog/data-protection.md#a664--archive-or-delete-a-venues-old-data-once-it-no-longer-has-to-be-kept)
 
 - **libvips is LGPL-3.0-or-later** and ships in the box image with its notices and a written
   source offer in `/app/third-party/` (`deploy/third-party/`). The legal advisor is asked to
