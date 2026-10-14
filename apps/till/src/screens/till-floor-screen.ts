@@ -55,7 +55,6 @@ import {
   dropAction,
   groupName,
   groupSplitOf,
-  mergeMembersOf,
   nextFloorMoment,
   onTodaysPlan,
   pendingPlaces,
@@ -63,6 +62,7 @@ import {
   type ResetTablePlan,
   sheetActions,
   shownName,
+  shownUnder,
   spareSpot,
 } from "../state/floor-today.js";
 import { partyPaid, unsentText } from "../widgets/table-details-sheet.js";
@@ -86,11 +86,9 @@ function needsClearing(table: TableState): boolean {
 
 /** The party's name when it says more than the name the table is shown under: a name staff gave,
  * or a joined party's tables. */
-function shownPartyName(table: TableState, zoneTables: readonly TableState[]): string | undefined {
+function shownPartyName(table: TableState): string | undefined {
   const name = table.party?.displayName;
-  const shown =
-    table.today?.joinId == null ? shownName(table) : groupName(mergeMembersOf(zoneTables, table));
-  return name === undefined || name === shown ? undefined : name;
+  return name === undefined || name === shownUnder(table) ? undefined : name;
 }
 
 /** The table's own Forgotten badge already says a forgotten wait. */
@@ -780,9 +778,8 @@ export class TillFloorScreen extends LitElement {
 
   /** The table's saved name when its heading is a name for today, else null. */
   #savedName(table: TableState): string | null {
-    const members = this.#mergeOf(table);
-    const today = members === null ? table.today?.name : members[0]!.today?.joinName;
-    return today == null ? null : table.label;
+    const shown = shownUnder(table);
+    return shown !== table.label && shown === this.#detailsHeading(table) ? table.label : null;
   }
 
   #detailsSheet(): TemplateResult | typeof nothing {
@@ -1477,7 +1474,7 @@ export class TillFloorScreen extends LitElement {
         status,
         reservedTime: table.nextReservation?.time ?? null,
         unsentDrafts: table.party?.unsentDrafts.map((draft) => draft.ownerName),
-        partyName: shownPartyName(table, this.#zone.visible),
+        partyName: shownPartyName(table),
         fireDue: this.#fireDue(table),
         chips: tableChips(table),
       },
@@ -1696,7 +1693,11 @@ export class TillFloorScreen extends LitElement {
       ${trackDialog()}
       data-clear-dialog
       .open=${true}
-      .heading=${t("floor.clear_title").replace("{table}", () => this.#shownAs(table))}
+      .heading=${
+        table.today?.name == null
+          ? t("floor.clear_title").replace("{table}", () => table.label)
+          : t("floor.clear_title_named").replace("{table}", () => table.today!.name!)
+      }
       @wt-close=${() => (this.clearing = null)}
     >
       <p>${t("floor.clear_body")}</p>
@@ -1738,7 +1739,7 @@ export class TillFloorScreen extends LitElement {
 
   /** Today's name, with the saved name small after it when they differ. */
   #cardName(table: TableState): TemplateResult {
-    const shown = table.today?.joinName ?? shownName(table);
+    const shown = shownUnder(table);
     return html`<span
       ><span class="label">${shown}</span>${
         shown === table.label
@@ -1842,7 +1843,7 @@ export class TillFloorScreen extends LitElement {
   }
 
   #partyName(table: TableState): TemplateResult | typeof nothing {
-    const name = shownPartyName(table, this.#zone.visible);
+    const name = shownPartyName(table);
     return name === undefined
       ? nothing
       : html`<span class="party-name" data-party-name>${name}</span>`;

@@ -56,6 +56,11 @@ export function shownName(table: TableState): string {
   return table.today?.name ?? table.label;
 }
 
+/** The name the table is shown under: its group's name for today, else its own, else its saved one. */
+export function shownUnder(table: TableState): string {
+  return table.today?.joinName ?? shownName(table);
+}
+
 /** What the group is called with no name of its own: its tables' shown names in number order. */
 export function normalGroupName(members: readonly TableState[]): string {
   return mergeLabel(members.map(shownName));
