@@ -468,8 +468,8 @@ export class PeriodsScreen extends LitElement {
     } catch (error) {
       if (this.deleting !== deletion || !this.isConnected) return;
       component.refusal = refusalOf(error);
-      // A further refusal reloads nothing until an impact read begun after the reloaded hours
-      // answers. An impact read on its way that took a revision other than the refused one is
+      // A further refusal reloads nothing until an impact read that began with the reloaded hours
+      // succeeds. An impact read on its way that took a revision other than the refused one is
       // left to answer instead of reloading.
       if (
         component.refusal.code === "hours.clock_changed" &&
