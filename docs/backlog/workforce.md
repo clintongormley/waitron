@@ -49,9 +49,11 @@ Clocked out. A lost clock response is checked with a fresh own-state read before
 available. An open shift in another location is shown with clock actions unavailable.
 
 Part 3 has a reviewed [end-of-day plan](../superpowers/plans/2026-10-14-a10-3-end-of-day-plan.md).
-Its implementation remains open: connect the remaining activity sources, discover completed business
-days, close eligible shifts, retain worker questions and send missing-time reminders. The plan records
-conservative handling of conflicting historical clock events.
+The part-3 branch has a library processor for automatic finishes, missing-time questions, overnight
+wake-ups and late clock/rota reconciliation. Its tests retain a question when there is no later
+activity or existing clock history conflicts with an automatic finish. Actual clock-boundary
+reconciliation, remaining command capture, background processing, boot wiring and missing-time email
+still need connecting; part 3 remains open.
 
 My hours stays with part 5; no placeholder is offered in part 2. Parts 3–6 remain open: automatic
 closure/questions, corrections, hours and the export/access screens. The period-read cost and the

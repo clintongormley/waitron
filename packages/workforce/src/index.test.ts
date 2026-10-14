@@ -16,6 +16,7 @@ describe("the public surface", () => {
         "attendanceQuestions",
         "attendanceMail",
         "enqueueAttendanceDay",
+        "processAttendanceDay",
         "upsertAttendanceQuestion",
         "listPendingAttendanceQuestions",
         "mergeAttendanceQuestions",
