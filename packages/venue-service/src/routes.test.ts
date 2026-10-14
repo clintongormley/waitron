@@ -2453,11 +2453,13 @@ describe("the clearing setting", () => {
       settings: unknown;
       kitchenTicketGrouping: unknown;
       printHeldWork: unknown;
+      printMovedSlips: unknown;
       releaseReminderMinutes: unknown;
     };
     expect(body.settings).toEqual({ editSentLines: true });
     expect(body.kitchenTicketGrouping).toBe("combined");
     expect(body.printHeldWork).toBe(false);
+    expect(body.printMovedSlips).toBe(true);
     expect(body.releaseReminderMinutes).toBe(10);
   });
 });
@@ -2536,10 +2538,16 @@ describe("the release-reminder setting", () => {
     ).toBe(204);
     const body = (await (
       await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
-    ).json()) as { settings: unknown; kitchenTicketGrouping: unknown; printHeldWork: unknown };
+    ).json()) as {
+      settings: unknown;
+      kitchenTicketGrouping: unknown;
+      printHeldWork: unknown;
+      printMovedSlips: unknown;
+    };
     expect(body.settings).toEqual({ editSentLines: true });
     expect(body.kitchenTicketGrouping).toBe("combined");
     expect(body.printHeldWork).toBe(false);
+    expect(body.printMovedSlips).toBe(true);
   });
 });
 

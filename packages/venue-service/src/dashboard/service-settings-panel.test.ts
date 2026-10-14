@@ -504,6 +504,11 @@ describe("the setting that prints MOVED slips", () => {
     expect(host).not.toBeNull();
     return { host, input: host.shadowRoot!.querySelector<HTMLInputElement>('[role="switch"]')! };
   }
+  function beside(el: ServiceSettingsPanel) {
+    return el
+      .shadowRoot!.querySelector('[data-field-error="printMovedSlips"]')
+      ?.textContent?.trim();
+  }
   function stored(printMovedSlips: boolean): VenueServiceSettingsView {
     return { ...structuredClone(model), printMovedSlips };
   }
@@ -559,9 +564,27 @@ describe("the setting that prints MOVED slips", () => {
     expect(pageAlert(el)).toBe("");
   });
 
+  // Fails if the in-flight guard goes: two changes arriving before the switch is disabled would
+  // both be sent.
+  it("sends one save for two changes that arrive before the switch is disabled", async () => {
+    const api = {
+      loadSettings: vi.fn().mockResolvedValue(model),
+      savePrintMovedSlips: vi.fn(() => new Promise<void>(() => {})),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    const { host } = movedSwitch(el);
+    for (const checked of [false, true])
+      host.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { checked }, bubbles: true, composed: true }),
+      );
+    await settle(el);
+    expect(api.savePrintMovedSlips).toHaveBeenCalledTimes(1);
+    expect(api.savePrintMovedSlips).toHaveBeenCalledWith(false);
+  });
+
   // Fails if a refused save leaves the switch showing the value that was never stored, or says
-  // nothing beside it.
-  it("says a refused save failed beside the switch and shows the stored value again", async () => {
+  // nothing.
+  it("says a refused save failed, beside the switch and at the top of the panel, and shows the stored value again", async () => {
     const api = {
       loadSettings: vi.fn().mockResolvedValue(model),
       savePrintMovedSlips: vi.fn().mockRejectedValue(new Error("offline")),
@@ -570,9 +593,8 @@ describe("the setting that prints MOVED slips", () => {
     movedSwitch(el).input.click();
     await settle(el);
     expect(api.savePrintMovedSlips).toHaveBeenCalledWith(false);
-    expect(
-      el.shadowRoot!.querySelector('[data-field-error="printMovedSlips"]')?.textContent?.trim(),
-    ).toContain("could not be saved");
+    expect(pageAlert(el)).toContain("could not be saved");
+    expect(beside(el)).toContain("could not be saved");
     expect(movedSwitch(el).input.checked).toBe(true);
   });
 

@@ -1402,6 +1402,21 @@ describe("the print-moved-slips setting", () => {
     await db.execute(sql`update service_settings set print_moved_slips = 0`);
     expect(await inTx((tx) => readPrintMovedSlips(tx))).toBe(false);
   });
+
+  it("creates the row with the other settings at their defaults when only this one is written", async () => {
+    await inTx((tx) => writePrintMovedSlips(tx, false));
+    expect(await db.select().from(serviceSettings)).toEqual([
+      {
+        id: 1,
+        editSentLines: true,
+        clearingWorkflow: false,
+        kitchenTicketGrouping: "combined",
+        printHeldWork: false,
+        printMovedSlips: false,
+        releaseReminderMinutes: 10,
+      },
+    ]);
+  });
 });
 
 describe("the release-reminder setting", () => {

@@ -64,6 +64,7 @@ async function mount(options: { permissions?: string[]; required?: boolean; path
     settings: { editSentLines: true },
     kitchenTicketGrouping: "combined",
     printHeldWork: false,
+    printMovedSlips: true,
     releaseReminderMinutes: null,
     clearingWorkflow: false,
   };
