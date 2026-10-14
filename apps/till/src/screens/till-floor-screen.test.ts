@@ -568,6 +568,7 @@ describe("closed floor zones", () => {
     el.zones = [zone({ closed: false })];
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("[data-zone-closed]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-zone-no-seating]")).toBeNull();
     el.shadowRoot!.querySelector<HTMLElement>("[data-table]")!.click();
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("till-seat-dialog")).not.toBeNull();
