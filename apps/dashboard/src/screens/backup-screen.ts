@@ -927,7 +927,7 @@ export class BackupScreen extends LitElement {
       )
         return;
     }
-    this.#prefillAndCommit(s);
+    this.#prefillAndCommit(s, !afterTurnOff);
   }
 
   /** The stream's bucket changed under a prefilled form nobody has changed: open it again as a fresh
@@ -939,12 +939,17 @@ export class BackupScreen extends LitElement {
       void this.#openStoredOff(false);
       return;
     }
-    this.#prefillAndCommit(s);
+    this.#prefillAndCommit(s, true);
   }
 
-  #prefillAndCommit(s: BackupStatusView): void {
+  /** An automatic refill keeps a switched-off folder's text when the refilled folder is off too:
+   * that text never makes the draft differ, so the unchanged-draft check before a refill cannot
+   * protect it. */
+  #prefillAndCommit(s: BackupStatusView, automatic: boolean): void {
+    const hidden = this.folderOn ? null : this.folder;
     this.#prefillFromStatus(s);
     this.#archiveScope?.commit(this.#archiveValue());
+    if (automatic && hidden !== null && !this.folderOn) this.folder = hidden;
   }
 
   /** A write's answer is the box's state after it; a status read begun before it is taken may be

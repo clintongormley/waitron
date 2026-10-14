@@ -2296,6 +2296,44 @@ describe("the bucket copy turned off on the same page", () => {
   });
 });
 
+describe("a folder typed and switched off, when the bucket copy's bucket changes", () => {
+  const STREAM_MOVED = {
+    ...STREAM_ON,
+    bucket: { ...STREAM_BUCKET, bucket: "moved-bucket" },
+  } as unknown as StreamSettingsView;
+
+  it.each([
+    ["the settings editor", openEdit],
+    ["the form turning stored-off settings back on", openStoredOff],
+  ] as const)("%s keeps the folder for the switch", async (_where, open) => {
+    const { el, api } = await open(ON_STREAM_BUCKET);
+    expect(folderSwitch(el)!.checked).toBe(false);
+    await setFolder(el, true);
+    await typeFolder(el, "/mnt/kept");
+    await setFolder(el, false);
+    vi.mocked(api.getStreamSettings).mockResolvedValue(STREAM_MOVED);
+    api.liveData.invalidate([{ type: "backup_status" }]);
+    await vi.waitFor(() => expect(choice(el)!.value).toBe("custom-s3"));
+    await settle();
+    await el.updateComplete;
+    expect(folderSwitch(el)!.checked).toBe(false);
+    await setFolder(el, true);
+    expect((q(el, "[data-test=destination]") as Field).value).toBe("/mnt/kept");
+  });
+
+  it("the settings editor's Save stays quiet while the kept folder is switched off", async () => {
+    const { el, api } = await openEdit(ON_STREAM_BUCKET);
+    await setFolder(el, true);
+    await typeFolder(el, "/mnt/kept");
+    await setFolder(el, false);
+    vi.mocked(api.getStreamSettings).mockResolvedValue(STREAM_MOVED);
+    api.liveData.invalidate([{ type: "backup_status" }]);
+    await vi.waitFor(() => expect(choice(el)!.value).toBe("custom-s3"));
+    await settle();
+    expect(await buttonState(el, "save-settings")).toEqual(["secondary", true]);
+  });
+});
+
 describe("a key change whose settings record failed", () => {
   it("takes a shown pack refusal away", async () => {
     const { el } = await mount(TWO, {
