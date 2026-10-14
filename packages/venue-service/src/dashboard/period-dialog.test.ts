@@ -435,6 +435,29 @@ it("colour is a radio group of the six period colours; choosing one checks only 
   expect(save(el).disabled).toBe(false);
 });
 
+it("draws the chosen swatch's ring outside the swatch, clear of its fill", async () => {
+  const el = await mount(true);
+  const chosen = getComputedStyle(swatch(el, "blue"));
+  expect(chosen.outlineStyle).toBe("solid");
+  expect(chosen.outlineOffset).toBe("2px");
+  expect(getComputedStyle(swatch(el, "green")).outlineStyle).toBe("none");
+});
+
+it("a Save refused only for its colour moves focus to the first swatch", async () => {
+  const el = document.createElement("period-dialog");
+  el.menus = menus;
+  el.departmentName = "Restaurant";
+  el.period = { ...structuredClone(period), colour: "pink" as never };
+  el.open = true;
+  applyTokens(el);
+  hosts.push(el);
+  document.body.append(el);
+  await el.updateComplete;
+  await change(el, "name", { value: "Dinner" });
+  save(el).click();
+  await expect.poll(() => el.shadowRoot!.activeElement).toBe(swatch(el, "red"));
+});
+
 it("a refusal naming colour shows under the colour group", async () => {
   const el = await mount(true);
   await change(el, "name", { value: "Dinner" });

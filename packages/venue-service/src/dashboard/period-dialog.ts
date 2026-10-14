@@ -79,7 +79,7 @@ export class PeriodDialog extends LitElement {
       }
       .swatch[aria-checked="true"] {
         outline: var(--wt-selected-ring);
-        outline-offset: var(--wt-selected-ring-offset);
+        outline-offset: var(--wt-focus-offset);
       }
       [data-test="colour-error"] {
         color: var(--wt-color-danger);
@@ -341,13 +341,14 @@ export class PeriodDialog extends LitElement {
               aria-describedby="colour-error"
             >
               ${CALENDAR_COLOURS.map(
-                (colour) =>
+                (colour, index) =>
                   html`<button
                     type="button"
                     class="swatch"
                     role="radio"
                     aria-checked=${this.draft.colour === colour ? "true" : "false"}
                     aria-label=${t(`hours.colour.${colour}`)}
+                    aria-invalid=${colourError && index === 0 ? "true" : nothing}
                     data-colour=${colour}
                     ?disabled=${this.busy}
                     @click=${(event: Event) => {
