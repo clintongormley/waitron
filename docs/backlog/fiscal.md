@@ -228,6 +228,14 @@ it. The Cloud owner must correct its own contract and run Task 7's scheduled joi
 the pinned Waitron candidate. The Waitron receipt verifier and HTTP client are in progress;
 this check does not qualify a complete restore or enable Cloud production custody.
 
+**2026-10-15 local adapter checkpoint:** the [configured module preparation and reconciliation
+adapter](../developers/cloud-fiscal-allocation.md) have local archive/bucket restore, exact
+committed replay, old-backup refusal, unchanged historical rows and sale-with-zero-network cases.
+A consumed receipt is retained before a local attempt; its stable report is collected only
+from a matching committed result. Reporting is an explicit adapter call, without a background
+scheduler. Cloud's separately scheduled joint test and the branch's final reviews/gates remain
+open. No production custody, signing or continuity policy is selected by this checkpoint.
+
 **2026-10-14, Task 4 review checkpoint:** the supplied-identity/default/text transition,
 regenerated migrations, host/demo inputs and person-or-key-event Cloud handoff are implemented.
 The owner approved the exact archive changes; the original archive/target suites pass 36 cases.

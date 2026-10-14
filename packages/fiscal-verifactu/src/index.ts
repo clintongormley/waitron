@@ -77,3 +77,7 @@ export type {
   StandbyAllocationEvidence,
   StandbyAllocationEvidenceSource,
 } from "./allocated-standby.js";
+export {
+  createCloudAllocationPreparation,
+  readCloudAllocationReport,
+} from "./cloud-preparation.js";

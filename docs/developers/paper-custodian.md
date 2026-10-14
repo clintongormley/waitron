@@ -393,7 +393,8 @@ Transfer the public operation from a phone or another computer and paste its com
 the candidate restore screen's recovery-record field. A changed signed value is refused; typing
 the installation name alone supplies no consumption evidence. Enter the selected backup's node
 key in its separate field. Keep the receipt and operation with your outside incident record.
-This is a paper-custodian handoff; the Cloud registry adapter remains a later W41s item.
+For a consumed Cloud packet, use the separately configured
+[Cloud allocation adapter](cloud-fiscal-allocation.md); the paper command above does not assemble it.
 
 Use `--action re-register` for a node re-registration, with a matching current-event confirmation.
 After a confirmed committed attempt, retain the original operation for the host's replay checks;
