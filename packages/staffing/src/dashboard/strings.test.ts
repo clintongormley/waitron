@@ -9,8 +9,8 @@ describe("staffing strings", () => {
   });
 
   it("fills each placeholder, and leaves one with no value as written", () => {
-    expect(tf("staffing.role.delete_question", { name: "Waiter" }, "en")).toBe("Delete Waiter?");
-    expect(tf("staffing.role.delete_question", {}, "en")).toBe("Delete {name}?");
+    expect(tf("staffing.role.actions", { name: "Waiter" }, "en")).toBe("Actions for Waiter");
+    expect(tf("staffing.role.actions", {}, "en")).toBe("Actions for {name}");
   });
 
   it("counts holders in the singular and the plural", () => {

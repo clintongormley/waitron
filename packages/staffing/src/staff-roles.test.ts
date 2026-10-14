@@ -7,6 +7,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import { WORKFORCE_MIGRATIONS, shifts } from "@waitron/workforce";
+import { persons } from "@waitron/identity";
 import { seedVenue } from "../test/seed.js";
 import { STAFFING_MIGRATIONS } from "./migrations.js";
 import {
@@ -20,6 +21,7 @@ import {
   createStaffRole,
   deleteStaffRole,
   listStaffRoles,
+  readStaffRoleDeleteImpact,
   reorderStaffRoles,
   setStaffRoleHolders,
   updateStaffRole,
@@ -266,6 +268,65 @@ describe("staff roles", () => {
         .from(staffRoles)
         .where(eq(staffRoles.id, staffRole.id)),
     ).toEqual([{ id: staffRole.id }]);
+  });
+
+  it("reads what deleting a staff role would remove: its painted blocks and who holds it", async () => {
+    const v = await seedVenue(suite.db);
+    const staffRole = await inTx((tx) =>
+      createStaffRole(tx, v.cfg, { name: "Waiter", colour: "blue" }),
+    );
+    expect(await inTx((tx) => readStaffRoleDeleteImpact(tx, v.cfg, staffRole.id))).toEqual({
+      target: { id: staffRole.id, name: "Waiter" },
+      refusals: [],
+      ends: [],
+      removes: [],
+    });
+    await inTx((tx) => setStaffRoleHolders(tx, v.cfg, staffRole.id, [v.marc, v.ana]));
+    await paintBlock(v, staffRole.id, 1);
+    await paintBlock(v, staffRole.id, 2);
+    const name = async (id: string) =>
+      (await suite.db.select().from(persons).where(eq(persons.id, id)))[0]!.displayName;
+    expect(await inTx((tx) => readStaffRoleDeleteImpact(tx, v.cfg, staffRole.id))).toEqual({
+      target: { id: staffRole.id, name: "Waiter" },
+      refusals: [],
+      ends: [],
+      removes: [
+        { key: "staff_role_blocks", count: 2, targets: [] },
+        {
+          key: "staff_role_holders",
+          count: 2,
+          targets: [
+            { id: v.ana, name: await name(v.ana) },
+            { id: v.marc, name: await name(v.marc) },
+          ],
+        },
+      ],
+    });
+  });
+
+  it("reads a staff role that shifts use as refused, with the shift count", async () => {
+    const v = await seedVenue(suite.db);
+    const staffRole = await inTx((tx) =>
+      createStaffRole(tx, v.cfg, { name: "Waiter", colour: "blue" }),
+    );
+    await assignShift(v, v.ana, staffRole.id);
+    await assignShift(v, v.marc, staffRole.id);
+    const impact = await inTx((tx) => readStaffRoleDeleteImpact(tx, v.cfg, staffRole.id));
+    expect(impact.refusals).toEqual([
+      { code: "staff_role.in_use", params: { shiftCount: 2 }, targets: [] },
+    ]);
+  });
+
+  it("reads no delete impact for an unknown id or another location's role", async () => {
+    const v = await seedVenue(suite.db);
+    const other = await seedVenue(suite.db);
+    const theirs = await inTx((tx) =>
+      createStaffRole(tx, other.cfg, { name: "Waiter", colour: "blue" }),
+    );
+    for (const staffRoleId of [randomUUID(), theirs.id])
+      await expect(
+        inTx((tx) => readStaffRoleDeleteImpact(tx, v.cfg, staffRoleId)),
+      ).rejects.toMatchObject({ code: "staff_role.not_found", params: { staffRoleId } });
   });
 
   it("reorders by the given ids and refuses a list that is not exactly the venue's roles", async () => {

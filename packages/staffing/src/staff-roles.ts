@@ -1,7 +1,7 @@
 import { and, asc, eq, inArray, ne, sql, type SQL } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { persons } from "@waitron/identity";
-import { AppError } from "@waitron/shared";
+import { AppError, createLabelComparator, type DeleteImpact } from "@waitron/shared";
 import { CALENDAR_COLOURS } from "@waitron/venue-service/hours-types";
 import {
   personStaffRoles,
@@ -185,6 +185,49 @@ export async function reorderStaffRoles(
     if (current.get(staffRoleId) === position) continue;
     await tx.update(staffRoles).set({ position }).where(eq(staffRoles.id, staffRoleId));
   }
+}
+
+/** What deleting the role would do, as the delete question shows it. `deleteStaffRole` checks again. */
+export async function readStaffRoleDeleteImpact(
+  tx: Transaction,
+  cfg: Cfg,
+  staffRoleId: string,
+): Promise<DeleteImpact> {
+  const [target] = await tx
+    .select({ id: staffRoles.id, name: staffRoles.name })
+    .from(staffRoles)
+    .where(and(eq(staffRoles.id, staffRoleId), eq(staffRoles.locationId, cfg.locationId)));
+  if (target === undefined) throw notFound(staffRoleId);
+  const [shiftsUsing] = await tx
+    .select({ n: tally })
+    .from(shiftAssignments)
+    .where(eq(shiftAssignments.staffRoleId, staffRoleId));
+  const [blocks] = await tx
+    .select({ n: tally })
+    .from(staffingBlocks)
+    .where(eq(staffingBlocks.staffRoleId, staffRoleId));
+  const compare = createLabelComparator();
+  const holders = (
+    await tx
+      .select({ id: persons.id, name: persons.displayName })
+      .from(personStaffRoles)
+      .innerJoin(persons, eq(persons.id, personStaffRoles.personId))
+      .where(eq(personStaffRoles.staffRoleId, staffRoleId))
+      .orderBy(asc(persons.id))
+  ).sort((a, b) => compare(a.name, b.name));
+  const shiftCount = shiftsUsing!.n;
+  return {
+    target,
+    refusals:
+      shiftCount > 0 ? [{ code: "staff_role.in_use", params: { shiftCount }, targets: [] }] : [],
+    ends: [],
+    removes: [
+      ...(blocks!.n > 0 ? [{ key: "staff_role_blocks", count: blocks!.n, targets: [] }] : []),
+      ...(holders.length > 0
+        ? [{ key: "staff_role_holders", count: holders.length, targets: holders }]
+        : []),
+    ],
+  };
 }
 
 /** Deletes the role with its holders and painted blocks; refused while a shift fills it. */

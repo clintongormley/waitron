@@ -9,8 +9,10 @@ import {
 } from "@waitron/dashboard-kit";
 import { applyTokens, type DataTableColumn } from "@waitron/ui";
 import { chooseOptions, formMessageOf } from "@waitron/ui/src/test-helpers.js";
+import type { DeleteImpact } from "@waitron/shared";
 import { StaffingApi, type StaffPerson, type StaffRole } from "./client.js";
 import type { StaffRolesScreen } from "./staff-roles-screen.js";
+import { STAFFING_STRINGS } from "./strings.js";
 import "./staff-roles-screen.js";
 
 const BASE = "/management-api/staffing/staff-roles";
@@ -44,6 +46,30 @@ const runner: StaffRole = {
 };
 const people: StaffPerson[] = [{ personId: "p-ana", displayName: "Ana", status: "active" }];
 
+/** What the server's delete-impact read answers for `staffRole`. */
+function impactOf(staffRole: StaffRole): DeleteImpact {
+  const holders = staffRole.holderIds.map((id) => ({
+    id,
+    name: people.find((person) => person.personId === id)?.displayName ?? id,
+  }));
+  return {
+    target: { id: staffRole.id, name: staffRole.name },
+    refusals:
+      staffRole.shiftCount > 0
+        ? [{ code: "staff_role.in_use", params: { shiftCount: staffRole.shiftCount }, targets: [] }]
+        : [],
+    ends: [],
+    removes: [
+      ...(staffRole.blockCount > 0
+        ? [{ key: "staff_role_blocks", count: staffRole.blockCount, targets: [] }]
+        : []),
+      ...(holders.length > 0
+        ? [{ key: "staff_role_holders", count: holders.length, targets: holders }]
+        : []),
+    ],
+  };
+}
+
 type Answer = (body: unknown) => unknown;
 type Routes = Record<string, Answer>;
 
@@ -54,6 +80,9 @@ function fakeRequest(roles: () => StaffRole[], routes: Routes = {}) {
     if (route) return route(body);
     if (method === "GET" && path === BASE) return { staffRoles: roles() };
     if (method === "GET" && path === "/management-api/staff") return people;
+    const impact = /^\/management-api\/staffing\/staff-roles\/([^/]+)\/delete-impact$/.exec(path);
+    if (method === "GET" && impact)
+      return impactOf(roles().find((listed) => listed.id === decodeURIComponent(impact[1]!))!);
     if (method === "PUT" && path === `${BASE}/order`) return undefined;
     if (method === "DELETE") return undefined;
     throw new Error(`unexpected ${method} ${path}`);
@@ -113,8 +142,16 @@ const cells = (id: string) =>
 const menuItem = (test: string) =>
   table()!.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(`[data-test="${test}"]`);
 const dialog = () => el.shadowRoot!.querySelector("staff-role-dialog")!;
-const deleteModal = () =>
-  el.shadowRoot!.querySelector<HTMLElement>("wt-modal[data-test=delete-staff-role]");
+const deleteDialog = () =>
+  el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-delete-dialog"]>(
+    "wt-delete-dialog[data-test=delete-staff-role]",
+  );
+const inDialog = <T extends Element = HTMLElementTagNameMap["wt-button"]>(selector: string) =>
+  deleteDialog()!.shadowRoot!.querySelector<T>(selector)!;
+const confirmDelete = () => inDialog("[data-test=delete-confirm]");
+const dialogText = () => deleteDialog()!.shadowRoot!.textContent!.replace(/\s+/g, " ");
+const dialogLines = () =>
+  [...deleteDialog()!.shadowRoot!.querySelectorAll("li")].map((line) => line.textContent!.trim());
 const alertText = (test: string) =>
   el.shadowRoot!.querySelector(`[data-test=${test}]`)?.textContent?.trim() ?? "";
 
@@ -128,8 +165,16 @@ async function choose(test: string) {
 }
 
 async function deleteMessage() {
-  const actions = deleteModal()!.querySelector("wt-form-actions")!;
+  const actions = inDialog<HTMLElementTagNameMap["wt-form-actions"]>("wt-form-actions");
   return (await formMessageOf(actions))?.textContent?.trim() ?? "";
+}
+
+/** Presses Delete in the dialog and waits for it to close itself. */
+async function confirmAndClose() {
+  const dialog = deleteDialog()!;
+  confirmDelete().click();
+  await vi.waitFor(() => expect(dialog.isConnected).toBe(false));
+  await settle();
 }
 
 describe("the staff roles page", () => {
@@ -360,13 +405,7 @@ describe("the staff roles page", () => {
     const before = reads();
     await choose("move-down-role-w");
     await choose("delete-role-w");
-    const modal = deleteModal()!;
-    const closed = new Promise((resolve) =>
-      modal.addEventListener("wt-close", resolve, { once: true }),
-    );
-    modal.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
-    await closed;
-    await settle();
+    await confirmAndClose();
     expect(request).toHaveBeenCalledWith(`${BASE}/role-w`, "DELETE");
     expect(reads()).toBe(before);
     liveData.clear();
@@ -432,83 +471,151 @@ describe("the staff roles page", () => {
     expect(alertText("action-alert")).toBe("");
   });
 
-  it("asks before deleting, naming the painted blocks that go with it", async () => {
-    const request = await mount(fakeRequest(() => [waiter, runner]));
+  it("asks with the shared delete dialog, naming the staff role and the blocks and people it removes", async () => {
+    const withAna = { ...runner, holderIds: ["p-ana"] };
+    const request = await mount(fakeRequest(() => [waiter, withAna]));
     await choose("delete-role-r");
-    const modal = deleteModal()!;
-    expect(modal.getAttribute("heading")).toBe("Delete staff role");
-    expect(modal.textContent).toContain("Delete Runner?");
-    expect(modal.textContent).toContain("Its 3 painted staffing blocks go too.");
-    expect(modal.textContent).not.toContain("shift");
-    const closed = new Promise((resolve) =>
-      modal.addEventListener("wt-close", resolve, { once: true }),
+    expect(request).toHaveBeenCalledWith(`${BASE}/role-r/delete-impact`, "GET", undefined, {
+      passive: true,
+    });
+    const dialog = deleteDialog()!;
+    expect(dialog.open).toBe(true);
+    expect(inDialog<HTMLElementTagNameMap["wt-modal"]>("wt-modal").heading).toBe(
+      "Delete staff role",
     );
-    modal.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
-    await closed;
-    await settle();
+    expect(inDialog("[data-target]").textContent).toBe("Runner");
+    expect(dialogLines()).toEqual([
+      "Removes 3 painted staffing blocks.",
+      "Removes it from 1 person: Ana.",
+    ]);
+    expect(dialogText()).toContain("Settings removed");
+    expect(dialogText()).toContain("This cannot be undone.");
+    expect(confirmDelete().variant).toBe("danger");
+    expect(confirmDelete().disabled).toBe(false);
+    await confirmAndClose();
     expect(request).toHaveBeenCalledWith(`${BASE}/role-r`, "DELETE");
-    expect(deleteModal()).toBeNull();
+    expect(deleteDialog()).toBeNull();
   });
 
   it("says a staff role with shifts cannot be deleted, and draws Delete quiet and disabled", async () => {
     await mount(fakeRequest(() => [cook]));
     await choose("delete-role-c");
-    const modal = deleteModal()!;
-    expect(modal.textContent).toContain("Cook can't be deleted while 2 shifts use it.");
-    expect(modal.textContent).not.toContain("Delete Cook?");
-    expect(modal.textContent).not.toContain("painted");
-    const confirm = modal.querySelector<HTMLElementTagNameMap["wt-button"]>(
-      "[data-test=confirm-delete]",
-    )!;
-    expect(confirm.disabled).toBe(true);
-    expect(confirm.variant).toBe("secondary");
+    expect(inDialog("[data-target]").textContent).toBe("Cook");
+    expect(dialogText()).toContain("Why this cannot be deleted");
+    expect(dialogLines()).toContain("2 shifts use this staff role.");
+    expect(confirmDelete().disabled).toBe(true);
+    expect(confirmDelete().variant).toBe("secondary");
   });
 
-  it("shows the in-use refusal when the shifts were assigned after the list was read", async () => {
+  it("shows the in-use refusal when the shifts were assigned after the impact was read, and leaves Delete usable", async () => {
     const request = await mount(
       fakeRequest(() => [{ ...cook, shiftCount: 0 }], {
         [`DELETE ${BASE}/role-c`]: () => {
-          throw { code: "staff_role.in_use", params: { staffRoleId: "role-c" } };
+          throw { code: "staff_role.in_use", params: { staffRoleId: "role-c", shiftCount: 1 } };
         },
       }),
     );
     await choose("delete-role-c");
-    const modal = deleteModal()!;
-    expect(modal.textContent).toContain("Delete Cook?");
-    const confirm = modal.querySelector<HTMLElementTagNameMap["wt-button"]>(
-      "[data-test=confirm-delete]",
-    )!;
-    expect(confirm.variant).toBe("danger");
-    confirm.click();
+    expect(dialogLines()).toEqual([
+      "Removes 1 painted staffing block.",
+      "Removes it from 1 person: Ana.",
+    ]);
+    expect(confirmDelete().variant).toBe("danger");
+    confirmDelete().click();
     await settle();
     expect(request).toHaveBeenCalledWith(`${BASE}/role-c`, "DELETE");
     expect(await deleteMessage()).toBe(
       `Could not delete the staff role: ${codeMessage("staff_role.in_use")}`,
     );
-    expect(confirm.disabled).toBe(false);
-    expect(deleteModal()).not.toBeNull();
+    expect(confirmDelete().disabled).toBe(false);
+    expect(deleteDialog()).not.toBeNull();
   });
 
   it("names a single shift in the singular, in English and Spanish, and closes on Cancel", async () => {
     setLocale("es");
-    await mount(fakeRequest(() => [{ ...cook, shiftCount: 1, blockCount: 0 }]));
+    await mount(fakeRequest(() => [{ ...cook, shiftCount: 1, blockCount: 0, holderIds: [] }]));
     await choose("delete-role-c");
-    expect(deleteModal()!.textContent).toContain(
-      "No se puede eliminar Cook mientras lo use 1 turno.",
-    );
+    // The Spanish line is read from the catalogue: its word for a shift is on the English-only list.
+    expect(dialogLines()).toEqual([STAFFING_STRINGS.es["staffing.role.delete_shifts_one"]]);
+    expect(dialogText()).toContain("Por qué no se puede eliminar");
     host.remove();
     setLocale("en");
-    await mount(fakeRequest(() => [{ ...cook, shiftCount: 1, blockCount: 0 }]));
+    await mount(fakeRequest(() => [{ ...cook, shiftCount: 1, blockCount: 0, holderIds: [] }]));
     await choose("delete-role-c");
-    const modal = deleteModal()!;
-    expect(modal.textContent).toContain("Cook can't be deleted while 1 shift uses it.");
-    const closed = new Promise((resolve) =>
-      modal.addEventListener("wt-close", resolve, { once: true }),
-    );
-    modal.querySelector<HTMLElement>("[data-test=cancel-delete]")!.click();
-    await closed;
+    expect(dialogLines()).toEqual(["1 shift uses this staff role."]);
+    inDialog<HTMLElement>("[data-test=delete-cancel]").click();
     await settle();
-    expect(deleteModal()).toBeNull();
+    expect(deleteDialog()).toBeNull();
+  });
+
+  it("names what a delete removes in Spanish", async () => {
+    setLocale("es");
+    await mount(fakeRequest(() => [{ ...runner, blockCount: 1, holderIds: ["p-ana", "p-x"] }]));
+    await choose("delete-role-r");
+    expect(dialogLines()).toEqual([
+      "Quita 1 bloque de personal pintado.",
+      "Se lo quita a 2 personas: Ana, p-x.",
+    ]);
+  });
+
+  it("says when the impact cannot be read, holds Delete, and reads again on Try again", async () => {
+    let fail = true;
+    const request = await mount(
+      fakeRequest(() => [runner], {
+        [`GET ${BASE}/role-r/delete-impact`]: () => {
+          if (fail) throw { code: "connection.failed" };
+          return impactOf(runner);
+        },
+      }),
+    );
+    await choose("delete-role-r");
+    expect(await deleteMessage()).toBe(
+      `Could not load what deleting it would change: ${codeMessage("connection.failed")}`,
+    );
+    expect(confirmDelete().disabled).toBe(true);
+    fail = false;
+    inDialog<HTMLElement>("[data-test=delete-retry]").click();
+    await settle();
+    expect(dialogLines()).toEqual(["Removes 3 painted staffing blocks."]);
+    expect(await deleteMessage()).toBe("");
+    expect(confirmDelete().disabled).toBe(false);
+    expect(
+      request.mock.calls.filter(([path]) => path === `${BASE}/role-r/delete-impact`),
+    ).toHaveLength(2);
+  });
+
+  it("shows the impact loading until its read answers", async () => {
+    let answer!: (value: DeleteImpact) => void;
+    await mount(
+      fakeRequest(() => [runner], {
+        [`GET ${BASE}/role-r/delete-impact`]: () =>
+          new Promise<DeleteImpact>((resolve) => (answer = resolve)),
+      }),
+    );
+    await choose("delete-role-r");
+    expect(deleteDialog()!.loading).toBe(true);
+    expect(dialogText()).toContain("Checking what deleting this staff role would change…");
+    expect(confirmDelete().disabled).toBe(true);
+    answer(impactOf(runner));
+    await settle();
+    expect(deleteDialog()!.loading).toBe(false);
+    expect(confirmDelete().disabled).toBe(false);
+  });
+
+  it("reads the impact again when a shift starts using the staff role elsewhere", async () => {
+    let roles = [runner];
+    const liveData = new LiveData();
+    await mount(
+      fakeRequest(() => roles),
+      { liveData },
+    );
+    await choose("delete-role-r");
+    expect(confirmDelete().disabled).toBe(false);
+    roles = [{ ...runner, shiftCount: 1 }];
+    liveData.invalidate([{ type: "shift_assignments" }]);
+    await vi.waitFor(() => expect(dialogLines()).toContain("1 shift uses this staff role."));
+    expect(confirmDelete().disabled).toBe(true);
+    liveData.clear();
   });
 
   it("sends one reorder for a move pressed twice before it answers", async () => {
@@ -534,11 +641,10 @@ describe("the staff roles page", () => {
       }),
     );
     await choose("delete-role-w");
-    const confirm = () => deleteModal()!.querySelector<HTMLElement>("[data-test=confirm-delete]")!;
-    confirm().click();
-    confirm().click();
+    confirmDelete().click();
+    confirmDelete().click();
     await settle();
-    confirm().click();
+    confirmDelete().click();
     answer();
     await settle();
     expect(request.mock.calls.filter(([, method]) => method === "DELETE")).toHaveLength(1);
@@ -555,7 +661,7 @@ describe("the staff roles page", () => {
         }),
       );
       await choose("delete-role-w");
-      deleteModal()!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
+      confirmDelete().click();
       await settle();
       el.remove();
       if (outcome === "answers") settleDelete.resolve();
@@ -563,7 +669,7 @@ describe("the staff roles page", () => {
       await new Promise((resolve) => setTimeout(resolve, 20));
       host.append(el);
       await settle();
-      expect(deleteModal()).toBeNull();
+      expect(deleteDialog()).toBeNull();
     },
   );
 

@@ -1,4 +1,5 @@
 import type { DashboardRequest, LiveData, QueryController } from "@waitron/dashboard-kit";
+import type { DeleteImpact } from "@waitron/shared";
 import type { CalendarColour, StaffRole } from "../staffing-types.js";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
 
@@ -41,6 +42,26 @@ export class StaffingApi {
               passive: true,
             })
           ).staffRoles,
+      },
+      apply,
+    );
+  }
+
+  /** Keeps `apply` fed with what deleting the staff role would do; resolves after the first read. */
+  watchStaffRoleDeleteImpact(
+    queries: QueryController,
+    staffRoleId: string,
+    apply: (impact: DeleteImpact) => void,
+  ): Promise<void> {
+    return queries.watch(
+      "delete-impact",
+      {
+        key: `staffing:staff-role-delete-impact:${staffRoleId}`,
+        dependencies: QUERY_DEPENDENCIES["staff-role-delete-impact"].map((type) => ({ type })),
+        read: () =>
+          this.request<DeleteImpact>(`${path(staffRoleId)}/delete-impact`, "GET", undefined, {
+            passive: true,
+          }),
       },
       apply,
     );

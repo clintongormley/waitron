@@ -16,6 +16,7 @@ import {
   createStaffRole,
   deleteStaffRole,
   listStaffRoles,
+  readStaffRoleDeleteImpact,
   reorderStaffRoles,
   setStaffRoleHolders,
   updateStaffRole,
@@ -136,6 +137,15 @@ export const STAFFING_ROUTES: ModuleRoutes = {
             setStaffRoleHolders(tx, ctx.cfg, id, uuidList(body, "personIds")),
           ),
         );
+      }),
+    );
+
+    // Gated like the delete, as the zone, station, course, department and printer impact reads are.
+    app.get(`${BASE}/:staffRoleId/delete-impact`, (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const id = staffRoleIdParam(c.req.param("staffRoleId"));
+        return c.json(await gated(sessionId, (tx) => readStaffRoleDeleteImpact(tx, ctx.cfg, id)));
       }),
     );
 

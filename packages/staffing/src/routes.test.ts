@@ -21,7 +21,7 @@ import { seedVenue } from "../test/seed.js";
 import { STAFFING_MIGRATIONS } from "./migrations.js";
 import { STAFFING_PERMISSIONS } from "./permissions.js";
 import { STAFFING_ROUTES } from "./routes.js";
-import { shiftAssignments } from "./schema/staffing.js";
+import { shiftAssignments, staffRoles } from "./schema/staffing.js";
 import type { StaffRole } from "./staffing-types.js";
 
 registerModulePermissions(STAFFING_PERMISSIONS);
@@ -223,6 +223,34 @@ describe("the staff-role routes", () => {
     );
   });
 
+  it("reads what deleting a role would do, and answers staff_role.not_found for another location's role", async () => {
+    const r = await routed();
+    const staffRole = await r.create("Waiter");
+    await answers(await r.send("GET", `/${staffRole.id}/delete-impact`, r.manager), 200, {
+      target: { id: staffRole.id, name: "Waiter" },
+      refusals: [],
+      ends: [],
+      removes: [],
+    });
+    const other = await seedVenue(suite.db);
+    const [theirs] = await withTransaction(suite.db, (tx) =>
+      tx
+        .insert(staffRoles)
+        .values({ locationId: other.cfg.locationId, name: "Cook", colour: "red", position: 0 })
+        .returning({ id: staffRoles.id }),
+    );
+    await answers(
+      await r.send("GET", `/${theirs!.id}/delete-impact`, r.manager),
+      404,
+      refusal("staff_role.not_found", { staffRoleId: theirs!.id }),
+    );
+    await answers(
+      await r.send("GET", "/not-a-uuid/delete-impact", r.manager),
+      400,
+      refusal("shared.invalid_id", { kind: "StaffRoleId", value: "not-a-uuid" }),
+    );
+  });
+
   it("refuses a malformed body and an extra key", async () => {
     const r = await routed();
     const staffRole = await r.create("Waiter");
@@ -258,7 +286,7 @@ describe("the staff-role routes", () => {
     );
   });
 
-  it("lets a supervisor read but not write, and refuses staff and anonymous callers", async () => {
+  it("lets a supervisor read the list but not write or read a delete's impact, and refuses staff and anonymous callers", async () => {
     const r = await routed();
     const staffRole = await r.create("Waiter");
     const notPermitted = async (response: Response) => {
@@ -279,6 +307,7 @@ describe("the staff-role routes", () => {
       await r.send("PUT", "/order", r.supervisor, { staffRoleIds: [staffRole.id] }),
     );
     await notPermitted(await r.send("DELETE", `/${staffRole.id}`, r.supervisor));
+    await notPermitted(await r.send("GET", `/${staffRole.id}/delete-impact`, r.supervisor));
     // The body's fields are checked only once the caller is authorised, so a bad one is a 403.
     await notPermitted(await r.send("POST", "", r.supervisor, { name: 5, extra: true }));
     await notPermitted(

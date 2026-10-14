@@ -1,20 +1,26 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { keyed } from "lit/directives/keyed.js";
 import { QueryController, codeMessage, codeOf } from "@waitron/dashboard-kit";
+import type { DeleteImpact } from "@waitron/shared";
 import { baseStyles, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
-import "@waitron/ui/src/components/wt-form-actions.js";
-import "@waitron/ui/src/components/wt-modal.js";
+import "@waitron/ui/src/components/wt-delete-dialog.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import type { StaffRole, StaffingApi } from "./client.js";
-import { holderCount, t, tf, type StringKey } from "./strings.js";
+import { staffRoleDeleteCopy } from "./staff-role-delete-copy.js";
+import { holderCount, t, tf } from "./strings.js";
 import "./staff-role-dialog.js";
 
-type Deletion = { staffRole: StaffRole; busy: boolean; error?: string };
-
-const count = (one: StringKey, other: StringKey, value: number, name = "") =>
-  tf(value === 1 ? one : other, { count: String(value), name });
+type Deletion = {
+  staffRoleId: string;
+  impact: DeleteImpact | null;
+  loading: boolean;
+  readError: string;
+  actionError: string;
+  busy: boolean;
+};
 
 /** Lists the venue's staff roles in their order, and adds, edits, moves and deletes them. */
 @customElement("dashboard-staff-roles-screen")
@@ -87,6 +93,8 @@ export class StaffRolesScreen extends LitElement {
   /** The dialog's subject while it is open: `null` for a new staff role. */
   @state() private editing?: StaffRole | null;
   @state() private deleting?: Deletion;
+  /** Replaced each time the delete question opens or closes, so a late answer finds it changed. */
+  #deletion?: object;
 
   readonly #queries = new QueryController(
     this,
@@ -98,6 +106,18 @@ export class StaffRolesScreen extends LitElement {
       this.loadError = undefined;
     },
   );
+  /** Released whenever the delete question closes, so it reports only while one is open. */
+  readonly #impactQueries = new QueryController(
+    this,
+    () => this.api.liveData,
+    (error) => {
+      this.deleting = {
+        ...this.deleting!,
+        loading: false,
+        readError: tf("staffing.role.delete_load_error", { reason: codeMessage(codeOf(error)) }),
+      };
+    },
+  );
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -106,7 +126,7 @@ export class StaffRolesScreen extends LitElement {
 
   override disconnectedCallback(): void {
     this.editing = undefined;
-    this.deleting = undefined;
+    this.#closeDelete();
     this.busy = false;
     super.disconnectedCallback();
   }
@@ -144,25 +164,56 @@ export class StaffRolesScreen extends LitElement {
     await this.#afterWrite();
   }
 
-  async #delete(deletion: Deletion): Promise<void> {
-    if (this.deleting !== deletion || deletion.busy) return;
-    this.deleting = { ...deletion, busy: true, error: undefined };
-    const current = this.deleting;
+  #openDelete(staffRole: StaffRole): void {
+    this.actionError = undefined;
+    this.#closeDelete();
+    this.#deletion = {};
+    this.deleting = {
+      staffRoleId: staffRole.id,
+      impact: null,
+      loading: true,
+      readError: "",
+      actionError: "",
+      busy: false,
+    };
+    this.#readImpact();
+  }
+
+  #closeDelete(): void {
+    this.#impactQueries.release("delete-impact");
+    this.#deletion = undefined;
+    this.deleting = undefined;
+  }
+
+  #readImpact(): void {
+    const deletion = this.deleting!;
+    this.deleting = { ...deletion, loading: true, readError: "" };
+    this.api
+      .watchStaffRoleDeleteImpact(this.#impactQueries, deletion.staffRoleId, (impact) => {
+        this.deleting = { ...this.deleting!, impact, loading: false, readError: "" };
+      })
+      .catch(() => undefined);
+  }
+
+  /** The dialog draws `submitting` a render late, so a second press in the same turn stops here. */
+  async #delete(staffRoleId: string): Promise<void> {
+    const deletion = this.deleting!;
+    if (deletion.busy) return;
+    const current = this.#deletion;
+    this.deleting = { ...deletion, busy: true, actionError: "" };
     try {
-      await this.api.deleteStaffRole(deletion.staffRole.id);
+      await this.api.deleteStaffRole(staffRoleId);
     } catch (error) {
-      if (this.deleting === current)
-        this.deleting = {
-          ...current,
-          busy: false,
-          error: tf("staffing.role.delete_error", { reason: codeMessage(codeOf(error)) }),
-        };
+      if (current !== this.#deletion) return;
+      this.deleting = {
+        ...this.deleting,
+        busy: false,
+        actionError: tf("staffing.role.delete_error", { reason: codeMessage(codeOf(error)) }),
+      };
       return;
     }
-    if (this.deleting !== current) return;
-    this.deleting = { ...current, busy: false };
-    await this.updateComplete;
-    this.renderRoot.querySelector("wt-modal")?.closeAfter("saved");
+    if (current !== this.#deletion) return;
+    this.#closeDelete();
     await this.#afterWrite();
   }
 
@@ -192,10 +243,7 @@ export class StaffRolesScreen extends LitElement {
           ? item("move-down", t("staffing.role.move_down"), () => void this.#move(staffRole, 1))
           : nothing
       }
-      ${item("delete", t("staffing.role.delete"), () => {
-        this.actionError = undefined;
-        this.deleting = { staffRole, busy: false };
-      })}
+      ${item("delete", t("staffing.role.delete"), () => this.#openDelete(staffRole))}
     </wt-row-actions>`;
   }
 
@@ -228,65 +276,34 @@ export class StaffRolesScreen extends LitElement {
     ];
   }
 
-  #deleteModal() {
+  #deleteDialog() {
     const deletion = this.deleting;
     if (!deletion) return nothing;
-    const { staffRole } = deletion;
-    // The server refuses to delete a staff role that shifts use (staff_role.in_use).
-    const blocked = staffRole.shiftCount > 0;
-    return html`<wt-modal
-      open
-      size="compact"
-      data-test="delete-staff-role"
-      heading=${t("staffing.role.delete_heading")}
-      .dismissible=${!deletion.busy}
-      @wt-close=${(event: Event) => {
-        event.stopPropagation();
-        this.deleting = undefined;
-      }}
-    >
-      ${
-        blocked
-          ? html`<p>
-              ${count(
-                "staffing.role.delete_blocked_one",
-                "staffing.role.delete_blocked_other",
-                staffRole.shiftCount,
-                staffRole.name,
-              )}
-            </p>`
-          : html`<p>${tf("staffing.role.delete_question", { name: staffRole.name })}</p>`
-      }
-      ${
-        !blocked && staffRole.blockCount > 0
-          ? html`<p>
-              ${count(
-                "staffing.role.delete_blocks_one",
-                "staffing.role.delete_blocks_other",
-                staffRole.blockCount,
-              )}
-            </p>`
-          : nothing
-      }
-      <wt-form-actions slot="footer" .error=${deletion.error ?? ""}>
-        <wt-button
-          slot="cancel"
-          variant="secondary"
-          data-test="cancel-delete"
-          ?disabled=${deletion.busy}
-          @click=${() => void this.renderRoot.querySelector("wt-modal")!.requestClose("cancel")}
-          >${t("staffing.role.cancel")}</wt-button
-        >
-        <wt-button
-          variant=${blocked ? "secondary" : "danger"}
-          data-test="confirm-delete"
-          ?disabled=${blocked}
-          ?loading=${deletion.busy}
-          @click=${() => void this.#delete(deletion)}
-          >${t("staffing.role.delete")}</wt-button
-        >
-      </wt-form-actions>
-    </wt-modal>`;
+    return keyed(
+      this.#deletion,
+      html`<wt-delete-dialog
+        data-test="delete-staff-role"
+        .open=${true}
+        .impact=${deletion.impact}
+        .loading=${deletion.loading}
+        .submitting=${deletion.busy}
+        .readError=${deletion.readError}
+        .actionError=${deletion.actionError}
+        .copy=${staffRoleDeleteCopy()}
+        @wt-delete-confirm=${(event: CustomEvent<{ id: string }>) => {
+          event.stopPropagation();
+          void this.#delete(event.detail.id);
+        }}
+        @wt-delete-retry=${(event: Event) => {
+          event.stopPropagation();
+          this.#readImpact();
+        }}
+        @wt-close=${(event: Event) => {
+          event.stopPropagation();
+          this.#closeDelete();
+        }}
+      ></wt-delete-dialog>`,
+    );
   }
 
   override render() {
@@ -342,7 +359,7 @@ export class StaffRolesScreen extends LitElement {
               }}
             ></staff-role-dialog>`
       }
-      ${this.#deleteModal()}`;
+      ${this.#deleteDialog()}`;
   }
 }
 
