@@ -3393,6 +3393,7 @@ describe("department transfers across operator lifetimes", () => {
     let incoming = [request];
     const calls = {
       listIncomingDepartmentTransfers: vi.fn(async () => ({
+        receiving: true,
         count: incoming.length,
         requests: incoming,
       })),
@@ -3574,6 +3575,7 @@ describe("department transfers across operator lifetimes", () => {
       ...desk.calls,
       listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue),
       listIncomingDepartmentTransfers: vi.fn(async () => ({
+        receiving: true,
         count: accepted ? 0 : 1,
         requests: accepted ? [] : [request],
       })),
@@ -4029,9 +4031,10 @@ describe("department transfers across operator lifetimes", () => {
 
   it("does not publish a pending count on a profile that is not the receiving desk", async () => {
     const desk = transfers();
-    desk.calls.listIncomingDepartmentTransfers.mockRejectedValue({
-      code: "department_transfer.not_allowed",
-      status: 403,
+    desk.calls.listIncomingDepartmentTransfers.mockResolvedValue({
+      receiving: false,
+      count: 0,
+      requests: [],
     });
     const { el } = await mountApp(desk.calls);
     await signIn(el);
@@ -4051,7 +4054,11 @@ describe("department transfers across operator lifetimes", () => {
 
   it("clears a delayed old-session answer before a new operator signs in", async () => {
     const desk = transfers();
-    let answer!: (value: { count: number; requests: (typeof request)[] }) => void;
+    let answer!: (value: {
+      receiving: boolean;
+      count: number;
+      requests: (typeof request)[];
+    }) => void;
     desk.calls.listIncomingDepartmentTransfers.mockImplementationOnce(
       () =>
         new Promise((resolve) => {
@@ -4065,7 +4072,7 @@ describe("department transfers across operator lifetimes", () => {
     desk.empty();
     await signIn(el);
     expect(desk.calls.listIncomingDepartmentTransfers).toHaveBeenCalledTimes(2);
-    answer({ count: 1, requests: [request] });
+    answer({ receiving: true, count: 1, requests: [request] });
     await flush(el);
     await vi.waitFor(() => expect(pendingCount(el)?.textContent).toContain("0"));
   });
@@ -4518,7 +4525,11 @@ describe("department transfers across operator lifetimes", () => {
     desk.empty();
     await vi.waitFor(() => expect(answer).toBeTypeOf("function"));
     el.api = stubApi({
-      listIncomingDepartmentTransfers: vi.fn(async () => ({ count: 0, requests: [] })),
+      listIncomingDepartmentTransfers: vi.fn(async () => ({
+        receiving: true,
+        count: 0,
+        requests: [],
+      })),
       listDepartmentSentTransfers: vi.fn(async () => ({ requests: [] })),
       readDepartmentTransferEvents: desk.calls.readDepartmentTransferEvents,
     });

@@ -326,21 +326,30 @@ async function pendingRequest(tx: Transaction, cfg: VenueScope, requestId: strin
   return request;
 }
 
+async function receives(
+  tx: Transaction,
+  cfg: VenueScope,
+  departmentId: string,
+  receiver: DepartmentTransferReceiver,
+): Promise<boolean> {
+  const [desk] = await tx
+    .select()
+    .from(departmentTransferDesks)
+    .where(eq(departmentTransferDesks.departmentId, departmentId));
+  return (
+    receiver.departmentId === departmentId &&
+    desk?.receivingProfileId === receiver.profileId &&
+    (await usableProfile(tx, cfg, departmentId, receiver.profileId))
+  );
+}
+
 async function checkReceiver(
   tx: Transaction,
   cfg: VenueScope,
   departmentId: string,
   receiver: DepartmentTransferReceiver,
 ) {
-  const [desk] = await tx
-    .select()
-    .from(departmentTransferDesks)
-    .where(eq(departmentTransferDesks.departmentId, departmentId));
-  if (
-    receiver.departmentId !== departmentId ||
-    desk?.receivingProfileId !== receiver.profileId ||
-    !(await usableProfile(tx, cfg, departmentId, receiver.profileId))
-  )
+  if (!(await receives(tx, cfg, departmentId, receiver)))
     throw new AppError("department_transfer.not_allowed", {});
 }
 
@@ -524,12 +533,13 @@ async function summarizeTransfers(tx: Transaction, rows: DepartmentTransfer[]) {
   return rows.map((row) => ({ ...row, ...byId.get(row.id)! }));
 }
 
+/** Null, not a refusal, when `receives` is false: the till polls this list. */
 export async function listIncomingDepartmentTransfers(
   tx: Transaction,
   cfg: VenueScope,
   receiver: DepartmentTransferReceiver,
 ) {
-  await checkReceiver(tx, cfg, receiver.departmentId, receiver);
+  if (!(await receives(tx, cfg, receiver.departmentId, receiver))) return null;
   return summarizeTransfers(tx, await listDepartmentTransfers(tx, cfg, receiver.departmentId));
 }
 

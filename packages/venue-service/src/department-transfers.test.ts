@@ -184,6 +184,28 @@ describe("departmental tab transfers", () => {
     return v;
   }
 
+  it("lists the incoming queue for the receiving desk and answers null for any other profile", async () => {
+    const v = await ready();
+    const request = await withTransaction(suite.db, (tx) =>
+      service.requestDepartmentTransfer(tx, v.cfg, v.tab, v.b, {
+        departmentId: v.a,
+        personId: "sender",
+      }),
+    );
+    await withTransaction(suite.db, async (tx) => {
+      const desk = { departmentId: v.b, personId: "receiver", profileId: v.profile };
+      expect(await service.listIncomingDepartmentTransfers(tx, v.cfg, desk)).toMatchObject([
+        { id: request.id, status: "pending" },
+      ]);
+      expect(
+        await service.listIncomingDepartmentTransfers(tx, v.cfg, {
+          ...desk,
+          profileId: randomUUID(),
+        }),
+      ).toBeNull();
+    });
+  });
+
   it("refuses the opposite direction even when both departments have receiving desks", async () => {
     const v = await ready();
     await withTransaction(suite.db, async (tx) => {

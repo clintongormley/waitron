@@ -149,7 +149,11 @@ export function mountDepartmentTransferApi(
         const receiver = await actor(tx, deps, session);
         return VENUE_SERVICE.listIncomingDepartmentTransfers(tx, deps.cfg, receiver);
       });
-      return c.json({ count: requests.length, requests });
+      return c.json(
+        requests === null
+          ? { receiving: false, count: 0, requests: [] }
+          : { receiving: true, count: requests.length, requests },
+      );
     }),
   );
   app.get("/api/working-orders/:id/department-transfers", (c) =>

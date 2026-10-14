@@ -2237,6 +2237,7 @@ export class TillApi {
   }
 
   listIncomingDepartmentTransfers(options: ReadOptions = {}): Promise<{
+    receiving: boolean;
     count: number;
     requests: DepartmentTransfer[];
   }> {
