@@ -82,12 +82,6 @@ A drawer whose claim or done report was lost stays listed as “printing”, wit
 automatic expiry. Preserve single-attempt delivery while deciding how to show that unknown
 outcome. A517's lost-report route case pins the current row and its non-resendable listing.
 
-## A printer rethrow test calls a different CHECK a non-CHECK error
-
-`packages/printing/src/printers.test.ts`'s “a driver error that is NEITHER the UNIQUE NOR the CHECK”
-case supplies `carrier_pigeon`, which its comment identifies as refused by `printers_transport_ck`.
-Reconcile the case name with the boundary it tests. This is a source reading, not a new probe.
-
 ## Waitron carries two QR encoders; consolidate on `qrcode-generator`
 
 When consolidating, check the receipt's `qrRaster` path separately from `EscBuilder.qr`, and

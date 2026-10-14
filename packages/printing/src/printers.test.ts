@@ -1,6 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
+  CHECK_VIOLATION,
   CORE_MIGRATIONS,
   UNIQUE_VIOLATION,
   isRefusal,
@@ -280,13 +281,13 @@ describe("updatePrinter", () => {
     const err = await errorOf(() =>
       asTx(cfg, (tx) => updatePrinter(tx, cfg, id, { paperWidth: "100mm" as PaperWidth })),
     );
-    expect(err).toBeDefined();
-    expect((err as { code?: string }).code).not.toBe("printer.invalid_config");
+    expect(err).toMatchObject({
+      errcode: CHECK_VIOLATION[0],
+      message: "CHECK constraint failed: printers_paper_width_ck",
+    });
   });
 
-  it("a driver error that is NEITHER the UNIQUE NOR the CHECK propagates UNCHANGED (the rethrow branch)", async () => {
-    // `printers_transport_ck` refuses this value — a CHECK, but not the transport-fields one, so
-    // translatePrinterWriteError must rethrow it rather than mistranslate it to a printing code.
+  it("printers_transport_ck, a CHECK other than the transport-fields one, is rethrown as the engine's own refusal", async () => {
     const cfg = await setup();
     const id = await seedPrinter(cfg);
     const err = await errorOf(() =>
@@ -294,9 +295,10 @@ describe("updatePrinter", () => {
         updatePrinter(tx, cfg, id, { transport: "carrier_pigeon" as PrintTransport }),
       ),
     );
-    expect(err).toBeDefined();
-    expect((err as { code?: string }).code).not.toBe("printer.already_registered");
-    expect((err as { code?: string }).code).not.toBe("printer.invalid_config");
+    expect(err).toMatchObject({
+      errcode: CHECK_VIOLATION[0],
+      message: "CHECK constraint failed: printers_transport_ck",
+    });
   });
 });
 
