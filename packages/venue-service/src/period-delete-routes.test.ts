@@ -12,6 +12,7 @@ import {
 import {
   CORE_MIGRATIONS,
   kitchenStations,
+  locationBusinessDaySettings,
   locations,
   withTransaction,
   type Database,
@@ -344,7 +345,42 @@ describe("the period-delete routes", () => {
         { id: r.afternoon, name: "Afternoon" },
         { id: r.dinner, name: "Dinner" },
       ],
+      clockRevision: 0,
     });
+  });
+
+  it("GET delete-impact carries the clock revision POST delete accepts, and a new one once the clock changes", async () => {
+    const r = await routed();
+    const revision = async () =>
+      (
+        (await (await r.send("GET", `/${r.lunch}/delete-impact`, r.manager)).json()) as {
+          clockRevision: number;
+        }
+      ).clockRevision;
+    const before = await revision();
+    await scoped((tx) =>
+      tx
+        .insert(locationBusinessDaySettings)
+        .values({ locationId: r.cfg.locationId, revision: before + 2 }),
+    );
+    const after = await revision();
+    expect(after).toBe(before + 2);
+
+    await answers(
+      await r.send("POST", `/${r.lunch}/delete`, r.manager, {
+        replacementPeriodId: null,
+        expectedClockRevision: before,
+      }),
+      409,
+      { code: "hours.clock_changed", params: {} },
+    );
+    await answers(
+      await r.send("POST", `/${r.lunch}/delete`, r.manager, {
+        replacementPeriodId: null,
+        expectedClockRevision: after,
+      }),
+      204,
+    );
   });
 
   it("refuses both reads to someone who may not view the venue", async () => {
