@@ -431,6 +431,75 @@ list, because no inline multi-pick primitive exists. #1601's look also saw, at 1
 list's Made of column wrap to two lines, and in Spanish the two Add buttons stack. Left open by
 A503 part 2 (#1601). Next: an inline multi-pick primitive, and the owner's call on the two wraps.
 
+## A671. The floor plan editor's side panel: less text, nothing jumps
+
+**A671 (owner, 2026-10-14).** The dashboard floor plan editor's side panel
+(`apps/dashboard/src/screens/floor-plan-editor.ts`, `floor-plan-tables-panel.ts`,
+`floor-plan-table-panel.ts`). Mockups: [nothing selected](mockups/a671-floor-plan-editor-panel/1-nothing-selected.png),
+[a table selected](mockups/a671-floor-plan-editor-panel/2-table-selected.png) (the second also shows
+A672's corner handles).
+
+1. **Remove the subtitle** "Your first save goes live now; later changes tomorrow, unless you
+   'Reset to saved plan' on the till." Its explanation belongs in help mode (A582).
+2. **Remove the help sentence** above the table list ("Select a table on the plan to change it.
+   Click a table below to put it on the plan or take it off; it returns to the same spot.").
+3. **Remove the colour key** ("on plan / not placed / in a joined table"): the markers are plain
+   enough.
+4. **The table form always keeps its space.** Today placing or selecting a table opens the form
+   above the list and pushes the list down. The space stays reserved and is left empty while no
+   table is selected (owner: empty, not greyed-out fields), so the list never moves.
+5. **"Add tables" and "Add joined table" move to the top of the panel**, above the form. A569's
+   note that in Spanish the two buttons stack applies here too.
+6. **Seats, Shape and Moveable share one row of boxes of the same height.** Seats is a little
+   narrower; Shape becomes ONE button showing the current shape that switches between square and
+   round (today two buttons, which also do not line up with Seats); the Moveable switch follows
+   Shape on the same row.
+7. **The round markers beside the table names become squares**: filled in the primary colour on
+   the plan, an outline when not placed, filled grey in a joined table.
+8. **Only the square places a table or takes it off.** Clicking the name no longer toggles
+   placement; for a table on the plan it selects the table and opens its form, and for one off the
+   plan it does nothing.
+9. **A new joined table goes onto the plan as soon as it is defined** in Add joined table, rather
+   than waiting to be placed from the list.
+
+## A672. The floor plan editor's canvas: the top-left limit, corner handles, scroll bars on a turn
+
+**A672 (owner, 2026-10-14).** In `wt-floor-plan-canvas` (`packages/ui/src/components/`) and
+`packages/ui/src/floor-plan-geometry.ts`.
+
+1. **A table at the plan's top-left limit cannot be moved or resized up or left, although empty grid
+   shows there.** Seen with a turned table: dragging its top handle grows it so far and then stops,
+   and the table cannot be dragged up or left at all. Likely cause, read and not run: a move clamps
+   the table's unturned top-left corner at 0 (`clampToGrid`), `resizeFrom` refuses growth that would
+   take it below 0, while the canvas draws a margin of empty grid beyond the plan's corner for the
+   turn arrow (`#margin` in `willUpdate`), so the limit looks like free space. Next: reproduce, then
+   decide whether the plan grows up and left when a table is taken there, or the margin stops looking
+   usable.
+2. **Corner resize handles** (owner: yes). Dragging a corner changes width and height together; the
+   side dots stay, for stretching one side. The turn arrow moves from outside the top-right corner to
+   above the top-centre dot, clear of the corner handle. A small table already has its name covered
+   by its handles (A562), so decide with A562 how a small table shows them — corners instead of side
+   dots below some size is one option. Shift+arrow resizing and the hit areas
+   (`#renderHitAreas`) need the corners too.
+3. **A small clockwise turn just after placing a table flashes scroll bars on the grid**, which then
+   disappear. Related to the open "a size reading just after a floor plan drop may shift the plan"
+   entry in `docs/backlog.md`; not measured whether it is the same cause.
+
+## A673. The floor plan editor on a touch screen: pinch to zoom, tap before drag
+
+**A673 (owner, 2026-10-14).**
+
+1. **Pinch to zoom, and one finger moves the view**, as the till's floor map already does
+   (`packages/ui/src/components/wt-floor-map.ts`: pan, pinch and wheel). The editor's canvas draws a
+   fixed `GRID_SQUARE_PX` (12) per square and sets `touch-action: none`, so a pinch does nothing
+   today. Moving, resizing and turning convert pointer distance to squares through
+   `GRID_SQUARE_PX`, so each must divide by the zoom. Reuse the floor map's gesture code rather than
+   writing a second one. How the editor lays out at phone width has not been looked at.
+2. **On a touch screen a table is tapped to select it before it can be dragged** (owner, agreed).
+   A finger on an unselected table moves the view, like empty grid, so panning a crowded plan does
+   not move tables by accident. With a mouse, pressing a table still drags it straight away and
+   selects it as it goes (today every press starts a move at once, `#onPointerDown`).
+
 ## A570. A table split off a joined table whose removal was refused cannot be moved
 
 **A570 (2026-10-13).** When a joined table's removal is refused, its split rows stay

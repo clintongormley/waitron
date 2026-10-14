@@ -2078,6 +2078,23 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   the mockup's inline list; two wraps seen in #1601's look.
   [Detail](backlog/till.md#a569-the-floor-plan-editors-made-of-picker-and-two-wraps)
 
+- **A671. The floor plan editor's side panel: less text, nothing jumps (owner, 2026-10-14).** The
+  Add buttons move to the top, the table form always keeps its space, Seats, Shape and Moveable share
+  one row, the subtitle, help sentence and colour key go, the markers become squares that alone put a
+  table on or off the plan, and a new joined table goes straight onto the plan.
+  [Detail](backlog/till.md#a671-the-floor-plan-editors-side-panel-less-text-nothing-jumps),
+  [mockups](backlog/mockups/a671-floor-plan-editor-panel/)
+
+- **A672. The floor plan editor's canvas: the top-left limit, corner handles, scroll bars on a turn
+  (owner, 2026-10-14).** A table at the plan's top-left limit cannot go up or left although empty
+  grid shows there; corners get resize handles and the turn arrow moves to top centre; a small turn
+  flashes scroll bars. [Detail](backlog/till.md#a672-the-floor-plan-editors-canvas-the-top-left-limit-corner-handles-scroll-bars-on-a-turn)
+
+- **A673. The floor plan editor on a touch screen: pinch to zoom, tap before drag (owner,
+  2026-10-14).** Pinch zooms and one finger moves the view, as on the till's map; a table is tapped
+  to select it before it can be dragged. A mouse still drags straight away.
+  [Detail](backlog/till.md#a673-the-floor-plan-editor-on-a-touch-screen-pinch-to-zoom-tap-before-drag)
+
 - **A570. A table split off a joined table whose removal was refused cannot be moved
   (2026-10-13).** Refused Back, Take off and Reset table. Left open by A503 part 4 (#1608).
   [Detail](backlog/till.md#a570-a-table-split-off-a-joined-table-whose-removal-was-refused-cannot-be-moved)
