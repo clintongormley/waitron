@@ -27,9 +27,15 @@ import {
 import { createBucketClient } from "@waitron/stream";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { cleanupFromReceipt } from "./testing/aws-rehearsal.js";
-import { UNCAUGHT_MESSAGE } from "./testing/aws-rehearsal-interrupt-driver.js";
+import {
+  DRIVER_DEADLINE_MS,
+  DRIVER_SETTLE_MS,
+  DRIVER_TEARDOWN_MS,
+  UNCAUGHT_MESSAGE,
+} from "./testing/aws-rehearsal-interrupt-driver.js";
 import { journalFileName, processStartTime } from "./testing/aws-rehearsal-journal.js";
-import { tsxLoaderUrl } from "./testing/aws-rehearsal-keeper-start.js";
+import { KEEPER_READY_MS, tsxLoaderUrl } from "./testing/aws-rehearsal-keeper-start.js";
+import { AWS_REHEARSAL_LIMITS } from "./testing/aws-rehearsal-limits.js";
 import { cleanupCommandFor, receiptFileName } from "./testing/aws-rehearsal-receipt.js";
 import { AWS_REHEARSAL_NONCE_KEY } from "./testing/aws-request-plan.js";
 import {
@@ -58,6 +64,18 @@ const SHORT_TEARDOWN_MS = 2_000;
 const POINT_MS = 30_000;
 const KEEPER_MS = 60_000;
 const POLL_MS = 100;
+/**
+ * A driver run that ends by itself: its keeper's start, the scenario's deadline and settling, and
+ * its teardown.
+ */
+const DRIVER_RUN_MS = KEEPER_READY_MS + DRIVER_DEADLINE_MS + DRIVER_SETTLE_MS + DRIVER_TEARDOWN_MS;
+/**
+ * `cleanupFromReceipt` with its default limit: the ownership read and the teardown after it each
+ * take a signal of their own.
+ */
+const RECEIPT_CLEANUP_MS = 2 * AWS_REHEARSAL_LIMITS.teardownMs;
+/** A case's untimed work: spawning, reading files and the server's answers. */
+const MARGIN_MS = 10_000;
 
 const versitygw = await resolveVersitygw(process.env);
 if (!versitygw.ok && !REQUIRED) {
@@ -479,7 +497,7 @@ describe("a rehearsal run killed part-way, against versitygw", () => {
       expect(lines).toContain("nothing left behind");
       expect(lines.at(-1)).toBe("exit 0");
     },
-    POINT_MS + KEEPER_MS + 10_000,
+    POINT_MS + KEEPER_MS + MARGIN_MS,
   );
 
   /** The end state for a run whose scratch and tracked process may never have been made. */
@@ -544,7 +562,7 @@ describe("a rehearsal run killed part-way, against versitygw", () => {
       const lines = await keeperFinished(receiptDir, facts.runId);
       await expectNothingLeft(client, caseDir, facts, receiptDir, lines);
     },
-    POINT_MS + KEEPER_MS + 10_000,
+    POINT_MS + KEEPER_MS + MARGIN_MS,
   );
 
   it(
@@ -560,7 +578,7 @@ describe("a rehearsal run killed part-way, against versitygw", () => {
       const lines = await keeperFinished(receiptDir, facts.runId);
       await expectNothingLeft(client, caseDir, facts, receiptDir, lines);
     },
-    POINT_MS + KEEPER_MS + 10_000,
+    POINT_MS + KEEPER_MS + MARGIN_MS,
   );
 
   it(
@@ -585,7 +603,7 @@ describe("a rehearsal run killed part-way, against versitygw", () => {
       const lines = await keeperFinished(receiptDir, facts.runId);
       await expectNothingLeft(client, caseDir, facts, receiptDir, lines);
     },
-    2 * POINT_MS + KEEPER_MS + 10_000,
+    2 * POINT_MS + KEEPER_MS + MARGIN_MS,
   );
 
   it(
@@ -602,7 +620,7 @@ describe("a rehearsal run killed part-way, against versitygw", () => {
       const lines = await keeperFinished(receiptDir, facts.runId);
       await expectNothingLeft(client, caseDir, facts, receiptDir, lines);
     },
-    POINT_MS + KEEPER_MS + 10_000,
+    POINT_MS + KEEPER_MS + MARGIN_MS,
   );
 
   it(
@@ -657,7 +675,7 @@ describe("a rehearsal run killed part-way, against versitygw", () => {
       expect(cleaned.ok, printed.join("\n")).toBe(true);
       expect(await rehearsalBuckets(client)).toEqual([]);
     },
-    POINT_MS + 2 * KEEPER_MS + 10_000,
+    POINT_MS + 2 * KEEPER_MS + RECEIPT_CLEANUP_MS + MARGIN_MS,
   );
 
   it(
@@ -720,7 +738,7 @@ describe("a rehearsal run killed part-way, against versitygw", () => {
         await client.send(new DeleteBucketCommand({ Bucket: other })).catch(() => undefined);
       }
     },
-    POINT_MS + KEEPER_MS + 10_000,
+    DRIVER_RUN_MS + POINT_MS + KEEPER_MS + MARGIN_MS,
   );
 
   it(
@@ -755,6 +773,6 @@ describe("a rehearsal run killed part-way, against versitygw", () => {
       const lines = await keeperFinished(receiptDir, run.runId);
       await expectNothingLeft(client, caseDir, run, receiptDir, lines);
     },
-    POINT_MS + KEEPER_MS + 10_000,
+    POINT_MS + KEEPER_MS + MARGIN_MS,
   );
 });
