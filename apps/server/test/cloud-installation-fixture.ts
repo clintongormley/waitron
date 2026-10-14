@@ -6,7 +6,7 @@ export type ServiceState = "unconfigured" | "provisioning" | "ready" | "failed";
 export async function installationFixture(
   capture?: MachineHandler,
   options: {
-    servicesVersion2?: boolean;
+    cloudBeforeVersion2?: boolean;
     translation?: MachineHandler;
     translationState?: () => ServiceState;
   } = {},
@@ -23,34 +23,32 @@ export async function installationFixture(
     patch: Record<string, unknown> = {},
     delay = async () => {},
     failure = "";
-  const services = (body: unknown) => {
-    const four =
-      (options.servicesVersion2 ?? true) &&
-      typeof body === "string" &&
-      (JSON.parse(body) as { servicesVersion?: unknown }).servicesVersion === 2;
-    return [
-      ...["continuous_backup", "remote_access", "retained_snapshots"].map((service) => ({
-        service,
-        state: "unconfigured",
-        configuration: { secret: "adapter-only" },
-        health: "unknown",
-        failure: null,
-        observedAt: null,
-      })),
-      ...(four
-        ? [
-            {
-              service: "content_translation",
-              state: (options.translationState ?? (() => "ready"))(),
-              configuration: {},
-              health: "unknown",
-              failure: null,
-              observedAt: null,
-            },
-          ]
-        : []),
-    ];
-  };
+  // Contract, "Seeing the service": any other configuration body is an invalid proof.
+  const configurationBodies = options.cloudBeforeVersion2
+    ? ["{}"]
+    : ["{}", '{"servicesVersion":2}'];
+  const services = (four: boolean) => [
+    ...["continuous_backup", "remote_access", "retained_snapshots"].map((service) => ({
+      service,
+      state: "unconfigured",
+      configuration: { secret: "adapter-only" },
+      health: "unknown",
+      failure: null,
+      observedAt: null,
+    })),
+    ...(four
+      ? [
+          {
+            service: "content_translation",
+            state: (options.translationState ?? (() => "ready"))(),
+            configuration: {},
+            health: "unknown",
+            failure: null,
+            observedAt: null,
+          },
+        ]
+      : []),
+  ];
   const f = await cloudFixture(async (values, saved, req, res, sent) => {
     requests.push(values);
     if (String(values[2]).startsWith("backup-") && capture) {
@@ -70,9 +68,12 @@ export async function installationFixture(
       res.end("{}");
       return;
     }
-    if (failure) {
+    if (
+      failure ||
+      (values[2] === "configuration" && !configurationBodies.includes(String(values[7])))
+    ) {
       res.writeHead(401);
-      res.end(JSON.stringify({ error: failure }));
+      res.end(JSON.stringify({ error: failure || "invalid_proof" }));
       return;
     }
     const operation = String(values[4]);
@@ -111,7 +112,7 @@ export async function installationFixture(
         revokedAt: revoked ? new Date().toISOString() : null,
         lastContactAt: new Date().toISOString(),
         leaseExpiresAt: new Date(now + 3600000).toISOString(),
-        services: values[2] === "configuration" ? services(values[7]) : services(undefined),
+        services: services(values[2] === "configuration" && values[7] !== "{}"),
         ...(values[2] === "renew" ? { lease } : {}),
       });
     }
@@ -152,6 +153,7 @@ export async function installationFixture(
     revoke: () => {
       revoked = true;
     },
+    isRevoked: () => revoked,
     patch: (v: Record<string, unknown>) => {
       patch = v;
     },

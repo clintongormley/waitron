@@ -1,11 +1,15 @@
-import { randomUUID } from "node:crypto";
+import { createPrivateKey, randomUUID, sign } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { expect, it } from "vitest";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { expect, it, vi } from "vitest";
 import {
   type TranslationCloud,
   translationCloudFixture,
   verifySubmitVector,
 } from "../test/translation-cloud-fixture.js";
+import type { SavedCloudState } from "./cloud-client.js";
+import { machinePayload } from "./cloud-installation.js";
 import { jobFingerprint, submitSignedBody } from "./cloud-translation.js";
 
 interface VectorCase {
@@ -29,14 +33,17 @@ const item = (
   family = ref,
   kind = family === ref ? "product" : "variant",
 ) => ({ ref, kind, family, category: null, staffName, existing: {}, missing });
-const job = (items: unknown[]) =>
+const job = (items: unknown[], fields: Record<string, unknown> = {}) =>
   JSON.stringify({
     version: 1,
     country: "ES",
     languages: { default: "ca", enabled: ["ca", "es"] },
     items,
     houseStyle: [],
+    ...fields,
   });
+const pinta = [item("product:1", "PINTA", ["ca"])];
+const house = { kind: "product", staffName: "CARAJILLO", names: { ca: "Cigaló" } };
 const one = job([item("product:1", "PINTA", ["ca", "es"])]);
 const two = job([
   item("product:1", "PINTA", ["ca", "es"]),
@@ -53,7 +60,7 @@ const refused = (status: number, error: string) => ({ status, json: { error } })
 
 async function withCloud(
   run: (f: TranslationCloud) => Promise<void>,
-  options?: { servicesVersion2?: boolean },
+  options?: { cloudBeforeVersion2?: boolean },
 ) {
   const f = await translationCloudFixture(options);
   try {
@@ -245,6 +252,37 @@ it.each([
     job([{ ...item("option_list:1", "SIZES", ["ca"]), kind: "option_list", category: "BEERS" }]),
   ],
   ["a repeated ref", job([item("product:1", "PINTA", ["ca"]), item("product:1", "CANYA", ["es"])])],
+  ["version 2", job(pinta, { version: 2 })],
+  ["a country that is not two capitals", job(pinta, { country: "es" })],
+  ["a default that is not enabled", job(pinta, { languages: { default: "en", enabled: ["ca"] } })],
+  [
+    "21 enabled languages",
+    job(pinta, {
+      languages: {
+        default: "ca",
+        enabled: ["ca", ...Array.from({ length: 20 }, (_, i) => `l${String.fromCharCode(97 + i)}`)],
+      },
+    }),
+  ],
+  ["no items", job([])],
+  [
+    "a member's ref over 128 characters",
+    job([item("product:1", "PINTA", []), item("v".repeat(129), "CANYA", ["ca"], "product:1")]),
+  ],
+  [
+    "an existing name in a language that is not enabled",
+    job([{ ...item("product:1", "PINTA", ["ca"]), existing: { fr: "Pinte" } }]),
+  ],
+  ["a missing language listed twice", job([item("product:1", "PINTA", ["ca", "ca"])])],
+  [
+    "a missing language that already has a name",
+    job([{ ...item("product:1", "PINTA", ["ca"]), existing: { ca: "Pinta" } }]),
+  ],
+  [
+    "a house-style entry with a key the contract does not name",
+    job(pinta, { houseStyle: [{ ...house, note: "x" }] }),
+  ],
+  ["301 house-style entries", job(pinta, { houseStyle: Array.from({ length: 301 }, () => house) })],
 ])("a job with %s is 400 invalid_request", (_name, body) =>
   withCloud(async (f) => {
     expect(await submit(f, body)).toEqual(refused(400, "invalid_request"));
@@ -332,15 +370,95 @@ it("the version-2 configuration reply carries the service's state", () =>
     expect(await state()).toBe("provisioning");
   }));
 
-it("a Cloud without version 2 lists only the three original services", () =>
+/** Signs a `configuration` request with the box's pending operation ID, which the base fake requires. */
+async function postConfiguration(f: TranslationCloud, body: string) {
+  const saved = JSON.parse(
+    await readFile(join(f.stateDir, "cloud-connection.json"), "utf8"),
+  ) as SavedCloudState & { lifecycle: { pending: { operationId: string } } };
+  const bytes = machinePayload(saved, {
+    action: "configuration",
+    operationId: saved.lifecycle.pending.operationId,
+    lease: JSON.stringify(saved.lifecycle.lease),
+    body,
+  });
+  const key = createPrivateKey({
+    key: Buffer.from(saved.privateKey, "base64url"),
+    format: "der",
+    type: "pkcs8",
+  });
+  const response = await fetch(`${f.options.origin}/api/installations/configuration`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      payload: bytes.toString("base64url"),
+      signature: sign(null, bytes, key).toString("base64url"),
+    }),
+  });
+  return { status: response.status, json: (await response.json()) as unknown };
+}
+
+it("a configuration body other than {} or the version-2 one is an invalid proof", () =>
+  withCloud(async (f) => {
+    f.lose(); // leaves the configuration request pending, so its operation ID can be signed again
+    await expect(f.client.refresh()).rejects.toThrow();
+    for (const body of ['{"servicesVersion":2,"extra":1}', '{"servicesVersion":3}', "not json"])
+      expect(await postConfiguration(f, body)).toEqual(refused(401, "invalid_proof"));
+  }));
+
+it("a Cloud before version 2 refuses the version-2 configuration, and the box renews to three services", () =>
   withCloud(
     async (f) => {
-      const services = (await f.client.refresh()).installation!.services.map((s) => s.service);
+      let refusal: unknown;
+      // While the box's request waits, the same signed request is sent again to read the answer.
+      f.delay(async () => {
+        f.delay(async () => {});
+        refusal = await postConfiguration(f, '{"servicesVersion":2}');
+      });
+      await expect(f.client.refresh()).rejects.toMatchObject({ code: "cloud.unavailable" });
+      expect(refusal).toEqual(refused(401, "invalid_proof"));
+      expect(f.requests.at(-2)![2]).toBe("configuration"); // the box's; the last is the re-send
+      expect(f.requests.at(-2)![7]).toBe('{"servicesVersion":2}');
+      const status = await f.client.refresh();
+      expect(f.requests.at(-1)![2]).toBe("renew");
+      const services = status.installation!.services.map((s) => s.service);
       expect(services).toHaveLength(3);
       expect(services).not.toContain("content_translation");
     },
-    { servicesVersion2: false },
+    { cloudBeforeVersion2: true },
   ));
+
+it("a revoked installation's translation requests are 403 revoked, after the proof is checked", () =>
+  withCloud(async (f) => {
+    f.revoke();
+    expect(await submit(f, two)).toEqual(refused(403, "revoked"));
+    expect(await ask(f, "translation-status", randomUUID())).toEqual(refused(403, "revoked"));
+    expect(
+      await f.signedRequest("translation-submit", {
+        signedBody: submitSignedBody(two),
+        body: two,
+        lease: "",
+      }),
+    ).toEqual(refused(401, "invalid_proof"));
+    expect(f.jobs.size).toBe(0);
+  }));
+
+it("an operation ID that is not a UUID is an invalid proof", () =>
+  withCloud(async (f) => {
+    expect(await submit(f, two, "op-1")).toEqual(refused(401, "invalid_proof"));
+    expect(f.jobs.size).toBe(0);
+  }));
+
+it("a lease the fake issued is an invalid proof once it has expired", () =>
+  withCloud(async (f) => {
+    const now = Date.now();
+    const clock = vi.spyOn(Date, "now").mockReturnValue(now + 3_601_000);
+    try {
+      expect(await submit(f, two)).toEqual(refused(401, "invalid_proof"));
+    } finally {
+      clock.mockRestore();
+    }
+    expect((await submit(f, two)).status).toBe(200);
+  }));
 
 it("runs a job queued, running, done, and collects the default translator's answers", () =>
   withCloud(async (f) => {

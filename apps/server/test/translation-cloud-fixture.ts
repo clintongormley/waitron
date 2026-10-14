@@ -215,7 +215,17 @@ function defaultTranslator(item: FakeItem): Omit<FakeResult, "ref"> {
   };
 }
 
-export async function translationCloudFixture(options: { servicesVersion2?: boolean } = {}) {
+/**
+ * Where the contract is silent, this fake chooses:
+ * - for status, collect and release, `permission_denied` comes after the signed-body check and
+ *   before the job lookup;
+ * - `revoked` (403) comes straight after the proof checks, for all four actions;
+ * - any unexpired lease this fake issued is accepted, not only the one the box saved last;
+ * - a language tag matches `[a-z]{2,3}` with an optional `-` and two capitals;
+ * - `expire()` expires a job in any state, a `collected` one included;
+ * - a `translator` answer is returned as written, not limited to `missing`.
+ */
+export async function translationCloudFixture(options: { cloudBeforeVersion2?: boolean } = {}) {
   const jobs = new Map<string, FakeJob>();
   const byOperation = new Map<string, FakeJob>();
   const calls: { action: string; operationId: string; at: number }[] = [];
@@ -292,6 +302,7 @@ export async function translationCloudFixture(options: { servicesVersion2?: bool
       (submitting && typeof sent.body !== "string")
     )
       return answer(401, { error: "invalid_proof" });
+    if (base.isRevoked()) return answer(403, { error: "revoked" });
     const signedBody = String(values[7]);
     if (submitting) return submit(String(sent.body), signedBody, operationId, answer);
     const jobId = jobIdIn(signedBody);
@@ -488,7 +499,7 @@ export async function translationCloudFixture(options: { servicesVersion2?: bool
   }
 
   const base = await installationFixture(undefined, {
-    servicesVersion2: options.servicesVersion2 ?? true,
+    cloudBeforeVersion2: options.cloudBeforeVersion2 ?? false,
     translation: handler,
     translationState: () => serviceState,
   });
