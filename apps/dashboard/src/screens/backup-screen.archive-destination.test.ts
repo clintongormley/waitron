@@ -1,5 +1,5 @@
 import { LiveData } from "@waitron/dashboard-kit";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
@@ -2477,6 +2477,78 @@ describe("a refusal naming nothing the form shows a field for", () => {
     expect(await bottomOf(el, "apply-actions")).toBe(codeMessage("backup.request_invalid"));
     expect(banner(el)).toBeNull();
   });
+});
+
+describe("a field refusal that answers after its field was hidden", () => {
+  let locale: ReturnType<typeof currentLocale>;
+  beforeEach(() => {
+    locale = currentLocale();
+    setLocale("en");
+  });
+  afterEach(() => setLocale(locale));
+
+  /** A save the test refuses by hand, after acting on the form while it is out. */
+  function heldRefusal() {
+    let refuse!: (error: unknown) => void;
+    const applyBackup = vi
+      .fn()
+      .mockReturnValue(new Promise<BackupWriteAnswer>((_, r) => (refuse = r)));
+    return { applyBackup, refuse: (field: string) => refuse(refusalNaming(field)) };
+  }
+  const refusalNaming = (field: string) => ({ code: "backup.request_invalid", params: { field } });
+
+  const settingsEditor = async (applyBackup: DashboardApi["applyBackup"]) => {
+    const { el } = await openEdit(TWO, { applyBackup });
+    return { el, action: "save-settings", actions: "settings-actions" };
+  };
+  const turnOn = async (applyBackup: DashboardApi["applyBackup"]) => {
+    const { el } = await openConfigure({ applyBackup });
+    await typeFolder(el, "/mnt/usb/waitron");
+    await choose(el, "custom-s3");
+    await fillCustom(el, "SECRET-1");
+    return { el, action: "apply", actions: "apply-actions" };
+  };
+
+  it.each([
+    ["the settings editor", settingsEditor],
+    ["turning backups on", turnOn],
+  ] as const)(
+    "on %s, a refused folder switched off while the save was out is said once at the bottom, marking nothing",
+    async (_where, open) => {
+      const held = heldRefusal();
+      const { el, action, actions } = await open(held.applyBackup);
+      await typeFolder(el, "/mnt/usb\tother");
+      await press(el, action);
+      await vi.waitFor(() => expect(held.applyBackup).toHaveBeenCalledOnce());
+      await setFolder(el, false);
+      held.refuse("dir");
+      await arrive(el);
+      expect(await bottomOf(el, actions)).toBe("Check the backup settings and try again");
+      expect(await buttonState(el, action)).toEqual(["primary", false]);
+      expect(banner(el)).toBeNull();
+    },
+  );
+
+  it.each([
+    ["the settings editor", settingsEditor],
+    ["turning backups on", turnOn],
+  ] as const)(
+    "on %s, a refused bucket field left for another bucket while the save was out is said once at the bottom, marking nothing",
+    async (_where, open) => {
+      const held = heldRefusal();
+      const { el, action, actions } = await open(held.applyBackup);
+      await typeCustom(el, "region", "eu-west-9");
+      await typeCustom(el, "secret-access-key", "SECRET-2");
+      await press(el, action);
+      await vi.waitFor(() => expect(held.applyBackup).toHaveBeenCalledOnce());
+      await choose(el, "stream-bucket");
+      held.refuse("region");
+      await arrive(el);
+      expect(await bottomOf(el, actions)).toBe("Check the backup settings and try again");
+      expect(await buttonState(el, action)).toEqual(["primary", false]);
+      expect(banner(el)).toBeNull();
+    },
+  );
 });
 
 describe("the secret's reveal button", () => {

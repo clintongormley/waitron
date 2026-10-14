@@ -738,17 +738,19 @@ export class BackupScreen extends LitElement {
     const custom = sent.find((d) => d.kind === "custom-s3");
     const field = (error as { params?: { field?: unknown } } | null)?.params?.field;
     if (code === "backup.request_invalid") {
+      // A refusal naming the folder or a custom-bucket field not shown when it answers goes to
+      // the bottom message.
       if (field === "retention") {
         this.retentionRefused = true;
         this.#focusFirstInvalidBox();
-      } else if (custom !== undefined && isCustomField(field)) {
+      } else if (custom !== undefined && this.bucket === "custom-s3" && isCustomField(field)) {
         this.customRefused = field;
         if (field === "secretAccessKey") {
           this.secretSentRefused = custom.secretAccessKey !== undefined;
           if (!this.secretSentRefused) this.secretDemanded = true;
         }
         this.#focusFirstInvalidBox();
-      } else if (field === "dir") {
+      } else if (field === "dir" && this.folderOn) {
         this.folderRefused = true;
         this.#focusFirstInvalidBox();
       } else if (field === "prefix" && sent.some((d) => d.kind === "stream-bucket")) {
