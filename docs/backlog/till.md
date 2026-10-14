@@ -1492,6 +1492,9 @@ From **Variants as products (#511–#556) — what is left open.** How the model
   group prints nothing, as the party keeps every table and the name; and an unnamed group of two
   ended the same way prints nothing
   ([plan](../superpowers/plans/2026-10-14-a650-moved-slips-design.md)).
+- **The table screen shows no "(was N)" (A650 question A, owner 2026-10-14: the default kept).** A
+  party's bills stay named "Ana · Bill 1" with no order number; "(was 28)" shows where numbers
+  already show, such as the Pass screen, because a waiter answering a kitchen call looks there.
 - **The "needs clearing" window names the one table it clears (A581 part 3, coordinator decision,
   2026-10-14).** A table renamed for today reads "Window needs clearing"; a table in a group, named
   or not, keeps "Table Counter 4 needs clearing", never the group's name, because Mark cleared

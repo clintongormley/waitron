@@ -2044,12 +2044,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   After A668's data shape. [Spec](superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md),
   [mockups](backlog/mockups/a669-allergy-at-the-table/)
 
-- **A650 — MOVED slips say which order moved, from which table, to which table (owner, 2026-10-14;
-  Part 4 to build).** Left: Part 4, each prep station can follow or override the venue's Print
-  MOVED slips switch (Venue settings → Kitchen tab), and the switch's hint gets back its last
-  sentence, "A prep station can be set to differ." [Plan](superpowers/plans/2026-10-14-a650-moved-slips-design.md) ·
-  [mockups](backlog/mockups/a650-moved-slips/)
-
 - **A677 — Every path that can move sent work snapshots it, writes, then queues MOVED slips by hand
   (2026-10-14; open).** Each chooses its own tables to snapshot (`readSentWorkAt`,
   `readPartiesSentWork`, then `enqueueMovedSlipsFor`, `apps/server/src/kitchen-print.ts`), and the
