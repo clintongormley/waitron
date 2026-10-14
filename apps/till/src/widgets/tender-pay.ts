@@ -25,6 +25,7 @@ import "./numeric-pad.js";
 import "./reader-picker.js";
 import "./modifier-picker.js";
 import type { ModifierConfirmDetail } from "./modifier-picker.js";
+import { segmentedOptionStyles } from "./segmented-control-styles.js";
 import { StoreChangeController } from "../state/store-controller.js";
 import type { OrderFlow, PayOutcome, TillActiveReader, TillProduct } from "../api/client.js";
 import type { WorkingOrderStore } from "../state/working-order.js";
@@ -76,6 +77,7 @@ type View = "idle" | "paying" | "weighing" | "holding" | "card" | "collecting" |
 export class TillTenderPay extends LitElement {
   static override styles = [
     baseStyles,
+    segmentedOptionStyles,
     formMessageStyles,
     css`
       :host {
@@ -912,26 +914,30 @@ export class TillTenderPay extends LitElement {
                 aria-label=${t("card.simulation_result")}
               >
                 <p>${t("card.simulation_help")}</p>
-                <wt-button
-                  variant=${this.simulationOutcome === "captured" ? "primary" : "secondary"}
+                <button
+                  type="button"
+                  class="option"
                   data-test="simulation-captured"
                   aria-pressed=${this.simulationOutcome === "captured"}
                   @click=${() => {
                     this.simulationOutcome = "captured";
                     this.#extrasScope?.changed();
                   }}
-                  >${t("card.simulation_captured")}</wt-button
                 >
-                <wt-button
-                  variant=${this.simulationOutcome === "declined" ? "primary" : "secondary"}
+                  ${t("card.simulation_captured")}
+                </button>
+                <button
+                  type="button"
+                  class="option"
                   data-test="simulation-declined"
                   aria-pressed=${this.simulationOutcome === "declined"}
                   @click=${() => {
                     this.simulationOutcome = "declined";
                     this.#extrasScope?.changed();
                   }}
-                  >${t("card.simulation_declined")}</wt-button
                 >
+                  ${t("card.simulation_declined")}
+                </button>
               </div>`
             : nothing
         }

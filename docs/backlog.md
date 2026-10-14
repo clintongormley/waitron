@@ -2608,12 +2608,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   number pad or a choice picker counts as a form under it is open.
   [Detail](backlog/till.md#the-tills-schedule-screen-does-not-follow-the-forms-rule-yet)
 
-- **Two till controls put `aria-pressed` on a `wt-button`, which does not pass it to its inner
-  button** (found 2026-10-03 in review of lane C's W23; read, not run). **Next action:** make them
-  native buttons with `aria-pressed`, as the Tab drawer's transfer and split pickers and the draft
-  line toggle are.
-  [Detail](backlog/till.md#two-till-controls-put-aria-pressed-on-a-wt-button-which-does-not-pass-it-to-its-inner-button)
-
 - **Three till loading lines may not be announced** (found 2026-10-03 in review of lane C's W23).
   The schedule screen (`apps/till/src/screens/till-schedule-screen.ts`, #1103), the lock screen and
   the device chooser each insert a `role="status"` element already holding the loading text and

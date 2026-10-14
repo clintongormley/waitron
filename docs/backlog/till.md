@@ -1191,16 +1191,6 @@ arriving, but open periods are told apart only by their start time, to the milli
   (`apps/till/src/widgets/supervisor-override-dialog.ts`) keeps Authorize disabled while the PIN is
   empty and shows a refusal as a `role="alert"` paragraph.
 
-## Two till controls put `aria-pressed` on a `wt-button`, which does not pass it to its inner button
-
-- **Two till controls put `aria-pressed` on a `wt-button`, which does not pass it to its inner
-  button** (found 2026-10-03 in review of lane C's W23; read, not run). `wt-button`
-  (`packages/ui-core/src/components/wt-button.ts`) forwards `aria-label`, `aria-haspopup`,
-  `aria-expanded` and `aria-invalid` to its inner `<button>`, not `aria-pressed`. The two are the
-  station picker (`#pick`, `apps/till/src/screens/till-station-screen.ts`) and the card-simulation
-  result buttons (`apps/till/src/widgets/tender-pay.ts`). **Next action:** make them native buttons
-  with `aria-pressed`, as the Tab drawer's transfer and split pickers and the draft line toggle are.
-
 ## Three till loading lines may not be announced
 
 - **Three till loading lines may not be announced** (found 2026-10-03 in review of lane C's W23).

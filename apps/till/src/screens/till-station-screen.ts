@@ -7,6 +7,7 @@ import {
   nothing,
   unsafeCSS,
 } from "lit";
+import { segmentedOptionStyles } from "../widgets/segmented-control-styles.js";
 import { PHONE_WIDTH } from "../widgets/language-chooser-styles.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { UrlStateController, baseStyles } from "@waitron/ui";
@@ -97,6 +98,7 @@ export interface HoldReloadDetail {
 export class TillStationScreen extends LitElement {
   static override styles = [
     baseStyles,
+    segmentedOptionStyles,
     unavailableStyles,
     css`
       :host {
@@ -1126,10 +1128,10 @@ export class TillStationScreen extends LitElement {
 
   #pick(station: Station): TemplateResult {
     const active = station.id === this.activeStationId;
-    return html`<wt-button
-      class=${active ? "pick active" : "pick"}
+    return html`<button
+      type="button"
+      class=${active ? "option pick active" : "option pick"}
       data-station=${station.id}
-      variant=${active ? "primary" : "secondary"}
       aria-pressed=${active ? "true" : "false"}
       @click=${() => void this.#selectStation(station.id)}
     >
@@ -1138,7 +1140,7 @@ export class TillStationScreen extends LitElement {
           ? station.name
           : t("station_today.picker_closed").replace("{station}", () => station.name)
       }
-    </wt-button>`;
+    </button>`;
   }
 }
 
