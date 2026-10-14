@@ -407,6 +407,35 @@ describe("staff-role dialog", () => {
     expect(api.setHolders).toHaveBeenLastCalledWith("role-new", ["p-ana"]);
   });
 
+  it("keeps Save busy across being taken out and put back before a create answers, then updates the created staff role", async () => {
+    const api = await mount();
+    let settle!: (value: StaffRole) => void;
+    api.createStaffRole.mockImplementationOnce(
+      () => new Promise<StaffRole>((resolve) => (settle = resolve)),
+    );
+    await typeName("Runner");
+    await press();
+    await vi.waitFor(() => expect(api.createStaffRole).toHaveBeenCalled());
+    el.remove();
+    document.body.append(el);
+    await el.updateComplete;
+    await typeName("Cook");
+    expect(save().disabled).toBe(true);
+    await press();
+    expect(api.createStaffRole).toHaveBeenCalledTimes(1);
+    settle({ ...waiter, id: "role-runner", name: "Runner", holderIds: [] });
+    await vi.waitFor(() => expect(save().disabled).toBe(false));
+    expect(el.shadowRoot!.querySelector("wt-modal")!.heading).toBe("Edit staff role");
+    const close = closed();
+    await press();
+    await close;
+    expect(api.createStaffRole).toHaveBeenCalledTimes(1);
+    expect(api.updateStaffRole).toHaveBeenCalledWith("role-runner", {
+      name: "Cook",
+      colour: "blue",
+    });
+  });
+
   it.each([
     ["for a new staff role", undefined, "createStaffRole"],
     ["on another staff role", waiter, "updateStaffRole"],

@@ -89,7 +89,6 @@ export class StaffRoleDialog extends LitElement {
     this.scope = undefined;
     this.leave = undefined;
     this.generation = {};
-    this.busy = false;
     super.disconnectedCallback();
   }
   protected override willUpdate() {
@@ -211,6 +210,13 @@ export class StaffRoleDialog extends LitElement {
     }
     const generation = this.generation;
     const identity = this.identity;
+    // A save whose dialog was taken out since is dropped; while the same editing session is still
+    // open, Save stays busy until it answers, so a put-back dialog cannot create a second role.
+    const dropped = () => {
+      if (generation === this.generation) return false;
+      if (identity === this.identity) this.busy = false;
+      return true;
+    };
     const submitted = copy({ ...this.draft, name: this.draft.name.trim() });
     const details = { name: submitted.name, colour: submitted.colour };
     const baseline = this.baseline!;
@@ -221,7 +227,7 @@ export class StaffRoleDialog extends LitElement {
       else if (!sameDetails(submitted, baseline))
         saved = await this.api.updateStaffRole(this.savedId, details);
     } catch (error) {
-      if (generation !== this.generation) return;
+      if (dropped()) return;
       this.busy = false;
       const { params } = error as { params?: Record<string, unknown> };
       this.refusal = { code: codeOf(error), params };
@@ -233,7 +239,7 @@ export class StaffRoleDialog extends LitElement {
       this.savedId = saved.id;
       this.wrote = true;
     }
-    if (generation !== this.generation) return;
+    if (dropped()) return;
     if (saved) {
       this.baseline = { ...baseline, name: saved.name, colour: saved.colour };
       this.scope?.commit(this.baseline);
@@ -243,13 +249,13 @@ export class StaffRoleDialog extends LitElement {
         saved = await this.api.setHolders(this.savedId!, submitted.holderIds);
         this.wrote = true;
       } catch (error) {
-        if (generation !== this.generation) return;
+        if (dropped()) return;
         this.busy = false;
         const { params } = error as { params?: Record<string, unknown> };
         this.holdersRefusal = { code: codeOf(error), params };
         return;
       }
-      if (generation !== this.generation) return;
+      if (dropped()) return;
     }
     this.busy = false;
     this.baseline = submitted;
