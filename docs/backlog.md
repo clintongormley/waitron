@@ -4216,8 +4216,10 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   Task 7 built the opt-in Amazon S3 rehearsal runner and runs the stream loop through it (A538-7;
   runbook `docs/developers/aws-backup-rehearsal.md`). Task 8 added the pause scenario: local proxies
   hold the rehearsal's own bucket calls, and a bucket rule refuses the paused supervisor's check
-  (A538-8; same runbook). Neither scenario has yet run against Amazon S3. Tasks 9 and 10 and the
-  real-AWS evidence are open.
+  (A538-8; same runbook). Task 9 added the delete-many, archive round trip and archive abort
+  scenarios, each with an opt-in Amazon S3 file and a versitygw run in CI's `test-server-stream` job
+  (A538-9; same runbook). No scenario has yet run against Amazon S3. Task 10 and the real-AWS
+  evidence are open.
   `S3FileStore`'s listing and batch delete repeat `S3ObjectStore`'s (`packages/stream/src/s3-store.ts`)
   with different error codes, and only the file store's refuses a repeated key or bad size and
   counts `NoSuchKey` as deleted; share them, deciding whether the bucket stream takes those checks

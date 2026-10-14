@@ -1,7 +1,7 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { open, unlink } from "node:fs/promises";
 import { AppError } from "@waitron/shared";
-import { KDF_BY_VERSION, VERSION } from "./artifact-cipher.js";
+import { ARTIFACT_HEADER_BYTES, KDF_BY_VERSION, VERSION } from "./artifact-cipher.js";
 import { FILE_CHUNK_BYTES, readExactly, writeAll } from "./artifact-file-io.js";
 import { deriveKeyAsync } from "./scrypt-kdf.js";
 import "./errors.js";
@@ -48,8 +48,9 @@ export async function decryptArtifactFile(
   const input = await open(artifactPath, "r");
   try {
     const size = (await input.stat()).size;
-    if (size < 49) throw new AppError("backup.artifact_invalid", { reason: "too_short" });
-    const header = await readExactly(input, 49, 0);
+    if (size < ARTIFACT_HEADER_BYTES)
+      throw new AppError("backup.artifact_invalid", { reason: "too_short" });
+    const header = await readExactly(input, ARTIFACT_HEADER_BYTES, 0);
     if (!header.subarray(0, 4).equals(Buffer.from("WBK1"))) {
       throw new AppError("backup.artifact_invalid", { reason: "bad_magic" });
     }
@@ -59,10 +60,10 @@ export async function decryptArtifactFile(
     const key = await deriveKeyAsync(passphrase, header.subarray(5, 21), params);
     const decipher = createDecipheriv("aes-256-gcm", key, header.subarray(21, 33));
     decipher.setAAD(header.subarray(0, 33));
-    decipher.setAuthTag(header.subarray(33, 49));
+    decipher.setAuthTag(header.subarray(33, ARTIFACT_HEADER_BYTES));
     const output = await open(outPath, "wx", 0o600);
     try {
-      for (let position = 49; position < size; position += FILE_CHUNK_BYTES) {
+      for (let position = ARTIFACT_HEADER_BYTES; position < size; position += FILE_CHUNK_BYTES) {
         const bytes = await readExactly(
           input,
           Math.min(FILE_CHUNK_BYTES, size - position),

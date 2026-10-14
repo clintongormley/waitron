@@ -504,7 +504,8 @@ Before calling a package green, verify its CI coverage result on the current hea
 `pnpm --filter <pkg> test:coverage` locally when investigating a failure. There is no single `test`
 job: `.github/workflows/ci.yml` runs `test-heavy` (`packages/db`) and `test-server`
 (`apps/server`) as three-way and eight-way file shards, each with a `-merge` job that enforces the thresholds on
-the merged blob (#216) — `apps/server`'s two stream tests run in `test-server-stream` instead, whose
+the merged blob (#216) — the files that need either downloaded binary (the stream loop and pause tests, the S3 rehearsal
+scenarios and the S3 test server's suite) run in `test-server-stream` instead, whose
 blob joins the same merge. `test-dashboard` and `test-venue-service` are four-way and `test-till`
 two-way file shards in the same pattern, each with its own `-merge` job, so those three packages'
 coverage bars are enforced in the merge job, not in a shard. Then `test-fiscal-verifactu`,
@@ -1250,12 +1251,14 @@ config's own `exclude` list rather than replacing it (`vitest list --filesOnly` 
 listed 289 files without the two flags and 287 with them, and the config-excluded
 `src/**/*.preprod.test.ts` file in neither, 2026-09-26). The S3 test server's own suite,
 `apps/server/src/testing/s3-test-server.test.ts`, has cases that need versitygw too and is excluded
-and run the same way (2026-09-30). `test-server-stream` runs
+and run the same way (2026-09-30), and so are the Amazon S3 rehearsal's scenarios run against
+versitygw, `apps/server/src/s3-rehearsal-scenarios.e2e.test.ts` (2026-10-14). `test-server-stream` runs
 the same `test:shard` script over those files alone and uploads its blob as `server-blob-stream`,
 which `test-server-merge`'s `server-blob-*` download picks up with the shards' blobs, so the
 coverage gate counts what those tests reach. It alone runs `node scripts/setup-litestream.mjs` and
 `node scripts/setup-s3-test-server.mjs`, because the cases that run them fail rather than skip in CI
-without them; the S3 test server's suite runs versitygw alone, and only in some of its cases
+without them; the S3 test server's suite runs versitygw alone, and only in some of its cases, and
+the S3 rehearsal scenarios run versitygw alone in every case
 ([testing-guide.md](testing-guide.md), "The stream loop test skips locally without its two
 binaries, and a skip reads as a pass"). That is about 13.5 MB of Litestream and 27.5 MB of versitygw
 for linux/amd64 (the release APIs' `size` fields, read 2026-09-25), from GitHub's release downloads,

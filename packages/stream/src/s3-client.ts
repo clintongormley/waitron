@@ -23,6 +23,21 @@ export interface S3ObjectStoreOptions {
   sleep?: (ms: number, signal: AbortSignal | undefined) => Promise<void>;
   /** Replaces {@link BUCKET_IDLE_MS}. Tests only. */
   idleMs?: number;
+  /**
+   * Told of each command that reaches the client's `initialize` step, once its attempts end.
+   * Rehearsals only. An observer that throws fails the command with what it threw.
+   */
+  observe?: (observation: CommandObservation) => void;
+}
+
+export interface CommandObservation {
+  /** The SDK's command name, such as "UploadPartCommand". */
+  command: string;
+  input: Readonly<Record<string, unknown>>;
+  /** Exactly one of output and error is set. */
+  output?: unknown;
+  error?: unknown;
+  elapsedMs: number;
 }
 
 /**
@@ -43,7 +58,7 @@ export function createBucketClient(
   options: S3ObjectStoreOptions = {},
   checksums: Pick<S3ClientConfig, "requestChecksumCalculation"> = {},
 ): S3Client {
-  return new S3Client({
+  const client = new S3Client({
     ...checksums,
     region: config.region,
     ...(config.endpoint === undefined ? {} : { endpoint: config.endpoint }),
@@ -54,6 +69,45 @@ export function createBucketClient(
     requestHandler: options.requestHandler ?? { socketTimeout: options.idleMs ?? BUCKET_IDLE_MS },
     maxAttempts: 3,
   });
+  const observe = options.observe;
+  if (observe !== undefined) {
+    // At "initialize" it sees one answer after the retries ("reports a retried command once",
+    // `s3-client.observe.test.ts`).
+    client.middlewareStack.add(
+      (next, context) => async (args) => {
+        const command = String(context.commandName);
+        const input = args.input as Record<string, unknown>;
+        const started = performance.now();
+        let result: Awaited<ReturnType<typeof next>>;
+        try {
+          result = await next(args);
+        } catch (error) {
+          observe({ command, input, error, elapsedMs: performance.now() - started });
+          throw error;
+        }
+        try {
+          observe({
+            command,
+            input,
+            output: result.output,
+            elapsedMs: performance.now() - started,
+          });
+        } catch (error) {
+          // The caller gets a rejection, never the output, so nothing else will close its body.
+          destroyBody(result.output);
+          throw error;
+        }
+        return result;
+      },
+      { step: "initialize", name: "observeCommand" },
+    );
+  }
+  return client;
+}
+
+function destroyBody(output: unknown): void {
+  const body = (output as { Body?: { destroy?: unknown } }).Body;
+  if (typeof body?.destroy === "function") (body as { destroy: () => void }).destroy();
 }
 
 export function statusOf(error: unknown): number | null {

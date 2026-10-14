@@ -44,6 +44,8 @@ export interface FakeAdminOptions {
   uploads?: Iterable<[string, string]>;
   /** Keys per ListObjectsV2 page. */
   pageSize?: number;
+  /** Uploads per ListMultipartUploads page. */
+  uploadsPageSize?: number;
 }
 
 /** An admin client that keeps an in-memory bucket and records every command it is sent. */
@@ -53,11 +55,13 @@ export class FakeAdmin implements AdminClient {
   readonly uploads: Map<string, string>;
   readonly answers: Record<string, Answer>;
   private readonly pageSize: number;
+  private readonly uploadsPageSize: number;
 
   constructor(options: FakeAdminOptions = {}) {
     this.objects = new Map(options.objects);
     this.uploads = new Map(options.uploads);
     this.pageSize = options.pageSize ?? 1000;
+    this.uploadsPageSize = options.uploadsPageSize ?? 1000;
     this.answers = { ...this.defaults(), ...options.answers };
   }
 
@@ -93,11 +97,29 @@ export class FakeAdmin implements AdminClient {
         },
       }),
       GetBucketVersioning: () => ok(),
-      ListMultipartUploads: () => ({
-        ...ok(),
-        IsTruncated: false,
-        Uploads: [...this.uploads].map(([UploadId, Key]) => ({ Key, UploadId })),
-      }),
+      ListMultipartUploads: (input) => {
+        const prefix = (input.Prefix as string | undefined) ?? "";
+        const listed = [...this.uploads]
+          .filter(([, key]) => key.startsWith(prefix))
+          .map(([UploadId, Key]) => ({ Key, UploadId }));
+        const after =
+          input.KeyMarker === undefined
+            ? 0
+            : listed.findIndex(
+                (u) => u.Key === input.KeyMarker && u.UploadId === input.UploadIdMarker,
+              ) + 1;
+        const page = listed.slice(after, after + this.uploadsPageSize);
+        const last = page.at(-1);
+        const truncated = after + this.uploadsPageSize < listed.length;
+        return {
+          ...ok(),
+          IsTruncated: truncated,
+          Uploads: page,
+          ...(truncated && last !== undefined
+            ? { NextKeyMarker: last.Key, NextUploadIdMarker: last.UploadId }
+            : {}),
+        };
+      },
       AbortMultipartUpload: (input) => {
         if (!this.uploads.delete(input.UploadId as string)) throw sdkError("NoSuchUpload", 404);
         return ok(204);

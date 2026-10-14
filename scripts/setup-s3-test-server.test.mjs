@@ -22,8 +22,8 @@ import {
   parseVersion,
 } from "./setup-s3-test-server.mjs";
 
-// The installer for the S3-compatible server the stream loop and pause tests run as a child
-// process. Every case runs offline: the "release" is a tarball built here, holding a shell script
+// The installer for the S3-compatible server the stream loop and pause tests and the S3 rehearsal
+// scenarios run as a child process. Every case runs offline: the "release" is a tarball built here, holding a shell script
 // that prints a version line the way `versitygw --version` does.
 
 const HOST = `${process.platform}-${process.arch}`;

@@ -89,6 +89,8 @@ describe("AWS rehearsal test selection", () => {
     expect(rehearsalFilesOnDisk()).toContain("src/aws-rehearsal-profile.aws-rehearsal.test.ts");
     expect(rehearsalFilesOnDisk()).toContain("src/aws-stream-loop.aws-rehearsal.test.ts");
     expect(rehearsalFilesOnDisk()).toContain("src/aws-stream-pause.aws-rehearsal.test.ts");
+    expect(rehearsalFilesOnDisk()).toContain("src/aws-delete.aws-rehearsal.test.ts");
+    expect(rehearsalFilesOnDisk()).toContain("src/aws-archive.aws-rehearsal.test.ts");
   });
 
   it("the default config never selects a rehearsal file", () => {
@@ -107,6 +109,8 @@ describe("AWS rehearsal test selection", () => {
     const files = listed(children.rehearsal);
     expect(files).toContain("src/aws-stream-loop.aws-rehearsal.test.ts");
     expect(files).toContain("src/aws-stream-pause.aws-rehearsal.test.ts");
+    expect(files).toContain("src/aws-delete.aws-rehearsal.test.ts");
+    expect(files).toContain("src/aws-archive.aws-rehearsal.test.ts");
     expect(files).toEqual(rehearsalFilesOnDisk().sort());
   });
 

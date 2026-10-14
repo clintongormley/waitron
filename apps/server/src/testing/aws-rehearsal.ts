@@ -21,7 +21,6 @@ import {
   type GetBucketVersioningCommandOutput,
   GetObjectCommand,
   type GetObjectCommandOutput,
-  ListMultipartUploadsCommand,
   type ListMultipartUploadsCommandOutput,
   ListObjectsV2Command,
   type ListObjectsV2CommandOutput,
@@ -62,6 +61,8 @@ import {
   type TeardownEntry,
   writeReceipt,
 } from "./aws-rehearsal-receipt.js";
+import { fixtureBudget } from "./fixture-budget.js";
+import { listPages, listUploads, type Outcome, type TrackedUpload } from "./s3-listing.js";
 import { settleWithin } from "./settle-within.js";
 
 export type AwsRehearsalRefusalReason =
@@ -285,6 +286,8 @@ export interface AwsRehearsal {
   reserveObjects(count: number): void;
   trackChild(pid: number): void;
   trackUpload(key: string, uploadId: string): void;
+  /** The unfinished multipart uploads in `bucket` under `prefix`, an issued prefix or a path below one. */
+  ownedUploads(prefix: string): Promise<TrackedUpload[]>;
   record(event: unknown): void;
   /** Acts on `bucket` alone; `put` takes only a listing-denial document (`assertListingDenial`). */
   bucketPolicy: {
@@ -318,11 +321,6 @@ export interface AwsRehearsalDeps extends TeardownDeps, RehearsalProfileDeps {
   print(line: string): void;
 }
 
-export interface TrackedUpload {
-  key: string;
-  uploadId: string;
-}
-
 export interface TeardownTarget {
   bucket: string;
   /** The run the bucket's ownership marker names; the marker is put back from it if needed. */
@@ -347,13 +345,7 @@ const LABEL = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const RECEIPT_DIR = /^\/[A-Za-z0-9._/@-]+$/;
 const CHILD_GRACE_MS = 5_000;
 const CHILD_POLL_MS = 100;
-const MAX_LIST_PAGES = 10_000;
 const DELETE_BATCH = 1000;
-
-interface Outcome<T> {
-  output?: T;
-  error?: unknown;
-}
 
 interface CallExtra {
   objectRole?: string;
@@ -476,36 +468,6 @@ async function stopChildren(
     : { step: "stop-child", outcome: "failed", count: left };
 }
 
-/**
- * Yields each page's answer until one fails or is the last. A truncated page whose next position is
- * missing or already seen is followed by a failure carrying `repeated`; at most MAX_LIST_PAGES are read.
- */
-async function* listPages<T extends { IsTruncated?: boolean | undefined }, P>(
-  list: (position: P | undefined) => Promise<Outcome<T>>,
-  nextPosition: (output: T) => { position: P; seen: string } | undefined,
-  repeated: string,
-): AsyncGenerator<Outcome<T>> {
-  const seen = new Set<string>();
-  let position: P | undefined;
-  for (let page = 0; page < MAX_LIST_PAGES; page += 1) {
-    const listed = await list(position);
-    yield listed;
-    if (listed.error !== undefined || listed.output?.IsTruncated !== true) return;
-    const next = nextPosition(listed.output);
-    if (next === undefined || seen.has(next.seen)) {
-      yield { error: new AwsRehearsalFailed(repeated) };
-      return;
-    }
-    seen.add(next.seen);
-    position = next.position;
-  }
-}
-
-interface UploadMarkers {
-  keyMarker: string | undefined;
-  uploadIdMarker: string | undefined;
-}
-
 async function abortUploads(
   send: Send,
   bucket: string,
@@ -530,33 +492,15 @@ async function abortUploads(
   };
   for (const upload of tracked) await abort(upload);
 
-  for await (const listed of listPages<ListMultipartUploadsCommandOutput, UploadMarkers>(
-    (markers) =>
-      send(
-        new ListMultipartUploadsCommand({
-          Bucket: bucket,
-          ...(markers?.keyMarker === undefined ? {} : { KeyMarker: markers.keyMarker }),
-          ...(markers?.uploadIdMarker === undefined
-            ? {}
-            : { UploadIdMarker: markers.uploadIdMarker }),
-        }),
-        "ListMultipartUploads",
-      ),
-    ({ NextKeyMarker: keyMarker, NextUploadIdMarker: uploadIdMarker }) => ({
-      position: { keyMarker, uploadIdMarker },
-      seen: `${keyMarker ?? ""}\u0000${uploadIdMarker ?? ""}`,
-    }),
-    "ListMultipartUploads repeated its marker",
+  for await (const listed of listUploads(
+    (command) => send<ListMultipartUploadsCommandOutput>(command, "ListMultipartUploads"),
+    { bucket, failure: (message) => new AwsRehearsalFailed(message) },
   )) {
     if (listed.error !== undefined) {
       firstError ??= listed.error;
       break;
     }
-    for (const upload of listed.output?.Uploads ?? []) {
-      if (upload.Key !== undefined && upload.UploadId !== undefined) {
-        await abort({ key: upload.Key, uploadId: upload.UploadId });
-      }
-    }
+    for (const upload of listed.uploads) await abort(upload);
   }
   const entry =
     firstError === undefined
@@ -589,7 +533,7 @@ async function deleteObjects(send: Send, bucket: string): Promise<TeardownEntry>
       ),
     ({ NextContinuationToken: token }) =>
       token === undefined ? undefined : { position: token, seen: token },
-    "ListObjectsV2 repeated its continuation token",
+    () => new AwsRehearsalFailed("ListObjectsV2 repeated its continuation token"),
   )) {
     if (listed.error !== undefined) {
       failure = listed.error;
@@ -917,12 +861,6 @@ function createFailure(ownership: CreateOutcome, bucket: string): AwsRehearsalFa
   }
 }
 
-function nonNegativeInteger(value: number, what: string): void {
-  if (!Number.isSafeInteger(value) || value < 0) {
-    throw new AwsRehearsalRefused("fixture-limit", `${what} must be a non-negative integer`);
-  }
-}
-
 async function preflight(
   client: AdminClient,
   bucket: string,
@@ -1192,27 +1130,10 @@ async function runOwned<T>(
       );
     }
   };
-  let uploaded = 0;
-  let objects = 0;
-  const reserveUpload = (bytes: number, role: string): void => {
-    nonNegativeInteger(bytes, "bytes");
-    const overTotal = uploaded + bytes > AWS_REHEARSAL_LIMITS.uploadedBytes;
-    const overArchive = role === "archive" && bytes > AWS_REHEARSAL_LIMITS.archiveBytes;
-    if (overTotal || overArchive) {
-      record({
-        scenario: "lifecycle",
-        phase: "fixture-limit",
-        objectRole: role,
-        bytes,
-        outcome: "refused",
-      });
-      throw new AwsRehearsalRefused(
-        "fixture-limit",
-        overArchive ? "an archive fixture is over its byte limit" : "the upload budget is spent",
-      );
-    }
-    uploaded += bytes;
-  };
+  const { reserveUpload, reserveObjects } = fixtureBudget(
+    record,
+    (detail) => new AwsRehearsalRefused("fixture-limit", detail),
+  );
   const issued = new Set<string>();
   const labels = new Set<string>();
   const ctx: AwsRehearsal = {
@@ -1242,19 +1163,7 @@ async function runOwned<T>(
       };
     },
     reserveUpload,
-    reserveObjects(count) {
-      nonNegativeInteger(count, "count");
-      if (objects + count > AWS_REHEARSAL_LIMITS.deleteObjects) {
-        record({
-          scenario: "lifecycle",
-          phase: "fixture-limit",
-          count,
-          outcome: "refused",
-        });
-        throw new AwsRehearsalRefused("fixture-limit", "the object budget is spent");
-      }
-      objects += count;
-    },
+    reserveObjects,
     trackChild(pid) {
       refuseOnceTearingDown();
       if (!Number.isSafeInteger(pid) || pid <= 0) {
@@ -1271,6 +1180,30 @@ async function runOwned<T>(
         );
       }
       uploads.push({ key, uploadId });
+    },
+    async ownedUploads(prefix) {
+      refuseOnceTearingDown();
+      if (![...issued].some((given) => prefix.startsWith(given))) {
+        throw new AwsRehearsalRefused(
+          "prefix-not-issued",
+          "list under a prefix from prefix(label) or a path below one",
+        );
+      }
+      const send = sender(client, "inventory", callDeps, signal);
+      const found: TrackedUpload[] = [];
+      for await (const listed of listUploads(
+        (command) => send<ListMultipartUploadsCommandOutput>(command, "ListMultipartUploads"),
+        { bucket, prefix, failure: (message) => new AwsRehearsalFailed(message) },
+      )) {
+        if (listed.error instanceof AwsRehearsalFailed) throw listed.error;
+        if (listed.error !== undefined) {
+          throw new AwsRehearsalFailed(
+            `ListMultipartUploads failed: ${receiptErrorName(nameOf(listed.error))}`,
+          );
+        }
+        found.push(...listed.uploads);
+      }
+      return found;
     },
     // The scenario's own entries stay strict, so a refused one fails the scenario where it is made.
     record: (event) => log.record(event),

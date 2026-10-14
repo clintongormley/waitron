@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   type AwsReceiptEvent,
+  type ReceiptLog,
   actionTable,
   createReceiptLog,
   sanitizeEvent,
@@ -43,6 +44,20 @@ function runnerCommand(region: string, receiptPath: string): string {
     `AWS_REGION=${region} pnpm --filter @waitron/server exec tsx scripts/aws-rehearsal-cleanup.ts ` +
     `--receipt ${receiptPath}`
   );
+}
+
+/** An owned bucket's receipt is refused without these steps, so a log that finishes one carries them. */
+function tornDown(log: ReceiptLog): ReceiptLog {
+  for (const step of [
+    "stop-child",
+    "abort-upload",
+    "remove-policy",
+    "delete-objects",
+    "delete-bucket",
+  ] as const) {
+    log.teardown({ step, outcome: "ok" });
+  }
+  return log;
 }
 
 function refusalOf(run: () => unknown): Error {
@@ -133,7 +148,7 @@ describe("sanitizeEvent", () => {
 
 describe("createReceiptLog", () => {
   it("never serialises a refused event", () => {
-    const log = createReceiptLog(header, KEYS);
+    const log = tornDown(createReceiptLog(header, KEYS));
     log.record({ scenario: "s", phase: "p", outcome: "ok", api: "PutObject", httpStatus: 200 });
     expect(() => log.record({ scenario: "s", phase: SECRET, outcome: "ok" })).toThrow(
       "receipt field refused: phase",
@@ -155,7 +170,9 @@ describe("createReceiptLog", () => {
     const log = createReceiptLog(header, KEYS);
     log.teardown({ step: "delete-bucket", outcome: "failed", errorName: "<b>", httpStatus: 409 });
     log.teardown({ step: "delete-objects", outcome: "ok", count: 2, errorName: "BucketNotEmpty" });
-    expect(log.finish(finishParts).teardown).toEqual([
+    expect(
+      log.finish({ ...finishParts, ownership: { bucket: null, state: "not-created" } }).teardown,
+    ).toEqual([
       { step: "delete-bucket", outcome: "failed", errorName: "Unlisted", httpStatus: 409 },
       { step: "delete-objects", outcome: "ok", count: 2, errorName: "BucketNotEmpty" },
     ]);
@@ -294,7 +311,7 @@ describe("writeReceipt", () => {
   it("writes the receipt as JSON named after its run id", async () => {
     const dir = await mkdtemp(join(tmpdir(), "aws-receipt-"));
     try {
-      const receipt = createReceiptLog(header, KEYS).finish(finishParts);
+      const receipt = tornDown(createReceiptLog(header, KEYS)).finish(finishParts);
       const path = await writeReceipt(dir, receipt, KEYS);
       expect(path).toBe(join(dir, "aws-rehearsal-run-1.json"));
       expect(JSON.parse(await readFile(path, "utf8"))).toEqual(receipt);
@@ -317,7 +334,7 @@ describe("the loaded key pair never reaches the receipt", () => {
   it.each(["scenario", "phase", "objectRole", "api"])(
     "refuses the plain secret in event field %s",
     (key) => {
-      const log = createReceiptLog(header, keys);
+      const log = tornDown(createReceiptLog(header, keys));
       for (const value of [PLAIN_SECRET, `x-${PLAIN_SECRET}`]) {
         const error = refusalOf(() => log.record({ ...event, [key]: value }));
         expect(error.message).toBe(`receipt field refused: ${key}`);
@@ -328,7 +345,7 @@ describe("the loaded key pair never reaches the receipt", () => {
   );
 
   it("never echoes a capital-first secret as an error name", () => {
-    const log = createReceiptLog(header, capitalKeys);
+    const log = tornDown(createReceiptLog(header, capitalKeys));
     const error = refusalOf(() => log.record({ ...event, errorName: CAPITAL_SECRET }));
     expect(error.message).toBe("receipt field refused: errorName");
     expectClean(error, CAPITAL_SECRET);
@@ -383,7 +400,7 @@ describe("the loaded key pair never reaches the receipt", () => {
   it("writeReceipt refuses a hand-built receipt carrying either value", async () => {
     const dir = await mkdtemp(join(tmpdir(), "aws-receipt-"));
     try {
-      const receipt = createReceiptLog(header, keys).finish(finishParts);
+      const receipt = tornDown(createReceiptLog(header, keys)).finish(finishParts);
       for (const value of [PLAIN_SECRET, ACCESS_KEY_ID]) {
         const tampered = { ...receipt, remaining: { bucket: null, uploadIds: [value] } };
         const error = await writeReceipt(dir, tampered, keys).then(
@@ -406,7 +423,7 @@ describe("receipt rules widened for slice 7b", () => {
     "x".repeat(1024),
     "VXBsb2FkIElEIGZvciA2aWWpbmcncyBteS1tb3ZpZS5tMnRzIHVwbG9hZA",
   ])("keeps the opaque upload id %s", (id) => {
-    const receipt = createReceiptLog(header, KEYS).finish({
+    const receipt = tornDown(createReceiptLog(header, KEYS)).finish({
       ...finishParts,
       remaining: { bucket: BUCKET, uploadIds: [id] },
     });
@@ -459,7 +476,7 @@ describe("receipt rules widened for slice 7b", () => {
       'AWS_CONFIG_FILE="$HOME/.config/waitron-cloud/aws/config" AWS_PROFILE=waitron-rehearsal ' +
       "AWS_REGION=eu-north-1 pnpm --filter @waitron/server exec tsx scripts/aws-rehearsal-cleanup.ts " +
       "--receipt /var/folders/ab/x_y/T/waitron-aws-rehearsal/aws-rehearsal-run-1.json";
-    const receipt = createReceiptLog(header, KEYS).finish({
+    const receipt = tornDown(createReceiptLog(header, KEYS)).finish({
       ...finishParts,
       remaining: { bucket: BUCKET, uploadIds: [] },
       cleanupCommand: command,
@@ -516,11 +533,50 @@ describe("receipt rules widened for slice 7b", () => {
 
   it("accepts the runner's command for a cleanup receipt", () => {
     const command = runnerCommand("us-east-1", "/tmp/r/aws-rehearsal-run-1-cleanup.json");
-    const receipt = createReceiptLog(header, KEYS).finish({
+    const receipt = tornDown(createReceiptLog(header, KEYS)).finish({
       ...finishParts,
       remaining: { bucket: BUCKET, uploadIds: [] },
       cleanupCommand: command,
     });
     expect(receipt.cleanupCommand).toBe(command);
+  });
+});
+
+describe("an owned bucket's teardown", () => {
+  const STEPS = [
+    "stop-child",
+    "abort-upload",
+    "remove-policy",
+    "delete-objects",
+    "delete-bucket",
+  ] as const;
+
+  function logWith(steps: readonly (typeof STEPS)[number][]) {
+    const log = createReceiptLog(header, KEYS);
+    for (const step of steps) log.teardown({ step, outcome: "ok" });
+    return log;
+  }
+
+  it("refuses an owned receipt with no teardown", () => {
+    expect(() => logWith([]).finish(finishParts)).toThrow("receipt field refused: teardown");
+  });
+
+  it.each(STEPS)("refuses an owned receipt missing its %s step", (missing) => {
+    const log = logWith(STEPS.filter((step) => step !== missing));
+    expect(() => log.finish(finishParts)).toThrow("receipt field refused: teardown");
+  });
+
+  it("accepts an owned receipt carrying all five steps, failed ones included", () => {
+    const log = logWith(STEPS.slice(1));
+    log.teardown({ step: "stop-child", outcome: "failed", errorName: "Timeout" });
+    expect(log.finish(finishParts).teardown).toHaveLength(5);
+  });
+
+  it("accepts a receipt for a bucket never created with no teardown", () => {
+    const receipt = logWith([]).finish({
+      ...finishParts,
+      ownership: { bucket: null, state: "not-created" },
+    });
+    expect(receipt.teardown).toEqual([]);
   });
 });

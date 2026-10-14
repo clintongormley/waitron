@@ -1,6 +1,7 @@
 /**
  * `pnpm setup:s3-test-server` — install the pinned versitygw release at `.bin/versitygw`
- * under the repository root, where the stream loop and pause tests look for it
+ * under the repository root, where the stream loop and pause tests and the S3 rehearsal scenarios
+ * look for it
  * (`apps/server/src/testing/s3-test-server.ts`).
  *
  * versitygw is the S3-compatible server those tests run as a plain child process; why this one is in

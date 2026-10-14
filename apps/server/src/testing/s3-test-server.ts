@@ -10,10 +10,11 @@ import { isUnset } from "../env-value.js";
 import { freePort } from "./free-ports.js";
 
 // versitygw run as a plain child process: the S3-compatible server the stream loop and pause tests
-// stream to, plus the lookup of the litestream binary those tests also need. No package suite may
-// start a container (CLAUDE.md §4). Why versitygw, and the measurements behind the flags below, are
-// in docs/developers/testing-guide.md → "The stream loop test skips locally without its two
-// binaries, and a skip reads as a pass".
+// stream to and the S3 rehearsal scenarios run against, plus the lookup of the litestream binary
+// the stream loop and pause tests also need. No package suite may start a container (CLAUDE.md §4).
+// Why versitygw, and the measurements behind the flags below, are in
+// docs/developers/testing-guide.md → "The stream loop test skips locally without its two binaries,
+// and a skip reads as a pass".
 
 /** Must equal `VERSITYGW_VERSION` in `scripts/setup-s3-test-server.mjs`; that script's suite reads this line. */
 export const VERSITYGW_VERSION = "1.8.0";

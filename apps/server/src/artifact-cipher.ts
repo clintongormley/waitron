@@ -19,7 +19,8 @@ const TAG_LEN = 16;
 /** The authenticated header prefix: MAGIC|version|salt|iv, everything before the tag. These bytes are
  * bound into the GCM tag as AAD, so a flipped header byte fails authentication. */
 const AAD_LEN = MAGIC.length + 1 + SALT_LEN + IV_LEN; // 33
-const HEADER_LEN = AAD_LEN + TAG_LEN; // 49
+/** Everything an artifact holds besides its ciphertext, which is as long as its plaintext. */
+export const ARTIFACT_HEADER_BYTES = AAD_LEN + TAG_LEN; // 49
 
 /** Encrypt bytes under a passphrase. Frame: MAGIC|version|salt|iv|tag|ciphertext (all binary). */
 export function encryptArtifact(plaintext: Uint8Array, passphrase: string): Buffer {
@@ -52,7 +53,7 @@ function frameUnderKey(plaintext: Uint8Array, salt: Buffer, key: Buffer): Buffer
  * recovery.passphrase_invalid (wrong key / tamper — GCM auth failure, deliberately alike). */
 export function decryptArtifact(framed: Uint8Array, passphrase: string): Buffer {
   const buf = Buffer.from(framed.buffer, framed.byteOffset, framed.byteLength);
-  if (buf.length < HEADER_LEN)
+  if (buf.length < ARTIFACT_HEADER_BYTES)
     throw new AppError("backup.artifact_invalid", { reason: "too_short" });
   if (!buf.subarray(0, MAGIC.length).equals(MAGIC)) {
     throw new AppError("backup.artifact_invalid", { reason: "bad_magic" });

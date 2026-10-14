@@ -617,6 +617,8 @@ with the S3 test server's own suite, `apps/server/src/testing/s3-test-server.tes
 cases that start versitygw skip and fail the same way; its other cases start a stub or Node in
 versitygw's place and always run (`.github/workflows/ci.yml`; see
 [ci-and-gates.md](ci-and-gates.md), "The stream loop and pause tests run in a job of their own").
+The same job runs `apps/server/src/s3-rehearsal-scenarios.e2e.test.ts`, the Amazon S3 rehearsal's
+scenarios against versitygw alone, which skips and fails the same way.
 
 **A skipped run looks like a quiet pass.** Measured 2026-09-25 with Vitest 4.1.11 and
 `WAITRON_LITESTREAM_BIN=/nonexistent`: `pnpm --filter @waitron/server exec vitest run
@@ -727,12 +729,13 @@ something is still checkpointing`.
 | [SQLite WAL format](https://www.sqlite.org/fileformat.html#wal_file_format) | "The WAL header is 32 bytes in size"; "Checkpoint sequence number" | Big-endian page size at byte 8, checkpoint sequence at byte 12, and the salt pair at bytes 16–23. The same source's WAL Reset section describes salt changes and optional truncation. |
 
 **In CI their temporary files are in memory.** `test-server-stream` runs the loop and pause tests,
-and the S3 test server's own suite, with `TMPDIR=/dev/shm`, pinned by
+the S3 rehearsal scenarios and the S3 test server's own suite with `TMPDIR=/dev/shm`, pinned by
 `scripts/ci-workflow.test.mjs`, which reads `ci.yml` as text. It is the CI step's environment, not
 `scratchParent()`, so a local run still uses the system temporary directory. The loop and pause
 tests each make their scratch directory under `tmpdir()`, and that directory holds the server's
 database, Litestream's files and versitygw's bucket, so all of them move; the S3 test server's suite
-keeps its scratch and its stub programs under `tmpdir()` too. Main run 36559470238 (2026-09-29)
+keeps its scratch and its stub programs under `tmpdir()` too, and the scenarios their versitygw
+bucket. Main run 36559470238 (2026-09-29)
 failed with the slowest frozen sale at 1,228 ms. A probe with per-sale timing reproduced it on one
 runner of 20 (run 36574315468, a sale of 1,262 ms, in the fill stage): that sale's commit took 1,017
 ms. The next write waited 1,029 ms to begin, which A130 inferred was Litestream's

@@ -607,7 +607,9 @@ browser test** — most of these rules exist because a test passed while proving
 - **The stream loop test and the stream pause test need two pinned binaries: without them they are
   SKIPPED locally and FAIL in CI.** Install both with
   `node scripts/setup-litestream.mjs && node scripts/setup-s3-test-server.mjs`. A skipped run prints
-  `1 skipped` and nothing else, so a local green run of `apps/server` may not have run them. Guard:
+  `1 skipped` and nothing else, so a local green run of `apps/server` may not have run them. The S3
+  rehearsal scenarios (`apps/server/src/s3-rehearsal-scenarios.e2e.test.ts`) need versitygw alone
+  and skip and fail the same way. Guard:
   `scripts/ci-workflow.test.mjs`, weaker than its name — it reads `ci.yml` as TEXT, so install
   commands left only in a YAML comment, or in a step an `if:` switches off, pass it.
 - **On Vitest 4.1.11 a browser's `connectTimeout` is read only from the OUTER config's

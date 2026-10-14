@@ -136,6 +136,7 @@ const TEARDOWN_STEPS = [
   "delete-bucket",
   "inventory",
 ] as const;
+const OWNED_TEARDOWN_STEPS = TEARDOWN_STEPS.filter((step) => step !== "inventory");
 const OWNERSHIP_STATES = ["owned", "not-created", "collision", "unowned-candidate"] as const;
 
 /** The receipt's shape rule for an upload id; the key-pair check is separate. */
@@ -425,13 +426,23 @@ export function createReceiptLog(
       if (cleanupCommand !== null && !isReceiptCleanupCommand(cleanupCommand)) {
         throw refused("cleanupCommand");
       }
+      const finishedAt = token(parts.finishedAt, "header.finishedAt");
+      const ownership = sanitizeOwnership(parts.ownership, forbidden);
+      const actions = actionTable(events, parts.sourceOnly ?? []);
+      const remaining = sanitizeRemaining(parts.remaining, forbidden);
+      if (
+        ownership.state === "owned" &&
+        !OWNED_TEARDOWN_STEPS.every((step) => teardown.some((entry) => entry.step === step))
+      ) {
+        throw refused("teardown");
+      }
       return {
-        header: { ...cleanHeader, finishedAt: token(parts.finishedAt, "header.finishedAt") },
-        ownership: sanitizeOwnership(parts.ownership, forbidden),
+        header: { ...cleanHeader, finishedAt },
+        ownership,
         events: [...events],
         teardown: [...teardown],
-        actions: actionTable(events, parts.sourceOnly ?? []),
-        remaining: sanitizeRemaining(parts.remaining, forbidden),
+        actions,
+        remaining,
         cleanupCommand,
       };
     },
