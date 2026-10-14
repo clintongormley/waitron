@@ -1226,10 +1226,12 @@ export class MenuPricesTable extends LitElement {
       <div class="outcome-room"></div>`;
   }
 
-  /** A closed message says nothing any longer, so the host is asked to clear the outcome. */
   readonly #onOutcomeClose = (event: Event): void => {
     event.stopPropagation();
+    const key = this.outcome?.save.key;
+    const hadFocus = this.#toast().matches(":focus-within");
     this.#emit("wt-price-outcome-close", {});
+    if (hadFocus && key !== undefined) void this.#focusField(key);
   };
 
   #outcomeText(): string {
@@ -1246,8 +1248,8 @@ export class MenuPricesTable extends LitElement {
   #undoButton() {
     const outcome = this.outcome;
     if (outcome?.kind !== "saved" || outcome.save.undo) return nothing;
-    // Pressing it keeps focus where it is: a field left would save what it holds, and that new
-    // save takes this Undo away before the click lands. Undo writes over its own field's text.
+    // A pointer press must not blur a price field: leaving it would save its draft and
+    // replace this Undo before the click lands.
     return html`<wt-button
       slot="action"
       variant="secondary"
@@ -1255,7 +1257,9 @@ export class MenuPricesTable extends LitElement {
       @mousedown=${(event: Event) => event.preventDefault()}
       @click=${(event: Event) => {
         event.stopPropagation();
+        const hadFocus = this.#toast().matches(":focus-within");
         this.#undo(outcome.save);
+        if (hadFocus) void this.#focusField(outcome.save.key);
       }}
       >${t("menu_prices.undo")}</wt-button
     >`;

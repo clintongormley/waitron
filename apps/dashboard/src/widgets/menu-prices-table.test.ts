@@ -1469,6 +1469,74 @@ it("asks the host to clear the outcome once its message is closed, the toast's o
   expect(closes).toEqual([]);
 });
 
+it.each(["saved", "refused"] as const)(
+  "A611 returns keyboard focus to the saved field when the %s message closes",
+  async (kind) => {
+    const el = await mount();
+    el.outcome =
+      kind === "saved"
+        ? { kind, save: burgerSaved }
+        : { kind, save: burgerSaved, reason: "No connection" };
+    await el.updateComplete;
+    const close = outcomeToast(el).shadowRoot!.querySelector<HTMLButtonElement>("button.close")!;
+    close.focus();
+    expect(outcomeToast(el).matches(":focus-within")).toBe(true);
+    el.addEventListener("wt-price-outcome-close", () => {
+      el.outcome = null;
+    });
+    await userEvent.keyboard("{Enter}");
+    await vi.waitFor(() => {
+      const field = override(el, "mi-burger");
+      expect(field.shadowRoot!.activeElement).toBe(field.shadowRoot!.querySelector("input"));
+    });
+    expect(outcomeToast(el).open).toBe(false);
+  },
+);
+
+it("A611 leaves another field focused when the saved message expires", async () => {
+  const el = await mount();
+  el.outcome = { kind: "saved", save: burgerSaved };
+  await el.updateComplete;
+  el.addEventListener("wt-price-outcome-close", () => {
+    el.outcome = null;
+  });
+  const other = override(el, "mi-lager");
+  other.focus();
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    outcomeToast(el).show();
+    await vi.advanceTimersByTimeAsync(5000);
+    await el.updateComplete;
+    expect(outcomeToast(el).open).toBe(false);
+    expect(other.shadowRoot!.activeElement).toBe(other.shadowRoot!.querySelector("input"));
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("A611 returns keyboard focus to the undone field when Undo removes its button", async () => {
+  const el = await mount({ rows: [{ ...burger, override: "11.00" }, lemonade, lager] });
+  el.outcome = { kind: "saved", save: burgerSaved };
+  await el.updateComplete;
+  const heard = priceSaves(el);
+  el.addEventListener("wt-price-save", () => {
+    el.outcome = null;
+  });
+  undoButton(el)!.focus();
+  expect(outcomeToast(el).matches(":focus-within")).toBe(true);
+  await userEvent.keyboard("{Enter}");
+  await vi.waitFor(() => {
+    const field = override(el, "mi-burger");
+    expect(field.shadowRoot!.activeElement).toBe(field.shadowRoot!.querySelector("input"));
+  });
+  expect(heard).toHaveBeenCalledExactlyOnceWith({
+    ...burgerSaved,
+    price: null,
+    previous: "11.00",
+    undo: true,
+  });
+});
+
 it("undoes on a click while another field holds a price typed and not yet saved, leaving that price typed and unsent", async () => {
   const el = await mount({ rows: [{ ...burger, override: "11.00" }, lemonade, lager] });
   const heard = priceSaves(el);

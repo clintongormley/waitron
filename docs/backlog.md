@@ -1082,12 +1082,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   placeholder's full stops were not re-checked. Left open by A343 (#1368).
   [Detail](backlog/catalogue.md#in-spanish-a-ranges-placeholder-reads-800--1200-with-full-stops-and-a-refused-field-is-drawn-about-14-px-wider-than-the-others)
 
-- **Closing a refusal's message now clears the outcome**, so a later save's "Saved …" message with
-  its Undo can appear where before it stayed hidden — no test covers that case. And when the message
-  closes, keyboard focus is not put back where it was. Next: a test for the first, and return focus
-  to the field the save came from. Left open by A343 (#1368's review).
-  [Detail](backlog/catalogue.md#closing-a-refusals-message-now-clears-the-outcome)
-
 - **A353 — Preview's changes: an "Undo" link that puts one change back to the live version** —
   owner, 2026-10-07; PARKED, not queued — owner 2026-10-08: take it from here when a lane has room.
   Its work so far is on a LOCAL branch only — `feat/menu-preview-undo` at `e04b3abe7`, in the
