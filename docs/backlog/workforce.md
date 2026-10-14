@@ -51,9 +51,11 @@ available. An open shift in another location is shown with clock actions unavail
 Part 3 has a reviewed [end-of-day plan](../superpowers/plans/2026-10-14-a10-3-end-of-day-plan.md).
 The part-3 branch has a library processor for automatic finishes, missing-time questions, overnight
 wake-ups and late clock/rota reconciliation. Its tests retain a question when there is no later
-activity or existing clock history conflicts with an automatic finish. Actual clock-boundary
-reconciliation, remaining command capture, background processing, boot wiring and missing-time email
-still need connecting; part 3 remains open.
+activity or existing clock history conflicts with an automatic finish. On this branch, reading your
+clock state or submitting a clock action reconciles your open completed day first. A stale action is
+refused after committing the automatic finish. This worker-only pass leaves the shared day's work
+pending for a complete background pass. Remaining command capture, background processing, boot wiring
+and missing-time email still need connecting; part 3 remains open.
 
 My hours stays with part 5; no placeholder is offered in part 2. Parts 3–6 remain open: automatic
 closure/questions, corrections, hours and the export/access screens. The period-read cost and the

@@ -1,7 +1,7 @@
 import "./errors.js";
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, sql, type SQL } from "drizzle-orm";
-import type { Transaction } from "@waitron/db";
+import { and, asc, desc, eq, sql, type SQL } from "drizzle-orm";
+import { billPayments, type Transaction } from "@waitron/db";
 import { readLocationClock } from "@waitron/reporting";
 import { AppError, businessDayAt, businessDayBounds } from "@waitron/shared";
 import {
@@ -10,11 +10,104 @@ import {
   attendanceOperationFacts,
   enqueueAttendanceDay,
   retireObsoleteRotaQuestions,
+  processAttendanceDay,
+  timeEntries,
   type AttendanceDay,
 } from "@waitron/workforce";
 
 import { recordAttendanceFact } from "./attendance-capture.js";
 import { discoverIntegratedAttendance } from "./attendance-integrated.js";
+import { readAttendanceFacts, readPlannedAttendanceShifts } from "./attendance-facts.js";
+import { readTillClockState } from "./till-clock-state.js";
+
+export async function reconcileAttendanceBeforeClock(
+  tx: Transaction,
+  scope: { nodeId: string; locationId: string; personId: string },
+  at: Date,
+): Promise<void> {
+  const state = await readTillClockState(tx, scope, at);
+  if (state.state === "out" || state.activeLocationId !== scope.locationId) return;
+  const [start] = await tx
+    .select({ eventAt: timeEntries.eventAt })
+    .from(timeEntries)
+    .where(
+      and(
+        eq(timeEntries.personId, scope.personId),
+        sql`(${timeEntries.entryKind} = 'in' or (${timeEntries.entryKind} = 'correction'
+        and ${timeEntries.correctionStatus} = 'approved' and ${timeEntries.correctsEntryId} is null
+        and ${timeEntries.missingEntryKind} = 'in'))`,
+      ),
+    )
+    .orderBy(
+      desc(timeEntries.eventAt),
+      desc(timeEntries.recordedAt),
+      desc(timeEntries.nodeId),
+      desc(timeEntries.sequenceNo),
+      desc(timeEntries.id),
+    )
+    .limit(1);
+  if (!start) return;
+  const clock = await readLocationClock(tx, scope.locationId);
+  const businessDay = businessDayAt(clock, new Date(start.eventAt));
+  const day = {
+    locationId: scope.locationId,
+    businessDay,
+    ...businessDayBounds(clock, businessDay),
+  };
+  if (Date.parse(day.endAt) > at.getTime()) return;
+  const [saved] = await tx
+    .select()
+    .from(attendanceDayWork)
+    .where(
+      and(
+        eq(attendanceDayWork.locationId, scope.locationId),
+        eq(attendanceDayWork.businessDay, businessDay),
+      ),
+    );
+  if (!saved) await enqueueAttendanceDay(tx, day);
+  const pending = await tx
+    .select()
+    .from(attendanceOperationFacts)
+    .where(
+      and(
+        eq(attendanceOperationFacts.personId, scope.personId),
+        eq(attendanceOperationFacts.locationId, scope.locationId),
+        eq(attendanceOperationFacts.businessDay, businessDay),
+        eq(attendanceOperationFacts.outcome, "pending"),
+      ),
+    );
+  for (const fact of pending) {
+    if (fact.source === "bill-payment") {
+      const [payment] = await tx
+        .select({ receivedAt: billPayments.receivedAt })
+        .from(billPayments)
+        .where(eq(billPayments.id, fact.key));
+      if (payment?.receivedAt !== null && payment?.receivedAt !== undefined)
+        await recordAttendanceFact(tx, { ...fact, outcome: "qualified" });
+    } else if (fact.source === "whole-payment") {
+      const [watch] = await tx
+        .select()
+        .from(attendanceSourceState)
+        .where(
+          and(
+            eq(attendanceSourceState.locationId, scope.locationId),
+            eq(attendanceSourceState.source, "whole-payment"),
+            eq(attendanceSourceState.recordKind, "watch"),
+            eq(attendanceSourceState.key, fact.key),
+          ),
+        );
+      if (watch) await discoverIntegratedAttendance(tx, watch, at);
+    }
+  }
+  await processAttendanceDay(tx, {
+    day,
+    nodeId: scope.nodeId,
+    personId: scope.personId,
+    now: at,
+    facts: await readAttendanceFacts(tx, day),
+    planned: await readPlannedAttendanceShifts(tx, day),
+  });
+}
 
 type Source = typeof attendanceSourceState.$inferInsert.source;
 type Scan = typeof attendanceSourceState.$inferSelect;

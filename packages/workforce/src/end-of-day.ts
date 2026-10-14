@@ -152,13 +152,16 @@ export async function processAttendanceDay(
         lt(timeEntries.eventAt, endAt),
       ),
     );
-  const people = [
-    ...new Set([
-      ...subjects.map((s) => s.personId),
-      ...facts.map((f) => f.personId),
-      ...planned.map((p) => p.personId),
-    ]),
-  ].sort();
+  const people =
+    input.personId === undefined
+      ? [
+          ...new Set([
+            ...subjects.map((s) => s.personId),
+            ...facts.map((f) => f.personId),
+            ...planned.map((p) => p.personId),
+          ]),
+        ].sort()
+      : [input.personId];
   const result: AttendanceDayResult = { automaticEntryIds: [], questionIds: [] };
   const deferred: { id: string; at: string }[] = [];
   const backend = new WorkforceBackend();
@@ -421,13 +424,14 @@ export async function processAttendanceDay(
     }
     for (const [key, gapFacts] of gaps) await addQuestion(personId, key, gapFacts);
   }
-  await tx
-    .update(attendanceDayWork)
-    .set({
-      evaluatedRevision: work.dirtyRevision,
-      deferredShiftIds: deferred.map((d) => d.id).sort(),
-      nextDueAt: deferred.map((d) => d.at).sort()[0] ?? endAt,
-    })
-    .where(eq(attendanceDayWork.id, work.id));
+  if (input.personId === undefined)
+    await tx
+      .update(attendanceDayWork)
+      .set({
+        evaluatedRevision: work.dirtyRevision,
+        deferredShiftIds: deferred.map((d) => d.id).sort(),
+        nextDueAt: deferred.map((d) => d.at).sort()[0] ?? endAt,
+      })
+      .where(eq(attendanceDayWork.id, work.id));
   return result;
 }
