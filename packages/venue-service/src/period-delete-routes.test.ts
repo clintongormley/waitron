@@ -491,15 +491,14 @@ describe("the period-delete routes", () => {
     expect(await stored(r)).toEqual(before);
   });
 
-  it("keeps today's DELETE refusing a period in use", async () => {
+  it("today's DELETE finds no route and changes nothing", async () => {
     const r = await routed();
+    const before = await stored(r);
     const response = await r.app.request(`${BASE}/${r.lunch}`, {
       method: "DELETE",
       headers: { cookie: r.manager },
     });
-    expect(response.status).toBe(409);
-    expect(((await response.json()) as { error: { code: string } }).error.code).toBe(
-      "menu_period.in_use",
-    );
+    expect(response.status).toBe(404);
+    expect(await stored(r)).toEqual(before);
   });
 });

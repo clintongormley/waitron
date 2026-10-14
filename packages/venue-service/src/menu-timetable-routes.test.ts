@@ -295,7 +295,13 @@ describe("the opening-hours routes", () => {
       }),
       404,
     );
-    await answers(await r.send("DELETE", `/menu-periods/${mediodia.id}`, r.manager), 204);
+    await answers(
+      await r.send("POST", `/menu-periods/${mediodia.id}/delete`, r.manager, {
+        replacementPeriodId: null,
+        expectedClockRevision: 0,
+      }),
+      204,
+    );
     model = await r.model();
     expect(restaurantOf(model, r).periods.map((period) => period.id)).toEqual([r.mananas]);
   });
@@ -385,7 +391,11 @@ describe("the opening-hours routes", () => {
         { name: "Tardes", menuId: r.cafe, staffMenuIds: [] },
       ],
       ["PATCH", `/menu-periods/${r.mananas}`, { name: "Tardes", menuId: r.cafe, staffMenuIds: [] }],
-      ["DELETE", `/menu-periods/${r.mananas}`, undefined],
+      [
+        "POST",
+        `/menu-periods/${r.mananas}/delete`,
+        { replacementPeriodId: null, expectedClockRevision: 0 },
+      ],
       ["PUT", `/departments/${r.restaurant}/menu-week`, { days: week([]) }],
     ];
     for (const [method, path, body] of writes) {
@@ -447,10 +457,6 @@ describe("the opening-hours routes", () => {
       }),
       204,
     );
-    await answers(await r.send("DELETE", `/menu-periods/${r.mananas}`, r.manager), 409, {
-      code: "menu_period.in_use",
-      params: { periodId: r.mananas, uses: [{ kind: "week", weekday: 1 }] },
-    });
     await answers(
       await r.send("PUT", `/departments/${r.restaurant}/menus`, r.manager, {
         menuIds: [r.almuerzo, r.cafe],
@@ -485,10 +491,10 @@ describe("the opening-hours routes", () => {
     for (const [method, path] of [
       ["POST", "/departments/x/menu-periods"],
       ["PATCH", "/menu-periods/x"],
-      ["DELETE", "/menu-periods/x"],
+      ["POST", "/menu-periods/x/delete"],
       ["PUT", "/departments/x/menu-week"],
     ] as const) {
-      const response = await r.send(method, path, r.manager, method === "DELETE" ? undefined : {});
+      const response = await r.send(method, path, r.manager, {});
       expect(response.status, `${method} ${path}`).toBe(400);
       expect(((await response.json()) as { error: { code: string } }).error.code).toBe(
         "shared.invalid_id",

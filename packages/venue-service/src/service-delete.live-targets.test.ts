@@ -153,7 +153,7 @@ const actions: [string, string, (tx: Transaction, f: Fixture) => Promise<unknown
   [
     "menu period delete derived department",
     "department.not_found",
-    (tx, f) => service.deleteMenuPeriod(tx, f.cfg, f.period),
+    (tx, f) => service.deletePeriod(tx, f.cfg, f.period, null, at, 0),
   ],
   [
     "default period existing fast path",
