@@ -2129,6 +2129,31 @@ describe("one period", () => {
     });
   });
 
+  it("a choice waiting on a row's Every zone leaves that row's same-department blank cells blank in the period view", async () => {
+    const { el } = await mountExpanded();
+    await choosePeriod(el, "lunch");
+    el.pending = {
+      address: { row: { kind: "category", categoryId: "pizzas" }, zoneId: null },
+      target: station("grill"),
+    };
+    await el.updateComplete;
+    expect(drawn(el, "c:pizzas", "every")).toEqual({
+      text: "Grill",
+      style: "set",
+      colour: "purple",
+    });
+    expect(drawn(el, "c:pizzas", "terrace")).toEqual({
+      text: "",
+      style: "blank",
+      colour: "pink",
+    });
+    expect(drawn(el, "c:pizzas", "counter")).toEqual({
+      text: "Kitchen",
+      style: "differs",
+      colour: "orange",
+    });
+  });
+
   it("a cell that follows its row's Every zone stays nameless in the period view, and takes its colour", async () => {
     const { el } = await mountExpanded();
     expect(drawn(el, "c:pizzas", "terrace")).toEqual({
@@ -2172,6 +2197,120 @@ describe("one period", () => {
     el.model = twoDepartments();
     await el.updateComplete;
     expect(periodField(el)!.value).toBe("dinner");
+  });
+
+  const searchInput = (el: RoutingGrid) =>
+    root(el)
+      .querySelector<HTMLElementTagNameMap["wt-input"]>('wt-input[name="search"]')!
+      .shadowRoot!.querySelector<HTMLInputElement>("input")!;
+  const status = (el: RoutingGrid) =>
+    root(el).querySelector<HTMLElement>('[role="status"]')!.textContent!.trim();
+  /** Opens the Period field and clicks the option labelled `label`, as a person does. */
+  async function pickPeriod(el: RoutingGrid, label: string) {
+    const box = periodField(el)!;
+    await userEvent.click(box.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
+    const option = [...box.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')].find(
+      (row) => row.textContent!.trim() === label,
+    )!;
+    await userEvent.click(option);
+    await el.updateComplete;
+  }
+
+  it("keeps the Period field's option list while the search is typed into, and rebuilds it in a new language", async () => {
+    const { el } = await mount(twoDepartments());
+    const options = periodField(el)!.options;
+    await userEvent.fill(searchInput(el), "marg");
+    await el.updateComplete;
+    expect(status(el)).toBe("1 match");
+    expect(periodField(el)!.options).toBe(options);
+    setLocale("es");
+    await userEvent.fill(searchInput(el), "margh");
+    await el.updateComplete;
+    expect(periodField(el)!.options[0]).toEqual({ value: "", label: "Todos los periodos" });
+  });
+
+  it("a search and a chosen period together show the matching rows with each cell's station during the period", async () => {
+    const { el } = await mount(twoDepartments());
+    await userEvent.fill(searchInput(el), "marg");
+    await el.updateComplete;
+    await pickPeriod(el, "Lunch");
+    expect(periodField(el)!.value).toBe("lunch");
+    expect(rowLabels(el)).toEqual(["All categories", "▾ PIZZAS", "Margherita"]);
+    expect(drawn(el, "p:margherita", "every")).toEqual({
+      text: "Pizza oven",
+      style: "inherited",
+      colour: "pink",
+    });
+    expect(drawn(el, "p:margherita", "terrace")).toEqual({
+      text: "Kitchen",
+      style: "set",
+      colour: "orange",
+    });
+    expect(lineCount(el)).toBe(0);
+  });
+
+  it("the period view still draws a refusal, and a disabled station unpainted with its warning", async () => {
+    const postresEvery: CellAddress = {
+      row: { kind: "category", categoryId: "postres" },
+      zoneId: null,
+    };
+    const model = twoDepartments({
+      stations: [
+        { id: "kitchen", name: "Kitchen", active: true, colour: "orange" },
+        { id: "oven", name: "Pizza oven", active: true, colour: "pink" },
+        { id: "grill", name: "Grill", active: true, colour: "purple" },
+        { id: "old", name: "Old kitchen", active: false, colour: "brown" },
+      ],
+    });
+    model.cells = [
+      ...model.cells,
+      { ...postresEvery, target: station("old") },
+      {
+        row: { kind: "product", productId: "flan" },
+        zoneId: null,
+        target: station("kitchen"),
+        periods: [{ periodId: "lunch", target: station("old") }],
+      },
+    ];
+    const { el } = await mountExpanded(model);
+    await choosePeriod(el, "lunch");
+    el.refusal = { address: postresEvery, message: "The change could not be saved." };
+    await el.updateComplete;
+    expect(errorOf(el, "c:postres", "every")).toBe("The change could not be saved.");
+    expect(drawn(el, "c:postres", "every")).toEqual({
+      text: "Old kitchen (Disabled)",
+      style: "set",
+      colour: undefined,
+    });
+    expect(
+      cell(el, "c:postres", "every").querySelector('[data-test="disabled-target"]')!.textContent,
+    ).toContain("Old kitchen: Disabled.");
+    expect(drawn(el, "p:flan", "every")).toEqual({
+      text: "Old kitchen (Disabled)",
+      style: "set",
+      colour: undefined,
+    });
+  });
+
+  it("a cell opened from the period view edits the whole cell, its period lines included", async () => {
+    const { el } = await mountExpanded();
+    await choosePeriod(el, "lunch");
+    const editor = await openEditor(el, combo(el, "c:pizzas", "every")!);
+    expect(editor.cell).toEqual({
+      address: { row: { kind: "category", categoryId: "pizzas" }, zoneId: null },
+      label: "PIZZAS, Every zone",
+      target: station("kitchen"),
+      periods: [
+        { periodId: "lunch", target: station("oven") },
+        { periodId: "dinner", target: station("oven") },
+      ],
+    });
+    expect(
+      editor.shadowRoot!.querySelectorAll<Combo>('wt-combobox[name="line-periods"]'),
+    ).toHaveLength(1);
+    expect(
+      editor.shadowRoot!.querySelector<Combo>('wt-combobox[name="line-periods"]')!.values,
+    ).toEqual(["lunch", "dinner"]);
   });
 
   it("a new grid opens on All periods", async () => {

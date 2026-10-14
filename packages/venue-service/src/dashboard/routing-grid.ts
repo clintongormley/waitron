@@ -91,9 +91,12 @@ const sameAddress = (a: CellAddress, b: CellAddress) => cellKey(a) === cellKey(b
  */
 type CellStyle = "set" | "inherited" | "differs" | "blank";
 
-/** A cell's content, the target its drawn value sends to, and that station's colour, if painted. */
+/**
+ * A cell's content and the colour of the station it draws, if painted. `saved` is where the saved
+ * routing sends work, during the chosen period if there is one, ignoring a choice still waiting.
+ */
 type DrawnCell = {
-  target: RouteTarget | null;
+  saved: RouteTarget | null;
   colour: StationColour | undefined;
   content: unknown;
 };
@@ -398,6 +401,8 @@ export class RoutingGrid extends LitElement {
     of: ReturnType<typeof cellPeriodLines>;
   } | null = null;
   #used: { model: RoutingModel; stations: RoutingModel["stations"] } | null = null;
+  /** Kept so the Period field is handed the same list, and does not redraw, on each render. */
+  #periodOptions: { model: RoutingModel; locale: string; options: ComboboxOption[] } | null = null;
 
   override willUpdate(changed: Map<PropertyKey, unknown>): void {
     if (!changed.has("model") || this.model === null) return;
@@ -598,7 +603,7 @@ export class RoutingGrid extends LitElement {
     </button>`;
   }
 
-  /** `every` is what the row's Every zone cell draws, which a blank zone cell repeats. */
+  /** `every` is the row's Every zone's `saved`; a period view names a blank cell that differs. */
   #cell(entry: GridRow, zone: Zone, every: RouteTarget | null): DrawnCell {
     const address: CellAddress = { row: entry.row, zoneId: zone.id };
     const own = this.#cells.get(cellKey(address));
@@ -618,6 +623,16 @@ export class RoutingGrid extends LitElement {
         ? (shown ?? inherited)
         : stationDuring(periodLines.lines, period, shown ?? inherited);
     const lines = period === null ? periodLines.lines : [];
+    const saved =
+      waiting === undefined
+        ? target
+        : period === null
+          ? (own?.target ?? inherited)
+          : stationDuring(
+              this.#periodLines(entry.row, zone.id, undefined, selected).lines,
+              period,
+              own?.target ?? inherited,
+            );
     const text = this.#targetText(target);
     const label = this.#labelWithNote(
       format("routing.cell_label", {
@@ -649,7 +664,7 @@ export class RoutingGrid extends LitElement {
             ${this.#fallbackSentence(disabled.stationId)}</span
           >`,
     ]);
-    return { target, colour: this.#colourOf(target), content };
+    return { saved, colour: this.#colourOf(target), content };
   }
 
   #defaultTarget(): RouteTarget | null {
@@ -674,7 +689,7 @@ export class RoutingGrid extends LitElement {
           >`;
     if (!model.canMakeDefault) {
       return {
-        target,
+        saved: target,
         colour,
         content: html`${name !== null ? html`<span>${name}</span> ` : nothing}${repair}
           <span class="note">${t("routing.default_read_only")}</span>`,
@@ -690,7 +705,7 @@ export class RoutingGrid extends LitElement {
       }),
     );
     return {
-      target,
+      saved: target,
       colour,
       content: this.#button(
         address,
@@ -912,11 +927,11 @@ export class RoutingGrid extends LitElement {
         zones,
         (zone) => zoneKey(zone.id),
         (zone) => {
-          const { target, colour, content } =
+          const { saved, colour, content } =
             entry.row.kind === "all" && zone.id === null
               ? this.#defaultCell()
               : this.#cell(entry, zone, every);
-          if (zone.id === null) every = target;
+          if (zone.id === null) every = saved;
           return html`<td
             data-row=${rowKey(entry.row)}
             data-zone=${zoneKey(zone.id)}
@@ -960,15 +975,25 @@ export class RoutingGrid extends LitElement {
   }
 
   #periodField(model: RoutingModel) {
-    const periods = offeredPeriods(model);
-    if (periods.length === 0) return nothing;
-    const grouped = new Set(periods.map(({ departmentId }) => departmentId)).size > 1;
-    const options: ComboboxOption[] = [
-      { value: "", label: t("routing.all_periods") },
-      ...periods.map(({ id, name, departmentName }) =>
-        grouped ? { value: id, label: name, group: departmentName } : { value: id, label: name },
-      ),
-    ];
+    const locale = currentLocale();
+    if (this.#periodOptions?.model !== model || this.#periodOptions.locale !== locale) {
+      const periods = offeredPeriods(model);
+      const grouped = new Set(periods.map(({ departmentId }) => departmentId)).size > 1;
+      const options: ComboboxOption[] =
+        periods.length === 0
+          ? []
+          : [
+              { value: "", label: t("routing.all_periods") },
+              ...periods.map(({ id, name, departmentName }) =>
+                grouped
+                  ? { value: id, label: name, group: departmentName }
+                  : { value: id, label: name },
+              ),
+            ];
+      this.#periodOptions = { model, locale, options };
+    }
+    const { options } = this.#periodOptions;
+    if (options.length === 0) return nothing;
     return html`<wt-combobox
       name="period"
       label=${t("routing.period")}
