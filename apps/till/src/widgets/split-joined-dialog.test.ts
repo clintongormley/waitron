@@ -572,3 +572,28 @@ describe("on a group", () => {
     expect(pick(el).error).toBe("Deja una de las mesas de los clientes");
   });
 });
+
+describe("today's names", () => {
+  const renamed = (id: string, label: string, seats: number, name: string | null) =>
+    table(id, label, {
+      today: today(seats, { inJoinedTable: "Long table", ...(name === null ? {} : { name }) }),
+    });
+
+  it("lists each table by its name for today, and says the guests move to it by that name", async () => {
+    const el = await mount({
+      joined: longTable({ party, condition: "held", state: "open-tab" }),
+      parts: [
+        renamed("c3", "Counter 3", 2, null),
+        renamed("c4", "Counter 4", 6, "Window"),
+        renamed("c5", "Counter 5", 4, null),
+      ],
+    });
+    expect(pick(el).options.map((each) => each.label)).toEqual([
+      "Counter 3",
+      "Window",
+      "Counter 5",
+    ]);
+    await choose(el, ["c3", "c5"]);
+    expect(text(el)).toContain("Guests move to Window");
+  });
+});

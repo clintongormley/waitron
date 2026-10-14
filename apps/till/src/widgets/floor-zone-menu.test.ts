@@ -288,3 +288,37 @@ it("speaks Spanish", async () => {
   await el.updateComplete;
   expect(text(dialogOf(el, "taken-off").querySelector("[data-put-back]"))).toBe("Volver a poner");
 });
+
+it("lists spares and tables taken off by their names for today, in that name's order", async () => {
+  const el = await mount([
+    placed,
+    table("t2", { placement: null, name: "Window" }),
+    table("t10", { placement: null }),
+    spare,
+    table("t4", { takenOff: true, name: "Window" }),
+    table("t5", { takenOff: true }),
+  ]);
+  await choose(el, "spares");
+  expect(
+    [...dialogOf(el, "spares").querySelectorAll<HTMLElement>("[data-spare]")].map((row) => [
+      row.dataset.spare,
+      text(row),
+    ]),
+  ).toEqual([
+    ["t9", "9"],
+    ["t10", "10"],
+    ["t2", "Window"],
+  ]);
+  dialogOf(el, "spares").querySelector<HTMLElement>("[data-cancel]")!.click();
+  await el.updateComplete;
+  await choose(el, "taken-off");
+  expect(
+    [...dialogOf(el, "taken-off").querySelectorAll<HTMLElement>("[data-taken-off]")].map((row) => [
+      row.dataset.takenOff,
+      text(row.querySelector("[data-label]")),
+    ]),
+  ).toEqual([
+    ["t5", "5"],
+    ["t4", "Window"],
+  ]);
+});

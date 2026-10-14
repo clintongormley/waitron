@@ -120,7 +120,11 @@ export function dropAction(zoneTables: readonly TableState[], drop: FloorMapDrop
   if (draggedGroup.members.length > 1) return { kind: "say", message: t("floor.drop_merge") };
 
   const both = [...draggedGroup.members, ...targetGroup.members];
-  const heading = mergeLabel(both.flatMap((table) => joinedLabels(zoneTables, table)));
+  const heading =
+    targetGroup.members[0]!.today?.joinName ??
+    handedName(targetGroup) ??
+    handedName(draggedGroup) ??
+    mergeLabel(both.flatMap((table) => joinedLabels(zoneTables, table)));
   const dropped: TodayPlacement = { ...from, x: drop.x, y: drop.y };
   const nearest = nearestMember(targetGroup.members, centre(dropped));
   const fixedSide = draggedGroup.fixed || targetGroup.fixed;
@@ -157,11 +161,21 @@ export function dropAction(zoneTables: readonly TableState[], drop: FloorMapDrop
   };
 }
 
-/** A joined table's still-joined tables' labels; any other table's own label. */
+/** The name for today a lone joined table gives the group a drop makes, as `writeMerge` does. */
+function handedName(group: Group): string | null {
+  const [table] = group.members;
+  if (group.members.length !== 1 || (table!.today?.joined?.parts.length ?? 0) === 0) return null;
+  return table!.today?.name ?? null;
+}
+
+/** A joined table's still-joined tables' shown names; any other table's own. */
 function joinedLabels(zoneTables: readonly TableState[], table: TableState): string[] {
   const parts = table.today?.joined?.parts ?? [];
-  const labels = parts.flatMap((id) => zoneTables.find((each) => each.id === id)?.label ?? []);
-  return labels.length === 0 ? [table.label] : labels;
+  const names = parts.flatMap((id) => {
+    const part = zoneTables.find((each) => each.id === id);
+    return part === undefined ? [] : [shownName(part)];
+  });
+  return names.length === 0 ? [shownName(table)] : names;
 }
 
 /** The placed member whose centre is nearest `point`; the first on a tie. */
@@ -411,11 +425,11 @@ export function groupSplitOf(
     keptBy(ticked).flatMap((kept) => {
       const tables = zoneTables.filter((each) => kept.includes(each.id));
       if (kept.length === 0 || tables.length !== kept.length) return [];
-      return [mergeLabel(tables.map((each) => each.label).sort(inNumberOrder))];
+      return [mergeLabel(tables.map(shownName).sort(inNumberOrder))];
     });
   return {
     members,
-    name: mergeLabel(members.map((each) => each.label)),
+    name: groupName(members),
     asksSeats: (staying) => staying.length >= 2 && !rejoins(staying),
     guestsMoveTo,
     strandsGuests: (ticked) => keptBy(ticked).some((kept) => kept.length === 0),

@@ -282,3 +282,22 @@ for (const [width, height] of [
     }
   });
 }
+
+it("names the joined table and each table staying apart by its name for today", async () => {
+  const renamed = (id: string, label: string, name: string) =>
+    table(id, label, { today: today(4, { splitOffFrom: "long", name }) });
+  const joined = longTable();
+  const el = await mount({
+    joined: { ...joined, today: { ...joined.today!, name: "García birthday" } },
+    apart: [
+      { table: renamed("c5", "Counter 5", "Window"), reason: "guests" },
+      away("c4", "Counter 4", "food"),
+    ],
+  });
+  expect(el.shadowRoot!.querySelector("wt-dialog")!.heading).toBe("Reset García birthday");
+  expect(seatsField(el).label).toBe("Seats for García birthday");
+  expect(lines(el)).toEqual([
+    "Window stays apart: guests seated",
+    "Counter 4 stays apart: food on its way",
+  ]);
+});

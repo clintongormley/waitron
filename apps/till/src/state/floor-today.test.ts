@@ -1021,3 +1021,96 @@ describe("today's names", () => {
     expect(normalGroupName([c4, bar])).toBe("Bar+Counter 4");
   });
 });
+
+describe("today's names on a drop and a group split", () => {
+  const garcia = (id: string, label: string, x: number, over: Partial<TableToday> = {}) =>
+    table(id, label, {
+      today: today({ placement: place(x, 0), joinId: "g", joinName: "García birthday", ...over }),
+    });
+  const c6 = table("c6", "Counter 6", { today: today({ placement: place(20, 0) }) });
+
+  it("heads a drop on a group with a name for today with that name", () => {
+    const zone = [garcia("c4", "Counter 4", 0, { fixed: true }), garcia("c5", "Counter 5", 4), c6];
+    expect(dropAction(zone, { tableId: "c6", x: 8, y: 0, targetId: "c5" })).toEqual({
+      kind: "seat",
+      tableId: "c6",
+      withTableIds: ["c4", "c5"],
+      heading: "García birthday",
+    });
+  });
+
+  it("heads a drop on a renamed table with its tables' shown names", () => {
+    const window4 = table("c4", "Counter 4", {
+      today: today({ placement: place(0, 0), fixed: true, name: "Window" }),
+    });
+    const bar = table("bar", "Bar", { today: today({ placement: place(20, 0) }) });
+    expect(dropAction([window4, bar], { tableId: "bar", x: 4, y: 0, targetId: "c4" })).toEqual({
+      kind: "seat",
+      tableId: "bar",
+      withTableIds: ["c4"],
+      heading: "Bar+Window",
+    });
+  });
+
+  describe("a renamed joined table hands its name to the group", () => {
+    const joined = (id: string, label: string, x: number, name: string | null, parts: string[]) =>
+      table(id, label, {
+        today: today({
+          placement: place(x, 0),
+          name,
+          joined: { parts, splitOff: [], apart: false },
+        }),
+      });
+    const part = (id: string, label: string) =>
+      table(id, label, {
+        today: today({ placement: null, inJoinedTable: "x", name: `${label} today` }),
+      });
+    const parts = [part("c3", "Counter 3"), part("c4", "Counter 4"), part("t1", "Terrace 1")];
+    const long = joined("long", "Long table", 0, "Window table", ["c3", "c4"]);
+    const terrace = joined("terrace", "Terrace", 20, "Sunny side", ["t1"]);
+    const bar = table("bar", "Bar", { today: today({ placement: place(40, 0) }) });
+    const heading = (zone: TableState[], tableId: string, targetId: string) =>
+      (dropAction(zone, { tableId, x: 6, y: 0, targetId }) as { heading: string }).heading;
+
+    it("the target's name first, then the one dropped", () => {
+      const zone = [long, terrace, bar, ...parts];
+      expect(heading(zone, "bar", "long")).toBe("Window table");
+      expect(heading(zone, "long", "bar")).toBe("Window table");
+      expect(heading(zone, "terrace", "long")).toBe("Window table");
+      expect(heading(zone, "long", "terrace")).toBe("Sunny side");
+    });
+
+    it("a joined table with no name gives none, and a group's own name wins", () => {
+      const plain = joined("long", "Long table", 0, null, ["c3", "c4"]);
+      expect(heading([plain, terrace, ...parts], "long", "terrace")).toBe("Sunny side");
+      expect(heading([plain, bar, ...parts], "bar", "long")).toBe(
+        "Bar+Counter 3 today+Counter 4 today",
+      );
+      const zone = [garcia("g1", "Counter 7", 0), garcia("g2", "Counter 8", 4), terrace, ...parts];
+      expect(heading(zone, "terrace", "g1")).toBe("García birthday");
+    });
+
+    it("a renamed table that is not a joined table gives none", () => {
+      const window4 = table("w", "Counter 9", {
+        today: today({ placement: place(0, 0), name: "Window" }),
+      });
+      expect(heading([window4, bar], "bar", "w")).toBe("Bar+Window");
+    });
+  });
+
+  it("names a group split by its name for today and the guests' tables by their shown names", () => {
+    const p = party("p", ["c3", "c4", "c5"]);
+    const seated = (id: string, label: string, x: number, name: string | null) => ({
+      ...garcia(id, label, x, { name }),
+      ...seatedBy(p),
+    });
+    const zone = [
+      seated("c3", "Counter 3", 0, null),
+      seated("c4", "Counter 4", 4, "Window"),
+      seated("c5", "Counter 5", 8, null),
+    ];
+    const split = groupSplitOf(zone[0]!, zone)!;
+    expect(split.name).toBe("García birthday");
+    expect(split.guestsMoveTo(["c3"])).toEqual(["Counter 5+Window"]);
+  });
+});

@@ -988,7 +988,7 @@ export class TillFloorScreen extends LitElement {
       const drop = { tableId: table.id, x: from.x, y: from.y, targetId: each.id };
       if (dropAction(zoneTables, drop).kind === "none") continue;
       const label = linkId === null ? this.#mergeName(each) : this.#linkName(linkId);
-      targets.push({ ...each, label: label ?? each.label });
+      targets.push({ ...each, label: label ?? shownName(each) });
     }
     return targets;
   }
@@ -1007,7 +1007,7 @@ export class TillFloorScreen extends LitElement {
     return html`<till-join-with-dialog
       .table=${joining}
       .targets=${this.#joinTargets(joining, joining.today.placement)}
-      .heading=${t("floor.join_with_title").replace("{table}", () => joining.label)}
+      .heading=${t("floor.join_with_title").replace("{table}", () => shownName(joining))}
       @join-with-pick=${(event: Event) => this.#onJoinWithPick(event)}
       @join-with-close=${(event: Event) => {
         event.stopPropagation();
@@ -1113,10 +1113,14 @@ export class TillFloorScreen extends LitElement {
    * longer has one of them. */
   #namedRefusal(code: string, refused: Refused): string | undefined {
     const tableOf = (id: unknown) => this.tables.find((each) => each.id === id);
+    const nameOf = (id: unknown) => {
+      const table = tableOf(id);
+      return table === undefined ? undefined : shownName(table);
+    };
     switch (code) {
       case "table.place_taken": {
-        const standing = tableOf(refused.standingId)?.label;
-        const joined = tableOf(refused.tableId)?.label;
+        const standing = nameOf(refused.standingId);
+        const joined = nameOf(refused.tableId);
         if (standing === undefined || joined === undefined) return undefined;
         return t("floor.place_taken")
           .replaceAll("{table}", () => standing)
@@ -1131,7 +1135,7 @@ export class TillFloorScreen extends LitElement {
           return undefined;
         const group = this.#mergeName(parts[0]!);
         if (group === null) return undefined;
-        const labels = parts.map((each) => each!.label);
+        const labels = parts.map((each) => shownName(each!));
         const sentence =
           labels.length === 1
             ? t("floor.table_in_group").replace("{table}", () => labels[0]!)
@@ -1142,7 +1146,7 @@ export class TillFloorScreen extends LitElement {
       }
       case "table.split_off": {
         const from = tableOf(refused.tableId)?.today?.splitOffFrom ?? null;
-        const joined = from === null ? undefined : tableOf(from)?.label;
+        const joined = from === null ? undefined : nameOf(from);
         return joined === undefined
           ? undefined
           : t("floor.split_off_reset").replace("{joined}", () => joined);
@@ -1208,7 +1212,7 @@ export class TillFloorScreen extends LitElement {
       parts: joined.today!.joined!.parts.flatMap((id) =>
         this.tables.filter((each) => each.id === id),
       ),
-      name: joined.label,
+      name: shownName(joined),
       asksSeats: (staying) => staying.length >= 2,
       guestsMoveTo: () => [],
       strandsGuests: () => false,

@@ -13,7 +13,7 @@ import type {
   TillApi,
 } from "../api/client.js";
 import type { TillTableDetailsSheet } from "../widgets/table-details-sheet.js";
-import { nextFloorMoment } from "../state/floor-today.js";
+import { nextFloorMoment, shownName } from "../state/floor-today.js";
 
 function zone(over: Partial<FloorZone> = {}): FloorZone {
   return {
@@ -766,6 +766,60 @@ describe("till-floor-screen: today's names", () => {
         "till-join-with-dialog",
       )!;
     expect(dialog.targets.map((table) => [table.id, table.label])).toEqual([["tb", "Bar+Window"]]);
+  });
+
+  it("Join with… lists a renamed group and a renamed table by their names and is headed with the joining table's name for today", async () => {
+    const el = await mount(
+      [
+        counter4({}, { name: null, ...inGroup("García birthday") }),
+        bar(inGroup("García birthday")),
+        counter5({ name: "Corner" }),
+        { ...planned("t6", 30, { name: "Patio" }), label: "Counter 6" },
+      ],
+      stubApi(),
+    );
+    await press(el, "t5", "join-with");
+    const dialog =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["till-join-with-dialog"]>(
+        "till-join-with-dialog",
+      )!;
+    expect(dialog.heading).toBe("Join Corner with");
+    expect(dialog.targets.map((table) => [table.id, table.label])).toEqual([
+      ["tb", "García birthday"],
+      ["t6", "Patio"],
+    ]);
+  });
+
+  const splitWindow = (el: TillFloorScreen) =>
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["till-split-joined-dialog"]>(
+      "till-split-joined-dialog",
+    )!;
+
+  it("Split tables… on a renamed group is headed with its name and lists its tables by their shown names", async () => {
+    const el = await mount(
+      [counter4({}, inGroup("García birthday")), counter5(inGroup("García birthday"))],
+      stubApi(),
+    );
+    await press(el, "t5", "split-off");
+    expect(splitWindow(el).name).toBe("García birthday");
+    expect(splitWindow(el).parts.map(shownName)).toEqual(["Window", "Counter 5"]);
+  });
+
+  it("Split tables… on a renamed joined table is headed with its name for today", async () => {
+    const part = (id: string, label: string) => ({
+      ...planned(id, 0, { placement: null, inJoinedTable: "Long table" }),
+      label,
+    });
+    const long = {
+      ...planned("tl", 2, {
+        name: "Window table",
+        joined: { parts: ["t3", "t6"], splitOff: [], apart: false },
+      }),
+      label: "Long table",
+    };
+    const el = await mount([long, part("t3", "Counter 3"), part("t6", "Counter 6")], stubApi());
+    await press(el, "tl", "split-off");
+    expect(splitWindow(el).name).toBe("Window table");
   });
 
   it("the seat window for a renamed table on its own is headed with today's name", async () => {
