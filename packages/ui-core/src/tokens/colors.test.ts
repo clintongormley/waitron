@@ -535,3 +535,66 @@ describe.each(["light", "dark"] as const)("table fill colours (%s)", (theme) => 
     expect(names.map((name) => token(byPreference, name))).toEqual(fromTheme);
   });
 });
+
+// The twelve fills a prep station picks from, in the order the picker offers them.
+const STATION_FILLS = [
+  "red",
+  "orange",
+  "amber",
+  "lime",
+  "green",
+  "teal",
+  "cyan",
+  "blue",
+  "indigo",
+  "purple",
+  "pink",
+  "brown",
+].map((colour) => `--wt-color-station-${colour}`);
+
+describe.each(["light", "dark"] as const)("station colours (%s)", (theme) => {
+  test("each fill keeps the text, muted text, warning and danger colours at 4.5:1 or more", () => {
+    const el = mount(theme);
+    for (const fill of STATION_FILLS)
+      for (const text of [
+        "--wt-color-text",
+        "--wt-color-text-muted",
+        "--wt-color-warning",
+        "--wt-color-danger",
+      ])
+        expect(
+          ratio(token(el, text), token(el, fill)),
+          `${text} on ${fill}`,
+        ).toBeGreaterThanOrEqual(4.5);
+  });
+
+  test("each dot stands 3:1 or more from every station fill and from the surface", () => {
+    const el = mount(theme);
+    for (const dot of STATION_FILLS.map((fill) => `${fill}-dot`))
+      for (const ground of [...STATION_FILLS, "--wt-color-surface"])
+        expect(
+          ratio(token(el, dot), token(el, ground)),
+          `${dot} on ${ground}`,
+        ).toBeGreaterThanOrEqual(3);
+  });
+
+  test("the twelve fills are different colours, and so are the twelve dots", () => {
+    const el = mount(theme);
+    expect(new Set(STATION_FILLS.map((fill) => token(el, fill))).size).toBe(STATION_FILLS.length);
+    expect(new Set(STATION_FILLS.map((fill) => token(el, `${fill}-dot`))).size).toBe(
+      STATION_FILLS.length,
+    );
+  });
+
+  test("the OS preference gives them the same values as the explicit theme", async () => {
+    const names = STATION_FILLS.flatMap((fill) => [fill, `${fill}-dot`]);
+    await commands.emulateColorScheme(theme === "light" ? "dark" : "light");
+    const explicit = mount(theme);
+    const fromTheme = names.map((name) => token(explicit, name));
+    expect(fromTheme).not.toContain("");
+    explicit.remove();
+    await commands.emulateColorScheme(theme);
+    const byPreference = mount();
+    expect(names.map((name) => token(byPreference, name))).toEqual(fromTheme);
+  });
+});
