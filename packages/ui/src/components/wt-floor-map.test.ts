@@ -457,3 +457,12 @@ it("names a linked party by a lone table's own name in the groups' order", async
   ]);
   expect(shownNames(el)).toEqual(["Bar 1+Window"]);
 });
+
+it("names a linked party by its groups' names when only one table in a merge has a name", async () => {
+  const el = await map([
+    t("m4", "Bar 4", { x: 0 }, { linkId: "p", joinId: "j", name: "Window" }),
+    t("m5", "Bar 5", { x: 8 }, { linkId: "p", joinId: "j" }),
+    t("b2", "Bar 2", { x: 16 }, { linkId: "p" }),
+  ]);
+  expect(shownNames(el)).toEqual(["Bar 2+5+Window"]);
+});
