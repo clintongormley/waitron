@@ -47,7 +47,6 @@ import {
   writeReleaseReminderMinutes,
 } from "./kitchen-notices.js";
 import {
-  deleteMenuPeriod,
   readOpeningHoursModel,
   replaceMenuWeek,
   saveMenuPeriod,
@@ -116,7 +115,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "period_extension.invalid": 400,
   "period_extension.not_allowed": 409,
   "menu_period.not_found": 404,
-  "menu_period.in_use": 409,
   "menu_period.name_taken": 409,
   "menu_timetable.invalid": 400,
   "menu_period.invalid": 400,
@@ -1241,15 +1239,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         await gated(sessionId, (tx) =>
           updateMenuPeriod(tx, ctx.cfg, periodId, period, body.expectedClockRevision as number),
         );
-        return c.body(null, 204);
-      }),
-    );
-
-    app.delete("/management-api/venue-service/menu-periods/:periodId", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const periodId = requireUuidParam(c.req.param("periodId"), "MenuPeriodId");
-        await gated(sessionId, (tx) => deleteMenuPeriod(tx, ctx.cfg, periodId));
         return c.body(null, 204);
       }),
     );

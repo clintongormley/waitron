@@ -1,7 +1,7 @@
 import type { BusinessDayScheduleStatus } from "./service-day-context.js";
 // Browser-safe: types only, no database or server imports.
 import type { ClosedRange, ServiceRange } from "./service-day.js";
-import type { CalendarColour, LocalDate } from "./hours-types.js";
+import type { CalendarColour } from "./hours-types.js";
 
 export interface MenuPeriodInput {
   name: string;
@@ -21,10 +21,6 @@ export interface MenuWeekDay {
   weekday: number;
   slots: MenuSlot[];
 }
-
-export type MenuPeriodUse =
-  | { kind: "week"; weekday: number }
-  | { kind: "special_day"; specialDayId: string; name: string; date: LocalDate };
 
 export interface DepartmentService {
   departmentId: string;

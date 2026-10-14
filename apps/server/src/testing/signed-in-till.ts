@@ -10,7 +10,7 @@ import {
   createDepartment,
   departmentReceipts,
   departments,
-  deleteMenuPeriod,
+  deletePeriod,
   menuPeriods,
   replaceMenuWeek,
   setProfileServiceAccess,
@@ -176,7 +176,7 @@ export async function createBareDepartment(
     at,
     0,
   );
-  for (const period of initialPeriods) await deleteMenuPeriod(tx, cfg, period.id);
+  for (const period of initialPeriods) await deletePeriod(tx, cfg, period.id, null, at, 0);
   return departmentId;
 }
 

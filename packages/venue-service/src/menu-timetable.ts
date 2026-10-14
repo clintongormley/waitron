@@ -4,7 +4,7 @@ import {
   readBusinessDayScheduleRevision,
   readBusinessDayScheduleStatus,
 } from "./business-day-schedule.js";
-import { and, asc, desc, eq, inArray, isNotNull, ne } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, ne } from "drizzle-orm";
 import { catalogues, categories, floorZones, products, type Transaction } from "@waitron/db";
 import { categoryDetails, directIncludedMenus, loadSectionGraph } from "@waitron/catalogue";
 import { readLocationClock } from "@waitron/reporting";
@@ -28,7 +28,6 @@ import type {
   DepartmentService,
   OpeningHoursModel,
   MenuPeriodInput,
-  MenuPeriodUse,
   MenuSlot,
   PeriodRoutingUse,
 } from "./menu-timetable-types.js";
@@ -55,12 +54,6 @@ import {
 } from "./season-weeks.js";
 import { seasonOn, type Season } from "./season-rules.js";
 import { readSeasons } from "./seasons.js";
-import {
-  departmentDayRanges,
-  departmentDays,
-  specialDayDates,
-  specialDays,
-} from "./schema/seasons.js";
 import {
   scheduleCutovers,
   serviceDayContext,
@@ -646,62 +639,6 @@ export async function updateMenuPeriod(
     expectedClockRevision,
     at,
   );
-}
-
-/** Every day that places each listed period: weekdays in order, then special-day dates by date. */
-async function periodUses(
-  tx: Transaction,
-  periodIds: readonly string[],
-): Promise<Map<string, MenuPeriodUse[]>> {
-  const uses = new Map<string, MenuPeriodUse[]>(periodIds.map((id) => [id, []]));
-  if (periodIds.length === 0) return uses;
-  const painted = await tx
-    .selectDistinct({ periodId: departmentDayRanges.periodId, weekday: departmentDays.weekday })
-    .from(departmentDayRanges)
-    .innerJoin(departmentDays, eq(departmentDays.id, departmentDayRanges.dayId))
-    .where(
-      and(
-        isNotNull(departmentDays.seasonId),
-        inArray(departmentDayRanges.periodId, [...periodIds]),
-      ),
-    );
-  const specialDayPaint = await tx
-    .selectDistinct({
-      periodId: departmentDayRanges.periodId,
-      specialDayId: specialDays.id,
-      name: specialDays.name,
-      date: specialDayDates.date,
-    })
-    .from(departmentDayRanges)
-    .innerJoin(departmentDays, eq(departmentDays.id, departmentDayRanges.dayId))
-    .innerJoin(specialDayDates, eq(specialDayDates.id, departmentDays.specialDayDateId))
-    .innerJoin(specialDays, eq(specialDays.id, specialDayDates.specialDayId))
-    .where(inArray(departmentDayRanges.periodId, [...periodIds]))
-    .orderBy(asc(specialDayDates.date), asc(specialDays.id));
-  const weekdays = new Map<string, Set<number>>(periodIds.map((id) => [id, new Set()]));
-  for (const row of painted) weekdays.get(row.periodId!)!.add(row.weekday!);
-  for (const [periodId, days] of weekdays)
-    for (const weekday of [...days].sort((a, b) => a - b))
-      uses.get(periodId)!.push({ kind: "week", weekday });
-  for (const row of specialDayPaint)
-    uses.get(row.periodId!)!.push({
-      kind: "special_day",
-      specialDayId: row.specialDayId,
-      name: row.name,
-      date: row.date,
-    });
-  return uses;
-}
-
-export async function deleteMenuPeriod(
-  tx: Transaction,
-  cfg: VenueScope,
-  periodId: string,
-): Promise<void> {
-  await requirePeriod(tx, cfg, periodId);
-  const uses = (await periodUses(tx, [periodId])).get(periodId)!;
-  if (uses.length > 0) throw new AppError("menu_period.in_use", { periodId, uses });
-  await tx.delete(menuPeriods).where(eq(menuPeriods.id, periodId));
 }
 
 export async function replaceMenuWeek(
