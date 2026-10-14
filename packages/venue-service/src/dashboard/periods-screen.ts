@@ -189,8 +189,24 @@ export class PeriodsScreen extends LitElement {
     super.disconnectedCallback();
   }
 
+  private lookups?: {
+    model: OpeningHoursModel;
+    tints: Map<string, string>;
+    menuNames: Map<string, string>;
+  };
+  /** Season tints and menu names, worked out once per model rather than once per row. */
+  private lookup() {
+    const model = this.model!;
+    if (this.lookups?.model !== model)
+      this.lookups = {
+        model,
+        tints: seasonTints(model.seasons),
+        menuNames: new Map(model.menus.map(({ id, name }) => [id, name])),
+      };
+    return this.lookups;
+  }
   private menuName(id: string) {
-    return this.model!.menus.find((menu) => menu.id === id)?.name ?? id;
+    return this.lookup().menuNames.get(id) ?? id;
   }
   private unpainted(row: PeriodRow) {
     const painted = row.kind === "period" ? this.painted?.get(row.id) : undefined;
@@ -201,7 +217,7 @@ export class PeriodsScreen extends LitElement {
     if (!painted) return nothing;
     if (!painted.seasons.length && !painted.specialDays.length)
       return html`<span part="not-painted">${t("period.not_painted")}</span>`;
-    const tints = seasonTints(this.model!.seasons);
+    const { tints } = this.lookup();
     return html`<span part="chips"
       >${painted.seasons.map(
         (season) =>
