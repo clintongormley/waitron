@@ -492,6 +492,18 @@ describe("withListingDenied", () => {
     expect(error!.message).toMatch(/^the work failed/);
   });
 
+  it("keeps a work error that already has a cause first and still reports a later control failure", async () => {
+    const failure = new Error("the work failed", { cause: new Error("its own cause") });
+    const { error } = await run([DENIED], async () => {
+      throw failure;
+    });
+    expect(error).toBeInstanceOf(AggregateError);
+    const errors = (error as AggregateError).errors as Error[];
+    expect(errors[0]).toBe(failure);
+    expect((errors[0]!.cause as Error).message).toBe("its own cause");
+    expect(errors[1]!.message).toMatch(/unresolved/);
+  });
+
   /**
    * Answers from `before` until the policy is removed and from `after` once it is, the last of each
    * repeating. The first sleep of the `late` control wakes a whole budget late.

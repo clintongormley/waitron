@@ -158,7 +158,8 @@ export async function withListingDenied(
   // Teardown removes the policy again whatever happened here.
   const { error } = failure;
   if (unresolved === undefined) throw error;
-  // `Reflect.set` answers false rather than throwing on a frozen error.
+  // `Reflect.set` answers false rather than throwing on a frozen error; a frozen error, one with its
+  // own cause, or a non-Error goes into an AggregateError, the work's error first.
   if (
     error instanceof Error &&
     error.cause === undefined &&

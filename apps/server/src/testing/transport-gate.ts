@@ -302,8 +302,9 @@ class GatedAgent extends Agent {
  * aborted while its CONNECT was held left that CONNECT open for at least 5 s, so release would
  * have dialled it; this agent's tunnel goes when its request does.
  *
- * A held request is given up later than `socketTimeoutMs`, never earlier (measured on 4.12.1, Node
- * v26.7.0; see commit f19cd4fb1).
+ * A held request was given up later than `socketTimeoutMs` at each of five measured values, and
+ * setting `connectionTimeout` changed none of them, so it is not set (4.12.1, Node v26.7.0; the
+ * table is in commit f19cd4fb1's diff).
  */
 export function gatedRequestHandler(
   gate: TransportGate,

@@ -48,9 +48,10 @@ Two limits matter if something goes wrong:
   and receipt; a scenario still running then is stopped as at its deadline, and the receipt records
   that stop as the `interrupt` step. A scenario still running after
   that minute, for example one inside a restore that cannot be cut short, races the teardown, and a
-  late Litestream upload can leave the bucket behind. In the loop scenario the server does not tell
-  the scenario its Litestream child's process id, so the runner has no child of its own to stop; the
-  pause scenario's does (see "The pause scenario"). When the bucket is
+  late Litestream upload can leave the bucket behind. In the loop scenario the runner never learns
+  the Litestream child's process id, so it has no child of its own to stop; the AWS pause test hands
+  the server the function that starts Litestream, so the runner learns each child's id and stops it
+  at teardown (see "The pause scenario"). When the bucket is
   left, the run fails and the receipt gives the cleanup command.
 - **Ctrl-C is not handled.** Interrupting the run from the terminal skips teardown and writes no
   receipt. The bucket is left behind, and nothing printed names it. Find it in the S3 console by its
