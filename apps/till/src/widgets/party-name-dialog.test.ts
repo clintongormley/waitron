@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { page } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { setLocale, t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import "./party-name-dialog.js";
 import type { PartyNameDetail, TillPartyNameDialog } from "./party-name-dialog.js";
 
@@ -39,6 +40,45 @@ function captured(el: TillPartyNameDialog) {
 }
 
 describe("till-party-name-dialog", () => {
+  it.each([
+    { width: 390, locale: "en", theme: "light" as const },
+    { width: 1280, locale: "en", theme: "light" as const },
+    { width: 390, locale: "es", theme: "light" as const },
+    { width: 1280, locale: "es", theme: "light" as const },
+    { width: 390, locale: "en", theme: "dark" as const },
+    { width: 1280, locale: "en", theme: "dark" as const },
+    { width: 390, locale: "es", theme: "dark" as const },
+    { width: 1280, locale: "es", theme: "dark" as const },
+  ])(
+    "gives the name field room at $width px in $locale, $theme, without scrolling sideways",
+    async ({ width, locale, theme }) => {
+      const previousLocale = currentLocale();
+      await page.viewport(width, 900);
+      try {
+        setLocale(locale);
+        const { el } = await mountWidget<TillPartyNameDialog>(
+          "till-party-name-dialog",
+          { tables: "4, 5" },
+          theme,
+        );
+        const dialog = el
+          .shadowRoot!.querySelector("wt-dialog")!
+          .shadowRoot!.querySelector("dialog")!;
+        const body = dialog.querySelector<HTMLElement>(".body")!;
+        expect(window.innerWidth).toBe(width);
+        expect(nativeInput(el).getBoundingClientRect().width).toBeGreaterThanOrEqual(
+          width === 390 ? 300 : 560,
+        );
+        expect(body.scrollWidth).toBeLessThanOrEqual(body.clientWidth);
+        expect(dialog.getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
+        expect(dialog.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+      } finally {
+        setLocale(previousLocale);
+        await page.viewport(1280, 900);
+      }
+    },
+  );
+
   it("names the tables in its heading, and its one optional field partyName, capped at 40", async () => {
     const el = await mountDialog();
 
