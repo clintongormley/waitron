@@ -4202,6 +4202,16 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   counts `NoSuchKey` as deleted; share them, deciding whether the bucket stream takes those checks
   too.
 
+- **The Amazon S3 rehearsal runner's open edges (A538-7).** Left open by #1648, all in
+  `apps/server/src/testing/aws-rehearsal.ts` and its runbook `docs/developers/aws-backup-rehearsal.md`:
+  (1) Ctrl-C or a killed process skips teardown — no signal handler — so the owned bucket stays and
+  no receipt names it, and the scratch folder `$TMPDIR/waitron-aws-stream-loop-*` keeps a
+  `secrets.env` and, once written, `recovery-kit.txt` (the rehearsal key pair, not encrypted);
+  (2) after the 60-second settle wait, teardown can still race a scenario stuck in a call that takes
+  no stop signal (a restore); (3) running the cleanup command again overwrites the previous cleanup
+  receipt, losing the earlier attempt's teardown ledger; (4) the receipt reader the cleanup uses is
+  more lenient than the writer. Decide (1) before Task 10's live run.
+
 - **`backup.archive_settings_unusable` is worded only as an alert** (`alert-messages.ts`), not on
   the Backups screen. Left open by A538-4.
 

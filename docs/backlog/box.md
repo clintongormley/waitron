@@ -429,6 +429,12 @@ this item stays open.)
 
 ## Decisions and deliberate limits
 
+- **The rehearsal's 128 MiB upload budget counts only the runner's own fixtures (A538-7, #1648).**
+  Litestream uploads straight to the bucket, so the stream loop's uploads are not counted; the runbook
+  `docs/developers/aws-backup-rehearsal.md` says so. On Amazon S3 the loop's frozen-transport timing
+  stage is always recorded as skipped: the real service cannot be frozen, and the local frozen-request
+  check in `apps/server/src/stream-loop.e2e.test.ts` stays separate.
+
 - **Image identity (A490, owner 2026-10-11):** both Waitron images carry their full source
   commit and UTC build time. `waitron.sh install`, `update` and `status` read the running
   containers' image IDs and report commits, requested ref, local build time and GitHub link. The optional
