@@ -84,7 +84,7 @@ export class StaffingApi {
     return this.request(`${BASE}/order`, "PUT", { staffRoleIds });
   }
 
-  deleteStaffRole(staffRoleId: string): Promise<void> {
+  deleteStaffRole(staffRoleId: string): Promise<DeleteImpact> {
     return this.request(path(staffRoleId), "DELETE");
   }
 

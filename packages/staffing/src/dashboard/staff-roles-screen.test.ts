@@ -56,7 +56,13 @@ function impactOf(staffRole: StaffRole): DeleteImpact {
     target: { id: staffRole.id, name: staffRole.name },
     refusals:
       staffRole.shiftCount > 0
-        ? [{ code: "staff_role.in_use", params: { shiftCount: staffRole.shiftCount }, targets: [] }]
+        ? [
+            {
+              code: "staff_role.in_use",
+              params: { staffRoleId: staffRole.id, shiftCount: staffRole.shiftCount },
+              targets: [],
+            },
+          ]
         : [],
     ends: [],
     removes: [
@@ -84,7 +90,8 @@ function fakeRequest(roles: () => StaffRole[], routes: Routes = {}) {
     if (method === "GET" && impact)
       return impactOf(roles().find((listed) => listed.id === decodeURIComponent(impact[1]!))!);
     if (method === "PUT" && path === `${BASE}/order`) return undefined;
-    if (method === "DELETE") return undefined;
+    if (method === "DELETE")
+      return impactOf(roles().find((listed) => path === `${BASE}/${listed.id}`)!);
     throw new Error(`unexpected ${method} ${path}`);
   });
 }

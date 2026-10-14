@@ -1,7 +1,12 @@
 import { and, asc, eq, inArray, ne, sql, type SQL } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { persons } from "@waitron/identity";
-import { AppError, createLabelComparator, type DeleteImpact } from "@waitron/shared";
+import {
+  AppError,
+  createLabelComparator,
+  type DeleteImpact,
+  type ErrorParams,
+} from "@waitron/shared";
 import { CALENDAR_COLOURS } from "@waitron/venue-service/hours-types";
 import {
   personStaffRoles,
@@ -187,8 +192,8 @@ export async function reorderStaffRoles(
   }
 }
 
-/** What deleting the role would do, as the delete question shows it. `deleteStaffRole` checks again. */
-export async function readStaffRoleDeleteImpact(
+/** What deleting the role would do; the delete question reads it and the delete recomputes it. */
+async function staffRoleDeleteRules(
   tx: Transaction,
   cfg: Cfg,
   staffRoleId: string,
@@ -219,7 +224,9 @@ export async function readStaffRoleDeleteImpact(
   return {
     target,
     refusals:
-      shiftCount > 0 ? [{ code: "staff_role.in_use", params: { shiftCount }, targets: [] }] : [],
+      shiftCount > 0
+        ? [{ code: "staff_role.in_use", params: { staffRoleId, shiftCount }, targets: [] }]
+        : [],
     ends: [],
     removes: [
       ...(blocks!.n > 0 ? [{ key: "staff_role_blocks", count: blocks!.n, targets: [] }] : []),
@@ -230,18 +237,24 @@ export async function readStaffRoleDeleteImpact(
   };
 }
 
+export function readStaffRoleDeleteImpact(
+  tx: Transaction,
+  cfg: Cfg,
+  staffRoleId: string,
+): Promise<DeleteImpact> {
+  return staffRoleDeleteRules(tx, cfg, staffRoleId);
+}
+
 /** Deletes the role with its holders and painted blocks; refused while a shift fills it. */
 export async function deleteStaffRole(
   tx: Transaction,
   cfg: Cfg,
   staffRoleId: string,
-): Promise<void> {
-  await assertStaffRoleHere(tx, cfg, staffRoleId);
-  const [used] = await tx
-    .select({ n: tally })
-    .from(shiftAssignments)
-    .where(eq(shiftAssignments.staffRoleId, staffRoleId));
-  const shiftCount = used!.n;
-  if (shiftCount > 0) throw new AppError("staff_role.in_use", { staffRoleId, shiftCount });
+): Promise<DeleteImpact> {
+  const impact = await staffRoleDeleteRules(tx, cfg, staffRoleId);
+  const first = impact.refusals[0];
+  if (first !== undefined)
+    throw new AppError(first.code as keyof ErrorParams, first.params as never);
   await tx.delete(staffRoles).where(eq(staffRoles.id, staffRoleId));
+  return impact;
 }

@@ -153,8 +153,7 @@ export const STAFFING_ROUTES: ModuleRoutes = {
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const id = staffRoleIdParam(c.req.param("staffRoleId"));
-        await gated(sessionId, (tx) => deleteStaffRole(tx, ctx.cfg, id));
-        return c.body(null, 204);
+        return c.json(await gated(sessionId, (tx) => deleteStaffRole(tx, ctx.cfg, id)));
       }),
     );
   },

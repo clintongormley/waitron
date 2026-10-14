@@ -127,8 +127,21 @@ describe("the staff-role routes", () => {
       200,
       { ...staffRole, name: "Head waiter", colour: "red", holderIds: [r.ana, r.marc].sort() },
     );
-    const deleted = await r.send("DELETE", `/${staffRole.id}`, r.manager);
-    expect(deleted.status).toBe(204);
+    await answers(await r.send("DELETE", `/${staffRole.id}`, r.manager), 200, {
+      target: { id: staffRole.id, name: "Head waiter" },
+      refusals: [],
+      ends: [],
+      removes: [
+        {
+          key: "staff_role_holders",
+          count: 2,
+          targets: expect.arrayContaining([
+            expect.objectContaining({ id: r.ana }),
+            expect.objectContaining({ id: r.marc }),
+          ]) as unknown,
+        },
+      ],
+    });
     await answers(await r.send("GET", "", r.manager), 200, { staffRoles: [] });
   });
 
@@ -336,7 +349,12 @@ describe("the staff-role routes", () => {
       staffRoleIds: [b.id.toUpperCase(), upper],
     });
     expect(reordered.status).toBe(204);
-    expect((await r.send("DELETE", `/${b.id.toUpperCase()}`, r.manager)).status).toBe(204);
+    await answers(await r.send("DELETE", `/${b.id.toUpperCase()}`, r.manager), 200, {
+      target: { id: b.id, name: "B" },
+      refusals: [],
+      ends: [],
+      removes: [],
+    });
     await answers(await r.send("GET", "", r.manager), 200, {
       staffRoles: [{ ...a, name: "A2", colour: "red", position: 1, holderIds: [r.ana] }],
     });

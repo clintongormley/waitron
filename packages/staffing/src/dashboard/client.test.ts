@@ -124,11 +124,18 @@ describe("StaffingApi", () => {
     });
   });
 
-  it("sets who holds a staff role, reorders and deletes", async () => {
+  it("sets who holds a staff role, reorders and deletes, answering what the delete did", async () => {
+    const impact = {
+      target: { id: waiter.id, name: "Waiter" },
+      refusals: [],
+      ends: [],
+      removes: [{ key: "staff_role_blocks", count: 2, targets: [] }],
+    };
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse({ ...waiter, holderIds: ["p1"] }))
-      .mockResolvedValue(emptyResponse());
+      .mockResolvedValueOnce(emptyResponse())
+      .mockResolvedValueOnce(jsonResponse(impact));
     const client = api(fetchImpl);
     expect(await client.setHolders(waiter.id, ["p1"])).toMatchObject({ holderIds: ["p1"] });
     expect(sent(fetchImpl)).toMatchObject({
@@ -142,7 +149,7 @@ describe("StaffingApi", () => {
       method: "PUT",
       body: { staffRoleIds: ["b", "a"] },
     });
-    expect(await client.deleteStaffRole(waiter.id)).toBeUndefined();
+    expect(await client.deleteStaffRole(waiter.id)).toEqual(impact);
     expect(sent(fetchImpl, 2)).toMatchObject({ path: `${BASE}/${waiter.id}`, method: "DELETE" });
   });
 

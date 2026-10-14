@@ -235,7 +235,12 @@ describe("staff roles", () => {
     await inTx((tx) => setStaffRoleHolders(tx, v.cfg, staffRole.id, [v.ana]));
     await inTx((tx) => setStaffRoleHolders(tx, v.cfg, kept.id, [v.ana]));
     await paintBlock(v, staffRole.id);
-    await inTx((tx) => deleteStaffRole(tx, v.cfg, staffRole.id));
+    const impact = await inTx((tx) => readStaffRoleDeleteImpact(tx, v.cfg, staffRole.id));
+    expect(impact.removes.map(({ key, count }) => [key, count])).toEqual([
+      ["staff_role_blocks", 1],
+      ["staff_role_holders", 1],
+    ]);
+    expect(await inTx((tx) => deleteStaffRole(tx, v.cfg, staffRole.id))).toEqual(impact);
     expect((await inTx((tx) => listStaffRoles(tx, v.cfg))).map((r) => r.id)).toEqual([kept.id]);
     expect(
       await suite.db
@@ -313,7 +318,11 @@ describe("staff roles", () => {
     await assignShift(v, v.marc, staffRole.id);
     const impact = await inTx((tx) => readStaffRoleDeleteImpact(tx, v.cfg, staffRole.id));
     expect(impact.refusals).toEqual([
-      { code: "staff_role.in_use", params: { shiftCount: 2 }, targets: [] },
+      {
+        code: "staff_role.in_use",
+        params: { staffRoleId: staffRole.id, shiftCount: 2 },
+        targets: [],
+      },
     ]);
   });
 

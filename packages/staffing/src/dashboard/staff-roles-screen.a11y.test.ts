@@ -33,7 +33,13 @@ const impactOf: ImpactAnswer = async (staffRole) => ({
   target: { id: staffRole.id, name: staffRole.name },
   refusals:
     staffRole.shiftCount > 0
-      ? [{ code: "staff_role.in_use", params: { shiftCount: staffRole.shiftCount }, targets: [] }]
+      ? [
+          {
+            code: "staff_role.in_use",
+            params: { staffRoleId: staffRole.id, shiftCount: staffRole.shiftCount },
+            targets: [],
+          },
+        ]
       : [],
   ends: [],
   removes: [
