@@ -70,6 +70,7 @@ describe("VENUE_SERVICE", () => {
       "readKitchenTicketGrouping",
       "readLinesSoldInEach",
       "readPrintHeldWork",
+      "readPrintMovedSlips",
       "readPrintedDepartmentReceipt",
       "readProfileKitchenScreens",
       "readProfileServiceAccess",

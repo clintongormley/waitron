@@ -1185,6 +1185,8 @@ export interface VenueServiceContribution {
   readKitchenTicketGrouping(tx: Transaction): Promise<"combined" | "separate">;
   /** Whether held groups print in advance, marked HOLD. */
   readPrintHeldWork(tx: Transaction): Promise<boolean>;
+  /** Whether food the kitchen already has prints a MOVED slip when it moves. */
+  readPrintMovedSlips(tx: Transaction): Promise<boolean>;
   /** Minutes after the work ahead is served that a held group is due to be released; null is off. */
   readReleaseReminderMinutes(tx: Transaction): Promise<number | null>;
 }
