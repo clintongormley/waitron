@@ -1,3 +1,4 @@
+import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { sql } from "drizzle-orm";
 import { withTransaction, type Database } from "@waitron/db";
 import {
@@ -7,7 +8,7 @@ import {
   createProduct,
 } from "@waitron/catalogue";
 import { hashPassword, hashPin, persons, startManagementSession } from "@waitron/identity";
-import { applyVenue, planVenue } from "@waitron/provisioning";
+import { planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
 import {
   jobOrigin,

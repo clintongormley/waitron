@@ -1,10 +1,11 @@
+import { seedFixtureSif as registerSif } from "../test/sif-fixture.js";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { newId, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { TENANT_A, seedTenants } from "../test/fixtures.js";
-import { registerSif } from "./registro-sif.js";
+
 import { deriveReservedSeriesCodes, liveSeriesBases, stripOwnSuffixes } from "./reserved-series.js";
 
 describe("deriveReservedSeriesCodes", () => {
@@ -14,28 +15,28 @@ describe("deriveReservedSeriesCodes", () => {
         { code: "A", purpose: "standard" },
         { code: "R", purpose: "rectificative" },
       ],
-      42,
+      "P000042",
     );
     expect(derived).toEqual([
-      { code: "A-42", purpose: "standard" },
-      { code: "R-42", purpose: "rectificative" },
+      { code: "A-P000042", purpose: "standard" },
+      { code: "R-P000042", purpose: "rectificative" },
     ]);
   });
 
   it("returns an empty array for empty input", () => {
-    expect(deriveReservedSeriesCodes([], 42)).toEqual([]);
+    expect(deriveReservedSeriesCodes([], "P000042")).toEqual([]);
   });
 });
 
 describe("stripOwnSuffixes", () => {
-  it("strips only trailing -<digits> groups that are registered installation numbers", () => {
-    const registered = new Set([7, 210441234]);
+  it("strips only trailing groups that are registered installation identities", () => {
+    const registered = new Set(["S000001", "P000042"]);
     expect(stripOwnSuffixes("FA", registered)).toBe("FA");
-    expect(stripOwnSuffixes("FA-7", registered)).toBe("FA");
-    expect(stripOwnSuffixes("FA-210441234", registered)).toBe("FA");
-    expect(stripOwnSuffixes("FA-7-210441234", registered)).toBe("FA");
+    expect(stripOwnSuffixes("FA-S000001", registered)).toBe("FA");
+    expect(stripOwnSuffixes("FA-P000042", registered)).toBe("FA");
+    expect(stripOwnSuffixes("FA-S000001-P000042", registered)).toBe("FA");
     expect(stripOwnSuffixes("FA-2026", registered)).toBe("FA-2026");
-    expect(stripOwnSuffixes("FA-2026-7", registered)).toBe("FA-2026");
+    expect(stripOwnSuffixes("FA-2026-S000001", registered)).toBe("FA-2026");
   });
 });
 
@@ -46,24 +47,24 @@ describe("liveSeriesBases", () => {
     await withTransaction(suite.db, async (tx) => {
       const node = { nodeId: TENANT_A.nodeId };
       const identity = { ...node, nif: "89890001K", idSistemaInformatico: "WT" };
-      await registerSif(tx, identity);
-      const registered = await registerSif(tx, identity);
-      expect(registered.numeroInstalacion).toBe(2);
+      await registerSif(tx, { ...identity, numeroInstalacion: "S000001" });
+      const registered = await registerSif(tx, { ...identity, numeroInstalacion: "P000042" });
+      expect(registered.numeroInstalacion).toBe("P000042");
       // Raw inserts supply `id`: its `$defaultFn` runs only for a builder insert.
       await tx.execute(sql`
         insert into invoice_series (id, node_id, code, purpose) values (${newId()}, ${node.nodeId}, 'FA', 'standard'),
-          (${newId()}, ${node.nodeId}, 'FA-2', 'standard')
+          (${newId()}, ${node.nodeId}, 'FA-P000042', 'standard')
       `);
       expect(await liveSeriesBases(tx, node)).toEqual([{ code: "FA", purpose: "standard" }]);
 
       await tx.execute(sql`
         insert into invoice_series (id, node_id, code, purpose) values (${newId()}, ${node.nodeId}, 'RE', 'rectificative'),
-          (${newId()}, ${node.nodeId}, 'FA-2-2', 'rectificative'),
-          (${newId()}, ${node.nodeId}, 'FA-2-2-2', 'rectificative')
+          (${newId()}, ${node.nodeId}, 'FA-P000042-P000042', 'rectificative'),
+          (${newId()}, ${node.nodeId}, 'FA-P000042-P000042-P000042', 'rectificative')
       `);
       expect(await liveSeriesBases(tx, node)).toEqual([
         { code: "FA", purpose: "standard" },
-        { code: "FA-2-2", purpose: "rectificative" },
+        { code: "FA-P000042-P000042", purpose: "rectificative" },
         { code: "RE", purpose: "rectificative" },
       ]);
     });
@@ -71,22 +72,36 @@ describe("liveSeriesBases", () => {
 });
 
 describe("liveSeriesBases across purposes", () => {
-  // Each fixture owns its database so registration counters and live codes cannot depend on test order.
   const suite = useVenueDb({ migrations: [...TEST_MIGRATIONS], setup: seedTenants });
 
-  it("keeps FA standard and FA-1 rectificative distinct when installation 1 is registered", async () => {
+  it("keeps FA standard and FA-S000001 rectificative distinct when S000001 is registered", async () => {
     await withTransaction(suite.db, async (tx) => {
       const node = { nodeId: TENANT_A.nodeId };
-      const sif = await registerSif(tx, { ...node, nif: "89890001K", idSistemaInformatico: "WT" });
-      expect(sif.numeroInstalacion).toBe(1);
+      const sif = await registerSif(tx, {
+        ...node,
+        nif: "89890001K",
+        idSistemaInformatico: "WT",
+        numeroInstalacion: "S000001",
+      });
+      expect(sif.numeroInstalacion).toBe("S000001");
       await tx.execute(sql`
           insert into invoice_series (id, node_id, code, purpose) values (${newId()}, ${node.nodeId}, 'FA', 'standard'),
-            (${newId()}, ${node.nodeId}, 'FA-1', 'rectificative')
+            (${newId()}, ${node.nodeId}, 'FA-S000001', 'rectificative')
         `);
       expect(await liveSeriesBases(tx, node)).toEqual([
         { code: "FA", purpose: "standard" },
-        { code: "FA-1", purpose: "rectificative" },
+        { code: "FA-S000001", purpose: "rectificative" },
       ]);
     });
+  });
+});
+
+describe("externally allocated installation suffixes", () => {
+  it("removes retained paper and emergency identities without removing a human suffix", () => {
+    const registered = new Set(["P000042", "E00000000000000000000000000"]);
+    expect(stripOwnSuffixes("FA-P000042", registered)).toBe("FA");
+    expect(stripOwnSuffixes("FA-P000042-E00000000000000000000000000", registered)).toBe("FA");
+    expect(stripOwnSuffixes("FA-2026-P000042", registered)).toBe("FA-2026");
+    expect(stripOwnSuffixes("FA-P000043", registered)).toBe("FA-P000043");
   });
 });

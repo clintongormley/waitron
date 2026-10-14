@@ -2,14 +2,17 @@ import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { recordSale } from "@waitron/core";
-import { openVenueDatabase, withTransaction, type Database } from "@waitron/db";
+import { openVenueDatabase, stampDeployment, withTransaction, type Database } from "@waitron/db";
 import type { KeyRing } from "@waitron/credentials";
 import type { FiscalContribution } from "@waitron/fiscal";
 import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
 import { orderedMigrationSets, type WaitronModule } from "@waitron/module";
-import { nodeId, seriesId, jobOrigin } from "@waitron/shared";
+import { nodeId, seriesId, jobOrigin, AppError } from "@waitron/shared";
 import {
   applyVenue,
+  initialVenueApplyInput,
+  parseInitialVenueInput,
+  type InitialVenueInput,
   planVenue,
   readTenantIdentities,
   type VenueRequest,
@@ -54,11 +57,21 @@ async function testVenue(
   db: Database,
   venue: VenueRequest,
   modules: readonly WaitronModule[],
+  initialOperations?: InitialVenueInput,
 ): Promise<VenueResult> {
   if ((await readTenantIdentities(db)).length === 0) {
-    return applyVenue(planVenue(venue, modules), { db, modules });
+    await stampDeployment(db, "preproduction");
+    return applyVenue(planVenue(venue, modules), {
+      db,
+      modules,
+      ...(initialOperations === undefined ? {} : initialVenueApplyInput(initialOperations)),
+    });
   }
-  return recoverProvisionedVenue(db, { environment: "preproduction", venue });
+  return recoverProvisionedVenue(
+    db,
+    { environment: "preproduction", venue, initialOperations },
+    modules,
+  );
 }
 
 export function fiscalReadinessDatabaseKey(input: FiscalReadinessInput): string {
@@ -75,9 +88,29 @@ export async function submitFiscalReadiness(args: {
   secret: unknown;
   ring: KeyRing;
   readinessInput: FiscalReadinessInput;
+  initialOperations?: InitialVenueInput;
   now?: () => Date;
 }): Promise<FiscalTestResult> {
   if (args.contribution.activationReadiness === "not-applicable") return { status: "accepted" };
+  const request = structuredClone(args.venue);
+  const modules = [...args.modules];
+  const initial =
+    args.initialOperations === undefined
+      ? undefined
+      : parseInitialVenueInput(args.initialOperations);
+  if (
+    initial === null ||
+    initial?.inputs.some(
+      (input) =>
+        !modules.some(
+          (module) =>
+            module.name === input.module &&
+            module.operations !== undefined &&
+            module.provisioning?.seed !== undefined,
+        ),
+    )
+  )
+    throw new AppError("setup.request_invalid", { field: "initialOperations" });
   const testIdentity = fiscalReadinessDatabaseKey(args.readinessInput);
   // Its own venue DIRECTORY under the state root, retained between runs: the readiness sample is a
   // real preproduction sale on a real chain, so it must not share a file with the box's own venue
@@ -87,12 +120,12 @@ export async function submitFiscalReadiness(args: {
   // takes the migration lock and opens its own handle, so it runs BEFORE this one is opened.
   await applyMigrations(
     directory,
-    migrationOptionsFor(orderedMigrationSets(args.modules), args.migrationsRoot ?? null),
+    migrationOptionsFor(orderedMigrationSets(modules), args.migrationsRoot ?? null),
   );
   const store = await openVenueDatabase(directory);
   const db = store.venue;
   try {
-    const venue = await testVenue(db, args.venue, args.modules);
+    const venue = await testVenue(db, request, modules, initial);
     const secret = args.contribution.provisioningSecret;
     if (secret !== undefined) await secret.seal({ db, ring: args.ring }, args.secret);
 
@@ -109,14 +142,14 @@ export async function submitFiscalReadiness(args: {
             origin: jobOrigin("readiness_test"),
             nodeId: nodeId(venue.nodeId),
             seriesId: seriesId(venue.seriesIds[0]!),
-            locale: args.venue.location.invoiceLocales[0]!,
-            invoiceLocales: args.venue.location.invoiceLocales,
+            locale: request.location.invoiceLocales[0]!,
+            invoiceLocales: request.location.invoiceLocales,
             total: "1.00",
             lines: [
               {
                 lineNo: 1,
                 name: "Fiscal readiness test",
-                descriptions: { [args.venue.location.invoiceLocales[0]!]: "Fiscal readiness test" },
+                descriptions: { [request.location.invoiceLocales[0]!]: "Fiscal readiness test" },
                 quantity: "1",
                 unitPrice: "1.00",
                 vatRate: "0.00",

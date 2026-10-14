@@ -21,7 +21,9 @@ import { resolveEnvironment } from "./environment.js";
 import { venueFiscalSelection } from "./venue-fiscal.js";
 import type { ProvisioningIo } from "./io.js";
 import { runKeyring } from "./keyring-command.js";
-import { applyVenue } from "./venue-apply.js";
+import { applyVenue, type VenueApplyDeps } from "./venue-apply.js";
+import { initialVenueApplyInput } from "./initial-venue-input.js";
+import { readInitialVenueFile } from "./initial-venue-file.js";
 import { describeVenueAction, planVenue, type VenueRequest } from "./venue-plan.js";
 import { assertNoForeignTenant, readTenantIdentities } from "./tenant-guard.js";
 import "./errors.js";
@@ -39,6 +41,7 @@ export interface CliDeps {
   applyVenue: typeof applyVenue;
   /** The composition list (`@waitron/composition`'s `ALL_MODULES`). */
   modules: readonly WaitronModule[];
+  initialVenue?: Pick<VenueApplyDeps, "moduleInputs" | "initialNodeId" | "initialAdministratorId">;
   /** Absent, no `modules.json` is written. */
   writeModuleConfig?: (config: ModuleConfig) => Promise<void>;
   readEnvironment: typeof readDeploymentEnvironment;
@@ -324,10 +327,29 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
 
       // Refuses a directory stamped for the other environment (CLAUDE.md §5). After the confirmation:
       // stamping is permanent, so declining must leave the directory exactly as it was found.
+      const inputPath = deps.env.WAITRON_INITIAL_VENUE_INPUT;
+      const initialVenue =
+        deps.initialVenue ??
+        (inputPath?.trim()
+          ? initialVenueApplyInput(await readInitialVenueFile(inputPath))
+          : undefined);
+      if (
+        [...(initialVenue?.moduleInputs?.keys() ?? [])].some(
+          (name) =>
+            !modules.some(
+              (module) => module.name === name && module.provisioning?.seed !== undefined,
+            ),
+        )
+      )
+        throw new AppError("provisioning.initial_input_invalid", {});
       await deps.stampEnvironment(target, requested);
 
       try {
-        const result = await deps.applyVenue(actions, { db: target, modules });
+        const result = await deps.applyVenue(actions, {
+          ...initialVenue,
+          db: target,
+          modules,
+        });
         if (deps.writeModuleConfig !== undefined) await deps.writeModuleConfig(fiscalConfig);
         deps.io.stdout("");
         deps.io.stdout(`node:     ${result.nodeId}`);

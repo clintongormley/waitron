@@ -17,16 +17,14 @@ import {
 } from "@waitron/db";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import {
-  cadenas,
-  contadoresInstalacion,
-  installationFloor,
-  registroSif,
-  registrosFacturacion,
-} from "@waitron/fiscal-verifactu";
+import { cadenas, registroSif, registrosFacturacion } from "@waitron/fiscal-verifactu";
 import { hashPin, persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { AppError, jobOrigin } from "@waitron/shared";
+import { AppError, jobOrigin, nodeId, locationId } from "@waitron/shared";
+import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
+import { stampDeployment } from "@waitron/db";
+import { mintBreakGlassSecret } from "./break-glass.js";
+import { createRecoveryRestoreRunner } from "./recovery-module-operation.js";
 import type { BucketConfig, FileCall, S3FileStore } from "@waitron/stream";
 import { appendToChain, readChain, workforceChains } from "@waitron/workforce";
 import { encryptArtifact } from "./artifact-cipher.js";
@@ -102,6 +100,7 @@ const PACK: ArchiveRecoveryPack = {
 let scratch: string;
 let artifactBytes: Buffer;
 let personId: string;
+let nodeSecret: string;
 /** Every line any case printed, read once at the end for secrets. */
 const printed: string[] = [];
 
@@ -129,15 +128,12 @@ beforeAll(async () => {
       .insert(invoiceSeries)
       .values({ nodeId: ids.node, code: "RE", purpose: "rectificative" });
     await tx.insert(invoiceSeries).values({ nodeId: ids.node, code: "FF", purpose: "full" });
-    await tx
-      .insert(contadoresInstalacion)
-      .values({ nif: "89890001K", idSistemaInformatico: "W1", proximoNumero: 2 });
     await tx.insert(registroSif).values({
       id: ids.sif,
       nodeId: ids.node,
       nif: "89890001K",
       idSistemaInformatico: "W1",
-      numeroInstalacion: 1,
+      numeroInstalacion: "1",
     });
     const [person] = await tx
       .insert(persons)
@@ -145,6 +141,8 @@ beforeAll(async () => {
       .returning({ id: persons.id });
     personId = person!.id;
   });
+  await stampDeployment(suite.db, "preproduction");
+  nodeSecret = await mintBreakGlassSecret(suite.db, ids.node);
   await seedFiscalRecord(suite.db);
   for (const at of ["2026-10-01T09:00:00Z", "2026-10-01T13:00:00Z"]) {
     await suite.db.transaction((tx) =>
@@ -387,7 +385,27 @@ async function run(
   overrides: Partial<Parameters<typeof runRestore>[0]> = {},
 ): Promise<{ code: number; out: string[] }> {
   const out: string[] = [];
+  const allocation = allocationFixture({
+    node: { nodeId: nodeId(ids.node), locationId: locationId(ids.location) },
+    taxpayerNif: "89890001K",
+    identity: "P000042",
+    recoveryKey: true,
+    bases: [
+      { code: "FA", purpose: "standard" },
+      { code: "FF", purpose: "full" },
+      { code: "RE", purpose: "rectificative" },
+    ],
+  });
+  const held = allocation.request("restore");
+  const modules = ALL_MODULES.map((module) =>
+    module.name === "fiscal-verifactu" ? { ...module, operations: held.preparation } : module,
+  );
   const code = await runRestore({
+    withModuleOperations: createRecoveryRestoreRunner(
+      modules,
+      { binding: held.binding, input: held.input },
+      nodeSecret,
+    ),
     argv: ["restore", "--from-archive", f.packPath, "--archive-key", KEY, ...args],
     env: { WAITRON_STATE_DIR: f.stateDir, WAITRON_VENUE_DIR: f.venueDir },
     out: (line) => {
@@ -440,7 +458,6 @@ describe("waitron-restore restore --from-archive", () => {
       const db = restored.venue;
       expect(await db.select().from(tenants)).toEqual(expectedTenants);
       expect(await db.select().from(locations)).toEqual(expectedLocations);
-      // A fresh fiscal installation: the old one revoked, a new one at or above today's floor.
       const sifs = await db
         .select({
           numeroInstalacion: registroSif.numeroInstalacion,
@@ -448,14 +465,13 @@ describe("waitron-restore restore --from-archive", () => {
         })
         .from(registroSif)
         .where(eq(registroSif.nodeId, ids.node))
-        .orderBy(registroSif.numeroInstalacion);
+        .orderBy(registroSif.registradoEn);
       expect(sifs).toHaveLength(2);
-      expect(sifs[0]).toMatchObject({ numeroInstalacion: 1 });
+      expect(sifs[0]).toMatchObject({ numeroInstalacion: "1" });
       expect(sifs[0]?.revocadoEn).not.toBeNull();
       expect(sifs[1]?.revocadoEn).toBeNull();
-      expect(sifs[1]!.numeroInstalacion).toBeGreaterThanOrEqual(
-        installationFloor(new Date(Date.now() - 60_000)),
-      );
+      expect(sifs[1]!.numeroInstalacion).toBe("P000042");
+      expect(sifs[1]!.numeroInstalacion).not.toBe(sifs[0]!.numeroInstalacion);
       const n = sifs[1]!.numeroInstalacion;
       expect(await chainHead(db)).toEqual([{ ultimaHuella: null, secuencia: 1 }]);
       expect(await seriesOfNode(db)).toEqual([

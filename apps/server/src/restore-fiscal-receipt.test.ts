@@ -71,7 +71,7 @@ async function seedFiscalRegistro(db: Database): Promise<void> {
     nodeId: F.nodeId,
     nif: "89890001K",
     idSistemaInformatico: "WT",
-    numeroInstalacion: 1,
+    numeroInstalacion: "1",
   });
   await db.insert(registrosFacturacion).values({
     source: "device",

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import {
   invoiceSeries,
   kitchenStations,
@@ -20,9 +20,17 @@ import {
   cutoverForBusinessDay,
   locationId as brandLocationId,
   nodeId as brandNodeId,
+  normaliseUuid,
 } from "@waitron/shared";
 import type { CapabilityFlag, FormFactor } from "@waitron/layouts";
 import type { SeedReport, WaitronModule } from "@waitron/module";
+import {
+  moduleOperationFor,
+  readOperationAuthority,
+  withOperationAuthority,
+  withPreparedModuleOperations,
+  type ModuleOperations,
+} from "@waitron/module";
 import type { VenueAction } from "./venue-plan.js";
 import { normalizeDayCutover } from "./venue-plan.js";
 import "./errors.js";
@@ -33,40 +41,124 @@ export interface VenueApplyDeps {
   /** The modules whose seeds a `seed-module` action may name — the enabled set, in the composition
    * list's order. */
   modules: readonly WaitronModule[];
+  moduleInputs?: ReadonlyMap<string, InitialModuleInput>;
+  // A signed outside consumption names these identities before the venue transaction begins.
+  initialNodeId?: string;
+  initialAdministratorId?: string;
   /** Optional configuration import that must commit or roll back with the freshly minted venue. */
   beforeCommit?: (tx: Transaction, result: VenueResult) => Promise<void>;
+}
+
+export interface InitialModuleInput {
+  readonly eventId: string;
+  readonly sourceId: string;
+  readonly input: unknown;
 }
 
 export interface VenueResult {
   locationId: string;
   nodeId: string;
-  /** The ids of the series actually inserted, in plan order. */
+  /** The active series ids, in the plan's purpose order. */
   seriesIds: string[];
   /** One entry per `seed-module` action run, in plan order: the module and its one-line report. */
   seeded: readonly SeedReport[];
 }
 
-/**
- * Runs one plan as ONE transaction, so no partial venue is ever left behind.
- *
- * A database contains one taxpayer and one operational venue. Repeating the same plan returns the
- * existing location, node and series without rerunning module seeds. A different location is
- * refused; so is a different taxpayer. Two overlapping plans cannot interleave: `withTransaction`
- * holds the file's write lock for the whole plan.
- */
+async function assertActionOrder(actions: readonly VenueAction[], db: Database): Promise<void> {
+  let tenant = false;
+  let location = false;
+  let node = false;
+  let administrator = false;
+  for (const action of actions) {
+    switch (action.kind) {
+      case "ensure-tenant":
+        tenant = true;
+        break;
+      case "create-location":
+        if (!tenant) throw new Error("applyVenue: create-location before ensure-tenant");
+        location = true;
+        break;
+      case "create-node":
+        if (!location) throw new Error("applyVenue: create-node before create-location");
+        node = true;
+        break;
+      case "seed-module":
+        if (!node) throw new Error("applyVenue: seed-module before create-node");
+        break;
+      case "create-series":
+        if (!node) throw new Error("applyVenue: create-series before create-node");
+        break;
+      case "seed-admin":
+        administrator = true;
+        break;
+      case "seed-device-profiles":
+        if (!administrator) {
+          const [existing] = await db
+            .select({ id: persons.id })
+            .from(persons)
+            .where(eq(persons.role, "admin"))
+            .limit(1);
+          if (existing === undefined)
+            throw new Error("applyVenue: seed-device-profiles before seed-admin");
+        }
+        break;
+    }
+  }
+  if (!node) throw new Error("applyVenue: plan is missing create-node");
+}
+
 export async function applyVenue(
-  actions: readonly VenueAction[],
+  suppliedActions: readonly VenueAction[],
   deps: VenueApplyDeps,
 ): Promise<VenueResult> {
+  const actions = structuredClone(suppliedActions);
+  const modules = [...deps.modules];
   const ensure = actions.find((a) => a.kind === "ensure-tenant");
   if (ensure === undefined || ensure.kind !== "ensure-tenant") {
     throw new Error("applyVenue: plan is missing ensure-tenant");
   }
+  const inputs = new Map(
+    [...(deps.moduleInputs ?? [])].map(([name, input]) => [name, { ...input }]),
+  );
+  const collecting = modules.filter(
+    (module) =>
+      module.operations !== undefined &&
+      inputs.has(module.name) &&
+      actions.some((action) => action.kind === "seed-module" && action.module === module.name),
+  );
+  if (collecting.length > 0 && !actions.some((action) => action.kind === "seed-admin"))
+    throw new AppError("provisioning.initial_operator_required", {});
+  await assertActionOrder(actions, deps.db);
+  const initialNodeId = brandNodeId(deps.initialNodeId ?? randomUUID());
+  const initialAdministratorId = normaliseUuid(
+    deps.initialAdministratorId ?? randomUUID(),
+    "PersonId",
+  );
+  const filingModule = actions.find((action) => action.kind === "create-node")?.filingModule;
+  const seriesOwners = modules.filter((module) => module.provisioning?.seed?.series);
+  if (seriesOwners.length > 1)
+    throw new Error("applyVenue: only the filing module may own initial series");
+  if (seriesOwners.some((module) => module.fiscal?.id !== filingModule)) {
+    const [existing] = await deps.db.select({ id: locations.id }).from(locations).limit(1);
+    if (existing !== undefined) throw new AppError("provisioning.second_venue", {});
+    throw new Error("applyVenue: only the filing module may own initial series");
+  }
+  const seriesOwner = seriesOwners[0];
+  if (
+    seriesOwner !== undefined &&
+    !actions.some((action) => action.kind === "seed-module" && action.module === seriesOwner.name)
+  )
+    throw new Error("applyVenue: series owner is missing its seed action");
+  const resolveSeries = seriesOwner?.provisioning?.seed?.series?.resolve;
+  const seriesBases = actions
+    .filter((action) => action.kind === "create-series")
+    .map(({ code, purpose }) => ({ code, purpose }));
 
-  return withTransaction(deps.db, async (tx) => {
+  const run = async (tx: Transaction, prepared: ModuleOperations): Promise<VenueResult> => {
     let locationId = "";
     let nodeId = "";
     let reusingVenue = false;
+    let createdAdministrator: string | undefined;
     const seeded: SeedReport[] = [];
     const seriesIds: string[] = [];
 
@@ -101,31 +193,32 @@ export async function applyVenue(
           break;
         }
         case "seed-admin": {
-          // The admin belongs to the taxpayer, not to a venue, so a re-run must not add a second
-          // one. Read-then-insert is safe because the write lock is held for the whole plan. The
-          // insert goes through the table definition because `persons.id` and
-          // `persons.created_at` are `$defaultFn` generators that only the insert builder runs.
-          // `planVenue` refuses an unsupported `locale`; a hand-built plan's is not screened here.
           const seededAdmin = await tx
             .select({ id: persons.id })
             .from(persons)
             .where(eq(persons.role, "admin"))
             .limit(1);
           if (seededAdmin.length === 0) {
-            await tx.insert(persons).values({
-              displayName: action.displayName,
-              firstNames: action.firstNames,
-              lastNames: action.lastNames,
-              locale: action.locale,
-              pinHash: action.pinHash,
-              passwordHash: action.passwordHash,
-              email: action.email,
-              // Without the folded twin, login falls back on an ASCII-only key and an address
-              // with a non-ASCII character stops matching at sign-in.
-              emailFolded: action.email === undefined ? undefined : foldForUniqueness(action.email),
-              displayNameFolded: foldForUniqueness(action.displayName),
-              role: "admin",
-            });
+            const [created] = await tx
+              .insert(persons)
+              .values({
+                id: initialAdministratorId,
+                displayName: action.displayName,
+                firstNames: action.firstNames,
+                lastNames: action.lastNames,
+                locale: action.locale,
+                pinHash: action.pinHash,
+                passwordHash: action.passwordHash,
+                email: action.email,
+                // Without the folded twin, login falls back on an ASCII-only key and an address
+                // with a non-ASCII character stops matching at sign-in.
+                emailFolded:
+                  action.email === undefined ? undefined : foldForUniqueness(action.email),
+                displayNameFolded: foldForUniqueness(action.displayName),
+                role: "admin",
+              })
+              .returning({ id: persons.id });
+            createdAdministrator = created!.id;
           }
           break;
         }
@@ -245,7 +338,7 @@ export async function applyVenue(
             nodeId = existing[0].id;
             break;
           }
-          nodeId = randomUUID();
+          nodeId = initialNodeId;
           await tx.insert(nodes).values({
             id: nodeId,
             locationId,
@@ -256,22 +349,59 @@ export async function applyVenue(
           break;
         case "seed-module": {
           if (nodeId === "") throw new Error("applyVenue: seed-module before create-node");
-          const seed = deps.modules.find((m) => m.name === action.module)?.provisioning?.seed;
+          const seed = modules.find((m) => m.name === action.module)?.provisioning?.seed;
           if (seed === undefined) {
             throw new Error(
               `applyVenue: seed-module names ${action.module}, which is not in deps.modules or declares no seed`,
             );
           }
           if (reusingVenue) break;
-          const report = await seed.run(tx, {
+          const node = {
             locationId: brandLocationId(locationId),
             nodeId: brandNodeId(nodeId),
-          });
+          };
+          const input = inputs.get(action.module);
+          let report: string;
+          if (input === undefined) {
+            report = await seed.run(tx, node);
+          } else {
+            const [operator] =
+              createdAdministrator === undefined
+                ? []
+                : await tx
+                    .select({ id: persons.id, role: persons.role, status: persons.status })
+                    .from(persons)
+                    .where(eq(persons.id, createdAdministrator));
+            if (operator?.role !== "admin" || operator.status !== "active")
+              throw new AppError("provisioning.initial_operator_required", {});
+            const binding = Object.freeze({
+              module: action.module,
+              action: "setup",
+              eventId: input.eventId,
+              sourceId: input.sourceId,
+              targetNodeId: nodeId,
+            });
+            const collected = moduleOperationFor(prepared, action.module, nodeId, "setup");
+            if (collected === undefined) {
+              report = await withOperationAuthority(binding, operator.id, (authority) =>
+                seed.run(tx, node, Object.freeze({ input: input.input, binding, authority })),
+              );
+            } else {
+              if (
+                readOperationAuthority(collected.authority, collected.binding)?.operatorId !==
+                operator.id
+              )
+                throw new AppError("provisioning.initial_operator_required", {});
+              report = await seed.run(tx, node, collected);
+              moduleOperationFor(prepared, action.module, nodeId, "setup");
+            }
+          }
           seeded.push({ module: action.module, report });
           break;
         }
         case "create-series": {
           if (nodeId === "") throw new Error("applyVenue: create-series before create-node");
+          if (resolveSeries !== undefined) break;
           if (reusingVenue) {
             const existing = await tx
               .select({ id: invoiceSeries.id })
@@ -311,10 +441,87 @@ export async function applyVenue(
     // The ordering guards fire only when a dependent action runs, so a plan that omits create-node
     // (with everything depending on it) reaches here with an empty id.
     if (nodeId === "") throw new Error("applyVenue: plan is missing create-node");
+    if (resolveSeries !== undefined) {
+      const references = (
+        await resolveSeries(
+          tx,
+          { locationId: brandLocationId(locationId), nodeId: brandNodeId(nodeId) },
+          seriesBases.map((base) => ({ ...base })),
+        )
+      ).map((reference) => ({ ...reference }));
+      const active = await tx
+        .select({
+          id: invoiceSeries.id,
+          code: invoiceSeries.code,
+          purpose: invoiceSeries.purpose,
+        })
+        .from(invoiceSeries)
+        .where(and(eq(invoiceSeries.nodeId, nodeId), isNull(invoiceSeries.retiredAt)));
+      if (
+        seriesBases.length === 0 ||
+        new Set(seriesBases.map((base) => base.purpose)).size !== seriesBases.length ||
+        references.length !== seriesBases.length ||
+        active.length !== references.length ||
+        new Set(references.map((reference) => reference.id)).size !== references.length ||
+        seriesBases.some(
+          (base) =>
+            references.filter((reference) => reference.purpose === base.purpose).length !== 1,
+        ) ||
+        references.some(
+          (reference) =>
+            !active.some(
+              (row) =>
+                row.id === reference.id &&
+                row.code === reference.code &&
+                row.purpose === reference.purpose,
+            ),
+        )
+      )
+        throw new AppError("provisioning.second_venue", {});
+      seriesIds.push(
+        ...seriesBases.map(
+          (base) => references.find((reference) => reference.purpose === base.purpose)!.id,
+        ),
+      );
+    }
     const result = { locationId, nodeId, seriesIds, seeded };
     await deps.beforeCommit?.(tx, result);
+    for (const [name] of prepared) moduleOperationFor(prepared, name, nodeId, "setup");
     return result;
-  });
+  };
+  const transact = (prepared: ModuleOperations) =>
+    withTransaction(deps.db, (tx) => run(tx, prepared));
+
+  if (collecting.length === 0) return transact(new Map());
+  const [existingVenue] = await deps.db.select({ id: locations.id }).from(locations).limit(1);
+  if (existingVenue !== undefined) return transact(new Map());
+  const [existingAdministrator] = await deps.db
+    .select({ id: persons.id })
+    .from(persons)
+    .where(eq(persons.role, "admin"))
+    .limit(1);
+  if (existingAdministrator !== undefined)
+    throw new AppError("provisioning.initial_operator_required", {});
+  // The seed checks that this planned operator is the newly inserted active administrator.
+  const authorise = (index: number, operations: ModuleOperations): Promise<VenueResult> => {
+    const module = collecting[index];
+    if (module === undefined)
+      return withPreparedModuleOperations(collecting, operations, initialNodeId, "setup", transact);
+    const input = inputs.get(module.name)!;
+    const binding = Object.freeze({
+      module: module.name,
+      action: "setup",
+      eventId: input.eventId,
+      sourceId: input.sourceId,
+      targetNodeId: initialNodeId,
+    });
+    return withOperationAuthority(binding, initialAdministratorId, (authority) => {
+      const next = new Map(operations);
+      next.set(module.name, { input: input.input, binding, authority });
+      return authorise(index + 1, next);
+    });
+  };
+  return authorise(0, new Map());
 }
 
 /**

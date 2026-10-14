@@ -15,7 +15,8 @@ import {
 import { generateNodeKeyPair } from "@waitron/membership";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { hashPassword, hashPin, persons } from "@waitron/identity";
-import { applyVenue, planVenue } from "@waitron/provisioning";
+import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
+import { planVenue } from "@waitron/provisioning";
 import { AppError } from "@waitron/shared";
 import {
   parseRecoveryKit,

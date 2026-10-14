@@ -17,7 +17,8 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { DEFAULT_CANVASES } from "@waitron/layouts";
 import type { CanvasDef } from "@waitron/layouts";
-import { applyVenue, planVenue } from "@waitron/provisioning";
+import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
+import { planVenue } from "@waitron/provisioning";
 import {
   createDepartment,
   createServiceZone,

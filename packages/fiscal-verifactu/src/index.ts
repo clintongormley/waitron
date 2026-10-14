@@ -4,6 +4,7 @@ export { FISCAL_ALERTS } from "./alerts.js";
 export { FISCAL_MIGRATIONS } from "./migrations.js";
 export { FISCAL_VOCABULARY } from "./vocabulary.js";
 export { FISCAL_PROVISIONING, WAITRON_ID_SISTEMA } from "./provisioning.js";
+export { FISCAL_OPERATIONS } from "./allocation-configuration.js";
 export { FISCAL_SLOT } from "./slot.js";
 export { isCertKind } from "./aeat-transport.js";
 export type { CertKind } from "./aeat-transport.js";
@@ -13,13 +14,7 @@ export {
   validateAeatCert,
   type AeatCert,
 } from "./provisioning-secret.js";
-export {
-  cadenas,
-  contadoresInstalacion,
-  envios,
-  registroSif,
-  registrosFacturacion,
-} from "./schema/index.js";
+export { cadenas, envios, registroSif, registrosFacturacion } from "./schema/index.js";
 export { currentSif, esPrimerRegistro, registerSif } from "./registro-sif.js";
 export type { RegisterSifParams, SifRegistration } from "./registro-sif.js";
 export { DEFAULT_SKIP_RETRY_MS, drain } from "./drain.js";
@@ -35,11 +30,46 @@ export type {
 } from "./registro-row.js";
 export { verifyChain } from "./verify.js";
 
-export {
-  FISCAL_RESTORE,
-  installationFloor,
-  raiseInstallationFloor,
-  restoreFiscal,
-} from "./restore.js";
+export { FISCAL_RESTORE, restoreFiscal } from "./restore.js";
 export { liveSeriesBases, MAX_BASE_CODE_LENGTH, stripOwnSuffixes } from "./reserved-series.js";
 export { FISCAL_CLASSIFICATION } from "./classification.js";
+export { fiscalAllocations } from "./schema/allocations.js";
+export { activateAllocation } from "./allocation.js";
+export { drawEmergencyIdentity, validateAllocationEnvelope } from "./allocation-envelope.js";
+export type {
+  AllocationContext,
+  AllocationRefusal,
+  AllocationValidation,
+  EmergencyDraw,
+  FiscalAllocation,
+  RecoveryApproval,
+} from "./allocation-envelope.js";
+
+export { validateAllocationForActivation } from "./allocation.js";
+export type { ActivationRefusal, ActivationValidation } from "./allocation.js";
+export { validateStandbyAllocation } from "./standby-allocation.js";
+export type { StandbyAllocationValidation } from "./standby-allocation.js";
+export {
+  createPaperAllocationPreparation,
+  createAllocationPreparation,
+  activatePreparedModuleAllocation,
+} from "./allocation-preparation.js";
+export type {
+  AllocationEvidenceRequest,
+  AllocationEvidenceSource,
+  AllocationOperationEvidence,
+} from "./allocation-operation.js";
+export {
+  ALLOCATED_FISCAL_SEED,
+  ALLOCATED_FISCAL_RESTORE,
+  activatePreparedFiscalStandby,
+} from "./allocated-lifecycle.js";
+
+export {
+  ALLOCATED_FISCAL_STANDBY,
+  createStandbyAllocationPreparation,
+} from "./allocated-standby.js";
+export type {
+  StandbyAllocationEvidence,
+  StandbyAllocationEvidenceSource,
+} from "./allocated-standby.js";

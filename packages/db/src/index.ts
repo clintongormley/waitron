@@ -202,6 +202,7 @@ export {
   deploymentEnvironmentFor,
   deploymentTableExists,
   readBreakGlassVerifier,
+  readBreakGlassKeyName,
   readDeploymentAxes,
   readDeploymentEnvironment,
   readDeploymentMode,

@@ -459,6 +459,8 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
       venueDir: deps.venueDir,
       migrationsRoot,
       log: deps.log,
+      recoverySecret: deps.baseEnv.WAITRON_NODE_RECOVERY_KEY,
+      recoveryOperationPath: deps.baseEnv.WAITRON_RECOVERY_OPERATION_FILE,
       onManagedCloudRestored: async (binding) => {
         if (recoveryOrigin)
           await createCloudRecoveryClient({

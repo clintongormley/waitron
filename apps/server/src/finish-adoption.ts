@@ -2,8 +2,10 @@ import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { Database } from "@waitron/db";
 import type { KeyRing } from "@waitron/credentials";
+import "@waitron/module";
 import type { WaitronModule } from "@waitron/module";
 import { codeOf } from "@waitron/server-kit";
+import { AppError } from "@waitron/shared";
 import { writeFileAtomic } from "./fs-atomic.js";
 import { establishReservedStandbyIdentity, type StandbyIdentity } from "./reserved-identity.js";
 import { ensureMirrorViewer } from "./mirror-session.js";
@@ -12,6 +14,14 @@ import type { Logger } from "./logger.js";
 
 /** The file under `<stateDir>` a mirror writes at adopt and clears once its identity is established. */
 export const PENDING_ADOPTION_FILE = "pending-adoption.json";
+
+export function assertAdoptionModules(modules: readonly WaitronModule[]): void {
+  for (const module of modules) {
+    // The adoption latch carries no live authority for a separately prepared allocation.
+    if (module.operations !== undefined && module.provisioning?.standby?.series === "on-activation")
+      throw new AppError("module.operation_invalid", { module: module.name });
+  }
+}
 
 /**
  * The full standby identity + reservation an adopted mirror records at adopt for a boot to establish.
@@ -76,12 +86,8 @@ type EstablishArgs = {
 };
 
 /**
- * The boot-time finish worker for an adoption-pending mirror. If the pending file exists it attempts
- * the reserved identity (idempotent) with THIS node's enabled module set, then the ambient mirror
- * viewer, then unlinks the file and logs `adoption.established`. A throw is logged
- * (`adoption.establish_failed`) and the file is LEFT in place, so the next boot re-enters
- * adoption-pending mode and retries the whole step — which every boot of an adopted mirror does
- * today, for the reason in `PendingAdoption`'s header above.
+ * Keep the latch on refusal or an unfinished step. Establish the identity before the viewer;
+ * clear the latch only after both succeed, so a later boot can retry the same reservation.
  */
 export async function runFinishAdoption(deps: {
   ownerDb: Database;
@@ -100,6 +106,7 @@ export async function runFinishAdoption(deps: {
   const pending = await readPendingAdoption(deps.stateDir);
   if (pending === null) return; // established (file unlinked) or never pending — nothing to finish.
   try {
+    assertAdoptionModules(deps.modules);
     // establish FIRST (its inserts FK to the venue's rows), then the ambient viewer, then clear the
     // latch — order matters: the file must survive a throw in either step so the next boot retries.
     await establish({

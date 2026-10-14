@@ -16,7 +16,10 @@ import {
   loginManagerById,
   type TotpKeyRing,
 } from "@waitron/identity";
-import type { FenceAttestation } from "./promote.js";
+import type { WaitronModule } from "@waitron/module";
+import { parseStandbyOperationInput } from "./recovery-module-operation.js";
+import { withPromotionModuleOperation } from "./promotion-operation.js";
+import type { FenceAttestation, PromotionOperationRunner } from "./promote.js";
 import { verifyBreakGlass } from "./break-glass.js";
 import { createErrorBoundary, readJsonBody } from "@waitron/server-kit";
 import { isUuid } from "./till-session.js";
@@ -38,7 +41,11 @@ export interface PromoteApiDeps {
   nodeId: string;
   /** Unlocks a stored authenticator secret, so an admin who has one can sign in. */
   credentialKeyRing: TotpKeyRing;
-  run: (attestation: FenceAttestation) => Promise<PromoteRunResult>;
+  modules?: readonly WaitronModule[];
+  run: (
+    attestation: FenceAttestation,
+    operation?: PromotionOperationRunner,
+  ) => Promise<PromoteRunResult>;
 }
 
 const STATUS: Record<string, ContentfulStatusCode> = {
@@ -62,7 +69,26 @@ export function mountPromoteApi(app: Hono, deps: PromoteApiDeps, log: Logger = (
         password?: string;
         totp?: string;
         breakGlass?: string;
+        moduleOperation?: unknown;
       }>(c);
+
+      if (body.moduleOperation !== undefined) {
+        const operation = parseStandbyOperationInput(body.moduleOperation);
+        if (operation === null)
+          throw new AppError("module.operation_invalid", { module: "unknown" });
+        const result = await withPromotionModuleOperation(
+          {
+            db: deps.appDb,
+            nodeId: deps.nodeId,
+            credentialKeyRing: deps.credentialKeyRing,
+            modules: deps.modules ?? [],
+          },
+          operation,
+          body,
+          (runner) => deps.run({ oldNodeNeutralised: body.oldNodeNeutralised === true }, runner),
+        );
+        return c.json(result);
+      }
 
       // A present break-glass secret is authoritative: a wrong one is refused here, never downgraded
       // to the login path.

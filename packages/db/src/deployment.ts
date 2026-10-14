@@ -193,9 +193,6 @@ export async function setSingletonRoleTx(
     });
 }
 
-/** One node's stored break-glass verifier, or `null` when it has none. Never the secret. No
- * {@link nodeRolesTableExists} probe: its one caller, `verifyBreakGlass` behind the promote route,
- * runs only on a server that has already applied its migrations. */
 export async function readBreakGlassVerifier(
   db: Database | Transaction,
   nodeId: string,
@@ -207,20 +204,29 @@ export async function readBreakGlassVerifier(
   return row?.v ?? null;
 }
 
-/** Writes one node's break-glass verifier on a caller's transaction, creating the node's row if it
- * has none. The one product writer is adopt, through `mintBreakGlassSecret`
- * (`apps/server/src/break-glass.ts`); nothing in the database refuses another writer. */
+export async function readBreakGlassKeyName(
+  db: Database | Transaction,
+  nodeId: string,
+): Promise<string | null> {
+  const [row] = await db
+    .select({ name: nodeRoles.breakGlassKeyName, verifier: nodeRoles.breakGlassVerifier })
+    .from(nodeRoles)
+    .where(eq(nodeRoles.nodeId, nodeId));
+  return row?.verifier == null ? null : row.name;
+}
+
 export async function setBreakGlassVerifierTx(
   tx: Transaction,
   nodeId: string,
   verifier: string,
+  keyName: string | null = null,
 ): Promise<void> {
   await requireStamp(tx);
   await tx
     .insert(nodeRoles)
-    .values({ nodeId, breakGlassVerifier: verifier })
+    .values({ nodeId, breakGlassVerifier: verifier, breakGlassKeyName: keyName })
     .onConflictDoUpdate({
       target: nodeRoles.nodeId,
-      set: { breakGlassVerifier: verifier, updatedAt: now() },
+      set: { breakGlassVerifier: verifier, breakGlassKeyName: keyName, updatedAt: now() },
     });
 }

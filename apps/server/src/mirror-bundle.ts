@@ -19,7 +19,14 @@ import {
 } from "@waitron/membership";
 import type { KeyRing } from "@waitron/credentials";
 import type { AdoptResult } from "@waitron/provisioning";
-import { enabledModules, serializeModuleConfig } from "@waitron/module";
+import {
+  enabledModules,
+  moduleOperationFor,
+  serializeModuleConfig,
+  snapshotModuleOperations,
+  withPreparedModuleOperations,
+  type ModuleOperations,
+} from "@waitron/module";
 import { caCertPath } from "./box-secrets.js";
 import { readModuleConfig } from "./module-config.js";
 import { ALL_MODULES } from "./modules.js";
@@ -67,6 +74,7 @@ export interface AssembleDeps {
   standby: { nodeId: string; publicKey: string };
   accountKey: string;
   wireguardPublicKey?: string;
+  moduleOperations?: ModuleOperations;
 }
 
 export function refuseRemovedStandby(
@@ -99,6 +107,11 @@ export function refuseFullChart(
 // `mirror.standby_removed` when the held chart lists the standby as `evicted` or has cleared it, and
 // `mirror.membership_full` when it has no place left for the standby.
 export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBundle> {
+  const operations = snapshotModuleOperations(deps.moduleOperations);
+  const standby = {
+    nodeId: brandNodeId(deps.standby.nodeId),
+    locationId: brandLocationId(deps.designated.locationId),
+  };
   const { tenant, primaryNode } = await withTransaction(deps.appDb, async (tx) => {
     // Safe: every provisioned database holds the taxpayer row and the designated node's row.
     const t = (await readTenant(tx))!;
@@ -119,31 +132,48 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
   if (environment === null) throw new AppError("mirror.not_provisioned", {});
 
   // Read fresh, not from boot: the operator may have edited modules.json since, and a malformed file
-  // must fail here, before the reservation bumps any counter.
+  // must fail before collecting or writing any reservation.
   const moduleConfig = await readModuleConfig(deps.stateDir);
   const modules = enabledModules(ALL_MODULES, moduleConfig);
 
+  for (const name of operations.keys()) {
+    if (
+      !modules.some((module) => module.name === name && module.provisioning?.standby !== undefined)
+    )
+      throw new AppError("module.operation_invalid", { module: name });
+  }
+
   // Every module's reservation shares one transaction, so their reads and allocations agree.
   const [reserved, primaryPrivateKey, boxCaPem] = await Promise.all([
-    withTransaction(deps.appDb, async (tx) => {
-      // In the reservation's own transaction, so a removal commits wholly before or after it.
-      const held = await readNodeMembership(tx);
-      refuseRemovedStandby(held, deps.standby.nodeId);
-      refuseFullChart(held, deps.standby.nodeId);
-      const primary = {
-        locationId: brandLocationId(deps.designated.locationId),
-        nodeId: brandNodeId(deps.designated.nodeId),
-      };
-      const states: Record<string, unknown> = {};
-      const series: { code: string; purpose: string }[] = [];
-      for (const m of modules) {
-        if (m.provisioning?.standby === undefined) continue;
-        const r = await m.provisioning.standby.reserve(tx, primary);
-        states[m.name] = r.state;
-        series.push(...(r.series ?? []));
-      }
-      return { modules: states, series };
-    }),
+    withPreparedModuleOperations(modules, operations, standby.nodeId, "reserve", (prepared) =>
+      withTransaction(deps.appDb, async (tx) => {
+        // In the reservation's own transaction, so a removal commits wholly before or after it.
+        const held = await readNodeMembership(tx);
+        refuseRemovedStandby(held, deps.standby.nodeId);
+        refuseFullChart(held, deps.standby.nodeId);
+        const primary = {
+          locationId: brandLocationId(deps.designated.locationId),
+          nodeId: brandNodeId(deps.designated.nodeId),
+        };
+        const states: Record<string, unknown> = {};
+        const series: { code: string; purpose: string }[] = [];
+        for (const m of modules) {
+          if (m.provisioning?.standby === undefined) continue;
+          const operation = moduleOperationFor(prepared, m.name, standby.nodeId, "reserve");
+          const r = await m.provisioning.standby.reserve(tx, primary, standby, operation);
+          moduleOperationFor(prepared, m.name, standby.nodeId, "reserve");
+          if (m.provisioning.standby.series === "on-activation" && (r.series?.length ?? 0) !== 0)
+            throw new AppError("module.operation_invalid", { module: m.name });
+          states[m.name] = r.state;
+          series.push(...(r.series ?? []));
+        }
+        for (const m of modules) {
+          if (m.provisioning?.standby !== undefined)
+            moduleOperationFor(prepared, m.name, standby.nodeId, "reserve");
+        }
+        return { modules: states, series };
+      }),
+    ),
     readNodeIdentityKey(deps.appDb, deps.ring),
     readFile(caCertPath(deps.stateDir), "utf8"),
   ]);

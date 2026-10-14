@@ -84,6 +84,7 @@ import {
 import type {
   FenceAttestation,
   MirrorPromotionResult,
+  PromotionOperationRunner,
   PromoteDeps,
   PromotionResult,
 } from "./promote.js";
@@ -269,7 +270,10 @@ export interface StartedServer {
    * Promote a read-only mirror to the venue's primary in-process, then restart into `mode=primary`.
    * Present only in mirror mode. Refuses without a fence attestation (`promotion.fence_not_attested`).
    */
-  promoteMirrorToPrimary?: (attestation: FenceAttestation) => Promise<MirrorPromotionResult>;
+  promoteMirrorToPrimary?: (
+    attestation: FenceAttestation,
+    withModuleOperations?: PromotionOperationRunner,
+  ) => Promise<MirrorPromotionResult>;
   /**
    * Resolves once background work has stopped, the listeners are closed, every password reset the
    * management API answered has written its token and read the mail settings for its email (the send
@@ -1003,6 +1007,7 @@ async function bootServer(
                 migrationsRoot: config.migrationsRoot,
                 modules,
                 venue: request.venue,
+                initialOperations: request.initialOperations,
                 contribution,
                 secret,
                 ring,
@@ -2011,10 +2016,13 @@ async function bootServer(
   // An already-primary re-run is a no-op that skips the restart.
   const promoteMirrorRun = async (
     attestation: FenceAttestation,
+    withModuleOperations?: PromotionOperationRunner,
   ): Promise<MirrorPromotionResult> => {
     const result = await promoteMirrorToPrimary(
       {
         ...promoteDeps,
+        modules: setsToMigrate,
+        withModuleOperations,
         persistTradingEnv: async () => {
           const next: TradingConfig = {
             nodeId: till.nodeId,
@@ -2036,9 +2044,12 @@ async function bootServer(
 
   // The promote endpoint's delegate. On a non-mirror it only reports status; it NEVER calls
   // `promoteLocalSecondaryToPrimary` (shelved active-active).
-  const promoteRun = async (attestation: FenceAttestation): Promise<PromoteRunResult> => {
+  const promoteRun = async (
+    attestation: FenceAttestation,
+    withModuleOperations?: PromotionOperationRunner,
+  ): Promise<PromoteRunResult> => {
     if (isMirror) {
-      const result = await promoteMirrorRun(attestation);
+      const result = await promoteMirrorRun(attestation, withModuleOperations);
       return { alreadyPrimary: result.alreadyPrimary, restarting: !result.alreadyPrimary };
     }
     const held = await readNodeMembership(db);
@@ -2048,7 +2059,13 @@ async function bootServer(
 
   mountPromoteApi(
     app,
-    { appDb: db, nodeId: till.nodeId, credentialKeyRing: totpKeyRing, run: promoteRun },
+    {
+      appDb: db,
+      nodeId: till.nodeId,
+      credentialKeyRing: totpKeyRing,
+      modules: setsToMigrate,
+      run: promoteRun,
+    },
     log,
   );
 

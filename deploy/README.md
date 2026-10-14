@@ -444,6 +444,13 @@ command against it treat that entrypoint differently:
   shows the pack's code line, and the Download pack file link shown with it downloads a file that
   holds that line under a few lines of explanation in the dashboard's language.
 
+  **Keep older paper recovery keys.** Restoring an older backup also restores the node key
+  from that time. A replaced key can work again on the restored box, while its replacement
+  can be refused. Keep the older paper until every backup made before the replacement has
+  been deleted. When the restored copy contains a key name, `restore.recovery_key_selected`
+  names the paper you need. The node key authenticates recovery; the separate backup encryption
+  key opens the backup file.
+
   A restore moves the old database into a hidden folder in the venue folder
   (`/var/lib/waitron/state/venue/` inside the container), named `.venue.db-replaced-` and six
   random characters, and deletes that folder once the restored database is in place. If the command

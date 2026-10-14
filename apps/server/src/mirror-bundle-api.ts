@@ -26,6 +26,9 @@ import {
   MAX_CHART_WRITE_ROUNDS,
   mintNextMembershipDocument,
 } from "./membership-mint.js";
+import { withAuthenticatedOperation } from "./operation-authentication.js";
+import { parseStandbyOperationInput } from "./recovery-module-operation.js";
+import type { ModuleOperations } from "@waitron/module";
 import { isBareOrigin } from "./config.js";
 import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody } from "@waitron/server-kit";
@@ -73,6 +76,7 @@ export function mountMirrorBundleApi(
         standbyNodeId?: string;
         standbyPublicKey?: string;
         standbyContactUrl?: unknown;
+        moduleOperation?: unknown;
       }>(c);
       if (
         typeof body.personId !== "string" ||
@@ -99,6 +103,45 @@ export function mountMirrorBundleApi(
       const standby = { nodeId: body.standbyNodeId, publicKey: body.standbyPublicKey };
       const standbyContactUrl = body.standbyContactUrl;
 
+      const assemble = async (moduleOperations?: ModuleOperations) => {
+        if (deps.relayUrl === undefined) throw new AppError("mirror.no_relay", {});
+
+        const bundle = await assembleMirrorBundle({
+          appDb: deps.appDb,
+          ring: deps.ring,
+          stateDir: deps.stateDir,
+          relayUrl: deps.relayUrl,
+          boxHostname: deps.boxHostname,
+          designated: deps.designated,
+          standby,
+          accountKey: deps.accountKey,
+          moduleOperations,
+        });
+        // Before the response, so no bundle is handed out for a node the chart omits: a till reroutes by
+        // the chart's `contactUrl`. Deliberately a separate transaction: assembly's reservation has already
+        // committed.
+        await appendStandbyToChart(deps, standby.nodeId, standbyContactUrl);
+
+        return c.json(bundle);
+      };
+      if (body.moduleOperation !== undefined) {
+        const operation = parseStandbyOperationInput(body.moduleOperation);
+        if (operation === null)
+          throw new AppError("module.operation_invalid", { module: "unknown" });
+        if (
+          operation.binding.action !== "reserve" ||
+          operation.binding.sourceId !== deps.designated.nodeId ||
+          operation.binding.targetNodeId !== standby.nodeId
+        )
+          throw new AppError("module.operation_invalid", { module: operation.binding.module });
+        return withAuthenticatedOperation(
+          { db: deps.appDb, credentialKeyRing: deps.credentialKeyRing },
+          { binding: operation.binding, permission: "mirror.create" },
+          body,
+          (authority) =>
+            assemble(new Map([[operation.binding.module, { ...operation, authority }]])),
+        );
+      }
       const checked = await checkManagerPassword(deps.appDb, { personId }, password);
       await withTransaction(deps.appDb, async (tx) => {
         const session = await loginManagerById(tx, {
@@ -116,24 +159,7 @@ export function mountMirrorBundleApi(
         await endManagementSession(tx, session.token);
       });
 
-      if (deps.relayUrl === undefined) throw new AppError("mirror.no_relay", {});
-
-      const bundle = await assembleMirrorBundle({
-        appDb: deps.appDb,
-        ring: deps.ring,
-        stateDir: deps.stateDir,
-        relayUrl: deps.relayUrl,
-        boxHostname: deps.boxHostname,
-        designated: deps.designated,
-        standby,
-        accountKey: deps.accountKey,
-      });
-      // Before the response, so no bundle is handed out for a node the chart omits: a till reroutes by
-      // the chart's `contactUrl`. Deliberately a separate transaction: assembly's reservation has already
-      // committed.
-      await appendStandbyToChart(deps, standby.nodeId, standbyContactUrl);
-
-      return c.json(bundle);
+      return assemble();
     }),
   );
 }

@@ -10,6 +10,8 @@ import "@waitron/shared";
  */
 declare module "@waitron/shared" {
   interface ErrorParams {
+    "provisioning.initial_input_invalid": Record<string, never>;
+    "provisioning.initial_operator_required": Record<string, never>;
     /** Nothing supplied the venue directory: no `--venue-dir`, `WAITRON_VENUE_DIR` unset or empty,
      * AND the prompt answered nothing. `variable` is our own declared environment-variable NAME,
      * never a path an operator typed. */

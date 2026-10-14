@@ -1421,6 +1421,30 @@ has sold from a menu. Today this costs
 nothing beyond a reset, while the rule of no data-migration code until production stands. Once a
 venue is live, a rebuild has to carry the child rows across by hand.
 
+**2026-10-12, W41s-4 migration experiment; no migration shipped.** Before changing
+`registro_sif.numero_instalacion` from integer to text, qualify the generated parent rebuild
+against fiscal records. In a disposable clone of `21ce89a2b`, drizzle-kit 0.31.11 generated that
+rebuild after the column became `label` and its CHECK became a length bound of 1–30 characters.
+On Node v26.7.0, the generated SQL migrated a SIF with no record but failed at
+`DROP TABLE registro_sif` when `seedSale` and `appendToChain` had written a record referring to it.
+
+The experiment replaced the generated foreign-key toggles with `defer_foreign_keys=ON`,
+then checked `pragma_foreign_key_check` through a temporary table whose CHECK required zero
+violations, before setting deferral OFF. Through `applyMigrations`, with the change feed installed
+before migration, that candidate retained the complete fiscal-record and chain rows and the
+record's append-only trigger pair. Deliberately changing the copied SIF id refused the integrity
+CHECK and rolled back the SIF rebuild and journal advance. Removing the integrity check let that
+orphan commit; the same refusal test then failed. Commands in the disposable clone were
+`pnpm --filter @waitron/fiscal-verifactu exec vitest run src/allocation-boot-migration.probe.test.ts`
+and the deletion control with `-t 'deferred orphan control with check'`. The temporary probe and
+SQL are retained with the campaign's migration receipts.
+
+This experiment covers this SIF rebuild and its sampled records. It does not cover cascading
+children, every possible stored value, or the future allocation ledger and runtime consumers.
+The candidate also passed the migration-upgrade, schema-constraints, append-only-triggers,
+behavioural-triggers and migrations-match-schema suites. Repeat the product and integrity
+controls against the final schema and generated migration before connecting activation.
+
 `scripts/module-graph-honesty.test.ts` derives its edge kinds from the SQL text, and says so. **Two
 hedges from its own header belong here, because a failing test can never restore them.** The
 `EXECUTE (FUNCTION|PROCEDURE)` detector was DELETED as dead syntax — SQLite has no functions, so
@@ -2495,24 +2519,33 @@ venue has ONE node and no failover at all until slice 3 (2026-09-19,
 
 **Provisioning and boot**
 
-## A restore re-registers a filing node; the working-time chain continues
+## A restore consumes a supplied fiscal identity; the working-time chain continues
 
-A cold restore, or a rebuild from the bucket, of a node that was filing floors the installation
-counter by the clock (the counter is in the backup, so an older artifact would otherwise re-mint a
-number a previous restore used), retires the node's invoice series and opens disjoint ones, and
-writes the box's identity only after that commits — #248. The working-time chain is not reset: a
-survivor's forked row is refused by `time_entries_chain_position_uq`, reported by this engine as
-`UNIQUE constraint failed: time_entries.node_id, …`, errcode 2067 — it names the COLUMNS, never the
-index. Guard: `packages/workforce/src/restore-continuation.test.ts`.
+When you restore a filing node from an archive or the bucket, supply its recovery operation and
+node recovery key. The operation carries an outside signed allocation and its matching approval.
+The fiscal hook activates that identity and its complete series set in the local transaction.
+The box no longer draws an installation number from a clock or backup counter. The restore
+command refuses combined archive and bucket inputs before either restore runs. The input procedure is in
+[paper-custodian.md](paper-custodian.md#supply-a-recovery-operation-to-the-host).
 
-A cold restore (`waitron-restore`) does that re-registering automatically for a node that was filing
-(#248), and so does a rebuild from the bucket (`waitron-restore restore --from-bucket`, or the setup
-wizard's "Restore from my bucket"), which places its copy through the same path — one restore takes
-one source, never both, or one event would mint two installation numbers. UNLIKE the fiscal chain,
-the working-time chain is NOT reset on a cold restore — it continues from the backup's head,
-because the fiscal reset exists to mint a fresh SIF for AEAT and the working-time record has no
-equivalent. A survivor's forked row is refused by the chain-position unique index however it
-reaches the database; nothing carries rows between nodes today.
+Cold restore checks the node key saved in the selected backup. An older backup can accept a
+replaced key and refuse its replacement, so keep the older paper until no older backup remains
+(owner, 2026-10-13). Live takeover checks the live database's verifier. The archive encryption
+key remains a separate credential.
+
+Qualification, 2026-10-14: `restore-command.archive.test.ts` and
+`restore-command.archive-target.test.ts` passed 36 cases with the supplied P000042 identity and
+retained fiscal and working-time history. The first FULL review's missing-operation probe
+refused `sif.allocation_invalid` with `reauthentication_required` and unchanged rows. The second
+review removed that refusal and the fiscal cases failed four checks. These runs replace the
+clock-floor receipt from #248; they do not establish outside register continuity or fencing.
+The existing mixed-source argument case also passed: exit 2, no restore called and no store calls.
+
+The working-time chain continues from the backup's head. A survivor's forked row is refused by
+`time_entries_chain_position_uq`, reported by this engine as
+`UNIQUE constraint failed: time_entries.node_id, …`, errcode 2067. It names the columns rather
+than the index. Guard: `packages/workforce/src/restore-continuation.test.ts`. Nothing carries
+working-time rows between nodes today.
 
 ## On a node that files, every start puts each sale left "being sent" back to waiting
 

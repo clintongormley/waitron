@@ -29,6 +29,16 @@ import { mountSetup } from "./setup-api.js";
 import { createSetupOperationStore } from "./setup-operation.js";
 import { writeTradingEnv } from "./trading-config.js";
 
+vi.mock("./modules.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./modules.js")>();
+  return {
+    ...actual,
+    ALL_MODULES: actual.ALL_MODULES.map((module) =>
+      module.name === "fiscal-verifactu" ? { ...module, operations: undefined } : module,
+    ),
+  };
+});
+
 const NODE_ID = "11111111-1111-4111-8111-111111111111";
 const PRIMARY_NODE_ID = "22222222-2222-4222-8222-222222222222";
 const ADOPT_BODY = JSON.stringify({
@@ -263,7 +273,10 @@ describe("runStagedReset", () => {
       );
 
       expect(await postAdopt(stateDir, adopt)).toBe(200);
-      expect(await adopt.mock.results[0]?.value).toEqual({ breakGlassSecret: expect.any(String) });
+      expect(await adopt.mock.results[0]?.value).toEqual({
+        breakGlassSecret: expect.any(String),
+        breakGlassKeyName: expect.stringMatching(/\S/),
+      });
       expect((await createSetupOperationStore(stateDir).read())?.phase).toBe("complete");
       const trading = parseEnvFile(await readFile(join(stateDir, "trading.env"), "utf8"));
       expect(trading.WAITRON_TILL_NODE_ID).toBe(standbyNodeId);

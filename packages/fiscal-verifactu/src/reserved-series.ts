@@ -5,12 +5,12 @@ import { invoiceSeries, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { registroSif } from "./schema/sif.js";
 
-/** `NumSerieFactura` (`<code>/<counter>`) is capped at 60 characters (`@waitron/verifactu`'s validate). A
- * base must leave room for one `-<installation number>` suffix and the counter, each at most ten
- * digits (`integer`), so it may be at most 38 characters. */
+// Leave room for a 27-character emergency identity and a ten-digit invoice counter.
 const NUM_SERIE_MAX = 60;
 const MAX_INT_DIGITS = 10;
-export const MAX_BASE_CODE_LENGTH = NUM_SERIE_MAX - (1 + MAX_INT_DIGITS) - (1 + MAX_INT_DIGITS);
+const MAX_INSTALLATION_LENGTH = 27;
+export const MAX_BASE_CODE_LENGTH =
+  NUM_SERIE_MAX - (1 + MAX_INSTALLATION_LENGTH) - (1 + MAX_INT_DIGITS);
 
 /**
  * Suffix each base with the installation number, preserving purpose. Given a fresh installation
@@ -20,23 +20,17 @@ export const MAX_BASE_CODE_LENGTH = NUM_SERIE_MAX - (1 + MAX_INT_DIGITS) - (1 + 
  */
 export function deriveReservedSeriesCodes(
   bases: readonly { code: string; purpose: string }[],
-  numeroInstalacion: number,
+  numeroInstalacion: string,
 ): { code: string; purpose: string }[] {
   return bases.map((s) => ({ code: `${s.code}-${numeroInstalacion}`, purpose: s.purpose }));
 }
 
-/**
- * The base of a code: `code` with every trailing `-<digits>` group whose digits are an installation
- * number this venue has registered (any node, live or revoked) removed. `FA-7` from a promoted standby
- * and `FA-210441234` from an earlier restore both give `FA`; a human's `FA-2026` stays unless 2026 was
- * an installation number. Keeps every derived code to ONE suffix however many restores or
- * reservations a lineage goes through.
- */
-export function stripOwnSuffixes(code: string, registered: ReadonlySet<number>): string {
+export function stripOwnSuffixes(code: string, registered: ReadonlySet<string>): string {
+  const suffixes = new Set([...registered].map(String));
   let base = code;
   for (;;) {
-    const match = /^(.*)-(\d{1,10})$/.exec(base);
-    if (match === null || !registered.has(Number(match[2]))) return base;
+    const match = /^(.*)-([^-]+)$/.exec(base);
+    if (match === null || !suffixes.has(match[2]!)) return base;
     base = match[1]!;
   }
 }

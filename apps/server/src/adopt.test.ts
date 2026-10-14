@@ -2,6 +2,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { sql } from "drizzle-orm";
 import {
   locations,
   readDeploymentEnvironment,
@@ -24,6 +25,16 @@ import { ALL_MODULES } from "./modules.js";
 import type { MirrorBundle, ReservedIdentity } from "./mirror-bundle.js";
 import type { PendingAdoption } from "./finish-adoption.js";
 import { verifyBreakGlass } from "./break-glass.js";
+
+vi.mock("./modules.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./modules.js")>();
+  return {
+    ...actual,
+    ALL_MODULES: actual.ALL_MODULES.map((module) =>
+      module.name === "fiscal-verifactu" ? { ...module, operations: undefined } : module,
+    ),
+  };
+});
 
 // Cases depend on `useVenueDb`'s default `resetPerTest`: each starts from an unstamped `deployment`
 // and an empty `tenants`.
@@ -156,6 +167,27 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     expect(persistedModules).toHaveLength(1);
     expect(isEnabled(persistedModules[0]!, ALL_MODULES[0]!.name)).toBe(true);
     expect(result.breakGlassSecret).toMatch(/^[A-Za-z0-9_-]{20,}$/);
+    expect(await verifyBreakGlass(suite.db, ownNodeId, result.breakGlassSecret)).toBe(true);
+  });
+
+  it("hands over the stored name with the recovery key", async () => {
+    let ownNodeId = "";
+    const result = await adoptFromPrimary(
+      deps({
+        persistTrading: async (args) => {
+          ownNodeId = args.nodeId;
+        },
+      }),
+      REQ,
+      NO_HOOKS,
+    );
+    const stored = await suite.db.execute<Record<string, unknown>>(
+      sql`select * from node_roles where node_id = ${ownNodeId}`,
+    );
+    expect(result).toHaveProperty("breakGlassKeyName", stored.rows[0]!.break_glass_key_name);
+    expect((result as unknown as { breakGlassKeyName: string }).breakGlassKeyName).toMatch(
+      /^\d{4}-\d{2}-\d{2} · [34679ACDEFHJKMNPQRTUVWXY]{4}$/,
+    );
     expect(await verifyBreakGlass(suite.db, ownNodeId, result.breakGlassSecret)).toBe(true);
   });
 

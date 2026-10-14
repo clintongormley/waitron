@@ -16,7 +16,8 @@ import {
   verifyPassword,
   webauthnCredentials,
 } from "@waitron/identity";
-import { applyVenue, planVenue } from "@waitron/provisioning";
+import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
+import { planVenue } from "@waitron/provisioning";
 import { openBreakGlassVenue, runBreakGlassReset } from "./break-glass-command.js";
 import { ALL_MODULES } from "./modules.js";
 

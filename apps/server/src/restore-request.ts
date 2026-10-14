@@ -12,6 +12,7 @@ import {
   validateDatabaseEntries,
   type EntryValidationDeps,
   type RestoreFileDeps,
+  type RestoreOperationRunner,
 } from "./restore.js";
 import {
   confirmsVenue,
@@ -21,6 +22,13 @@ import {
   type WriteStreamArgs,
 } from "./restore-stream.js";
 import "./errors.js";
+import {
+  createRecoveryRestoreRunner,
+  parseRecoveryOperationInput,
+  readRecoveryOperationFile,
+  type RecoveryOperationInput,
+} from "./recovery-module-operation.js";
+import { isUnset } from "./env-value.js";
 
 const ARTIFACT = "restore-request.artifact";
 const KEY = "restore-request.key";
@@ -35,6 +43,7 @@ export interface ArchiveRestoreRequest {
   recoveryKey: string;
   environment: DeploymentEnvironment;
   managedCloud?: { requestId: string; pointId: string };
+  recoveryOperation?: RecoveryOperationInput;
 }
 
 /** A rebuild from the bucket: the downloaded database and the unlocked secrets row's entries. */
@@ -43,6 +52,7 @@ export interface StreamRestoreRequest {
   databasePath: string;
   entries: ArchiveEntry[];
   environment: DeploymentEnvironment;
+  recoveryOperation?: RecoveryOperationInput;
 }
 
 export type RestoreRequest = ArchiveRestoreRequest | StreamRestoreRequest;
@@ -56,6 +66,18 @@ export async function stageRestoreRequest<R extends RestoreRequest>(
   request: R,
   validate?: (request: R) => Promise<void>,
 ): Promise<void> {
+  const recoveryOperation =
+    request.recoveryOperation === undefined
+      ? undefined
+      : parseRecoveryOperationInput(request.recoveryOperation);
+  if (
+    recoveryOperation === null ||
+    (recoveryOperation !== undefined && recoveryOperation.binding.action !== "restore")
+  )
+    throw new AppError("server.config_invalid", {
+      variable: "WAITRON_RECOVERY_OPERATION_FILE",
+      reason: "invalid_operation",
+    });
   await validate?.(request);
   await rm(join(stateDir, MARKER), { force: true });
   if (request.kind === "stream") {
@@ -64,7 +86,12 @@ export async function stageRestoreRequest<R extends RestoreRequest>(
     await writeFileAtomic(join(stateDir, STREAM_ENTRIES), packArchive(request.entries), 0o600);
     await writeFileAtomic(
       join(stateDir, MARKER),
-      JSON.stringify({ version: 1, environment: request.environment, kind: "stream" }),
+      JSON.stringify({
+        version: 1,
+        environment: request.environment,
+        kind: "stream",
+        ...(recoveryOperation === undefined ? {} : { recoveryOperation }),
+      }),
       0o600,
     );
     return;
@@ -77,6 +104,7 @@ export async function stageRestoreRequest<R extends RestoreRequest>(
       version: 1,
       environment: request.environment,
       ...(request.managedCloud ? { managedCloud: request.managedCloud } : {}),
+      ...(recoveryOperation === undefined ? {} : { recoveryOperation }),
     }),
     0o600,
   );
@@ -127,6 +155,9 @@ export interface StagedRestoreDeps {
   venueDir: string;
   migrationsRoot: string | null;
   log: Logger;
+  withModuleOperations?: RestoreOperationRunner;
+  recoverySecret?: unknown;
+  recoveryOperationPath?: string;
   onManagedCloudRestored?: (binding: { requestId: string; pointId: string }) => Promise<void>;
 }
 
@@ -163,6 +194,7 @@ export async function runStagedRestore(
     environment?: unknown;
     kind?: unknown;
     managedCloud?: unknown;
+    recoveryOperation?: unknown;
   };
   if (
     marker.version !== 1 ||
@@ -183,6 +215,17 @@ export async function runStagedRestore(
     throw new Error("invalid staged restore request");
   }
   const environment: DeploymentEnvironment = marker.environment;
+  const operation =
+    marker.recoveryOperation === undefined
+      ? isUnset(deps.recoveryOperationPath)
+        ? undefined
+        : await readRecoveryOperationFile(deps.recoveryOperationPath)
+      : parseRecoveryOperationInput(marker.recoveryOperation);
+  if (operation === null) throw new Error("invalid staged restore request");
+  const withModuleOperations =
+    operation === undefined
+      ? deps.withModuleOperations
+      : createRecoveryRestoreRunner(ALL_MODULES, operation, deps.recoverySecret);
   const common = {
     venueDir: deps.venueDir,
     stateDir: deps.stateDir,
@@ -191,6 +234,7 @@ export async function runStagedRestore(
     modules: ALL_MODULES,
     environment,
     log: deps.log,
+    ...(withModuleOperations === undefined ? {} : { withModuleOperations }),
   };
   let run: () => Promise<void>;
   if (marker.kind === "stream") {

@@ -1,12 +1,18 @@
+import { seedFixtureSif as registerSif } from "../test/sif-fixture.js";
 import { sql } from "drizzle-orm";
-import { beforeEach, describe, expect, it } from "vitest";
-import { locations, nodes, withTransaction } from "@waitron/db";
+import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
+import {
+  locations,
+  nodes,
+  withTransaction,
+  captureError,
+  refusalOn,
+  UNIQUE_VIOLATION,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { markDelivered } from "./acks.js";
-import { registerSif } from "./registro-sif.js";
-import { raiseInstallationFloor } from "./restore.js";
 
 const venue = useVenueDb({ migrations: TEST_MIGRATIONS });
 
@@ -30,40 +36,42 @@ beforeEach(async () => {
   });
 });
 
-function counter(): (number | undefined)[] {
-  return venue.db
-    .all<{ proximo_numero: number }>(
-      sql`select proximo_numero from contadores_instalacion
-          where nif = ${SIF.nif} and id_sistema_informatico = ${SIF.idSistemaInformatico}`,
-    )
-    .map((row) => row.proximo_numero);
-}
+afterEach(() => vi.useRealTimers());
 
-function raise(floor: number): Promise<void> {
-  return withTransaction(venue.db, (tx) => raiseInstallationFloor(tx, { ...SIF, floor }));
-}
-
-/**
- * `raiseInstallationFloor` never lowers the installation counter (CLAUDE.md §5: an installation
- * number a previous restore used must never be minted twice). Both directions plus the create.
- */
-describe("raiseInstallationFloor", () => {
-  it("raises a counter standing below the floor", async () => {
-    await raise(10);
-    await raise(500);
-    expect(counter()).toEqual([500]);
+describe("supplied installation identities", () => {
+  it("keeps the supplied identity with a clock far ahead", async () => {
+    vi.setSystemTime(new Date("2039-01-01T00:00:00.000Z"));
+    const result = await withTransaction(venue.db, (tx) =>
+      registerSif(tx, { ...SIF, nodeId: NODE, numeroInstalacion: "P000042" }),
+    );
+    expect(result.numeroInstalacion).toBe("P000042");
   });
-
-  it("leaves a counter already standing above the floor", async () => {
-    await raise(500);
-    await raise(10);
-    expect(counter()).toEqual([500]);
+  it("keeps the supplied identity when the clock moves backwards", async () => {
+    await withTransaction(venue.db, (tx) =>
+      registerSif(tx, { ...SIF, nodeId: NODE, numeroInstalacion: "P000042" }),
+    );
+    vi.setSystemTime(new Date("2020-01-01T00:00:00.000Z"));
+    const result = await withTransaction(venue.db, (tx) =>
+      registerSif(tx, { ...SIF, nodeId: NODE, numeroInstalacion: "P000043" }),
+    );
+    expect(result.numeroInstalacion).toBe("P000043");
   });
-
-  it("creates the row at the floor when the restored database holds no counter", async () => {
-    expect(counter()).toEqual([]);
-    await raise(42);
-    expect(counter()).toEqual([42]);
+  it("refuses reuse of a supplied identity despite a different clock", async () => {
+    await withTransaction(venue.db, (tx) =>
+      registerSif(tx, { ...SIF, nodeId: NODE, numeroInstalacion: "P000042" }),
+    );
+    vi.setSystemTime(new Date("2039-01-01T00:00:00.000Z"));
+    const error = await captureError(() =>
+      withTransaction(venue.db, (tx) =>
+        registerSif(tx, { ...SIF, nodeId: NODE, numeroInstalacion: "P000042" }),
+      ),
+    );
+    expect(
+      refusalOn(error, UNIQUE_VIOLATION, {
+        table: "registro_sif",
+        columns: ["nif", "id_sistema_informatico", "numero_instalacion"],
+      }),
+    ).toBe(true);
   });
 });
 

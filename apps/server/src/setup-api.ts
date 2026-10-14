@@ -2,7 +2,7 @@ import type { Context, Hono } from "hono";
 import { createHash } from "node:crypto";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { VenueRequest, VenueResult } from "@waitron/provisioning";
-import { venueFiscalSelection } from "@waitron/provisioning";
+import { venueFiscalSelection, parseInitialVenueInput } from "@waitron/provisioning";
 import { ALL_MODULES } from "@waitron/composition";
 import {
   findAdministrativeArea,
@@ -77,7 +77,10 @@ export interface SetupDeps {
   /** Fetches the primary's bundle SERVER-SIDE, so the admin credential never touches a
    * browser→primary hop. The returned `breakGlassSecret` is surfaced ONCE in the connect response
    * and never logged. */
-  adopt?: (req: AdoptRequest, hooks: AdoptHooks) => Promise<{ breakGlassSecret: string }>;
+  adopt?: (
+    req: AdoptRequest,
+    hooks: AdoptHooks,
+  ) => Promise<{ breakGlassSecret: string; breakGlassKeyName?: string }>;
   /** Used to seal the fiscal regime's provisioning secret through its `provisioningSecret.seal`
    * seat. */
   db?: Database;
@@ -219,6 +222,7 @@ const runProvision = createErrorBoundary(PROVISION_STATUS, "setup.provision_fail
  * `password.invalid` is the primary's refusal of the login, relayed by `fetchMirrorBundle`.
  */
 const ADOPT_STATUS: Record<string, ContentfulStatusCode> = {
+  "module.operation_invalid": 409,
   "setup.request_invalid": 400,
   "mirror.primary_url_invalid": 400,
   "mirror.bundle_fetch_failed": 502,
@@ -468,6 +472,11 @@ function parseProvisionPayload(
     invalidRequest("body");
   }
   const body = parsed as Record<string, unknown>;
+  const initialOperations =
+    body.initialOperations === undefined
+      ? undefined
+      : parseInitialVenueInput(body.initialOperations);
+  if (initialOperations === null) invalidRequest("initialOperations");
   const mode = body.mode;
   if (mode !== "demo" && mode !== "prepare" && mode !== "live") invalidRequest("mode");
   if (body.configurationImport !== undefined && typeof body.configurationImport !== "boolean") {
@@ -512,6 +521,7 @@ function parseProvisionPayload(
       venue,
       configurationImport: mode === "live" && body.configurationImport === true,
       newTaxpayer: mode === "live" && body.newTaxpayer === true,
+      ...(initialOperations === undefined ? {} : { initialOperations }),
     },
     contribution,
     secret,
@@ -837,7 +847,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         totp: cred.totp === undefined ? undefined : asString(cred.totp, "credential.totp"),
       };
 
-      const { breakGlassSecret } = await adopt(
+      const { breakGlassSecret, breakGlassKeyName } = await adopt(
         { primaryUrl, credential },
         {
           // For adopt this phase means "adopt is past its own checks and may have written to this
@@ -856,7 +866,10 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       );
 
       // The operator's only chance to record the offline promote fallback. It is NEVER logged.
-      const response = c.json({ adopted: true, breakGlassSecret, restarting: true }, 200);
+      const response = c.json(
+        { adopted: true, breakGlassSecret, breakGlassKeyName, restarting: true },
+        200,
+      );
       setTimeout(() => requestRestart(), 0);
       return response;
     };

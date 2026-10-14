@@ -1,5 +1,6 @@
 import type { Transaction } from "@waitron/db";
 import type { ProvisionedNode } from "./provisioning.js";
+import type { ModuleOperationInput } from "./operation-input.js";
 
 /**
  * `series`, when present, REPLACES the node's live invoice series: the orchestrator retires every
@@ -18,4 +19,8 @@ export interface RestoreOutcome {
  * inside the orchestrator's transaction, after the database is restored and migrated and before the
  * identity is written to disk; never runs for a restore that keeps the box's own identity.
  */
-export type RestoreHook = (tx: Transaction, node: ProvisionedNode) => Promise<RestoreOutcome>;
+export type RestoreHook = (
+  tx: Transaction,
+  node: ProvisionedNode,
+  operation?: ModuleOperationInput,
+) => Promise<RestoreOutcome>;

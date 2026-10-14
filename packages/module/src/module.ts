@@ -22,6 +22,7 @@ import type { MigrationSet, MigrationSetSource } from "@waitron/migrations";
 import { appendOnlyTablesIn, type ClassifiedTable } from "@waitron/sync-enrolment";
 import type { FiscalContribution } from "@waitron/fiscal";
 import type { ModuleProvisioning } from "./provisioning.js";
+import type { ModuleOperationPreparation } from "./operation-preparation.js";
 import type { RestoreHook } from "./restore.js";
 import type { ModuleAlerts } from "./alerts.js";
 import "./errors.js";
@@ -1272,6 +1273,8 @@ export interface WaitronModule {
   readonly theme?: unknown;
   /** What this module seeds per node at provisioning, and its part in standing up a standby. */
   readonly provisioning?: ModuleProvisioning;
+  /** Collects module-owned outside evidence before the host opens its write transaction. */
+  readonly operations?: ModuleOperationPreparation;
   /** The module's contribution to the fiscal slot — `fiscalSlot` selects exactly one. */
   readonly fiscal?: FiscalContribution;
   readonly routes?: ModuleRoutes;

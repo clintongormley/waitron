@@ -13,7 +13,8 @@ import {
   startManagementSession,
   type PersonRoleValue,
 } from "@waitron/identity";
-import { applyVenue, planVenue } from "@waitron/provisioning";
+import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
+import { planVenue } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
 import type { LogEvent, LogReader } from "./log-file.js";
 import { ALL_MODULES } from "./modules.js";

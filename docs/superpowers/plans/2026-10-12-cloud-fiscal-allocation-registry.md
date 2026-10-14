@@ -63,6 +63,14 @@ The parked `ModuleOperationInput` is `{input:unknown,binding:OperationBinding,au
 
 Everything named below is **proposed**, including endpoints, tables, errors and configuration. Define it in B1; it is not an existing subscription or continuity API. Cloud and local operator identities are separate. A qualified custody/attribution adapter must bind the signed `operatorId` to the locally approved operator; do not derive that relationship from email, NIF, a phone text field or a Cloud session alone.
 
+**Binding update, 2026-10-14:** the owner's recovery-key attribution decision from 2026-10-12
+supersedes the proposed string-only local operator. Preserve the exact person-or-key-event form
+through custody checks, signed paper consumption, Cloud claim receipts and local approval. A Cloud
+login grants no relationship to a local person or recovery-key event by itself. Neither form carries
+the recovery secret. B1's strict parsing and canonical signing must handle both shapes; B3 compares
+the complete local binding. The registry remains separately queued, and the paper path remains
+available without a Cloud subscription.
+
 ### Proposed B1 types and seams
 
 Define browser-safe wire types in `packages/fiscal-allocation/src/types.ts`; export those separately from Node signing/store code. Use immutable snapshots and strict exact-key validation.
@@ -71,7 +79,8 @@ Define browser-safe wire types in `packages/fiscal-allocation/src/types.ts`; exp
 | --- | --- |
 | `Scope` | `{taxpayerNif:string,softwareId:string,environment:'preproduction'|'production'}` |
 | `SeriesBase` | `{code:string,purpose:'standard'|'full'|'rectificative'}` |
-| `ClaimBinding` | `{eventId:string,operatorId:string,sourceId:string,targetNodeId:string,incidentEvidence:string}`; each nonempty bounded text, maximum 256, canonical timestamps separately |
+| `OperationOperator` | `string` person ID, or `{kind:"recovery-key",nodeId:string,eventId:string}` for a key-authenticated local event; exact-key parsed tagged object, node/event must match the claim, never a Cloud account inferred from that key |
+| `ClaimBinding` | `{eventId:string,operatorId:OperationOperator,sourceId:string,targetNodeId:string,incidentEvidence:string}`; text fields are nonempty bounded text, maximum 256, canonical timestamps separately |
 | `ReserveInput` | `{version:1,operationId:string,venueId:string,scope:Scope,bases:readonly SeriesBase[],binding:ClaimBinding,mode:'initial-setup'|'recovery'}`; operation/venue UUIDs, operation ID preserved across lost replies |
 | `ConsumeInput` | `{version:1,operationId:string,allocationId:string,binding:ClaimBinding,oldMachineOffline:boolean,oldMachineAbsent:boolean,noParallelRecovery:boolean,confirmedAt:string}`; setup requires absence, recovery requires isolation and no absence claim |
 | `FiscalAllocation` | W1/W2 fields above; Cloud local declaration, source `'cloud'` for generated names; `reservationEvidence={kind:'cloud',authorityId:string,reservationId:string,reservationSequence:string}` is a reference covered by the enclosing signed receipt, never that receipt nested inside itself |

@@ -23,6 +23,7 @@ import {
 import {
   insertNodeSeriesTx,
   readLiveSeriesIdTx,
+  readBreakGlassKeyName,
   lockVenueDatabase,
   nodes,
   openVenueDatabase,
@@ -30,12 +31,19 @@ import {
   retireNodeSeriesTx,
   withTransaction,
   type Database,
+  type Transaction,
   type VenueLock,
 } from "@waitron/db";
 import { applyMigrations, expectedSchemaVersion, migrationOptionsFor } from "@waitron/migrations";
 import { SIDE_FILE_SUFFIXES, VENUE_FILE } from "@waitron/store";
 import { litestreamMetaDir } from "@waitron/stream/litestream.js";
 import { orderedMigrationSets, type ProvisionedNode, type WaitronModule } from "@waitron/module";
+import {
+  moduleOperationFor,
+  snapshotModuleOperations,
+  withPreparedModuleOperations,
+  type ModuleOperations,
+} from "@waitron/module";
 import { codeOf } from "@waitron/server-kit";
 import { parseEnvFile } from "./env-file.js";
 import { writeFileAtomic } from "./fs-atomic.js";
@@ -91,11 +99,23 @@ export interface RestoreDeps extends ValidationDeps {
   /** Runs after validation and before the restore changes the venue folder, the box's identity or
    * its secrets; not run with `skipSecrets`. Refusing stops the restore. */
   readonly checkSourceLive?: (validated: ValidatedArtifact) => Promise<void>;
+  readonly withModuleOperations?: RestoreOperationRunner;
   readonly log: Logger;
 }
 
 /** What writing an already validated artifact reads. */
 export type PlacementDeps = Omit<RestoreDeps, "artifact" | "recoveryKey">;
+
+export interface RestoreHookResult {
+  readonly seriesId: string;
+  readonly reports: readonly string[];
+}
+
+// Authentication is reconstructed by the trusted host, never deserialised from a backup or marker.
+export type RestoreOperationRunner = (
+  context: { readonly db: Database; readonly node: ProvisionedNode },
+  run: (tx: Transaction, operations: ModuleOperations) => Promise<RestoreHookResult>,
+) => Promise<RestoreHookResult>;
 
 /** What {@link validateArtifact} reads, and nothing else. */
 export interface ValidationDeps {
@@ -249,11 +269,14 @@ async function placeValidated(validated: ValidatedArtifact, deps: PlacementDeps)
   const identity = readArtifactIdentity(validated.secretEntries);
   const opened = await (deps.openDb ?? openVenue)(deps.venueDir);
   try {
+    const name = await readBreakGlassKeyName(opened.db, identity.node.nodeId);
+    if (name !== null) log("info", "restore.recovery_key_selected", { name });
     await runRestoreHooks({
       db: opened.db,
       modules: deps.modules,
       node: identity.node,
       log,
+      withModuleOperations: deps.withModuleOperations,
     });
   } finally {
     await opened.close();
@@ -608,9 +631,13 @@ export async function runRestoreHooks(args: {
   modules: readonly WaitronModule[];
   node: ProvisionedNode;
   log: Logger;
+  moduleOperations?: ModuleOperations;
+  withModuleOperations?: RestoreOperationRunner;
 }): Promise<{ seriesId: string; reports: readonly string[] }> {
   const { node } = args;
-  return withTransaction(args.db, async (tx) => {
+  const suppliedOperations = snapshotModuleOperations(args.moduleOperations);
+  const run = async (tx: Transaction, moduleOperations = suppliedOperations) => {
+    const operations = snapshotModuleOperations(moduleOperations);
     const [known] = await tx
       .select({ id: nodes.id })
       .from(nodes)
@@ -629,7 +656,9 @@ export async function runRestoreHooks(args: {
       if (hook === undefined) continue;
       let outcome;
       try {
-        outcome = await hook(tx, node);
+        const operation = moduleOperationFor(operations, m.name, node.nodeId, "restore");
+        outcome = operation === undefined ? await hook(tx, node) : await hook(tx, node, operation);
+        moduleOperationFor(operations, m.name, node.nodeId, "restore");
       } catch (err) {
         throw wrapHookError(m.name, err);
       }
@@ -647,18 +676,37 @@ export async function runRestoreHooks(args: {
     // `core` owns `invoice_series`: a failure here with no module returning series is the node's own
     // series contract failing, so that is the module named.
     const owner = replacement?.module ?? "core";
+    let seriesId: string;
     try {
       if (replacement !== undefined) {
         await retireNodeSeriesTx(tx, node.nodeId);
         await insertNodeSeriesTx(tx, node.nodeId, replacement.series);
       }
-      const seriesId = await readStandardSeriesIdTx(tx, node.nodeId);
+      seriesId = await readStandardSeriesIdTx(tx, node.nodeId);
       await readLiveSeriesIdTx(tx, node.nodeId, "full");
-      return { seriesId, reports };
     } catch (err) {
       throw wrapHookError(owner, err);
     }
-  });
+    for (const m of args.modules) {
+      if (m.backup?.restore !== undefined) {
+        try {
+          moduleOperationFor(operations, m.name, node.nodeId, "restore");
+        } catch (error) {
+          throw wrapHookError(m.name, error);
+        }
+      }
+    }
+    return { seriesId, reports };
+  };
+  return args.withModuleOperations === undefined
+    ? withPreparedModuleOperations(
+        args.modules,
+        suppliedOperations,
+        node.nodeId,
+        "restore",
+        (ready) => withTransaction(args.db, (tx) => run(tx, ready)),
+      )
+    : args.withModuleOperations({ db: args.db, node }, run);
 }
 
 /**

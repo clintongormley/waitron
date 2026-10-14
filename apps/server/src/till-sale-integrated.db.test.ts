@@ -19,7 +19,8 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 // Its records carry NO `verificationUrl`, which exercises the ticket's empty-QR default.
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import { hashPassword, hashPin, loginWithPin } from "@waitron/identity";
-import { applyVenue, planVenue } from "@waitron/provisioning";
+import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
+import { planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
 import {
   allocateInvoiceNumber,

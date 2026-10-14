@@ -185,7 +185,26 @@ owes (`settleSale`, `packages/core/src/settle-sale.ts`, refuses a settlement tha
 whether the Orders screen is enough as the list of unpaid invoices; how the daily close shows an
 invoice still owed; and what happens when the customer never pays. An F1 also needs A231's build.
 
+## A venue without Cloud needs a usable paper-custodian route
+
+You can use fiscal allocations without a Cloud subscription. The current paper route asks your
+custodian to run `paper-custodian.js` from a repository checkout, create and retain the signing key,
+keep a separate master register and sign allocation evidence. That is not a usable setup route for
+an ordinary restaurant owner. After W41s-4 lands, design a friendly route, such as a dashboard page
+or a printed setup kit, while preserving the separate custodian and outside register. The owner
+requested this follow-up on 2026-10-14; no design or product work belongs in W41s-4.
+
 ## W41s. Fiscal prevention and offline recovery — DESIGN AND REVISED PLAN APPROVED (2026-10-04)
+
+**2026-10-14, Task 4 review checkpoint:** the supplied-identity/default/text transition,
+regenerated migrations, host/demo inputs and person-or-key-event Cloud handoff are implemented.
+The owner approved the exact archive changes; the original archive/target suites pass 36 cases.
+Both FULL Claude reviews are complete. Their migration-preservation gap gains an exact SIF-row
+comparison, and wrong-administrator preparation is qualified at the authority boundary. Their
+restore wording finding is corrected in the developer topic and the exact root bullet, under
+the owner's A+ approval. The mixed-source command test refuses before either restore runs. Hook/current-head CI
+still qualify the publication candidate. Earlier dated Task 4 notes describe earlier checkpoints.
+
 
 **2026-10-12, a conflict no longer holds its chain (owner).** A record AEAT refuses as a duplicate
 (3000) while holding a different or cancelled record under that key is now `rechazado` with code
@@ -209,6 +228,81 @@ Statements below that a conflict holds its chain, that a cancellation of a rejec
 held or holds its chain, or that the brake reads the three records immediately before a record,
 describe the earlier behaviour.
 
+**2026-10-14, approved hook-contract checks:** the owner approved exactly the seven groups in
+[the supplemental request](../superpowers/plans/2026-10-14-w41s4-hook-contract-assertion-approval.md).
+The six affected suites on the Task 4 branch now select the prepared hooks for those cases.
+They check omitted host-created series, complete signed reservation contents and persisted
+active series with each purpose. Malformed-carrier cases receive valid independently prepared
+operations, then check `sif.allocation_invalid` with `reservation_mismatch` and retained rollback
+checks. Separate databases qualify the bundle's complete series at takeover; their fixtures copy
+primary scope and live bases, rather than exercising backup transport. The default descriptors,
+text-SIF schema and counter retirement remain unfinished, followed by final migration qualification,
+the Cloud contract check, both full reviews, the normal push hook and current-head CI.
+
+**2026-10-13, old-backup authentication:** the owner chose the verifier in the selected
+backup for cold restore; live takeover keeps the live verifier. The key name is now stored
+beside each newly minted verifier, shown with the handover secret, and read from the placed
+backup before the restore authentication callback. The runbooks warn you to keep older paper
+keys until no backup from before their replacement remains. A real archive taken before
+replacement retained its name and accepted its old key; the live database refused that key
+and accepted its replacement. Physical recovery-pack output and the backup selection screen's
+key-name display remain Task 6 work. No outside current-key record is planned.
+
+**2026-10-12, standby decision:** the owner selected dormant reservation at join and activation at
+takeover. The Task 4 branch signs a dedicated paper-reservation receipt for the named spare and
+checks its signatures, outside reserved state and stored venue scope without writing a SIF,
+chain, series, audit result or counter. The signing command requires current-register and outside
+reservation confirmations. That receipt cannot replace a takeover consumption receipt.
+An internal operation now retains the signed proof and complete bases in `fiscal_reservations`.
+Its database-backed tests compare all active fiscal rows, retry the same join, refuse retained
+event/allocation/identity reuse and check rollback and update/delete refusals. A caller-mutation
+case failed before the operation took a detached proof snapshot. The root append-only list and
+fiscal schema-ownership list gained exactly the two entries approved by the owner at 20:55.
+The internal takeover operation now rechecks the retained join signatures and binds a different
+consumption event to the same source, target, block and complete allocation. Its tests retain the
+primary and reservation rows, compare replay rows and roll back a refused final audit write.
+Ordinary recovery refuses using a name retained for a spare. Historical signature verification
+is separate from current outside consumption; it does not authenticate the caller or prove the
+current register state. Bundle, adoption and promotion integration remain open. Takeover must
+still authenticate the administrator, isolate the old box, rule out parallel recovery and check
+outside consumption before atomic activation. All three invoice purposes stay separate.
+
+**2026-10-12, internal host authority:** a new server helper checks the actual administrator
+password, authenticator and permission before issuing authority for one module/action/event/source/
+target. Its authentication transaction ends before the operation callback. New internal fiscal
+wrappers require that authority and recheck it after awaited reads, before writes or replay.
+The synthetic integration case combines real authentication, dormant activation and the existing
+role/membership transaction; a refused membership write rolls those rows back together. The
+wrappers are not in the fiscal public barrel and no boot or HTTP entry point uses them yet.
+They authenticate an operator, not an outside register. Outside continuity, text SIF/counter
+retirement and all host replacements remain open.
+
+**2026-10-12, internal setup/restore carrier:** the setup runner can pass module-owned input with
+authority attributed to the account it created in that transaction. It refuses using a retained
+administrator for this bootstrap grant and rechecks the new account's role/status before each
+seed. Host-chosen account/node IDs let outside consumption evidence name them before setup writes.
+The generic restore hook can receive opaque input and scoped authority from fresh account
+authentication; it checks module, action, target and authority lifetime before entering that hook.
+New database tests cover unchanged absent-input calls, retries, rollback and caller mutation.
+A synthetic setup integration writes a signed initial allocation with standard, full and
+rectificative series; substituting the operator or removing current outside confirmation refuses
+the transaction. This does not connect the production fiscal seats or change SIF/counter typing.
+
+The owner selected key-only authority at 22:55 on 2026-10-12, superseding the A/B choices in the
+[decision inventory](../superpowers/plans/2026-10-12-w41s4-break-glass-operator-decision.md).
+The signed consumption and permanent approval name the recovery-key event, never a person.
+
+**2026-10-12, restore placement and CLI carrier:** the initial CLI accepts host-selected node/account
+IDs and module input through its dependency object. It keeps the selected database and module list.
+Archive, bucket and staged runners can pass a host authentication callback to the placed database;
+its transaction contains the module hooks and series checks. New tests exercise actual encrypted
+file validation and stream placement with separate backup and node keys. Wrong-key refusal leaves
+no published identity; a later hook refusal backs out authentication and earlier hook writes.
+Host-issued input is snapshotted before hooks run. Neither the staged marker nor the backup carries
+in-process authority. These injectable paths do not yet collect production allocation input or
+connect the fiscal seats. Current outside confirmation, text SIF/counter retirement, all host
+replacements, final schema regeneration and full branch qualification remain open.
+
 **2026-10-12, Task 5:** invoice issuance reads the live series inside its transaction.
 Startup, development seeds, mirror bundles and saved trading identity carry node and location
 without a cached invoice-series id. Restore still checks live standard and full series before
@@ -216,6 +310,33 @@ publishing identity. The switch, replay, rollback and reconnect cases are in
 `apps/server/src/transactional-series.test.ts`; the integrated-card switch cases are in
 `apps/server/src/till-sale-integrated.db.test.ts`.
 Task 4's allocation activation remains open, followed by the dependent recovery tasks.
+The owner selected a separate external paper-custodian key on 2026-10-12, with independent
+fingerprint comparison against the current outside register on replacement hardware. Signed
+paper evidence and the [custodian tool](../developers/paper-custodian.md) are on the Task 4 branch;
+persistent activation and recovery-pack enrolment remain open. The Task 4 branch also validates
+paper/emergency allocation and approval envelopes against separately supplied host context.
+Its transaction-bound preflight reads the stored taxpayer, environment, node and existing software
+scope, checks recovery bases against the live series, and refuses retained identities and codes
+across nodes, including retired rows (`packages/fiscal-verifactu/src/allocation.test.ts`). Initial setup without series uses the trusted host's intended bases. An inactive `activateAllocation`
+operation now retires the live SIF and series, creates the supplied identity and complete series
+set, resets the chain head without resetting its sequence and appends the result to the new
+immutable `fiscal_allocations` ledger in the caller's transaction. Paper replay checks outside
+commitment and evidence again, binds both envelopes to the stored event, and checks the live SIF
+and complete series set before returning the saved references. Six forced-write failures roll
+back the local rows; a synthetic retained-record comparison checks unchanged stored bytes.
+The operation has no package-root export or host caller. SIF typing remains numeric until the
+coupled representation and consumer replacement: the inactive writer currently binds the text
+identity through SQL, as the transaction-validation fixtures did. Counter retirement, all host
+entry points and recovery-pack integration remain open. Emergency replay following restart and
+the two-restored-database control now pass on the branch. The owner approved the root append-only
+`EXPECTED` entry for the allocation ledger, and that guard passes without a logic change.
+Cloud input remains refused until its separate trusted adapter exists. The existing recovery kit carries the old box's pointer
+signer; it does not declare a paper custodian (`packages/stream/src/kit.ts`, `RecoveryKit`).
+A disposable SIF text-schema candidate has passed populated-record migration and integrity
+controls, recorded in [the migration notes](../developers/conventions-data.md). The complete
+allocation schema and consumers still need that qualification together.
+Keep activation disconnected until its full validation and atomic writes are implemented; emergency input formats alone
+provide no reservation or consumption evidence.
 When activation is connected to recovery, extend the reconnect qualification through that runtime
 path; today's test exercises an offline and then successful fiscal drain without a series switch.
 The owner answered its format question with first symbol `0–7` and 128 random bits.
@@ -583,3 +704,262 @@ From **The product editor and catalogue (#345, #379, #387) — what is left open
   (`apps/print-agent/src/ipp-capabilities.ts`). The measurements behind it are in the
   [design](../superpowers/specs/2026-10-03-invoice-pdf-email-and-office-printing-design.md). Office
   printing reverses the 2026-09-09 provisioning design's "raw ESC/POS only" decision.
+
+**Update, 2026-10-12 (W41s-4 key authority):** the owner selected the current node key alone
+with permanent attribution to its authentication event. Internal qualification now checks the
+real verifier before the lock and rechecks it in the write transaction. Signed consumption and
+approval bind `{kind:"recovery-key",nodeId,eventId}`; normal administrator actions retain person
+attribution. Tests compare retained audit/role rows around takeover and rollback, with no accounts
+or management sessions. This does not connect a public promotion or cold restore. Coupled
+representation, all host consumers, outside continuity and final review remain open.
+
+
+### W41s-4 standby-host qualification, 2026-10-13
+
+The feature branch adds scoped reservation/establishment input and a module takeover seat inside
+real mirror promotion. Synthetic signed paper evidence and the actual current node-key verifier
+now exercise dormant activation, all three invoice purposes, key-event attribution and rollback
+when the membership write refuses. Expiration during a module or settings await refuses the
+operation and rolls back its database writes. Incomplete series refuse before settings persistence;
+the settings file is not a transactional database write and is not covered by that rollback claim.
+
+Production fiscal-seat wiring and allocation collectors, text SIF/counter retirement and all coupled
+consumers, final schema regeneration/populated upgrade and the whole-branch review/CI remain open.
+This checkpoint establishes no independent current paper history or remote-writer exclusion.
+
+### W41s-4 initial-series handoff qualification, 2026-10-13
+
+The generic setup runner can delegate series creation to the filing seed and return its active
+references without opening base rows first. Synthetic signed allocation tests exercise this path
+and compare counters and all series rows on retry. The internal fiscal resolver checks the
+committed allocation against requested bases and current venue/SIF/series state.
+
+The production fiscal seed does not declare this contribution yet. Its activation, independent
+outside evidence and every host consumer still belong to the coupled Task 4 transition above.
+No production continuity or writer-exclusion result is established by this checkpoint.
+
+### W41s-4 host preparation qualification, 2026-10-13
+
+The branch adds a generic module preparation seat and an explicit public paper-source factory.
+Setup, restore and promotion can collect before their write transaction. The fiscal seat carries
+an attempt-local token whose source, binding and authenticated operator cannot be reconstructed
+from a saved marker. Initial setup checks the same newly created active administrator inside its
+transaction; known administrators and a competing creation refuse that initial authority. A
+committed setup retry returns its retained series without collecting again.
+
+Signed initial-setup and actual node-key restore tests exercise all three purposes, account-free
+recovery and rollback. Restore also rechecks each module after its hook and before commit, including
+an earlier module whose authority expires during a later hook. These tests establish the generic
+hosts and an explicitly supplied descriptor, not the default production composition.
+
+Production configuration, fiscal seed/restore/standby seats, text SIF/counter retirement and all
+remaining consumers, current-main regeneration/populated upgrade and the whole-branch gates remain
+open. No independent current-register or remote-writer exclusion result is established.
+
+### W41s-4 recovery-key label, 2026-10-13
+
+The owner's 18:00 naming override replaces the random 16-character label with the UTC issue
+date and four characters from an alphabet without 0/O, 1/I/L, 2/Z, 5/S, 6/G or 8/B pairs. The
+stored spelling is `2026-10-15 · K7QF`; the handover shows `Recovery key 15 Oct 2026 · K7QF`
+or `Clave de recuperación 15 oct 2026 · K7QF`. Switching language keeps the stored spelling
+and secret. A replacement redraws a code matching the current key's name inside the same
+transaction that replaces the verifier. The short name does not promise uniqueness across
+all historical papers and never authenticates an operation.
+
+Real database checks cover issue-day rollover, replacement collisions, snapshot key matching,
+node isolation and rollback. Browser checks cover both languages, live language changes,
+malformed stored labels and eight theme/width views. The lane retains red/green and installed
+removal-control receipts under `receipts/w41s4-short-name-*`. Physical paper output and the
+backup chooser remain Task 6 work; the coupled production allocation transition remains open.
+
+
+### W41s-4 allocated standby qualification, 2026-10-13
+
+The allocated standby contribution returns signed reservation state without a SIF or series.
+Establishment stores its signed proof and complete bases in the existing reservation ledger.
+Both actions use freshly scoped host authority and separately collected current paper statements;
+a statement remains an operator assertion rather than independent continuity evidence.
+The configured paper preparation factory handles these actions alongside activation.
+
+Real bundle/adoption carriers now collect before their write transaction, reject scaffold series
+for a module that opens them at activation, and recheck every module's authority before commit.
+A two-database synthetic journey reserves, adopts and takes over with the spare's actual node
+key, checking all three purposes and key-event attribution. Absent current consumption and a
+refused membership write retain the dormant reservation. Source/authority/argument snapshots,
+late expiry, rollback, wrong target and active-spare refusals have focused checks and installed
+removal controls. The existing behavioural assertions remain unchanged.
+
+The production collector and initial public setup input are connected in the later checkpoint
+below. The default seed/restore/standby contributions remain old. The text
+SIF/counter transition, remaining entry points, current-main schema regeneration/populated upgrade,
+Cloud handoff binding and both whole-branch reviews plus push-hook/current-head CI remain open.
+This branch checkpoint does not complete Task 4 and must not be published.
+
+
+### W41s-4 production source and initial input, 2026-10-13
+
+The production module list selects paper collection from three independent host settings. Missing
+settings refuse collection. The configured files are reread for each attempt, and their operator
+statements still do not establish independent current outside history.
+
+Initial setup carries a planned node and administrator plus opaque signed module inputs through
+the public route and provisioning CLI. The CLI reads at most 128 KiB and refuses malformed or
+unselected-module input before the permanent environment stamp. Setup recovery asks the filing
+module for its committed series references and compares their IDs, codes and purposes with stored
+rows in one transaction. Planned node/admin mismatches refuse. A persisted-route test interrupts
+after the venue commits, removes outside confirmation, and then checks a successful retry with
+unchanged series counters and allocation rows.
+
+The host tests explicitly supply the allocated seed; the production descriptor still selects its
+old seed, restore and standby hooks. Selecting those hooks, text SIF/counter retirement, remaining
+public authentication/input paths, current-main regeneration/populated upgrade, Cloud binding and
+both reviews plus hook/current-head CI remain. Do not publish this incomplete Task 4 checkpoint.
+
+### W41s-4 re-registration and cold-restore input, 2026-10-13
+
+The branch accepts a detached generic operation file in `register-till` and both cold-restore
+command forms. It obtains the node key separately, checks it before collecting outside evidence,
+and runs the prepared seeds or restore hooks inside the authentication transaction. Re-registration
+rechecks the node's location before its seeds. Committed re-registration retains series IDs and
+counters; a later seed refusal rolls back the local allocation while the outside consumption stays.
+
+Staged archive and stream requests may retain public operation input. The entry process reconstructs
+the runner after restart from that marker or its operation file and obtains its key from the
+process environment. The marker's input takes precedence over the environment file. Malformed or
+non-round-trippable JSON input refuses staging before replacing an earlier request. The marker
+stores no node key or authentication authority.
+
+Command: `pnpm --filter @waitron/server exec vitest run src/provision-node-operation.test.ts
+src/recovery-operation-input.test.ts src/recovery-restore-input.test.ts
+scripts/register-till-allocation.test.ts` (the final focused set also includes their legacy consumer
+suites). The new real fiscal command cases run encrypted archive validation and stream placement
+with signed paper evidence, create exactly `P000042` and its three series, and compare the retained
+old SIF and every old series row. They inject source-tree migrations and the allocated fiscal hooks;
+the bucket case supplies an already downloaded database and does not exercise an S3 download.
+
+The public initial setup path was qualified in the previous checkpoint. Default fiscal descriptors,
+readiness, standby HTTP/boot consumers, text SIF/counter retirement, current-main schema regeneration,
+populated upgrade, Cloud binding and both full reviews/hook/current-head CI remain. Task 4 is
+incomplete; do not publish this candidate.
+
+
+### W41s-4 public standby and readiness input, 2026-10-13
+
+The bundle and promotion routes accept a detached `moduleOperation` containing the generic binding
+and public evidence. A bundle request authenticates `mirror.create`, binds the original primary and
+requested standby, and rejects operations for modules that the enabled set does not reserve.
+Promotion authenticates an account holding `node.promote` or the node recovery key; its scoped
+runner collects before the write transaction. The key verifier is checked again at commit.
+A committed promotion retry authenticates but skips outside collection and returns the existing
+series. Boot passes the enabled modules and runner to mirror promotion.
+
+Readiness accepts `initialOperations` for its own preproduction allocation and stamps only its
+separate test database. Recovery uses the same supplied module set and committed allocation-owned
+references. In `apps/server/src/fiscal-readiness-allocation.test.ts`, a signed synthetic allocation
+produces `A-S000042/1`; a retry with the outside confirmation removed compares all saved SIF,
+allocation and invoice rows. Acceptance is simulated in that case. The existing real-drain refusal
+case remains in the focused checks; no live AEAT acceptance is claimed.
+
+The generic route cases use a test module; separate signed fiscal HTTP cases exercise the actual
+paper source and dormant/activation contributions. A real boot uses a test contribution to check
+both credential paths and wiring. Fiscal descriptors are supplied explicitly in the fiscal cases.
+Adoption still has its existing missing-copy limitation; no new copy mechanism or boot-time
+establishment credential is supplied here. Default fiscal descriptors, text SIF/counter retirement,
+current-main regeneration/populated upgrade, Cloud binding and both full reviews/hook/current-head
+CI remain. This is an incomplete Task 4 checkpoint, with no intermediate PR.
+
+
+### W41s-4 series-base boundary, 2026-10-14
+
+Setup field validation and live series-base collection on the Task 4 branch now accept
+21-character bases and refuse 22. The wizard's English and Spanish refusal messages and
+series help state that same limit. It reserves space for the longest emergency installation
+identity and a ten-digit invoice counter.
+
+The default fiscal descriptors, text installation schema and local-counter retirement remain
+incomplete; this checkpoint is not a publication candidate.
+
+
+### W41s-4 adoption boundary checkpoint, 2026-10-14
+
+An adoption file cannot carry the live authentication that an allocated standby needs. When an
+independently prepared module owns series at activation, the public adopter refuses before its
+first local write, and the setup route returns `409 module.operation_invalid`. The pending worker
+logs that refusal and keeps the complete adoption file. A booted pending mirror returns only its
+pending status, with no ambient viewer session, sealed node key or selling identity created by
+that step. A disabled allocation module does not prevent adoption.
+
+The new `adoption-allocation-refusal.test.ts` cases compare the full database before and after
+refusal and retry. `boot.adoption-allocation.test.ts` runs the actual pending boot with a test
+module contribution. The additional signed-reservation case in `allocated-standby-host.test.ts`
+runs the actual bundle assembler with synthetic paper evidence before the adopter refuses;
+the separately supplied reservation/confirmation remain unchanged. Its administrator authority
+is supplied by the test, not a real primary login or independent master-register implementation.
+The primary may already have reserved the name before local adoption refuses; do not spend that
+reservation again because the spare stayed empty.
+
+The production defaults still select the earlier numeric hooks, so this checkpoint does not
+qualify default allocated adoption. Copying the primary's venue data and collecting fresh
+establishment authority remain separate work. W41s-4 must still couple its default descriptors,
+text identity and counter retirement, regenerate and qualify the final migrations, align the
+Cloud contract, then complete both full reviews and current-head CI before landing.
+
+**Review clarification, 2026-10-14:** the defaults now select allocated hooks, so a fiscal
+standby's public adoption deliberately refuses rather than completing. No shipped caller supplies
+fresh establishment authority and the primary's venue copy together. This is the missing-allocation
+refusal allowed by spec §9.4, not a completed join journey. The open backlog entry carries the
+remaining copy and authentication work. A primary reservation remains consumed/reserved even if
+its empty spare cannot finish adoption.
+
+### W41s-4 remaining hook-contract checks, 2026-10-14
+
+Task 4 is parked on the [exact remaining assertion ports](../superpowers/plans/2026-10-14-w41s4-hook-contract-assertion-approval.md).
+The prepared restore writes its active series and returns no replacement list. A standby
+reservation carries the signed complete allocation and returns no active series. Malformed
+establishment state answers `sif.allocation_invalid`; the older tests name
+`sif.reservation_invalid`. The earlier exact approval lists do not enumerate all the old
+return-field and refusal-code checks.
+
+Six controls in an independently installed clone failed at those comparisons, then passed
+with the proposed complete-series and rollback checks. The unchanged fiscal/host baseline
+passed 133 cases; the unedited golden and immutability pair passed 20. These experiments
+select the prepared hooks explicitly. No default, schema, allocator or existing assertion
+was changed. Approve the listed ports or retain the old contract and revise the prepared
+hooks before the coupled default/text/counter transition. Earlier approvals stand.
+
+
+### W41s-4 default/text transition, 2026-10-14
+
+The branch now selects the prepared fiscal lifecycle hooks, stores supplied SIF identities as
+text and removes the local installation counter. `scripts/fiscal-allocation-migration.test.ts`
+checks a sampled real record and chain through the product migrator, and checks a deliberately
+orphaned key both with and without the migration's integrity assertion. It does not cover every
+historical row, a complete cold-box journey or the final regeneration after rebase.
+
+Two existing setup checks are outside the approved lists. The exact proposals and retained
+checks are in [the setup-check request](../superpowers/plans/2026-10-14-w41s4-setup-check-approval.md).
+They pass only in a disposable installed candidate; the feature retains those failures. Host
+consumer ports and final qualification remain incomplete. This branch is not for publication.
+
+
+**12:10 owner update:** both exact setup-check changes are approved and applied. The feature's
+venue-application suite passes 43 cases. The dormant-split assessment is in Lane E's local
+questions ledger; it proposes a shape and does not claim that split candidates have been qualified.
+Host consumer ports and final qualification remain; the split question is not a work blocker.
+
+
+### 2026-10-14 host qualification checkpoint: W41s-4
+
+The prepared default now has real host fixtures for setup, re-registration,
+standby reservation, account and node-key promotion, archive restore and bucket
+rebuild. The unedited golden hash and immutability pair passed 20 cases; the real
+pinned-binary stream loop passed with skipping forbidden. Unrelated existing-sale
+fixtures retain their original identities and series, and their behavioral checks.
+
+The developer command still supplies no allocation. Two history captures still
+name the retired counter, and a configuration-import check still expects the
+unsuffixed initial series. The concrete proposals and experiments are in
+[the host checks and demo decision](../superpowers/plans/2026-10-14-w41s4-host-check-and-demo-decision.md).
+They are not enabled by this checkpoint. Task 4 still owes their decisions and
+implementation, current-main regeneration/populated upgrade, the Cloud operator
+contract, both FULL reviews, the push hook and current-head CI.

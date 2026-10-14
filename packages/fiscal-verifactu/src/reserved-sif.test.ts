@@ -3,12 +3,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import {
-  currentSif,
-  esPrimerRegistro,
-  reserveInstallationNumber,
-  writeReservedSif,
-} from "./registro-sif.js";
+import { currentSif, esPrimerRegistro, writeReservedSif } from "./registro-sif.js";
 import { seedNodesForSifContention, type SifContentionFixture } from "./testing/seed.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
@@ -17,7 +12,7 @@ const SISTEMA = "W1";
 
 let fixture: SifContentionFixture;
 
-// Each case starts with unregistered nodes and an empty installation counter.
+// Each case starts with unregistered nodes.
 beforeEach(async () => {
   fixture = await seedNodesForSifContention(suite.db, 2);
 });
@@ -25,14 +20,7 @@ beforeEach(async () => {
 afterEach(async () => {
   // These fixtures have no filed records; clear only their mutable identity rows.
   await suite.db.transaction(async (tx) => {
-    for (const table of [
-      "cadenas",
-      "registro_sif",
-      "contadores_instalacion",
-      "nodes",
-      "locations",
-      "tenants",
-    ]) {
+    for (const table of ["cadenas", "registro_sif", "nodes", "locations", "tenants"]) {
       await tx.execute(sql`delete from ${sql.identifier(table)}`);
     }
   });
@@ -43,23 +31,37 @@ function withTx<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
 }
 
 describe("reserved-sif primitives", () => {
-  it("reserveInstallationNumber advances the counter and hands back the pre-increment value", async () => {
-    // First reservation for a fresh (nif, idSistema) returns 1, the next returns 2 (never-reuse).
-    const first = await withTx((tx) =>
-      reserveInstallationNumber(tx, { nif: fixture.nif, idSistemaInformatico: SISTEMA }),
+  it("persists two independently supplied installation identities", async () => {
+    const first = "S000001";
+    const second = "P000042";
+    await withTx((tx) =>
+      writeReservedSif(tx, {
+        nodeId: fixture.nodeIds[0]!,
+        nif: fixture.nif,
+        idSistemaInformatico: SISTEMA,
+        numeroInstalacion: first,
+      }),
     );
-    const second = await withTx((tx) =>
-      reserveInstallationNumber(tx, { nif: fixture.nif, idSistemaInformatico: SISTEMA }),
+    await withTx((tx) =>
+      writeReservedSif(tx, {
+        nodeId: fixture.nodeIds[1]!,
+        nif: fixture.nif,
+        idSistemaInformatico: SISTEMA,
+        numeroInstalacion: second,
+      }),
     );
-    expect(first).toBe(1);
-    expect(second).toBe(2);
+    expect((await withTx((tx) => currentSif(tx, fixture.nodeIds[0]!))).numeroInstalacion).toBe(
+      "S000001",
+    );
+    expect((await withTx((tx) => currentSif(tx, fixture.nodeIds[1]!))).numeroInstalacion).toBe(
+      "P000042",
+    );
+    expect(first).not.toBe(second);
   });
 
-  it("writeReservedSif persists a dormant SIF with the supplied number and a fresh empty chain", async () => {
+  it("writeReservedSif persists the supplied identity and a fresh empty chain", async () => {
     const cloud = fixture.nodeIds[1]!;
-    const numero = await withTx((tx) =>
-      reserveInstallationNumber(tx, { nif: fixture.nif, idSistemaInformatico: SISTEMA }),
-    );
+    const numero = "P000042";
     await withTx((tx) =>
       writeReservedSif(tx, {
         nodeId: cloud,
@@ -79,9 +81,7 @@ describe("reserved-sif primitives", () => {
 
   it("the unique index rejects re-persisting the same (nif, idSistema, numero)", async () => {
     const [nodeA, nodeB] = [fixture.nodeIds[0]!, fixture.nodeIds[1]!];
-    const numero = await withTx((tx) =>
-      reserveInstallationNumber(tx, { nif: fixture.nif, idSistemaInformatico: SISTEMA }),
-    );
+    const numero = "P000042";
     await withTx((tx) =>
       writeReservedSif(tx, {
         nodeId: nodeA,

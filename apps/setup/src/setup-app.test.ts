@@ -1613,6 +1613,25 @@ describe("setup-app", () => {
     expect(warning).toContain("will not be shown again");
   });
 
+  it("passes the adopted recovery key's name to its handover screen", async () => {
+    const el = await mountSetupApp(
+      stubApi({
+        adopt: vi.fn().mockResolvedValue({
+          adopted: true,
+          restarting: true,
+          breakGlassSecret: "key-on-paper",
+          breakGlassKeyName: "2026-10-15 · K7QF",
+        }),
+      }),
+    );
+    adoptRequest(el);
+    await flush(el);
+    expect(await screenText(el, "done", "[data-test=break-glass-key-name]")).toBe(
+      "Recovery key 15 Oct 2026 · K7QF",
+    );
+    expect(await screenText(el, "done", "[data-test=break-glass-secret]")).toBe("key-on-paper");
+  });
+
   it("shows the in-flight provisioning state while the adopt POST is pending", async () => {
     let resolveAdopt!: (value: unknown) => void;
     const adopt = vi.fn().mockImplementation(

@@ -33,7 +33,8 @@ import {
 } from "@waitron/membership";
 import { createDeploymentHolders } from "./deployment-holders.js";
 import { establishNodeIdentity } from "./node-identity.js";
-import { ALL_MODULES } from "./modules.js";
+import { seedFixtureSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
+import { nodeId as brandNodeId } from "@waitron/shared";
 import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./reserved-identity.js";
 import { singletonPass } from "./singleton-pass.js";
 import { DRAIN_DUTY } from "./pass.js";
@@ -358,7 +359,7 @@ describe("promoteMirrorToPrimary", () => {
         nodeName: "cloud",
         filingModule: "verifactu",
         taxModule: "vat",
-        modules: ALL_MODULES,
+        modules: [],
         reserved: {
           modules: {
             "fiscal-verifactu": { nif, idSistemaInformatico: "W1", numeroInstalacion: 7 },
@@ -371,6 +372,14 @@ describe("promoteMirrorToPrimary", () => {
           endorsement,
         },
       },
+    );
+    await withTransaction(db, (tx) =>
+      seedFixtureSif(tx, {
+        nodeId: brandNodeId(standby.nodeId),
+        nif,
+        idSistemaInformatico: "W1",
+        numeroInstalacion: "7",
+      }),
     );
     const standardSeriesId = await readStandardSeriesId(db, standby.nodeId);
     const holders = createDeploymentHolders("mirror", "secondary");

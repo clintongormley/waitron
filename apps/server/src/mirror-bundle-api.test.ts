@@ -27,7 +27,18 @@ import {
   verifyMembershipDocument,
   type MembershipNode,
 } from "@waitron/membership";
-import { applyVenue, planVenue, type AdoptResult } from "@waitron/provisioning";
+import { planVenue, type AdoptResult } from "@waitron/provisioning";
+import { applyAllocatedTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
+import { fiscalReservations } from "@waitron/fiscal-verifactu/src/schema/reservations.js";
+import { fiscalAllocations, registroSif } from "@waitron/fiscal-verifactu";
+import type { WaitronModule } from "@waitron/module";
+import { locationId, nodeId } from "@waitron/shared";
+import {
+  standbyContract,
+  allocatedStandbyModules,
+  prepareStandbyDatabase,
+  takenOverSeries,
+} from "./testing/allocated-contract.js";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
 import { establishNodeIdentity } from "./node-identity.js";
@@ -37,6 +48,11 @@ import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import { clearRemovedMachine, removeUnjoinedStandby } from "./membership-removal.js";
 import { enrolAuthenticator, wrongTotpCode, TOTP_KEY_RING } from "./testing/authenticator.js";
 import { writerBesideRequest } from "./testing/watched-scrypt.js";
+
+vi.mock("./modules.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./modules.js")>();
+  return { ...actual, ALL_MODULES: [...actual.ALL_MODULES] };
+});
 
 vi.mock("node:crypto", async (importOriginal) =>
   (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),
@@ -90,6 +106,11 @@ const RING: KeyRing = loadKeyRing({
 const STANDBY_PUB = generateNodeKeyPair().publicKey;
 
 const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+});
+
+const spare = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
 });
@@ -200,11 +221,14 @@ function validStandby(): {
   };
 }
 
-async function installationCounter(): Promise<number[]> {
-  const { rows } = await db.execute<{ n: number }>(
-    sql`select proximo_numero as n from contadores_instalacion`,
-  );
-  return rows.map((r) => r.n);
+let outsideReservations: unknown[] = [];
+async function allocationSnapshot() {
+  return {
+    allocations: await db.select().from(fiscalAllocations),
+    reservations: await db.select().from(fiscalReservations),
+    identities: await db.select().from(registroSif),
+    outsideReservations: structuredClone(outsideReservations),
+  };
 }
 
 async function removalRows(): Promise<Record<string, unknown>[]> {
@@ -231,12 +255,64 @@ async function holdChartWithStandby(
   return term;
 }
 
-async function post(app: Hono, body: unknown): Promise<Response> {
+async function rawPost(app: Hono, body: unknown): Promise<Response> {
   return app.request("/management-api/mirror-bundle", {
     method: "POST",
     body: JSON.stringify(body),
     headers: { "content-type": "application/json" },
   });
+}
+async function post(app: Hono, body: unknown): Promise<Response> {
+  if (typeof body !== "object" || body === null) return rawPost(app, body);
+  const request = body as Record<string, unknown>;
+  if (
+    request.moduleOperation !== undefined ||
+    typeof request.standbyNodeId !== "string" ||
+    !/^[0-9a-f-]{36}$/i.test(request.standbyNodeId) ||
+    typeof request.personId !== "string"
+  )
+    return rawPost(app, body);
+  const primary = (await db.select().from(nodes))[0]!;
+  const fixture = await standbyContract(
+    db,
+    { nodeId: nodeId(primary.id), locationId: locationId(primary.locationId) },
+    request.standbyNodeId,
+    [
+      { code: "FA", purpose: "standard" },
+      { code: "FF", purpose: "full" },
+      { code: "RF", purpose: "rectificative" },
+    ],
+    request.personId,
+  );
+  const held = fixture.request("reserve");
+  const original = [...ALL_MODULES];
+  const allocated = allocatedStandbyModules(original, fixture).map((module) => {
+    if (module.name !== "fiscal-verifactu") return module;
+    const standby = module.provisioning!.standby!;
+    return {
+      ...module,
+      provisioning: {
+        ...module.provisioning,
+        standby: {
+          ...standby,
+          async reserve(...args: Parameters<typeof standby.reserve>) {
+            const result = await standby.reserve(...args);
+            outsideReservations.push(structuredClone(fixture.state));
+            return result;
+          },
+        },
+      },
+    };
+  });
+  (ALL_MODULES as WaitronModule[]).splice(0, ALL_MODULES.length, ...allocated);
+  try {
+    return await rawPost(app, {
+      ...request,
+      moduleOperation: { binding: held.binding, input: held.input },
+    });
+  } finally {
+    (ALL_MODULES as WaitronModule[]).splice(0, ALL_MODULES.length, ...original);
+  }
 }
 
 beforeAll(async () => {
@@ -253,6 +329,7 @@ beforeAll(async () => {
 
 // The per-test reset wipes the deployment stamp.
 beforeEach(async () => {
+  outsideReservations = [];
   await stampDeployment(db, "preproduction");
 });
 
@@ -597,7 +674,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       return row!.id;
     });
     const app = mountApp(designated, "https://relay.example:9000/");
-    const counterBefore = await installationCounter();
+    const counterBefore = await allocationSnapshot();
 
     const causes: Record<string, Record<string, unknown>> = {
       unknown: { personId: crypto.randomUUID(), password: ADMIN_PASSWORD },
@@ -620,7 +697,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       wrongCode: refused,
       missingCode: refused,
     });
-    expect(await installationCounter()).toEqual(counterBefore);
+    expect(await allocationSnapshot()).toEqual(counterBefore);
   });
 
   it("refuses mirror.no_relay (400) when no relay is configured, AFTER authorizing", async () => {
@@ -636,12 +713,12 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     expect((await res.json()).error.code).toBe("mirror.no_relay");
   });
 
-  it("returns a reserved identity: a fresh number, disjoint series, and a valid endorsement", async () => {
+  it("returns a signed dormant allocation and a valid endorsement, activating every purpose at takeover", async () => {
     const { designated, adminPersonId, primaryPublicKey } = await setupVenue();
     const app = mountApp(designated, "https://relay.example:9000/");
     const standby = { nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB };
 
-    const res = await post(app, {
+    const { res, fixture } = await allocatedReply(app, designated, adminPersonId, {
       personId: adminPersonId,
       password: ADMIN_PASSWORD,
       standbyNodeId: standby.nodeId,
@@ -651,33 +728,38 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     expect(res.status).toBe(200);
     const bundle = (await res.json()) as {
       reservedIdentity: {
-        modules: {
-          "fiscal-verifactu": {
-            nif: string;
-            idSistemaInformatico: string;
-            numeroInstalacion: number;
-          };
-        };
+        modules: { "fiscal-verifactu": typeof fixture.state };
         series: { code: string; purpose: string }[];
         endorsement: { nodeId: string; publicKey: string; endorsedBy: string; signature: string };
       };
     };
     const r = bundle.reservedIdentity;
     const fiscal = r.modules["fiscal-verifactu"];
-    expect(fiscal.numeroInstalacion).toBeGreaterThan(0);
-    expect(typeof fiscal.nif).toBe("string");
-    expect(fiscal.idSistemaInformatico).toBe("W1");
-    expect(r.series.map((s) => s.code).sort()).toEqual(
-      [
-        `FA-${fiscal.numeroInstalacion}`,
-        `FF-${fiscal.numeroInstalacion}`,
-        `RF-${fiscal.numeroInstalacion}`,
-      ].sort(),
-    );
-    const byCode = new Map(r.series.map((s) => [s.code, s.purpose]));
-    expect(byCode.get(`FA-${fiscal.numeroInstalacion}`)).toBe("standard");
-    expect(byCode.get(`FF-${fiscal.numeroInstalacion}`)).toBe("full");
-    expect(byCode.get(`RF-${fiscal.numeroInstalacion}`)).toBe("rectificative");
+    const allocation = fiscal.evidence.block.payload.allocations[0]!;
+    expect(allocation.installationIdentity).toBe("P000042");
+    expect(typeof allocation.taxpayerNif).toBe("string");
+    expect(allocation.softwareId).toBe("W1");
+    expect(fiscal).toEqual(fixture.state);
+    expect(r.series).toEqual([]);
+    expect(allocation.series).toEqual([
+      { code: "FA-P000042", purpose: "standard" },
+      { code: "FF-P000042", purpose: "full" },
+      { code: "RF-P000042", purpose: "rectificative" },
+    ]);
+    const byCode = new Map(allocation.series.map((s) => [s.code, s.purpose]));
+    expect(byCode.get("FA-P000042")).toBe("standard");
+    expect(byCode.get("FF-P000042")).toBe("full");
+    expect(byCode.get("RF-P000042")).toBe("rectificative");
+    const primary = {
+      nodeId: nodeId(designated.nodeId),
+      locationId: locationId(designated.locationId),
+    };
+    await prepareStandbyDatabase(db, spare.db, primary);
+    expect(await takenOverSeries(spare.db, standby.nodeId, fixture, fiscal)).toEqual([
+      { code: "FA-P000042", purpose: "standard" },
+      { code: "FF-P000042", purpose: "full" },
+      { code: "RF-P000042", purpose: "rectificative" },
+    ]);
     expect(r.endorsement.nodeId).toBe(standby.nodeId);
     expect(r.endorsement.publicKey).toBe(standby.publicKey);
     expect(r.endorsement.endorsedBy).toBe(designated.nodeId);
@@ -788,7 +870,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       }),
     );
     const chartBefore = await readNodeMembership(db);
-    const counterBefore = await installationCounter();
+    const counterBefore = await allocationSnapshot();
 
     const res = await post(app, {
       personId: adminPersonId,
@@ -799,17 +881,17 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
 
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual({ error: { code: "mirror.standby_removed", params: {} } });
-    expect(await installationCounter()).toEqual(counterBefore);
+    expect(await allocationSnapshot()).toEqual(counterBefore);
     expect(await readNodeMembership(db)).toEqual(chartBefore);
 
-    // Control: a fresh id through the same app does reserve, so the counter read above can move.
+    // A fresh id through the same app reaches the signed outside reservation.
     const fresh = await post(app, {
       personId: adminPersonId,
       password: ADMIN_PASSWORD,
       ...validStandby(),
     });
     expect(fresh.status).toBe(200);
-    expect(await installationCounter()).not.toEqual(counterBefore);
+    expect(await allocationSnapshot()).not.toEqual(counterBefore);
   });
 
   it("refuses a standby id the held chart has cleared (revoked) with 409 mirror.standby_removed, before reserving anything", async () => {
@@ -832,7 +914,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       }),
     );
     const chartBefore = await readNodeMembership(db);
-    const counterBefore = await installationCounter();
+    const counterBefore = await allocationSnapshot();
 
     const res = await post(app, {
       personId: adminPersonId,
@@ -843,7 +925,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
 
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual({ error: { code: "mirror.standby_removed", params: {} } });
-    expect(await installationCounter()).toEqual(counterBefore);
+    expect(await allocationSnapshot()).toEqual(counterBefore);
     expect(await readNodeMembership(db)).toEqual(chartBefore);
   });
 
@@ -913,7 +995,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       const app = mountApp(designated, "https://relay.example:9000/");
       await holdFullChart(designated);
       const chartBefore = await readNodeMembership(db);
-      const counterBefore = await installationCounter();
+      const counterBefore = await allocationSnapshot();
 
       const res = await post(app, {
         personId: adminPersonId,
@@ -925,7 +1007,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       expect(await res.json()).toEqual({
         error: { code: "mirror.membership_full", params: { limit: MAX_NODES } },
       });
-      expect(await installationCounter()).toEqual(counterBefore);
+      expect(await allocationSnapshot()).toEqual(counterBefore);
       expect(await readNodeMembership(db)).toEqual(chartBefore);
     });
 
@@ -1032,7 +1114,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       const app = mountApp(designated, "https://relay.example:9000/");
       const standbyNodeId = crypto.randomUUID();
       const seedTerm = await holdChartWithStandby(designated, standbyNodeId);
-      const counterBefore = await installationCounter();
+      const counterBefore = await allocationSnapshot();
       pause.beforeModuleConfigRead = removeDuringRequest(designated, adminPersonId, standbyNodeId);
 
       const res = await post(app, {
@@ -1045,7 +1127,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       expect(pause.beforeModuleConfigRead).toBeUndefined();
       expect(res.status).toBe(409);
       expect(await res.json()).toEqual({ error: { code: "mirror.standby_removed", params: {} } });
-      expect(await installationCounter()).toEqual(counterBefore);
+      expect(await allocationSnapshot()).toEqual(counterBefore);
       const after = (await readNodeMembership(db))!;
       expect(after.body.term).toBe(seedTerm + 1);
       expect(after.body.nodes.find((n) => n.nodeId === standbyNodeId)?.standing).toBe("evicted");
@@ -1057,7 +1139,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       const app = mountApp(designated, "https://relay.example:9000/");
       const standbyNodeId = crypto.randomUUID();
       const seedTerm = await holdChartWithStandby(designated, standbyNodeId);
-      const counterBefore = await installationCounter();
+      const counterBefore = await allocationSnapshot();
       pause.beforeChartMint = removeDuringRequest(designated, adminPersonId, standbyNodeId);
 
       const res = await post(app, {
@@ -1070,8 +1152,24 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       expect(pause.beforeChartMint).toBeUndefined();
       expect(res.status).toBe(409);
       expect(await res.json()).toEqual({ error: { code: "mirror.standby_removed", params: {} } });
-      // The reservation ran before the chart round, so its number is spent.
-      expect(await installationCounter()).toEqual(counterBefore.map((n) => n + 1));
+      // The chart refusal does not undo the outside reservation returned during assembly.
+      expect(await allocationSnapshot()).toEqual({
+        ...counterBefore,
+        outsideReservations: [
+          ...counterBefore.outsideReservations,
+          expect.objectContaining({
+            version: 1,
+            evidence: expect.objectContaining({
+              reservation: expect.objectContaining({
+                payload: expect.objectContaining({
+                  targetNodeId: standbyNodeId,
+                  allocationId: "contract-P000042",
+                }),
+              }),
+            }),
+          }),
+        ],
+      });
       // The removal's chart is the one held: the request wrote no later term over it.
       const after = (await readNodeMembership(db))!;
       expect(after.body.term).toBe(seedTerm + 1);
@@ -1106,3 +1204,42 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     expect(order.slice(0, 2)).toEqual(["writer", "request's transaction"]);
   });
 });
+
+async function allocatedReply(
+  app: Hono,
+  designated: AdoptResult,
+  adminPersonId: string,
+  body: { standbyNodeId: string; [key: string]: unknown },
+) {
+  const primary = {
+    nodeId: nodeId(designated.nodeId),
+    locationId: locationId(designated.locationId),
+  };
+  const fixture = await standbyContract(
+    db,
+    primary,
+    body.standbyNodeId,
+    [
+      { code: "FA", purpose: "standard" },
+      { code: "FF", purpose: "full" },
+      { code: "RF", purpose: "rectificative" },
+    ],
+    adminPersonId,
+  );
+  const held = fixture.request("reserve");
+  const original = [...ALL_MODULES];
+  (ALL_MODULES as WaitronModule[]).splice(
+    0,
+    ALL_MODULES.length,
+    ...allocatedStandbyModules(ALL_MODULES, fixture),
+  );
+  try {
+    const res = await post(app, {
+      ...body,
+      moduleOperation: { binding: held.binding, input: held.input },
+    });
+    return { res, fixture };
+  } finally {
+    (ALL_MODULES as WaitronModule[]).splice(0, ALL_MODULES.length, ...original);
+  }
+}

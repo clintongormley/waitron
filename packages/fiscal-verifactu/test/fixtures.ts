@@ -1,3 +1,4 @@
+import { seedFixtureSif as registerSif } from "./sif-fixture.js";
 import { sql } from "drizzle-orm";
 import {
   invoiceSeries,
@@ -13,7 +14,7 @@ import type { DeviceId, NodeId, SeriesId } from "@waitron/shared";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 import { registrosFacturacion } from "../src/schema/registros.js";
 import { registroSif } from "../src/schema/sif.js";
-import { registerSif } from "../src/registro-sif.js";
+
 import type { Entorno } from "../src/registro-row.js";
 import { nifWithControlLetter } from "../src/testing/seed.js";
 
@@ -25,29 +26,15 @@ import { nifWithControlLetter } from "../src/testing/seed.js";
 /** The sale's issue instant, carrying the `+01:00` that `issued_offset_minutes` (60) records. */
 const ISSUED_AT = "2026-07-20T19:20:30+01:00";
 
-/**
- * Fixed ids for one venue's SIF-identity/sale, reused across `inmutabilidad.test.ts`'s separate
- * `it` blocks. Literal UUIDs, so a failing assertion's id is recognisable rather than a
- * freshly-random one printed once and never seen again. The `A`/`B` namespaces are kept as two
- * NIFs and two nodes of one taxpayer — the counter tests need distinct SIF identities, never
- * distinct tenants.
- */
 export const TENANT_A = {
   locationId: "a0000000-0000-4000-8000-000000000002",
   seriesId: "a0000000-0000-4000-8000-000000000004",
   saleId: "a0000000-0000-4000-8000-000000000005",
   sifId: "a0000000-0000-4000-8000-000000000006",
-  // The SIF/chain/series owner. `nodeId2` is a second node of the SAME obligado — proving the
-  // installation-number counter is per (NIF, IdSIF), not per node.
   nodeId: brandNodeId("a0000000-0000-4000-8000-000000000008"),
   nodeId2: brandNodeId("a0000000-0000-4000-8000-000000000009"),
 };
 
-/**
- * A second NIF, to prove `contadores_instalacion`'s counter is keyed by (NIF, IdSIF) rather than
- * shared across every identity. Distinct id namespace (`b0000000...`) purely so a failing assertion's id is
- * recognisably "the other NIF's node" rather than a misprinted TENANT_A id.
- */
 export const TENANT_B = {
   locationId: "b0000000-0000-4000-8000-000000000002",
   nodeId: brandNodeId("b0000000-0000-4000-8000-000000000004"),
@@ -97,7 +84,7 @@ export async function seedTenantTillSif(db: Database): Promise<void> {
     nodeId: TENANT_A.nodeId,
     nif: "89890001K",
     idSistemaInformatico: "WAITRON01",
-    numeroInstalacion: 1,
+    numeroInstalacion: "1",
   });
 }
 

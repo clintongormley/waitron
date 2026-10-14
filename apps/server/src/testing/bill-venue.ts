@@ -1,3 +1,4 @@
+import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { departments, departmentReceipts } from "@waitron/venue-service";
 import { issueOrderInvoice } from "./issue-order.js";
 import { randomUUID } from "node:crypto";
@@ -24,7 +25,7 @@ import { hashPassword, hashPin, loginWithPin, persons } from "@waitron/identity"
 import { cardReaderHolders, cardReaders, deviceCardReaders } from "@waitron/payments";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { createPrinter } from "@waitron/printing";
-import { applyVenue, planVenue } from "@waitron/provisioning";
+import { planVenue } from "@waitron/provisioning";
 import {
   AppError,
   locationId as brandLocationId,

@@ -1,9 +1,8 @@
 import type { Transaction } from "@waitron/db";
 import type { LocationId, NodeId } from "@waitron/shared";
+import type { ModuleOperationInput } from "./operation-input.js";
 
-/** The node a seed runs for. Built by the RUNNER from rows it inserted or read — never from operator
- * input; anything else a module needs (the tenant's tax id, its own product constants) it reads or
- * owns itself. */
+/** These identities come from rows the host inserted or read. */
 export interface ProvisionedNode {
   readonly locationId: LocationId;
   readonly nodeId: NodeId;
@@ -16,7 +15,16 @@ export interface NodeSeed {
   /** Runs INSIDE the caller's provisioning transaction, after the core rows exist. Returns a one-line
    * report of what it established. Re-running for an existing node is the module's call to define,
    * never an error here. */
-  run(tx: Transaction, node: ProvisionedNode): Promise<string>;
+  run(tx: Transaction, node: ProvisionedNode, operation?: ModuleOperationInput): Promise<string>;
+  /** A filing seed may own series creation. Resolve its active references after setup and on
+   * retries, without activating again; reject requested bases that differ from the allocation. */
+  readonly series?: {
+    resolve(
+      tx: Transaction,
+      node: ProvisionedNode,
+      bases: readonly { readonly code: string; readonly purpose: string }[],
+    ): Promise<readonly { readonly id: string; readonly code: string; readonly purpose: string }[]>;
+  };
 }
 
 /** One module's line in a provisioning run's summary: the report its `NodeSeed.run` returned. */
@@ -36,11 +44,29 @@ export interface StandbyReservation {
 /** Standby support: the primary reserves, the mirror establishes. Declared together — a module that
  * reserves state must know how to establish it. */
 export interface StandbyProvisioning {
+  /** When activation owns the series, neither reservation nor adoption may open scaffold series. */
+  readonly series?: "on-activation";
   /** Primary side, inside the bundle-minting transaction. */
-  reserve(tx: Transaction, primary: ProvisionedNode): Promise<StandbyReservation>;
+  reserve(
+    tx: Transaction,
+    primary: ProvisionedNode,
+    standby?: ProvisionedNode,
+    operation?: ModuleOperationInput,
+  ): Promise<StandbyReservation>;
   /** Mirror side, inside the adopt transaction, after the standby's own node row exists. `state` is
    * wire input the module validates before writing anything. */
-  establish(tx: Transaction, standby: ProvisionedNode, state: unknown): Promise<void>;
+  establish(
+    tx: Transaction,
+    standby: ProvisionedNode,
+    state: unknown,
+    operation?: ModuleOperationInput,
+  ): Promise<void>;
+  /** Runs in the role-change transaction, before the host checks the trading series. */
+  activate?(
+    tx: Transaction,
+    standby: ProvisionedNode,
+    operation?: ModuleOperationInput,
+  ): Promise<void>;
 }
 
 export interface ModuleProvisioning {

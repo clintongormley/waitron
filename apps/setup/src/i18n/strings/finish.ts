@@ -64,6 +64,9 @@ export const finishEn = {
   "done.devices.print_agent":
     "A print agent on this server reconnects by itself. One on another computer that was given an IP address needs its Server address changed on its own page, at port 9110 on that computer.",
   "done.break_glass.heading": "Save your break-glass code now",
+  "done.break_glass.key_name": "Recovery key {date} · {code}",
+  "done.break_glass.backups":
+    "Older backups need the key from that time. Keep it until those backups are deleted.",
   "done.break_glass.warning":
     "Write this down and store it offline. It is shown once and will not be shown again.",
   "done.break_glass.join_stalled":
@@ -143,6 +146,9 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
   "done.devices.print_agent":
     "Un agente de impresión en este servidor se vuelve a conectar solo. Si está en otro ordenador y se le dio una dirección IP, hay que cambiar su «Server address» en su propia página, en el puerto 9110 de ese ordenador.",
   "done.break_glass.heading": "Guarda ahora tu código de emergencia",
+  "done.break_glass.key_name": "Clave de recuperación {date} · {code}",
+  "done.break_glass.backups":
+    "Las copias antiguas necesitan la clave de entonces. Consérvala hasta que se borren esas copias.",
   "done.break_glass.warning":
     "Anótalo y guárdalo fuera de línea. Se muestra una sola vez y no se volverá a mostrar.",
   "done.break_glass.join_stalled":

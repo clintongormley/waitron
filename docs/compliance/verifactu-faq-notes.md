@@ -1,5 +1,12 @@
 # Veri\*Factu developer FAQ — indexed receipts
 
+> **Implementation pointer, 2026-10-14:** W41s-4's unpublished branch replaces the local
+> installation counter and restore-time clock floor with supplied allocations. References below
+> to that counter describe the earlier implementation. See the approved
+> [allocation design](../superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md)
+> and [Task 4](../superpowers/plans/2026-10-04-fiscal-prevention-and-offline-recovery.md#task-4-one-allocation-activation-operation).
+
+
 **Source:** AEAT, *"Aclaraciones a dudas de los desarrolladores"*, **versión 1.3, 4 de diciembre de 2025**
 (published on the Agencia Tributaria developer web). Pinned copy in this repo:
 [sources/FAQs-Desarrolladores-v1.3-2025-12-04.pdf](sources/FAQs-Desarrolladores-v1.3-2025-12-04.pdf).

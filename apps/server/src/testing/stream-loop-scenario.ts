@@ -1,5 +1,5 @@
 // The stream loop, end to end, against whichever bucket its fixture names: box A streams its
-// venue, dies, box B is rebuilt from the bucket with nothing but the recovery kit, sells under a fresh
+// venue, dies, box B is rebuilt with its kit, saved node key and signed allocation, sells under a fresh
 // installation number and chain, streams into a generation of its own and moves the pointer, and a
 // restore of B's generation holds exactly what B's database holds. `stream-loop.e2e.test.ts` runs it
 // against versitygw; `aws-stream-loop.aws-rehearsal.test.ts` against Amazon S3, by opt-in only.
@@ -20,10 +20,23 @@ import {
   stampDeployment,
   withTransaction,
 } from "@waitron/db";
-import { installationFloor, registroSif, registrosFacturacion } from "@waitron/fiscal-verifactu";
+import {
+  createPaperAllocationPreparation,
+  registroSif,
+  registrosFacturacion,
+} from "@waitron/fiscal-verifactu";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { applyVenue, planVenue, quoteIdent } from "@waitron/provisioning";
+import { applyAllocatedTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
+import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
+import { locationId, nodeId } from "@waitron/shared";
+import { planVenue, quoteIdent } from "@waitron/provisioning";
+import { mintBreakGlassSecret } from "../break-glass.js";
+import {
+  createRecoveryRestoreRunner,
+  readRecoveryOperationFile,
+} from "../recovery-module-operation.js";
+import { writeAllocationInput } from "./allocation-input.js";
 import {
   createS3ObjectStore,
   encodeRecoveryKit,
@@ -249,6 +262,7 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
       parseEnvFile(await readFile(join(dirsA.state, "secrets.env"), "utf8")),
     );
     await applyMigrations(dirsA.venue, fromSource);
+    let nodeSecret: string;
     const seeding = await openVenueDatabase(dirsA.venue);
     let a: {
       nodeId: string;
@@ -292,6 +306,7 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
         ),
         { db: seeding.venue, modules: ALL_MODULES },
       );
+      nodeSecret = await mintBreakGlassSecret(seeding.venue, venue.nodeId);
       await establishNodeIdentity({ ownerDb: seeding.venue, ring }, venue.nodeId);
       await seedTermZeroMembership(
         { db: seeding.venue, ring },
@@ -407,7 +422,7 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
     );
 
     clock.begin("rebuild");
-    // 5. A dies: its server stops and its whole folder is gone. The kit is all that is left.
+    // 5. A dies: its server stops and its whole folder is gone.
     running.delete(serverA);
     await serverA.close();
     const leafA = new X509Certificate(
@@ -430,9 +445,38 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
     //    minutes, so the owner's confirmation that it is gone is required, and given.
     const dirsB = await boxDirs(scratch, "box-b");
     const portB = await freePort();
-    const rebuildStartedAt = new Date();
+    const recoveryFixture = allocationFixture({
+      node: { nodeId: nodeId(a.nodeId), locationId: locationId(a.locationId) },
+      taxpayerNif: "74000001P",
+      identity: "P000042",
+      recoveryKey: true,
+      bases: [
+        { code: "A", purpose: "standard" },
+        { code: "FF", purpose: "full" },
+        { code: "R", purpose: "rectificative" },
+      ],
+    });
+    const allocationEnv = await writeAllocationInput(scratch, recoveryFixture, "restore");
+    const recoveryModules = ALL_MODULES.map((module) =>
+      module.name === "fiscal-verifactu"
+        ? {
+            ...module,
+            operations: createPaperAllocationPreparation({
+              custodianPath: allocationEnv.WAITRON_FISCAL_CUSTODIAN_FILE,
+              confirmationPath: allocationEnv.WAITRON_FISCAL_CONFIRMATION_FILE,
+              confirmedFingerprint: allocationEnv.WAITRON_FISCAL_CUSTODIAN_FINGERPRINT,
+            }),
+          }
+        : module,
+    );
     const said: string[] = [];
+    const { WAITRON_RECOVERY_OPERATION_FILE: operationPath, ...paperEnv } = allocationEnv;
     const code = await runRestore({
+      withModuleOperations: createRecoveryRestoreRunner(
+        recoveryModules,
+        await readRecoveryOperationFile(operationPath),
+        nodeSecret!,
+      ),
       argv: [
         "restore",
         "--from-bucket",
@@ -442,6 +486,8 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
         "74000001P",
       ],
       env: {
+        ...paperEnv,
+        WAITRON_NODE_RECOVERY_KEY: nodeSecret!,
         WAITRON_STATE_DIR: dirsB.state,
         WAITRON_VENUE_DIR: dirsB.venue,
         WAITRON_MIGRATIONS_DIR: migrationsRoot,
@@ -615,14 +661,13 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
         })
         .from(registroSif)
         .where(eq(registroSif.nodeId, a.nodeId))
-        .orderBy(registroSif.numeroInstalacion);
+        .orderBy(registroSif.registradoEn);
       expect(sifs).toHaveLength(2);
       const [old, fresh] = sifs;
       expect(old!.revocadoEn).not.toBeNull();
       expect(fresh!.revocadoEn).toBeNull();
-      expect(fresh!.numeroInstalacion).toBeGreaterThanOrEqual(
-        installationFloor(new Date(rebuildStartedAt.getTime() - 60_000)),
-      );
+      expect(fresh!.numeroInstalacion).toBe("P000042");
+      expect(fresh!.numeroInstalacion).not.toBe(old!.numeroInstalacion);
       const records = await readB.venue
         .select({
           saleId: registrosFacturacion.saleId,

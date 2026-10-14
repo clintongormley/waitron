@@ -117,9 +117,8 @@ export const startEn = {
     "Keep the name to 120 characters or fewer, and remove any hidden characters the tax agency's records cannot carry — typing the name out instead of pasting it usually clears them.",
   "server_fields.tax_id": "Check the tax ID. A new business needs its own.",
   "server_fields.taxpayer_domicile": "Enter the full registered business address.",
-  // The message's 38 is `MAX_BASE_CODE_LENGTH` (`packages/fiscal-verifactu/src/reserved-series.ts`).
   "server_fields.series_code":
-    "Use letters, numbers, and the characters / _ . and - only, up to 38 characters.",
+    "Use letters, numbers, and the characters / _ . and - only, up to 21 characters.",
   "server_fields.operation_description":
     "Keep this to 500 characters or fewer, and remove any hidden characters — typing it out instead of pasting it usually clears them.",
 } as const;
@@ -246,7 +245,7 @@ export const startEs: Record<keyof typeof startEn, string> = {
   "server_fields.tax_id": "Revisa el NIF. Un negocio nuevo necesita el suyo.",
   "server_fields.taxpayer_domicile": "Introduce el domicilio fiscal completo del negocio.",
   "server_fields.series_code":
-    "Usa solo letras, números y los caracteres / _ . y - (hasta 38 caracteres).",
+    "Usa solo letras, números y los caracteres / _ . y - (hasta 21 caracteres).",
   "server_fields.operation_description":
     "Usa 500 caracteres como máximo y quita los caracteres ocultos; suele bastar con escribirlo en lugar de pegarlo.",
 };

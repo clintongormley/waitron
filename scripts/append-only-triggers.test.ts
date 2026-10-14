@@ -37,6 +37,8 @@ const EXPECTED = [
   "daily_closes",
   "filing_case_events",
   "filing_cases",
+  "fiscal_allocations",
+  "fiscal_reservations",
   "invoice_pdf_downloads",
   "membership_clearances",
   "membership_removals",

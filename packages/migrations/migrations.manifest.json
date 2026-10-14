@@ -80,7 +80,13 @@
     "name": "fiscal-verifactu",
     "table": "__drizzle_migrations_fiscal",
     "from": "../fiscal-verifactu/drizzle",
-    "appendOnlyTables": ["registros_facturacion", "filing_cases", "filing_case_events"]
+    "appendOnlyTables": [
+      "registros_facturacion",
+      "filing_cases",
+      "filing_case_events",
+      "fiscal_allocations",
+      "fiscal_reservations"
+    ]
   },
   {
     "name": "fiscal-none",

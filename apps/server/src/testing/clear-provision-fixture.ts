@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { Database } from "@waitron/db";
 
-/** Clears untraded provision fixtures without deleting ledger rows or disabling their triggers. */
+/** Clears historical untraded fixtures; activation-ledger references can refuse owner deletion. */
 export async function clearProvisionFixture(db: Database): Promise<void> {
   await db.transaction(async (tx) => {
     for (const table of [
@@ -42,7 +42,6 @@ export async function clearProvisionFixture(db: Database): Promise<void> {
       "persons",
       "cadenas",
       "registro_sif",
-      "contadores_instalacion",
       "invoice_series",
       "nodes",
       "device_made_here_stations",

@@ -10,7 +10,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { runCli } from "./cli.js";
-import { applyVenue } from "./venue-apply.js";
+import { applyAllocatedTestVenue as applyVenue } from "../test/allocated-venue.js";
 import { readTenantIdentities } from "./tenant-guard.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
@@ -87,7 +87,8 @@ function retained() {
       "nodes",
       "invoice_series",
       "registro_sif",
-      "contadores_instalacion",
+      "fiscal_allocations",
+      "fiscal_reservations",
     ].map((table) => [
       table,
       suite.db.all(sql`select * from ${sql.identifier(table)} order by rowid`),

@@ -31,7 +31,14 @@ import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/mig
 import { startServer } from "./boot.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { ALL_MODULES } from "./modules.js";
-import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./reserved-identity.js";
+import { generateStandbyIdentity } from "./reserved-identity.js";
+import { withPromotionModuleOperation } from "./promotion-operation.js";
+import { TOTP_KEY_RING } from "./testing/authenticator.js";
+import { mintBreakGlassSecret } from "./break-glass.js";
+import { establishDormantContract } from "./testing/dormant-contract.js";
+import { writeAllocationInput } from "./testing/allocation-input.js";
+import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
+import { invoiceSeries } from "@waitron/db";
 import { parseEnvFile } from "./env-file.js";
 import { mintMtlsMaterial } from "@waitron/server-kit/testing/mtls.js";
 import { freePort } from "./testing/free-ports.js";
@@ -313,12 +320,11 @@ describe("promote: local secondary → primary, live", () => {
 
 const MIRROR_LOCATION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const MIRROR_ORIGIN_NODE_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
-const MIRROR_NUMERO_INSTALACION = 7;
 
 /** A mirror holding its own dormant identity. */
 async function seedMirrorIdentity(
   db: Database,
-): Promise<{ nodeId: string; standardSeriesId: string }> {
+): Promise<{ nodeId: string; fixture: ReturnType<typeof allocationFixture> }> {
   await db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "90222222H", legalName: "Promote Cloud SL" })
@@ -343,31 +349,18 @@ async function seedMirrorIdentity(
     endorsedBy: MIRROR_ORIGIN_NODE_ID,
     signature: "endorsement-sig",
   };
-  await establishReservedStandbyIdentity(
-    { ownerDb: db, ring: PROMOTE_RING },
-    {
-      locationId: MIRROR_LOCATION_ID,
-      standby,
-      nodeName: "cloud",
-      filingModule: "verifactu",
-      taxModule: "vat",
-      modules: ALL_MODULES,
-      reserved: {
-        modules: {
-          "fiscal-verifactu": {
-            nif,
-            idSistemaInformatico: "W1",
-            numeroInstalacion: MIRROR_NUMERO_INSTALACION,
-          },
-        },
-        series: [
-          { code: "FA-7", purpose: "standard" },
-          { code: "FF-7", purpose: "full" },
-        ],
-        endorsement,
-      },
-    },
-  );
+  const fixture = await establishDormantContract({
+    db: db,
+    ring: PROMOTE_RING,
+    locationId: MIRROR_LOCATION_ID,
+    sourceId: MIRROR_ORIGIN_NODE_ID,
+    taxpayerNif: nif,
+    standby,
+    endorsement,
+    modules: ALL_MODULES,
+    operatorId: "contract-administrator",
+    recoveryKey: true,
+  });
 
   // A held term-3 chart: the outgoing primary serving, this node secondary — the promote bumps it to 4.
   const held: SignedMembershipDocument = {
@@ -394,17 +387,19 @@ async function seedMirrorIdentity(
   // Deployment: production (matching WAITRON_ENV) then mode='mirror' (co-sets singleton_role='secondary').
   await stampDeployment(db, "production");
   await setDeploymentMode(db, standby.nodeId, "mirror");
-  const standardSeriesId = await readStandardSeriesId(db, standby.nodeId);
-  return { nodeId: standby.nodeId, standardSeriesId };
+  return { nodeId: standby.nodeId, fixture };
 }
 
 describe("promote: mirror → primary, in-process, restart-into-primary", () => {
   it("exposes promoteMirrorToPrimary, promotes, and persists identity without a series cache", async () => {
     const seed = await seedMirrorIdentity(mirrorDb);
+    const secret = await mintBreakGlassSecret(mirrorDb, seed.nodeId);
     const port = await freePort();
     // Its own state dir, so the rewritten `trading.env` can be read back.
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-mirror-state-"));
     writeFileSync(join(stateDir, "modules.json"), FISCAL_NONE_OFF);
+    const allocationEnv = await writeAllocationInput(stateDir, seed.fixture, "promote");
+    for (const [key, value] of Object.entries(allocationEnv)) vi.stubEnv(key, value);
 
     const server = await startServer({
       ...KEY_ENV,
@@ -428,8 +423,32 @@ describe("promote: mirror → primary, in-process, restart-into-primary", () => 
       expect(server.promoteMirrorToPrimary).toBeDefined();
       expect(server.promoteLocalSecondaryToPrimary).toBeUndefined();
 
-      const result = await server.promoteMirrorToPrimary!({ oldNodeNeutralised: true });
-      expect(result).toEqual({ alreadyPrimary: false, seriesId: seed.standardSeriesId });
+      const request = seed.fixture.request("promote");
+      const result = await server.promoteMirrorToPrimary!(
+        { oldNodeNeutralised: true },
+        (context, consume) =>
+          withPromotionModuleOperation(
+            {
+              db: context.db,
+              nodeId: seed.nodeId,
+              credentialKeyRing: TOTP_KEY_RING,
+              modules: ALL_MODULES,
+            },
+            { binding: request.binding, input: request.input },
+            { breakGlass: secret },
+            (runner) => runner(context, consume),
+          ),
+      );
+      const activeSeriesId = await readStandardSeriesId(mirrorDb, seed.nodeId);
+      expect(
+        (await mirrorDb.select().from(invoiceSeries)).find((row) => row.id === activeSeriesId)
+          ?.code,
+      ).toBe("FA-P000042");
+      expect(result).toEqual({ alreadyPrimary: false, seriesId: activeSeriesId });
+      expect(await server.promoteMirrorToPrimary!({ oldNodeNeutralised: true })).toEqual({
+        alreadyPrimary: true,
+        seriesId: activeSeriesId,
+      });
 
       expect(await readDeploymentMode(mirrorDb, seed.nodeId)).toBe("primary");
       expect(await readSingletonRole(mirrorDb, seed.nodeId)).toBe("primary");
@@ -450,12 +469,13 @@ describe("promote: mirror → primary, in-process, restart-into-primary", () => 
 
       const persisted = parseEnvFile(readFileSync(join(stateDir, "trading.env"), "utf8"));
       expect(persisted).not.toHaveProperty("WAITRON_TILL_SERIES_ID");
-      expect(await readStandardSeriesId(mirrorDb, seed.nodeId)).toBe(seed.standardSeriesId);
+      expect(await readStandardSeriesId(mirrorDb, seed.nodeId)).toBe(activeSeriesId);
       expect(persisted.WAITRON_TILL_NODE_ID).toBe(seed.nodeId);
       expect(persisted.WAITRON_ENV).toBe("production");
     } finally {
       await server.close();
       killSpy.mockRestore();
+      vi.unstubAllEnvs();
       await rm(stateDir, { recursive: true, force: true });
     }
   }, 60_000);

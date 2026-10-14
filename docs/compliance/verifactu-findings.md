@@ -1,5 +1,12 @@
 # Verifactu — verified findings
 
+> **Implementation pointer, 2026-10-14:** W41s-4's unpublished branch replaces the local
+> installation counter and restore-time clock floor with supplied allocations. References below
+> to that counter describe the earlier implementation. See the approved
+> [allocation design](../superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md)
+> and [Task 4](../superpowers/plans/2026-10-04-fiscal-prevention-and-offline-recovery.md#task-4-one-allocation-activation-operation).
+
+
 Research date: **2026-07-18**. Sources are AEAT and BOE primary texts unless noted.
 Companion documents: [asesor-questions.md](asesor-questions.md) — the unresolved items;
 [verifactu-faq-notes.md](verifactu-faq-notes.md) — indexed receipts from AEAT's developer FAQ (v1.3,

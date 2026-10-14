@@ -1,10 +1,11 @@
+import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { deviceProfiles, withTransaction, type Database, type Transaction } from "@waitron/db";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { hashPassword, hashPin, loginWithPin, persons } from "@waitron/identity";
-import { applyVenue, planVenue } from "@waitron/provisioning";
+import { planVenue } from "@waitron/provisioning";
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import {
   createDepartment,

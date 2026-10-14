@@ -390,9 +390,12 @@ up to 100 characters (`verifactu/src/validate.ts:694`). The `IdSistemaInformatic
 requires exactly two uppercase letters or digits (`verifactu/src/validate.ts:650–661`). These
 are library checks, not a claim that AEAT has accepted these example values.
 
+**2026-10-12 correction (owner approved):** the first-symbol range below is `0`–`7`;
+26 Base32 symbols carry 130 bits, and this range restricts the value to 128 bits.
+
 Generate an emergency suffix from 128 unbiased random bits with the operating system's
 cryptographic generator. Encode it as 26 Crockford Base32 characters using
-`0123456789ABCDEFGHJKMNPQRSTVWXYZ`; the first symbol must be `0`–`3`, so a decoded value outside
+`0123456789ABCDEFGHJKMNPQRSTVWXYZ`; the first symbol must be `0`–`7`, so a decoded value outside
 the 128-bit range is refused. Do not use the wall clock, a device identifier or the restored counter as
 entropy. Distinct independent draws collide with probability about `n(n-1)/2^129` after `n`
 emergency allocations; they provide a probability, never a uniqueness guarantee. A manual entry
@@ -407,6 +410,15 @@ administrator records that uncertainty and confirms old-machine isolation; it ma
 certain uniqueness.
 
 ### 9.2 Authority and consumption
+
+**2026-10-12 decision (owner approved):** the paper custodian holds a separate Ed25519
+signing key outside venue backups. The recovery pack carries that custodian's public key and
+fingerprint; the administrator compares the fingerprint with the current outside master register
+before enrolling it on replacement offline hardware. The private key never enters a venue
+database or pack. The entry is still crossed out in the current master before activation.
+Custodian signing and enrolment tooling and a key replacement procedure are in Task 4's scope.
+The [custodian procedure](../../developers/paper-custodian.md) describes the standalone tool;
+recovery-pack integration remains Task 6.
 
 Before printing a paper block, its custodian reserves its exact serials in the master register
 and records the block ID, taxpayer, software ID, environment, allowed series bases, recipient
@@ -520,3 +532,13 @@ run the library validator over boundary examples, including the longest emergenc
 10-digit counter. Changing `registerSif`, `restoreFiscal`, an alta builder or the hash path is
 outside RUNNER H2 until the owner records a narrow, item-specific exception. Approval of this
 appendix alone does not grant that exception or enable issuance after recovery.
+
+### Recovery-key attribution, owner decision 2026-10-12 22:55
+
+The current node recovery key alone authorises offline recovery or takeover. No account is
+selected, no password is required, no management session is created and no password is reset.
+Bind the outside consumption and local approval to `operatorId:{kind:"recovery-key",nodeId,eventId}`.
+This records a key-authenticated event rather than naming a person; the key itself is never
+recorded. Wrong or replaced keys refuse. Normal administrator operations retain person attribution.
+Old-machine isolation, complete series, independent outside consumption and atomic local activation
+still apply. This owner decision supersedes any assumption above that every recovery names an account.

@@ -6,7 +6,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
 import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -18,8 +18,12 @@ import { parseModuleConfig } from "@waitron/module";
 import type { VenueRequest } from "@waitron/provisioning";
 import { seedInstalledDemo } from "./demo-seed.js";
 import { ALL_MODULES } from "./modules.js";
-import { provisionVenue, venueModuleConfig } from "./provision.js";
+import { provisionAllocatedTestVenue as provisionVenue } from "./testing/allocated-provision.js";
+import { venueModuleConfig } from "./provision.js";
 
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 
 it("provisions Spain's demo business and files its practice sales under the demo tax ID", async () => {

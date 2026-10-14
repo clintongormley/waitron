@@ -1,3 +1,4 @@
+import { seedFixtureSif as registerSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { setRoutingCell } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
@@ -13,10 +14,11 @@ import {
 } from "@waitron/catalogue";
 import { catalogues, ticketItems, workingOrderLines } from "@waitron/db";
 import type { AvailableProduct } from "@waitron/catalogue";
-import { registerSif, VerifactuBackend } from "@waitron/fiscal-verifactu";
+import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin } from "@waitron/identity";
-import { applyVenue, planVenue } from "@waitron/provisioning";
+import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
+import { planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
 import { withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";

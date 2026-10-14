@@ -3,6 +3,7 @@ import { AppError } from "@waitron/shared";
 import {
   persistNodeMembershipIfNewerTx,
   readLiveSeriesIdTx,
+  nodes,
   readNodeMembership,
   readStandardSeriesId,
   setDeploymentModeTx,
@@ -19,6 +20,16 @@ import {
   type SignedMembershipDocument,
 } from "@waitron/membership";
 import type { KeyRing } from "@waitron/credentials";
+import { eq } from "drizzle-orm";
+import {
+  moduleOperationFor,
+  snapshotModuleOperations,
+  withPreparedModuleOperations,
+  type ModuleOperations,
+  type ProvisionedNode,
+  type WaitronModule,
+} from "@waitron/module";
+import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import { refreshDeploymentHolders, type DeploymentHolders } from "./deployment-holders.js";
 import { mintNextMembershipDocument } from "./membership-mint.js";
 import type { Logger } from "./logger.js";
@@ -118,7 +129,15 @@ export interface MirrorPromotionResult extends PromotionResult {
 
 export interface MirrorPromoteDeps extends PromoteDeps {
   readonly persistTradingEnv: () => Promise<void>;
+  readonly modules?: readonly WaitronModule[];
+  readonly moduleOperations?: ModuleOperations;
+  readonly withModuleOperations?: PromotionOperationRunner;
 }
+
+export type PromotionOperationRunner = (
+  context: { readonly db: Database; readonly node: ProvisionedNode },
+  run: (tx: Transaction, operations: ModuleOperations) => Promise<string>,
+) => Promise<string>;
 
 /**
  * One transaction, ordered for `node_roles_role_valid_ck`: `mode` first, so the transient pair is
@@ -144,24 +163,30 @@ export async function commitMirrorPromotionTx(
 }
 
 /**
- * Mirror to primary, on the identity reserved at adopt: no fiscal identity is minted here. The
- * checks, the mint and `persistTradingEnv` run before `commitMirrorPromotionTx`, so a failure there
- * leaves the mirror as it was. The caller restarts only on `{ alreadyPrimary: false }`.
+ * The module activation, trading-series checks and role change share one transaction.
+ * The caller restarts only on `{ alreadyPrimary: false }`.
  */
 export async function promoteMirrorToPrimary(
   deps: MirrorPromoteDeps,
   attestation: FenceAttestation,
 ): Promise<MirrorPromotionResult> {
   assertFenced(attestation);
+  const supplied = snapshotModuleOperations(deps.moduleOperations);
 
   await refreshDeploymentHolders(deps.db, deps.nodeId, deps.holders);
-  // Also what an already-primary re-run returns.
-  const seriesId = await readStandardSeriesId(deps.db, deps.nodeId);
-  await withTransaction(deps.db, (tx) => readLiveSeriesIdTx(tx, deps.nodeId, "full"));
 
   if (deps.holders.mode.current === "primary") {
+    const seriesId = await readStandardSeriesId(deps.db, deps.nodeId);
+    await withTransaction(deps.db, (tx) => readLiveSeriesIdTx(tx, deps.nodeId, "full"));
     return { alreadyPrimary: true, seriesId };
   }
+
+  const [stored] = await deps.db
+    .select({ locationId: nodes.locationId })
+    .from(nodes)
+    .where(eq(nodes.id, deps.nodeId));
+  if (stored === undefined) throw new AppError("node.not_found", { id: deps.nodeId });
+  const node = { nodeId: brandNodeId(deps.nodeId), locationId: brandLocationId(stored.locationId) };
 
   const held = await readNodeMembership(deps.db);
   assertNotFenced(held, deps.nodeId);
@@ -174,11 +199,35 @@ export async function promoteMirrorToPrimary(
     },
   );
 
-  await deps.persistTradingEnv();
-
-  await withTransaction(deps.db, async (tx) => {
+  const run = async (tx: Transaction, suppliedOperations = supplied): Promise<string> => {
+    const operations = snapshotModuleOperations(suppliedOperations);
+    for (const m of deps.modules ?? []) {
+      const activate = m.provisioning?.standby?.activate;
+      if (activate === undefined) continue;
+      const operation = moduleOperationFor(operations, m.name, node.nodeId, "promote");
+      await activate(tx, node, operation);
+      moduleOperationFor(operations, m.name, node.nodeId, "promote");
+    }
+    const series = await readLiveSeriesIdTx(tx, node.nodeId, "standard");
+    await readLiveSeriesIdTx(tx, node.nodeId, "full");
+    await deps.persistTradingEnv();
     await commitMirrorPromotionTx(tx, deps.nodeId, document);
-  });
+    for (const m of deps.modules ?? []) {
+      if (m.provisioning?.standby?.activate !== undefined)
+        moduleOperationFor(operations, m.name, node.nodeId, "promote");
+    }
+    return series;
+  };
+  const seriesId =
+    deps.withModuleOperations === undefined
+      ? await withPreparedModuleOperations(
+          deps.modules ?? [],
+          supplied,
+          node.nodeId,
+          "promote",
+          (ready) => withTransaction(deps.db, (tx) => run(tx, ready)),
+        )
+      : await deps.withModuleOperations({ db: deps.db, node }, run);
 
   await refreshDeploymentHolders(deps.db, deps.nodeId, deps.holders);
   deps.log("info", "promotion.completed", { target: "mirror" });

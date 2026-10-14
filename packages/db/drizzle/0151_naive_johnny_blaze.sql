@@ -1,0 +1,1 @@
+ALTER TABLE `node_roles` ADD `break_glass_key_name` text;

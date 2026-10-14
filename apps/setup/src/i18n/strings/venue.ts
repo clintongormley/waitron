@@ -111,7 +111,7 @@ export const venueEn = {
   "venue.help.day_cutover":
     "Sales before this time belong to the previous business day. Keep 04:00 if you finish trading after midnight.",
   "venue.help.series_code":
-    "This prefix identifies ordinary invoices, for example FS/1. Use letters, numbers, / _ . or -, up to 38 characters. Keep FS unless you need another series.",
+    "This prefix identifies ordinary invoices, for example FS/1. Use letters, numbers, / _ . or -, up to 21 characters. Keep FS unless you need another series.",
   "venue.help.full_series_code":
     "This prefix identifies full invoices, for example FF/1. Use a different prefix from the other invoice series.",
   "venue.help.rectificative_series_code":
@@ -338,7 +338,7 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "venue.help.day_cutover":
     "Las ventas anteriores a esta hora pertenecen al día comercial anterior. Deja las 04:00 si cierras después de medianoche.",
   "venue.help.series_code":
-    "Este prefijo identifica las facturas ordinarias, por ejemplo FS/1. Usa letras, números, / _ . o -, hasta 38 caracteres. Deja FS salvo que necesites otra serie.",
+    "Este prefijo identifica las facturas ordinarias, por ejemplo FS/1. Usa letras, números, / _ . o -, hasta 21 caracteres. Deja FS salvo que necesites otra serie.",
   "venue.help.full_series_code":
     "Este prefijo identifica las facturas completas, por ejemplo FF/1. Usa un prefijo distinto al de las demás series.",
   "venue.help.rectificative_series_code":

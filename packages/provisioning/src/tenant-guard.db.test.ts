@@ -4,7 +4,7 @@ import { ALL_MODULES } from "@waitron/composition";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { planVenue, type VenueRequest } from "./venue-plan.js";
-import { applyVenue } from "./venue-apply.js";
+import { applyAllocatedTestVenue as applyVenue } from "../test/allocated-venue.js";
 import { readOperationalVenueIds, readTenantIdentities } from "./tenant-guard.js";
 
 const suite = useVenueDb({

@@ -6,6 +6,8 @@ import {
   locationBusinessDaySettings,
   locationDayCutoverChanges,
   openVenueDatabase,
+  stampDeployment,
+  invoiceSeries,
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -20,6 +22,10 @@ import { buildManifest } from "./backup-manifest.js";
 import { packArchive } from "./backup-archive.js";
 import { encryptArtifact } from "./artifact-cipher.js";
 import { restoreFromArtifact } from "./restore.js";
+import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
+import { nodeId } from "@waitron/shared";
+import { mintBreakGlassSecret } from "./break-glass.js";
+import { createRecoveryRestoreRunner } from "./recovery-module-operation.js";
 import { wipeVenueDatabases } from "./db-wipe.js";
 import { readVenueDetails } from "./venue-details.js";
 
@@ -60,6 +66,22 @@ describe("business-day timeline through cold restore and reset", () => {
     const root = await mkdtemp(join(tmpdir(), "a495-cold-restore-"));
     try {
       const dump = join(root, "copy.db");
+      await stampDeployment(suite.db, "preproduction");
+      const secret = await mintBreakGlassSecret(suite.db, venue.cfg.nodeId);
+      const series = await suite.db.select().from(invoiceSeries);
+      const fixture = allocationFixture({
+        node: { nodeId: nodeId(venue.cfg.nodeId), locationId: venue.cfg.locationId },
+        taxpayerNif: (
+          await suite.db.execute<{ taxId: string }>(sql`select tax_id as taxId from tenants`)
+        ).rows[0]!.taxId,
+        identity: "P000042",
+        recoveryKey: true,
+        bases: series.map(({ code, purpose }) => ({ code, purpose })),
+      });
+      const held = fixture.request("restore");
+      const modules = ALL_MODULES.map((module) =>
+        module.name === "fiscal-verifactu" ? { ...module, operations: held.preparation } : module,
+      );
       await suite.db.archiveTo(dump);
       const manifest = await buildManifest({
         db: suite.db,
@@ -96,7 +118,12 @@ describe("business-day timeline through cold restore and reset", () => {
         stagingDir: join(root, "staging"),
         venueDir,
         migrationsRoot: null,
-        modules: ALL_MODULES,
+        modules,
+        withModuleOperations: createRecoveryRestoreRunner(
+          modules,
+          { binding: held.binding, input: held.input },
+          secret,
+        ),
         environment: "preproduction",
         log: () => {},
       });

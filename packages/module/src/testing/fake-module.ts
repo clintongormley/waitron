@@ -6,7 +6,7 @@ import type { WaitronModule } from "../module.js";
  */
 export function fakeModule(
   name: string,
-  seats: Partial<Pick<WaitronModule, "provisioning" | "fiscal" | "vocabulary">> = {},
+  seats: Partial<Pick<WaitronModule, "provisioning" | "fiscal" | "vocabulary" | "operations">> = {},
 ): WaitronModule {
   return {
     name,

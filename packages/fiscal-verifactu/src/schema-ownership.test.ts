@@ -10,11 +10,12 @@ import * as schema from "./schema/index.js";
 const OWNED = [
   "acks",
   "cadenas",
-  "contadores_instalacion",
   "envio_flujo",
   "envios",
   "filing_case_events",
   "filing_cases",
+  "fiscal_allocations",
+  "fiscal_reservations",
   "registro_sif",
   "registros_facturacion",
 ];

@@ -33,14 +33,18 @@ import {
   createProduct,
 } from "@waitron/catalogue";
 import type { Endorsement, SignedMembershipDocument } from "@waitron/membership";
-import { locationId as brandLocationId } from "@waitron/shared";
+import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { startServer, type StartedServer } from "./boot.js";
 import { ALL_MODULES } from "./modules.js";
-import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./reserved-identity.js";
+import { generateStandbyIdentity } from "./reserved-identity.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { mountPromoteApi } from "./promote-api.js";
 import { readOnlyGate } from "./read-only-gate.js";
+import { establishDormantContract } from "./testing/dormant-contract.js";
+import { writeAllocationInput } from "./testing/allocation-input.js";
+import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
+import { invoiceSeries } from "@waitron/db";
 import { parseEnvFile } from "./env-file.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
@@ -99,7 +103,6 @@ const RING = loadKeyRing({
 
 const MIRROR_LOCATION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const MIRROR_ORIGIN_NODE_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
-const MIRROR_NUMERO_INSTALACION = 7;
 
 // Also signs in to the dashboard for the box-status read.
 const ADMIN_ID = "99999999-9999-4999-8999-999999999999";
@@ -129,7 +132,9 @@ let migrationsRoot: string;
 // per-case restore can run before that timer fires, and the signal then kills the vitest worker.
 let killSpy: MockInstance<typeof process.kill>;
 
-async function seedMirror(admin: Database): Promise<{ nodeId: string; standardSeriesId: string }> {
+async function seedMirror(
+  admin: Database,
+): Promise<{ nodeId: string; fixture: ReturnType<typeof allocationFixture> }> {
   await admin
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "90222222F", legalName: "Promote E2E Cloud SL" })
@@ -153,31 +158,18 @@ async function seedMirror(admin: Database): Promise<{ nodeId: string; standardSe
     endorsedBy: MIRROR_ORIGIN_NODE_ID,
     signature: "endorsement-sig",
   };
-  await establishReservedStandbyIdentity(
-    { ownerDb: admin, ring: RING },
-    {
-      locationId: MIRROR_LOCATION_ID,
-      standby,
-      nodeName: "cloud",
-      filingModule: "verifactu",
-      taxModule: "vat",
-      modules: ALL_MODULES,
-      reserved: {
-        modules: {
-          "fiscal-verifactu": {
-            nif,
-            idSistemaInformatico: "W1",
-            numeroInstalacion: MIRROR_NUMERO_INSTALACION,
-          },
-        },
-        series: [
-          { code: "FA-7", purpose: "standard" },
-          { code: "FF-7", purpose: "full" },
-        ],
-        endorsement,
-      },
-    },
-  );
+  const fixture = await establishDormantContract({
+    db: admin,
+    ring: RING,
+    locationId: MIRROR_LOCATION_ID,
+    sourceId: MIRROR_ORIGIN_NODE_ID,
+    taxpayerNif: nif,
+    standby,
+    endorsement,
+    modules: ALL_MODULES,
+    operatorId: ADMIN_ID,
+    recoveryKey: false,
+  });
 
   const held: SignedMembershipDocument = {
     body: {
@@ -214,8 +206,7 @@ async function seedMirror(admin: Database): Promise<{ nodeId: string; standardSe
 
   await stampDeployment(admin, "production");
   await setDeploymentMode(admin, standby.nodeId, "mirror");
-  const standardSeriesId = await readStandardSeriesId(admin, standby.nodeId);
-  return { nodeId: standby.nodeId, standardSeriesId };
+  return { nodeId: standby.nodeId, fixture };
 }
 
 /** What the promoted primary needs to ring a real cash sale; returns the offer to sell. */
@@ -365,6 +356,8 @@ describe("promote endpoint e2e — the whole arc over HTTP", () => {
     const mirrorBase = `http://127.0.0.1:${mirrorPort}`;
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-e2e-main-state-"));
     writeFileSync(join(stateDir, "modules.json"), FISCAL_NONE_OFF);
+    const allocationEnv = await writeAllocationInput(stateDir, seed.fixture, "promote");
+    for (const [key, value] of Object.entries(allocationEnv)) vi.stubEnv(key, value);
 
     killSpy.mockClear();
 
@@ -405,7 +398,9 @@ describe("promote endpoint e2e — the whole arc over HTTP", () => {
       expect(write.status).toBe(403);
       expect(await write.json()).toEqual({ error: { code: "node.read_only", params: {} } });
 
+      const operation = seed.fixture.request("promote");
       const res = await postPromote(mirrorBase, {
+        moduleOperation: { binding: operation.binding, input: operation.input },
         oldNodeNeutralised: true,
         personId: ADMIN_ID,
         password: ADMIN_PW,
@@ -420,7 +415,11 @@ describe("promote endpoint e2e — the whole arc over HTTP", () => {
 
       const persisted = parseEnvFile(readFileSync(join(stateDir, "trading.env"), "utf8"));
       expect(persisted).not.toHaveProperty("WAITRON_TILL_SERIES_ID");
-      expect(await readStandardSeriesId(db.main, seed.nodeId)).toBe(seed.standardSeriesId);
+      const activeSeriesId = await readStandardSeriesId(db.main, seed.nodeId);
+      expect(
+        (await db.main.select().from(invoiceSeries)).find((row) => row.id === activeSeriesId)?.code,
+      ).toBe("FA-P000042");
+      expect(await readStandardSeriesId(db.main, seed.nodeId)).toBe(activeSeriesId);
 
       // `trading.env` names no venue directory, so it is supplied here.
       await mirror.close();
@@ -511,6 +510,7 @@ describe("promote endpoint e2e — the whole arc over HTTP", () => {
     } finally {
       if (primary !== undefined) await primary.close().catch(() => undefined);
       await mirror.close().catch(() => undefined);
+      vi.unstubAllEnvs();
       await rm(stateDir, { recursive: true, force: true });
     }
   }, 120_000);
@@ -518,11 +518,28 @@ describe("promote endpoint e2e — the whole arc over HTTP", () => {
   it("break-glass secret → 200 promoted (no login)", async () => {
     const seed = await seedMirror(db.breakGlass);
     const breakGlass = await mintBreakGlassSecret(db.breakGlass, seed.nodeId);
+    const keyFixture = allocationFixture({
+      node: { nodeId: brandNodeId(seed.nodeId), locationId: brandLocationId(MIRROR_LOCATION_ID) },
+      primary: {
+        nodeId: brandNodeId(MIRROR_ORIGIN_NODE_ID),
+        locationId: brandLocationId(MIRROR_LOCATION_ID),
+      },
+      taxpayerNif: "90222222F",
+      identity: "P000042",
+      environment: "production",
+      recoveryKey: true,
+      bases: [
+        { code: "FA", purpose: "standard" },
+        { code: "FF", purpose: "full" },
+      ],
+    });
 
     const port = await freePort();
     const base = `http://127.0.0.1:${port}`;
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-e2e-bg-state-"));
     writeFileSync(join(stateDir, "modules.json"), FISCAL_NONE_OFF);
+    const allocationEnv = await writeAllocationInput(stateDir, keyFixture, "promote");
+    for (const [key, value] of Object.entries(allocationEnv)) vi.stubEnv(key, value);
 
     const server = await startServer(
       mirrorEnv(venueDir.breakGlass, port, seed.nodeId, stateDir),
@@ -533,13 +550,19 @@ describe("promote endpoint e2e — the whole arc over HTTP", () => {
     try {
       await poll(async () => server.health.lastPassAt ?? undefined);
 
-      const res = await postPromote(base, { oldNodeNeutralised: true, breakGlass });
+      const operation = keyFixture.request("promote");
+      const res = await postPromote(base, {
+        oldNodeNeutralised: true,
+        breakGlass,
+        moduleOperation: { binding: operation.binding, input: operation.input },
+      });
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ alreadyPrimary: false, restarting: true });
       expect(await readDeploymentMode(db.breakGlass, seed.nodeId)).toBe("primary");
       expect(await readSingletonRole(db.breakGlass, seed.nodeId)).toBe("primary");
     } finally {
       await server.close();
+      vi.unstubAllEnvs();
       await rm(stateDir, { recursive: true, force: true });
     }
   }, 90_000);

@@ -2,18 +2,22 @@ import { sql } from "drizzle-orm";
 import { stampDeployment, withTransaction, type Database, type Transaction } from "@waitron/db";
 import {
   applyVenue,
+  parseInitialVenueInput,
+  initialVenueApplyInput,
   assertNoForeignTenant,
   planVenue,
   readTenantIdentities,
   venueFiscalSelection,
   type VenueRequest,
   type VenueResult,
+  type InitialVenueInput,
 } from "@waitron/provisioning";
-import { AppError } from "@waitron/shared";
+import { AppError, locationId, nodeId } from "@waitron/shared";
 import {
   disabledProvisionOnly,
   enabledModules,
   fiscalSlot,
+  type WaitronModule,
   type ModuleConfig,
 } from "@waitron/module";
 import { ALL_MODULES } from "./modules.js";
@@ -38,6 +42,7 @@ export interface ProvisionRequest {
   configurationImport?: boolean;
   /** The import goes to a different taxpayer: the request's tax ID must differ from the bundle's. */
   newTaxpayer?: boolean;
+  initialOperations?: InitialVenueInput;
 }
 
 export interface ProvisionDeps {
@@ -50,58 +55,80 @@ export interface ProvisionDeps {
   readonly beforeCommit?: (tx: Transaction, result: VenueResult) => Promise<void>;
 }
 
-/**
- * Recover the identifiers minted by a matching persisted setup operation. This is deliberately
- * narrower than a general "find venue" query: first boot creates one location and node for a
- * previously empty tenant, and all invoice series must still match the submitted codes. A shape
- * outside those invariants is refused instead of guessing which fiscal identity to publish.
- */
 export async function recoverProvisionedVenue(
   ownerDb: Database,
   req: ProvisionRequest,
+  availableModules: readonly WaitronModule[] = ALL_MODULES,
 ): Promise<VenueResult> {
-  const venue = await withTransaction(ownerDb, (tx) =>
-    tx.execute<{ locationId: string; nodeId: string }>(sql`
-      select l.id as "locationId", n.id as "nodeId"
-      from locations l
-      join nodes n on n.location_id = l.id
-      where l.name = ${req.venue.location.name}
-        and l.fiscal_territory = ${req.venue.location.fiscalTerritory}
-        and n.name = ${req.venue.location.name}`),
-  );
-  if (venue.rows.length !== 1) {
+  const venue = structuredClone(req.venue);
+  const initial =
+    req.initialOperations === undefined ? undefined : parseInitialVenueInput(req.initialOperations);
+  const refuse = (): never => {
     throw new AppError("setup.already_provisioned", {});
-  }
-  const row = venue.rows[0]!;
-  const series = await withTransaction(ownerDb, (tx) =>
-    tx.execute<{ id: string; purpose: string; code: string }>(sql`
-      select id, purpose, code
-      from invoice_series
-      where node_id = ${row.nodeId}`),
-  );
-  const standard = series.rows.find(
-    (item) => item.purpose === "standard" && item.code === req.venue.seriesCode,
-  );
-  const full = series.rows.find(
-    (item) => item.purpose === "full" && item.code === (req.venue.fullSeriesCode ?? "FF"),
-  );
-  const rectificative = series.rows.find(
-    (item) => item.purpose === "rectificative" && item.code === req.venue.rectificativeSeriesCode,
-  );
-  if (
-    series.rows.length !== 3 ||
-    standard === undefined ||
-    full === undefined ||
-    rectificative === undefined
-  ) {
-    throw new AppError("setup.already_provisioned", {});
-  }
-  return {
-    locationId: row.locationId,
-    nodeId: row.nodeId,
-    seriesIds: [standard.id, full.id, rectificative.id],
-    seeded: [],
   };
+  if (initial === null) return refuse();
+  const bases = [
+    { code: venue.seriesCode, purpose: "standard" },
+    { code: venue.fullSeriesCode ?? "FF", purpose: "full" },
+    { code: venue.rectificativeSeriesCode, purpose: "rectificative" },
+  ];
+  const selection = venueFiscalSelection(availableModules, venue.location.fiscalTerritory);
+  const owners = enabledModules(availableModules, selection.config).filter(
+    (module) =>
+      module.fiscal?.id === selection.contribution?.id &&
+      module.provisioning?.seed?.series !== undefined,
+  );
+  if (owners.length > 1) return refuse();
+  return withTransaction(ownerDb, async (tx) => {
+    const found = await tx.execute<{ locationId: string; nodeId: string }>(sql`
+      select l.id as "locationId", n.id as "nodeId"
+      from locations l join nodes n on n.location_id = l.id
+      where l.name = ${venue.location.name}
+        and l.fiscal_territory = ${venue.location.fiscalTerritory}
+        and n.name = ${venue.location.name}`);
+    if (found.rows.length !== 1) return refuse();
+    const row = found.rows[0]!;
+    if (initial !== undefined) {
+      if (row.nodeId !== initial.nodeId) return refuse();
+      const administrator = await tx.execute<{ id: string }>(sql`
+        select id from persons where id = ${initial.administratorId}
+          and role = 'admin' and status = 'active'`);
+      if (administrator.rows.length !== 1) return refuse();
+    }
+    const resolver = owners[0]?.provisioning?.seed?.series;
+    const expected: readonly { id?: string; code: string; purpose: string }[] =
+      resolver === undefined
+        ? bases
+        : await resolver.resolve(
+            tx,
+            { nodeId: nodeId(row.nodeId), locationId: locationId(row.locationId) },
+            bases,
+          );
+    const series = await tx.execute<{ id: string; purpose: string; code: string }>(sql`
+      select id, purpose, code from invoice_series where node_id = ${row.nodeId}`);
+    if (
+      expected.length !== 3 ||
+      series.rows.length !== 3 ||
+      new Set(expected.map((reference) => reference.purpose)).size !== 3
+    )
+      return refuse();
+    const references = bases.map((base) => {
+      const reference = expected.find((item) => item.purpose === base.purpose);
+      return series.rows.find(
+        (item) =>
+          item.purpose === base.purpose &&
+          item.code === reference?.code &&
+          (reference.id === undefined || item.id === reference.id),
+      );
+    });
+    if (references.some((reference) => reference === undefined)) return refuse();
+    return {
+      locationId: row.locationId,
+      nodeId: row.nodeId,
+      seriesIds: references.map((reference) => reference!.id),
+      seeded: [],
+    };
+  });
 }
 
 /**
@@ -123,6 +150,21 @@ export async function provisionVenue(
   // The plan and the apply are built from this SAME list, so no seed can be named that the runner
   // does not hold.
   const modules = enabledModules(ALL_MODULES, deps.moduleConfig);
+  const initial =
+    req.initialOperations === undefined ? undefined : parseInitialVenueInput(req.initialOperations);
+  if (
+    initial === null ||
+    initial?.inputs.some(
+      (input) =>
+        !modules.some(
+          (module) =>
+            module.name === input.module &&
+            module.operations !== undefined &&
+            module.provisioning?.seed !== undefined,
+        ),
+    )
+  )
+    throw new AppError("setup.request_invalid", { field: "initialOperations" });
 
   // `null`: no node is minted yet, so there is no stamped regime to compare against.
   fiscalSlot(modules, null);
@@ -143,6 +185,7 @@ export async function provisionVenue(
   await stampDeployment(deps.ownerDb, req.environment);
 
   const result = await applyVenue(plan, {
+    ...(initial === undefined ? {} : initialVenueApplyInput(initial)),
     db: deps.ownerDb,
     modules,
     beforeCommit: deps.beforeCommit,

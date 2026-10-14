@@ -7,7 +7,7 @@ import { helpLinkStyles, introStyles, statusStyles } from "../form-styles.js";
 import { modePill, modePillStyles } from "../mode-pill.js";
 import type { SetupApi } from "../api/client.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, format, t } from "../i18n/t.js";
 
 export const BACKUP_SETUP_URL = "/manage/backup";
 
@@ -81,6 +81,7 @@ export class SetupDoneScreen extends LitElement {
   /** The server keeps only a verifier of this secret (`mintBreakGlassSecret`), so this screen is the
    * operator's only chance to record it. */
   @property({ attribute: false }) breakGlassSecret?: string;
+  @property({ attribute: false }) breakGlassKeyName?: string;
 
   /**
    * True after a successful adopt, where the box does not come back trading (why:
@@ -148,6 +149,23 @@ export class SetupDoneScreen extends LitElement {
     return this.mirrorJoin ? this.#renderJoinStalled() : this.#renderTrading();
   }
 
+  #keyName(name: string): string {
+    const parts = /^(\d{4}-\d{2}-\d{2}) · ([34679ACDEFHJKMNPQRTUVWXY]{4})$/.exec(name);
+    if (parts === null) return name;
+    const date = new Date(`${parts[1]}T00:00:00Z`);
+    if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== parts[1])
+      return name;
+    return format("done.break_glass.key_name", {
+      date: new Intl.DateTimeFormat(currentLocale(), {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        timeZone: "UTC",
+      }).format(date),
+      code: parts[2]!,
+    });
+  }
+
   #breakGlass(): TemplateResult | null {
     if (this.breakGlassSecret === undefined) return null;
     return html`<div class="break-glass" data-test="break-glass">
@@ -156,9 +174,11 @@ export class SetupDoneScreen extends LitElement {
         ${t("done.break_glass.warning")}
         ${t(this.mirrorJoin ? "done.break_glass.join_stalled" : "done.break_glass.promote")}
       </p>
+      ${this.breakGlassKeyName === undefined ? nothing : html`<p data-test="break-glass-key-name">${this.#keyName(this.breakGlassKeyName)}</p>`}
       <code class="break-glass-secret" data-test="break-glass-secret"
         >${this.breakGlassSecret}</code
       >
+      <p data-test="break-glass-backup-warning">${t("done.break_glass.backups")}</p>
     </div>`;
   }
 

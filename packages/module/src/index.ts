@@ -77,6 +77,17 @@ export type {
 export { fiscalSlot, selectFiscalModule } from "./fiscal-slot.js";
 export { selectVenueService } from "./venue-service-slot.js";
 export type { RestoreHook, RestoreOutcome } from "./restore.js";
+export type {
+  OperationAuthority,
+  OperationBinding,
+  OperationOperator,
+  RecoveryKeyOperator,
+} from "./operation-authority.js";
+export { readOperationAuthority, withOperationAuthority } from "./operation-authority.js";
+export type { ModuleOperationInput, ModuleOperations } from "./operation-input.js";
+export { moduleOperationFor, snapshotModuleOperations } from "./operation-input.js";
+export type { ModuleOperationPreparation } from "./operation-preparation.js";
+export { withPreparedModuleOperations } from "./operation-preparation.js";
 export type { Reconciliation } from "./reconcile.js";
 export { reconcile } from "./reconcile.js";
 import "./errors.js";
