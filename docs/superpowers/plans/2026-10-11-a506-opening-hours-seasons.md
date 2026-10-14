@@ -1977,19 +1977,20 @@ test, `errors.ts` (if a new field is needed on `menu_period.invalid`: `field: "r
     season shows through on that date — assert the resolved day); routing lines naming Lunch gone;
     today's "keep Lunch open" extension gone.
   - With Afternoon: every Lunch range is Afternoon, and a Lunch 13:00–15:00 touching Afternoon
-    15:00–20:00 becomes one Afternoon 13:00–20:00; a cell with a Lunch line names Afternoon; a cell
-    with both keeps its Afternoon line and loses Lunch's (A578, 2026-10-13: lines naming the
-    deleted period are deleted, not moved); today's extension names Afternoon; a past
+    15:00–20:00 becomes one Afternoon 13:00–20:00; ~~a cell with a Lunch line names Afternoon; a cell
+    with both keeps its Afternoon line and loses Lunch's~~ _(2026-10-13: superseded by A578 —
+    routing lines naming Lunch are deleted, as without a replacement)_; today's extension names Afternoon; a past
     one-off special day's Lunch paint becomes Afternoon too.
   - Refusals by code: a replacement of another department → `menu_period.invalid` field
     `replacementPeriodId`; the period itself → same; **review focus 5:** a replacement whose end
     offset clashes with the next placement → `menu_timetable.invalid` reason `end_offset`, and
     nothing changed (read all four places back).
   Expected: fail.
-- [ ] **Step 2: Implement** in the caller's transaction: routing lines — delete the deleted
+- [ ] **Step 2: Implement** in the caller's transaction: ~~routing lines — delete the deleted
   period's line where the cell already has the replacement's, THEN update the rest (the order keeps
-  `routing_cell_periods_cell_period_key` satisfied at every statement, CLAUDE.md §3) (A578,
-  2026-10-13: lines naming the deleted period are deleted, not moved); ranges updated
+  `routing_cell_periods_cell_period_key` satisfied at every statement, CLAUDE.md §3)~~
+  _(2026-10-13: superseded by A578 — routing lines go through the `routing_cell_periods_period_fk`
+  cascade when the period row is deleted)_; ranges updated
   then re-joined per day; extension updated (`period_extensions_day_key` is per department and day,
   so it is an update); then delete the period; then the end-offset check. **Step 3:** run.
   **Commit**.
@@ -2029,8 +2030,7 @@ with it" (mockup 9). Save quiet until a change; saves on its own.
 **Files:** Create `period-delete-dialog.ts` (+ tests): mockup 8 — where it is painted (counts),
 which routing cells name it, a replacement choice from the same department ("None"), the sentence
 about today's extension when `keptOpenToday`; calls `POST …/delete`. The dialog says the routing
-cells' lines naming the period are deleted, with or without a replacement (for example "2 routing
-lines that name Lunch are deleted") (A578, 2026-10-13).
+cells' lines naming the period are deleted, with or without a replacement (A578, 2026-10-13).
 - [ ] Failing browser tests (with and without replacement; a refusal shown beside the action) →
   implement → run → **Commit**.
 

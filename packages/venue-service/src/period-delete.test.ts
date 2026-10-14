@@ -646,7 +646,7 @@ describe("deleting a period", () => {
       ]);
     });
 
-    it("deletes the routing lines naming the period, naming the replacement on none, and keeps the rest", async () => {
+    it("drops the routing lines naming the period, as without a replacement, and keeps the rest", async () => {
       const v = await deleteVenue();
 
       await remove(v, v.lunch, v.afternoon);
@@ -656,7 +656,7 @@ describe("deleting a period", () => {
       );
     });
 
-    it("deletes exactly the routing lines the impact read listed before the delete", async () => {
+    it("deletes as many routing lines, of the same row kinds, as the impact read listed before the delete", async () => {
       const v = await deleteVenue();
       const before = (await stored(v)).routing;
       const impact = await scoped((tx) => periodDeleteImpact(tx, v.cfg, v.lunch, AT));

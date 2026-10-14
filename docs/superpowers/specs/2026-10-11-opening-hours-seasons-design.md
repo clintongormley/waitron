@@ -250,7 +250,7 @@ changes which week a date lies under. A refusal names the season or the special 
   offers a period of the same department to take its place:
   - **Without a replacement:** its painted time becomes closed in the seasons, and the season shows
     through on special days (owner, mockup 8). Its routing-cell lines go, so the cell's "Any other
-    time" station takes that time **(default)**. A "keep open" extension of it for today ends, and
+    time" station takes that time (owner, 2026-10-13, A578). A "keep open" extension of it for today ends, and
     the dialog says so when one exists.
   - **With a replacement:** every painted range of it becomes the replacement (touching stretches
     of the replacement then join); each routing-cell line naming it is deleted, as without a
@@ -516,7 +516,7 @@ shared start; a start's change takes effect at once; 29 February repeats only in
 special day per date; special-day names need not be unique; a holiday's edits drawn with its mark;
 the "not available yet" line for a year with no official list; skipped clock times in season weeks;
 the zone's "Open" paint on special days; the zone summary's current season; Painted in lists only
-special days still to come or repeating; routing lines and extensions on delete; one painter draft
+special days still to come or repeating; extensions on delete; one painter draft
 across departments; the month's picker; period order and readiness across all seasons; the
 Calendar's local-holiday sentence.
 
