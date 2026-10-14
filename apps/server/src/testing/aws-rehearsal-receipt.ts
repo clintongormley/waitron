@@ -207,6 +207,11 @@ function errorName(value: unknown, key: string): string {
   return ERROR_NAME.test(value) && !ACCESS_KEY_ID.test(value) ? value : "Unlisted";
 }
 
+/** An error name as the receipt would carry it: a listed shape, else "Unlisted". */
+export function receiptErrorName(name: string): string {
+  return errorName(name, "errorName");
+}
+
 function bucketName(value: unknown, key: string): string | null {
   if (value === null) return null;
   if (typeof value !== "string" || !REHEARSAL_BUCKET_PATTERN.test(value)) throw refused(key);

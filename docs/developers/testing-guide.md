@@ -639,12 +639,15 @@ drives the side file to its limit. Its sales are recorded with `recordOneSale`
 its own write queue, not the server's route and write queue. The next test reaches the limit.
 
 **The stream pause test.** `apps/server/src/stream-pause.e2e.test.ts` needs the same two binaries
-and skips or fails without them the same way. It boots one streaming server with `startServer`'s
+and skips or fails without them the same way. Its steps live in
+`apps/server/src/testing/stream-pause-scenario.ts`, which the test runs against versitygw and the
+Amazon S3 rehearsal reuses ([aws-backup-rehearsal.md](aws-backup-rehearsal.md)); the test supplies
+the bucket and how to freeze it. The scenario boots one streaming server with `startServer`'s
 third argument, a test seam, setting the side-file limit to 16 MiB; a 1 MiB limit paused the stream
 while its generation was still opening, from boot's own writes (measured 2026-09-26). One till
 session has three sellers posting sales at once to `/api/sales` over the box's TLS. At least ten
-sales with the bucket up set the bound, as in the frozen-server stage. The bucket is frozen with
-`SIGSTOP`, and a listing sent to it is checked to be still unanswered at the bound. Then the test
+sales with the bucket up set the bound, as in the frozen-server stage. The bucket is frozen (the
+test stops versitygw with `SIGSTOP`), and a listing sent to it is checked to be still unanswered at the bound. Then the test
 kills Litestream (`SIGKILL`, by the PID the supervisor records in
 `<stateDir>/stream/litestream.pid`) and waits until the supervisor has started another and logged
 `stream.litestream_exited`. The new Litestream takes its read transaction and then waits on the

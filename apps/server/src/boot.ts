@@ -693,7 +693,7 @@ function makeStartedServer(
 
 /** Test seams; production leaves them unset. */
 export interface StartServerSeams {
-  stream?: Pick<StreamHostDeps, "walLimitBytes">;
+  stream?: Pick<StreamHostDeps, "walLimitBytes" | "spawn" | "store">;
   appendOnlyWatch?: { intervalMs?: number };
 }
 

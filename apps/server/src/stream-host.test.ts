@@ -30,6 +30,7 @@ import {
   type StreamHostDeps,
 } from "./stream-host.js";
 import { omitStoredStreamField } from "./testing/old-stream-credential.js";
+import { pauseListingPrefix } from "./testing/stream-pause-scenario.js";
 
 const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0xd).toString("base64"),
@@ -557,6 +558,44 @@ describe("the live copy's wiring", () => {
           await rt.start();
           await vi.waitFor(() => expect(foldBack).toHaveBeenCalled(), { timeout: 10_000 });
           expect(rt.status()).toMatchObject({ state: "paused", reason: "side_file_limit" });
+        } finally {
+          await rt.stop();
+          foldBack.mockRestore();
+          await rm(venueDir, { recursive: true, force: true });
+        }
+      });
+
+      // Taken at this level: no case hands `startServer`'s `stream.store` seam a store.
+      it("asks the store it was given whether the bucket answers, listing the level-0 folder the pause scenario names", async () => {
+        const venueDir = await mkdtemp(join(tmpdir(), "waitron-stream-host-venue-"));
+        const wal = join(venueDir, "venue.db-wal");
+        await writeFile(wal, Buffer.alloc(64));
+        const foldBack = vi.spyOn(db, "checkpointTruncate").mockImplementation(async () => {
+          await writeFile(wal, "");
+          return { reclaimed: true };
+        });
+        const store = new SwitchableStore(() => new Date());
+        // Each listing asked while the stream reads paused, with the generation it is paused in.
+        const whilePaused: { prefix: string; generation: string }[] = [];
+        const list = store.list.bind(store);
+        store.list = async (prefix, call) => {
+          // Called only once `rt` below has started it.
+          const view = rt.status();
+          if (view.state === "paused") whilePaused.push({ prefix, generation: generationOf(view) });
+          return list(prefix, call);
+        };
+        const rt = runtime({
+          venueDir,
+          spawn: new FakeLitestream().spawn,
+          store,
+          walLimitBytes: 64,
+        });
+        try {
+          await rt.start();
+          await vi.waitFor(() => expect(whilePaused).not.toHaveLength(0), { timeout: 10_000 });
+          const [{ prefix, generation }] = whilePaused as [(typeof whilePaused)[number]];
+          expect(generation).not.toBe("");
+          expect(prefix).toBe(pauseListingPrefix({ prefix: "" }, SETTINGS.venueId, generation));
         } finally {
           await rt.stop();
           foldBack.mockRestore();
