@@ -259,8 +259,7 @@ describe("a rehearsal run killed part-way, against versitygw", () => {
       () => {
         if (was.driver?.pid !== undefined) stopPid(was.driver.pid, true);
       },
-      // Each only while it is still the process the run started. A keeper whose start time this
-      // case never read is not signalled.
+      // A keeper whose start time this case never read is not signalled.
       () => {
         stopPid(was.sleepPid);
         const { keeperPid, keeperStartTime } = was;

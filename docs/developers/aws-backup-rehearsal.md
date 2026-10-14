@@ -184,6 +184,8 @@ What is not checked:
   rehearsal-scenario tests run under the same plans as the AWS runs, so a request a plan lacks fails
   there first; but the local pause test does not run the listing-denial step, which needs Amazon's
   bucket policies, so that step's listings are first checked against the plan on Amazon S3.
+- **A request rewritten after it is built.** A middleware that changes the request after the SDK has
+  serialised it is not checked again.
 
 **Proving it without Amazon.** The rehearsal's own tests run the runner against versitygw by giving
 it a local endpoint, which only a test can set. With one

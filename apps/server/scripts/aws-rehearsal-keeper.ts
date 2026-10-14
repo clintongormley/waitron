@@ -3,7 +3,8 @@
 //
 // Usage: node --import <tsx loader> scripts/aws-rehearsal-keeper.ts [--launch] --journal <path>
 //   --launch  starts the keeper in a session of its own, its stdin this process's, and exits, so the
-//             keeper is outside the runner's process tree and group and a Ctrl-C to the run's process group does not reach it.
+//             keeper is outside the runner's process tree and group and a Ctrl-C to the run's
+//             process group does not reach it.
 import { spawn } from "node:child_process";
 import { readFileSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";

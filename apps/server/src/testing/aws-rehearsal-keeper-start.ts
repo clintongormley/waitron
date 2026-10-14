@@ -65,8 +65,8 @@ function keeperReady(journalPath: string): number | null {
 
 /**
  * Spawns the launcher, which starts the keeper in a session of its own and exits, so the keeper is
- * outside the runner's process tree and group. The keeper's stdin is a pipe whose writing end only this process holds, so this
- * process ending, however it ends, is end-of-file there. Resolves once the journal shows the keeper
+ * outside the runner's process tree and group. The keeper's stdin is a pipe whose writing end only
+ * this process holds, so this process ending, however it ends, is end-of-file there. Resolves once the journal shows the keeper
  * ready and the launcher has exited 0; refuses `keeper-unavailable` otherwise.
  */
 export async function startKeeper(
