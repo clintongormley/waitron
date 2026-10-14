@@ -2034,7 +2034,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   free, already grouped, zone mismatch) only after the seats are typed.
   The request log is in #1699.
 
-- **The order screen's Move guests and Move this bill offer free tables in an area that does not
+- **A690 — the order screen's Move guests and Move this bill offer free tables in an area that does not
   seat guests, and the server then refuses them (2026-10-14; open).** Both list every table
   (`#tableTargets`, `apps/till/src/screens/till-table-order-screen.ts`); a free table in a pay-first
   area is refused with `service_zone.mode_incompatible` (`refuseUnseatable`, reached from
