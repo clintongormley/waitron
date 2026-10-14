@@ -58,7 +58,7 @@ import { ALL_MODULES } from "../modules.js";
 import { establishNodeIdentity } from "../node-identity.js";
 import { runRestore } from "../restore-command.js";
 import { unsealNodeState } from "../sealed-state.js";
-import { streamSettingsPayload } from "../stream-host.js";
+import { streamSettingsPayload, type StreamHostDeps } from "../stream-host.js";
 import { freePort } from "./free-ports.js";
 import { stageClock, waitUntil } from "./scenario-stages.js";
 
@@ -124,6 +124,8 @@ export interface StreamLoopFixture {
   /** Hangs every bucket call until `resume`; without it stage 8b's sales run unbounded. */
   freeze?: { pause(): Promise<void>; resume(): void };
   record?(event: StreamLoopEvent): void;
+  /** Handed to both servers' stream, so a caller can learn of each Litestream they start. */
+  serverSeams?: Pick<StreamHostDeps, "spawn">;
 }
 
 interface BoxDirs {
@@ -360,7 +362,11 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
     });
 
     // 3. A boots, opens its generation and moves the pointer only after the first full copy landed.
-    const serverA = await startServer(await loadBoxEnv(bootEnv(dirsA, portA), dirsA.state));
+    const serverA = await startServer(
+      await loadBoxEnv(bootEnv(dirsA, portA), dirsA.state),
+      {},
+      { stream: { ...fixture.serverSeams } },
+    );
     running.add(serverA);
     const venueId = await waitFor("a pointer in the bucket", POINTER_WAIT_MS, () =>
       venueIdInBucket(store),
@@ -504,7 +510,11 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
     clock.begin("pointer-b");
     // 7. B's first start: a membership document one term higher, a generation of its own, and the
     //    pointer moved — still verifiable with the key the owner's kit carries.
-    const serverB = await startServer(await loadBoxEnv(bootEnv(dirsB, portB), dirsB.state));
+    const serverB = await startServer(
+      await loadBoxEnv(bootEnv(dirsB, portB), dirsB.state),
+      {},
+      { stream: { ...fixture.serverSeams } },
+    );
     running.add(serverB);
     const pointerB = await waitFor(
       "the pointer to move to box B's generation",

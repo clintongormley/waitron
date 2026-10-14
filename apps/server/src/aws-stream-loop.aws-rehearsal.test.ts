@@ -6,6 +6,7 @@ import { rehearsalLifecycle } from "./testing/aws-rehearsal.js";
 import { LOOP_APIS } from "./testing/aws-rehearsal-plans.js";
 import { resolveLitestream } from "./testing/s3-test-server.js";
 import { runStreamLoopScenario } from "./testing/stream-loop-scenario.js";
+import { trackedSpawn } from "./testing/transport-gate.js";
 
 describe("AWS rehearsal: the stream loop against Amazon S3", () => {
   const rehearsal = rehearsalLifecycle({ apis: LOOP_APIS });
@@ -31,6 +32,7 @@ describe("AWS rehearsal: the stream loop against Amazon S3", () => {
         describeTransport: () => `Amazon S3, region ${ctx.region}`,
         signal: ctx.signal,
         record: (event) => ctx.record({ scenario: "loop", ...event }),
+        serverSeams: { spawn: trackedSpawn((pid) => ctx.trackChild(pid)) },
       });
     });
   });

@@ -20,6 +20,7 @@ import {
   type S3TestServer,
 } from "./testing/s3-test-server.js";
 import { settleWithin } from "./testing/settle-within.js";
+import { trackedSpawn } from "./testing/transport-gate.js";
 import {
   STREAM_LOOP_PHASES,
   STREAM_LOOP_SCENARIO_MS,
@@ -34,6 +35,16 @@ const REQUIRED = process.env.CI === "true" || process.env.WAITRON_REQUIRE_STREAM
 const LOOP_TIMEOUT_MS = S3_READY_MS + STREAM_LOOP_SCENARIO_MS;
 // After an abort the scenario may still be inside one restore, which its abort cannot cut short.
 const ABORT_SETTLE_MS = 60_000;
+
+/** Signal 0 checks the process exists without sending it anything. */
+function isRunning(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 const litestream = await resolveLitestream(process.env);
 const versitygw = await resolveVersitygw(process.env);
@@ -91,6 +102,8 @@ describe("the stream loop: stream, rebuild from the bucket, sell under a fresh c
       const server = await startS3TestServer({ bin: versitygw.bin, root: join(folder, "s3") });
       s3 = server;
       const events: StreamLoopEvent[] = [];
+      // Which box's `replicate` children the seam was told of, and whether each was running then.
+      const replicating: Array<{ box: string; alive: boolean }> = [];
       running = runUnderPlan({ bucket: server.bucket, apis: LOOP_APIS, prefixes: ["loop/"] }, () =>
         runStreamLoopScenario({
           bucket: {
@@ -107,12 +120,21 @@ describe("the stream loop: stream, rebuild from the bucket, sell under a fresh c
           freeze: { pause: () => server.pause(), resume: () => server.resume() },
           signal: stop.signal,
           record: (event) => events.push(event),
+          serverSeams: {
+            spawn: trackedSpawn((pid, args) => {
+              if (args[0] !== "replicate") return;
+              const box = /[/\\](box-[ab])[/\\]/.exec(args.at(-1) ?? "")?.[1] ?? "unknown";
+              replicating.push({ box, alive: isRunning(pid) });
+            }),
+          },
         }),
       );
       await running;
       expect(events.map(({ phase, outcome }) => [phase, outcome])).toEqual(
         STREAM_LOOP_PHASES.map((phase) => [phase, "ok"]),
       );
+      expect([...new Set(replicating.map(({ box }) => box))].sort()).toEqual(["box-a", "box-b"]);
+      expect(replicating.filter(({ alive }) => !alive)).toEqual([]);
     },
     LOOP_TIMEOUT_MS,
   );
