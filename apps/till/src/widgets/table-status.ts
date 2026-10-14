@@ -5,7 +5,7 @@ import "@waitron/ui/src/components/wt-toast.js";
 import type { TableParty, TableState } from "../api/client.js";
 import { t } from "../i18n/t.js";
 import { readyText, statusPin } from "../state/floor-map.js";
-import { detailsHeading, savedNameUnder } from "../state/floor-today.js";
+import { detailsHeading, groupName, mergeMembersOf, savedNameUnder } from "../state/floor-today.js";
 import { signalOf } from "../state/table-signals.js";
 import "./table-details-sheet.js";
 
@@ -131,7 +131,10 @@ export class TillTableStatus extends LitElement {
     const first = rows[0]!;
     const heading =
       party.name === null && rows.length === 1
-        ? detailsHeading(first, first.today?.joinName ?? null)
+        ? detailsHeading(
+            first,
+            first.today?.joinId == null ? null : groupName(mergeMembersOf(this.tables, first)),
+          )
         : party.displayName;
     return html`<button
         type="button"

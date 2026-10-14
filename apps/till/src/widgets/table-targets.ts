@@ -2,7 +2,7 @@ import { css, html, nothing, type TemplateResult } from "lit";
 import { partyTablesName } from "@waitron/shared";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
-import { shownName } from "../state/floor-today.js";
+import { shownName, shownUnder } from "../state/floor-today.js";
 import type { TableActionRevisions, TableParty, TableState } from "../api/client.js";
 
 /** The styles {@link tableTarget} needs. */
@@ -47,12 +47,20 @@ export function otherPartyRead(
   return { otherPartyId: seated.id, expectedOtherPartyRevision: seated.revision };
 }
 
-/** The shown names of the party's tables that `tables` lists, "Mesa 4, 5". */
+/** The shown names of the party's tables that `tables` lists, "Mesa 4, 5", a named group's once
+ * (the server's `partyTableLabels`). */
 export function partyTablesLabel(party: TableParty, tables: readonly TableState[]): string {
+  const listedGroups = new Set<string>();
   return partyTablesName(
     party.tableIds.flatMap((id) => {
       const table = tables.find((each) => each.id === id);
-      return table === undefined ? [] : shownName(table);
+      if (table === undefined) return [];
+      const joinId = table.today?.joinId ?? null;
+      if (joinId !== null && table.today?.joinName != null) {
+        if (listedGroups.has(joinId)) return [];
+        listedGroups.add(joinId);
+      }
+      return shownUnder(table);
     }),
   );
 }

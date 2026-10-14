@@ -4123,6 +4123,31 @@ describe("till-table-order-screen", () => {
       expect(target(el, "t9")!.querySelector(".target-label")!.textContent).toBe("Window");
     });
 
+    it("Move guests names an unnamed party at a group named for today by the group's name once, its targets by their own names", async () => {
+      const floor = partyTables(true);
+      const party = { ...floor.party, name: null, displayName: "García birthday" };
+      const inGroup = (table: TableState): TableState => {
+        const named = renamed(table, "");
+        return {
+          ...named,
+          party,
+          today: { ...named.today!, name: null, joinId: "j1", joinName: "García birthday" },
+        };
+      };
+      const tables = floor.tables.map((table) =>
+        table.id === "t4" || table.id === "t5" ? inGroup(table) : table,
+      );
+      const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", party, tables });
+      await toMenu(el);
+      click(el, '[data-action="move"]');
+      await el.updateComplete;
+
+      expect(el.shadowRoot!.querySelector("[data-target-picker] h2")!.textContent!.trim()).toBe(
+        t("table.move_guests_heading").replace("{party}", "García birthday"),
+      );
+      expect(target(el, "t5")!.querySelector(".target-label")!.textContent).toBe("Mesa 5");
+    });
+
     it("Split a table names a table renamed for today by its name, in its choices and its heading", async () => {
       const floor = partyTables(true);
       const tables = floor.tables.map((table) =>

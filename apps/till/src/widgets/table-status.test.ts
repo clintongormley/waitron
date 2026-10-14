@@ -487,3 +487,19 @@ it("heads a lone seated table in a named group with the group's name", async () 
   expect(sheet(el)!.heading).toBe("García birthday");
   expect(sheet(el)!.savedName).toBe("Counter 4");
 });
+
+it("heads a lone seated table in an unnamed group with the group's name as the floor gives it", async () => {
+  const p = party();
+  const group = { joinId: "j1" };
+  const { el } = await mount({
+    party: p,
+    tables: [
+      row(p, { label: "Counter 4", today: today({ ...group, name: "Window" }) }),
+      table({ id: "bar", label: "Bar", today: today(group) }),
+    ],
+  });
+  pin(el)!.click();
+  await el.updateComplete;
+  expect(sheet(el)!.heading).toBe("Bar+Window");
+  expect(sheet(el)!.savedName).toBeNull();
+});
