@@ -416,6 +416,37 @@ describe("till-floor-screen: Rename", () => {
     expect(api.nameToday).not.toHaveBeenCalled();
   });
 
+  it("closes Rename when a live read changes its group after the group moves to another room", async () => {
+    const api = stubApi();
+    const el = await mount([...group(), table("other", "Other", 20)], api);
+    el.zones = [zone, { ...zone, id: "z2", name: "Terrace", displayOrder: 1 }];
+    await el.updateComplete;
+    const opened = await pressRename(el, "bar");
+    await typeName(opened, "Window");
+
+    const moved = [
+      ...group().map((each) => ({ ...each, zoneId: "z2" })),
+      table("other", "Other", 20),
+    ];
+    el.tablesReadAt = nextFloorMoment();
+    el.tables = moved;
+    await settle(el);
+    expect(el.shadowRoot!.querySelector("wt-floor-map")!.fitKey).toBe("z1");
+    expect(windowOf(el)).toBe(opened);
+    expect(fieldOf(opened).shadowRoot!.querySelector("input")!.value).toBe("Window");
+
+    el.tablesReadAt = nextFloorMoment();
+    el.tables = moved.map((each) =>
+      each.id === "c3" ? { ...each, today: { ...each.today!, joinId: null } } : each,
+    );
+    await settle(el);
+
+    expect(windowOf(el)).toBeNull();
+    send(opened, "today-name-confirm", { name: "Window" });
+    await settle(el);
+    expect(api.nameToday).not.toHaveBeenCalled();
+  });
+
   it("sends nothing for a Save pressed after its table joined a group but before the screen redrew", async () => {
     const api = stubApi();
     const el = await mount(bar(), api);
