@@ -160,7 +160,7 @@ async function mount(state: string, theme: "light" | "dark") {
       confirm().click();
       await expect
         .poll(() => dialog.shadowRoot!.querySelector("wt-form-actions")!.error)
-        .toBe("The business-day start changed. Reload hours.");
+        .toBe("The business-day start changed. Check what deleting it changes, then try again.");
     }
     await dialog.updateComplete;
   }

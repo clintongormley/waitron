@@ -365,11 +365,15 @@ it("a failed then recovered page read leaves the delete dialog's refusal in plac
   const dialog = await removePeriod(el);
   await impactShown(dialog);
   confirm(dialog).click();
-  await expect.poll(() => bottom(dialog)).toBe("The business-day start changed. Reload hours.");
+  await expect
+    .poll(() => bottom(dialog))
+    .toBe("The business-day start changed. Check what deleting it changes, then try again.");
   failRead = true;
   el.api.rereadWatches();
   await expect.poll(() => el.shadowRoot!.querySelector("[data-test=read-error]")).not.toBeNull();
-  expect(bottom(dialog)).toBe("The business-day start changed. Reload hours.");
+  expect(bottom(dialog)).toBe(
+    "The business-day start changed. Check what deleting it changes, then try again.",
+  );
   failRead = false;
   data = model([{ ...lunch(), name: "Renamed lunch" }]);
   el.api.rereadWatches();
@@ -380,7 +384,9 @@ it("a failed then recovered page read leaves the delete dialog's refusal in plac
   await dialog.updateComplete;
   expect(deleteDialog(el)).toBe(dialog);
   expect(heading(dialog)).toBe("Delete Renamed lunch?");
-  expect(bottom(dialog)).toBe("The business-day start changed. Reload hours.");
+  expect(bottom(dialog)).toBe(
+    "The business-day start changed. Check what deleting it changes, then try again.",
+  );
 });
 
 it("a delete refused for a changed clock reads the page and then the impact again by itself; Confirm sends the new revision once that impact read has answered, and the old one before", async () => {
@@ -411,7 +417,9 @@ it("a delete refused for a changed clock reads the page and then the impact agai
   server = 4;
   data.clockRevision = 4;
   confirm(dialog).click();
-  await expect.poll(() => bottom(dialog)).toBe("The business-day start changed. Reload hours.");
+  await expect
+    .poll(() => bottom(dialog))
+    .toBe("The business-day start changed. Check what deleting it changes, then try again.");
   expect(sent).toEqual([3]);
 
   await expect.poll(() => answers.length).toBe(2);
@@ -422,11 +430,16 @@ it("a delete refused for a changed clock reads the page and then the impact agai
   await expect.poll(() => sent).toEqual([3, 3]);
   await expect.poll(() => confirm(dialog).loading).toBe(false);
   expect(deleteDialog(el)).toBe(dialog);
-  expect(bottom(dialog)).toBe("The business-day start changed. Reload hours.");
+  expect(bottom(dialog)).toBe(
+    "The business-day start changed. Check what deleting it changes, then try again.",
+  );
 
   answers[1]!(impactOf());
   await new Promise((done) => setTimeout(done, 0));
   await dialog.updateComplete;
+  expect(bottom(dialog), "the refusal stays until Confirm is pressed again").toBe(
+    "The business-day start changed. Check what deleting it changes, then try again.",
+  );
   confirm(dialog).click();
   await expect.poll(() => sent).toEqual([3, 3, 4]);
   await expect.poll(() => deleteDialog(el)).toBeNull();

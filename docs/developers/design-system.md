@@ -4134,7 +4134,10 @@ replacement. When it changes none of these, it says the period is painted nowher
 change. When the period is painted or kept open today and the
 department has another period, a Replace with choice offers them, with None first. The delete button names the period.
 It is its own `wt-modal`, not `wt-delete-dialog`, which has no place for Replace with. A failed
-re-read keeps the impact last shown and leaves Delete usable. It takes no draft scope: Replace with
+re-read keeps the impact last shown and leaves Delete usable. A delete refused because the
+business-day start changed has its own sentence, "Check what deleting it changes, then try again.",
+not the shared "Reload hours.": the page brings what deleting it changes up to date by itself, and,
+like any refusal that names no field, the sentence stays until Delete is pressed again. It takes no draft scope: Replace with
 is a confirmation's choice, not staged input.
 Cases: the `periods-screen*.test.ts`, `period-dialog*.test.ts` and `period-delete-dialog*.test.ts`
 files.

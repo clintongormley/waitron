@@ -197,7 +197,9 @@ it("a new impact replaces the cells and counts shown, keeps a refusal, and drops
   expect(text).not.toContain("Cocktails");
   expect(picker(el)!.value).toBe("");
   expect(text).toContain("Its painted time becomes closed");
-  expect(bottom(el)).toBe("The business-day start changed. Reload hours.");
+  expect(bottom(el)).toBe(
+    "The business-day start changed. Check what deleting it changes, then try again.",
+  );
   const confirmed = listen(el, "period-delete-confirm");
   confirm(el).click();
   expect(confirmed).toEqual([{ periodId: "p1", replacementPeriodId: null }]);
@@ -233,7 +235,10 @@ it("a replacement refusal marks Replace with and the bottom asks to correct it; 
 it("any other refusal shows one sentence at the bottom and keeps Confirm", async () => {
   const el = await mount(impactOf({ seasons: 1 }));
   const cases: [Record<string, unknown>, string][] = [
-    [{ code: "hours.clock_changed" }, "The business-day start changed. Reload hours."],
+    [
+      { code: "hours.clock_changed" },
+      "The business-day start changed. Check what deleting it changes, then try again.",
+    ],
     [
       { code: "hours.clock_change_pending" },
       "Cancel the pending business-day change before editing hours.",
@@ -286,6 +291,11 @@ it("Spanish: Eliminar Lunch y Sin categoría · Terraza", async () => {
   el.impact = impactOf();
   await el.updateComplete;
   expect(body(el)).toBe("Sin pintar en ningún sitio. No cambia ningún horario.");
+  el.refusal = { code: "hours.clock_changed" };
+  await el.updateComplete;
+  expect(bottom(el)).toBe(
+    "Ha cambiado el inicio del día. Revisa qué cambia al eliminarlo y vuelve a intentarlo.",
+  );
 });
 
 it("while loading Confirm is quiet (secondary) and disabled; a failed read shows Retry, which emits period-delete-retry", async () => {

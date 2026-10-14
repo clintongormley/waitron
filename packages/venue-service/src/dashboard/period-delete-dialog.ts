@@ -97,6 +97,7 @@ export class PeriodDeleteDialog extends LitElement {
     const params = refusal.params ?? {};
     switch (refusal.code) {
       case "hours.clock_changed":
+        return t("period.delete_clock_changed");
       case "hours.clock_change_pending":
         return t(refusal.code);
       case "menu_period.not_found":
