@@ -364,6 +364,21 @@ describe("till-floor-screen: Rename", () => {
     expect(api.nameToday).not.toHaveBeenCalled();
   });
 
+  it("keeps a group member's window open across a re-read listing the group in another order", async () => {
+    const api = stubApi();
+    const el = await mount(group(), api);
+    const opened = await pressRename(el, "c4");
+    await typeName(opened, "García birthday");
+
+    el.tables = group({ c3: { name: "Corner" } }).reverse();
+    await settle(el);
+    expect(windowOf(el)).toBe(opened);
+    send(opened, "today-name-confirm", { name: "García birthday" });
+    await settle(el);
+
+    expect(api.nameToday).toHaveBeenCalledExactlyOnceWith("c4", "García birthday", 7);
+  });
+
   it("closes the window, sending nothing, when its table's group ends", async () => {
     const api = stubApi();
     const el = await mount(group(), api);
