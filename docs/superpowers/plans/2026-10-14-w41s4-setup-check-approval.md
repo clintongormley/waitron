@@ -2,8 +2,11 @@
 
 The default fiscal setup now receives a supplied text identity and opens its complete allocated
 series set. Two existing checks in `packages/provisioning/src/venue-apply.test.ts` need a decision
-before this transition can finish. Neither proposed change has been applied in the feature tree.
+before this transition can finish. Both proposed changes are now approved for the feature tree.
 The earlier numeric, return-field and refusal-code approvals remain in force.
+
+**Owner answer, 2026-10-14 12:10:** A, exactly both rows below. The proposals and
+qualification record the request before that answer.
 
 ## What failed
 
@@ -42,7 +45,7 @@ record. List both changes under “Changed test checks” in the eventual pull r
 Keep these checks and revise the setup transition before changing them. There is no proposal to
 print a fabricated numeric installation or accept an incomplete signed allocation to satisfy them.
 
-Until the answer, keep this branch unpublished. Host consumer ports, final regeneration after
+The approval does not make the incomplete branch publishable. Host consumer ports, final regeneration after
 rebase, the complete upgrade checks, both full reviews, the push hook and current-head CI remain.
 
 

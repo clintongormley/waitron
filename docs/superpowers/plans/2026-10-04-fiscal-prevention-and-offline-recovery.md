@@ -979,3 +979,13 @@ installed candidate. No feature-tree change to those two checks is authorised by
 Remaining host input and numeric-counter consumer ports, the Cloud contract check, current-main
 regeneration, complete upgrade qualification, both FULL reviews, the hook and current-head CI
 remain. Do not publish this incomplete default-switch candidate.
+
+
+**2026-10-14 12:10 setup-check approval applied:** the owner approved exactly both rows of
+the setup-check request. The feature now matches the complete supplied-identity report and runs
+the unchanged phantom-series comparisons through the real generic provisioning path with a
+non-owning test seed. The UUID report pattern checks its groups explicitly. The original
+venue-application suite passes all 43 cases. The earlier independent guard removal failed at two
+returned ids versus one and its restored candidate passed 43. No owner answer remains pending
+for these checks. Host consumer/input ports, server type errors, current-main regeneration, full
+upgrade/Cloud qualification, both reviews, the hook and current-head CI still remain.

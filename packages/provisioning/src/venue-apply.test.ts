@@ -1,3 +1,5 @@
+import { applyVenue as realApplyVenue } from "./venue-apply.js";
+import { FISCAL_SLOT } from "@waitron/fiscal-verifactu";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
@@ -241,7 +243,9 @@ describe("applyVenue", () => {
       },
       {
         module: "fiscal-verifactu",
-        report: expect.stringMatching(/^SIF .* \(installation \d+\)$/),
+        report: expect.stringMatching(
+          /^SIF [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12} \(installation S000001\); series A-S000001, FF-S000001, R-S000001$/,
+        ),
       },
       {
         module: "adjustments",
@@ -632,7 +636,22 @@ describe("applyVenue", () => {
       { kind: "create-series", code: "A", purpose: "rectificative" },
     ];
 
-    const result = await applyVenue(collidingPlan, { db: suite.db, modules: ALL_MODULES });
+    const result = await realApplyVenue(collidingPlan, {
+      db: suite.db,
+      modules: [
+        fakeModule("fiscal-verifactu", {
+          fiscal: FISCAL_SLOT,
+          provisioning: {
+            seed: {
+              summary: "generic-series fixture",
+              async run() {
+                return "fixture ready";
+              },
+            },
+          },
+        }),
+      ],
+    });
     expect(result.seriesIds).toHaveLength(1);
 
     const series = await suite.db.execute<{ n: number }>(sql`

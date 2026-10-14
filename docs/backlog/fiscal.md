@@ -914,3 +914,9 @@ Two existing setup checks are outside the approved lists. The exact proposals an
 checks are in [the setup-check request](../superpowers/plans/2026-10-14-w41s4-setup-check-approval.md).
 They pass only in a disposable installed candidate; the feature retains those failures. Host
 consumer ports and final qualification remain incomplete. This branch is not for publication.
+
+
+**12:10 owner update:** both exact setup-check changes are approved and applied. The feature's
+venue-application suite passes 43 cases. The dormant-split assessment is in Lane E's local
+questions ledger; it proposes a shape and does not claim that split candidates have been qualified.
+Host consumer ports and final qualification remain; the split question is not a work blocker.
