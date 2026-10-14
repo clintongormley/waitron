@@ -4284,11 +4284,6 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   Backups screen downloads it as written; the kit's heading and note come from the screen's strings
   (`stream.kit.file_heading`, `stream.kit.file_note`). Left open by A538-5.
 
-- **The Backups screen offers one destination, not a bucket and a folder together.** The A538
-  design says one archive bucket plus optional local copies; the apply route stores one
-  (`apps/server/src/backup-api.ts`), and turning stored settings back on opens on the first only
-  (`openingDestination`). Open owner question, asked 2026-10-13. Left open by A538-6.
-
 - **A recovery kit can carry a recovery key its own restore refuses.** `parseRecoveryKit`
   (`packages/stream/src/kit.ts`) refuses a recovery key holding a C0 control character or DEL, which
   the box's key rules (`checkedRecoveryKey`) accept, so a box with such a key hands out a kit whose
