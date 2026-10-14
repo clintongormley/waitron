@@ -167,6 +167,7 @@ export class SeasonPainter extends LitElement {
   private periods = new PeriodEditing(this, {
     api: () => this.api,
     model: () => this.model,
+    readOnly: () => this.readOnly,
     chose: (id) => {
       this.chosen = id;
     },

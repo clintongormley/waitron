@@ -353,7 +353,6 @@ it("blocks duplicate pending writes and read-only submissions", async () => {
   const next = await edit(el, "p1");
   await change(next, "name", "Supper");
   el.readOnly = true;
-  await el.updateComplete;
   submit(next);
   await el.updateComplete;
   expect(writes).toBe(1);
@@ -631,26 +630,34 @@ it("+ Add period on a venue with two departments asks for the department and cre
   await expect.poll(() => dialogOf(el)).toBeNull();
 });
 
-it("+ Add period does nothing until the periods have been read", async () => {
-  let answer!: (data: OpeningHoursModel) => void;
+it("+ Add period is disabled until the periods have been read, and after a failed first read", async () => {
+  let fail!: (error: unknown) => void;
+  let reads = 0;
   const el = document.createElement("dashboard-periods-screen") as PeriodsScreen;
   el.api = new OpeningHoursApi(
-    withPaintedIn(
-      (() =>
-        new Promise<OpeningHoursModel>((done) => {
-          answer = done;
-        })) as unknown as DashboardRequest,
-    ),
+    withPaintedIn((() =>
+      ++reads === 1
+        ? new Promise<OpeningHoursModel>((_done, reject) => {
+            fail = reject;
+          })
+        : Promise.resolve(model())) as unknown as DashboardRequest),
   );
   applyTokens(el);
   hosts.push(el);
   document.body.append(el);
   await el.updateComplete;
-  el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-period]")!.click();
+  const add = () =>
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=add-period]")!;
+  expect(add().disabled).toBe(true);
+  fail(new Error("offline"));
+  await expect.poll(() => el.shadowRoot!.querySelector("[data-test=read-error]")).not.toBeNull();
+  expect(add().disabled).toBe(true);
+  add().click();
   await el.updateComplete;
   expect(dialogOf(el)).toBeNull();
-  answer(model());
+  el.api.rereadWatches();
   await expect.poll(() => table(el)).not.toBeNull();
+  expect(add().disabled).toBe(false);
   expect((await edit(el)).departments?.map(({ id }) => id)).toEqual(["restaurant"]);
 });
 

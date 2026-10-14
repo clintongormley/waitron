@@ -47,6 +47,7 @@ export class PeriodEditing implements ReactiveController {
       /** The host's own Painted-in watch; without it, opening a period reads Painted in once. */
       paintedIn?: () => readonly PaintedInRow[] | undefined;
       paintedInLinks?: boolean;
+      readOnly?: () => boolean;
     },
   ) {
     host.addController(this);
@@ -96,7 +97,7 @@ export class PeriodEditing implements ReactiveController {
   }
 
   open(department: Department | null, period?: Period) {
-    if (this.editor || this.busy || !this.host.isConnected) return;
+    if (this.editor || this.busy || !this.host.isConnected || this.options.readOnly?.()) return;
     if (!department && !this.options.chooseDepartment) return;
     const editor = {
       period,
@@ -128,6 +129,7 @@ export class PeriodEditing implements ReactiveController {
     if (
       !editor ||
       this.busy ||
+      this.options.readOnly?.() ||
       !this.host.isConnected ||
       component !== this.host.renderRoot.querySelector("period-dialog")
     )

@@ -115,6 +115,7 @@ export class PeriodsScreen extends LitElement {
     chooseDepartment: true,
     paintedIn: () => this.paintedRows,
     paintedInLinks: true,
+    readOnly: () => this.readOnly,
   });
   private detach?: () => void;
   private paintedDetach?: () => void;
@@ -277,6 +278,7 @@ export class PeriodsScreen extends LitElement {
             ? nothing
             : html`<wt-button
                 data-test="add-period"
+                ?disabled=${!model}
                 @click=${() => this.model && this.periods.open(null)}
                 >${t("period.add_button")}</wt-button
               >`
