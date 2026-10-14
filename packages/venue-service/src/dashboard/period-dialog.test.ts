@@ -710,3 +710,229 @@ it("labels its submit with submitLabel when one is given, else Save", async () =
   await el.updateComplete;
   expect(save(el).textContent!.trim()).toBe("Add and paint with it");
 });
+
+const seasons = [
+  { id: "summer", startsOn: "06-01" },
+  { id: "winter", startsOn: "12-01" },
+  { id: "spring", startsOn: "03-01" },
+];
+async function mountEdit(setup: (el: PeriodDialog) => void) {
+  const el = await mount(true);
+  el.open = false;
+  await el.updateComplete;
+  setup(el);
+  el.open = true;
+  await el.updateComplete;
+  return el;
+}
+function paintedChips(el: PeriodDialog) {
+  return [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-test=painted-in] .chip")].map(
+    (chip) => ({
+      text: chip.textContent!.trim(),
+      tag: chip.localName,
+      href: chip.getAttribute("href"),
+      tint: chip.getAttribute("data-tint"),
+      special: chip.hasAttribute("data-special-day"),
+    }),
+  );
+}
+
+it("Painted in shows season chips in the order given with their tints, then special days; as links when paintedInLinks, plain otherwise", async () => {
+  const paintedIn = {
+    seasons: [
+      { id: "winter", name: "Winter" },
+      { id: "summer", name: "Summer" },
+    ],
+    specialDays: [{ id: "sd1", name: "Company dinners" }],
+  };
+  const el = await mountEdit((el) => {
+    el.paintedIn = paintedIn;
+    el.seasons = seasons;
+    el.departmentId = "restaurant";
+    el.paintedInLinks = true;
+  });
+  expect(
+    el.shadowRoot!.querySelector("[data-test=painted-in]")!.textContent!.includes("Painted in"),
+  ).toBe(true);
+  expect(paintedChips(el)).toEqual([
+    {
+      text: "Winter",
+      tag: "a",
+      href: "/manage/opening-hours/view/season/season/winter/department/restaurant",
+      tint: "3",
+      special: false,
+    },
+    {
+      text: "Summer",
+      tag: "a",
+      href: "/manage/opening-hours/view/season/season/summer/department/restaurant",
+      tint: "2",
+      special: false,
+    },
+    {
+      text: "Company dinners",
+      tag: "a",
+      href: "/manage/opening-hours/view/special-day/special-day/sd1",
+      tint: null,
+      special: true,
+    },
+  ]);
+  el.paintedInLinks = false;
+  await el.updateComplete;
+  expect(paintedChips(el).map(({ tag, href }) => ({ tag, href }))).toEqual([
+    { tag: "span", href: null },
+    { tag: "span", href: null },
+    { tag: "span", href: null },
+  ]);
+  expect(paintedChips(el).map(({ tint }) => tint)).toEqual(["3", "2", null]);
+  setLocale("es");
+  el.requestUpdate();
+  await el.updateComplete;
+  expect(
+    el.shadowRoot!.querySelector("[data-test=painted-in]")!.textContent!.includes("Pintado en"),
+  ).toBe(true);
+});
+
+it("a period painted nowhere says Not painted anywhere", async () => {
+  const el = await mountEdit((el) => {
+    el.paintedIn = { seasons: [], specialDays: [] };
+    el.seasons = seasons;
+    el.departmentId = "restaurant";
+  });
+  const note = () => el.shadowRoot!.querySelector("[data-test=not-painted]");
+  expect(note()?.textContent?.trim()).toBe("Not painted anywhere");
+  expect(paintedChips(el)).toEqual([]);
+  setLocale("es");
+  el.requestUpdate();
+  await el.updateComplete;
+  expect(note()?.textContent?.trim()).toBe("Sin pintar en ningún sitio");
+});
+
+it("no Painted in section while paintedIn is not given, nor when adding", async () => {
+  const edit = await mount(true);
+  expect(edit.shadowRoot!.querySelector("[data-test=painted-in]")).toBeNull();
+  expect(edit.shadowRoot!.querySelector("[data-test=not-painted]")).toBeNull();
+  edit.remove();
+  const add = await mount();
+  add.open = false;
+  await add.updateComplete;
+  add.paintedIn = { seasons: [], specialDays: [] };
+  add.open = true;
+  await add.updateComplete;
+  expect(add.shadowRoot!.querySelector("[data-test=painted-in]")).toBeNull();
+  expect(add.shadowRoot!.querySelector("[data-test=not-painted]")).toBeNull();
+});
+
+function deleteButton(el: PeriodDialog) {
+  return el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    "[data-test=delete-period]",
+  );
+}
+
+it("Delete… shows only when deletable and editing", async () => {
+  const plain = await mount(true);
+  expect(deleteButton(plain)).toBeNull();
+  plain.remove();
+  const editing = await mountEdit((el) => {
+    el.deletable = true;
+  });
+  expect(deleteButton(editing)?.textContent?.trim()).toBe("Delete…");
+  expect(deleteButton(editing)?.variant).toBe("secondary");
+  expect(deleteButton(editing)!.closest("wt-form-actions")).toBeNull();
+  setLocale("es");
+  editing.requestUpdate();
+  await editing.updateComplete;
+  expect(deleteButton(editing)?.textContent?.trim()).toBe("Eliminar…");
+  editing.remove();
+  const adding = await mount();
+  adding.deletable = true;
+  await adding.updateComplete;
+  expect(deleteButton(adding)).toBeNull();
+});
+
+it("Delete… on a clean draft closes the dialog and emits period-delete once with the period id", async () => {
+  const el = await mountEdit((el) => {
+    el.deletable = true;
+  });
+  const events: { type: string; detail: unknown }[] = [];
+  for (const type of ["period-close", "period-delete"])
+    el.addEventListener(type, (e) => events.push({ type, detail: (e as CustomEvent).detail }));
+  deleteButton(el)!.click();
+  await expect.poll(() => events.length).toBe(2);
+  await el.updateComplete;
+  expect(events).toEqual([
+    { type: "period-close", detail: null },
+    { type: "period-delete", detail: { periodId: "p1" } },
+  ]);
+  expect(el.open).toBe(false);
+});
+
+const departments = [
+  { id: "restaurant", name: "Restaurant", usedColours: ["red", "amber"] as const },
+  { id: "bar", name: "Bar", usedColours: ["red"] as const },
+];
+async function mountAdd(list: typeof departments | (typeof departments)[number][]) {
+  const el = document.createElement("period-dialog");
+  el.menus = menus;
+  el.departments = list;
+  el.open = true;
+  applyTokens(el);
+  hosts.push(el);
+  document.body.append(el);
+  await el.updateComplete;
+  return el;
+}
+
+it("from the page, Add asks for the department first, preselects a lone department, and sends it", async () => {
+  const el = await mountAdd([departments[1]!]);
+  const names = [...el.shadowRoot!.querySelectorAll("[name]")].map((n) => n.getAttribute("name"));
+  expect(names[0]).toBe("departmentId");
+  expect(field(el, "departmentId").required).toBe(true);
+  expect(field(el, "departmentId").label).toBe("Department");
+  expect(field(el, "departmentId").value).toBe("bar");
+  expect(el.shadowRoot!.querySelector("wt-modal")!.heading).toBe("Add period");
+  const writes: { departmentId?: string; input: object }[] = [];
+  el.addEventListener("period-save", (e) => writes.push((e as CustomEvent).detail));
+  await change(el, "name", { value: "Dinner" });
+  await change(el, "menuId", { value: "lunch" });
+  save(el).click();
+  await el.updateComplete;
+  expect(writes).toHaveLength(1);
+  expect(writes[0]!.departmentId).toBe("bar");
+  expect(writes[0]!.input).toEqual({
+    name: "Dinner",
+    colour: "amber",
+    menuId: "lunch",
+    staffMenuIds: [],
+    endOffsetMinutes: 0,
+  });
+  setLocale("es");
+  el.requestUpdate();
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("wt-modal")!.heading).toBe("Añadir periodo");
+});
+
+it("with two departments, the preselected colour follows the department chosen until a colour is picked; after a pick, changing department keeps it", async () => {
+  const el = await mountAdd(departments);
+  expect(field(el, "departmentId").value).toBe("");
+  await change(el, "departmentId", { value: "restaurant" });
+  expect(checkedColour(el)).toBe("grey");
+  await change(el, "departmentId", { value: "bar" });
+  expect(checkedColour(el)).toBe("amber");
+  await change(el, "colour", { value: "blue" });
+  await change(el, "departmentId", { value: "restaurant" });
+  expect(checkedColour(el)).toBe("blue");
+});
+
+it("a missing department marks the field after Save and keeps Save disabled until chosen", async () => {
+  const el = await mountAdd(departments);
+  await change(el, "name", { value: "Dinner" });
+  await change(el, "menuId", { value: "lunch" });
+  save(el).click();
+  await el.updateComplete;
+  expect(field(el, "departmentId").error).toBe("Choose a department.");
+  expect(save(el).disabled).toBe(true);
+  await change(el, "departmentId", { value: "bar" });
+  expect(field(el, "departmentId").error).toBe("");
+  expect(save(el).disabled).toBe(false);
+});

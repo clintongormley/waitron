@@ -20,30 +20,45 @@ import { CALENDAR_COLOURS, type CalendarColour } from "../hours-types.js";
 import type { MenuPeriodInput, OpeningHoursModel } from "../menu-timetable-types.js";
 import { format } from "./hours-view.js";
 import { periodColourStyles } from "./period-colour-styles.js";
+import { seasonTints, seasonTintStyles } from "./season-tint.js";
 import { t } from "./strings.js";
 
 type Draft = Omit<MenuPeriodInput, "endOffsetMinutes"> & {
   colour: CalendarColour;
   endOffsetMinutes: string;
+  /** Empty unless the dialog asks for the department. */
+  departmentId: string;
 };
+type Department = { id: string; name: string; usedColours: readonly CalendarColour[] };
 const offsetNumber = (text: string): number | undefined =>
   /^[+-]?\d+$/.test(text) ? Number(text) : undefined;
 type Field = keyof Draft;
 const copy = (value: Draft): Draft => ({ ...value, staffMenuIds: [...value.staffMenuIds] });
+const unused = (usedColours: readonly CalendarColour[]) =>
+  CALENDAR_COLOURS.find((colour) => !usedColours.includes(colour)) ?? CALENDAR_COLOURS[0];
 const empty = (usedColours: readonly CalendarColour[] = []): Draft => ({
   name: "",
-  colour: CALENDAR_COLOURS.find((colour) => !usedColours.includes(colour)) ?? CALENDAR_COLOURS[0],
+  colour: unused(usedColours),
   menuId: "",
   staffMenuIds: [],
   endOffsetMinutes: "0",
+  departmentId: "",
 });
-const fields: Field[] = ["name", "colour", "menuId", "staffMenuIds", "endOffsetMinutes"];
+const fields: Field[] = [
+  "departmentId",
+  "name",
+  "colour",
+  "menuId",
+  "staffMenuIds",
+  "endOffsetMinutes",
+];
 
 @customElement("period-dialog")
 export class PeriodDialog extends LitElement {
   static override styles = [
     baseStyles,
     periodColourStyles,
+    seasonTintStyles,
     css`
       :host {
         display: block;
@@ -85,6 +100,29 @@ export class PeriodDialog extends LitElement {
         color: var(--wt-color-danger);
         font-size: var(--wt-font-size-sm);
       }
+      .painted {
+        display: grid;
+        gap: var(--wt-space-2);
+      }
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-2);
+      }
+      .chip {
+        padding: var(--wt-space-1) var(--wt-space-3);
+        border: 1px solid var(--wt-color-palette-purple);
+        border-radius: var(--wt-radius-full);
+        color: var(--wt-color-text);
+      }
+      .chip[data-tint] {
+        background: var(--season-tint);
+        color: var(--season-on-tint);
+        border-color: var(--season-tint-line);
+      }
+      [data-test="not-painted"] {
+        color: var(--wt-color-warning);
+      }
       [data-test="menu-includes"] {
         margin: calc(-1 * var(--wt-space-3)) 0 0;
         color: var(--wt-color-text-muted);
@@ -102,7 +140,19 @@ export class PeriodDialog extends LitElement {
   @property({ attribute: false }) menus: OpeningHoursModel["menus"] = [];
   @property({ attribute: false }) usedColours: readonly CalendarColour[] = [];
   @property({ attribute: false }) refusal?: { code: string; params?: Record<string, unknown> };
+  /** Where the period is painted; absent draws no Painted in. */
+  @property({ attribute: false }) paintedIn?: {
+    seasons: readonly { id: string; name: string }[];
+    specialDays: readonly { id: string; name: string }[];
+  };
+  @property({ attribute: false }) seasons: readonly { id: string; startsOn: string }[] = [];
+  @property() departmentId = "";
+  @property({ type: Boolean }) paintedInLinks = false;
+  @property({ type: Boolean }) deletable = false;
+  /** Given when adding without a fixed department, so the dialog asks for one. */
+  @property({ attribute: false }) departments?: readonly Department[];
   @state() private draft: Draft = empty();
+  private colourPicked = false;
   @state() private attempted = false;
   private scope?: DraftScope<Draft>;
   private leave?: LeaveCoordinator;
@@ -148,8 +198,12 @@ export class PeriodDialog extends LitElement {
             menuId: this.period.menuId,
             staffMenuIds: [...this.period.staffMenuIds],
             endOffsetMinutes: String(this.period.endOffsetMinutes),
+            departmentId: "",
           }
-        : empty(this.usedColours);
+        : this.departments?.length === 1
+          ? { ...empty(this.departments[0]!.usedColours), departmentId: this.departments[0]!.id }
+          : empty(this.usedColours);
+      this.colourPicked = false;
       this.baseline = copy(this.input);
       this.attempted = false;
       this.refusal = undefined;
@@ -165,6 +219,7 @@ export class PeriodDialog extends LitElement {
           a.colour === b.colour &&
           a.menuId === b.menuId &&
           a.endOffsetMinutes === b.endOffsetMinutes &&
+          a.departmentId === b.departmentId &&
           a.staffMenuIds.length === b.staffMenuIds.length &&
           a.staffMenuIds.every((id) => b.staffMenuIds.includes(id)),
         restore: (value) => {
@@ -184,8 +239,13 @@ export class PeriodDialog extends LitElement {
       endOffsetMinutes: offset === undefined ? this.draft.endOffsetMinutes : String(offset),
     };
   }
+  private get choosesDepartment() {
+    return !this.period && this.departments !== undefined;
+  }
   private get ownErrors(): Partial<Record<Field, string>> {
     const errors: Partial<Record<Field, string>> = {};
+    if (this.choosesDepartment && !this.input.departmentId)
+      errors.departmentId = t("period.department_required");
     if (!this.input.name) errors.name = t("menu.name_required");
     if (!this.input.menuId) errors.menuId = t("menu.menu_required");
     if (!CALENDAR_COLOURS.includes(this.input.colour)) errors.colour = t("hours.colour_required");
@@ -231,6 +291,14 @@ export class PeriodDialog extends LitElement {
         ...this.draft,
         staffMenuIds: this.draft.staffMenuIds.filter((id) => id !== value),
       };
+    if (field === "colour") this.colourPicked = true;
+    if (field === "departmentId" && !this.colourPicked) {
+      const department = this.departments?.find((entry) => entry.id === value);
+      this.draft = {
+        ...this.draft,
+        colour: unused(department ? department.usedColours : this.usedColours),
+      };
+    }
     if (this.refusalField() === field) this.refusal = undefined;
     this.scope?.changed();
   }
@@ -245,14 +313,13 @@ export class PeriodDialog extends LitElement {
     }
     this.submittedGeneration = this.generation;
     this.submitted = copy(this.input);
+    const { departmentId, ...input } = copy(this.input);
     this.dispatchEvent(
       new CustomEvent("period-save", {
         detail: {
           periodId: this.period?.id ?? null,
-          input: {
-            ...copy(this.input),
-            endOffsetMinutes: offsetNumber(this.draft.endOffsetMinutes)!,
-          },
+          input: { ...input, endOffsetMinutes: offsetNumber(this.draft.endOffsetMinutes)! },
+          ...(this.choosesDepartment ? { departmentId } : {}),
         },
         bubbles: true,
         composed: true,
@@ -266,6 +333,7 @@ export class PeriodDialog extends LitElement {
       ...input,
       colour: input.colour ?? this.submitted!.colour,
       endOffsetMinutes: String(input.endOffsetMinutes ?? this.submitted!.endOffsetMinutes),
+      departmentId: this.submitted!.departmentId,
     };
     this.baseline = copy(submitted);
     this.scope?.commit(submitted);
@@ -278,6 +346,63 @@ export class PeriodDialog extends LitElement {
     const outcome = await this.leave.request({ scopes: [this.scope.id], reason, proceed() {} });
     return this.isConnected && generation === this.generation && outcome === "proceeded";
   };
+  private async requestDelete(periodId: string) {
+    const generation = this.generation;
+    if (this.scope && this.leave) {
+      const outcome = await this.leave.request({
+        scopes: [this.scope.id],
+        reason: "cancel",
+        proceed() {},
+      });
+      if (outcome !== "proceeded") return;
+    }
+    if (!this.isConnected || !this.open || this.busy || generation !== this.generation) return;
+    this.open = false;
+    this.dispatchEvent(new CustomEvent("period-close", { bubbles: true, composed: true }));
+    this.dispatchEvent(
+      new CustomEvent("period-delete", { detail: { periodId }, bubbles: true, composed: true }),
+    );
+  }
+  private paintedInSection() {
+    const painted = this.paintedIn;
+    if (!this.period || !painted) return nothing;
+    const tints = seasonTints(this.seasons);
+    const chip = (text: string, href: string, tint?: string) =>
+      this.paintedInLinks
+        ? html`<a class="chip" href=${href} data-tint=${tint || nothing} ?data-special-day=${!tint}
+            >${text}</a
+          >`
+        : html`<span class="chip" data-tint=${tint || nothing} ?data-special-day=${!tint}
+            >${text}</span
+          >`;
+    return html`<div
+      class="painted"
+      data-test="painted-in"
+      role="group"
+      aria-labelledby="painted-in-label"
+    >
+      <span id="painted-in-label">${t("period.painted_in")}</span>
+      ${
+        painted.seasons.length || painted.specialDays.length
+          ? html`<div class="chips">
+              ${painted.seasons.map((season) =>
+                chip(
+                  season.name,
+                  `/manage/opening-hours/view/season/season/${encodeURIComponent(season.id)}/department/${encodeURIComponent(this.departmentId)}`,
+                  tints.get(season.id) ?? "",
+                ),
+              )}
+              ${painted.specialDays.map((day) =>
+                chip(
+                  day.name,
+                  `/manage/opening-hours/view/special-day/special-day/${encodeURIComponent(day.id)}`,
+                ),
+              )}
+            </div>`
+          : html`<span data-test="not-painted">${t("period.not_painted")}</span>`
+      }
+    </div>`;
+  }
   private menuOptions(exclude?: string) {
     return this.menus
       .filter((menu) => menu.active && menu.id !== exclude)
@@ -305,7 +430,7 @@ export class PeriodDialog extends LitElement {
       html`<wt-modal
         open
         size="compact"
-        heading=${format(this.period ? "period.edit_heading" : "period.add_heading", { department: this.departmentName })}
+        heading=${this.choosesDepartment ? t("period.add") : format(this.period ? "period.edit_heading" : "period.add_heading", { department: this.departmentName })}
         .dismissible=${!this.busy}
         .beforeClose=${this.beforeClose}
         @wt-close=${(event: Event) => {
@@ -320,6 +445,23 @@ export class PeriodDialog extends LitElement {
         }}
       >
         <div class="form">
+          ${
+            this.choosesDepartment
+              ? html`<wt-combobox
+                  name="departmentId"
+                  label=${t("menu.department")}
+                  required
+                  .value=${this.draft.departmentId}
+                  .options=${this.departments!.map((department) => ({ value: department.id, label: department.name }))}
+                  .error=${this.error("departmentId")}
+                  ?disabled=${this.busy}
+                  @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                    event.stopPropagation();
+                    if (current()) this.changed("departmentId", event.detail.value);
+                  }}
+                ></wt-combobox>`
+              : nothing
+          }
           <wt-input
             name="name"
             label=${t("menu.period_name")}
@@ -414,6 +556,22 @@ export class PeriodDialog extends LitElement {
                   placeholder=${t("period.floor_plan_later")}
                   disabled
                 ></wt-combobox>`
+              : nothing
+          }
+          ${this.paintedInSection()}
+          ${
+            this.period && this.deletable
+              ? html`<div>
+                  <wt-button
+                    data-test="delete-period"
+                    variant="secondary"
+                    ?disabled=${this.busy}
+                    @click=${() => {
+                      if (current()) void this.requestDelete(this.period!.id);
+                    }}
+                    >${t("period.delete_ellipsis")}</wt-button
+                  >
+                </div>`
               : nothing
           }
         </div>

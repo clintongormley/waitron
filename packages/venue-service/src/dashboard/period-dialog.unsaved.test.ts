@@ -240,3 +240,83 @@ it("offset edits made during saving stay dirty against the submitted numeric bas
   expect(unload()).toBe(false);
   expect(save(el).disabled).toBe(true);
 });
+
+class PeriodLeaveConfigApp extends LitElement {
+  readonly leave = new LeaveController(this);
+  override render() {
+    return html`<period-dialog></period-dialog
+      >${this.leave.render({ heading: "Unsaved changes", message: "Discard unsaved changes?", keepLabel: "Keep editing", discardLabel: "Discard changes" })}`;
+  }
+}
+customElements.define("period-dialog-leave-config-app", PeriodLeaveConfigApp);
+async function mountWith(setup: (el: PeriodDialog) => void) {
+  app = document.createElement("period-dialog-leave-config-app") as PeriodLeaveApp;
+  applyTokens(app);
+  document.body.append(app);
+  await app.updateComplete;
+  const el = app.shadowRoot!.querySelector<PeriodDialog>("period-dialog")!;
+  el.menus = [{ id: "lunch", name: "Lunch", active: true, includes: [] }];
+  setup(el);
+  el.open = true;
+  await el.updateComplete;
+  return el;
+}
+
+it("Delete… on a changed draft asks first: keep emits nothing and keeps the draft; discard closes and emits once", async () => {
+  const el = await mountWith((el) => {
+    el.departmentName = "Restaurant";
+    el.period = {
+      id: "p1",
+      name: "Lunch",
+      colour: "blue",
+      menuId: "lunch",
+      staffMenuIds: [],
+      endOffsetMinutes: 0,
+      weekdays: [1],
+      routingUses: [],
+    };
+    el.deletable = true;
+  });
+  const events: { type: string; detail: unknown }[] = [];
+  for (const type of ["period-close", "period-delete"])
+    el.addEventListener(type, (e) => events.push({ type, detail: (e as CustomEvent).detail }));
+  const button = () =>
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=delete-period]")!;
+  await change(el, "Dinner");
+  button().click();
+  await choose("keep");
+  await el.updateComplete;
+  expect(events).toEqual([]);
+  expect(el.open).toBe(true);
+  expect(name(el).value).toBe("Dinner");
+  button().click();
+  await choose("discard");
+  await expect.poll(() => events.length).toBe(2);
+  expect(events).toEqual([
+    { type: "period-close", detail: null },
+    { type: "period-delete", detail: { periodId: "p1" } },
+  ]);
+  expect(el.open).toBe(false);
+});
+
+it("changing only the department of a new period makes it dirty, and choosing it back makes it clean", async () => {
+  const el = await mountWith((el) => {
+    el.departments = [
+      { id: "restaurant", name: "Restaurant", usedColours: ["red", "amber"] },
+      { id: "bar", name: "Bar", usedColours: ["red"] },
+    ];
+  });
+  const department = async (value: string) => {
+    el.shadowRoot!.querySelector("[name=departmentId]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
+  };
+  expect(unload()).toBe(false);
+  await department("bar");
+  expect(unload()).toBe(true);
+  expect(save(el).variant).toBe("primary");
+  await department("");
+  expect(unload()).toBe(false);
+  expect(save(el).disabled).toBe(true);
+});
