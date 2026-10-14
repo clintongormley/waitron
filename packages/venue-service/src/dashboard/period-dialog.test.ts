@@ -574,7 +574,7 @@ it("the floor plan field is shown disabled with Not available yet, and is never 
 
 it("adding from a painter shows no floor plan field", async () => {
   const el = await mount();
-  el.submitLabel = "Add and paint with it";
+  el.fromPainter = true;
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector("[name=floorPlanId]")).toBeNull();
 });

@@ -18,6 +18,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { CALENDAR_COLOURS, type CalendarColour } from "../hours-types.js";
 import type { MenuPeriodInput, OpeningHoursModel } from "../menu-timetable-types.js";
+import type { PaintedIn } from "../period-delete.js";
 import { format } from "./hours-view.js";
 import { seasonPainterPath, specialDayPainterPath } from "./opening-hours-paths.js";
 import { periodColourStyles } from "./period-colour-styles.js";
@@ -145,16 +146,15 @@ export class PeriodDialog extends LitElement {
   @property() departmentName = "";
   /** The submit button's text; Save when empty. */
   @property() submitLabel = "";
+  /** Adding a period from a painter, which asks for no floor plan. */
+  @property({ type: Boolean }) fromPainter = false;
   @property({ attribute: false })
   period?: OpeningHoursModel["departments"][number]["periods"][number];
   @property({ attribute: false }) menus: OpeningHoursModel["menus"] = [];
   @property({ attribute: false }) usedColours: readonly CalendarColour[] = [];
   @property({ attribute: false }) refusal?: { code: string; params?: Record<string, unknown> };
   /** Where the period is painted; absent draws no Painted in. */
-  @property({ attribute: false }) paintedIn?: {
-    seasons: readonly { id: string; name: string }[];
-    specialDays: readonly { id: string; name: string }[];
-  };
+  @property({ attribute: false }) paintedIn?: PaintedIn;
   @property({ attribute: false }) seasons: readonly { id: string; startsOn: string }[] = [];
   @property() departmentId = "";
   @property({ type: Boolean }) paintedInLinks = false;
@@ -589,7 +589,7 @@ export class PeriodDialog extends LitElement {
           ></wt-input>
           <p data-test="offset-explanation">${t("menu.offset_explanation")}</p>
           ${
-            this.period || !this.submitLabel
+            this.period || !this.fromPainter
               ? html`<wt-combobox
                   name="floorPlanId"
                   label=${t("period.floor_plan")}

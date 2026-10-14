@@ -2,7 +2,7 @@ import { html, nothing, type ReactiveController, type ReactiveControllerHost } f
 import { keyed } from "lit/directives/keyed.js";
 import type { MenuPeriodInput, OpeningHoursModel } from "../menu-timetable-types.js";
 import type { PaintedIn } from "../period-delete.js";
-import type { OpeningHoursApi, PaintedInRow } from "./opening-hours-client.js";
+import type { OpeningHoursApi } from "./opening-hours-client.js";
 import type { PaintPot } from "./paint-row.js";
 import type { PeriodDialog } from "./period-dialog.js";
 import { refusalOf } from "./refusal.js";
@@ -44,8 +44,9 @@ export class PeriodEditing implements ReactiveController {
       chose: (periodId: string) => void;
       /** `open(null)` asks for the department in the dialog. */
       chooseDepartment?: boolean;
-      /** The host's own Painted-in watch; without it, opening a period reads Painted in once. */
-      paintedIn?: () => readonly PaintedInRow[] | undefined;
+      /** Where the period is painted, from the host's own Painted-in watch; without it, opening a
+       *  period reads Painted in once. */
+      paintedIn?: (periodId: string) => PaintedIn | undefined;
       paintedInLinks?: boolean;
       readOnly?: () => boolean;
       /** Offers Delete… in the dialog; called once the dialog has closed itself to hand over. */
@@ -176,8 +177,7 @@ export class PeriodEditing implements ReactiveController {
 
   private paintedIn(editor: NonNullable<PeriodEditing["editor"]>): PaintedIn | undefined {
     if (!this.options.paintedIn) return editor.paintedIn;
-    const row = this.options.paintedIn()?.find(({ periodId }) => periodId === editor.period?.id);
-    return row && { seasons: row.seasons, specialDays: row.specialDays };
+    return editor.period && this.options.paintedIn(editor.period.id);
   }
 
   render(): unknown {
@@ -187,6 +187,7 @@ export class PeriodEditing implements ReactiveController {
     const colours = (department: Department) => department.periods.map(({ colour }) => colour);
     const department = model.departments.find(({ id }) => id === editor.departmentId);
     if (editor.departmentId !== null && !department) return nothing;
+    const fromPainter = !editor.period && !this.options.chooseDepartment;
     return keyed(
       editor,
       html`<period-dialog
@@ -208,9 +209,8 @@ export class PeriodEditing implements ReactiveController {
         .menus=${model.menus}
         .busy=${this.busy}
         .deletable=${this.options.onDelete !== undefined}
-        .submitLabel=${
-          editor.period || this.options.chooseDepartment ? "" : t("painter.add_and_paint")
-        }
+        .fromPainter=${fromPainter}
+        .submitLabel=${fromPainter ? t("painter.add_and_paint") : ""}
         @period-save=${(event: CustomEvent<SaveDetail>) => void this.save(event)}
         @period-close=${(event: Event) => {
           event.stopPropagation();

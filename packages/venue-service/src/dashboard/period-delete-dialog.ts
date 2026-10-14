@@ -112,13 +112,20 @@ export class PeriodDeleteDialog extends LitElement {
     const painted = impact.seasons + impact.specialDays > 0;
     const uses = impact.routingUses;
     const replacement = this.replacementName;
-    const count = (key: string, value: number) =>
-      value === 1
-        ? t(`${key}_one` as Parameters<typeof t>[0])
-        : format(key as Parameters<typeof t>[0], { count: String(value) });
     const lines = [
-      impact.seasons > 0 ? count("period.delete_seasons", impact.seasons) : "",
-      impact.specialDays > 0 ? count("period.delete_special_days", impact.specialDays) : "",
+      impact.seasons > 0
+        ? format(impact.seasons === 1 ? "period.delete_seasons_one" : "period.delete_seasons", {
+            count: String(impact.seasons),
+          })
+        : "",
+      impact.specialDays > 0
+        ? format(
+            impact.specialDays === 1
+              ? "period.delete_special_days_one"
+              : "period.delete_special_days",
+            { count: String(impact.specialDays) },
+          )
+        : "",
       uses.length > 0
         ? format(uses.length === 1 ? "period.delete_cells_one" : "period.delete_cells", {
             count: String(uses.length),

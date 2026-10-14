@@ -1,7 +1,7 @@
 import { css, unsafeCSS } from "lit";
 import { byStart, type Season } from "../season-rules.js";
 
-export type SeasonTint = "1" | "2" | "3" | "4";
+type SeasonTint = "1" | "2" | "3" | "4";
 
 /** The tokens that paint a season of each tint, spelt out so the token-name guard reads them. */
 export const SEASON_TINT_TOKENS: Record<
@@ -30,7 +30,7 @@ export const SEASON_TINT_TOKENS: Record<
   },
 };
 /** Every tint `seasonTints` hands out, in order. */
-export const SEASON_TINTS = Object.keys(SEASON_TINT_TOKENS) as SeasonTint[];
+const SEASON_TINTS = Object.keys(SEASON_TINT_TOKENS) as SeasonTint[];
 
 /** Each season's tint by its place in start order, cycled past the last of `SEASON_TINTS`. */
 export function seasonTints(

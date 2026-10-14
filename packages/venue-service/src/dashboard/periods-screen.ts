@@ -9,7 +9,7 @@ import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import type { PaintedIn } from "../period-delete.js";
 import { format } from "./hours-view.js";
 import { seasonPainterPath, specialDayPainterPath } from "./opening-hours-paths.js";
-import type { OpeningHoursApi, PaintedInRow, PeriodDeleteImpact } from "./opening-hours-client.js";
+import type { OpeningHoursApi, PeriodDeleteImpact } from "./opening-hours-client.js";
 import type { PeriodDeleteDialog } from "./period-delete-dialog.js";
 import { PeriodEditing } from "./period-editing.js";
 import { PERIOD_COLOUR_TOKENS } from "./period-colour-styles.js";
@@ -56,8 +56,8 @@ const chipTints = unsafeCSS(
     .join("\n"),
 );
 
-/** The period list of mockup 6: every active department's periods, grouped under it. Cell markup
- *  lives in the table's shadow root, so each colour and season tint is its own part. */
+/** Every active department's periods, grouped under it. Cell markup lives in the table's shadow
+ *  root, so each colour and season tint is its own part. */
 @customElement("dashboard-periods-screen")
 export class PeriodsScreen extends LitElement {
   static override styles = [
@@ -136,7 +136,6 @@ export class PeriodsScreen extends LitElement {
   @property({ type: Boolean }) readOnly = false;
   @state() private model?: OpeningHoursModel;
   @state() private painted?: Map<string, PaintedIn>;
-  @state() private paintedRows?: readonly PaintedInRow[];
   @state() private readError = "";
   @state() private paintedInError = "";
   private periods = new PeriodEditing(this, {
@@ -144,7 +143,7 @@ export class PeriodsScreen extends LitElement {
     model: () => this.model!,
     chose: () => {},
     chooseDepartment: true,
-    paintedIn: () => this.paintedRows,
+    paintedIn: (periodId) => this.painted?.get(periodId),
     paintedInLinks: true,
     readOnly: () => this.readOnly,
     onDelete: (_department, period) => this.askDelete(period),
@@ -170,7 +169,6 @@ export class PeriodsScreen extends LitElement {
     );
     this.paintedDetach = this.api.watchPaintedIn(
       (rows) => {
-        this.paintedRows = rows;
         this.painted = new Map(rows.map(({ periodId, ...painted }) => [periodId, painted]));
         this.paintedInError = "";
         this.rereadImpact(rows);

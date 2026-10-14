@@ -193,6 +193,7 @@ it("+ New period saves the period on its own, keeps the painting and chooses the
   expect(editor.period).toBeUndefined();
   const submit = editor.shadowRoot!.querySelector<HTMLElement>("[data-test=save-period]")!;
   expect(submit.textContent!.trim()).toBe("Add and paint with it");
+  expect(editor.shadowRoot!.querySelector("[name=floorPlanId]")).toBeNull();
   for (const [name, value] of [
     ["name", "Christmas"],
     ["menuId", "m1"],
