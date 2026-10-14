@@ -187,6 +187,22 @@ describe("till-table-details-sheet", () => {
     expect(text(el, "[data-seats]")).toBe("6 seats");
   });
 
+  it("says the saved name under a heading that is today's name, in English and Spanish", async () => {
+    const el = await mount({ heading: "Window", savedName: "Counter 4" });
+    expect(text(el, "[data-saved-name]")).toBe("Saved as Counter 4");
+    expect(lines(el)).not.toContain("Saved as Counter 4");
+
+    setLocale("es");
+    el.requestUpdate();
+    await el.updateComplete;
+    expect(text(el, "[data-saved-name]")).toBe("Guardada como Counter 4");
+  });
+
+  it("says no saved name when it is given none", async () => {
+    const el = await mount({ heading: "Table 1" });
+    expect(find(el, "[data-saved-name]")).toBeNull();
+  });
+
   it("shows a seated party: its name, guests, what it owes, its bills and its kitchen progress", async () => {
     const el = await mount({
       heading: "4",

@@ -27,7 +27,13 @@ import {
   toFloorTable,
 } from "@waitron/ui";
 import type { FloorMapDrop, FloorMapTable, FloorTable, ZoneTab } from "@waitron/ui";
-import { conjunctionList, decimal, formatMoney, isZeroDecimal } from "@waitron/shared";
+import {
+  conjunctionList,
+  decimal,
+  formatMoney,
+  isZeroDecimal,
+  partyTablesName,
+} from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
 import "../widgets/seat-dialog.js";
 import "../widgets/today-seats-dialog.js";
@@ -47,13 +53,16 @@ import {
   type DropAction,
   type SheetAction,
   dropAction,
+  groupName,
   groupSplitOf,
+  mergeMembersOf,
   nextFloorMoment,
   onTodaysPlan,
   pendingPlaces,
   resetTableOf,
   type ResetTablePlan,
   sheetActions,
+  shownName,
   spareSpot,
 } from "../state/floor-today.js";
 import { partyPaid, unsentText } from "../widgets/table-details-sheet.js";
@@ -75,11 +84,13 @@ function needsClearing(table: TableState): boolean {
   return table.condition === "needs_clearing";
 }
 
-/** The party's name when it says more than the table's own label: a name staff gave, or a joined
- * party's tables. */
-function shownPartyName(table: TableState): string | undefined {
+/** The party's name when it says more than the name the table is shown under: a name staff gave,
+ * or a joined party's tables. */
+function shownPartyName(table: TableState, zoneTables: readonly TableState[]): string | undefined {
   const name = table.party?.displayName;
-  return name === undefined || name === table.label ? undefined : name;
+  const shown =
+    table.today?.joinId == null ? shownName(table) : groupName(mergeMembersOf(zoneTables, table));
+  return name === undefined || name === shown ? undefined : name;
 }
 
 /** The table's own Forgotten badge already says a forgotten wait. */
@@ -336,6 +347,7 @@ export class TillFloorScreen extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
+      .saved-label,
       .capacity {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
@@ -675,10 +687,7 @@ export class TillFloorScreen extends LitElement {
         return;
       }
       this.refusedZoneId = null;
-      this.seating =
-        seat === null
-          ? { table, heading: this.#mergeName(table) ?? table.label }
-          : { table, ...seat };
+      this.seating = seat === null ? { table, heading: this.#shownAs(table) } : { table, ...seat };
       return;
     }
     this.#emit("open-table", { tableId: table.id, seated: true });
@@ -710,13 +719,26 @@ export class TillFloorScreen extends LitElement {
     if (this.tables.some((table) => table.id === tableId)) this.details = { tableId };
   }
 
+  /** The tables of the merge `table` is drawn in, or null for a table drawn on its own. */
+  #mergeOf(table: TableState): TableState[] | null {
+    const joinId = table.today?.joinId ?? null;
+    const ids = new Set(
+      joinId === null
+        ? []
+        : this.#zone.onMap.filter((drawn) => drawn.joinId === joinId).map((drawn) => drawn.id),
+    );
+    return ids.has(table.id) ? this.#zone.visible.filter((each) => ids.has(each.id)) : null;
+  }
+
   /** The name of the merge `table` is drawn in, or null for a table drawn on its own. */
   #mergeName(table: TableState): string | null {
-    const joinId = table.today?.joinId ?? null;
-    const members =
-      joinId === null ? [] : this.#zone.onMap.filter((drawn) => drawn.joinId === joinId);
-    if (!members.some((drawn) => drawn.id === table.id)) return null;
-    return mergeLabel(members.map((drawn) => drawn.label));
+    const members = this.#mergeOf(table);
+    return members === null ? null : groupName(members);
+  }
+
+  /** The name `table` is shown under: its merge's, else its own. */
+  #shownAs(table: TableState): string {
+    return this.#mergeName(table) ?? shownName(table);
   }
 
   /** The party `table` is linked to on the map (a party drawn as two or more groups), or null. */
@@ -724,15 +746,43 @@ export class TillFloorScreen extends LitElement {
     return this.#zone.onMap.find((drawn) => drawn.id === table.id)?.linkId ?? null;
   }
 
-  /** A linked party's name, as the map names it: every one of its tables. */
+  /** A linked party's name, as the map names it: every one of its tables, or with a name for
+   * today among them, each of its groups' names in their first tables' order. */
   #linkName(linkId: string): string {
-    return mergeLabel(
-      this.#zone.onMap.filter((drawn) => drawn.linkId === linkId).map((drawn) => drawn.label),
+    const ids = new Set(
+      this.#zone.onMap.filter((drawn) => drawn.linkId === linkId).map((drawn) => drawn.id),
+    );
+    const tables = this.#zone.visible.filter((each) => ids.has(each.id));
+    if (tables.every((each) => each.today?.name == null && each.today?.joinName == null))
+      return mergeLabel(tables.map((each) => each.label));
+    const groups = new Map<string, TableState[]>();
+    for (const each of tables) {
+      const key = each.today?.joinId ?? `table:${each.id}`;
+      groups.set(key, [...(groups.get(key) ?? []), each]);
+    }
+    const firstLabel = (members: TableState[]) =>
+      members.map((each) => each.label).sort(inNumberOrder)[0]!;
+    return partyTablesName(
+      [...groups.values()]
+        .sort((a, b) => inNumberOrder(firstLabel(a), firstLabel(b)))
+        .map(groupName),
+      "+",
     );
   }
 
   #detailsHeading(table: TableState): string {
-    return this.#mergeName(table) ?? t("floor.table_title").replace("{table}", () => table.label);
+    return (
+      this.#mergeName(table) ??
+      table.today?.name ??
+      t("floor.table_title").replace("{table}", () => table.label)
+    );
+  }
+
+  /** The table's saved name when its heading is a name for today, else null. */
+  #savedName(table: TableState): string | null {
+    const members = this.#mergeOf(table);
+    const today = members === null ? table.today?.name : members[0]!.today?.joinName;
+    return today == null ? null : table.label;
   }
 
   #detailsSheet(): TemplateResult | typeof nothing {
@@ -742,6 +792,7 @@ export class TillFloorScreen extends LitElement {
     return html`<till-table-details-sheet
       .table=${table}
       .heading=${this.#detailsHeading(table)}
+      .savedName=${this.#savedName(table)}
       .now=${this.#drawnAt}
       .actions=${this.canChangeToday}
       .tables=${this.tables}
@@ -900,7 +951,7 @@ export class TillFloorScreen extends LitElement {
         return;
       case "seats":
         this.askingSeats = {
-          heading: this.#mergeName(table) ?? table.label,
+          heading: this.#shownAs(table),
           seats: seatsFor(table) ?? 0,
           action: "save",
           resend: (seats) => send((sent) => api.setSeatsToday(table.id, seats, sent)),
@@ -1426,7 +1477,7 @@ export class TillFloorScreen extends LitElement {
         status,
         reservedTime: table.nextReservation?.time ?? null,
         unsentDrafts: table.party?.unsentDrafts.map((draft) => draft.ownerName),
-        partyName: shownPartyName(table),
+        partyName: shownPartyName(table, this.#zone.visible),
         fireDue: this.#fireDue(table),
         chips: tableChips(table),
       },
@@ -1645,7 +1696,7 @@ export class TillFloorScreen extends LitElement {
       ${trackDialog()}
       data-clear-dialog
       .open=${true}
-      .heading=${t("floor.clear_title").replace("{table}", () => table.label)}
+      .heading=${t("floor.clear_title").replace("{table}", () => this.#shownAs(table))}
       @wt-close=${() => (this.clearing = null)}
     >
       <p>${t("floor.clear_body")}</p>
@@ -1672,10 +1723,7 @@ export class TillFloorScreen extends LitElement {
    * plain box instead. */
   #clearingCard(table: TableState): TemplateResult {
     return html`<div class="card state-${table.state} clearing" data-table=${table.id}>
-      <span class="card-head">
-        <span class="label">${table.label}</span>
-        ${this.#seats(table)}
-      </span>
+      <span class="card-head">${this.#cardName(table)} ${this.#seats(table)}</span>
       <span class="occupancy" data-needs-clearing>${t("floor.needs_clearing")}</span>
       <wt-button
         size="sm"
@@ -1686,6 +1734,18 @@ export class TillFloorScreen extends LitElement {
         ${t("floor.mark_cleared")}
       </wt-button>
     </div>`;
+  }
+
+  /** Today's name, with the saved name small after it when they differ. */
+  #cardName(table: TableState): TemplateResult {
+    const shown = table.today?.joinName ?? shownName(table);
+    return html`<span
+      ><span class="label">${shown}</span>${
+        shown === table.label
+          ? nothing
+          : html` <span class="saved-label" data-saved-label>${table.label}</span>`
+      }</span
+    >`;
   }
 
   #seats(table: TableState): TemplateResult | typeof nothing {
@@ -1702,10 +1762,7 @@ export class TillFloorScreen extends LitElement {
       data-table=${table.id}
       @click=${() => this.#openTable(table)}
     >
-      <span class="card-head">
-        <span class="label">${table.label}</span>
-        ${this.#seats(table)}
-      </span>
+      <span class="card-head">${this.#cardName(table)} ${this.#seats(table)}</span>
       ${this.#partyName(table)} ${this.#occupancy(table)} ${this.#unsent(table.party)}
       <span class="badges">
         ${this.#hint(table)}
@@ -1785,7 +1842,7 @@ export class TillFloorScreen extends LitElement {
   }
 
   #partyName(table: TableState): TemplateResult | typeof nothing {
-    const name = shownPartyName(table);
+    const name = shownPartyName(table, this.#zone.visible);
     return name === undefined
       ? nothing
       : html`<span class="party-name" data-party-name>${name}</span>`;

@@ -89,6 +89,16 @@ describe.each(["light", "dark"] as const)("till-table-details-sheet a11y (%s the
     await expectNoA11yViolations(host);
   });
 
+  it("has no violations for a table shown under today's name", async () => {
+    const { el, host } = await mountWidget<TillTableDetailsSheet>(
+      "till-table-details-sheet",
+      { table: table({ today: placed }), heading: "Window", savedName: "Terraza 4", actions: true },
+      theme,
+    );
+    expect(el.shadowRoot!.querySelector("[data-saved-name]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   const withActions: [string, TableState][] = [
     ["a free table's actions", table({ today: placed })],
     ["a merge's actions", table({ today: { ...placed, joinId: "j1", joinSeats: 8 } })],
