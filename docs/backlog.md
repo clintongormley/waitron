@@ -1668,6 +1668,11 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   untranslated in English; …
   [Detail](backlog/service-periods.md#smaller-notes-from-the-public-holidays-reviews)
 
+- **A685 — a sale with no department found borrows the missing-description refusal (2026-10-14;
+  open; left open by #1709).** `apps/server/src/sale-operation-description.ts` refuses it as
+  `department.operation_description_required`, which the till words as "add the description in
+  Departments and zones", no help there. Give it its own code. A662 will make it the only case left.
+
 
 ### The kitchen and preparation
 
@@ -3153,6 +3158,11 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   of the Collect step (light and dark): the row with quantity, price and Note is there, the name
   row above it is missing, not cut off. In English at 390, and in Spanish at 1280, the name shows.
   Seen once; cause not investigated. Left open by A526.
+
+- **A686 — a till whose profile has no department still logs a refusal every 15 seconds
+  (2026-10-14; open; left open by #1711).** `actor()` in `apps/server/src/department-transfer-api.ts`
+  still refuses it with `department_transfer.not_allowed`. Give it #1711's "not receiving" answer,
+  after checking whether any such profile runs the till's transfer monitor.
 
 ### Printers, the print agent and receipts
 
