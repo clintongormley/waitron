@@ -1,6 +1,6 @@
 import { request as httpRequest } from "node:http";
 import { createServer, type Server } from "node:https";
-import { connect } from "node:net";
+import { connect, createServer as createNetServer, type Socket } from "node:net";
 import { setTimeout as delay } from "node:timers/promises";
 import { ListObjectsV2Command, S3Client } from "@aws-sdk/client-s3";
 import { spawnLitestream } from "@waitron/stream";
@@ -109,6 +109,44 @@ function rawAsk(g: TransportGate, head: string): Promise<string> {
   });
 }
 
+/** A plain TCP target that counts what reaches it and reads only while `reading`. */
+async function countingTarget() {
+  const state = { received: 0, socket: undefined as Socket | undefined };
+  const server = createNetServer((socket) => {
+    state.socket = socket;
+    socket.on("data", (chunk) => (state.received += chunk.length));
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const port = (server.address() as { port: number }).port;
+  return {
+    port,
+    state,
+    async close() {
+      state.socket?.destroy();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    },
+  };
+}
+
+/** Opens a CONNECT to `127.0.0.1:port` through the gate; resolves once the gate answers 200. */
+function rawTunnel(g: TransportGate, port: number): Promise<Socket> {
+  return new Promise((resolve, reject) => {
+    const socket = connect(Number(new URL(g.url).port), "127.0.0.1", () =>
+      socket.write(`CONNECT 127.0.0.1:${port} HTTP/1.1\r\nHost: 127.0.0.1:${port}\r\n\r\n`),
+    );
+    let answer = "";
+    const onData = (chunk: Buffer) => {
+      answer += chunk.toString();
+      if (!answer.includes("\r\n\r\n")) return;
+      socket.off("data", onData);
+      if (/^HTTP\/1\.1 200 /.test(answer)) resolve(socket);
+      else reject(new Error(answer));
+    };
+    socket.on("data", onData);
+    socket.on("error", reject);
+  });
+}
+
 describe("startTransportGate", () => {
   it("tunnels a request through the gated handler to the target", async () => {
     const g = await gate();
@@ -171,6 +209,55 @@ describe("startTransportGate", () => {
     expect(g.seen()).toHaveLength(1);
   });
 
+  it("keeps a tunnel stopped when its backed-up target drains while held", async () => {
+    const tcp = await countingTarget();
+    try {
+      const g = await gate((_host, port) => port === tcp.port);
+      const client = await rawTunnel(g, tcp.port);
+      await vi.waitFor(() => expect(tcp.state.socket).toBeDefined());
+      tcp.state.socket!.pause();
+      const upload = Buffer.alloc(64 * 1024 * 1024, 1);
+      client.write(upload);
+      await delay(300);
+
+      g.hold();
+      tcp.state.socket!.resume();
+      await delay(300);
+      const whileHeld = tcp.state.received;
+      await delay(300);
+      expect(tcp.state.received).toBe(whileHeld);
+      expect(tcp.state.received).toBeLessThan(upload.length);
+
+      g.release();
+      await vi.waitFor(() => expect(tcp.state.received).toBe(upload.length), { timeout: 5_000 });
+      client.destroy();
+    } finally {
+      await tcp.close();
+    }
+  });
+
+  it("stops a tunnel whose dial completes after a fresh hold", async () => {
+    const tcp = await countingTarget();
+    try {
+      const g = await gate((_host, port) => port === tcp.port);
+      g.hold();
+      const opened = rawTunnel(g, tcp.port);
+      await g.waitForHeld(1, 5_000);
+      g.release();
+      g.hold();
+      const client = await opened;
+      client.write("ping");
+      await delay(300);
+      expect(tcp.state.received).toBe(0);
+
+      g.release();
+      await vi.waitFor(() => expect(tcp.state.received).toBe(4), { timeout: 5_000 });
+      client.destroy();
+    } finally {
+      await tcp.close();
+    }
+  });
+
   it("drops a held CONNECT whose caller aborted, and never dials it", async () => {
     const g = await gate();
     g.hold();
@@ -190,6 +277,7 @@ describe("startTransportGate", () => {
     const answer = await rawAsk(g, "CONNECT 192.0.2.1:443 HTTP/1.1\r\nHost: 192.0.2.1:443\r\n\r\n");
     expect(answer).toMatch(/^HTTP\/1\.1 403 /);
     expect(g.refused()).toEqual(["192.0.2.1:443"]);
+    expect(g.seen()).toEqual([]);
     expect(g.forwarded()).toBe(0);
   });
 
