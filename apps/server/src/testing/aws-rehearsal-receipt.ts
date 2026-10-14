@@ -142,6 +142,8 @@ const OWNED_TEARDOWN_STEPS = {
   run: TEARDOWN_STEPS.filter((step) => step !== "inventory"),
   // A cleanup runs later, from another process, and never removes the run's scratch.
   cleanup: TEARDOWN_STEPS.filter((step) => step !== "inventory" && step !== "remove-scratch"),
+  // A keeper removes scratch only when the journal names a scratch folder.
+  interrupted: TEARDOWN_STEPS.filter((step) => step !== "inventory" && step !== "remove-scratch"),
 } as const;
 const OWNERSHIP_STATES = ["owned", "not-created", "collision", "unowned-candidate"] as const;
 
@@ -413,7 +415,7 @@ export function actionTable(
 export function createReceiptLog(
   header: Omit<AwsReceiptHeader, "finishedAt">,
   keys: ReceiptKeyPair,
-  kind: "run" | "cleanup" = "run",
+  kind: "run" | "cleanup" | "interrupted" = "run",
 ): ReceiptLog {
   const forbidden = forbiddenFrom(keys);
   const cleanHeader = sanitizeHeader(header, forbidden);
@@ -468,12 +470,13 @@ export async function writeReceipt(
   dir: string,
   receipt: AwsReceipt,
   keys: ReceiptKeyPair,
-  kind: "run" | "cleanup" = "run",
+  kind: "run" | "cleanup" | "interrupted" = "run",
 ): Promise<string> {
   const text = `${JSON.stringify(receipt, null, 2)}\n`;
   if (carriesKeyPair(text, keys)) throw refused("receipt");
   const path = join(dir, receiptFileName(receipt.header.runId, kind));
   await mkdir(dir, { recursive: true });
-  await writeFile(path, text);
+  // A keeper's receipt never replaces one already there, whoever wrote it.
+  await writeFile(path, text, kind === "interrupted" ? { flag: "wx" } : undefined);
   return path;
 }

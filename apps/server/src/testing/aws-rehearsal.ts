@@ -721,7 +721,7 @@ export async function teardownOwnedBucket(
  * Refuses, before any command, a run whose run, cleanup or interrupted receipt could not carry a
  * cleanup command; the interrupted receipt's name is the longest.
  */
-function assertCleanupCommandFits(region: string, runId: string, receiptDir: string): void {
+export function assertCleanupCommandFits(region: string, runId: string, receiptDir: string): void {
   if (!isReceiptRegion(region)) {
     throw new AwsRehearsalRefused(
       "region-unsupported",
@@ -965,7 +965,7 @@ export async function withAwsRehearsal<T>(
 }
 
 /** Names only a refused field or an error code, never a value. */
-function receiptFailureCause(error: unknown): string {
+export function receiptFailureCause(error: unknown): string {
   if (error instanceof Error && error.message.startsWith("receipt field refused: ")) {
     return error.message;
   }
@@ -977,7 +977,7 @@ function receiptFailureCause(error: unknown): string {
  * Records into `log`, and in place of an entry the receipt refuses writes a fixed note and counts
  * it, so a refused entry never stops teardown or loses the receipt.
  */
-function containedLog(log: ReceiptLog): {
+export function containedLog(log: ReceiptLog): {
   record(event: unknown): void;
   teardown(entry: TeardownEntry): void;
   /** Notes and counts a value left out of the receipt by the caller. */
@@ -1022,7 +1022,7 @@ function containedLog(log: ReceiptLog): {
  * Leaves out, as a refused entry, a listed upload id the receipt could not carry; the cleanup
  * command lists the bucket's uploads itself, so `bucket` alone is enough to finish the job.
  */
-function carriedRemaining(
+export function carriedRemaining(
   remaining: AwsReceiptRemaining,
   profile: RehearsalProfile,
   contained: { refuse(): void },
@@ -1035,7 +1035,7 @@ function carriedRemaining(
   return { bucket: remaining.bucket, uploadIds };
 }
 
-function unplannedFailure(refusals: {
+export function unplannedFailure(refusals: {
   count: number;
   first: string | undefined;
 }): AwsRehearsalFailed | undefined {
@@ -1050,7 +1050,7 @@ function unplannedFailure(refusals: {
  * A scope for `plan` that records each refusal in the receipt until `finished()` (the receipt is about
  * to be built), and prints it after; `close()` stops the counting the run's failure reads.
  */
-function runScope(
+export function runScope(
   plan: Parameters<typeof openRequestScope>[0]["plan"],
   record: (event: unknown) => void,
   print: (line: string) => void,
@@ -1614,7 +1614,7 @@ async function runOwned<T>(
 }
 
 /** `stillRunning`: the scenario outlived its settle wait, so it can write the root again after this. */
-async function removeScratch(
+export async function removeScratch(
   made: boolean,
   root: string,
   removeDir: AwsRehearsalDeps["removeDir"],
