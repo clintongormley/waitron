@@ -360,6 +360,7 @@ describe("what deleting a period touches", () => {
         { id: v.afternoon, name: "Afternoon" },
         { id: v.dinner, name: "Dinner" },
       ],
+      clockRevision: 0,
     });
     expect(impact.routingUses).toEqual(routing.get(v.lunch));
   });
@@ -378,6 +379,7 @@ describe("what deleting a period touches", () => {
         { id: v.dinner, name: "Dinner" },
         { id: v.lunch, name: "Lunch" },
       ],
+      clockRevision: 0,
     });
   });
 

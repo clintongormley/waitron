@@ -91,15 +91,15 @@ it("preserves the Prep stations tab when the dashboard rewrites its destination,
 });
 
 it("preserves the Opening hours tab and department a link names when the dashboard rewrites its destination", () => {
-  history.replaceState(null, "", "/manage/opening-hours/view/periods/department/deli");
+  history.replaceState(null, "", "/manage/opening-hours/view/week/department/deli");
   const host = document.createElement("test-dashboard-navigation-host") as NavigationHost;
   hosts.push(host);
   const url = new UrlStateController(host, () => {}, dashboardPath);
   document.body.append(host);
   expect(url.read("department")).toBe("deli");
-  expect(url.read("view")).toBe("periods");
+  expect(url.read("view")).toBe("week");
   url.write({ dashboard: "opening-hours" }, true);
-  expect(location.pathname).toBe("/manage/opening-hours/view/periods/department/deli");
+  expect(location.pathname).toBe("/manage/opening-hours/view/week/department/deli");
 });
 
 it("keeps the Opening hours year a link names when the dashboard rewrites its destination", () => {

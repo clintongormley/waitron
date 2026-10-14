@@ -318,7 +318,7 @@ describe("links into the painter", () => {
     expect(location.pathname).toBe("/manage/opening-hours/view/year");
   });
 
-  it("closing a painter loaded directly, after its Periods link and Back, stays on this page", async () => {
+  it("closing a painter loaded directly, after its Periods link and Back, closes onto the Year view", async () => {
     history.replaceState(null, "", "/manage/before");
     let app!: PainterApp;
     const guard = new NavigationGuard(window, {
@@ -333,16 +333,14 @@ describe("links into the painter", () => {
       (await shownPainter(el))
         .shadowRoot!.querySelector<HTMLAnchorElement>("a[data-test=periods-link]")!
         .click();
-      await expect
-        .poll(() => location.pathname)
-        .toBe("/manage/opening-hours/view/periods/department/d1");
+      await expect.poll(() => location.pathname).toBe("/manage/periods");
       history.back();
       await expect
         .poll(() => location.pathname)
         .toBe("/manage/opening-hours/view/season/season/winter/department/d1");
       await cancel(await shownPainter(el));
       await expect.poll(() => painterOf(el)).toBeNull();
-      expect(location.pathname).toBe("/manage/opening-hours/view/periods/department/d1");
+      expect(location.pathname).toBe("/manage/opening-hours/view/year");
     } finally {
       guard.dispose();
     }
@@ -397,7 +395,7 @@ describe("links into the painter", () => {
       .toBe(`/manage/opening-hours/view/season/season/${painted}`);
     expect(pushed()).toEqual([]);
     await shownPainter(el);
-    expect(tabs(el).items.map(({ key }) => key)).toEqual(["year", "periods"]);
+    expect(tabs(el).items.map(({ key }) => key)).toEqual(["year"]);
   });
 
   it("a station's link still draws that station's read-only week", async () => {
@@ -469,7 +467,7 @@ describe("links into the painter", () => {
 });
 
 describe("leaving a painter with edits", () => {
-  it("the Periods link asks first, staying on keep and reaching the Periods tab on discard", async () => {
+  it("the Periods link asks first, staying on keep and reaching the Periods page on discard", async () => {
     const { app, el } = await mountApp(
       "/manage/opening-hours/view/season/season/winter/department/d1",
     );
@@ -485,11 +483,9 @@ describe("leaving a painter with edits", () => {
     expect(app.leave.coordinator.isDirty()).toBe(true);
     link().click();
     await choose(app, "discard");
-    await expect
-      .poll(() => location.pathname)
-      .toBe("/manage/opening-hours/view/periods/department/d1");
-    await expect.poll(() => painterOf(el)).toBeNull();
-    expect(tabs(el).value).toBe("periods");
+    await expect.poll(() => location.pathname).toBe("/manage/periods");
+    expect(app.leave.coordinator.isDirty()).toBe(false);
+    expect(painterOf(el)!.edited()).toEqual({ departments: [], zones: [] });
     expect(app.writes).toEqual([]);
   });
 

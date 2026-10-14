@@ -31,7 +31,6 @@ import { locationId as brandLocationId, type LocationId } from "@waitron/shared"
 import { addDays } from "./hours-rules.js";
 import { localTimeOccurrences } from "./hours-occurrences.js";
 import {
-  deleteMenuPeriod,
   readOpeningHoursModel,
   replaceMenuWeek,
   resolveDefaultMenu,
@@ -40,6 +39,7 @@ import {
   updateMenuPeriod,
 } from "./menu-timetable.js";
 import type { MenuSlot, MenuWeekDay } from "./menu-timetable-types.js";
+import { deletePeriod } from "./period-delete.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { saveSeasonWeeks } from "./season-weeks.js";
 import { readSeasons } from "./seasons.js";
@@ -1301,7 +1301,7 @@ describe("the timetable's writers", () => {
     ).rejects.toMatchObject({ code: "department.not_found" });
   });
 
-  it("refuse deleting a period still placed, naming every day; once none does, delete it with its staff menus", async () => {
+  it("deleting a painted period removes its staff menus", async () => {
     const v = await timed();
     const { menus, periods } = v;
     await scoped((tx) =>
@@ -1313,67 +1313,13 @@ describe("the timetable's writers", () => {
         .from(menuPeriodStaffMenus)
         .where(eq(menuPeriodStaffMenus.periodId, periods.noches)),
     ).toEqual([{ menuId: menus.Cócteles }]);
-    await expect(scoped((tx) => deleteMenuPeriod(tx, v.cfg, periods.noches))).rejects.toMatchObject(
-      {
-        code: "menu_period.in_use",
-        params: {
-          periodId: periods.noches,
-          uses: [1, 2, 3, 4, 5].map((weekday) => ({ kind: "week", weekday })),
-        },
-      },
-    );
-    await scoped(async (tx) => {
-      await replaceMenuWeek(
-        tx,
-        v.cfg,
-        v.restaurant,
-        weekOf(() => [slot(periods.mananas, "09:00", "12:00")]),
-        AT,
-        0,
-      );
-      await deleteMenuPeriod(tx, v.cfg, periods.noches);
-    });
+    await scoped((tx) => deletePeriod(tx, v.cfg, periods.noches, null, AT, 0));
     expect(
       await db
         .select()
         .from(menuPeriodStaffMenus)
         .where(eq(menuPeriodStaffMenus.periodId, periods.noches)),
     ).toEqual([]);
-  });
-});
-
-describe("a period painted in one season only", () => {
-  it("refuses deleting a period painted in one season only", async () => {
-    const v = await timed();
-    const { periods } = v;
-    const winter = (await scoped((tx) => readSeasons(tx, v.cfg))).find(
-      (season) => season.name === "Winter",
-    )!;
-    await scoped((tx) =>
-      replaceMenuWeek(
-        tx,
-        v.cfg,
-        v.restaurant,
-        restaurantWeek(periods, (weekday) =>
-          weekday === 2 ? [slot(periods.brunch, "09:00", "12:00")] : null,
-        ),
-        AT,
-        0,
-        { seasonId: winter.id },
-      ),
-    );
-    await expect(scoped((tx) => deleteMenuPeriod(tx, v.cfg, periods.brunch))).rejects.toMatchObject(
-      {
-        code: "menu_period.in_use",
-        params: { periodId: periods.brunch, uses: [{ kind: "week", weekday: 2 }] },
-      },
-    );
-    expect(
-      await db
-        .select({ id: menuPeriods.id })
-        .from(menuPeriods)
-        .where(eq(menuPeriods.id, periods.brunch)),
-    ).toEqual([{ id: periods.brunch }]);
   });
 });
 
@@ -1564,27 +1510,17 @@ describe("the opening-hours model's seasons", () => {
 });
 
 describe("a period no longer placed anywhere but a past special day", () => {
-  it("is named with that special day's date, which can be cleared, so the period can be deleted", async () => {
+  it("a period painted only on a past special day has no weekdays in the model and is deleted with that paint", async () => {
     const v = await timed();
     const { periods } = v;
-    const lastChristmas = await saveDay(v, "2025-12-25", {
+    await saveDay(v, "2025-12-25", {
       paint: [slot(periods.brunch, "11:00", "15:00")],
     });
-    const use = {
-      kind: "special_day",
-      specialDayId: lastChristmas.id,
-      name: "Special 2025-12-25",
-      date: "2025-12-25",
-    };
-    await expect(scoped((tx) => deleteMenuPeriod(tx, v.cfg, periods.brunch))).rejects.toMatchObject(
-      { code: "menu_period.in_use", params: { periodId: periods.brunch, uses: [use] } },
-    );
     const model = await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT));
     const restaurant = model.departments.find((department) => department.id === v.restaurant)!;
     expect(restaurant.periods.find((period) => period.id === periods.brunch)!.weekdays).toEqual([]);
 
-    await saveDay(v, "2025-12-25", { id: lastChristmas.id });
-    await scoped((tx) => deleteMenuPeriod(tx, v.cfg, periods.brunch));
+    await scoped((tx) => deletePeriod(tx, v.cfg, periods.brunch, null, AT, 0));
     expect(await db.select().from(menuPeriods).where(eq(menuPeriods.id, periods.brunch))).toEqual(
       [],
     );
@@ -3493,7 +3429,7 @@ describe("the routing that names a period", () => {
         AT,
         0,
       );
-      await deleteMenuPeriod(tx, v.cfg, periods.noches);
+      await deletePeriod(tx, v.cfg, periods.noches, null, AT, 0);
     });
     expect(
       await db

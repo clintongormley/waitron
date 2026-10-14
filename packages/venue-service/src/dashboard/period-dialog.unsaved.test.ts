@@ -2,22 +2,22 @@ import { afterEach, beforeEach, expect, it } from "vitest";
 import { LitElement, html } from "lit";
 import { applyTokens, LeaveController } from "@waitron/ui";
 import { setLocale } from "@waitron/dashboard-kit";
-import type { PeriodEditor } from "./period-editor.js";
-import "./period-editor.js";
+import type { PeriodDialog } from "./period-dialog.js";
+import "./period-dialog.js";
 
 class PeriodLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
   override render() {
-    return html`<period-editor
+    return html`<period-dialog
         .open=${true}
         departmentName="Restaurant"
         .menus=${[{ id: "lunch", name: "Lunch", active: true, includes: [] }]}
         .period=${{ id: "p1", name: "Lunch", colour: "blue", menuId: "lunch", staffMenuIds: [], endOffsetMinutes: -15, weekdays: [1] }}
-      ></period-editor
+      ></period-dialog
       >${this.leave.render({ heading: "Unsaved changes", message: "Discard unsaved changes?", keepLabel: "Keep editing", discardLabel: "Discard changes" })}`;
   }
 }
-customElements.define("period-leave-test-app", PeriodLeaveApp);
+customElements.define("period-dialog-leave-test-app", PeriodLeaveApp);
 let app: PeriodLeaveApp;
 beforeEach(() => setLocale("en"));
 afterEach(() => {
@@ -25,31 +25,31 @@ afterEach(() => {
   setLocale("en");
 });
 async function mount() {
-  app = document.createElement("period-leave-test-app") as PeriodLeaveApp;
+  app = document.createElement("period-dialog-leave-test-app") as PeriodLeaveApp;
   applyTokens(app);
   document.body.append(app);
   await app.updateComplete;
-  const el = app.shadowRoot!.querySelector<PeriodEditor>("period-editor")!;
+  const el = app.shadowRoot!.querySelector<PeriodDialog>("period-dialog")!;
   await el.updateComplete;
   return el;
 }
-function name(el: PeriodEditor) {
+function name(el: PeriodDialog) {
   const field = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]");
   expect(field).not.toBeNull();
   return field!;
 }
-async function change(el: PeriodEditor, value: string) {
+async function change(el: PeriodDialog, value: string) {
   name(el).dispatchEvent(
     new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
   );
   await el.updateComplete;
 }
-function modal(el: PeriodEditor) {
+function modal(el: PeriodDialog) {
   const modal = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>("wt-modal");
   expect(modal).not.toBeNull();
   return modal!;
 }
-function save(el: PeriodEditor) {
+function save(el: PeriodDialog) {
   return el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
     "[data-test=save-period]",
   )!;
@@ -74,7 +74,7 @@ async function choose(decision: "keep" | "discard") {
   q.shadowRoot!.querySelector<HTMLElement>(`[data-choice=${decision}]`)!.click();
   await expect.poll(() => q.open).toBe(false);
 }
-async function reconnect(el: PeriodEditor) {
+async function reconnect(el: PeriodDialog) {
   const parent = el.parentNode!;
   el.remove();
   await el.updateComplete;
@@ -187,7 +187,7 @@ it("busy and disconnected editors refuse a retained close guard", async () => {
   expect(await guard("cancel")).toBe(false);
 });
 
-async function offset(el: PeriodEditor, value: string) {
+async function offset(el: PeriodDialog, value: string) {
   const control =
     el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=endOffsetMinutes]");
   expect(control).not.toBeNull();
@@ -237,6 +237,86 @@ it("offset edits made during saving stay dirty against the submitted numeric bas
   expect(unload()).toBe(true);
   await reconnect(el);
   await offset(el, "+014");
+  expect(unload()).toBe(false);
+  expect(save(el).disabled).toBe(true);
+});
+
+class PeriodLeaveConfigApp extends LitElement {
+  readonly leave = new LeaveController(this);
+  override render() {
+    return html`<period-dialog></period-dialog
+      >${this.leave.render({ heading: "Unsaved changes", message: "Discard unsaved changes?", keepLabel: "Keep editing", discardLabel: "Discard changes" })}`;
+  }
+}
+customElements.define("period-dialog-leave-config-app", PeriodLeaveConfigApp);
+async function mountWith(setup: (el: PeriodDialog) => void) {
+  app = document.createElement("period-dialog-leave-config-app") as PeriodLeaveApp;
+  applyTokens(app);
+  document.body.append(app);
+  await app.updateComplete;
+  const el = app.shadowRoot!.querySelector<PeriodDialog>("period-dialog")!;
+  el.menus = [{ id: "lunch", name: "Lunch", active: true, includes: [] }];
+  setup(el);
+  el.open = true;
+  await el.updateComplete;
+  return el;
+}
+
+it("Delete… on a changed draft asks first: keep emits nothing and keeps the draft; discard closes and emits once", async () => {
+  const el = await mountWith((el) => {
+    el.departmentName = "Restaurant";
+    el.period = {
+      id: "p1",
+      name: "Lunch",
+      colour: "blue",
+      menuId: "lunch",
+      staffMenuIds: [],
+      endOffsetMinutes: 0,
+      weekdays: [1],
+      routingUses: [],
+    };
+    el.deletable = true;
+  });
+  const events: { type: string; detail: unknown }[] = [];
+  for (const type of ["period-close", "period-delete"])
+    el.addEventListener(type, (e) => events.push({ type, detail: (e as CustomEvent).detail }));
+  const button = () =>
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=delete-period]")!;
+  await change(el, "Dinner");
+  button().click();
+  await choose("keep");
+  await el.updateComplete;
+  expect(events).toEqual([]);
+  expect(el.open).toBe(true);
+  expect(name(el).value).toBe("Dinner");
+  button().click();
+  await choose("discard");
+  await expect.poll(() => events.length).toBe(2);
+  expect(events).toEqual([
+    { type: "period-close", detail: null },
+    { type: "period-delete", detail: { periodId: "p1" } },
+  ]);
+  expect(el.open).toBe(false);
+});
+
+it("changing only the department of a new period makes it dirty, and choosing it back makes it clean", async () => {
+  const el = await mountWith((el) => {
+    el.departments = [
+      { id: "restaurant", name: "Restaurant", usedColours: ["red", "amber"] },
+      { id: "bar", name: "Bar", usedColours: ["red"] },
+    ];
+  });
+  const department = async (value: string) => {
+    el.shadowRoot!.querySelector("[name=departmentId]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
+  };
+  expect(unload()).toBe(false);
+  await department("bar");
+  expect(unload()).toBe(true);
+  expect(save(el).variant).toBe("primary");
+  await department("");
   expect(unload()).toBe(false);
   expect(save(el).disabled).toBe(true);
 });

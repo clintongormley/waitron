@@ -487,7 +487,7 @@ describe("a date ticked Closed", () => {
 });
 
 describe("periods from the painter", () => {
-  const editorOf = (el: SpecialDayPainter) => el.shadowRoot!.querySelector("period-editor");
+  const editorOf = (el: SpecialDayPainter) => el.shadowRoot!.querySelector("period-dialog");
   async function openEditor(el: SpecialDayPainter, test: string) {
     chip(el, test).click();
     await settle(el);
@@ -501,16 +501,16 @@ describe("periods from the painter", () => {
     const link = painter.shadowRoot!.querySelector<HTMLAnchorElement>("a[data-test=periods-link]")!;
     expect(link.slot).toBe("link");
     expect(link.textContent!.trim()).toBe("Periods");
-    expect(link.getAttribute("href")).toBe("/manage/opening-hours/view/periods/department/d1");
+    expect(link.getAttribute("href")).toBe("/manage/periods");
     await pick(painter, "zone:z2");
     expect(
       painter
         .shadowRoot!.querySelector<HTMLAnchorElement>("a[data-test=periods-link]")!
         .getAttribute("href"),
-    ).toBe("/manage/opening-hours/view/periods/department/d1");
+    ).toBe("/manage/periods");
   });
 
-  it("+ New period opens the period editor, saves the period on its own, keeps the painting and chooses it", async () => {
+  it("+ New period opens the period dialog, saves the period on its own, keeps the painting and chooses it", async () => {
     const { painter, writes } = await mount({
       answer: ({ url }) => (url.endsWith("/menu-periods") ? { id: "p-new" } : undefined),
     });
@@ -555,7 +555,7 @@ describe("periods from the painter", () => {
     expect(saveButton(painter).disabled).toBe(false);
   });
 
-  it("✎ on a period chip opens the period editor with that period", async () => {
+  it("✎ on a period chip opens the period dialog with that period", async () => {
     const { painter } = await mount();
     const editor = await openEditor(painter, "edit-p2");
     expect(editor.period?.id).toBe("p2");

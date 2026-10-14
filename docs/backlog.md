@@ -1676,7 +1676,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   `packages/venue-service/src/routing-periods.ts`), which only the routing cell editor needs, so the
   catalogue's folder read pays for it too; and the Opening hours model reads every period's routing
   uses (`readRoutingUses`, `packages/venue-service/src/menu-timetable.ts`), re-read on any product
-  or category change, for the period delete warning alone. Work each out only where it is used.
+  or category change, though since A506-11 nothing reads the model's copy: the period delete dialog
+  reads its own through `GET …/menu-periods/:periodId/delete-impact`. Work each out only where it is
+  used.
 
 - **A selected tab that grows while its strip keeps its width is not scrolled back into view**
   (`packages/ui/src/components/wt-tabs.ts`) — left open by A487a (#1540): a late font load or a

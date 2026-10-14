@@ -12,6 +12,7 @@ import {
 import {
   CORE_MIGRATIONS,
   kitchenStations,
+  locationBusinessDaySettings,
   locations,
   withTransaction,
   type Database,
@@ -307,6 +308,28 @@ describe("the period-delete routes", () => {
     ]);
   });
 
+  it("GET painted-in with a periodId lists only that period, and refuses a malformed id", async () => {
+    const r = await routed();
+
+    const response = await r.send("GET", `/painted-in?periodId=${r.dinner}`, r.supervisor);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual([
+      {
+        periodId: r.dinner,
+        seasons: [
+          { id: r.seasons.summer, name: "Summer" },
+          { id: r.seasons.autumn, name: "Autumn" },
+        ],
+        specialDays: [],
+      },
+    ]);
+    await answers(await r.send("GET", "/painted-in?periodId=not-a-uuid", r.manager), 400, {
+      code: "shared.invalid_id",
+      params: { kind: "MenuPeriodId", value: "not-a-uuid" },
+    });
+  });
+
   it("GET delete-impact says what deleting a period would change, for a venue viewer", async () => {
     const r = await routed();
 
@@ -322,7 +345,42 @@ describe("the period-delete routes", () => {
         { id: r.afternoon, name: "Afternoon" },
         { id: r.dinner, name: "Dinner" },
       ],
+      clockRevision: 0,
     });
+  });
+
+  it("GET delete-impact carries the clock revision POST delete accepts, and a new one once the clock changes", async () => {
+    const r = await routed();
+    const revision = async () =>
+      (
+        (await (await r.send("GET", `/${r.lunch}/delete-impact`, r.manager)).json()) as {
+          clockRevision: number;
+        }
+      ).clockRevision;
+    const before = await revision();
+    await scoped((tx) =>
+      tx
+        .insert(locationBusinessDaySettings)
+        .values({ locationId: r.cfg.locationId, revision: before + 2 }),
+    );
+    const after = await revision();
+    expect(after).toBe(before + 2);
+
+    await answers(
+      await r.send("POST", `/${r.lunch}/delete`, r.manager, {
+        replacementPeriodId: null,
+        expectedClockRevision: before,
+      }),
+      409,
+      { code: "hours.clock_changed", params: {} },
+    );
+    await answers(
+      await r.send("POST", `/${r.lunch}/delete`, r.manager, {
+        replacementPeriodId: null,
+        expectedClockRevision: after,
+      }),
+      204,
+    );
   });
 
   it("refuses both reads to someone who may not view the venue", async () => {
@@ -491,15 +549,14 @@ describe("the period-delete routes", () => {
     expect(await stored(r)).toEqual(before);
   });
 
-  it("keeps today's DELETE refusing a period in use", async () => {
+  it("the retired DELETE finds no route and changes nothing", async () => {
     const r = await routed();
+    const before = await stored(r);
     const response = await r.app.request(`${BASE}/${r.lunch}`, {
       method: "DELETE",
       headers: { cookie: r.manager },
     });
-    expect(response.status).toBe(409);
-    expect(((await response.json()) as { error: { code: string } }).error.code).toBe(
-      "menu_period.in_use",
-    );
+    expect(response.status).toBe(404);
+    expect(await stored(r)).toEqual(before);
   });
 });

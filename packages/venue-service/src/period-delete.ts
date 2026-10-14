@@ -2,7 +2,10 @@ import { and, asc, eq, gte, inArray, isNotNull, ne, notExists } from "drizzle-or
 import type { Transaction } from "@waitron/db";
 import { readLocationClock } from "@waitron/reporting";
 import { AppError, cutoverForBusinessDay, type BusinessDayClock } from "@waitron/shared";
-import { assertBusinessDayScheduleWrite } from "./business-day-schedule.js";
+import {
+  assertBusinessDayScheduleWrite,
+  readBusinessDayScheduleRevision,
+} from "./business-day-schedule.js";
 import { resolveDepartmentDays } from "./day-resolver.js";
 import type { LocalDate } from "./hours-types.js";
 import { departmentEndOffsetClash, readRoutingUses, requirePeriod } from "./menu-timetable.js";
@@ -35,6 +38,8 @@ export interface PeriodDeleteImpact {
   keptOpenToday: boolean;
   /** The department's other periods. */
   replacements: { id: string; name: string }[];
+  /** The revision this impact was read under, for the delete to send back. */
+  clockRevision: number;
 }
 
 /** The business day holding `at`, or null when the venue's clock cannot be read. */
@@ -132,13 +137,14 @@ async function paintedIn(
   return painted;
 }
 
-/** Where each of the venue's periods is painted, keyed by period id. */
+/** Where each of the venue's periods, or only `periodId`, is painted, keyed by period id. */
 export async function readPaintedIn(
   tx: Transaction,
   cfg: VenueScope,
   at: Date,
+  periodId?: string,
 ): Promise<Map<string, PaintedIn>> {
-  return paintedIn(tx, cfg, await businessDayAt(tx, cfg, at));
+  return paintedIn(tx, cfg, await businessDayAt(tx, cfg, at), periodId);
 }
 
 /**
@@ -175,6 +181,7 @@ export async function periodDeleteImpact(
     routingUses,
     keptOpenToday: kept.length > 0,
     replacements,
+    clockRevision: await readBusinessDayScheduleRevision(tx, cfg),
   };
 }
 

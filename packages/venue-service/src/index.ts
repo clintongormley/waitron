@@ -7,7 +7,6 @@ export * from "./keep-open.js";
 export type { MenuUse } from "./errors.js";
 export {
   assertPeriodEndOffsets,
-  deleteMenuPeriod,
   readOpeningHoursModel,
   replaceMenuWeek,
   resolveDepartmentService,
@@ -16,6 +15,7 @@ export {
   updateMenuPeriod,
 } from "./menu-timetable.js";
 export type * from "./menu-timetable-types.js";
+export { deletePeriod } from "./period-delete.js";
 export * from "./kitchen-notices.js";
 export * from "./profile-access.js";
 export * from "./kitchen-screens.js";

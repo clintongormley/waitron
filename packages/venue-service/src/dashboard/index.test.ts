@@ -6,6 +6,7 @@ import type { VenueOperationsScreen } from "./venue-operations-screen.js";
 import type { PrepStationsScreen } from "./prep-stations-screen.js";
 import type { ServiceSettingsPanel } from "./service-settings-panel.js";
 import type { OpeningHoursScreen } from "./opening-hours-screen.js";
+import type { PeriodsScreen } from "./periods-screen.js";
 
 const containers: HTMLElement[] = [];
 const originalUrl = location.href;
@@ -210,14 +211,42 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
         },
       ],
     };
+    const yearRead = (year: number) => ({
+      businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
+      clockRevision: 0,
+      currentBusinessDay: `${year}-10-07`,
+      pending: null,
+      year,
+      timeZone: "Europe/Madrid",
+      today: `${year}-10-07`,
+      seasons: [],
+      days: [],
+      publicHolidaysAvailable: true,
+      missingHolidays: [],
+      holidayCoverage: [],
+      area: {
+        addressKey: "fixture",
+        readiness: "ready",
+        options: [],
+        required: false,
+        chosen: null,
+      },
+    });
     const fetchImpl = vi.fn((path: string) =>
       Promise.resolve({
         ok: true,
         status: 200,
-        text: async () => JSON.stringify(path === "/management-api/stations" ? [] : model),
+        text: async () =>
+          JSON.stringify(
+            path === "/management-api/stations"
+              ? []
+              : path.includes("/opening-hours/year?")
+                ? yearRead(Number(new URL(path, location.href).searchParams.get("year")))
+                : model,
+          ),
       } as Response),
     );
-    history.replaceState(null, "", "/manage/opening-hours/view/periods/department/d1");
+    history.replaceState(null, "", "/manage/opening-hours/view/year");
     const liveData = new LiveData();
     const timetable = VENUE_SERVICE_DASHBOARD.moreScreens!.at(-1)!;
     expect(timetable.screen).toEqual({
@@ -242,28 +271,67 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
     expect(screen.api.liveData).toBe(liveData);
     expect(screen.readOnly).toBe(true);
     await vi.waitFor(() => expect(screen.shadowRoot!.querySelector("wt-tabs")).not.toBeNull());
+    const year = () => screen.shadowRoot!.querySelector("opening-hours-year");
     await vi.waitFor(() =>
-      expect(
-        screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
-          "[name=departmentId]",
-        )!.value,
-      ).toBe("d1"),
+      expect(year()?.shadowRoot?.querySelector("[data-test=year]")).not.toBeNull(),
     );
-    const periods =
-      screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>("wt-data-table")!;
-    await periods.updateComplete;
-    expect(periods.shadowRoot!.textContent).toContain("No periods yet.");
-    expect(screen.shadowRoot!.querySelector("[data-test=new-period]")).toBeNull();
+    expect(year()!.shadowRoot!.querySelector("[data-test=add-special-day]")).toBeNull();
     render(handle.render(false), container);
     await screen.updateComplete;
     expect(screen.readOnly).toBe(false);
-    expect(screen.shadowRoot!.querySelector("[data-test=new-period]")).not.toBeNull();
+    await year()!.updateComplete;
+    expect(year()!.shadowRoot!.querySelector("[data-test=add-special-day]")).not.toBeNull();
     const [path, init] = (fetchImpl.mock.calls as unknown as [string, RequestInit][]).find(
       ([path]) => path === "/management-api/venue-service/opening-hours",
     )!;
     expect(path).toBe("/management-api/venue-service/opening-hours");
     expect(new Headers(init.headers).get("x-waitron-live")).toBe("1");
   });
+});
+
+it("registers Periods between Opening hours and Prep stations, readable with venue.view", async () => {
+  const model = {
+    dayCutover: "06:00",
+    menus: [],
+    seasons: [],
+    departments: [{ id: "d1", name: "Restaurant", active: true, periods: [] }],
+  };
+  const fetchImpl = vi.fn((path: string) =>
+    Promise.resolve({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify(path.endsWith("/menu-periods/painted-in") ? [] : model),
+    } as Response),
+  );
+  const entry = VENUE_SERVICE_DASHBOARD.moreScreens![1]!;
+  expect(entry.screen).toEqual({
+    id: "periods",
+    navLabelKey: "nav.periods",
+    group: "operations",
+    order: 20,
+    requiresPermission: "venue_service.manage",
+    readPermission: "venue.view",
+  });
+  expect(VENUE_SERVICE_DASHBOARD.strings.en["nav.periods"]).toBe("Periods");
+  expect(VENUE_SERVICE_DASHBOARD.strings.es["nav.periods"]).toBe("Periodos");
+  const liveData = new LiveData();
+  const handle = entry.create({
+    request: createRequest({ fetchImpl: fetchImpl as unknown as typeof fetch }),
+    liveData,
+  });
+  const container = document.createElement("div");
+  document.body.append(container);
+  containers.push(container);
+  render(handle.render(true), container);
+  const screen = container.querySelector<PeriodsScreen>("dashboard-periods-screen")!;
+  expect(screen.readOnly).toBe(true);
+  expect(screen.api.liveData).toBe(liveData);
+  await vi.waitFor(() => expect(screen.shadowRoot!.querySelector("wt-data-table")).not.toBeNull());
+  expect(screen.shadowRoot!.querySelector("[data-test=add-period]")).toBeNull();
+  render(handle.render(false), container);
+  await screen.updateComplete;
+  expect(screen.readOnly).toBe(false);
+  expect(screen.shadowRoot!.querySelector("[data-test=add-period]")).not.toBeNull();
 });
 
 it("registers Opening hours without a separate Station hours page", () => {
@@ -274,6 +342,7 @@ it("registers Opening hours without a separate Station hours page", () => {
   expect(screens.map((screen) => screen.id)).toEqual([
     "venue-operations",
     "prep-stations",
+    "periods",
     "opening-hours",
   ]);
   expect(customElements.get("dashboard-hours-screen")).toBeUndefined();

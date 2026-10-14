@@ -2,6 +2,7 @@ import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
 import { SEASON_DAYS_MAX_DATES, type LocalDate } from "../hours-types.js";
 import type { OpeningHoursMonth, OpeningHoursYear, SeasonDays } from "../opening-hours-calendar.js";
 import type { MenuPeriodInput, MenuWeekDay, OpeningHoursModel } from "../menu-timetable-types.js";
+import type { PaintedIn, PeriodDeleteImpact } from "../period-delete.js";
 import type { Season } from "../season-rules.js";
 import type { ClosedRange } from "../service-day.js";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
@@ -26,6 +27,9 @@ export interface SeasonInput {
 export interface SeasonDeleteImpact {
   departments: { id: string; name: string }[];
 }
+
+export type PaintedInRow = { periodId: string } & PaintedIn;
+export type { PeriodDeleteImpact };
 
 const BASE = "/management-api/venue-service";
 const at = (id: string) => encodeURIComponent(id);
@@ -55,6 +59,30 @@ export class OpeningHoursApi {
       apply,
       failed,
       recovered,
+    );
+  }
+  watchPaintedIn(
+    apply: (rows: PaintedInRow[]) => void,
+    failed: (error: unknown) => void,
+    recovered: () => void,
+  ): () => void {
+    return this.#watches.watch(
+      "venue-service:menu-periods-painted-in",
+      QUERY_DEPENDENCIES["menu-periods-painted-in"],
+      () =>
+        this.request<PaintedInRow[]>(`${BASE}/menu-periods/painted-in`, "GET", undefined, {
+          passive: true,
+        }),
+      apply,
+      failed,
+      recovered,
+    );
+  }
+  /** Where one period is painted: a list of that period's row, or none once it is gone. */
+  readPaintedIn(periodId: string): Promise<PaintedInRow[]> {
+    return this.request(
+      `${BASE}/menu-periods/painted-in?periodId=${encodeURIComponent(periodId)}`,
+      "GET",
     );
   }
   /** On the special-day calendar's dependencies, so a special-day or holiday-area write re-reads it. */
@@ -167,6 +195,9 @@ export class OpeningHoursApi {
   readNumberOf(model: object): number | undefined {
     return this.#watches.readNumberOf(model);
   }
+  nextReadNumber(): number {
+    return this.#watches.nextReadNumber();
+  }
   rereadWithSpecialDays(): void {
     this.specialDays.rereadWatches();
     this.rereadWatches();
@@ -191,8 +222,27 @@ export class OpeningHoursApi {
       expectedClockRevision,
     });
   }
-  deletePeriod(periodId: string): Promise<void> {
-    return this.request(`${BASE}/menu-periods/${at(periodId)}`, "DELETE");
+  /** `passive` for a read nobody asked for, so it keeps no session alive. */
+  readPeriodDeleteImpact(
+    periodId: string,
+    options?: { passive?: boolean },
+  ): Promise<PeriodDeleteImpact> {
+    return this.request(
+      `${BASE}/menu-periods/${at(periodId)}/delete-impact`,
+      "GET",
+      undefined,
+      options,
+    );
+  }
+  deletePeriod(
+    periodId: string,
+    replacementPeriodId: string | null,
+    expectedClockRevision: number,
+  ): Promise<void> {
+    return this.request(`${BASE}/menu-periods/${at(periodId)}/delete`, "POST", {
+      replacementPeriodId,
+      expectedClockRevision,
+    });
   }
   saveSeasonWeeks(
     seasonId: string,

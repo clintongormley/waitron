@@ -118,6 +118,11 @@ A506-9 landed in #1651: the special-day painter replaces the special-day dialog 
 edits one special day's name, dates, Every year and each date's department and zone paint in a
 full-screen painter with its own address, opens from the Year, the month and an ordinary date, and
 saves only the paint the draft changed. An old `/view/date` address opens the month instead.
+A506-11 landed in #1694: a Periods page (`/manage/periods`) lists each department's periods with
+their menus and where they are painted, and adds, edits and deletes them through a new period
+dialog and a delete dialog that can hand the period's paint to another period; the painters' + New
+period and ✎ open the same dialog; the Opening hours Periods tab, the period editor and the old
+refusing delete (`DELETE …/menu-periods/:periodId`, `menu_period.in_use`) are gone.
 
 **Left open by A506-1, for the later parts.**
 - No test yet gives a second department its own paint on the same special day.
@@ -139,8 +144,6 @@ saves only the paint the draft changed. An old `/view/date` address opens the mo
   the code, not run.
 
 **Left open by A506-4, for the later parts.**
-- The Periods tab's "Placed on" column counts season weeks only, so a period placed only on a special
-  day reads "Not placed". A506-11 rebuilds that page.
 - A business-day changeover conflict reports "Invalid or overlapping range" before "Range crosses the
   new start" (`packages/venue-service/src/business-day-schedule.ts`, season lines too).
 - A special-day line in the Business day start dialog shows its date unformatted ("2026-11-03").
@@ -204,6 +207,17 @@ saves only the paint the draft changed. An old `/view/date` address opens the mo
   finish-branch review. One way to remove it is a cache that outlives the transaction.
 - The "Add to" offer reads every special day with every date (`GET …/special-days`) to show a name
   and a latest date.
+
+**Left open by A506-11, for the later parts.**
+- The period dialog keeps the End offset field although mockup 7 leaves it out, because nothing
+  else edits a period's end offset (open question Q1 of A506-11). Owner to confirm; removing it is one field.
+- The period dialog draws Delete… last in its body, not at the footer's left as mockup 7 does,
+  because `wt-form-actions` has no left-hand slot (ruling C3 of A506-11).
+- A painter opened from a Painted in chip on the Periods page closes to the Opening hours Year, not
+  back to the Periods page (open question Q10 and ruling C22 of A506-11): a manager loses their place.
+- The Opening hours model's `periods[].weekdays` and `routingUses` have no reader left in the
+  dashboard (open question Q9 of A506-11); `readOpeningHoursModel` still works both out on every read. See also
+  "Routing reads do work only one screen uses" in `docs/backlog.md`.
 
 **Left open by A506-9, for the later parts.**
 - A special day whose dates start their business day at different times is painted on one grid

@@ -414,6 +414,7 @@ export class SpecialDayPainter extends LitElement {
   private periods = new PeriodEditing(this, {
     api: () => this.api,
     model: () => this.model,
+    readOnly: () => this.readOnly,
     chose: (id) => {
       this.chosen = id;
     },
@@ -1178,7 +1179,7 @@ export class SpecialDayPainter extends LitElement {
   }
   private linkFor() {
     const department = this.department();
-    return department ? periodsLink(department.id) : nothing;
+    return department ? periodsLink() : nothing;
   }
   private pickerFor() {
     const department = this.department();

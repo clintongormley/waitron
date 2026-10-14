@@ -170,6 +170,28 @@ async function hours(
   const writes: unknown[][] = [];
   const api = new OpeningHoursApi(
     withOpeningStations((async (path, method, body) => {
+      if (method === "GET" && path.includes("/opening-hours/year?"))
+        return {
+          businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
+          clockRevision: 0,
+          currentBusinessDay: "2026-10-07",
+          pending: null,
+          year: Number(new URL(path, location.href).searchParams.get("year")),
+          timeZone: "Europe/Madrid",
+          today: "2026-10-07",
+          seasons: [],
+          days: [],
+          publicHolidaysAvailable: true,
+          missingHolidays: [],
+          holidayCoverage: [],
+          area: {
+            addressKey: "fixture",
+            readiness: "ready",
+            options: [],
+            required: false,
+            chosen: null,
+          },
+        };
       if (method === "GET") return path.includes("/named-days?") ? namedWeekModel() : model;
       writes.push([path, method, body]);
       return write();
@@ -188,35 +210,6 @@ async function hours(
   }
   return { screen, writes, model, replace };
 }
-it.each(["department", "period"])(
-  "remote %s deletion retires the dirty retained menu-period editor",
-  async (kind) => {
-    const { screen, model, replace, writes } = await hours("periods");
-    const table = screen.shadowRoot!.querySelector("wt-data-table")!;
-    await table.updateComplete;
-    table.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-period]")!.click();
-    await screen.updateComplete;
-    const editor = screen.shadowRoot!.querySelector("period-editor")!;
-    await editor.updateComplete;
-    emit(editor.shadowRoot!.querySelector("[name=name]")!, "wt-change", { value: "Staged lunch" });
-    await editor.updateComplete;
-    expect(app.leave.coordinator.isDirty()).toBe(true);
-    await replace(
-      kind === "department"
-        ? { ...model, departments: model.departments.slice(1) }
-        : {
-            ...model,
-            departments: model.departments.map((d) => (d.id === "d1" ? { ...d, periods: [] } : d)),
-          },
-    );
-    expect(screen.shadowRoot!.querySelector("period-editor")).toBeNull();
-    expect(editor.isConnected).toBe(false);
-    expect(app.leave.coordinator.isDirty()).toBe(false);
-    emit(editor, "period-save", { periodId: "p1", input: { name: "Stale" } });
-    await screen.updateComplete;
-    expect(writes).toEqual([]);
-  },
-);
 it("zone service deletion invalidates pending discard on the same retained component", async () => {
   await mount();
   const el = document.createElement("zone-edit-dialog");
@@ -246,7 +239,7 @@ it("zone service deletion invalidates pending discard on the same retained compo
 it.each(["week", "zone-week"])(
   "deletion drops the dirty painted %s and its Save writes nothing",
   async (kind) => {
-    const { screen, model, replace, writes } = await hours("periods");
+    const { screen, model, replace, writes } = await hours("year");
     history.pushState(
       null,
       "",
@@ -287,78 +280,7 @@ it.each(["week", "zone-week"])(
     expect(writes).toEqual([]);
   },
 );
-it("a live change to another department preserves the retained dirty period dialog", async () => {
-  const { screen, model, replace } = await hours("periods");
-  const table = screen.shadowRoot!.querySelector("wt-data-table")!;
-  await table.updateComplete;
-  table.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-period]")!.click();
-  await screen.updateComplete;
-  const editor = screen.shadowRoot!.querySelector("period-editor")!;
-  await editor.updateComplete;
-  emit(editor.shadowRoot!.querySelector("[name=name]")!, "wt-change", { value: "Staged lunch" });
-  await editor.updateComplete;
-  await replace({ ...model, departments: model.departments.slice(0, 1) });
-  expect(screen.shadowRoot!.querySelector("period-editor")).toBe(editor);
-  expect(
-    editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!.value,
-  ).toBe("Staged lunch");
-  expect(app.leave.coordinator.isDirty()).toBe(true);
-});
-it("voluntary period close waits for the native close event after discarding its draft", async () => {
-  const { screen } = await hours("periods");
-  const table = screen.shadowRoot!.querySelector("wt-data-table")!;
-  await table.updateComplete;
-  table.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-period]")!.click();
-  await screen.updateComplete;
-  const editor = screen.shadowRoot!.querySelector("period-editor")!;
-  await editor.updateComplete;
-  emit(editor.shadowRoot!.querySelector("[name=name]")!, "wt-change", { value: "Staged lunch" });
-  await editor.updateComplete;
-  const modal = editor.shadowRoot!.querySelector("wt-modal")!;
-  await modal.updateComplete;
-  const closed = new Promise<void>((done) =>
-    modal.addEventListener("wt-close", () => done(), { once: true }),
-  );
-  const result = modal.requestClose("cancel");
-  await app.updateComplete;
-  const question = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
-  await expect.poll(() => question.open).toBe(true);
-  await question.updateComplete;
-  question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
-  expect(await result).toBe(true);
-  await closed;
-  await screen.updateComplete;
-  expect(screen.shadowRoot!.querySelector("period-editor")).toBeNull();
-  expect(app.leave.coordinator.isDirty()).toBe(false);
-});
-it("a late period save cannot revive the removed department's retained dialog", async () => {
-  let finish!: () => void;
-  const { screen, model, replace, writes } = await hours(
-    "periods",
-    hoursFixture(),
-    () =>
-      new Promise<void>((done) => {
-        finish = done;
-      }),
-  );
-  const table = screen.shadowRoot!.querySelector("wt-data-table")!;
-  await table.updateComplete;
-  table.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-period]")!.click();
-  await screen.updateComplete;
-  const editor = screen.shadowRoot!.querySelector("period-editor")!;
-  await editor.updateComplete;
-  emit(editor.shadowRoot!.querySelector("[name=name]")!, "wt-change", { value: "Staged lunch" });
-  await editor.updateComplete;
-  editor.shadowRoot!.querySelector<HTMLElement>("[data-test=save-period]")!.click();
-  await expect.poll(() => writes.length).toBe(1);
-  await replace({ ...model, departments: model.departments.slice(1) });
-  finish();
-  await new Promise((done) => setTimeout(done, 0));
-  await screen.updateComplete;
-  expect(editor.isConnected).toBe(false);
-  expect(screen.shadowRoot!.querySelector("period-editor")).toBeNull();
-  expect(app.leave.coordinator.isDirty()).toBe(false);
-});
+
 it("department deletion removes its contributed receipt panel while another department draft survives", async () => {
   await mount();
   const survivor = await settings("d2");

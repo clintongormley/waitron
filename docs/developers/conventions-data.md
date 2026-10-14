@@ -679,9 +679,8 @@ same file is the writer behind the API; a configuration import inserts a bundle'
 day's name, dates, Every year and the paint of each department or zone and date it changed, in one
 request (see [design-system.md](design-system.md), "Forms").
 
-`DELETE …/menu-periods/:periodId` refuses a period `menu_period.in_use` while a season week or a
-special-day date's paint places it, past dates included; the refusal lists each use (`periodUses`
-and `deleteMenuPeriod` in `packages/venue-service/src/menu-timetable.ts`).
+**2026-10-14, A506-11.** The refusing `DELETE …/menu-periods/:periodId`, `deleteMenuPeriod` and
+`menu_period.in_use` are gone; `POST …/menu-periods/:periodId/delete` is the only delete.
 
 **2026-10-13, A506-10.** `POST …/menu-periods/:periodId/delete` deletes a period in use
 (`deletePeriod`, `packages/venue-service/src/period-delete.ts`), taking the clock revision as the
@@ -702,6 +701,11 @@ foreign key. Its routing-cell lines go with the period through their cascading f
 or not there is a replacement; none is moved to the replacement (owner, 2026-10-13, A578). It all
 runs in the caller's transaction, and ends with an end-offset check over the period's department
 that refuses `menu_timetable.invalid` (`reason: "end_offset"`).
+2026-10-14, A506-11: `GET …/menu-periods/painted-in?periodId=` lists that period alone, and a
+malformed id is refused as `shared.invalid_id`.
+2026-10-14, A506-11: the delete-impact answer also carries `clockRevision`, read in the same
+transaction with `readBusinessDayScheduleRevision`, the reader the delete's own check uses; the
+delete dialog sends it back as `expectedClockRevision`.
 
 A configuration transfer carries both tables under the importing venue's location
 (`VENUE_SERVICE_CONFIGURATION_TRANSFER`). The import refuses, as `setup.request_invalid` naming
@@ -714,9 +718,8 @@ transfer" in `apps/server/src/configuration-transfer.test.ts`.
 
 ### Earlier W98 menu timetable model
 
-**2026-10-13, A506-5:** `special_dates`, `menu_day_timetables` and `menu_slots` are dropped, and
-`menu_period.in_use` reads season weeks and special-day paint, and since A506-10
-`POST …/menu-periods/:periodId/delete` deletes a period in use; see "Special days" above.
+**2026-10-13, A506-5:** `special_dates`, `menu_day_timetables` and `menu_slots` are dropped. Since
+A506-10 `POST …/menu-periods/:periodId/delete` deletes a period in use; see "Special days" above.
 
 W98 keeps each department's menu timetable in four venue-service tables, all classified `state`
 (`packages/venue-service/src/schema/menus.ts`): `menu_periods` (a named period such as "Mañanas"
@@ -744,6 +747,7 @@ calendar.
   it, past special dates included; once none does, its zones' overrides and the routing cells'
   choices for it (`routing_cell_periods`) cascade with it. The Periods tab's delete dialog lists
   those routing cells first (`routingWarning`, `packages/venue-service/src/dashboard/opening-hours-screen.ts`).
+  (2026-10-14, A506-11: that refusal and the Periods tab are gone; see "Special days" above.)
 - A whole-venue closure does not close menus: the clash checks build their date state with
   `closeWholeVenue: false` (`firstMenuClash`, `packages/venue-service/src/menu-timetable-rules.ts`)
   and the resolver never reads `special_dates.close_whole_venue`.

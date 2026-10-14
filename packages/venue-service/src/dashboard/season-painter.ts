@@ -167,6 +167,7 @@ export class SeasonPainter extends LitElement {
   private periods = new PeriodEditing(this, {
     api: () => this.api,
     model: () => this.model,
+    readOnly: () => this.readOnly,
     chose: (id) => {
       this.chosen = id;
     },
@@ -617,7 +618,7 @@ export class SeasonPainter extends LitElement {
           this.forget();
         }}
       >
-        ${this.seasonChip()}${this.picker(department)} ${periodsLink(department.id)}
+        ${this.seasonChip()}${this.picker(department)} ${periodsLink()}
         ${this.readOnly ? nothing : this.paintRow(department, chosen, zone !== undefined)}
         <paint-grid
           .target=${`${this.seasonId}/${key}`}

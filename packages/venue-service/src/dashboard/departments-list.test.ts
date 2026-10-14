@@ -177,11 +177,9 @@ describe("department list", () => {
     const cells = rows(el).map((row) => row.querySelectorAll("td")[0]!);
     expect(cells[0]!.textContent).toContain("Restaurant and bar has no opening periods.");
     expect(cells[0]!.querySelector('[part="setup-issue"] a')!.getAttribute("href")).toBe(
-      "/manage/opening-hours/department/d1",
+      "/manage/periods",
     );
-    expect(cells[0]!.querySelector('[part="setup-issue"] a')!.textContent).toBe(
-      "Set up Opening hours",
-    );
+    expect(cells[0]!.querySelector('[part="setup-issue"] a')!.textContent).toBe("Set up periods");
     expect(cells[0]!.textContent).toContain("Dining room needs an active, published menu.");
     expect(cells[0]!.textContent).toContain("Bar: Lunch has no products for Bar.");
     expect(cells[1]!.querySelectorAll('[part="setup-issue"]')).toHaveLength(0);

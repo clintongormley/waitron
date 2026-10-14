@@ -220,6 +220,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
         background: var(--wt-color-surface);
       }
 
+      :host([wrap-to-fit]) table {
+        min-width: 0;
+      }
+
       table[data-locked-columns] {
         table-layout: fixed;
       }
@@ -846,6 +850,9 @@ export class WtDataTable<Row = unknown> extends LitElement {
   /** Extra part names for a row's tree toggle button, after `tree-toggle`, so a screen can style
    * one kind of row's toggle apart from another's. */
   @property({ attribute: false }) rowToggleParts?: (row: Row) => string;
+  /** Part names for every cell of a row, so a screen can style one kind of row's cells, a group
+   * heading row's band for one. */
+  @property({ attribute: false }) rowCellParts?: (row: Row) => string;
   @property({ type: Boolean }) initiallyCollapsed = false;
   @property({ type: Boolean }) collapseDescendants = false;
   @property({ attribute: false }) rowInitiallyExpanded: (row: Row) => boolean = () => false;
@@ -923,6 +930,9 @@ export class WtDataTable<Row = unknown> extends LitElement {
   /** Starts every body cell's content at the cell's top rather than lining cells up by their
    * first line's baseline. */
   @property({ type: Boolean, reflect: true, attribute: "top-aligned" }) topAligned = false;
+  /** Lets headings and cell text wrap at spaces so the columns fit the box, which then scrolls
+   * sideways only when they cannot. Off, nothing wraps to make room: the box scrolls instead. */
+  @property({ type: Boolean, reflect: true, attribute: "wrap-to-fit" }) wrapToFit = false;
   @state() private sideFilters = false;
   @state() private searchText = "";
   /** Every filter choice, chosen or restored, keyed by column key: a string for a single-choice
@@ -2473,7 +2483,11 @@ export class WtDataTable<Row = unknown> extends LitElement {
    * where the table's own role is overridden to `treegrid` and every cell needs one. */
   #renderSelectCell(key: string, row: Row, isTree: boolean) {
     if (!this.selectable && !this.rowControls) return nothing;
-    return html`<td class="select" role=${isTree ? "gridcell" : nothing}>
+    return html`<td
+      class="select"
+      role=${isTree ? "gridcell" : nothing}
+      part=${this.rowCellParts?.(row) || nothing}
+    >
       <span class="row-controls">
         ${
           this.selectable && this.rowSelectable(row)
@@ -2904,12 +2918,14 @@ export class WtDataTable<Row = unknown> extends LitElement {
               ${repeat(sorted, repeatKeys(rowKeys), (row, index) => {
                 const key = rowKeys[index]!;
                 const clicks = this.rowClick !== undefined && (this.rowClickable?.(row) ?? true);
+                const cellParts = this.rowCellParts?.(row);
                 return html`
                   <tr data-row-key=${key} class=${classMap({ clickable: clicks })}>
                     ${this.#renderSelectCell(key, row, false)}
                     ${shown.map(
                       (column, ci) => html`
                         <td
+                          part=${cellParts || nothing}
                           data-align=${column.align ?? "start"}
                           data-pinned=${column.pinned ?? nothing}
                           data-actions=${column.key === "actions" ? "" : nothing}
@@ -2987,6 +3003,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
                     ? this.collapseLabel
                     : this.expandLabel;
                 const joined = depth > 0 && this.rowJoinsParent(row);
+                const cellParts = this.rowCellParts?.(row);
                 const activate = toggles
                   ? () => this.#toggle(key)
                   : clicks
@@ -3004,6 +3021,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
                     (column, ci) =>
                       html`<td
                         role="gridcell"
+                        part=${cellParts || nothing}
                         data-align=${column.align ?? "start"}
                         data-pinned=${column.pinned ?? nothing}
                         data-actions=${column.key === "actions" ? "" : nothing}

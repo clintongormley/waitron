@@ -18,30 +18,55 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { CALENDAR_COLOURS, type CalendarColour } from "../hours-types.js";
 import type { MenuPeriodInput, OpeningHoursModel } from "../menu-timetable-types.js";
+import type { PaintedIn } from "../period-delete.js";
 import { format } from "./hours-view.js";
+import { seasonPainterPath, specialDayPainterPath } from "./opening-hours-paths.js";
+import { periodColourStyles } from "./period-colour-styles.js";
+import { seasonTints, seasonTintStyles } from "./season-tint.js";
 import { t } from "./strings.js";
 
 type Draft = Omit<MenuPeriodInput, "endOffsetMinutes"> & {
   colour: CalendarColour;
   endOffsetMinutes: string;
+  /** Empty unless the dialog asks for the department. */
+  departmentId: string;
 };
+type Department = { id: string; name: string; usedColours: readonly CalendarColour[] };
 const offsetNumber = (text: string): number | undefined =>
   /^[+-]?\d+$/.test(text) ? Number(text) : undefined;
 type Field = keyof Draft;
+const COLOUR_STEPS: Partial<Record<string, 1 | -1>> = {
+  ArrowRight: 1,
+  ArrowDown: 1,
+  ArrowLeft: -1,
+  ArrowUp: -1,
+};
 const copy = (value: Draft): Draft => ({ ...value, staffMenuIds: [...value.staffMenuIds] });
+const unused = (usedColours: readonly CalendarColour[]) =>
+  CALENDAR_COLOURS.find((colour) => !usedColours.includes(colour)) ?? CALENDAR_COLOURS[0];
 const empty = (usedColours: readonly CalendarColour[] = []): Draft => ({
   name: "",
-  colour: CALENDAR_COLOURS.find((colour) => !usedColours.includes(colour)) ?? CALENDAR_COLOURS[0],
+  colour: unused(usedColours),
   menuId: "",
   staffMenuIds: [],
   endOffsetMinutes: "0",
+  departmentId: "",
 });
-const fields: Field[] = ["name", "colour", "menuId", "staffMenuIds", "endOffsetMinutes"];
+const fields: Field[] = [
+  "departmentId",
+  "name",
+  "colour",
+  "menuId",
+  "staffMenuIds",
+  "endOffsetMinutes",
+];
 
-@customElement("period-editor")
-export class PeriodEditor extends LitElement {
+@customElement("period-dialog")
+export class PeriodDialog extends LitElement {
   static override styles = [
     baseStyles,
+    periodColourStyles,
+    seasonTintStyles,
     css`
       :host {
         display: block;
@@ -51,6 +76,69 @@ export class PeriodEditor extends LitElement {
         gap: var(--wt-space-4);
         padding-block: var(--wt-space-3);
       }
+      fieldset {
+        display: grid;
+        gap: var(--wt-space-2);
+        border: none;
+        margin: 0;
+        padding: 0;
+      }
+      legend {
+        padding: 0;
+        margin-block-end: var(--wt-space-2);
+      }
+      [role="radiogroup"] {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-2);
+      }
+      .swatch {
+        width: var(--wt-space-6);
+        height: var(--wt-space-6);
+        padding: 0;
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-sm);
+        background: var(--period-fill);
+        cursor: pointer;
+      }
+      .swatch[aria-checked="true"] {
+        outline: var(--wt-field-line-width-active) solid var(--wt-color-text);
+        outline-offset: var(--wt-focus-offset);
+      }
+      [data-test="colour-error"] {
+        color: var(--wt-color-danger);
+        font-size: var(--wt-font-size-sm);
+      }
+      .painted {
+        display: grid;
+        gap: var(--wt-space-2);
+      }
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-2);
+      }
+      .chip {
+        padding: var(--wt-space-1) var(--wt-space-3);
+        border: 1px solid var(--wt-color-palette-purple);
+        border-radius: var(--wt-radius-full);
+        color: var(--wt-color-text);
+        text-decoration: none;
+      }
+      .chip[data-tint] {
+        background: var(--season-tint);
+        color: var(--season-on-tint);
+        border-color: var(--season-tint-line);
+      }
+      [data-test="not-painted"] {
+        color: var(--wt-color-warning);
+      }
+      [data-test="menu-includes"],
+      [data-test="offset-explanation"] {
+        margin: calc(-1 * var(--wt-space-3)) 0 0;
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
     `,
   ];
   @property({ type: Boolean }) open = false;
@@ -58,12 +146,23 @@ export class PeriodEditor extends LitElement {
   @property() departmentName = "";
   /** The submit button's text; Save when empty. */
   @property() submitLabel = "";
+  /** Adding a period from a painter, which asks for no floor plan. */
+  @property({ type: Boolean }) fromPainter = false;
   @property({ attribute: false })
   period?: OpeningHoursModel["departments"][number]["periods"][number];
   @property({ attribute: false }) menus: OpeningHoursModel["menus"] = [];
   @property({ attribute: false }) usedColours: readonly CalendarColour[] = [];
   @property({ attribute: false }) refusal?: { code: string; params?: Record<string, unknown> };
+  /** Where the period is painted; absent draws no Painted in. */
+  @property({ attribute: false }) paintedIn?: PaintedIn;
+  @property({ attribute: false }) seasons: readonly { id: string; startsOn: string }[] = [];
+  @property() departmentId = "";
+  @property({ type: Boolean }) paintedInLinks = false;
+  @property({ type: Boolean }) deletable = false;
+  /** Given when adding without a fixed department, so the dialog asks for one. */
+  @property({ attribute: false }) departments?: readonly Department[];
   @state() private draft: Draft = empty();
+  private colourPicked = false;
   @state() private attempted = false;
   private scope?: DraftScope<Draft>;
   private leave?: LeaveCoordinator;
@@ -109,8 +208,12 @@ export class PeriodEditor extends LitElement {
             menuId: this.period.menuId,
             staffMenuIds: [...this.period.staffMenuIds],
             endOffsetMinutes: String(this.period.endOffsetMinutes),
+            departmentId: "",
           }
-        : empty(this.usedColours);
+        : this.departments?.length === 1
+          ? { ...empty(this.departments[0]!.usedColours), departmentId: this.departments[0]!.id }
+          : empty(this.usedColours);
+      this.colourPicked = false;
       this.baseline = copy(this.input);
       this.attempted = false;
       this.refusal = undefined;
@@ -126,6 +229,7 @@ export class PeriodEditor extends LitElement {
           a.colour === b.colour &&
           a.menuId === b.menuId &&
           a.endOffsetMinutes === b.endOffsetMinutes &&
+          a.departmentId === b.departmentId &&
           a.staffMenuIds.length === b.staffMenuIds.length &&
           a.staffMenuIds.every((id) => b.staffMenuIds.includes(id)),
         restore: (value) => {
@@ -145,8 +249,16 @@ export class PeriodEditor extends LitElement {
       endOffsetMinutes: offset === undefined ? this.draft.endOffsetMinutes : String(offset),
     };
   }
+  private get choosesDepartment() {
+    return !this.period && this.departments !== undefined;
+  }
   private get ownErrors(): Partial<Record<Field, string>> {
     const errors: Partial<Record<Field, string>> = {};
+    if (
+      this.choosesDepartment &&
+      !this.departments!.some(({ id }) => id === this.input.departmentId)
+    )
+      errors.departmentId = t("period.department_required");
     if (!this.input.name) errors.name = t("menu.name_required");
     if (!this.input.menuId) errors.menuId = t("menu.menu_required");
     if (!CALENDAR_COLOURS.includes(this.input.colour)) errors.colour = t("hours.colour_required");
@@ -159,6 +271,11 @@ export class PeriodEditor extends LitElement {
     const refusal = this.refusal;
     if (!refusal) return undefined;
     if (refusal.code === "menu_period.name_taken") return "name";
+    if (
+      refusal.code === "department.not_found" &&
+      refusal.params?.departmentId === (this.submitted ?? this.input).departmentId
+    )
+      return "departmentId";
     const field = refusal.params?.field;
     if (
       (refusal.code === "menu_period.invalid" ||
@@ -179,6 +296,7 @@ export class PeriodEditor extends LitElement {
     if (this.refusalField() === field) {
       if (this.refusal?.code === "menu_period.name_taken") return t("menu.name_taken");
       if (this.refusal?.code === "catalogue.not_found") return t("opening.active_menus_required");
+      if (this.refusal?.code === "department.not_found") return t("menu.department_gone");
       if (field === "endOffsetMinutes" && this.refusal?.params?.reason === "placement")
         return t("menu.offset_placement");
       return t("menu.field_refused");
@@ -192,6 +310,14 @@ export class PeriodEditor extends LitElement {
         ...this.draft,
         staffMenuIds: this.draft.staffMenuIds.filter((id) => id !== value),
       };
+    if (field === "colour") this.colourPicked = true;
+    if (field === "departmentId" && !this.colourPicked) {
+      const department = this.departments?.find((entry) => entry.id === value);
+      this.draft = {
+        ...this.draft,
+        colour: unused(department ? department.usedColours : this.usedColours),
+      };
+    }
     if (this.refusalField() === field) this.refusal = undefined;
     this.scope?.changed();
   }
@@ -206,14 +332,13 @@ export class PeriodEditor extends LitElement {
     }
     this.submittedGeneration = this.generation;
     this.submitted = copy(this.input);
+    const { departmentId, ...input } = copy(this.input);
     this.dispatchEvent(
       new CustomEvent("period-save", {
         detail: {
           periodId: this.period?.id ?? null,
-          input: {
-            ...copy(this.input),
-            endOffsetMinutes: offsetNumber(this.draft.endOffsetMinutes)!,
-          },
+          input: { ...input, endOffsetMinutes: offsetNumber(this.draft.endOffsetMinutes)! },
+          ...(this.choosesDepartment ? { departmentId } : {}),
         },
         bubbles: true,
         composed: true,
@@ -227,6 +352,7 @@ export class PeriodEditor extends LitElement {
       ...input,
       colour: input.colour ?? this.submitted!.colour,
       endOffsetMinutes: String(input.endOffsetMinutes ?? this.submitted!.endOffsetMinutes),
+      departmentId: this.submitted!.departmentId,
     };
     this.baseline = copy(submitted);
     this.scope?.commit(submitted);
@@ -239,20 +365,70 @@ export class PeriodEditor extends LitElement {
     const outcome = await this.leave.request({ scopes: [this.scope.id], reason, proceed() {} });
     return this.isConnected && generation === this.generation && outcome === "proceeded";
   };
+  private async requestDelete(periodId: string) {
+    const generation = this.generation;
+    if (this.scope && this.leave) {
+      const outcome = await this.leave.request({
+        scopes: [this.scope.id],
+        reason: "cancel",
+        proceed() {},
+      });
+      if (outcome !== "proceeded") return;
+    }
+    if (!this.isConnected || !this.open || this.busy || generation !== this.generation) return;
+    this.open = false;
+    this.dispatchEvent(new CustomEvent("period-close", { bubbles: true, composed: true }));
+    this.dispatchEvent(
+      new CustomEvent("period-delete", { detail: { periodId }, bubbles: true, composed: true }),
+    );
+  }
+  private paintedInSection() {
+    const painted = this.paintedIn;
+    if (!this.period || !painted) return nothing;
+    const tints = seasonTints(this.seasons);
+    const links = this.paintedInLinks && this.departmentId !== "";
+    const chip = (text: string, href: string, special: boolean, tint?: string) =>
+      links
+        ? html`<a
+            class="chip"
+            href=${href}
+            data-tint=${tint || nothing}
+            ?data-special-day=${special}
+            >${text}</a
+          >`
+        : html`<span class="chip" data-tint=${tint || nothing} ?data-special-day=${special}
+            >${text}</span
+          >`;
+    return html`<div
+      class="painted"
+      data-test="painted-in"
+      role="group"
+      aria-labelledby="painted-in-label"
+    >
+      <span id="painted-in-label">${t("period.painted_in")}</span>
+      ${
+        painted.seasons.length || painted.specialDays.length
+          ? html`<div class="chips">
+              ${painted.seasons.map((season) =>
+                chip(
+                  season.name,
+                  seasonPainterPath({ seasonId: season.id, departmentId: this.departmentId }),
+                  false,
+                  tints.get(season.id),
+                ),
+              )}
+              ${painted.specialDays.map((day) =>
+                chip(day.name, specialDayPainterPath({ specialDayId: day.id }), true),
+              )}
+            </div>`
+          : html`<span data-test="not-painted">${t("period.not_painted")}</span>`
+      }
+    </div>`;
+  }
   private menuOptions(exclude?: string) {
     return this.menus
       .filter((menu) => menu.active && menu.id !== exclude)
-      .map((menu) => ({
-        value: menu.id,
-        label: menu.includes.length
-          ? format("opening.menu_includes", {
-              name: menu.name,
-              menus: menu.includes
-                .map((id) => this.menus.find((item) => item.id === id)?.name ?? id)
-                .join(", "),
-            })
-          : menu.name,
-      }));
+      .map((menu) => ({ value: menu.id, label: menu.name }));
   }
   override render(): unknown {
     if (!this.open) return nothing;
@@ -266,6 +442,9 @@ export class PeriodEditor extends LitElement {
             ? t("menu.department_gone")
             : t("menu.save_error")
         : "";
+    const colourError = this.error("colour");
+    const tabStop = Math.max(0, CALENDAR_COLOURS.indexOf(this.draft.colour));
+    const includes = this.menus.find((menu) => menu.id === this.draft.menuId)?.includes ?? [];
     const generation = this.generation;
     const current = () =>
       generation === this.generation && this.isConnected && this.open && !this.busy;
@@ -274,7 +453,7 @@ export class PeriodEditor extends LitElement {
       html`<wt-modal
         open
         size="compact"
-        heading=${this.period ? format("menu.edit_period_heading", { name: this.period.name }) : format("menu.add_period_heading", { department: this.departmentName })}
+        heading=${this.choosesDepartment ? t("period.add") : format(this.period ? "period.edit_heading" : "period.add_heading", { department: this.departmentName })}
         .dismissible=${!this.busy}
         .beforeClose=${this.beforeClose}
         @wt-close=${(event: Event) => {
@@ -289,6 +468,23 @@ export class PeriodEditor extends LitElement {
         }}
       >
         <div class="form">
+          ${
+            this.choosesDepartment
+              ? html`<wt-combobox
+                  name="departmentId"
+                  label=${t("menu.department")}
+                  required
+                  .value=${this.draft.departmentId}
+                  .options=${this.departments!.map((department) => ({ value: department.id, label: department.name }))}
+                  .error=${this.error("departmentId")}
+                  ?disabled=${this.busy}
+                  @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                    event.stopPropagation();
+                    if (current()) this.changed("departmentId", event.detail.value);
+                  }}
+                ></wt-combobox>`
+              : nothing
+          }
           <wt-input
             name="name"
             label=${t("menu.period_name")}
@@ -301,22 +497,54 @@ export class PeriodEditor extends LitElement {
               if (current()) this.changed("name", event.detail.value);
             }}
           ></wt-input>
-          <wt-combobox
-            name="colour"
-            label=${t("hours.colour")}
-            search="never"
-            .value=${this.draft.colour}
-            .error=${this.error("colour")}
-            ?disabled=${this.busy}
-            .options=${CALENDAR_COLOURS.map((colour) => ({ value: colour, label: t(`hours.colour.${colour}`) }))}
-            @wt-change=${(event: CustomEvent<{ value: string }>) => {
-              event.stopPropagation();
-              if (current()) this.changed("colour", event.detail.value);
-            }}
-          ></wt-combobox>
+          <fieldset name="colour">
+            <legend>${t("hours.colour")}</legend>
+            <div
+              role="radiogroup"
+              aria-label=${t("hours.colour")}
+              aria-invalid=${colourError ? "true" : "false"}
+              aria-describedby="colour-error"
+            >
+              ${CALENDAR_COLOURS.map(
+                (colour, index) =>
+                  html`<button
+                    type="button"
+                    class="swatch"
+                    role="radio"
+                    aria-checked=${this.draft.colour === colour ? "true" : "false"}
+                    aria-label=${t(`hours.colour.${colour}`)}
+                    aria-invalid=${colourError && index === 0 ? "true" : nothing}
+                    data-colour=${colour}
+                    tabindex=${index === tabStop ? 0 : -1}
+                    ?disabled=${this.busy}
+                    @click=${(event: Event) => {
+                      event.stopPropagation();
+                      if (current()) this.changed("colour", colour);
+                    }}
+                    @keydown=${(event: KeyboardEvent) => {
+                      const step = COLOUR_STEPS[event.key];
+                      if (!step) return;
+                      event.preventDefault();
+                      if (!current()) return;
+                      const next =
+                        CALENDAR_COLOURS[
+                          (index + step + CALENDAR_COLOURS.length) % CALENDAR_COLOURS.length
+                        ]!;
+                      this.changed("colour", next);
+                      void this.updateComplete.then(() =>
+                        this.shadowRoot!.querySelector<HTMLElement>(
+                          `[role=radio][data-colour="${next}"]`,
+                        )?.focus(),
+                      );
+                    }}
+                  ></button>`,
+              )}
+            </div>
+            <span id="colour-error" data-test="colour-error">${colourError}</span>
+          </fieldset>
           <wt-combobox
             name="menuId"
-            label=${t("menu.period_menu")}
+            label=${t("period.customer_menu")}
             required
             .value=${this.draft.menuId}
             .options=${this.menuOptions()}
@@ -325,6 +553,26 @@ export class PeriodEditor extends LitElement {
             @wt-change=${(event: CustomEvent<{ value: string }>) => {
               event.stopPropagation();
               if (current()) this.changed("menuId", event.detail.value);
+            }}
+          ></wt-combobox>
+          ${
+            includes.length
+              ? html`<p data-test="menu-includes">
+                  ${format("period.includes", { menus: includes.join(", ") })}
+                </p>`
+              : nothing
+          }
+          <wt-combobox
+            name="staffMenuIds"
+            label=${t("opening.staff_menus")}
+            multiple
+            .values=${this.draft.staffMenuIds}
+            .options=${this.menuOptions(this.draft.menuId)}
+            .error=${this.error("staffMenuIds")}
+            ?disabled=${this.busy}
+            @wt-change=${(event: CustomEvent<{ values: string[] }>) => {
+              event.stopPropagation();
+              if (current()) this.changed("staffMenuIds", [...event.detail.values]);
             }}
           ></wt-combobox>
           <wt-input
@@ -340,19 +588,32 @@ export class PeriodEditor extends LitElement {
             }}
           ></wt-input>
           <p data-test="offset-explanation">${t("menu.offset_explanation")}</p>
-          <wt-combobox
-            name="staffMenuIds"
-            label=${t("opening.staff_menus")}
-            multiple
-            .values=${this.draft.staffMenuIds}
-            .options=${this.menuOptions(this.draft.menuId)}
-            .error=${this.error("staffMenuIds")}
-            ?disabled=${this.busy}
-            @wt-change=${(event: CustomEvent<{ values: string[] }>) => {
-              event.stopPropagation();
-              if (current()) this.changed("staffMenuIds", [...event.detail.values]);
-            }}
-          ></wt-combobox>
+          ${
+            this.period || !this.fromPainter
+              ? html`<wt-combobox
+                  name="floorPlanId"
+                  label=${t("period.floor_plan")}
+                  placeholder=${t("period.floor_plan_later")}
+                  disabled
+                ></wt-combobox>`
+              : nothing
+          }
+          ${this.paintedInSection()}
+          ${
+            this.period && this.deletable
+              ? html`<div>
+                  <wt-button
+                    data-test="delete-period"
+                    variant="secondary"
+                    ?disabled=${this.busy}
+                    @click=${() => {
+                      if (current()) void this.requestDelete(this.period!.id);
+                    }}
+                    >${t("period.delete_ellipsis")}</wt-button
+                  >
+                </div>`
+              : nothing
+          }
         </div>
         <wt-form-actions
           slot="footer"
@@ -385,6 +646,6 @@ export class PeriodEditor extends LitElement {
 }
 declare global {
   interface HTMLElementTagNameMap {
-    "period-editor": PeriodEditor;
+    "period-dialog": PeriodDialog;
   }
 }

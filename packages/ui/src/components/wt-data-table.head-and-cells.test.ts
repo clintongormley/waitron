@@ -342,3 +342,55 @@ test("in a tree row that opens something, a click on a cell opens it unless the 
   activator.click();
   expect(opened).toHaveBeenCalledWith(rows[1]);
 });
+
+test("wrapToFit wraps headings and text at spaces to fit the box, keeps a no-wrap item whole, and scrolls only when even that cannot fit", async () => {
+  const words = "one two three four five six seven eight nine ten";
+  const columns: DataTableColumn<Row>[] = [
+    { key: "name", label: `Name ${words}`, cell: (row) => `${row.name} ${words}` },
+    {
+      key: "tag",
+      label: "Tag",
+      cell: () => html`<span data-test="whole" style="white-space: nowrap">kept on one line</span>`,
+    },
+    { key: "actions", label: "Actions", pinned: "end", cell: () => "Edit" },
+  ];
+  const measure = async (frameWidth: number, wrapToFit: boolean) => {
+    const el = await table({ columns, wrapToFit });
+    el.parentElement!.style.inlineSize = `${frameWidth}px`;
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const root = el.shadowRoot!;
+    const scroll = root.querySelector<HTMLElement>(".scroll")!;
+    const heading = root.querySelector<HTMLElement>("thead th")!;
+    const whole = root.querySelector<HTMLElement>("[data-test=whole]")!;
+    const lines = (node: Node) => {
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      return new Set([...range.getClientRects()].map((rect) => Math.round(rect.top))).size;
+    };
+    const result = {
+      attribute: el.hasAttribute("wrap-to-fit"),
+      overflow: scroll.scrollWidth - scroll.clientWidth,
+      headingLines: lines(heading),
+      wholeLines: lines(whole),
+      cellsHoldTheirContent: [...root.querySelectorAll<HTMLElement>("th, td")].every(
+        (cell) => cell.scrollWidth <= cell.clientWidth + 1,
+      ),
+    };
+    cleanup();
+    return result;
+  };
+
+  const plain = await measure(400, false);
+  expect(plain).toMatchObject({ attribute: false, headingLines: 1, wholeLines: 1 });
+  expect(plain.overflow).toBeGreaterThan(50);
+
+  const fitted = await measure(400, true);
+  expect(fitted.attribute).toBe(true);
+  expect(fitted.overflow).toBeLessThanOrEqual(1);
+  expect(fitted.headingLines).toBeGreaterThan(1);
+  expect(fitted).toMatchObject({ wholeLines: 1, cellsHoldTheirContent: true });
+
+  const tooNarrow = await measure(120, true);
+  expect(tooNarrow.overflow).toBeGreaterThan(50);
+  expect(tooNarrow).toMatchObject({ wholeLines: 1, cellsHoldTheirContent: true });
+});

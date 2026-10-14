@@ -1,6 +1,5 @@
 import { withOpeningStations } from "../testing/opening-hours-stations-request.js";
 import { afterEach, describe, expect, test } from "vitest";
-import { page } from "vitest/browser";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
 import { mountThemed, expectNoA11yViolations } from "@waitron/ui/src/a11y-helpers.js";
@@ -15,26 +14,41 @@ afterEach(() => {
   history.replaceState(null, "", originalUrl);
 });
 describe.each(["light", "dark"] as const)("Opening hours (%s)", (theme) => {
-  test.each([
-    "periods",
-    "empty",
-    "viewer",
-    "delete",
-    "delete-routing",
-    "delete-refused",
-    "load-failed",
-    "unreadable-viewer",
-  ])("%s", async (state) => {
+  test.each(["load-failed", "unreadable-viewer"])("%s", async (state) => {
     setLocale("en");
-    history.replaceState(null, "", "/manage/opening-hours/view/periods");
+    history.replaceState(null, "", "/manage/opening-hours/view/year");
     // Assign the API before connecting: the screen attaches its passive model watch on connection.
     const wrapper = await mountThemed("<div></div>", theme);
     const screen = document.createElement("dashboard-opening-hours-screen") as OpeningHoursScreen;
     screen.api = new OpeningHoursApi(
-      withOpeningStations((async (_path, method) => {
+      withOpeningStations((async (path: string) => {
         if (state === "load-failed") throw new Error("offline");
-        if (method !== "GET")
-          throw { code: "menu_period.in_use", params: { uses: [{ kind: "week", weekday: 1 }] } };
+        if (path.includes("/opening-hours/year?"))
+          return {
+            businessDayClock: {
+              timeZone: "Europe/Madrid",
+              dayCutover: "06:00",
+              cutoverChanges: [],
+            },
+            clockRevision: 0,
+            currentBusinessDay: "2026-10-12",
+            pending: null,
+            year: Number(new URL(path, location.href).searchParams.get("year")),
+            timeZone: "Europe/Madrid",
+            today: "2026-10-12",
+            seasons: [],
+            days: [],
+            publicHolidaysAvailable: true,
+            missingHolidays: [],
+            holidayCoverage: [],
+            area: {
+              addressKey: "fixture-address",
+              readiness: "ready",
+              options: [],
+              required: false,
+              chosen: null,
+            },
+          };
         return {
           businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
           clockRevision: 0,
@@ -49,33 +63,24 @@ describe.each(["light", "dark"] as const)("Opening hours (%s)", (theme) => {
               id: "restaurant",
               name: "Restaurant",
               active: true,
-              periods:
-                state === "empty"
-                  ? []
-                  : [
-                      {
-                        id: "p1",
-                        name: "Lunch",
-                        colour: "green",
-                        menuId: "lunch",
-                        staffMenuIds: [],
-                        endOffsetMinutes: 0,
-                        weekdays: [1, 3],
-                        routingUses:
-                          state === "delete-routing"
-                            ? [
-                                { rowKind: "category", rowLabel: "Cocktails", zoneName: null },
-                                { rowKind: "all", rowLabel: null, zoneName: "Terrace" },
-                              ]
-                            : [],
-                      },
-                    ],
+              periods: [
+                {
+                  id: "p1",
+                  name: "Lunch",
+                  colour: "green",
+                  menuId: "lunch",
+                  staffMenuIds: [],
+                  endOffsetMinutes: 0,
+                  weekdays: [1, 3],
+                  routingUses: [],
+                },
+              ],
             },
           ],
         };
       }) as DashboardRequest),
     );
-    screen.readOnly = state === "viewer" || state === "unreadable-viewer";
+    screen.readOnly = state === "unreadable-viewer";
     wrapper.appendChild(screen);
     if (state === "load-failed") {
       await expect
@@ -87,100 +92,11 @@ describe.each(["light", "dark"] as const)("Opening hours (%s)", (theme) => {
       await expectNoA11yViolations(host);
       return;
     }
-    await expect.poll(() => screen.shadowRoot!.querySelector("wt-data-table")).not.toBeNull();
-    const table =
-      screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>("wt-data-table")!;
-    await table.updateComplete;
-    if (state.startsWith("delete")) {
-      table.shadowRoot!.querySelector<HTMLElement>("[data-test=delete-period]")!.click();
-      await screen.updateComplete;
-      if (state === "delete-routing")
-        expect(screen.shadowRoot!.querySelectorAll("[data-test=routing-uses] li")).toHaveLength(2);
-      if (state === "delete-refused") {
-        screen.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
-        await expect
-          .poll(() => screen.shadowRoot!.querySelector("[data-test=delete-error]"))
-          .not.toBeNull();
-      }
-    }
+    await expect
+      .poll(() => screen.shadowRoot!.querySelector("opening-hours-year")?.model)
+      .toBeDefined();
+    await screen.shadowRoot!.querySelector("opening-hours-year")!.updateComplete;
     await expectNoA11yViolations(host);
-  });
-});
-
-describe.each(["en", "es"] as const)("Signed offset list (%s)", (locale) => {
-  describe.each(["light", "dark"] as const)("%s", (theme) => {
-    test.each([1280, 390])("at %s px", async (width) => {
-      setLocale(locale);
-      history.replaceState(null, "", "/manage/opening-hours/view/periods");
-      await page.viewport(width, 900);
-      try {
-        const wrapper = await mountThemed("<div></div>", theme);
-        const screen = document.createElement(
-          "dashboard-opening-hours-screen",
-        ) as OpeningHoursScreen;
-        screen.api = new OpeningHoursApi(
-          withOpeningStations((async () => ({
-            businessDayClock: {
-              timeZone: "Europe/Madrid",
-              dayCutover: "06:00",
-              cutoverChanges: [],
-            },
-            clockRevision: 0,
-            currentBusinessDay: "2026-10-12",
-            pending: null,
-            timeZone: "Europe/Madrid",
-            clockReadable: true,
-            dayCutover: "06:00",
-            menus: [{ id: "lunch", name: "Lunch menu", active: true, includes: [] }],
-            departments: [
-              {
-                id: "restaurant",
-                name: "Restaurant",
-                active: true,
-                periods: [-15, 0, 14].map((offset, index) => ({
-                  id: `p${index}`,
-                  name: ["Breakfast", "Lunch", "Dinner"][index],
-                  colour: "green",
-                  menuId: "lunch",
-                  staffMenuIds: [],
-                  endOffsetMinutes: offset,
-                  weekdays: [1],
-                  routingUses: [],
-                })),
-              },
-            ],
-          })) as DashboardRequest),
-        );
-        wrapper.appendChild(screen);
-        await expect.poll(() => screen.shadowRoot!.querySelector("wt-data-table")).not.toBeNull();
-        const table =
-          screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
-            "wt-data-table",
-          )!;
-        await table.updateComplete;
-        expect(table.shadowRoot!.textContent).toContain("-15");
-        expect(table.shadowRoot!.textContent).toContain("+14");
-        await expectNoA11yViolations(host);
-        await page.screenshot({
-          path: `../__screenshots__/a432-editor/list-${locale}-${theme}-${width}.png`,
-        });
-        if (width === 390) {
-          const scroll = table.shadowRoot!.querySelector<HTMLElement>(".scroll")!;
-          scroll.scrollLeft = scroll.scrollWidth;
-          await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-          const cell = table.shadowRoot!.querySelector<HTMLElement>("tbody td:nth-child(4)")!;
-          expect(cell.getBoundingClientRect().left).toBeGreaterThanOrEqual(
-            scroll.getBoundingClientRect().left,
-          );
-          expect(cell.getBoundingClientRect().right).toBeLessThanOrEqual(width);
-          await page.screenshot({
-            path: `../__screenshots__/a432-editor/list-offset-${locale}-${theme}-${width}.png`,
-          });
-        }
-      } finally {
-        await page.viewport(1280, 768);
-      }
-    });
   });
 });
 

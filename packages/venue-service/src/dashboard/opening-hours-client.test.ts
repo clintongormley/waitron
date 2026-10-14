@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { LiveData, type DashboardRequest } from "@waitron/dashboard-kit";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
+import { QUERY_DEPENDENCIES } from "./live-queries.js";
 import { OpeningHoursApi } from "./opening-hours-client.js";
 
 const model: OpeningHoursModel = {
@@ -32,12 +33,110 @@ describe("OpeningHoursApi", () => {
     };
     expect(await api.createPeriod("d/1", input, 0)).toEqual({ id: "p1" });
     expect(await api.updatePeriod("p/1", input, 0)).toBeUndefined();
-    await api.deletePeriod("p/1");
     expect(request.mock.calls).toEqual([
       [`${base}/departments/d%2F1/menu-periods`, "POST", { ...input, expectedClockRevision: 0 }],
       [`${base}/menu-periods/p%2F1`, "PATCH", { ...input, expectedClockRevision: 0 }],
-      [`${base}/menu-periods/p%2F1`, "DELETE"],
     ]);
+  });
+
+  it("reads where periods are painted and a delete's impact, and sends a delete with its replacement and clock revision", async () => {
+    const painted = [{ periodId: "p/1", seasons: [], specialDays: [] }];
+    const impact = {
+      seasons: 1,
+      specialDays: 0,
+      routingUses: [],
+      keptOpenToday: false,
+      replacements: [{ id: "p/2", name: "Dinner" }],
+    };
+    const request = vi.fn(async (path: string, method: string) =>
+      method === "POST" ? undefined : path.includes("/painted-in") ? painted : impact,
+    );
+    const api = new OpeningHoursApi(request as DashboardRequest);
+    expect(await api.readPaintedIn("p/1")).toEqual(painted);
+    expect(await api.readPeriodDeleteImpact("p/1")).toEqual(impact);
+    expect(await api.deletePeriod("p/1", "p/2", 4)).toBeUndefined();
+    await api.deletePeriod("p/1", null, 4);
+    expect(request.mock.calls).toEqual([
+      [`${base}/menu-periods/painted-in?periodId=p%2F1`, "GET"],
+      [`${base}/menu-periods/p%2F1/delete-impact`, "GET", undefined, undefined],
+      [
+        `${base}/menu-periods/p%2F1/delete`,
+        "POST",
+        { replacementPeriodId: "p/2", expectedClockRevision: 4 },
+      ],
+      [
+        `${base}/menu-periods/p%2F1/delete`,
+        "POST",
+        { replacementPeriodId: null, expectedClockRevision: 4 },
+      ],
+    ]);
+  });
+
+  it("reads a delete's impact passively only when asked to, passing the options straight through", async () => {
+    const request = vi.fn(async () => ({}));
+    const api = new OpeningHoursApi(request as DashboardRequest);
+    await api.readPeriodDeleteImpact("p/1", { passive: true });
+    await api.readPeriodDeleteImpact("p/1", { passive: false });
+    await api.readPeriodDeleteImpact("p/1");
+    expect(request.mock.calls).toStrictEqual([
+      [`${base}/menu-periods/p%2F1/delete-impact`, "GET", undefined, { passive: true }],
+      [`${base}/menu-periods/p%2F1/delete-impact`, "GET", undefined, { passive: false }],
+      [`${base}/menu-periods/p%2F1/delete-impact`, "GET", undefined, undefined],
+    ]);
+  });
+
+  it("watchPaintedIn reads passively and re-reads after rereadWatches", async () => {
+    const painted = [{ periodId: "p1", seasons: [{ id: "s1", name: "Winter" }], specialDays: [] }];
+    const request = vi.fn(async () => painted);
+    const api = new OpeningHoursApi(request as DashboardRequest);
+    const apply = vi.fn();
+    const stop = api.watchPaintedIn(apply, vi.fn(), vi.fn());
+    try {
+      await vi.waitFor(() => expect(apply).toHaveBeenCalledWith(painted));
+      api.rereadWatches();
+      await vi.waitFor(() => expect(apply).toHaveBeenCalledTimes(2));
+      expect(request.mock.calls).toEqual([
+        [`${base}/menu-periods/painted-in`, "GET", undefined, { passive: true }],
+        [`${base}/menu-periods/painted-in`, "GET", undefined, { passive: true }],
+      ]);
+    } finally {
+      stop();
+    }
+  });
+
+  it("watches Painted in on its declared tables, re-reading it after a period save and not on a product change", async () => {
+    const live = new LiveData();
+    const painted = [{ periodId: "p1", seasons: [], specialDays: [] }];
+    const request = vi.fn(async () => painted);
+    const api = new OpeningHoursApi(request as DashboardRequest, live);
+    const apply = vi.fn();
+    const stop = api.watchPaintedIn(apply, vi.fn(), vi.fn());
+    try {
+      await vi.waitFor(() => expect(apply).toHaveBeenCalledTimes(1));
+      const tables = [
+        "menu_periods",
+        "departments",
+        "seasons",
+        "department_days",
+        "department_day_ranges",
+        "special_days",
+        "special_day_dates",
+        "locations",
+        "location_business_day_settings",
+        "location_day_cutover_changes",
+        "period_extensions",
+      ];
+      expect(QUERY_DEPENDENCIES["menu-periods-painted-in"]).toEqual(tables);
+      expect(live.interests).toEqual(tables.map((type) => ({ type })));
+      live.invalidate([{ type: "products" }]);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(request).toHaveBeenCalledTimes(1);
+      api.rereadWatches();
+      await vi.waitFor(() => expect(apply).toHaveBeenCalledTimes(2));
+      expect(request).toHaveBeenCalledTimes(2);
+    } finally {
+      stop();
+    }
   });
 
   it("sends each season write with the clock revision and reads a delete's impact", async () => {

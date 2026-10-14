@@ -1,6 +1,5 @@
 import "@waitron/shared";
 import type { BusinessDayClockConflict } from "@waitron/module";
-import type { MenuPeriodUse } from "./menu-timetable-types.js";
 
 /** Something that still names a menu of a department's list, so the menu cannot leave it. */
 export type MenuUse =
@@ -74,8 +73,6 @@ declare module "@waitron/shared" {
       date?: string;
       specialDayId?: string;
     };
-    /** Deleting a named period that `uses` still place, past special-day dates included. */
-    "menu_period.in_use": { periodId: string; uses: MenuPeriodUse[] };
     /** Another of the department's named periods already has `name`, as trimmed. */
     "menu_period.name_taken": { departmentId: string; name: string };
     "menu_timetable.invalid": {
