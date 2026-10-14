@@ -632,6 +632,7 @@ describe("splitting a line the kitchen has", () => {
       workingOrderId: checkId,
       workingOrderLineId: split!.id,
       quantity: 1000,
+      sentOrderNumber: await orderNumberOf(tabId),
     });
     // The station still makes the three it was asked for, now as two rows.
     expect(await queueAt(cfg, stationId)).toEqual({
@@ -692,6 +693,7 @@ describe("splitting a line the kitchen has", () => {
         workingOrderId: checkId,
         workingOrderLineId: split!.id,
         quantity: 1000,
+        sentOrderNumber: await orderNumberOf(tabId),
       });
       for (const [orderId, ticketItemId] of [
         [tabId, source!.ticketId],

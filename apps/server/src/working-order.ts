@@ -3201,7 +3201,11 @@ export async function moveOrderLines(
     throw new AppError("tab.merge_self", { tabId: fromTabId });
   }
   const both = await tx
-    .select({ id: workingOrders.id, status: workingOrders.status })
+    .select({
+      id: workingOrders.id,
+      status: workingOrders.status,
+      orderNumber: workingOrders.orderNumber,
+    })
     .from(workingOrders)
     .where(or(eq(workingOrders.id, fromTabId), eq(workingOrders.id, toTabId)));
   const from = both.find((r) => r.id === fromTabId);
@@ -3254,6 +3258,17 @@ export async function moveOrderLines(
       );
   }
   if (source.length > 0) {
+    const lineIds = source.map((line) => line.id);
+    await tx
+      .update(ticketItems)
+      .set({ sentOrderNumber: from.orderNumber })
+      .where(
+        and(
+          inArray(ticketItems.workingOrderLineId, lineIds),
+          isNull(ticketItems.sentOrderNumber),
+          seenByKitchen(tx, lineIds),
+        ),
+      );
     await tx
       .update(ticketItems)
       .set({ workingOrderId: toTabId })
@@ -3266,6 +3281,25 @@ export async function moveOrderLines(
     await refuseOrderOverSimplifiedLimit(tx, cfg, toTabId, before);
   }
   return source.map((line) => line.id);
+}
+
+/**
+ * Of the ticket items of these lines, those the kitchen has seen: fired, or in a held group whose
+ * HOLD ticket printed. A held item whose HOLD ticket never printed first prints on the order it is
+ * on when it fires.
+ */
+function seenByKitchen(tx: Transaction, lineIds: string[]): SQL {
+  return or(
+    isNotNull(ticketItems.firedAt),
+    inArray(
+      ticketItems.workingOrderLineId,
+      tx
+        .select({ id: workingOrderLines.id })
+        .from(workingOrderLines)
+        .innerJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
+        .where(and(inArray(workingOrderLines.id, lineIds), isNotNull(orderGroups.holdPrintedAt))),
+    ),
+  )!;
 }
 
 /** Assert a working order is OPEN, else `tab.not_open`; its revision. */
@@ -4021,6 +4055,26 @@ export async function splitUnitsWithinOrder(
 }
 
 /**
+ * The sent order number a copy of `ticket` moving to `toOrderId` carries: the one it already holds,
+ * else its order's number when the kitchen has seen it and it leaves that order, else null.
+ */
+async function sentOrderNumberLeaving(
+  tx: Transaction,
+  ticket: typeof ticketItems.$inferSelect,
+  toOrderId: string,
+): Promise<number | null> {
+  if (ticket.sentOrderNumber !== null || ticket.workingOrderId === toOrderId) {
+    return ticket.sentOrderNumber;
+  }
+  const [seen] = await tx
+    .select({ orderNumber: workingOrders.orderNumber })
+    .from(ticketItems)
+    .innerJoin(workingOrders, eq(workingOrders.id, ticketItems.workingOrderId))
+    .where(and(eq(ticketItems.id, ticket.id), seenByKitchen(tx, [ticket.workingOrderLineId])));
+  return seen?.orderNumber ?? null;
+}
+
+/**
  * Give a split row its own copy of the source line's ticket item, asking for the part moved, and take
  * that part off the source's; returns the copy's id. The total the kitchen makes is unchanged.
  */
@@ -4046,6 +4100,7 @@ async function splitTicketItem(
     workingOrderId: toOrderId,
     workingOrderLineId: splitLineId,
     quantity: movedThousandths,
+    sentOrderNumber: await sentOrderNumberLeaving(tx, ticket!, toOrderId),
   });
   const passMarks = await tx
     .select()
