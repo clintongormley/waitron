@@ -595,6 +595,27 @@ describe("till-floor-screen: Rename", () => {
     expect(floorRefusal(el)).toBe("Another table already has that name");
   });
 
+  it("a refusal under the field arriving with a read that puts the group back keeps the window open", async () => {
+    const api = stubApi();
+    const answer = holdAnswer(api);
+    const el = await mount(barJoined(), api);
+    const opened = await pressRename(el, "bar");
+    send(opened, "today-name-confirm", { name: "Window" });
+    await settle(el);
+    el.tables = bar();
+    await settle(el);
+
+    // Both land before the screen redraws.
+    answer.refuse({ code: "table.label_taken", status: 409, label: "Window", field: "name" });
+    el.tables = barJoined();
+    await settle(el);
+    await opened.updateComplete;
+
+    expect(windowOf(el)).toBe(opened);
+    expect(opened.refusal).toEqual({ code: "table.label_taken", field: "name" });
+    expect(floorRefusal(el)).toBeNull();
+  });
+
   it("closes the window when its table leaves the floor read", async () => {
     const el = await mount(bar(), stubApi());
     await pressRename(el, "bar");

@@ -1357,7 +1357,7 @@ export class TillFloorScreen extends LitElement {
 
   /** A table in a group renames the group. */
   #renameOpening(table: TableState): Renaming {
-    const members = this.#mergeOf(table);
+    const members = this.#mergeRead(table);
     return {
       tableId: table.id,
       value: (members === null ? table.today?.name : table.today?.joinName) ?? "",
@@ -1367,8 +1367,18 @@ export class TillFloorScreen extends LitElement {
     };
   }
 
+  /** The tables of `table`'s merge in the floor read now, or null for a table on its own.
+   * `#mergeOf` gives the merge as last drawn, which a floor read can be ahead of. */
+  #mergeRead(table: TableState): TableState[] | null {
+    const joinId = table.today?.joinId ?? null;
+    if (joinId === null || !onTodaysPlan(table)) return null;
+    return this.tables.filter(
+      (each) => each.zoneId === table.zoneId && each.today?.joinId === joinId && onTodaysPlan(each),
+    );
+  }
+
   #groupKey(table: TableState): string | null {
-    const members = this.#mergeOf(table);
+    const members = this.#mergeRead(table);
     return members === null
       ? null
       : members
@@ -1390,10 +1400,11 @@ export class TillFloorScreen extends LitElement {
       return this.tables.some((each) => each.id === renaming.tableId) ? renaming.sent : undefined;
     const table = this.#renamable(renaming.tableId);
     if (table === undefined || this.#groupKey(table) !== renaming.group) return undefined;
-    const members = this.#mergeOf(table);
+    const members = this.#mergeRead(table);
+    const name = members === null ? shownName(table) : groupName(members);
     return {
       table,
-      heading: t("floor.rename_title").replace("{table}", () => this.#shownAs(table)),
+      heading: t("floor.rename_title").replace("{table}", () => name),
       normalName: members === null ? table.label : normalGroupName(members),
     };
   }
@@ -1419,11 +1430,9 @@ export class TillFloorScreen extends LitElement {
     ></till-today-name-dialog>`;
   }
 
-  /** A refusal naming the name field stays under it while the window is still shown; any other
-   * closes the window and shows on the floor. */
+  /** A refusal naming the name field stays under it while the window would still be shown before
+   * Save; any other closes the window and shows on the floor. */
   async #rename(dialog: TillTodayNameDialog, name: string | null): Promise<void> {
-    // A floor read can land after the last draw, and `#renameShown` reads the zone as drawn.
-    this.#zone = this.#zoneOnScreen();
     const renaming = this.renaming;
     const shown = renaming === null ? undefined : this.#renameShown(renaming);
     const api = this.api;
