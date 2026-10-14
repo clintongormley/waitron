@@ -127,14 +127,12 @@ it("binds an older bucket copy before private preview migrations change its byte
   await suite.db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Earlier venue" });
-  await suite.db
-    .insert(locations)
-    .values({
-      id: locationId,
-      name: "Earlier location",
-      invoiceLocales: ["es-ES"],
-      operationDescription: "Restaurant",
-    });
+  await suite.db.insert(locations).values({
+    id: locationId,
+    name: "Earlier location",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Restaurant",
+  });
   await suite.db.insert(nodes).values({ id: nodeId, locationId, name: "Earlier node" });
   const scratch = await mkdtemp(join(tmpdir(), "preview-old-stream-"));
   try {
