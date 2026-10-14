@@ -309,7 +309,10 @@ async function fixture(pack: ArchiveRecoveryPack = PACK): Promise<Fixture> {
   await mkdir(f.stateDir);
   await mkdir(f.bucketDir);
   await writeFile(join(f.bucketDir, KEY), artifactBytes);
-  await writeFile(f.packPath, encodeArchiveRecoveryPack(pack));
+  await writeFile(
+    f.packPath,
+    `Paquete de recuperación de las copias de Waitron\nSigue «A restore takes one of three sources» en deploy/README.md.\n\n${encodeArchiveRecoveryPack(pack)}\n`,
+  );
   current = f;
   return f;
 }

@@ -506,7 +506,7 @@ describe.each(["light", "dark"] as const)("backup-screen a11y (%s theme)", (them
       {
         api: stubApi(WITH_BUCKET, {
           getArchiveRecoveryPack: vi.fn().mockResolvedValue({
-            pack: "Waitron archive recovery pack.\n\nWAITRON-ARCHIVE-PACK-1:eyJ2ZXJzaW9uIjoxfQ\n",
+            pack: "WAITRON-ARCHIVE-PACK-1:eyJ2ZXJzaW9uIjoxfQ",
             keyFingerprint: "ab12cd34",
             revision: ENABLED.revision,
           }),
