@@ -1509,6 +1509,7 @@ describe("a prep station's own print-MOVED-slips choice", () => {
 
   it("after Merge bills with every station off, no slip prints and the station queue still shows the merged bill's number", async () => {
     const v = await setupPartyVenue(db);
+    await inTx(v, (tx) => writePrintMovedSlips(tx, true));
     const grill = await stationWithPrinter(v, "Grill", ["Burger", "Paella"]);
     await stationPrints(v, "Grill", false);
     const { partyId, tabId } = await seat(v, await v.table("Mesa 33"));
@@ -1529,6 +1530,7 @@ describe("a prep station's own print-MOVED-slips choice", () => {
     expect(await slipsSince(grill, before)).toEqual([]);
     const grillId = await stationIdOf(v, "Grill");
     const queues = await inTx(v, (tx) => listStationQueues(tx, [grillId]));
+    expect(n28).toBeDefined();
     expect(queues.get(grillId)!.find((group) => group.orderId === tabId)).toMatchObject({
       formerNumbers: [n28],
     });

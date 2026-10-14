@@ -258,7 +258,7 @@ export class StationEditor extends LitElement {
   @property({ type: Boolean }) canManagePrinters = false;
   @property({ attribute: false }) refusal?: Refusal;
   /** The venue's MOVED slips choice, which a station left as the venue follows. */
-  @property({ type: Boolean }) venuePrintsMovedSlips = true;
+  @property({ attribute: false }) venuePrintsMovedSlips = true;
 
   @state() private draft: Draft = {
     name: "",
@@ -387,7 +387,7 @@ export class StationEditor extends LitElement {
     };
   }
 
-  private changed(draft: Draft, field: Field | "rest") {
+  private changed(draft: Draft, field: Field | "rest" | "printMovedSlips") {
     this.draft = draft;
     this.printerDropped = false;
     if (stationRefusalField(this.refusal) === field) this.refusal = undefined;
@@ -588,7 +588,7 @@ export class StationEditor extends LitElement {
               if (current())
                 this.changed(
                   { ...this.draft, printMovedSlips: movedValue(event.detail.value) },
-                  "rest",
+                  "printMovedSlips",
                 );
             }}
           ></wt-combobox>

@@ -44,6 +44,7 @@ it("refreshes the routing grid and the operations screen on a routing cell chang
     "zone_day_ranges",
     "special_days",
     "special_day_dates",
+    "service_settings",
   ]);
   expect(QUERY_DEPENDENCIES.operations).toEqual([
     "department_receipts",
