@@ -53,6 +53,7 @@ import {
   type DropAction,
   type SheetAction,
   dropAction,
+  detailsHeading,
   groupName,
   groupSplitOf,
   nextFloorMoment,
@@ -61,6 +62,7 @@ import {
   resetTableOf,
   type ResetTablePlan,
   sheetActions,
+  savedNameUnder,
   shownName,
   shownUnder,
   spareSpot,
@@ -769,17 +771,11 @@ export class TillFloorScreen extends LitElement {
   }
 
   #detailsHeading(table: TableState): string {
-    return (
-      this.#mergeName(table) ??
-      table.today?.name ??
-      t("floor.table_title").replace("{table}", () => table.label)
-    );
+    return detailsHeading(table, this.#mergeName(table));
   }
 
-  /** The table's saved name when its heading is a name for today, else null. */
   #savedName(table: TableState): string | null {
-    const shown = shownUnder(table);
-    return shown !== table.label && shown === this.#detailsHeading(table) ? table.label : null;
+    return savedNameUnder(table, this.#detailsHeading(table));
   }
 
   #detailsSheet(): TemplateResult | typeof nothing {

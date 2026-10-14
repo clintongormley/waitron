@@ -422,3 +422,68 @@ it("keeps a named single-table party's heading", async () => {
   await el.updateComplete;
   expect(sheet(el)!.heading).toBe("Birthday");
 });
+
+const today = (over: Partial<NonNullable<TableState["today"]>> = {}): TableState["today"] => ({
+  placement: { x: 0, y: 0, width: 2, height: 2, shape: "rect", rotation: 0 },
+  seats: null,
+  fixed: false,
+  takenOff: false,
+  joinId: null,
+  joinSeats: null,
+  inJoinedTable: null,
+  joined: null,
+  splitOffFrom: null,
+  zoneRevision: 1,
+  ...over,
+});
+
+it("heads a renamed table's sheet with its name for today, saved as its saved name", async () => {
+  const p = party({ displayName: "Window" });
+  const { el } = await mount({
+    party: p,
+    tables: [row(p, { label: "Counter 4", today: today({ name: "Window" }) })],
+  });
+  pin(el)!.click();
+  await el.updateComplete;
+  expect(sheet(el)!.heading).toBe("Window");
+  expect(sheet(el)!.savedName).toBe("Counter 4");
+});
+
+it("heads a named group's sheet with the group's name, saved as the first table's saved name", async () => {
+  const p = party({ displayName: "García birthday", tableIds: ["t4", "t5"] });
+  const group = today({ joinId: "j1", joinName: "García birthday" });
+  const { el } = await mount({
+    party: p,
+    tables: [
+      row(p, { id: "t4", label: "Counter 4", today: group }),
+      row(p, { id: "t5", label: "Counter 5", today: group }),
+    ],
+  });
+  pin(el)!.click();
+  await el.updateComplete;
+  expect(sheet(el)!.heading).toBe("García birthday");
+  expect(sheet(el)!.savedName).toBe("Counter 4");
+});
+
+it("says no saved name for a table with no name for today", async () => {
+  const p = party();
+  const { el } = await mount({ party: p, tables: [row(p, { today: today() })] });
+  pin(el)!.click();
+  await el.updateComplete;
+  expect(sheet(el)!.heading).toBe("Table 4");
+  expect(sheet(el)!.savedName).toBeNull();
+});
+
+it("heads a lone seated table in a named group with the group's name", async () => {
+  const p = party({ displayName: "García birthday" });
+  const { el } = await mount({
+    party: p,
+    tables: [
+      row(p, { label: "Counter 4", today: today({ joinId: "j1", joinName: "García birthday" }) }),
+    ],
+  });
+  pin(el)!.click();
+  await el.updateComplete;
+  expect(sheet(el)!.heading).toBe("García birthday");
+  expect(sheet(el)!.savedName).toBe("Counter 4");
+});

@@ -2,6 +2,7 @@ import { css, html, nothing, type TemplateResult } from "lit";
 import { partyTablesName } from "@waitron/shared";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
+import { shownName } from "../state/floor-today.js";
 import type { TableActionRevisions, TableParty, TableState } from "../api/client.js";
 
 /** The styles {@link tableTarget} needs. */
@@ -46,10 +47,13 @@ export function otherPartyRead(
   return { otherPartyId: seated.id, expectedOtherPartyRevision: seated.revision };
 }
 
-/** The labels of the party's tables that `tables` lists, "Mesa 4, 5". */
+/** The shown names of the party's tables that `tables` lists, "Mesa 4, 5". */
 export function partyTablesLabel(party: TableParty, tables: readonly TableState[]): string {
   return partyTablesName(
-    party.tableIds.flatMap((id) => tables.find((table) => table.id === id)?.label ?? []),
+    party.tableIds.flatMap((id) => {
+      const table = tables.find((each) => each.id === id);
+      return table === undefined ? [] : shownName(table);
+    }),
   );
 }
 
@@ -96,7 +100,7 @@ export function tableTarget(
         if (!clearing) pick(table);
       }}
     >
-      <span class="target-label">${table.label}</span>
+      <span class="target-label">${shownName(table)}</span>
       <span class="target-state">${state}</span>
     </wt-button>
     ${

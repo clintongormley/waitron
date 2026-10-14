@@ -62,6 +62,20 @@ export function shownUnder(table: TableState): string {
   return table.today?.joinName ?? shownName(table);
 }
 
+/** The details sheet's heading: the merge's name, else the table's own name for today, else
+ * "Table 4". */
+export function detailsHeading(table: TableState, mergeName: string | null): string {
+  return (
+    mergeName ?? table.today?.name ?? t("floor.table_title").replace("{table}", () => table.label)
+  );
+}
+
+/** The table's saved name when its sheet's heading is a name for today, else null. */
+export function savedNameUnder(table: TableState, heading: string): string | null {
+  const shown = shownUnder(table);
+  return shown !== table.label && shown === heading ? table.label : null;
+}
+
 /** What the group is called with no name of its own: its tables' shown names in number order. */
 export function normalGroupName(members: readonly TableState[]): string {
   return mergeLabel(members.map(shownName));

@@ -530,6 +530,40 @@ describe("till-app: seating a party", () => {
     expect(tableOrder(el)!.party!.tableIds).toEqual(["t9", "t11"]);
   });
 
+  it.each([
+    ["a table renamed for today by its name", { name: "Window" }, "Window"],
+    [
+      "a table in a group named for today by the group's name",
+      { joinId: "j1", joinName: "García birthday" },
+      "García birthday",
+    ],
+  ])("names %s until the floor is read again", async (_name, names, shown) => {
+    const today = {
+      placement: { x: 0, y: 0, width: 8, height: 8, shape: "rect" as const, rotation: 0 },
+      seats: 4,
+      fixed: false,
+      takenOff: false,
+      joinId: null,
+      joinSeats: null,
+      inJoinedTable: null,
+      joined: null,
+      splitOffFrom: null,
+      zoneRevision: 0,
+      ...names,
+    };
+    const getTablesState = vi
+      .fn()
+      .mockResolvedValueOnce([table({ id: "t9", label: "Counter 4", today })])
+      .mockRejectedValue(new TypeError("Failed to fetch"));
+    const { el } = await mountApp({ getTablesState, getPartyBills: vi.fn().mockResolvedValue([]) });
+    const screen = await toFloor(el);
+
+    emit(screen, "open-table", { tableId: "t9", seated: false, guestCount: 2 });
+    await flush(el);
+
+    expect(tableOrder(el)!.party!.displayName).toBe(shown);
+  });
+
   it("says the table needs clearing when seating it is refused for that, and re-reads the floor", async () => {
     const { el } = await mountApp({
       seatTable: vi.fn().mockRejectedValue({ code: "table.needs_clearing", tableId: "t9" }),

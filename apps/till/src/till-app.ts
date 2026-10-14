@@ -177,7 +177,7 @@ import type { BillPayDetail, MoveBillDetail } from "./screens/till-table-order-s
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import { billName, owing, paidInPart, shownBills } from "./state/bill-state.js";
 import { billRequestOf } from "./state/table-signals.js";
-import { mergeMembersOf, nextFloorMoment } from "./state/floor-today.js";
+import { mergeMembersOf, nextFloorMoment, shownUnder } from "./state/floor-today.js";
 import type { BumpMode, FireControlMode } from "./widgets/station-queue.js";
 import type {
   AdjustmentAsk,
@@ -5929,7 +5929,7 @@ export class TillApp extends LitElement {
           guestCount,
           state: "open",
           name: null,
-          displayName: table?.label ?? "",
+          displayName: table === undefined ? "" : shownUnder(table),
           mainBillId: tabId,
           outstanding: "0.00",
           billCount: 1,

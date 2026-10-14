@@ -5,6 +5,7 @@ import "@waitron/ui/src/components/wt-toast.js";
 import type { TableParty, TableState } from "../api/client.js";
 import { t } from "../i18n/t.js";
 import { readyText, statusPin } from "../state/floor-map.js";
+import { detailsHeading, savedNameUnder } from "../state/floor-today.js";
 import { signalOf } from "../state/table-signals.js";
 import "./table-details-sheet.js";
 
@@ -127,6 +128,11 @@ export class TillTableStatus extends LitElement {
     const rows = this.#partyRows;
     if (party === null || rows.length === 0) return nothing;
     const { fill, dot, text } = statusPin(rows);
+    const first = rows[0]!;
+    const heading =
+      party.name === null && rows.length === 1
+        ? detailsHeading(first, first.today?.joinName ?? null)
+        : party.displayName;
     return html`<button
         type="button"
         class="status-pin"
@@ -146,12 +152,9 @@ export class TillTableStatus extends LitElement {
         close-label=${t("table.flash_close")}
       ></wt-toast>
       <till-table-details-sheet
-        .table=${this.#openFor === null ? null : rows[0]!}
-        .heading=${
-          party.name === null && rows.length === 1
-            ? t("floor.table_title").replace("{table}", () => rows[0]!.label)
-            : party.displayName
-        }
+        .table=${this.#openFor === null ? null : first}
+        .heading=${heading}
+        .savedName=${savedNameUnder(first, heading)}
         @details-close=${(event: Event) => {
           event.stopPropagation();
           this.#setOpen(null);
