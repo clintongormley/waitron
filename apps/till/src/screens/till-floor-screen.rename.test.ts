@@ -515,6 +515,50 @@ describe("till-floor-screen: Rename", () => {
     expect(opened.busy).toBe(true);
   });
 
+  it("keeps the heading and hint shown at Save while the name is sent", async () => {
+    const api = stubApi();
+    holdAnswer(api);
+    const el = await mount(group(), api);
+    const opened = await pressRename(el, "c4");
+    send(opened, "today-name-confirm", { name: "García birthday" });
+    await settle(el);
+
+    el.tables = group({ c3: { name: "Corner" } });
+    await settle(el);
+    await opened.updateComplete;
+
+    expect(windowOf(el)).toBe(opened);
+    expect(opened.busy).toBe(true);
+    expect(shown(opened)).toMatchObject({
+      heading: "Rename Bar+Counter 3+Counter 4+Counter 5",
+      hint: "Leave it empty for Bar+Counter 3+Counter 4+Counter 5",
+    });
+  });
+
+  it("a refusal under the field after a floor read that keeps the group shows over the new read", async () => {
+    const api = stubApi();
+    const answer = holdAnswer(api);
+    const el = await mount(group(), api);
+    const opened = await pressRename(el, "c4");
+    send(opened, "today-name-confirm", { name: "García birthday" });
+    await settle(el);
+    el.tables = group({ c3: { name: "Corner" } });
+    await settle(el);
+
+    answer.refuse({ code: "table.label_taken", status: 409, label: "Window", field: "name" });
+    await settle(el);
+    await opened.updateComplete;
+
+    expect(windowOf(el)).toBe(opened);
+    expect(opened.busy).toBe(false);
+    expect(opened.refusal).toEqual({ code: "table.label_taken", field: "name" });
+    expect(shown(opened)).toMatchObject({
+      heading: "Rename Bar+Corner+Counter 4+Counter 5",
+      hint: "Leave it empty for Bar+Corner+Counter 4+Counter 5",
+    });
+    expect(floorRefusal(el)).toBeNull();
+  });
+
   it("a successful answer then closes that window", async () => {
     const api = stubApi();
     const answer = holdAnswer(api);
