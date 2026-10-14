@@ -1937,10 +1937,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   part 3b's review.
   [Detail](backlog/till.md#a594-moving-a-bill-to-a-free-table-in-a-group-seats-only-that-table)
 
-- **A596. Two helpers work out where a joined table comes back (2026-10-13).** `joinedPlaceOver` and
-  `joinedPlaceAfter` (`apps/server/src/joined-split-layout.ts`) agreed on 20,000 random inputs in
-  A579 part 3b's simplify review (#1627), which kept both. Next: keep one; Join again is gone (A579 part 4b).
-
 - **A598. A table held by guests when its joined table went live is neither joined nor split off
   (2026-10-13).** So the till cannot see that the rest will not rejoin; it asks Seats only after the
   server refuses. Found by A579 part 3c's review.

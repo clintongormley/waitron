@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import type { Placement } from "./floor-reset-plan.js";
 import {
   joinedPlaceAfter,
-  joinedPlaceOver,
   type LaidPart,
   partPlaces,
   remainingPlace,
@@ -216,13 +215,23 @@ describe("wholePlace and joinedPlaceAfter", () => {
   });
 });
 
-describe("joinedPlaceOver", () => {
+describe("joinedPlaceAfter over standing parts", () => {
   const EVEN = [part("c3", 2, 2), part("c4", 2, 2), part("c5", 2, 2)];
   const C3: Placement = { x: 10, y: 20, width: 2, height: 2, shape: "rect", rotation: 0 };
   const WHOLE = { width: 6, height: 2 };
+  const fromStandingParts = (row: Placement, staying: number[], whole: boolean) =>
+    joinedPlaceAfter({
+      row,
+      standing: true,
+      saved: { ...LONG, ...WHOLE },
+      parts: EVEN,
+      covered: staying[0]!,
+      staying,
+      whole,
+    })!;
 
   it("puts Long table back whole from where Counter 3 stands", () => {
-    expect(joinedPlaceOver(C3, EVEN, [0, 1, 2], true, WHOLE)).toEqual({
+    expect(fromStandingParts(C3, [0, 1, 2], true)).toEqual({
       x: 10,
       y: 20,
       width: 6,
@@ -233,7 +242,7 @@ describe("joinedPlaceOver", () => {
   });
 
   it("covers only Counter 3 and 4 when Counter 5 stays split off", () => {
-    expect(joinedPlaceOver(C3, EVEN, [0, 1], false, WHOLE)).toEqual({
+    expect(fromStandingParts(C3, [0, 1], false)).toEqual({
       x: 10,
       y: 20,
       width: 4,
@@ -244,7 +253,7 @@ describe("joinedPlaceOver", () => {
   });
 
   it("follows Counter 3 to where it was moved", () => {
-    expect(joinedPlaceOver({ ...C3, x: 42, y: 0 }, EVEN, [0, 1, 2], true, WHOLE)).toEqual({
+    expect(fromStandingParts({ ...C3, x: 42, y: 0 }, [0, 1, 2], true)).toEqual({
       x: 42,
       y: 0,
       width: 6,
@@ -255,7 +264,7 @@ describe("joinedPlaceOver", () => {
   });
 
   it("starts from Counter 4 when Counter 3 is split off", () => {
-    expect(joinedPlaceOver({ ...C3, x: 12 }, EVEN, [1, 2], false, WHOLE)).toEqual({
+    expect(fromStandingParts({ ...C3, x: 12 }, [1, 2], false)).toEqual({
       x: 12,
       y: 20,
       width: 4,
@@ -268,7 +277,7 @@ describe("joinedPlaceOver", () => {
   it("puts a turned Long table back over the outline its parts were laid out in", () => {
     const outline: Placement = { ...LONG, rotation: 90 };
     const [c3] = partPlaces(outline, EVEN, 0);
-    const back = joinedPlaceOver(c3!, EVEN, [0, 1, 2], true, WHOLE);
+    const back = fromStandingParts(c3!, [0, 1, 2], true);
     expect(back).toMatchObject({ width: 6, height: 2, shape: "rect", rotation: 90 });
     expect(Math.abs(back.x - outline.x)).toBeLessThanOrEqual(1);
     expect(Math.abs(back.y - outline.y)).toBeLessThanOrEqual(1);
