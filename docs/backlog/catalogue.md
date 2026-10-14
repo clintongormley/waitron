@@ -815,8 +815,8 @@ Where a board and this text differ, this text wins. The library is
    name and size, and "Choose another". This is a shared field primitive in `packages/ui`, under
    the rule that a screen does not draw its own form field (CLAUDE.md §3), with the tests a new
    `wt-*` primitive needs. Dropping one photo here fills the field and does not upload until Save.
-   Whether its default-language name is pre-filled from the file name is open; board 6 shows it
-   filled.
+   Its default-language name is filled in from the file name, as on a drop on the page (owner,
+   2026-10-14), and can be changed before Save.
 3. **The Photo field's required mark is red**, as the Name field's already is (today it is black).
 4. **Library page** (board 1): the Upload photo button reads "Upload photos" and is drawn blue
    (`variant="primary"`; today it is drawn like every other button). The "Preview" label over each photo goes; clicking the photo still
@@ -852,7 +852,8 @@ shrunk to 1600 pixels (`STORED_LONG_EDGE`, `packages/media/src/prepare.ts`).
    no restaurant case for it was found). Every thumbnail in the list above reads it.
 4. **Replace photo** swaps the picture and keeps the photo's names and every product, variant,
    section, folder and receipt logo that uses it. It is new: editing a photo today cannot change its file.
-   Whether the framing resets on a replace is open.
+   Replacing resets the framing to the centre at no zoom (owner, 2026-10-14): a new photo rarely
+   has the dish where the old one did.
 5. **The library grid's size.** The grid loads the full 1600-pixel copy for each tile, 24 a page,
    about 4 MB at the average size (left open by photos shrunk on upload, #543). Decide while
    building whether framing also produces a small copy for thumbnails; that question was its own
