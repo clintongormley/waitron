@@ -316,7 +316,7 @@ it("✎ opens the period dialog with where the period is painted, read once, as 
   expect(reads).toEqual(["GET"]);
 });
 
-it("+ New period reads nothing and draws no Painted in; a failed read draws none either", async () => {
+it("+ New period reads nothing and draws no Painted in; a failed or malformed read draws none either", async () => {
   const { painter } = await mount();
   const { api, reads } = paintedInApi();
   painter.api = api;
@@ -328,18 +328,35 @@ it("+ New period reads nothing and draws no Painted in; a failed read draws none
   expect(dialog.shadowRoot!.querySelector("[data-test=painted-in]")).toBeNull();
   dialog.shadowRoot!.querySelector<HTMLElement>("wt-button[slot=cancel]")!.click();
   await expect.poll(() => painter.shadowRoot!.querySelector("period-dialog")).toBeNull();
-  const failing = new OpeningHoursApi((async (url: string) => {
-    if (url === PAINTED_IN) throw Object.assign(new Error("down"), { code: "server.unavailable" });
-    return painterModel();
-  }) as DashboardRequest);
-  painter.api = failing;
-  chip(painter, "edit-p1")!.click();
-  await settle(painter);
-  const edit = painter.shadowRoot!.querySelector("period-dialog")!;
-  await new Promise((resolve) => setTimeout(resolve, 20));
-  await edit.updateComplete;
-  expect(edit.period?.id).toBe("p1");
-  expect(edit.shadowRoot!.querySelector("[data-test=painted-in]")).toBeNull();
+  // Checked once the promise the dialog awaits has settled, where a failed read and a good one
+  // differ: the control answers and must already show the section at that same point.
+  async function editOnceReadSettles(answer: () => Promise<unknown>) {
+    let read: Promise<unknown> | undefined;
+    const api = new OpeningHoursApi((async (url: string) =>
+      url === PAINTED_IN ? answer() : painterModel()) as DashboardRequest);
+    const readPaintedIn = api.readPaintedIn.bind(api);
+    api.readPaintedIn = () => (read = readPaintedIn()) as ReturnType<typeof readPaintedIn>;
+    painter.api = api;
+    chip(painter, "edit-p1")!.click();
+    await settle(painter);
+    expect(read, "the Painted-in read was made").toBeDefined();
+    await Promise.allSettled([read]);
+    await settle(painter);
+    const edit = painter.shadowRoot!.querySelector("period-dialog")!;
+    await edit.updateComplete;
+    expect(edit.period?.id).toBe("p1");
+    const section = edit.shadowRoot!.querySelector("[data-test=painted-in]");
+    edit.shadowRoot!.querySelector<HTMLElement>("wt-button[slot=cancel]")!.click();
+    await expect.poll(() => painter.shadowRoot!.querySelector("period-dialog")).toBeNull();
+    return section;
+  }
+  expect(await editOnceReadSettles(async () => paintedRows)).not.toBeNull();
+  expect(
+    await editOnceReadSettles(async () => {
+      throw Object.assign(new Error("down"), { code: "server.unavailable" });
+    }),
+  ).toBeNull();
+  expect(await editOnceReadSettles(async () => ({ unexpected: "shape" }))).toBeNull();
 });
 
 it("a Painted-in read that answers after the dialog closed changes nothing", async () => {
@@ -579,7 +596,7 @@ async function cancelEditor(
   await settle(painter);
 }
 
-it("cancelling the period editor creates nothing, keeps the painting, and + New period opens a fresh editor", async () => {
+it("cancelling the period dialog creates nothing, keeps the painting, and + New period opens a fresh dialog", async () => {
   const { painter, writes } = await mount();
   chip(painter, "paint-p2")!.click();
   await settle(painter);
@@ -600,7 +617,7 @@ it("cancelling the period editor creates nothing, keeps the painting, and + New 
   expect(frame(painter).dirty).toBe(true);
 });
 
-it("a save from an earlier, closed period editor writes nothing and leaves the open editor alone", async () => {
+it("a save from an earlier, closed period dialog writes nothing and leaves the open dialog alone", async () => {
   const { painter, writes } = await mount();
   const earlier = await openEditor(painter, "edit-p1");
   await cancelEditor(painter, earlier);
@@ -835,7 +852,7 @@ it("with one season, ‹ and › activated by script stay on the season and navi
   expect(painter.edited()).toEqual({ departments: ["d1"], zones: [] });
 });
 
-it("✎ and + New period do nothing while a period editor is open", async () => {
+it("✎ and + New period do nothing while a period dialog is open", async () => {
   const { painter } = await mount();
   const editor = await openEditor(painter, "edit-p1");
   chip(painter, "edit-p2")!.click();
@@ -862,7 +879,7 @@ async function renameLunch(painter: SeasonPainter, answer: () => unknown) {
   return { editor, writes, reread };
 }
 
-it("✎ saving a period closes the editor, rereads, and keeps that period chosen", async () => {
+it("✎ saving a period closes the dialog, rereads, and keeps that period chosen", async () => {
   const { painter } = await mount();
   const { writes, reread } = await renameLunch(painter, () => ({}));
   await expect.poll(() => editorOf(painter)).toBeNull();
@@ -875,7 +892,7 @@ it("✎ saving a period closes the editor, rereads, and keeps that period chosen
   expect(grid(painter).chosen).toBe("p1");
 });
 
-it("closing the period editor while its save is in flight keeps it open until the save lands", async () => {
+it("closing the period dialog while its save is in flight keeps it open until the save lands", async () => {
   const { painter } = await mount();
   let answer!: () => void;
   const { editor } = await renameLunch(
@@ -890,7 +907,7 @@ it("closing the period editor while its save is in flight keeps it open until th
   await expect.poll(() => editorOf(painter)).toBeNull();
 });
 
-it("a period save refused after the painter left the page puts no refusal on the editor", async () => {
+it("a period save refused after the painter left the page puts no refusal on the dialog", async () => {
   const { painter } = await mount();
   let refuse!: (error: unknown) => void;
   const late = new Promise((_, reject) => (refuse = reject));

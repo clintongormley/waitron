@@ -367,8 +367,9 @@ export class PeriodDialog extends LitElement {
     const painted = this.paintedIn;
     if (!this.period || !painted) return nothing;
     const tints = seasonTints(this.seasons);
+    const links = this.paintedInLinks && this.departmentId !== "";
     const chip = (text: string, href: string, special: boolean, tint?: string) =>
-      this.paintedInLinks
+      links
         ? html`<a
             class="chip"
             href=${href}

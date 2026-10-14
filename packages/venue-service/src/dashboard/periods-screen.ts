@@ -7,7 +7,8 @@ import "@waitron/ui/src/components/wt-button.js";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import type { PaintedIn } from "../period-delete.js";
 import { format } from "./hours-view.js";
-import type { OpeningHoursApi } from "./opening-hours-client.js";
+import type { OpeningHoursApi, PaintedInRow } from "./opening-hours-client.js";
+import { PeriodEditing } from "./period-editing.js";
 import { PERIOD_COLOUR_TOKENS } from "./period-colour-styles.js";
 import { SEASON_TINT_TOKENS, seasonTints } from "./season-tint.js";
 import { t } from "./strings.js";
@@ -104,8 +105,17 @@ export class PeriodsScreen extends LitElement {
   @property({ type: Boolean }) readOnly = false;
   @state() private model?: OpeningHoursModel;
   @state() private painted?: Map<string, PaintedIn>;
+  @state() private paintedRows?: readonly PaintedInRow[];
   @state() private readError = "";
   @state() private paintedInError = "";
+  private periods = new PeriodEditing(this, {
+    api: () => this.api,
+    model: () => this.model!,
+    chose: () => {},
+    chooseDepartment: true,
+    paintedIn: () => this.paintedRows,
+    paintedInLinks: true,
+  });
   private detach?: () => void;
   private paintedDetach?: () => void;
 
@@ -125,6 +135,7 @@ export class PeriodsScreen extends LitElement {
     );
     this.paintedDetach = this.api.watchPaintedIn(
       (rows) => {
+        this.paintedRows = rows;
         this.painted = new Map(rows.map(({ periodId, ...painted }) => [periodId, painted]));
         this.paintedInError = "";
       },
@@ -178,7 +189,8 @@ export class PeriodsScreen extends LitElement {
   private actions(row: PeriodRow) {
     if (row.kind !== "period") return nothing;
     return html`<wt-row-actions label=${format("menu.row_actions", { name: row.name })} align="end"
-      ><wt-button variant="secondary" data-test="edit-period">${t("menu.edit")}</wt-button
+      ><wt-button variant="secondary" data-test="edit-period" @click=${() => this.edit(row)}
+        >${t("menu.edit")}</wt-button
       ><a
         data-test="open-hours"
         href=${`/manage/opening-hours/view/season/department/${at(row.departmentId)}`}
@@ -187,6 +199,12 @@ export class PeriodsScreen extends LitElement {
         >${t("menu.delete")}</wt-button
       ></wt-row-actions
     >`;
+  }
+
+  private edit(row: PeriodRow & { kind: "period" }) {
+    const department = this.model?.departments.find(({ id }) => id === row.departmentId);
+    const period = department?.periods.find(({ id }) => id === row.id);
+    if (period) this.periods.open(department!, period);
   }
 
   override render() {
@@ -254,7 +272,15 @@ export class PeriodsScreen extends LitElement {
     ];
     return html`<div class="toolbar">
         <h1>${t("period.title")}</h1>
-        ${this.readOnly ? nothing : html`<wt-button data-test="add-period">${t("period.add_button")}</wt-button>`}
+        ${
+          this.readOnly
+            ? nothing
+            : html`<wt-button
+                data-test="add-period"
+                @click=${() => this.model && this.periods.open(null)}
+                >${t("period.add_button")}</wt-button
+              >`
+        }
       </div>
       ${this.readError ? html`<p role="alert" data-test="read-error">${this.readError}</p>` : nothing}
       ${this.paintedInError ? html`<p role="alert" data-test="painted-in-error">${this.paintedInError}</p>` : nothing}
@@ -271,7 +297,8 @@ export class PeriodsScreen extends LitElement {
                 .rowParent=${(row: PeriodRow) => (row.kind === "period" ? `department:${row.departmentId}` : null)}
                 .rowCollapsible=${() => false}
               ></wt-data-table>`
-      }`;
+      }
+      ${model && !this.readOnly ? this.periods.render() : nothing}`;
   }
 }
 

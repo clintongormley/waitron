@@ -510,7 +510,7 @@ describe("periods from the painter", () => {
     ).toBe("/manage/periods");
   });
 
-  it("+ New period opens the period editor, saves the period on its own, keeps the painting and chooses it", async () => {
+  it("+ New period opens the period dialog, saves the period on its own, keeps the painting and chooses it", async () => {
     const { painter, writes } = await mount({
       answer: ({ url }) => (url.endsWith("/menu-periods") ? { id: "p-new" } : undefined),
     });
@@ -555,7 +555,7 @@ describe("periods from the painter", () => {
     expect(saveButton(painter).disabled).toBe(false);
   });
 
-  it("✎ on a period chip opens the period editor with that period", async () => {
+  it("✎ on a period chip opens the period dialog with that period", async () => {
     const { painter } = await mount();
     const editor = await openEditor(painter, "edit-p2");
     expect(editor.period?.id).toBe("p2");

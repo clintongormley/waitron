@@ -807,6 +807,21 @@ it("a season chip whose season is not in seasons stays a season chip, untinted",
   ]);
 });
 
+it("Painted in draws plain chips when links are asked for but no department is given", async () => {
+  const el = await mountEdit((el) => {
+    el.paintedIn = {
+      seasons: [{ id: "winter", name: "Winter" }],
+      specialDays: [{ id: "sd1", name: "Company dinners" }],
+    };
+    el.seasons = seasons;
+    el.paintedInLinks = true;
+  });
+  expect(paintedChips(el).map(({ text, tag, href }) => ({ text, tag, href }))).toEqual([
+    { text: "Winter", tag: "span", href: null },
+    { text: "Company dinners", tag: "span", href: null },
+  ]);
+});
+
 it("a period painted nowhere says Not painted anywhere", async () => {
   const el = await mountEdit((el) => {
     el.paintedIn = { seasons: [], specialDays: [] };

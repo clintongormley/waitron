@@ -2,7 +2,7 @@ import { html, nothing, type ReactiveController, type ReactiveControllerHost } f
 import { keyed } from "lit/directives/keyed.js";
 import type { MenuPeriodInput, OpeningHoursModel } from "../menu-timetable-types.js";
 import type { PaintedIn } from "../period-delete.js";
-import type { OpeningHoursApi } from "./opening-hours-client.js";
+import type { OpeningHoursApi, PaintedInRow } from "./opening-hours-client.js";
 import type { PaintPot } from "./paint-row.js";
 import type { PeriodDialog } from "./period-dialog.js";
 import { refusalOf } from "./refusal.js";
@@ -11,6 +11,7 @@ import "./period-dialog.js";
 
 type Department = OpeningHoursModel["departments"][number];
 type Period = Department["periods"][number];
+type SaveDetail = { periodId: string | null; input: MenuPeriodInput; departmentId?: string };
 
 /** The Periods page, which a painter's bar links to. */
 export function periodsLink() {
@@ -20,13 +21,14 @@ export function periodsLink() {
 }
 
 /**
- * A painter's ✎ on each period chip and "+ New period": one period dialog at a time, saved on its
- * own. A period just created is chosen, through `chose`, before the model lists it.
+ * One period dialog at a time, saved on its own: a painter's ✎ and "+ New period", or the Periods
+ * page's Add and Edit. A period just created is chosen, through `chose`, before the model lists it.
  */
 export class PeriodEditing implements ReactiveController {
   private editor?: {
     period?: Period;
-    departmentId: string;
+    /** Null while the dialog asks for the department. */
+    departmentId: string | null;
     clockRevision: number;
     paintedIn?: PaintedIn;
   };
@@ -40,12 +42,30 @@ export class PeriodEditing implements ReactiveController {
       api: () => OpeningHoursApi;
       model: () => OpeningHoursModel;
       chose: (periodId: string) => void;
+      /** `open(null)` asks for the department in the dialog. */
+      chooseDepartment?: boolean;
+      /** The host's own Painted-in watch; without it, opening a period reads Painted in once. */
+      paintedIn?: () => readonly PaintedInRow[] | undefined;
+      paintedInLinks?: boolean;
     },
   ) {
     host.addController(this);
   }
 
   hostUpdate() {
+    const editor = this.editor;
+    if (editor) {
+      const department = this.options
+        .model()
+        .departments.find(({ id, active }) => active && id === editor.departmentId);
+      if (
+        (editor.departmentId !== null && !department) ||
+        (editor.period && !department?.periods.some(({ id }) => id === editor.period!.id))
+      ) {
+        this.editor = undefined;
+        this.busy = false;
+      }
+    }
     const created = this.created;
     if (
       created &&
@@ -75,32 +95,33 @@ export class PeriodEditing implements ReactiveController {
     }));
   }
 
-  open(department: Department, period?: Period) {
-    if (this.editor || this.busy) return;
+  open(department: Department | null, period?: Period) {
+    if (this.editor || this.busy || !this.host.isConnected) return;
+    if (!department && !this.options.chooseDepartment) return;
     const editor = {
       period,
-      departmentId: department.id,
+      departmentId: department?.id ?? null,
       clockRevision: this.options.model().clockRevision,
     };
     this.editor = editor;
     this.host.requestUpdate();
-    if (period) void this.readPaintedIn(editor, period.id);
+    if (period && !this.options.paintedIn) void this.readPaintedIn(editor, period.id);
   }
 
   private async readPaintedIn(editor: NonNullable<PeriodEditing["editor"]>, periodId: string) {
-    let rows;
+    let row;
     try {
-      rows = await this.options.api().readPaintedIn();
+      const rows = await this.options.api().readPaintedIn();
+      row = rows.find((candidate) => candidate.periodId === periodId);
     } catch {
       return;
     }
-    const row = rows.find((candidate) => candidate.periodId === periodId);
     if (this.editor !== editor || !row) return;
     editor.paintedIn = { seasons: row.seasons, specialDays: row.specialDays };
     this.host.requestUpdate();
   }
 
-  private async save(event: CustomEvent<{ periodId: string | null; input: MenuPeriodInput }>) {
+  private async save(event: CustomEvent<SaveDetail>) {
     event.stopPropagation();
     const editor = this.editor;
     const component = event.currentTarget as PeriodDialog;
@@ -112,13 +133,15 @@ export class PeriodEditing implements ReactiveController {
     )
       return;
     const { periodId, input } = event.detail;
+    const departmentId = event.detail.departmentId ?? editor.departmentId;
+    if (periodId === null && !departmentId) return;
     const api = this.options.api();
     this.setBusy(true);
     component.refusal = undefined;
     let created: string | undefined;
     try {
       if (periodId === null)
-        created = (await api.createPeriod(editor.departmentId, input, editor.clockRevision)).id;
+        created = (await api.createPeriod(departmentId!, input, editor.clockRevision)).id;
       else await api.updatePeriod(periodId, input, editor.clockRevision);
     } catch (error) {
       if (this.editor === editor && this.host.isConnected) component.refusal = refusalOf(error);
@@ -127,7 +150,7 @@ export class PeriodEditing implements ReactiveController {
       if (this.editor === editor) this.setBusy(false);
     }
     if (created !== undefined) {
-      this.created = { id: created, departmentId: editor.departmentId };
+      this.created = { id: created, departmentId: departmentId! };
       this.options.chose(created);
     }
     if (this.editor === editor && component.commitSubmitted(input)) this.close();
@@ -142,28 +165,43 @@ export class PeriodEditing implements ReactiveController {
     this.host.requestUpdate();
   }
 
+  private paintedIn(editor: NonNullable<PeriodEditing["editor"]>): PaintedIn | undefined {
+    if (!this.options.paintedIn) return editor.paintedIn;
+    const row = this.options.paintedIn()?.find(({ periodId }) => periodId === editor.period?.id);
+    return row && { seasons: row.seasons, specialDays: row.specialDays };
+  }
+
   render(): unknown {
     const editor = this.editor;
-    const department = this.options
-      .model()
-      .departments.find(({ id }) => id === editor?.departmentId);
-    if (!editor || !department) return nothing;
+    if (!editor) return nothing;
+    const model = this.options.model();
+    const colours = (department: Department) => department.periods.map(({ colour }) => colour);
+    const department = model.departments.find(({ id }) => id === editor.departmentId);
+    if (editor.departmentId !== null && !department) return nothing;
     return keyed(
       editor,
       html`<period-dialog
         .open=${true}
         .period=${editor.period}
-        .paintedIn=${editor.paintedIn}
-        .paintedInLinks=${false}
-        .seasons=${this.options.model().seasons}
-        .departmentId=${department.id}
-        .departmentName=${department.name}
-        .usedColours=${department.periods.map(({ colour }) => colour)}
-        .menus=${this.options.model().menus}
+        .paintedIn=${this.paintedIn(editor)}
+        .paintedInLinks=${this.options.paintedInLinks ?? false}
+        .seasons=${model.seasons}
+        .departmentId=${department?.id ?? ""}
+        .departmentName=${department?.name ?? ""}
+        .usedColours=${department ? colours(department) : []}
+        .departments=${
+          department
+            ? undefined
+            : model.departments
+                .filter(({ active }) => active)
+                .map((entry) => ({ id: entry.id, name: entry.name, usedColours: colours(entry) }))
+        }
+        .menus=${model.menus}
         .busy=${this.busy}
-        .submitLabel=${editor.period ? "" : t("painter.add_and_paint")}
-        @period-save=${(event: CustomEvent<{ periodId: string | null; input: MenuPeriodInput }>) =>
-          void this.save(event)}
+        .submitLabel=${
+          editor.period || this.options.chooseDepartment ? "" : t("painter.add_and_paint")
+        }
+        @period-save=${(event: CustomEvent<SaveDetail>) => void this.save(event)}
         @period-close=${(event: Event) => {
           event.stopPropagation();
           if (this.editor === editor && !this.busy) this.close();

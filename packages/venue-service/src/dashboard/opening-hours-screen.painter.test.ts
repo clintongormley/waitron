@@ -318,7 +318,7 @@ describe("links into the painter", () => {
     expect(location.pathname).toBe("/manage/opening-hours/view/year");
   });
 
-  it("closing a painter loaded directly, after its Periods link and Back, stays on this page", async () => {
+  it("closing a painter loaded directly, after its Periods link and Back, closes onto the Year view", async () => {
     history.replaceState(null, "", "/manage/before");
     let app!: PainterApp;
     const guard = new NavigationGuard(window, {
