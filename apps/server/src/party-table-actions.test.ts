@@ -696,6 +696,7 @@ describe("a paid bill stays on its original party", () => {
     await order(v, ana.tabId, "Burger", "Vino");
     const second = await splitOff(ana.partyId, ana.tabId, [2]);
     await pay(v, ana.tabId, "12.00");
+    const before = noticesOn([ana.tabId, second]);
 
     const moving = await opts(ana.partyId, luis.partyId);
     await act((tx) => moveGuests(tx, v.cfg, ana.partyId, m7, moving));
@@ -705,6 +706,7 @@ describe("a paid bill stays on its original party", () => {
       partyId: ana.partyId,
     });
     expect(noticesOn([ana.tabId, second])).toEqual([
+      ...before,
       { working_order_id: ana.tabId, kind: "moved", line_name: "BURG", moved_to: "Pagada 7" },
       { working_order_id: second, kind: "moved", line_name: "TINTO", moved_to: "Pagada 7" },
     ]);
@@ -1297,11 +1299,12 @@ describe("MOVED notices after a table action", () => {
     await order(v, ana.tabId, "Paella", "Burger");
     const b2 = await splitOff(ana.partyId, ana.tabId, [2]);
     await order(v, luis.tabId, "Tarta");
+    const anaNotices = noticesOn([ana.tabId, b2]);
     const luisNotices = noticesOn([luis.tabId]);
 
     await joinFree(ana.partyId, m5);
 
-    expect(noticesOn([ana.tabId, b2])).toEqual([]);
+    expect(noticesOn([ana.tabId, b2])).toEqual(anaNotices);
     expect(noticesOn([luis.tabId])).toEqual(luisNotices);
   });
 

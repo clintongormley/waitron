@@ -146,11 +146,13 @@ export async function splitBill(
     existingService: true,
     copyServiceContextFrom: billId,
   });
-  await carveOffLines(tx, cfg, billId, newBillId, transfers, {
+  const before = await readSentWork(tx, billId);
+  const { splitFrom } = await carveOffLines(tx, cfg, billId, newBillId, transfers, {
     refuseHeld: true,
   });
   await bumpRevision(tx, [billId, newBillId]);
   await assertBillInvariant(tx, [billId]);
+  await enqueueMovedSlips(tx, cfg, before, newBillId, splitFrom);
   return { billId: newBillId };
 }
 

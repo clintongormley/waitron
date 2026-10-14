@@ -288,11 +288,12 @@ describe("POST /api/bills/:id/merge of a check back into the tab it was split fr
     ).length;
   }
 
-  it("puts the check's sent line and its kitchen ticket back on the tab, and tells the kitchen nothing", async () => {
+  it("puts the check's sent line and its kitchen ticket back on the tab, and tells the kitchen it is on another order", async () => {
     const { app, tabA, checkId, cookie, printerId, ticket } = await splitSentLine();
     expect(await heldOrderIds(app, cookie)).toContain(checkId);
     expect((await ticketsOn(checkId)).map((item) => item.id)).toEqual([ticket.id]);
     const jobsBefore = await printJobCount(printerId);
+    const noticesBefore = await noticeCount(tabA, checkId);
 
     const res = await app.request(`/api/bills/${tabA}/merge`, {
       method: "POST",
@@ -309,8 +310,8 @@ describe("POST /api/bills/:id/merge of a check back into the tab it was split fr
     ]);
     expect(await ticketsOn(checkId)).toEqual([]);
     expect(await heldOrderIds(app, cookie)).not.toContain(checkId);
-    expect(await noticeCount(tabA, checkId)).toBe(0);
-    expect(await printJobCount(printerId)).toBe(jobsBefore);
+    expect(await noticeCount(tabA, checkId)).toBe(noticesBefore + 1);
+    expect(await printJobCount(printerId)).toBe(jobsBefore + 1);
   });
 
   it("refuses order.payment_in_flight while the check is being paid by card, leaving its lines on it", async () => {

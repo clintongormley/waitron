@@ -457,7 +457,7 @@ describe("guests pass to a joined table's tables when it is pushed into a group"
     ]);
   });
 
-  it("guests with food at both, Bar pushed onto Long table, bills merged: a moved notice for Long table's dish only, as Bar's dish keeps Bar and its name", async () => {
+  it("guests with food at both, Bar pushed onto Long table, bills merged: a moved notice for each dish, Bar's on the bill it merged into, as it is on another order", async () => {
     const { table } = await LONG_TABLE();
     const atLong = await seat(v, table.long!);
     const atBar = await seat(v, table.bar!);
@@ -479,7 +479,9 @@ describe("guests pass to a joined table's tables when it is pushed into a group"
     const notices = await noticesOn([atLong.tabId, atBar.tabId]);
     const byBill = (a: { working_order_id: string }, b: { working_order_id: string }) =>
       a.working_order_id.localeCompare(b.working_order_id);
+    // Bar's bill merged into Long table's, so its notice is filed on the merged bill.
     expect(notices.sort(byBill)).toEqual([
+      { working_order_id: atLong.tabId, kind: "moved", moved_to: four },
       { working_order_id: atLong.tabId, kind: "moved", moved_to: four },
     ]);
   });

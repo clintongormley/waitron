@@ -150,9 +150,7 @@ export async function moveBill(
 
   // After any merge, so the tickets name the bill the dishes are now on.
   await printHoldTickets(tx, cfg, held);
-  await enqueueMovedSlips(tx, cfg, before, result.billId, new Map(), {
-    force: source === null || result.partyId === null,
-  });
+  await enqueueMovedSlips(tx, cfg, before, result.billId);
   return result;
 }
 

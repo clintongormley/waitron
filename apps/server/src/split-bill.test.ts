@@ -732,7 +732,7 @@ describe("splitting a line the kitchen has", () => {
     });
   });
 
-  it("tells the kitchen nothing when the split goes onto a check: no notice and no print job", async () => {
+  it("tells the kitchen of the part split onto a check that it is on another order: one notice and one MOVED slip", async () => {
     const seeded = await setupVenue();
     const { cfg } = seeded;
     const stationId = await withKitchen(cfg);
@@ -747,8 +747,14 @@ describe("splitting a line the kitchen has", () => {
       splitPartyBill(tx, cfg, from, [{ lineNo: 1, quantity: "1" }]),
     );
 
-    expect(await printedBy(printerId)).toEqual(printed);
-    expect(await noticesOn(from, checkId)).toEqual([]);
+    const numbers = `${await orderNumberOf(from)} -> ${await orderNumberOf(checkId)}`;
+    expect(await printedBy(printerId)).toEqual([
+      ...printed,
+      movedSlip("T1", "T1", numbers, "1.000 x Agua"),
+    ]);
+    expect(await noticesOn(from, checkId)).toEqual([
+      { orderId: checkId, kind: "moved", quantity: 1000 },
+    ]);
     expect(await queueAt(cfg, stationId)).toEqual({
       [from]: [thousandthsToDecimal(3000)],
       [checkId]: [thousandthsToDecimal(1000)],
@@ -766,6 +772,7 @@ describe("splitting a line the kitchen has", () => {
     await asApp(cfg, (tx) => cancelLine(tx, cfg, to, 1));
 
     expect(await noticesOn(from, to)).toEqual([
+      { orderId: to, kind: "moved", quantity: 1000 },
       { orderId: to, kind: "moved", quantity: 1000 },
       { orderId: to, kind: "void", quantity: 1000 },
     ]);
@@ -785,6 +792,7 @@ describe("splitting a line the kitchen has", () => {
     await asApp(cfg, (tx) => cancelLine(tx, cfg, from, 1));
 
     expect(await noticesOn(from, to)).toEqual([
+      { orderId: to, kind: "moved", quantity: 1000 },
       { orderId: to, kind: "moved", quantity: 1000 },
       { orderId: from, kind: "void", quantity: 1000 },
     ]);
@@ -852,7 +860,10 @@ describe("splitting a line the kitchen has", () => {
     expect(slip).toContain("*** VOID ***");
     expect(slip).toContain("T1");
     expect(slip).toContain("1.000 x Agua");
-    expect(await noticesOn(checkId)).toEqual([{ orderId: checkId, kind: "void", quantity: 1000 }]);
+    expect(await noticesOn(checkId)).toEqual([
+      { orderId: checkId, kind: "moved", quantity: 2000 },
+      { orderId: checkId, kind: "void", quantity: 1000 },
+    ]);
   });
 
   it("names the origin's table for the check on the pass board", async () => {
@@ -981,7 +992,7 @@ function movedSlip(from: string, to: string, orderNumber: string, item: string):
  * names for the order (`readOrderHeader`), read before the move and after it.
  */
 describe("moving sent work to another table tells the kitchen", () => {
-  it("tells the kitchen nothing when a check merges back into the tab it was split from", async () => {
+  it("tells the kitchen, when a check merges back into the tab it was split from, that its dishes are on another order", async () => {
     const { cfg, aguaId, tableId } = await setupVenue();
     const stationId = await withKitchen(cfg);
     const printerId = await printerAt(cfg, stationId);
@@ -1004,8 +1015,25 @@ describe("moving sent work to another table tells the kitchen", () => {
       });
     });
 
-    expect(await kitchenNoticesAt(cfg, stationId)).toEqual([]);
-    expect(await printedBy(printerId)).toEqual(printed);
+    const [tabNumber, checkNumber] = [await orderNumberOf(tabId), await orderNumberOf(checkId)];
+    const notice = {
+      stationId,
+      kind: "moved",
+      lineName: "Agua",
+      quantity: thousandthsToDecimal(1000),
+      unitName: { es: EACH_UNIT.abbreviation.es },
+      note: null,
+      wasStarted: false,
+      movedTo: "T1",
+    };
+    expect(await kitchenNoticesAt(cfg, stationId)).toEqual([
+      { ...notice, workingOrderId: checkId, orderLabel: `#${checkNumber} · T1` },
+      { ...notice, workingOrderId: tabId, orderLabel: `#${tabNumber}` },
+    ]);
+    expect(await printedBy(printerId)).toEqual([
+      ...printed,
+      movedSlip("T1", "T1", `${checkNumber} -> ${tabNumber}`, "1.000 x Agua"),
+    ]);
     expect(await queueAt(cfg, stationId)).toEqual({
       [tabId]: [thousandthsToDecimal(1000), thousandthsToDecimal(1000)],
     });

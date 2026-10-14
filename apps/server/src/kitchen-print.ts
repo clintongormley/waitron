@@ -1028,11 +1028,10 @@ export async function readSentWork(tx: Transaction, orderId: string): Promise<Se
 }
 
 /**
- * Tell the kitchen of sent work that moved. When `toOrderId`'s places now have lost one of
- * `before`'s ({@link lostAPlace}), each of `before`'s fired items now on `toOrderId` gets a `moved`
- * notice, at the quantity its ticket asks for, and each station with an active printer gets one
- * MOVED slip listing those items. `splitFrom` maps a ticket item a split made to the one it copied.
- * `force` tells the kitchen even when no place was lost.
+ * Tell the kitchen of sent work that moved. When the kitchen is to be told ({@link kitchenToBeTold}),
+ * each of `before`'s fired items now on `toOrderId` gets a `moved` notice, at the quantity its
+ * ticket asks for, and each station with an active printer gets one MOVED slip listing those items.
+ * `splitFrom` maps a ticket item a split made to the one it copied.
  */
 export async function enqueueMovedSlips(
   tx: Transaction,
@@ -1040,14 +1039,21 @@ export async function enqueueMovedSlips(
   before: SentWork,
   toOrderId: string,
   splitFrom: ReadonlyMap<string, string> = new Map(),
-  options: { force?: boolean } = {},
 ): Promise<void> {
   if (before.ticketItemIds.size === 0) return;
   const header = await readOrderHeader(tx, cfg, toOrderId);
   const after = (await readPlacesNow(tx, [header])).get(toOrderId)!;
-  if (!lostAPlace(before.places!, after.places) && options.force !== true) return;
+  if (!kitchenToBeTold(before, header, after.places)) return;
   const fired = await readTicketItemsOn(tx, [toOrderId]);
   await notifyMoved(tx, cfg, before, header, after, fired.get(toOrderId) ?? [], splitFrom);
+}
+
+/**
+ * Whether the kitchen is told of `before`'s work now on the order `header` heads, at `after`: the
+ * order lost a place ({@link lostAPlace}), or the work is on an order with another number.
+ */
+function kitchenToBeTold(before: SentWork, header: OrderHeader, after: OrderPlaces): boolean {
+  return lostAPlace(before.places!, after) || header.orderNumber !== before.orderNumber;
 }
 
 /**
@@ -1305,8 +1311,8 @@ export async function readPartiesSentWork(
 }
 
 /**
- * {@link enqueueMovedSlips} for each bill `before` read, onto the bill `mergedInto` maps it to, else
- * onto itself, reading every destination's header and ticket items once.
+ * {@link enqueueMovedSlips} for each bill `before` read, onto the bill at the end of its chain in
+ * `mergedInto`, else onto itself, reading every destination's header and ticket items once.
  */
 export async function enqueueMovedSlipsFor(
   tx: Transaction,
@@ -1314,9 +1320,13 @@ export async function enqueueMovedSlipsFor(
   before: ReadonlyMap<string, SentWork>,
   mergedInto: ReadonlyMap<string, string> = new Map(),
 ): Promise<void> {
+  const endOf = (billId: string): string => {
+    const into = mergedInto.get(billId);
+    return into === undefined ? billId : endOf(into);
+  };
   const moves = [...before]
     .filter(([, work]) => work.ticketItemIds.size > 0)
-    .map(([billId, work]) => ({ work, to: mergedInto.get(billId) ?? billId }));
+    .map(([billId, work]) => ({ work, to: endOf(billId) }));
   if (moves.length === 0) return;
   const destinations = [...new Set(moves.map((move) => move.to))];
   const headers = await readOrderHeaders(tx, cfg, destinations);
@@ -1324,12 +1334,14 @@ export async function enqueueMovedSlipsFor(
     tx,
     destinations.map((to) => headers.get(to)!),
   );
-  const changed = moves.filter((move) => lostAPlace(move.work.places!, now.get(move.to)!.places));
+  const changed = moves.filter((move) =>
+    kitchenToBeTold(move.work, headers.get(move.to)!, now.get(move.to)!.places),
+  );
   if (changed.length === 0) return;
   const onOrders = await readTicketItemsOn(tx, [...new Set(changed.map((move) => move.to))]);
   for (const { work, to } of changed) {
     const header = headers.get(to)!;
-    await notifyMoved(tx, cfg, work, header, now.get(to)!, onOrders.get(to) ?? [], new Map());
+    await notifyMoved(tx, cfg, work, header, now.get(to)!, onOrders.get(to)!, new Map());
   }
 }
 
