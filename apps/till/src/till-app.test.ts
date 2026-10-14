@@ -11201,6 +11201,16 @@ describe("till-app", () => {
       );
     });
 
+    it("tells the operator a Find a bill collection's department needs a tax-agency description", async () => {
+      expect(
+        await findBillPayRefused({
+          code: "department.operation_description_required",
+          departmentId: "143d2fc1-2e8b-4a1f-8ca6-12cd8a1fd63c",
+          status: 409,
+        }),
+      ).toBe(codeMessage("department.operation_description_required"));
+    });
+
     it("keeps the generic sale error for a Find a bill over-limit refusal naming no limit", async () => {
       expect(
         await findBillPayRefused({ code: "sale.total_exceeds_simplified_limit", status: 409 }),
@@ -11418,6 +11428,33 @@ describe("till-app", () => {
       );
       expect(banner.textContent).toContain("3010,00");
       expect(ticket(el)).toBeNull();
+      expect(tenderPay(el).stage).toBe("collect");
+    });
+
+    it("collect-order: a department without a tax-agency description is refused in its own words", async () => {
+      const { el } = await mountApp({
+        zonePolicy: { serviceMode: "ticket_then_pay" },
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
+        collectOrder: vi.fn().mockRejectedValue({
+          code: "department.operation_description_required",
+          departmentId: "143d2fc1-2e8b-4a1f-8ca6-12cd8a1fd63c",
+          status: 409,
+        }),
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+      emit(c, "place-order");
+      await flush(el);
+
+      emit(counter(el)!, "collect-order", { method: "cash", amount: "5" });
+      await flush(el);
+
+      const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+      expect(banner.textContent).toContain(
+        codeMessage("department.operation_description_required"),
+      );
+      expect(banner.textContent).not.toContain(t("sale.error"));
       expect(tenderPay(el).stage).toBe("collect");
     });
 
