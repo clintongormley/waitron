@@ -1,5 +1,6 @@
 import { check, index, unique } from "drizzle-orm/sqlite-core";
 import {
+  count,
   enumCheck,
   enumType,
   flag,
@@ -71,6 +72,8 @@ export const ticketItems = table(
     // `0014_order_edit_columns.sql`.
     quantity: quantity("quantity"),
     madeHere: flag("made_here").notNull().default(false),
+    // The number of the order this item was first seen by the kitchen on, once it has left it.
+    sentOrderNumber: count("sent_order_number"),
   },
   (t) => [
     // One ticket item per line — also the guard that makes a concurrent double-fire collide rather
