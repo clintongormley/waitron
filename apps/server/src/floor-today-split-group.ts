@@ -89,13 +89,36 @@ async function splitGroup(
   const staying = merge.members.filter((member) => !ticked.has(member.tableId));
   if (staying.length === 0) throw new AppError("merge.split_all", { tableId, field: "partIds" });
   const holders = await holdersOf(tx, members);
+  const leaving = partIds.filter((id) => holders.has(id));
+  const losing = [...new Set(leaving.map((id) => holders.get(id)!))];
+  if (holders.size > 0) {
+    const emptied = await partiesHoldingOnly(tx, losing, partIds);
+    const stranding = members.find((id) => ticked.has(id) && emptied.has(holders.get(id)!));
+    if (stranding !== undefined) {
+      throw new AppError("merge.strands_party", { tableId: stranding, field: "partIds" });
+    }
+  }
+  const rejoin = holders.size === 0 && staying.length >= 2 ? await rejoining(tx, staying) : null;
+  if (staying.length >= 2 && seats === null) {
+    if (rejoin === null) throw new AppError("merge.seats_required", {});
+    if (!rejoin.whole) throw new AppError("joined_table.seats_required", {});
+  }
+
   const before = await readPartiesSentWork(tx, [...new Set(holders.values())], members);
-  await ungroup(tx, cfg, removals, now, { zoneId, merge, holders }, { tableId, partIds, seats });
+  if (rejoin === null) {
+    for (const partyId of losing) {
+      await checkAndBumpParty(tx, partyId, await partyRevision(tx, partyId), "open");
+    }
+    if (leaving.length > 0) await leaveForClearing(tx, leaving, nowIso());
+    await leaveAsGroup(tx, merge.joinId, partIds, staying.length >= 2 ? seats : null);
+  } else {
+    await putBack(tx, cfg, removals, now, { zoneId, merge, staying, rejoin }, { partIds, seats });
+  }
   await enqueueMovedSlipsFor(tx, cfg, before);
 }
 
-/** {@link splitGroup}'s writes; `holders` maps each held table of the group to its party. */
-async function ungroup(
+/** `partIds` leave the group and `rejoin`'s joined table is put back over `staying`. */
+async function putBack(
   tx: Transaction,
   cfg: TillConfig,
   removals: readonly TableRemoval[],
@@ -103,38 +126,11 @@ async function ungroup(
   {
     zoneId,
     merge,
-    holders,
-  }: { zoneId: string; merge: Merge; holders: ReadonlyMap<string, string> },
-  { partIds, seats }: SplitArgs,
+    staying,
+    rejoin,
+  }: { zoneId: string; merge: Merge; staying: readonly Row[]; rejoin: Rejoin },
+  { partIds, seats }: { partIds: readonly string[]; seats: number | null },
 ): Promise<void> {
-  const members = merge.members.map((member) => member.tableId);
-  const ticked = new Set(partIds);
-  const staying = merge.members.filter((member) => !ticked.has(member.tableId));
-  if (holders.size > 0) {
-    const leaving = partIds.filter((id) => holders.has(id));
-    const losing = [...new Set(leaving.map((id) => holders.get(id)!))];
-    const emptied = await partiesHoldingOnly(tx, losing, partIds);
-    const stranding = members.find((id) => ticked.has(id) && emptied.has(holders.get(id)!));
-    if (stranding !== undefined) {
-      throw new AppError("merge.strands_party", { tableId: stranding, field: "partIds" });
-    }
-    if (staying.length >= 2 && seats === null) throw new AppError("merge.seats_required", {});
-    const groupSeats = staying.length >= 2 ? seats : null;
-    if (leaving.length === 0) return leaveAsGroup(tx, merge.joinId, partIds, groupSeats);
-    for (const partyId of losing) {
-      await checkAndBumpParty(tx, partyId, await partyRevision(tx, partyId), "open");
-    }
-    await leaveForClearing(tx, leaving, nowIso());
-    return leaveAsGroup(tx, merge.joinId, partIds, groupSeats);
-  }
-
-  const rejoin = staying.length >= 2 ? await rejoining(tx, staying) : null;
-  if (rejoin === null) {
-    if (staying.length >= 2 && seats === null) throw new AppError("merge.seats_required", {});
-    return leaveAsGroup(tx, merge.joinId, partIds, staying.length >= 2 ? seats : null);
-  }
-  if (!rejoin.whole && seats === null) throw new AppError("joined_table.seats_required", {});
-
   await leaveMergesRestoring(tx, partIds);
   const { joinedId, parts, stayingAt, anchor, whole } = rejoin;
   const stayingIds = staying.map((member) => member.tableId);
