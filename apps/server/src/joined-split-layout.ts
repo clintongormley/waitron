@@ -90,21 +90,6 @@ export function wholePlace(
   return slotPlace(frameOf(row, parts, covered), row, 0, size.width, size.height);
 }
 
-/** The joined table over the tables `staying` (indexes into `parts`), from where the first of them stands now; whole: at `size`. */
-export function joinedPlaceOver(
-  anchor: Placement,
-  parts: readonly LaidPart[],
-  staying: readonly number[],
-  whole: boolean,
-  size: { width: number; height: number },
-): Placement {
-  const first = staying[0]!;
-  return whole
-    ? wholePlace(anchor, parts, first, size)
-    : remainingPlace(anchor, parts, first, first, staying.at(-1)!);
-}
-
-/** Where a joined table stands after Reset table takes tables back into it. */
 export function joinedPlaceAfter(args: {
   row: Placement | null;
   standing: boolean;

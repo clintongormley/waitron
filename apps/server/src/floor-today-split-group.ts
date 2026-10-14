@@ -10,7 +10,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
-import { AppError, NEW_TABLE_SIZE } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import { leaveMergesRestoring } from "./floor-today-merges.js";
 import { partsOf, type Part } from "./floor-today-parts.js";
 import { splitJoinedTable } from "./floor-today-split.js";
@@ -25,7 +25,7 @@ import {
   partyRevision,
 } from "./parties.js";
 import type { Placement } from "./floor-reset-plan.js";
-import { joinedPlaceOver, partPlaces } from "./joined-split-layout.js";
+import { joinedPlaceAfter, partPlaces } from "./joined-split-layout.js";
 import type { TillConfig } from "./till-config.js";
 import "./errors.js";
 
@@ -138,8 +138,15 @@ async function splitGroup(
     .select()
     .from(floorResetTables)
     .where(eq(floorResetTables.tableId, joinedId));
-  const size = placementOf(saved!) ?? { width: NEW_TABLE_SIZE, height: NEW_TABLE_SIZE };
-  const place = joinedPlaceOver(anchor, parts, stayingAt, whole, size);
+  const place = joinedPlaceAfter({
+    row: anchor,
+    standing: true,
+    saved: placementOf(saved!),
+    parts,
+    covered: stayingAt[0]!,
+    staying: stayingAt,
+    whole,
+  });
   for (const index of stayingAt) {
     const part = parts[index]!;
     await tx
