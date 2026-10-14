@@ -15,7 +15,7 @@ import {
   type ZoneFloorPlan,
 } from "./client.js";
 import { DepartmentsZonesDrag } from "./departments-zones-drag.js";
-import { format } from "./hours-view.js";
+import { format, formatDate } from "./hours-view.js";
 import { t } from "./strings.js";
 
 export type DepartmentZoneRow =
@@ -445,7 +445,15 @@ export class DepartmentsList extends LitElement {
                 year: String(issue.year),
               })}
             </p>`
-          : nothing,
+          : issue.code === "special_day.date_shared"
+            ? html`<p class="issue" data-test="special-day-clash">
+                ${format("venue.readiness.special_day_clash", {
+                  other: issue.otherName,
+                  name: issue.name,
+                  date: formatDate(issue.date),
+                })}
+              </p>`
+            : nothing,
       )}
       ${model.departments.length > 0 && model.readiness.some((issue) => issue.code === "venue.department_missing") ? html`<p class="issue" data-test="no-enabled-department">${t("venue.no_enabled_department")}</p>` : nothing}
       ${this.moveFailure ? html`<p role="alert">${this.moveFailure}</p>` : nothing}

@@ -218,6 +218,36 @@ describe("department list", () => {
     ).toBeTruthy();
   });
 
+  it("warns, above the table, of two special days that fall on one date, naming the one that applies", async () => {
+    const clash = {
+      ...model,
+      readiness: [
+        {
+          code: "special_day.date_shared" as const,
+          date: "2027-03-26",
+          specialDayId: "sd2",
+          name: "Feria",
+          otherSpecialDayId: "sd1",
+          otherName: "Viernes Santo",
+        },
+      ],
+    };
+    const el = await setup(clash);
+    const warning = find(el, '[data-test="special-day-clash"]')!;
+    expect(warning.textContent!.trim()).toBe(
+      "Viernes Santo and Feria both fall on Fri, 26 Mar 2027. Feria applies; change one to choose.",
+    );
+    expect(
+      warning.compareDocumentPosition(table(el)) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    cleanup();
+    setLocale("es");
+    const es = await setup(clash);
+    expect(find(es, '[data-test="special-day-clash"]')!.textContent!.trim()).toBe(
+      "Viernes Santo y Feria caen el vie, 26 mar 2027. Se aplica Feria; cambia uno para elegir.",
+    );
+  });
+
   it("shows venue issues above and unassigned zones below, with their actions", async () => {
     const el = await setup({
       ...model,

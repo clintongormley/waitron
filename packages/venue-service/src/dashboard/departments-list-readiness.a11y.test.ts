@@ -226,6 +226,56 @@ describe.each(["light", "dark"] as const)("desktop Opening hours warning (%s)", 
   );
 });
 
+describe.each(["light", "dark"] as const)("special-day clash warning (%s)", (theme) => {
+  it.each([
+    ["en", 390],
+    ["es", 390],
+    ["en", 1280],
+    ["es", 1280],
+  ] as const)(
+    "wraps inside the screen and is accessible in %s at %i wide",
+    async (locale, width) => {
+      const previous = [window.innerWidth, window.innerHeight];
+      try {
+        await page.viewport(width, 1100);
+        expect(window.innerWidth).toBe(width);
+        setLocale(locale);
+        const el = (await mountThemed(
+          "<departments-list></departments-list>",
+          theme,
+        )) as HTMLElementTagNameMap["departments-list"];
+        host.style.width = "calc(100vw - 32px)";
+        const view = structuredClone(model);
+        view.readiness = [
+          {
+            code: "special_day.date_shared",
+            date: "2027-03-26",
+            specialDayId: "sd2",
+            name: "Feria".repeat(20),
+            otherSpecialDayId: "sd1",
+            otherName: "Viernes Santo".repeat(10),
+          },
+        ];
+        el.model = view;
+        await el.updateComplete;
+        const warning = el.shadowRoot!.querySelector<HTMLElement>(
+          '[data-test="special-day-clash"]',
+        )!;
+        expect(warning.textContent).toContain(locale === "en" ? "applies" : "Se aplica");
+        const bounds = el.getBoundingClientRect();
+        const rect = warning.getBoundingClientRect();
+        expect(rect.left).toBeGreaterThanOrEqual(bounds.left - 1);
+        expect(rect.right).toBeLessThanOrEqual(bounds.right + 1);
+        expect(rect.width).toBeGreaterThan(0);
+        expect(warning.scrollWidth).toBeLessThanOrEqual(warning.clientWidth + 1);
+        await expectNoA11yViolations(host);
+      } finally {
+        await page.viewport(previous[0]!, previous[1]!);
+      }
+    },
+  );
+});
+
 for (const theme of ["light", "dark"] as const) {
   for (const locale of ["en", "es"] as const) {
     it(`Receipt policy columns are accessible in ${theme}/${locale}`, async () => {

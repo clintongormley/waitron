@@ -1,4 +1,5 @@
 import type { DeleteImpact } from "@waitron/shared";
+import type { LocalDate } from "../hours-types.js";
 import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
 import type { PlanPlacement, PreviewTable } from "@waitron/ui";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
@@ -74,6 +75,14 @@ export type VenueReadinessIssue =
       specialDayId: string;
       holidayName: string;
       year: number;
+    }
+  | {
+      code: "special_day.date_shared";
+      date: LocalDate;
+      specialDayId: string;
+      name: string;
+      otherSpecialDayId: string;
+      otherName: string;
     };
 export interface NamedRow {
   id: string;
