@@ -343,6 +343,7 @@ export class PeriodsScreen extends LitElement {
           : rows.length === 0
             ? html`<p data-test="no-departments">${t("menu.no_departments")}</p>`
             : html`<wt-data-table
+                wrap-to-fit
                 aria-label=${t("period.title")}
                 .columns=${columns}
                 .rows=${rows}

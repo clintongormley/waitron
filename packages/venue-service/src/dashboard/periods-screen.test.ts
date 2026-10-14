@@ -402,9 +402,12 @@ it("Spanish: Periodos, Carta de clientes, Pintado en, Sin pintar en ningún siti
   ).toBe("Abrir en Horario de apertura");
 });
 
-it.each(["en", "es"])(
-  "M1: at 1280 the table fits its frame with five long Painted in chips (%s)",
-  async (locale) => {
+// Verdana is about as wide as CI's Linux system font.
+it.each(
+  ["en", "es"].flatMap((locale) => ["", 'Verdana, "DejaVu Sans"'].map((font) => [locale, font])),
+)(
+  "M1: at 1280 the table fits its frame with five long Painted in chips (%s, font %j)",
+  async (locale, font) => {
     const previous = [window.innerWidth, window.innerHeight];
     await page.viewport(1280, 900);
     setLocale(locale);
@@ -450,6 +453,11 @@ it.each(["en", "es"])(
           () => painted,
         ),
       );
+      if (font) {
+        const family = getComputedStyle(el).getPropertyValue("--wt-font-family");
+        expect(family).not.toBe("");
+        el.style.setProperty("--wt-font-family", `${font}, ${family}`);
+      }
       frame.append(el);
       const grid = await loaded(el);
       await expect.poll(() => grid.shadowRoot!.querySelectorAll("a[part~=chip]").length).toBe(5);
@@ -457,6 +465,8 @@ it.each(["en", "es"])(
       const scroll = grid.shadowRoot!.querySelector<HTMLElement>(".scroll")!;
       expect(scroll.clientWidth).toBeGreaterThan(800);
       expect(scroll.scrollWidth).toBeLessThanOrEqual(scroll.clientWidth + 1);
+      for (const cell of grid.shadowRoot!.querySelectorAll<HTMLElement>("th, td"))
+        expect(cell.scrollWidth).toBeLessThanOrEqual(cell.clientWidth + 1);
       for (const chip of grid.shadowRoot!.querySelectorAll<HTMLElement>("a[part~=chip]"))
         expect(getComputedStyle(chip).whiteSpace).toBe("nowrap");
     } finally {

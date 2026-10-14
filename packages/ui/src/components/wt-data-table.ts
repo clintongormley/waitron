@@ -220,6 +220,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
         background: var(--wt-color-surface);
       }
 
+      :host([wrap-to-fit]) table {
+        min-width: 0;
+      }
+
       table[data-locked-columns] {
         table-layout: fixed;
       }
@@ -926,6 +930,9 @@ export class WtDataTable<Row = unknown> extends LitElement {
   /** Starts every body cell's content at the cell's top rather than lining cells up by their
    * first line's baseline. */
   @property({ type: Boolean, reflect: true, attribute: "top-aligned" }) topAligned = false;
+  /** Lets headings and cell text wrap at spaces so the columns fit the box, which then scrolls
+   * sideways only when they cannot. Off, nothing wraps to make room: the box scrolls instead. */
+  @property({ type: Boolean, reflect: true, attribute: "wrap-to-fit" }) wrapToFit = false;
   @state() private sideFilters = false;
   @state() private searchText = "";
   /** Every filter choice, chosen or restored, keyed by column key: a string for a single-choice
