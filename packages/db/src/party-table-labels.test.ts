@@ -7,6 +7,7 @@ import {
   billParties,
   billPartyTableLabels,
   orderTableLabels,
+  partySurvivorNames,
   partySurvivors,
   partyTableLabels,
   billPartyTables,
@@ -209,6 +210,56 @@ describe("party table labels", () => {
     expect(await inTx((tx) => billPartyTableLabels(tx, [missing]))).toEqual(
       new Map([[missing, []]]),
     );
+  });
+
+  describe("partySurvivorNames", () => {
+    async function rename(id: string, name: string | null): Promise<void> {
+      await inTx((tx) => tx.update(parties).set({ name }).where(eq(parties.id, id)));
+    }
+
+    it("answers each party with the end of its chain of merges and that end's name", async () => {
+      const survivor = await party();
+      const middle = await party();
+      const first = await party();
+      await rename(survivor, "Ana");
+      await rename(middle, "Middle");
+      await rename(first, "First");
+      await merge(middle, survivor);
+      await merge(first, middle);
+      expect(await inTx((tx) => partySurvivorNames(tx, [first, middle, survivor]))).toEqual(
+        new Map([
+          [first, { id: survivor, name: "Ana" }],
+          [middle, { id: survivor, name: "Ana" }],
+          [survivor, { id: survivor, name: "Ana" }],
+        ]),
+      );
+    });
+
+    it("gives a null name when the chain ends at an unnamed party, and none for a cycle or a missing party", async () => {
+      const end = await party();
+      const merged = await party();
+      await rename(merged, "Merged");
+      await merge(merged, end);
+      const unmerged = await party();
+      await rename(unmerged, "Luis");
+      const first = await party();
+      const second = await party();
+      await merge(first, second);
+      await merge(second, first);
+      const missing = "cccccccc-9999-4000-8000-000000000002";
+      expect(
+        await inTx((tx) => partySurvivorNames(tx, [merged, unmerged, first, second, missing])),
+      ).toEqual(
+        new Map([
+          [merged, { id: end, name: null }],
+          [unmerged, { id: unmerged, name: "Luis" }],
+        ]),
+      );
+    });
+
+    it("answers no party with an empty map, without reading the database", async () => {
+      expect(await partySurvivorNames({} as Transaction, [])).toEqual(new Map());
+    });
   });
 
   describe("billPartyTables", () => {

@@ -115,12 +115,14 @@ export async function tableNames(
 }
 
 /**
- * The party at the end of each party's chain of merges, by id and name ({@link partySurvivors}).
+ * The party at the end of each party's chain of merges, by id and name, keyed by each party asked
+ * about, with the same answers as {@link partySurvivors}.
  */
-async function readSurvivors(
+export async function partySurvivorNames(
   tx: Transaction,
   partyIds: readonly string[],
 ): Promise<Map<string, { id: string; name: string | null }>> {
+  if (partyIds.length === 0) return new Map();
   const { rows } = await tx.execute<{ start: string; id: string; name: string | null }>(sql`
     with recursive chain(start, id, next, name) as (
       select p.id, p.id, p.merged_into_party_id, p.name from parties p
@@ -142,7 +144,7 @@ export async function partySurvivors(
   tx: Transaction,
   partyIds: readonly string[],
 ): Promise<Map<string, string>> {
-  return mapValues(await readSurvivors(tx, partyIds), (end) => end.id);
+  return mapValues(await partySurvivorNames(tx, partyIds), (end) => end.id);
 }
 
 /**
@@ -211,7 +213,7 @@ export async function billParties(
   partyIds: readonly string[],
 ): Promise<Map<string, BillParty>> {
   if (partyIds.length === 0) return new Map();
-  const survivors = await readSurvivors(tx, partyIds);
+  const survivors = await partySurvivorNames(tx, partyIds);
   const tables = await billActiveTables(
     tx,
     partyIds,

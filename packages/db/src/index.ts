@@ -250,6 +250,7 @@ export {
   billPartyTableLabels,
   billPartyTables,
   orderTableLabels,
+  partySurvivorNames,
   partySurvivors,
   partyTableLabels,
   tableNames,
