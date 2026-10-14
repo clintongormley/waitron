@@ -445,7 +445,7 @@ function untilAborted(wait: Promise<unknown>, signal: AbortSignal): Promise<void
   });
 }
 
-async function stopChildren(
+export async function stopChildren(
   pids: readonly number[],
   deps: TeardownDeps,
   signal: AbortSignal,

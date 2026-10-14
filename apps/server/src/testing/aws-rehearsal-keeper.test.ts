@@ -290,7 +290,7 @@ describe("runKeeper", () => {
     expect(await runKeeper(journalPath, h.deps)).toBe(0);
 
     expect(fake.names()).toEqual(["GetObject"]);
-    expect(h.kill).not.toHaveBeenCalled();
+    expect(h.kill).toHaveBeenCalledWith(101, "SIGTERM");
     expect(h.printed).toEqual([interruptedPath(), "nothing left behind"]);
     expect((await receipt()).remaining).toEqual({ bucket: null, uploadIds: [] });
   });
@@ -648,6 +648,81 @@ describe("runKeeper", () => {
         );
       expect(String(refused)).toContain("outside a rehearsal run");
       expect(after.paths).toEqual([]);
+    });
+  });
+  describe("tracked processes, whatever the bucket's state", () => {
+    const pid = { pid: 4242, startTime: START_TIME };
+
+    it.each(["deleted", "not-created", "collision"] as const)(
+      "stops a live tracked process on %s",
+      async (state) => {
+        await writeJournalFile(journal({ state, pids: [pid] }));
+        const h = harness(new FakeAdmin());
+        withAlive(h, [4242]);
+
+        expect(await runKeeper(journalPath, h.deps)).toBe(0);
+
+        expect(h.kill).toHaveBeenCalledWith(4242, "SIGTERM");
+        expect(h.printed).toEqual([interruptedPath(), "nothing left behind"]);
+        expect((await receipt()).teardown).toContainEqual(
+          expect.objectContaining({ step: "stop-child", outcome: "ok", count: 1 }),
+        );
+      },
+    );
+
+    it("names a process that would not stop on deleted, and exits 1", async () => {
+      await writeJournalFile(journal({ state: "deleted", pids: [pid] }));
+      const h = harness(new FakeAdmin(), { isAlive: (p) => p === 4242 });
+
+      expect(await runKeeper(journalPath, h.deps)).toBe(1);
+
+      expect(h.kill).toHaveBeenCalledWith(4242, "SIGKILL");
+      expect(h.printed).toEqual([interruptedPath(), "left behind:", "process 4242"]);
+    });
+
+    it("stops a live tracked process when the marker names another run", async () => {
+      await writeJournalFile(journal({ pids: [pid] }));
+      const fake = new FakeAdmin({ objects: [[NONCE, JSON.stringify({ runId: "run-9999" })]] });
+      const h = harness(fake);
+      withAlive(h, [4242]);
+
+      expect(await runKeeper(journalPath, h.deps)).toBe(1);
+
+      expect(h.kill).toHaveBeenCalledWith(4242, "SIGTERM");
+      expect(fake.names()).toEqual(["GetObject"]);
+      expect(h.printed).toEqual([
+        interruptedPath(),
+        "left behind:",
+        `bucket ${BUCKET} (ownership unknown)`,
+      ]);
+    });
+
+    it("stops a live tracked process when it is refused after the run ended", async () => {
+      await writeJournalFile(journal({ pids: [pid] }));
+      const fake = bucketWithObjects();
+      const h = harness(fake, {
+        env: profileEnv({ credentialsFile, configFile }, { AWS_PROFILE: undefined }),
+      });
+      withAlive(h, [4242]);
+
+      expect(await runKeeper(journalPath, h.deps)).toBe(1);
+
+      expect(h.kill).toHaveBeenCalledWith(4242, "SIGTERM");
+      expect(fake.calls).toEqual([]);
+      expect(h.printed.slice(1)).toEqual(["left behind:", `bucket ${BUCKET}`]);
+    });
+
+    it("names a process that would not stop when it is refused", async () => {
+      await writeJournalFile(journal({ state: "deleted", pids: [pid] }));
+      const h = harness(new FakeAdmin(), {
+        env: profileEnv({ credentialsFile, configFile }, { AWS_PROFILE: undefined }),
+        isAlive: (p) => p === 4242,
+      });
+
+      expect(await runKeeper(journalPath, h.deps)).toBe(1);
+
+      expect(h.kill).toHaveBeenCalledWith(4242, "SIGKILL");
+      expect(h.printed.slice(1)).toEqual(["left behind:", "process 4242"]);
     });
   });
 });

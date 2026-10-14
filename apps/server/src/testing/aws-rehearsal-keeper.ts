@@ -20,6 +20,7 @@ import {
   receiptFailureCause,
   removeScratch,
   runScope,
+  stopChildren,
   teardownOwnedBucket,
   unplannedFailure,
 } from "./aws-rehearsal.js";
@@ -40,8 +41,8 @@ import { installSendGate, markRunnerClient, setSendGateStrict } from "./aws-send
 /** How long a keeper waits, on a journal still `creating`, for a create that may yet land. */
 export const KEEPER_GRACE_MS = 30_000;
 
+// After stop-child, which the keeper runs in every state.
 const BUCKET_STEPS = [
-  "stop-child",
   "abort-upload",
   "remove-policy",
   "delete-objects",
@@ -146,8 +147,6 @@ interface BucketOutcome {
   remaining: AwsReceiptRemaining;
   /** A bucket the keeper may not delete because nothing proves this run made it. */
   unknown: string | null;
-  /** Tracked processes still running after teardown tried to stop them. */
-  processes: number[];
 }
 
 const NOTHING: AwsReceiptRemaining = { bucket: null, uploadIds: [] };
@@ -199,7 +198,8 @@ export async function runKeeper(
         `gave up waiting: the run did not end within ${first.keeperCeilingMs} ms; nothing done`,
       );
       const left = [
-        ...journalLeft(latest, deps),
+        ...journalLeft(latest),
+        ...liveTracked(latest, deps).map((pid) => `process ${pid}`),
         ...(latest.scratchRoot === null ? [] : [`folder ${latest.scratchRoot}`]),
       ];
       if (left.length > 0) {
@@ -230,17 +230,45 @@ function sayLeft(lines: Lines, left: readonly string[]): void {
   }
 }
 
-/** What the journal says may still exist when the keeper sends nothing; scratch is named apart. */
-function journalLeft(journal: RehearsalJournal, deps: KeeperDeps): string[] {
+/** The bucket and uploads the journal says may still exist when the keeper sends nothing. */
+function journalLeft(journal: RehearsalJournal): string[] {
   const { state, bucket } = journal;
   if (state !== "owned" && state !== "creating") return [];
   return [
     state === "owned" ? `bucket ${bucket}` : `bucket ${bucket} (ownership unknown)`,
     ...(state === "owned" ? journal.uploads.map(({ uploadId }) => `upload ${uploadId}`) : []),
-    ...matchingPids(journal, deps, { say: () => {}, note: () => {} })
-      .filter((pid) => deps.isAlive(pid))
-      .map((pid) => `process ${pid}`),
   ];
+}
+
+function liveTracked(journal: RehearsalJournal, deps: KeeperDeps): number[] {
+  return matchingPids(journal, deps, { say: () => {}, note: () => {} }).filter((pid) =>
+    deps.isAlive(pid),
+  );
+}
+
+/**
+ * Stops the journal's tracked children whose start time still matches, in every state: the runner
+ * writes `deleted` once its bucket is gone even when stopping a child failed. Sends no request.
+ */
+async function stopTracked(
+  journal: RehearsalJournal,
+  deps: KeeperDeps,
+  lines: Lines,
+): Promise<{ entry: TeardownEntry; left: number[] }> {
+  const pids = matchingPids(journal, deps, lines);
+  const entry = await stopChildren(
+    pids,
+    {
+      isAlive: deps.isAlive,
+      kill: deps.kill,
+      sleep: deps.sleep,
+      now: deps.now,
+      teardownMs: journal.teardownMs,
+      ...(deps.childGraceMs === undefined ? {} : { childGraceMs: deps.childGraceMs }),
+    },
+    AbortSignal.timeout(journal.teardownMs),
+  );
+  return { entry, left: entry.outcome === "failed" ? pids.filter((pid) => deps.isAlive(pid)) : [] };
 }
 
 async function removeJournalScratch(
@@ -270,9 +298,11 @@ async function act(journal: RehearsalJournal, deps: KeeperDeps, lines: Lines): P
   } catch (error) {
     // Nothing can be sent, but the scratch folder holding the run's secrets is still removed.
     lines.say(describe(error));
+    const stopped = await stopTracked(journal, deps, lines);
     const scratch = await removeJournalScratch(journal, deps);
     sayLeft(lines, [
-      ...journalLeft(journal, deps),
+      ...journalLeft(journal),
+      ...stopped.left.map((pid) => `process ${pid}`),
       ...(scratch.left === null ? [] : [`folder ${scratch.left}`]),
     ]);
     return 1;
@@ -281,6 +311,8 @@ async function act(journal: RehearsalJournal, deps: KeeperDeps, lines: Lines): P
   const contained = containedLog(log);
   const { record } = contained;
   record({ scenario: "lifecycle", phase: "interrupted", outcome: "failed" });
+  const stopped = await stopTracked(journal, deps, lines);
+  contained.teardown(stopped.entry);
 
   installSendGate();
   setSendGateStrict(true);
@@ -312,7 +344,6 @@ async function act(journal: RehearsalJournal, deps: KeeperDeps, lines: Lines): P
       ownership: { state: "unowned-candidate", bucket: null, candidate: bucket },
       remaining: NOTHING,
       unknown: bucket,
-      processes: [],
     };
     const outcome = await requests.scope.run(async (): Promise<BucketOutcome> => {
       const owned = { state: "owned", bucket } as const;
@@ -322,7 +353,7 @@ async function act(journal: RehearsalJournal, deps: KeeperDeps, lines: Lines): P
           if (gone(read)) {
             lines.note(`${bucket} is already gone`);
             skipBucketSteps();
-            return { ownership: owned, remaining: NOTHING, unknown: null, processes: [] };
+            return { ownership: owned, remaining: NOTHING, unknown: null };
           }
           // No marker: a run killed between its create's answer and the marker's write.
           if (read.error === undefined || nameOf(read.error) !== "NoSuchKey") {
@@ -337,10 +368,9 @@ async function act(journal: RehearsalJournal, deps: KeeperDeps, lines: Lines): P
               return unknown;
             }
           }
-          const pids = matchingPids(journal, deps, lines);
           const teardown = await teardownOwnedBucket(
             client,
-            { bucket, runId, uploads: journal.uploads, pids },
+            { bucket, runId, uploads: journal.uploads, pids: [] },
             {
               isAlive: deps.isAlive,
               kill: deps.kill,
@@ -351,7 +381,9 @@ async function act(journal: RehearsalJournal, deps: KeeperDeps, lines: Lines): P
               record,
             },
           );
-          for (const entry of teardown.entries) contained.teardown(entry);
+          for (const entry of teardown.entries) {
+            if (entry.step !== "stop-child") contained.teardown(entry);
+          }
           const failed = (step: TeardownEntry["step"]): boolean =>
             teardown.entries.some((entry) => entry.step === step && entry.outcome === "failed");
           // teardownOwnedBucket names the bucket after any failed step; only a failed delete leaves it.
@@ -359,12 +391,11 @@ async function act(journal: RehearsalJournal, deps: KeeperDeps, lines: Lines): P
             ownership: owned,
             remaining: failed("delete-bucket") ? teardown.remaining : NOTHING,
             unknown: null,
-            processes: failed("stop-child") ? pids.filter((pid) => deps.isAlive(pid)) : [],
           };
         }
         case "deleted":
           skipBucketSteps();
-          return { ownership: owned, remaining: NOTHING, unknown: null, processes: [] };
+          return { ownership: owned, remaining: NOTHING, unknown: null };
         case "creating": {
           lines.note(`waiting ${deps.graceMs} ms for a create that may still land`);
           await deps.sleep(deps.graceMs);
@@ -373,7 +404,6 @@ async function act(journal: RehearsalJournal, deps: KeeperDeps, lines: Lines): P
               ownership: { state: "not-created", bucket: null },
               remaining: NOTHING,
               unknown: null,
-              processes: [],
             };
           }
           return unknown;
@@ -386,7 +416,6 @@ async function act(journal: RehearsalJournal, deps: KeeperDeps, lines: Lines): P
             },
             remaining: NOTHING,
             unknown: null,
-            processes: [],
           };
       }
     });
@@ -419,7 +448,7 @@ async function act(journal: RehearsalJournal, deps: KeeperDeps, lines: Lines): P
       ...(remaining.bucket === null ? [] : [`bucket ${remaining.bucket}`]),
       ...(outcome.unknown === null ? [] : [`bucket ${outcome.unknown} (ownership unknown)`]),
       ...remaining.uploadIds.map((id) => `upload ${id}`),
-      ...outcome.processes.map((pid) => `process ${pid}`),
+      ...stopped.left.map((pid) => `process ${pid}`),
       ...(folderLeft === null ? [] : [`folder ${folderLeft}`]),
     ];
     sayLeft(lines, left);
