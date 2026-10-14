@@ -335,6 +335,19 @@ const EXPECTED_FOREIGN_KEYS = [
   ["zone_days", ["season_id"], "seasons"],
   ["zone_days", ["special_day_date_id"], "special_day_dates"],
   ["zone_day_ranges", ["day_id"], "zone_days"],
+  ["person_staff_roles", ["person_id"], "persons"],
+  ["person_staff_roles", ["staff_role_id"], "staff_roles"],
+  ["shift_assignments", ["department_id"], "departments"],
+  ["shift_assignments", ["shift_id"], "shifts"],
+  ["shift_assignments", ["staff_role_id"], "staff_roles"],
+  ["shift_assignments", ["station_id"], "kitchen_stations"],
+  ["staff_roles", ["location_id"], "locations"],
+  ["staffing_blocks", ["day_id"], "staffing_days"],
+  ["staffing_blocks", ["staff_role_id"], "staff_roles"],
+  ["staffing_days", ["department_id"], "departments"],
+  ["staffing_days", ["season_id"], "seasons"],
+  ["staffing_days", ["special_day_date_id"], "special_day_dates"],
+  ["staffing_days", ["station_id"], "kitchen_stations"],
 ];
 
 /** Every unique index that is not a primary key, by the name its declaration gives it. */
@@ -459,6 +472,11 @@ const EXPECTED_UNIQUE_INDEXES = [
   "webauthn_credentials_credential_id_uq",
   "working_order_lines_line_no_key",
   "zone_service_policies_one_counter_default_key",
+  "staff_roles_location_name_key",
+  "staffing_days_department_date_key",
+  "staffing_days_department_season_key",
+  "staffing_days_station_date_key",
+  "staffing_days_station_season_key",
 ];
 
 /**
@@ -771,6 +789,14 @@ const EXPECTED_CHECK_CONSTRAINTS = [
   "working_orders_settled_at_ck",
   "working_orders_source_ck",
   "working_orders_source_device_ck",
+  "shift_assignments_one_area_ck",
+  "staff_roles_colour_ck",
+  "staff_roles_name_ck",
+  "staffing_blocks_headcount_ck",
+  "staffing_blocks_step_ck",
+  "staffing_days_one_area_ck",
+  "staffing_days_one_day_ck",
+  "staffing_days_weekday_ck",
 ];
 
 /** Every migration set, applied into one database in the manifest's order, as the product does. */

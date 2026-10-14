@@ -24,6 +24,7 @@ const SERVER_ENTRIES = ['from "../index.js"', 'from "../bookings.js"'];
 const SUBPATHS: Array<[string, string]> = [
   ["@waitron/bookings", "packages/bookings/src/dashboard"],
   ["@waitron/adjustments", "packages/adjustments/src/dashboard"],
+  ["@waitron/staffing", "packages/staffing/src/dashboard"],
 ];
 
 function tsFiles(dir: string): string[] {

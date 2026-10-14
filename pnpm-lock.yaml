@@ -713,6 +713,9 @@ importers:
       '@waitron/scheduler':
         specifier: workspace:*
         version: link:../scheduler
+      '@waitron/staffing':
+        specifier: workspace:*
+        version: link:../staffing
       '@waitron/venue-service':
         specifier: workspace:*
         version: link:../venue-service
@@ -1756,6 +1759,76 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^4.1.11
         version: 4.1.11(@vitest/browser@4.1.11)(vitest@4.1.11)
+      typescript:
+        specifier: ^7.0.0
+        version: 7.0.2
+      vitest:
+        specifier: ^4.1.11
+        version: 4.1.11(@types/node@26.6.2)(@vitest/browser-playwright@4.1.11)(@vitest/coverage-v8@4.1.11)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.0))
+
+  packages/staffing:
+    dependencies:
+      '@waitron/dashboard-kit':
+        specifier: workspace:*
+        version: link:../dashboard-kit
+      '@waitron/db':
+        specifier: workspace:*
+        version: link:../db
+      '@waitron/identity':
+        specifier: workspace:*
+        version: link:../identity
+      '@waitron/module':
+        specifier: workspace:*
+        version: link:../module
+      '@waitron/reporting':
+        specifier: workspace:*
+        version: link:../reporting
+      '@waitron/server-kit':
+        specifier: workspace:*
+        version: link:../server-kit
+      '@waitron/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@waitron/sync-enrolment':
+        specifier: workspace:*
+        version: link:../sync-enrolment
+      '@waitron/ui':
+        specifier: workspace:*
+        version: link:../ui
+      '@waitron/venue-service':
+        specifier: workspace:*
+        version: link:../venue-service
+      '@waitron/workforce':
+        specifier: workspace:*
+        version: link:../workforce
+      drizzle-orm:
+        specifier: ^0.45.3
+        version: 0.45.3(@electric-sql/pglite@0.5.8)(@types/pg@8.23.1)(pg@8.23.0)
+      hono:
+        specifier: ^4.13.9
+        version: 4.13.9
+      lit:
+        specifier: ^3.2.0
+        version: 3.3.3
+    devDependencies:
+      '@types/node':
+        specifier: ^26.0.0
+        version: 26.6.2
+      '@vitest/browser-playwright':
+        specifier: ^4.1.11
+        version: 4.1.11(playwright@1.63.0)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.0))(vitest@4.1.11)
+      '@vitest/coverage-v8':
+        specifier: ^4.1.11
+        version: 4.1.11(@vitest/browser@4.1.11)(vitest@4.1.11)
+      '@waitron/catalogue':
+        specifier: workspace:*
+        version: link:../catalogue
+      drizzle-kit:
+        specifier: ^0.31.11
+        version: 0.31.11
+      playwright:
+        specifier: ^1.63.0
+        version: 1.63.0
       typescript:
         specifier: ^7.0.0
         version: 7.0.2
