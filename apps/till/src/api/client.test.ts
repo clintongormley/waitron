@@ -2706,6 +2706,24 @@ describe("TillApi", () => {
     ]);
   });
 
+  it("sends today's name, or null to clear it, with the room's revision", async () => {
+    const answer = { zoneId: "z1", revision: 8 };
+    const fetchStub = vi.fn(async () => jsonResponse(answer));
+    const api = new TillApi("", fetchStub);
+
+    await expect(api.nameToday("t1", "García birthday", 7)).resolves.toEqual(answer);
+    await expect(api.nameToday("t1", null, 7)).resolves.toEqual(answer);
+
+    const sent = fetchStub.mock.calls.map((call) => {
+      const [path, init] = call as unknown as [string, RequestInit];
+      return [path, init.method, JSON.parse(String(init.body)) as unknown];
+    });
+    expect(sent).toEqual([
+      ["/api/tables/t1/today/name", "POST", { name: "García birthday", zoneRevision: 7 }],
+      ["/api/tables/t1/today/name", "POST", { name: null, zoneRevision: 7 }],
+    ]);
+  });
+
   it("sends a split-off with its parts, and seats only when given", async () => {
     const answer = { zoneId: "z1", revision: 8 };
     const fetchStub = vi.fn(async () => jsonResponse(answer));
