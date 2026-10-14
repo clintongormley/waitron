@@ -328,13 +328,11 @@ joined table apart while a party holds any table of its group, so a group such a
 is not ended under it. Next: decide whether the moved bill's party takes the
 whole group, as seating at one of its tables does.
 
-Such a party can also lose a group's today's name with no MOVED slip (A581 part 2's review, both
+Such a party can also lose a group's today's name with no MOVED slip (A581 part 2's review,
 reproduced with a throwaway test): Move guests onto a table another party holds in the same named
-group can end the group after `combineAt` has compared names (`moveGuests`,
-`apps/server/src/table-actions.ts`), and Split tables… ticking only a table no party holds ends a
-named group under a party at its other table with no comparison at all (`splitGroup`,
-`apps/server/src/floor-today-split-group.ts`). Both need a party holding part of a group, so taking
-the whole group should remove both (reasoned, not tested).
+group can end the group (`leaveMergeOf`) after `combineAt` has queued its slips (`moveGuests`,
+`apps/server/src/table-actions.ts`). It needs a party holding part of a group, so taking the whole
+group should remove it (reasoned, not tested).
 
 ## A603. Reset table does not wait for food on its way to a group's other tables, nor for a table a module refuses to remove
 
@@ -973,11 +971,9 @@ allergens, or show only dishes matching a chosen diet. Icons and words as in
     the same column.
   - **Task 7 (#864, move a whole bill).** Open: the move moves the bill's revision on, open or
     presented, without `bumpRevision`'s refusal of money in flight, since a move changes no amount
-    (plan P19); plan P17 flags for the owner that a MOVED slip can name the same table as where the
-    dish came from and where it went (the slip's text was not checked); and since A143 (#928)
-    paying a pay-first order with a dish no station can take files the sale and raises
-    `route.dish_not_sent`, but invoice-first placing still refuses such a dish — nobody has decided
-    whether it should take the order and raise the alert instead.
+    (plan P19); and since A143 (#928) paying a pay-first order with a dish no station can take
+    files the sale and raises `route.dish_not_sent`, but invoice-first placing still refuses such
+    a dish — nobody has decided whether it should take the order and raise the alert instead.
   - **Task 8 (#869, move guests, join and split tables) and C77/C86.** Open: a party with no table
     whose chain of merges never ends (an unknown id, or two parties recorded as merged into each
     other, which the database accepts) is named by the bill's own label; whether any till action
@@ -987,10 +983,10 @@ allergens, or show only dishes matching a chosen diet. Icons and words as in
     has other unpaid bills", which Split a table choosing the main bill need not satisfy. Left by
     #906's review: `computeOverdueOrders` is the one report function that reads its own node's
     location rather than being handed one (adding `locationId` to `OverdueOrdersInput` was
-    suggested, not done); no case pins what a MOVED slip's "from" line or a correction slip prints
-    for a counter order delivered to a table; and a database built on purpose with a delivery table
-    in another location now names the order by its own label — no product path creates that state,
-    and whether every existing venue database is free of it was not checked.
+    suggested, not done); no case pins what a correction slip prints for a counter order delivered
+    to a table; and a database built on purpose with a delivery table in another location now
+    names the order by its own label — no product path creates that state, and whether every
+    existing venue database is free of it was not checked.
   - **Task 9 (#874, dishes arriving in a party get a kitchen group).** **A plan default the owner
     may overturn (P16):** spec §15's "leaves with them outside any group" is read as the side the
     bill leaves; the receiving party groups the dishes. Left by C78's review: the earliest fire
@@ -1433,16 +1429,6 @@ as "no longer on this menu". A shortcut whose target a newly read version lacks 
 with no notice. **Next action:** the owner confirms this meets §9, or asks for a notice when a
 shortcut disappears.
 
-## A joined tab of no party can have kitchen slips naming a table its ticket did not print
-
-**A joined tab of no party can have kitchen slips naming a table its ticket did not print.**
-Correction and MOVED slips name such a tab's lowest-id table (`orderTableLabels`,
-`packages/db/src/party-table-labels.ts`), so after a join a MOVED slip's "from" can name the other
-table; recording each ticket's printed table would fix it. A party's bill names all its tables
-instead. Since table actions Task 13 the join and move-tab routes are deleted and
-`dining_tables.tab_id` is dropped, so a bill reaches a table only through its party or, for a
-counter order, `delivery_table_id`; whether a tab of no party can still reach a join is not
-established.
 
 ## The owner decided a split check gets no Void; the server now allows one
 
@@ -1493,21 +1479,17 @@ From **Variants as products (#511–#556) — what is left open.** How the model
   to as the placeholder only; no hidden description for screen readers. The windows are the till's
   party Name window and the floor's Rename window (since A643, #1692, and A658, #1698); what a
   cleared field goes back to is the table list, or the group's normal name.
-- **Back to saved place tells the kitchen when a party's tables read differently (A606, owner
-  2026-10-14, overturning A581 part 2's default).** A table sent back from a group a party sits at
-  prints a MOVED slip for each of the party's bills with work sent whose table name changed:
-  "García birthday -> Counter 6, Table 9" when a named group of two ends (`backToSaved`,
-  `apps/server/src/floor-today-store.ts`). When Bar leaves a named group of four, the other three
-  keep the name and the slip reads "García birthday -> Bar, García birthday". That is lane C's
-  reading, not the owner's: the owner's example assumed the group ended and read "-> Bar, Counter 3,
-  Counter 4, Counter 5". Owner may overturn it. A rename for today prints too (A650 owner ruling 1,
-  2026-10-14): a MOVED slip for each bill of a party at the table or its group, and each counter
-  order with food on its way there, with work sent whose place names changed (`nameToday`,
-  `apps/server/src/floor-today-name.ts`). The owner found the Bar slip
-  misleading (2026-10-14) and ruled on its replacement the same day (A650): a slip only when an
-  order left a table, a name on its kitchen paper is gone (so a rename prints) or its dishes moved
-  to an order with another number; the Bar case above then prints nothing. This entry describes the
-  code until A650 Part 1 lands, which rewrites it
+- **Back to saved place and a rename for today tell the kitchen only when an order lost a place
+  (A606 and A650, owner 2026-10-14, overturning A581 part 2's default).** The owner ruled that a
+  table sent back from a group a party sits at tells the kitchen (A606), and that a rename for
+  today does too (A650 ruling 1). After finding a slip for Bar leaving a named group misleading,
+  the owner ruled the same day on what counts (A650): a MOVED slip only when an order left one of
+  its tables, a place name on its kitchen paper is no longer one of its places, or its dishes are
+  on an order with another number (`kitchenToBeTold`, `apps/server/src/kitchen-print.ts`). So
+  Table 9 back to its saved place, ending the group of two named "García birthday", prints
+  `From: García birthday` / `To: Counter 6, Table 9`; Bar back to its saved place inside a named
+  group prints nothing, as the party keeps every table and the name; and an unnamed group of two
+  ended the same way prints nothing
   ([plan](../superpowers/plans/2026-10-14-a650-moved-slips-design.md)).
 - **The "needs clearing" window names the one table it clears (A581 part 3, coordinator decision,
   2026-10-14).** A table renamed for today reads "Window needs clearing"; a table in a group, named

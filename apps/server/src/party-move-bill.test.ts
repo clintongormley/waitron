@@ -1258,7 +1258,7 @@ describe("MOVED notices", () => {
     expect(noticesOn([ana.tabId])).toEqual(mainNotices);
   });
 
-  it("tells the kitchen of each sent dish of a bill moved to the counter, though its label reads the same", async () => {
+  it("tells the kitchen of each sent dish of a bill moved to the counter, as the bill left its table", async () => {
     const { ana, second, mainNotices, splitNotices } = await sentSplit("Mesa aviso 2");
 
     await move(second, { counter: { zoneId: v.counter.zoneId } });

@@ -721,8 +721,8 @@ export async function seatsToday(
 /**
  * Sets the table's today's row from what the last reset copied for it, after it leaves any merge.
  * Its label and its today's name are left alone. The kitchen is told of each bill of a party at the
- * table's group, and each counter order with food on its way to one of its tables, whose tables now
- * read differently, for example when the table leaves a group named for today.
+ * table's group, and each counter order with food on its way to one of its tables, when
+ * `kitchenToBeTold` (kitchen-print.ts) says so.
  */
 export async function backToSaved(
   tx: Transaction,

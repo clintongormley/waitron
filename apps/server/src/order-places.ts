@@ -18,7 +18,9 @@ export interface OrderPlaces {
 export interface PlacedOrder {
   places: OrderPlaces;
   partyId: string | null;
-  /** The name of the party at the end of its party's merges, else its own party's; null for none. */
+  /**
+   * The name of the party at the end of its party's merges, else its own party's; null for none.
+   */
   sittingWith: string | null;
 }
 

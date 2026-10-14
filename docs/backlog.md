@@ -1776,9 +1776,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   (#761, HOLD tickets in advance).
 
 - A printed HOLD ticket goes stale when held groups are reordered or a party is merged into another
-  (both renumber `GROUP n`), and when the party's table moves or is joined, since no MOVED slip goes
-  out for held work (`readSentWork`, `apps/server/src/kitchen-print.ts`). Only a FIRE ticket or a
-  Reprint can be relied on. Left open by service Task 6 (#761, HOLD tickets in advance).
+  (both renumber `GROUP n`). Only a FIRE ticket or a Reprint can be relied on. Left open by service Task 6 (#761, HOLD tickets in advance).
   [Detail](backlog/kitchen.md#task-6-761-hold-tickets-in-advance)
 
 - Whether a group's HOLD ticket was queued is recorded per group, not per station, so a correction,
@@ -1947,6 +1945,12 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   (`apps/server/src/station-move.ts`) does so whoever moved it. Should it? A question for the owner.
   Left open by A439.
 
+- **A676 — `recordKitchenNotices` takes its five optional values as positional arguments
+  (2026-10-14; open).** Two of them sit side by side and are both text or null (`cancelledExtra`,
+  `reroutedTo`), so a call that swaps them type-checks. Move the optional ones into one options
+  object across `packages/module/src/module.ts`, `packages/venue-service/src/kitchen-notices.ts`
+  and the callers in `apps/server/src/kitchen-print.ts`. Left open by A650 Part 1.
+
 ### The till, devices and table service
 
 - **A669 — an allergy at the table (owner, 2026-10-14; spec written, awaiting the owner's
@@ -1960,21 +1964,27 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [mockups](backlog/mockups/a669-allergy-at-the-table/)
 
 - **A650 — MOVED slips say which order moved, from which table, to which table (owner, 2026-10-14;
-  rulings in, build planned in four parts).** Today a MOVED slip prints whenever an order's printed
-  place name changes, one slip per kitchen line, so sending Bar back from the named group of four
-  "García birthday" printed "García birthday -> Bar, García birthday" although nothing moved. The
-  owner ruled (2026-10-14): a slip when an order left a table, a name on its kitchen paper is gone
-  (a rename prints), or its dishes now sit on an order with another number (Merge bills, Transfer
-  items, Split the bill print "Order 28 -> 27"); one slip per order per station, "Order 5 · Ana /
-  From: Mesa 11 / To: Mesa 12", translated, held dishes on a HOLD ticket listed under HOLD; the
-  till shows "#27 (was 28)" wherever it shows an order number; and printing MOVED slips becomes a
-  venue setting (default on) that each prep station can follow or override. Parts: 1 the rule and
-  slip, 2 "(was N)" (a migration), 3 the venue switch, 4 the station override (after Parts 2
-  and 3 and lane A's a506-12). Three small owner questions carry defaults. Once built, it also settles two open points
-  in this file: a HOLD ticket that goes stale when its guests move (the kitchen area), and a bill
-  moved to the counter whose slip names the same table on both sides (the table actions plan's
-  Task 7 point). [Plan](superpowers/plans/2026-10-14-a650-moved-slips-design.md) ·
+  Part 1 built, Parts 2 to 4 to build).** Part 1, the rule and the slip, is built. Left: Part 2,
+  the till shows "#27 (was 28)" wherever it shows an order number (a migration); Part 3, printing
+  MOVED slips becomes a venue setting (default on); Part 4, each prep station can follow or
+  override it (after Parts 2 and 3 and lane A's a506-12). Three small owner questions carry
+  defaults. [Plan](superpowers/plans/2026-10-14-a650-moved-slips-design.md) ·
   [mockups](backlog/mockups/a650-moved-slips/)
+
+- **A677 — Every path that can move sent work snapshots it, writes, then queues MOVED slips by hand
+  (2026-10-14; open).** Each chooses its own tables to snapshot (`readSentWorkAt`,
+  `readPartiesSentWork`, then `enqueueMovedSlipsFor`, `apps/server/src/kitchen-print.ts`), and the
+  floor's merge route (`apps/server/src/floor-today-api.ts`) adds the target group's members while
+  the till's join route (`apps/server/src/till-api.ts`) does not. One wrapper owning the snapshot
+  and the widening would end the hand copies; the owner decides whether the two routes should
+  differ. Left open by A650 Part 1.
+
+- **A678 — Two readers answer "where is this order" (2026-10-14; open).** `readOrderPlaces`
+  (`apps/server/src/order-places.ts`, used by MOVED slips) reads a counter order whose delivery
+  table was released as the counter, a known edge the owner accepted, while `orderTableLabels`
+  (`packages/db/src/party-table-labels.ts`, used by tickets and correction slips) names it by its
+  kept `delivery_table_label`; only `orderTableLabels` limits the tables it reads to the venue's
+  location. Once the edge is decided, one reader in `packages/db`. Left open by A650 Part 1.
 
 - **The comment above `fitPlaceholder` (`apps/till/src/widgets/fit-placeholder.ts`) says whole
   names are kept "where one fits", looser than what it does at the edge.** Left open by A665.
@@ -2758,12 +2768,11 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   [Detail](backlog/fiscal.md#c126-cancelling-an-order-whose-invoice-was-issued-credits-it-owner-2026-10-02-option-b-decided-without-the-asesor--landed-as-1030)
 
 - The move moves the bill's revision on, open or presented, without `bumpRevision`'s refusal of
-  money in flight, since a move changes no amount (plan P19); plan P17 flags for the owner that a
-  MOVED slip can name the same table as where the dish came from and where it went (the slip's text
-  was not checked); and since A143 (#928) paying a pay-first order with a dish no station can take
-  files the sale and raises `route.dish_not_sent`, but invoice-first placing still refuses such a
-  dish — nobody has decided whether it should take the order and raise the alert instead. Left open
-  by the table actions plan's Task 7 (#864, move a whole bill).
+  money in flight, since a move changes no amount (plan P19); and since A143 (#928) paying a
+  pay-first order with a dish no station can take files the sale and raises `route.dish_not_sent`,
+  but invoice-first placing still refuses such a dish — nobody has decided whether it should take
+  the order and raise the alert instead. Left open by the table actions plan's Task 7 (#864, move a
+  whole bill).
 
 - A party with no table whose chain of merges never ends (an unknown id, or two parties recorded as
   merged into each other, which the database accepts) is named by the bill's own label; whether any
@@ -2776,11 +2785,11 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - Left by #906's review: `computeOverdueOrders` is the one report function that reads its own node's
   location rather than being handed one (adding `locationId` to `OverdueOrdersInput` was suggested,
-  not done); no case pins what a MOVED slip's "from" line or a correction slip prints for a counter
-  order delivered to a table; and a database built on purpose with a delivery table in another
-  location now names the order by its own label — no product path creates that state, and whether
-  every existing venue database is free of it was not checked. Left open by the table actions plan's
-  Task 8 (#869, move guests, join and split tables) and C77/C86.
+  not done); no case pins what a correction slip prints for a counter order delivered to a table;
+  and a database built on purpose with a delivery table in another location now names the order by
+  its own label — no product path creates that state, and whether every existing venue database is
+  free of it was not checked. Left open by the table actions plan's Task 8 (#869, move guests, join
+  and split tables) and C77/C86.
 
 - Unchecked Send to radios are Chromium's own dark-theme control, dim grey on the dark dialog (seen
   in the 390 px Spanish dark screenshot). Left open by the table actions plan's Task 10 (#875).
@@ -3023,12 +3032,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   lock): the two join-status readers answer from a hash read just before the key is derived, so a
   request denied or revoked in that window can get one stale `pending` or `approved`.
   [Detail](backlog/dashboard.md#secret-checks-and-the-write-lock-the-pin-manager-login-and-profile-checks-moved--done-w1-1117-two-blocking-derivations-and-one-stale-answer-window-remain-open)
-
-- **A joined tab of no party can have kitchen slips naming a table its ticket did not print.**
-  Correction and MOVED slips name such a tab's lowest-id table (`orderTableLabels`,
-  `packages/db/src/party-table-labels.ts`), so after a join a MOVED slip's "from" can name the other
-  table; recording each ticket's printed table would fix it.
-  [Detail](backlog/till.md#a-joined-tab-of-no-party-can-have-kitchen-slips-naming-a-table-its-ticket-did-not-print)
 
 - **The owner decided a split check gets no Void; the server now allows one.** **Next action:** the
   owner decides whether that still covers the no-Void decision.

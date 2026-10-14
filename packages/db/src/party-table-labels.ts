@@ -93,7 +93,9 @@ export async function partyTableLabels(
   return mapValues(await readActiveTables(tx, partyIds), shownLabels);
 }
 
-/** A table's own name (today's, else its saved label) and its shown name ({@link partyTableLabels}). */
+/**
+ * A table's own name (today's, else its saved label) and its shown name ({@link partyTableLabels}).
+ */
 export interface TableNames {
   id: string;
   name: string;
@@ -112,7 +114,9 @@ export async function tableNames(
   );
 }
 
-/** The party at the end of each party's chain of merges, by id and name ({@link partySurvivors}). */
+/**
+ * The party at the end of each party's chain of merges, by id and name ({@link partySurvivors}).
+ */
 async function readSurvivors(
   tx: Transaction,
   partyIds: readonly string[],
@@ -143,8 +147,8 @@ export async function partySurvivors(
 
 /**
  * The tables each party's bill is at: its active tables, or, once it holds none, those of the party
- * at the end of its merges as `survivorOf` gives it (else as {@link partySurvivors} reads it); empty
- * when that party holds none either, or when the chain has no end.
+ * at the end of its merges as `survivorOf` gives it (else as {@link partySurvivors} reads it);
+ * empty when that party holds none either, or when the chain has no end.
  */
 async function billActiveTables(
   tx: Transaction,
@@ -191,7 +195,9 @@ export async function billPartyTables(
   return mapValues(await billActiveTables(tx, partyIds), (tables) => tables.map(namesOf));
 }
 
-/** Where a party's bill is: {@link billPartyTables}, {@link billPartyTableLabels}, and its survivor. */
+/**
+ * Where a party's bill is: {@link billPartyTables}, {@link billPartyTableLabels}, and its survivor.
+ */
 export interface BillParty {
   tables: TableNames[];
   labels: string[];

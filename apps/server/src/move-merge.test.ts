@@ -514,7 +514,9 @@ describe("a table action tells the kitchen of every bill of the party", () => {
   });
 });
 
-/** A station named `name` with its own printer, taking each of `dishes`; returns the printer's id. */
+/**
+ * A station named `name` with its own printer, taking each of `dishes`; returns the printer's id.
+ */
 async function stationWithPrinter(v: PartyVenue, name: string, dishes: string[]): Promise<string> {
   return inTx(v, async (tx) => {
     const station = await createStation(tx, v.cfg, { name });

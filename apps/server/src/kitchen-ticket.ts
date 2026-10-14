@@ -170,7 +170,10 @@ function onlyGroupOf(items: readonly KitchenTicketItem[]): number | undefined {
   return groups.size === 1 ? [...groups][0] : undefined;
 }
 
-/** Emit `items`, heading each with `GROUP n` where its group differs from the item before, `current` before the first. */
+/**
+ * Emit `items`, heading each with `GROUP n` where its group differs from the item before, `current`
+ * before the first.
+ */
 function emitGrouped(
   b: ReturnType<typeof esc>,
   items: readonly KitchenTicketItem[],
@@ -392,7 +395,9 @@ const MOVED_WORDS = {
   es: { header: "MOVIDO", order: "Pedido", from: "De: ", to: "A:  ", counter: "(mostrador)" },
 } as const;
 
-/** A MOVED slip's From or To text: the counter's word, else the place names as tickets join them. */
+/**
+ * A MOVED slip's From or To text: the counter's word, else the place names as tickets join them.
+ */
 export function movedPlaceText(
   place: { counter: boolean; names: readonly string[] },
   locale: string,

@@ -213,7 +213,7 @@ async function labelOf(tableId: string): Promise<string> {
 }
 
 describe("a group renamed for today, as the kitchen sees it", () => {
-  it("a ticket sent after the rename names the group, and the rename itself prints nothing", async () => {
+  it("a rename before anything is sent prints nothing, and a ticket sent after it names the group", async () => {
     const { table, guests } = await seatedGroup();
     const name = suffixed("García birthday");
     const jobsBefore = await allJobCount();

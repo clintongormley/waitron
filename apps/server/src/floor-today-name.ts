@@ -20,7 +20,7 @@ export function sameName(a: string, b: string): boolean {
 /**
  * Today's name for the table, or for its group when it is in one; null clears it. The kitchen is
  * told of each bill of a party at those tables, and each counter order with food on its way to one
- * of them, whose place names now read differently.
+ * of them, when `kitchenToBeTold` (kitchen-print.ts) says so.
  */
 export async function nameToday(
   tx: Transaction,

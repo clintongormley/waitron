@@ -78,7 +78,9 @@ export interface FiredItem {
   quantity?: number | null;
 }
 
-/** Group-less items first, then group by group, each in line order: a paper heads each group's run. */
+/**
+ * Group-less items first, then group by group, each in line order: a paper heads each group's run.
+ */
 function byGroupThenLine(
   a: { lineNo: number; item: KitchenTicketItem },
   b: { lineNo: number; item: KitchenTicketItem },
@@ -1013,13 +1015,16 @@ async function printCorrectionSlips(
 /** The kitchen work an order has on paper, and its places. */
 export interface SentWork {
   places: OrderPlaces;
-  /** Its fired ticket items and its held ones on a HOLD ticket ({@link readOnHoldTickets}); never empty. */
+  /**
+   * Its fired ticket items and its held ones on a HOLD ticket ({@link readOnHoldTickets}); never
+   * empty.
+   */
   ticketItemIds: ReadonlySet<string>;
   /** Of {@link ticketItemIds}, the held ones. */
   heldItemIds: ReadonlySet<string>;
 }
 
-/** Read before a path moves an order's lines to another table; null when nothing is on paper. */
+/** Read before a path moves an order's lines or its tables; null when nothing is on paper. */
 export async function readSentWork(tx: Transaction, orderId: string): Promise<SentWork | null> {
   const sent = (await readSentItems(tx, [orderId])).get(orderId);
   if (sent === undefined) return null;
@@ -1258,7 +1263,10 @@ function movedItems({ before, onOrder, splitFrom }: MovedWork): MovedItem[] {
 /** A dish a MOVED slip lists; `held` when it is on a HOLD ticket rather than fired. */
 type MovedItem = CorrectionItem & { held: boolean };
 
-/** What MOVED slips print with: their stations' printers and names, their lines, the ticket grouping. */
+/**
+ * What MOVED slips print with: their stations' printers and names, their lines, the ticket
+ * grouping.
+ */
 interface MovedSlipPrinting {
   byStation: MappingsByStation;
   itemsByLine: Awaited<ReturnType<typeof buildTicketItems>>;
@@ -1343,10 +1351,10 @@ async function printMovedSlips(
 
 /**
  * The sent work of every open, placed or settled bill of `partyIds` and of every party merged into
- * them ({@link partyFamilies}), and of every counter order with food on its way ({@link foodOnItsWay})
- * to one of those parties' tables or to one of `tableIds`, keyed by order; an order the kitchen has
- * nothing on paper for is left out. Read before a table action changes which tables those bills belong to, or what those
- * tables are called.
+ * them ({@link partyFamilies}), and of every counter order with food on its way
+ * ({@link foodOnItsWay}) to one of those parties' tables or to one of `tableIds`, keyed by order;
+ * an order the kitchen has nothing on paper for is left out. Read before a table action changes
+ * which tables those bills belong to, or what those tables are called.
  */
 export async function readPartiesSentWork(
   tx: Transaction,

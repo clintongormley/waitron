@@ -1357,7 +1357,7 @@ export interface KitchenNotice {
   quantity: string;
   note: string | null;
   wasStarted: boolean;
-  /** On a `moved` notice, the table the work now belongs to. */
+  /** On a `moved` notice, the MOVED slip's To text; null when the work went to the counter. */
   movedTo: string | null;
   /** On a `rerouted` notice, the station now making the dish. */
   reroutedTo: string | null;
