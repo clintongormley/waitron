@@ -316,7 +316,10 @@ anything. So on a box started with `WAITRON_ENV=production`, Demo and Preparatio
 with that code. Through the setup route this holds only where an enabled module offers a throwaway
 allocation, which today is the Veri\*Factu module. A territory whose fiscal slot is `fiscal-none`,
 which files nothing, makes no allocation, so there is nothing to refuse; no country the setup route
-accepts today has one. The setup wizard has no text of its own for this refusal yet.
+accepts today has one: the route takes its country from `getVenueSetupCountryPack`
+(`packages/country-packs/src/registry.ts`), which offers only Spain, and Spain's only supported
+fiscal territory files through Veri\*Factu (`packages/country-es/src/spain.ts`). The setup wizard
+has no text of its own for this refusal yet.
 
 **Live on a real box needs a supplied allocation** (A679). On a box that is not a development box,
 a Live setup that is otherwise complete but has no allocation stops at `setup.fiscal_test_required`
@@ -340,10 +343,6 @@ allocation. With `WAITRON_ENV` unset, empty, `dev` or `preproduction` it goes th
 throwaway step and stamps the database preproduction; any other value is refused as
 `server.config_invalid`. `dev-setup.ts` uses it through `applyDeveloperDemoVenue`
 (`apps/server/scripts/demo-seed/allocation.ts`).
-
-**A leftover `.env`.** An `apps/server/.env` written by an earlier development build of this change
-may hold three `WAITRON_FISCAL_*` lines. They are harmless: a throwaway setup never reads them, and
-only the real custodian path does (`packages/fiscal-verifactu/src/allocation-configuration.ts`).
 
 ## Iterating against a local checkout of `@waitron/verifactu`
 

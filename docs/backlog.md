@@ -680,9 +680,9 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   192.168.10.81) in the shared demo venue.** Left open by A331 batch 3b (#1415).
 
 - **`pnpm dev:reset` deletes the venue folder before it refuses `WAITRON_ENV=production`.**
-  `apps/server/scripts/dev-setup.ts`'s `main()` calls `resetVenueDir` (lines 416-419) before
-  `devSetup` refuses production (line 347), against the file's own header (line 4). Fix: the same
-  check at the top of `main()` that `dev-onboard.ts` has. Found by A680.
+  `apps/server/scripts/dev-setup.ts`'s `main()` calls `resetVenueDir` under `--reset` before
+  `devSetup` reaches `demoSeedEnvironment`, against the file's header. Fix: the same check at the
+  top of `main()` that `dev-onboard.ts` has. Found by A680.
 
 - **The setup wizard has no text for `sif.throwaway_allocation_refused`.** A box started with
   `WAITRON_ENV=production` still offers Demo and Preparation (`apps/setup/src/screens/mode-screen.ts`
@@ -694,12 +694,9 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   up an unconfigured box in either mode before its owner does. Only a preproduction venue can come of
   it. Left open by A680 (its plan's unsure point 2).
 
-- **A fresh Demo venue opens its dashboard on a red tax-filing alert.** Seen on a box image during
-  A680, 2026-10-14: a Demo set up through the wizard showed "473 fiscal record(s) have been waiting
-  705h to reach the tax agency" (`fiscal.submission_delayed`). The 473 records are the demo seed's
-  back-dated sales, and a Demo venue sends nothing to the tax agency. A Preparation venue set up the
-  same way had no fiscal records and no fiscal alert. The alert is raised in
-  `packages/fiscal-verifactu/src/submission-alerts.ts`; why it fires for Demo was not traced.
+- **A fresh Demo venue opens its dashboard on a red tax-filing alert** (`fiscal.submission_delayed`
+  over the demo seed's back-dated sales). Found by A680.
+  [Detail](backlog/setup.md#a-fresh-demo-venue-opens-its-dashboard-on-a-red-tax-filing-alert)
 
 ### Menus and the catalogue
 
