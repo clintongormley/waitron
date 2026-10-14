@@ -27,7 +27,13 @@ import {
   type ListObjectsV2CommandOutput,
   PutObjectCommand,
 } from "@aws-sdk/client-s3";
-import { type BucketConfig, createBucketClient, LITESTREAM_VERSION } from "@waitron/stream";
+import {
+  type BucketConfig,
+  createBucketClient,
+  LITESTREAM_VERSION,
+  nameOf,
+  statusOf,
+} from "@waitron/stream";
 import { isUnset } from "../env-value.js";
 import {
   AWS_REHEARSAL_LIMITS,
@@ -37,8 +43,10 @@ import {
 } from "./aws-rehearsal-limits.js";
 import {
   AWS_REHEARSAL_PROFILE,
+  type AwsReceiptHeader,
   type AwsReceiptOwnership,
   type AwsReceiptRemaining,
+  carriesKeyPair,
   CLEANUP_COMMAND_MAX,
   cleanupCommandFor,
   createReceiptLog,
@@ -52,16 +60,7 @@ import {
   type TeardownEntry,
   writeReceipt,
 } from "./aws-rehearsal-receipt.js";
-
-export { AWS_REHEARSAL_PROFILE, cleanupCommandFor } from "./aws-rehearsal-receipt.js";
-
-export {
-  AWS_REHEARSAL_LIMITS,
-  AWS_REHEARSAL_SCENARIO_DEADLINE_MS,
-  AWS_REHEARSAL_SETUP_MARGIN_MS,
-  AWS_REHEARSAL_SETTLE_MS,
-  AWS_REHEARSAL_STOP_WAIT_MS,
-} from "./aws-rehearsal-limits.js";
+import { settleWithin } from "./settle-within.js";
 
 export type AwsRehearsalRefusalReason =
   | "opt-in-missing"
@@ -256,10 +255,10 @@ export async function loadRehearsalProfile(
 }
 
 /** The ownership nonce, at the bucket root; deleted only just before the bucket itself. */
-export const AWS_REHEARSAL_NONCE_KEY = ".waitron-rehearsal-owner";
+const AWS_REHEARSAL_NONCE_KEY = ".waitron-rehearsal-owner";
 
 /** A run that went wrong after the bucket was named; its message carries no SDK text or value. */
-export class AwsRehearsalFailed extends Error {
+class AwsRehearsalFailed extends Error {
   constructor(message: string) {
     super(message);
     this.name = "AwsRehearsalFailed";
@@ -348,19 +347,15 @@ interface Outcome<T> {
   error?: unknown;
 }
 
-function metadata(value: unknown): { httpStatus: number | null; attempts?: number } {
-  const meta = (value as { $metadata?: { httpStatusCode?: unknown; attempts?: unknown } } | null)
-    ?.$metadata;
-  const status = meta?.httpStatusCode;
-  const attempts = meta?.attempts;
-  return {
-    httpStatus: typeof status === "number" ? status : null,
-    ...(typeof attempts === "number" && attempts >= 1 ? { attempts } : {}),
-  };
+interface CallExtra {
+  objectRole?: string;
+  count?: number;
+  bytes?: number;
 }
 
-function errorNameOf(error: unknown): string {
-  return error instanceof Error ? error.name : "Unknown";
+function attemptsOf(value: unknown): number | undefined {
+  const attempts = (value as { $metadata?: { attempts?: unknown } } | null)?.$metadata?.attempts;
+  return typeof attempts === "number" && attempts >= 1 ? attempts : undefined;
 }
 
 /** Sends one command and records it as a vetted event; never throws the SDK's error. */
@@ -370,7 +365,7 @@ async function call<T>(
   api: string,
   phase: string,
   deps: Pick<TeardownDeps, "now" | "record">,
-  extra: { objectRole?: string; count?: number; bytes?: number } = {},
+  extra: CallExtra = {},
   abortSignal?: AbortSignal,
 ): Promise<Outcome<T>> {
   const started = deps.now();
@@ -382,29 +377,44 @@ async function call<T>(
   } catch (error) {
     outcome = { error };
   }
-  const meta = metadata(outcome.error ?? outcome.output);
+  const answer = outcome.error ?? outcome.output;
+  const attempts = attemptsOf(answer);
   deps.record?.({
     scenario: "lifecycle",
     phase,
     api,
     ...extra,
-    httpStatus: meta.httpStatus,
-    ...(meta.attempts === undefined ? {} : { attempts: meta.attempts }),
+    httpStatus: statusOf(answer),
+    ...(attempts === undefined ? {} : { attempts }),
     elapsedMs: Math.max(0, deps.now() - started),
-    ...(outcome.error === undefined ? {} : { errorName: errorNameOf(outcome.error) }),
+    ...(outcome.error === undefined ? {} : { errorName: nameOf(outcome.error) }),
     outcome: outcome.error === undefined ? "ok" : "failed",
   });
   return outcome;
 }
 
+type Send = <T>(
+  command: object & { input: object },
+  api: string,
+  extra?: CallExtra,
+) => Promise<Outcome<T>>;
+
+function sender(
+  client: AdminClient,
+  phase: string,
+  deps: Pick<TeardownDeps, "now" | "record">,
+  signal: AbortSignal,
+): Send {
+  return (command, api, extra = {}) => call(client, command, api, phase, deps, extra, signal);
+}
+
 function failedEntry(step: TeardownEntry["step"], error: unknown, count?: number): TeardownEntry {
-  const { httpStatus } = metadata(error);
   return {
     step,
     outcome: "failed",
     ...(count === undefined ? {} : { count }),
-    errorName: errorNameOf(error),
-    httpStatus,
+    errorName: nameOf(error),
+    httpStatus: statusOf(error),
   };
 }
 
@@ -458,28 +468,51 @@ async function stopChildren(
     : { step: "stop-child", outcome: "failed", count: left };
 }
 
+/**
+ * Yields each page's answer until one fails or is the last. A truncated page whose next position is
+ * missing or already seen is followed by a failure carrying `repeated`; at most MAX_LIST_PAGES are read.
+ */
+async function* listPages<T extends { IsTruncated?: boolean | undefined }, P>(
+  list: (position: P | undefined) => Promise<Outcome<T>>,
+  nextPosition: (output: T) => { position: P; seen: string } | undefined,
+  repeated: string,
+): AsyncGenerator<Outcome<T>> {
+  const seen = new Set<string>();
+  let position: P | undefined;
+  for (let page = 0; page < MAX_LIST_PAGES; page += 1) {
+    const listed = await list(position);
+    yield listed;
+    if (listed.error !== undefined || listed.output?.IsTruncated !== true) return;
+    const next = nextPosition(listed.output);
+    if (next === undefined || seen.has(next.seen)) {
+      yield { error: new AwsRehearsalFailed(repeated) };
+      return;
+    }
+    seen.add(next.seen);
+    position = next.position;
+  }
+}
+
+interface UploadMarkers {
+  keyMarker: string | undefined;
+  uploadIdMarker: string | undefined;
+}
+
 async function abortUploads(
-  client: AdminClient,
+  send: Send,
   bucket: string,
   tracked: readonly TrackedUpload[],
-  deps: TeardownDeps,
-  signal: AbortSignal,
 ): Promise<{ entry: TeardownEntry; left: string[] }> {
   const left = new Set<string>();
   const done = new Set<string>();
   let firstError: unknown;
   const abort = async ({ key, uploadId }: TrackedUpload): Promise<void> => {
     if (done.has(uploadId)) return;
-    const result = await call(
-      client,
+    const result = await send(
       new AbortMultipartUploadCommand({ Bucket: bucket, Key: key, UploadId: uploadId }),
       "AbortMultipartUpload",
-      "teardown",
-      deps,
-      {},
-      signal,
     );
-    if (result.error === undefined || errorNameOf(result.error) === "NoSuchUpload") {
+    if (result.error === undefined || nameOf(result.error) === "NoSuchUpload") {
       done.add(uploadId);
       left.delete(uploadId);
     } else {
@@ -489,23 +522,24 @@ async function abortUploads(
   };
   for (const upload of tracked) await abort(upload);
 
-  const markers = new Set<string>();
-  let keyMarker: string | undefined;
-  let uploadIdMarker: string | undefined;
-  for (let page = 0; page < MAX_LIST_PAGES; page += 1) {
-    const listed = await call<ListMultipartUploadsCommandOutput>(
-      client,
-      new ListMultipartUploadsCommand({
-        Bucket: bucket,
-        ...(keyMarker === undefined ? {} : { KeyMarker: keyMarker }),
-        ...(uploadIdMarker === undefined ? {} : { UploadIdMarker: uploadIdMarker }),
-      }),
-      "ListMultipartUploads",
-      "teardown",
-      deps,
-      {},
-      signal,
-    );
+  for await (const listed of listPages<ListMultipartUploadsCommandOutput, UploadMarkers>(
+    (markers) =>
+      send(
+        new ListMultipartUploadsCommand({
+          Bucket: bucket,
+          ...(markers?.keyMarker === undefined ? {} : { KeyMarker: markers.keyMarker }),
+          ...(markers?.uploadIdMarker === undefined
+            ? {}
+            : { UploadIdMarker: markers.uploadIdMarker }),
+        }),
+        "ListMultipartUploads",
+      ),
+    ({ NextKeyMarker: keyMarker, NextUploadIdMarker: uploadIdMarker }) => ({
+      position: { keyMarker, uploadIdMarker },
+      seen: `${keyMarker ?? ""}\u0000${uploadIdMarker ?? ""}`,
+    }),
+    "ListMultipartUploads repeated its marker",
+  )) {
     if (listed.error !== undefined) {
       firstError ??= listed.error;
       break;
@@ -515,15 +549,6 @@ async function abortUploads(
         await abort({ key: upload.Key, uploadId: upload.UploadId });
       }
     }
-    if (listed.output?.IsTruncated !== true) break;
-    keyMarker = listed.output.NextKeyMarker;
-    uploadIdMarker = listed.output.NextUploadIdMarker;
-    const marker = `${keyMarker ?? ""}\u0000${uploadIdMarker ?? ""}`;
-    if (markers.has(marker)) {
-      firstError ??= new AwsRehearsalFailed("ListMultipartUploads repeated its marker");
-      break;
-    }
-    markers.add(marker);
   }
   const entry =
     firstError === undefined
@@ -532,49 +557,32 @@ async function abortUploads(
   return { entry, left: [...left] };
 }
 
-async function removePolicy(
-  client: AdminClient,
-  bucket: string,
-  deps: TeardownDeps,
-  signal: AbortSignal,
-): Promise<TeardownEntry> {
-  const result = await call(
-    client,
+async function removePolicy(send: Send, bucket: string): Promise<TeardownEntry> {
+  const result = await send(
     new DeleteBucketPolicyCommand({ Bucket: bucket }),
     "DeleteBucketPolicy",
-    "teardown",
-    deps,
-    {},
-    signal,
   );
-  return result.error === undefined || errorNameOf(result.error) === "NoSuchBucketPolicy"
+  return result.error === undefined || nameOf(result.error) === "NoSuchBucketPolicy"
     ? { step: "remove-policy", outcome: "ok" }
     : failedEntry("remove-policy", result.error);
 }
 
-async function deleteObjects(
-  client: AdminClient,
-  bucket: string,
-  deps: TeardownDeps,
-  signal: AbortSignal,
-): Promise<TeardownEntry> {
+async function deleteObjects(send: Send, bucket: string): Promise<TeardownEntry> {
   const keys: string[] = [];
-  const tokens = new Set<string>();
-  let token: string | undefined;
   let failure: unknown;
-  for (let page = 0; page < MAX_LIST_PAGES; page += 1) {
-    const listed = await call<ListObjectsV2CommandOutput>(
-      client,
-      new ListObjectsV2Command({
-        Bucket: bucket,
-        ...(token === undefined ? {} : { ContinuationToken: token }),
-      }),
-      "ListObjectsV2",
-      "teardown",
-      deps,
-      {},
-      signal,
-    );
+  for await (const listed of listPages<ListObjectsV2CommandOutput, string>(
+    (token) =>
+      send(
+        new ListObjectsV2Command({
+          Bucket: bucket,
+          ...(token === undefined ? {} : { ContinuationToken: token }),
+        }),
+        "ListObjectsV2",
+      ),
+    ({ NextContinuationToken: token }) =>
+      token === undefined ? undefined : { position: token, seen: token },
+    "ListObjectsV2 repeated its continuation token",
+  )) {
     if (listed.error !== undefined) {
       failure = listed.error;
       break;
@@ -582,28 +590,17 @@ async function deleteObjects(
     for (const object of listed.output?.Contents ?? []) {
       if (object.Key !== undefined && object.Key !== AWS_REHEARSAL_NONCE_KEY) keys.push(object.Key);
     }
-    if (listed.output?.IsTruncated !== true) break;
-    token = listed.output.NextContinuationToken;
-    if (token === undefined || tokens.has(token)) {
-      failure = new AwsRehearsalFailed("ListObjectsV2 repeated its continuation token");
-      break;
-    }
-    tokens.add(token);
   }
   let deleted = 0;
   for (let start = 0; start < keys.length; start += DELETE_BATCH) {
     const batch = keys.slice(start, start + DELETE_BATCH);
-    const result = await call<DeleteObjectsCommandOutput>(
-      client,
+    const result = await send<DeleteObjectsCommandOutput>(
       new DeleteObjectsCommand({
         Bucket: bucket,
         Delete: { Objects: batch.map((Key) => ({ Key })), Quiet: true },
       }),
       "DeleteObjects",
-      "teardown",
-      deps,
       { count: batch.length },
-      signal,
     );
     const errors = result.output?.Errors ?? [];
     if (result.error !== undefined) {
@@ -623,48 +620,34 @@ async function deleteObjects(
     : failedEntry("delete-objects", failure, deleted);
 }
 
-export function ownershipNonce(runId: string): string {
+function ownershipNonce(runId: string): string {
   return JSON.stringify({ runId });
 }
 
 async function deleteBucket(
-  client: AdminClient,
+  send: Send,
+  restoreNonce: Send,
   bucket: string,
   runId: string,
   objectsDeleted: boolean,
-  deps: TeardownDeps,
-  signal: AbortSignal,
 ): Promise<TeardownEntry> {
   // The nonce stays while any other object may remain: it is the proof the cleanup command reads.
   if (objectsDeleted) {
-    const nonce = await call(
-      client,
+    const nonce = await send(
       new DeleteObjectCommand({ Bucket: bucket, Key: AWS_REHEARSAL_NONCE_KEY }),
       "DeleteObject",
-      "teardown",
-      deps,
       { objectRole: "ownership-nonce" },
-      signal,
     );
     if (nonce.error !== undefined) return failedEntry("delete-bucket", nonce.error);
   }
-  const result = await call(
-    client,
-    new DeleteBucketCommand({ Bucket: bucket }),
-    "DeleteBucket",
-    "teardown",
-    deps,
-    {},
-    signal,
-  );
-  if (result.error === undefined || errorNameOf(result.error) === "NoSuchBucket") {
+  const result = await send(new DeleteBucketCommand({ Bucket: bucket }), "DeleteBucket");
+  if (result.error === undefined || nameOf(result.error) === "NoSuchBucket") {
     return { step: "delete-bucket", outcome: "ok" };
   }
   if (objectsDeleted) {
     // The bucket outlived its marker; put the marker back so the cleanup command can prove ownership.
     const body = ownershipNonce(runId);
-    await call(
-      client,
+    await restoreNonce(
       new PutObjectCommand({
         Bucket: bucket,
         Key: AWS_REHEARSAL_NONCE_KEY,
@@ -672,10 +655,7 @@ async function deleteBucket(
         ContentType: "application/json",
       }),
       "PutObject",
-      "restore-nonce",
-      deps,
       { objectRole: "ownership-nonce", bytes: Buffer.byteLength(body) },
-      signal,
     );
   }
   return failedEntry("delete-bucket", result.error);
@@ -692,14 +672,21 @@ export async function teardownOwnedBucket(
 ): Promise<TeardownResult> {
   const { bucket } = target;
   const signal = AbortSignal.timeout(deps.teardownMs);
+  const send = sender(client, "teardown", deps, signal);
   const entries: TeardownEntry[] = [await stopChildren(target.pids, deps, signal)];
-  const aborted = await abortUploads(client, bucket, target.uploads, deps, signal);
+  const aborted = await abortUploads(send, bucket, target.uploads);
   entries.push(aborted.entry);
-  entries.push(await removePolicy(client, bucket, deps, signal));
-  const objects = await deleteObjects(client, bucket, deps, signal);
+  entries.push(await removePolicy(send, bucket));
+  const objects = await deleteObjects(send, bucket);
   entries.push(objects);
   entries.push(
-    await deleteBucket(client, bucket, target.runId, objects.outcome === "ok", deps, signal),
+    await deleteBucket(
+      send,
+      sender(client, "restore-nonce", deps, signal),
+      bucket,
+      target.runId,
+      objects.outcome === "ok",
+    ),
   );
   const clean = entries.every((entry) => entry.outcome !== "failed");
   return {
@@ -798,12 +785,37 @@ function sdkVersion(): string {
   return (require("@aws-sdk/client-s3/package.json") as { version: string }).version;
 }
 
+function receiptHeader(
+  deps: Pick<AwsRehearsalDeps, "commit" | "now">,
+  runId: string,
+  region: string,
+  limits: Record<string, number>,
+): Omit<AwsReceiptHeader, "finishedAt"> {
+  return {
+    runId,
+    commit: deps.commit(),
+    node: process.version,
+    sdkVersion: sdkVersion(),
+    litestreamVersion: LITESTREAM_VERSION,
+    region,
+    startedAt: new Date(deps.now()).toISOString(),
+    limits,
+  };
+}
+
+/** The failed steps' names, comma-separated, or "none". */
+function failedSteps(entries: readonly TeardownEntry[]): string {
+  const failed = entries.filter((entry) => entry.outcome === "failed").map((entry) => entry.step);
+  return failed.length === 0 ? "none" : failed.join(", ");
+}
+
 type CreateOutcome = AwsReceiptOwnership;
 
 function classifyCreate(bucket: string, error: unknown): CreateOutcome {
   if (error === undefined) return { state: "owned", bucket };
-  const name = errorNameOf(error);
-  const { httpStatus, attempts } = metadata(error);
+  const name = nameOf(error);
+  const httpStatus = statusOf(error);
+  const attempts = attemptsOf(error);
   // On a retry, "already owned by you" may answer this run's own lost first attempt.
   if (name === "BucketAlreadyOwnedByYou" && attempts !== undefined && attempts > 1) {
     return { state: "unowned-candidate", bucket: null, candidate: bucket };
@@ -924,29 +936,13 @@ export async function withAwsRehearsal<T>(
   }
 }
 
-/** Whether `running` settled, either way, within `ms`. */
-async function settleWithin(running: Promise<unknown>, ms: number): Promise<boolean> {
-  let timer: NodeJS.Timeout | undefined;
-  const settled = await Promise.race([
-    running.then(
-      () => true,
-      () => true,
-    ),
-    new Promise<false>((resolve) => {
-      timer = setTimeout(() => resolve(false), ms);
-    }),
-  ]);
-  clearTimeout(timer);
-  return settled;
-}
-
 /** Names only a refused field or an error code, never a value. */
 function receiptFailureCause(error: unknown): string {
   if (error instanceof Error && error.message.startsWith("receipt field refused: ")) {
     return error.message;
   }
   const code = (error as { code?: unknown } | null)?.code;
-  return typeof code === "string" && /^[A-Z0-9_]{1,32}$/.test(code) ? code : errorNameOf(error);
+  return typeof code === "string" && /^[A-Z0-9_]{1,32}$/.test(code) ? code : nameOf(error);
 }
 
 /**
@@ -1079,16 +1075,11 @@ async function runOwned<T>(
   assertCleanupCommandFits(region, runId, receiptDir);
   const receiptPath = join(receiptDir, receiptFileName(runId));
   const log = createReceiptLog(
-    {
-      runId,
-      commit: deps.commit(),
-      node: process.version,
-      sdkVersion: sdkVersion(),
-      litestreamVersion: LITESTREAM_VERSION,
-      region,
-      startedAt: new Date(deps.now()).toISOString(),
-      limits: { ...AWS_REHEARSAL_LIMITS, deadlineMs: deps.deadlineMs, teardownMs: deps.teardownMs },
-    },
+    receiptHeader(deps, runId, region, {
+      ...AWS_REHEARSAL_LIMITS,
+      deadlineMs: deps.deadlineMs,
+      teardownMs: deps.teardownMs,
+    }),
     profile,
   );
   const contained = containedLog(log);
@@ -1108,9 +1099,6 @@ async function runOwned<T>(
       );
     }
   };
-  const loweredKeys = [profile.accessKeyId, profile.secretAccessKey].map((key) =>
-    key.toLowerCase(),
-  );
   let uploaded = 0;
   let objects = 0;
   const reserveUpload = (bytes: number, role: string): void => {
@@ -1183,8 +1171,7 @@ async function runOwned<T>(
     },
     trackUpload(key, uploadId) {
       refuseOnceTearingDown();
-      const lowered = typeof uploadId === "string" ? uploadId.toLowerCase() : "";
-      if (!isReceiptUploadId(uploadId) || loweredKeys.some((k) => lowered.includes(k))) {
+      if (!isReceiptUploadId(uploadId) || carriesKeyPair(uploadId, profile)) {
         throw new AwsRehearsalRefused(
           "upload-id-refused",
           "an upload id the receipt could not carry is not tracked",
@@ -1282,9 +1269,7 @@ async function runOwned<T>(
   }
 
   const remaining = teardown?.remaining ?? { bucket: null, uploadIds: [] };
-  const failedSteps = (teardown?.entries ?? [])
-    .filter((entry) => entry.outcome === "failed")
-    .map((entry) => entry.step);
+  const failed = failedSteps(teardown?.entries ?? []);
   let receiptFailure: AwsRehearsalFailed | undefined;
   try {
     const receipt = log.finish({
@@ -1310,10 +1295,10 @@ async function runOwned<T>(
   }
 
   const teardownFailure =
-    failedSteps.length === 0
+    failed === "none"
       ? undefined
       : new AwsRehearsalFailed(
-          `teardown failed at ${failedSteps.join(", ")}` +
+          `teardown failed at ${failed}` +
             (receiptFailure === undefined ? `; receipt: ${receiptPath}` : ""),
         );
   const problems = [failure, refusedEntriesFailure(contained.refused()), teardownFailure].filter(
@@ -1328,7 +1313,7 @@ async function runOwned<T>(
     throw new AggregateError(
       [...problems, receiptFailure],
       `the rehearsal's receipt was not written; bucket left: ${left}; ` +
-        `failed teardown steps: ${failedSteps.length === 0 ? "none" : failedSteps.join(", ")}`,
+        `failed teardown steps: ${failed}`,
     );
   }
   if (printFailure !== undefined) {
@@ -1506,16 +1491,7 @@ export async function cleanupFromReceipt(
   const client = deps.createAdminClient(profile);
   try {
     const log = createReceiptLog(
-      {
-        runId,
-        commit: deps.commit(),
-        node: process.version,
-        sdkVersion: sdkVersion(),
-        litestreamVersion: LITESTREAM_VERSION,
-        region,
-        startedAt: new Date(deps.now()).toISOString(),
-        limits: { teardownMs: deps.teardownMs },
-      },
+      receiptHeader(deps, runId, region, { teardownMs: deps.teardownMs }),
       profile,
     );
     const contained = containedLog(log);
@@ -1529,7 +1505,7 @@ export async function cleanupFromReceipt(
       { objectRole: "ownership-nonce" },
       AbortSignal.timeout(deps.teardownMs),
     );
-    if (marker.error !== undefined && errorNameOf(marker.error) === "NoSuchBucket") {
+    if (marker.error !== undefined && nameOf(marker.error) === "NoSuchBucket") {
       deps.print("bucket not found; nothing deleted");
       return { ok: true, receiptPath: null };
     }
@@ -1564,11 +1540,10 @@ export async function cleanupFromReceipt(
     try {
       written = await writeReceipt(dirname(path), receipt, profile, "cleanup");
     } catch (error) {
-      const failed = teardown.entries.filter((entry) => entry.outcome === "failed");
       throw new AwsRehearsalFailed(
         `cleanup receipt not written (${receiptFailureCause(error)}); ` +
-          `bucket left: ${teardown.remaining.bucket ?? "none"}; failed teardown steps: ` +
-          (failed.length === 0 ? "none" : failed.map((entry) => entry.step).join(", ")),
+          `bucket left: ${teardown.remaining.bucket ?? "none"}; ` +
+          `failed teardown steps: ${failedSteps(teardown.entries)}`,
       );
     }
     deps.print(written);

@@ -230,25 +230,12 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
   const clock = stageClock(fixture.record, signal);
   const waitFor = <T>(what: string, timeoutMs: number, probe: () => Promise<T | undefined>) =>
     waitUntil(what, timeoutMs, probe, signal);
-  let serverA: StartedServer | undefined;
-  let serverB: StartedServer | undefined;
-  // Each server is taken before it is closed, so an abort and the body never close one twice.
+  // Each server leaves the set before it is closed, so an abort and the body never close one twice.
+  const running = new Set<StartedServer>();
   const closeRunning = async (): Promise<unknown[]> => {
     const closeFailures: unknown[] = [];
-    for (const take of [
-      () => {
-        const server = serverA;
-        serverA = undefined;
-        return server;
-      },
-      () => {
-        const server = serverB;
-        serverB = undefined;
-        return server;
-      },
-    ]) {
-      const server = take();
-      if (server === undefined) continue;
+    for (const server of running) {
+      running.delete(server);
       try {
         await server.close();
       } catch (error) {
@@ -393,7 +380,8 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
     });
 
     // 3. A boots, opens its generation and moves the pointer only after the first full copy landed.
-    serverA = await startServer(await loadBoxEnv(bootEnv(dirsA, portA), dirsA.state));
+    const serverA = await startServer(await loadBoxEnv(bootEnv(dirsA, portA), dirsA.state));
+    running.add(serverA);
     const venueId = await waitFor("a pointer in the bucket", POINTER_WAIT_MS, () =>
       venueIdInBucket(store),
     );
@@ -413,22 +401,27 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
       generation: string,
       saleId: string,
     ): Promise<true | undefined> => {
-      const out = join(await mkdtemp(join(scratch, "probe-")), "venue.db");
-      await restoreGeneration({
-        litestreamBin,
-        bucket,
-        venueId,
-        generation,
-        outPath: out,
-        ceilingMs: RESTORE_MS,
-      });
-      const db = new DatabaseSync(out);
+      const folder = await mkdtemp(join(scratch, "probe-"));
       try {
-        return db.prepare("select 1 as hit from sales where id = ?").get(saleId) === undefined
-          ? undefined
-          : true;
+        const out = join(folder, "venue.db");
+        await restoreGeneration({
+          litestreamBin,
+          bucket,
+          venueId,
+          generation,
+          outPath: out,
+          ceilingMs: RESTORE_MS,
+        });
+        const db = new DatabaseSync(out);
+        try {
+          return db.prepare("select 1 as hit from sales where id = ?").get(saleId) === undefined
+            ? undefined
+            : true;
+        } finally {
+          db.close();
+        }
       } finally {
-        db.close();
+        await rm(folder, { recursive: true, force: true });
       }
     };
 
@@ -450,9 +443,8 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
 
     clock.begin("rebuild");
     // 5. A dies: its server stops and its whole folder is gone. The kit is all that is left.
-    const closingA = serverA;
-    serverA = undefined;
-    await closingA.close();
+    running.delete(serverA);
+    await serverA.close();
     const leafA = new X509Certificate(
       await readFile(join(dirsA.state, "tls", "server.crt"), "utf8"),
     );
@@ -501,7 +493,8 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
     clock.begin("pointer-b");
     // 7. B's first start: a membership document one term higher, a generation of its own, and the
     //    pointer moved — still verifiable with the key the owner's kit carries.
-    serverB = await startServer(await loadBoxEnv(bootEnv(dirsB, portB), dirsB.state));
+    const serverB = await startServer(await loadBoxEnv(bootEnv(dirsB, portB), dirsB.state));
+    running.add(serverB);
     const pointerB = await waitFor(
       "the pointer to move to box B's generation",
       POINTER_WAIT_MS,
@@ -622,9 +615,8 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
     clock.end(freeze === undefined ? "skipped" : "ok");
     clock.begin("restore-compare");
     // 9. B stops cleanly; a restore of its generation holds exactly what its database holds.
-    const closingB = serverB;
-    serverB = undefined;
-    await closingB.close();
+    running.delete(serverB);
+    await serverB.close();
     const restoredB = join(await mkdtemp(join(scratch, "restored-b-")), "venue.db");
     await restoreGeneration({
       litestreamBin,

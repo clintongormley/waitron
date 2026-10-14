@@ -4,12 +4,11 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseCleanupArgs, runCleanup } from "../../scripts/aws-rehearsal-cleanup.js";
-import type { AwsReceipt } from "./aws-rehearsal-receipt.js";
+import { type AwsReceipt, cleanupCommandFor } from "./aws-rehearsal-receipt.js";
 import {
   AwsRehearsalRefused,
   type AdminClient,
   type AwsRehearsalDeps,
-  cleanupCommandFor,
   cleanupFromReceipt,
 } from "./aws-rehearsal.js";
 

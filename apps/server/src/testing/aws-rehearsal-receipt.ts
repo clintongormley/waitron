@@ -114,6 +114,7 @@ const ERROR_NAME = /^[A-Z][A-Za-z0-9]{0,63}$/;
 const UPLOAD_ID = /^[!#-[\]-~]{1,1024}$/;
 export const AWS_REHEARSAL_PROFILE = "waitron-rehearsal";
 const REGION = "[a-z]{2}(?:-[a-z]+)+-[0-9]{1,2}";
+const REGION_ONLY = new RegExp(`^${REGION}$`);
 const CLEANUP_COMMAND_HEAD =
   'WAITRON_RUN_AWS_REHEARSAL=1 AWS_SHARED_CREDENTIALS_FILE="$HOME/.config/waitron-cloud/aws/credentials" ' +
   `AWS_CONFIG_FILE="$HOME/.config/waitron-cloud/aws/config" AWS_PROFILE=${AWS_REHEARSAL_PROFILE} AWS_REGION=`;
@@ -144,7 +145,7 @@ export function isReceiptUploadId(id: unknown): id is string {
 
 /** A region the cleanup command may carry. */
 export function isReceiptRegion(region: unknown): region is string {
-  return typeof region === "string" && new RegExp(`^${REGION}$`).test(region);
+  return typeof region === "string" && REGION_ONLY.test(region);
 }
 
 export function isReceiptToken(value: unknown): value is string {
@@ -179,8 +180,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function token(value: unknown, key: string): string {
-  if (typeof value !== "string" || !TOKEN.test(value) || ACCESS_KEY_ID.test(value))
-    throw refused(key);
+  if (!isReceiptToken(value)) throw refused(key);
   return value;
 }
 
@@ -233,6 +233,11 @@ function carriesKey(value: unknown, forbidden: Forbidden): boolean {
   if (typeof value !== "string") return false;
   const lower = value.toLowerCase();
   return forbidden.some((secret) => lower.includes(secret));
+}
+
+/** Whether `value` contains either key, in any case. */
+export function carriesKeyPair(value: unknown, keys: ReceiptKeyPair): boolean {
+  return carriesKey(value, forbiddenFrom(keys));
 }
 
 /** Checks every string, or string in an array, directly under `input` — before any shape rule. */
@@ -440,7 +445,7 @@ export async function writeReceipt(
   kind: "run" | "cleanup" = "run",
 ): Promise<string> {
   const text = `${JSON.stringify(receipt, null, 2)}\n`;
-  if (carriesKey(text, forbiddenFrom(keys))) throw refused("receipt");
+  if (carriesKeyPair(text, keys)) throw refused("receipt");
   const path = join(dir, receiptFileName(receipt.header.runId, kind));
   await mkdir(dir, { recursive: true });
   await writeFile(path, text);

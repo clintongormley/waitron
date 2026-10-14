@@ -9,7 +9,9 @@ import {
   AWS_REHEARSAL_SETUP_MARGIN_MS,
   AWS_REHEARSAL_SETTLE_MS,
   AWS_REHEARSAL_STOP_WAIT_MS,
-  AWS_REHEARSAL_PROFILE,
+} from "./aws-rehearsal-limits.js";
+import { AWS_REHEARSAL_PROFILE } from "./aws-rehearsal-receipt.js";
+import {
   AwsRehearsalRefused,
   assertOutsideDirectory,
   assertRehearsalOptIn,

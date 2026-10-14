@@ -7,7 +7,6 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { setTimeout as delay } from "node:timers/promises";
 import { afterAll, describe, expect, it } from "vitest";
 import {
   READY_TIMEOUT_MS as S3_READY_MS,
@@ -17,6 +16,7 @@ import {
   startS3TestServer,
   type S3TestServer,
 } from "./testing/s3-test-server.js";
+import { settleWithin } from "./testing/settle-within.js";
 import {
   STREAM_LOOP_PHASES,
   STREAM_LOOP_SCENARIO_MS,
@@ -49,19 +49,8 @@ describe("the stream loop: stream, rebuild from the bucket, sell under a fresh c
     const failures: unknown[] = [];
     // A test that hit its time limit is still running: its servers close before versitygw stops.
     stop.abort();
-    if (running !== undefined) {
-      const timer = new AbortController();
-      const settled = await Promise.race([
-        running.then(
-          () => true,
-          () => true,
-        ),
-        delay(ABORT_SETTLE_MS, false, { signal: timer.signal }).catch(() => false),
-      ]);
-      timer.abort();
-      if (!settled) {
-        failures.push(new Error(`the stream loop did not stop within ${ABORT_SETTLE_MS} ms`));
-      }
+    if (running !== undefined && !(await settleWithin(running, ABORT_SETTLE_MS))) {
+      failures.push(new Error(`the stream loop did not stop within ${ABORT_SETTLE_MS} ms`));
     }
     // Each cleanup runs even when an earlier one rejects, so a failed stop cannot leave scratch behind.
     for (const cleanup of [
