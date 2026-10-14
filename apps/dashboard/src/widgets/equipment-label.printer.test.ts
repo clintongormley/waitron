@@ -160,6 +160,7 @@ it("ignores a late list after the label changes and opens a new choice", async (
     expect(q<WtCombobox>(el, "equipment-label-printer").options[0]?.value).toBe(OTHER),
   );
   complete([]);
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   await el.updateComplete;
   expect(q<WtCombobox>(el, "equipment-label-printer").options).toHaveLength(2);
 });
@@ -187,7 +188,47 @@ it("sends once while pending and ignores its late result after switching equipme
   expect(q<WtButton>(el, "send-equipment-label").loading).toBe(true);
   el.itemId = OTHER;
   await el.updateComplete;
+  q<WtButton>(el, "venue-print-equipment-label").click();
+  await vi.waitFor(() =>
+    expect(q<WtCombobox>(el, "equipment-label-printer").options).toHaveLength(2),
+  );
+  expect(q<WtCombobox>(el, "equipment-label-printer").value).toBe("");
+  expect(q<WtButton>(el, "send-equipment-label").disabled).toBe(true);
   complete({ jobId: "old-job" });
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   await el.updateComplete;
   expect(q(el, "equipment-label-printer-status")).toBeNull();
+});
+
+it("keeps a late refusal from appearing on the replacement label choice", async () => {
+  const { el, api } = await mount();
+  let reject!: (error: Error) => void;
+  api.printEquipmentLabel.mockImplementationOnce(
+    () =>
+      new Promise((_resolve, refuse) => {
+        reject = refuse;
+      }),
+  );
+  q<WtButton>(el, "venue-print-equipment-label").click();
+  await vi.waitFor(() =>
+    expect(q<WtCombobox>(el, "equipment-label-printer").options).toHaveLength(2),
+  );
+  q(el, "equipment-label-printer").dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: ID } }),
+  );
+  await el.updateComplete;
+  q<WtButton>(el, "send-equipment-label").click();
+  await el.updateComplete;
+  el.itemId = OTHER;
+  await el.updateComplete;
+  q<WtButton>(el, "venue-print-equipment-label").click();
+  await vi.waitFor(() =>
+    expect(q<WtCombobox>(el, "equipment-label-printer").options).toHaveLength(2),
+  );
+  reject(new Error("old refusal"));
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  await el.updateComplete;
+  expect(
+    q<HTMLElementTagNameMap["wt-form-actions"]>(el, "equipment-label-printer-actions").error,
+  ).toBe("");
 });

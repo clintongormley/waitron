@@ -1,6 +1,6 @@
 // Load server-owned error codes; imported printing verbs load the printing registry.
 import "./errors.js";
-import { cardReaders } from "@waitron/payments";
+import { cardReaders, DEMO_READER_ID } from "@waitron/payments";
 import { formatEquipmentLabel } from "./equipment-label.js";
 import { createPrinterProbes } from "./printer-probes.js";
 import { createPageTestPages, type PageTestPages } from "./page-test-pages.js";
@@ -1247,12 +1247,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           .select({ paperWidth: printers.paperWidth, resolution: printers.resolution })
           .from(printers)
           .where(
-            and(
-              eq(printers.id, printerId),
-              eq(printers.locationId, deps.cfg.locationId),
-              eq(printers.active, true),
-              isNull(printers.deletedAt),
-            ),
+            and(eq(printers.id, printerId), eq(printers.active, true), isNull(printers.deletedAt)),
           );
         if (target === undefined) throw new AppError("printer.not_found", { id: printerId });
         const [label] =
@@ -1260,18 +1255,12 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             ? await tx
                 .select({ name: printers.name })
                 .from(printers)
-                .where(
-                  and(
-                    eq(printers.id, id),
-                    eq(printers.locationId, deps.cfg.locationId),
-                    isNull(printers.deletedAt),
-                  ),
-                )
+                .where(and(eq(printers.id, id), isNull(printers.deletedAt)))
             : await tx
                 .select({ name: cardReaders.name })
                 .from(cardReaders)
                 .where(and(eq(cardReaders.id, id), isNull(cardReaders.deletedAt)));
-        if (label === undefined)
+        if (label === undefined || (kind === "reader" && id === DEMO_READER_ID))
           throw new AppError(kind === "printer" ? "printer.not_found" : "reader.not_found", { id });
         return enqueuePrintJob(
           tx,
