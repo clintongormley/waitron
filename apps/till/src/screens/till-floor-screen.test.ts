@@ -651,4 +651,18 @@ describe("floor zones that seat no one", () => {
     expect(el.shadowRoot!.querySelector("till-seat-dialog")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("[data-zone-no-seating]")).toBeNull();
   });
+
+  it("seats free tables once the zone takes table service and clears the old notice", async () => {
+    const { el } = await mount({ zones: [zone({ serviceMode: "prepay" })] });
+    el.shadowRoot!.querySelector<HTMLElement>("[data-table]")!.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-zone-no-seating]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("till-seat-dialog")).toBeNull();
+    el.zones = [zone({ serviceMode: "table_tab" })];
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-zone-no-seating]")).toBeNull();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-table]")!.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("till-seat-dialog")).not.toBeNull();
+  });
 });
