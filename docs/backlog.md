@@ -1433,6 +1433,16 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   delete removes them — left open by A506-5, #1603.
   [Detail](backlog/service-periods.md#a-department-or-zone-deletes-preview-never-counts-a-special-days-painted-hours)
 
+- **The Opening hours Year page does not show the warning that two special days share a date**;
+  only the Departments screen's readiness list does — left open by A577.
+
+- **Between two special-day dates that both stand on their own terms, the earlier STORED date
+  wins**: a yearly "Feria" saved on 26 March 2026 beats a one-off "Cena de empresa" on 26 March
+  2027, though a person may expect the one-off to win (`standingInYear`,
+  `packages/venue-service/src/repeat-rules.ts`). Saving refuses such a pair, so it arises only
+  from rows written another way (the save's check, `sharedSpecialDate`, finds the pair in
+  either order); the A577 warning names it — left open by A577.
+
 - **The readiness line for a repeating holiday date names the official holiday**, not the special
   day's own name, and the Year's missing-holiday warning does the same — left open by A506-5,
   #1603. [Detail](backlog/service-periods.md#the-readiness-line-for-a-repeating-holiday-date-names-the-official-holiday)
