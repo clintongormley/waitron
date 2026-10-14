@@ -27,8 +27,12 @@ const startUrl = location.href;
 afterEach(() => {
   for (const host of hosts.splice(0)) host.remove();
   setLocale("en");
+  vi.restoreAllMocks();
   history.replaceState(null, "", startUrl);
 });
+/** The path each call of a spied `pushState` or `replaceState` wrote. */
+const writtenPaths = (spy: { mock: { calls: unknown[][] } }) =>
+  spy.mock.calls.map(([, , url]) => new URL(String(url), location.href).pathname);
 const view: PrepStationsView = {
   routing: {
     zones: [],
@@ -1545,7 +1549,8 @@ describe("the Times tab", () => {
   it("choosing a station writes it to the address as a new history entry", async () => {
     history.replaceState(null, "", "/manage/prep-stations/view/times/station/upstairs");
     const el = await mountTimes();
-    const count = history.length;
+    const push = vi.spyOn(history, "pushState");
+    const replace = vi.spyOn(history, "replaceState");
     times(el)!.dispatchEvent(
       new CustomEvent("station-change", {
         detail: { stationId: "terrace" },
@@ -1555,7 +1560,8 @@ describe("the Times tab", () => {
     );
     await settle(el);
     expect(location.pathname).toBe("/manage/prep-stations/view/times/station/terrace");
-    expect(history.length).toBe(count + 1);
+    expect(writtenPaths(push)).toEqual(["/manage/prep-stations/view/times/station/terrace"]);
+    expect(replace).not.toHaveBeenCalled();
     expect(times(el)!.stationId).toBe("terrace");
     history.back();
     await expect.poll(() => times(el)?.stationId).toBe("upstairs");
@@ -1569,12 +1575,14 @@ describe("the Times tab", () => {
     "replaces %s with the first active station without a history entry",
     async (_case, address) => {
       history.replaceState(null, "", address);
-      const count = history.length;
+      const push = vi.spyOn(history, "pushState");
+      const replace = vi.spyOn(history, "replaceState");
       const el = await mountTimes();
       await expect
         .poll(() => location.pathname)
         .toBe("/manage/prep-stations/view/times/station/bar");
-      expect(history.length).toBe(count);
+      expect(writtenPaths(replace)).toEqual(["/manage/prep-stations/view/times/station/bar"]);
+      expect(push).not.toHaveBeenCalled();
       expect(times(el)!.stationId).toBe("bar");
     },
   );
@@ -1595,10 +1603,12 @@ describe("the Times tab", () => {
     el.hoursApi = hoursApi();
     host.append(el);
     await expect.poll(() => times(el)?.stationId).toBe("terrace");
-    const count = history.length;
+    const push = vi.spyOn(history, "pushState");
+    const replace = vi.spyOn(history, "replaceState");
     liveData.invalidate([{ type: "kitchen_stations", id: "terrace" }]);
     await expect.poll(() => location.pathname).toBe("/manage/prep-stations/view/times/station/bar");
-    expect(history.length).toBe(count);
+    expect(writtenPaths(replace)).toEqual(["/manage/prep-stations/view/times/station/bar"]);
+    expect(push).not.toHaveBeenCalled();
     expect(times(el)!.stationId).toBe("bar");
   });
 
@@ -1617,11 +1627,13 @@ describe("the Times tab", () => {
 
   it("an address naming a station on another tab drops the station without a history entry", async () => {
     history.replaceState(null, "", "/manage/prep-stations/view/routing/station/terrace");
-    const count = history.length;
+    const push = vi.spyOn(history, "pushState");
+    const replace = vi.spyOn(history, "replaceState");
     const el = await mountTimes();
     expect(tabs(el).value).toBe("routing");
     expect(location.pathname).toBe("/manage/prep-stations/view/routing");
-    expect(history.length).toBe(count);
+    expect(writtenPaths(replace)).toEqual(["/manage/prep-stations/view/routing"]);
+    expect(push).not.toHaveBeenCalled();
   });
 
   it("a station's link on the Stations table opens Times on that station on the same page", async () => {
