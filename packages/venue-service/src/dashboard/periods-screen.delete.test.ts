@@ -490,7 +490,7 @@ it("Confirm pressed again while a changed-clock refusal's reload is on its way d
   await dialog.updateComplete;
   confirm(dialog).click();
   await expect.poll(() => sent).toEqual([3, 3, 3, 4]);
-  await expect.poll(() => pageReads - before, "a later change reloads again").toBe(2);
+  await expect.poll(() => pageReads - before, { message: "a later change reloads again" }).toBe(2);
   await expect.poll(() => confirm(dialog).loading).toBe(false);
   await new Promise((done) => setTimeout(done, 200));
   await dialog.updateComplete;
@@ -594,7 +594,9 @@ it("a changed-clock refusal reloads even while an impact read that took the refu
   confirm(dialog).click();
   await expect.poll(() => sent).toEqual([3]);
   await expect
-    .poll(() => pageReads - before, "the refusal reloads though an impact read is on its way")
+    .poll(() => pageReads - before, {
+      message: "the refusal reloads though an impact read is on its way",
+    })
     .toBe(1);
   answers[1]!(impactOf());
   await new Promise((done) => setTimeout(done, 0));
@@ -766,7 +768,9 @@ it("with live data, an impact read that answers while the page is detached does 
   held(impactOf());
   await new Promise((done) => setTimeout(done, 0));
   document.body.append(el);
-  await expect.poll(() => reads, "the dropped answer is read again on re-attaching").toBe(3);
+  await expect
+    .poll(() => reads, { message: "the dropped answer is read again on re-attaching" })
+    .toBe(3);
   await new Promise((done) => setTimeout(done, 50));
   expect(reads, "once, for both watches").toBe(3);
   await el.updateComplete;
@@ -777,7 +781,9 @@ it("with live data, an impact read that answers while the page is detached does 
   const before = reads;
   confirm(dialog).click();
   await expect.poll(() => sent).toEqual([3]);
-  await expect.poll(() => reads, "the refusal reads the impact again").toBeGreaterThan(before);
+  await expect
+    .poll(() => reads, { message: "the refusal reads the impact again" })
+    .toBeGreaterThan(before);
   await expect.poll(() => confirm(dialog).loading).toBe(false);
   await new Promise((done) => setTimeout(done, 0));
   await dialog.updateComplete;
