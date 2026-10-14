@@ -1,5 +1,6 @@
 import { stampDeployment } from "@waitron/db";
-import "../src/errors.js";
+// The registry of `sif.throwaway_allocation_refused`, which `applyDevelopmentVenue` throws.
+import "@waitron/fiscal-verifactu";
 import {
   applyVenue,
   throwawayApplyInput,
