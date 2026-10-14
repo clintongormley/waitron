@@ -136,6 +136,10 @@ export async function startS3TestServer(opts: {
   bin: string;
   root: string;
   readState?: () => Promise<string | undefined>;
+  /** "us-east-1" when absent. */
+  region?: string;
+  /** A file versitygw writes one line to per request it receives. */
+  accessLog?: string;
 }): Promise<S3TestServer> {
   const data = join(opts.root, "data");
   const meta = join(opts.root, "meta");
@@ -145,7 +149,7 @@ export async function startS3TestServer(opts: {
   const taken: string[] = [];
   for (let attempt = 0; attempt < PORT_ATTEMPTS; attempt += 1) {
     try {
-      return await startOnPort(opts.bin, data, meta, await freePort(), deadline, opts.readState);
+      return await startOnPort(opts, data, meta, await freePort(), deadline);
     } catch (error) {
       if (!(error instanceof PortTaken)) throw error;
       taken.push(error.message);
@@ -157,13 +161,19 @@ export async function startS3TestServer(opts: {
 }
 
 async function startOnPort(
-  bin: string,
+  opts: {
+    bin: string;
+    readState?: () => Promise<string | undefined>;
+    region?: string;
+    accessLog?: string;
+  },
   data: string,
   meta: string,
   port: number,
   deadline: number,
-  readState?: () => Promise<string | undefined>,
 ): Promise<S3TestServer> {
+  const { bin, readState } = opts;
+  const region = opts.region ?? "us-east-1";
   const accessKeyId = `waitron${randomBytes(8).toString("hex")}`;
   const secretAccessKey = randomBytes(16).toString("hex");
   const child = spawn(
@@ -175,6 +185,9 @@ async function startOnPort(
       secretAccessKey,
       "--port",
       `127.0.0.1:${port}`,
+      "--region",
+      region,
+      ...(opts.accessLog === undefined ? [] : ["--access-log", opts.accessLog]),
       "posix",
       "--sidecar",
       meta,
@@ -234,7 +247,7 @@ async function startOnPort(
 
   const server: S3TestServer = {
     endpoint: `http://127.0.0.1:${port}`,
-    region: "us-east-1",
+    region,
     bucket: BUCKET,
     accessKeyId,
     secretAccessKey,

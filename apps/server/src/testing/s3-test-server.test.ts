@@ -2,7 +2,7 @@
 // that start the real pinned versitygw are reported SKIPPED without it; with CI=true or
 // WAITRON_REQUIRE_STREAM_BINARIES=1 a missing binary FAILS them, as in `stream-loop.e2e.test.ts`.
 // The cases that start a stub, or Node itself, in its place run everywhere.
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -102,6 +102,27 @@ describe("startS3TestServer", () => {
     expect(await pending).toBe("unanswered");
     second.resume();
     expect(await listing(second)).toBe("answered");
+  });
+
+  it("serves the region it is given and writes each request to the access log it is given", async (ctx) => {
+    const bin = versitygwBin(ctx);
+    const accessLog = join(scratch, "access.log");
+    const server = await startS3TestServer({
+      bin,
+      root: await mkdtemp(join(scratch, "s3-")),
+      region: "eu-north-1",
+      accessLog,
+    });
+    started.push(server);
+
+    expect(server.region).toBe("eu-north-1");
+    expect(await listing(server)).toBe("answered");
+    const lines = (await readFile(accessLog, "utf8")).split("\n");
+    expect(
+      lines.filter(
+        (line) => line.split(" ")[1] === server.bucket && / s3_ListObjectsV2 /.test(line),
+      ),
+    ).not.toHaveLength(0);
   });
 
   it("does not resolve a pause while the process state still reports running", async (ctx) => {
