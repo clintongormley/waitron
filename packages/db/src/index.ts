@@ -250,6 +250,7 @@ export {
   orderTableLabels,
   partySurvivors,
   partyTableLabels,
+  tableOwnNames,
 } from "./party-table-labels.js";
 export { withTransaction } from "./tenancy.js";
 export { isRefusal, isUniqueViolation } from "./unique-violation.js";

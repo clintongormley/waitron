@@ -8,6 +8,7 @@ import {
   orderTableLabels,
   partySurvivors,
   partyTableLabels,
+  tableOwnNames,
 } from "./party-table-labels.js";
 import { diningTables } from "./schema/dining-tables.js";
 import { floorTodayJoins, floorTodayJoinTables, floorTodayTables } from "./schema/floor-plans.js";
@@ -284,6 +285,20 @@ describe("party table labels", () => {
       expect(await inTx((tx) => partyTableLabels(tx, [earlier]))).toEqual(
         new Map([[earlier, [`Table 9 ${t}`, `García birthday ${t}`]]]),
       );
+    });
+
+    it("names each table by its own today's name, else its label, never its group's name", async () => {
+      const { s, ids, labels } = await longTable();
+      await group([ids.bar, ids.c3], `García birthday ${s}`);
+      await nameToday(ids.c3, `Window ${s}`);
+      expect(await inTx((tx) => tableOwnNames(tx, [ids.bar, ids.c3, ids.c4]))).toEqual(
+        new Map([
+          [ids.bar, labels.bar],
+          [ids.c3, `Window ${s}`],
+          [ids.c4, labels.c4],
+        ]),
+      );
+      expect(await inTx((tx) => tableOwnNames(tx, []))).toEqual(new Map());
     });
 
     it("lists each table of an unnamed group by its own today's name, else its label", async () => {

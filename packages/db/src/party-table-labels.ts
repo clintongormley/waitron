@@ -61,6 +61,20 @@ export async function partyTableLabels(
   return labels;
 }
 
+/** Each table's own name — today's name, else its saved label — ignoring any group it is in. */
+export async function tableOwnNames(
+  tx: Transaction,
+  tableIds: readonly string[],
+): Promise<Map<string, string>> {
+  if (tableIds.length === 0) return new Map();
+  const rows = await tx
+    .select({ id: diningTables.id, label: diningTables.label, name: floorTodayTables.name })
+    .from(diningTables)
+    .leftJoin(floorTodayTables, eq(floorTodayTables.tableId, diningTables.id))
+    .where(inArray(diningTables.id, [...tableIds]));
+  return new Map(rows.map((row) => [row.id, row.name ?? row.label]));
+}
+
 /**
  * The party each of `partyIds` was merged into, following the chain of merges to its end, keyed by
  * each party asked about; a party never merged answers itself, and one whose chain has no end (a
