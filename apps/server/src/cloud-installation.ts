@@ -155,6 +155,11 @@ function leaseExpiry(lease?: Envelope): number {
     ? (JSON.parse(Buffer.from(lease.payload, "base64url").toString()) as number[])[9]!
     : 0;
 }
+/** A lease a call outside this client may use as it is: more than ten minutes left, nothing pending. */
+export function hasLiveLease(state: SavedCloudState, now = Date.now()): boolean {
+  const c = state.lifecycle;
+  return !!c && !c.revoked && !c.pending && !!c.lease && leaseExpiry(c.lease) > now + 600000;
+}
 export function readCloudInstallation(
   value: unknown,
   state: SavedCloudState,
@@ -343,6 +348,15 @@ export function installationClient(
       const needsRenew = leaseExpiry(c.lease) <= Date.now() + 600000;
       await prepare(needsRenew ? "renew" : "configuration", needsRenew ? "{}" : CONFIGURATION_BODY);
       await exchange(signal);
+    },
+    /** Leaves the state holding a live control lease, renewing with ten minutes or less left. */
+    async ensureLease(signal?: AbortSignal) {
+      if (c.pending) await exchange(signal);
+      if (!c.revoked && (!c.lease || leaseExpiry(c.lease) <= Date.now() + 600000)) {
+        await prepare("renew");
+        await exchange(signal);
+      }
+      if (c.revoked || !c.lease) throw new AppError("cloud.not_configured", {});
     },
     async revoke(authorize: () => Promise<void>, signal?: AbortSignal) {
       if (c.revoked) return;
