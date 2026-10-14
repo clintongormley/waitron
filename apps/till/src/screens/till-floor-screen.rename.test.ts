@@ -416,6 +416,23 @@ describe("till-floor-screen: Rename", () => {
     expect(api.nameToday).toHaveBeenCalledExactlyOnceWith("c4", "García birthday", 7);
   });
 
+  it("heads and hints the window from each floor read, keeping what the waiter typed", async () => {
+    const el = await mount(group(), stubApi());
+    const opened = await pressRename(el, "c4");
+    await typeName(opened, "García birthday");
+
+    el.tables = group({ c3: { name: "Corner" } });
+    await settle(el);
+    await opened.updateComplete;
+
+    expect(windowOf(el)).toBe(opened);
+    expect(shown(opened)).toEqual({
+      heading: "Rename Bar+Corner+Counter 4+Counter 5",
+      value: "García birthday",
+      hint: "Leave it empty for Bar+Corner+Counter 4+Counter 5",
+    });
+  });
+
   it("closes the window, sending nothing, when its table's group ends", async () => {
     const api = stubApi();
     const el = await mount(group(), api);

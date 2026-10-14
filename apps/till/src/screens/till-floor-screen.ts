@@ -139,17 +139,22 @@ interface SplittingJoined {
   seatsRequired: boolean;
 }
 
+interface RenameShown {
+  table: TableState;
+  heading: string;
+  normalName: string;
+}
+
 interface Renaming {
   tableId: string;
-  /** What the window opened with: its `value` is also the waiter's draft, so a floor read never
-   * replaces it. */
-  heading: string;
+  /** The name at opening. The waiter's draft lives in the window's own `value`; this one is never
+   * changed, so a floor read never replaces what the waiter typed. */
   value: string;
-  normalName: string;
   /** The tables of its group at opening, or null: a rename in a group renames the group, so the
-   * window closes when that changes. */
+   * window closes when that changes before Save. */
   group: string | null;
-  sent: boolean;
+  /** What the window showed at Save, until the answer arrives. */
+  sent: RenameShown | null;
   refusal: TodayNameRefusal | null;
 }
 
@@ -663,7 +668,7 @@ export class TillFloorScreen extends LitElement {
           this.resettingTable.refusal.message ?? codeMessage(this.resettingTable.refusal.code);
       this.resettingTable = null;
     }
-    if (this.renaming !== null && !this.#renameShown(this.renaming)) {
+    if (this.renaming !== null && this.#renameShown(this.renaming) === undefined) {
       if (this.renaming.refusal !== null) this.refusal = codeMessage(this.renaming.refusal.code);
       this.renaming = null;
     }
@@ -1355,11 +1360,9 @@ export class TillFloorScreen extends LitElement {
     const members = this.#mergeOf(table);
     return {
       tableId: table.id,
-      heading: t("floor.rename_title").replace("{table}", () => this.#shownAs(table)),
       value: (members === null ? table.today?.name : table.today?.joinName) ?? "",
-      normalName: members === null ? table.label : normalGroupName(members),
       group: this.#groupKey(table),
-      sent: false,
+      sent: null,
       refusal: null,
     };
   }
@@ -1379,22 +1382,31 @@ export class TillFloorScreen extends LitElement {
     return this.tables.find((each) => each.id === tableId && sheetActions(each).includes("rename"));
   }
 
-  /** While its name is out, the window stays until its table leaves the floor read; otherwise while
-   * the table offers Rename in the group it was opened in. */
-  #renameShown(renaming: Renaming): boolean {
-    if (renaming.sent) return this.tables.some((each) => each.id === renaming.tableId);
+  /** While its name is out, the window keeps what it showed until its table leaves the floor read;
+   * otherwise it is shown, as the floor reads the table now, while the table offers Rename in the
+   * group it was opened in. */
+  #renameShown(renaming: Renaming): RenameShown | undefined {
+    if (renaming.sent !== null)
+      return this.tables.some((each) => each.id === renaming.tableId) ? renaming.sent : undefined;
     const table = this.#renamable(renaming.tableId);
-    return table !== undefined && this.#groupKey(table) === renaming.group;
+    if (table === undefined || this.#groupKey(table) !== renaming.group) return undefined;
+    const members = this.#mergeOf(table);
+    return {
+      table,
+      heading: t("floor.rename_title").replace("{table}", () => this.#shownAs(table)),
+      normalName: members === null ? table.label : normalGroupName(members),
+    };
   }
 
   #renameWindow(): TemplateResult | typeof nothing {
     const renaming = this.renaming;
-    if (renaming === null) return nothing;
+    const shown = renaming === null ? undefined : this.#renameShown(renaming);
+    if (renaming === null || shown === undefined) return nothing;
     return html`<till-today-name-dialog
-      .heading=${renaming.heading}
+      .heading=${shown.heading}
       .value=${renaming.value}
-      .normalName=${renaming.normalName}
-      .busy=${renaming.sent}
+      .normalName=${shown.normalName}
+      .busy=${renaming.sent !== null}
       .refusal=${renaming.refusal}
       @today-name-confirm=${(event: CustomEvent<TodayNameDetail>) => {
         event.stopPropagation();
@@ -1413,21 +1425,15 @@ export class TillFloorScreen extends LitElement {
     // A floor read can land after the last draw, and `#renameShown` reads the zone as drawn.
     this.#zone = this.#zoneOnScreen();
     const renaming = this.renaming;
-    const table = renaming === null ? undefined : this.#renamable(renaming.tableId);
+    const shown = renaming === null ? undefined : this.#renameShown(renaming);
     const api = this.api;
-    if (
-      renaming === null ||
-      renaming.sent ||
-      !this.#renameShown(renaming) ||
-      table === undefined ||
-      api === undefined
-    )
+    if (renaming === null || renaming.sent !== null || shown === undefined || api === undefined)
       return;
-    const sending = { ...renaming, sent: true, refusal: null };
+    const sending = { ...renaming, sent: shown, refusal: null };
     this.renaming = sending;
     try {
       this.#carry(
-        await this.#send(this.#revision(table.zoneId), (sent) =>
+        await this.#send(this.#revision(shown.table.zoneId), (sent) =>
           api.nameToday(renaming.tableId, name, sent),
         ),
       );
@@ -1441,7 +1447,7 @@ export class TillFloorScreen extends LitElement {
       if (
         this.renaming === sending &&
         refused.field === "name" &&
-        this.#renameShown(renaming)
+        this.#renameShown(renaming) !== undefined
       )
         this.renaming = { ...renaming, refusal: { code, field: "name" } };
       else if (this.renaming === sending || this.renaming === null) {
