@@ -41,7 +41,7 @@ export async function* listPages<T extends { IsTruncated?: boolean | undefined }
   }
 }
 
-export interface ListedUpload {
+export interface TrackedUpload {
   key: string;
   uploadId: string;
 }
@@ -62,7 +62,7 @@ export async function* listUploads(
     failure: (message: string) => Error;
     signal?: AbortSignal;
   },
-): AsyncGenerator<{ uploads: ListedUpload[]; error?: unknown }> {
+): AsyncGenerator<{ uploads: TrackedUpload[]; error?: unknown }> {
   for await (const listed of listPages<
     Partial<ListMultipartUploadsCommandOutput>,
     { keyMarker: string | undefined; uploadIdMarker: string | undefined }
@@ -89,7 +89,7 @@ export async function* listUploads(
       yield { uploads: [], error: listed.error };
       return;
     }
-    const uploads: ListedUpload[] = [];
+    const uploads: TrackedUpload[] = [];
     for (const { Key, UploadId } of listed.output?.Uploads ?? []) {
       if (Key !== undefined && UploadId !== undefined)
         uploads.push({ key: Key, uploadId: UploadId });

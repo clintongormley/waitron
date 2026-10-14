@@ -11,13 +11,13 @@ import {
 } from "./aws-rehearsal-receipt.js";
 import { fixtureBudget } from "./fixture-budget.js";
 import type { S3ScenarioFixture } from "./s3-scenario-fixture.js";
-import { listUploads, type ListedUpload } from "./s3-listing.js";
+import { listUploads, type TrackedUpload } from "./s3-listing.js";
 
 export interface LocalS3Fixture {
   fixture: S3ScenarioFixture;
   /** Every event recorded, each already through the receipt's own `sanitizeEvent`. */
   events: AwsReceiptEvent[];
-  tracked: ListedUpload[];
+  tracked: TrackedUpload[];
 }
 
 /**
@@ -37,8 +37,8 @@ export function localS3Fixture(opts: {
   ): Promise<Partial<ListMultipartUploadsCommandOutput>>;
 }): LocalS3Fixture {
   const events: AwsReceiptEvent[] = [];
-  const tracked: ListedUpload[] = [];
-  const record = (event: object): void => {
+  const tracked: TrackedUpload[] = [];
+  const record = (event: unknown): void => {
     events.push(sanitizeEvent(event));
   };
   const budget = fixtureBudget(record, (detail) => new Error(`fixture-limit: ${detail}`));
@@ -60,7 +60,7 @@ export function localS3Fixture(opts: {
       if (!prefix.startsWith(opts.bucket.prefix)) {
         throw new Error(`prefix-not-issued: list under ${opts.bucket.prefix} or a path below it`);
       }
-      const found: ListedUpload[] = [];
+      const found: TrackedUpload[] = [];
       for await (const page of listUploads(
         async (command) => {
           try {

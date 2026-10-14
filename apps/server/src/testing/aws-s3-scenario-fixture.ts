@@ -7,15 +7,16 @@ export function awsScenarioFixture(
   label: string,
   scratch: string,
 ): S3ScenarioFixture {
+  const { signal, record, reserveUpload, reserveObjects, trackUpload, ownedUploads } = ctx;
   return {
     bucket: ctx.bucketConfig(ctx.prefix(label)),
     venueId: "rehearsal-venue",
     scratch,
-    signal: ctx.signal,
-    record: (event) => ctx.record(event),
-    reserveUpload: (bytes, role) => ctx.reserveUpload(bytes, role),
-    reserveObjects: (count) => ctx.reserveObjects(count),
-    trackUpload: (key, uploadId) => ctx.trackUpload(key, uploadId),
-    ownedUploads: (prefix) => ctx.ownedUploads(prefix),
+    signal,
+    record,
+    reserveUpload,
+    reserveObjects,
+    trackUpload,
+    ownedUploads,
   };
 }

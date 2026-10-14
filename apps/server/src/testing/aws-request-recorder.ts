@@ -25,7 +25,7 @@ export function requestRecorder(
     if (!(RECEIPT_APIS as readonly string[]).includes(api)) {
       throw new Error(`unlisted S3 API: ${api}`);
     }
-    const failed = "error" in observation && observation.error !== undefined;
+    const failed = observation.error !== undefined;
     const answer = failed ? observation.error : observation.output;
     const event: Fields = {
       scenario,

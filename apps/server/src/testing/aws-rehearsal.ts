@@ -62,7 +62,9 @@ import {
   writeReceipt,
 } from "./aws-rehearsal-receipt.js";
 import { fixtureBudget } from "./fixture-budget.js";
-import { listPages, listUploads, type Outcome } from "./s3-listing.js";
+import { listPages, listUploads, type Outcome, type TrackedUpload } from "./s3-listing.js";
+
+export type { TrackedUpload };
 import { settleWithin } from "./settle-within.js";
 
 export type AwsRehearsalRefusalReason =
@@ -319,11 +321,6 @@ export interface AwsRehearsalDeps extends TeardownDeps, RehearsalProfileDeps {
   /** Aborting it ends the run as its deadline does: the scenario is told to stop, then teardown runs. */
   signal?: AbortSignal;
   print(line: string): void;
-}
-
-export interface TrackedUpload {
-  key: string;
-  uploadId: string;
 }
 
 export interface TeardownTarget {

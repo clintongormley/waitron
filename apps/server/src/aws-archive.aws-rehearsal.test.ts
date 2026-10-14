@@ -27,10 +27,8 @@ describe("AWS rehearsal: archives in Amazon S3", () => {
     const folder = await mkdtemp(join(tmpdir(), "waitron-aws-archive-"));
     scratch = folder;
     await rehearsal.run(async (ctx) => {
-      const roundTrip = await mkdtemp(join(folder, "archive-roundtrip-"));
-      await runArchiveRoundTrip(awsScenarioFixture(ctx, "archive-roundtrip", roundTrip));
-      const abort = await mkdtemp(join(folder, "archive-abort-"));
-      await runArchiveAbort(awsScenarioFixture(ctx, "archive-abort", abort));
+      await runArchiveRoundTrip(awsScenarioFixture(ctx, "archive-roundtrip", folder));
+      await runArchiveAbort(awsScenarioFixture(ctx, "archive-abort", folder));
     });
   });
 });
