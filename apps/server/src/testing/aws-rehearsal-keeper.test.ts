@@ -1,5 +1,5 @@
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
-import { Readable } from "node:stream";
+import { Readable, Writable } from "node:stream";
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -18,7 +18,12 @@ import {
   writeProfileFiles,
 } from "./aws-rehearsal-fake.js";
 import { journalFileName, type RehearsalJournal } from "./aws-rehearsal-journal.js";
-import { type KeeperDeps, keeperLogPath, runKeeper } from "./aws-rehearsal-keeper.js";
+import {
+  type KeeperDeps,
+  keeperLogPath,
+  runKeeper,
+  terminalPrinter,
+} from "./aws-rehearsal-keeper.js";
 import { type AwsReceipt, cleanupCommandFor } from "./aws-rehearsal-receipt.js";
 import { cleanupFromReceipt } from "./aws-rehearsal.js";
 import {
@@ -845,5 +850,33 @@ describe("runKeeper", () => {
       expect(h.kill).toHaveBeenCalledWith(4242, "SIGKILL");
       expect(h.printed.slice(1)).toEqual(["left behind:", "process 4242"]);
     });
+  });
+});
+
+describe("terminalPrinter", () => {
+  /** A terminal closed after the keeper started: each write fails as an `error` event, not a throw. */
+  class ClosedTerminal extends Writable {
+    readonly isTTY = true;
+    readonly writes: string[] = [];
+    override _write(chunk: Buffer, _encoding: string, done: (error?: Error) => void): void {
+      this.writes.push(chunk.toString());
+      done(Object.assign(new Error("write EIO"), { code: "EIO" }));
+    }
+  }
+
+  it("survives a terminal that closed, and writes nothing more to it", async () => {
+    const terminal = new ClosedTerminal();
+    const print = terminalPrinter(terminal);
+    print("first");
+    await new Promise((resolve) => setImmediate(resolve));
+    print("second");
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(terminal.writes).toEqual(["first\n"]);
+  });
+
+  it("writes nothing when the keeper has no terminal", () => {
+    const write = vi.fn();
+    terminalPrinter({ isTTY: false, write, on: vi.fn() })("line");
+    expect(write).not.toHaveBeenCalled();
   });
 });

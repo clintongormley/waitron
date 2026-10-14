@@ -71,6 +71,27 @@ export interface KeeperDeps {
   childGraceMs?: number;
 }
 
+/** The part of `process.stdout` the keeper writes its lines through. */
+export interface TerminalStream {
+  isTTY?: boolean;
+  write(text: string): unknown;
+  on(event: "error", listener: (error: Error) => void): unknown;
+}
+
+/**
+ * Prints to the run's terminal while it is open. Once the terminal closes, a write fails as an
+ * `error` event that no `try` catches, and an unheard one ends the process: measured 2026-10-14 on
+ * Node v26.7.0, macOS, a pty whose other end closed failed the next write with EIO, exit 1. Heard
+ * here, it costs only the terminal's lines; the log keeps them all.
+ */
+export function terminalPrinter(stream: TerminalStream): (line: string) => void {
+  if (stream.isTTY !== true) return () => {};
+  stream.on("error", () => {});
+  return (line) => {
+    stream.write(`${line}\n`);
+  };
+}
+
 /** Beside the journal, which the runner writes in its receipt folder. */
 export function keeperLogPath(journalPath: string): string {
   const name = basename(journalPath);

@@ -14,7 +14,7 @@ import {
   readJournal,
   writeJournal,
 } from "../src/testing/aws-rehearsal-journal.js";
-import { runKeeper } from "../src/testing/aws-rehearsal-keeper.js";
+import { runKeeper, terminalPrinter } from "../src/testing/aws-rehearsal-keeper.js";
 
 const USAGE =
   "usage: node --import <tsx loader> scripts/aws-rehearsal-keeper.ts [--launch] --journal <path>";
@@ -57,7 +57,7 @@ async function keep(journalPath: string): Promise<number> {
   }
   return runKeeper(journalPath, {
     waitForRunnerEnd: () => ended,
-    print: process.stdout.isTTY ? (line) => process.stdout.write(`${line}\n`) : () => {},
+    print: terminalPrinter(process.stdout),
   });
 }
 
