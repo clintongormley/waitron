@@ -171,7 +171,7 @@ function stopPid(pid: number | undefined, group = false): void {
 /** The prefixes of the buckets this file's cases make: each run's own, and the unplanned case's other one. */
 const CASE_BUCKET_PREFIXES = ["waitron-rehearsal-", "waitron-interrupt-other-"];
 
-/** Empties and deletes the cases' buckets; a step that fails is left for the next case to report. */
+/** Empties and deletes the cases' buckets; a bucket a step fails on is left in place. */
 async function removeCaseBuckets(admin: S3Client): Promise<void> {
   const listed = await admin.send(new ListBucketsCommand({})).catch(() => undefined);
   for (const { Name: bucket } of listed?.Buckets ?? []) {
@@ -187,7 +187,7 @@ async function removeCaseBuckets(admin: S3Client): Promise<void> {
       }
       await admin.send(new DeleteBucketCommand({ Bucket: bucket }));
     } catch {
-      // The next case's own checks say what is still there.
+      // Left in place.
     }
   }
 }
