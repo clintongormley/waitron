@@ -75,6 +75,30 @@ function stubApi() {
 
 type Stub = ReturnType<typeof stubApi>;
 
+interface Answer {
+  done(): void;
+  refuse(reason: unknown): void;
+}
+
+/** Holds `nameToday`'s answer until the test gives it. */
+function holdAnswer(api: Stub): Answer {
+  const answer = {} as Answer;
+  api.nameToday.mockImplementationOnce(
+    () =>
+      new Promise<FloorAnswer>((resolve, reject) => {
+        answer.done = () => resolve({ zoneId: "z1", revision: 8 });
+        answer.refuse = reject;
+      }),
+  );
+  return answer;
+}
+
+/** Bar and Counter 3 joined into a group by another till. */
+const barJoined = () => [
+  table("bar", "Bar", 40, { joinId: "g" }),
+  table("c3", "Counter 3", 42, { joinId: "g" }),
+];
+
 async function mount(tables: TableState[], api: Stub) {
   const { el } = await mountWidget<TillFloorScreen>("till-floor-screen", {
     zones: [zone],
@@ -411,6 +435,57 @@ describe("till-floor-screen: Rename", () => {
       table("bar", "Bar", 40, { joinId: "g" }),
       table("c3", "Counter 3", 42, { joinId: "g" }),
     ];
+    await settle(el);
+
+    expect(windowOf(el)).toBeNull();
+    expect(floorRefusal(el)).toBe("Another table already has that name");
+  });
+
+  it("a floor read during the request that changes the group keeps the window until the answer", async () => {
+    const api = stubApi();
+    holdAnswer(api);
+    const el = await mount(bar(), api);
+    const opened = await pressRename(el, "bar");
+    send(opened, "today-name-confirm", { name: "Window" });
+    await settle(el);
+
+    el.tables = barJoined();
+    await settle(el);
+
+    expect(windowOf(el)).toBe(opened);
+    expect(opened.busy).toBe(true);
+  });
+
+  it("a successful answer then closes that window", async () => {
+    const api = stubApi();
+    const answer = holdAnswer(api);
+    const el = await mount(bar(), api);
+    const opened = await pressRename(el, "bar");
+    const commit = vi.spyOn(opened, "commit");
+    send(opened, "today-name-confirm", { name: "Window" });
+    await settle(el);
+    el.tables = barJoined();
+    await settle(el);
+
+    answer.done();
+    await settle(el);
+
+    expect(commit).toHaveBeenCalledOnce();
+    expect(windowOf(el)).toBeNull();
+    expect(floorRefusal(el)).toBeNull();
+  });
+
+  it("a refusal under the field whose table joined a group during the request shows on the floor", async () => {
+    const api = stubApi();
+    const answer = holdAnswer(api);
+    const el = await mount(bar(), api);
+    const opened = await pressRename(el, "bar");
+    send(opened, "today-name-confirm", { name: "Window" });
+    await settle(el);
+    el.tables = barJoined();
+    await settle(el);
+
+    answer.refuse({ code: "table.label_taken", status: 409, label: "Window", field: "name" });
     await settle(el);
 
     expect(windowOf(el)).toBeNull();

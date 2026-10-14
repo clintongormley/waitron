@@ -1382,9 +1382,8 @@ export class TillFloorScreen extends LitElement {
   /** While its name is out, the window stays until its table leaves the floor read; otherwise while
    * the table offers Rename in the group it was opened in. */
   #renameShown(renaming: Renaming): boolean {
-    const table = renaming.sent
-      ? this.tables.find((each) => each.id === renaming.tableId)
-      : this.#renamable(renaming.tableId);
+    if (renaming.sent) return this.tables.some((each) => each.id === renaming.tableId);
+    const table = this.#renamable(renaming.tableId);
     return table !== undefined && this.#groupKey(table) === renaming.group;
   }
 
@@ -1408,8 +1407,8 @@ export class TillFloorScreen extends LitElement {
     ></till-today-name-dialog>`;
   }
 
-  /** As `#splitOff`: a refusal naming the field stays in the window while the table still offers
-   * Rename; any other shows on the floor. */
+  /** A refusal naming the name field stays under it while the window is still shown; any other
+   * closes the window and shows on the floor. */
   async #rename(dialog: TillTodayNameDialog, name: string | null): Promise<void> {
     const renaming = this.renaming;
     const table = renaming === null ? undefined : this.#renamable(renaming.tableId);
@@ -1433,7 +1432,7 @@ export class TillFloorScreen extends LitElement {
       if (
         this.renaming === sending &&
         refused.field === "name" &&
-        this.#renamable(renaming.tableId) !== undefined
+        this.#renameShown(renaming)
       )
         this.renaming = { ...renaming, refusal: { code, field: "name" } };
       else if (this.renaming === sending || this.renaming === null) {
