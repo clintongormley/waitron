@@ -253,7 +253,9 @@ function stubApi(overrides: Record<string, unknown> = {}) {
     getTablesState: vi.fn().mockResolvedValue([mesa4, mesa7]),
     listZones: vi
       .fn()
-      .mockResolvedValue([{ id: "z1", name: "Comedor", displayOrder: 0, active: true }]),
+      .mockResolvedValue([
+        { id: "z1", name: "Comedor", displayOrder: 0, active: true, serviceMode: "table_tab" },
+      ]),
     listStatuses: vi.fn().mockResolvedValue([]),
     getBillBalance: vi.fn(async (workingOrderId: string) => ({
       workingOrderId,

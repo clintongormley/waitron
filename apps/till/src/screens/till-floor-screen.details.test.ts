@@ -16,6 +16,7 @@ function zone(): FloorZone {
     closesAt: null,
     closed: false,
     hasPlan: false,
+    serviceMode: "table_tab",
   };
 }
 

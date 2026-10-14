@@ -100,6 +100,7 @@ async function mountFloor(
         closesAt: null,
         closed: false,
         hasPlan: false,
+        serviceMode: "table_tab",
       },
     ],
     tables,
@@ -265,6 +266,7 @@ describe("till-floor-screen: what each station has ready", () => {
           closesAt: null,
           closed: false,
           hasPlan: false,
+          serviceMode: "table_tab",
         },
         {
           id: "z2",
@@ -274,6 +276,7 @@ describe("till-floor-screen: what each station has ready", () => {
           closesAt: null,
           closed: false,
           hasPlan: false,
+          serviceMode: "table_tab",
         },
       ],
     });

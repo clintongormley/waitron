@@ -15,6 +15,7 @@ const zones: FloorZone[] = [
     closesAt: null,
     closed: false,
     hasPlan: false,
+    serviceMode: "table_tab",
   },
   {
     id: "z2",
@@ -24,6 +25,7 @@ const zones: FloorZone[] = [
     closesAt: null,
     closed: false,
     hasPlan: false,
+    serviceMode: "table_tab",
   },
 ];
 

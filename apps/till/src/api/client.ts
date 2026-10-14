@@ -1770,6 +1770,8 @@ export interface FloorZone {
   active: boolean;
   /** The zone has a saved plan, which may have no tables. */
   hasPlan: boolean;
+  /** Null for a zone with no service policy. */
+  serviceMode: ServiceZoneSummary["serviceMode"] | null;
 }
 
 /**

@@ -15,6 +15,7 @@ const zone: FloorZone = {
   closesAt: null,
   closed: false,
   hasPlan: false,
+  serviceMode: "table_tab",
 };
 
 function party(id: string, revision: number, tableIds: string[]): TableParty {

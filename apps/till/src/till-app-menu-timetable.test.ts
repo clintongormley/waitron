@@ -812,11 +812,15 @@ describe("an open table's order", () => {
       getTill: vi.fn().mockResolvedValue({ ...till, canvas: tableCanvas }),
       listZoneOffers: vi.fn(async () => closed),
       getTablesState: vi.fn().mockResolvedValue([table]),
-      listZones: vi
-        .fn()
-        .mockResolvedValue([
-          { id: "zone-comedor", name: "Comedor", displayOrder: 0, active: true },
-        ]),
+      listZones: vi.fn().mockResolvedValue([
+        {
+          id: "zone-comedor",
+          name: "Comedor",
+          displayOrder: 0,
+          active: true,
+          serviceMode: "table_tab",
+        },
+      ]),
       listStatuses: vi.fn().mockResolvedValue([]),
       getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0, editSentLines: true }),
       listDrafts: drafts.listDrafts,
@@ -871,11 +875,15 @@ describe("an open table's order", () => {
         zoneId === "zone-comedor" ? current : BARRA,
       ),
       getTablesState: vi.fn().mockResolvedValue([table]),
-      listZones: vi
-        .fn()
-        .mockResolvedValue([
-          { id: "zone-comedor", name: "Comedor", displayOrder: 0, active: true },
-        ]),
+      listZones: vi.fn().mockResolvedValue([
+        {
+          id: "zone-comedor",
+          name: "Comedor",
+          displayOrder: 0,
+          active: true,
+          serviceMode: "table_tab",
+        },
+      ]),
       listStatuses: vi.fn().mockResolvedValue([]),
       getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0, editSentLines: true }),
       listDrafts: drafts.listDrafts,
@@ -951,11 +959,15 @@ describe("an open table's order", () => {
         zoneId === "zone-comedor" ? current : BARRA,
       ),
       getTablesState: vi.fn().mockResolvedValue([table]),
-      listZones: vi
-        .fn()
-        .mockResolvedValue([
-          { id: "zone-comedor", name: "Comedor", displayOrder: 0, active: true },
-        ]),
+      listZones: vi.fn().mockResolvedValue([
+        {
+          id: "zone-comedor",
+          name: "Comedor",
+          displayOrder: 0,
+          active: true,
+          serviceMode: "table_tab",
+        },
+      ]),
       listStatuses: vi.fn().mockResolvedValue([]),
       getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0, editSentLines: true }),
       listDrafts: drafts.listDrafts,
@@ -1025,11 +1037,15 @@ describe("an open table's order", () => {
         zoneId === "zone-comedor" ? COMEDOR : BARRA,
       ),
       getTablesState: vi.fn().mockResolvedValue([table]),
-      listZones: vi
-        .fn()
-        .mockResolvedValue([
-          { id: "zone-comedor", name: "Comedor", displayOrder: 0, active: true },
-        ]),
+      listZones: vi.fn().mockResolvedValue([
+        {
+          id: "zone-comedor",
+          name: "Comedor",
+          displayOrder: 0,
+          active: true,
+          serviceMode: "table_tab",
+        },
+      ]),
       listStatuses: vi.fn().mockResolvedValue([]),
       getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0, editSentLines: true }),
       listDrafts: drafts.listDrafts,

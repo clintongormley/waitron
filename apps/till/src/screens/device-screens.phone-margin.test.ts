@@ -171,6 +171,7 @@ describe("device screens at phone width", () => {
             closesAt: null,
             closed: false,
             hasPlan: false,
+            serviceMode: "table_tab",
           },
         ],
         tables: [plannedTable],

@@ -390,7 +390,12 @@ describe("the till keeps a zone open today", () => {
     expect(answer.status).toBe(200);
     expect(answer.json).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ id: plain!.id, closed: false, closesAt: null }),
+        expect.objectContaining({
+          id: plain!.id,
+          closed: false,
+          closesAt: null,
+          serviceMode: null,
+        }),
       ]),
     );
   });

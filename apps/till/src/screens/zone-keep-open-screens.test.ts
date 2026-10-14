@@ -86,6 +86,7 @@ it.each([true, false])(
           closed,
           closesAt: "22:00",
           hasPlan: false,
+          serviceMode: "table_tab",
         },
         {
           id: "bar",
@@ -95,6 +96,7 @@ it.each([true, false])(
           closed: false,
           closesAt: null,
           hasPlan: false,
+          serviceMode: "table_tab",
         },
       ],
       tables: [],

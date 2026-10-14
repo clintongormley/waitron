@@ -1987,6 +1987,7 @@ describe("TillApi", () => {
         closesAt: null,
         closed: false,
         hasPlan: false,
+        serviceMode: "table_tab",
       },
       {
         id: "z2",
@@ -1996,6 +1997,7 @@ describe("TillApi", () => {
         closesAt: null,
         closed: false,
         hasPlan: false,
+        serviceMode: "table_tab",
       },
     ];
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(zones));

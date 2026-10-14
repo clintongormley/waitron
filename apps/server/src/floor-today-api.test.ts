@@ -1164,7 +1164,48 @@ describe("the till's zone list", () => {
       false,
     ]);
   });
+
+  it("says each zone's service mode", async () => {
+    const tables = await tableServiceZone(v);
+    const prepay = await tableServiceZone(v);
+    const ticketThenPay = await tableServiceZone(v);
+    await payFirst(prepay, "prepay");
+    await payFirst(ticketThenPay, "ticket_then_pay");
+
+    const answer = await send("GET", "/api/zones");
+    expect(answer.status).toBe(200);
+    const zones = (await answer.json()) as { id: string; serviceMode: string | null }[];
+    const listed = (zoneId: string) => zones.find((zone) => zone.id === zoneId);
+    expect([listed(tables), listed(prepay), listed(ticketThenPay)]).not.toContain(undefined);
+    expect([tables, prepay, ticketThenPay].map((id) => listed(id)!.serviceMode)).toEqual([
+      "table_tab",
+      "prepay",
+      "ticket_then_pay",
+    ]);
+  });
+
+  it("merges two free tables in a zone that takes payment first", async () => {
+    const { zoneId, table } = await plannedZone(v, [
+      { key: "a", place: { x: 0, y: 0 } },
+      { key: "b", place: { x: 20, y: 0 } },
+    ]);
+    await payFirst(zoneId, "prepay");
+
+    await expectRevision(
+      v,
+      today(table.a!, "merge", { targetId: table.b!, side: "right", seats: 8 }),
+      zoneId,
+    );
+  });
 });
+
+async function payFirst(zoneId: string, paidWhen: "prepay" | "ticket_then_pay"): Promise<void> {
+  await inTx(v, async (tx) => {
+    await tx.execute(sql`
+      update zone_sale_policies set order_start = 'counter', paid_when = ${paidWhen}
+      where zone_id = ${zoneId}`);
+  });
+}
 
 async function inService(tableId: string): Promise<boolean> {
   const [table] = await inTx(v, (tx) =>

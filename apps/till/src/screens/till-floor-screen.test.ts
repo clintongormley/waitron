@@ -13,6 +13,7 @@ function zone(over: Partial<FloorZone> = {}): FloorZone {
     closesAt: null,
     closed: false,
     hasPlan: false,
+    serviceMode: "table_tab",
     ...over,
   };
 }
