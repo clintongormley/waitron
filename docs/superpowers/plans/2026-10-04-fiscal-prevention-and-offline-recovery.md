@@ -1010,7 +1010,7 @@ both FULL reviews and the hook/current-head CI remain before publication. Task 4
 
 
 **2026-10-14 current-main rebase and regeneration:** rebase onto
-7145b0e56b55f5cba99c96b89e9b7988ec0800cf retained main's archive input route and the extracted
+c106c7e44371adc9ba370972346625529942e095 retained main's archive input route and the extracted
 stream scenarios. Approved fixture/assertion ports now live in those scenario helpers; their
 stage timing, abort handling and original behavioral checks remain. The loop supplies an explicit
 prepared recovery runner rather than changing process-wide configuration in a reusable scenario.

@@ -1,6 +1,6 @@
 # W41s-4: the archive-from-bucket checks added on main
 
-Rebasing Task 4 onto `7145b0e56b55f5cba99c96b89e9b7988ec0800cf` brought in
+Rebasing Task 4 onto `c106c7e44371adc9ba370972346625529942e095` brought in
 `apps/server/src/restore-command.archive.test.ts`, added by A538 task 5 in #1632.
 Its original checks are retained on the feature. They import the retired installation counter
 and clock floor, and expect numeric SIF values. They were absent from the earlier exact approval
