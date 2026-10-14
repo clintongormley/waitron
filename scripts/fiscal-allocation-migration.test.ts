@@ -120,6 +120,13 @@ for (const kind of ["empty", "populated", "orphan", "unchecked-orphan"] as const
       ).toEqual(beforeJournal);
     } else {
       expect(result).toEqual({ ok: true });
+      if (kind !== "unchecked-orphan")
+        expect(suite.db.execute(sql`select * from registro_sif`).rows).toEqual(
+          sifs.map((row) => ({
+            ...row,
+            numero_instalacion: String(row.numero_instalacion),
+          })),
+        );
       expect(
         suite.db.execute<{ type: string }>(
           sql`select type from pragma_table_info('registro_sif') where name = 'numero_instalacion'`,

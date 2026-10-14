@@ -3,7 +3,7 @@ import { withTransaction, nodes, tenants } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { readOperationAuthority } from "@waitron/module";
+import { readOperationAuthority, withOperationAuthority } from "@waitron/module";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { applyVenue } from "./venue-apply.js";
 import { planVenue, type VenueRequest } from "./venue-plan.js";
@@ -74,6 +74,34 @@ function apply(
     beforeCommit,
   });
 }
+
+it("refuses a prepared authority issued to another administrator before creating the venue", async () => {
+  let seeded = false;
+  const owner = fakeModule("test-regime", {
+    operations: {
+      prepare: (operation, run) =>
+        withOperationAuthority(
+          operation.binding,
+          "d0000000-0000-4000-8000-000000000099",
+          (authority) => run({ ...operation, authority }),
+        ),
+    },
+    provisioning: {
+      seed: {
+        summary: "initial source",
+        run: async () => {
+          seeded = true;
+          return "unexpected setup";
+        },
+      },
+    },
+  });
+  await expect(apply(owner)).rejects.toMatchObject({ code: "module.operation_invalid" });
+  expect(seeded).toBe(false);
+  expect(await suite.db.select().from(persons)).toEqual([]);
+  expect(await suite.db.select().from(nodes)).toEqual([]);
+  expect(await suite.db.select().from(tenants)).toEqual([]);
+});
 
 it("prepares the initial signed input before the venue transaction, then binds the created account", async () => {
   const owner = regime(async (operation, run) => {

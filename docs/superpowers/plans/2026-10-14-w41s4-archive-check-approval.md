@@ -40,3 +40,9 @@ empty/populated/checked-orphan/unchecked-orphan controls. The protected fiscal p
 Task 4 remains unpublished. On A, apply only the concrete proposal, run the original archive
 suite and types on the feature, then both FULL Claude reviews, the normal push hook, current-head
 CI and authorised landing. B requires revisiting the callers while retaining the checks.
+
+## Owner answer and feature qualification, 2026-10-14
+
+The owner selected A at 15:25, approving exactly both rows. The feature applied the retained
+proposal and passed the original archive and asynchronous-target suites: 36 cases. Server types
+and focused lint passed. The earlier paragraphs record the proposal before that answer.

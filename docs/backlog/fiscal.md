@@ -196,14 +196,14 @@ requested this follow-up on 2026-10-14; no design or product work belongs in W41
 
 ## W41s. Fiscal prevention and offline recovery — DESIGN AND REVISED PLAN APPROVED (2026-10-04)
 
-**2026-10-14, current Task 4 checkpoint:** remaining host/demo checks passed, current-main core
-and fiscal migrations were regenerated, the populated upgrade and real stream loop/pause passed,
-and the Cloud handoff now carries the approved person-or-key-event binding. The newly landed
-archive-from-bucket suite still imports the old counter/floor and needs the owner's exact approval
-of [two proposed rows](../superpowers/plans/2026-10-14-w41s4-archive-check-approval.md).
-Its proposed independently installed candidate passes; the feature retains the original checks.
-Both FULL reviews, the push hook and current-head CI remain. Earlier dated Task 4 notes below
-about unfinished defaults, host wiring and final regeneration describe preceding checkpoints.
+**2026-10-14, Task 4 review checkpoint:** the supplied-identity/default/text transition,
+regenerated migrations, host/demo inputs and person-or-key-event Cloud handoff are implemented.
+The owner approved the exact archive changes; the original archive/target suites pass 36 cases.
+Both FULL Claude reviews are complete. Their migration-preservation gap gains an exact SIF-row
+comparison, and wrong-administrator preparation is qualified at the authority boundary. Their
+restore wording finding is corrected in the developer topic; the exact root-rule correction is
+proposed to the owner under the campaign's instruction-file restriction. Hook/current-head CI
+still qualify the publication candidate. Earlier dated Task 4 notes describe earlier checkpoints.
 
 
 **2026-10-12, a conflict no longer holds its chain (owner).** A record AEAT refuses as a duplicate
@@ -903,6 +903,13 @@ qualify default allocated adoption. Copying the primary's venue data and collect
 establishment authority remain separate work. W41s-4 must still couple its default descriptors,
 text identity and counter retirement, regenerate and qualify the final migrations, align the
 Cloud contract, then complete both full reviews and current-head CI before landing.
+
+**Review clarification, 2026-10-14:** the defaults now select allocated hooks, so a fiscal
+standby's public adoption deliberately refuses rather than completing. No shipped caller supplies
+fresh establishment authority and the primary's venue copy together. This is the missing-allocation
+refusal allowed by spec §9.4, not a completed join journey. The open backlog entry carries the
+remaining copy and authentication work. A primary reservation remains consumed/reserved even if
+its empty spare cannot finish adoption.
 
 ### W41s-4 remaining hook-contract checks, 2026-10-14
 

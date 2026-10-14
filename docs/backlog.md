@@ -313,53 +313,19 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   W41s-4 lands, such as a dashboard page or a printed setup kit. Owner request, 2026-10-14.
   Detail: [backlog/fiscal.md](backlog/fiscal.md#a-venue-without-cloud-needs-a-usable-paper-custodian-route).
 
-- **W41s. Fiscal prevention and offline recovery** — DESIGN AND REVISED PLAN APPROVED (2026-10-04).
-  **2026-10-14, remaining archive-check approval:** the host/demo pass is qualified and both
-  migration sets were regenerated on current main. Populated upgrade and pinned-binary stream
-  checks pass. Main added an archive-from-bucket suite whose old counter/floor checks were absent
-  from the earlier approvals; [the exact two-row request](superpowers/plans/2026-10-14-w41s4-archive-check-approval.md)
-  is awaiting the owner. The Cloud handoff now carries person or recovery-key-event attribution.
-  Both FULL reviews, the hook and current-head CI still precede publication. This update
-  supersedes earlier Task 4 notes below about remaining host wiring and regeneration.
+- **W41s. Fiscal prevention and offline recovery** — remaining recovery and resolution work.
+  Allocation validation and local activation use outside signed identities, with a dormant standby
+  reservation and authenticated takeover. Recovery packs and screens, automatic conflict recovery,
+  corrective-record resolution, filing investigation, outside evidence/fencing, the complete offline
+  exercise and the Cloud registry adapter remain queued. The Cloud service has its own workstream;
+  paper allocation does not require a subscription. [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04).
 
-  **2026-10-13, Task 4 decisions settled:** cold restore checks the selected backup's
-  node key, and you must keep its older paper key until no older backup remains. The owner
-  approved the [nine remaining test ports](superpowers/plans/2026-10-13-w41s4-current-key-and-remaining-checks.md).
-  **2026-10-14, hook-contract ports approved and qualified on the branch:** the owner
-  approved the [seven remaining return-field and refusal-code ports](superpowers/plans/2026-10-14-w41s4-hook-contract-assertion-approval.md).
-  Their tests select the prepared hooks explicitly, compare complete signed reservations and
-  persisted series, and check malformed carriers with valid preparation.
-  **2026-10-14, unpublished default/text transition:** the branch now selects prepared seed,
-  restore and standby hooks, stores text SIF identities and removes the local installation counter.
-  Real-record migration and orphan controls pass. The owner approved the
-  [two setup-check changes](superpowers/plans/2026-10-14-w41s4-setup-check-approval.md)
-  at 12:10; the original venue-application suite now passes 43 cases.
-  Remaining host consumer ports, final regeneration and the full gates still precede publication.
-  New keys now have stored issue-date/four-character names, shown in the handover language
-  with the secret and in canonical form in selected-copy restore
-  output. Printed recovery packs and the backup chooser's name display remain Task 6 work.
-  **Task 4 series bounds, 2026-10-14:** setup and live-base collection on the branch now
-  accept at most 21 characters, leaving room for the emergency identity and invoice counter.
-  The wizard's English and Spanish help and refusal messages use the same bound.
-  **Task 4 host input, 2026-10-13:** re-registration and both cold-restore command sources now
-  accept an operation file and a separate node key on the branch. Staged restore reconstructs
-  authentication after restart from marker or file input. Qualification supplies the allocated
-  hooks explicitly; default hooks, text schema/counter retirement and the remaining consumers
-  still precede a publication candidate.
-  **Update, 2026-10-12: queued again in Lane E.** The owner authorised landing after green
-  checks and resolved findings; an important unresolved decision still goes to the owner. Q5(f)
-  and Q33–Q40 in the adviser document are revised, and Q41 covers issued invoices missing from the
-  backup. Task 3 can use the published receipts; D2 retains its remaining plan gates, and D5 still
-  needs old-chain evidence and its adviser answer. Task 5 reads the live series during issuance
-  and retires the boot series setting. Task 4 still owes allocation activation; the owner selected
-  first symbol `0–7` with 128 random bits. The later recovery and resolution tasks remain open.
-  [The Cloud registry handoff](superpowers/plans/2026-10-12-cloud-fiscal-allocation-registry.md)
-  separates its service and phone journey from the later Waitron adapter. Those builds and the
-  production custody, entitlement, signing and independent-history choices remain open.
-  **Owner, 2026-10-12:** three duplicate conflicts in a row should switch to a fresh number series
-  automatically and keep selling, never stop sales; this needs Task 4's activation and Task 7's
-  automatic recovery, and until then the same-code brake holds the chain. Any invoice that needs
-  correction or cancellation opens a filing case for the owner to fix and submit. [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04)
+- **Allocated standby adoption still needs the primary's venue copy and fresh establishment
+  authority.** The bundle can reserve a signed identity, but the public adopter refuses that
+  allocation module before writing; no shipped entry point establishes its standby identity.
+  Complete the copy and authenticated establishment path before presenting a successful fiscal
+  join. The pending file alone supplies no live authority. Spec §9.4 permits the current refusal;
+  [detail](backlog/fiscal.md#w41s-4-adoption-boundary-checkpoint-2026-10-14).
 
 - **Still open after W41s-3 (#1289): one reply can open up to 1,000 filing cases.** A refusal
   that applies to every later record (one about the taxpayer's identity, say) opens one case per
