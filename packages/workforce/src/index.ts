@@ -49,10 +49,15 @@ export type { ChainHead, ChainKey, TimeEntryAppend } from "./chain.js";
 export { computeEntryHash, verifyChain } from "./chain-hash.js";
 export type { ChainVerification, EntryHashInput, VerifiableEntry } from "./chain-hash.js";
 export { WorkforceBackend } from "./clocking.js";
+export { projectTimeRecord } from "./record-projection.js";
+export type { TimeRecordQuery } from "./record-reads.js";
 export type {
   ClockEventInput,
   CorrectionApprovalInput,
   CorrectionRequestInput,
+  CorrectionDecisionInput,
+  AutomaticCloseInput,
+  AutomaticConfirmationInput,
   WorkSummaryQuery,
   WorkSummaryRuleset,
 } from "./clocking.js";
@@ -96,3 +101,21 @@ export { WORKFORCE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 // Keeps errors.ts's registry augmentation reachable from the public barrel.
 import "./errors.js";
 export { WORKFORCE_CHANGE_SOURCES } from "./classification.js";
+
+export { payPeriodSettings } from "./schema/pay-period-settings.js";
+export { payPeriodClosures } from "./schema/pay-period-closures.js";
+export { verifyPayPeriodClosures } from "./pay-period-chain.js";
+export { resolvePayPeriod, readPayPeriodSettings, setPayPeriodSettings } from "./pay-periods.js";
+export type { PayPeriodSettings } from "./pay-periods.js";
+export { closePayPeriod, readPayPeriodClosures } from "./pay-period-close.js";
+export type {
+  ClockEntryKind,
+  EntryAuthor,
+  RecordExtension,
+  ProjectedRecordEntry,
+  PayPeriodSnapshot,
+  PayPeriodClosure,
+  ClosedPeriodImpact,
+  PayPeriodClosureView,
+  TimeRecord,
+} from "./record-types.js";

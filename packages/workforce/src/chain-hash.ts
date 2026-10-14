@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { RecordExtension } from "./record-types.js";
 import type { Source } from "@waitron/shared";
 
 /** The content of one time entry that the chain hash commits to, plus the predecessor's hash. */
@@ -19,7 +20,8 @@ export interface EntryHashInput {
    * correction tie-break, which must not be reordered undetected. */
   recordedAt: string;
   eventOffsetMinutes: number;
-  recordedByPersonId: string;
+  recordedByPersonId: string | null;
+  extension?: RecordExtension | null;
   /** Both hashed, so a captured event cannot be re-pointed at another source or device undetected. A
    * job names no device, hashed as the empty string. */
   capturedBySource: Source;
@@ -59,7 +61,7 @@ function joinFields(fields: ReadonlyArray<readonly [string, string]>): string {
  * digest, so neither may move once real chains exist.
  */
 function canonicalString(input: EntryHashInput): string {
-  return joinFields([
+  const basic = joinFields([
     ["SequenceNo", String(input.sequenceNo)],
     ["PersonId", input.personId],
     ["LocationId", input.locationId],
@@ -68,7 +70,7 @@ function canonicalString(input: EntryHashInput): string {
     ["EventAtMs", String(Date.parse(input.eventAt))],
     ["RecordedAtMs", String(Date.parse(input.recordedAt))],
     ["EventOffsetMinutes", String(input.eventOffsetMinutes)],
-    ["RecordedByPersonId", input.recordedByPersonId],
+    ["RecordedByPersonId", input.recordedByPersonId ?? ""],
     ["CapturedBySource", input.capturedBySource],
     ["CapturedByDeviceId", input.capturedByDeviceId ?? ""],
     ["CorrectsEntryId", input.correctsEntryId ?? ""],
@@ -77,6 +79,20 @@ function canonicalString(input: EntryHashInput): string {
     ["CorrectionActorId", input.correctionActorId ?? ""],
     ["PrevEntryHash", input.prevEntryHash ?? ""],
   ]);
+  const extension = input.extension;
+  if (extension === undefined || extension === null) return basic;
+  return (
+    basic +
+    "&RecordExtension=" +
+    JSON.stringify([
+      extension.selfApproved ?? false,
+      extension.authorKind,
+      extension.direction,
+      extension.missingEntryKind,
+      extension.respondsToEntryId,
+      extension.payPeriodClosureId,
+    ])
+  );
 }
 
 /** SHA-256 over the UTF-8 canonical string, uppercase hex. */

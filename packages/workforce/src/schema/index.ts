@@ -10,3 +10,6 @@ export { absences, absenceKind, absenceStatus } from "./absences.js";
 export { availability } from "./availability.js";
 export { shiftTemplates } from "./shift-templates.js";
 export { shiftSwaps, shiftSwapStatus } from "./shift-swaps.js";
+
+export { payPeriodSettings } from "./pay-period-settings.js";
+export { payPeriodClosures } from "./pay-period-closures.js";

@@ -10,6 +10,8 @@ const STATE = "manager configuration / live service; copied to a standby, never 
  */
 export const WORKFORCE_CLASSIFICATION: readonly ClassifiedTable[] = [
   appendOnly("time_entries", "ledger", LEDGER),
+  appendOnly("pay_period_closures", "ledger", LEDGER),
+  classify("pay_period_settings", "state", STATE),
   classify(
     "workforce_chains",
     "ledger",
