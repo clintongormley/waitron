@@ -513,6 +513,9 @@ const en = {
   "venue.print_held_work": "Print held groups in advance",
   "venue.print_held_work_hint":
     "A held group prints straight away on a kitchen ticket marked HOLD. Adding, moving, removing or changing its dishes then prints a HOLD correction, and firing it prints its ticket marked FIRE. A group held before this is turned on prints when it is fired, as before. A group already printed marked HOLD is still fired marked FIRE after this is turned off.",
+  "venue.print_moved_slips": "Print MOVED slips",
+  "venue.print_moved_slips_hint":
+    "When food the kitchen already has moves to another table or another order, each of its prep stations' printers prints a MOVED slip saying from where to where. A prep station can be set to differ.",
   "venue.clearing_workflow": "Needs clearing",
   "venue.clearing_workflow_hint":
     "When on, a table a party leaves — at Finish table, or by moving to another table or joining another party — shows Needs clearing until someone marks it cleared.",
@@ -1369,6 +1372,9 @@ const es: Record<keyof typeof en, string> = {
   "venue.print_held_work": "Imprimir por adelantado los grupos en espera",
   "venue.print_held_work_hint":
     "Un grupo en espera se imprime en el momento en una comanda de cocina marcada HOLD. Añadir, mover, quitar o cambiar sus platos imprime después una corrección HOLD, y al marcharlo se imprime su comanda marcada FIRE. Un grupo que ya estaba en espera antes de activarlo se imprime al marcharlo, como hasta ahora. Un grupo ya impreso como HOLD se sigue marchando marcado FIRE aunque se desactive.",
+  "venue.print_moved_slips": "Imprimir avisos MOVIDO",
+  "venue.print_moved_slips_hint":
+    "Cuando comida que ya tiene la cocina pasa a otra mesa u otro pedido, las impresoras de cada estación imprimen un aviso MOVIDO que dice de dónde a dónde. Cada estación puede configurarse aparte.",
   "venue.clearing_workflow": "Por recoger",
   "venue.clearing_workflow_hint":
     "Si está activado, una mesa que un grupo deja —al Cerrar mesa, al cambiarse a otra mesa o al unirse a otro grupo— aparece Por recoger hasta que alguien la marca como recogida.",

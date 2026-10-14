@@ -13,6 +13,7 @@ type Field =
   | "editSentLines"
   | "kitchenTicketGrouping"
   | "printHeldWork"
+  | "printMovedSlips"
   | "releaseReminderMinutes"
   | "clearingWorkflow";
 
@@ -159,7 +160,18 @@ export class ServiceSettingsPanel extends LitElement {
           }),
       )}
       <p class="hint" data-test="print-held-work-hint">${t("venue.print_held_work_hint")}</p>
-      ${this.#fieldError("printHeldWork")} ${this.#releaseReminder(model)}
+      ${this.#fieldError("printHeldWork")}
+      ${this.#switch(
+        "printMovedSlips",
+        t("venue.print_moved_slips"),
+        model.printMovedSlips,
+        (printMovedSlips) =>
+          void this.#save("printMovedSlips", () => this.api.savePrintMovedSlips(printMovedSlips), {
+            printMovedSlips,
+          }),
+      )}
+      <p class="hint" data-test="print-moved-slips-hint">${t("venue.print_moved_slips_hint")}</p>
+      ${this.#fieldError("printMovedSlips")} ${this.#releaseReminder(model)}
     </section>`;
   }
 
