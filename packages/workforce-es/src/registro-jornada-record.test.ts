@@ -1,4 +1,5 @@
 import { beforeEach, expect, it, vi, afterEach } from "vitest";
+import { eq } from "drizzle-orm";
 import { CORE_MIGRATIONS, locations, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -68,17 +69,18 @@ const close = () =>
       origin,
     }),
   );
-it("exports an unconfirmed automatic end while its session has no counted minutes", async () => {
+it("exports a confirmed automatic end with its counted minutes before the worker answers", async () => {
   const target = await day(true);
   const result = exportTimeRecord(await record(), period);
-  expect(result.lineas).toEqual([]);
+  expect(result.lineas.map((e) => e.minutosTrabajados)).toEqual([480]);
   expect(result.entradas).toHaveLength(2);
   expect(result.entradas!.find((e) => e.entryId === target)).toMatchObject({
     instante: "2026-01-05T17:00:00+00:00",
     autor: { kind: "automatic", personId: null },
     automatica: true,
-    sinConfirmar: true,
-    efectiva: false,
+    sinConfirmar: false,
+    confirmadaPorTrabajador: false,
+    efectiva: true,
   });
 });
 async function proposal(target: string, byManager: boolean) {
@@ -127,6 +129,8 @@ it("exports a worker request and manager approval with their separate authors an
     efectiva: true,
     automatica: false,
     sinConfirmar: false,
+    confirmadaPorTrabajador: false,
+    autoaprobada: false,
     corregida: true,
     disputada: false,
     periodosCerrados: [],
@@ -186,14 +190,15 @@ it("keeps both disputed departure times and the worker's reason", async () => {
     disputada: true,
   });
 });
-it("exports an automatic unconfirmed end at closure and its later 60-minute amendment", async () => {
+it("exports a confirmed automatic end at closure and its later 60-minute amendment", async () => {
   const target = await day(true);
   const frozen = await close();
   const result = exportTimeRecord(await record(), period);
   expect(result.entradas!.find((e) => e.entryId === target)).toMatchObject({
     autor: { kind: "automatic", personId: null },
     automatica: true,
-    sinConfirmar: true,
+    sinConfirmar: false,
+    confirmadaPorTrabajador: false,
     efectiva: true,
     periodosCerrados: [frozen.id],
   });
@@ -308,4 +313,41 @@ it("filters rich input to the export period and preserves the session-only shape
     ["periodo", "conservarHasta", "titularesAcceso", "lineas"].sort(),
   );
   expect(result.conservarHasta).toBe("2030-02-01");
+});
+
+it("exports the worker's later confirmation separately without changing counted hours or automatic authorship", async () => {
+  const target = await day(true);
+  const before = exportTimeRecord(await record(), period);
+  await run((tx) =>
+    backend.confirmAutomaticEntry(tx, { nodeId, entryId: target, workerPersonId: worker, origin }),
+  );
+  const after = exportTimeRecord(await record(), period);
+  expect(after.lineas).toEqual(before.lineas);
+  expect(after.entradas!.find((e) => e.entryId === target)).toMatchObject({
+    automatica: true,
+    sinConfirmar: false,
+    confirmadaPorTrabajador: true,
+    autor: { kind: "automatic", personId: null },
+  });
+});
+it("exports an admin's self-approval after their role changes", async () => {
+  const target = await day();
+  await suite.db.update(persons).set({ role: "admin" }).where(eq(persons.id, worker));
+  const request = await proposal(target, false);
+  const answer = await run((tx) =>
+    backend.approveCorrection(tx, { nodeId, correctionId: request, approverPersonId: worker }),
+  );
+  await suite.db.update(persons).set({ role: "staff" }).where(eq(persons.id, worker));
+  const result = exportTimeRecord(await record(), period);
+  expect(result.lineas[0]!.minutosTrabajados).toBe(540);
+  expect(result.entradas!.find((e) => e.entryId === answer)).toMatchObject({
+    autoaprobada: true,
+    estadoCorreccion: "approved",
+    efectiva: true,
+    autor: { kind: "manager", personId: worker },
+    respondeEntradaId: request,
+  });
+  expect(result.entradas!.find((e) => e.entryId === request)).toMatchObject({
+    autoaprobada: false,
+  });
 });

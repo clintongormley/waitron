@@ -16,7 +16,7 @@ import { isRecordDate } from "./record-dates.js";
 import { recordInPeriod } from "./record-period.js";
 import { projectTimeRecord } from "./record-projection.js";
 import { readRecordedEntries } from "./record-reads.js";
-import { uncountedAutomaticEntryIds } from "./effective-entries.js";
+import { automaticEntryIdsWithoutMarker } from "./effective-entries.js";
 import {
   dailyContractedTargetMinutes,
   summarisePeriod,
@@ -28,7 +28,7 @@ import type { WorkSummaryRuleset } from "./clocking.js";
 import { payPeriodClosures } from "./schema/pay-period-closures.js";
 import { employments } from "./schema/employments.js";
 
-export async function appendCountingMarker(
+export async function appendClosureMarker(
   tx: Transaction,
   nodeId: string,
   target: TimeEntryRecord,
@@ -111,8 +111,8 @@ export async function closePayPeriod(
     throw new AppError("pay_period.not_due", { closeAt: scheduledCloseAt });
   const entries = await readRecordedEntries(tx, { locationId: input.locationId });
   const closureId = newId();
-  const uncounted = uncountedAutomaticEntryIds(entries);
-  const candidates = entries.filter((e) => uncounted.has(e.entryId));
+  const unmarked = automaticEntryIdsWithoutMarker(entries);
+  const candidates = entries.filter((e) => unmarked.has(e.entryId));
   const virtual = candidates.map((e) => ({
     ...e,
     entryId: `count:${e.entryId}`,
@@ -139,7 +139,7 @@ export async function closePayPeriod(
     sessions: record.sessions,
     entries: record.entries.filter((e) => !markerIds.has(e.entry.entryId)),
     summaries: [],
-    countedAutomaticEntryIds: eligible.map((e) => e.entryId).sort(),
+    markedAutomaticEntryIds: eligible.map((e) => e.entryId).sort(),
   };
   const people = [...new Set(snapshot.entries.map((e) => e.entry.personId))].sort();
   for (const personId of people) {
@@ -203,6 +203,6 @@ export async function closePayPeriod(
     .insert(payPeriodClosures)
     .values({ ...closure, periodStart: input.period.start, periodEnd: input.period.end });
   for (const entry of eligible)
-    await appendCountingMarker(tx, input.nodeId, entry, closureId, input.origin);
+    await appendClosureMarker(tx, input.nodeId, entry, closureId, input.origin);
   return closure;
 }

@@ -1,5 +1,21 @@
 # A10-1 Record Library Implementation Plan
 
+> **Owner amendment, 2026-10-14 — supersedes the automatic-count and self-approval steps below.**
+> Decision 7 permits self-approval only for a person currently holding `admin`; every admin is an
+> owner for this rule. Persist `self_approved` on the approval, include it in the extended entry hash
+> and frozen-closure hash, and expose it in the record and Spanish export, retaining it after a role
+> change. Managers/supervisors retain the different-approver refusal. No separate owner field.
+> Decision 9 counts automatic clock-outs immediately as confirmed; pending, declined or disputed
+> corrections retain the automatic time until an approval replaces it. Keep the next-clock-in
+> question and append its worker acknowledgment separately (`confirmedByWorker`). Closure markers
+> link unanswered automatic ends to the frozen period; they no longer enable counting. The snapshot
+> field is `markedAutomaticEntryIds`. Export retains `sinConfirmar: false` and adds
+> `confirmadaPorTrabajador` and `autoaprobada`. The dated checklist below records the original
+> implementation plan; its zero-minute/unconfirmed expectations are superseded by these rulings.
+> Rework tests must observe failure first; main’s behavioral assertions stay intact. A10-1 still
+> needs a fresh FULL review, green current-head CI and the owner’s separate approval to land.
+
+
 > **For agentic workers:** Use `superpowers:executing-plans` to implement this plan task by task, inline with the driver after the separately arranged fresh-context plan review. Read `superpowers:test-driven-development` before writing implementation or tests. Do not delegate execution automatically.
 
 **Goal:** Extend the working-time library with attributable missing-entry corrections, two-party decisions, automatic-entry confirmation, pay-period closure, and an inspectable Spanish library export.

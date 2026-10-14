@@ -85,6 +85,7 @@ function canonicalString(input: EntryHashInput): string {
     basic +
     "&RecordExtension=" +
     JSON.stringify([
+      extension.selfApproved ?? false,
       extension.authorKind,
       extension.direction,
       extension.missingEntryKind,

@@ -1,11 +1,6 @@
 import { AppError } from "@waitron/shared";
 import { projectWorkSessions, type TimeEntryRecord } from "./projection.js";
-import {
-  compareRecording,
-  effectiveClockEntries,
-  uncountedAutomaticEntryIds,
-  sameSubject,
-} from "./effective-entries.js";
+import { compareRecording, effectiveClockEntries, sameSubject } from "./effective-entries.js";
 import type { EntryAuthor, TimeRecord, PayPeriodClosure } from "./record-types.js";
 import { recordInPeriod } from "./record-period.js";
 import "./errors.js";
@@ -48,7 +43,6 @@ export function projectTimeRecord(
     groups.set(root, rows);
   }
   const effectiveIds = new Set(effectiveClockEntries(entries).map((e) => e.entryId));
-  const uncounted = uncountedAutomaticEntryIds(entries);
   const record: TimeRecord = {
     sessions: projectWorkSessions(entries).sort(
       (a, b) =>
@@ -64,11 +58,12 @@ export function projectTimeRecord(
       return {
         entry,
         author: authorFor(entry),
-        effective: effectiveIds.has(entry.entryId) && !uncounted.has(entry.entryId),
-        confirmed:
-          entry.extension?.authorKind !== "automatic" ||
-          corrected ||
-          group.some((e) => e.entryKind === "confirmation" && e.extension?.authorKind === "worker"),
+        effective: effectiveIds.has(entry.entryId),
+        selfApproved: entry.extension?.selfApproved ?? false,
+        confirmed: true,
+        confirmedByWorker: group.some(
+          (e) => e.entryKind === "confirmation" && e.extension?.authorKind === "worker",
+        ),
         corrected,
         disputed: group.some((e) => e.correctionStatus === "disputed"),
         closedPeriodIds: [],

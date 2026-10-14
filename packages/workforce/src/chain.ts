@@ -158,6 +158,7 @@ async function attemptAppend(
       correctionReason: entry.correctionReason ?? null,
       correctionStatus: entry.correctionStatus ?? null,
       correctionActorId: entry.correctionActorId ?? null,
+      selfApproved: entry.extension?.selfApproved ?? false,
       authorKind: entry.extension?.authorKind ?? null,
       correctionDirection: entry.extension?.direction ?? null,
       missingEntryKind: entry.extension?.missingEntryKind ?? null,
@@ -206,9 +207,22 @@ export async function appendToChain(
   clock: () => Date = () => new Date(),
 ): Promise<{ id: string; sequenceNo: number; entryHash: string }> {
   if (
+    entry.extension?.selfApproved &&
+    (entry.entryKind !== "correction" ||
+      entry.correctionStatus !== "approved" ||
+      entry.extension.authorKind !== "manager" ||
+      entry.extension.direction !== "worker_request" ||
+      !entry.extension.respondsToEntryId ||
+      entry.recordedByPersonId !== entry.personId ||
+      entry.correctionActorId !== entry.personId)
+  )
+    throw new AppError("attendance.invalid", { reason: "self_approval_shape" });
+  if (
     entry.extension !== undefined &&
     entry.extension !== null &&
-    Object.values(entry.extension).every((value) => value === null)
+    Object.entries(entry.extension).every(([field, value]) =>
+      field === "selfApproved" ? !value : value === null,
+    )
   ) {
     throw new AppError("attendance.invalid", { reason: "empty_extension" });
   }
@@ -250,6 +264,7 @@ export async function readChain(
       correctionReason: timeEntries.correctionReason,
       correctionStatus: timeEntries.correctionStatus,
       correctionActorId: timeEntries.correctionActorId,
+      selfApproved: timeEntries.selfApproved,
       authorKind: timeEntries.authorKind,
       correctionDirection: timeEntries.correctionDirection,
       missingEntryKind: timeEntries.missingEntryKind,
@@ -264,6 +279,7 @@ export async function readChain(
     .orderBy(timeEntries.sequenceNo);
   return rows.map(
     ({
+      selfApproved,
       authorKind,
       correctionDirection,
       missingEntryKind,
@@ -281,6 +297,7 @@ export async function readChain(
       ].every((value) => value === null)
         ? null
         : {
+            selfApproved,
             authorKind,
             direction: correctionDirection,
             missingEntryKind,

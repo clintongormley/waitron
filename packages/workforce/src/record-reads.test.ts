@@ -91,7 +91,7 @@ async function freezeJanuary() {
         { personId, summary: null },
         { personId: other, summary: null },
       ],
-      countedAutomaticEntryIds: [],
+      markedAutomaticEntryIds: [],
     },
   };
   await suite.db.insert(payPeriodClosures).values({
@@ -114,7 +114,7 @@ it("returns a worker-scoped frozen snapshot without the other worker's entries o
   expect(snapshot.sessions.map((s) => s.personId)).toEqual([personId]);
   expect(snapshot.entries.map((e) => e.entry.personId)).toEqual([personId, personId]);
   expect(snapshot.summaries).toEqual([{ personId, summary: null }]);
-  expect(snapshot.countedAutomaticEntryIds).toEqual([]);
+  expect(snapshot.markedAutomaticEntryIds).toEqual([]);
   expect(record.closedPeriodImpacts).toEqual([]);
   const stored = (await suite.db.select().from(payPeriodClosures))[0]!.snapshot;
   expect(stored.sessions.map((s) => s.personId).sort()).toEqual([personId, other].sort());

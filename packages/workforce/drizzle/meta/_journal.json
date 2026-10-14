@@ -43,6 +43,13 @@
       "when": 1791918890538,
       "tag": "0005_a10_record_constraints",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1791967605312,
+      "tag": "0006_a10_self_approval",
+      "breakpoints": true
     }
   ]
 }

@@ -5,6 +5,7 @@ export type ClockEntryKind = "in" | "out" | "break_start" | "break_end";
 export type EntryAuthor =
   { kind: "worker" | "manager"; personId: string } | { kind: "automatic"; personId: null };
 export interface RecordExtension {
+  selfApproved?: boolean;
   authorKind: "worker" | "manager" | "automatic" | null;
   direction: "worker_request" | "manager_proposal" | null;
   missingEntryKind: ClockEntryKind | null;
@@ -16,6 +17,8 @@ export interface ProjectedRecordEntry {
   author: EntryAuthor;
   effective: boolean;
   confirmed: boolean;
+  confirmedByWorker: boolean;
+  selfApproved: boolean;
   corrected: boolean;
   disputed: boolean;
   closedPeriodIds: string[];
@@ -24,7 +27,7 @@ export interface PayPeriodSnapshot {
   sessions: WorkSession[];
   entries: ProjectedRecordEntry[];
   summaries: { personId: string; summary: PeriodSummary | null }[];
-  countedAutomaticEntryIds: string[];
+  markedAutomaticEntryIds: string[];
 }
 export interface PayPeriodClosure {
   id: string;

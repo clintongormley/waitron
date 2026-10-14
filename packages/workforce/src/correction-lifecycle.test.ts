@@ -192,6 +192,61 @@ describe("two-party correction decisions", () => {
     expect(await minutes()).toBe(540);
     await intact();
   });
+  it.each(["admin at request", "promoted before approval"])(
+    "stores and hashes an admin's self-approval (%s), retaining it after demotion",
+    async (when) => {
+      const target = await day();
+      if (when === "admin at request")
+        await suite.db.update(persons).set({ role: "admin" }).where(eq(persons.id, personId));
+      const request = await run((tx) => backend.requestCorrection(tx, targeted(target)));
+      if (when === "promoted before approval")
+        await suite.db.update(persons).set({ role: "admin" }).where(eq(persons.id, personId));
+      const approved = await run((tx) =>
+        backend.approveCorrection(tx, {
+          nodeId,
+          correctionId: request,
+          approverPersonId: personId,
+        }),
+      );
+      await suite.db.update(persons).set({ role: "staff" }).where(eq(persons.id, personId));
+      expect(await minutes()).toBe(540);
+      const record = await run((tx) =>
+        backend.timeRecord(tx, {
+          personId,
+          period: { start: "2026-01-01", end: "2026-02-01" },
+        }),
+      );
+      expect(record.entries.find((e) => e.entry.entryId === approved)).toMatchObject({
+        selfApproved: true,
+        author: { kind: "manager", personId },
+        entry: { extension: { selfApproved: true }, recordedByPersonId: personId },
+      });
+      const chain = await readChain(suite.db, { nodeId, locationId });
+      expect(verifyChain(chain)).toEqual({ ok: true });
+      expect(
+        verifyChain(
+          chain.map((e) =>
+            e.sequenceNo === 4 ? { ...e, extension: { ...e.extension!, selfApproved: false } } : e,
+          ),
+        ),
+      ).toEqual({
+        ok: false,
+        reason: "hash_mismatch",
+        sequenceNo: 4,
+      });
+      await unchangedRefusal(
+        () =>
+          run((tx) =>
+            backend.approveCorrection(tx, {
+              nodeId,
+              correctionId: request,
+              approverPersonId: personId,
+            }),
+          ),
+        "correction.not_pending",
+      );
+    },
+  );
   it("does not let staff request a change for someone else", async () => {
     const target = await day();
     await unchangedRefusal(

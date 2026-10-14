@@ -32,6 +32,7 @@ function canonicalEntry(row: ProjectedRecordEntry) {
         extension === undefined || extension === null
           ? null
           : {
+              selfApproved: extension.selfApproved ?? false,
               authorKind: extension.authorKind,
               direction: extension.direction,
               missingEntryKind: extension.missingEntryKind,
@@ -42,6 +43,8 @@ function canonicalEntry(row: ProjectedRecordEntry) {
     author: { kind: row.author.kind, personId: row.author.personId },
     effective: row.effective,
     confirmed: row.confirmed,
+    confirmedByWorker: row.confirmedByWorker,
+    selfApproved: row.selfApproved,
     corrected: row.corrected,
     disputed: row.disputed,
     closedPeriodIds: [...row.closedPeriodIds].sort(compare),
@@ -66,7 +69,7 @@ function canonicalSnapshot(snapshot: PayPeriodSnapshot) {
   const ids = snapshot.entries.map((row) => row.entry.entryId);
   if (
     new Set(ids).size !== ids.length ||
-    new Set(snapshot.countedAutomaticEntryIds).size !== snapshot.countedAutomaticEntryIds.length
+    new Set(snapshot.markedAutomaticEntryIds).size !== snapshot.markedAutomaticEntryIds.length
   ) {
     throw new Error("Duplicate pay-period snapshot entry ids");
   }
@@ -109,7 +112,7 @@ function canonicalSnapshot(snapshot: PayPeriodSnapshot) {
               },
       }))
       .sort((a, b) => compare(a.personId, b.personId)),
-    countedAutomaticEntryIds: [...snapshot.countedAutomaticEntryIds].sort(compare),
+    markedAutomaticEntryIds: [...snapshot.markedAutomaticEntryIds].sort(compare),
   };
 }
 

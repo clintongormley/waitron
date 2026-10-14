@@ -77,7 +77,7 @@ export function liveClockEntries(entries: readonly TimeEntryRecord[]): TimeEntry
         : [],
   );
 }
-export function uncountedAutomaticEntryIds(entries: readonly TimeEntryRecord[]): Set<string> {
+export function automaticEntryIdsWithoutMarker(entries: readonly TimeEntryRecord[]): Set<string> {
   const byId = new Map(entries.map((e) => [e.entryId, e]));
   const confirmations = new Set(
     entries

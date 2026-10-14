@@ -4119,6 +4119,8 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   automatic-entry confirmation, frozen pay periods and a Spanish history export. Left: till
   clocking and profile-checked routes; end-of-day discovery and questions; correction screens;
   hours screens; PDF/CSV and the representatives' export. Part 1 takes the owner's sign-off.
+  Owner rulings (2026-10-14): automatic ends count immediately; only admins may self-approve,
+  with a stored flag. Part 1 is under owner review in #1638; the remaining app work waits for it.
   [Detail](backlog/workforce.md#a10-clocking-in-and-out--the-working-time-record)
 
 - **A585. Staffing needs and the rota** — staff roles painted per area and day like opening hours,

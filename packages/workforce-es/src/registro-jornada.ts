@@ -74,6 +74,8 @@ export interface EntradaJornada {
   efectiva: boolean;
   automatica: boolean;
   sinConfirmar: boolean;
+  confirmadaPorTrabajador: boolean;
+  autoaprobada: boolean;
   corregida: boolean;
   disputada: boolean;
   periodosCerrados: string[];
@@ -147,6 +149,8 @@ function historyForPeriod(record: TimeRecord, periodo: Period): EntradaJornada[]
         efectiva: row.effective,
         automatica: row.author.kind === "automatic",
         sinConfirmar: !row.confirmed,
+        confirmadaPorTrabajador: row.confirmedByWorker,
+        autoaprobada: row.selfApproved,
         corregida: row.corrected,
         disputada: row.disputed,
         periodosCerrados: [...row.closedPeriodIds],

@@ -51,9 +51,7 @@ export async function readTimeRecord(
           sessions: snapshot.sessions.filter((s) => s.personId === personId),
           entries: ownEntries,
           summaries: snapshot.summaries.filter((s) => s.personId === personId),
-          countedAutomaticEntryIds: snapshot.countedAutomaticEntryIds.filter((id) =>
-            ownIds.has(id),
-          ),
+          markedAutomaticEntryIds: snapshot.markedAutomaticEntryIds.filter((id) => ownIds.has(id)),
         },
       };
     });
@@ -99,6 +97,7 @@ export async function readRecordedEntries(
     ].every((v) => v === null)
       ? null
       : {
+          selfApproved: row.selfApproved,
           authorKind: row.authorKind,
           direction: row.correctionDirection,
           missingEntryKind: row.missingEntryKind,

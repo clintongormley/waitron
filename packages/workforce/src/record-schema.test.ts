@@ -178,7 +178,7 @@ describe("pay period schema", () => {
     const id = newId();
     await suite.db
       .execute(sql`insert into pay_period_closures (id, node_id, location_id, period_start, period_end, clock, scheduled_close_at, closed_at, snapshot, sequence_no, prev_closure_hash, closure_hash)
-   values (${id}, ${nodeId}, ${locationId}, '2026-01-01', '2026-02-01', '{"timeZone":"Europe/Madrid","dayCutover":"06:00"}', '2026-02-01T05:00:00.000Z', '2026-02-01T05:00:00.000Z', '{"sessions":[],"entries":[],"summaries":[],"countedAutomaticEntryIds":[]}', 1, null, ${"A".repeat(64)})`);
+   values (${id}, ${nodeId}, ${locationId}, '2026-01-01', '2026-02-01', '{"timeZone":"Europe/Madrid","dayCutover":"06:00"}', '2026-02-01T05:00:00.000Z', '2026-02-01T05:00:00.000Z', '{"sessions":[],"entries":[],"summaries":[],"markedAutomaticEntryIds":[]}', 1, null, ${"A".repeat(64)})`);
     const target = await insert(shape({ kind: "out", author: "automatic", recorder: null }));
     await insert(
       shape({

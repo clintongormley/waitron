@@ -1,9 +1,4 @@
-import {
-  compareEvents,
-  effectiveClockEntries,
-  uncountedAutomaticEntryIds,
-  originalEntry,
-} from "./effective-entries.js";
+import { compareEvents, effectiveClockEntries, originalEntry } from "./effective-entries.js";
 import type { RecordAttribution } from "./record-types.js";
 /**
  * Overtime has TWO lawful readings, and the code returns BOTH rather than choosing: which one binds
@@ -149,7 +144,6 @@ function groupByPerson(entries: readonly TimeEntryRecord[]): Map<string, TimeEnt
  */
 export function projectWorkSessions(entries: readonly TimeEntryRecord[]): WorkSession[] {
   const sessions: WorkSession[] = [];
-  const uncounted = uncountedAutomaticEntryIds(entries);
   const byId = new Map(entries.map((e) => [e.entryId, e]));
   for (const [personId, personEntries] of groupByPerson(effectiveClockEntries(entries))) {
     const ordered = [...personEntries].sort(compareEvents);
@@ -176,7 +170,7 @@ export function projectWorkSessions(entries: readonly TimeEntryRecord[]): WorkSe
             ) {
               open.breakMs += Date.parse(e.eventAt) - Date.parse(open.breakStartedAt);
             }
-            if (!uncounted.has(e.entryId)) sessions.push(closeShift(personId, open, e));
+            sessions.push(closeShift(personId, open, e));
             open = undefined;
           }
           break;

@@ -12,7 +12,7 @@ function closure(over: Partial<PayPeriodClosure> = {}): PayPeriodClosure {
     clock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
     scheduledCloseAt: "2026-02-01T05:00:00.000Z",
     closedAt: "2026-02-01T05:00:01.000Z",
-    snapshot: { sessions: [], entries: [], summaries: [], countedAutomaticEntryIds: [] },
+    snapshot: { sessions: [], entries: [], summaries: [], markedAutomaticEntryIds: [] },
     sequenceNo: 1,
     prevClosureHash: null,
     closureHash: "",
@@ -33,7 +33,7 @@ function closure(over: Partial<PayPeriodClosure> = {}): PayPeriodClosure {
       sessions: row.snapshot.sessions,
       entries: row.snapshot.entries,
       summaries: row.snapshot.summaries,
-      countedAutomaticEntryIds: row.snapshot.countedAutomaticEntryIds,
+      markedAutomaticEntryIds: row.snapshot.markedAutomaticEntryIds,
     },
     row.sequenceNo,
     row.prevClosureHash,
@@ -78,13 +78,13 @@ describe("pay-period closure verification", () => {
           sessions: [],
           entries: [],
           summaries: [{ personId: "p", summary: null }],
-          countedAutomaticEntryIds: [],
+          markedAutomaticEntryIds: [],
         },
       },
     ],
     [
       "automatic ids",
-      { snapshot: { sessions: [], entries: [], summaries: [], countedAutomaticEntryIds: ["e"] } },
+      { snapshot: { sessions: [], entries: [], summaries: [], markedAutomaticEntryIds: ["e"] } },
     ],
   ] satisfies [string, Partial<PayPeriodClosure>][])("detects tampered %s", (_name, over) => {
     expect(api.verifyPayPeriodClosures?.([{ ...closure(), ...over }])).toEqual({
@@ -146,7 +146,9 @@ const recorded: ProjectedRecordEntry = {
   },
   author: { kind: "automatic", personId: null },
   effective: true,
-  confirmed: false,
+  confirmed: true,
+  confirmedByWorker: false,
+  selfApproved: false,
   corrected: false,
   disputed: false,
   closedPeriodIds: ["closure"],
@@ -187,7 +189,7 @@ function rich(): PayPeriodClosure {
           },
         },
       ],
-      countedAutomaticEntryIds: ["entry"],
+      markedAutomaticEntryIds: ["entry"],
     },
   });
 }
@@ -210,7 +212,7 @@ it("canonicalizes object and collection order without omitting optional entry fi
     snapshot: {
       ...row.snapshot,
       entries: [entry, other],
-      countedAutomaticEntryIds: ["entry", "other"],
+      markedAutomaticEntryIds: ["entry", "other"],
     },
   };
   expect(
@@ -219,7 +221,7 @@ it("canonicalizes object and collection order without omitting optional entry fi
       snapshot: {
         ...two.snapshot,
         entries: [other, entry],
-        countedAutomaticEntryIds: ["other", "entry"],
+        markedAutomaticEntryIds: ["other", "entry"],
       },
     }),
   ).toBe(computeClosureHash(two));
@@ -243,7 +245,15 @@ it.each([
       },
     },
   ],
-  ["confirmation", { confirmed: true }],
+  ["confirmation", { confirmed: false }],
+  ["worker confirmation", { confirmedByWorker: true }],
+  ["self approval", { selfApproved: true }],
+  [
+    "stored self approval",
+    {
+      entry: { ...recorded.entry, extension: { ...recorded.entry.extension!, selfApproved: true } },
+    },
+  ],
   ["effective", { effective: false }],
   ["correction", { corrected: true }],
   ["dispute", { disputed: true }],
@@ -293,7 +303,7 @@ it("refuses duplicate history and counted ids rather than hashing them", () => {
   expect(() =>
     computeClosureHash({
       ...row,
-      snapshot: { ...row.snapshot, countedAutomaticEntryIds: ["entry", "entry"] },
+      snapshot: { ...row.snapshot, markedAutomaticEntryIds: ["entry", "entry"] },
     }),
   ).toThrow("Duplicate pay-period snapshot entry ids");
   const duplicated = closure({
@@ -301,7 +311,7 @@ it("refuses duplicate history and counted ids rather than hashing them", () => {
       sessions: [],
       entries: [],
       summaries: [],
-      countedAutomaticEntryIds: ["entry", "entry"],
+      markedAutomaticEntryIds: ["entry", "entry"],
     },
   });
   expect(api.verifyPayPeriodClosures([duplicated])).toEqual({

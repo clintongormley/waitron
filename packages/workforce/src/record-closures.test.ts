@@ -51,7 +51,7 @@ function closure(entries: TimeEntryRecord[] = [start, end]): PayPeriodClosure {
       sessions: record.sessions,
       entries: record.entries,
       summaries: [{ personId: "worker", summary: null }],
-      countedAutomaticEntryIds: [],
+      markedAutomaticEntryIds: [],
     },
   };
 }
@@ -176,7 +176,7 @@ it("reports a later worker confirmation without turning the original automatic a
     },
   });
   const frozen = closure([start, automatic, marker]);
-  frozen.snapshot.countedAutomaticEntryIds = ["out"];
+  frozen.snapshot.markedAutomaticEntryIds = ["out"];
   const confirmed = row("confirmed", "confirmation", "17", 4, {
     recordedAt: "2026-03-05T12:00:00.000Z",
     extension: { ...end.extension!, respondsToEntryId: "out" },

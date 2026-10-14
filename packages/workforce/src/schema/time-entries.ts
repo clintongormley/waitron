@@ -68,6 +68,7 @@ export const timeEntries = table(
     /** The accountable actor who requested or approved the correction, distinct from
      * `recorded_by_person_id` (the device operator) even when they are the same person. */
     correctionActorId: id("correction_actor_id"),
+    selfApproved: flag("self_approved").notNull().default(false),
     authorKind: label("author_kind").$type<"worker" | "manager" | "automatic">(),
     correctionDirection: label("correction_direction").$type<
       "worker_request" | "manager_proposal"

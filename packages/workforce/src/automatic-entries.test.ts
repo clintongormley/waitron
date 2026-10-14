@@ -140,9 +140,9 @@ describe("automatic closes and worker confirmation", () => {
       "attendance.not_pending",
     );
   });
-  it("closes live state but waits for the worker before counting time, preserving automatic authorship", async () => {
+  it("counts an automatic close immediately, preserving automatic authorship and the later worker response", async () => {
     const end = await run((tx) => backend.recordAutomaticClose(tx, input()));
-    expect(await minutes()).toBe(0);
+    expect(await minutes()).toBe(480);
     const original = await suite.db.select().from(timeEntries).where(eq(timeEntries.id, end));
     expect(original[0]).toMatchObject({
       entryKind: "out",
@@ -170,10 +170,10 @@ describe("automatic closes and worker confirmation", () => {
     );
     expect(verifyChain(await readChain(suite.db, { nodeId, locationId }))).toEqual({ ok: true });
   });
-  it("closes a trailing break at the supplied end when it is confirmed", async () => {
+  it("counts a trailing break at the supplied automatic end before the worker answers", async () => {
     await run((tx) => backend.breakStart(tx, event("2026-01-05T16:00:00Z")));
     const end = await run((tx) => backend.recordAutomaticClose(tx, input()));
-    expect(await minutes()).toBe(0);
+    expect(await minutes()).toBe(420);
     await run((tx) => backend.confirmAutomaticEntry(tx, confirm(end)));
     expect(await minutes()).toBe(420);
     expect((await suite.db.select().from(timeEntries)).map((r) => r.entryKind)).toEqual([
@@ -201,7 +201,7 @@ describe("automatic closes and worker confirmation", () => {
           ? backend.requestCorrection(tx, request)
           : backend.proposeCorrection(tx, request),
       );
-      expect(await minutes()).toBe(0);
+      expect(await minutes()).toBe(480);
       await run((tx) =>
         kind === "approve"
           ? backend.approveCorrection(tx, { nodeId, correctionId: id, approverPersonId: manager })
@@ -223,7 +223,7 @@ describe("automatic closes and worker confirmation", () => {
     },
   );
   it.each(["decline", "disagree"] as const)(
-    "keeps an automatic end uncounted after %s",
+    "keeps the original automatic end counted after %s",
     async (kind) => {
       const end = await run((tx) => backend.recordAutomaticClose(tx, input()));
       const request = {
@@ -252,7 +252,7 @@ describe("automatic closes and worker confirmation", () => {
               reason: "Not my time",
             }),
       );
-      expect(await minutes()).toBe(0);
+      expect(await minutes()).toBe(480);
     },
   );
   it.each([

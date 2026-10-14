@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import * as projection from "./index.js";
 import { projectWorkSessions, type TimeEntryRecord } from "./projection.js";
 import { jobOrigin } from "@waitron/shared";
-import { uncountedAutomaticEntryIds } from "./effective-entries.js";
+import { automaticEntryIdsWithoutMarker } from "./effective-entries.js";
 const author = (kind: "worker" | "manager" | "automatic" = "worker") => ({
   authorKind: kind,
   direction: null,
@@ -85,7 +85,7 @@ describe("inspectable record projection", () => {
         enumerable: true,
       });
     }
-    expect([...uncountedAutomaticEntryIds(rows)]).toEqual([]);
+    expect([...automaticEntryIdsWithoutMarker(rows)]).toEqual([]);
     expect(idReads).toBeLessThan(20000);
   });
   it("keeps a manager proposal pending then exposes all versions and distinct authors on acceptance", () => {
@@ -144,13 +144,14 @@ describe("inspectable record projection", () => {
       effective: false,
     });
   });
-  it("shows an unanswered automatic end without an effective session, then retains its author on confirmation", () => {
+  it("counts an unanswered automatic end and distinguishes the worker response from confirmed time", () => {
     const pending = projection.projectTimeRecord([start, automatic]);
-    expect(pending.sessions).toEqual([]);
+    expect(pending.sessions.map((s) => s.workedMinutes)).toEqual([480]);
     expect(pending.entries[1]).toMatchObject({
       author: { kind: "automatic", personId: null },
-      confirmed: false,
-      effective: false,
+      confirmed: true,
+      confirmedByWorker: false,
+      effective: true,
     });
     const confirmation = entry("confirm", "confirmation", automatic.eventAt, {
       sequenceNo: 3,
@@ -161,14 +162,19 @@ describe("inspectable record projection", () => {
     expect(record.entries.find((e) => e.entry.entryId === automatic.entryId)).toMatchObject({
       author: { kind: "automatic", personId: null },
       confirmed: true,
+      confirmedByWorker: true,
       effective: true,
     });
   });
   it.each(["requested", "declined", "disputed"] as const)(
-    "keeps an automatic end uncounted with a %s correction",
+    "keeps the automatic end counted with a %s correction",
     (correctionStatus) => {
       const change = { ...request, correctsEntryId: automatic.entryId, correctionStatus };
-      expect(projection.projectTimeRecord([start, automatic, change]).sessions).toEqual([]);
+      expect(
+        projection
+          .projectTimeRecord([start, automatic, change])
+          .sessions.map((s) => s.workedMinutes),
+      ).toEqual([480]);
     },
   );
   it("counts an approved supplied start and end once with their pending requests still inspectable", () => {
@@ -227,8 +233,10 @@ describe("inspectable record projection", () => {
         extension: { ...author(), respondsToEntryId: automatic.entryId },
       });
       expect(
-        projection.projectTimeRecord([start, automatic, foreignConfirmation]).sessions,
-      ).toEqual([]);
+        projection
+          .projectTimeRecord([start, automatic, foreignConfirmation])
+          .entries.find((e) => e.entry.entryId === automatic.entryId),
+      ).toMatchObject({ confirmed: true, confirmedByWorker: false, effective: true });
     },
   );
   it("refuses incomplete authorship without changing the basic session-only projection", () => {

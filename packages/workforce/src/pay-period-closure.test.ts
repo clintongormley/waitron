@@ -68,7 +68,7 @@ it("counts a next-month local-day automatic end only when that next month closes
     }),
   );
   const october = await close();
-  expect(october.snapshot.countedAutomaticEntryIds).toEqual([]);
+  expect(october.snapshot.markedAutomaticEntryIds).toEqual([]);
   expect(october.snapshot.sessions).toEqual([]);
   expect(
     (await suite.db.select().from(api.timeEntries)).filter((e) => e.entryKind === "confirmation"),
@@ -77,7 +77,7 @@ it("counts a next-month local-day automatic end only when that next month closes
     period: { start: "2026-11-01", end: "2026-12-01" },
     now: "2026-12-01T05:00:00Z",
   });
-  expect(november.snapshot.countedAutomaticEntryIds).toEqual([entryId]);
+  expect(november.snapshot.markedAutomaticEntryIds).toEqual([entryId]);
   expect(november.snapshot.sessions.map((s) => [s.workDate, s.workedMinutes])).toEqual([
     ["2026-11-01", 270],
   ]);
@@ -129,17 +129,20 @@ it("uses a dated cutover change stored with the frozen closure", async () => {
   const result = await close({ clock: changed, now: "2026-11-01T06:00:00Z" });
   expect(result.clock).toEqual(changed);
 });
-it("counts an unanswered automatic end once without confirming or changing its author", async () => {
+it("freezes an already counted automatic end without a worker response or changed author", async () => {
   const entryId = await automatic();
   expect(
-    (await run((tx) => backend.timeRecord(tx, { period, personId: worker }))).sessions,
-  ).toEqual([]);
+    (await run((tx) => backend.timeRecord(tx, { period, personId: worker }))).sessions.map(
+      (s) => s.workedMinutes,
+    ),
+  ).toEqual([480]);
   const frozen = await close();
   expect(frozen.snapshot.sessions[0]!.workedMinutes).toBe(480);
-  expect(frozen.snapshot.countedAutomaticEntryIds).toEqual([entryId]);
+  expect(frozen.snapshot.markedAutomaticEntryIds).toEqual([entryId]);
   expect(frozen.snapshot.entries.find((e) => e.entry.entryId === entryId)).toMatchObject({
     author: { kind: "automatic", personId: null },
-    confirmed: false,
+    confirmed: true,
+    confirmedByWorker: false,
     effective: true,
   });
   expect(frozen.snapshot.summaries[0]!.summary).toMatchObject({ workedMinutes: 480 });
@@ -147,7 +150,8 @@ it("counts an unanswered automatic end once without confirming or changing its a
   expect(record.sessions[0]!.workedMinutes).toBe(480);
   expect(record.closedPeriodImpacts).toEqual([]);
   expect(record.entries.find((e) => e.entry.entryId === entryId)).toMatchObject({
-    confirmed: false,
+    confirmed: true,
+    confirmedByWorker: false,
     author: { kind: "automatic", personId: null },
   });
   expect(
@@ -163,7 +167,7 @@ it("keeps open no-activity shifts uncounted and visible", async () => {
   const frozen = await close();
   expect(frozen.snapshot.sessions).toEqual([]);
   expect(frozen.snapshot.entries.map((e) => e.entry.entryId)).toEqual([entryId]);
-  expect(frozen.snapshot.countedAutomaticEntryIds).toEqual([]);
+  expect(frozen.snapshot.markedAutomaticEntryIds).toEqual([]);
 });
 it("retains actual time without an employment and uses a null summary", async () => {
   await automatic(other);
@@ -181,7 +185,7 @@ it("does not append another marker for an already confirmed automatic end", asyn
   );
   const frozen = await close();
   expect(frozen.snapshot.sessions[0]!.workedMinutes).toBe(480);
-  expect(frozen.snapshot.countedAutomaticEntryIds).toEqual([]);
+  expect(frozen.snapshot.markedAutomaticEntryIds).toEqual([]);
   expect(
     (await suite.db.select().from(api.timeEntries)).filter((e) => e.entryKind === "confirmation"),
   ).toHaveLength(1);
@@ -405,7 +409,7 @@ it("freezes accepted missing clock-in and clock-out entries with their requests"
   const frozen = await close();
   expect(frozen.snapshot.sessions.map((s) => s.workedMinutes)).toEqual([480]);
   expect(frozen.snapshot.entries).toHaveLength(4);
-  expect(frozen.snapshot.countedAutomaticEntryIds).toEqual([]);
+  expect(frozen.snapshot.markedAutomaticEntryIds).toEqual([]);
 });
 it.each([null, "", []])("refuses a malformed closure read location %j", async (bad) => {
   await expect(
@@ -440,7 +444,7 @@ it("filters counted automatic ids and frozen histories to the queried worker", a
   const foreign = await automatic(other);
   await close();
   const record = await run((tx) => backend.timeRecord(tx, { period, personId: worker }));
-  expect(record.closures[0]!.snapshot.countedAutomaticEntryIds).toEqual([own]);
+  expect(record.closures[0]!.snapshot.markedAutomaticEntryIds).toEqual([own]);
   expect(record.closures[0]!.snapshot.entries.some((e) => e.entry.entryId === foreign)).toBe(false);
   expect(record.closures[0]!.snapshot.summaries.map((s) => s.personId)).toEqual([worker]);
   expect(record.closedPeriodImpacts).toEqual([]);

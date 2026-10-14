@@ -38,6 +38,7 @@ const content: EntryHashInput = {
 describe("record extension hash", () => {
   it.each([
     ["authorKind", "manager"],
+    ["selfApproved", true],
     ["direction", "worker_request"],
     ["missingEntryKind", "out"],
     ["respondsToEntryId", "response"],
@@ -144,7 +145,39 @@ it("confirmation leaves the last captured out as the current state", async () =>
   ]);
 });
 
-it("refuses an all-null extension before appending a hash that cannot round-trip", async () => {
+it.each([undefined, false])(
+  "refuses an otherwise all-null extension with selfApproved %s before appending a hash that cannot round-trip",
+  async (selfApproved) => {
+    await expect(
+      suite.db.transaction((tx) =>
+        appendToChain(
+          tx,
+          { nodeId, locationId },
+          {
+            personId,
+            entryKind: "in",
+            eventAt: "2026-01-05T09:00:00.000Z",
+            eventOffsetMinutes: 0,
+            recordedByPersonId: personId,
+            origin: jobOrigin("dashboard"),
+            extension: {
+              ...(selfApproved === undefined ? {} : { selfApproved }),
+              authorKind: null,
+              direction: null,
+              missingEntryKind: null,
+              respondsToEntryId: null,
+              payPeriodClosureId: null,
+            },
+          },
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "attendance.invalid", params: { reason: "empty_extension" } });
+    expect(suite.db.execute(sql`select id from time_entries`).rows).toEqual([]);
+    expect(suite.db.execute(sql`select * from workforce_chains`).rows).toEqual([]);
+  },
+);
+
+it("refuses a self-approval flag on an ordinary clock entry without changing the chain", async () => {
   await expect(
     suite.db.transaction((tx) =>
       appendToChain(
@@ -153,21 +186,18 @@ it("refuses an all-null extension before appending a hash that cannot round-trip
         {
           personId,
           entryKind: "in",
-          eventAt: "2026-01-05T09:00:00.000Z",
+          eventAt: "2026-01-05T09:00:00Z",
           eventOffsetMinutes: 0,
           recordedByPersonId: personId,
           origin: jobOrigin("dashboard"),
-          extension: {
-            authorKind: null,
-            direction: null,
-            missingEntryKind: null,
-            respondsToEntryId: null,
-            payPeriodClosureId: null,
-          },
+          extension: { ...extension, selfApproved: true },
         },
       ),
     ),
-  ).rejects.toMatchObject({ code: "attendance.invalid", params: { reason: "empty_extension" } });
+  ).rejects.toMatchObject({
+    code: "attendance.invalid",
+    params: { reason: "self_approval_shape" },
+  });
   expect(suite.db.execute(sql`select id from time_entries`).rows).toEqual([]);
   expect(suite.db.execute(sql`select * from workforce_chains`).rows).toEqual([]);
 });

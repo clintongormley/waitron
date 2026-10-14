@@ -270,10 +270,16 @@ export async function decideCorrection(
   )
     throw new AppError("correction.not_pending", { correctionId: input.correctionId });
   const managerAction = action === "approve" || action === "decline";
+  const role = managerAction ? await roleOf(tx, input.actorPersonId) : undefined;
+  const selfApproved =
+    action === "approve" &&
+    role === "admin" &&
+    input.actorPersonId === request.personId &&
+    input.actorPersonId === request.recordedByPersonId;
   const permitted = managerAction
     ? request.extension?.direction === "worker_request" &&
-      MANAGER_ROLES.has((await roleOf(tx, input.actorPersonId))!) &&
-      input.actorPersonId !== request.recordedByPersonId
+      MANAGER_ROLES.has(role!) &&
+      (input.actorPersonId !== request.recordedByPersonId || selfApproved)
     : request.extension?.direction === "manager_proposal" &&
       input.actorPersonId === request.personId &&
       input.actorPersonId !== request.recordedByPersonId;
@@ -298,6 +304,7 @@ export async function decideCorrection(
       correctionActorId: input.actorPersonId,
       extension: {
         ...request.extension!,
+        selfApproved,
         authorKind: managerAction ? "manager" : "worker",
         respondsToEntryId: request.entryId,
       },
