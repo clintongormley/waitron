@@ -131,6 +131,37 @@ describe("till-station-choice-dialog", () => {
     expect(submit(el).disabled).toBe(false);
   });
 
+  it.each([
+    ["busy", { currentStationId: "grill", selected: "bar", busy: true }],
+    ["no station chosen", { currentStationId: "removed" }],
+    ["the current station chosen", { currentStationId: "grill" }],
+  ] as const)("refuses a Move submit from the button host with %s", async (_, properties) => {
+    const el = await mount({ mode: "move", ...properties });
+    const chosen: unknown[] = [];
+    el.addEventListener("station-chosen", (event) => chosen.push((event as CustomEvent).detail));
+
+    submit(el).click();
+
+    expect(chosen).toEqual([]);
+  });
+
+  it("sends a Move submit from the button host after busy ends", async () => {
+    const el = await mount({
+      mode: "move",
+      currentStationId: "grill",
+      selected: "bar",
+      busy: true,
+    });
+    const chosen: unknown[] = [];
+    el.addEventListener("station-chosen", (event) => chosen.push((event as CustomEvent).detail));
+    el.busy = false;
+    await el.updateComplete;
+
+    submit(el).click();
+
+    expect(chosen).toEqual([{ stationId: "bar" }]);
+  });
+
   it("speaks Spanish and emits close on Cancel", async () => {
     setLocale("es");
     const el = await mount({ mode: "move", currentStationId: "grill" });
