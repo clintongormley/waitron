@@ -1787,7 +1787,7 @@ it("shows Add station on the Stations tab alone, and no action on the other tabs
   }
 });
 
-it("at 320 px in Spanish, both tabs show whole and the tab row does not overflow", async () => {
+it("at 320 px in Spanish, every tab shows whole and the tab row does not overflow", async () => {
   setLocale("es");
   history.replaceState(null, "", "/manage/prep-stations");
   const el = await mount(api());
@@ -1804,7 +1804,7 @@ it("at 320 px in Spanish, both tabs show whole and the tab row does not overflow
   const boxes = [...strip.querySelectorAll<HTMLElement>('[role="tab"]')].map((tab) =>
     tab.getBoundingClientRect(),
   );
-  expect(boxes).toHaveLength(2);
+  expect(boxes).toHaveLength(3);
   for (const box of boxes) {
     expect(box.left).toBeGreaterThanOrEqual(bounds.left - 1);
     expect(box.right).toBeLessThanOrEqual(bounds.right + 1);

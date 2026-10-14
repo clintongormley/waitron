@@ -124,7 +124,7 @@ export class PrepStationsScreen extends LitElement {
         display: block;
         min-width: 0;
       }
-      wt-tabs[data-routes]::part(tablist) {
+      wt-tabs::part(tablist) {
         flex-wrap: wrap;
       }
       wt-tabs::part(tab-actions) {
@@ -1505,7 +1505,6 @@ export class PrepStationsScreen extends LitElement {
       ${
         view
           ? html`<wt-tabs
-              ?data-routes=${this.tab === "routing"}
               label=${t("prep.title")}
               .value=${this.tab}
               .items=${PREP_TABS.map((key) => ({ key, label: t(`prep.tab.${key}`) }))}
