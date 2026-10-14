@@ -506,3 +506,61 @@ describe("guests moved onto one table of their group renamed for today, as the k
     expect(slips[0]!.join(" ")).toContain(prepareText(`-> ${await labelOf(table.c6!)}`));
   });
 });
+
+describe("back to its saved place on a group renamed for today, as the kitchen sees it", () => {
+  async function backToSavedPlace(tableId: string) {
+    await post(`/api/tables/${tableId}/today/back`, await withRevision(v, tableId, {}));
+  }
+
+  it("Table 9 back to its saved place ends the group of two and prints one MOVED slip from the name to both tables", async () => {
+    const { table, guests } = await seatedPair(null);
+    const name = suffixed("García birthday");
+    await rename(table.c6!, name);
+    await orderForParty(v, guests.partyId, ["Burger"], guests.tabId);
+
+    const printed = await jobsFrom(() => backToSavedPlace(table.t9!));
+
+    expect((await floorRow(v, table.c6!)).today?.joinName).toBeNull();
+    const slips = printed.filter(isMovedSlip);
+    expect(slips).toHaveLength(1);
+    const both = `${await labelOf(table.c6!)}, ${await labelOf(table.t9!)}`;
+    expect(slips[0]!.join(" ")).toContain(prepareText(`${name} -> ${both}`));
+  });
+
+  it("Bar back to its saved place leaves the named group of three and prints one MOVED slip from the name to Bar and the name", async () => {
+    const { table, guests } = await seatedGroup();
+    const name = suffixed("García birthday");
+    await rename(table.c3!, name);
+    await orderForParty(v, guests.partyId, ["Burger"], guests.tabId);
+
+    const printed = await jobsFrom(() => backToSavedPlace(table.bar!));
+
+    expect((await floorRow(v, table.c3!)).today?.joinName).toBe(name);
+    const slips = printed.filter(isMovedSlip);
+    expect(slips).toHaveLength(1);
+    const barAndGroup = `${await labelOf(table.bar!)}, ${name}`;
+    expect(slips[0]!.join(" ")).toContain(prepareText(`${name} -> ${barAndGroup}`));
+  });
+
+  it("an unnamed group of two ended the same way prints no MOVED slip", async () => {
+    const { table, guests } = await seatedPair(null);
+    await orderForParty(v, guests.partyId, ["Burger"], guests.tabId);
+
+    const printed = await jobsFrom(() => backToSavedPlace(table.t9!));
+
+    expect((await floorRow(v, table.c6!)).today?.joinName ?? null).toBeNull();
+    expect(printed.filter(isMovedSlip)).toEqual([]);
+  });
+
+  it("a seated table in no group, named for today, back to its saved place keeps its name and prints no MOVED slip", async () => {
+    const { table } = await LONG_TABLE();
+    const own = suffixed("Window");
+    await rename(table.c6!, own);
+    const guests = await seat(v, table.c6!, 2);
+    await orderForParty(v, guests.partyId, ["Burger"], guests.tabId);
+
+    const printed = await jobsFrom(() => backToSavedPlace(table.c6!));
+
+    expect(printed.filter(isMovedSlip)).toEqual([]);
+  });
+});
