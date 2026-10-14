@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, drawn, measured, mountWidget, stylePlaceholder } from "./test-helpers.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
-import { fitPlaceholder } from "./party-name-dialog.js";
+import { fitPlaceholder } from "./fit-placeholder.js";
+import "./party-name-dialog.js";
 import type { PartyNameDetail, TillPartyNameDialog } from "./party-name-dialog.js";
 
 afterEach(cleanupWidgets);
@@ -22,42 +23,6 @@ const nativeInput = (el: TillPartyNameDialog) =>
 const save = (el: TillPartyNameDialog) =>
   el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>("[data-name-save]")!;
 const bottom = (el: TillPartyNameDialog) => el.shadowRoot!.querySelector("wt-form-actions")!;
-
-/** Measured with the page's own layout, not the window's canvas: a span in the placeholder's font
- * and letter spacing, against the field's unrounded box less its borders and padding. */
-function drawn(el: TillPartyNameDialog) {
-  const input = nativeInput(el);
-  const control = getComputedStyle(input);
-  const placeholder = getComputedStyle(input, "::placeholder");
-  const px = (value: string) => parseFloat(value);
-  return {
-    placeholder: input.placeholder,
-    width(text: string): number {
-      const probe = document.createElement("span");
-      probe.style.cssText = "position: absolute; visibility: hidden; white-space: pre";
-      probe.style.font = placeholder.font;
-      probe.style.letterSpacing = placeholder.letterSpacing;
-      probe.textContent = text;
-      document.body.append(probe);
-      const width = probe.getBoundingClientRect().width;
-      probe.remove();
-      return width;
-    },
-    textBox:
-      input.getBoundingClientRect().width -
-      px(control.borderLeftWidth) -
-      px(control.borderRightWidth) -
-      px(control.paddingLeft) -
-      px(control.paddingRight),
-  };
-}
-
-/** Adds a placeholder rule inside the name field's own shadow tree. */
-function stylePlaceholder(el: TillPartyNameDialog, rule: string): void {
-  const style = document.createElement("style");
-  style.textContent = `.field-control::placeholder { ${rule} }`;
-  field(el).shadowRoot!.append(style);
-}
 
 async function type(el: TillPartyNameDialog, value: string): Promise<void> {
   const input = nativeInput(el);
@@ -150,12 +115,6 @@ describe("till-party-name-dialog", () => {
   describe("a placeholder wider than the field", () => {
     const counters = (count: number) =>
       Array.from({ length: count }, (_, index) => `Counter ${index + 1}`).join(", ");
-
-    /** A ResizeObserver reports after the frame's animation callbacks, so this waits two frames. */
-    async function measured(): Promise<void> {
-      for (let frame = 0; frame < 2; frame++)
-        await new Promise((resolve) => requestAnimationFrame(resolve));
-    }
 
     function expectOnScreen(el: TillPartyNameDialog, width: number): void {
       const dialog = el
@@ -323,6 +282,11 @@ describe("till-party-name-dialog", () => {
 
     it("shows the ellipsis alone when no character fits", () => {
       expect(fitPlaceholder("Ww", 0, measure)).toBe("…");
+    });
+
+    it("splits on the separator it is given", () => {
+      expect(fitPlaceholder("Aa+Bb+Cc", 7, measure, "+")).toBe("Aa+Bb+…");
+      expect(fitPlaceholder("Aa+Bb+Cc", 6, measure, "+")).toBe("Aa+…");
     });
   });
 

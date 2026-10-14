@@ -1,7 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { setLocale, t } from "../i18n/t.js";
+import { cleanupWidgets, drawn, measured, mountWidget } from "./test-helpers.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import "./today-name-dialog.js";
 import type { TodayNameDetail, TillTodayNameDialog } from "./today-name-dialog.js";
 
@@ -43,7 +43,7 @@ function captured(el: TillTodayNameDialog) {
 }
 
 describe("till-today-name-dialog", () => {
-  it("shows the heading it is given, and one optional field todayName, capped at 40, hinting the normal name", async () => {
+  it("shows the heading it is given, and one optional field todayName, capped at 40, showing the normal name as its placeholder", async () => {
     const el = await mountDialog({ normalName: "Bar+Window" });
 
     expect(el.shadowRoot!.querySelector("wt-dialog")!.heading).toBe("Rename Counter 4");
@@ -51,10 +51,86 @@ describe("till-today-name-dialog", () => {
     expect(nativeInput(el).maxLength).toBe(40);
     expect(field(el).required).toBe(false);
     expect(field(el).label).toBe("Name");
-    expect(field(el).hint).toBe("Leave it empty for Bar+Window");
+    expect(field(el).placeholder).toBe("Bar+Window");
+    expect(field(el).hint).toBe("");
     expect(save(el).textContent!.trim()).toBe("Save");
     expect(field(el).error).toBe("");
     expect(bottom(el).error).toBe("");
+  });
+
+  it.each(["en", "es"])(
+    "shows the name the table or group goes back to when left empty as the field's placeholder, in %s",
+    async (locale) => {
+      const previousLocale = currentLocale();
+      try {
+        setLocale(locale);
+        const el = await mountDialog({ normalName: "Bar+Window", value: "" });
+
+        expect(field(el).placeholder).toBe("Bar+Window");
+        expect(field(el).hint).toBe("");
+        expect(nativeInput(el).placeholder).toBe("Bar+Window");
+      } finally {
+        setLocale(previousLocale);
+      }
+    },
+  );
+
+  describe("a placeholder wider than the field", () => {
+    const longGroup = [
+      "Olive tree",
+      "Fountain side",
+      "Sun corner",
+      "Pergola",
+      "Garden gate",
+      "Window seat",
+      "Vine arbour",
+      "Lemon grove",
+    ].join("+");
+
+    function expectOnScreen(el: TillTodayNameDialog, width: number): void {
+      const dialog = el
+        .shadowRoot!.querySelector("wt-dialog")!
+        .shadowRoot!.querySelector("dialog")!;
+      const body = dialog.querySelector<HTMLElement>(".body")!;
+      expect(body.scrollWidth).toBeLessThanOrEqual(body.clientWidth);
+      expect(dialog.getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
+      expect(dialog.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+    }
+
+    it("shortens a long group name to whole table names and +… that fit at 390 px, with the cursor in the field", async () => {
+      await page.viewport(390, 900);
+      try {
+        const el = await mountDialog({ normalName: longGroup, value: "" });
+
+        await vi.waitFor(() => expect(nativeInput(el).placeholder).toMatch(/[^+]\+…$/));
+        const { placeholder, width, textBox } = drawn(el);
+        expect(width(longGroup)).toBeGreaterThan(textBox);
+        expect(longGroup.startsWith(placeholder.slice(0, -"…".length))).toBe(true);
+        expect(width(placeholder)).toBeLessThanOrEqual(textBox);
+        expect(field(el).shadowRoot!.activeElement).toBe(nativeInput(el));
+        expectOnScreen(el, 390);
+      } finally {
+        await page.viewport(1280, 900);
+      }
+    });
+
+    it("shortens a new, longer normal name read while the window is open", async () => {
+      await page.viewport(390, 900);
+      try {
+        const el = await mountDialog({ normalName: "Bar+Window", value: "" });
+        await measured();
+        expect(nativeInput(el).placeholder).toBe("Bar+Window");
+
+        el.normalName = longGroup;
+        await el.updateComplete;
+
+        expect(nativeInput(el).placeholder).toMatch(/^Olive tree\+.*[^+]\+…$/);
+        const { placeholder, width, textBox } = drawn(el);
+        expect(width(placeholder)).toBeLessThanOrEqual(textBox);
+      } finally {
+        await page.viewport(1280, 900);
+      }
+    });
   });
 
   it("puts the cursor in the name field when it opens", async () => {
@@ -190,7 +266,8 @@ describe("till-today-name-dialog", () => {
     const el = await mountDialog({ heading: "Cambiar el nombre de Mesa 4", normalName: "Mesa 4" });
 
     expect(field(el).label).toBe("Nombre");
-    expect(field(el).hint).toBe("Déjalo vacío para Mesa 4");
+    expect(field(el).placeholder).toBe("Mesa 4");
+    expect(field(el).hint).toBe("");
     expect(save(el).textContent!.trim()).toBe("Guardar");
     expect(cancelButton(el).textContent!.trim()).toBe("Cancelar");
   });
