@@ -36,6 +36,8 @@ export class TillTodayNameDialog extends LitElement {
         display: flex;
         flex-direction: column;
         gap: var(--wt-space-4);
+        width: var(--wt-form-max-width);
+        max-width: 100%;
       }
     `,
   ];

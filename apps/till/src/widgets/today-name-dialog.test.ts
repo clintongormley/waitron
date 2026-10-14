@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { page } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import "./today-name-dialog.js";
@@ -183,4 +184,32 @@ describe("till-today-name-dialog", () => {
     await expect.poll(() => seen.cancelled).toBe(1);
     expect(seen.named).toEqual([]);
   });
+
+  it.each([1280, 390])(
+    "at %ipx gives its field the form width, or most of a narrower screen, and fits the screen",
+    async (width) => {
+      await page.viewport(width, 900);
+      try {
+        const el = await mountDialog({ normalName: "3+5+7" });
+        const native = el
+          .shadowRoot!.querySelector("wt-dialog")!
+          .shadowRoot!.querySelector("dialog")!;
+        const body = native.querySelector<HTMLElement>(".body")!;
+        // A body wider than its box scrolls sideways and takes the dialog's first focus.
+        expect(body.scrollWidth).toBeLessThanOrEqual(body.clientWidth);
+        expect(native.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+        const fields = el.shadowRoot!.querySelector<HTMLElement>(".fields")!;
+        const probe = document.createElement("div");
+        probe.style.width = "var(--wt-form-max-width)";
+        fields.append(probe);
+        const formWidth = probe.getBoundingClientRect().width;
+        probe.remove();
+        const fieldsWidth = fields.getBoundingClientRect().width;
+        if (width === 1280) expect(fieldsWidth).toBeCloseTo(formWidth, 0);
+        else expect(fieldsWidth).toBeGreaterThanOrEqual(300);
+      } finally {
+        await page.viewport(1280, 900);
+      }
+    },
+  );
 });
