@@ -1,3 +1,4 @@
+import type { AttendanceRecorder } from "./attendance-capture.js";
 import { createHash, randomUUID } from "node:crypto";
 import { and, eq, inArray, isNull, notInArray, sql } from "drizzle-orm";
 import { formatInvoiceNumber } from "@waitron/core";
@@ -660,6 +661,7 @@ export async function leaveForClearing(
 export async function finishTable(
   tx: Transaction,
   args: { partyId: string; expectedPartyRevision: number; operatorId: string },
+  attendance?: { recorder: AttendanceRecorder; locationId: string },
 ): Promise<{ state: "closed" }> {
   const { partyId } = args;
   await checkAndBumpParty(tx, partyId, args.expectedPartyRevision, "open");
@@ -669,7 +671,7 @@ export async function finishTable(
     throw new AppError("party.bill_outstanding", { partyId });
   }
   const empty = bills.filter((bill) => bill.status === "open").map((bill) => bill.id);
-  return closeParty(tx, partyId, empty, args.operatorId);
+  return closeParty(tx, partyId, empty, args.operatorId, attendance);
 }
 
 /**
@@ -681,6 +683,7 @@ export async function closeParty(
   partyId: string,
   emptyBillIds: readonly string[],
   operatorId: string,
+  attendance?: { recorder: AttendanceRecorder; locationId: string },
 ): Promise<{ state: "closed" }> {
   // An emptied bill can still hold a tip its refunded payment kept (design §2.3, §4.5).
   await refuseBillHoldingMoney(tx, emptyBillIds);
@@ -700,7 +703,7 @@ export async function closeParty(
     tx,
     bills.map((bill) => bill.id),
   );
-  await discardPartyDrafts(tx, partyId, operatorId);
+  await discardPartyDrafts(tx, partyId, operatorId, attendance);
 
   const at = nowIso();
   const tables = await memberTables(tx, partyId);

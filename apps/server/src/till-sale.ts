@@ -57,7 +57,14 @@ import {
   toVatBreakdown,
   unsentDishLines,
 } from "./working-order.js";
-import type { GrossOrder, LineExtras, OrderLineIdentity, TillSaleDeps } from "./working-order.js";
+import type {
+  GrossOrder,
+  LineExtras,
+  OrderLineIdentity,
+  TillSaleDeps as BaseTillSaleDeps,
+} from "./working-order.js";
+import type { AttendanceRecorder } from "./attendance-capture.js";
+type TillSaleDeps = BaseTillSaleDeps & { attendance?: AttendanceRecorder };
 import { issuancePass } from "./issuance-pass.js";
 import { raiseDishesNotSent, type DishesNotSent } from "./dish-not-sent-alert.js";
 import { issueMoment } from "./issue-moment.js";
@@ -82,6 +89,30 @@ import {
 export interface TillMoneyOperator {
   personId: string;
   sessionId: string;
+}
+
+async function captureWholePayment(
+  tx: Transaction,
+  attendance: AttendanceRecorder | undefined,
+  orderId: string,
+  personId: string | undefined,
+  at: Date | undefined,
+): Promise<void> {
+  if (attendance === undefined || personId === undefined || at === undefined) return;
+  const [order] = await tx
+    .select({ locationId: workingOrders.locationId })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, orderId));
+  await attendance(tx, {
+    source: "whole-payment",
+    key: orderId,
+    personId,
+    locationId: order!.locationId,
+    kind: "payment",
+    at: at.toISOString(),
+    offsetMinutes: 0,
+    outcome: "qualified",
+  });
 }
 
 type WriteAdmission = (tx: Transaction) => Promise<void>;
@@ -601,6 +632,8 @@ async function runPayWorkingOrder(
         return readSettledTicket(deps.backend, tx, cfg, req.id);
       }
 
+      const attendanceAt = deps.attendance === undefined ? undefined : deps.clock.now().instant;
+
       refuseUnavailableInvoiceRequest(req.invoiceType, req.recipient);
 
       // The domain code, rather than the raw `working_orders_enforce_transition` trigger error the
@@ -646,7 +679,7 @@ async function runPayWorkingOrder(
       }
 
       // A walk-up is created with no party.
-      return fireAndFileSale(
+      const ticket = await fireAndFileSale(
         tx,
         deps,
         cfg,
@@ -656,6 +689,8 @@ async function runPayWorkingOrder(
         locked?.partyId ?? null,
         operatorId,
       );
+      await captureWholePayment(tx, deps.attendance, req.id, operatorId, attendanceAt);
+      return ticket;
     });
   } catch (error) {
     // Step 6. Anything but a unique violation is a real failure and surfaces unchanged.
@@ -1914,6 +1949,8 @@ async function runCollectOrder(
       return readSettledTicket(deps.backend, tx, cfg, req.id);
     }
 
+    const attendanceAt = deps.attendance === undefined ? undefined : deps.clock.now().instant;
+
     if (locked === undefined || locked.status !== "placed") {
       throw new AppError("working_order.not_placed", { workingOrderId: req.id });
     }
@@ -1971,13 +2008,16 @@ async function runCollectOrder(
 
       const ticket = await readSettledTicket(deps.backend, tx, cfg, req.id);
       await enqueueSaleDrawer(tx, cfg, outstanding.saleId, req.tender.method, operatorId);
+      await captureWholePayment(tx, deps.attendance, req.id, operatorId, attendanceAt);
       return ticket;
     }
 
     await refuseUnavailableFullInvoice(tx, req.id);
     await storeSentReceiptLanguage(tx, req.id, locked, req.receiptLanguage);
     const order = await priceStoredOrderForIssuance(tx, req.id);
-    return fileImmediateSale(tx, deps, cfg, req.id, req.tender, order, operatorId);
+    const ticket = await fileImmediateSale(tx, deps, cfg, req.id, req.tender, order, operatorId);
+    await captureWholePayment(tx, deps.attendance, req.id, operatorId, attendanceAt);
+    return ticket;
   });
 }
 

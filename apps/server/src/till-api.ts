@@ -1720,7 +1720,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       );
       const saleCfg = sendingCfg(cfg, c, session.device);
       const result = await recordTillSale(
-        { db: deps.db, backend: deps.backend, clock: deps.clock, log },
+        { db: deps.db, backend: deps.backend, clock: deps.clock, log, attendance: deps.attendance },
         saleCfg,
         { ...body, zoneId },
         { personId, sessionId: session.sessionId },
@@ -2469,7 +2469,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       }
       assertTakesTender(session.device, tillTenderKind(body.tender));
       const result = await collectOrder(
-        { db: deps.db, backend: deps.backend, clock: deps.clock, log },
+        { db: deps.db, backend: deps.backend, clock: deps.clock, log, attendance: deps.attendance },
         cfg,
         { id, lines: [], tender: body.tender, receiptLanguage: body.receiptLanguage },
         { personId, sessionId: session.sessionId },
@@ -2632,7 +2632,13 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const result = await withTransaction(deps.db, async (tx) => {
         await catchUpFloor(tx);
         await checkZones(tx, deps.cfg, session, [{ partyId }]);
-        return finishTable(tx, { partyId, expectedPartyRevision, operatorId: personId });
+        return finishTable(
+          tx,
+          { partyId, expectedPartyRevision, operatorId: personId },
+          deps.attendance === undefined
+            ? undefined
+            : { recorder: deps.attendance, locationId: deps.cfg.locationId },
+        );
       });
       return c.json(result);
     }),

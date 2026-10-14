@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
-import { billPaymentRefunds, billPayments, devices, withTransaction } from "@waitron/db";
+import { billPaymentRefunds, billPayments, devices, newId, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { hashPin, persons, sessions, startManagementSession } from "@waitron/identity";
@@ -11,12 +11,21 @@ import { AppError } from "@waitron/shared";
 import { SimulatorPaymentProvider } from "@waitron/payments";
 import type { PaymentProvider } from "@waitron/payments";
 import { attendanceOperationFacts } from "@waitron/workforce";
+import { saveDraft } from "./order-drafts.js";
+import { issueOrderInvoice } from "./testing/issue-order.js";
 import { mountTillApi, type TillApiDeps } from "./till-api.js";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { mountPaymentsApi } from "./payments-api.js";
-import { setupPartyVenue, seat, order, OPERATOR, type PartyVenue } from "./testing/party-venue.js";
+import {
+  setupPartyVenue,
+  seat,
+  order,
+  placeByHand,
+  OPERATOR,
+  type PartyVenue,
+} from "./testing/party-venue.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -69,6 +78,120 @@ function login(app: Hono, pin = "1234", personId = OPERATOR) {
   });
 }
 describe("till attendance recorder admission", () => {
+  it.each(["finish", "unpaid-departure"] as const)(
+    "passes the admitted %s actor to discarded draft capture",
+    async (path) => {
+      const { partyId, tabId } = await seat(v, await v.table("Closing attendance"));
+      const draft = await withTransaction(suite.db, (tx) =>
+        saveDraft(tx, v.cfg, partyId, OPERATOR, {
+          draftId: null,
+          revision: 0,
+          lines: [
+            {
+              menuItemId: v.item("Burger"),
+              quantity: "1",
+              variantId: null,
+              menuVersionId: null,
+              options: [],
+              extras: [],
+              note: null,
+              courseId: null,
+              noMerge: false,
+            },
+          ],
+        }),
+      );
+      if (path === "unpaid-departure") {
+        await order(v, tabId, "Burger");
+        await placeByHand(v, tabId);
+        await issueOrderInvoice(
+          { db: suite.db, backend: v.backend, clock: v.clock },
+          v.cfg,
+          tabId,
+          OPERATOR,
+        );
+      }
+      const api = app();
+      const opened = await login(api);
+      expect(opened.status).toBe(200);
+      const sessionCookie = opened.headers.get("set-cookie")!.split(";")[0]!;
+      vi.setSystemTime(new Date("2026-10-14T13:00:00.987Z"));
+      const response = await api.request(`/api/parties/${partyId}/${path}`, {
+        method: "POST",
+        headers: { cookie: `${cookie}; ${sessionCookie}`, "content-type": "application/json" },
+        body: JSON.stringify({
+          expectedPartyRevision: 0,
+          reason: "Guests left",
+          personId: "untrusted person",
+          at: "2026-10-15T20:00:00Z",
+        }),
+      });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ state: "closed" });
+      expect(
+        (await suite.db.select().from(attendanceOperationFacts))
+          .filter((r) => r.source === "draft")
+          .map((r) => [r.key, r.personId, r.locationId, r.at, r.outcome]),
+      ).toEqual([
+        [
+          `${draft.id}:${draft.revision + 1}:discard`,
+          OPERATOR,
+          v.cfg.locationId,
+          "2026-10-14T13:00:00.000Z",
+          "qualifying",
+        ],
+      ]);
+    },
+  );
+
+  it.each(["counter", "collection"] as const)(
+    "passes the admitted %s collector to whole-payment capture",
+    async (path) => {
+      const api = app();
+      const opened = await login(api);
+      expect(opened.status).toBe(200);
+      const sessionCookie = opened.headers.get("set-cookie")!.split(";")[0]!;
+      let id: string = newId();
+      if (path === "collection") {
+        const seated = await seat(v, await v.table("Whole collection"));
+        id = seated.tabId;
+        await order(v, id, "Burger");
+        await placeByHand(v, id);
+      }
+      vi.setSystemTime(new Date("2026-10-14T13:00:00.987Z"));
+      const paid = await api.request(
+        path === "counter" ? "/api/sales" : `/api/working-orders/${id}/collect`,
+        {
+          method: "POST",
+          headers: { cookie: `${cookie}; ${sessionCookie}`, "content-type": "application/json" },
+          body: JSON.stringify({
+            ...(path === "counter"
+              ? {
+                  workingOrderId: id,
+                  zoneId: v.counter.zoneId,
+                  lines: [{ menuItemId: v.counterItem("Burger"), quantity: "1" }],
+                }
+              : {}),
+            tender: { method: "cash", amount: "20.00" },
+            personId: "untrusted person",
+            at: "2026-10-15T20:00:00Z",
+            locationId: "untrusted location",
+          }),
+        },
+      );
+      expect(paid.status).toBe(200);
+      expect(await paid.json()).toMatchObject({
+        total: "12.00",
+        tender: { method: "cash", change: "8.00" },
+      });
+      expect(
+        (await suite.db.select().from(attendanceOperationFacts))
+          .filter((r) => r.source === "whole-payment")
+          .map((r) => [r.key, r.personId, r.locationId, r.at, r.outcome]),
+      ).toEqual([[id, OPERATOR, v.cfg.locationId, "2026-10-14T13:00:00.000Z", "qualifying"]]);
+    },
+  );
+
   it("passes the admitted bill payment to the recorder without trusting body attribution", async () => {
     const { tabId } = await seat(v, await v.table("Payment attendance"));
     await order(v, tabId, "Burger");

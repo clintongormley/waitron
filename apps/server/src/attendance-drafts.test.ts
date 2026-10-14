@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   orderDraftEvents,
+  parties,
   orderDraftLines,
   orderDrafts,
   newId,
@@ -8,6 +9,8 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { migrationOptionsFor, manifestSets } from "@waitron/migrations";
+import { eq } from "drizzle-orm";
+import { finishTable } from "./parties.js";
 import { persons } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { attendanceOperationFacts } from "@waitron/workforce";
@@ -69,6 +72,60 @@ const operations = () =>
   suite.db.select().from(attendanceOperationFacts).orderBy(attendanceOperationFacts.sequence);
 
 describe("accepted draft attendance capture", () => {
+  it("Finish table captures the discard under its acting worker", async () => {
+    const draft = await save();
+    vi.setSystemTime(new Date("2026-01-05T14:00:00Z"));
+    expect(
+      await run((tx) =>
+        finishTable(
+          tx,
+          { partyId, expectedPartyRevision: 0, operatorId: other },
+          { recorder: recordAttendanceFact, locationId: v.cfg.locationId },
+        ),
+      ),
+    ).toEqual({ state: "closed" });
+    expect((await operations()).map((r) => [r.key, r.personId, r.locationId, r.at])).toEqual([
+      [
+        `${draft.id}:${draft.revision}:save`,
+        OPERATOR,
+        v.cfg.locationId,
+        "2026-01-05T09:00:00.000Z",
+      ],
+      [
+        `${draft.id}:${draft.revision + 1}:discard`,
+        other,
+        v.cfg.locationId,
+        "2026-01-05T14:00:00.000Z",
+      ],
+    ]);
+  });
+  it("a close capture refusal rolls back the party, draft and attendance", async () => {
+    const draft = await save();
+    const before = await operations();
+    const events = await suite.db.select().from(orderDraftEvents);
+    vi.setSystemTime(new Date("2026-01-05T14:00:00Z"));
+    const refusing: AttendanceRecorder = async (tx, fact) => {
+      await recordAttendanceFact(tx, fact);
+      throw new AppError("attendance.invalid", { reason: "discard refused" });
+    };
+    await expect(
+      run((tx) =>
+        finishTable(
+          tx,
+          { partyId, expectedPartyRevision: 0, operatorId: other },
+          { recorder: refusing, locationId: v.cfg.locationId },
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "attendance.invalid" });
+    expect(await operations()).toEqual(before);
+    expect(await suite.db.select().from(orderDraftEvents)).toEqual(events);
+    expect(
+      (await suite.db.select().from(orderDrafts)).map((d) => [d.id, d.state, d.revision]),
+    ).toEqual([[draft.id, "open", draft.revision]]);
+    const [party] = await suite.db.select().from(parties).where(eq(parties.id, partyId));
+    expect([party!.state, party!.revision]).toEqual(["open", 0]);
+  });
+
   it("records every accepted save at its server instant and resulting revision", async () => {
     const first = await save();
     vi.setSystemTime(new Date("2026-01-05T11:00:00Z"));
