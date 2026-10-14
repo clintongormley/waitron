@@ -1062,7 +1062,6 @@ export class TillStationQueue extends LitElement {
     return this.#renderLine(group, item, state);
   }
 
-  /** The columns cut across orders, so a cell keeps the order number beside the dish. */
   #cell(group: StationQueueGroup, item: StationQueueItem): TemplateResult {
     const tag = html`<span class="number"
       >${orderNumber(group.orderNumber, group.formerNumbers)}${group.label ? html` · ${group.label}` : nothing}</span
