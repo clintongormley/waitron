@@ -36,6 +36,8 @@ type Deletion = {
   generation: number;
   /** The latest impact read started after every watch read numbered below this. */
   readAfter: number;
+  /** Whether the latest impact read has yet to answer. */
+  reading: boolean;
   impact?: PeriodDeleteImpact;
   readError: string;
   busy: boolean;
@@ -377,6 +379,7 @@ export class PeriodsScreen extends LitElement {
       readRevision: this.model.clockRevision,
       generation: 0,
       readAfter: 0,
+      reading: false,
       readError: "",
       busy: false,
     };
@@ -389,17 +392,20 @@ export class PeriodsScreen extends LitElement {
     const revision = this.model!.clockRevision;
     deletion.readRevision = revision;
     deletion.readAfter = this.api.nextReadNumber();
+    deletion.reading = true;
     let impact: PeriodDeleteImpact;
     try {
       impact = await this.api.readPeriodDeleteImpact(deletion.period.id);
     } catch {
       if (this.current(deletion, generation)) {
+        deletion.reading = false;
         deletion.readError = t("period.delete_read_error");
         this.requestUpdate();
       }
       return;
     }
     if (!this.current(deletion, generation)) return;
+    deletion.reading = false;
     deletion.impact = impact;
     deletion.clockRevision = revision;
     deletion.readError = "";
@@ -434,7 +440,13 @@ export class PeriodsScreen extends LitElement {
         deletion.clockRevision,
       );
     } catch (error) {
-      if (this.deleting === deletion && this.isConnected) component.refusal = refusalOf(error);
+      if (this.deleting !== deletion || !this.isConnected) return;
+      component.refusal = refusalOf(error);
+      // The impact is read again once the re-read model answers, so the retry's revision is
+      // taken with an impact read that started after it. A read still in flight is left to
+      // answer, or each Confirm before it answers would start the wait again.
+      if (component.refusal.code === "hours.clock_changed" && !deletion.reading)
+        this.api.rereadWatches();
       return;
     } finally {
       deletion.busy = false;

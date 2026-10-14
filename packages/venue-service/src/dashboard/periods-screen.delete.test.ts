@@ -379,7 +379,7 @@ it("a failed then recovered page read leaves the delete dialog's refusal in plac
   expect(bottom(dialog)).toBe("The business-day start changed. Reload hours.");
 });
 
-it("after a delete refused for a changed clock, Confirm sends the new revision once an impact read started after the new model has answered, and the old one before", async () => {
+it("a delete refused for a changed clock reads the page and then the impact again by itself; Confirm sends the new revision once that impact read has answered, and the old one before", async () => {
   const data = model();
   data.clockRevision = 3;
   let server = 3;
@@ -405,12 +405,11 @@ it("after a delete refused for a changed clock, Confirm sends the new revision o
   const dialog = await removePeriod(el);
   await impactShown(dialog);
   server = 4;
+  data.clockRevision = 4;
   confirm(dialog).click();
   await expect.poll(() => bottom(dialog)).toBe("The business-day start changed. Reload hours.");
   expect(sent).toEqual([3]);
 
-  data.clockRevision = 4;
-  el.api.rereadWatches();
   await expect.poll(() => answers.length).toBe(2);
   await new Promise((done) => setTimeout(done, 50));
   expect(answers.length, "one page re-read, one impact read").toBe(2);
