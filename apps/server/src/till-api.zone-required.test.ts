@@ -265,10 +265,22 @@ describe("an order requires a resolvable service zone", () => {
 
 describe("a venue with a service zone", () => {
   for (const [route, body] of ROUTES) {
-    it(`POST ${route} refuses a line naming a product rather than an offer`, async () => {
+    it(`POST ${route} refuses a line with no menuItemId`, async () => {
       const venue = await seedVenue(suite.db);
       await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
-      const res = await post(venue, route, body({ productId: venue.water, quantity: "1" }));
+      const res = await post(venue, route, body({ quantity: "1" }));
+      expect({ status: res.status, body: await res.json() }).toEqual({
+        status: 400,
+        body: { error: { code: "management.request_invalid", params: { field: "lines" } } },
+      });
+      expect(await recorded()).toEqual({ orders: 0, lines: 0 });
+    });
+
+    it(`POST ${route} refuses a line naming a product beside its offer`, async () => {
+      const venue = await seedVenue(suite.db);
+      const offers = await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
+      const [offerLine] = offers.toOfferLines([{ productId: venue.water, quantity: "1" }]);
+      const res = await post(venue, route, body({ ...offerLine, productId: venue.water }));
       expect({ status: res.status, body: await res.json() }).toEqual({
         status: 400,
         body: { error: { code: "management.request_invalid", params: { field: "lines" } } },

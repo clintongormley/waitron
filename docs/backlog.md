@@ -2677,12 +2677,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   now do (#1531); nothing is priced from them. **Next action:** decide whether it should refuse them
   too.
 
-- The sale-route cases "refuses a line naming a product rather than an offer"
-  (`apps/server/src/till-api.zone-required.test.ts`) send a line with `productId` and no
-  `menuItemId`, so the missing-`menuItemId` check gives the same refusal. Read, not run: deleting
-  the `productId` check may leave them green. **Next action:** delete it and see; if they stay
-  green, give the line a real `menuItemId` too.
-
 - **A collect straight after Place order does not re-read the kitchen queue.** Left open by service
   Task 16 (#981). [Detail](backlog/till.md#task-16-981-counter-handover-with-b25-b26-b29-b30)
 

@@ -2711,7 +2711,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
     });
   });
 
-  it("POST rejects a product id that bypasses the zone's menu offers", async () => {
+  it("POST refuses a line naming only a product id", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
