@@ -40,16 +40,17 @@ archive scenarios (task 9) and the first live run (task 10).
 Two limits matter if something goes wrong:
 
 - **A run that passes its deadline gets one minute to stop.** The runner signals the scenario
-  to stop. The loop scenario then closes whichever of its two servers is running, which stops that
-  server's Litestream, and ends at its next wait. The runner waits up to 60 seconds for that before
+  to stop. The loop scenario then closes whichever of its two servers is running, and the pause scenario its
+  one server; either way that server's Litestream stops, and the scenario ends at its next wait. The runner waits up to 60 seconds for that before
   it starts teardown, and records the wait as the `settle` step. The test's own time limit is longer than the
   deadline, that minute and teardown together. If it still ends the test while the run is going,
   the test file's `afterAll` stops the run and waits up to three and a half minutes for its teardown
   and receipt; a scenario still running then is stopped as at its deadline, and the receipt records
   that stop as the `interrupt` step. A scenario still running after
   that minute, for example one inside a restore that cannot be cut short, races the teardown, and a
-  late Litestream upload can leave the bucket behind. The server does not tell the scenario its
-  Litestream child's process id, so the runner has no child of its own to stop. When the bucket is
+  late Litestream upload can leave the bucket behind. In the loop scenario the server does not tell
+  the scenario its Litestream child's process id, so the runner has no child of its own to stop; the
+  pause scenario's does (see "The pause scenario"). When the bucket is
   left, the run fails and the receipt gives the cleanup command.
 - **Ctrl-C is not handled.** Interrupting the run from the terminal skips teardown and writes no
   receipt. The bucket is left behind, and nothing printed names it. Find it in the S3 console by its
@@ -129,9 +130,9 @@ generation, and a sale made during the pause must be in a restore of it.
 **How the bucket is held.** Amazon S3 cannot be frozen, so the scenario holds the rehearsal's own
 connections to it instead, through three small proxies on 127.0.0.1 that the test starts and
 closes (`apps/server/src/testing/transport-gate.ts`), one per client, so a connection a proxy sees
-can only be its own client's. Litestream reaches the bucket through the first:
+can only be its own client's. Litestream reaches the bucket through its own:
 `HTTPS_PROXY` is added to the environment of the Litestream processes the server starts, and to no
-other process. The server's own bucket calls go through the second, and the scenario's own calls
+other process. The server's own bucket calls go through another, and the scenario's own calls
 through the third, each by a request handler the test gives that store. The server's store does not
 reuse connections (keep-alive is off), so every server call opens its own connection to the proxy,
 and a server call held there is always a held connection the proxy counts. While held, a new connection waits unanswered and is
@@ -139,12 +140,12 @@ never passed on to AWS, and an open one moves no bytes; releasing passes the wai
 order. Each proxy lets through only port 443 of the owned bucket's own name in the run's region,
 `<bucket>.s3.<region>.amazonaws.com`, and refuses every other host, including the shared
 `s3.<region>.amazonaws.com`; the run fails if anything asked for a refused host (the `gate-refused`
-steps, one per proxy, recorded whether the scenario passed or failed). Not everything goes through a proxy: the runner's own calls, the rule's control listings
+steps, one per proxy, each naming its client in `objectRole`: `server`, `scenario` or `litestream`, recorded whether the scenario passed or failed). Not everything goes through a proxy: the runner's own calls, the rule's control listings
 and the final restore check reach AWS directly, with the same key pair. Unlike the loop scenario's,
 this test hands the server the function that starts Litestream, so it learns each process id and
 the runner stops those processes at teardown.
 
-On 2026-10-14, slice 8a held a real Litestream 0.5.17 this way on a Mac, against a made-up bucket
+On 2026-10-14, a local experiment while building the proxy (A538 plan Task 8) held a real Litestream 0.5.17 this way on a Mac, against a made-up bucket
 name with dummy keys and no AWS packet sent: for 240 seconds Litestream stayed alive and kept
 opening new connections to replace held ones it gave up (the one timed closely was given up between
 58.7 and 64.7 seconds after it arrived), none was passed on, and its side file grew from 7 MB to 50 MB
@@ -170,15 +171,15 @@ the run's `pause` prefix):
 }
 ```
 
-The runner refuses any other document before sending it. After putting the rule, a negative control
-lists that prefix every two seconds until AWS answers 403, for 60 seconds at most. Only then does the
+The runner refuses any other document before sending it (`policy-refused`). After putting the rule, a negative control
+lists that prefix every two seconds until AWS answers 403, starting no new listing after 60 seconds. Only then does the
 scenario release the server's held connections, so the supervisor's held question reaches AWS under
 the rule, and it waits up to 60 seconds more for the server to log `stream.pause_check_failed` with
 status 403 and `AccessDenied` (the `pause-check-denied` step, its status and name taken from that
 log line). The supervisor logs a refused check once per pause, and a check that hit its five-minute
 read deadline each time; either way the first one decides: any other status or name fails the run at
 once. Then the rule is removed and a positive control lists the
-prefix until it is answered, again for 60 seconds at most. If the negative control never sees a 403,
+prefix until it is answered, again starting none after 60 seconds. If the negative control never sees a 403,
 the refusal is **unmeasured**: the receipt records `deny-unmeasured` as failed and the run fails. The
 rule is then removed before the scenario's own cleanup releases the proxies, so the held question
 goes out without it; but if removing the rule fails, that cleanup still releases the proxies, and
