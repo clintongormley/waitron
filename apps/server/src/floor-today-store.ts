@@ -30,6 +30,7 @@ import {
 import { foodOnItsWay } from "./delivery-release.js";
 import { moveChangedRooms, roomPrints, roomRevisions } from "./floor-revision.js";
 import { leaveMerges } from "./floor-today-merges.js";
+import { enqueueMovedSlipsFor, readPartiesSentWork } from "./kitchen-print.js";
 import { holdersOf } from "./parties.js";
 import {
   refuseInJoinedTable,
@@ -719,14 +720,16 @@ export async function seatsToday(
 
 /**
  * Sets the table's today's row from what the last reset copied for it, after it leaves any merge.
- * Its label and its today's name are left alone.
+ * Its label and its today's name are left alone. The kitchen is told of each bill of a party at the
+ * table's group whose tables now read differently, for example when the table leaves a group named
+ * for today.
  */
 export async function backToSaved(
   tx: Transaction,
   cfg: TillConfig,
   tableId: string,
 ): Promise<void> {
-  const { row } = await todayOf(tx, cfg, tableId);
+  const { row, merge } = await todayOf(tx, cfg, tableId);
   await refuseSplitOff(tx, tableId);
   const [splitOff] = await tx
     .select({ id: floorTodaySplitParts.id })
@@ -741,6 +744,9 @@ export async function backToSaved(
   if (saved === undefined || saved.remove) {
     throw new AppError("table.not_on_today_plan", { tableId });
   }
+  const members = merge?.members.map((member) => member.tableId) ?? [];
+  const parties = members.length === 0 ? [] : [...new Set((await holdersOf(tx, members)).values())];
+  const before = parties.length === 0 ? null : await readPartiesSentWork(tx, cfg, parties);
   await leaveMerges(tx, [tableId]);
   await tx
     .update(floorTodayTables)
@@ -751,4 +757,5 @@ export async function backToSaved(
       takenOff: false,
     })
     .where(eq(floorTodayTables.id, row.id));
+  if (before !== null) await enqueueMovedSlipsFor(tx, cfg, before);
 }
