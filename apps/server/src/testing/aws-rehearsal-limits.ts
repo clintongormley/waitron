@@ -8,7 +8,7 @@ export const AWS_REHEARSAL_LIMITS = {
   teardownMs: 120_000,
 } as const;
 
-/** The plan's upload-plus-retention and restore-transfer budget; a scenario may pass its own. */
+/** How long a rehearsal's scenario runs before the runner tells it to stop. */
 export const AWS_REHEARSAL_SCENARIO_DEADLINE_MS = 15 * 60_000;
 
 /** Room in a test's time limit for building fixtures before its scenario deadline starts. */

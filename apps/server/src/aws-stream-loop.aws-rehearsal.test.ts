@@ -1,6 +1,6 @@
 // The stream loop against Amazon S3, in a bucket the rehearsal creates and then tries to remove. Runs only
 // under `test:aws-rehearsal` with WAITRON_RUN_AWS_REHEARSAL=1; the runbook is
-// docs/developers/aws-backup-rehearsal.md. Amazon S3 cannot be frozen, so stage 8b's bound is not
+// docs/developers/aws-backup-rehearsal.md. This test passes no `freeze`, so stage 8b's bound is not
 // checked here and its receipt event says `skipped`.
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";

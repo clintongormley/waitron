@@ -1,6 +1,6 @@
 // Removes a bucket an Amazon S3 rehearsal left behind, working only from that run's receipt and only
-// once the bucket's ownership marker names the receipt's run. The rehearsal prints the exact command
-// (`cleanupCommandFor`, `src/testing/aws-rehearsal.ts`).
+// once the bucket's ownership marker names the receipt's run. The rehearsal's receipt carries the exact
+// command (`cleanupCommandFor`, `src/testing/aws-rehearsal-receipt.ts`).
 //
 // Usage: pnpm --filter @waitron/server exec tsx scripts/aws-rehearsal-cleanup.ts --receipt <path>
 import { realpathSync } from "node:fs";

@@ -87,7 +87,7 @@ export type AwsRehearsalRefusalReason =
   | "region-unsupported"
   | "run-id-unsupported";
 
-/** Its message names a rule and a variable or key, never a value read from the environment or a file. */
+/** Its message names a rule and a variable or key, or a rehearsal bucket's name; never another value read from the environment or a file. */
 export class AwsRehearsalRefused extends Error {
   constructor(
     readonly reason: AwsRehearsalRefusalReason,

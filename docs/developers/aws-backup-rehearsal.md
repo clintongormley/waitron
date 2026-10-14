@@ -1,7 +1,6 @@
 # The Amazon S3 backup rehearsal
 
-Every test that touches a bucket in this repository talks to versitygw, a small S3-compatible server
-started on your machine. That is fast and free, but it cannot tell you how Amazon S3 itself answers.
+The server's stream tests talk to versitygw, a small S3-compatible server started on your machine. That is fast and free, but it cannot tell you how Amazon S3 itself answers.
 The rehearsal is the one place that asks the real service: it runs the same scenarios against Amazon
 S3, in a bucket it creates for the run and then tries to delete. Teardown can fail to delete it: an
 error from AWS, the teardown's two-minute limit running out, or a Litestream upload still running
@@ -9,8 +8,9 @@ when teardown starts. Any failed teardown step fails the run, and when the bucke
 receipt names it and gives a cleanup command. Pressing Ctrl-C also leaves the bucket, with no receipt; that is described
 under the limits below.
 
-As of 2026-10-14 only the loop scenario exists and it has never run against Amazon S3; tasks 8–10 add
-pause/403, delete and archive scenarios and the first live run.
+As of 2026-10-14 only the loop scenario exists and it has never run against Amazon S3; later tasks of the A538
+plan (`docs/superpowers/plans/2026-10-12-a538-archive-s3.md`, tasks 8 to 10) add the pause,
+refused-listing, batch-delete and archive scenarios and the first live run.
 
 ## What it is, and what it is not
 
@@ -56,7 +56,7 @@ Two limits matter if something goes wrong:
 
 Run it from a checkout of the branch you want to test, with Litestream installed
 (`node scripts/setup-litestream.mjs`). The loop scenario fails, rather than skips, when Litestream is
-missing. Do not set `CI=true`.
+missing.
 
 ```sh
 AWS_SHARED_CREDENTIALS_FILE="$HOME/.config/waitron-cloud/aws/credentials" \
@@ -66,7 +66,7 @@ WAITRON_RUN_AWS_REHEARSAL=1 \
 pnpm --filter @waitron/server test:aws-rehearsal
 ```
 
-Every variable the run reads:
+The variables the rehearsal's own code reads:
 
 | Variable                             | What it does                                                                                                                                                                                                                       |
 | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -102,7 +102,9 @@ still run, but their timing is not checked.
 ## When teardown fails: the cleanup command
 
 If teardown could not delete the bucket, the run fails and the receipt's `cleanupCommand` holds the
-exact command to finish the job. It looks like this:
+command to finish the job. The command always names the credentials and config files under
+`$HOME/.config/waitron-cloud/aws/`; if yours are elsewhere, change those two paths before running it.
+It looks like this:
 
 ```sh
 WAITRON_RUN_AWS_REHEARSAL=1 AWS_SHARED_CREDENTIALS_FILE="$HOME/.config/waitron-cloud/aws/credentials" AWS_CONFIG_FILE="$HOME/.config/waitron-cloud/aws/config" AWS_PROFILE=waitron-rehearsal AWS_REGION=eu-north-1 pnpm --filter @waitron/server exec tsx scripts/aws-rehearsal-cleanup.ts --receipt /path/to/aws-rehearsal-<run id>.json

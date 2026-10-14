@@ -1,4 +1,4 @@
-// The slice-2 stream loop, end to end, against whichever bucket its fixture names: box A streams its
+// The stream loop, end to end, against whichever bucket its fixture names: box A streams its
 // venue, dies, box B is rebuilt from the bucket with nothing but the recovery kit, sells under a fresh
 // installation number and chain, streams into a generation of its own and moves the pointer, and a
 // restore of B's generation holds exactly what B's database holds. `stream-loop.e2e.test.ts` runs it
@@ -346,7 +346,6 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
         venue.nodeId,
         `https://127.0.0.1:${portA}`,
       );
-      // Stored the way Task 8a's Save stores it: the venue is this node's location (N9).
       await withTransaction(seeding.venue, (tx) =>
         putCredential(tx, ring, {
           purpose: "backup.stream",
@@ -520,7 +519,7 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
     expect(
       await keysContaining(store, `${venuePrefix(venueId)}${pointerA.pointer.body.generation}/`),
     ).not.toHaveLength(0);
-    // Task 9a: B serves a NEW leaf, signed by the authority A had, to a client that trusts only the
+    // B serves a NEW leaf, signed by the authority A had, to a client that trusts only the
     // restored ca.crt. The dead box's leaf would also verify against that authority, so the served
     // certificate is compared with both files: it must be B's re-issued one, not A's.
     const caB = await readFile(join(dirsB.state, "tls", "ca.crt"), "utf8");
@@ -540,8 +539,6 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
       socket.once("error", reject);
     });
     expect(served.toUpperCase()).toBe(leafB.serialNumber.toUpperCase());
-    // Task 2b's refresh runs after Task 9a's re-issue in the same start, so the row B sealed carries
-    // B's leaf, not A's.
     const sealedB = await openVenueDatabase(dirsB.venue);
     let seriesB: string;
     try {
@@ -578,10 +575,9 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
     );
 
     clock.begin("frozen-transport");
-    // 8b. Sales keep their normal time with the transport frozen — against the real Litestream
-    //     (Task 7's stream-host case uses a fake one and cannot show this). A frozen transport
-    //     hangs every bucket call rather than refusing it. A sale that waited on the bucket would
-    //     hang with it; the bound sits far below that and far above a healthy sale. Without a
+    // 8b. Sales keep their normal time with the transport frozen — against the real Litestream.
+    //     A frozen transport hangs every bucket call rather than refusing it. A sale that waited on
+    //     the bucket would hang with it; the bound sits far below that and far above a healthy sale. Without a
     //     `freeze` the same sales run unfrozen and unbounded, so the record count below holds.
     const idsB = {
       nodeId: tradingB.WAITRON_TILL_NODE_ID!,
