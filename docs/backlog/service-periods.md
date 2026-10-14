@@ -218,6 +218,18 @@ refusing delete (`DELETE …/menu-periods/:periodId`, `menu_period.in_use`) are 
 - The Opening hours model's `periods[].weekdays` and `routingUses` have no reader left in the
   dashboard (open question Q9 of A506-11); `readOpeningHoursModel` still works both out on every read. See also
   "Routing reads do work only one screen uses" in `docs/backlog.md`.
+- After a delete is refused because the business day's start changed, the delete dialog keeps
+  Delete greyed out until its re-read answers. If the page is taken out of the document during that
+  read, nothing starts a new read when it comes back, so Delete can stay greyed out
+  (`period-delete-dialog.ts`). Found by reading during #1694's review, not tried.
+- The delete dialog can skip a re-read of what the delete will change in a rare order of updates,
+  and then shows slightly old counts. The server still refuses a delete sent with an old clock
+  revision, so the wrong delete is not made. Not checked whether the code before #1694 had the
+  same gap.
+- Opening hours keeps its own click handler for the painters' Periods link
+  (`opening-hours-screen.ts`), although the dashboard shell handles that link first in the real
+  app (judged by reading). Two painter tests mount the screen without the shell and fail without
+  it; remove it once those tests mount the shell.
 
 **Left open by A506-9, for the later parts.**
 - A special day whose dates start their business day at different times is painted on one grid
