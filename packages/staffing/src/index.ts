@@ -7,3 +7,12 @@ export { STAFFING_CLASSIFICATION, STAFFING_CHANGE_SOURCES } from "./classificati
 export { STAFFING_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 export { STAFFING_PERMISSIONS } from "./permissions.js";
 export { STAFFING_ROUTES } from "./routes.js";
+export {
+  createStaffRole,
+  deleteStaffRole,
+  listStaffRoles,
+  reorderStaffRoles,
+  setStaffRoleHolders,
+  updateStaffRole,
+  type StaffRoleInput,
+} from "./staff-roles.js";
