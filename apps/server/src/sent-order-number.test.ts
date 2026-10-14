@@ -5,6 +5,7 @@ import { setRoutingCell } from "@waitron/venue-service";
 import { products, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { mergeBills, splitBill, transferItems } from "./bill-actions.js";
+import { readFormerNumbers } from "./former-numbers.js";
 import { createStation } from "./kitchen.js";
 import { setMadeHereStations } from "./made-here.js";
 import { moveBill } from "./move-bill.js";
@@ -22,7 +23,7 @@ import {
 } from "./testing/party-venue.js";
 import { addExtras } from "./testing/split-extras-venue.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
-import { fireLines, splitLinesWithinOrder } from "./working-order.js";
+import { fireLines, splitLinesWithinOrder, updateOrderLine } from "./working-order.js";
 import "./errors.js";
 
 // ticket_items.sent_order_number: the number of the order a dish the kitchen had seen left.
@@ -30,7 +31,7 @@ let v: PartyVenue;
 let cheese: { listId: string; productId: string };
 /** The tables zone's offers, made again once the Caña offers a Cheese extra. */
 let offers: ZoneOffers;
-/** The venue's device makes the Vino on the spot when it sends it with this configuration. */
+/** The venue's device makes the Vino and the Cheese on the spot when it sends them with this configuration. */
 let madeHereCfg: PartyVenue["cfg"];
 useVenueDb({
   resetPerTest: false,
@@ -50,7 +51,7 @@ useVenueDb({
     cheese = { listId, productId: productIds[0]! };
     // At a station of its own, the Cheese has a kitchen item of its own rather than riding on the
     // Caña's.
-    await inTx(v, async (tx) => {
+    const quesos = await inTx(v, async (tx) => {
       const { id: stationId } = await createStation(tx, v.cfg, { name: "Quesos" });
       await setRoutingCell(
         tx,
@@ -58,6 +59,7 @@ useVenueDb({
         { row: { kind: "product", productId: cheese.productId }, zoneId: null },
         { kind: "station", stationId },
       );
+      return stationId;
     });
     await inTx(v, async (tx) => {
       const { id: barra } = await createStation(tx, v.cfg, { name: "Barra" });
@@ -67,7 +69,7 @@ useVenueDb({
         { row: { kind: "product", productId: v.productId("Vino") }, zoneId: null },
         { kind: "station", stationId: barra },
       );
-      await setMadeHereStations(tx, v.cfg, v.cfg.origin.deviceId, [barra]);
+      await setMadeHereStations(tx, v.cfg, v.cfg.origin.deviceId, [barra, quesos]);
     });
     madeHereCfg = { ...v.cfg, sendingDeviceId: v.cfg.origin.deviceId };
     offers = await inTx(v, (tx) => offerProducts(tx, v.cfg, { zone: "tables" }));
@@ -178,6 +180,14 @@ async function transfer(
 ) {
   const command = await commandFor(v, partyId);
   await inTx(v, (tx) => transferItems(tx, v.cfg, fromBillId, toBillId, transfers, command));
+}
+
+/** Changes the note on the bill's line of `name`, as the till's line edit does. */
+async function editNote(billId: string, name: string, note: string, cfg = v.cfg) {
+  const { revision } = await billRow(v, billId);
+  await inTx(v, (tx) =>
+    updateOrderLine(tx, cfg, billId, lineOf(billId, name), { note }, revision, OPERATOR),
+  );
 }
 
 /** Marks the bill's held groups as printed on a HOLD ticket. */
@@ -401,6 +411,78 @@ describe("the order number a moved dish was sent under", () => {
     expect(kitchenItems(tabId)).toEqual([
       { name: "Paella", quantity: 1000, sent: null },
       { name: "Burger", quantity: 1000, sent: nCounter },
+    ]);
+  });
+});
+
+describe("the order number an edited dish was sent under", () => {
+  it("is kept when a moved dish is edited and sent again", async () => {
+    const { partyId, bills } = await party("Mesa edit 1", 2);
+    const [b27, b28] = bills as [string, string];
+    await send(partyId, b28, [{ name: "Burger" }], "fire");
+    const n28 = await numberOf(b28);
+    await merge(partyId, b27, b28);
+
+    await editNote(b27, "Burger", "sin cebolla");
+
+    expect(kitchenItems(b27)).toEqual([{ name: "Burger", quantity: 1000, sent: n28 }]);
+    const former = await inTx(v, (tx) => readFormerNumbers(tx, [b27]));
+    expect(former.get(b27)).toEqual([n28]);
+  });
+
+  it("is kept on the extras of a moved dish that is edited", async () => {
+    const { partyId, bills } = await party("Mesa edit 2", 2);
+    const [b27, b28] = bills as [string, string];
+    await send(partyId, b28, [{ name: "Caña", cheese: 1 }], "fire");
+    const n28 = await numberOf(b28);
+    await merge(partyId, b27, b28);
+
+    await editNote(b27, "Caña", "bien fría");
+
+    expect(kitchenItems(b27)).toEqual([
+      { name: "Caña", quantity: 1000, sent: n28 },
+      { name: "Cheese", quantity: 1000, sent: n28 },
+    ]);
+  });
+
+  it("is not given to an edited dish that never moved", async () => {
+    const { partyId, bills } = await party("Mesa edit 3", 1);
+    const [b28] = bills as [string];
+    await send(partyId, b28, [{ name: "Burger" }], "fire");
+
+    await editNote(b28, "Burger", "sin cebolla");
+
+    expect(kitchenItems(b28)).toEqual([{ name: "Burger", quantity: 1000, sent: null }]);
+  });
+
+  it("stays the first number when an edited moved dish moves again", async () => {
+    const { partyId, bills } = await party("Mesa edit 4", 3);
+    const [b26, b27, b28] = bills as [string, string, string];
+    await send(partyId, b28, [{ name: "Burger" }], "fire");
+    const n28 = await numberOf(b28);
+    await merge(partyId, b27, b28);
+    await editNote(b27, "Burger", "sin cebolla");
+
+    await merge(partyId, b26, b27);
+
+    expect(kitchenItems(b26)).toEqual([{ name: "Burger", quantity: 1000, sent: n28 }]);
+  });
+
+  it("is not given to an edited moved dish's extra when the editing device makes it on the spot", async () => {
+    const { partyId, bills } = await party("Mesa edit 5", 2);
+    const [b27, b28] = bills as [string, string];
+    await send(partyId, b28, [{ name: "Caña", cheese: 1 }], "fire");
+    const n28 = await numberOf(b28);
+    await merge(partyId, b27, b28);
+    expect(madeHereOf(b27, "Cheese")).toEqual([false]);
+
+    await editNote(b27, "Caña", "bien fría", madeHereCfg);
+
+    expect(madeHereOf(b27, "Caña")).toEqual([false]);
+    expect(madeHereOf(b27, "Cheese")).toEqual([true]);
+    expect(kitchenItems(b27)).toEqual([
+      { name: "Caña", quantity: 1000, sent: n28 },
+      { name: "Cheese", quantity: 1000, sent: null },
     ]);
   });
 });

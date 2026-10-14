@@ -72,7 +72,8 @@ export const ticketItems = table(
     // `0014_order_edit_columns.sql`.
     quantity: quantity("quantity"),
     madeHere: flag("made_here").notNull().default(false),
-    // The number of the order this item was first seen by the kitchen on, once it has left it.
+    // The number of the order this kitchen work was first sent under, once it has moved to another
+    // order; null on a made-here item.
     sentOrderNumber: count("sent_order_number"),
   },
   (t) => [

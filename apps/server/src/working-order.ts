@@ -4499,6 +4499,7 @@ interface EditableLine {
     stationChosenAt: string | null;
     courseId: string | null;
     madeHere: boolean;
+    sentOrderNumber: number | null;
     /** Thousandths. */
     firedQuantity: number;
   } | null;
@@ -4711,6 +4712,7 @@ async function readEditableOrder(
       stationChosenAt: ticketItems.stationChosenAt,
       ticketCourseId: ticketItems.courseId,
       madeHere: ticketItems.madeHere,
+      sentOrderNumber: ticketItems.sentOrderNumber,
       firedQuantity,
     })
     .from(workingOrderLines)
@@ -4750,6 +4752,7 @@ async function readEditableOrder(
             stationChosenAt: row.stationChosenAt,
             courseId: row.ticketCourseId,
             madeHere: row.madeHere!,
+            sentOrderNumber: row.sentOrderNumber,
             firedQuantity: row.firedQuantity,
           },
   }));
@@ -5237,6 +5240,7 @@ async function applyLineEdits(
   const fireNow: Parameters<typeof fireLines>[3] = [];
   const keepMadeHere = new Map<string, { madeHere: boolean; stationId: string }>();
   const keepStations = new Map<string, string>();
+  const keepSentNumber = new Map<number, string[]>();
   for (const change of changes.filter(({ action }) => action === "free" || action === "change")) {
     const { parent, quantity, note, optionSnapshots, kept } = change;
     await tx
@@ -5281,6 +5285,10 @@ async function applyLineEdits(
       }
     }
     if (change.action === "change") {
+      for (const line of [parent, ...kept.map(({ child }) => child)]) {
+        const sent = line.ticket?.sentOrderNumber ?? null;
+        if (sent !== null) keepSentNumber.set(sent, [...(keepSentNumber.get(sent) ?? []), line.id]);
+      }
       if (parent.ticket !== null) {
         keepMadeHere.set(parent.id, {
           madeHere: parent.ticket.madeHere,
@@ -5446,6 +5454,13 @@ async function applyLineEdits(
   });
   // Fired while the removed lines' items still stand, so a course they held counts as fired.
   await fireLines(tx, cfg, orderId, fireNow, { keepStations, keepMadeHere, routing });
+  for (const [sent, lineIds] of keepSentNumber)
+    await tx
+      .update(ticketItems)
+      .set({ sentOrderNumber: sent })
+      .where(
+        and(inArray(ticketItems.workingOrderLineId, lineIds), eq(ticketItems.madeHere, false)),
+      );
   const heldGroup = newGroups.get("hold");
   if (heldGroup !== undefined) await printHoldTickets(tx, cfg, [heldGroup]);
   // As a raise of the line itself would: `+N` on its group's queued HOLD ticket, not a new one.
