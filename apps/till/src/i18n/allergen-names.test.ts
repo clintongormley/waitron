@@ -5,6 +5,13 @@ import { ALLERGEN_CODES } from "@waitron/catalogue/src/allergens.js";
 import { ALLERGEN_NAMES, allergenName } from "./allergen-names.js";
 
 describe("allergen names", () => {
+  it.each(["constructor", "toString", "__proto__"])(
+    "falls back to the English allergen name for inherited locale key %s",
+    (locale) => {
+      expect(allergenName("milk", locale)).toBe("Milk");
+    },
+  );
+
   it("names exactly the EU-14 codes, each with a non-empty en and es", () => {
     expect(Object.keys(ALLERGEN_NAMES).sort()).toEqual([...ALLERGEN_CODES].sort());
     for (const c of ALLERGEN_CODES) {

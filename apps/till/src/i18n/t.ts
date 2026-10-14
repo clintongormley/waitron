@@ -72,5 +72,7 @@ export function clockTime(at: Date | number): string {
 /** Strips the region subtag ("es-ES" → "es"); a missing language degrades to the English text. */
 export function pickLocale(entry: { en: string; es: string }, l: string = locale): string {
   const lang = l.replace(/-.*$/, "");
-  return (entry as Record<string, string>)[lang] ?? entry.en;
+  return Object.hasOwn(entry, lang)
+    ? ((entry as Record<string, string>)[lang] ?? entry.en)
+    : entry.en;
 }

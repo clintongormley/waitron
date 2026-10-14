@@ -4,11 +4,61 @@ import {
   clockTime,
   countText,
   currentLocale,
+  pickLocale,
   setLocale,
   subscribeLocale,
   t,
 } from "./t.js";
 import { catalogues, en } from "./strings.js";
+
+it.each(["constructor", "toString", "__proto__"])(
+  "falls back to English for inherited locale key %s",
+  (locale) => {
+    expect(pickLocale({ en: "Milk", es: "Leche" }, locale)).toBe("Milk");
+  },
+);
+
+it.each([
+  ["en", "Milk"],
+  ["en-GB", "Milk"],
+  ["es", "Leche"],
+  ["es-ES", "Leche"],
+  ["fr-FR", "Milk"],
+  ["", "Milk"],
+])("selects the entry's text for locale %s", (locale, expected) => {
+  expect(pickLocale({ en: "Milk", es: "Leche" }, locale)).toBe(expected);
+});
+
+it("falls back to English when the Spanish translation is inherited", () => {
+  const entry = new (class {
+    en = "Milk";
+    get es(): string {
+      return "Leche";
+    }
+  })();
+  expect(pickLocale(entry, "es-ES")).toBe("Milk");
+});
+
+it("preserves an empty own translation", () => {
+  expect(pickLocale({ en: "Milk", es: "" }, "es-ES")).toBe("");
+});
+
+it.each([null, undefined])("falls back to English for an own nullish translation %s", (es) => {
+  const entry = { en: "Milk", es } as unknown as { en: string; es: string };
+  expect(pickLocale(entry, "es-ES")).toBe("Milk");
+});
+
+it("selects an entry's text using the active locale when no locale is passed", () => {
+  const previous = currentLocale();
+  try {
+    setLocale("es-ES");
+    expect(pickLocale({ en: "Milk", es: "Leche" })).toBe("Leche");
+    setLocale("constructor");
+    expect(pickLocale({ en: "Milk", es: "Leche" })).toBe("Milk");
+  } finally {
+    setLocale(previous);
+  }
+});
 
 afterEach(() => {
   // t.ts's locale is module-level, so a setLocale in one test would leak into the next.

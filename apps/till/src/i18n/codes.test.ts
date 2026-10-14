@@ -2,6 +2,13 @@ import { afterEach, expect, it } from "vitest";
 import { setLocale } from "./t.js";
 import { codeMessage } from "./codes.js";
 
+it.each(["constructor", "toString", "__proto__"])(
+  "falls back to the English refusal message for inherited locale key %s",
+  (locale) => {
+    expect(codeMessage("swap.not_found", locale)).toBe("That swap could not be found");
+  },
+);
+
 afterEach(() => {
   // t.ts's locale is module-level, so a setLocale in one test would leak into the next.
   setLocale("en-GB");
