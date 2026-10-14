@@ -366,3 +366,56 @@ export function formatCorrectionSlip(slip: CorrectionSlip, layout: EscSetting): 
 
   return b.feedAndCut().bytes();
 }
+
+/**
+ * One order's MOVED slip at one station. `toNumber` is absent when the order kept its number;
+ * `fromText` and `toText` print as given, so the caller words the counter. Held dishes follow the
+ * fired ones under `HOLD`, each group under `GROUP n`, which stay English as on every kitchen paper.
+ */
+export interface MovedSlip {
+  stationName: string;
+  fromNumber: string;
+  toNumber?: string;
+  partyName?: string;
+  fromText: string;
+  toText: string;
+  at: string;
+  items: KitchenTicketItem[];
+  held: { group: number; items: KitchenTicketItem[] }[];
+  locale: string;
+}
+
+const MOVED_WORDS = {
+  en: { header: "MOVED", order: "Order", from: "From: ", to: "To:   " },
+  es: { header: "MOVIDO", order: "Pedido", from: "De: ", to: "A:  " },
+} as const;
+
+export function formatMovedSlip(slip: MovedSlip, layout: EscSetting): Uint8Array {
+  const b = esc(layout).init();
+  const { columns } = b.grid;
+  const words = MOVED_WORDS[ticketLanguage(slip.locale)];
+  const text = (s: string, indent = 0): void => {
+    for (const line of wrapText(prepareText(s), columns, indent)) b.line(line);
+  };
+  const labelled = (label: string, value: string): void =>
+    text(`${label}${value}`, prepareText(label).length);
+
+  text(`*** ${words.header} ***`);
+  text(slip.stationName);
+  const numbers =
+    slip.toNumber === undefined ? slip.fromNumber : `${slip.fromNumber} -> ${slip.toNumber}`;
+  const order = `${words.order} ${numbers}`;
+  if (slip.partyName === undefined) text(order);
+  else labelled(`${order} · `, slip.partyName);
+  labelled(words.from, slip.fromText);
+  labelled(words.to, slip.toText);
+  b.line(hhmm(new Date(slip.at)));
+  for (const item of slip.items) emitItem(b, item, columns);
+  if (slip.held.length > 0) b.line("HOLD");
+  for (const { group, items } of slip.held) {
+    b.line(`GROUP ${group}`);
+    for (const item of items) emitItem(b, item, columns);
+  }
+
+  return b.feedAndCut().bytes();
+}
