@@ -839,7 +839,7 @@ export function matchAreaDay(slots: readonly Slot[], shifts: readonly PlacedShif
   row; a staff role from another location or an unknown area is refused
   (`staff_role.not_found`, `staffing_area.not_found`); a special day's edit with `blocks: null`
   removes the date's row and `[]` keeps an empty row; `resolveStaffing` returns the season's blocks
-  on an ordinary date, the special day's blocks on its date, nothing on a special-day date whose row
+  on an ordinary date, the special day's blocks on its date, `[]` for an area whose special-day row
   is empty, and the season's blocks for an area the special day did not paint. **Switched-off
   areas** (Review Focus 5): after `update departments set active = 0` (what
   `service-delete.ts:329` does) and the same for a station (`station-delete.ts:215`), the area is

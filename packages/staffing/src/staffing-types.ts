@@ -15,7 +15,8 @@ export interface StaffRole {
 /** A season's staffing for every active area; `weekdays` holds 0 (Sunday) to 6, empty when unpainted. */
 export interface SeasonStaffing {
   areas: { area: AreaRef; name: string; weekdays: Record<number, StaffingBlock[]> }[];
-  /** areaKey → weekday → the area's opening hours, drawn behind the paint. */
+  /** areaKey → weekday → a department's opening hours, drawn behind the paint; a station's are
+   *  empty. */
   guides: Record<string, Record<number, { startsAt: string; endsAt: string }[]>>;
 }
 
