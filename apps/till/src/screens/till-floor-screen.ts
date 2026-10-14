@@ -71,6 +71,8 @@ import {
   type ResetTablePlan,
   sheetActions,
   savedNameUnder,
+  seatsAtFreeTable,
+  seatsGuests,
   shownName,
   shownUnder,
   spareSpot,
@@ -579,7 +581,7 @@ export class TillFloorScreen extends LitElement {
   @state() private clearing: TableState | null = null;
   /** The table whose details sheet is open, read afresh from `tables` on each render. */
   @state() private details: { tableId: string } | null = null;
-  /** The floor's last refusal, in its code's words; cleared by the next drop or a change of zone. */
+  /** The floor's last refusal, in its code's words. */
   @state() private refusal: string | null = null;
   /** A merge's seats, or Change seats, waiting for the seats prompt. */
   @state() private askingSeats: {
@@ -724,7 +726,8 @@ export class TillFloorScreen extends LitElement {
     }
     if (table.party === null && !table.hasOpenTab) {
       const zone = this.zones.find((candidate) => candidate.id === table.zoneId);
-      if (zone?.closed) {
+      if (zone !== undefined && (zone.closed || !seatsGuests(zone))) {
+        this.refusal = null;
         this.refusedZoneId = zone.id;
         return;
       }
@@ -838,12 +841,19 @@ export class TillFloorScreen extends LitElement {
       .now=${this.#drawnAt}
       .actions=${this.canChangeToday}
       .tables=${this.tables}
+      .offersJoinWith=${this.#offersJoinWith(table)}
       @today-action=${(event: Event) => this.#onTodayAction(event)}
       @details-close=${(event: Event) => {
         event.stopPropagation();
         this.details = null;
       }}
     ></till-table-details-sheet>`;
+  }
+
+  #offersJoinWith(table: TableState): boolean {
+    if (seatsGuests(this.zones.find((zone) => zone.id === table.zoneId))) return true;
+    const joining = this.#joining(table.id);
+    return joining !== undefined && this.#joinTargets(joining, joining.today.placement).length > 0;
   }
 
   #markCleared(table: TableState): void {
@@ -903,6 +913,11 @@ export class TillFloorScreen extends LitElement {
     return { zoneId, revision: this.#revision(zoneId) };
   }
 
+  #dropZone(tableId: string): FloorZone | undefined {
+    const { zoneId } = this.#zone.visible.find((each) => each.id === tableId)!;
+    return this.zones.find((zone) => zone.id === zoneId);
+  }
+
   /** A null revision is answered here as a stale one is, without being sent: only the zone reset's
    * route accepts null. */
   #send<T>(revision: number | null, call: (revision: number) => Promise<T>): Promise<T> {
@@ -916,7 +931,12 @@ export class TillFloorScreen extends LitElement {
 
   #onDrop(drop: FloorMapDrop): void {
     this.refusal = null;
+    this.refusedZoneId = null;
     const action = dropAction(this.#zone.visible, drop);
+    if (seatsAtFreeTable(action) && !seatsGuests(this.#dropZone(drop.tableId))) {
+      this.refusal = codeMessage("service_zone.mode_incompatible");
+      return;
+    }
     switch (action.kind) {
       case "say":
         this.refusal = action.message;
@@ -1027,10 +1047,11 @@ export class TillFloorScreen extends LitElement {
   /**
    * One per group of the zone on today's plan, a party linked across groups counting once, its first member
    * in the map's label order named as the map names it, leaving out every group a drop of `table` on it would do nothing with,
-   * sorted by those names.
+   * or would seat guests at in an area that does not seat them, sorted by those names.
    */
   #joinTargets(table: TableState, from: TodayPlacement): TableState[] {
     const zoneTables = this.#zone.visible;
+    const seats = seatsGuests(this.zones.find((zone) => zone.id === table.zoneId));
     const seen = new Set<string>();
     const targets: TableState[] = [];
     for (const each of [...zoneTables].sort((a, b) => inNumberOrder(a.label, b.label))) {
@@ -1040,7 +1061,8 @@ export class TillFloorScreen extends LitElement {
       if (seen.has(group)) continue;
       seen.add(group);
       const drop = { tableId: table.id, x: from.x, y: from.y, targetId: each.id };
-      if (dropAction(zoneTables, drop).kind === "none") continue;
+      const action = dropAction(zoneTables, drop);
+      if (action.kind === "none" || (!seats && seatsAtFreeTable(action))) continue;
       const label = linkId === null ? this.#mergeName(each) : this.#linkName(linkId);
       // `tableTarget` draws a table's own name for today ahead of its label.
       targets.push({
@@ -1674,7 +1696,9 @@ export class TillFloorScreen extends LitElement {
         name: zone.closed ? `${zone.name} · ${t("floor.closed")}` : zone.name,
       })),
     );
-    const refusedZone = this.zones.find((zone) => zone.id === this.refusedZoneId && zone.closed);
+    const refusedZone = this.zones.find(
+      (zone) => zone.id === this.refusedZoneId && (zone.closed || !seatsGuests(zone)),
+    );
     const activeKey = resolveActiveTabKey(this.activeZone, tabs);
     const visible = this.tables.filter((table): table is ZonedTable => table.zoneId === activeKey);
     const planned = visible.some((table) => table.today !== null);
@@ -1742,7 +1766,17 @@ export class TillFloorScreen extends LitElement {
               </nav>`
             : nothing
         }
-        ${refusedZone === undefined ? nothing : html`<p data-zone-closed role="status">${t("menu.zone_closed").replace("{zone}", () => refusedZone.name)}</p>`}
+        ${
+          refusedZone === undefined
+            ? nothing
+            : refusedZone.closed
+              ? html`<p data-zone-closed role="status">
+                  ${t("menu.zone_closed").replace("{zone}", () => refusedZone.name)}
+                </p>`
+              : html`<p data-zone-no-seating role="status">
+                  ${codeMessage("service_zone.mode_incompatible")}
+                </p>`
+        }
         ${this.refusal === null ? nothing : html`<p data-floor-refusal role="status">${this.refusal}</p>`}
         ${(() => {
           const zone = this.zones.find((z) => z.id === activeKey);

@@ -2034,13 +2034,13 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   free, already grouped, zone mismatch) only after the seats are typed.
   The request log is in #1699.
 
-- **A667 — The floor offers Join with… in a pay-first area, and seating the joined tables is
-  always refused (2026-10-14; open).** Found by A659's probe (#1699) in the demo's Downstairs bar: B1 → Join
-  with… → B2 opens "Seat table B1+B2", and Seat answers `409 service_zone.mode_incompatible`
-  ("That table is in an area that does not seat guests"; `openTab` in
-  `apps/server/src/working-order.ts`, and `refuseUnseatable` in `apps/server/src/move-bill.ts` for
-  a join). The floor should not offer what the area cannot do; whether the floor knows an area's
-  service mode was not checked.
+- **A690 — the order screen's Move guests and Move this bill offer free tables in an area that does not
+  seat guests, and the server then refuses them (2026-10-14; open).** Neither list checks the area's
+  service mode (`#tableTargets`, `apps/till/src/screens/till-table-order-screen.ts`); a free table in a pay-first
+  area is refused with `service_zone.mode_incompatible` (`refuseUnseatable`, reached from
+  `moveGuests` in `apps/server/src/table-actions.ts` and `resolveDestination` in
+  `apps/server/src/move-bill.ts`). Left open by A667, which fixed the floor only; the till's zones
+  now carry each area's service mode, which the list could check.
 
 - **A660 — Moving an open counter order with nothing sent into a party printed a kitchen ticket
   (2026-10-14; check).** Found by A650's probe (Move this bill, an open counter order holding a

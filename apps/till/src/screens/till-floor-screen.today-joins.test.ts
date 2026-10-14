@@ -15,6 +15,7 @@ function zone(over: Partial<FloorZone> = {}): FloorZone {
     closesAt: null,
     closed: false,
     hasPlan: false,
+    serviceMode: "table_tab",
     ...over,
   };
 }
@@ -468,6 +469,99 @@ describe("till-floor-screen: dragging on today's plan — joins and seating", ()
 
     expect(el.shadowRoot!.querySelector("till-seat-dialog")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-zone-closed]")).not.toBeNull();
+  });
+
+  describe("in a zone that seats no one", () => {
+    const prepay = [zone({ serviceMode: "prepay" })];
+    const noSeating = "That table is in an area that does not seat guests. Choose another table";
+
+    it("two fixed free tables dropped together seat no one and say why", async () => {
+      const api = stubApi();
+      const el = await mount(
+        [planned("F1", 2, { fixed: true }, "Bar 1"), planned("F2", 20, { fixed: true }, "Bar 2")],
+        api,
+        prepay,
+      );
+      const opened = vi.fn();
+      el.addEventListener("open-table", opened);
+      await drop(el, { tableId: "F1", x: 17, y: 3, targetId: "F2" });
+
+      expect(el.shadowRoot!.querySelector("till-seat-dialog")).toBeNull();
+      expect(refusal(el)).toBe(noSeating);
+      expect(opened).not.toHaveBeenCalled();
+      expect(api.joinTables).not.toHaveBeenCalled();
+      expect(api.mergeToday).not.toHaveBeenCalled();
+    });
+
+    it("a seated table dropped on a free one sends nothing and stays where it was", async () => {
+      const api = stubApi();
+      const el = await mount([planned("t1", 2, {}, "1", P), planned("t2", 20)], api, prepay);
+      await drop(el, { tableId: "t1", x: 17, y: 3, targetId: "t2" });
+
+      expect(api.joinTables).not.toHaveBeenCalled();
+      expect(drawnAt(el, "t1")).toBe(2);
+      expect(refusal(el)).toBe(noSeating);
+    });
+
+    function lines(el: TillFloorScreen): string[] {
+      return [
+        ...el.shadowRoot!.querySelectorAll("[data-zone-no-seating], [data-floor-refusal]"),
+      ].map((line) => line.textContent!.trim());
+    }
+
+    it("a tap and then a drop say why once", async () => {
+      const api = stubApi();
+      const el = await mount(
+        [planned("F1", 2, { fixed: true }, "Bar 1"), planned("F2", 20, { fixed: true }, "Bar 2")],
+        api,
+        prepay,
+      );
+      send(mapOf(el), "wt-table-tap", { tableId: "F1" });
+      await el.updateComplete;
+      expect(lines(el)).toEqual([noSeating]);
+
+      await drop(el, { tableId: "F1", x: 17, y: 3, targetId: "F2" });
+
+      expect(lines(el)).toEqual([noSeating]);
+    });
+
+    it("a drop and then a tap say why once", async () => {
+      const api = stubApi();
+      const el = await mount(
+        [planned("F1", 2, { fixed: true }, "Bar 1"), planned("F2", 20, { fixed: true }, "Bar 2")],
+        api,
+        prepay,
+      );
+      await drop(el, { tableId: "F1", x: 17, y: 3, targetId: "F2" });
+      expect(lines(el)).toEqual([noSeating]);
+
+      send(mapOf(el), "wt-table-tap", { tableId: "F1" });
+      await el.updateComplete;
+
+      expect(lines(el)).toEqual([noSeating]);
+    });
+
+    it("two seated tables still ask which bills to keep", async () => {
+      const api = stubApi();
+      const el = await mount(
+        [planned("t1", 2, {}, "1", P), planned("t2", 20, {}, "2", Q)],
+        api,
+        prepay,
+      );
+      await drop(el, { tableId: "t1", x: 17, y: 3, targetId: "t2" });
+
+      expect(el.shadowRoot!.querySelector("till-bill-choice-dialog")).not.toBeNull();
+      expect(refusal(el)).toBeNull();
+    });
+
+    it("two free unfixed tables still merge", async () => {
+      const api = stubApi();
+      const el = await mount([planned("t1", 2), planned("t2", 20)], api, prepay);
+      await drop(el, { tableId: "t1", x: 17, y: 3, targetId: "t2" });
+
+      expect(api.mergeToday).toHaveBeenCalledTimes(1);
+      expect(refusal(el)).toBeNull();
+    });
   });
 
   it("a fixed table needing clearing dropped on a free one offers to clear it", async () => {

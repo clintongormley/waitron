@@ -15,6 +15,7 @@ const zone: FloorZone = {
   closesAt: null,
   closed: false,
   hasPlan: false,
+  serviceMode: "table_tab",
 };
 
 function table(id: string, label: string, x: number, over: Partial<TableToday> = {}): TableState {

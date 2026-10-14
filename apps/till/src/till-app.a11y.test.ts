@@ -291,7 +291,9 @@ describe.each(["light", "dark"] as const)("till-app a11y (%s theme)", (theme) =>
       listZoneOffers: base.listDefaultZoneOffers,
       listZones: vi
         .fn()
-        .mockResolvedValue([{ id: "z1", name: "Comedor", displayOrder: 0, active: true }]),
+        .mockResolvedValue([
+          { id: "z1", name: "Comedor", displayOrder: 0, active: true, serviceMode: "table_tab" },
+        ]),
       listStatuses: vi.fn().mockResolvedValue([]),
       getTablesState: vi.fn().mockResolvedValue([
         {

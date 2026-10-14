@@ -119,6 +119,8 @@ export class TillTableDetailsSheet extends LitElement {
   @property({ type: Boolean }) actions = false;
   /** The zone's tables, which Reset table reads to find the joined table and its split-off tables. */
   @property({ attribute: false }) tables: readonly TableState[] = [];
+  /** False leaves Join with… out. */
+  @property({ attribute: false }) offersJoinWith = true;
 
   #emit(type: string, detail?: unknown): void {
     this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
@@ -140,7 +142,11 @@ export class TillTableDetailsSheet extends LitElement {
   }
 
   #todayActions(table: TableState): TemplateResult | typeof nothing {
-    const offered = this.actions ? sheetActions(table, this.tables) : [];
+    const offered = this.actions
+      ? sheetActions(table, this.tables).filter(
+          (action) => this.offersJoinWith || action !== "join-with",
+        )
+      : [];
     if (offered.length === 0) return nothing;
     return html`<div class="today-actions">
       ${offered.map(

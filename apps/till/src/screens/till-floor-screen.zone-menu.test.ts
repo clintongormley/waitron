@@ -7,7 +7,16 @@ import type { TillFloorZoneMenu } from "../widgets/floor-zone-menu.js";
 import { spareSpot } from "../state/floor-today.js";
 
 function zone(id: string, name: string, hasPlan = true): FloorZone {
-  return { id, name, displayOrder: 0, active: true, closesAt: null, closed: false, hasPlan };
+  return {
+    id,
+    name,
+    displayOrder: 0,
+    active: true,
+    closesAt: null,
+    closed: false,
+    hasPlan,
+    serviceMode: "table_tab",
+  };
 }
 
 function table(

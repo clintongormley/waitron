@@ -2516,8 +2516,11 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         const visible = (await listZones(tx, deps.cfg)).filter((zone) => inScope(scope, zone.id));
         const ids = visible.map((zone) => zone.id);
         const at = new Date();
-        const serviceZones = new Set(
-          (await VENUE_SERVICE.listServiceZones(tx, deps.cfg)).map((zone) => zone.id),
+        const modes = new Map(
+          (await VENUE_SERVICE.listServiceZones(tx, deps.cfg)).map((zone) => [
+            zone.id,
+            zone.serviceMode,
+          ]),
         );
         const states = await VENUE_SERVICE.readZoneClosingStates(tx, deps.cfg, ids, at);
         const planned = new Set(
@@ -2533,8 +2536,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           return {
             ...zone,
             closed: state.closed,
-            closesAt: serviceZones.has(zone.id) ? (state.keepOpen?.closesAt ?? null) : null,
+            closesAt: modes.has(zone.id) ? (state.keepOpen?.closesAt ?? null) : null,
             hasPlan: planned.has(zone.id),
+            serviceMode: modes.get(zone.id) ?? null,
           };
         });
       });

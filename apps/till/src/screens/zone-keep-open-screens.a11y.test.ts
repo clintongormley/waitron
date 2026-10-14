@@ -102,6 +102,7 @@ for (const locale of ["en", "es"] as const)
                                 closed,
                                 closesAt: state === "open" ? null : closesAt,
                                 hasPlan: false,
+                                serviceMode: "table_tab",
                               },
                             ],
                             tables: [],

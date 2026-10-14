@@ -1016,9 +1016,15 @@ function tableStubs(
       Promise.resolve(zoneId === "zone-dining" ? DINING : V1),
     ),
     getTablesState: vi.fn().mockResolvedValue([table]),
-    listZones: vi
-      .fn()
-      .mockResolvedValue([{ id: "zone-dining", name: "Comedor", displayOrder: 0, active: true }]),
+    listZones: vi.fn().mockResolvedValue([
+      {
+        id: "zone-dining",
+        name: "Comedor",
+        displayOrder: 0,
+        active: true,
+        serviceMode: "table_tab",
+      },
+    ]),
     listStatuses: vi.fn().mockResolvedValue([]),
     getTabLines: vi
       .fn()

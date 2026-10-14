@@ -15,6 +15,7 @@ const zones: FloorZone[] = [
     closesAt: null,
     closed: false,
     hasPlan: false,
+    serviceMode: "table_tab",
   },
   {
     id: "z2",
@@ -24,6 +25,7 @@ const zones: FloorZone[] = [
     closesAt: null,
     closed: false,
     hasPlan: false,
+    serviceMode: "table_tab",
   },
 ];
 
@@ -440,6 +442,70 @@ for (const locale of ["en-GB", "es-ES"]) {
             await expectNoA11yViolations(host);
             await page.screenshot({
               path: `../__screenshots__/a366-floor-closed/${view}-${locale}-${theme}-${width}.png`,
+            });
+          } finally {
+            setLocale(previous);
+            await page.viewport(1280, 768);
+          }
+        });
+      }
+    }
+  }
+}
+
+for (const locale of ["en-GB", "es-ES"]) {
+  for (const theme of ["light", "dark"] as const) {
+    for (const width of [390, 1280]) {
+      for (const view of ["list", "map"]) {
+        it(`no-seating floor zone ${view} is readable in ${locale}/${theme}/${width}`, async () => {
+          const previous = currentLocale();
+          try {
+            setLocale(locale);
+            await page.viewport(width, 900);
+            expect(window.innerWidth).toBe(width);
+            const { el, host } = await mountWidget<TillFloorScreen>(
+              "till-floor-screen",
+              {
+                zones: [
+                  {
+                    ...zones[0]!,
+                    name: locale === "en-GB" ? "Bar" : "Barra",
+                    serviceMode: "prepay",
+                  },
+                  zones[1]!,
+                ],
+                tables: [
+                  {
+                    ...tables[2]!,
+                    ...(view === "map" ? { today: todayRow(2) } : {}),
+                  },
+                ],
+              },
+              theme,
+            );
+            if (view === "map") {
+              el.shadowRoot!.querySelector("wt-floor-map")!.dispatchEvent(
+                new CustomEvent("wt-table-tap", {
+                  detail: { tableId: "t3" },
+                  bubbles: true,
+                  composed: true,
+                }),
+              );
+            } else {
+              el.shadowRoot!.querySelector<HTMLElement>("[data-table]")!.click();
+            }
+            await el.updateComplete;
+            const notice = el.shadowRoot!.querySelector<HTMLElement>("[data-zone-no-seating]");
+            expect(notice?.textContent).toContain(
+              locale === "en-GB"
+                ? "That table is in an area that does not seat guests. Choose another table"
+                : "Esa mesa está en una zona sin servicio de mesa. Elige otra mesa",
+            );
+            expect(notice!.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+            expect(el.shadowRoot!.querySelector("till-seat-dialog")).toBeNull();
+            await expectNoA11yViolations(host);
+            await page.screenshot({
+              path: `../__screenshots__/a667-floor-no-seating/${view}-${locale}-${theme}-${width}.png`,
             });
           } finally {
             setLocale(previous);

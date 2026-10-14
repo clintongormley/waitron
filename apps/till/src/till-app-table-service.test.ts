@@ -53,6 +53,7 @@ const floorZone: FloorZone = {
   closesAt: null,
   closed: false,
   hasPlan: false,
+  serviceMode: "table_tab",
 };
 
 const openTable: TableState = {

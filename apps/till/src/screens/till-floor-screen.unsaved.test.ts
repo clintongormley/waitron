@@ -30,7 +30,7 @@ class FloorLeaveApp extends LitElement {
   opened: unknown[] = [];
   override render() {
     return html`<till-floor-screen
-        .zones=${[{ id: "z1", name: "Dining room", displayOrder: 0, active: true }]}
+        .zones=${[{ id: "z1", name: "Dining room", displayOrder: 0, active: true, serviceMode: "table_tab" }]}
         .tables=${[freeTable]}
         @open-table=${(event: CustomEvent) => this.opened.push(event.detail)}
       ></till-floor-screen
