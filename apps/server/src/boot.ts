@@ -1724,7 +1724,7 @@ async function bootServer(
   );
   // Provenance and the backup config's disk re-read both use the RAW `base` env, not the merged
   // `env`, so a file-sourced value is distinguishable from an env-sourced one.
-  // Filled by the supervisor's sweep and read by the backups alert source below: one map.
+  // Filled by the supervisor's sweep and read by the backups alert source below.
   const backupOutcomes: BackupOutcomeHolder = { failed: new Map() };
   const readRecoveryKey = async (): Promise<string | undefined> =>
     loadRecoveryKey(await loadBoxEnv(base, config.stateDir));

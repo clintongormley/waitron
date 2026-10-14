@@ -131,9 +131,9 @@ function streamAlerts(stream: StreamView, now: Date): OngoingAlert[] {
   return alerts;
 }
 
-/** An entry means that destination's most recent backup attempt failed. In memory only: empty after
- * a restart until the next sweep tick. */
 export interface BackupOutcomeHolder {
+  /** An entry means that destination's most recent backup attempt failed. In memory only: empty
+   * after a restart until the next sweep tick. */
   failed: Map<string, { at: string }>;
   /** Set while the most recent backup run stopped before any destination call; `code` is the error
    * code it stopped on. In memory only, like `failed`. */
@@ -196,7 +196,7 @@ export function backupAlertSource(deps: {
         alerts.push({
           key: "backup.run_stopped",
           code: "backup.run_stopped",
-          params: { reason: stopped.code },
+          params: { errorCode: stopped.code },
           severity: "error",
           since: stopped.at,
           screen: BACKUP_SCREEN,

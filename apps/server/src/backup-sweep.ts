@@ -76,7 +76,8 @@ export interface BackupSweepDeps {
   /** How long one destination's upload and its pruning may run, together. */
   destinationTimeoutMs: number;
   onScheduled?: (at: number | null) => void;
-  /** Read by the backups alert source, so a failed store shows before the freshness threshold. */
+  /** Read by the backups alert source, so a failed store, or a run that stopped before any
+   * destination, shows before the freshness threshold. */
   outcomes?: BackupOutcomeHolder;
   log: Logger;
   /**
@@ -169,6 +170,7 @@ export async function runOnce(
       deps.signal,
     );
     const key = backupArchiveKey(stamp);
+    if (deps.outcomes) delete deps.outcomes.runStopped;
     // Every destination call has settled before `finally` removes the ciphertext they read.
     await Promise.allSettled(
       deps.backends.map(async (backend) => {
@@ -205,6 +207,11 @@ export async function runOnce(
         });
       }),
     );
+  } catch (err) {
+    // Only a step before the destination calls lands here: `Promise.allSettled` never rejects.
+    if (!deps.signal.aborted && deps.outcomes)
+      deps.outcomes.runStopped = { code: codeOf(err), at: stamp.toISOString() };
+    throw err;
   } finally {
     if (encryptedDir) await rm(encryptedDir, { recursive: true, force: true });
     if (dumped) await rm(staged, { force: true });
@@ -293,16 +300,8 @@ export async function runBackupSweep(deps: BackupSweepDeps): Promise<void> {
 async function tick(deps: BackupSweepDeps): Promise<void> {
   try {
     await runOnce(deps);
-    // `runOnce` returns only after every destination call has settled and recorded its own outcome.
-    if (deps.outcomes) delete deps.outcomes.runStopped;
   } catch (err) {
     if (deps.signal.aborted) return;
-    const errorCode = codeOf(err);
-    deps.log("warn", "backup.failed", { errorCode });
-    if (deps.outcomes)
-      deps.outcomes.runStopped = {
-        code: errorCode,
-        at: (deps.now ?? (() => new Date()))().toISOString(),
-      };
+    deps.log("warn", "backup.failed", { errorCode: codeOf(err) });
   }
 }

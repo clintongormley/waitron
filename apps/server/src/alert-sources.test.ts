@@ -282,7 +282,7 @@ describe("backupAlertSource and a run that stopped before any destination", () =
       {
         key: "backup.run_stopped",
         code: "backup.run_stopped",
-        params: { reason: "backup.staging_space_low" },
+        params: { errorCode: "backup.staging_space_low" },
         severity: "error",
         since: "2026-09-15T11:58:00Z",
         screen: "backup",

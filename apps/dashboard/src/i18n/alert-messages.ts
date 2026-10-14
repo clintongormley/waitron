@@ -68,8 +68,8 @@ export const ALERT_MESSAGES: Readonly<
     es: "La última copia de seguridad en «{destination}» falló. Abre la página de Copias para reintentar.",
   },
   "backup.run_stopped": {
-    en: "The last backup stopped before reaching any destination, so no new copy was saved. Sales continue. {reason:backup_stop}",
-    es: "La última copia de seguridad se detuvo antes de llegar a ningún destino, así que no se ha guardado ninguna copia nueva. Las ventas continúan. {reason:backup_stop}",
+    en: "The last backup stopped before reaching any destination, so no new copy was saved. Sales continue. {errorCode:backup_stop}",
+    es: "La última copia de seguridad se detuvo antes de llegar a ningún destino, así que no se ha guardado ninguna copia nueva. Las ventas continúan. {errorCode:backup_stop}",
   },
   "backup.disabled": {
     en: "No copy of your data is being kept: there are no scheduled backups, and the bucket copy is off or not up to date. Set one up on the Backups page.",
@@ -350,8 +350,6 @@ export const ALERT_WORDS: Readonly<
       es: "Está esperando algo: revisa qué necesita la impresora.",
     },
   },
-  // What stopped a backup before any destination, by the error code a `backup.run_stopped` alert's
-  // `reason` param carries.
   backup_stop: {
     words: {
       "backup.staging_space_low": {

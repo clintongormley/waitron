@@ -1269,9 +1269,10 @@ declare module "@waitron/shared" {
     /** A backup destination's most recent attempt failed. `destination` is the backend id (never a
      * secret). Built as data by the backups alert source, never thrown. */
     "backup.destination_failed": { destination: string };
-    /** The most recent backup run stopped before reaching any destination; `reason` is the error
-     * code it stopped on. Built as data by the backups alert source, never thrown. */
-    "backup.run_stopped": { reason: string };
+    /** The most recent backup run stopped before reaching any destination; `errorCode` is the code
+     * it threw, `unknown` for an error that is not an AppError. Built as data by the backups alert
+     * source, never thrown. */
+    "backup.run_stopped": { errorCode: string };
     /** A small object put to a bucket destination, or read from any destination, is larger than
      * `maxBytes` (`SMALL_OBJECT_MAX_BYTES`, `storage-backend.ts`). */
     "backup.destination_object_too_large": { maxBytes: number };

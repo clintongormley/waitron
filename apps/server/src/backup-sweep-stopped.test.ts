@@ -1,3 +1,4 @@
+import { mkdirSync, readdirSync, rmSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -133,4 +134,44 @@ it("records a failure that is not an AppError as unknown", async () => {
   await runBackupSweep(deps);
 
   expect(outcomes.runStopped).toEqual({ code: "unknown", at: STAMP.toISOString() });
+});
+
+it("clears the stopped run once a later run stores, even when that run's clean-up then fails", async () => {
+  const controller = new AbortController();
+  let free = 1999;
+  let nowMs = STAMP.getTime();
+  const seen: unknown[] = [];
+  let stagingDir = "";
+  const { deps, outcomes, backend } = await loopDeps({
+    signal: controller.signal,
+    now: () => new Date(nowMs),
+    stagingEstimateBytes: async () => 1000,
+    statfs: async () => freeSpace(free)(),
+    sleep: async (chunk) => {
+      if (seen.length > 0) {
+        controller.abort();
+        return;
+      }
+      seen.push(outcomes.runStopped);
+      free = 10_000_000;
+      nowMs += chunk;
+    },
+    // An empty directory in place of the staged copy makes the clean-up's non-recursive `rm`
+    // reject (`ERR_FS_EISDIR`) without changing any permission.
+    onUploaded: () => {
+      const staged = readdirSync(stagingDir).find((name) => !name.startsWith("backup-encrypt-"));
+      if (!staged) throw new Error("no staged copy beside the ciphertext");
+      rmSync(join(stagingDir, staged));
+      mkdirSync(join(stagingDir, staged));
+    },
+  });
+  stagingDir = deps.stagingDir;
+
+  await runBackupSweep(deps);
+
+  expect(seen).toEqual([{ code: "backup.staging_space_low", at: STAMP.toISOString() }]);
+  expect(await backend.list("", { signal: new AbortController().signal })).toHaveLength(1);
+  expect(outcomes.failed.size).toBe(0);
+  expect(outcomes.runStopped).toBeUndefined();
+  expect(deps.log).toHaveBeenCalledWith("warn", "backup.failed", { errorCode: "unknown" });
 });
