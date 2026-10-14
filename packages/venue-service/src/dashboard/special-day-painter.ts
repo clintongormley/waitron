@@ -420,6 +420,8 @@ export class SpecialDayPainter extends LitElement {
   private revision = 0;
   /** Replaced whenever a read's or a write's answer would land on a draft it no longer belongs to. */
   private generation = {};
+  /** Replaced as {@link generation} is, except by a disconnect: a save's answer still lands then. */
+  private seedToken = {};
   /** Replaced by each re-read of the stored day and by each save, so only the newest re-read that
    *  no save has overtaken lands. */
   private followToken = {};
@@ -437,6 +439,7 @@ export class SpecialDayPainter extends LitElement {
     this.unanswered = undefined;
     unanswered?.();
     if (this.adding) this.showMonth(this.month);
+    this.requestUpdate();
   }
   override disconnectedCallback() {
     this.scope?.dispose();
@@ -444,7 +447,6 @@ export class SpecialDayPainter extends LitElement {
     this.coordinator = undefined;
     this.closeMonth();
     this.generation = {};
-    this.saving = false;
     if (this.deleting?.busy) this.deleting = undefined;
     this.forgetSeason();
     super.disconnectedCallback();
@@ -456,7 +458,8 @@ export class SpecialDayPainter extends LitElement {
     if (this.open && this.seeded !== key) this.reseed(key);
     else if (changes.has("model")) {
       if (!this.scope?.isDirty()) this.revision = this.model.clockRevision;
-      this.dropUnpaintable((changes.get("model") as Model | undefined) ?? this.model);
+      if (!this.saving)
+        this.dropUnpaintable((changes.get("model") as Model | undefined) ?? this.model);
       if (this.open) this.follow();
     }
     if (this.isConnected && !this.scope) {
@@ -520,6 +523,7 @@ export class SpecialDayPainter extends LitElement {
 
   private reseed(key: string) {
     this.generation = {};
+    this.seedToken = {};
     this.followAfterRead = false;
     this.unanswered = undefined;
     this.seeded = key;
@@ -636,6 +640,7 @@ export class SpecialDayPainter extends LitElement {
   private addTo(id: string) {
     const date = this.draft.dates[0]!.date;
     this.generation = {};
+    this.seedToken = {};
     this.offered = undefined;
     this.specialDayId = id;
     this.seeded = this.seedKey();
@@ -691,6 +696,7 @@ export class SpecialDayPainter extends LitElement {
     if (!paint) return;
     this.draft = { ...this.draft, paint };
     this.notice = droppedNotice(gone, inactive);
+    this.scope?.changed();
   }
   /** One entry per (owner, date) whose paint differs from the saved state, for owners the model
    *  still has; a removed date sends none, as the server drops its paint with it. */
@@ -768,7 +774,8 @@ export class SpecialDayPainter extends LitElement {
       ...this.changedPaint(),
     };
     const sent = copyPaint(this.draft.paint);
-    const generation = this.generation;
+    const seed = this.seedToken;
+    const model = this.model;
     this.followToken = {};
     this.unanswered = undefined;
     this.saving = true;
@@ -778,16 +785,20 @@ export class SpecialDayPainter extends LitElement {
     try {
       detail = await this.api.specialDays.writeSpecialDay(this.specialDayId, input, this.revision);
     } catch (error) {
-      if (generation === this.generation) this.refuse(error, input);
+      if (seed === this.seedToken) {
+        this.refuse(error, input);
+        this.dropUnpaintable(model);
+      }
       return;
     } finally {
-      if (generation === this.generation) this.saving = false;
+      if (seed === this.seedToken) this.saving = false;
     }
-    if (generation !== this.generation) return;
+    if (seed !== this.seedToken) return;
     this.specialDayId = detail.id;
     this.seeded = this.seedKey();
     this.attempted = false;
     this.adopt(detail, [], "", this.paintedSince(sent));
+    this.dropUnpaintable(model);
     this.dispatchEvent(
       new CustomEvent("special-day-saved", { detail: { detail }, bubbles: true, composed: true }),
     );
@@ -1450,6 +1461,7 @@ export class SpecialDayPainter extends LitElement {
           this.open = false;
           this.seeded = undefined;
           this.generation = {};
+          this.seedToken = {};
           this.unanswered = undefined;
           this.saving = false;
           this.adding = false;

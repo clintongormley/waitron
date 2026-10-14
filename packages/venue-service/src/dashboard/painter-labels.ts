@@ -12,7 +12,8 @@ export function listOf(names: readonly string[]): string {
     type: "conjunction",
   }).format(names);
 }
-/** The department, active or not, whose week holds `key`'s, when it is still in the model. */
+/** The department, active or not, that `key` (`d:<id>` or `z:<id>`) belongs to, when it is still
+ *  in the model. */
 export function departmentOf(model: Model, key: string): Department | undefined {
   const id = key.slice(2);
   return model.departments.find((department) =>

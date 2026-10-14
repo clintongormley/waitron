@@ -1206,26 +1206,48 @@ describe("taken off the page while a request is out, and put back", () => {
     await settle(el);
   }
 
-  it("during a save, is no longer busy: the edit stays unsaved, ✕ can close and Save sends it again", async () => {
+  it("during a save, stays busy until the save's answer lands, then takes it as saved: ✕ can close and Save is quiet", async () => {
     const held = deferred();
-    let calls = 0;
-    const { painter, writes } = await mount({
-      answer: () => (calls++ === 0 ? held.promise : undefined),
-    });
+    const { painter, writes } = await mount({ answer: () => held.promise });
     await typeName(painter, "Renamed");
     saveButton(painter).click();
     await expect.poll(() => writes.length).toBe(1);
     await expect.poll(() => frame(painter).busy).toBe(true);
     await putBack(painter);
+    expect(frame(painter).busy).toBe(true);
     held.release();
+    await expect.poll(() => frame(painter).busy).toBe(false);
     await settle(painter);
-    expect(frame(painter).busy).toBe(false);
     expect(dismiss(painter).disabled).toBe(false);
     expect(frame(painter).heading).toBe("Renamed");
-    await save(painter, writes);
-    expect(writes).toHaveLength(2);
-    expect(writes[1]!.body).toEqual(writes[0]!.body);
     expect(saveButton(painter).disabled).toBe(true);
+    expect(writes).toHaveLength(1);
+  });
+
+  it("during a new day's first save, takes the saved day's answer even when it lands off the page: Save is quiet and the next save changes that day", async () => {
+    const held = deferred();
+    let calls = 0;
+    const { painter, writes } = await mount({
+      specialDayId: null,
+      date: "2026-12-14",
+      answer: () => (calls++ === 0 ? held.promise : undefined),
+    });
+    await typeName(painter, "Christmas lunch");
+    saveButton(painter).click();
+    await expect.poll(() => writes.length).toBe(1);
+    expect(writes[0]!.method).toBe("POST");
+    painter.remove();
+    held.release();
+    await expect.poll(() => painter.specialDayId).toBe("sd-new");
+    document.body.append(painter);
+    await settle(painter);
+    expect(frame(painter).busy).toBe(false);
+    expect(saveButton(painter).disabled).toBe(true);
+    expect(part(painter, "delete")).not.toBeNull();
+    await typeName(painter, "Christmas lunches");
+    await save(painter, writes);
+    expect(writes[1]!.method).toBe("PUT");
+    expect(writes[1]!.url).toMatch(/\/special-days\/sd-new$/);
   });
 
   it("during the first read, reads the day again and opens on it", async () => {

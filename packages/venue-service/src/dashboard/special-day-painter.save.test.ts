@@ -359,6 +359,60 @@ describe("a live refresh that takes away a department or zone with edits", () =>
     expect(grid(painter).days.get(DEC_14)).toEqual([dinner("20:00", "21:00")]);
     expect(writes).toEqual([]);
   });
+  it("a department made inactive while a save is out keeps what the save stored, drops nothing and sends nothing back", async () => {
+    let release!: (value?: unknown) => void;
+    const held = new Promise((resolve) => (release = resolve));
+    const { painter, writes } = await mount({
+      days: {
+        sd1: storedDay({
+          paint: [{ departmentId: "d2", date: DEC_14, ranges: [dinner("20:00", "21:00")] }],
+        }),
+      },
+      refusals: [held],
+    });
+    painter.model = oldBarActive();
+    await settle(painter);
+    await pick(painter, "d2");
+    await clear(painter, DEC_14);
+    saveButton(painter).click();
+    await expect.poll(() => writes.length).toBe(1);
+    expect(body(writes[0]!).paint).toEqual([{ departmentId: "d2", date: DEC_14, ranges: [] }]);
+    painter.model = painterModel();
+    await settle(painter);
+    release();
+    await expect.poll(() => frame(painter).busy).toBe(false);
+    await settle(painter);
+    expect(frame(painter).refusal).toBe("");
+    expect(frame(painter).dirty).toBe(false);
+    expect(saveButton(painter).disabled).toBe(true);
+    await pick(painter, "d1");
+    await paintDinner(painter, DEC_15);
+    await save(painter, writes);
+    expect(body(writes[1]!).paint).toEqual([
+      { departmentId: "d1", date: DEC_15, ranges: [dinner("19:00", "22:00")] },
+    ]);
+  });
+  it("a department made inactive while a save is out has its edits dropped once the save is refused", async () => {
+    let refuse!: (reason: unknown) => void;
+    const held = new Promise((_, reject) => (refuse = reject));
+    const { painter, writes } = await mount({ refusals: [held] });
+    await paintOldBar(painter);
+    saveButton(painter).click();
+    await expect.poll(() => writes.length).toBe(1);
+    painter.model = painterModel();
+    await settle(painter);
+    refuse({ code: "server.internal" });
+    await expect.poll(() => frame(painter).busy).toBe(false);
+    await settle(painter);
+    expect(frame(painter).refusal).toBe(t("menu.save_error"));
+    expect(saveButton(painter).disabled).toBe(true);
+    await pick(painter, "d1");
+    await paintDinner(painter, DEC_15);
+    await save(painter, writes);
+    expect(body(writes[1]!).paint).toEqual([
+      { departmentId: "d1", date: DEC_15, ranges: [dinner("19:00", "22:00")] },
+    ]);
+  });
 });
 
 describe("after a save", () => {

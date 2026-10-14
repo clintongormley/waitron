@@ -1982,8 +1982,9 @@ whose paint differs from what is saved; the painter stays open and the answer be
 state. A live refresh reads a stored day again: its name, Every year, its dates, and each
 department's or zone's paint each follow what is now stored unless the draft has changed them, when
 the draft and what it is compared against both stay; one that removes a department or zone with
-edits, or makes a department with edits inactive, drops those edits and says so beside Save. A
-refusal keeps the draft. One that names the name says so under Name, and one about a date that
+edits, or makes a department with edits inactive, drops those edits and says so beside Save; while
+a save is out, that waits for its answer, and edits the save stored are not dropped. A refusal
+keeps the draft. One that names the name says so under Name, and one about a date that
 is not an overlap marks that date's heading; beside Save either says only "Correct the
 highlighted fields to continue.". Any other refusal is told beside Save: one that names a
 department's or zone's paint also switches the picker to it and marks that date's heading, and a
