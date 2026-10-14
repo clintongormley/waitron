@@ -1788,6 +1788,27 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   (`apps/till/src/widgets/fit-placeholder.ts`) says whole names are kept "where one fits", looser
   than what it does at the edge.
 
+- **A666 — A floor join that moves tables together is sent once without seats and refused before
+  the Seats prompt opens (2026-10-14; owner to decide).** Found by A659's probe (#1699): a floor Join with…
+  where neither side is a fixed table (two free tables, or a join involving a party) first sends
+  `POST /api/tables/:id/today/merge` or `/api/parties/:id/join` with no seat count, gets
+  `400 merge.seats_required` (`writeMerge`, `apps/server/src/floor-today-merges.ts`), then opens
+  the Seats prompt and sends again (`#merge`/`#join`, `apps/till/src/screens/till-floor-screen.ts`).
+  Since #1598 removed saved joins this happens on every such join (a fixed table sends no merge;
+  `dropAction`, `apps/till/src/state/floor-today.ts`): one wasted round trip (for a party, a
+  join done and undone in one transaction) and a red 400 in the console; nothing the waiter sees goes
+  wrong. Option: ask for seats before sending, at the cost of showing the other refusals (table not
+  free, already grouped, zone mismatch) only after the seats are typed.
+  The request log is in #1699.
+
+- **A667 — The floor offers Join with… in a pay-first area, and seating the joined tables is
+  always refused (2026-10-14; open).** Found by A659's probe (#1699) in the demo's Downstairs bar: B1 → Join
+  with… → B2 opens "Seat table B1+B2", and Seat answers `409 service_zone.mode_incompatible`
+  ("That table is in an area that does not seat guests"; `openTab` in
+  `apps/server/src/working-order.ts`, and `refuseUnseatable` in `apps/server/src/move-bill.ts` for
+  a join). The floor should not offer what the area cannot do; whether the floor knows an area's
+  service mode was not checked.
+
 - **A660 — Moving an open counter order with nothing sent into a party printed a kitchen ticket
   (2026-10-14; check).** Found by A650's probe (Move this bill, an open counter order holding a
   Burger nobody had sent, into Mesa 43's party): the move queued an ordinary kitchen ticket and the
