@@ -247,6 +247,7 @@ import type { CanvasDef, CapabilityFlag, DeviceKind, NavigationScreen, TabDef } 
 import { SessionActivity } from "./session-activity.js";
 import { MenuStatePoll } from "./state/menu-state-poll.js";
 import { EquipmentPoll } from "./state/equipment-poll.js";
+import { EquipmentNfc, type EquipmentCode } from "./state/equipment-nfc.js";
 import {
   type BasketRefresh,
   type BlockReason,
@@ -1551,7 +1552,10 @@ export class TillApp extends LitElement {
     this.sessionActivity.noteInteraction();
   };
 
-  readonly #onVisibility = (): void => this.sessionActivity.reacquire();
+  readonly #onVisibility = (): void => {
+    this.sessionActivity.reacquire();
+    this.#syncEquipmentNfc();
+  };
 
   readonly #onIdle = (): void => void this.#onLogout();
 
@@ -1598,9 +1602,12 @@ export class TillApp extends LitElement {
     this.addEventListener("hold-reload", this.#onHoldReload);
     void this.sessionActivity.start();
     this.#syncDepartmentTransfers();
+    this.#syncEquipmentNfc();
   }
 
   override disconnectedCallback(): void {
+    this.#equipmentNfc.stop();
+    this.#pendingNfc = undefined;
     this.#reloadAsked = false;
     this.#stopDeliveryReread();
     this.#stopDepartmentTransfers();
@@ -2244,6 +2251,54 @@ export class TillApp extends LitElement {
    * request may still reach the server after later ones, so the server stores this tab's choices
    * in the order they were picked only while every choice answers. */
   #equipmentQueue: Promise<void> = Promise.resolve();
+  #pendingNfc?: EquipmentCode;
+  @state() private nfcNotice: { message: string; tone: "info" | "error" } | null = null;
+  readonly #equipmentNfc = new EquipmentNfc(
+    (code) => {
+      if (code === null) this.nfcNotice = { message: t("equipment.scan_not_ours"), tone: "error" };
+      else {
+        this.#onInteraction();
+        if (this.operatorName === "" || this.#loginPending) this.#pendingNfc = code;
+        else void this.#pickUpNfc(code);
+      }
+    },
+    () => {
+      this.nfcNotice = { message: t("equipment.nfc_read_error"), tone: "error" };
+    },
+    () => {
+      this.nfcNotice = { message: t("equipment.nfc_unavailable"), tone: "error" };
+    },
+  );
+
+  #syncEquipmentNfc(): void {
+    if (this.isConnected && !this.equipmentOpen && document.visibilityState === "visible")
+      void this.#equipmentNfc.start();
+    else this.#equipmentNfc.stop();
+  }
+
+  async #pickUpNfc(code: EquipmentCode): Promise<void> {
+    const permitted = this.deviceEquipment?.roles.find(
+      (role) =>
+        (code.kind === "reader"
+          ? role.role === "card_terminal"
+          : role.role === "receipt" || role.role === "payment_slip") &&
+        role.choices.some((item) => item.id === code.id),
+    );
+    if (!permitted) {
+      this.nfcNotice = { message: t("equipment.scan_not_available"), tone: "error" };
+      return;
+    }
+    const context = {
+      session: this.#operatorSession,
+      name: permitted.choices.find((item) => item.id === code.id)!.name,
+    };
+    await this.#onEquipmentChange(
+      new CustomEvent<EquipmentChange>("equipment-change", {
+        detail: { kind: code.kind, selection: { id: code.id }, via: "scan" },
+      }),
+      context,
+    );
+  }
   #equipmentWaiting = 0;
   /** A refusal is shown only in the dialog opening it was picked in. */
   #equipmentOpenings = 0;
@@ -2462,6 +2517,7 @@ export class TillApp extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues): void {
+    if (changed.has("equipmentOpen")) this.#syncEquipmentNfc();
     if (
       changed.has("errorKey") &&
       typeof this.errorKey === "object" &&
@@ -2795,7 +2851,12 @@ export class TillApp extends LitElement {
     if (!offerLoadFailed) this.#reconcileBasket();
     this.#menuPoll.start();
     this.#equipmentPoll.start();
-    void this.#readEquipment();
+    void this.#readEquipment().then(() => {
+      if (replaced()) return;
+      const code = this.#pendingNfc;
+      this.#pendingNfc = undefined;
+      if (code !== undefined) void this.#pickUpNfc(code);
+    });
     const firstTab = this.canvas?.tabs[0];
     const landsOnFloor = firstTab !== undefined && this.#tabNeedsFloorData(firstTab);
     if (landsOnFloor) await this.#loadFloorData(replaced);
@@ -5299,10 +5360,13 @@ export class TillApp extends LitElement {
     );
   }
 
-  #onEquipmentChange(event: CustomEvent<EquipmentChange>): Promise<void> {
+  #onEquipmentChange(
+    event: CustomEvent<EquipmentChange>,
+    nfc?: { session: number; name: string },
+  ): Promise<void> {
     const opening = this.#equipmentOpenings;
     this.#equipmentWaiting++;
-    const step = () => this.#switchEquipment(event.detail, opening);
+    const step = () => this.#switchEquipment(event.detail, opening, nfc);
     const run = this.#equipmentQueue.then(step, step);
     this.#equipmentQueue = run;
     return run;
@@ -5310,11 +5374,23 @@ export class TillApp extends LitElement {
 
   /** A refusal stays shown until the next choice answers: clearing it before the request
    * re-renders the list, dropping the retried pick while the request is in flight. */
-  async #switchEquipment(change: EquipmentChange, opening: number): Promise<void> {
+  async #switchEquipment(
+    change: EquipmentChange,
+    opening: number,
+    nfc?: { session: number; name: string },
+  ): Promise<void> {
+    const current = () =>
+      nfc === undefined ||
+      (this.isConnected && nfc.session === this.#operatorSession && this.operatorName !== "");
+    if (!current()) {
+      this.#equipmentWaiting--;
+      return;
+    }
     const reads = this.#equipmentReads;
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
     try {
       const stored = await this.api.setDeviceEquipment(change, { signal: limit.signal });
+      if (!current()) return;
       this.#equipmentChanged++;
       if (opening === this.#equipmentOpenings) this.equipmentError = null;
       if (reads === this.#equipmentReads) {
@@ -5323,7 +5399,13 @@ export class TillApp extends LitElement {
       } else {
         this.#equipmentStale = true;
       }
+      if (nfc !== undefined)
+        this.nfcNotice = {
+          message: t("equipment.picked_up").replace("{item}", () => nfc.name),
+          tone: "info",
+        };
     } catch (error) {
+      if (!current()) return;
       const { code, field, status } = (error ?? {}) as {
         code?: unknown;
         field?: unknown;
@@ -5347,6 +5429,11 @@ export class TillApp extends LitElement {
           ...(typeof field === "string" ? { field } : {}),
         };
       }
+      if (nfc !== undefined)
+        this.nfcNotice = {
+          message: codeMessage(typeof code === "string" ? code : "server.internal"),
+          tone: "error",
+        };
     } finally {
       limit.done();
       this.#equipmentWaiting--;
@@ -8672,6 +8759,8 @@ export class TillApp extends LitElement {
     this.findingBill = false;
     this.equipmentOpen = false;
     this.equipmentTaken = null;
+    this.nfcNotice = null;
+    this.#pendingNfc = undefined;
     this.profileOpen = false;
     this.invoiceRecipientBill = undefined;
     this.invoiceRecipientOpen = false;
@@ -9844,11 +9933,20 @@ export class TillApp extends LitElement {
           data-equipment-toast
           tone="info"
           .duration=${0}
-          .open=${this.equipmentTaken !== null}
+          .open=${this.equipmentTaken !== null && this.nfcNotice === null}
           .message=${this.equipmentTaken ?? ""}
           close-label=${t("equipment.close")}
           @wt-activate=${() => void this.#onOpenEquipment()}
           @wt-close=${() => (this.equipmentTaken = null)}
+        ></wt-toast>
+        <wt-toast
+          class="equipment-toast"
+          data-nfc-notice
+          .tone=${this.nfcNotice?.tone ?? "info"}
+          .open=${this.nfcNotice !== null}
+          .message=${this.nfcNotice?.message ?? ""}
+          close-label=${t("equipment.close")}
+          @wt-close=${() => (this.nfcNotice = null)}
         ></wt-toast>
         ${
           this.equipmentOpen

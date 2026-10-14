@@ -117,36 +117,37 @@ their full text.
   One difference from the decision
   above: a card reader now has one holding device at a time, and a scan or a confirmed choice from
   the dropdown moves it to the waiter's device. NFC (W102) and Tap-to-Pay are still open._
-- **Still pending: NFC** — tapping a phone on an NFC sticker to pick up a card reader or portable
-  printer (plan Task 5), W102. Left open by W100 (#1332); the plan is the
-  [equipment plan](../superpowers/plans/2026-10-04-device-equipment-and-independent-drawers.md).
-  The hardware probe is done on a OnePlus 13 with Chrome 154 and metal-backed NTAG-type stickers
-  ([results](../research/2026-10-12-nfc-probe-oneplus-13.md)). Plan Task 5's NFC
-  reader path is implemented in the equipment dialog, with browser tests using simulated NFC
-  readers. A general tap submits the equipment kind and id through the authenticated selection
-  request; a row's Scan arms just that row. If NFC is allowed or awaiting permission, you choose Scan QR code to open
-  the camera, which pauses NFC until you return. Printers have a server-side pick-up role set
-  (receipt and payment slip by default); an unnamed authenticated scan applies that set in one
-  transaction, while a scan for a named row changes only that row. You can write the code as a text record from the dashboard equipment label, beside Print,
-  and then confirm a permanent sticker lock. On browsers without Web NFC, the write action is
-  disabled with an Android Chrome hint; Copy code remains available. Browser tests use simulated
-  writers and do not establish hardware writing or locking. You can also send the label to an active venue printer from the same dialog.
-  Choose a printer; the labelled printer is offered first when active. Its registered name prints
-  as a larger, heavier heading above the QR and code, in the browser print and the queued document.
-  Browser and real-database tests check the application path and payload, not a physical print.
-  Reading on every till screen remains open. What the probe settles for the build: the sticker holds a
-  **text record** of `formatEquipmentCode`'s text (owner, 2026-10-12); the till scans whenever it is
-  in front, or a tap brings up Android's own tag viewer; opening the camera stops NFC, so the QR
-  scanner and NFC take turns; a lost tap reaches the page as nothing at all. Still to check during
-  the build: the first permission grant on the box's own `https://waitron.local` address.
-  On the OnePlus 13, open a reader or portable printer's Equipment label there, write a spare
-  unlocked sticker, and check its text with the till dialog. Write again after moving the sticker
-  away to check the retry message; lock only a disposable sticker after reading the permanent
-  warning, then try rewriting it. These box-address write/read/lock checks remain unverified. On the OnePlus 13 at that address,
-  open a portable printer's Equipment label, press Print on a printer, choose that printer and print.
-  Check its job preview, read the paper's QR in the till dialog, and check the name and code are legible.
-  Repeat for a reader label on a second active printer. Confirm neither print opens the drawer.
-  These physical print checks remain unverified.
+
+_2026-10-14: the NFC implementation is in place. The box-address checks below remain open,
+along with Tap-to-Pay._
+
+## Check NFC pick-up on the box's address
+
+On the OnePlus 13, open the installed till at `https://waitron.local`. In Equipment, press
+Allow NFC for that address's first permission grant. Close the dialog and tap a registered reader
+and portable printer from Counter, Floor, a table's order, payment, Station, Pass and My Schedule.
+Check the pick-up notice and Equipment's assignments. Try a foreign label and a reader with a
+payment already running; neither should change the assignment. Sign out, tap a registered sticker,
+and sign in normally: the selection must wait for sign-in. Open a row's QR camera, return to the
+list and close the dialog; NFC must resume without a second selection from the same tap. Lock the
+phone or leave the app and return, then tap again. Browser tests use simulated readers; these
+box-address checks remain unverified. Left open by W102.
+
+## Check NFC sticker writing and locking on the box's address
+
+On the OnePlus 13 at `https://waitron.local`, open a reader or portable printer's Equipment label
+in the dashboard. Write a spare unlocked sticker and check its text with the till. Write again
+after moving the sticker away to check the retry message. Lock only a disposable sticker after
+reading the permanent warning, then try rewriting it. Browser tests use simulated writers; these
+box-address write/read/lock checks remain unverified. Left open by W102.
+
+## Check equipment labels on a physical venue printer
+
+On the OnePlus 13 at `https://waitron.local`, open a portable printer's Equipment label, press
+Print on a printer, choose that printer and print. Check its job preview, read the paper's QR in
+the till dialog, and check the name and code are legible. Repeat for a reader label on a second
+active printer. Confirm neither print opens the drawer. Application payload checks do not
+establish a physical print; these checks remain unverified. Left open by W102.
 
 ## A guest paying from their own phone
 

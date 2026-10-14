@@ -472,6 +472,7 @@ export const en = {
   "equipment.taken": "{item} was taken by {device}",
   "equipment.taken_person": "{item} was taken by {device} ({person})",
   "equipment.close": "Close",
+  "equipment.picked_up": "Picked up {item}",
   // Allergen screen chrome; the allergen names are in `allergen-names.ts`.
   "allergens.open": "Allergens",
   "allergens.title": "Allergens",
@@ -1725,6 +1726,7 @@ export const es: Record<StringKey, string> = {
   "equipment.taken": "{device} se ha llevado {item}",
   "equipment.taken_person": "{device} ({person}) se ha llevado {item}",
   "equipment.close": "Cerrar",
+  "equipment.picked_up": "Has recogido {item}",
   "allergens.open": "Alérgenos",
   "allergens.title": "Alérgenos",
   "allergens.notice": "Hay información sobre alérgenos disponible — pregunta al personal.",

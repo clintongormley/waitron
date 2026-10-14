@@ -3316,10 +3316,23 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   only reconciliation sees it.
   [Detail](backlog/payments.md#what-m7b2-left-open-a-manager-clearing-a-stuck-card-payment-702)
 
-- **Slice 2 — the handheld NFC/QR link.** Also here: restoring `stripe_on_device` (Tap-to-Pay). NFC
-  (W102; printer pick-up settings, dialog reading, dashboard sticker writing/locking and venue-printer labels delivered;
-  reading on every screen and the box-address hardware check remain) and Tap-to-Pay
-  are still open. [Detail](backlog/payments.md#slice-2--the-handheld-nfcqr-link)
+- **Slice 2 — the handheld NFC/QR link.** Restoring `stripe_on_device` (Tap-to-Pay) remains open.
+  [Detail](backlog/payments.md#slice-2--the-handheld-nfcqr-link)
+
+- **Check NFC pick-up on the box's address.** On the OnePlus 13, grant NFC at
+  `https://waitron.local` and try equipment stickers across till screens, sign-in, QR scanning and
+  a return from locking the phone. Left open by W102; simulated readers do not verify the phone.
+  [Detail](backlog/payments.md#check-nfc-pick-up-on-the-boxs-address)
+
+- **Check NFC sticker writing and locking on the box's address.** Write a spare sticker from
+  Equipment label, read it on the till, test a moved-sticker retry and lock only a disposable one.
+  Left open by W102; simulated writers do not verify the phone.
+  [Detail](backlog/payments.md#check-nfc-sticker-writing-and-locking-on-the-boxs-address)
+
+- **Check equipment labels on a physical venue printer.** Print a portable printer's label on
+  itself and a reader's label on another active printer, scan the paper and check the name and code.
+  Confirm neither print opens the drawer. Left open by W102; paper output remains unverified.
+  [Detail](backlog/payments.md#check-equipment-labels-on-a-physical-venue-printer)
 
 - **The webhook `recordSale` hand-off** (Mode 3) and the reconcile remediation UI. The hand-off sits
   BEHIND the `AsyncPaymentProvider` seam and is therefore provider-neutral — building it against the
