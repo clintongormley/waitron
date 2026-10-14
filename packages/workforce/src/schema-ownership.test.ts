@@ -19,6 +19,11 @@ const OWNED = [
   "availability",
   "shift_templates",
   "shift_swaps",
+  "attendance_day_work",
+  "attendance_source_state",
+  "attendance_operation_facts",
+  "attendance_questions",
+  "attendance_mail",
 ];
 
 /** Core tables: none may appear in this package's generated SQL. */
