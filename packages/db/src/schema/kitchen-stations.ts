@@ -23,6 +23,8 @@ export const kitchenStations = table(
     isDefault: flag("is_default").notNull().default(false),
     active: flag("active").notNull().default(true),
     showsRestOfOrder: flag("shows_rest_of_order").notNull().default(false),
+    // Null follows the venue-wide MOVED slips choice.
+    printMovedSlips: flag("print_moved_slips"),
     // The station routes and the import refuse a value outside `isStationColour`; a CHECK would rebuild this table.
     colour: label("colour").$type<StationColour>().notNull().default("red"),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),

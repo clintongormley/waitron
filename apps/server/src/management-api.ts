@@ -1892,6 +1892,7 @@ export function mountManagementApi(
         name?: unknown;
         displayOrder?: unknown;
         showsRestOfOrder?: unknown;
+        printMovedSlips?: unknown;
         colour?: unknown;
         warmAfterMinutes?: unknown;
         overdueAfterMinutes?: unknown;
@@ -1907,6 +1908,7 @@ export function mountManagementApi(
         name?: string;
         displayOrder?: number;
         showsRestOfOrder?: boolean;
+        printMovedSlips?: boolean | null;
         colour?: StationColour;
         warmAfterMinutes?: number | null;
         overdueAfterMinutes?: number | null;
@@ -1925,6 +1927,11 @@ export function mountManagementApi(
         if (typeof body.showsRestOfOrder !== "boolean")
           throw new AppError("management.request_invalid", { field: "showsRestOfOrder" });
         patch.showsRestOfOrder = body.showsRestOfOrder;
+      }
+      if (body.printMovedSlips !== undefined) {
+        if (body.printMovedSlips !== null && typeof body.printMovedSlips !== "boolean")
+          throw new AppError("management.request_invalid", { field: "printMovedSlips" });
+        patch.printMovedSlips = body.printMovedSlips;
       }
       const colour = parseStationColour(body.colour);
       if (colour !== undefined) patch.colour = colour;

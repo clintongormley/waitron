@@ -1079,6 +1079,13 @@
       "when": 1792005760229,
       "tag": "0153_sent_order_number",
       "breakpoints": true
+    },
+    {
+      "idx": 154,
+      "version": "6",
+      "when": 1792016366531,
+      "tag": "0154_station_moved_slips",
+      "breakpoints": true
     }
   ]
 }
