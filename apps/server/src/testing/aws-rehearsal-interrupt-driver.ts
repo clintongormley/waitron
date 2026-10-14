@@ -203,7 +203,8 @@ if (
   const args = parseDriverArgs(process.argv.slice(2));
   if (args === null) {
     console.error(
-      "usage: aws-rehearsal-interrupt-driver.ts --endpoint <loopback url> --receipt-dir <dir> --point <point>",
+      "usage: aws-rehearsal-interrupt-driver.ts --endpoint <loopback url> --receipt-dir <dir> " +
+        "--point <point> [--teardown-ms <ms>] [--other-bucket <name>, with --point unplanned only]",
     );
     process.exit(2);
   }

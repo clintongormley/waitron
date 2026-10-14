@@ -1174,7 +1174,11 @@ describe("the test shards", () => {
       ...jobs.map(({ id, body }) => ({ id, step: shardStep(body) })),
       {
         id: STREAM_JOB,
-        step: streamStep.slice(streamStep.findIndex((l) => /- name: Run the stream/.test(l))),
+        step: streamStep.slice(
+          streamStep.findIndex((l) =>
+            /- name: Run the tests that need Litestream or versitygw$/.test(l),
+          ),
+        ),
       },
     ].filter(({ step }) => step !== undefined);
 

@@ -14,10 +14,13 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import {
+  AbortMultipartUploadCommand,
   CreateBucketCommand,
   DeleteBucketCommand,
+  DeleteObjectCommand,
   HeadBucketCommand,
   ListBucketsCommand,
+  ListMultipartUploadsCommand,
   ListObjectsV2Command,
   S3Client,
 } from "@aws-sdk/client-s3";
@@ -150,7 +153,7 @@ async function journalsIn(
     try {
       journals.push(JSON.parse(await readFile(join(receiptDir, name), "utf8")));
     } catch {
-      // Being replaced as it was read; the pids it names are in the next one too.
+      // Removed between the listing and the read: a refused run deletes its journal.
     }
   }
   return journals;
@@ -165,15 +168,38 @@ function stopPid(pid: number | undefined, group = false): void {
   }
 }
 
+/** Empties and deletes every bucket on the server; a step that fails is left for the case to report. */
+async function removeAllBuckets(admin: S3Client): Promise<void> {
+  const listed = await admin.send(new ListBucketsCommand({})).catch(() => undefined);
+  for (const { Name: bucket } of listed?.Buckets ?? []) {
+    if (bucket === undefined) continue;
+    try {
+      const uploads = await admin.send(new ListMultipartUploadsCommand({ Bucket: bucket }));
+      for (const { Key, UploadId } of uploads.Uploads ?? []) {
+        await admin.send(new AbortMultipartUploadCommand({ Bucket: bucket, Key, UploadId }));
+      }
+      const objects = await admin.send(new ListObjectsV2Command({ Bucket: bucket }));
+      for (const { Key } of objects.Contents ?? []) {
+        await admin.send(new DeleteObjectCommand({ Bucket: bucket, Key }));
+      }
+      await admin.send(new DeleteBucketCommand({ Bucket: bucket }));
+    } catch {
+      // The next case's own checks say what is still there.
+    }
+  }
+}
+
 describe("a rehearsal run killed part-way, against versitygw", () => {
   let dir: string | undefined;
   let s3: S3TestServer | undefined;
   let client: S3Client | undefined;
-  /** Every pid this suite started or caused, stopped by pid alone in afterEach. */
+  /** What this suite started or caused, stopped in afterEach. */
   let started: {
     driver?: ChildProcess;
     receiptDir?: string;
     keeperPid?: number;
+    /** Read while the keeper was known to be running, so afterEach can tell it from a reused pid. */
+    keeperStartTime?: string | null;
     sleepPid?: number;
     proxy?: PausingProxy;
   } = {};
@@ -204,17 +230,25 @@ describe("a rehearsal run killed part-way, against versitygw", () => {
     }
     await started.proxy?.close();
     if (started.driver?.pid !== undefined) stopPid(started.driver.pid, true);
-    // A case that failed before the driver's RUN line knows these only from the run's journal.
-    const pids = new Set([started.keeperPid, started.sleepPid]);
+    // Each only while it is still the process the run started. A keeper whose start time was never
+    // read (its case failed before the driver's RUN line) is left to end itself: the driver's death
+    // above is end-of-file on its stdin.
+    const pids = new Set([started.sleepPid]);
+    const { keeperPid, keeperStartTime } = started;
+    if (keeperPid !== undefined && keeperStartTime !== undefined && keeperStartTime !== null) {
+      if (processStartTime(keeperPid) === keeperStartTime) pids.add(keeperPid);
+    }
+    // A case that failed before the driver's RUN line knows its tracked pids only from the journal.
     for (const journal of await journalsIn(started.receiptDir)) {
-      if (journal.keeperPid !== null) pids.add(journal.keeperPid);
-      // Only while it is still the process the run started.
       for (const { pid, startTime } of journal.pids) {
         if (startTime !== null && processStartTime(pid) === startTime) pids.add(pid);
       }
     }
     for (const pid of pids) stopPid(pid);
     started = {};
+    // Every bucket on this file's own server was made by one of its cases; a failed case's leftovers
+    // would fail each later case's bucket count.
+    if (client !== undefined) await removeAllBuckets(client);
   });
 
   afterAll(async () => {
@@ -331,7 +365,10 @@ describe("a rehearsal run killed part-way, against versitygw", () => {
     const journal = JSON.parse(
       await readFile(join(receiptDir, journalFileName(facts.runId)), "utf8"),
     ) as { keeperPid: number | null };
-    if (journal.keeperPid !== null) started.keeperPid = journal.keeperPid;
+    if (journal.keeperPid !== null) {
+      started.keeperPid = journal.keeperPid;
+      started.keeperStartTime = processStartTime(journal.keeperPid);
+    }
     return facts;
   }
 
@@ -633,6 +670,12 @@ describe("a rehearsal run killed part-way, against versitygw", () => {
         expect(lines).toContain("the run finished; nothing to do");
         expect(lines.at(-1)).toBe("exit 0");
         expect(await rehearsalBuckets(client)).toEqual([]);
+        // A bucket outside the rehearsal's pattern is never named (design D3).
+        expect(text).toContain("DeleteBucket was sent to a bucket this run did not create");
+        expect(text).not.toContain(other);
+        expect(
+          await readFile(join(receiptDir, receiptFileName(facts.runId)), "utf8"),
+        ).not.toContain(other);
       } finally {
         // Already gone when the refusal failed, which an assertion above reports.
         await client.send(new DeleteBucketCommand({ Bucket: other })).catch(() => undefined);
