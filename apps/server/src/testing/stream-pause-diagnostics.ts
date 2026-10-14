@@ -82,7 +82,7 @@ export interface CheckpointProbe {
 /**
  * Whether a reader holds the side file: a passive checkpoint stops at the oldest reader's snapshot,
  * so two probes, each after its own sale, that stop short of the end at the same mark show a read
- * transaction that outlived a sale, which a server's short read does not.
+ * transaction that outlived a sale.
  */
 export function holdProven(
   previous: CheckpointProbe | undefined,

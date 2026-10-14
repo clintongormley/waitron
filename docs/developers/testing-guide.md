@@ -703,10 +703,11 @@ and when a seller fails. You get the elapsed time, completed sales, summed reque
 request, summed waits around the supervisor's measurement, file size and the first 32 bytes'
 page size, checkpoint sequence and salt pair. `stream pause: a reader holds the side file` lists
 the checkpoint probes, `stream pause: the side file at the fill's start` records the header the
-fill checks against, and `stream pause: the side file is held` when 2,000 frames are under it. The sums cover three concurrent sellers, so they
-can exceed elapsed time. On failure, `stream pause failure context` also keeps the last twenty
-stream events and the synthetic S3 server's log before teardown resumes that server. An unreadable
-context does not replace the original failure.
+fill checks against, and `stream pause: the side file is held` is logged when 2,000 frames are
+under it. The sums cover three concurrent sellers, so they can exceed elapsed time. On failure,
+`stream pause failure context` also keeps the last twenty stream events and the synthetic S3
+server's log before teardown resumes that server. An unreadable context does not replace the
+original failure.
 
 These are observations, not a consistent database snapshot: Litestream can change the file between
 its size and header reads. The helper opens the file read-only and checks its header length, magic
@@ -733,13 +734,14 @@ something is still checkpointing`. That check began only at 2,000 frames under o
 fill sale, the side file restarted after 1,327 frames, 3,745 ms into the fill, and the test failed
 there with that message; the same change against the earlier check timed out after 181.7 s
 (`timed out waiting for the side file to reach the limit`, 1,098 sales, checkpoint sequence 57),
-never having seen 2,000 frames under one header. Healthy runs of the new check passed four times;
-in each, the first three or four probes copied the whole file back and the next two stopped at
-mark 0.
+never having seen 2,000 frames under one header. Healthy runs of the new check, with no added wait,
+passed four times on the owner's Mac; in each, the first three or four probes copied the whole
+file back and the next two stopped at mark 0.
 
 | Source | Source wording | What the diagnostic reads |
 | --- | --- | --- |
 | [SQLite WAL format](https://www.sqlite.org/fileformat.html#wal_file_format) | "The WAL header is 32 bytes in size"; "Checkpoint sequence number" | Big-endian page size at byte 8, checkpoint sequence at byte 12, and the salt pair at bytes 16–23. The same source's WAL Reset section describes salt changes and optional truncation. |
+| [SQLite WAL](https://www.sqlite.org/wal.html), "Checkpointing"; [`sqlite3_wal_checkpoint_v2`](https://www.sqlite.org/c3ref/wal_checkpoint_v2.html) | "the checkpoint must stop when it reaches a page in the WAL that is past the end mark of any current reader"; PASSIVE: "Checkpoint as many frames as possible without waiting for any database readers or writers to finish" | `pragma wal_checkpoint(passive)`'s `checkpointed` column as the point where the probe stopped (`holdProven`). |
 
 **In CI their temporary files are in memory.** `test-server-stream` runs the loop and pause tests,
 the S3 rehearsal scenarios and the S3 test server's own suite with `TMPDIR=/dev/shm`, pinned by

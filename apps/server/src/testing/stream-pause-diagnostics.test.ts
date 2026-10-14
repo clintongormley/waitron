@@ -134,6 +134,12 @@ describe("stream pause side-file diagnostics", () => {
       ).toBe(false);
     });
 
+    it("is proven at mark 0, where healthy runs stop", () => {
+      expect(
+        holdProven({ busy: 0, log: 40, checkpointed: 0 }, { busy: 0, log: 80, checkpointed: 0 }),
+      ).toBe(true);
+    });
+
     it("is not proven on the first probe alone", () => {
       expect(holdProven(undefined, { busy: 0, log: 118, checkpointed: 12 })).toBe(false);
     });

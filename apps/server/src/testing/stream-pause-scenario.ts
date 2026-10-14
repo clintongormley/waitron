@@ -80,12 +80,12 @@ const DEVICE_TOKEN = "stream-pause-e2e-device-token";
 const WAL_LIMIT_BYTES = 16 * 1024 * 1024;
 
 // `waitFor` checks each POINTER, RESTART, RESUME and UPLOAD wait's deadline between probes, and
-// `restoreGeneration` its RESTORE_MS ceiling; the fill and the wait for the fold-back each check a
-// deadline between sales. BOOT_MS is a budget nothing here enforces, and UNTIMED_MS covers
-// migrations, provisioning and the close. A caller's timeout adds this sum, because Vitest's timer
-// fails a healthy run that outlasts it (CLAUDE.md §4). The fold-back is waited for until the
-// supervisor's next side-file check after the fill, TICK_MS at most, plus FOLD_SLACK_MS for
-// Litestream's stop, which escalates to SIGKILL after five seconds.
+// `restoreGeneration` its RESTORE_MS ceiling; the hold wait, the fill and the wait for the
+// fold-back each check a deadline between sales. BOOT_MS is a budget nothing here enforces, and
+// UNTIMED_MS covers migrations, provisioning and the close. A caller's timeout adds this sum,
+// because Vitest's timer fails a healthy run that outlasts it (CLAUDE.md §4). The fold-back is
+// waited for until the supervisor's next side-file check after the fill, TICK_MS at most, plus
+// FOLD_SLACK_MS for Litestream's stop, which escalates to SIGKILL after five seconds.
 const POINTER_WAIT_MS = 30_000;
 const BOOT_MS = 30_000;
 /** CI run 36210908359 had not reached the limit after 30 s (testing-guide.md, the pause test). */
