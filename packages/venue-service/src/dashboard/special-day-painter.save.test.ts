@@ -401,6 +401,7 @@ describe("a live refresh that takes away a department or zone with edits", () =>
     await expect.poll(() => writes.length).toBe(1);
     painter.model = painterModel();
     await settle(painter);
+    expect(frame(painter).refusal).toBe("");
     refuse({ code: "server.internal" });
     await expect.poll(() => frame(painter).busy).toBe(false);
     await settle(painter);
