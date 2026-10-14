@@ -179,15 +179,6 @@ describe("the S3 rehearsal scenarios, against versitygw", () => {
     DELETE_MANY_SCENARIO_MS,
   );
 
-  it("refuses a 1,006th object before it sends any request", async (ctx) => {
-    const local = await deleteManyFixture(ctx);
-    local.fixture.reserveObjects(1);
-    await expect(started(runDeleteManyScenario(local.fixture))).rejects.toThrow(/fixture-limit/);
-    expect(local.events).toEqual([
-      { scenario: "lifecycle", phase: "fixture-limit", count: 1005, outcome: "refused" },
-    ]);
-  });
-
   it(
     "stops every upload once one fails, so no request follows the rejection",
     async (ctx) => {

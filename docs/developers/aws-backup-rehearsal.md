@@ -285,7 +285,9 @@ all 8 cases passed. The requests each scenario recorded were: delete-many,
 1,005 PutObject, 3 ListObjectsV2 and 2 DeleteObjects, all 200; the round trip, 1
 CreateMultipartUpload, 4 UploadPart, 1 CompleteMultipartUpload, 2 ListObjectsV2 and 1 GetObject, all
 200; the abort, 1 CreateMultipartUpload, 1 UploadPart and 1 ListObjectsV2 answered 200 and 1
-AbortMultipartUpload answered 204. That is how versitygw answers, not how Amazon S3 does.
+AbortMultipartUpload answered 204. That is how versitygw answers, not how Amazon S3 does. One of
+those 8, the delete-many scenario's refusal of a 1,006th object, has since moved to
+`apps/server/src/testing/s3-delete-scenario.test.ts`, which needs no server, so the file now holds 7.
 
 ## When teardown fails: the cleanup command
 

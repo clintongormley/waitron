@@ -2,9 +2,17 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { AWS_REHEARSAL_LIMITS } from "./aws-rehearsal-limits.js";
+import {
+  AWS_REHEARSAL_LIMITS,
+  AWS_REHEARSAL_SCENARIO_DEADLINE_MS,
+} from "./aws-rehearsal-limits.js";
+import { sanitizeEvent } from "./aws-rehearsal-receipt.js";
 import { localS3Fixture } from "./local-s3-fixture.js";
-import { runArchiveAbort, runArchiveRoundTrip } from "./s3-archive-scenario.js";
+import {
+  ARCHIVE_SCENARIO_MS,
+  runArchiveAbort,
+  runArchiveRoundTrip,
+} from "./s3-archive-scenario.js";
 
 const MiB = 1024 * 1024;
 const folders: string[] = [];
@@ -69,5 +77,40 @@ describe("the archive scenarios' budget", () => {
       },
     ]);
     expect(send).not.toHaveBeenCalled();
+  });
+});
+
+// Every phase each archive scenario records, its request recorder's included.
+const PHASES = [
+  ...[
+    "uploaded",
+    "listed",
+    "downloaded",
+    "decrypted-match",
+    "wrong-key-refused",
+    "tamper-refused",
+    "request",
+  ].map((phase) => ["archive-roundtrip", phase]),
+  ...["aborted", "abort-cleanup", "uploads-after", "listed-after", "request"].map((phase) => [
+    "archive-abort",
+    phase,
+  ]),
+];
+
+describe("the archive scenarios' fit to the AWS rehearsal", () => {
+  it.each(PHASES)("the receipt accepts %s's %s events as recorded", (scenario, phase) => {
+    for (const outcome of ["ok", "failed"] as const) {
+      expect(sanitizeEvent({ scenario, phase, outcome, bytes: 33554432 })).toEqual({
+        scenario,
+        phase,
+        outcome,
+        bytes: 33554432,
+      });
+    }
+  });
+
+  // aws-archive.aws-rehearsal.test.ts runs both scenarios in one rehearsal, under one deadline.
+  it("both time limits together fit inside the rehearsal's scenario deadline", () => {
+    expect(2 * ARCHIVE_SCENARIO_MS).toBeLessThanOrEqual(AWS_REHEARSAL_SCENARIO_DEADLINE_MS);
   });
 });
