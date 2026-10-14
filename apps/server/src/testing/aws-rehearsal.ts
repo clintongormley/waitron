@@ -84,6 +84,7 @@ import {
   installSendGate,
   markRunnerClient,
   openRequestScope,
+  refusalsSummary,
   type RequestScope,
 } from "./aws-send-gate.js";
 
@@ -1071,11 +1072,7 @@ export function unplannedFailure(refusals: {
   count: number;
   first: string | undefined;
 }): AwsRehearsalFailed | undefined {
-  return refusals.count === 0
-    ? undefined
-    : new AwsRehearsalFailed(
-        `${refusals.count} unplanned request(s) refused before sending; the first: ${refusals.first}`,
-      );
+  return refusals.count === 0 ? undefined : new AwsRehearsalFailed(refusalsSummary(refusals));
 }
 
 /**

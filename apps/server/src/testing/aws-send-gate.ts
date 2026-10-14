@@ -53,6 +53,11 @@ export function setSendGateStrict(on: boolean): void {
   strict = on;
 }
 
+/** The failure text for a run whose scope refused `count` requests, naming the first refusal. */
+export function refusalsSummary(refusals: { count: number; first: string | undefined }): string {
+  return `${refusals.count} unplanned request(s) refused before sending; the first: ${refusals.first}`;
+}
+
 const escaped = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /**

@@ -1,6 +1,11 @@
 import type { SCENARIO_APIS } from "./aws-request-plan.js";
 import { createRequestPlan } from "./aws-request-plan.js";
-import { installSendGate, openRequestScope, uninstallSendGate } from "./aws-send-gate.js";
+import {
+  installSendGate,
+  openRequestScope,
+  refusalsSummary,
+  uninstallSendGate,
+} from "./aws-send-gate.js";
 
 export interface LocalPlan {
   bucket: string;
@@ -48,13 +53,11 @@ export async function runUnderPlan<T>(plan: LocalPlan, body: () => Promise<T>): 
   } catch (error) {
     outcome = { ok: false, error };
   }
-  const { count, first } = scope.refusals();
+  const refusals = scope.refusals();
   scope.close();
   ended = true;
-  if (count > 0) {
-    throw new Error(`${count} unplanned request(s) refused before sending; the first: ${first}`, {
-      cause: outcome.ok ? undefined : outcome.error,
-    });
+  if (refusals.count > 0) {
+    throw new Error(refusalsSummary(refusals), { cause: outcome.ok ? undefined : outcome.error });
   }
   if (!outcome.ok) throw outcome.error;
   return outcome.value;
