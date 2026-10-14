@@ -312,6 +312,8 @@ export interface TeardownDeps {
   teardownMs: number;
   /** How long the runner waits for tracked children after SIGTERM, and again after SIGKILL; 5 s when unset. */
   childGraceMs?: number;
+  /** False once `pid` is no longer the process that was tracked: it is then gone, and never signalled. */
+  sameProcess?(pid: number): boolean;
   record?(event: unknown): void;
 }
 
@@ -473,11 +475,14 @@ export async function stopChildren(
   deps: TeardownDeps,
   signal: AbortSignal,
 ): Promise<TeardownEntry> {
-  const live = [...new Set(pids)].filter((pid) => deps.isAlive(pid));
+  // Checked again before each signal: a pid freed during the grace wait can be handed to another process.
+  const ours = (pid: number): boolean => deps.isAlive(pid) && deps.sameProcess?.(pid) !== false;
+  const live = [...new Set(pids)].filter(ours);
   if (live.length === 0) return { step: "stop-child", outcome: "skipped", count: 0 };
-  const running = (): number[] => live.filter((pid) => deps.isAlive(pid));
+  const running = (): number[] => live.filter(ours);
   const send = (kill: NodeJS.Signals): void => {
-    for (const pid of running()) {
+    for (const pid of live) {
+      if (!ours(pid)) continue;
       try {
         deps.kill(pid, kill);
       } catch {
@@ -1566,6 +1571,11 @@ async function runOwned<T>(
           {
             ...deps,
             record,
+            sameProcess: (pid) => {
+              const tracked = journalPids.find((entry) => entry.pid === pid);
+              // A pid whose start time could not be read when tracked cannot be told from another.
+              return tracked?.startTime == null || deps.processStartTime(pid) === tracked.startTime;
+            },
           },
         );
         for (const entry of teardown.entries) contained.teardown(entry);

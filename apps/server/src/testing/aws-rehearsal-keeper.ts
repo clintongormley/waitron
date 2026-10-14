@@ -262,8 +262,9 @@ function journalLeft(journal: RehearsalJournal): string[] {
 }
 
 function liveTracked(journal: RehearsalJournal, deps: KeeperDeps): number[] {
-  return matchingPids(journal, deps, { say: () => {}, note: () => {} }).filter((pid) =>
-    deps.isAlive(pid),
+  const same = sameProcess(journal, deps);
+  return matchingPids(journal, deps, { say: () => {}, note: () => {} }).filter(
+    (pid) => deps.isAlive(pid) && same(pid),
   );
 }
 
@@ -277,6 +278,7 @@ async function stopTracked(
   lines: Lines,
 ): Promise<{ entry: TeardownEntry; stopped: number[]; left: number[] }> {
   const pids = matchingPids(journal, deps, lines);
+  const same = sameProcess(journal, deps);
   const entry = await stopChildren(
     pids,
     {
@@ -286,10 +288,12 @@ async function stopTracked(
       now: deps.now,
       teardownMs: journal.teardownMs,
       ...(deps.childGraceMs === undefined ? {} : { childGraceMs: deps.childGraceMs }),
+      sameProcess: same,
     },
     AbortSignal.timeout(journal.teardownMs),
   );
-  const left = entry.outcome === "failed" ? pids.filter((pid) => deps.isAlive(pid)) : [];
+  const left =
+    entry.outcome === "failed" ? pids.filter((pid) => deps.isAlive(pid) && same(pid)) : [];
   return { entry, stopped: pids.filter((pid) => !left.includes(pid)), left };
 }
 
@@ -489,13 +493,22 @@ async function act(journal: RehearsalJournal, deps: KeeperDeps, lines: Lines): P
   }
 }
 
+/** Whether `pid` still has the start time the journal recorded for it. */
+function sameProcess(journal: RehearsalJournal, deps: KeeperDeps): (pid: number) => boolean {
+  return (pid) => {
+    const startTime = journal.pids.find((entry) => entry.pid === pid)?.startTime;
+    return startTime != null && deps.processStartTime(pid) === startTime;
+  };
+}
+
 /** A pid is signalled only while its start time still matches the one the journal recorded. */
 function matchingPids(journal: RehearsalJournal, deps: KeeperDeps, lines: Lines): number[] {
+  const same = sameProcess(journal, deps);
   const pids: number[] = [];
   for (const { pid, startTime } of journal.pids) {
     if (startTime === null) {
       lines.note(`pid ${pid} has no recorded start time; not signalled`);
-    } else if (deps.processStartTime(pid) !== startTime) {
+    } else if (!same(pid)) {
       lines.note(`pid ${pid} is gone or is another process now; not signalled`);
     } else {
       pids.push(pid);

@@ -770,6 +770,38 @@ describe("runKeeper", () => {
       },
     );
 
+    it("never signals a tracked pid once another process holds it", async () => {
+      await writeJournalFile(journal({ state: "deleted", pids: [pid] }));
+      let startTime = START_TIME;
+      const h = harness(new FakeAdmin(), {
+        isAlive: (p) => p === 4242,
+        processStartTime: () => startTime,
+      });
+      h.kill.mockImplementation(() => {
+        startTime = "Thu Oct 15 10:00:00 2026";
+      });
+
+      expect(await runKeeper(journalPath, h.deps)).toBe(0);
+
+      expect(h.kill.mock.calls).toEqual([[4242, "SIGTERM"]]);
+      expect(h.printed).toEqual([interruptedPath(), "nothing left behind"]);
+    });
+
+    it("does not signal a pid another process took after its start time was first read", async () => {
+      await writeJournalFile(journal({ state: "deleted", pids: [pid] }));
+      const h = harness(new FakeAdmin(), {
+        isAlive: (p) => p === 4242,
+        processStartTime: vi
+          .fn()
+          .mockReturnValueOnce(START_TIME)
+          .mockReturnValue("Thu Oct 15 10:00:00 2026"),
+      });
+
+      expect(await runKeeper(journalPath, h.deps)).toBe(0);
+
+      expect(h.kill).not.toHaveBeenCalled();
+    });
+
     it("names a process that would not stop on deleted, and exits 1", async () => {
       await writeJournalFile(journal({ state: "deleted", pids: [pid] }));
       const h = harness(new FakeAdmin(), { isAlive: (p) => p === 4242 });

@@ -11,6 +11,7 @@ import {
   NONCE,
   RUN_ID,
   SECRET,
+  START_TIME,
   SUFFIX,
   fakeHarness,
   ok,
@@ -404,6 +405,25 @@ describe("withAwsRehearsal — fixture limits", () => {
 });
 
 describe("withAwsRehearsal — teardown after a failure", () => {
+  it("never signals a tracked child's pid once another process holds it", async () => {
+    let startTime = START_TIME;
+    const h = harness(
+      {},
+      {
+        isAlive: (pid) => pid === 4242,
+        processStartTime: () => startTime,
+        kill: (pid, signal) => {
+          h.killed.push([pid, signal]);
+          startTime = "Thu Oct 15 10:00:00 2026";
+        },
+      },
+    );
+    await withAwsRehearsal(async (ctx) => {
+      ctx.trackChild(4242);
+    }, h.deps);
+    expect(h.killed).toEqual([[4242, "SIGTERM"]]);
+  });
+
   it("stops only live tracked children and aborts tracked and listed uploads", async () => {
     const alive = new Set([4242, 999]);
     const h = harness(
