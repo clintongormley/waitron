@@ -1,5 +1,5 @@
 // The Amazon S3 rehearsal's scenarios run against versitygw (`./testing/s3-test-server.ts`), so each
-// is proven locally before a rehearsal sends it to AWS. Install the server with
+// runs locally before a rehearsal sends it to AWS. Install the server with
 // `node scripts/setup-s3-test-server.mjs`. Without it each case is reported SKIPPED; with CI=true or
 // WAITRON_REQUIRE_STREAM_BINARIES=1 a missing binary FAILS the case instead.
 import { randomUUID } from "node:crypto";
