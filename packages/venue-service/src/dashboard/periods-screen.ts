@@ -26,20 +26,11 @@ export type PeriodRow =
 
 type Deletion = {
   period: Period;
-  /** Sent with the delete: the revision of the model applied when the shown impact's read began,
-   *  so a new revision never travels with an impact read before it. */
-  clockRevision: number;
-  /** The revision of the model applied when the latest impact read began. */
-  readRevision: number;
   /** The latest impact read; an answer to an earlier one is ignored. */
   generation: number;
   /** The latest impact read started after every watch read numbered below this. */
   readAfter: number;
-  /** Whether the latest impact read has yet to answer. */
-  reading: boolean;
-  /** Set by a clock-change refusal to the reload's hold-back point, and cleared when an impact
-   *  read succeeds that began with a model whose read started after that point. */
-  reloadedAt?: number;
+  /** The delete sends this impact's clock revision. */
   impact?: PeriodDeleteImpact;
   readError: string;
   busy: boolean;
@@ -377,8 +368,7 @@ export class PeriodsScreen extends LitElement {
       return;
     }
     deletion.period = period;
-    if (this.model!.clockRevision !== deletion.readRevision) void this.readImpact(deletion, true);
-    else this.rereadImpact(this.model!);
+    this.rereadImpact(this.model!);
   }
   /** Reads the impact again unless the latest impact read started after the watch read that
    *  produced `read`, so both watches answering one page re-read cost one impact read. */
@@ -393,16 +383,7 @@ export class PeriodsScreen extends LitElement {
   private askDelete(period: Period) {
     if (this.readOnly || !this.isConnected || !this.model || this.deleting || this.periods.editing)
       return;
-    const deletion: Deletion = {
-      period,
-      clockRevision: this.model.clockRevision,
-      readRevision: this.model.clockRevision,
-      generation: 0,
-      readAfter: 0,
-      reading: false,
-      readError: "",
-      busy: false,
-    };
+    const deletion: Deletion = { period, generation: 0, readAfter: 0, readError: "", busy: false };
     this.deleting = deletion;
     void this.readImpact(deletion);
   }
@@ -410,38 +391,22 @@ export class PeriodsScreen extends LitElement {
   /** `automatic` for a read the person did not start, which is passive session activity. */
   private async readImpact(deletion: Deletion, automatic = false) {
     const generation = ++deletion.generation;
-    const revision = this.model!.clockRevision;
-    const reloaded =
-      deletion.reloadedAt !== undefined &&
-      (this.api.readNumberOf(this.model!) ?? 0) > deletion.reloadedAt;
-    deletion.readRevision = revision;
     deletion.readAfter = this.api.nextReadNumber();
-    deletion.reading = true;
+    const current = () => this.deleting === deletion && deletion.generation === generation;
     let impact: PeriodDeleteImpact;
     try {
       impact = await this.api.readPeriodDeleteImpact(deletion.period.id, { passive: automatic });
     } catch {
-      if (this.current(deletion, generation)) {
-        deletion.reading = false;
+      if (current()) {
         deletion.readError = t("period.delete_read_error");
         this.requestUpdate();
       }
       return;
     }
-    if (!this.current(deletion, generation)) return;
-    deletion.reading = false;
+    if (!current()) return;
     deletion.impact = impact;
-    deletion.clockRevision = revision;
-    if (reloaded) deletion.reloadedAt = undefined;
     deletion.readError = "";
     this.requestUpdate();
-  }
-  /** An answer that arrives while the page is detached is dropped unseen, so the first model the
-   *  page applies once attached again reads the impact again, even a live query's kept model. */
-  private current(deletion: Deletion, generation: number) {
-    if (this.deleting !== deletion || deletion.generation !== generation) return false;
-    if (!this.isConnected) deletion.readAfter = 0;
-    return this.isConnected;
   }
 
   private async confirmDelete(
@@ -451,7 +416,7 @@ export class PeriodsScreen extends LitElement {
     const deletion = this.deleting;
     const component = event.currentTarget as PeriodDeleteDialog;
     if (
-      !deletion ||
+      !deletion?.impact ||
       deletion.busy ||
       this.readOnly ||
       !this.isConnected ||
@@ -462,21 +427,21 @@ export class PeriodsScreen extends LitElement {
     deletion.busy = true;
     component.refusal = undefined;
     this.requestUpdate();
-    const sent = deletion.clockRevision;
     try {
-      await this.api.deletePeriod(deletion.period.id, event.detail.replacementPeriodId, sent);
+      await this.api.deletePeriod(
+        deletion.period.id,
+        event.detail.replacementPeriodId,
+        deletion.impact.clockRevision,
+      );
     } catch (error) {
       if (this.deleting !== deletion || !this.isConnected) return;
       component.refusal = refusalOf(error);
-      // A further refusal reloads nothing until an impact read that began with the reloaded hours
-      // succeeds. An impact read on its way that took a revision other than the refused one is
-      // left to answer instead of reloading.
-      if (
-        component.refusal.code === "hours.clock_changed" &&
-        deletion.reloadedAt === undefined &&
-        !(deletion.reading && deletion.readRevision !== sent)
-      )
-        deletion.reloadedAt = this.api.rereadWatches();
+      if (component.refusal.code === "hours.clock_changed") {
+        // Delete waits for an impact read begun after the refusal, and sends its revision.
+        deletion.impact = undefined;
+        deletion.readError = "";
+        void this.readImpact(deletion, true);
+      }
       return;
     } finally {
       deletion.busy = false;

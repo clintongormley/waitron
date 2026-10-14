@@ -49,7 +49,7 @@ export class PeriodDeleteDialog extends LitElement {
   ];
   @property({ type: Boolean }) open = false;
   @property({ attribute: false }) period?: { id: string; name: string };
-  /** Undefined while it loads. */
+  /** Undefined while it loads. Going undefined keeps the Replace-with choice. */
   @property({ attribute: false }) impact?: PeriodDeleteImpact;
   @property() readError = "";
   @property({ type: Boolean }) busy = false;
@@ -64,8 +64,9 @@ export class PeriodDeleteDialog extends LitElement {
     }
     if (
       changed.has("impact") &&
+      this.impact &&
       this.replacement !== "" &&
-      !this.impact?.replacements.some((entry) => entry.id === this.replacement)
+      !this.impact.replacements.some((entry) => entry.id === this.replacement)
     )
       this.replacement = "";
   }
@@ -92,7 +93,7 @@ export class PeriodDeleteDialog extends LitElement {
   }
   private bottomError(): string {
     const refusal = this.refusal;
-    if (!refusal) return this.readError;
+    if (!refusal || this.readError) return this.readError;
     if (this.fieldError()) return t("prep.fix_fields");
     const params = refusal.params ?? {};
     switch (refusal.code) {

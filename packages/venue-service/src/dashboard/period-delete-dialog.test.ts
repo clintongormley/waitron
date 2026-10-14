@@ -23,6 +23,7 @@ function impactOf(overrides: Partial<PeriodDeleteImpact> = {}): PeriodDeleteImpa
     routingUses: [],
     keptOpenToday: false,
     replacements,
+    clockRevision: 0,
     ...overrides,
   };
 }
@@ -198,7 +199,7 @@ it("a new impact replaces the cells and counts shown, keeps a refusal, and drops
   expect(picker(el)!.value).toBe("");
   expect(text).toContain("Its painted time becomes closed");
   expect(bottom(el)).toBe(
-    "The business-day start changed. Check what deleting it changes, then try again.",
+    "The business-day start changed. Check what deleting it changes, then delete it again.",
   );
   const confirmed = listen(el, "period-delete-confirm");
   confirm(el).click();
@@ -211,6 +212,38 @@ it("a new impact that still lists the chosen replacement keeps it", async () => 
   el.impact = impactOf({ seasons: 2 });
   await el.updateComplete;
   expect(picker(el)!.value).toBe("p3");
+});
+
+it("keeps the Replace-with choice while the impact is read again, and while the new impact lists it", async () => {
+  const el = await mount(impactOf({ seasons: 4 }));
+  await choose(el, "p3");
+  el.impact = undefined;
+  await el.updateComplete;
+  expect(confirm(el).disabled).toBe(true);
+  el.impact = impactOf({ seasons: 2 });
+  await el.updateComplete;
+  expect(picker(el)!.value).toBe("p3");
+  expect(body(el)).toContain("Brunch takes its painted time.");
+  const confirmed = listen(el, "period-delete-confirm");
+  confirm(el).click();
+  expect(confirmed).toEqual([{ periodId: "p1", replacementPeriodId: "p3" }]);
+});
+
+it("a failed read is shown at the bottom over a refusal, with Try again, and the refusal returns once the read succeeds", async () => {
+  const el = await mount();
+  el.refusal = { code: "hours.clock_changed" };
+  el.readError = "What deleting it changes could not be read.";
+  await el.updateComplete;
+  expect(bottom(el)).toBe("What deleting it changes could not be read.");
+  expect(el.shadowRoot!.querySelector("[data-test=retry-delete]")).not.toBeNull();
+  expect(confirm(el).disabled).toBe(true);
+  el.readError = "";
+  el.impact = impactOf();
+  await el.updateComplete;
+  expect(bottom(el)).toBe(
+    "The business-day start changed. Check what deleting it changes, then delete it again.",
+  );
+  expect(confirm(el).disabled).toBe(false);
 });
 
 it("a replacement refusal marks Replace with and the bottom asks to correct it; Confirm stays enabled", async () => {
@@ -237,7 +270,7 @@ it("any other refusal shows one sentence at the bottom and keeps Confirm", async
   const cases: [Record<string, unknown>, string][] = [
     [
       { code: "hours.clock_changed" },
-      "The business-day start changed. Check what deleting it changes, then try again.",
+      "The business-day start changed. Check what deleting it changes, then delete it again.",
     ],
     [
       { code: "hours.clock_change_pending" },
@@ -294,7 +327,7 @@ it("Spanish: Eliminar Lunch y Sin categoría · Terraza", async () => {
   el.refusal = { code: "hours.clock_changed" };
   await el.updateComplete;
   expect(bottom(el)).toBe(
-    "Ha cambiado el inicio del día. Revisa qué cambia al eliminarlo y vuelve a intentarlo.",
+    "Ha cambiado el inicio del día. Revisa qué cambia al eliminarlo y vuelve a eliminarlo.",
   );
 });
 

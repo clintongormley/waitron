@@ -703,6 +703,9 @@ runs in the caller's transaction, and ends with an end-offset check over the per
 that refuses `menu_timetable.invalid` (`reason: "end_offset"`).
 2026-10-14, A506-11: `GET …/menu-periods/painted-in?periodId=` lists that period alone, and a
 malformed id is refused as `shared.invalid_id`.
+2026-10-14, A506-11: the delete-impact answer also carries `clockRevision`, read in the same
+transaction with `readBusinessDayScheduleRevision`, the reader the delete's own check uses; the
+delete dialog sends it back as `expectedClockRevision`.
 
 A configuration transfer carries both tables under the importing venue's location
 (`VENUE_SERVICE_CONFIGURATION_TRANSFER`). The import refuses, as `setup.request_invalid` naming

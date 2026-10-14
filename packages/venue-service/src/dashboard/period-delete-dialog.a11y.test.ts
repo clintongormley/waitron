@@ -21,6 +21,7 @@ const impactOf = (overrides: Partial<PeriodDeleteImpact> = {}): PeriodDeleteImpa
     { id: "p2", name: "Lunch" },
     { id: "p3", name: "Brunch" },
   ],
+  clockRevision: 0,
   ...overrides,
 });
 const painted = impactOf({

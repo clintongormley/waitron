@@ -116,6 +116,7 @@ async function mount(state: string, theme: "light" | "dark") {
           { id: "p1", name: "Breakfast" },
           { id: "p5", name: "Christmas set menu" },
         ],
+        clockRevision: 0,
       };
     if (method === "POST") throw { code: "hours.clock_changed" };
     if (path.endsWith("/menu-periods/painted-in")) {
@@ -160,7 +161,10 @@ async function mount(state: string, theme: "light" | "dark") {
       confirm().click();
       await expect
         .poll(() => dialog.shadowRoot!.querySelector("wt-form-actions")!.error)
-        .toBe("The business-day start changed. Check what deleting it changes, then try again.");
+        .toBe(
+          "The business-day start changed. Check what deleting it changes, then delete it again.",
+        );
+      await expect.poll(() => confirm().disabled).toBe(false);
     }
     await dialog.updateComplete;
   }

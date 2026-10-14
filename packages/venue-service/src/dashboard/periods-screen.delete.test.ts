@@ -55,6 +55,7 @@ function impactOf(overrides: Partial<PeriodDeleteImpact> = {}): PeriodDeleteImpa
     routingUses: [],
     keptOpenToday: false,
     replacements: [],
+    clockRevision: 0,
     ...overrides,
   };
 }
@@ -163,7 +164,7 @@ async function choose(dialog: PeriodDeleteDialog, value: string) {
 }
 const DELETE_P1 = "/management-api/venue-service/menu-periods/p1/delete";
 
-it("asks before deleting, reads the impact, sends the delete with no replacement and the revision the model had, and refreshes after it", async () => {
+it("asks before deleting, reads the impact, sends the delete with no replacement and the revision the impact was read under, and refreshes after it", async () => {
   const writes: unknown[] = [];
   const impactReads: string[] = [];
   const data = model();
@@ -173,7 +174,7 @@ it("asks before deleting, reads the impact, sends the delete with no replacement
       data: () => data,
       impact: (path) => {
         impactReads.push(path);
-        return impactOf();
+        return impactOf({ clockRevision: 5 });
       },
       write: (path, method, sent) => {
         writes.push({ path, method, body: sent });
@@ -194,7 +195,7 @@ it("asks before deleting, reads the impact, sends the delete with no replacement
       {
         path: DELETE_P1,
         method: "POST",
-        body: { replacementPeriodId: null, expectedClockRevision: 3 },
+        body: { replacementPeriodId: null, expectedClockRevision: 5 },
       },
     ]);
   await expect.poll(() => deleteDialog(el)).toBeNull();
@@ -367,12 +368,12 @@ it("a failed then recovered page read leaves the delete dialog's refusal in plac
   confirm(dialog).click();
   await expect
     .poll(() => bottom(dialog))
-    .toBe("The business-day start changed. Check what deleting it changes, then try again.");
+    .toBe("The business-day start changed. Check what deleting it changes, then delete it again.");
   failRead = true;
   el.api.rereadWatches();
   await expect.poll(() => el.shadowRoot!.querySelector("[data-test=read-error]")).not.toBeNull();
   expect(bottom(dialog)).toBe(
-    "The business-day start changed. Check what deleting it changes, then try again.",
+    "The business-day start changed. Check what deleting it changes, then delete it again.",
   );
   failRead = false;
   data = model([{ ...lunch(), name: "Renamed lunch" }]);
@@ -385,278 +386,162 @@ it("a failed then recovered page read leaves the delete dialog's refusal in plac
   expect(deleteDialog(el)).toBe(dialog);
   expect(heading(dialog)).toBe("Delete Renamed lunch?");
   expect(bottom(dialog)).toBe(
-    "The business-day start changed. Check what deleting it changes, then try again.",
+    "The business-day start changed. Check what deleting it changes, then delete it again.",
   );
 });
 
-it("a delete refused for a changed clock reads the page and then the impact again by itself; Confirm sends the new revision once that impact read has answered, and the old one before", async () => {
-  const data = model();
-  data.clockRevision = 3;
-  let server = 3;
+/** A screen whose delete is refused unless it sends `server.revision`, and whose impact reads
+ *  answer with that revision, or are held in `answers` while `server.hold` is set. */
+async function clockScreen(server: { revision: number; hold: boolean; failImpact?: boolean }) {
   const sent: unknown[] = [];
   const answers: ((impact: PeriodDeleteImpact) => void)[] = [];
+  const shown = () =>
+    impactOf({
+      seasons: 1,
+      replacements: [{ id: "p2", name: "Dinner" }],
+      clockRevision: server.revision,
+    });
   const el = await mount(
     fake({
-      data: () => data,
-      impact: () =>
-        answers.length === 0
-          ? (answers.push(() => {}), impactOf())
-          : new Promise<PeriodDeleteImpact>((done) => {
-              answers.push(done);
-            }),
-      write: (_path, _method, body) => {
-        const revision = (body as { expectedClockRevision: number }).expectedClockRevision;
-        sent.push(revision);
-        if (revision !== server) throw { code: "hours.clock_changed" };
-      },
-      paintedInDelay: 20,
-    }),
-  );
-  const dialog = await removePeriod(el);
-  await impactShown(dialog);
-  server = 4;
-  data.clockRevision = 4;
-  confirm(dialog).click();
-  await expect
-    .poll(() => bottom(dialog))
-    .toBe("The business-day start changed. Check what deleting it changes, then try again.");
-  expect(sent).toEqual([3]);
-
-  await expect.poll(() => answers.length).toBe(2);
-  await new Promise((done) => setTimeout(done, 50));
-  expect(answers.length, "one page re-read, one impact read").toBe(2);
-  await dialog.updateComplete;
-  confirm(dialog).click();
-  await expect.poll(() => sent).toEqual([3, 3]);
-  await expect.poll(() => confirm(dialog).loading).toBe(false);
-  expect(deleteDialog(el)).toBe(dialog);
-  expect(bottom(dialog)).toBe(
-    "The business-day start changed. Check what deleting it changes, then try again.",
-  );
-
-  answers[1]!(impactOf());
-  await new Promise((done) => setTimeout(done, 0));
-  await dialog.updateComplete;
-  expect(bottom(dialog), "the refusal stays until Confirm is pressed again").toBe(
-    "The business-day start changed. Check what deleting it changes, then try again.",
-  );
-  confirm(dialog).click();
-  await expect.poll(() => sent).toEqual([3, 3, 4]);
-  await expect.poll(() => deleteDialog(el)).toBeNull();
-});
-
-it("Confirm pressed again while a changed-clock refusal's reload is on its way does not reload again", async () => {
-  const data = model();
-  data.clockRevision = 3;
-  let server = 3;
-  let slowPage = 0;
-  let pageReads = 0;
-  const sent: unknown[] = [];
-  const el = await mount(
-    fake({
-      data: () => data,
-      dataDelay: () => {
-        pageReads++;
-        return slowPage;
-      },
-      write: (_path, _method, body) => {
-        const revision = (body as { expectedClockRevision: number }).expectedClockRevision;
-        sent.push(revision);
-        if (revision !== server) throw { code: "hours.clock_changed" };
-      },
-      paintedInDelay: 150,
-    }),
-  );
-  const dialog = await removePeriod(el);
-  await impactShown(dialog);
-  server = 4;
-  data.clockRevision = 4;
-  slowPage = 150;
-  const before = pageReads;
-  for (const attempt of [1, 2, 3]) {
-    confirm(dialog).click();
-    await expect.poll(() => sent.length).toBe(attempt);
-    await expect.poll(() => confirm(dialog).loading).toBe(false);
-  }
-  expect(sent).toEqual([3, 3, 3]);
-  expect(pageReads - before, "one page re-read").toBe(1);
-  await expect.poll(() => body(dialog)).toBe("Not painted anywhere. No hours change.");
-  await new Promise((done) => setTimeout(done, 200));
-  expect(pageReads - before, "still one page re-read").toBe(1);
-
-  server = 5;
-  data.clockRevision = 5;
-  slowPage = 0;
-  await dialog.updateComplete;
-  confirm(dialog).click();
-  await expect.poll(() => sent).toEqual([3, 3, 3, 4]);
-  await expect.poll(() => pageReads - before, { message: "a later change reloads again" }).toBe(2);
-  await expect.poll(() => confirm(dialog).loading).toBe(false);
-  await new Promise((done) => setTimeout(done, 200));
-  await dialog.updateComplete;
-  confirm(dialog).click();
-  await expect.poll(() => sent).toEqual([3, 3, 3, 4, 5]);
-  await expect.poll(() => deleteDialog(el)).toBeNull();
-});
-
-it("an impact read that starts after a changed-clock refusal but before the reloaded hours arrive does not end the reload", async () => {
-  const data = model();
-  data.clockRevision = 3;
-  let server = 3;
-  let slowPage = 0;
-  let pageReads = 0;
-  let impactReads = 0;
-  const sent: unknown[] = [];
-  const el = await mount(
-    fake({
-      data: () => data,
-      dataDelay: () => {
-        pageReads++;
-        return slowPage;
-      },
+      data: () => model([lunch(), dinner()]),
       impact: () => {
-        impactReads++;
-        return impactOf();
-      },
-      write: (_path, _method, body) => {
-        const revision = (body as { expectedClockRevision: number }).expectedClockRevision;
-        sent.push(revision);
-        if (revision !== server) throw { code: "hours.clock_changed" };
-      },
-    }),
-  );
-  const dialog = await removePeriod(el);
-  await impactShown(dialog);
-  server = 4;
-  data.clockRevision = 4;
-  slowPage = 150;
-  const pagesBefore = pageReads;
-  const impactsBefore = impactReads;
-  confirm(dialog).click();
-  await expect.poll(() => sent).toEqual([3]);
-  // Painted in answers first, and its impact read takes the hours the page still has.
-  await expect.poll(() => impactReads).toBe(impactsBefore + 1);
-  await new Promise((done) => setTimeout(done, 0));
-  await expect.poll(() => confirm(dialog).loading).toBe(false);
-  confirm(dialog).click();
-  await expect.poll(() => sent).toEqual([3, 3]);
-  await expect.poll(() => confirm(dialog).loading).toBe(false);
-  expect(pageReads - pagesBefore, "one page re-read").toBe(1);
-  await expect.poll(() => impactReads).toBe(impactsBefore + 2);
-  await new Promise((done) => setTimeout(done, 0));
-  await dialog.updateComplete;
-  confirm(dialog).click();
-  await expect.poll(() => sent).toEqual([3, 3, 4]);
-  await expect.poll(() => deleteDialog(el)).toBeNull();
-});
-
-it("a changed-clock refusal reloads even while an impact read that took the refused revision is on its way, and that read's answer does not end the reload", async () => {
-  const data = model();
-  data.clockRevision = 3;
-  let server = 3;
-  let slowPage = 0;
-  let pageReads = 0;
-  let hold = true;
-  const sent: unknown[] = [];
-  const answers: ((impact: PeriodDeleteImpact) => void)[] = [];
-  const el = await mount(
-    fake({
-      data: () => data,
-      dataDelay: () => {
-        pageReads++;
-        return slowPage;
-      },
-      impact: () =>
-        answers.length === 0 || !hold
-          ? (answers.push(() => {}), impactOf())
-          : new Promise<PeriodDeleteImpact>((done) => {
+        if (server.failImpact) throw new Error("offline");
+        return server.hold
+          ? new Promise<PeriodDeleteImpact>((done) => {
               answers.push(done);
-            }),
-      write: (_path, _method, body) => {
-        const revision = (body as { expectedClockRevision: number }).expectedClockRevision;
-        sent.push(revision);
-        if (revision !== server) throw { code: "hours.clock_changed" };
+            })
+          : shown();
       },
-      paintedInDelay: 100,
+      write: (_path, _method, body) => {
+        const { expectedClockRevision, replacementPeriodId } = body as {
+          expectedClockRevision: number;
+          replacementPeriodId: string | null;
+        };
+        sent.push([expectedClockRevision, replacementPeriodId]);
+        if (expectedClockRevision !== server.revision) throw { code: "hours.clock_changed" };
+      },
     }),
   );
   const dialog = await removePeriod(el);
   await impactShown(dialog);
-  el.api.rereadWatches();
-  await expect.poll(() => answers.length).toBe(2);
-  await new Promise((done) => setTimeout(done, 150));
-  expect(answers.length, "one impact read in flight, taken at revision 3").toBe(2);
+  return { el, dialog, sent, answers, shown };
+}
+const CLOCK_CHANGED =
+  "The business-day start changed. Check what deleting it changes, then delete it again.";
+async function waitingForImpact(dialog: PeriodDeleteDialog) {
+  await expect.poll(() => bottom(dialog)).toBe(CLOCK_CHANGED);
+  await expect.poll(() => confirm(dialog).loading).toBe(false);
+  expect(confirm(dialog).disabled, "Delete waits for the impact").toBe(true);
+  expect(confirm(dialog).variant, "and is drawn quiet").toBe("secondary");
+}
 
-  server = 4;
-  data.clockRevision = 4;
-  slowPage = 100;
-  const before = pageReads;
+it("a delete refused for a changed clock keeps Delete quiet and disabled until the impact is read again, then sends that read's revision with the replacement still chosen", async () => {
+  const server = { revision: 3, hold: false };
+  const { el, dialog, sent, answers, shown } = await clockScreen(server);
+  await choose(dialog, "p2");
+  server.revision = 4;
+  server.hold = true;
   confirm(dialog).click();
-  await expect.poll(() => sent).toEqual([3]);
+  await waitingForImpact(dialog);
+  expect(sent).toEqual([[3, "p2"]]);
+  await expect.poll(() => answers.length).toBe(1);
+  for (const press of [1, 2]) {
+    confirm(dialog).click();
+    confirm(dialog).shadowRoot!.querySelector("button")!.click();
+    await new Promise((done) => setTimeout(done, 20));
+    expect(sent, `press ${press} while the impact is read sends nothing`).toEqual([[3, "p2"]]);
+  }
+
+  answers[0]!(shown());
+  await expect.poll(() => confirm(dialog).disabled).toBe(false);
+  expect(confirm(dialog).variant).toBe("danger");
+  expect(bottom(dialog), "the refusal stays until Delete is pressed again").toBe(CLOCK_CHANGED);
+  expect(body(dialog)).toContain("Dinner takes its painted time.");
+  confirm(dialog).click();
   await expect
-    .poll(() => pageReads - before, {
-      message: "the refusal reloads though an impact read is on its way",
-    })
-    .toBe(1);
-  answers[1]!(impactOf());
-  await new Promise((done) => setTimeout(done, 0));
-  await expect.poll(() => confirm(dialog).loading).toBe(false);
-  confirm(dialog).click();
-  await expect.poll(() => sent).toEqual([3, 3]);
-  await expect.poll(() => confirm(dialog).loading).toBe(false);
-  expect(pageReads - before, "the earlier read's answer did not end the reload").toBe(1);
-
-  hold = false;
-  for (const answer of answers.slice(2)) answer(impactOf());
-  await new Promise((done) => setTimeout(done, 200));
-  for (const answer of answers.slice(2)) answer(impactOf());
-  await dialog.updateComplete;
-  confirm(dialog).click();
-  await expect.poll(() => sent).toEqual([3, 3, 4]);
+    .poll(() => sent)
+    .toEqual([
+      [3, "p2"],
+      [4, "p2"],
+    ]);
   await expect.poll(() => deleteDialog(el)).toBeNull();
 });
 
-it("a new revision arriving after an impact read began is not taken from that read; a fresh impact read starts and its revision is taken when it answers", async () => {
-  const data = model();
-  data.clockRevision = 3;
-  let slowPage = 0;
-  const sent: unknown[] = [];
-  const answers: ((impact: PeriodDeleteImpact) => void)[] = [];
-  const el = await mount(
-    fake({
-      data: () => data,
-      dataDelay: () => slowPage,
-      impact: () =>
-        answers.length === 0
-          ? (answers.push(() => {}), impactOf())
-          : new Promise<PeriodDeleteImpact>((done) => {
-              answers.push(done);
-            }),
-      write: (_path, _method, body) => {
-        sent.push((body as { expectedClockRevision: number }).expectedClockRevision);
-        throw { code: "hours.clock_changed" };
-      },
-    }),
-  );
-  const dialog = await removePeriod(el);
-  await impactShown(dialog);
-  slowPage = 30;
-  data.clockRevision = 4;
+it("a second clock change after a recovered refusal recovers the same way", async () => {
+  const server = { revision: 3, hold: false };
+  const { el, dialog, sent } = await clockScreen(server);
+  for (const revision of [4, 5]) {
+    server.revision = revision;
+    confirm(dialog).click();
+    await expect.poll(() => bottom(dialog)).toBe(CLOCK_CHANGED);
+    await expect.poll(() => confirm(dialog).disabled).toBe(false);
+  }
+  expect(sent).toEqual([
+    [3, null],
+    [4, null],
+  ]);
+  confirm(dialog).click();
+  await expect
+    .poll(() => sent)
+    .toEqual([
+      [3, null],
+      [4, null],
+      [5, null],
+    ]);
+  await expect.poll(() => deleteDialog(el)).toBeNull();
+});
+
+it("when the impact read after a changed-clock refusal fails, the dialog says so and offers Try again, which makes Delete usable with the new revision", async () => {
+  const server = { revision: 3, hold: false, failImpact: false };
+  const { el, dialog, sent } = await clockScreen(server);
+  server.revision = 4;
+  server.failImpact = true;
+  confirm(dialog).click();
+  await expect.poll(() => bottom(dialog)).toBe("What deleting it changes could not be read.");
+  expect(retry(dialog)).not.toBeNull();
+  expect(confirm(dialog).disabled).toBe(true);
+  expect(body(dialog), "the refused impact is not shown").toBe("");
+
+  server.failImpact = false;
+  retry(dialog)!.click();
+  await expect.poll(() => confirm(dialog).disabled).toBe(false);
+  expect(bottom(dialog)).toBe(CLOCK_CHANGED);
+  expect(retry(dialog)).toBeNull();
+  confirm(dialog).click();
+  await expect
+    .poll(() => sent)
+    .toEqual([
+      [3, null],
+      [4, null],
+    ]);
+  await expect.poll(() => deleteDialog(el)).toBeNull();
+});
+
+it("an impact read already on its way when a changed-clock refusal arrives does not make Delete usable", async () => {
+  const server = { revision: 3, hold: false };
+  const { el, dialog, sent, answers, shown } = await clockScreen(server);
+  server.hold = true;
   el.api.rereadWatches();
-  // Painted in answers first and starts a read; the late page read's new revision starts another.
-  await expect.poll(() => answers.length).toBe(3);
-  answers[1]!(impactOf({ seasons: 1 }));
-  await new Promise((done) => setTimeout(done, 0));
-  await el.updateComplete;
+  await expect.poll(() => answers.length).toBe(1);
+  const before = shown();
+  server.revision = 4;
+  confirm(dialog).click();
+  await waitingForImpact(dialog);
+  await expect.poll(() => answers.length).toBe(2);
+  answers[0]!(before);
+  await new Promise((done) => setTimeout(done, 20));
   await dialog.updateComplete;
-  expect(body(dialog)).toBe("Not painted anywhere. No hours change.");
+  expect(confirm(dialog).disabled, "the older answer is ignored").toBe(true);
+  answers[1]!(shown());
+  await expect.poll(() => confirm(dialog).disabled).toBe(false);
   confirm(dialog).click();
-  await expect.poll(() => sent).toEqual([3]);
-  await expect.poll(() => confirm(dialog).loading).toBe(false);
-  answers[2]!(impactOf({ seasons: 2 }));
-  await expect.poll(() => body(dialog)).toContain("Painted in 2 seasons.");
-  confirm(dialog).click();
-  await expect.poll(() => sent).toEqual([3, 4]);
+  await expect
+    .poll(() => sent)
+    .toEqual([
+      [3, null],
+      [4, null],
+    ]);
+  await expect.poll(() => deleteDialog(el)).toBeNull();
 });
 
 it("reads the impact actively for Delete… and Retry, and passively when a live change or a changed clock reads it again", async () => {
@@ -720,28 +605,22 @@ it("with live data, reads the impact again when today's kept-open period changes
   expect(reads).toBe(2);
 });
 
-it("with live data, an impact read that answers while the page is detached does not stop a later changed-clock refusal reloading", async () => {
+it("with live data, an impact answer that arrives while the page is detached is shown once it is back, and Delete sends its revision", async () => {
   const liveData = new LiveData();
-  const data = model();
-  data.clockRevision = 3;
-  let server = 3;
   const sent: unknown[] = [];
   let reads = 0;
   let held!: (impact: PeriodDeleteImpact) => void;
   const request = fake({
-    data: () => data,
     impact: () => {
       reads++;
       return reads === 2
         ? new Promise<PeriodDeleteImpact>((done) => {
             held = done;
           })
-        : impactOf();
+        : impactOf({ clockRevision: 3 });
     },
     write: (_path, _method, body) => {
-      const revision = (body as { expectedClockRevision: number }).expectedClockRevision;
-      sent.push(revision);
-      if (revision !== server) throw { code: "hours.clock_changed" };
+      sent.push((body as { expectedClockRevision: number }).expectedClockRevision);
     },
   });
   // Another screen on the same live data keeps both queries' models while this page is detached.
@@ -765,30 +644,14 @@ it("with live data, an impact read that answers while the page is detached does 
   liveData.invalidate([{ type: "period_extensions" }]);
   await expect.poll(() => reads).toBe(2);
   el.remove();
-  held(impactOf());
+  held(impactOf({ seasons: 2, clockRevision: 4 }));
   await new Promise((done) => setTimeout(done, 0));
   document.body.append(el);
-  await expect
-    .poll(() => reads, { message: "the dropped answer is read again on re-attaching" })
-    .toBe(3);
+  await expect.poll(() => body(dialog)).toContain("Painted in 2 seasons.");
   await new Promise((done) => setTimeout(done, 50));
-  expect(reads, "once, for both watches").toBe(3);
-  await el.updateComplete;
-  await dialog.updateComplete;
-
-  server = 4;
-  data.clockRevision = 4;
-  const before = reads;
+  expect(reads, "the models kept while detached are older than that answer").toBe(2);
   confirm(dialog).click();
-  await expect.poll(() => sent).toEqual([3]);
-  await expect
-    .poll(() => reads, { message: "the refusal reads the impact again" })
-    .toBeGreaterThan(before);
-  await expect.poll(() => confirm(dialog).loading).toBe(false);
-  await new Promise((done) => setTimeout(done, 0));
-  await dialog.updateComplete;
-  confirm(dialog).click();
-  await expect.poll(() => sent).toEqual([3, 4]);
+  await expect.poll(() => sent).toEqual([4]);
   await expect.poll(() => deleteDialog(el)).toBeNull();
 });
 

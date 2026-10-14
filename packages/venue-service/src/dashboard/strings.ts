@@ -747,7 +747,7 @@ const en = {
   "period.delete_nothing": "Not painted anywhere. No hours change.",
   "period.delete_read_error": "What deleting it changes could not be read.",
   "period.delete_clock_changed":
-    "The business-day start changed. Check what deleting it changes, then try again.",
+    "The business-day start changed. Check what deleting it changes, then delete it again.",
   "menu.edit": "Edit",
   "menu.delete": "Delete",
   "menu.name_required": "Enter a name.",
@@ -1595,7 +1595,7 @@ const es: Record<keyof typeof en, string> = {
   "period.delete_nothing": "Sin pintar en ningún sitio. No cambia ningún horario.",
   "period.delete_read_error": "No se pudo leer qué cambia al eliminarlo.",
   "period.delete_clock_changed":
-    "Ha cambiado el inicio del día. Revisa qué cambia al eliminarlo y vuelve a intentarlo.",
+    "Ha cambiado el inicio del día. Revisa qué cambia al eliminarlo y vuelve a eliminarlo.",
   "menu.edit": "Editar",
   "menu.delete": "Eliminar",
   "menu.name_required": "Indica un nombre.",
