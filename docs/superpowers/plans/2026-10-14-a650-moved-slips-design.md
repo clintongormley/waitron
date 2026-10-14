@@ -332,6 +332,10 @@ that changes a dish's order goes through those two functions: Merge bills, Trans
 `:224`) and every merge (`mergeCheckedBills`, called from `move-bill.ts:138` and
 `table-actions.ts:244`); `grep` found no other caller.
 
+2026-10-14 (A687): an edit that replaces a sent dish's kitchen items (`applyLineEdits`) also writes
+the column: each replacement — the dish's and each kept extra's — takes the number its own old item
+held, unless the replacement is made here.
+
 An existing row stays null, which shows nothing; no backfill (CLAUDE.md §3: no data-migration code
 before production).
 
