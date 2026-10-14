@@ -703,8 +703,8 @@ heading says "Table 9" / "Mesa 9", or the table's name for today with "Saved as 
 it; Guests has no placeholder. Rename, after Change seats on the details sheet, opens the Rename
 window (`apps/till/src/widgets/today-name-dialog.ts`), which names a table, or its group when it is
 in one, for today; its hint names what an empty field puts back ("Leave it empty for Bar+Window"), and
-a name in use or too long is refused under the field with the window kept open, unless the table's
-group is different when the answer arrives, when the refusal shows on the floor instead.
+a name in use or too long is refused under the field with the window kept open, or on the floor when, by
+the time the answer arrives, the table no longer offers Rename or is in a different group.
 
 The floor screen uses today's plan for every zone's map. Its Unplaced tray uses a
 `wt-table-token` with the table's shown name and seat count (`#trayItem`, `apps/till/src/screens/till-floor-screen.ts`).
