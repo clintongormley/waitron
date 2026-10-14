@@ -218,15 +218,19 @@ from a season chip, an ordinary date and a zone's Opening hours link.
   server refuses a time off the quarter hour (`service-day.ts`, the `step` refusal); that refusal
   was read in the code, not run.
 - A save writes each edited week whole, all seven days. If another manager's save of the same week
-  is stored between this Save being pressed and this save being stored, this save puts back the days
-  they changed, and nothing shows it. A fix needs the server to refuse a week changed since the draft
-  was read, or to write only the changed days. Read in the code (`save` in `season-painter.ts` sends
-  every day; `saveSeasonWeeks` in `season-weeks.ts`), not run against the server.
-- An edited week that no save has sent still keeps all its days when a live update changes a day
-  the manager did not paint, so a later Save sends that day's old hours back. This is A506-8's rule,
-  asserted by "a live model refresh keeps an edited week and reseeds the ones not edited" in
-  `season-painter.test.ts`. Following unedited days one by one would reverse that assertion, so it
-  is an owner decision. A506-9's question 1 asks the same for special days.
+  is stored after the read this painter's copy of the week came from and before this save is stored,
+  this save puts back the days they changed, and nothing shows it. A fix needs the server to refuse
+  a week changed since the draft was read, or to write only the changed days. Read in the code
+  (`save` in `season-painter.ts` sends every day; `saveSeasonWeeks` in `season-weeks.ts`), not run
+  against the server.
+- An edited week keeps all its days when a live update changes a day the manager did not paint, so a
+  later Save sends that day's old hours back. The one exception is the first read that started after
+  a save of that week answered, with no other save in flight: it takes in the stored days not
+  repainted since (`rebaseDays`). This is A506-8's rule, asserted by "a live model refresh keeps an
+  edited week and reseeds the ones not edited" in `season-painter.test.ts`. Following unedited days
+  one by one would reverse that assertion, so it is an owner decision. PR #1651 (A506-9) leaves the
+  same question open for special days: a live update merges paint per department or zone, not per
+  date.
 - `ModelWatches.reread` (`model-watch.ts`) holds back reads that started before a save only for its
   own client's watches. Another `OpeningHoursApi` on the same live data still applies them. Read in
   the code, not run.
