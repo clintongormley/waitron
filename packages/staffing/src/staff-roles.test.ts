@@ -112,6 +112,10 @@ describe("staff roles", () => {
     const counted = await inTx((tx) => listStaffRoles(tx, v.cfg));
     expect(counted[0]).toMatchObject({ holderIds: [], blockCount: 2, shiftCount: 1 });
     expect(counted[1]).toMatchObject({ blockCount: 0, shiftCount: 0 });
+    const renamed = await inTx((tx) =>
+      updateStaffRole(tx, v.cfg, chef.id, { name: "Chef", colour: "purple" }),
+    );
+    expect(renamed).toMatchObject({ name: "Chef", blockCount: 2, shiftCount: 1 });
   });
 
   it("lists only the venue's own roles", async () => {

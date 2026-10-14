@@ -279,7 +279,7 @@ describe("the staff-role routes", () => {
       await r.send("PUT", "/order", r.supervisor, { staffRoleIds: [staffRole.id] }),
     );
     await notPermitted(await r.send("DELETE", `/${staffRole.id}`, r.supervisor));
-    // The body is read only after the caller is authorised, so a malformed one is still a 403.
+    // The body's fields are checked only once the caller is authorised, so a bad one is a 403.
     await notPermitted(await r.send("POST", "", r.supervisor, { name: 5, extra: true }));
     await notPermitted(
       await r.send("PUT", `/${staffRole.id}/holders`, r.supervisor, { personIds: "x" }),
