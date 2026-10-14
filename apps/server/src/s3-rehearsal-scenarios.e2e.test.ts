@@ -3,13 +3,18 @@
 // `node scripts/setup-s3-test-server.mjs`. Without it each case is reported SKIPPED; with CI=true or
 // WAITRON_REQUIRE_STREAM_BINARIES=1 a missing binary FAILS the case instead.
 import { randomUUID } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { S3Client } from "@aws-sdk/client-s3";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { localS3Fixture, type LocalS3Fixture } from "./testing/local-s3-fixture.js";
+import {
+  ARCHIVE_SCENARIO_MS,
+  runArchiveAbort,
+  runArchiveRoundTrip,
+} from "./testing/s3-archive-scenario.js";
 import { DELETE_MANY_SCENARIO_MS, runDeleteManyScenario } from "./testing/s3-delete-scenario.js";
 import {
   READY_TIMEOUT_MS as S3_READY_MS,
@@ -95,15 +100,33 @@ describe("the S3 rehearsal scenarios, against versitygw", () => {
     };
   }
 
-  async function deleteManyFixture(ctx: { skip(note: string): never }): Promise<LocalS3Fixture> {
+  async function scenarioFixture(
+    ctx: { skip(note: string): never },
+    label: string,
+  ): Promise<LocalS3Fixture> {
     const { server, client: admin, scratch: root } = requireServer(ctx);
     return localS3Fixture({
-      bucket: bucketFor(server, "delete-many"),
+      bucket: bucketFor(server, label),
       venueId: "venue-1",
-      scratch: await mkdtemp(join(root, "delete-many-")),
+      scratch: await mkdtemp(join(root, `${label}-`)),
       signal: stop.signal,
       send: (command) => admin.send(command),
     });
+  }
+
+  function deleteManyFixture(ctx: { skip(note: string): never }): Promise<LocalS3Fixture> {
+    return scenarioFixture(ctx, "delete-many");
+  }
+
+  /** What versitygw answered, as `api status outcome` with a count of each. */
+  function answers(local: LocalS3Fixture): Record<string, number> {
+    const tally: Record<string, number> = {};
+    for (const { phase, api, httpStatus, outcome } of local.events) {
+      if (phase !== "request") continue;
+      const line = `${api} ${httpStatus} ${outcome}`;
+      tally[line] = (tally[line] ?? 0) + 1;
+    }
+    return tally;
   }
 
   /** The fixture, with `record` throwing `failure` after recording the `nth` request to `api`. */
@@ -131,13 +154,7 @@ describe("the S3 rehearsal scenarios, against versitygw", () => {
       const local = await deleteManyFixture(ctx);
       const summary = await runDeleteManyScenario(local.fixture);
       expect(summary).toEqual({ put: 1005, deleteBatches: [1000, 5], remaining: 0 });
-      const tally: Record<string, number> = {};
-      for (const { phase, api, httpStatus, outcome } of local.events) {
-        if (phase !== "request") continue;
-        const line = `${api} ${httpStatus} ${outcome}`;
-        tally[line] = (tally[line] ?? 0) + 1;
-      }
-      console.info(`versitygw answers: ${JSON.stringify(tally)}`);
+      console.info(`versitygw answers: ${JSON.stringify(answers(local))}`);
       expect(local.events.filter(({ phase }) => phase !== "request")).toEqual([
         { scenario: "delete-many", phase: "listed-before", count: 1005, outcome: "ok" },
         { scenario: "delete-many", phase: "deleted", count: 1005, outcome: "ok" },
@@ -194,5 +211,59 @@ describe("the S3 rehearsal scenarios, against versitygw", () => {
       ]);
     },
     DELETE_MANY_SCENARIO_MS,
+  );
+
+  it(
+    "a 32 MiB archive goes up in four parts and comes back through its saved pack alone",
+    async (ctx) => {
+      const local = await scenarioFixture(ctx, "archive-roundtrip");
+      const summary = await runArchiveRoundTrip(local.fixture);
+      console.info(`versitygw answers (archive round trip): ${JSON.stringify(answers(local))}`);
+      expect(summary).toEqual({ bytes: 32 * 1024 * 1024, parts: 4, partBytes: 8 * 1024 * 1024 });
+      expect(local.events.filter(({ phase }) => phase !== "request")).toEqual([
+        {
+          scenario: "archive-roundtrip",
+          phase: "uploaded",
+          count: 4,
+          bytes: 33554432,
+          outcome: "ok",
+        },
+        {
+          scenario: "archive-roundtrip",
+          phase: "listed",
+          count: 1,
+          bytes: 33554432,
+          outcome: "ok",
+        },
+        { scenario: "archive-roundtrip", phase: "downloaded", bytes: 33554432, outcome: "ok" },
+        { scenario: "archive-roundtrip", phase: "decrypted-match", outcome: "ok" },
+        { scenario: "archive-roundtrip", phase: "wrong-key-refused", outcome: "ok" },
+        { scenario: "archive-roundtrip", phase: "tamper-refused", outcome: "ok" },
+      ]);
+      expect(local.tracked).toHaveLength(1);
+      await expect(local.fixture.ownedUploads(local.fixture.bucket.prefix)).resolves.toEqual([]);
+      expect(await readdir(local.fixture.scratch)).toEqual([]);
+    },
+    ARCHIVE_SCENARIO_MS,
+  );
+
+  it(
+    "an upload cancelled after its first part is abandoned, leaving no upload and no object",
+    async (ctx) => {
+      const local = await scenarioFixture(ctx, "archive-abort");
+      const summary = await runArchiveAbort(local.fixture);
+      console.info(`versitygw answers (archive abort): ${JSON.stringify(answers(local))}`);
+      console.info(`archive abort: ${JSON.stringify(summary)}`);
+      expect(summary.partsBeforeAbort).toBeGreaterThanOrEqual(1);
+      expect(summary.uploadsAfter).toBe(0);
+      expect(local.events.filter(({ phase }) => phase !== "request")).toEqual([
+        { scenario: "archive-abort", phase: "aborted", errorName: "AppError", outcome: "ok" },
+        { scenario: "archive-abort", phase: "uploads-after", count: 0, outcome: "ok" },
+        { scenario: "archive-abort", phase: "listed-after", count: 0, outcome: "ok" },
+      ]);
+      expect(local.tracked).toHaveLength(1);
+      expect(await readdir(local.fixture.scratch)).toEqual([]);
+    },
+    ARCHIVE_SCENARIO_MS,
   );
 });
