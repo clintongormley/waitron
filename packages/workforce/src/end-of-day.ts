@@ -249,9 +249,11 @@ export async function processAttendanceDay(
     for (const interval of intervals) {
       const { start, next } = interval;
       const automatic = next?.entryKind === "out" && next.extension?.authorKind === "automatic";
-      const limit = automatic
-        ? (intervals.find((i) => compareEvents(i.start, next) > 0)?.start.eventAt ?? endAt)
-        : (next?.eventAt ?? endAt);
+      // Later evidence can extend this day's question, but later days remain separate gaps.
+      const limit =
+        automatic && start.eventAt >= startAt && start.eventAt < endAt
+          ? (intervals.find((i) => compareEvents(i.start, next) > 0)?.start.eventAt ?? endAt)
+          : (next?.eventAt ?? endAt);
       const intervalFacts = ownFacts.filter(
         (f) => instant(f.at) >= instant(start.eventAt) && instant(f.at) < instant(limit),
       );

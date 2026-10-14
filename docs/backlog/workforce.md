@@ -54,8 +54,9 @@ wake-ups and late clock/rota reconciliation. Its tests retain a question when th
 activity or existing clock history conflicts with an automatic finish. On this branch, reading your
 clock state or submitting a clock action reconciles your open completed day first. A stale action is
 refused after committing the automatic finish. This worker-only pass leaves the shared day's work
-pending for a complete background pass. Remaining command capture, background processing, boot wiring
-and missing-time email still need connecting; part 3 remains open.
+pending for a complete background pass. A loop helper processes one completed day per pass and waits
+for its active pass on shutdown. Remaining command capture, starting that loop at boot, and
+missing-time email still need connecting; part 3 remains open.
 
 My hours stays with part 5; no placeholder is offered in part 2. Parts 3–6 remain open: automatic
 closure/questions, corrections, hours and the export/access screens. The period-read cost and the

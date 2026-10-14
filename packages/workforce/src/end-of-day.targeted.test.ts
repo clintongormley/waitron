@@ -1,9 +1,36 @@
 import { describe, expect, it } from "vitest";
 import { attendanceFixture } from "../test/attendance-fixture.js";
+import { enqueueAttendanceDay } from "./index.js";
 
 const f = attendanceFixture();
 
 describe("a clock caller reconciles only its worker", () => {
+  it("keeps later-day unclocked work separate from yesterday's automatic finish", async () => {
+    await f.open();
+    await f.process();
+    const before = await f.entries();
+    const day = {
+      ...f.day(),
+      businessDay: "2026-01-06",
+      startAt: "2026-01-06T04:00:00.000Z",
+      endAt: "2026-01-07T04:00:00.000Z",
+    };
+    await f.run((tx) => enqueueAttendanceDay(tx, day));
+    await f.process({
+      day,
+      now: new Date(day.endAt),
+      facts: [f.fact("2026-01-06T16:00:00Z", "next-day")],
+    });
+    expect(await f.entries()).toEqual(before);
+    const questions = await f.questions();
+    expect(questions).toHaveLength(2);
+    expect(questions.find((q) => q.day.businessDay === "2026-01-06")).toMatchObject({
+      kind: "missing-times",
+      missingKinds: ["in", "out"],
+      evidenceKeys: ["order:next-day"],
+      openEntryId: null,
+    });
+  });
   it("leaves the shared day revision and other workers untouched until a complete pass", async () => {
     await f.open();
     await f.run((tx) =>
