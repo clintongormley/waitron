@@ -5,14 +5,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect } from "vitest";
 
-export async function cloudFixture(
-  machine?: (
-    values: unknown[],
-    saved: Record<string, unknown>,
-    req: IncomingMessage,
-    res: ServerResponse,
-  ) => Promise<void>,
-) {
+export type MachineHandler = (
+  values: unknown[],
+  saved: Record<string, unknown>,
+  req: IncomingMessage,
+  res: ServerResponse,
+  sent: Record<string, unknown>,
+) => Promise<void>;
+
+export async function cloudFixture(machine?: MachineHandler) {
   const stateDir = await mkdtemp(join(tmpdir(), "waitron-cloud-client-"));
   const requests: unknown[][] = [];
   let replyPatch: Record<string, unknown> = {};
@@ -32,10 +33,24 @@ export async function cloudFixture(
   const server = createServer(async (req, res) => {
     const chunks: Buffer[] = [];
     for await (const chunk of req) chunks.push(Buffer.from(chunk));
-    const { payload, signature } = JSON.parse(Buffer.concat(chunks).toString()) as {
-      payload: string;
-      signature: string;
+    const refuse = (status: number, error: string) => {
+      res.writeHead(status, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error }));
     };
+    if (req.headers["content-type"]?.split(";")[0]?.trim().toLowerCase() !== "application/json")
+      return refuse(415, "invalid_input");
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(Buffer.concat(chunks).toString());
+    } catch {
+      return refuse(400, "invalid_input");
+    }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+      return refuse(400, "invalid_input");
+    const sent = parsed as Record<string, unknown>;
+    if (typeof sent.payload !== "string" || typeof sent.signature !== "string")
+      return refuse(401, "invalid_proof");
+    const { payload, signature } = sent as { payload: string; signature: string };
     const values = JSON.parse(Buffer.from(payload, "base64url").toString()) as string[];
     if (values[0] === "waitron-cloud-machine-v1" && machine) {
       const saved = JSON.parse(await readFile(join(stateDir, "cloud-connection.json"), "utf8"));
@@ -51,7 +66,7 @@ export async function cloudFixture(
           Buffer.from(signature, "base64url"),
         ),
       ).toBe(true);
-      await machine(values, saved, req, res);
+      await machine(values, saved, req, res, sent);
       return;
     }
     expect(
