@@ -159,6 +159,7 @@ import type {
   ZoneOffers,
 } from "@waitron/module";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
+import type { AttendanceRecorder } from "./attendance-capture.js";
 import { authorize, type Override, type PinAttempts } from "@waitron/identity";
 import { issuancePass } from "./issuance-pass.js";
 import { issueMoment, type IssueMoment } from "./issue-moment.js";
@@ -229,6 +230,33 @@ import {
 
 export interface WorkingOrderDeps {
   db: Database;
+}
+
+export interface OrderAttendance {
+  recorder: AttendanceRecorder;
+  clock: TrustedClock;
+}
+
+async function captureOrderEdit(
+  tx: Transaction,
+  attendance: OrderAttendance | undefined,
+  orderId: string,
+  personId: string | undefined,
+  locationId: string,
+  revision: number,
+  action: "park" | "save" | "line" | "label" | "discard",
+): Promise<void> {
+  if (attendance === undefined || personId === undefined) return;
+  await attendance.recorder(tx, {
+    source: "order",
+    key: `${orderId}:${revision}:${action}`,
+    personId,
+    locationId,
+    kind: "order",
+    at: attendance.clock.now().instant.toISOString(),
+    offsetMinutes: 0,
+    outcome: "qualified",
+  });
 }
 
 /** `db` plus the fiscal backend and trusted clock that a path filing a sale needs. */
@@ -1238,6 +1266,7 @@ export async function parkOrder(
   deps: WorkingOrderDeps,
   cfg: OriginConfig,
   req: ParkOrderRequest,
+  attendance?: OrderAttendance,
 ): Promise<ParkOrderResult> {
   if (req.lines.length === 0) {
     throw new AppError("sale.empty_basket", {});
@@ -1249,6 +1278,7 @@ export async function parkOrder(
         zoneId: req.zoneId,
         creditedTo: req.operatorId,
       });
+      await captureOrderEdit(tx, attendance, req.id, req.operatorId, cfg.locationId, 0, "park");
       return { id: req.id, orderNumber };
     });
   } catch (error) {
@@ -4559,12 +4589,13 @@ async function requireEditableOrder(
   tx: Transaction,
   orderId: string,
   revision: number,
-): Promise<{ label: string | null }> {
+): Promise<{ label: string | null; locationId: string }> {
   const [order] = await tx
     .select({
       status: workingOrders.status,
       revision: workingOrders.revision,
       label: workingOrders.label,
+      locationId: workingOrders.locationId,
     })
     .from(workingOrders)
     .where(eq(workingOrders.id, orderId));
@@ -4577,7 +4608,7 @@ async function requireEditableOrder(
       revision: order.revision,
     });
   }
-  return { label: order.label };
+  return { label: order.label, locationId: order.locationId };
 }
 
 /**
@@ -5621,9 +5652,10 @@ export async function setWorkingOrderLabel(
   db: Database,
   orderId: string,
   request: { label: string; revision: number },
+  attendance?: OrderAttendance & { personId: string },
 ): Promise<number> {
   return withTransaction(db, async (tx) => {
-    const { label } = await requireEditableOrder(tx, orderId, request.revision);
+    const { label, locationId } = await requireEditableOrder(tx, orderId, request.revision);
     const changed = label !== request.label;
     if (changed) {
       await tx
@@ -5631,7 +5663,18 @@ export async function setWorkingOrderLabel(
         .set({ label: request.label })
         .where(eq(workingOrders.id, orderId));
     }
-    return countEdit(tx, orderId, request.revision, changed);
+    const revision = await countEdit(tx, orderId, request.revision, changed);
+    if (changed)
+      await captureOrderEdit(
+        tx,
+        attendance,
+        orderId,
+        attendance?.personId,
+        locationId,
+        revision,
+        "label",
+      );
+    return revision;
   });
 }
 
@@ -5648,6 +5691,8 @@ export async function updateHeldOrder(
   cfg: TillConfig,
   id: string,
   req: UpdateHeldOrderRequest,
+  issue?: undefined,
+  attendance?: OrderAttendance,
 ): Promise<number>;
 export async function updateHeldOrder(
   deps: WorkingOrderDeps,
@@ -5655,6 +5700,7 @@ export async function updateHeldOrder(
   id: string,
   req: UpdateHeldOrderRequest & { operatorId: string },
   issue: IssueOnSave,
+  attendance?: OrderAttendance,
 ): Promise<number>;
 export async function updateHeldOrder(
   deps: WorkingOrderDeps,
@@ -5662,9 +5708,10 @@ export async function updateHeldOrder(
   id: string,
   req: UpdateHeldOrderRequest,
   issue?: IssueOnSave,
+  attendance?: OrderAttendance,
 ): Promise<number> {
   return withTransaction(deps.db, async (tx) => {
-    const { label } = await requireEditableOrder(tx, id, req.revision);
+    const { label, locationId } = await requireEditableOrder(tx, id, req.revision);
     // Rewriting an order to zero lines is a discard, which is `abandonHeldOrder`'s job.
     if (req.lines.length === 0) {
       throw new AppError("sale.empty_basket", {});
@@ -5726,6 +5773,8 @@ export async function updateHeldOrder(
     if (issue !== undefined) {
       await issueIfFullyPaid(tx, issue.fiscal, issue.saleCfg, id, req.operatorId);
     }
+    if (changed || relabelled)
+      await captureOrderEdit(tx, attendance, id, req.operatorId, locationId, revision, "save");
     return revision;
   });
 }
@@ -5744,8 +5793,9 @@ export async function updateOrderLine(
   patch: OrderLinePatch,
   revision: number,
   operatorId?: string,
+  attendance?: OrderAttendance,
 ): Promise<number> {
-  await requireEditableOrder(tx, orderId, revision);
+  const { locationId } = await requireEditableOrder(tx, orderId, revision);
   const order = await readEditableOrder(tx, cfg, orderId);
   const line = order.lines.find((candidate) => candidate.lineNo === lineNo);
   if (line === undefined) {
@@ -5778,7 +5828,10 @@ export async function updateOrderLine(
     },
     operatorId,
   );
-  return countEdit(tx, orderId, revision, changed);
+  const saved = await countEdit(tx, orderId, revision, changed);
+  if (changed)
+    await captureOrderEdit(tx, attendance, orderId, operatorId, locationId, saved, "line");
+  return saved;
 }
 
 /** Abandon an open held order anywhere in the venue. An unknown id reads as `working_order.not_open`. */
@@ -5786,11 +5839,16 @@ export async function abandonHeldOrder(
   deps: WorkingOrderDeps,
   cfg: TillConfig,
   id: string,
+  attendance?: OrderAttendance & { personId: string },
 ): Promise<void> {
   void cfg;
   return withTransaction(deps.db, async (tx) => {
     const [locked] = await tx
-      .select({ status: workingOrders.status })
+      .select({
+        status: workingOrders.status,
+        revision: workingOrders.revision,
+        locationId: workingOrders.locationId,
+      })
       .from(workingOrders)
       .where(eq(workingOrders.id, id));
     if (locked === undefined || locked.status !== "open") {
@@ -5800,6 +5858,15 @@ export async function abandonHeldOrder(
     await refuseBillHoldingMoney(tx, [id]);
     await tx.update(workingOrders).set({ status: "abandoned" }).where(eq(workingOrders.id, id));
     await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [id]);
+    await captureOrderEdit(
+      tx,
+      attendance,
+      id,
+      attendance?.personId,
+      locked.locationId,
+      locked.revision,
+      "discard",
+    );
   });
 }
 

@@ -1822,13 +1822,20 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         session,
         named(zoneId !== undefined && { zoneId }, { orderId: body.id }),
       );
-      const result = await parkOrder({ db: deps.db }, cfg, {
-        id: body.id,
-        lines: body.lines,
-        zoneId,
-        label: body.label,
-        operatorId: personId,
-      });
+      const result = await parkOrder(
+        { db: deps.db },
+        cfg,
+        {
+          id: body.id,
+          lines: body.lines,
+          zoneId,
+          label: body.label,
+          operatorId: personId,
+        },
+        deps.attendance === undefined
+          ? undefined
+          : { recorder: deps.attendance, clock: deps.clock },
+      );
       return c.json(result);
     }),
   );
@@ -1890,6 +1897,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           operatorId: personId,
         },
         { fiscal, saleCfg: sendCfg },
+        deps.attendance === undefined
+          ? undefined
+          : { recorder: deps.attendance, clock: deps.clock },
       );
       return c.json({ revision });
     }),
@@ -1901,10 +1911,17 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const id = requireUuidId(c.req.param("id"), "working_order.not_open");
       await gateZones(deps, session, [{ orderId: id }]);
       const body = await readJsonBody<{ label?: unknown; revision?: unknown }>(c);
-      const revision = await setWorkingOrderLabel(deps.db, id, {
-        label: requireString(body.label, "label"),
-        revision: requireRevision(body.revision),
-      });
+      const revision = await setWorkingOrderLabel(
+        deps.db,
+        id,
+        {
+          label: requireString(body.label, "label"),
+          revision: requireRevision(body.revision),
+        },
+        deps.attendance === undefined
+          ? undefined
+          : { recorder: deps.attendance, clock: deps.clock, personId: session.personId },
+      );
       return c.json({ revision });
     }),
   );
@@ -1989,7 +2006,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const cfg = requestCfg(deps.cfg, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_open");
       await gateZones(deps, session, [{ orderId: id }]);
-      await abandonHeldOrder({ db: deps.db }, cfg, id);
+      await abandonHeldOrder(
+        { db: deps.db },
+        cfg,
+        id,
+        deps.attendance === undefined
+          ? undefined
+          : { recorder: deps.attendance, clock: deps.clock, personId: session.personId },
+      );
       return c.body(null, 200);
     }),
   );
@@ -3331,7 +3355,18 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const sendCfg = sendingCfg(cfg, c, session.device);
       const saved = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
-        const revision = await updateOrderLine(tx, sendCfg, id, lineNo, patch, copy, personId);
+        const revision = await updateOrderLine(
+          tx,
+          sendCfg,
+          id,
+          lineNo,
+          patch,
+          copy,
+          personId,
+          deps.attendance === undefined
+            ? undefined
+            : { recorder: deps.attendance, clock: deps.clock },
+        );
         await issueIfFullyPaid(tx, fiscal, sendCfg, id, personId);
         return { revision, party: await partyRevisionOfOrder(tx, id) };
       });
