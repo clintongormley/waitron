@@ -4223,6 +4223,17 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   counts `NoSuchKey` as deleted; share them, deciding whether the bucket stream takes those checks
   too.
 
+- **The Amazon S3 pause rehearsal's open edges (A538-8).** Left open by #1658, in
+  `apps/server/src/testing/aws-rehearsal.ts`, `testing/aws-pause-gate.ts` and
+  `aws-stream-pause.aws-rehearsal.test.ts`: (1) `ctx.bucketPolicy.put(document)` accepts any policy
+  text and checks it back down to the one allowed shape; the simplify review proposed a
+  `denyListing(prefix)` method that builds the document itself (about 60 lines and 20 refusal cases
+  fewer) — a redesign of a safety check, so the owner's call; (2) the scenario's `beforeRestart`
+  hook is called only by the AWS file, so no local test fails if the call goes (the AWS run would
+  stop with "step 7's restart was never watched"); (3) the held-check evidence counts a held call at
+  the server's own proxy but cannot say which call it is (TLS hides it) — the later logged 403 is what
+  ties the refusal to the pause check.
+
 - **The Amazon S3 rehearsal runner's open edges (A538-7).** Left open by #1648, all in
   `apps/server/src/testing/aws-rehearsal.ts` and its runbook `docs/developers/aws-backup-rehearsal.md`:
   (1) Ctrl-C or a killed process skips teardown — no signal handler — so the owned bucket stays and
