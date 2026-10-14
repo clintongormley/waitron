@@ -1,10 +1,4 @@
-// Writes every derived brand file from waitron-mark.svg and waitron-wordmark.svg. The outputs are
-// committed and nothing checks them against their sources, so run this after editing either source:
-//
-//   node packages/ui/brand/build-icons.mjs
-//
-// Set INKSCAPE to point at a binary that is not on PATH. `Buffer` and `process` are imported because
-// no eslint.config.js block grants this file Node globals.
+// Derived assets are committed, so editing a drawing or dark theme token requires regeneration.
 import { Buffer } from "node:buffer";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -16,8 +10,20 @@ const here = import.meta.dirname;
 const pub = join(here, "public");
 const inkscape = process.env.INKSCAPE ?? "inkscape";
 
-const MARK_BLUE_DARK = "#4c8dff"; // mirrors --wt-color-primary dark; hand-kept in step, see README
-const WORD_INK_DARK = "#eceef2"; // mirrors --wt-color-text dark; hand-kept in step, see README
+const colors = readFileSync(
+  join(here, "..", "..", "ui-core", "src", "tokens", "colors.css"),
+  "utf8",
+);
+// The token file's unindented closing brace bounds the media block, excluding explicit themes.
+const darkBlock = colors.match(/@media\s*\(prefers-color-scheme:\s*dark\)\s*\{([\s\S]*?)\n\}/)?.[1];
+if (darkBlock === undefined) throw new Error("colors.css has no dark media block");
+const darkToken = (name) => {
+  const value = darkBlock.match(new RegExp(`--wt-color-${name}:\\s*(#[0-9a-f]{6});`, "i"))?.[1];
+  if (value === undefined) throw new Error(`colors.css declares no dark --wt-color-${name}`);
+  return value;
+};
+const MARK_BLUE_DARK = darkToken("primary");
+const WORD_INK_DARK = darkToken("text");
 const ICON_CANVAS = 136; // mark is 124.64 x 117.09, so this leaves an even margin on the long axis
 
 /**
