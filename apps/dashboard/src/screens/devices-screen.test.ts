@@ -3127,7 +3127,7 @@ describe("the Edit dialog", () => {
 
 describe("add a device", () => {
   type Field = HTMLElement & { value: string; error: string; invalid: boolean };
-  type Button = HTMLElement & { disabled: boolean };
+  type Button = HTMLElement & { disabled: boolean; variant: string };
 
   /** Waiting rows are table cells, which live in the table's own shadow root. */
   function deep(root: ShadowRoot | Element, sel: string): HTMLElement | null {
@@ -3368,6 +3368,7 @@ describe("add a device", () => {
     expect(d(el, "[data-test=pair-r1]")?.getAttribute("aria-label")).toBe(
       `${t("devices.pair")} Barra 1`,
     );
+    expect((d(el, "[data-test=pair-r1]") as Button).variant).toBe("primary");
     expect(d(el, "[data-test=pair-r2]")).not.toBeNull();
     expect(d(el, "[data-test^=join-deny]")).toBeNull();
     expect(q(el, "[data-test=waiting-empty]")).toBeNull();
@@ -4439,12 +4440,15 @@ describe("add a device", () => {
       expect(api.renewPairingHold).toHaveBeenCalledWith("h1");
       expect((d(el, "[data-test=pair-r1]") as Button).disabled).toBe(true);
       expect((d(el, "[data-test=pair-r2]") as Button).disabled).toBe(true);
+      expect((d(el, "[data-test=pair-r1]") as Button).variant).toBe("secondary");
+      expect((d(el, "[data-test=pair-r2]") as Button).variant).toBe("secondary");
 
       q(el, "[data-test=hold-restart]")!.click();
       await vi.waitFor(() => expect(api.takePairingHold).toHaveBeenCalledTimes(2));
       await vi.waitFor(() => expect(q(el, "[data-test=hold-lapsed]")).toBeNull());
       await flush(el);
       expect((d(el, "[data-test=pair-r1]") as Button).disabled).toBe(false);
+      expect((d(el, "[data-test=pair-r1]") as Button).variant).toBe("primary");
     } finally {
       vi.useRealTimers();
     }
@@ -4582,6 +4586,7 @@ describe("add a device", () => {
           expect(d(el, "[data-test=pair-d2]")?.getAttribute("aria-label")).toBe(
             `${enable} Pase revocado`,
           );
+          expect((d(el, "[data-test=pair-d2]") as Button).variant).toBe("primary");
           expect(d(el, "[data-test=waiting-row-r1]")?.textContent?.trim()).toBe("Barra 1");
           expect(d(el, "[data-test=returning-hint-r1]")).toBeNull();
           expect(d(el, "[data-test=pair-r1]")?.textContent?.trim()).toBe(pair);

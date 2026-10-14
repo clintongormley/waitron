@@ -2068,13 +2068,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   `apps/server/src/order-groups.ts`, puts a bill's released dishes in a fired group); decide whether
   a counter order's dishes count as already released, and if not, stop the move firing them.
 
-- **A649 — Add a device's Pair is drawn blue when it can act (owner, 2026-10-14; open).** In the
-  waiting-devices table (`apps/dashboard/src/screens/devices-screen.ts`, the `pair-<id>` button,
-  which reads Enable for a returning device) the button is drawn `secondary` even when a device is
-  waiting and Pair can be pressed. Under the A416 rule (design-system.md → Forms) it is drawn
-  `secondary` while it is disabled and `primary` once it can act; add it to that rule's list.
-  [Mockup](backlog/mockups/a649-pair-button/1-pair-button.png)
-
 - **A559. The till's full-invoice dialog changes width when an error appears.** It takes the width
   of its content: at 1280 px in English it grew from about 274 to about 348 px when A231q looked at
   it, and at 390 px the customer's name is cut short. A fixed width for its fields, as the find-bill
