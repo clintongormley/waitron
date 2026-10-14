@@ -11,6 +11,7 @@ const model: VenueServiceSettingsView = {
   settings: { editSentLines: true },
   kitchenTicketGrouping: "combined",
   printHeldWork: false,
+  printMovedSlips: true,
   releaseReminderMinutes: 10,
   clearingWorkflow: false,
 };
@@ -98,6 +99,36 @@ describe.each(["light", "dark"] as const)("print held work setting accessibility
     await expectNoA11yViolations(host);
   });
 });
+
+describe.each(["light", "dark"] as const)(
+  "print MOVED slips setting accessibility (%s)",
+  (theme) => {
+    test.each([
+      ["stored", undefined],
+      ["refused", new Error("offline")],
+    ] as const)("the switch and its hint, %s", async (_state, refusal) => {
+      setLocale("en");
+      await mountThemed("<div></div>", theme);
+      const el = document.createElement("dashboard-venue-service-settings") as ServiceSettingsPanel;
+      el.api = {
+        loadSettings: vi.fn().mockResolvedValue(model),
+        savePrintMovedSlips: refusal ? vi.fn().mockRejectedValue(refusal) : vi.fn(),
+      } as unknown as VenueServiceApi;
+      host.append(el);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await el.updateComplete;
+      const toggle = el.shadowRoot!.querySelector('wt-switch[name="printMovedSlips"]');
+      expect(toggle).not.toBeNull();
+      if (refusal) {
+        toggle!.shadowRoot!.querySelector("input")!.click();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        await el.updateComplete;
+        expect(el.shadowRoot!.querySelector('[data-field-error="printMovedSlips"]')).not.toBeNull();
+      }
+      await expectNoA11yViolations(host);
+    });
+  },
+);
 
 describe.each(["light", "dark"] as const)(
   "release reminder setting accessibility (%s)",

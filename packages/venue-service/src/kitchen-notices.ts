@@ -328,6 +328,22 @@ export async function writePrintHeldWork(tx: Transaction, value: boolean): Promi
     .onConflictDoUpdate({ target: serviceSettings.id, set: { printHeldWork: value } });
 }
 
+/** Whether food the kitchen already has prints a MOVED slip when it moves. No row reads ON. */
+export async function readPrintMovedSlips(tx: Transaction): Promise<boolean> {
+  const [row] = await tx
+    .select({ printMovedSlips: serviceSettings.printMovedSlips })
+    .from(serviceSettings)
+    .where(eq(serviceSettings.id, 1));
+  return row?.printMovedSlips ?? true;
+}
+
+export async function writePrintMovedSlips(tx: Transaction, value: boolean): Promise<void> {
+  await tx
+    .insert(serviceSettings)
+    .values({ id: 1, printMovedSlips: value })
+    .onConflictDoUpdate({ target: serviceSettings.id, set: { printMovedSlips: value } });
+}
+
 /** Minutes after the work ahead is served that a held group is due; null is off. No row reads 10. */
 export async function readReleaseReminderMinutes(tx: Transaction): Promise<number | null> {
   const [row] = await tx

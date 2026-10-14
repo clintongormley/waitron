@@ -39,11 +39,13 @@ import {
   readEditSentLines,
   readKitchenTicketGrouping,
   readPrintHeldWork,
+  readPrintMovedSlips,
   readReleaseReminderMinutes,
   writeClearingWorkflow,
   writeEditSentLines,
   writeKitchenTicketGrouping,
   writePrintHeldWork,
+  writePrintMovedSlips,
   writeReleaseReminderMinutes,
 } from "./kitchen-notices.js";
 import {
@@ -693,6 +695,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           settings: { editSentLines: await readEditSentLines(tx) },
           kitchenTicketGrouping: await readKitchenTicketGrouping(tx),
           printHeldWork: await readPrintHeldWork(tx),
+          printMovedSlips: await readPrintMovedSlips(tx),
           releaseReminderMinutes: await readReleaseReminderMinutes(tx),
           clearingWorkflow: await readClearingWorkflow(tx),
         }));
@@ -709,6 +712,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
             settings: { editSentLines: await readEditSentLines(tx) },
             kitchenTicketGrouping: await readKitchenTicketGrouping(tx),
             printHeldWork: await readPrintHeldWork(tx),
+            printMovedSlips: await readPrintMovedSlips(tx),
             releaseReminderMinutes: await readReleaseReminderMinutes(tx),
             clearingWorkflow: await readClearingWorkflow(tx),
           };
@@ -754,6 +758,19 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           throw new AppError("management.request_invalid", { field: "printHeldWork" });
         }
         await gated(sessionId, (tx) => writePrintHeldWork(tx, printHeldWork));
+        return c.body(null, 204);
+      }),
+    );
+
+    app.put("/management-api/venue-service/settings/print-moved-slips", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const body = await readJsonBody<Record<string, unknown>>(c);
+        const printMovedSlips = body.printMovedSlips;
+        if (typeof printMovedSlips !== "boolean") {
+          throw new AppError("management.request_invalid", { field: "printMovedSlips" });
+        }
+        await gated(sessionId, (tx) => writePrintMovedSlips(tx, printMovedSlips));
         return c.body(null, 204);
       }),
     );

@@ -2306,6 +2306,88 @@ describe("the print-held-work setting", () => {
   });
 });
 
+describe("the print-moved-slips setting", () => {
+  const PRINT_MOVED_SLIPS = "/management-api/venue-service/settings/print-moved-slips";
+  async function stored(fx: Fixture, path = "/management-api/venue-service"): Promise<unknown> {
+    return (
+      (await (await send(fx.app, "GET", path, fx.managerCookie)).json()) as {
+        printMovedSlips: unknown;
+      }
+    ).printMovedSlips;
+  }
+
+  it("reads on until a manager turns it off, and back, in both settings views", async () => {
+    const fx = await fixture();
+    expect(await stored(fx)).toBe(true);
+    expect(await stored(fx, "/management-api/venue-service/settings")).toBe(true);
+    expect(
+      (await send(fx.app, "PUT", PRINT_MOVED_SLIPS, fx.managerCookie, { printMovedSlips: false }))
+        .status,
+    ).toBe(204);
+    expect(await stored(fx)).toBe(false);
+    expect(await stored(fx, "/management-api/venue-service/settings")).toBe(false);
+    expect(
+      (await send(fx.app, "PUT", PRINT_MOVED_SLIPS, fx.managerCookie, { printMovedSlips: true }))
+        .status,
+    ).toBe(204);
+    expect(await stored(fx)).toBe(true);
+  });
+
+  it("refuses anything but true or false, naming the field, and keeps the stored value", async () => {
+    const fx = await fixture();
+    expect(
+      (await send(fx.app, "PUT", PRINT_MOVED_SLIPS, fx.managerCookie, { printMovedSlips: false }))
+        .status,
+    ).toBe(204);
+    for (const body of [
+      {},
+      { printMovedSlips: "true" },
+      { printMovedSlips: 1 },
+      { printMovedSlips: null },
+      { printMovedSlips: [true] },
+    ]) {
+      const rejected = await send(fx.app, "PUT", PRINT_MOVED_SLIPS, fx.managerCookie, body);
+      expect(rejected.status).toBe(400);
+      expect(await rejected.json()).toEqual({
+        error: { code: "management.request_invalid", params: { field: "printMovedSlips" } },
+      });
+    }
+    expect(await stored(fx)).toBe(false);
+  });
+
+  it("lets only a signed-in manager change it", async () => {
+    const fx = await fixture();
+    const body = { printMovedSlips: false };
+    expect((await send(fx.app, "PUT", PRINT_MOVED_SLIPS, undefined, body)).status).toBe(401);
+    const refused = await send(fx.app, "PUT", PRINT_MOVED_SLIPS, fx.staffCookie, body);
+    expect(refused.status).toBe(403);
+    expect(await refused.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+    expect(await stored(fx)).toBe(true);
+  });
+
+  it("leaves the other settings as they were", async () => {
+    const fx = await fixture();
+    expect(
+      (await send(fx.app, "PUT", PRINT_MOVED_SLIPS, fx.managerCookie, { printMovedSlips: false }))
+        .status,
+    ).toBe(204);
+    const body = (await (
+      await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
+    ).json()) as {
+      settings: unknown;
+      kitchenTicketGrouping: unknown;
+      printHeldWork: unknown;
+      releaseReminderMinutes: unknown;
+      clearingWorkflow: unknown;
+    };
+    expect(body.settings).toEqual({ editSentLines: true });
+    expect(body.kitchenTicketGrouping).toBe("combined");
+    expect(body.printHeldWork).toBe(false);
+    expect(body.releaseReminderMinutes).toBe(10);
+    expect(body.clearingWorkflow).toBe(false);
+  });
+});
+
 describe("the clearing setting", () => {
   const CLEARING = "/management-api/venue-service/settings/clearing-workflow";
   async function stored(fx: Fixture): Promise<unknown> {
@@ -2371,11 +2453,13 @@ describe("the clearing setting", () => {
       settings: unknown;
       kitchenTicketGrouping: unknown;
       printHeldWork: unknown;
+      printMovedSlips: unknown;
       releaseReminderMinutes: unknown;
     };
     expect(body.settings).toEqual({ editSentLines: true });
     expect(body.kitchenTicketGrouping).toBe("combined");
     expect(body.printHeldWork).toBe(false);
+    expect(body.printMovedSlips).toBe(true);
     expect(body.releaseReminderMinutes).toBe(10);
   });
 });
@@ -2454,10 +2538,16 @@ describe("the release-reminder setting", () => {
     ).toBe(204);
     const body = (await (
       await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
-    ).json()) as { settings: unknown; kitchenTicketGrouping: unknown; printHeldWork: unknown };
+    ).json()) as {
+      settings: unknown;
+      kitchenTicketGrouping: unknown;
+      printHeldWork: unknown;
+      printMovedSlips: unknown;
+    };
     expect(body.settings).toEqual({ editSentLines: true });
     expect(body.kitchenTicketGrouping).toBe("combined");
     expect(body.printHeldWork).toBe(false);
+    expect(body.printMovedSlips).toBe(true);
   });
 });
 

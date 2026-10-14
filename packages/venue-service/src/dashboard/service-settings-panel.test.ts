@@ -18,6 +18,7 @@ const model: VenueServiceSettingsView = {
   settings: { editSentLines: true },
   kitchenTicketGrouping: "combined",
   printHeldWork: false,
+  printMovedSlips: true,
   releaseReminderMinutes: 10,
   clearingWorkflow: false,
 };
@@ -492,6 +493,141 @@ describe("the setting that prints held groups in advance", () => {
     expect(
       el.shadowRoot!.querySelector('[data-test="print-held-work-hint"]')!.textContent,
     ).toContain("marcada HOLD");
+  });
+});
+
+describe("the setting that prints MOVED slips", () => {
+  function movedSwitch(el: ServiceSettingsPanel) {
+    const host = el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+      'wt-switch[name="printMovedSlips"]',
+    )!;
+    expect(host).not.toBeNull();
+    return { host, input: host.shadowRoot!.querySelector<HTMLInputElement>('[role="switch"]')! };
+  }
+  function beside(el: ServiceSettingsPanel) {
+    return el
+      .shadowRoot!.querySelector('[data-field-error="printMovedSlips"]')
+      ?.textContent?.trim();
+  }
+  function stored(printMovedSlips: boolean): VenueServiceSettingsView {
+    return { ...structuredClone(model), printMovedSlips };
+  }
+
+  // Fails if the switch stops reading the stored value, leaves the kitchen changes section, sits
+  // anywhere but between the held-groups switch and the reminder, or loses its label or hint.
+  it("shows the stored value after the held-groups switch and before the reminder", async () => {
+    const on = await mount({
+      loadSettings: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    const { host, input } = movedSwitch(on);
+    expect(host.closest('[data-test="kitchen-changes"]')).not.toBeNull();
+    expect(host.shadowRoot!.querySelector("label")!.textContent).toBe("Print MOVED slips");
+    expect(input.checked).toBe(true);
+    expect(
+      on.shadowRoot!.querySelector('[data-test="print-moved-slips-hint"]')!.textContent!.trim(),
+    ).toBe(
+      "When food the kitchen already has moves to another table or another order, each of its prep stations' printers prints a MOVED slip saying from where to where.",
+    );
+    const names = [...on.shadowRoot!.querySelectorAll('[data-test="kitchen-changes"] [name]')].map(
+      (control) => control.getAttribute("name"),
+    );
+    expect(names.indexOf("printMovedSlips")).toBe(names.indexOf("printHeldWork") + 1);
+    expect(names.indexOf("releaseReminderMinutes")).toBe(names.indexOf("printMovedSlips") + 1);
+    const off = await mount({
+      loadSettings: vi.fn().mockResolvedValue(stored(false)),
+    } as unknown as VenueServiceApi);
+    expect(movedSwitch(off).input.checked).toBe(false);
+  });
+
+  // Fails if the switch sends the old value, sends it through another setting's save, or stays
+  // usable mid-save.
+  it("saves the chosen value straight away and is disabled until the save finishes", async () => {
+    let finish!: () => void;
+    const api = {
+      loadSettings: vi.fn().mockResolvedValueOnce(model).mockResolvedValue(stored(false)),
+      savePrintMovedSlips: vi.fn(() => new Promise<void>((resolve) => (finish = resolve))),
+      savePrintHeldWork: vi.fn(),
+      saveSettings: vi.fn(),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    movedSwitch(el).input.click();
+    await settle(el);
+    expect(api.savePrintMovedSlips).toHaveBeenCalledWith(false);
+    expect(api.savePrintHeldWork).not.toHaveBeenCalled();
+    expect(api.saveSettings).not.toHaveBeenCalled();
+    expect(movedSwitch(el).input.disabled).toBe(true);
+    finish();
+    await settle(el);
+    expect(api.loadSettings).toHaveBeenCalledTimes(2);
+    expect(movedSwitch(el).input.checked).toBe(false);
+    expect(movedSwitch(el).input.disabled).toBe(false);
+    expect(pageAlert(el)).toBe("");
+  });
+
+  // Fails if the in-flight guard goes: two changes arriving before the switch is disabled would
+  // both be sent.
+  it("sends one save for two changes that arrive before the switch is disabled", async () => {
+    const api = {
+      loadSettings: vi.fn().mockResolvedValue(model),
+      savePrintMovedSlips: vi.fn(() => new Promise<void>(() => {})),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    const { host } = movedSwitch(el);
+    for (const checked of [false, true])
+      host.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { checked }, bubbles: true, composed: true }),
+      );
+    await settle(el);
+    expect(api.savePrintMovedSlips).toHaveBeenCalledTimes(1);
+    expect(api.savePrintMovedSlips).toHaveBeenCalledWith(false);
+  });
+
+  // Fails if a refused save leaves the switch showing the value that was never stored, or says
+  // nothing.
+  it("says a refused save failed, beside the switch and at the top of the panel, and shows the stored value again", async () => {
+    const api = {
+      loadSettings: vi.fn().mockResolvedValue(model),
+      savePrintMovedSlips: vi.fn().mockRejectedValue(new Error("offline")),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    movedSwitch(el).input.click();
+    await settle(el);
+    expect(api.savePrintMovedSlips).toHaveBeenCalledWith(false);
+    expect(pageAlert(el)).toContain("could not be saved");
+    expect(beside(el)).toContain("could not be saved");
+    expect(movedSwitch(el).input.checked).toBe(true);
+  });
+
+  // Fails if a read-only viewer can flip the switch.
+  it("is disabled for a read-only viewer and saves nothing", async () => {
+    const api = {
+      loadSettingsReadOnly: vi.fn().mockResolvedValue(model),
+      savePrintMovedSlips: vi.fn(),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api, "kitchen", true);
+    const { host } = movedSwitch(el);
+    expect(host.disabled).toBe(true);
+    host.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { checked: false }, bubbles: true, composed: true }),
+    );
+    await settle(el);
+    expect(api.savePrintMovedSlips).not.toHaveBeenCalled();
+  });
+
+  // Fails if the Spanish catalogue loses the label or the hint.
+  it("reads in Spanish", async () => {
+    setLocale("es");
+    const el = await mount({
+      loadSettings: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    expect(movedSwitch(el).host.shadowRoot!.querySelector("label")!.textContent).toBe(
+      "Imprimir avisos MOVIDO",
+    );
+    expect(
+      el.shadowRoot!.querySelector('[data-test="print-moved-slips-hint"]')!.textContent!.trim(),
+    ).toBe(
+      "Cuando comida que ya tiene la cocina pasa a otra mesa u otro pedido, las impresoras de cada estación imprimen un aviso MOVIDO que dice de dónde a dónde.",
+    );
   });
 });
 

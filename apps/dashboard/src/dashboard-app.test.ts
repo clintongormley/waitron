@@ -1717,6 +1717,7 @@ describe("dashboard-app", () => {
             settings: { editSentLines: true },
             kitchenTicketGrouping: "combined",
             printHeldWork: false,
+            printMovedSlips: true,
             releaseReminderMinutes: 10,
             clearingWorkflow: false,
           } as never)
@@ -4129,6 +4130,7 @@ describe("dashboard URL navigation", () => {
             salePolicies: { departments: [], zones: [] },
             kitchenTicketGrouping: "combined",
             printHeldWork: false,
+            printMovedSlips: true,
             releaseReminderMinutes: null,
             clearingWorkflow: false,
             settings: { editSentLines: true },
@@ -4204,6 +4206,7 @@ describe("dashboard URL navigation", () => {
             salePolicies: { departments: [], zones: [] },
             kitchenTicketGrouping: "combined",
             printHeldWork: false,
+            printMovedSlips: true,
             releaseReminderMinutes: null,
             clearingWorkflow: false,
             settings: { editSentLines: true },
@@ -7613,6 +7616,7 @@ describe("department list links inside dashboard capture", () => {
       settings: { editSentLines: true },
       kitchenTicketGrouping: "combined",
       printHeldWork: false,
+      printMovedSlips: true,
       releaseReminderMinutes: 10,
       clearingWorkflow: false,
     };
@@ -7730,6 +7734,7 @@ describe("mounted public department dialogs", () => {
       settings: { editSentLines: true },
       kitchenTicketGrouping: "combined",
       printHeldWork: false,
+      printMovedSlips: true,
       releaseReminderMinutes: null,
       clearingWorkflow: false,
     };

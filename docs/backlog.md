@@ -1998,8 +1998,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [mockups](backlog/mockups/a669-allergy-at-the-table/)
 
 - **A650 — MOVED slips say which order moved, from which table, to which table (owner, 2026-10-14;
-  Parts 3 and 4 to build).** Left: Part 3, printing MOVED slips becomes a venue setting (default
-  on); Part 4, each prep station can follow or override it (after Part 3). [Plan](superpowers/plans/2026-10-14-a650-moved-slips-design.md) ·
+  Part 4 to build).** Left: Part 4, each prep station can follow or override the venue's Print
+  MOVED slips switch (Venue settings → Kitchen tab), and the switch's hint gets back its last
+  sentence, "A prep station can be set to differ." [Plan](superpowers/plans/2026-10-14-a650-moved-slips-design.md) ·
   [mockups](backlog/mockups/a650-moved-slips/)
 
 - **A677 — Every path that can move sent work snapshots it, writes, then queues MOVED slips by hand
@@ -4338,7 +4339,7 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
 - **The two dropdown explanations on venue service's Kitchen panel in Venue settings ("Applies to
   new kitchen tickets and to reprints." and the release reminder's) are now each dropdown's `hint`**
   — left open by A178 (#1010 to #1019), seen while building, not changed; for the owner: which a
-  field that always holds a value never shows, so only screen readers read them while the two
+  field that always holds a value never shows, so only screen readers read them while the
   switches beside them keep visible lines.
 
 - **Text size after A179 (#988).** Open: page headings follow the Typography roles table in

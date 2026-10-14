@@ -10,6 +10,7 @@ const initial: VenueServiceSettingsView = {
   settings: { editSentLines: true },
   kitchenTicketGrouping: "combined",
   printHeldWork: false,
+  printMovedSlips: true,
   releaseReminderMinutes: 10,
   clearingWorkflow: false,
 };
@@ -66,6 +67,7 @@ async function mount(subject: "kitchen" | "tables") {
     saveKitchenTicketGrouping: async (kitchenTicketGrouping) =>
       write({ kitchenTicketGrouping }, { kitchenTicketGrouping }),
     savePrintHeldWork: async (printHeldWork) => write({ printHeldWork }, { printHeldWork }),
+    savePrintMovedSlips: async (printMovedSlips) => write({ printMovedSlips }, { printMovedSlips }),
     saveReleaseReminderMinutes: async (releaseReminderMinutes) =>
       write({ releaseReminderMinutes }, { releaseReminderMinutes }),
     saveClearingWorkflow: async (clearingWorkflow) =>
@@ -122,6 +124,13 @@ const choices = [
     value: true,
     original: false,
     body: { printHeldWork: true },
+  },
+  {
+    name: "printMovedSlips",
+    subject: "kitchen",
+    value: false,
+    original: true,
+    body: { printMovedSlips: false },
   },
   {
     name: "releaseReminderMinutes",

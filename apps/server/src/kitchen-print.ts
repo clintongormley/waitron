@@ -1089,9 +1089,9 @@ async function readOnHoldTickets(tx: Transaction, orderIds: readonly string[]) {
 /**
  * Tell the kitchen of sent work that moved; nothing when `before` is null. When the kitchen is to
  * be told ({@link kitchenToBeTold}), each of `before`'s items on paper now on `toOrderId` gets a
- * `moved` notice, at the quantity its ticket asks for, and each station with an active printer gets
- * one MOVED slip listing those items. `splitFrom` maps a ticket item a split made to the one it
- * copied.
+ * `moved` notice, at the quantity its ticket asks for, and, unless the venue has turned MOVED slips
+ * off, each station with an active printer gets one MOVED slip listing those items. `splitFrom` maps
+ * a ticket item a split made to the one it copied.
  */
 export async function enqueueMovedSlips(
   tx: Transaction,
@@ -1274,7 +1274,10 @@ interface MovedSlipPrinting {
   grouping: Parameters<typeof arrangeTicketItems>[1];
 }
 
-/** {@link MovedSlipPrinting} for every slip of `items`, read once; null when no station prints. */
+/**
+ * {@link MovedSlipPrinting} for every slip of `items`, read once; null when no station prints or
+ * the venue does not print MOVED slips.
+ */
 async function readMovedSlipPrinting(
   tx: Transaction,
   cfg: TillConfig,
@@ -1282,7 +1285,7 @@ async function readMovedSlipPrinting(
 ): Promise<MovedSlipPrinting | null> {
   const stationIds = [...new Set(items.map((item) => item.stationId))];
   const byStation = mappingsByStation(await printerMappings(tx, stationIds));
-  if (byStation.size === 0) return null;
+  if (byStation.size === 0 || !(await VENUE_SERVICE.readPrintMovedSlips(tx))) return null;
   const itemsByLine = await buildTicketItems(tx, cfg, [
     ...new Set(items.map((item) => item.workingOrderLineId)),
   ]);

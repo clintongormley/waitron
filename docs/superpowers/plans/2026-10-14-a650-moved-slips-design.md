@@ -1,12 +1,14 @@
 # A650 — MOVED slips say which order moved, from where, to where (build plan)
 
-Status: build plan, written 2026-10-14 after the owner's rulings (§0). Nothing is built yet. The
-build is four pull requests (§7); three small questions (§8) each carry the default the build
-proceeds on. Drawings: [`docs/backlog/mockups/a650-moved-slips/`](../../backlog/mockups/a650-moved-slips/)
+Status: build plan, written 2026-10-14 after the owner's rulings (§0). The build is four pull
+requests (§7); three small questions (§8) each carry the default the build proceeds on. Drawings: [`docs/backlog/mockups/a650-moved-slips/`](../../backlog/mockups/a650-moved-slips/)
 — pictures 1 to 4 are the design as it stood before the rulings, pictures 5 to 7 are this plan.
 
-2026-10-14: Part 1 landed in #1706, and Part 2 adds `ticket_items.sent_order_number` (migration
-`0153_sent_order_number.sql`); §5's account of what is stored describes the code before Part 2.
+2026-10-14: Part 1 landed in #1706, and Part 2 in #1714, which adds
+`ticket_items.sent_order_number` (migration `0153_sent_order_number.sql`); §5's account of what is
+stored describes the code before Part 2. Part 3 adds `service_settings.print_moved_slips`
+(venue-service migration `0052_mute_groot.sql`) and ships the venue switch's hint without its last
+sentence (§6).
 
 The file keeps its old name (`…-design.md`) so the links to it from the backlog stay good.
 
@@ -394,7 +396,7 @@ Drawing: picture 7.
   `apps/server/src/order-groups.ts:1312`); the dashboard reads it in the settings view and saves it
   through a route beside `printHeldWork`'s (the settings view at
   `packages/venue-service/src/routes.ts:703-708` and the save at `:760-768`).
-- **Dashboard placement**: Settings → Kitchen tab, the "Changes after sending" section
+- **Dashboard placement**: Venue settings → Kitchen tab, the "Changes after sending" section
   (`#kitchen`, `packages/venue-service/src/dashboard/service-settings-panel.ts:138-164`, mounted as
   the `venue-service-kitchen` settings panel, `packages/venue-service/src/dashboard/index.ts:92-108`),
   a switch after "Print held groups in advance" and before "Reminder to fire the next group".
@@ -403,7 +405,8 @@ Drawing: picture 7.
   saying from where to where. A prep station can be set to differ." / "Cuando comida que ya tiene
   la cocina pasa a otra mesa u otro pedido, las impresoras de cada estación imprimen un aviso
   MOVIDO que dice de dónde a dónde. Cada estación puede configurarse aparte." It saves when flipped,
-  like its neighbours (`#save` and `#switch`, `service-settings-panel.ts:97-137`).
+  like its neighbours (`#save` and `#switch`, `service-settings-panel.ts:97-137`). Part 3 ships the
+  hint without its last sentence (the prep-station one); Part 4 adds it back with the station's choice.
 
 ### The prep station's override
 
@@ -751,7 +754,9 @@ combobox shows "As the venue (print)" when the station is null and the venue on,
 `station-editor.unsaved.test.ts` — a changed choice asks before closing;
 `packages/venue-service/src/routes.test.ts` — the routing view carries the venue's value. Add the
 combobox's states to `station-editor.a11y.test.ts`, and check `station-editor.save-state.test.ts`.
-Guards: `scripts/native-form-fields.test.ts`, `scripts/english-only.test.ts`.
+Guards: `scripts/native-form-fields.test.ts`, `scripts/english-only.test.ts`. Also add back the venue
+switch's last hint sentence, "A prep station can be set to differ." / "Cada estación puede
+configurarse aparte." (§6), which Part 3 left out, and its two pinned test strings.
 
 ## 8. Questions for the owner (the build proceeds on each default)
 

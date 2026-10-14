@@ -54,6 +54,7 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
             settings: { editSentLines: true },
             kitchenTicketGrouping: "combined",
             printHeldWork: false,
+            printMovedSlips: true,
             releaseReminderMinutes: 10,
             clearingWorkflow: true,
           }),

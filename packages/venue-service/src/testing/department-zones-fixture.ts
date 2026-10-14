@@ -110,6 +110,7 @@ export const zonesModel: VenueServiceView = {
   settings: { editSentLines: true },
   kitchenTicketGrouping: "combined",
   printHeldWork: false,
+  printMovedSlips: true,
   releaseReminderMinutes: null,
   clearingWorkflow: false,
 };

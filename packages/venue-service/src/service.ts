@@ -75,6 +75,7 @@ import {
   readEditSentLines,
   readKitchenTicketGrouping,
   readPrintHeldWork,
+  readPrintMovedSlips,
   readReleaseReminderMinutes,
   recordKitchenNotices,
 } from "./kitchen-notices.js";
@@ -192,5 +193,6 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   readClearingWorkflow,
   readKitchenTicketGrouping,
   readPrintHeldWork,
+  readPrintMovedSlips,
   readReleaseReminderMinutes,
 };
