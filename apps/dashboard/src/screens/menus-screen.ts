@@ -47,6 +47,7 @@ import { publishFailure, statusWords, type PublishResult } from "../widgets/menu
 import "../widgets/section-details-form.js";
 import "../widgets/include-folder-form.js";
 import { fieldOf, ListWriteQueue } from "../widgets/section-writes.js";
+import { countOf } from "../widgets/count-text.js";
 import type {
   CatalogueSummary,
   CategorySummary,
@@ -2581,10 +2582,7 @@ export class MenusScreen extends LitElement {
       aria-label=${t("folders.select")}
     >
       <span data-test="selected-count" aria-live="polite"
-        >${t(count === 1 ? "folders.selected_one" : "folders.selected").replace(
-          "{count}",
-          String(count),
-        )}</span
+        >${countOf("folders.selected", count)}</span
       >
       <wt-button
         data-test="selection-move"
@@ -3330,10 +3328,7 @@ export class MenusScreen extends LitElement {
       data-test="move-selected"
       .open=${open}
       .beforeClose=${leaveCoordinatorFor(this) ? this.#beforeMoveClose : undefined}
-      heading=${t(keys.length === 1 ? "folders.move_heading_one" : "folders.move_heading").replace(
-        "{count}",
-        String(keys.length),
-      )}
+      heading=${countOf("folders.move_heading", keys.length)}
       @keydown=${this.#guardEscape}
       @wt-close=${(event: Event) => {
         event.stopPropagation();

@@ -5658,6 +5658,27 @@ describe("the Structure tree", () => {
         expect(client.moveSectionMembersInto).toHaveBeenCalledOnce();
       });
 
+      it.each([
+        ["en", 1, "1 selected", "Move 1 item"],
+        ["en", 2, "2 selected", "Move 2 items"],
+        ["es", 1, "1 seleccionado", "Mover 1 elemento"],
+        ["es", 2, "2 seleccionados", "Mover 2 elementos"],
+      ] as const)(
+        "renders the selected count and native move heading in %s for %i items",
+        async (locale, count, selected, heading) => {
+          setLocale(locale);
+          const el = await mountLunch();
+          await pressSelect(el);
+          await tick(el, "m-burger");
+          if (count === 2) await tick(el, "m-fav");
+          expect(text(q(el, '[data-test="selected-count"]'))).toBe(selected);
+          await openMove(el);
+          const dialog = modal(el, "move-selected");
+          await dialog.updateComplete;
+          expect(text(dialog.shadowRoot!.querySelector("h2"))).toBe(heading);
+        },
+      );
+
       it("names the button, the dialog and Top level in Spanish", async () => {
         setLocale("es");
         const el = await mountLunch();
