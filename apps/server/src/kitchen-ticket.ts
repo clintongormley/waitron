@@ -7,7 +7,7 @@
  * `esc()` has no bold, so ASCII markers stand in for emphasis.
  */
 import { esc, prepareText, wrapText, type EscSetting } from "@waitron/printing";
-import { stringToThousandths, thousandthsToDecimal } from "@waitron/shared";
+import { partyTablesName, stringToThousandths, thousandthsToDecimal } from "@waitron/shared";
 
 /** One fired line. Modifiers and cross-references print beneath the item. */
 export interface KitchenTicketItem {
@@ -255,9 +255,8 @@ export function joinKitchenTickets(first: Uint8Array, second: Uint8Array): Uint8
 
 /**
  * A slip for one line the kitchen has on paper, telling the cook what changed without reprinting the
- * order. For fired work: `VOID` (cancelled after firing), `RECALLED` (pulled back to held) or `MOVED`
- * (now belongs to another table, `tableLabel`, where `movedFrom` names the table and order its ticket
- * had). For held work on a HOLD ticket: `HOLD CHANGED` (the item's quantity `added` to or `removed`
+ * order. For fired work: `VOID` (cancelled after firing) or `RECALLED` (pulled back to held). For
+ * held work on a HOLD ticket: `HOLD CHANGED` (the item's quantity `added` to or `removed`
  * from its group) or `HOLD CANCELLED` (taken out of the order); these name the item's group.
  * `TO STATION` names the station now responsible for fired work; the slip stays at the old station.
  * `EXTRA CANCELLED`: an extra taken off a dish the kitchen has, fired or `held` on a HOLD ticket,
@@ -273,7 +272,6 @@ export type CorrectionSlip = {
   item: KitchenTicketItem;
 } & (
   | { kind: "VOID" | "RECALLED" }
-  | { kind: "MOVED"; movedFrom: { tableLabel: string | null; orderNumber: string } }
   | { kind: "HOLD CHANGED"; direction: "added" | "removed" }
   | { kind: "HOLD CANCELLED" }
   | { kind: "TO STATION"; toStation: string; locale: string }
@@ -337,18 +335,8 @@ export function formatCorrectionSlip(slip: CorrectionSlip, layout: EscSetting): 
 
   text(`*** ${slipHeader(slip)} ***`);
   text(slip.stationName);
-  if (slip.kind === "MOVED") {
-    const { movedFrom } = slip;
-    text(`${movedFrom.tableLabel ?? "-"} -> ${slip.tableLabel ?? "-"}`);
-    text(
-      movedFrom.orderNumber === slip.orderNumber
-        ? slip.orderNumber
-        : `${movedFrom.orderNumber} -> ${slip.orderNumber}`,
-    );
-  } else {
-    if (slip.tableLabel !== null) text(slip.tableLabel);
-    text(slip.orderNumber);
-  }
+  if (slip.tableLabel !== null) text(slip.tableLabel);
+  text(slip.orderNumber);
   b.line(hhmm(new Date(slip.at)));
   if (slip.item.group !== undefined) b.line(`GROUP ${slip.item.group}`);
   const sign = slip.kind !== "HOLD CHANGED" ? "" : slip.direction === "added" ? "+" : "-";
@@ -369,8 +357,9 @@ export function formatCorrectionSlip(slip: CorrectionSlip, layout: EscSetting): 
 
 /**
  * One order's MOVED slip at one station. `toNumber` is absent when the order kept its number;
- * `fromText` and `toText` print as given, so the caller words the counter. Held dishes follow the
- * fired ones under `HOLD`, each group under `GROUP n`, which stay English as on every kitchen paper.
+ * `fromText` and `toText` print as given ({@link movedPlaceText} words them). Fired dishes spanning
+ * groups head each group's run with `GROUP n`; held dishes follow the fired ones under `HOLD`, each
+ * group under `GROUP n`. Both words stay English, as on every kitchen paper.
  */
 export interface MovedSlip {
   stationName: string;
@@ -386,9 +375,17 @@ export interface MovedSlip {
 }
 
 const MOVED_WORDS = {
-  en: { header: "MOVED", order: "Order", from: "From: ", to: "To:   " },
-  es: { header: "MOVIDO", order: "Pedido", from: "De: ", to: "A:  " },
+  en: { header: "MOVED", order: "Order", from: "From: ", to: "To:   ", counter: "(counter)" },
+  es: { header: "MOVIDO", order: "Pedido", from: "De: ", to: "A:  ", counter: "(mostrador)" },
 } as const;
+
+/** A MOVED slip's From or To text: the counter's word, else the place names as tickets join them. */
+export function movedPlaceText(
+  place: { counter: boolean; names: readonly string[] },
+  locale: string,
+): string {
+  return place.counter ? MOVED_WORDS[ticketLanguage(locale)].counter : partyTablesName(place.names);
+}
 
 export function formatMovedSlip(slip: MovedSlip, layout: EscSetting): Uint8Array {
   const b = esc(layout).init();
@@ -410,7 +407,13 @@ export function formatMovedSlip(slip: MovedSlip, layout: EscSetting): Uint8Array
   labelled(words.from, slip.fromText);
   labelled(words.to, slip.toText);
   b.line(hhmm(new Date(slip.at)));
-  for (const item of slip.items) emitItem(b, item, columns);
+  const groups = new Set(slip.items.map((item) => item.group));
+  let current = groups.size === 1 ? [...groups][0] : undefined;
+  for (const item of slip.items) {
+    if (item.group !== undefined && item.group !== current) b.line(`GROUP ${item.group}`);
+    current = item.group;
+    emitItem(b, item, columns);
+  }
   if (slip.held.length > 0) b.line("HOLD");
   for (const { group, items } of slip.held) {
     b.line(`GROUP ${group}`);

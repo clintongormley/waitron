@@ -7,6 +7,7 @@ import {
   printJobs,
   withTransaction,
   workingOrderLines,
+  workingOrders,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -29,7 +30,9 @@ import type { OriginConfig } from "./till-config.js";
 import { createTable } from "./testing/live-table.js";
 import { addTabRound, moveOrderLines } from "./working-order.js";
 import { createPrinter } from "@waitron/printing";
-import { kitchenNotices } from "@waitron/venue-service";
+import { kitchenNotices, setRoutingCell } from "@waitron/venue-service";
+import { createStation } from "./kitchen.js";
+import { placeGroups } from "./order-groups.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import {
@@ -37,8 +40,11 @@ import {
   commandFor,
   inTx,
   join,
+  nameParty,
   nextMillisecond,
+  order,
   orderForParty,
+  pay,
   revisionOf,
   seat,
   setupPartyVenue,
@@ -49,6 +55,7 @@ import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { joinTables, moveGuests, splitTable } from "./table-actions.js";
+import { moveBill } from "./move-bill.js";
 
 const LOCALE = "es-ES";
 const suite = useVenueDb({
@@ -393,10 +400,10 @@ describe("a table action tells the kitchen of every bill of the party", () => {
       ["FLAN", tabId, "Mesa 4"],
       ["TINTO", checkId, "Mesa 4"],
     ]);
-    const slips = (await printedBy(printerId)).filter((slip) => slip.includes("MOVED"));
+    const slips = (await printedBy(printerId)).filter((slip) => slip.includes("*** MOVIDO ***"));
     expect(slips).toHaveLength(3);
-    expect(slips.filter((slip) => slip.includes("Mesa 4, 5 -> Mesa 5"))).toHaveLength(1);
-    expect(slips.filter((slip) => slip.includes("Mesa 4, 5 -> Mesa 4"))).toHaveLength(2);
+    expect(slips.filter((slip) => slip.includes("De: Mesa 4, 5\nA:  Mesa 5\n"))).toHaveLength(1);
+    expect(slips.filter((slip) => slip.includes("De: Mesa 4, 5\nA:  Mesa 4\n"))).toHaveLength(2);
   });
 
   it("tells the kitchen of the party's sent dishes when an empty table leaves it", async () => {
@@ -496,6 +503,167 @@ describe("a table action tells the kitchen of every bill of the party", () => {
     expect(byDish(notices)).toEqual([
       ["FLAN", ana.tabId, "Mesa 4, 7"],
       ["TARTA", otherCheckId, "Mesa 4, 7"],
+    ]);
+  });
+});
+
+/** A station named `name` with its own printer, taking each of `dishes`; returns the printer's id. */
+async function stationWithPrinter(v: PartyVenue, name: string, dishes: string[]): Promise<string> {
+  return inTx(v, async (tx) => {
+    const station = await createStation(tx, v.cfg, { name });
+    const { id } = await createPrinter(
+      tx,
+      { locationId: v.cfg.locationId },
+      { name: `${name} printer`, transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
+    );
+    await attachPrinterToStation(tx, {
+      locationId: v.cfg.locationId,
+      stationId: station.id,
+      printerId: id,
+    });
+    for (const dish of dishes)
+      await setRoutingCell(
+        tx,
+        v.cfg,
+        { row: { kind: "product", productId: v.productId(dish) }, zoneId: null },
+        { kind: "station", stationId: station.id },
+      );
+    return id;
+  });
+}
+
+describe("a MOVED slip per order per station", () => {
+  it("prints one slip for each order at each station, listing that order's dishes there", async () => {
+    const v = await setupPartyVenue(db);
+    const grill = await stationWithPrinter(v, "Grill", ["Burger", "Paella"]);
+    const postres = await stationWithPrinter(v, "Postres", ["Flan"]);
+    const mesa11 = await v.table("Mesa 11");
+    const mesa12 = await v.table("Mesa 12");
+    const { partyId, tabId } = await seat(v, mesa11);
+    await nameParty(v, partyId, "Ana");
+    await inTx(v, (tx) =>
+      placeGroups(tx, v.cfg, partyId, {
+        groups: [
+          {
+            lines: [
+              { menuItemId: v.item("Burger"), quantity: "2" },
+              { menuItemId: v.item("Paella"), quantity: "1" },
+              { menuItemId: v.item("Flan"), quantity: "1" },
+              { menuItemId: v.item("Burger"), quantity: "1" },
+            ],
+            release: "fire",
+          },
+        ],
+        operatorId: OPERATOR,
+        billId: tabId,
+      }),
+    );
+    const checkId = await split(v, partyId, tabId, [4]);
+    const numbers = await db
+      .select({ id: workingOrders.id, orderNumber: workingOrders.orderNumber })
+      .from(workingOrders)
+      .where(inArray(workingOrders.id, [tabId, checkId]));
+    const numberOf = (id: string) => numbers.find((row) => row.id === id)!.orderNumber;
+    const grillBefore = (await printedBy(grill)).length;
+    const postresBefore = (await printedBy(postres)).length;
+    const command = await commandFor(v, partyId);
+
+    await inTx(v, (tx) =>
+      moveGuests(tx, v.cfg, partyId, mesa12, { ...command, bills: "merge", otherPartyId: null }),
+    );
+
+    const slip = (orderNumber: number, dishes: string[], station: string) => [
+      "*** MOVIDO ***",
+      station,
+      `Pedido ${orderNumber} · Ana`,
+      "De: Mesa 11",
+      "A:  Mesa 12",
+      expect.stringMatching(/^\d\d:\d\d$/),
+      ...dishes,
+      "",
+    ];
+    const grillSlips = (await printedBy(grill)).slice(grillBefore);
+    const postresSlips = (await printedBy(postres)).slice(postresBefore);
+    expect(grillSlips.map((text) => text.split("\n"))).toEqual(
+      expect.arrayContaining([
+        slip(numberOf(tabId), ["2.000 x BURG", "1.000 x PAELLA"], "Grill"),
+        slip(numberOf(checkId), ["1.000 x BURG"], "Grill"),
+      ]),
+    );
+    expect(grillSlips).toHaveLength(2);
+    expect(postresSlips.map((text) => text.split("\n"))).toEqual([
+      slip(numberOf(tabId), ["1.000 x FLAN"], "Postres"),
+    ]);
+  });
+
+  it("names the party a bill moved to the counter left, and words the counter", async () => {
+    const v = await setupPartyVenue(db);
+    const grill = await stationWithPrinter(v, "Grill", ["Burger"]);
+    const mesa13 = await v.table("Mesa 13");
+    const { partyId, tabId } = await seat(v, mesa13);
+    await nameParty(v, partyId, "Ana");
+    await order(v, tabId, "Paella", "Burger");
+    const second = await split(v, partyId, tabId, [2]);
+    const number = (
+      await db
+        .select({ orderNumber: workingOrders.orderNumber })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, second))
+    )[0]!.orderNumber;
+    const before = (await printedBy(grill)).length;
+    const expectedPartyRevision = await revisionOf(v, partyId);
+
+    await inTx(v, (tx) =>
+      moveBill(
+        tx,
+        v.cfg,
+        second,
+        { counter: { zoneId: v.counter.zoneId } },
+        { bills: "merge", operatorId: OPERATOR, expectedPartyRevision },
+      ),
+    );
+
+    const slips = (await printedBy(grill)).slice(before).map((text) => text.split("\n"));
+    expect(slips.map((lines) => lines.slice(0, 5))).toEqual([
+      ["*** MOVIDO ***", "Grill", `Pedido ${number} · Ana`, "De: Mesa 13", "A:  (mostrador)"],
+    ]);
+  });
+
+  it("names the party a kept bill's party was merged into", async () => {
+    const v = await setupPartyVenue(db);
+    const grill = await stationWithPrinter(v, "Grill", ["Burger"]);
+    const mesa21 = await v.table("Mesa 21");
+    const mesa22 = await v.table("Mesa 22");
+    const ana = await seat(v, mesa21);
+    await nameParty(v, ana.partyId, "Ana");
+    await nextMillisecond();
+    const luis = await seat(v, mesa22);
+    await nameParty(v, luis.partyId, "Luis");
+    await order(v, ana.tabId, "Burger");
+    await pay(v, ana.tabId, "12.00");
+    const number = (
+      await db
+        .select({ orderNumber: workingOrders.orderNumber })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, ana.tabId))
+    )[0]!.orderNumber;
+    const before = (await printedBy(grill)).length;
+    const expectedPartyRevision = await revisionOf(v, ana.partyId);
+    const expectedOtherPartyRevision = await revisionOf(v, luis.partyId);
+
+    await inTx(v, (tx) =>
+      moveGuests(tx, v.cfg, ana.partyId, mesa22, {
+        bills: "merge",
+        expectedPartyRevision,
+        otherPartyId: luis.partyId,
+        expectedOtherPartyRevision,
+        operatorId: OPERATOR,
+      }),
+    );
+
+    const slips = (await printedBy(grill)).slice(before).map((text) => text.split("\n"));
+    expect(slips.map((lines) => lines.slice(0, 5))).toEqual([
+      ["*** MOVIDO ***", "Grill", `Pedido ${number} · Luis`, "De: Mesa 21", "A:  Mesa 22"],
     ]);
   });
 });

@@ -1061,7 +1061,7 @@ describe("sent work moved between a party's bills at two of its tables", () => {
     // The control: this printer does print the MOVED slips the join makes.
     const control = await printedBy(printerId);
     expect(control.length).toBeGreaterThan(0);
-    expect(new Set(control.map((slip) => slip[0]))).toEqual(new Set(["*** MOVED ***"]));
+    expect(new Set(control.map((slip) => slip[0]))).toEqual(new Set(["*** MOVIDO ***"]));
     return { partyId, main, second, printerId };
   }
 

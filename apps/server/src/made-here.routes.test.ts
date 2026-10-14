@@ -861,7 +861,7 @@ describe("made-here route wiring", () => {
     const movedGrill = await inTx(venue, (tx) =>
       tx.select().from(printJobs).where(eq(printJobs.printerId, grillPrinterId)),
     );
-    expect(decodeTicket(movedGrill.at(-1)!.payload)).toContain("MOVED");
+    expect(decodeTicket(movedGrill.at(-1)!.payload)).toContain("*** MOVIDO ***");
     const noticesAfter = venue.db.all<{ station_id: string; kind: string }>(
       sql`select station_id, kind from kitchen_notices order by rowid`,
     );

@@ -962,12 +962,13 @@ async function orderNumberOf(orderId: string): Promise<number> {
 }
 
 /** A MOVED slip's printed lines, its time matched by shape. */
-function movedSlip(tables: string, orderNumbers: string, item: string): unknown[] {
+function movedSlip(from: string, to: string, orderNumber: string, item: string): unknown[] {
   return [
-    "*** MOVED ***",
+    "*** MOVIDO ***",
     "Cocina",
-    tables,
-    orderNumbers,
+    `Pedido ${orderNumber}`,
+    `De: ${from}`,
+    `A:  ${to}`,
     expect.stringMatching(/^\d\d:\d\d$/),
     item,
     "",
@@ -1048,6 +1049,6 @@ describe("moving sent work to another table tells the kitchen", () => {
     ]);
     const printed = await printedBy(printerId);
     expect(printed).toHaveLength(2);
-    expect(printed[1]).toEqual(movedSlip("T1 -> T2", `${number}`, "2.000 x Agua"));
+    expect(printed[1]).toEqual(movedSlip("T1", "T2", `${number}`, "2.000 x Agua"));
   });
 });

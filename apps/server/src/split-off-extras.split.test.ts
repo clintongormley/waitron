@@ -217,10 +217,10 @@ describe("splitting a dish with split-off extras", () => {
       .get(venue.printers.fryer)!
       .slice(before.get(venue.printers.fryer)!.length);
     expect(grillSlips).toHaveLength(1);
-    expect(grillSlips[0]).toContain("MOVED");
+    expect(grillSlips[0]).toContain("*** MOVIDO ***");
     expect(grillSlips[0]).toContain("BURG");
     expect(fryerSlips).toHaveLength(1);
-    expect(fryerSlips[0]).toContain("MOVED");
+    expect(fryerSlips[0]).toContain("*** MOVIDO ***");
     expect(fryerSlips[0]).toContain("CHIPS");
     const moved = await withTransaction(db, (tx) =>
       tx

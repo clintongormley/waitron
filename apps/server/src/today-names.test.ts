@@ -196,7 +196,10 @@ async function jobsFrom(act: () => Promise<unknown>): Promise<string[][]> {
   return (await kitchenJobs()).slice(before);
 }
 
-const isMovedSlip = (lines: string[]) => lines.includes("*** MOVED ***");
+const isMovedSlip = (lines: string[]) => lines.includes("*** MOVIDO ***");
+
+/** A MOVED slip's From and To lines, as its lines joined with spaces read them. */
+const fromTo = (from: string, to: string) => prepareText(`De: ${from} A:  ${to}`);
 
 async function labelOf(tableId: string): Promise<string> {
   return (await tableRow(v, tableId)).label;
@@ -257,7 +260,7 @@ describe("a group renamed for today, as the kitchen sees it", () => {
 
     const slips = printed.filter(isMovedSlip);
     expect(slips).toHaveLength(1);
-    expect(slips[0]!.join(" ")).toContain(prepareText(`${name} -> ${await labelOf(table.t9!)}`));
+    expect(slips[0]!.join(" ")).toContain(fromTo(name, await labelOf(table.t9!)));
   });
 
   it("the expo board names the order by the group's name", async () => {
@@ -426,7 +429,7 @@ describe("a table split off a group renamed for today, as the kitchen sees it", 
 
     const slips = printed.filter(isMovedSlip);
     expect(slips).toHaveLength(1);
-    expect(slips[0]!.join(" ")).toContain(prepareText(`${name} -> ${own}`));
+    expect(slips[0]!.join(" ")).toContain(fromTo(name, own));
   });
 
   it("Table 9 split off taking a bill prints a MOVED slip for each bill, from the group's name to its own table's name", async () => {
@@ -442,8 +445,8 @@ describe("a table split off a group renamed for today, as the kitchen sees it", 
 
     const slips = printed.filter(isMovedSlip).map((lines) => lines.join(" "));
     expect(slips).toHaveLength(2);
-    expect(slips.filter((s) => s.includes(prepareText(`${name} -> ${own}`)))).toHaveLength(1);
-    expect(slips.filter((s) => s.includes(prepareText(`${name} -> ${nine}`)))).toHaveLength(1);
+    expect(slips.filter((s) => s.includes(fromTo(name, own)))).toHaveLength(1);
+    expect(slips.filter((s) => s.includes(fromTo(name, nine)))).toHaveLength(1);
   });
 
   it("Table 9 split off an unnamed group with no bill prints one MOVED slip to Counter 6", async () => {
@@ -454,7 +457,7 @@ describe("a table split off a group renamed for today, as the kitchen sees it", 
 
     const slips = printed.filter(isMovedSlip);
     expect(slips).toHaveLength(1);
-    expect(slips[0]!.join(" ")).toContain(prepareText(`-> ${await labelOf(table.c6!)}`));
+    expect(slips[0]!.join(" ")).toContain(prepareText(`A:  ${await labelOf(table.c6!)}`));
   });
 
   it("Table 9 split off an unnamed group taking a bill prints a MOVED slip for each bill", async () => {
@@ -466,8 +469,8 @@ describe("a table split off a group renamed for today, as the kitchen sees it", 
 
     const slips = printed.filter(isMovedSlip).map((lines) => lines.join(" "));
     expect(slips).toHaveLength(2);
-    const counter6 = prepareText(`-> ${await labelOf(table.c6!)}`);
-    const table9 = prepareText(`-> ${await labelOf(table.t9!)}`);
+    const counter6 = prepareText(`A:  ${await labelOf(table.c6!)}`);
+    const table9 = prepareText(`A:  ${await labelOf(table.t9!)}`);
     expect(slips.filter((s) => s.includes(counter6))).toHaveLength(1);
     expect(slips.filter((s) => s.includes(table9))).toHaveLength(1);
   });
@@ -492,7 +495,7 @@ describe("guests moved onto one table of their group renamed for today, as the k
 
     const slips = printed.filter(isMovedSlip);
     expect(slips).toHaveLength(1);
-    expect(slips[0]!.join(" ")).toContain(prepareText(`${name} -> ${own}`));
+    expect(slips[0]!.join(" ")).toContain(fromTo(name, own));
   });
 
   it("moved onto Counter 6 of an unnamed group they print one MOVED slip to Counter 6", async () => {
@@ -503,7 +506,7 @@ describe("guests moved onto one table of their group renamed for today, as the k
 
     const slips = printed.filter(isMovedSlip);
     expect(slips).toHaveLength(1);
-    expect(slips[0]!.join(" ")).toContain(prepareText(`-> ${await labelOf(table.c6!)}`));
+    expect(slips[0]!.join(" ")).toContain(prepareText(`A:  ${await labelOf(table.c6!)}`));
   });
 });
 
@@ -524,7 +527,7 @@ describe("back to its saved place on a group renamed for today, as the kitchen s
     const slips = printed.filter(isMovedSlip);
     expect(slips).toHaveLength(1);
     const both = `${await labelOf(table.c6!)}, ${await labelOf(table.t9!)}`;
-    expect(slips[0]!.join(" ")).toContain(prepareText(`${name} -> ${both}`));
+    expect(slips[0]!.join(" ")).toContain(fromTo(name, both));
   });
 
   it("Table 9 back to its saved place ends a group of two tables with their own names for today and prints one MOVED slip from the name to both own names", async () => {
@@ -541,7 +544,7 @@ describe("back to its saved place on a group renamed for today, as the kitchen s
     expect((await floorRow(v, table.t9!)).today?.name).toBe(nine);
     const slips = printed.filter(isMovedSlip);
     expect(slips).toHaveLength(1);
-    expect(slips[0]!.join(" ")).toContain(prepareText(`${name} -> ${own}, ${nine}`));
+    expect(slips[0]!.join(" ")).toContain(fromTo(name, `${own}, ${nine}`));
   });
 
   it("Bar back to its saved place leaves the named group of three and prints one MOVED slip from the name to Bar and the name", async () => {
@@ -556,7 +559,7 @@ describe("back to its saved place on a group renamed for today, as the kitchen s
     const slips = printed.filter(isMovedSlip);
     expect(slips).toHaveLength(1);
     const barAndGroup = `${await labelOf(table.bar!)}, ${name}`;
-    expect(slips[0]!.join(" ")).toContain(prepareText(`${name} -> ${barAndGroup}`));
+    expect(slips[0]!.join(" ")).toContain(fromTo(name, barAndGroup));
   });
 
   it("an unnamed group of two ended the same way prints no MOVED slip", async () => {

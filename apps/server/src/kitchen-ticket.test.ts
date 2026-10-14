@@ -9,6 +9,7 @@ import {
   formatKitchenTicket,
   formatMovedSlip,
   joinKitchenTickets,
+  movedPlaceText,
 } from "./kitchen-ticket.js";
 import type { KitchenTicket, KitchenTicketItem, MovedSlip } from "./kitchen-ticket.js";
 import {
@@ -752,6 +753,63 @@ describe("formatMovedSlip", () => {
       formatMovedSlip({ ...slip, fromText: "Mesa 43", toText: "(counter)" }, KITCHEN_80),
     );
     expect(lines.slice(3, 5)).toEqual(["From: Mesa 43", "To:   (counter)"]);
+  });
+
+  it("heads each group's run of fired dishes with GROUP n when they span groups", () => {
+    const lines = printedLines(
+      formatMovedSlip(
+        {
+          ...slip,
+          items: [
+            { qty: "1.000", name: "BURG", group: 1 },
+            { qty: "2.000", name: "CHIPS", group: 1 },
+            { qty: "1.000", name: "STEAK", group: 2 },
+          ],
+        },
+        KITCHEN_80,
+      ),
+    );
+    expect(lines.slice(5)).toEqual([
+      "13:24",
+      "GROUP 1",
+      "1.000 x BURG",
+      "2.000 x CHIPS",
+      "GROUP 2",
+      "1.000 x STEAK",
+      "",
+    ]);
+  });
+
+  it("prints no GROUP line when every fired dish is in one group", () => {
+    const lines = printedLines(
+      formatMovedSlip(
+        {
+          ...slip,
+          items: [
+            { qty: "1.000", name: "BURG", group: 1 },
+            { qty: "2.000", name: "CHIPS", group: 1 },
+          ],
+        },
+        KITCHEN_80,
+      ),
+    );
+    expect(lines.slice(5)).toEqual(["13:24", "1.000 x BURG", "2.000 x CHIPS", ""]);
+  });
+});
+
+describe("movedPlaceText", () => {
+  it.each([
+    ["en-GB", "(counter)"],
+    ["es-ES", "(mostrador)"],
+  ])("words a counter order for %s", (locale, expected) => {
+    expect(movedPlaceText({ counter: true, names: [] }, locale)).toBe(expected);
+  });
+
+  it("joins an order's place names as its tickets name them", () => {
+    expect(movedPlaceText({ counter: false, names: ["Mesa 6", "Mesa 9"] }, "es-ES")).toBe(
+      "Mesa 6, 9",
+    );
+    expect(movedPlaceText({ counter: false, names: ["Cumple Ana"] }, "en-GB")).toBe("Cumple Ana");
   });
 });
 
