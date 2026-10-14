@@ -10,8 +10,9 @@ The command below prepares signed evidence. It does not update your master regis
 **2026-10-14 status:** Task 4's allocation activation, default fiscal hooks and text identities
 landed in #1700. Earlier paragraphs below describing those as unfinished refer to its development
 checkpoints. Successful allocated standby adoption still needs the primary's venue copy and fresh
-establishment authority. Task 6 adds the pack handover below; its recovery screens and complete
-offline exercise remain unfinished.
+establishment authority. Task 6's candidate adds the pack handover and recovery-record entry below;
+the complete offline exercise remains unfinished. Its optional host-managed emergency collector
+is described in [Emergency recovery](emergency-recovery.md).
 
 ## Create the custodian's key
 
@@ -380,7 +381,7 @@ unfinished. This is branch development guidance, not a qualified venue recovery 
 ## Staged node keys on the Task 6 candidate
 
 The restart backend can stage a node recovery key separately from the archive encryption key.
-The public restore forms do not collect this credential yet. A host request supplies
+The candidate public restore forms collect this credential. A host request supplies
 `nodeRecoverySecret` alongside its public `recoveryOperation`; the secret goes into
 `restore-request.node-key` with mode `0600`, not into the JSON marker. After restart, the selected
 backup's verifier checks it again and the module rereads current outside evidence. A missing or
@@ -407,8 +408,7 @@ To submit these inputs through the candidate setup API, send `recoveryOperation`
 archive, send a multipart form with `artifact` as a file, `recoveryKey`, `environment`,
 `recoveryOperation` as JSON text, and `nodeRecoverySecret`. Set `oldBoxGone` to `1` only after
 confirming the old box is off; `0` leaves that confirmation unset. The archive encryption key is
-still `recoveryKey`. The browser API client accepts the recovery pair, but the screens do not
-collect it yet.
+still `recoveryKey`. The browser API client and candidate restore screens forward the recovery pair.
 
 The setup request's saved hash includes the operation and node key, so a completed request cannot
 be replayed with different inputs. Its saved progress contains neither key. Forwarding the operation

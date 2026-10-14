@@ -1051,3 +1051,16 @@ an allocation issuer or current-register collector: the configured outside paper
 rereads its separate files. Emergency/phone evidence collection, keeping an existing identity
 and the complete interruption/retry/burn journeys remain Task 6 work. The operator must not
 interpret a pasted record or a checked box as independent outside authority.
+
+**2026-10-14 emergency-collector checkpoint (candidate only):** a public emergency request can
+use the default module preparation seat without a paper signer or subscription. The host must
+separately configure its current confirmation and a mounted outside incident directory. A fresh
+cryptographic draw and every series are retained there before local activation; a failed local
+transaction leaves the event consumed. Exclusive event files prevent concurrent or changed-source
+claims from reopening it. A confirmed retry rereads the current outside evidence and returns only
+an exact locally committed result. Reapplying an old backup without that result cannot recreate
+the draw's authority. Focused tests exercise the real staged archive and prepared-stream paths
+with the selected backup's old key after live-key replacement. This does not establish that a
+configured path is physically outside the box, complete the paper-only operator flow or record
+all later attempt outcomes. Those, full interruption qualification and final review remain open.
+The candidate host contract is in [Emergency recovery](../developers/emergency-recovery.md).
