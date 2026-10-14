@@ -251,6 +251,18 @@ export interface RoutingLookups {
   readonly zoneDepartment: ReadonlyMap<string, string | null>;
 }
 
+/** The colour key's stations: the default and every active station a stored cell or line names. */
+export function usedStations(model: RoutingModel): RoutingModel["stations"] {
+  const named = new Set<string>();
+  if (model.defaultStationId !== null) named.add(model.defaultStationId);
+  for (const cell of model.cells) {
+    for (const { target } of [cell, ...(cell.periods ?? [])]) {
+      if (target.kind === "station") named.add(target.stationId);
+    }
+  }
+  return model.stations.filter((station) => station.active && named.has(station.id));
+}
+
 export function routingLookups(model: RoutingModel): RoutingLookups {
   return {
     rules: selectionRulesFromModel(model),

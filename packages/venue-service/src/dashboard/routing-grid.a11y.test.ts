@@ -131,6 +131,58 @@ const mockupTree = routing({
   ],
 });
 
+const COLOURS = [
+  "red",
+  "orange",
+  "amber",
+  "lime",
+  "green",
+  "teal",
+  "cyan",
+  "blue",
+  "indigo",
+  "purple",
+  "pink",
+  "brown",
+] as const;
+
+/**
+ * Twelve stations, one per colour: category `c<i>` sends Every zone to station `s<i>` with a Lunch
+ * line to the next station, and its product inherits both. One cell carries a refusal and another a
+ * disabled station.
+ */
+const everyColour = routing({
+  periods: flaggedLine.periods.map((period) => ({ ...period, productIds: ["p0"] })),
+  categories: COLOURS.map((_, i) => ({ id: `c${i}`, name: `Category ${i}`, parentId: null })),
+  products: COLOURS.map((_, i) => ({ id: `p${i}`, name: `Product ${i}`, categoryId: `c${i}` })),
+  defaultStationId: "s0",
+  stations: [
+    ...COLOURS.map((colour, i) => ({
+      id: `s${i}`,
+      name: `Station ${colour}`,
+      active: true,
+      colour,
+    })),
+    { id: "old", name: "Old kitchen", active: false, colour: "brown" as const },
+  ],
+  stationTimes: [{ ...routing().stationTimes[0]!, fallbackStationId: "s0", closedSendsTo: "s0" }],
+  cells: [
+    ...COLOURS.map((_, i) => ({
+      row: { kind: "category" as const, categoryId: `c${i}` },
+      zoneId: null,
+      target: { kind: "station" as const, stationId: `s${i}` },
+      periods: [
+        { periodId: "lunch", target: { kind: "station" as const, stationId: `s${(i + 1) % 12}` } },
+      ],
+    })),
+    {
+      row: { kind: "category", categoryId: "c3" },
+      zoneId: "inside",
+      target: { kind: "station", stationId: "old" },
+    },
+  ],
+});
+
 const states: Record<
   string,
   {
@@ -144,6 +196,8 @@ const states: Record<
     flags?: Record<string, boolean>;
     /** Cells and the look each must be drawn in before the scan. */
     styles?: Record<string, string>;
+    /** How many different station colours the cells must be painted in before the scan. */
+    painted?: number;
   }
 > = {
   "flagged period line": {
@@ -191,6 +245,15 @@ const states: Record<
     search: { query: "bread", marks: 1 },
   },
   "search, no matches": { model: routing(), search: { query: "zzz", marks: 0 } },
+  "every colour": {
+    model: everyColour,
+    expand: true,
+    painted: 12,
+    refusal: {
+      address: { row: { kind: "category", categoryId: "c5" }, zoneId: null },
+      message: "This station was disabled. Choose another.",
+    },
+  },
   refusal: {
     model: routing(),
     refusal: {
@@ -239,6 +302,14 @@ describe.each(["light", "dark"] as const)("routing grid accessibility (%s)", (th
         `${selector} button[data-test="routing-cell"]`,
       )?.dataset.style;
       if (drawn !== style) throw new Error(`${selector}: drawn ${drawn}, not ${style}`);
+    }
+    if (state.painted !== undefined) {
+      const colours = new Set(
+        [...el.shadowRoot!.querySelectorAll<HTMLElement>("td[data-station-colour]")].map(
+          (cell) => cell.dataset.stationColour,
+        ),
+      );
+      if (colours.size !== state.painted) throw new Error(`painted ${colours.size} colours`);
     }
     await expectNoA11yViolations(host);
   });
@@ -355,5 +426,27 @@ describe.each(["light", "dark"] as const)("a hovered routing cell (%s)", (theme)
     expect(hovered.backgroundColor).toBe("rgba(0, 0, 0, 0)");
     const behind = getComputedStyle(cell.parentElement!).backgroundColor;
     expect(contrastRatio(getComputedStyle(refusal).color, behind)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  test("outlines a hovered cell on a station's fill at 3:1 against that fill", async () => {
+    await mountThemed("<div></div>", theme);
+    const el = document.createElement("venue-routing-grid");
+    Object.assign(el, { model: routing() });
+    host.append(el);
+    await el.updateComplete;
+    const td = el.shadowRoot!.querySelector<HTMLElement>(
+      'td[data-row="c:drinks"][data-zone="every"]',
+    )!;
+    const probe = document.createElement("div");
+    probe.style.background = "var(--wt-color-station-blue)";
+    host.append(probe);
+    const blue = getComputedStyle(probe).backgroundColor;
+    expect(getComputedStyle(td).backgroundColor).toBe(blue);
+    const cell = td.querySelector<HTMLButtonElement>('button[data-test="routing-cell"]')!;
+    await userEvent.hover(cell);
+    expect(cell.matches(":hover")).toBe(true);
+    const hovered = getComputedStyle(cell);
+    expect(hovered.outlineStyle).toBe("solid");
+    expect(contrastRatio(hovered.outlineColor, blue)).toBeGreaterThanOrEqual(3);
   });
 });

@@ -25,6 +25,7 @@ import {
   pruneExpanded,
   rowInModel,
   searchRows,
+  usedStations,
   visibleRoutingRows,
   type SearchRow,
 } from "./routing-grid-model.js";
@@ -1441,5 +1442,42 @@ describe("searchRows", () => {
   it("adds no rows for a cell of a row's own", () => {
     const routed = { ...deli(), cells: [categoryCell("food"), productCell("water")] };
     expect(lines(searchRows(routed, "zzz")!.rows)).toEqual(["[All] parent"]);
+  });
+});
+
+describe("usedStations", () => {
+  it("usedStations: the default station, then every active station a stored cell or line names, in the model's order", () => {
+    const stations: RoutingModel["stations"] = [
+      { id: "bar", name: "Bar", active: true, colour: "blue" },
+      { id: "coffee", name: "Coffee", active: true, colour: "brown" },
+      { id: "grill", name: "Grill", active: true, colour: "red" },
+      { id: "kitchen", name: "Kitchen", active: true, colour: "orange" },
+      { id: "old", name: "Old kitchen", active: false, colour: "green" },
+      { id: "pizza", name: "Pizza oven", active: true, colour: "amber" },
+      { id: "unused", name: "Unused", active: true, colour: "teal" },
+    ];
+    const at = (stationId: string): RouteTarget => ({ kind: "station", stationId });
+    const used = usedStations({
+      ...model([folder("drinks"), folder("food")], [], []),
+      stations,
+      cells: [
+        categoryCell("drinks", at("pizza")),
+        categoryCell("food", noPreparation, "terrace"),
+        {
+          ...categoryCell("drinks", at("old"), "terrace"),
+          periods: [
+            { periodId: "lunch", target: at("bar") },
+            { periodId: "dinner", target: noPreparation },
+            { periodId: "brunch", target: at("pizza") },
+          ],
+        },
+        productCell("ghost", at("gone")),
+      ],
+    });
+    expect(used.map((station) => station.name)).toEqual(["Bar", "Kitchen", "Pizza oven"]);
+    expect(usedStations({ ...model([], []), defaultStationId: null })).toEqual([]);
+    expect(usedStations({ ...model([], []), defaultStationId: "kitchen" })).toEqual([
+      { id: "kitchen", name: "Kitchen", active: true, colour: "orange" },
+    ]);
   });
 });

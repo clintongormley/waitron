@@ -3,6 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import { styleMap } from "lit/directives/style-map.js";
 import { currentLocale } from "@waitron/dashboard-kit";
+import { isStationColour, type StationColour } from "@waitron/shared";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -15,6 +16,7 @@ import {
   zoneKey,
   selectRoutingCell,
   type CellAddress,
+  type RoutingModel,
   type GridCategory,
   type GridProduct,
   type GridRow,
@@ -40,6 +42,7 @@ import {
   routingLookups,
   routingSearch,
   rowInModel,
+  usedStations,
   visibleRoutingRows,
   type CellPeriodLines,
   type MatchRange,
@@ -48,6 +51,7 @@ import {
   type RoutingSearch,
   type SearchRow,
 } from "./routing-grid-model.js";
+import { stationColourStyles } from "./station-colour-styles.js";
 import { t } from "./strings.js";
 
 /** A refused write. `code` and `params` reach the cell's editor while it is open. */
@@ -85,10 +89,14 @@ const sameAddress = (a: CellAddress, b: CellAddress) => cellKey(a) === cellKey(b
  */
 type CellStyle = "set" | "inherited" | "differs" | "blank";
 
+/** A cell's content and the colour of the station its drawn value sends to, if it is painted. */
+type DrawnCell = { colour: StationColour | undefined; content: unknown };
+
 @customElement("venue-routing-grid")
 export class RoutingGrid extends LitElement {
   static override styles = [
     baseStyles,
+    stationColourStyles,
     css`
       :host {
         --routing-first: calc(var(--wt-cell-name-max-width) * 1.5);
@@ -147,6 +155,9 @@ export class RoutingGrid extends LitElement {
         background: var(--wt-color-surface);
         color: var(--wt-color-text);
         overflow-wrap: anywhere;
+      }
+      td[data-station-colour] {
+        background: var(--station-fill);
       }
       thead th {
         font-weight: var(--wt-font-weight-medium);
@@ -285,7 +296,7 @@ export class RoutingGrid extends LitElement {
       .cell[data-style="set"] .station,
       .cell[data-style="set"] .line {
         font-weight: var(--wt-font-weight-bold);
-        color: var(--wt-color-primary-text);
+        color: var(--wt-color-text);
       }
       .station.inherited,
       .line.inherited {
@@ -297,6 +308,34 @@ export class RoutingGrid extends LitElement {
       }
       .line {
         font-size: var(--wt-font-size-sm);
+      }
+      .dot {
+        display: inline-block;
+        inline-size: var(--wt-space-2);
+        block-size: var(--wt-space-2);
+        margin-inline-end: var(--wt-space-1);
+        border-radius: var(--wt-radius-full);
+        background: var(--station-dot);
+      }
+      .key {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-2) var(--wt-space-4);
+        margin: var(--wt-space-3) 0 0;
+        padding: 0;
+        list-style: none;
+      }
+      .key li {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-2);
+      }
+      .swatch {
+        inline-size: var(--wt-space-4);
+        block-size: var(--wt-space-4);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-sm);
+        background: var(--station-fill);
       }
       .cell-error {
         display: block;
@@ -343,6 +382,7 @@ export class RoutingGrid extends LitElement {
     locale: string;
     of: ReturnType<typeof cellPeriodLines>;
   } | null = null;
+  #used: { model: RoutingModel; stations: RoutingModel["stations"] } | null = null;
 
   override willUpdate(changed: Map<PropertyKey, unknown>): void {
     if (!changed.has("model") || this.model === null) return;
@@ -397,6 +437,13 @@ export class RoutingGrid extends LitElement {
 
   #station(id: string) {
     return this.model!.stations.find((station) => station.id === id);
+  }
+
+  /** The colour a target paints in; none for No preparation, a missing or a disabled station. */
+  #colourOf(target: RouteTarget | null): StationColour | undefined {
+    if (target?.kind !== "station") return undefined;
+    const station = this.#station(target.stationId);
+    return station?.active === true && isStationColour(station.colour) ? station.colour : undefined;
   }
 
   #targetText(target: RouteTarget | null): string {
@@ -514,19 +561,25 @@ export class RoutingGrid extends LitElement {
       }}
     >
       <span class=${`station${look}`}>${blank ? "" : station}</span>
-      ${(blank ? [] : lines).map(
-        (line) =>
-          html`<span class=${`line${look}`}>${line.text}</span>${
-              line.flagText === undefined
+      ${(blank ? [] : lines).map((line) => {
+        const dot = this.#colourOf(line.target);
+        return html`<span class=${`line${look}`}
+            >${
+              dot === undefined
                 ? nothing
-                : html`<span class="warning" data-test="period-flag">${line.flagText}</span>`
-            }`,
-      )}
+                : html`<span class="dot" aria-hidden="true" data-station-colour=${dot}></span>`
+            }${line.text}</span
+          >${
+            line.flagText === undefined
+              ? nothing
+              : html`<span class="warning" data-test="period-flag">${line.flagText}</span>`
+          }`;
+      })}
       ${shownNotes.length === 0 ? nothing : html`<span class="notes" id=${notesId}>${shownNotes}</span>`}
     </button>`;
   }
 
-  #cell(entry: GridRow, zone: Zone) {
+  #cell(entry: GridRow, zone: Zone): DrawnCell {
     const address: CellAddress = { row: entry.row, zoneId: zone.id };
     const own = this.#cells.get(cellKey(address));
     const selected = this.#inherited(entry.row, zone.id);
@@ -557,7 +610,7 @@ export class RoutingGrid extends LitElement {
           : this.#blank!(entry.row, zone.id, selected)
             ? "blank"
             : "differs";
-    return this.#button(address, label, shown, style, text, periodLines.lines, [
+    const content = this.#button(address, label, shown, style, text, periodLines.lines, [
       this.#error(address),
       disabled === null
         ? null
@@ -568,6 +621,7 @@ export class RoutingGrid extends LitElement {
             ${this.#fallbackSentence(disabled.stationId)}</span
           >`,
     ]);
+    return { colour: this.#colourOf(shown ?? inherited), content };
   }
 
   #defaultTarget(): RouteTarget | null {
@@ -579,10 +633,11 @@ export class RoutingGrid extends LitElement {
   }
 
   /** All categories × Every zone is the default station: Make default, never cleared. */
-  #defaultCell() {
+  #defaultCell(): DrawnCell {
     const model = this.model!;
     const address: CellAddress = { row: { kind: "all" }, zoneId: null };
     const target = this.#defaultTarget();
+    const colour = this.#colourOf(target);
     const name = target === null ? null : this.#targetText(target);
     const repair =
       target !== null
@@ -591,8 +646,11 @@ export class RoutingGrid extends LitElement {
             >${t("routing.default_repair")}</span
           >`;
     if (!model.canMakeDefault) {
-      return html`${name !== null ? html`<span>${name}</span> ` : nothing}${repair}
-        <span class="note">${t("routing.default_read_only")}</span>`;
+      return {
+        colour,
+        content: html`${name !== null ? html`<span>${name}</span> ` : nothing}${repair}
+          <span class="note">${t("routing.default_read_only")}</span>`,
+      };
     }
     const text = name ?? t("routing.no_station");
     const label = this.#labelWithNote(
@@ -603,7 +661,18 @@ export class RoutingGrid extends LitElement {
         state: t("routing.default_state"),
       }),
     );
-    return this.#button(address, label, target, "set", text, [], [this.#error(address), repair]);
+    return {
+      colour,
+      content: this.#button(
+        address,
+        label,
+        target,
+        "set",
+        text,
+        [],
+        [this.#error(address), repair],
+      ),
+    };
   }
 
   /** The row's name as the grid draws it, whether or not the row is shown. */
@@ -812,14 +881,19 @@ export class RoutingGrid extends LitElement {
       ${repeat(
         zones,
         (zone) => zoneKey(zone.id),
-        (zone) =>
-          html`<td data-row=${rowKey(entry.row)} data-zone=${zoneKey(zone.id)}>
-            ${
-              entry.row.kind === "all" && zone.id === null
-                ? this.#defaultCell()
-                : this.#cell(entry, zone)
-            }
-          </td>`,
+        (zone) => {
+          const { colour, content } =
+            entry.row.kind === "all" && zone.id === null
+              ? this.#defaultCell()
+              : this.#cell(entry, zone);
+          return html`<td
+            data-row=${rowKey(entry.row)}
+            data-zone=${zoneKey(zone.id)}
+            data-station-colour=${colour ?? nothing}
+          >
+            ${content}
+          </td>`;
+        },
       )}
     </tr>`;
   }
@@ -834,6 +908,21 @@ export class RoutingGrid extends LitElement {
       ({ entry }) => rowKey(entry.row),
       (row) => this.#row(row, zones, search),
     );
+  }
+
+  #key(model: RoutingModel) {
+    if (this.#used?.model !== model) this.#used = { model, stations: usedStations(model) };
+    const stations = this.#used.stations.filter((station) => isStationColour(station.colour));
+    if (stations.length === 0) return nothing;
+    return html`<ul class="key" aria-label=${t("routing.colour_key")}>
+      ${stations.map(
+        (station) =>
+          html`<li>
+            <span class="swatch" aria-hidden="true" data-station-colour=${station.colour}></span
+            >${station.name}
+          </li>`,
+      )}
+    </ul>`;
   }
 
   override render() {
@@ -904,6 +993,7 @@ export class RoutingGrid extends LitElement {
           }
         </table>
       </div>
+      ${this.#key(model)}
       <wt-form-actions
         .error=${this.refusal === null ? "" : this.#refusalText(this.refusal)}
       ></wt-form-actions>
