@@ -59,7 +59,7 @@ const listsPageSize = (c: OfficePrinterCapabilities): boolean =>
 /**
  * Returns a function that asks each network device's IPP queue what it can print: the queue its host
  * announced, else port 631 at `/ipp/print`. A device whose answer lists A4 or US letter gains
- * `pagePrinter: true` and an `office` report. A device announced only by IPP (`ippOnly`) always gains
+ * `pagePrinter: true` and an `office` report. A queue without an unambiguous raw counterpart (`ippOnly`) always gains
  * an `office` report, an unanswered query reading `invalid_reply`, because it has no raw port to be a
  * receipt printer on. Any other device the answer does not mark is returned unchanged, so a failed
  * check leaves a receipt printer selectable.

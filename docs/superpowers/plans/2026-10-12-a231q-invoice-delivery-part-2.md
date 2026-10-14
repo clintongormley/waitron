@@ -1,5 +1,11 @@
 # A231q implementation plan: invoice delivery, part 2
 
+_2026-10-14 update: A576 supersedes Group A's one-queue-per-host discovery assumption.
+Distinct IPP queue paths on one server have separate rows; a raw port inherits queue metadata
+only when one distinct queue is announced. See the
+[A576 identity map](2026-10-14-a576-ipp-queue-identity.md). The original task descriptions below
+record A231q's implementation at the time._
+
 **Status:** plan, written 2026-10-12 on `feat/invoice-delivery-part-2` at `7a11e34b7`; revised the
 same day after a fresh-context review. Built on `feat/invoice-delivery-part-2` (2026-10-12/13); see
 the pull request.
