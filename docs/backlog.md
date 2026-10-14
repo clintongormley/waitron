@@ -694,6 +694,13 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   up an unconfigured box in either mode before its owner does. Only a preproduction venue can come of
   it. Left open by A680 (its plan's unsure point 2).
 
+- **A fresh Demo venue opens its dashboard on a red tax-filing alert.** Seen on a box image during
+  A680, 2026-10-14: a Demo set up through the wizard showed "473 fiscal record(s) have been waiting
+  705h to reach the tax agency" (`fiscal.submission_delayed`). The 473 records are the demo seed's
+  back-dated sales, and a Demo venue sends nothing to the tax agency. A Preparation venue set up the
+  same way had no fiscal records and no fiscal alert. The alert is raised in
+  `packages/fiscal-verifactu/src/submission-alerts.ts`; why it fires for Demo was not traced.
+
 ### Menus and the catalogue
 
 - **Menu prices' narrow-layout CI failure still needs a cause (A613).** The existing
