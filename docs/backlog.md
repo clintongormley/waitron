@@ -1973,6 +1973,11 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   tables' names, and the kitchen is told nothing — treated like a rename (A581 default 5). Owner
   question in lane C's questions.md, "A581 part 2 (#1649)": answer (b) to print a slip on that path.
 
+- **A617. The Rename window's group check across rooms is untested (2026-10-14).** The window
+  closes when its table's group changes (`#mergeRead`, `apps/till/src/screens/till-floor-screen.ts`),
+  and it reads the group from the whole floor read, not only the room on screen. Believed reachable
+  while the window is open; no test covers it. Left open by A581 part 4's review (#1664).
+
 - **A616. The till's party Name window cuts off its hint (2026-10-14).** It takes the width of its
   content, so its field shows about 154 px of text at 1280 and 390 px wide: "Leave it empty to call th".
   The floor's Rename window had the same defect and now takes the form width
