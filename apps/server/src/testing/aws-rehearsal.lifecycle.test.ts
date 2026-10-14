@@ -808,18 +808,22 @@ describe("fix round 1", () => {
     },
   );
 
-  it("refuses a bad child pid with its own reason", async () => {
-    const h = harness();
-    let refusal: unknown;
-    await withAwsRehearsal(async (ctx) => {
-      try {
-        ctx.trackChild(0);
-      } catch (error) {
-        refusal = error;
-      }
-    }, h.deps);
-    expect((refusal as AwsRehearsalRefused).reason).toBe("child-pid-refused");
-  });
+  it.each([0, 1, -1, 1.5])(
+    "refuses child pid %s, which the journal could not carry",
+    async (pid) => {
+      const h = harness();
+      let refusal: unknown;
+      await withAwsRehearsal(async (ctx) => {
+        try {
+          ctx.trackChild(pid);
+        } catch (error) {
+          refusal = error;
+        }
+      }, h.deps);
+      expect((refusal as AwsRehearsalRefused).reason).toBe("child-pid-refused");
+      expect(h.journals.flatMap((journal) => journal.pids)).toEqual([]);
+    },
+  );
 
   it("refuses tracking once teardown has started", async () => {
     const h = harness({}, { deadlineMs: 20 });

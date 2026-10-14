@@ -147,7 +147,7 @@ function positiveInteger(value: unknown): value is number {
 }
 
 /** Pid 1 is init or launchd, never a child the run started. */
-function childPid(value: unknown): value is number {
+export function isJournalChildPid(value: unknown): value is number {
   return positiveInteger(value) && value > 1;
 }
 
@@ -202,7 +202,7 @@ function pids(value: unknown): JournalPid[] {
     if (!isRecord(entry)) throw refused("pids");
     onlyKeys(entry, ["pid", "startTime"], "pids.");
     const { pid, startTime } = entry;
-    if (!childPid(pid)) throw refused("pids");
+    if (!isJournalChildPid(pid)) throw refused("pids");
     if (startTime !== null && (typeof startTime !== "string" || !START_TIME.test(startTime))) {
       throw refused("pids");
     }

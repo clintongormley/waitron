@@ -68,6 +68,7 @@ import { listPages, listUploads, type Outcome, type TrackedUpload } from "./s3-l
 import { settleWithin } from "./settle-within.js";
 import { AwsRehearsalRefused } from "./aws-rehearsal-refused.js";
 import {
+  isJournalChildPid,
   isJournalUploadKey,
   journalFileName,
   type JournalPid,
@@ -1371,8 +1372,8 @@ async function runOwned<T>(
     reserveObjects,
     trackChild(pid) {
       refuseOnceTearingDown();
-      if (!Number.isSafeInteger(pid) || pid <= 0) {
-        throw new AwsRehearsalRefused("child-pid-refused", "a child pid is a positive integer");
+      if (!isJournalChildPid(pid)) {
+        throw new AwsRehearsalRefused("child-pid-refused", "a child pid is an integer above 1");
       }
       journalPids.push({ pid, startTime: deps.processStartTime(pid) });
       pids.push(pid);
