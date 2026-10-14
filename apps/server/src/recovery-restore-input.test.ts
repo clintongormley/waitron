@@ -545,9 +545,12 @@ it.each(["wrong", "outside-refusal"])(
     expect(collected).toBe(mode === "outside-refusal");
     expect(hookEntered).toBe(false);
     await expect(readFile(join(stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
-    await expect(readFile(join(stateDir, "restore-request.node-key"))).rejects.toMatchObject({
-      code: "ENOENT",
-    });
+    expect(await readFile(join(stateDir, "restore-request.node-key"), "utf8")).toBe(
+      mode === "wrong" ? "wrong-node-key" : nodeKey,
+    );
+    expect(
+      JSON.parse(await readFile(join(stateDir, "restore-request.json"), "utf8")),
+    ).toHaveProperty("placementStarted", true);
   },
 );
 

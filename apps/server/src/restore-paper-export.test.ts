@@ -334,9 +334,11 @@ it("refuses the archive encryption key as node authentication for an exported pa
   }
   expect(JSON.parse(await readFile(outsideCurrent, "utf8"))).toEqual(current);
   await expect(readFile(join(stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
-  await expect(readFile(join(stateDir, "restore-request.node-key"))).rejects.toMatchObject({
-    code: "ENOENT",
-  });
+  expect(await readFile(join(stateDir, "restore-request.node-key"), "utf8")).toBe(encryptionKey);
+  expect(JSON.parse(await readFile(join(stateDir, "restore-request.json"), "utf8"))).toHaveProperty(
+    "placementStarted",
+    true,
+  );
   expect(JSON.stringify(log.mock.calls)).not.toContain(nodeKey);
   expect(JSON.stringify(log.mock.calls)).not.toContain(encryptionKey);
 });
