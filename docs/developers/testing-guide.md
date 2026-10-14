@@ -615,7 +615,9 @@ FAILS it when `CI=true` (GitHub Actions sets it on every job) or `WAITRON_REQUIR
 CI runs both tests in `test-server-stream`, the one job that installs both binaries, together
 with the S3 test server's own suite, `apps/server/src/testing/s3-test-server.test.ts`, whose
 cases that start versitygw skip and fail the same way; its other cases start a stub or Node in
-versitygw's place and always run (`.github/workflows/ci.yml`; see
+versitygw's place and always run, and with `apps/server/src/s3-rehearsal-scenarios.e2e.test.ts`, the
+Amazon S3 rehearsal's scenarios run against versitygw alone, which skips and fails the same way
+(`.github/workflows/ci.yml`; see
 [ci-and-gates.md](ci-and-gates.md), "The stream loop and pause tests run in a job of their own").
 
 **A skipped run looks like a quiet pass.** Measured 2026-09-25 with Vitest 4.1.11 and

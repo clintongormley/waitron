@@ -59,6 +59,7 @@ const STREAM_JOB = "test-server-stream";
 const STREAM_TEST_FILES = [
   "src/stream-loop.e2e.test.ts",
   "src/stream-pause.e2e.test.ts",
+  "src/s3-rehearsal-scenarios.e2e.test.ts",
   "src/testing/s3-test-server.test.ts",
 ];
 const STREAM_BINARY_INSTALLERS = [

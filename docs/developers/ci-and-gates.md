@@ -1250,7 +1250,8 @@ config's own `exclude` list rather than replacing it (`vitest list --filesOnly` 
 listed 289 files without the two flags and 287 with them, and the config-excluded
 `src/**/*.preprod.test.ts` file in neither, 2026-09-26). The S3 test server's own suite,
 `apps/server/src/testing/s3-test-server.test.ts`, has cases that need versitygw too and is excluded
-and run the same way (2026-09-30). `test-server-stream` runs
+and run the same way (2026-09-30), and so are the Amazon S3 rehearsal's scenarios run against
+versitygw, `apps/server/src/s3-rehearsal-scenarios.e2e.test.ts` (2026-10-14). `test-server-stream` runs
 the same `test:shard` script over those files alone and uploads its blob as `server-blob-stream`,
 which `test-server-merge`'s `server-blob-*` download picks up with the shards' blobs, so the
 coverage gate counts what those tests reach. It alone runs `node scripts/setup-litestream.mjs` and
