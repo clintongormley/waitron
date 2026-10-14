@@ -55,25 +55,25 @@ function expectRefused(run: () => unknown, reason: "not_found" | "encoding" | "s
 }
 
 describe("archive recovery pack", () => {
-  it("round-trips through the downloadable file", () => {
-    const file = encodeArchiveRecoveryPack(pack());
-    expect(decodeArchiveRecoveryPack(file)).toEqual(pack());
+  it("round-trips through the encoded token", () => {
+    const encoded = encodeArchiveRecoveryPack(pack());
+    expect(decodeArchiveRecoveryPack(encoded)).toEqual(pack());
   });
 
-  it("writes explanatory lines and the token on its own line", () => {
-    const lines = encodeArchiveRecoveryPack(pack()).trimEnd().split("\n");
-    const tokenLine = lines.find((line) => line.startsWith(ARCHIVE_PACK_PREFIX));
-    expect(tokenLine).toBe(token(pack()));
-    const prose = lines.filter((line) => line !== tokenLine).join("\n");
-    expect(prose).toContain(
-      "Keep this file secret: it opens this venue's archived backups made under its recovery key.",
-    );
-    expect(prose).toContain(
-      "Keep the previous pack while you still want to restore archives made before it was replaced.",
-    );
-    expect(prose).toContain('follow "A restore takes one of three sources" in deploy/README.md');
-    expect(prose).not.toContain(SECRET);
-    expect(prose).not.toContain(RECOVERY);
+  it("encodes the bare token alone, with no explanatory text", () => {
+    expect(encodeArchiveRecoveryPack(pack())).toBe(token(pack()));
+  });
+
+  it("decodes a downloaded file whose translated lines surround the token", () => {
+    const file = [
+      "Paquete de recuperación de las copias archivadas de Waitron.",
+      "Guarda este archivo en secreto: abre las copias archivadas del local.",
+      'Para restaurar, sigue «A restore takes one of three sources» en deploy/README.md.',
+      "",
+      encodeArchiveRecoveryPack(pack()),
+      "",
+    ].join("\n");
+    expect(decodeArchiveRecoveryPack(file)).toEqual(pack());
   });
 
   it("decodes the bare token", () => {
@@ -117,7 +117,7 @@ describe("archive recovery pack", () => {
       venueId: "venue-2",
       archivePrefix: "waitron/archives/venue-2/",
     };
-    const text = encodeArchiveRecoveryPack(pack()) + encodeArchiveRecoveryPack(other);
+    const text = `${encodeArchiveRecoveryPack(pack())}\n${encodeArchiveRecoveryPack(other)}`;
     expectRefused(() => decodeArchiveRecoveryPack(text), "several");
   });
 

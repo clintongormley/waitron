@@ -53,20 +53,14 @@ function token(pack: ArchiveRecoveryPack): string {
   return ARCHIVE_PACK_PREFIX + Buffer.from(JSON.stringify(pack), "utf8").toString("base64url");
 }
 
-/** The whole downloadable file. Refuses a pack {@link decodeArchiveRecoveryPack} would refuse. */
+/**
+ * The pack's code line alone; the dashboard writes the file's explanatory lines around it in the
+ * owner's language. Refuses a pack {@link decodeArchiveRecoveryPack} would refuse.
+ */
 export function encodeArchiveRecoveryPack(pack: ArchiveRecoveryPack): string {
   const line = token(pack);
   decodeArchiveRecoveryPack(line);
-  return [
-    "Waitron archive recovery pack.",
-    "Keep this file secret: it opens this venue's archived backups made under its recovery key.",
-    "Keep the previous pack while you still want to restore archives made before it was replaced.",
-    "Save it somewhere off the box, such as a password manager or a USB stick kept safe.",
-    'To restore an archive on a new box, follow "A restore takes one of three sources" in deploy/README.md.',
-    "",
-    line,
-    "",
-  ].join("\n");
+  return line;
 }
 
 /** Accepts the bare token or the downloaded file, whose explanatory lines surround it. */
