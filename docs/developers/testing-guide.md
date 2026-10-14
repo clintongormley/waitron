@@ -1570,11 +1570,7 @@ way, where the case minted a manager session while the server ran. In an instrum
 that passed, the server committed 50 ms before the session write began and began its next
 transaction 9 ms after it ended, so whether the two overlap is timing. The fix wrote the session
 before `startServer`, and the file now refuses a write from its own helpers while its server runs
-(`beforeServerStarts`). A comment in `apps/server/src/boot.test.ts` records the other direction:
-a suite write beside a running server can make the server's pending-card-payment sweep log
-`resolve_pending.failed` with `database is locked`; that direction was not measured here. Other
-suites still have the shape; the list is in
-[the backlog](../backlog/ci.md#server-suites-write-to-the-venue-database-while-their-in-process-server-runs-found-by-a538-5f).
+(`beforeServerStarts`).
 
 ## Treat "there is a test" as an unfinished sentence
 

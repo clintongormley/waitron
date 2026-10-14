@@ -3,30 +3,6 @@
 The open entries are listed in [the backlog](../backlog.md), under "CI, tests and developer tooling". This file holds
 their full text.
 
-## Server suites write to the venue database while their in-process server runs (found by A538-5f)
-
-The remaining suites below write beside their in-process server. They were found by reading;
-no locking failure has been reproduced in either. A605 skipped both on 2026-10-14 because the
-retained manual `a493-assertion-ports` worktree changes them. The other listed suites now prepare
-fixtures before boot, check sessions after close, or send live fixture changes through the server.
-You must use the server's database handle for a live fixture request, so its write joins the
-server's queue rather than waiting synchronously on another connection
-([why](../developers/testing-guide.md#a-test-that-runs-the-server-in-its-own-process-writes-to-the-database-only-while-the-server-is-down)).
-
-The original locations below are on main `430839e26`:
-
-- `apps/server/src/boot.invoice-delivery.test.ts`: `claimInvoiceDelivery` and
-  `reportInvoiceDelivery` (280, 283), server started at 266.
-- `apps/server/src/boot.test.ts`: `enqueuePrintJob` (425; the comment above it names the risk and
-  only narrows it by waiting for the listener); the writes in `assertPassiveManagementReads`
-  (277–399, called at 528); the `bookings` insert (1683); `uploadImage` (1996); and in the describe
-  whose server starts in `beforeAll` (2695), `invite()`, `deleteCredential`, `putCredential` and
-  `uploadImage` (2714–2832).
-
-Next: move each write before `startServer` or after `close()`, or make it through the server's API.
-`boot.backup-network.test.ts` shows one way to keep a file honest: its helpers call
-`beforeServerStarts()`, which throws while its server runs.
-
 ## Venue-service browser startup remains unexplained (#1557)
 
 On 2026-10-11, [CI attempt 1's venue-service shard 2](https://github.com/clintongormley/waitron/actions/runs/38170156450/job/114561139899)

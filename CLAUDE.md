@@ -624,8 +624,7 @@ browser test** — most of these rules exist because a test passed while proving
   container.
 - **A test that starts the server in its own process writes to the venue database only before
   `startServer` or after `close()`**. Cost: main run 38430159396 failed `boot.backup-network.test.ts`. Guard: that file's `beforeServerStarts`, weaker than the rule — it
-  covers the file's two write helpers only, and other suites still write while their server runs
-  (backlog). Receipt:
+  covers the file's two write helpers only. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#a-test-that-runs-the-server-in-its-own-process-writes-to-the-database-only-while-the-server-is-down).
 - **Draw every port a test needs in one `freePorts(n)` call, before binding any of them**
   (`apps/server/src/testing/free-ports.ts`), never two single draws before either is bound. Nothing
