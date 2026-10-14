@@ -153,7 +153,7 @@ export class SeasonPainter extends LitElement {
   ];
 
   @property({ attribute: false }) api!: OpeningHoursApi;
-  /** Refreshed by the host from its live watch; a refresh keeps only the days the draft changed. */
+  /** Refreshed by the host from its live watch; `refresh` says what an edited week keeps. */
   @property({ attribute: false }) model!: Model;
   @property({ type: Boolean }) open = false;
   @property() seasonId = "";
@@ -273,7 +273,7 @@ export class SeasonPainter extends LitElement {
     this.confirming = undefined;
   }
   /** A save in flight already holds the draft's copy of every day, and until the first read after
-   *  a save its baseline is what was sent, so neither may take in another day yet. */
+   *  a save that succeeded its baseline is what was sent, so neither may take in another day yet. */
   private mayFollow(): boolean {
     return !this.saving && this.confirming === undefined;
   }
@@ -298,7 +298,6 @@ export class SeasonPainter extends LitElement {
    *  not change, unless the painter may not follow yet, when the week and its baseline stay. A
    *  week whose department or zone is gone or inactive has its edits dropped with a notice. */
   private refresh(previous: Model, confirmed?: Draft) {
-    if (!this.anyEdited()) this.revision = this.model.clockRevision;
     const fresh = seed(this.model, this.seasonId);
     if (confirmed) {
       this.draft = new Map(this.draft);
@@ -343,6 +342,7 @@ export class SeasonPainter extends LitElement {
     if ([...baseline].every(([key, week]) => week === fresh.get(key))) this.followed = this.model;
     this.draft = draft;
     this.commitBaseline(baseline);
+    if (!this.anyEdited()) this.revision = this.model.clockRevision;
     const notice = droppedNotice(gone, inactive);
     if (notice) this.notice = notice;
   }

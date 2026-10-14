@@ -131,6 +131,21 @@ it("sends the clock revision the draft was seeded with, followed only while noth
   expect((writes[0]!.body as { expectedClockRevision: number }).expectedClockRevision).toBe(9);
 });
 
+it("a refresh that stores what the draft painted leaves it clean on the model's clock revision", async () => {
+  const { painter, writes } = await mount();
+  await drag(painter, "3", 7 * 60, 9 * 60);
+  const painted = grid(painter).days.get("3")!;
+  expect(painted).not.toEqual([]);
+  const next = withBar();
+  (next.departments[0]!.seasonWeeks[1]!.week[3]!.slots as unknown[]).push(...painted);
+  painter.model = { ...next, clockRevision: 11 };
+  await settle(painter);
+  expect(frame(painter).dirty).toBe(false);
+  await drag(painter, "4", 7 * 60, 9 * 60);
+  await save(painter, writes);
+  expect((writes[0]!.body as { expectedClockRevision: number }).expectedClockRevision).toBe(11);
+});
+
 it("a refusal naming no field shows beside Save only, keeps the draft, and a retry saves", async () => {
   const { painter, writes, reread } = await mount(withBar(), [
     { code: "season.not_found", params: { seasonId: "winter" } },
