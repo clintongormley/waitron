@@ -1,10 +1,33 @@
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { type SQL, and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { partyTablesName } from "@waitron/shared";
 import type { Transaction } from "./client.js";
 import { diningTables } from "./schema/dining-tables.js";
+import { floorTodayJoins, floorTodayJoinTables, floorTodayTables } from "./schema/floor-plans.js";
 import { partyTables } from "./schema/parties.js";
 
-/** Each party's active tables' labels, in the order the tables joined it. */
+function shown(row: { label: string; name: string | null; joinName: string | null }): string {
+  return row.joinName ?? row.name ?? row.label;
+}
+
+function readShownNames(tx: Transaction, where: SQL | undefined) {
+  return tx
+    .select({
+      id: diningTables.id,
+      label: diningTables.label,
+      name: floorTodayTables.name,
+      joinName: floorTodayJoins.name,
+    })
+    .from(diningTables)
+    .leftJoin(floorTodayTables, eq(floorTodayTables.tableId, diningTables.id))
+    .leftJoin(floorTodayJoinTables, eq(floorTodayJoinTables.tableId, diningTables.id))
+    .leftJoin(floorTodayJoins, eq(floorTodayJoins.id, floorTodayJoinTables.joinId))
+    .where(where);
+}
+
+/**
+ * Each party's active tables' shown names — its group's today's name, else its own, else its saved
+ * label — in the order the tables joined it, a named group's name once.
+ */
 export async function partyTableLabels(
   tx: Transaction,
   partyIds: readonly string[],
@@ -12,12 +35,29 @@ export async function partyTableLabels(
   const labels = new Map(partyIds.map((id) => [id, [] as string[]]));
   if (partyIds.length === 0) return labels;
   const rows = await tx
-    .select({ partyId: partyTables.partyId, label: diningTables.label })
+    .select({
+      partyId: partyTables.partyId,
+      label: diningTables.label,
+      name: floorTodayTables.name,
+      joinId: floorTodayJoins.id,
+      joinName: floorTodayJoins.name,
+    })
     .from(partyTables)
     .innerJoin(diningTables, eq(diningTables.id, partyTables.tableId))
+    .leftJoin(floorTodayTables, eq(floorTodayTables.tableId, partyTables.tableId))
+    .leftJoin(floorTodayJoinTables, eq(floorTodayJoinTables.tableId, partyTables.tableId))
+    .leftJoin(floorTodayJoins, eq(floorTodayJoins.id, floorTodayJoinTables.joinId))
     .where(and(inArray(partyTables.partyId, [...partyIds]), isNull(partyTables.leftAt)))
     .orderBy(partyTables.joinedAt, partyTables.id);
-  for (const row of rows) labels.get(row.partyId)!.push(row.label);
+  const listedGroups = new Set<string>();
+  for (const row of rows) {
+    if (row.joinName !== null) {
+      const listed = `${row.partyId} ${row.joinId}`;
+      if (listedGroups.has(listed)) continue;
+      listedGroups.add(listed);
+    }
+    labels.get(row.partyId)!.push(shown(row));
+  }
   return labels;
 }
 
@@ -77,8 +117,9 @@ interface LabelledOrder {
 /**
  * The table each order belongs to, keyed by order. A party bill names the tables
  * {@link billPartyTableLabels} gives its party, together ({@link partyTablesName}), or its own label
- * when that list is empty. Any other order names the table of `locationId` it is delivered to, else
- * the name kept when that table was let go, else its own label; null for an unlabelled walk-up.
+ * when that list is empty. Any other order names the shown name, as {@link partyTableLabels} reads
+ * it, of the table of `locationId` it is delivered to, else the name kept when that table was let
+ * go, else its own label; null for an unlabelled walk-up.
  */
 export async function orderTableLabels(
   tx: Transaction,
@@ -92,16 +133,16 @@ export async function orderTableLabels(
       orders.flatMap((order) => (order.partyId === null ? (order.deliveryTableId ?? []) : [])),
     ),
   ];
-  const tables =
+  const shownById = new Map(
     deliveredTo.length === 0
       ? []
-      : await tx
-          .select({ id: diningTables.id, label: diningTables.label })
-          .from(diningTables)
-          .where(
+      : (
+          await readShownNames(
+            tx,
             and(eq(diningTables.locationId, locationId), inArray(diningTables.id, deliveredTo)),
-          );
-  const tableById = new Map(tables.map((table) => [table.id, table]));
+          )
+        ).map((row) => [row.id, shown(row)]),
+  );
   const labels = new Map<string, string | null>();
   for (const order of orders) {
     if (order.partyId !== null) {
@@ -109,8 +150,8 @@ export async function orderTableLabels(
       labels.set(order.id, partyLabels.length === 0 ? order.label : partyTablesName(partyLabels));
       continue;
     }
-    const table = order.deliveryTableId === null ? undefined : tableById.get(order.deliveryTableId);
-    labels.set(order.id, table?.label ?? order.deliveryTableLabel ?? order.label);
+    const name = order.deliveryTableId === null ? undefined : shownById.get(order.deliveryTableId);
+    labels.set(order.id, name ?? order.deliveryTableLabel ?? order.label);
   }
   return labels;
 }

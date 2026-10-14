@@ -74,6 +74,9 @@ export const QUERY_DEPENDENCIES = {
     "station_day_states",
     "kitchen_station_timing",
     "floor_zones",
+    "floor_today_tables",
+    "floor_today_join_tables",
+    "floor_today_joins",
   ],
   settings: ["service_settings"],
   routing: [

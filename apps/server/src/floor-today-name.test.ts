@@ -10,7 +10,7 @@ import {
   floorTodayTables,
 } from "@waitron/db";
 import type { AppError } from "@waitron/shared";
-import { leaveMergesRestoring, mergeMembers, writeMerge } from "./floor-today-merges.js";
+import { writeMerge } from "./floor-today-merges.js";
 import { nameToday, sameName } from "./floor-today-name.js";
 import { resetTable } from "./floor-today-reset-table.js";
 import { splitJoinedTable } from "./floor-today-split.js";
@@ -26,7 +26,7 @@ import {
   takeOffToday,
 } from "./floor-today-store.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
-import { finishTable, memberTables, partyRevision } from "./parties.js";
+import { finishTable, partyRevision } from "./parties.js";
 import { moveGuests, splitTable } from "./table-actions.js";
 import {
   commandFor,
@@ -498,24 +498,14 @@ describe("what moves, ends or keeps today's name", () => {
     );
   const push = (movingId: string, targetId: string, seats: number) =>
     inTx(v, (tx) => writeMerge(tx, v.cfg, { movingId, targetId, side: "left", seats, free: true }));
-  /** Move guests as the route does: a party staying on part of its group takes the rest out of it. */
   const moveGuestsTo = (partyId: string, toTableId: string) =>
     inTx(v, async (tx) => {
-      const heldBefore = await memberTables(tx, partyId);
-      const command = {
+      await moveGuests(tx, v.cfg, partyId, toTableId, {
         expectedPartyRevision: await partyRevision(tx, partyId),
         operatorId: OPERATOR,
-      };
-      await moveGuests(tx, v.cfg, partyId, toTableId, {
-        ...command,
         bills: "merge",
         otherPartyId: null,
       });
-      const merged = await mergeMembers(tx, toTableId);
-      await leaveMergesRestoring(
-        tx,
-        heldBefore.filter((id) => id !== toTableId && merged.includes(id)),
-      );
     });
 
   it("Bar pushed onto a renamed Long table: the group takes Long's name, Long's own goes, Bar keeps its own (moves)", async () => {
@@ -627,7 +617,6 @@ describe("what moves, ends or keeps today's name", () => {
         expectedPartyRevision,
         operatorId: OPERATOR,
       });
-      await leaveMergesRestoring(tx, [table.window!]);
     });
 
     expect(await joinRow(joinId)).toEqual([]);

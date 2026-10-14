@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Transaction } from "./client.js";
@@ -9,6 +10,7 @@ import {
   partyTableLabels,
 } from "./party-table-labels.js";
 import { diningTables } from "./schema/dining-tables.js";
+import { floorTodayJoins, floorTodayJoinTables, floorTodayTables } from "./schema/floor-plans.js";
 import { floorZones } from "./schema/floor-zones.js";
 import { parties, partyTables } from "./schema/parties.js";
 import { locations } from "./schema/tenants.js";
@@ -204,6 +206,187 @@ describe("party table labels", () => {
     expect(await inTx((tx) => billPartyTableLabels(tx, [missing]))).toEqual(
       new Map([[missing, []]]),
     );
+  });
+
+  async function nameToday(tableId: string, name: string | null): Promise<void> {
+    await inTx((tx) => tx.insert(floorTodayTables).values({ tableId, name }));
+  }
+
+  async function group(tableIds: readonly string[], name: string | null = null): Promise<void> {
+    await inTx(async (tx) => {
+      const [{ zoneId }] = await tx
+        .select({ zoneId: diningTables.zoneId })
+        .from(diningTables)
+        .where(eq(diningTables.id, tableIds[0]!));
+      const [join] = await tx
+        .insert(floorTodayJoins)
+        .values({ zoneId: zoneId!, seats: 10, name })
+        .returning({ id: floorTodayJoins.id });
+      for (const tableId of tableIds) {
+        await tx
+          .insert(floorTodayJoinTables)
+          .values({ joinId: join!.id, tableId, beforeX: 0, beforeY: 0, beforeRotation: 0 });
+      }
+    });
+  }
+
+  /** Bar, Counter 3, 4 and 5 (each label suffixed), joining a new party in that order. */
+  async function longTable() {
+    const s = randomUUID().slice(0, 6);
+    const ids = { bar: randomUUID(), c3: randomUUID(), c4: randomUUID(), c5: randomUUID() };
+    const labels = {
+      bar: `Bar ${s}`,
+      c3: `Counter 3 ${s}`,
+      c4: `Counter 4 ${s}`,
+      c5: `Counter 5 ${s}`,
+    };
+    const partyId = await party(
+      (["bar", "c3", "c4", "c5"] as const).map((key, i) => ({
+        id: ids[key],
+        label: labels[key],
+        joinedAt: `2026-09-29T20:0${i + 1}:00.000Z`,
+      })),
+    );
+    return { s, ids, labels, partyId };
+  }
+
+  describe("today's names", () => {
+    it("lists a named group's name once in place of its tables", async () => {
+      const { s, ids, partyId } = await longTable();
+      await group([ids.bar, ids.c3, ids.c4, ids.c5], `García birthday ${s}`);
+      await nameToday(ids.c4, `Window ${s}`);
+      expect(await inTx((tx) => partyTableLabels(tx, [partyId]))).toEqual(
+        new Map([[partyId, [`García birthday ${s}`]]]),
+      );
+    });
+
+    it("places a named group among the party's other tables by the order they joined", async () => {
+      const s = randomUUID().slice(0, 6);
+      const [bar, c3, nine] = [randomUUID(), randomUUID(), randomUUID()];
+      const later = await party([
+        { id: bar, label: `Bar ${s}`, joinedAt: "2026-09-29T20:01:00.000Z" },
+        { id: c3, label: `Counter 3 ${s}`, joinedAt: "2026-09-29T20:02:00.000Z" },
+        { id: nine, label: `Table 9 ${s}`, joinedAt: "2026-09-29T20:03:00.000Z" },
+      ]);
+      await group([bar, c3], `García birthday ${s}`);
+      expect(await inTx((tx) => partyTableLabels(tx, [later]))).toEqual(
+        new Map([[later, [`García birthday ${s}`, `Table 9 ${s}`]]]),
+      );
+
+      const t = randomUUID().slice(0, 6);
+      const [bar2, c32, nine2] = [randomUUID(), randomUUID(), randomUUID()];
+      const earlier = await party([
+        { id: nine2, label: `Table 9 ${t}`, joinedAt: "2026-09-29T20:00:00.000Z" },
+        { id: bar2, label: `Bar ${t}`, joinedAt: "2026-09-29T20:01:00.000Z" },
+        { id: c32, label: `Counter 3 ${t}`, joinedAt: "2026-09-29T20:02:00.000Z" },
+      ]);
+      await group([bar2, c32], `García birthday ${t}`);
+      expect(await inTx((tx) => partyTableLabels(tx, [earlier]))).toEqual(
+        new Map([[earlier, [`Table 9 ${t}`, `García birthday ${t}`]]]),
+      );
+    });
+
+    it("lists each table of an unnamed group by its own today's name, else its label", async () => {
+      const { s, ids, labels, partyId } = await longTable();
+      await group([ids.bar, ids.c3, ids.c4, ids.c5]);
+      await nameToday(ids.c4, `Window ${s}`);
+      await nameToday(ids.c5, null);
+      expect(await inTx((tx) => partyTableLabels(tx, [partyId]))).toEqual(
+        new Map([[partyId, [labels.bar, labels.c3, `Window ${s}`, labels.c5]]]),
+      );
+    });
+
+    it("lists a group's name for each party seated at one of its tables", async () => {
+      const s = randomUUID().slice(0, 6);
+      const [bar, c3] = [randomUUID(), randomUUID()];
+      const first = await party([{ id: bar, label: `Bar ${s}`, ...AT }]);
+      const second = await party([{ id: c3, label: `Counter 3 ${s}`, ...AT }]);
+      await group([bar, c3], `García birthday ${s}`);
+      expect(await inTx((tx) => partyTableLabels(tx, [first, second]))).toEqual(
+        new Map([
+          [first, [`García birthday ${s}`]],
+          [second, [`García birthday ${s}`]],
+        ]),
+      );
+    });
+
+    it("lists each of two groups sharing one name, both at one party", async () => {
+      const { s, ids, partyId } = await longTable();
+      await group([ids.bar, ids.c3], `García birthday ${s}`);
+      await group([ids.c4, ids.c5], `García birthday ${s}`);
+      expect(await inTx((tx) => partyTableLabels(tx, [partyId]))).toEqual(
+        new Map([[partyId, [`García birthday ${s}`, `García birthday ${s}`]]]),
+      );
+    });
+
+    it("lists both of two tables in no group whose shown names are the same", async () => {
+      const { ids, labels, partyId } = await longTable();
+      await nameToday(ids.c4, labels.bar);
+      expect(await inTx((tx) => partyTableLabels(tx, [partyId]))).toEqual(
+        new Map([[partyId, [labels.bar, labels.c3, labels.bar, labels.c5]]]),
+      );
+    });
+
+    it("names an order delivered to a table by its group's name, else its own, else its saved label", async () => {
+      const s = randomUUID().slice(0, 6);
+      const bar = await table(`Bar ${s}`);
+      const c3 = await table(`Counter 3 ${s}`);
+      const c4 = await table(`Counter 4 ${s}`);
+      const c5 = await table(`Counter 5 ${s}`);
+      await group([c3, c4], `García birthday ${s}`);
+      await nameToday(c4, `Window ${s}`);
+      await nameToday(c5, `Terrace ${s}`);
+      const delivered = (id: string, deliveryTableId: string) => ({
+        id,
+        partyId: null,
+        deliveryTableId,
+        deliveryTableLabel: null,
+        label: "Luis",
+      });
+      expect(
+        await inTx((tx) =>
+          orderTableLabels(tx, LOCATION, [
+            delivered("bar", bar),
+            delivered("c3", c3),
+            delivered("c4", c4),
+            delivered("c5", c5),
+          ]),
+        ),
+      ).toEqual(
+        new Map([
+          ["bar", `Bar ${s}`],
+          ["c3", `García birthday ${s}`],
+          ["c4", `García birthday ${s}`],
+          ["c5", `Terrace ${s}`],
+        ]),
+      );
+    });
+
+    it("names an order delivered to a renamed table, and a party bill, by the shown names", async () => {
+      const { s, ids, partyId } = await longTable();
+      await group([ids.bar, ids.c3, ids.c4, ids.c5], `García birthday ${s}`);
+      const window = await table(`Terrace ${s}`);
+      await nameToday(window, `Window ${s}`);
+      expect(
+        await inTx((tx) =>
+          orderTableLabels(tx, LOCATION, [
+            {
+              id: "delivered",
+              partyId: null,
+              deliveryTableId: window,
+              deliveryTableLabel: null,
+              label: "Luis",
+            },
+            { id: "bill", partyId, deliveryTableId: null, deliveryTableLabel: null, label: "Ana" },
+          ]),
+        ),
+      ).toEqual(
+        new Map([
+          ["delivered", `Window ${s}`],
+          ["bill", `García birthday ${s}`],
+        ]),
+      );
+    });
   });
 
   async function table(label: string, locationId = LOCATION): Promise<string> {

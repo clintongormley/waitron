@@ -7134,7 +7134,7 @@ export interface TableParty {
   state: "open" | "closed";
   /** The name staff gave the party, or null. */
   name: string | null;
-  /** `name`, or else the party's tables' labels ({@link partyDisplayName}). */
+  /** `name`, or else the party's tables' shown names ({@link partyDisplayName}). */
   displayName: string;
   /** The bill an order that names none goes on; null until the party's next order makes one. */
   mainBillId: string | null;

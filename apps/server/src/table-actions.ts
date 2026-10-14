@@ -3,6 +3,7 @@ import { diningTables, nowIso, parties, partyTables, workingOrders } from "@wait
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { mergeCheckedBills } from "./bill-actions.js";
+import { leaveMergesRestoring, mergeMembers } from "./floor-today-merges.js";
 import { enqueueMovedSlipsFor, readPartiesSentWork } from "./kitchen-print.js";
 import {
   isUntouched,
@@ -87,10 +88,12 @@ export async function moveGuests(
   const zoneBefore = await partyZone(tx, cfg, partyId);
   if (table.zoneId !== zoneBefore)
     await VENUE_SERVICE.assertZoneTakesNewOrders(tx, cfg, table.zoneId, new Date());
-  if (table.holding !== null && table.holding !== partyId) {
-    return combineAt(tx, cfg, partyId, table.holding, "leave", options);
-  }
   const held = await memberTables(tx, partyId);
+  if (table.holding !== null && table.holding !== partyId) {
+    const combined = await combineAt(tx, cfg, partyId, table.holding, "leave", options);
+    await leaveMergeOf(tx, toTableId, held);
+    return combined;
+  }
   if (table.holding === partyId && held.length === 1) {
     throw new AppError("table.already_in_party", { tableId: toTableId });
   }
@@ -108,8 +111,22 @@ export async function moveGuests(
   if (table.zoneId !== zoneBefore) {
     await retargetUnsettledBills(tx, cfg, partyId, table.zoneId);
   }
+  await leaveMergeOf(tx, toTableId, held);
   await enqueueMovedSlipsFor(tx, cfg, before);
   return { partyId, mainBillId, merged: false };
+}
+
+/** Only a party staying on part of its merge breaks it up; a merge left whole stays, free. */
+async function leaveMergeOf(
+  tx: Transaction,
+  tableId: string,
+  held: readonly string[],
+): Promise<void> {
+  const merged = await mergeMembers(tx, tableId);
+  await leaveMergesRestoring(
+    tx,
+    held.filter((id) => id !== tableId && merged.includes(id)),
+  );
 }
 
 /**
@@ -259,9 +276,10 @@ export async function combineParties(
 }
 
 /**
- * `tableId` leaves the party and a new, unnamed party starts on it, taking `billId`, or a new empty
- * main bill when none is chosen. The chosen bill must be an open or presented bill of the party
- * other than its main bill, holding no dish held for the kitchen.
+ * `tableId` leaves the party and its today's merge ({@link leaveMergesRestoring}), and a new,
+ * unnamed party starts on it, taking `billId`, or a new empty main bill when none is chosen. The
+ * chosen bill must be an open or presented bill of the party other than its main bill, holding no
+ * dish held for the kitchen.
  */
 export async function splitTable(
   tx: Transaction,
@@ -305,6 +323,7 @@ export async function splitTable(
       mainBillId = billId;
     }
   }
+  await leaveMergesRestoring(tx, [tableId]);
   await enqueueMovedSlipsFor(tx, cfg, before);
   return { partyId: newParty, mainBillId };
 }

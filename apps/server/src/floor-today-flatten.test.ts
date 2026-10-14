@@ -14,7 +14,7 @@ import {
 } from "@waitron/db";
 import type { AppError, JoinSide } from "@waitron/shared";
 import { foodOnItsWay } from "./delivery-release.js";
-import { leaveMergesRestoring, writeMerge } from "./floor-today-merges.js";
+import { writeMerge } from "./floor-today-merges.js";
 import { splitJoinedTable } from "./floor-today-split.js";
 import { catchUpZone, resetZone } from "./floor-today-store.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
@@ -422,11 +422,7 @@ describe("Split a table and the floor-wide reset on a flattened group", () => {
     );
     const command = await commandFor(v, partyId);
 
-    const split = await inTx(v, async (tx) => {
-      const answer = await splitTable(tx, v.cfg, partyId, table.c5!, null, command);
-      await leaveMergesRestoring(tx, [table.c5!]);
-      return answer;
-    });
+    const split = await inTx(v, (tx) => splitTable(tx, v.cfg, partyId, table.c5!, null, command));
 
     expect(await partyAt(v, table.c5!)).toBe(split.partyId);
     expect(split.partyId).not.toBe(partyId);
