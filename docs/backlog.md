@@ -5328,6 +5328,11 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   keeps the machine's own loopback and can still meet the stall (how often was not measured), and a
   box's restore over a real network was not measured.
 
+- **The upgrade test overran its 165,500 ms deadline once in CI, on a branch that changed no
+  migration** (PR #1705, run 38607502363, job 116002045326, 2026-10-14). Its finished phases summed
+  168,686 ms and none took 2 seconds; the four main runs before it took 81,898 to 122,555 ms.
+  Whether the runner or the walk was slow was not established.
+
 - **What moving the upgrade test's scratch directory to `/dev/shm` (A122, #856) left open:**
   `scratchParent()` does not fall back to the disk when `/dev/shm` is nearly full, and on CI's Linux
   runner `scripts/scratch-dir.mjs` measures 83% of branches. Neither is queued. [Detail](backlog/ci.md#what-moving-the-upgrade-tests-scratch-directory-to-devshm-a122-856-left-open)
