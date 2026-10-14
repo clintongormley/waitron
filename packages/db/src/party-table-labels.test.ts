@@ -4,6 +4,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import type { Transaction } from "./client.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import {
+  billParties,
   billPartyTableLabels,
   orderTableLabels,
   partySurvivors,
@@ -272,6 +273,78 @@ describe("party table labels", () => {
         ]),
       );
       expect(await inTx((tx) => billPartyTables(tx, []))).toEqual(new Map());
+    });
+  });
+
+  describe("billParties", () => {
+    async function nameParty(id: string, name: string): Promise<void> {
+      await inTx((tx) => tx.update(parties).set({ name }).where(eq(parties.id, id)));
+    }
+
+    it("gives each party the tables and labels of billPartyTables and billPartyTableLabels, and the party at the end of its merges", async () => {
+      const survivor = await party([
+        { label: "Bp 7", joinedAt: "2026-09-29T20:20:00.000Z" },
+        { label: "Bp 8", joinedAt: "2026-09-29T20:21:00.000Z" },
+      ]);
+      const middle = await party([{ label: "Bp 6", ...LEFT }]);
+      const first = await party([{ label: "Bp 4", ...LEFT }]);
+      const seated = await party([{ label: "Bp 2", joinedAt: "2026-09-29T20:00:00.000Z" }]);
+      const alone = await party([{ label: "Bp 3", ...LEFT }]);
+      const cycleA = await party([{ label: "Bp 10", ...LEFT }]);
+      const cycleB = await party([{ label: "Bp 11", ...LEFT }]);
+      await merge(middle, survivor);
+      await merge(first, middle);
+      await merge(seated, survivor);
+      await merge(cycleA, cycleB);
+      await merge(cycleB, cycleA);
+      await nameParty(survivor, "Ana");
+      await nameParty(seated, "Luis");
+      const missing = "cccccccc-9999-4000-8000-0000000000c1";
+      const asked = [first, seated, alone, survivor, cycleA, missing];
+
+      const got = await inTx((tx) => billParties(tx, asked));
+      const tables = await inTx((tx) => billPartyTables(tx, asked));
+      const labels = await inTx((tx) => billPartyTableLabels(tx, asked));
+      expect([...got.keys()]).toEqual(asked);
+      for (const id of asked) {
+        expect(got.get(id)!.tables).toEqual(tables.get(id));
+        expect(got.get(id)!.labels).toEqual(labels.get(id));
+      }
+      expect(got.get(first)!.labels).toEqual(["Bp 7", "Bp 8"]);
+      expect(got.get(seated)!.labels).toEqual(["Bp 2"]);
+      expect(new Map([...got].map(([id, bill]) => [id, bill.survivor]))).toEqual(
+        new Map([
+          [first, { id: survivor, name: "Ana" }],
+          [seated, { id: survivor, name: "Ana" }],
+          [alone, { id: alone, name: null }],
+          [survivor, { id: survivor, name: "Ana" }],
+          [cycleA, undefined],
+          [missing, undefined],
+        ]),
+      );
+
+      const firstAlone = await inTx((tx) => billParties(tx, [first]));
+      expect(firstAlone.get(first)!.tables.map((table) => table.name)).toEqual(["Bp 7", "Bp 8"]);
+    });
+
+    it("lists a named group once among the labels, and each of its tables", async () => {
+      const a = randomUUID();
+      const b = randomUUID();
+      const id = await party([
+        { id: a, label: "Bg A", joinedAt: "2026-09-29T20:00:00.000Z" },
+        { id: b, label: "Bg B", joinedAt: "2026-09-29T20:01:00.000Z" },
+      ]);
+      await group([a, b], "Cumple");
+      const got = (await inTx((tx) => billParties(tx, [id]))).get(id)!;
+      expect(got.labels).toEqual(["Cumple"]);
+      expect(got.tables).toEqual([
+        { id: a, name: "Bg A", shown: "Cumple" },
+        { id: b, name: "Bg B", shown: "Cumple" },
+      ]);
+    });
+
+    it("answers an empty map when asked about no party", async () => {
+      expect(await inTx((tx) => billParties(tx, []))).toEqual(new Map());
     });
   });
 

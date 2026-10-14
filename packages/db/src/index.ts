@@ -246,12 +246,14 @@ export {
 export { allocateInvoiceNumber } from "./allocate-number.js";
 export { allocateOrderNumber } from "./allocate-order-number.js";
 export {
+  billParties,
   billPartyTableLabels,
   billPartyTables,
   orderTableLabels,
   partySurvivors,
   partyTableLabels,
   tableNames,
+  type BillParty,
   type TableNames,
 } from "./party-table-labels.js";
 export { withTransaction } from "./tenancy.js";

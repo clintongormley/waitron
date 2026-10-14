@@ -1,12 +1,5 @@
 import { eq, inArray } from "drizzle-orm";
-import {
-  billPartyTableLabels,
-  billPartyTables,
-  parties,
-  tableNames,
-  workingOrders,
-  type Transaction,
-} from "@waitron/db";
+import { billParties, parties, tableNames, workingOrders, type Transaction } from "@waitron/db";
 
 /** Where an order is, as its kitchen tickets name it. */
 export interface OrderPlaces {
@@ -21,16 +14,24 @@ export interface OrderPlaces {
   partyName: string | null;
 }
 
+/** An order's places, and the parties a MOVED slip names it by. */
+export interface PlacedOrder {
+  places: OrderPlaces;
+  partyId: string | null;
+  /** The name of the party at the end of its party's merges, else its own party's; null for none. */
+  sittingWith: string | null;
+}
+
 /**
  * Each order's places, keyed by order; an id that names no order has no entry. A party bill is at
- * the tables {@link billPartyTables} gives its party, named as {@link billPartyTableLabels} names
- * them, else by the order's own label; an order of no party is at the table it is delivered to,
- * named by that table's shown name, else at the counter. No reading filters by location.
+ * the tables {@link billParties} gives its party, named as it names them, else by the order's own
+ * label; an order of no party is at the table it is delivered to, named by that table's shown name,
+ * else at the counter. No reading filters by location.
  */
-export async function readOrderPlaces(
+export async function readPlacedOrders(
   tx: Transaction,
   orderIds: readonly string[],
-): Promise<Map<string, OrderPlaces>> {
+): Promise<Map<string, PlacedOrder>> {
   if (orderIds.length === 0) return new Map();
   const orders = await tx
     .select({
@@ -45,37 +46,49 @@ export async function readOrderPlaces(
     .leftJoin(parties, eq(parties.id, workingOrders.partyId))
     .where(inArray(workingOrders.id, [...orderIds]));
 
-  const partyIds = [...new Set(orders.flatMap((order) => order.partyId ?? []))];
-  const namesByParty = await billPartyTableLabels(tx, partyIds);
-  const tablesByParty = await billPartyTables(tx, partyIds);
+  const byParty = await billParties(tx, [
+    ...new Set(orders.flatMap((order) => order.partyId ?? [])),
+  ]);
   const delivered = await tableNames(tx, [
     ...new Set(
       orders.flatMap((order) => (order.partyId === null ? (order.deliveryTableId ?? []) : [])),
     ),
   ]);
 
-  const places = new Map<string, OrderPlaces>();
+  const placed = new Map<string, PlacedOrder>();
   for (const order of orders) {
     const base = { orderNumber: order.orderNumber, partyName: order.partyName };
-    if (order.partyId !== null) {
-      const names = namesByParty.get(order.partyId)!;
-      places.set(order.id, {
+    const party = order.partyId === null ? undefined : byParty.get(order.partyId)!;
+    let places: OrderPlaces;
+    if (party !== undefined) {
+      places = {
         ...base,
         counter: false,
-        tables: tablesByParty.get(order.partyId)!.map(({ id, name }) => ({ id, name })),
-        names: names.length > 0 ? names : order.label === null ? [] : [order.label],
-      });
+        tables: party.tables.map(({ id, name }) => ({ id, name })),
+        names: party.labels.length > 0 ? party.labels : order.label === null ? [] : [order.label],
+      };
     } else if (order.deliveryTableId === null) {
-      places.set(order.id, { ...base, counter: true, tables: [], names: [] });
+      places = { ...base, counter: true, tables: [], names: [] };
     } else {
       const table = delivered.get(order.deliveryTableId)!;
-      places.set(order.id, {
+      places = {
         ...base,
         counter: false,
         tables: [{ id: table.id, name: table.name }],
         names: [table.shown],
-      });
+      };
     }
+    const sittingWith = party?.survivor === undefined ? order.partyName : party.survivor.name;
+    placed.set(order.id, { places, partyId: order.partyId, sittingWith });
   }
-  return places;
+  return placed;
+}
+
+/** {@link readPlacedOrders}' places alone. */
+export async function readOrderPlaces(
+  tx: Transaction,
+  orderIds: readonly string[],
+): Promise<Map<string, OrderPlaces>> {
+  const placed = await readPlacedOrders(tx, orderIds);
+  return new Map([...placed].map(([id, order]) => [id, order.places]));
 }
