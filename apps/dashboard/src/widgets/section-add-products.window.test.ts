@@ -1,8 +1,9 @@
-import { afterEach, describe, expect, it, onTestFinished } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-modal.js";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
+import { cleanupWidgets, mountWidget, type Theme } from "./test-helpers.js";
 import { SectionAddProducts, type AddableProduct } from "./section-add-products.js";
 
 afterEach(cleanupWidgets);
@@ -17,11 +18,15 @@ function many(count: number): AddableProduct[] {
 
 /** The window as the menus screen draws it: a standard modal with a heading, the picker in its
  * body and the host's Cancel in the picker's `cancel` slot. */
-async function openWindow(products: AddableProduct[]) {
-  const { el: modal } = await mountWidget<HTMLElementTagNameMap["wt-modal"]>("wt-modal", {
-    size: "standard",
-    heading: "Add products to Drinks",
-  });
+async function openWindow(products: AddableProduct[], theme?: Theme) {
+  const { el: modal } = await mountWidget<HTMLElementTagNameMap["wt-modal"]>(
+    "wt-modal",
+    {
+      size: "standard",
+      heading: "Add products to Drinks",
+    },
+    theme,
+  );
   const picker = document.createElement("dashboard-section-add-products");
   Object.assign(picker, { products, categories: [], inSection: [], onMenu: null });
   const cancel = document.createElement("wt-button");
@@ -168,6 +173,104 @@ describe.each([
       await expectTabbedCheckboxesUncovered(picker);
     },
   );
+
+  describe.each([
+    ["en", "light"],
+    ["en", "dark"],
+    ["es", "light"],
+    ["es", "dark"],
+  ] as const)("growing messages in %s, %s", (locale, theme) => {
+    it("keeps the whole last product visible when a refusal grows at the list end", async () => {
+      const previous = currentLocale();
+      onTestFinished(() => setLocale(previous));
+      setLocale(locale);
+      await at(width, height);
+      const { picker, cancel, add, body } = await openWindow(many(200), theme);
+      await frame();
+      await frame();
+      body.scrollTop = body.scrollHeight;
+      await frame();
+      const last = picker.shadowRoot!.querySelector<HTMLElement>("li:last-child")!;
+      expect(last.getBoundingClientRect().bottom).toBeLessThanOrEqual(blockTop(picker));
+      const message = document.createElement("p");
+      message.slot = "message";
+      message.setAttribute("role", "alert");
+      message.style.margin = "0";
+      message.textContent = t("add_products.none_chosen");
+      const before = picker.shadowRoot!.querySelector(".bottom")!.getBoundingClientRect().height;
+      picker.append(message);
+      await frame();
+      await frame();
+      expect(
+        picker.shadowRoot!.querySelector(".bottom")!.getBoundingClientRect().height,
+      ).toBeGreaterThan(before);
+      await vi.waitFor(() => {
+        expect(
+          last.getBoundingClientRect().bottom,
+          "the last row is clear of the refusal footer",
+        ).toBeLessThanOrEqual(blockTop(picker));
+        expectInView(last, body, "last product");
+      });
+      message.textContent = Array(8).fill(t("add_products.none_chosen")).join(" ");
+      await frame();
+      await frame();
+      await vi.waitFor(() => {
+        expect(last.getBoundingClientRect().bottom).toBeLessThanOrEqual(blockTop(picker));
+        expectInView(last, body, "last product after wrapping");
+      });
+      expectInView(cancel, body, "Cancel");
+      expectInView(add, body, "Add");
+    });
+
+    it("keeps the last product visible when its own nothing-chosen message appears", async () => {
+      const previous = currentLocale();
+      onTestFinished(() => setLocale(previous));
+      setLocale(locale);
+      await at(width, height);
+      const { picker, add, body } = await openWindow(many(200), theme);
+      picker.shadowRoot!.querySelector<HTMLInputElement>('input[value="p-000"]')!.click();
+      picker.inSection = ["p-000"];
+      await picker.updateComplete;
+      await frame();
+      await frame();
+      body.scrollTop = body.scrollHeight;
+      await frame();
+      const last = picker.shadowRoot!.querySelector<HTMLElement>("li:last-child")!;
+      expect(last.getBoundingClientRect().bottom).toBeLessThanOrEqual(blockTop(picker));
+      add.click();
+      await picker.updateComplete;
+      await frame();
+      await frame();
+      expect(picker.shadowRoot!.querySelector('[data-test="error"]')).not.toBeNull();
+      await vi.waitFor(() => {
+        expect(last.getBoundingClientRect().bottom).toBeLessThanOrEqual(blockTop(picker));
+        expectInView(last, body, "last product with the own error");
+      });
+    });
+
+    it("keeps the reading position when a refusal grows halfway down the list", async () => {
+      const previous = currentLocale();
+      onTestFinished(() => setLocale(previous));
+      setLocale(locale);
+      await at(width, height);
+      const { picker, body } = await openWindow(many(200), theme);
+      await frame();
+      await frame();
+      body.scrollTop = body.scrollHeight / 2;
+      await frame();
+      const before = body.scrollTop;
+      const message = document.createElement("p");
+      message.slot = "message";
+      message.textContent = t("add_products.none_chosen");
+      picker.append(message);
+      await frame();
+      await frame();
+      expect(body.scrollTop).toBe(before);
+      expect(
+        picker.shadowRoot!.querySelector<HTMLElement>("li:last-child")!.getBoundingClientRect().top,
+      ).toBeGreaterThan(body.getBoundingClientRect().bottom);
+    });
+  });
 
   // With three products the list ends well above the window's bottom, so the buttons sit right
   // after it; no position is pinned.
