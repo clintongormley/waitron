@@ -1025,22 +1025,30 @@ function unplannedFailure(refusals: {
 }
 
 /**
- * A scope for `plan` that records each refusal in the receipt while the run is open, and prints it
- * once `closed()` says the receipt has been written.
+ * A scope for `plan` that records each refusal in the receipt until `finished()` (the receipt is about
+ * to be built), and prints it after; `close()` stops the counting the run's failure reads.
  */
 function runScope(
   plan: Parameters<typeof openRequestScope>[0]["plan"],
   record: (event: unknown) => void,
   print: (line: string) => void,
-): { scope: RequestScope; close(): { count: number; first: string | undefined } } {
-  let closed = false;
+): {
+  scope: RequestScope;
+  finished(): void;
+  close(): { count: number; first: string | undefined };
+} {
+  let state: "open" | "finished" | "closed" = "open";
   const scope = openRequestScope({
     plan,
     mode: "enforce",
     onRefused(detail, api) {
-      if (closed) {
+      if (state !== "open") {
         try {
-          print(`refused after the run ended: ${detail}`);
+          print(
+            state === "finished"
+              ? `refused after the receipt was written: ${detail}`
+              : `refused after the run ended: ${detail}`,
+          );
         } catch {
           // The refusal still rejects the send.
         }
@@ -1056,9 +1064,12 @@ function runScope(
   });
   return {
     scope,
+    finished() {
+      if (state === "open") state = "finished";
+    },
     close() {
       const refusals = scope.refusals();
-      closed = true;
+      state = "closed";
       scope.close();
       return refusals;
     },
@@ -1387,6 +1398,7 @@ async function runOwned<T>(
   );
   const failed = failedSteps(teardown?.entries ?? []);
   let receiptFailure: AwsRehearsalFailed | undefined;
+  requests.finished();
   try {
     const receipt = log.finish({
       finishedAt: new Date(deps.now()).toISOString(),
@@ -1401,7 +1413,6 @@ async function runOwned<T>(
       `the receipt was not written (${receiptFailureCause(error)})`,
     );
   }
-  const refusals = requests.close();
   let printFailure: unknown;
   if (receiptFailure === undefined) {
     try {
@@ -1410,6 +1421,7 @@ async function runOwned<T>(
       printFailure = error;
     }
   }
+  const refusals = requests.close();
 
   const teardownFailure =
     failed === "none"
@@ -1660,6 +1672,7 @@ export async function cleanupFromReceipt(
       return { ok: true, receiptPath: null };
     }
     const remaining = carriedRemaining(removed.remaining, profile, contained);
+    requests.finished();
     const receipt = log.finish({
       finishedAt: new Date(deps.now()).toISOString(),
       ownership: { state: "owned", bucket },
@@ -1670,14 +1683,16 @@ export async function cleanupFromReceipt(
     try {
       written = await writeReceipt(dirname(path), receipt, profile, "cleanup");
     } catch (error) {
+      const refused = unplannedFailure(requests.close());
       throw new AwsRehearsalFailed(
         `cleanup receipt not written (${receiptFailureCause(error)}); ` +
           `bucket left: ${remaining.bucket ?? "none"}; ` +
-          `failed teardown steps: ${failedSteps(removed.entries)}`,
+          `failed teardown steps: ${failedSteps(removed.entries)}` +
+          (refused === undefined ? "" : `; ${refused.message}`),
       );
     }
-    const unplanned = unplannedFailure(requests.close());
     deps.print(written);
+    const unplanned = unplannedFailure(requests.close());
     if (unplanned !== undefined) throw unplanned;
     return {
       ok: remaining.bucket === null && contained.refused() === 0,

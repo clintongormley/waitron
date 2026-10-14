@@ -1,8 +1,15 @@
-import { readFile, rm, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { AsyncResource } from "node:async_hooks";
 import { join } from "node:path";
 import { Readable } from "node:stream";
 import { setTimeout as sleep } from "node:timers/promises";
-import { GetBucketTaggingCommand, HeadObjectCommand, type S3Client } from "@aws-sdk/client-s3";
+import {
+  GetBucketTaggingCommand,
+  HeadObjectCommand,
+  PutObjectCommand,
+  type S3Client,
+} from "@aws-sdk/client-s3";
 import { createBucketClient, createS3ObjectStore, type BucketConfig } from "@waitron/stream";
 import {
   type Answer,
@@ -218,7 +225,7 @@ describe("withAwsRehearsal — the request plan", () => {
     ]);
   });
 
-  it("holds the scope open through teardown and closes it once the receipt is written", async () => {
+  it("holds the scope open through teardown", async () => {
     const scopes: unknown[] = [];
     const h = harness({
       DeleteBucket: () => {
@@ -229,6 +236,68 @@ describe("withAwsRehearsal — the request plan", () => {
     await withAwsRehearsal(async () => undefined, h.deps);
     expect(scopes).toHaveLength(1);
     expect(scopes[0]).toBeDefined();
+  });
+
+  it("counts and prints a request refused after the receipt is written but before the scope closes", async () => {
+    const net = recordingHandler();
+    let fire: (() => void) | undefined;
+    let receiptWritten: boolean | undefined;
+    const printed: string[] = [];
+    const h = harness(
+      {},
+      {
+        print: (line) => {
+          printed.push(line);
+          if (fire === undefined) return;
+          receiptWritten = existsSync(join(receiptDir, `aws-rehearsal-${RUN_ID}.json`));
+          const once = fire;
+          fire = undefined;
+          once();
+        },
+      },
+    );
+    const error = await rejection(
+      withAwsRehearsal(async (ctx) => {
+        const client = createBucketClient(
+          { ...ctx.bucketConfig(ctx.prefix("loop")), bucket: "someone-elses-bucket" },
+          { requestHandler: net.requestHandler },
+        ) as S3Client;
+        // Bound here, so it runs inside this run's scope when the print hook calls it.
+        fire = AsyncResource.bind(() => {
+          void client
+            .send(new PutObjectCommand({ Bucket: "someone-elses-bucket", Key: "a", Body: "x" }))
+            .catch(() => {});
+        });
+      }, h.deps),
+    );
+    expect(receiptWritten).toBe(true);
+    expect(net.handled()).toBe(0);
+    expect(error.message).toBe(
+      `${REFUSED_PREFIX}PutObject was sent to a bucket this run did not create`,
+    );
+    expect(printed).toContain(
+      "refused after the receipt was written: PutObject was sent to a bucket this run did not create",
+    );
+  });
+
+  it("sends the runner's own requests through a real SDK client as the runner's", async () => {
+    const net = recordingHandler();
+    const h = harness();
+    const createAdminClient = (profile: {
+      region: string;
+      accessKeyId: string;
+      secretAccessKey: string;
+    }) =>
+      createBucketClient(
+        { ...profile, bucket: "", prefix: "" },
+        { requestHandler: net.requestHandler },
+      );
+    await withAwsRehearsal(async () => undefined, { ...h.deps, createAdminClient }).catch(
+      () => undefined,
+    );
+    // The empty answers fail the encryption preflight; CreateBucket and the marker still went out.
+    expect(net.handled()).toBeGreaterThanOrEqual(2);
+    expect(refusedEvents(await receipt())).toEqual([]);
   });
 
   it("refuses and prints a request sent after the run has ended", async () => {
@@ -247,7 +316,109 @@ describe("withAwsRehearsal — the request plan", () => {
   });
 });
 
+async function writeOwnedReceipt(): Promise<string> {
+  const bucket = `waitron-rehearsal-waitron-${SUFFIX}`;
+  const path = join(dir, `aws-rehearsal-${RUN_ID}.json`);
+  await writeFile(
+    path,
+    JSON.stringify({
+      header: { runId: RUN_ID, region: "eu-north-1" },
+      ownership: { state: "owned", bucket },
+      remaining: { bucket, uploadIds: [] },
+    }),
+  );
+  return path;
+}
+
+const MARKER = {
+  $metadata: { httpStatusCode: 200, attempts: 1 },
+  Body: { transformToString: async () => JSON.stringify({ runId: RUN_ID }) },
+};
+
 describe("cleanupFromReceipt — the request plan", () => {
+  it("reads the ownership marker through a real SDK client as the runner's", async () => {
+    const path = await writeOwnedReceipt();
+    const net = recordingHandler();
+    const h = harness();
+    const createAdminClient = (profile: {
+      region: string;
+      accessKeyId: string;
+      secretAccessKey: string;
+    }) =>
+      createBucketClient(
+        { ...profile, bucket: "", prefix: "" },
+        { requestHandler: net.requestHandler },
+      );
+    // The empty answer is no marker, so nothing past the read is sent.
+    const error = await rejection(cleanupFromReceipt(path, { ...h.deps, createAdminClient }));
+    expect((error as AwsRehearsalRefused).reason).toBe("ownership-unproven");
+    expect(net.handled()).toBe(1);
+  });
+
+  it("fails naming a request refused during the cleanup, after writing its receipt", async () => {
+    const path = await writeOwnedReceipt();
+    const net = recordingHandler();
+    const h = harness({
+      GetObject: (input) => {
+        const other = createBucketClient(
+          {
+            region: "eu-north-1",
+            bucket: "someone-elses-bucket",
+            prefix: "",
+            accessKeyId: "AKIAEXAMPLE0000",
+            secretAccessKey: "not-a-real-secret",
+          },
+          { requestHandler: net.requestHandler },
+        ) as S3Client;
+        void other
+          .send(
+            new PutObjectCommand({
+              Bucket: "someone-elses-bucket",
+              Key: String(input.Key),
+              Body: "x",
+            }),
+          )
+          .catch(() => {});
+        return MARKER;
+      },
+    });
+    const error = await rejection(cleanupFromReceipt(path, h.deps));
+    expect(net.handled()).toBe(0);
+    expect(error.message).toBe(
+      `${REFUSED_PREFIX}PutObject was sent to a bucket this run did not create`,
+    );
+    expect(h.printed).toEqual([join(dir, `aws-rehearsal-${RUN_ID}-cleanup.json`)]);
+  });
+
+  it("names the refusals when the cleanup receipt cannot be written", async () => {
+    const path = await writeOwnedReceipt();
+    await mkdir(join(dir, `aws-rehearsal-${RUN_ID}-cleanup.json`));
+    const net = recordingHandler();
+    const h = harness({
+      GetObject: () => {
+        const other = createBucketClient(
+          {
+            region: "eu-north-1",
+            bucket: "someone-elses-bucket",
+            prefix: "",
+            accessKeyId: "AKIAEXAMPLE0000",
+            secretAccessKey: "not-a-real-secret",
+          },
+          { requestHandler: net.requestHandler },
+        ) as S3Client;
+        void other
+          .send(new PutObjectCommand({ Bucket: "someone-elses-bucket", Key: "a", Body: "x" }))
+          .catch(() => {});
+        return MARKER;
+      },
+    });
+    const error = await rejection(cleanupFromReceipt(path, h.deps));
+    expect(error.message).toContain("cleanup receipt not written");
+    expect(error.message).toContain(
+      `; ${REFUSED_PREFIX}PutObject was sent to a bucket this run did not create`,
+    );
+  });
+
   it("sends its marker read and teardown inside a scope", async () => {
     const bucket = `waitron-rehearsal-waitron-${SUFFIX}`;
     const path = join(dir, `aws-rehearsal-${RUN_ID}.json`);
