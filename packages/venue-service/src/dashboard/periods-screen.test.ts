@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
+import { page } from "vitest/browser";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { applyTokens, type WtDataTable } from "@waitron/ui";
 import { CALENDAR_COLOURS } from "../hours-types.js";
@@ -370,3 +371,66 @@ it("Spanish: Periodos, Carta de clientes, Pintado en, Sin pintar en ningún siti
       .textContent!.trim(),
   ).toBe("Abrir en Horario de apertura");
 });
+
+it.each(["en", "es"])(
+  "M1: at 1280 the table fits its frame with five long Painted in chips (%s)",
+  async (locale) => {
+    const previous = [window.innerWidth, window.innerHeight];
+    await page.viewport(1280, 900);
+    setLocale(locale);
+    try {
+      // The LOOK's demo venue: its names, menus and four seasons, plus a special day.
+      const data = model();
+      data.menus = [
+        { id: "casa", name: "Casa Delgado", active: true, includes: [] },
+        { id: "deli", name: "Deli takeaway", active: true, includes: [] },
+      ];
+      data.seasons = [
+        { id: "spring", name: "Primavera", startsOn: "03-01" },
+        { id: "summer", name: "Verano", startsOn: "06-01" },
+        { id: "autumn", name: "Otoño", startsOn: "09-01" },
+        { id: "winter", name: "Invierno", startsOn: "12-01" },
+      ];
+      data.departments = [
+        {
+          ...data.departments[0]!,
+          name: "Restaurant and bar",
+          periods: [
+            period("p1", "Open", { menuId: "casa", staffMenuIds: ["deli"] }),
+            period("p2", "Breakfast", { menuId: "casa", staffMenuIds: ["deli"] }),
+          ],
+        },
+      ];
+      const painted = [
+        {
+          periodId: "p1",
+          seasons: data.seasons.map(({ id, name }) => ({ id, name })),
+          specialDays: [{ id: "sd1", name: "Nochevieja" }],
+        },
+        { periodId: "p2", seasons: [], specialDays: [] },
+      ];
+      const frame = document.createElement("div");
+      // The table's frame on the dashboard at 1280 px, measured in the A506-11 LOOK.
+      frame.style.inlineSize = "898px";
+      document.body.append(frame);
+      hosts.push(frame);
+      const el = await mount(
+        answering(
+          () => data,
+          () => painted,
+        ),
+      );
+      frame.append(el);
+      const grid = await loaded(el);
+      await expect.poll(() => grid.shadowRoot!.querySelectorAll("a[part~=chip]").length).toBe(5);
+      await grid.updateComplete;
+      const scroll = grid.shadowRoot!.querySelector<HTMLElement>(".scroll")!;
+      expect(scroll.clientWidth).toBeGreaterThan(800);
+      expect(scroll.scrollWidth).toBeLessThanOrEqual(scroll.clientWidth + 1);
+      for (const chip of grid.shadowRoot!.querySelectorAll<HTMLElement>("a[part~=chip]"))
+        expect(getComputedStyle(chip).whiteSpace).toBe("nowrap");
+    } finally {
+      await page.viewport(previous[0]!, previous[1]!);
+    }
+  },
+);

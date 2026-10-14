@@ -101,6 +101,7 @@ export class PeriodsScreen extends LitElement {
         display: flex;
         flex-wrap: wrap;
         gap: var(--wt-space-1);
+        max-inline-size: calc(1.25 * var(--wt-cell-name-max-width));
       }
       wt-data-table::part(chip) {
         padding: 0 var(--wt-space-2);
