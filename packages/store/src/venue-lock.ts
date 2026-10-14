@@ -14,7 +14,9 @@ const SQLITE_BUSY = 5;
 
 /** Whether the engine refused because another connection holds the lock. */
 export const isLocked = (error: unknown): boolean =>
-  (error as { errcode?: number }).errcode === SQLITE_BUSY;
+  typeof error === "object" &&
+  error !== null &&
+  (error as { errcode?: unknown }).errcode === SQLITE_BUSY;
 
 /** Closes a connection where the failure being handled is the one the caller has to see. */
 export const closeQuietly = (connection: DatabaseSync): void => {

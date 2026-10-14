@@ -5,7 +5,13 @@ import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { integer, sqliteTable } from "drizzle-orm/sqlite-core";
 import { afterEach, describe, expect, it } from "vitest";
-import { lockVenueDirectory, openVenueStore, VenueInUseError, type VenueStore } from "./index.js";
+import {
+  isLocked,
+  lockVenueDirectory,
+  openVenueStore,
+  VenueInUseError,
+  type VenueStore,
+} from "./index.js";
 
 const sales = sqliteTable("sales", { id: integer("id").primaryKey(), total: integer("total") });
 const venueSchema = { sales };
@@ -190,5 +196,19 @@ describe("the venue folder's process lock", () => {
     expect(existsSync(join(directory, "venue.lock"))).toBe(true);
     lock.release();
     lock.release(); // idempotent
+  });
+});
+
+describe("isLocked", () => {
+  it("answers true only for an error carrying SQLITE_BUSY", () => {
+    expect(isLocked(Object.assign(new Error("database is locked"), { errcode: 5 }))).toBe(true);
+    expect(isLocked(Object.assign(new Error("logic"), { errcode: 1 }))).toBe(false);
+  });
+
+  it("answers false for a thrown value that is not an object", () => {
+    expect(isLocked(null)).toBe(false);
+    expect(isLocked(undefined)).toBe(false);
+    expect(isLocked("database is locked")).toBe(false);
+    expect(isLocked(5)).toBe(false);
   });
 });
