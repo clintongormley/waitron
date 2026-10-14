@@ -59,6 +59,7 @@ export const personStaffRoles = table(
   ],
 );
 
+// Generated in a second migration: scripts/migration-upgrade.test.ts applies every set's first migration together, before venue-service creates seasons and special_day_dates.
 /** One area's painted day: a department OR a prep station, on a season's weekday OR a special day's date. */
 export const staffingDays = table(
   "staffing_days",
