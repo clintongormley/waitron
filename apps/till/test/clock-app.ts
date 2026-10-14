@@ -133,7 +133,7 @@ export async function clockApp(
       { personId: "p1", displayName: "Ana" },
       { personId: "p2", displayName: "Luis" },
     ]),
-    login: vi.fn().mockImplementation(async (personId: string, _pin: string) => {
+    login: vi.fn().mockImplementation(async (personId: string) => {
       if (personId !== state.personId) state = clockState("out", null, personId);
       return { personId, permissions: [], locale: null };
     }),

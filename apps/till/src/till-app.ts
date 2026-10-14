@@ -2820,14 +2820,13 @@ export class TillApp extends LitElement {
     const api = this.api;
     this.#clockNeedsInitialRead = prompt;
     this.clockPage = prompt;
-    let controller!: ClockingController;
     const current = () =>
       this.isConnected &&
       api === this.api &&
       signIn === this.#signIns &&
       session === this.#operatorSession &&
       controller === this.#clocking;
-    controller = new ClockingController(
+    const controller = new ClockingController(
       api,
       (snapshot) => {
         if (!current()) return;
