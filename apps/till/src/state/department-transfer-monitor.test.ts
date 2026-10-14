@@ -56,7 +56,8 @@ function desk() {
     }
     reads.push(url);
     if (readError) return json({ error: { code: readError.code, params: {} } }, readError.status);
-    if (url.endsWith("/incoming")) return json({ count: incoming.length, requests: incoming });
+    if (url.endsWith("/incoming"))
+      return json({ receiving: true, count: incoming.length, requests: incoming });
     if (url === "/api/working-orders/tab-1/department-transfers") return json({ requests: sent });
     throw new Error(`Unexpected read ${url}`);
   });
@@ -203,7 +204,25 @@ describe("DepartmentTransferMonitor", () => {
     },
   );
 
-  it("keeps a sender's updates while the profile is not a designated receiving desk", async () => {
+  it("reads a profile that is not the receiving desk from the queue's answer and keeps watching", async () => {
+    const api = new client.TillApi("", async (url) => {
+      if (String(url).endsWith("/incoming"))
+        return json({ receiving: false, count: 0, requests: [] });
+      if (String(url).endsWith("/events")) return new Response(new ReadableStream());
+      return json({ requests: [pending] });
+    });
+    const monitor = new DepartmentTransferMonitor({ api, changed() {} });
+    monitors.push(monitor);
+    monitor.watchSource("tab-1");
+    monitor.start();
+    await settle();
+    await expect.poll(() => monitor.snapshot.receivingAllowed).toBe(false);
+    await expect.poll(() => monitor.snapshot.sent).toEqual([pending]);
+    expect(monitor.snapshot.incoming).toEqual([]);
+    expect(monitor.running).toBe(true);
+  });
+
+  it("keeps a sender's updates when the incoming queue is refused to a profile with no department", async () => {
     const reads: string[] = [];
     const api = new client.TillApi("", async (url) => {
       reads.push(String(url));
@@ -262,7 +281,8 @@ describe("DepartmentTransferMonitor", () => {
     let resolve!: (response: Response) => void;
     const api = new client.TillApi("", async (url) => {
       if (String(url).endsWith("/events")) return new Response(new ReadableStream());
-      if (String(url).endsWith("/incoming")) return json({ count: 0, requests: [] });
+      if (String(url).endsWith("/incoming"))
+        return json({ receiving: true, count: 0, requests: [] });
       if (String(url).includes("tab-1"))
         return new Promise<Response>((answer) => {
           resolve = answer;
@@ -292,7 +312,7 @@ describe("DepartmentTransferMonitor", () => {
         return new Promise<Response>((answer) => {
           resolve = answer;
         });
-      return json({ count: 0, requests: [] });
+      return json({ receiving: true, count: 0, requests: [] });
     });
     const monitor = new DepartmentTransferMonitor({ api, changed() {} });
     monitors.push(monitor);
@@ -302,7 +322,7 @@ describe("DepartmentTransferMonitor", () => {
     monitor.start();
     await settle();
     await expect.poll(() => monitor.snapshot.receivingAllowed).toBe(true);
-    const late = consumedResponse({ count: 1, requests: [pending] });
+    const late = consumedResponse({ receiving: true, count: 1, requests: [pending] });
     resolve(late.response);
     await late.consumed;
     await settle();
@@ -324,7 +344,7 @@ describe("DepartmentTransferMonitor", () => {
     const api = new client.TillApi("", async (url) =>
       String(url).endsWith("/events")
         ? json({ error: { code: "device.forbidden_action", params: {} } }, 403)
-        : json({ count: 0, requests: [] }),
+        : json({ receiving: true, count: 0, requests: [] }),
     );
     const codes: string[] = [];
     const monitor = new DepartmentTransferMonitor({
@@ -352,14 +372,14 @@ describe("DepartmentTransferMonitor", () => {
         return new Promise<Response>((answer) => {
           resolve = answer;
         });
-      return json({ count: 1, requests: [pending] });
+      return json({ receiving: true, count: 1, requests: [pending] });
     });
     const monitor = new DepartmentTransferMonitor({ api, changed() {} });
     monitors.push(monitor);
     monitor.start();
     for (let i = 0; i < 10; i++) monitor.refresh();
     expect(reads).toBe(1);
-    resolve(json({ count: 0, requests: [] }));
+    resolve(json({ receiving: true, count: 0, requests: [] }));
     await expect.poll(() => monitor.snapshot.incoming).toEqual([pending]);
     expect(reads).toBe(2);
   });
@@ -373,7 +393,7 @@ describe("DepartmentTransferMonitor", () => {
         return new Promise<Response>((answer) => {
           resolve = answer;
         });
-      return json({ count: 0, requests: [] });
+      return json({ receiving: true, count: 0, requests: [] });
     });
     const monitor = new DepartmentTransferMonitor({ api, changed() {} });
     monitors.push(monitor);
@@ -381,7 +401,7 @@ describe("DepartmentTransferMonitor", () => {
     vi.advanceTimersByTime(25_000);
     await settle();
     await expect.poll(() => monitor.snapshot.receivingAllowed).toBe(true);
-    const late = consumedResponse({ count: 1, requests: [pending] });
+    const late = consumedResponse({ receiving: true, count: 1, requests: [pending] });
     resolve(late.response);
     await late.consumed;
     await settle();
@@ -407,7 +427,7 @@ describe("DepartmentTransferMonitor", () => {
     const api = new client.TillApi("", async (url) => {
       if (String(url).endsWith("/events")) return new Response(new ReadableStream());
       if (String(url).endsWith("/incoming"))
-        return json({ count: incoming.length, requests: incoming });
+        return json({ receiving: true, count: incoming.length, requests: incoming });
       if (String(url).includes("tab-2")) return json({ requests: [] });
       if (sourceState === "failed")
         return json({ error: { code: "server.internal", params: {} } }, 500);
@@ -486,7 +506,7 @@ it("forgets department-wide discovery on session end and ignores a late sent res
   const api = new client.TillApi("", async (input) => {
     const url = String(input);
     if (url.endsWith("/events")) return new Response(new ReadableStream());
-    if (url.endsWith("/incoming")) return json({ count: 0, requests: [] });
+    if (url.endsWith("/incoming")) return json({ receiving: true, count: 0, requests: [] });
     if (url.endsWith("/sent")) {
       sentReads++;
       return new Promise<Response>((resolve) => {
@@ -516,7 +536,7 @@ it("discovers the selected tab's older acceptance outside the bounded department
   const api = new client.TillApi("", async (input) => {
     const url = String(input);
     if (url.endsWith("/events")) return new Response(new ReadableStream());
-    if (url.endsWith("/incoming")) return json({ count: 0, requests: [] });
+    if (url.endsWith("/incoming")) return json({ receiving: true, count: 0, requests: [] });
     if (url === "/api/department-transfers/sent") return json({ requests: [] });
     if (url === "/api/working-orders/tab-1/department-transfers") return json({ requests: [old] });
     throw new Error(`Unexpected read ${url}`);
@@ -537,7 +557,7 @@ it("does not announce an old selected-tab acceptance after the operator selects 
   const api = new client.TillApi("", async (input) => {
     const url = String(input);
     if (url.endsWith("/events")) return new Response(new ReadableStream());
-    if (url.endsWith("/incoming")) return json({ count: 0, requests: [] });
+    if (url.endsWith("/incoming")) return json({ receiving: true, count: 0, requests: [] });
     if (url === "/api/department-transfers/sent") return json({ requests: [] });
     if (url === "/api/working-orders/tab-1/department-transfers")
       return new Promise<Response>((resolve) => {
@@ -577,7 +597,8 @@ it.each(["department_transfer.not_allowed", "authorization.not_permitted"])(
     const api = new client.TillApi("", async (input) => {
       const url = String(input);
       if (url.endsWith("/events")) return new Response(new ReadableStream());
-      if (url.endsWith("/incoming")) return json({ count: 1, requests: [pending] });
+      if (url.endsWith("/incoming"))
+        return json({ receiving: true, count: 1, requests: [pending] });
       return refused
         ? json({ error: { code, params: {} } }, 403)
         : json({ requests: [{ ...pending, status: "accepted" }] });

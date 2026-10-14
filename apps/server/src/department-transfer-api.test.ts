@@ -74,6 +74,7 @@ const suite = useVenueDb({
 let v: PartyVenue;
 let app: Hono;
 const liveEvents = new LiveEvents();
+const logged: string[] = [];
 let personId: string;
 /** `personId`'s open session on `v.cfg`'s device, which a bill payment is taken under. */
 let operator: { personId: string; sessionId: string };
@@ -262,7 +263,7 @@ beforeAll(async () => {
       secureCookies: false,
       venueLocale: v.cfg.locale,
     },
-    () => {},
+    (_level, event) => logged.push(event),
   );
 });
 
@@ -699,21 +700,30 @@ describe("department transfer durable reads", () => {
       const result = await get(desk.cookie, "/api/department-transfers/incoming");
       expect(result).toMatchObject({
         status: 200,
-        body: { count: 1, requests: [{ id, tabId: f.tab, status: "pending" }] },
+        body: {
+          receiving: true,
+          count: 1,
+          requests: [{ id, tabId: f.tab, status: "pending" }],
+        },
       });
       expect(result.body.requests).toHaveLength(1);
     }
     expect((await state(f.tab)).requests[0]!.status).toBe("pending");
   });
   for (const who of ["source", "other"] as const)
-    it(`refuses the incoming queue and detail to the ${who} profile`, async () => {
+    it(`tells the ${who} profile it receives nothing, without a logged refusal, and refuses it a request's detail`, async () => {
       const f = await ready();
       const id = await pending(f);
-      for (const path of ["/api/department-transfers/incoming", `/api/department-transfers/${id}`])
-        expect(await get(f[who].cookie, path)).toMatchObject({
-          status: 403,
-          body: { error: { code: "department_transfer.not_allowed" } },
-        });
+      logged.length = 0;
+      expect(await get(f[who].cookie, "/api/department-transfers/incoming")).toEqual({
+        status: 200,
+        body: { receiving: false, count: 0, requests: [] },
+      });
+      expect(logged).not.toContain("department_transfer.not_allowed");
+      expect(await get(f[who].cookie, `/api/department-transfers/${id}`)).toMatchObject({
+        status: 403,
+        body: { error: { code: "department_transfer.not_allowed" } },
+      });
     });
   it("reads the latest placed tab and outstanding kitchen instructions without resolving it", async () => {
     const f = await ready();
@@ -793,7 +803,7 @@ describe("department transfer durable reads", () => {
       for (const desk of [f.desk, second]) {
         expect(await get(desk.cookie, "/api/department-transfers/incoming")).toEqual({
           status: 200,
-          body: { count: 0, requests: [] },
+          body: { receiving: true, count: 0, requests: [] },
         });
         expect(await get(desk.cookie, `/api/department-transfers/${id}`)).toMatchObject({
           status: 409,
@@ -875,9 +885,9 @@ describe("department transfer read boundaries", () => {
         destinationDepartmentIds: [],
       }),
     );
-    expect(await get(f.desk.cookie, "/api/department-transfers/incoming")).toMatchObject({
-      status: 403,
-      body: { error: { code: "department_transfer.not_allowed" } },
+    expect(await get(f.desk.cookie, "/api/department-transfers/incoming")).toEqual({
+      status: 200,
+      body: { receiving: false, count: 0, requests: [] },
     });
     expect(await get(f.desk.cookie, `/api/department-transfers/${id}`)).toMatchObject({
       status: 403,
@@ -885,7 +895,7 @@ describe("department transfer read boundaries", () => {
     });
     expect(await get(f.other.cookie, "/api/department-transfers/incoming")).toMatchObject({
       status: 200,
-      body: { count: 1, requests: [{ id }] },
+      body: { receiving: true, count: 1, requests: [{ id }] },
     });
   });
   it("does not label away or made-here kitchen work outstanding", async () => {
@@ -1011,7 +1021,7 @@ describe("department transfer live invalidation", () => {
           expect(text((await reader.read()).value)).toBe("event: change\ndata: {}\n\n");
         expect(await get(anotherDesk.cookie, "/api/department-transfers/incoming")).toEqual({
           status: 200,
-          body: { count: 0, requests: [] },
+          body: { receiving: true, count: 0, requests: [] },
         });
       } finally {
         for (const reader of readers) await reader.cancel();

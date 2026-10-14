@@ -589,7 +589,7 @@ export interface VenueServiceContribution {
     tx: Transaction,
     cfg: { locationId: LocationId },
     receiver: DepartmentTransferReceiver,
-  ): Promise<DepartmentTransfer[]>;
+  ): Promise<DepartmentTransfer[] | null>;
   readIncomingDepartmentTransfer(
     tx: Transaction,
     cfg: { locationId: LocationId },

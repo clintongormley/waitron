@@ -216,7 +216,7 @@ export class DepartmentTransferMonitor {
       );
       if (this.#active !== active || this.#incomingFlight !== flight) return;
       this.#incomingError = undefined;
-      this.#update({ incoming: answer.requests, receivingAllowed: true });
+      this.#update({ incoming: answer.requests, receivingAllowed: answer.receiving });
     } catch (error) {
       if (this.#active !== active || this.#incomingFlight !== flight) return;
       if (sessionLost(error)) this.#loseAccess(codeOf(error)!);

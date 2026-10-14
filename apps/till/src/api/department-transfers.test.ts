@@ -101,7 +101,7 @@ describe("departmental transfer client", () => {
       expect(init?.signal).toBe(abort.signal);
       switch (url) {
         case "https://primary.test/api/department-transfers/incoming":
-          return json({ count: 1, requests: [request] });
+          return json({ receiving: true, count: 1, requests: [request] });
         case "https://primary.test/api/department-transfers/request-1":
           return json(detail);
         case "https://primary.test/api/working-orders/tab-1/department-transfers":
@@ -115,6 +115,7 @@ describe("departmental transfer client", () => {
     const api = new TillApi("https://primary.test", fetchImpl);
     const abort = new AbortController();
     expect(await api.listIncomingDepartmentTransfers({ signal: abort.signal })).toEqual({
+      receiving: true,
       count: 1,
       requests: [request],
     });
