@@ -4327,7 +4327,7 @@ export class TillTableOrderScreen extends LitElement {
     const keepOwn = this.actionVerb === "move" && own.size > 1;
     const tables = this.tables
       .filter((table) => !outOfServiceJoined(table))
-      .sort((a, b) => inNumberOrder(a.label, b.label));
+      .sort((a, b) => inNumberOrder(tableShownName(a), tableShownName(b)));
     const owned = keepOwn ? tables.filter((table) => own.has(table.id)) : [];
     return [...owned, ...tables.filter((table) => !own.has(table.id))];
   }

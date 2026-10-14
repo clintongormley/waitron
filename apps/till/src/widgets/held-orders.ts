@@ -13,7 +13,7 @@ import {
   type SeatedRead,
 } from "./table-targets.js";
 import { paidInPart } from "../state/bill-state.js";
-import { outOfServiceJoined } from "../state/floor-today.js";
+import { outOfServiceJoined, shownName } from "../state/floor-today.js";
 import { signalChipStyles, signalChips } from "./signal-chips.js";
 import "./bill-choice-dialog.js";
 import type { BillChoiceDetail } from "./bill-choice-dialog.js";
@@ -248,7 +248,7 @@ export class TillHeldOrders extends LitElement {
           ? html`<p class="picker-empty">${t("held.no_tables")}</p>`
           : html`<div class="action-options">
               ${tables
-                .sort((a, b) => inNumberOrder(a.label, b.label))
+                .sort((a, b) => inNumberOrder(shownName(a), shownName(b)))
                 .map((table) => tableTarget(table, undefined, (picked) => this.#pick(picked)))}
             </div>`
       }

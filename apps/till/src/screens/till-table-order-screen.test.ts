@@ -4123,6 +4123,31 @@ describe("till-table-order-screen", () => {
       expect(target(el, "t9")!.querySelector(".target-label")!.textContent).toBe("Window");
     });
 
+    it("Move guests lists its tables in the order of the names they show for today", async () => {
+      const floor = partyTables();
+      const tables = floor.tables.map((table) =>
+        table.id === "t7"
+          ? renamed(table, "Zinc")
+          : table.id === "t9"
+            ? renamed(table, "Arch")
+            : table,
+      );
+      const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...floor, tables });
+      await toMenu(el);
+      click(el, '[data-action="move"]');
+      await el.updateComplete;
+
+      expect(
+        [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-target-picker] [data-target]")].map(
+          (row) => [row.dataset.target, row.querySelector(".target-label")!.textContent!.trim()],
+        ),
+      ).toEqual([
+        ["t9", "Arch"],
+        ["t6", "Mesa 6"],
+        ["t7", "Zinc"],
+      ]);
+    });
+
     it("Move guests names an unnamed party at a group named for today by the group's name once, its targets by their own names", async () => {
       const floor = partyTables(true);
       const party = { ...floor.party, name: null, displayName: "García birthday" };
