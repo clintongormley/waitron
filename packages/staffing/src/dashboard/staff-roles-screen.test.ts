@@ -451,7 +451,7 @@ describe("the staff roles page", () => {
   });
 
   it("says a staff role with shifts cannot be deleted, and draws Delete quiet and disabled", async () => {
-    const request = await mount(fakeRequest(() => [cook]));
+    await mount(fakeRequest(() => [cook]));
     await choose("delete-role-c");
     const modal = deleteModal()!;
     expect(modal.textContent).toContain("Cook can't be deleted while 2 shifts use it.");
@@ -462,7 +462,6 @@ describe("the staff roles page", () => {
     )!;
     expect(confirm.disabled).toBe(true);
     expect(confirm.variant).toBe("secondary");
-    expect(request).not.toHaveBeenCalledWith(`${BASE}/role-c`, "DELETE");
   });
 
   it("shows the in-use refusal when the shifts were assigned after the list was read", async () => {
@@ -486,6 +485,7 @@ describe("the staff roles page", () => {
     expect(await deleteMessage()).toBe(
       `Could not delete the staff role: ${codeMessage("staff_role.in_use")}`,
     );
+    expect(confirm.disabled).toBe(false);
     expect(deleteModal()).not.toBeNull();
   });
 

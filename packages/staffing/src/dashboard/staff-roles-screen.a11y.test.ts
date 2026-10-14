@@ -11,7 +11,7 @@ afterEach(() => {
   setLocale("en");
 });
 
-const roles: StaffRole[] = (["red", "amber", "grey", "blue", "green", "purple"] as const).map(
+const staffRoles: StaffRole[] = (["red", "amber", "grey", "blue", "green", "purple"] as const).map(
   (colour, position) => ({
     id: `role-${colour}`,
     name: `Role ${position + 1}`,
@@ -68,7 +68,7 @@ const states: Record<string, () => Promise<void>> = {
     expect(table(el).shadowRoot!.textContent).toContain("No staff roles yet.");
   },
   "a list of every colour": async () => {
-    const el = await screen(async () => ({ staffRoles: roles }));
+    const el = await screen(async () => ({ staffRoles }));
     expect(table(el).shadowRoot!.querySelectorAll("tbody tr[data-row-key]")).toHaveLength(6);
   },
   "a load failure": async () => {
@@ -81,7 +81,7 @@ const states: Record<string, () => Promise<void>> = {
     const el = await screen(
       async () => {
         if (fail) throw { code: "connection.failed" };
-        return { staffRoles: roles };
+        return { staffRoles };
       },
       { liveData },
     );
@@ -93,26 +93,26 @@ const states: Record<string, () => Promise<void>> = {
     liveData.clear();
   },
   "a refused move": async () => {
-    const el = await screen(async () => ({ staffRoles: roles }), {
+    const el = await screen(async () => ({ staffRoles }), {
       write: refuse("staffing.invalid"),
     });
     await press(el, "move-down-role-red");
     expect(el.shadowRoot!.querySelector("[data-test=action-alert]")).not.toBeNull();
   },
   "the delete question": async () => {
-    const el = await screen(async () => ({ staffRoles: roles }));
+    const el = await screen(async () => ({ staffRoles }));
     await press(el, "delete-role-grey");
     await deleteModal(el).updateComplete;
     expect(deleteModal(el).textContent).toContain("Delete Role 3?");
   },
   "a staff role that shifts use": async () => {
-    const el = await screen(async () => ({ staffRoles: roles }));
+    const el = await screen(async () => ({ staffRoles }));
     await press(el, "delete-role-amber");
     await deleteModal(el).updateComplete;
     expect(deleteModal(el).textContent).toContain("Role 2 can't be deleted while 2 shifts use it.");
   },
   "a refused delete inside the question": async () => {
-    const el = await screen(async () => ({ staffRoles: roles }), {
+    const el = await screen(async () => ({ staffRoles }), {
       write: refuse("staff_role.in_use"),
     });
     await press(el, "delete-role-grey");
@@ -123,7 +123,7 @@ const states: Record<string, () => Promise<void>> = {
     );
   },
   "the read-only page": async () => {
-    const el = await screen(async () => ({ staffRoles: roles }), { readOnly: true });
+    const el = await screen(async () => ({ staffRoles }), { readOnly: true });
     expect(el.shadowRoot!.querySelector("[data-test=new-staff-role]")).toBeNull();
   },
 };
