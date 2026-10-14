@@ -3,6 +3,10 @@
 Date: 2026-10-12. Updated 2026-10-14 with the owner’s self-approval and automatic-clock-out rulings.
 Status: design agreed; A10-1 awaits the owner’s review before landing.
 
+Update 2026-10-14: parts 1 and 2 are built. The remaining implementation is tracked in
+[the workforce backlog](../../backlog/workforce.md). The original design below records the state
+when this spec was agreed.
+
 ## Why
 
 Spanish law requires a daily record of each worker's start and end times, kept four years, from the

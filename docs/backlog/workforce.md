@@ -5,19 +5,18 @@ their full text.
 
 ## A10. Clocking in and out — the working-time record
 
-**Staff cannot clock in or out today.** The _registro de jornada_ is a legal duty from the first day
+You can clock in, take breaks and clock out on an admitted till or venue handheld. The
+_registro de jornada_ is a legal duty from the first day
 the deli employs anyone ([design](../superpowers/specs/2026-07-22-workforce-and-time-record-design.md)).
 Built: the append-only, hash-chained time entries (per node since #268), contracts, the daily
 projection of worked time, correction requests and approvals, the Spanish export
 (`packages/workforce-es`), and the rota, absences, swaps, planned-versus-actual view and staff portal.
-But `clockIn`, `clockOut`, the break events and the correction functions in
-`packages/workforce/src/clocking.ts` have no caller outside the package:
-`apps/server/src/workforce-api.ts` serves the rota and says it is "plumbed ahead of a clock-in
-route". So the planned-versus-actual view has no actual hours to compare.
+The trading server connects the till adapter to `clockIn`, `clockOut` and the break events in
+`packages/workforce/src/clocking.ts`. Correction routes and screens remain open.
 
 Left, as the legal minimum:
 
-- a till clock-in and clock-out screen and its routes;
+- end-of-day automatic closure and the worker questions it creates;
 - correction requests and their approval, as routes and screens;
 - read access for the worker, their representatives and the labour inspectorate, with four years'
   retention, and a route that produces the export.
@@ -31,16 +30,27 @@ BOE up to 12 Oct 2026 (the spec's legal-basis table has the sources), so A10 bui
 draft and is checked against the final text if it is published. The time record cannot be edited once
 written, so its chain and correction paths take the owner's sign-off at land.
 
-Part 1 adds missing-entry corrections, worker and manager decisions, immediate confirmed automatic
+Part 1 added missing-entry corrections, worker and manager decisions, immediate confirmed automatic
 hours with a separate worker acknowledgment, stored admin-only self-approval (owner, 2026-10-14),
-pay-period closure, scoped frozen records and the Spanish history export. The library has no new
-route or screen yet. Reset/reseed old workforce venue folders before installing the nullable-recorder
+pay-period closure, scoped frozen records and the Spanish history export. The correction and export libraries still have no staff-facing route or screen. Reset/reseed old workforce venue folders before installing the nullable-recorder
 constraint migration (owner decision, 2026-10-13). The populated old-record migration test checks
 the refused rebuild and unchanged rows/head after rollback; the empty old-schema test upgrades.
 
 
-Part 2 has a reviewed [till-clocking plan](../superpowers/plans/2026-10-14-a10-2-till-clock-plan.md).
-Implementation has not started; parts 2–6 remain open.
+Part 2 connects till clocking through the reviewed
+[till-clocking plan](../superpowers/plans/2026-10-14-a10-2-till-clock-plan.md). New Counter and
+Handheld profiles include `clock-in`; enable it explicitly on an existing profile in Device profiles.
+At the first sign-in of the business day, you see Clock in and Cancel together. Cancel lets you work
+without clocking in, and the next sign-in asks again. After that, your name menu holds the clock-state
+dot, break actions, Clock in or Clock out, and Log out. On a phone these fold into More. Clock out
+ends a current break and records your finish together, then locks and logs out. Log out alone leaves
+your time record open. If the finish was recorded but logout fails, the till stays locked and shows
+Clocked out. A lost clock response is checked with a fresh own-state read before another write is
+available. An open shift in another location is shown with clock actions unavailable.
+
+My hours stays with part 5; no placeholder is offered in part 2. Parts 3–6 remain open: automatic
+closure/questions, corrections, hours and the export/access screens. The period-read cost and the
+correction waiting-list follow-ups remain in the backlog.
 
 ## A10 period read cost
 
