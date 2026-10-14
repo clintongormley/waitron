@@ -703,6 +703,26 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   recolours one, and it can be changed or cleared like any other. No data migration (CLAUDE.md §3:
   venues are reset). [Mockup](backlog/mockups/a648-pale-default-colours/1-pale-defaults.png)
 
+- **A651 — drop photos to upload them, and tidy the image library and its picker (owner,
+  2026-10-14; open).** Photos dropped anywhere on the library page upload at once, several at a
+  time, each named in the default language from its file name; one dropped in the upload window
+  fills its Photo field, which becomes a drop area instead of the browser's grey button. The
+  library's Upload photos button is drawn blue, the Preview label on each photo goes, and Edit and
+  Delete move into a ⋮ menu per photo. The picker loses its second "Image library" heading and its
+  big Edit and Delete buttons, keeps the ⋮ menu, a white Use image and Upload photos, and its
+  full-size photo view gains Use image. The Photo field's required mark turns red.
+  [Detail](backlog/catalogue.md#a651--drop-photos-to-upload-them-and-tidy-the-image-library-and-its-picker),
+  [mockups](backlog/mockups/a651-image-library/)
+
+- **A652 — frame a photo for its thumbnails (owner, 2026-10-14; open).** Edit photo gains
+  "Adjust framing", a window where the person drags the photo inside a square frame and zooms, with
+  square and 4:3 previews; the result is one setting per photo that every thumbnail uses (today
+  each shows the photo's centre). Edit photo also gains "Replace photo", which swaps the picture
+  and keeps its names and every use. Settles, while building, whether the library grid needs a
+  small copy instead of loading the full 1600-pixel photo for each tile.
+  [Detail](backlog/catalogue.md#a652--frame-a-photo-for-its-thumbnails),
+  [mockups](backlog/mockups/a652-photo-framing/)
+
 
 - **A product in more than one category (owner 2026-10-10, A461 amendment 4).** Define the
   storage, editor and what Move/Remove do to memberships. Products currently has one category;
@@ -1029,11 +1049,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
 - **The upload limit is 20 MB (owner decision 2026-09-23).** It bounds how large an upload the
   server will buffer; the decode is bounded by `MAX_INPUT_PIXELS` (100 million). What current
   phones produce has not been measured. Left open by photos shrunk on upload (#543).
-
-- **The library grid loads the full 1600-pixel copy for each tile**, 24 photos a page
-  (`packages/media/src/dashboard/image-library.ts`), about 4 MB at the average size. **Next
-  action:** decide whether the grid needs a thumbnail copy for slow Wi-Fi. Left open by photos
-  shrunk on upload (#543).
 
 - **Category authoring serialises across the whole database, and nobody has measured what that
   costs.** `withTransaction` admits one write transaction per venue file

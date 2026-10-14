@@ -791,6 +791,73 @@ twice](#the-product-editor-summarises-the-same-values-twice) (Nutritional info's
 the Descriptors fold at 390px in `docs/backlog.md`. Every change here is to an editor that saves,
 so its draft scope and `*.unsaved.test.ts` must keep passing with sections closed.
 
+## A651 — drop photos to upload them, and tidy the image library and its picker
+
+Owner, 2026-10-14, from screenshots of the library, the picker and the upload window. Boards, in
+[mockups/a651-image-library/](mockups/a651-image-library/): 1 the library page, 2 photos dragged
+over it, 3 just after the drop, 4 the picker, 5 the picker's full-size photo, 6 the upload window.
+Where a board and this text differ, this text wins. The library is
+`packages/media/src/dashboard/image-library.ts`; the picker
+(`packages/media/src/dashboard/image-picker.ts`) places that same component inside the window
+`apps/dashboard/src/widgets/image-upload.ts` opens, with its `picker` flag set.
+
+1. **Drop several photos on the library page** (boards 2, 3). The whole page accepts the drop and
+   says "Drop 3 photos to upload them" while photos are dragged over it. Each photo uploads straight
+   away, with no window, its default-language name taken from its file name (`patatas-bravas.jpg`
+   becomes "Patatas bravas": extension dropped, dashes and underscores to spaces, first letter
+   capital). While they upload, a bar reads "2 of 3 photos uploaded." and each new photo shows a
+   New badge; no message says the names came from the file names (owner). The person renames one
+   later with Edit. A photo the server reports as already in the library (`created: false`) is
+   reused, as one uploaded through the window is today (`image.duplicate_reused`). The page also says "Drop photos anywhere on this
+   page to upload them, or choose files", and choose files takes several files too.
+2. **The upload window's Photo field becomes a drop area** (board 6): "Drop a photo here, or choose
+   a file · JPEG, PNG or WebP, up to 20 MB". Once a photo is chosen it shows the photo, its file
+   name and size, and "Choose another". This is a shared field primitive in `packages/ui`, under
+   the rule that a screen does not draw its own form field (CLAUDE.md §3), with the tests a new
+   `wt-*` primitive needs. Dropping one photo here fills the field and does not upload until Save.
+   Whether its default-language name is pre-filled from the file name is open; board 6 shows it
+   filled.
+3. **The Photo field's required mark is red**, as the Name field's already is (today it is black).
+4. **Library page** (board 1): the Upload photo button reads "Upload photos" and is drawn blue
+   (`variant="primary"`; today it is drawn like every other button). The "Preview" label over each photo goes; clicking the photo still
+   opens it. Edit and Delete leave the tile for a ⋮ menu beside the photo's name.
+5. **Picker** (board 4): only the window's "Choose image" title shows; the library's own "Image
+   library" heading goes. Each photo keeps the same ⋮ menu (Edit, Delete) and a full-width
+   Use image drawn white (owner: not blue, so a page of photos is not a page of blue buttons). The
+   big Edit and Delete buttons and the Preview label go. Upload photos stays (owner), so a photo
+   can be added and used without leaving the product.
+6. **The picker's full-size photo** (board 5) gains Use image, drawn blue, beside Back. Today it
+   opens with no way to choose the photo from it.
+
+## A652 — frame a photo for its thumbnails
+
+Owner, 2026-10-14. Boards, in [mockups/a652-photo-framing/](mockups/a652-photo-framing/): 1 Edit
+photo, 2 Adjust framing. A first draft put the framing inside Edit photo; the owner found it messy,
+so it has a window of its own.
+
+**Today** every thumbnail shows the centre of the photo (`object-fit: cover` with no position):
+squares in the dashboard's lists and trees, 4:3 on the till's buttons
+(`apps/till/src/widgets/menu-browser.ts`) and on the dashboard's device home preview. A photo with
+the dish in its lower half shows mostly table. Only one copy of each photo is stored, its long edge
+shrunk to 1600 pixels (`STORED_LONG_EDGE`, `packages/media/src/prepare.ts`).
+
+1. **Edit photo** (board 1) shows the photo as framed, with its file name and two links:
+   Adjust framing and Replace photo. The names follow as today.
+2. **Adjust framing** (board 2) is its own window: the photo inside a large square frame, dragged
+   to place it, a Zoom slider under it, then two small previews labelled Lists (square) and Till
+   buttons (4:3). Reset returns to the centre at no zoom; Done goes back to Edit photo, and nothing
+   is saved until Save there.
+3. **One framing per photo**, stored as a point on the photo and a zoom, and used by every place
+   that shows it in any shape (recommended over one framing per use: more work for the person, and
+   no restaurant case for it was found). Every thumbnail in the list above reads it.
+4. **Replace photo** swaps the picture and keeps the photo's names and every product, variant,
+   section, folder and receipt logo that uses it. It is new: editing a photo today cannot change its file.
+   Whether the framing resets on a replace is open.
+5. **The library grid's size.** The grid loads the full 1600-pixel copy for each tile, 24 a page,
+   about 4 MB at the average size (left open by photos shrunk on upload, #543). Decide while
+   building whether framing also produces a small copy for thumbnails; that question was its own
+   entry until this one.
+
 ## Decisions and deliberate limits
 
 **Table toolbars and closure (A462, owner 2026-10-10).** Customise follows search and stays last
