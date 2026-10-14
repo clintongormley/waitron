@@ -1679,14 +1679,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   choose: keep one bar, one track per department, or one label naming both where times overlap —
   left open by A506-12.
 
-- **A584. Prep stations get colours, and the Routes grid paints each cell with its station's colour
-  and can show one period at a time (owner 2026-10-13)** — OPEN, not started. Each station picks a
-  colour from a larger set than the six menu periods use; a cell takes its station's colour, and each
-  period line under it a dot in the colour of the station it sends to. A new dropdown above the grid,
-  defaulting to "All periods", shows where everything goes during one period, so each cell has one
-  station and one colour. Design settled with the owner from mock-ups the same day.
-  [Detail](backlog/kitchen.md#a584-prep-stations-get-colours-and-the-routes-grid-paints-each-cell-with-its-stations-colour-and-can-show-one-period-at-a-time-owner-2026-10-13)
-
 - **A656 — tidy the Routes tab and its cell editor (owner, 2026-10-14; open).** In
   `packages/venue-service/src/dashboard/`: (1) the editor's fallback station field
   (`routing-cell-editor.ts`, `routing.any_other_time`, Spanish "El resto del tiempo") reads
@@ -1697,8 +1689,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   Expand all and Collapse all become one button, "Collapse all" while every category is open and
   "Expand all" otherwise, as `wt-data-table`'s own does, always to the right of the search box,
   which fills the rest of the row as on Products (today it is capped and the toolbar wraps on a
-  phone). A584's period dropdown joins the same toolbar. The editor's height is the full-height
-  dialog entry under "Users, sign-in and the dashboard shell".
+  phone). A584's Period field already sits after the search box; the tidy keeps it there. The
+  editor's height is the full-height dialog entry under "Users, sign-in and the dashboard shell".
   [Detail](backlog/kitchen.md#a656--tidy-the-routes-tab-and-its-cell-editor),
   [screenshots](backlog/mockups/a656-routes-tab/)
 
