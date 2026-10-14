@@ -197,7 +197,7 @@ outside (menu publication dates, imports), so it needs a decision.
 ## Decisions and deliberate limits
 
 - Once two special days share a date, a save of either day that keeps that date is refused with
-  `special_day.date_taken` (A577, 2026-10-14).
+  `special_day.date_taken` (A577, #1702, 2026-10-14).
 
 - **Opening hours are seasons and special days (A506, owner, 2026-10-11).** Every venue has
   seasons that cover the whole year and repeat every year, each with its own week per department;
