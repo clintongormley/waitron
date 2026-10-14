@@ -9,6 +9,7 @@ import {
   submitOnEnter,
   draftScopeFor,
   saveActionState,
+  MAP_SEPARATOR,
 } from "@waitron/ui";
 import type { WtDialog, DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -52,7 +53,7 @@ export class TillTodayNameDialog extends LitElement {
   @property({ attribute: false }) refusal: TodayNameRefusal | null = null;
 
   @state() private attempted = false;
-  readonly #placeholder = new PlaceholderFit(this, () => this.normalName, "+");
+  readonly #placeholder = new PlaceholderFit(this, () => this.normalName, MAP_SEPARATOR);
   @state() private refusalDismissed = false;
   @state() private active = true;
   #scope?: DraftScope<string>;
