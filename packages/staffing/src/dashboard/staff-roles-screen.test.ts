@@ -17,7 +17,10 @@ import "./staff-roles-screen.js";
 
 const BASE = "/management-api/staffing/staff-roles";
 
-const waiter: StaffRole = {
+/** A staff role with what uses it, which only its delete-impact read reports. */
+type Role = StaffRole & { blockCount: number; shiftCount: number };
+
+const waiter: Role = {
   id: "role-w",
   name: "Waiter",
   colour: "green",
@@ -26,7 +29,7 @@ const waiter: StaffRole = {
   blockCount: 0,
   shiftCount: 0,
 };
-const cook: StaffRole = {
+const cook: Role = {
   id: "role-c",
   name: "Cook",
   colour: "red",
@@ -35,7 +38,7 @@ const cook: StaffRole = {
   blockCount: 1,
   shiftCount: 2,
 };
-const runner: StaffRole = {
+const runner: Role = {
   id: "role-r",
   name: "Runner",
   colour: "purple",
@@ -46,8 +49,17 @@ const runner: StaffRole = {
 };
 const people: StaffPerson[] = [{ personId: "p-ana", displayName: "Ana", status: "active" }];
 
+/** What the list read answers for `role`: it does not say what uses it. */
+const listed = ({ id, name, colour, position, holderIds }: Role): StaffRole => ({
+  id,
+  name,
+  colour,
+  position,
+  holderIds,
+});
+
 /** What the server's delete-impact read answers for `staffRole`. */
-function impactOf(staffRole: StaffRole): DeleteImpact {
+function impactOf(staffRole: Role): DeleteImpact {
   const holders = staffRole.holderIds.map((id) => ({
     id,
     name: people.find((person) => person.personId === id)?.displayName ?? id,
@@ -80,11 +92,11 @@ type Answer = (body: unknown) => unknown;
 type Routes = Record<string, Answer>;
 
 /** A request that answers `"<METHOD> <path>"` from `routes`, and lists `roles` for the page's read. */
-function fakeRequest(roles: () => StaffRole[], routes: Routes = {}) {
+function fakeRequest(roles: () => Role[], routes: Routes = {}) {
   return vi.fn(async (path: string, method: string = "GET", body?: unknown) => {
     const route = routes[`${method} ${path}`];
     if (route) return route(body);
-    if (method === "GET" && path === BASE) return { staffRoles: roles() };
+    if (method === "GET" && path === BASE) return { staffRoles: roles().map(listed) };
     if (method === "GET" && path === "/management-api/staff") return people;
     const impact = /^\/management-api\/staffing\/staff-roles\/([^/]+)\/delete-impact$/.exec(path);
     if (method === "GET" && impact)
@@ -331,7 +343,7 @@ describe("the staff roles page", () => {
     await mount(fakeRequest(() => [waiter, cook]));
     await choose("edit-role-c");
     expect(dialog().open).toBe(true);
-    expect(dialog().staffRole).toEqual(cook);
+    expect(dialog().staffRole).toEqual(listed(cook));
   });
 
   it("does not read the list again when the dialog is cancelled", async () => {

@@ -16,8 +16,6 @@ const waiter: StaffRole = {
   colour: "blue",
   position: 0,
   holderIds: [],
-  blockCount: 0,
-  shiftCount: 0,
 };
 const BASE = "/management-api/staffing/staff-roles";
 
@@ -53,8 +51,6 @@ describe("StaffingApi", () => {
     expect(liveData.interests).toEqual([
       { type: "staff_roles" },
       { type: "person_staff_roles" },
-      { type: "staffing_blocks" },
-      { type: "shift_assignments" },
       { type: "persons" },
     ]);
     fetchImpl.mockResolvedValue(jsonResponse({ staffRoles: [] }));

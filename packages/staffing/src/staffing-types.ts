@@ -9,6 +9,4 @@ export interface StaffRole {
   colour: CalendarColour;
   position: number;
   holderIds: string[];
-  blockCount: number;
-  shiftCount: number;
 }

@@ -108,8 +108,6 @@ describe("the staff-role routes", () => {
       colour: "green",
       position: 0,
       holderIds: [],
-      blockCount: 0,
-      shiftCount: 0,
     });
     await answers(await r.send("GET", "", r.supervisor), 200, { staffRoles: [staffRole] });
   });

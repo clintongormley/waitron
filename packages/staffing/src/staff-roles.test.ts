@@ -80,7 +80,7 @@ async function assignShift(v: Venue, personId: string, staffRoleId: string) {
 }
 
 describe("staff roles", () => {
-  it("creates, lists in position order and counts holders, blocks and shifts", async () => {
+  it("creates and lists in position order with each role's holders", async () => {
     const v = await seedVenue(suite.db);
     const chef = await inTx((tx) =>
       createStaffRole(tx, v.cfg, { name: "Head chef", colour: "purple" }),
@@ -94,30 +94,33 @@ describe("staff roles", () => {
       colour: "purple",
       position: 0,
       holderIds: [],
-      blockCount: 0,
-      shiftCount: 0,
     });
     expect(sous).toMatchObject({ name: "Sous chef", position: 1 });
     const held = await inTx((tx) => setStaffRoleHolders(tx, v.cfg, sous.id, [v.ana, v.marc]));
     expect(held.holderIds).toEqual([v.ana, v.marc].sort());
     const listed = await inTx((tx) => listStaffRoles(tx, v.cfg));
     expect(listed.map((r) => r.name)).toEqual(["Head chef", "Sous chef"]);
-    expect(listed[1]).toMatchObject({
-      holderIds: [v.ana, v.marc].sort(),
-      blockCount: 0,
-      shiftCount: 0,
-    });
+    expect(listed).toEqual([{ ...chef }, { ...sous, holderIds: [v.ana, v.marc].sort() }]);
+  });
 
+  it("counts only the role's own painted blocks and shifts in a delete's impact", async () => {
+    const v = await seedVenue(suite.db);
+    const chef = await inTx((tx) =>
+      createStaffRole(tx, v.cfg, { name: "Head chef", colour: "purple" }),
+    );
+    const sous = await inTx((tx) =>
+      createStaffRole(tx, v.cfg, { name: "Sous chef", colour: "green" }),
+    );
     await paintBlock(v, chef.id, 1);
     await paintBlock(v, chef.id, 2);
     await assignShift(v, v.ana, chef.id);
-    const counted = await inTx((tx) => listStaffRoles(tx, v.cfg));
-    expect(counted[0]).toMatchObject({ holderIds: [], blockCount: 2, shiftCount: 1 });
-    expect(counted[1]).toMatchObject({ blockCount: 0, shiftCount: 0 });
-    const renamed = await inTx((tx) =>
-      updateStaffRole(tx, v.cfg, chef.id, { name: "Chef", colour: "purple" }),
-    );
-    expect(renamed).toMatchObject({ name: "Chef", blockCount: 2, shiftCount: 1 });
+    const chefImpact = await inTx((tx) => readStaffRoleDeleteImpact(tx, v.cfg, chef.id));
+    expect(chefImpact.refusals).toEqual([
+      { code: "staff_role.in_use", params: { staffRoleId: chef.id, shiftCount: 1 }, targets: [] },
+    ]);
+    expect(chefImpact.removes).toEqual([{ key: "staff_role_blocks", count: 2, targets: [] }]);
+    const sousImpact = await inTx((tx) => readStaffRoleDeleteImpact(tx, v.cfg, sous.id));
+    expect(sousImpact).toMatchObject({ refusals: [], removes: [] });
   });
 
   it("lists only the venue's own roles", async () => {

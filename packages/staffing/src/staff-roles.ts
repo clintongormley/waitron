@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, ne, sql, type SQL } from "drizzle-orm";
+import { and, asc, eq, inArray, ne, sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import {
@@ -88,31 +88,13 @@ async function readStaffRoles(
     .innerJoin(staffRoles, eq(staffRoles.id, personStaffRoles.staffRoleId))
     .where(scope)
     .orderBy(asc(personStaffRoles.personId));
-  const blocks = await countsByStaffRole(tx, scope, staffingBlocks);
-  const shiftsUsing = await countsByStaffRole(tx, scope, shiftAssignments);
   return rows.map((staffRole) => ({
     ...staffRole,
     holderIds: holders.filter((h) => h.staffRoleId === staffRole.id).map((h) => h.personId),
-    blockCount: blocks.get(staffRole.id) ?? 0,
-    shiftCount: shiftsUsing.get(staffRole.id) ?? 0,
   }));
 }
 
-async function countsByStaffRole(
-  tx: Transaction,
-  scope: SQL | undefined,
-  table: typeof staffingBlocks | typeof shiftAssignments,
-): Promise<Map<string, number>> {
-  const rows = await tx
-    .select({ staffRoleId: table.staffRoleId, n: tally })
-    .from(table)
-    .innerJoin(staffRoles, eq(staffRoles.id, table.staffRoleId))
-    .where(scope)
-    .groupBy(table.staffRoleId);
-  return new Map(rows.map((row) => [row.staffRoleId, row.n]));
-}
-
-/** The location's staff roles in position order, with who holds each and how much uses it. */
+/** The location's staff roles in position order, with who holds each. */
 export function listStaffRoles(tx: Transaction, cfg: Cfg): Promise<StaffRole[]> {
   return readStaffRoles(tx, cfg, null);
 }

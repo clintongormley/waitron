@@ -13,8 +13,6 @@ const waiter: StaffRole = {
   colour: "green",
   position: 0,
   holderIds: ["p-ana"],
-  blockCount: 0,
-  shiftCount: 0,
 };
 const api = {
   listPeople: vi.fn(async () => [

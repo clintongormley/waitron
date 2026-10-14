@@ -12,8 +12,6 @@ const waiter: StaffRole = {
   colour: "green",
   position: 0,
   holderIds: [],
-  blockCount: 0,
-  shiftCount: 0,
 };
 let el: StaffRoleDialog;
 let locale: string;
