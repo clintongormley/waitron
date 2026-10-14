@@ -72,7 +72,7 @@ describe("till clocking integration", () => {
     );
     f.api.login.mockImplementationOnce(async (personId) => {
       f.setState(clockState("out", null, personId));
-      return { personId, displayName: "Bea", permissions: [] };
+      return { personId, displayName: "Bea", permissions: [], locale: null };
     });
     await signIn(f.el, "p2");
     await vi.waitFor(() => expect(clockPage(f.el)).not.toBeNull());
