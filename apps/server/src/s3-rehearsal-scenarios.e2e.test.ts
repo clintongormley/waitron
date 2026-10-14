@@ -111,7 +111,7 @@ describe("the S3 rehearsal scenarios, against versitygw", () => {
       venueId: "venue-1",
       scratch: await mkdtemp(join(root, `${label}-`)),
       signal: stop.signal,
-      send: (command) => admin.send(command),
+      send: (command, options) => admin.send(command, options),
     });
   }
 

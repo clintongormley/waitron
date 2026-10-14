@@ -21,7 +21,6 @@ import {
   type GetBucketVersioningCommandOutput,
   GetObjectCommand,
   type GetObjectCommandOutput,
-  ListMultipartUploadsCommand,
   type ListMultipartUploadsCommandOutput,
   ListObjectsV2Command,
   type ListObjectsV2CommandOutput,
@@ -63,6 +62,7 @@ import {
   writeReceipt,
 } from "./aws-rehearsal-receipt.js";
 import { fixtureBudget } from "./fixture-budget.js";
+import { listPages, listUploads, type Outcome } from "./s3-listing.js";
 import { settleWithin } from "./settle-within.js";
 
 export type AwsRehearsalRefusalReason =
@@ -350,13 +350,7 @@ const LABEL = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const RECEIPT_DIR = /^\/[A-Za-z0-9._/@-]+$/;
 const CHILD_GRACE_MS = 5_000;
 const CHILD_POLL_MS = 100;
-const MAX_LIST_PAGES = 10_000;
 const DELETE_BATCH = 1000;
-
-interface Outcome<T> {
-  output?: T;
-  error?: unknown;
-}
 
 interface CallExtra {
   objectRole?: string;
@@ -479,36 +473,6 @@ async function stopChildren(
     : { step: "stop-child", outcome: "failed", count: left };
 }
 
-/**
- * Yields each page's answer until one fails or is the last. A truncated page whose next position is
- * missing or already seen is followed by a failure carrying `repeated`; at most MAX_LIST_PAGES are read.
- */
-async function* listPages<T extends { IsTruncated?: boolean | undefined }, P>(
-  list: (position: P | undefined) => Promise<Outcome<T>>,
-  nextPosition: (output: T) => { position: P; seen: string } | undefined,
-  repeated: string,
-): AsyncGenerator<Outcome<T>> {
-  const seen = new Set<string>();
-  let position: P | undefined;
-  for (let page = 0; page < MAX_LIST_PAGES; page += 1) {
-    const listed = await list(position);
-    yield listed;
-    if (listed.error !== undefined || listed.output?.IsTruncated !== true) return;
-    const next = nextPosition(listed.output);
-    if (next === undefined || seen.has(next.seen)) {
-      yield { error: new AwsRehearsalFailed(repeated) };
-      return;
-    }
-    seen.add(next.seen);
-    position = next.position;
-  }
-}
-
-interface UploadMarkers {
-  keyMarker: string | undefined;
-  uploadIdMarker: string | undefined;
-}
-
 async function abortUploads(
   send: Send,
   bucket: string,
@@ -533,33 +497,15 @@ async function abortUploads(
   };
   for (const upload of tracked) await abort(upload);
 
-  for await (const listed of listPages<ListMultipartUploadsCommandOutput, UploadMarkers>(
-    (markers) =>
-      send(
-        new ListMultipartUploadsCommand({
-          Bucket: bucket,
-          ...(markers?.keyMarker === undefined ? {} : { KeyMarker: markers.keyMarker }),
-          ...(markers?.uploadIdMarker === undefined
-            ? {}
-            : { UploadIdMarker: markers.uploadIdMarker }),
-        }),
-        "ListMultipartUploads",
-      ),
-    ({ NextKeyMarker: keyMarker, NextUploadIdMarker: uploadIdMarker }) => ({
-      position: { keyMarker, uploadIdMarker },
-      seen: `${keyMarker ?? ""}\u0000${uploadIdMarker ?? ""}`,
-    }),
-    "ListMultipartUploads repeated its marker",
+  for await (const listed of listUploads(
+    (command) => send<ListMultipartUploadsCommandOutput>(command, "ListMultipartUploads"),
+    { bucket, failure: (message) => new AwsRehearsalFailed(message) },
   )) {
     if (listed.error !== undefined) {
       firstError ??= listed.error;
       break;
     }
-    for (const upload of listed.output?.Uploads ?? []) {
-      if (upload.Key !== undefined && upload.UploadId !== undefined) {
-        await abort({ key: upload.Key, uploadId: upload.UploadId });
-      }
-    }
+    for (const upload of listed.uploads) await abort(upload);
   }
   const entry =
     firstError === undefined
@@ -592,7 +538,7 @@ async function deleteObjects(send: Send, bucket: string): Promise<TeardownEntry>
       ),
     ({ NextContinuationToken: token }) =>
       token === undefined ? undefined : { position: token, seen: token },
-    "ListObjectsV2 repeated its continuation token",
+    () => new AwsRehearsalFailed("ListObjectsV2 repeated its continuation token"),
   )) {
     if (listed.error !== undefined) {
       failure = listed.error;
@@ -1250,24 +1196,9 @@ async function runOwned<T>(
       }
       const send = sender(client, "inventory", callDeps, signal);
       const found: TrackedUpload[] = [];
-      for await (const listed of listPages<ListMultipartUploadsCommandOutput, UploadMarkers>(
-        (markers) =>
-          send(
-            new ListMultipartUploadsCommand({
-              Bucket: bucket,
-              Prefix: prefix,
-              ...(markers?.keyMarker === undefined ? {} : { KeyMarker: markers.keyMarker }),
-              ...(markers?.uploadIdMarker === undefined
-                ? {}
-                : { UploadIdMarker: markers.uploadIdMarker }),
-            }),
-            "ListMultipartUploads",
-          ),
-        ({ NextKeyMarker: keyMarker, NextUploadIdMarker: uploadIdMarker }) => ({
-          position: { keyMarker, uploadIdMarker },
-          seen: `${keyMarker ?? ""}\u0000${uploadIdMarker ?? ""}`,
-        }),
-        "ListMultipartUploads repeated its marker",
+      for await (const listed of listUploads(
+        (command) => send<ListMultipartUploadsCommandOutput>(command, "ListMultipartUploads"),
+        { bucket, prefix, failure: (message) => new AwsRehearsalFailed(message) },
       )) {
         if (listed.error instanceof AwsRehearsalFailed) throw listed.error;
         if (listed.error !== undefined) {
@@ -1275,11 +1206,7 @@ async function runOwned<T>(
             `ListMultipartUploads failed: ${receiptErrorName(nameOf(listed.error))}`,
           );
         }
-        for (const upload of listed.output?.Uploads ?? []) {
-          if (upload.Key !== undefined && upload.UploadId !== undefined) {
-            found.push({ key: upload.Key, uploadId: upload.UploadId });
-          }
-        }
+        found.push(...listed.uploads);
       }
       return found;
     },

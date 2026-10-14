@@ -4,21 +4,22 @@ import { localS3Fixture } from "./local-s3-fixture.js";
 
 function fixture() {
   const send = vi.fn();
+  const stop = new AbortController();
   const built = localS3Fixture({
     bucket: {
       endpoint: "http://127.0.0.1:9",
       region: "us-east-1",
       bucket: "waitron-loop",
       prefix: "local-run/delete-many/",
-      accessKeyId: "id",
+      accessKeyId: "access-key",
       secretAccessKey: "secret",
     },
     venueId: "venue-1",
     scratch: "/nonexistent",
-    signal: new AbortController().signal,
+    signal: stop.signal,
     send,
   });
-  return { built, send };
+  return { built, send, stop };
 }
 
 describe("the local S3 scenario fixture", () => {
@@ -95,5 +96,68 @@ describe("the local S3 scenario fixture", () => {
         UploadIdMarker: "1",
       },
     ]);
+  });
+
+  it.each([
+    ["the bucket root", ""],
+    ["another folder", "local-run/other/"],
+    ["a prefix that only starts its own", "local-run/delete"],
+  ])("refuses to list under %s, before any command", async (_label, prefix) => {
+    const { built, send } = fixture();
+    await expect(built.fixture.ownedUploads(prefix)).rejects.toThrow(/prefix-not-issued/);
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("fails on a listing that repeats its marker rather than asking again", async () => {
+    const { built, send } = fixture();
+    const repeating = {
+      Uploads: [{ Key: "local-run/delete-many/a", UploadId: "1" }],
+      IsTruncated: true,
+      NextKeyMarker: "local-run/delete-many/a",
+      NextUploadIdMarker: "1",
+    };
+    send
+      .mockResolvedValueOnce(repeating)
+      .mockResolvedValueOnce(repeating)
+      .mockResolvedValueOnce(repeating)
+      .mockResolvedValueOnce({});
+    await expect(built.fixture.ownedUploads("local-run/delete-many/")).rejects.toThrow(
+      "ListMultipartUploads repeated its marker",
+    );
+    expect(send).toHaveBeenCalledTimes(2);
+  });
+
+  it("hands each listing the stop signal and asks for no page once it is stopped", async () => {
+    const { built, send, stop } = fixture();
+    send.mockImplementationOnce(async () => {
+      stop.abort(new Error("stopped for the test"));
+      return {
+        IsTruncated: true,
+        NextKeyMarker: "local-run/delete-many/a",
+        NextUploadIdMarker: "1",
+      };
+    });
+    send.mockResolvedValueOnce({});
+    await expect(built.fixture.ownedUploads("local-run/delete-many/")).rejects.toThrow(
+      "stopped for the test",
+    );
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(send.mock.calls[0]![1]).toEqual({ abortSignal: stop.signal });
+  });
+
+  it("passes on a listing's failure", async () => {
+    const { built, send } = fixture();
+    const denied = new Error("denied");
+    send.mockRejectedValueOnce(denied);
+    await expect(built.fixture.ownedUploads("local-run/delete-many/")).rejects.toBe(denied);
+  });
+
+  it.each([
+    ["an upload id the receipt could not carry", "s3://elsewhere/upload"],
+    ["an upload id holding the access key", "upload-id-with-access-key"],
+  ])("refuses to track %s and keeps nothing", (_label, uploadId) => {
+    const { built } = fixture();
+    expect(() => built.fixture.trackUpload("k", uploadId)).toThrow(/upload-id-refused/);
+    expect(built.tracked).toEqual([]);
   });
 });
