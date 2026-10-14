@@ -24,6 +24,10 @@ export interface FloorMapTable {
   fill: FloorMapFill;
   dot: FloorMapDot | null;
   joinId: string | null;
+  /** Today's name when it differs from `label`. */
+  name?: string;
+  /** The merge's name today; every member carries the same. */
+  groupName?: string;
   /** A fixed table is not drawn moved by a drag: a copy follows the finger. Unset is movable. */
   fixed?: boolean;
   /** Groups sharing one are drawn linked by a line and named once: one party at several groups. */
@@ -134,7 +138,7 @@ function groupsOf(tables: readonly FloorMapTable[]): Group[] {
       key,
       members,
       box: bounds(members.map((m) => m.placement))!,
-      label: mergeLabel(members.map((m) => m.label)),
+      label: members[0]!.groupName ?? mergeLabel(members.map((m) => m.name ?? m.label)),
       drawsName: true,
       fixed: members.some((m) => m.fixed === true),
     };
@@ -154,7 +158,12 @@ function linksOf(groups: readonly Group[]): Group[][] {
   const links = [...byLink.values()].filter((linked) => linked.length > 1);
   for (const linked of links) {
     linked.sort((a, b) => inNumberOrder(a.members[0]!.label, b.members[0]!.label));
-    const label = mergeLabel(linked.flatMap((g) => g.members.map((m) => m.label)));
+    const named = linked.some((g) =>
+      g.members.some((m) => m.name !== undefined || m.groupName !== undefined),
+    );
+    const label = named
+      ? mapLabel(linked.map((g) => g.label))
+      : mergeLabel(linked.flatMap((g) => g.members.map((m) => m.label)));
     for (const group of linked) {
       group.label = label;
       group.drawsName = group === linked[0];

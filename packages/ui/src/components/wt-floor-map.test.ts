@@ -393,3 +393,67 @@ it("watches its size again when put back", async () => {
   await settled(el);
   expect(boxOf(el, "t1").width).toBe(200);
 });
+
+it("draws a merge's own name when it has one", async () => {
+  const el = await map([
+    t("bar", "Bar", { x: 0 }, { joinId: "j", groupName: "García birthday" }),
+    t("c4", "Counter 4", { x: 8 }, { joinId: "j", groupName: "García birthday", name: "Window" }),
+  ]);
+  expect(within(el, "name", "bar")!.textContent).toBe("García birthday");
+  expect(button(el, "bar").getAttribute("aria-label")).toBe("García birthday, Free");
+});
+
+it("names a merge from its tables' own names where they have one", async () => {
+  const el = await map([
+    t("c4", "Counter 4", { x: 8 }, { joinId: "j", name: "Window" }),
+    t("bar", "Bar", { x: 0 }, { joinId: "j" }),
+  ]);
+  expect(within(el, "name", "bar")!.textContent).toBe("Bar+Window");
+});
+
+it("draws a single table's own name", async () => {
+  const el = await map([t("c4", "Counter 4", {}, { name: "Window" })]);
+  expect(within(el, "name", "c4")!.textContent).toBe("Window");
+  expect(button(el, "c4").getAttribute("aria-label")).toBe("Window, Free");
+});
+
+it("keeps a named merge's button on its first member by saved label", async () => {
+  const el = await map([
+    t("ten", "10", { x: 8 }, { joinId: "j", name: "A window" }),
+    t("four", "4", { x: 0 }, { joinId: "j", name: "Z corner" }),
+  ]);
+  const buttons = el.shadowRoot!.querySelectorAll<HTMLElement>('[part="table"]');
+  expect(buttons).toHaveLength(1);
+  expect(buttons[0]!.dataset["tableId"]).toBe("four");
+  expect(within(el, "name", "four")!.textContent).toBe("A window+Z corner");
+});
+
+const shownNames = (el: WtFloorMap) =>
+  [...el.shadowRoot!.querySelectorAll<HTMLElement>('[part="name"]')].map((n) => n.textContent);
+
+it("names a linked party with no names by all its tables in number order", async () => {
+  const el = await map([
+    t("m10", "Bar 10", { x: 0 }, { linkId: "p", joinId: "j" }),
+    t("m4", "Bar 4", { x: 8 }, { linkId: "p", joinId: "j" }),
+    t("b5", "Bar 5", { x: 16 }, { linkId: "p" }),
+  ]);
+  expect(shownNames(el)).toEqual(["Bar 4+5+10"]);
+});
+
+it("names a linked party with names by its groups' names in the groups' order", async () => {
+  const el = await map([
+    t("m10", "Bar 10", { x: 0 }, { linkId: "p", joinId: "j", groupName: "García birthday" }),
+    t("m4", "Bar 4", { x: 8 }, { linkId: "p", joinId: "j", groupName: "García birthday" }),
+    t("b5", "Bar 5", { x: 16 }, { linkId: "p" }),
+  ]);
+  expect(shownNames(el)).toEqual(["García birthday+Bar 5"]);
+  expect(button(el, "b5").getAttribute("aria-label")).toBe("García birthday+Bar 5, Free");
+});
+
+it("names a linked party by a lone table's own name in the groups' order", async () => {
+  const el = await map([
+    t("b2", "Bar 2", { x: 0 }, { linkId: "p", name: "Window" }),
+    t("b1", "Bar 1", { x: 8 }, { linkId: "p" }),
+  ]);
+  expect(shownNames(el)).toEqual(["Bar 1+Window"]);
+});
