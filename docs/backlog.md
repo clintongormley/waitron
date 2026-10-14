@@ -3512,11 +3512,11 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   rows the first resolved. The comment at `listAttempting` now says so. Found by #558 while pruning
   comments.
 
-- **Two `packages/payments-stripe` test-config leftovers from #570**: `tenant-scoping.test.ts` is
-  named for tenant scoping but guards that no source file opens a bare `.transaction(`, and
-  `vitest.config.ts` leaves `src/stripe-client.ts` out of coverage although the normal suite reaches
-  it (CLAUDE.md §2). Left open by A633, whose reversal half is the "fresh key each time" entry.
-  [Detail](backlog/payments.md#two-packagespayments-stripe-test-config-leftovers-from-570)
+- **`packages/payments-stripe`'s `tenant-scoping.test.ts` is named for tenant scoping but guards
+  that no source file opens a bare `.transaction(`.** Left open by A633.
+
+- **`packages/payments-stripe`'s `vitest.config.ts` leaves `src/stripe-client.ts` out of coverage
+  although the normal suite reaches it** (CLAUDE.md §2). Left open by A633.
 
 - **The Stripe webhook endpoint still has to be repointed by hand, at Stripe** — left behind by the
   tenant-column removal (#378, 2026-09-16). **Next action:** change it in the Stripe dashboard

@@ -3,18 +3,6 @@
 The open entries are listed in [the backlog](../backlog.md), under "Payments and card readers". This file holds
 their full text.
 
-## Two `packages/payments-stripe` test-config leftovers from #570
-
-- Found by #570 and not changed (each a code or config change, not a comment):
-  `tenant-scoping.test.ts` is named for tenant scoping but now guards that no source file opens a
-  bare `.transaction(`; and `vitest.config.ts` leaves `src/stripe-client.ts` out of coverage although
-  #570's review made that wrapper throw and two tests in the normal suite failed, so the normal run
-  does reach it — CLAUDE.md §2 says a gap is never closed by an exclude over code a test could
-  reach. The same entry's two "throws payment.not_found" cases now assert the code (A633). Its
-  reversal retry-safety point (a retried `reverseViaStripe` sends a second real refund, because each
-  call makes a fresh idempotency key) is the entry "The card refund path records only after the
-  provider call, with a fresh key each time".
-
 ## The Stripe webhook endpoint still has to be repointed by hand, at Stripe
 
 **Names left behind by the tenant-column removal (#378, 2026-09-16):**
