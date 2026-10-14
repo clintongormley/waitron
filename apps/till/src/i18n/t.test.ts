@@ -43,6 +43,11 @@ it("preserves an empty own translation", () => {
   expect(pickLocale({ en: "Milk", es: "" }, "es-ES")).toBe("");
 });
 
+it.each([null, undefined])("falls back to English for an own nullish translation %s", (es) => {
+  const entry = { en: "Milk", es } as unknown as { en: string; es: string };
+  expect(pickLocale(entry, "es-ES")).toBe("Milk");
+});
+
 it("selects an entry's text using the active locale when no locale is passed", () => {
   const previous = currentLocale();
   try {
