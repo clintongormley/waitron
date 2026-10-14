@@ -3076,7 +3076,27 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 
 - **A405 — printer details and the print queue (owner, 2026-10-08; open; low priority; not queued —
   owner 2026-10-08: take it from here when a lane has room; after A404).**
-  [Detail](backlog/printers.md#a405--printer-details-and-the-print-queue)
+  [Detail](backlog/printers.md#a405--printer-details-and-the-print-queue),
+  [mockups](backlog/mockups/a405-printer-details/)
+
+- **A661 — the full-invoice printer is chosen on the device profile (owner, 2026-10-14; open).**
+  A fourth printer role beside receipts, payment slips and the cash drawer, offering A4 and receipt
+  printers alike; the location-wide "Printer for A4 invoices" goes. The Orders screen offers every
+  printer, the original's chosen by default.
+  [Detail](backlog/printers.md#a661--the-full-invoice-printer-is-chosen-on-the-device-profile)
+
+- **A662 — tidy the Edit receipt dialog, and a default tax-agency description (owner, 2026-10-14;
+  open).** A department with no description uses the Veri\*Factu default "Venta en establecimiento",
+  so the Departments warning goes and no sale is refused for it. The dialog opens at full width,
+  loses its grey address copy and a stray line, and shows the logo small with Remove beside it.
+  [Detail](backlog/printers.md#a662--tidy-the-edit-receipt-dialog-and-a-default-tax-agency-description),
+  [mockup](backlog/mockups/a662-edit-receipt/1-logo.png)
+
+- **A663 — receipts and full invoices that are easier to read (owner, 2026-10-14; open).** Ruled
+  sections, a large TOTAL (ask the asesor first), one row per item on a full invoice, the registered
+  address once or labelled, "× 2" for quantities, VAT rates like "10%" and "17,5%", guests and per
+  person, and an optional drink/food subtotal. [Detail](backlog/printers.md#a663--receipts-and-full-invoices-that-are-easier-to-read),
+  [mockups](backlog/mockups/a663-receipt-layout/)
 
 - Read-back gap: the Impresoras editor leaves agent and transport re-binding read-only
   though the API accepts it. A261 step 8 retired the location print-mode and drawer-policy toggles.

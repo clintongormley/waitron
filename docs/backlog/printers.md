@@ -237,6 +237,24 @@ just a green typecheck.
      heading "Does this printer have a cash drawer?", which is not what it is about — give it its
      own heading or a wider one for the step. The same label shows on the printer details
      (A405), and changes there too.
+  5. **The found-printer rows are out of line** (owner, 2026-10-14). In the Add a printer dialog's
+     list, each row's buttons sit at the top of the row while its name, connection and address start
+     lower down. A long name also wraps far short of its column: "HP Color LaserJet MFP M181fw
+     (DE0887)" breaks after "MFP" although the Name column is half the dialog wide. Line the details
+     up with the buttons and let the name use its column.
+  6. **A paired Bluetooth printer comes and goes from the list** (owner, 2026-10-14). The owner's
+     paired "BlueTooth Printer" was missing while a scan ran, listed after it ended, and missing
+     again with no scan running. A printer that is already paired stays listed while the dialog is
+     open. The 45-second limit in the entry "While a discovery window is open, a device not reported
+     within 45 seconds drops off the list" (C102, #953) may be the cause; not checked.
+  7. **The name dialog opens with Name filled in** (owner, 2026-10-14): the name discovery found
+     ("HP Color LaserJet MFP M181fw (DE0887)"), or the address when that is all it found
+     ("192.168.10.81"), ready to overwrite. This applies to Add and to Add as invoice printer. With
+     the field filled, Add can be pressed as soon as the dialog opens.
+  8. **One line about Bluetooth instead of the paragraph** (owner, 2026-10-14). The two sentences
+     under the heading ("To add a Bluetooth printer that is not paired yet, press Pair and add…")
+     show every time, even with no Bluetooth printer in the list. Replace them with one line saying
+     a Bluetooth printer must be in pairing mode before it is added.
 
 ## A405 — printer details and the print queue
 
@@ -250,6 +268,15 @@ just a green typecheck.
      modal's other actions. A modal also fixes the print queue's link: clicking a printer name there
      opens the details with an "All printers" link that goes back to the print queue; a modal
      simply closes back to wherever it was opened.
+     **Layout (owner, 2026-10-14):** one line per fact, the label on the left and the value in a
+     column beside it — never today's label above value, which makes the page about two screens
+     long. The facts are grouped under Status, Connection, Paper and drawer, and Used by (point 5).
+     Active shows once, as its switch; times read as "Today 13:09". Delete, Calibrate and Edit sit
+     together at the bottom. Edit turns the same modal into a form holding only what can change
+     (Name and Address), with Cancel and Save; the Active switch stays on the viewing side, where it
+     acts at once.
+     [Mockup: viewing](mockups/a405-printer-details/1-details-modal.png),
+     [mockup: editing](mockups/a405-printer-details/2-edit-in-the-modal.png)
   2. **The connection line says the opposite of the truth for USB and Bluetooth printers.**
      `printers.connection_roaming` ("Can roam between agents", `printers-screen.ts`) is shown for
      them, but a USB or Bluetooth printer is tied to the one agent it is plugged into or paired
@@ -261,14 +288,147 @@ just a green typecheck.
      printer off (C109, #960), and the only way back is adding it again as a new printer. Offer
      "Pair again" (or similar) on the same printer record.
   4. **Reprint on the print queue lets the person choose a different printer**, for when the
-     original is out of service. Offer active printers, the original chosen by default; check
-     whether a job laid out for one paper width needs laying out again for another. Drawer jobs
+     original is out of service. Offer active printers, the original chosen by default. Drawer jobs
      stay unresendable (CLAUDE.md §5).
+     **Every job is laid out again for the printer chosen (owner, 2026-10-14)** — kitchen tickets
+     as much as receipts, since a jammed kitchen printer is when this matters most. Today a job
+     stores only its finished ESC/POS bytes, and Reprint copies them to the same printer
+     (`resendPrintJob`, `packages/printing/src/outbox.ts`); those bytes come out wrong on a printer
+     of another paper width. So every job also keeps the input it was built from, and Reprint
+     builds it again for the chosen printer with the same builder: `formatReceipt` for receipts
+     and full invoices, `formatKitchenTicket` and `formatCorrectionSlip` (`kitchen-print.ts`),
+     `formatPaymentSlip`, and `formatCategorySalesPage` (`report-api.ts`). Rebuilding a kitchen
+     ticket from the order instead is not the same thing: `kitchen_print_job_lines` records which
+     order lines a ticket carried, by id, not what they said when it printed, so a line changed or
+     split since could print differently. Test and calibration pages reprint only on their own
+     printer.
+     A job printed before the change has bytes alone and is offered only printers of the same
+     paper width (no migration: CLAUDE.md §3). Open: receipts and invoices already have an A4 page
+     (`apps/server/src/invoice-page.ts`); a kitchen ticket, payment slip or report sent to an A4
+     printer needs one too, or the A4 printers are left out for those kinds — settle which and say
+     so on the screen.
   5. **The printer details say where the printer is used, each with a link** (owner, 2026-10-08):
      the device profiles that list it and for what (receipts, payment slips, cash drawer), the
      preparation stations that print to it, and the departments those profiles belong to. A printer
      belongs to a location, not a department (`printers.location_id`); departments share one through
      `device_profile_printers` and `station_printers`. A link leaves the modal for another screen.
+  6. **One table for every printer** (owner, 2026-10-14). The Printers tab draws A4 printers in a
+     second table under "Invoice printers (A4)", with other columns and its own indentation. They
+     are stored apart (`page_printers`, `packages/db/src/schema/page-printers.ts`) and drawn by their
+     own panel (`apps/dashboard/src/widgets/page-printers-panel.ts`), but the screen need not follow
+     that: one table, told apart by a Paper column ("80 mm roll", "A4"), every row opening the same
+     details modal. An A4 printer's details differ (no calibration; a test page; A4 or Letter).
+     The "Printer for A4 invoices" dropdown and its Save button leave the page (A661).
+     [Mockup](mockups/a405-printer-details/3-one-printer-table.png)
+
+## A661 — the full-invoice printer is chosen on the device profile
+
+- **A661 — the full-invoice printer is chosen on the device profile (owner, 2026-10-14; open).**
+  Today a location has one A4 invoice printer, picked in the "Printer for A4 invoices" dropdown on
+  the Printers tab. Both places that print a full invoice use it: the till's "Print on A4"
+  (`POST /api/sales/:id/deliveries`, `apps/server/src/till-api.ts`) and the Orders screen's
+  (`POST /management-api/orders/:id/invoice-deliveries`, `apps/server/src/orders-api.ts`), through
+  `requestA4Delivery` (`apps/server/src/invoice-delivery-actions.ts`).
+  1. **The device profile chooses it, as it chooses the receipt printer.** A fourth role beside
+     `receipt`, `payment_slip` and `cash_drawer` (`deviceProfilePrinterRole`,
+     `packages/db/src/schema/device-profile-printers.ts`): the profile lists the printers its
+     devices may print full invoices to and marks a default, and a device may choose its own, as
+     `devices.receipt_printer_id` does for receipts. `device_profile_printers` references
+     `printers`, while A4 printers live in `page_printers`, so the role has to name either kind;
+     settle how.
+  2. **Receipt printers can be chosen too, not only A4 printers.** Tried 2026-10-14: a made-up full
+     invoice with a long customer name and address, run through `formatReceipt` at 58 mm and 80 mm
+     and drawn from the bytes it produced, carried every full-invoice detail and wrapped cleanly.
+     Not printed on paper. The till's "Print on A4" wording follows the printer chosen.
+  3. **No location-wide invoice printer.** The dropdown and its Save button leave the Printers tab
+     (A405 point 6), and nothing falls back to one.
+  4. **On the Orders screen**, printing a full invoice again offers every printer, with the one the
+     original went to chosen by default.
+  5. The PDF download and sending by email stay available for every full invoice.
+
+## A662 — tidy the Edit receipt dialog, and a default tax-agency description
+
+- **A662 — tidy the Edit receipt dialog, and a default tax-agency description (owner, 2026-10-14;
+  open).** The dialog is the department's receipt settings
+  (`apps/dashboard/src/screens/department-receipt-dialog.ts`).
+  1. **A department with no description uses the default.** The Veri\*Factu module already defines
+     "Venta en establecimiento" (`venueFields.defaults.operationDescription`,
+     `packages/fiscal-verifactu/src/slot.ts`), but only the setup wizard offers it
+     (`/setup-api/venue-defaults`, `apps/server/src/setup-api.ts`). A department without one is
+     flagged "Set up the tax-agency description" on the Departments screen
+     (`venue.readiness.department_description`,
+     `packages/venue-service/src/dashboard/departments-list.ts`), and its sales are refused with
+     `department.operation_description_required` (`apps/server/src/sale-operation-description.ts`).
+     Use the fiscal module's default whenever a department has none of its own: the dialog shows it
+     filled in and editable, the warning goes, and no sale is refused for a missing description.
+     Find first why the owner's Santet Deli Co department had none — the Santet data import, or does
+     "+ Add department" leave it empty too.
+  2. **Open at full width.** The dialog opens narrow and jumps wide when the receipt preview loads;
+     hold the preview's space from the start. In the owner's screenshot with a logo set, the dialog
+     was wider still, so the full-size logo (point 4) may widen it as well; not checked.
+  3. **Drop the grey copy of the venue's address** under "Print the venue's address"; the preview
+     shows it.
+  4. **The logo.** No "Logo" label. A small preview at about its printed size, clicking it opens the
+     image library to choose another, and Remove beside it (it only takes the logo off the receipt;
+     the image stays in the library). Without a logo, a dashed box "+ Add a logo". Today the logo is
+     stretched across the form under Choose image and Remove image.
+     [Mockup](mockups/a662-edit-receipt/1-logo.png)
+  5. **Delete the stray line "Available at the till."** under the description field.
+
+## A663 — receipts and full invoices that are easier to read
+
+- **A663 — receipts and full invoices that are easier to read (owner, 2026-10-14; open).** The
+  owner compared ours with a restaurant receipt from Rome: ruled-off sections, a large total, one
+  line per item. Both layouts below are approved. A printed receipt or invoice is a legal document:
+  re-check the result against RD 1619/2012 arts. 6 and 7 on the BOE before landing.
+  [Mockup: simplified receipt](mockups/a663-receipt-layout/1-simplified-receipt.png),
+  [mockup: full invoice](mockups/a663-receipt-layout/2-full-invoice.png) — each beside today's
+  receipt, rendered from the code on 2026-10-14.
+  1. **The simplified receipt.**
+     - The QR code, «QR tributario:» and VERI\*FACTU stay first. AEAT's QR specification v0.5.0, §3,
+       requires the QR at the start of the invoice (quoted in
+       `docs/compliance/verifactu-findings.md`).
+     - A ruled line between every section.
+     - The business block one fact per line, with the trading name in bold.
+     - Table, order and time on one line, and the number labelled "Factura simplificada".
+     - TOTAL drawn double size straight after the items, then the VAT, then the payment. **Ask the
+       asesor before building the large TOTAL:** the same §3 asks for the caption and the
+       VERI\*FACTU line in a size no smaller than the rest of the invoice's data (paraphrased in
+       `docs/compliance/verifactu-findings.md`, beside the QR-position quote).
+     - With one VAT rate, one line «IVA 10% incluido». Art. 7.1.f asks for the rate only, and for the
+       base of each rate only when there are several, which keep their Base lines.
+  2. **The full invoice.**
+     - "FACTURA" and its number head it, not "Factura completa" sitting left above the centred
+       header.
+     - One row per item under a header row: units, item, price before VAT, amount before VAT. Today
+       each item prints three more lines (price, base and VAT). With more than one VAT rate, a rate
+       column is added; art. 6.2.c then also requires each item's base, which the amount column
+       already is.
+     - A discount not in the unit price gets its own line (art. 6.1.f).
+     - The base and VAT for each rate (art. 6.1.g, h).
+     - "Fecha de operación" only when it differs from the issue date (art. 6.1.i).
+     - Checked 2026-10-14 against the BOE consolidated text of art. 6.
+     - The A4 page is drawn from the same document (`apps/server/src/invoice-page.ts`), so it changes
+       with it.
+  3. **The address on a full invoice** (owner, 2026-10-14). `buildReceiptDocument`
+     (`apps/server/src/receipt-document.ts`) prints the venue's address and then, on a full invoice,
+     the registered address (`issuer.domicile`), both unlabelled — the same text twice when they
+     match. Print it once when they are the same. When they differ, print both, the registered one
+     labelled «Domicilio fiscal:»: art. 6.1.e requires the issuer's «Domicilio».
+  4. **"17,50 € × 2", not "17,50 € / 2"**, wherever a unit price is printed with its quantity.
+  5. **VAT rates with significant digits only**, in the receipt language's decimal mark: "10%",
+     "17,5%". Today each item prints "10.00%" and the summary "10%".
+  6. **Guests and the amount per person** when the table's guests were entered.
+  7. **A drink/food subtotal, as a venue setting, off by default.** Researched 2026-10-14 by an
+     agent reading the sources below (not re-fetched here): no Spanish rule asks for it. Everything
+     served on the premises is 10% VAT, alcohol included: Ley 37/1992 art. 91.Uno.2.2º, «los de
+     restaurantes y, en general, el suministro de comidas y bebidas para consumir en el acto». For
+     takeaway, alcohol and sugary soft drinks are 21%: DGT ruling V2254-22, «con excepción de las
+     bebidas alcohólicas y las bebidas refrescantes, zumos y gaseosas con azúcares o edulcorantes
+     añadidos». Either way the per-rate breakdown already separates them. Italy does not require it
+     either; the Rome receipt's lines are most likely its till's own sales-department totals (an
+     inference). Deciding which products are drink needs a product setting or a category rule;
+     settle which.
 
 ## A command queued behind a slow pair can run out of time
 
