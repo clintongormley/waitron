@@ -176,7 +176,13 @@ export class OpeningHoursApi {
     const query = new URLSearchParams({ from, to, ...(normal ? { week: "normal" } : {}) });
     return this.#watches.watch(
       `opening-hours:station:${stationId}:${query}`,
-      [...new Set([...QUERY_DEPENDENCIES.routing, ...QUERY_DEPENDENCIES["opening-hours"]])],
+      [
+        ...new Set([
+          ...QUERY_DEPENDENCIES.routing,
+          ...QUERY_DEPENDENCIES["opening-hours"],
+          ...QUERY_DEPENDENCIES["opening-hours-month"],
+        ]),
+      ],
       () =>
         this.request<StationServiceTimes>(
           `${BASE}/stations/${at(stationId)}/service-times?${query}`,

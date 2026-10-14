@@ -541,6 +541,48 @@ it.each(["sections", "section_members", "catalogues"])(
   },
 );
 
+it.each(["holiday_geographies", "tenants"])(
+  "re-reads station times when %s changes, as the public holidays a date follows come from it",
+  async (type) => {
+    const live = new LiveData();
+    const before = { always: null, days: [{ date: "2026-10-12", departments: [] }] };
+    const after = {
+      always: null,
+      days: [
+        {
+          date: "2026-10-12",
+          departments: [
+            {
+              departmentId: "dining",
+              ranges: [{ periodId: "lunch", startsAt: "12:00", endsAt: "16:00" }],
+            },
+          ],
+        },
+      ],
+    };
+    const request = vi.fn().mockResolvedValueOnce(before).mockResolvedValueOnce(after);
+    const api = new OpeningHoursApi(request as DashboardRequest, live);
+    const received: unknown[] = [];
+    const stop = api.watchStationTimes(
+      "bar",
+      "2026-10-12",
+      "2026-10-12",
+      false,
+      (times) => received.push(times),
+      vi.fn(),
+      vi.fn(),
+    );
+    try {
+      await vi.waitFor(() => expect(received).toEqual([before]));
+      live.invalidate([{ type }]);
+      await vi.waitFor(() => expect(received).toEqual([before, after]));
+      expect(request).toHaveBeenCalledTimes(2);
+    } finally {
+      stop();
+    }
+  },
+);
+
 it("sends a season's edited department and zone weeks in one request with the clock revision", async () => {
   const request = vi.fn(async () => undefined);
   const api = new OpeningHoursApi(request as DashboardRequest);
