@@ -200,6 +200,7 @@ describe("scopeForPaths", () => {
         member("@waitron/server", "apps/server"),
         member("@waitron/print-agent-app", "apps/print-agent"),
         member("@waitron/credentials", "packages/credentials"),
+        member("@waitron/fiscal-verifactu", "packages/fiscal-verifactu"),
         member("@waitron/provisioning", "packages/provisioning"),
         member("@waitron/dashboard", "apps/dashboard"),
         member("@waitron/setup", "apps/setup"),
@@ -210,11 +211,12 @@ describe("scopeForPaths", () => {
       ROOT,
     );
 
-    it("selects the four members whose build runs scripts/bundle-node.mjs", () => {
+    it("selects the members whose build runs scripts/bundle-node.mjs", () => {
       expect(scopeForPaths(["scripts/bundle-node.mjs"], workspace(consumers))).toMatchObject({
         kind: "packages",
         packages: [
           "@waitron/credentials",
+          "@waitron/fiscal-verifactu",
           "@waitron/print-agent-app",
           "@waitron/provisioning",
           "@waitron/server",
@@ -289,6 +291,7 @@ describe("scopeForPaths", () => {
         packages: [
           "@waitron/credentials",
           "@waitron/db",
+          "@waitron/fiscal-verifactu",
           "@waitron/print-agent-app",
           "@waitron/provisioning",
           "@waitron/server",
@@ -730,7 +733,7 @@ describe("the CLI", () => {
 
   it("selects the real bundle-node consumers and builds the image when that script changes", () => {
     expect(run("scripts/bundle-node.mjs\n").stdout).toBe(
-      "code=true\nscope=packages\npackages=@waitron/credentials @waitron/print-agent-app " +
+      "code=true\nscope=packages\npackages=@waitron/credentials @waitron/fiscal-verifactu @waitron/print-agent-app " +
         "@waitron/provisioning @waitron/server\nroot=true\ndeploy=true\n",
     );
   });

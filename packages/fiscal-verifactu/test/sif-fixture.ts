@@ -3,6 +3,10 @@ import { and, eq } from "drizzle-orm";
 import { registerSif, type RegisterSifParams } from "../src/registro-sif.js";
 import { registroSif } from "../src/schema/sif.js";
 
+export async function fixtureSifIdentities(tx: Transaction) {
+  return tx.select({ identity: registroSif.numeroInstalacion }).from(registroSif);
+}
+
 export async function seedFixtureSif(
   tx: Transaction,
   params: Omit<RegisterSifParams, "numeroInstalacion"> & { numeroInstalacion?: string },

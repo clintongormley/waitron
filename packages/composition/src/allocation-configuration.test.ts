@@ -19,7 +19,7 @@ import {
   signPaperConsumptionForBlock,
 } from "@waitron/fiscal-verifactu/src/paper-evidence.js";
 import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
-import { registroSif } from "@waitron/fiscal-verifactu/src/schema/sif.js";
+import { fixtureSifIdentities } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const node: ProvisionedNode = {
@@ -167,9 +167,7 @@ it("selects the independently configured paper source through the production mod
       { code: "FF-P000042", purpose: "full" },
       { code: "R-P000042", purpose: "rectificative" },
     ]);
-    expect(
-      await suite.db.select({ identity: registroSif.numeroInstalacion }).from(registroSif),
-    ).toEqual([{ identity: "P000042" }]);
+    expect(await fixtureSifIdentities(suite.db)).toEqual([{ identity: "P000042" }]);
     expect(
       await suite.db.select({ approval: fiscalAllocations.approval }).from(fiscalAllocations),
     ).toEqual([{ approval }]);
@@ -191,7 +189,7 @@ it.each([
           params: { reason: "outside_confirmation_missing" },
         });
         expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
-        expect(await suite.db.select().from(registroSif)).toEqual([]);
+        expect(await fixtureSifIdentities(suite.db)).toEqual([]);
       }
     });
   },
