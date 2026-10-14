@@ -5,6 +5,7 @@ import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mintSelfSignedServerCert } from "../../src/self-signed-cert.js";
 import { cliSigner, devCustodianPlugin, devCustodianProvision } from "./setup-proxy.js";
@@ -346,13 +347,68 @@ describe("cliSigner", () => {
   it("kills what the command started too, as pnpm starts the signer as its own child", async () => {
     const pidFile = join(stateDir, "grandchild.pid");
     const grandchild = `const c = require("node:child_process").spawn(process.execPath, ["-e", "setTimeout(() => {}, 60_000)"], { stdio: "ignore" }); require("node:fs").writeFileSync(${JSON.stringify(pidFile)}, String(c.pid)); setTimeout(() => {}, 60_000);`;
-    const sign = cliSigner(stateDir, {
-      command: [process.execPath, "-e", grandchild],
-      timeoutMs: 500,
+    // The time limit fires only once the grandchild exists, however long Node takes to start both.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const sign = cliSigner(stateDir, {
+        command: [process.execPath, "-e", grandchild],
+        timeoutMs: 500,
+      });
+      const signed = expect(sign("{}")).rejects.toThrow(/timed out/);
+      let written = "";
+      const deadline = Date.now() + 30_000;
+      while (written === "" && Date.now() < deadline) {
+        await sleep(20);
+        written = await readFile(pidFile, "utf8").catch(() => "");
+      }
+      expect(written).not.toBe("");
+      vi.advanceTimersByTime(500);
+      await signed;
+      const pid = Number(written);
+      vi.useRealTimers();
+      await vi.waitFor(() => expect(() => process.kill(pid, 0)).toThrow(), { timeout: 5_000 });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("still reports the time limit when the command's group is gone before the kill", async () => {
+    const esrch = Object.assign(new Error("kill ESRCH"), { code: "ESRCH" });
+    const kill = vi.spyOn(process, "kill").mockImplementationOnce(() => {
+      throw esrch;
     });
-    await expect(sign("{}")).rejects.toThrow(/timed out/);
-    const pid = Number(await readFile(pidFile, "utf8"));
-    await vi.waitFor(() => expect(() => process.kill(pid, 0)).toThrow(), { timeout: 5_000 });
+    try {
+      const sign = cliSigner(stateDir, {
+        command: [process.execPath, "-e", "setTimeout(() => {}, 300)"],
+        timeoutMs: 50,
+      });
+      await expect(sign("{}")).rejects.toThrow(/timed out after 50 ms/);
+      expect(kill).toHaveBeenCalled();
+    } finally {
+      kill.mockRestore();
+    }
+  });
+
+  it("kills a running command when this process exits, and stops listening once it closes", async () => {
+    const before = process.listenerCount("exit");
+    const sign = cliSigner(stateDir, {
+      command: [process.execPath, "-e", "setTimeout(() => {}, 60_000)"],
+    });
+    const signed = sign("{}");
+    expect(process.listenerCount("exit")).toBe(before + 1);
+    const onExit = process.listeners("exit").at(-1)!;
+    onExit(0);
+    await expect(signed).rejects.toThrow(/exited null/);
+    expect(process.listenerCount("exit")).toBe(before);
+  });
+
+  it("stops listening for this process's exit once a command finishes", async () => {
+    const before = process.listenerCount("exit");
+    const sign = cliSigner(stateDir, {
+      command: [process.execPath, "-e", "process.stdin.pipe(process.stdout)"],
+    });
+    await expect(sign("{}")).resolves.toBe("{}");
+    expect(process.listenerCount("exit")).toBe(before);
   });
 });
 

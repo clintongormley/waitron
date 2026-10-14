@@ -60,18 +60,32 @@ export function cliSigner(
       let stdout = "";
       let stderr = "";
       let timedOut = false;
+      const killGroup = (): void => {
+        try {
+          process.kill(-child.pid!, "SIGKILL");
+        } catch (error) {
+          // The group can be gone before Node reports the close.
+          if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+        }
+      };
+      // Detached, the signer would outlive the dev server stopping mid-sign.
+      process.once("exit", killGroup);
+      const settle = (): void => {
+        clearTimeout(timer);
+        process.off("exit", killGroup);
+      };
       const timer = setTimeout(() => {
         timedOut = true;
-        process.kill(-child.pid!, "SIGKILL");
+        killGroup();
       }, timeoutMs);
       child.stdout.on("data", (chunk: Buffer) => (stdout += chunk.toString()));
       child.stderr.on("data", (chunk: Buffer) => (stderr += chunk.toString()));
       child.on("error", (error) => {
-        clearTimeout(timer);
+        settle();
         fail(error);
       });
       child.on("close", (code) => {
-        clearTimeout(timer);
+        settle();
         if (timedOut) fail(new Error(`dev:custodian sign timed out after ${timeoutMs} ms`));
         else if (code === 0) done(stdout);
         else fail(new Error(`dev:custodian sign exited ${code}: ${stderr.trim()}`));
