@@ -2020,9 +2020,7 @@ export class PrintersScreen extends LitElement {
   #agentActions(agent: PrintAgentRow): TemplateResult {
     const revokeArmed = this.armedRevokeId === agent.id;
     const allowArmed = this.armedAllowId === agent.id;
-    return html`<dashboard-row-actions
-      .label=${t("printers.row_actions").replace("{name}", agent.name)}
-    >
+    return html`<dashboard-row-actions .label=${fill("printers.row_actions", { name: agent.name })}>
       <wt-button
         data-test=${`edit-agent-${agent.id}`}
         @click=${(event: Event) => {
@@ -2133,7 +2131,7 @@ export class PrintersScreen extends LitElement {
                       size="lg"
                       data-choice=${number}
                       ?disabled=${this.submitting}
-                      aria-label=${t("printers.join_choice_label").replace("{number}", number)}
+                      aria-label=${fill("printers.join_choice_label", { number })}
                       @click=${() => void this.#accept(request, number)}
                       >${number}</wt-button
                     >`,
@@ -2262,7 +2260,7 @@ export class PrintersScreen extends LitElement {
           ${t("printers.agent_step_address")}<br />
           <code class="origin" data-test="join-origin">${window.location.origin}</code>
         </li>
-        <li>${t("printers.agent_step_match").replace("{action}", t("printers.join_review"))}</li>
+        <li>${fill("printers.agent_step_match", { action: t("printers.join_review") })}</li>
       </ol>
       ${this.#renderPairing()}
       <section data-test="join-panel">
@@ -2452,15 +2450,13 @@ export class PrintersScreen extends LitElement {
       @wt-notice-gone=${() => {
         this.testPageSent = null;
       }}
-      >${t("printers.test_page_sent").replace("{name}", this.testPageSent)}</wt-notice
+      >${fill("printers.test_page_sent", { name: this.testPageSent })}</wt-notice
     >`;
   }
 
   #printerActions(p: Printer): TemplateResult {
     const unpair = this.#forgetAction(p);
-    return html`<dashboard-row-actions
-      .label=${t("printers.row_actions").replace("{name}", p.name)}
-    >
+    return html`<dashboard-row-actions .label=${fill("printers.row_actions", { name: p.name })}>
       <wt-button
         data-test=${`edit-printer-${p.id}`}
         @click=${() => {
@@ -3016,9 +3012,7 @@ export class PrintersScreen extends LitElement {
   ): TemplateResult | typeof nothing {
     if (device === undefined || device.agentName === null) return nothing;
     return html`<div data-test=${`printer-last-seen-${printerId}`} part="printer-meta">
-      ${t("printers.seen_at")
-        .replace("{agent}", device.agentName)
-        .replace("{time}", formatIsoMinute(device.lastSeenAt))}
+      ${fill("printers.seen_at", { agent: device.agentName, time: formatIsoMinute(device.lastSeenAt) })}
     </div>`;
   }
 
@@ -3420,7 +3414,7 @@ export class PrintersScreen extends LitElement {
     const job = this.jobs.find(({ id }) => id === this.calibrationJobId);
     if (job?.status !== "failed") return nothing;
     return html`<p class="error" role="alert" data-test="calibration-job-failed">
-      ${t("printers.calibration_job_failed").replace("{reason}", () => jobReason(job.lastError ?? ""))}
+      ${fill("printers.calibration_job_failed", { reason: jobReason(job.lastError ?? "") })}
     </p>`;
   }
 
@@ -3450,7 +3444,7 @@ export class PrintersScreen extends LitElement {
       <div class="form-fields">
         ${this.#renderRefreshError()}
         <p role="status">
-          ${t("printers.calibration_progress").replace("{step}", String(this.calibrationStep))}
+          ${fill("printers.calibration_progress", { step: String(this.calibrationStep) })}
         </p>
         ${this.#renderCalibrationFailure()}
         <div
@@ -3522,9 +3516,7 @@ export class PrintersScreen extends LitElement {
           ${
             this.rulerNumber !== "" && Number(this.rulerNumber) !== settingDots
               ? html`<p role="status" data-test="ruler-disagrees">
-                  ${t("printers.ruler_disagrees")
-                    .replace("{ruler}", this.rulerNumber)
-                    .replace("{setting}", String(settingDots))}
+                  ${fill("printers.ruler_disagrees", { ruler: this.rulerNumber, setting: String(settingDots) })}
                 </p>`
               : nothing
           }
@@ -3967,7 +3959,7 @@ export class PrintersScreen extends LitElement {
             <div part="printer-meta">
               <div>${transportName(d.transport)}</div>
               <div>${this.#discoveredAddress(d)}</div>
-              ${d.agentName ? html`<div>${t("printers.discovered_seen_on").replace("{agent}", d.agentName)}</div>` : nothing}
+              ${d.agentName ? html`<div>${fill("printers.discovered_seen_on", { agent: d.agentName })}</div>` : nothing}
               ${this.#disabledPrinter(d) ? html`<div>${t("printers.enable_hint")}</div>` : nothing}
               ${office.get(d)?.kind === "enable" ? html`<div>${t("printers.page_printer_enable_hint")}</div>` : nothing}
               ${this.#repointNote(office.get(d))}
@@ -4040,7 +4032,7 @@ export class PrintersScreen extends LitElement {
         this.#finishAddPrinter(opening);
       }}
     >
-      ${this.addedPrinterName ? html`<p role="status" data-test="printer-added">${t("printers.added").replace("{name}", this.addedPrinterName)}</p>` : nothing}
+      ${this.addedPrinterName ? html`<p role="status" data-test="printer-added">${fill("printers.added", { name: this.addedPrinterName })}</p>` : nothing}
       ${this.#renderRefreshError()}
       <p class="hint">${t("printers.discovery_hint")}</p>
       ${bluetooth ? html`<p class="hint" data-test="bluetooth-note">${t("printers.bluetooth_pair_note")}</p>` : nothing}

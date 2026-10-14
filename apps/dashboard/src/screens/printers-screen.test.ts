@@ -11335,3 +11335,95 @@ describe("the invoice printers panel", () => {
     expect(q(el, "[data-test=printer-refresh-error]")).toBeNull();
   });
 });
+
+describe("literal translated printer labels", () => {
+  for (const [locale, actions, sent, added, seen] of [
+    ["en-GB", "Actions for", "Test page sent to", "Added", "Seen on"],
+    ["es-ES", "Acciones de", "Página de prueba enviada a", "Se ha añadido", "Detectada en"],
+  ] as const) {
+    describe(locale, () => {
+      const name = "A $& {time}";
+      let before: string;
+      beforeEach(() => {
+        before = currentLocale();
+        setLocale(locale);
+      });
+      afterEach(() => setLocale(before));
+      async function mounted() {
+        const api = stubApi({
+          listAgents: vi.fn().mockResolvedValue([{ ...agents[0]!, name }]),
+          listPrinters: vi.fn().mockResolvedValue([
+            { ...printers[0]!, name },
+            { ...printers[2]!, active: true },
+          ]),
+          listDiscoveredPrinters: vi
+            .fn()
+            .mockResolvedValue(discovered.map((device) => ({ ...device, agentName: name }))),
+          printTestPage: vi.fn().mockResolvedValue({ jobId: "literal-page" }),
+        });
+        const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+        await flush(el);
+        return el;
+      }
+      it("keeps the agent name literal in its action label", async () => {
+        const el = await mounted();
+        expect(
+          q(el, "[data-test=edit-agent-a1]")!
+            .closest("dashboard-row-actions")!
+            .shadowRoot!.querySelector("button")!
+            .getAttribute("aria-label"),
+        ).toBe(`${actions} ${name}`);
+      });
+      it("keeps the printer name literal in its action label", async () => {
+        const el = await mounted();
+        await selectTab(el, "printers");
+        expect(
+          q(el, "[data-test=edit-printer-p1]")!
+            .closest("dashboard-row-actions")!
+            .shadowRoot!.querySelector("button")!
+            .getAttribute("aria-label"),
+        ).toBe(`${actions} ${name}`);
+      });
+      it("keeps the printer name literal in the sent notice", async () => {
+        const el = await mounted();
+        await selectTab(el, "printers");
+        q(el, "[data-test=print-test-page-p1]")!.click();
+        await flush(el);
+        expect(text(el, "[data-test=print-test-page-notice]")).toBe(`${sent} ${name}`);
+      });
+      it("keeps the agent's placeholder text separate from the observed time", async () => {
+        const el = await mounted();
+        await selectTab(el, "printers");
+        expect(text(el, "[data-test=printer-last-seen-p3]")).toBe(
+          `${seen} ${name} · 2023-11-14 22:13`,
+        );
+      });
+      it("keeps the discovered agent name literal", async () => {
+        const el = await mounted();
+        await openDiscovery(el);
+        expect(text(el, "[data-test=discovered-row-SN-1]")).toContain(`${seen} ${name}`);
+      });
+      it("keeps the ruler answer literal in the disagreement sentence", async () => {
+        const el = await mounted();
+        await openPrinter(el);
+        typeField(el, 'wt-combobox[name="printer-ruler-number"]', "A $& {setting}");
+        await flush(el);
+        const expected =
+          locale === "en-GB"
+            ? "The ruler shows A $& {setting} dots, but this paper width and resolution print 512 dots. Check the ruler and the QR code’s square again."
+            : "La regla muestra A $& {setting} puntos, pero este ancho de papel y esta resolución imprimen 512 puntos. Vuelve a comprobar la regla y el cuadrado del código QR.";
+        expect(text(el, "[data-test=ruler-disagrees]")).toBe(expected);
+      });
+      it("keeps the added printer name literal", async () => {
+        const el = await mounted();
+        await openDiscovery(el);
+        q(el, "[data-test=register-SN-1]")!.click();
+        await flush(el);
+        typeField(el, "[data-test=discovered-name-SN-1]", name);
+        q(el, "[data-test=confirm-add-printer]")!.click();
+        await flush(el);
+        expect(text(el, "[data-test=printer-added]")).toBe(`${added} ${name}.`);
+      });
+    });
+  }
+});

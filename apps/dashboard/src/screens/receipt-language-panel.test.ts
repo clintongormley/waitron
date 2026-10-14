@@ -242,3 +242,48 @@ describe("the independent receipt language card", () => {
     expect(unload()).toBe(false);
   });
 });
+
+describe("literal receipt language labels", () => {
+  it.each([
+    [
+      "en-GB",
+      "By default, receipts print in A $& {fixed} until you switch to B $& {stored}.",
+      "Use B $& {stored}",
+    ],
+    [
+      "es-ES",
+      "Por defecto, los recibos se imprimen en A $& {fixed} hasta que cambies a B $& {stored}.",
+      "Usar B $& {stored}",
+    ],
+  ])(
+    "keeps unknown stored and fixed language names as written (%s)",
+    async (locale, warning, action) => {
+      setLocale(locale);
+      const { panel } = await mount({
+        language: "A $& {fixed}",
+        choices: [],
+        fixed: {
+          locale: "B $& {stored}",
+          reason: { en: "Module language", es: "Idioma del módulo" },
+        },
+      });
+      expect(panel.shadowRoot!.querySelector("p.warning")!.textContent!.trim()).toBe(warning);
+      expect(
+        panel.shadowRoot!.querySelector("[data-test=use-fixed-language]")!.textContent!.trim(),
+      ).toBe(action);
+    },
+  );
+  it.each([
+    ["en-GB", "Use A $& {fixed}"],
+    ["es-ES", "Usar A $& {fixed}"],
+  ])("keeps an unknown fixed language literal on the action (%s)", async (locale, expected) => {
+    setLocale(locale);
+    const { panel } = await mount({
+      ...original,
+      fixed: { locale: "A $& {fixed}", reason: { en: "Module language" } },
+    });
+    expect(
+      panel.shadowRoot!.querySelector("[data-test=use-fixed-language]")!.textContent!.trim(),
+    ).toBe(expected);
+  });
+});

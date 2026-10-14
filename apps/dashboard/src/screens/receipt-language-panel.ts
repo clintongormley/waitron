@@ -17,7 +17,7 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import type { DashboardApi, ReceiptLanguage } from "../api/client.js";
 import { dashboardQuery } from "../api/live-queries.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 import { receiptLanguageName, receiptLanguageWarning } from "../widgets/receipt-language.js";
 
 @customElement("dashboard-receipt-language-panel")
@@ -244,7 +244,7 @@ export class ReceiptLanguagePanel extends LitElement {
                           model.language === fixed.locale
                             ? nothing
                             : html`<p class="warning" role="note">
-                                  ${t("receipts.language_stored").replace("{stored}", receiptLanguageName(model.language, false)).replace("{fixed}", receiptLanguageName(fixed.locale, false))}
+                                  ${fill("receipts.language_stored", { stored: receiptLanguageName(model.language, false), fixed: receiptLanguageName(fixed.locale, false) })}
                                 </p>
                                 <wt-button
                                   data-test="use-fixed-language"
@@ -252,7 +252,7 @@ export class ReceiptLanguagePanel extends LitElement {
                                   ?loading=${this.saving}
                                   ?disabled=${this.saving}
                                   @click=${() => void this.#save(fixed.locale)}
-                                  >${t("receipts.language_use").replace("{fixed}", receiptLanguageName(fixed.locale, false))}</wt-button
+                                  >${fill("receipts.language_use", { fixed: receiptLanguageName(fixed.locale, false) })}</wt-button
                                 >`
                         }`
                     : html`<wt-combobox

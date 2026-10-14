@@ -3941,20 +3941,6 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   only `--wt-color-primary` or `--wt-color-danger` gets Waitron's default blue or red on a hovered or
   disabled primary or danger `wt-button`.
 
-- **The printers screen and the receipt-language text still put names into translated text with
-  `.replace`, so a name holding `$&`, or one holding a later placeholder's `{…}` text where two
-  are filled one after another, can garble the label** — left open by A536, which moved every
-  other such label under `apps/dashboard/src` to `fill` (`apps/dashboard/src/i18n/t.ts`). In
-  `apps/dashboard/src/screens/printers-screen.ts`: "Actions for …", "Test page sent to …",
-  "Added ….", "Seen on …", "Seen on … · …" (an agent name, then a time) and the calibration
-  ruler's disagreement line, which fills what was typed (PR #1602, which held that file, has
-  landed). In `apps/dashboard/src/screens/receipt-language-panel.ts` and
-  `apps/dashboard/src/widgets/receipt-language.ts`: the receipt-language sentences, which fill two
-  language names one after another, and a language tag the browser has no name for is shown as
-  written; left because lane D's A493 changes the receipt files.
-  `apps/dashboard/src/widgets/price-source.ts` keeps a private one-pass fill because it is handed
-  its `t`.
-
 - **One earlier Spanish dark-theme 390 px demo probe reached its 12-second deadline before the
   bottom** — left open by A334 (#1416, held reorder drags scroll at the list edge): a later
   instrumented eight-case matrix reached the bottom in every case. A 2026-10-09 venue-service
