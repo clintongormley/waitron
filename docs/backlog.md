@@ -4876,13 +4876,6 @@ the tree. What remains, largest first:
   A580's new floor-plan cases failed that way under a forced failure. Next: reset through
   `onTestFinished`, as `wt-floor-plan-canvas.test.ts`'s cursor cases now do.
 
-- **Server suites write to the venue database while their in-process server runs (found by
-  A538-5f).** Remaining: `boot.test.ts` and `boot.invoice-delivery.test.ts`, reserved by retained
-  manual work on `a493-assertion-ports` when A605 checked on 2026-10-14. Found by reading;
-  no locking failure reproduced in these two files. Move each write before `startServer` or after
-  `close()`, or make it through the server's API.
-  [Detail](backlog/ci.md#server-suites-write-to-the-venue-database-while-their-in-process-server-runs-found-by-a538-5f)
-
 - **The step-watch case's one pre-push failure (A544) is fixed at a likely cause, not a confirmed
   one.** The failure's message was not kept. A worker that starts late could report
   `Stalled between phases` with no finished phases although phases had already been sent, which

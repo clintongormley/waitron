@@ -33,7 +33,8 @@ import type { TrustedClock } from "@waitron/fiscal";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
 import { enqueuePrintJob, esc, MAX_DELIVERY_ATTEMPTS } from "@waitron/printing";
 import { jobOrigin, locationId, seriesId } from "@waitron/shared";
-import { startServer, type StartedServer } from "./boot.js";
+import type { StartedServer } from "./boot.js";
+import { serverFixture } from "./testing/server-fixture.js";
 import { configureDemoPrinter, DEMO_PRINTER_KEY } from "./demo-printer.js";
 import {
   claimInvoiceDelivery,
@@ -45,6 +46,8 @@ import { writeModuleConfig } from "./module-config.js";
 import { ALL_MODULES } from "./modules.js";
 import { venueModuleConfig } from "./provision.js";
 import { freePorts } from "./testing/free-ports.js";
+
+const { beforeServerStarts, startServer } = serverFixture();
 
 vi.mock("./demo-printer.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./demo-printer.js")>();
@@ -72,6 +75,7 @@ afterAll(async () => {
 });
 
 async function fixture(environment: "preproduction" | "production" = "preproduction") {
+  beforeServerStarts();
   await seedTenant(suite.db);
   await stampDeployment(suite.db, environment);
   await suite.db.update(tenants).set({ taxpayerDomicile: "Saved issuer address" });
@@ -215,6 +219,9 @@ describe("invoice delivery recovery at trading boot", () => {
         const response = await fetch(`http://127.0.0.1:${ctx.env.WAITRON_HTTP_PORT}/health`);
         expect(response.status).toBe(200);
       });
+      expect(() => beforeServerStarts()).toThrow(
+        "write to the venue database before the server starts",
+      );
       expect(await delivery(ctx.paper.id)).toMatchObject({
         status: "unknown",
         failureCode: "restart",
@@ -240,6 +247,7 @@ describe("invoice delivery recovery at trading boot", () => {
     } finally {
       await server?.close();
     }
+    expect(() => beforeServerStarts()).not.toThrow();
   });
 
   it.each(["sent", "failed"] as const)(
@@ -276,6 +284,8 @@ describe("invoice delivery recovery at trading boot", () => {
           recipient: "customer@example.test",
           personId: "staff-one",
         });
+        await server.close();
+        beforeServerStarts();
         expect(
           await withTransaction(suite.db, (tx) => claimInvoiceDelivery(tx, email.id, "new-server")),
         ).toBeUndefined();

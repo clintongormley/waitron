@@ -45,6 +45,7 @@ import {
   billPayments,
   applicationVersion,
   type Database,
+  type Transaction,
   type VenueDatabase,
 } from "@waitron/db";
 import { isAppError } from "@waitron/shared";
@@ -73,12 +74,8 @@ import {
   updateProduct,
 } from "@waitron/catalogue";
 import { runTunnelClient } from "@waitron/tunnel";
-import {
-  DEFAULT_MIGRATIONS_ROOT,
-  MAX_UPLOAD_BYTES,
-  startServer,
-  type StartedServer,
-} from "./boot.js";
+import { DEFAULT_MIGRATIONS_ROOT, MAX_UPLOAD_BYTES, type StartedServer } from "./boot.js";
+import { serverFixture } from "./testing/server-fixture.js";
 import { listBoxIpv4 } from "./box-reach.js";
 import { ALL_MODULES } from "./modules.js";
 import { DUTY_BUDGET_MS } from "./health.js";
@@ -117,6 +114,48 @@ import {
   startFakeSmtp,
   seedTradingVenue,
 } from "./testing/boot-harness.js";
+
+const { beforeServerStarts, startServer } = serverFixture();
+let fixtureDatabase: Database;
+let onFixtureRequest: (() => void) | undefined;
+const fixtureWrites = new Map<string, (db: Transaction) => Promise<void>>();
+
+// Live fixture writes join the server's queue through its own database handle.
+vi.mock("./management-api.js", async (original) => {
+  const actual = await original<typeof import("./management-api.js")>();
+  return {
+    ...actual,
+    mountManagementApi: (...args: Parameters<typeof actual.mountManagementApi>) => {
+      const [app, deps] = args;
+      fixtureDatabase = deps.db;
+      app.post("/__test/fixture/:id", async (c) => {
+        const write = fixtureWrites.get(c.req.param("id"));
+        if (write === undefined) return c.body(null, 404);
+        onFixtureRequest?.();
+        await withTransaction(deps.db, write);
+        return c.body(null, 204);
+      });
+      return actual.mountManagementApi(...args);
+    },
+  };
+});
+
+async function liveFixture<T>(port: number, write: (db: Transaction) => Promise<T>): Promise<T> {
+  const id = randomUUID();
+  let result!: T;
+  fixtureWrites.set(id, async (db) => {
+    result = await write(db);
+  });
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/__test/fixture/${id}`, {
+      method: "POST",
+    });
+    expect(response.status, await response.text()).toBe(204);
+    return result;
+  } finally {
+    fixtureWrites.delete(id);
+  }
+}
 
 /**
  * The one test below that provisions a usable `fiscal.aeat` credential needs the AEAT transport to
@@ -206,8 +245,7 @@ beforeEach(() => {
  *
  * The suite owns a venue DIRECTORY, because boot needs one and `useVenueDb` does not expose its own.
  * The suite's handle stays open across the file; reads beside a running server are safe in
- * write-ahead mode. A suite write beside a running server can make the server's pending-card-payment
- * sweep log `resolve_pending.failed` with `database is locked`; nothing here depends on that sweep.
+ * write-ahead mode. Fixture writes while it runs use the server's own handle and queue.
  */
 
 /**
@@ -273,34 +311,37 @@ async function withMockedExit<T>(fn: (exits: (number | undefined)[]) => Promise<
 }
 
 async function assertPassiveManagementReads(port: number): Promise<void> {
-  const [person] = await sharedDb
-    .insert(persons)
-    .values({ displayName: "Passive read probe", pinHash: hashPin("1234"), role: "manager" })
-    .returning({ id: persons.id });
-  const personId = person!.id;
-  const [department] = await sharedDb
-    .insert(departments)
-    .values({
-      locationId: KEY_ENV.WAITRON_TILL_LOCATION_ID,
-      name: "Receipt mount probe",
-      tradingName: "Probe",
-    })
-    .returning();
-  const departmentId = department!.id;
-  const policy = { receiptPrintMode: "auto", printTradingName: true } as const;
-  await sharedDb.insert(departmentSalePolicies).values({ departmentId, ...policy });
+  const { personId, departmentId, policy, session } = await liveFixture(port, async (db) => {
+    const [person] = await db
+      .insert(persons)
+      .values({ displayName: "Passive read probe", pinHash: hashPin("1234"), role: "manager" })
+      .returning({ id: persons.id });
+    const personId = person!.id;
+    const [department] = await db
+      .insert(departments)
+      .values({
+        locationId: KEY_ENV.WAITRON_TILL_LOCATION_ID,
+        name: "Receipt mount probe",
+        tradingName: "Probe",
+      })
+      .returning();
+    const departmentId = department!.id;
+    const policy = { receiptPrintMode: "auto", printTradingName: true } as const;
+    await db.insert(departmentSalePolicies).values({ departmentId, ...policy });
+    const session = await startManagementSession(db, { personId });
+    return { personId, departmentId, policy, session };
+  });
   try {
-    const session = await withTransaction(sharedDb, (tx) =>
-      startManagementSession(tx, { personId }),
-    );
     // Backdated in JavaScript, in the `toISOString()` spelling `@waitron/identity`'s own writers of
     // this column use, which is what makes the keepalive's staleness comparison a time ordering.
     const BACKDATE_MS = 10 * 60_000;
     const age = async (): Promise<string> => {
       const staleSeenAt = new Date(Date.now() - BACKDATE_MS).toISOString();
       return (
-        await sharedDb.execute<{ seen: string }>(
-          sql`update management_sessions set last_seen_at = ${staleSeenAt} where token_hash = ${hashSessionToken(session.token)} returning last_seen_at as seen`,
+        await liveFixture(port, async (db) =>
+          db.execute<{ seen: string }>(
+            sql`update management_sessions set last_seen_at = ${staleSeenAt} where token_hash = ${hashSessionToken(session.token)} returning last_seen_at as seen`,
+          ),
         )
       ).rows[0]!.seen;
     };
@@ -390,19 +431,78 @@ async function assertPassiveManagementReads(port: number): Promise<void> {
     expect(drawn.preview.text).toContain("VERI*FACTU");
     expect(await seen()).not.toBe(beforePreview);
   } finally {
-    await sharedDb
-      .delete(departmentReceipts)
-      .where(eq(departmentReceipts.departmentId, departmentId));
-    await sharedDb
-      .delete(departmentSalePolicies)
-      .where(eq(departmentSalePolicies.departmentId, departmentId));
-    await sharedDb.delete(departments).where(eq(departments.id, departmentId));
-    await sharedDb.execute(sql`delete from management_sessions where person_id = ${personId}`);
-    await sharedDb.execute(sql`delete from persons where id = ${personId}`);
+    await liveFixture(port, async (db) => {
+      await db.delete(departmentReceipts).where(eq(departmentReceipts.departmentId, departmentId));
+      await db
+        .delete(departmentSalePolicies)
+        .where(eq(departmentSalePolicies.departmentId, departmentId));
+      await db.delete(departments).where(eq(departments.id, departmentId));
+      await db.execute(sql`delete from management_sessions where person_id = ${personId}`);
+      await db.execute(sql`delete from persons where id = ${personId}`);
+    });
   }
 }
 
 describe("startServer, against a migrated venue directory", () => {
+  it("keeps a live fixture behind the server's open transaction", async () => {
+    const port = await freePort();
+    let server: StartedServer | undefined;
+    let release!: () => void;
+    let holding: Promise<void> | undefined;
+    let writing: Promise<{ id: string }[]> | undefined;
+    const id = randomUUID();
+    try {
+      server = await startServer({
+        ...KEY_ENV,
+        WAITRON_VENUE_DIR: sharedVenueDir,
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      });
+      await awaitListening(port);
+      let acquired!: () => void;
+      const locked = new Promise<void>((resolve) => {
+        acquired = resolve;
+      });
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      holding = withTransaction(fixtureDatabase, async () => {
+        acquired();
+        await gate;
+      });
+      await locked;
+      const requested = new Promise<void>((resolve) => {
+        onFixtureRequest = resolve;
+      });
+      let entered = false;
+      writing = liveFixture(port, async (tx) => {
+        entered = true;
+        return tx
+          .insert(persons)
+          .values({ id, displayName: "Queued fixture", role: "staff", pinHash: hashPin("1234") })
+          .returning({ id: persons.id });
+      });
+      await requested;
+      expect(entered).toBe(false);
+      release();
+      await holding;
+      expect(await writing).toEqual([{ id }]);
+      expect(
+        await sharedDb
+          .select({ displayName: persons.displayName })
+          .from(persons)
+          .where(eq(persons.id, id)),
+      ).toEqual([{ displayName: "Queued fixture" }]);
+    } finally {
+      onFixtureRequest = undefined;
+      release?.();
+      await Promise.allSettled([holding, writing]);
+      await server?.close();
+      beforeServerStarts();
+      await sharedDb.delete(persons).where(eq(persons.id, id));
+    }
+  });
+
   it("starts the pretend printer in Demo and delivers its jobs", async () => {
     const port = await freePort();
     let server: StartedServer | undefined;
@@ -414,15 +514,16 @@ describe("startServer, against a migrated venue directory", () => {
         WAITRON_MIGRATIONS_DIR: migrationsRoot,
         WAITRON_ONBOARDING_INTENT: "demo",
       });
-      // The suite's own handle writes below; a write while a start-up transaction is open blocks
-      // the thread and fails "database is locked".
       await awaitListening(port);
+      expect(() => beforeServerStarts()).toThrow(
+        "write to the venue database before the server starts",
+      );
       const [printer] = await sharedDb
         .select({ id: printers.id, active: printers.active })
         .from(printers)
         .where(eq(printers.localKey, "WAITRON-DEMO-PRINTER"));
       expect(printer?.active).toBe(true);
-      const { jobId } = await withTransaction(sharedDb, (tx) =>
+      const { jobId } = await liveFixture(port, (tx) =>
         enqueuePrintJob(
           tx,
           { locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID },
@@ -441,6 +542,7 @@ describe("startServer, against a migrated venue directory", () => {
     } finally {
       await server?.close();
     }
+    expect(() => beforeServerStarts()).not.toThrow();
   });
 
   it("boots and serves local requests when a saved Cloud replacement cannot be resumed", async () => {
@@ -1680,19 +1782,21 @@ describe("startServer, against a migrated venue directory", () => {
         tables: { liveTableId: string }[];
       };
       const liveTableId = plan.tables[0]!.liveTableId;
-      [{ id: bookingId }] = await sharedDb
-        .insert(bookings)
-        .values({
-          locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
-          tableId: liveTableId,
-          bookingDate: "2099-01-01",
-          bookingTime: "20:00",
-          partySize: 2,
-          contactName: "Ana",
-          createdBy: person!.id,
-          status: "booked",
-        })
-        .returning({ id: bookings.id });
+      [{ id: bookingId }] = await liveFixture(port, async (db) =>
+        db
+          .insert(bookings)
+          .values({
+            locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
+            tableId: liveTableId,
+            bookingDate: "2099-01-01",
+            bookingTime: "20:00",
+            partySize: 2,
+            contactName: "Ana",
+            createdBy: person!.id,
+            status: "booked",
+          })
+          .returning({ id: bookings.id }),
+      );
 
       const removal = await send("PUT", `/zones/${zoneId}/floor-plan`, {
         revision: 1,
@@ -1981,6 +2085,19 @@ describe("startServer, against a migrated venue directory", () => {
   // Exercise the module route through trading boot, including bytes, CORS and rejected names.
   it("serves database image bytes through the public route on a running server", async () => {
     const port = await freePort();
+    beforeServerStarts();
+    const prepared = await samplePreparedImage({ width: 8, format: "png" });
+    const imageName = await withTransaction(sharedDb, async (tx) => {
+      const result = await uploadImage(
+        tx,
+        {
+          image: prepared,
+          names: { en: "Bread", es: "Pan" },
+        },
+        { fallbackLanguage: "es" },
+      );
+      return result.image.filename;
+    });
     const server = await startServer({
       ...KEY_ENV,
       WAITRON_VENUE_DIR: sharedVenueDir,
@@ -1992,18 +2109,6 @@ describe("startServer, against a migrated venue directory", () => {
     });
 
     try {
-      const prepared = await samplePreparedImage({ width: 8, format: "png" });
-      const imageName = await withTransaction(sharedDb, async (tx) => {
-        const result = await uploadImage(
-          tx,
-          {
-            image: prepared,
-            names: { en: "Bread", es: "Pan" },
-          },
-          { fallbackLanguage: "es" },
-        );
-        return result.image.filename;
-      });
       const image = await fetch(`http://127.0.0.1:${port}/media/${imageName}`);
       expect(image.status).toBe(200);
       expect(image.headers.get("content-type")).toBe("image/webp");
@@ -2710,16 +2815,18 @@ describe("startServer — what a trading boot wires behind its management routes
   });
 
   async function invite(email: string): Promise<unknown> {
-    const [invitee] = await db
-      .insert(persons)
-      .values({
-        displayName: `Invitee ${email}`,
-        pinHash: hashPin("1234"),
-        email,
-        role: "staff",
-        status: "pending",
-      })
-      .returning({ id: persons.id });
+    const [invitee] = await liveFixture(port, async (db) =>
+      db
+        .insert(persons)
+        .values({
+          displayName: `Invitee ${email}`,
+          pinHash: hashPin("1234"),
+          email,
+          role: "staff",
+          status: "pending",
+        })
+        .returning({ id: persons.id }),
+    );
     const response = await fetch(
       `http://127.0.0.1:${port}/management-api/staff/${invitee!.id}/invitation`,
       { method: "POST", headers: { cookie, origin: ORIGIN } },
@@ -2780,7 +2887,7 @@ describe("startServer — what a trading boot wires behind its management routes
         },
       });
     } finally {
-      await withTransaction(db, (tx) => deleteCredential(tx, { purpose: "email.smtp" }));
+      await liveFixture(port, (tx) => deleteCredential(tx, { purpose: "email.smtp" }));
     }
   });
 
@@ -2797,8 +2904,7 @@ describe("startServer — what a trading boot wires behind its management routes
 
     const smtp = await startFakeSmtp();
     try {
-      // Resolved on every send, so a gateway configured while the box runs is used at once.
-      await withTransaction(db, (tx) =>
+      await liveFixture(port, (tx) =>
         putCredential(tx, loadKeyRing(KEY_ENV), {
           purpose: "email.smtp",
           value: {
@@ -2829,7 +2935,7 @@ describe("startServer — what a trading boot wires behind its management routes
       await fetch(`http://127.0.0.1:${port}/api/content-languages`)
     ).json()) as { defaultLanguage: string };
     const image = await samplePreparedImage({ width: 9, format: "png" });
-    await withTransaction(db, (tx) =>
+    await liveFixture(port, (tx) =>
       uploadImage(
         tx,
         {
