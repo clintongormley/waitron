@@ -1,3 +1,4 @@
+import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { setContentLanguages } from "@waitron/ui";
 import type { StationThresholds } from "@waitron/shared";
@@ -378,6 +379,38 @@ describe("till-station-queue", () => {
       });
       expect(flat(kanban.el.shadowRoot!.querySelector('[data-item="ti-1"] .number')!)).toBe("#27");
     });
+
+    it.each([
+      [390, undefined],
+      [390, [28, 30]],
+      [1024, undefined],
+      [1024, [28, 30]],
+    ])(
+      "leave a kanban cell's dish name uncut at %s px wide (former numbers %j)",
+      async (width, formerNumbers) => {
+        const previous = { width: innerWidth, height: innerHeight };
+        await page.viewport(width, 844);
+        try {
+          const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+            groups: [{ ...moved(formerNumbers), label: "Mesa 91" }],
+            view: "kanban",
+            stationId: "st-1",
+          });
+          const name = el.shadowRoot!.querySelector<HTMLElement>('[data-item="ti-1"] .line-name')!;
+          expect(flat(name)).toBe("2× Paella");
+          expect(name.clientWidth).toBeGreaterThan(0);
+          expect(name.scrollWidth).toBeLessThanOrEqual(name.clientWidth);
+          if (width === 1024) {
+            const tag = el.shadowRoot!.querySelector('[data-item="ti-1"] .number')!;
+            expect(tag.getBoundingClientRect().top).toBeLessThan(
+              name.getBoundingClientRect().bottom,
+            );
+          }
+        } finally {
+          await page.viewport(previous.width, previous.height);
+        }
+      },
+    );
   });
 
   it("renders the dish name verbatim, with no locale resolution left to fall back from", async () => {

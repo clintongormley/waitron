@@ -1986,11 +1986,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   on); Part 4, each prep station can follow or override it (after Part 3). [Plan](superpowers/plans/2026-10-14-a650-moved-slips-design.md) ·
   [mockups](backlog/mockups/a650-moved-slips/)
 
-- **A684 — A kitchen screen's kanban cell at phone width hides the dish name (2026-10-14; open).**
-  At 390 px the cell's row already cuts the dish name ("1× Pae…"); with A650's "(was 28, 30)" beside
-  the number it shrinks to "1× …" and the order tag wraps onto three lines. The cell's layout
-  (`apps/till/src/widgets/station-queue.ts`) needs room for both. Left open by A650 Part 2.
-
 - **A677 — Every path that can move sent work snapshots it, writes, then queues MOVED slips by hand
   (2026-10-14; open).** Each chooses its own tables to snapshot (`readSentWorkAt`,
   `readPartiesSentWork`, then `enqueueMovedSlipsFor`, `apps/server/src/kitchen-print.ts`), and the

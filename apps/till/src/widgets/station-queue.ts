@@ -254,7 +254,8 @@ export class TillStationQueue extends LitElement {
         align-self: stretch;
       }
 
-      /* The dish row: qty× name (left) and the lens-specific secondary element (right). */
+      /* The dish row: qty× name (left) and the lens-specific secondary element (right, or under the
+         name in a kanban cell too narrow for both). */
       .line-main {
         display: flex;
         align-items: center;
@@ -416,6 +417,11 @@ export class TillStationQueue extends LitElement {
       .cell {
         border-left: var(--wt-space-1) solid var(--wt-color-border);
         min-width: 0;
+      }
+
+      /* A narrow column moves the order tag under the dish rather than squeezing the name. */
+      .cell .line-main {
+        flex-wrap: wrap;
       }
 
       .cell.age-warm {
