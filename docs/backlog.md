@@ -1767,6 +1767,25 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 ### The till, devices and table service
 
+- **A650 — MOVED slips say which order moved, from which table, to which table (owner, 2026-10-14;
+  design written, waiting for the owner's answers).** Today a MOVED slip prints whenever an order's
+  printed place name changes, one slip per kitchen line, so sending Bar back from the named group of four
+  "García birthday" printed "García birthday -> Bar, García birthday" although nothing moved. The
+  design proposes: a slip only when an order left a table or a name on its kitchen paper is gone,
+  one slip per order per station, reading "Order 5 / From: Mesa 11 / To: Mesa 12", translated. Five
+  questions for the owner; build only after the answers. Once built, it would also settle two open points in this file: a
+  HOLD ticket that goes stale when its guests move (the kitchen area), and a bill moved to the
+  counter whose slip names the same table on both sides (the table actions plan's Task 7 point).
+  [Design](superpowers/plans/2026-10-14-a650-moved-slips-design.md) ·
+  [mockups](backlog/mockups/a650-moved-slips/)
+
+- **A660 — Moving an open counter order with nothing sent into a party printed a kitchen ticket
+  (2026-10-14; check).** Found by A650's probe (Move this bill, an open counter order holding a
+  Burger nobody had sent, into Mesa 43's party): the move queued an ordinary kitchen ticket and the
+  dish counted as sent. The cause was not traced (`groupArrivingDishes`,
+  `apps/server/src/order-groups.ts`, puts a bill's released dishes in a fired group); decide whether
+  a counter order's dishes count as already released, and if not, stop the move firing them.
+
 - **A649 — Add a device's Pair is drawn blue when it can act (owner, 2026-10-14; open).** In the
   waiting-devices table (`apps/dashboard/src/screens/devices-screen.ts`, the `pair-<id>` button,
   which reads Enable for a returning device) the button is drawn `secondary` even when a device is
