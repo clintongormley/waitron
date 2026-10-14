@@ -490,6 +490,7 @@ function parseVenue(venueRaw: unknown, acceptLanguage: string | undefined): Venu
 
 function parseProvisionPayload(
   parsed: unknown,
+  hostEnvironment: DeploymentEnvironment,
   devMode: boolean,
   acceptLanguage: string | undefined,
 ): {
@@ -553,13 +554,27 @@ function parseProvisionPayload(
       venue,
       configurationImport: mode === "live" && body.configurationImport === true,
       newTaxpayer: mode === "live" && body.newTaxpayer === true,
-      ...(initialOperations === undefined ? {} : { initialOperations }),
+      ...(initialOperations === undefined
+        ? throwawayMarker(mode, devMode, hostEnvironment)
+        : { initialOperations }),
     },
     contribution,
     secret,
     secretExpected,
     rawSecret: body.aeatCert,
   };
+}
+
+/** Demo, Preparation and a dev box's Live make their own preproduction allocation; a production
+ * environment among them is refused by the allocation itself, not here. */
+function throwawayMarker(
+  mode: "demo" | "prepare" | "live",
+  devMode: boolean,
+  hostEnvironment: DeploymentEnvironment,
+): Pick<ProvisionRequest, "initialAllocation"> {
+  return mode !== "live" || devMode
+    ? { initialAllocation: { kind: "throwaway", hostEnvironment } }
+    : {};
 }
 
 /** A structured error response mirroring the error boundary's `{ error: { code, params } }` shape,
@@ -665,6 +680,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         const parsed = await readRawJsonBody<unknown>(c);
         const payload = parseProvisionPayload(
           parsed,
+          deps.environment,
           deps.devMode === true,
           c.req.header("Accept-Language"),
         );
@@ -725,6 +741,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       const parsed: unknown = await readRawJsonBody<unknown>(c);
       const payload = parseProvisionPayload(
         parsed,
+        deps.environment,
         deps.devMode === true,
         c.req.header("Accept-Language"),
       );
@@ -749,6 +766,9 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       } else {
         try {
           result = await provision(request);
+          if (request.initialAllocation !== undefined) {
+            log("info", "setup.throwaway_allocation", { mode });
+          }
         } catch (error) {
           if (
             operation === undefined ||
