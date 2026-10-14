@@ -1653,6 +1653,7 @@ export async function groupArrivingDishes(
   billId: string,
   operatorId: string,
   firers: ReadonlyMap<string, Firer>,
+  attendance?: { recorder: AttendanceRecorder; at: string },
 ): Promise<{ fired: string | null; held: string[] }> {
   const dishes = await tx
     .select({
@@ -1696,10 +1697,21 @@ export async function groupArrivingDishes(
     earliest.push(...loose);
     heldByCourse.delete(null);
   }
-  const fired = await groupArrived(tx, partyId, billId, released, "fire", operatorId, firers);
+  const fired = await groupArrived(
+    tx,
+    partyId,
+    billId,
+    released,
+    "fire",
+    operatorId,
+    firers,
+    attendance,
+  );
   const held: string[] = [];
   for (const lines of heldByCourse.values()) {
-    held.push((await groupArrived(tx, partyId, billId, lines, "hold", operatorId, firers))!);
+    held.push(
+      (await groupArrived(tx, partyId, billId, lines, "hold", operatorId, firers, attendance))!,
+    );
   }
   return { fired, held };
 }
@@ -1712,6 +1724,7 @@ async function groupArrived(
   release: GroupRelease,
   operatorId: string,
   firers: ReadonlyMap<string, Firer>,
+  attendance?: { recorder: AttendanceRecorder; at: string },
 ): Promise<string | null> {
   if (lines.length === 0) return null;
   let fired: { at: string; by: Firer } | undefined;
@@ -1727,12 +1740,16 @@ async function groupArrived(
     .update(workingOrderLines)
     .set({ groupId })
     .where(or(inArray(workingOrderLines.id, ids), inArray(workingOrderLines.parentLineId, ids)));
-  await recordGroupEvent(tx, {
-    partyId,
-    groupId,
-    kind: "lines_moved",
-    actorId: operatorId,
-    detail: { workingOrderId: billId, arrived: true },
-  });
+  await recordGroupEvent(
+    tx,
+    {
+      partyId,
+      groupId,
+      kind: "lines_moved",
+      actorId: operatorId,
+      detail: { workingOrderId: billId, arrived: true },
+    },
+    attendance,
+  );
   return groupId;
 }

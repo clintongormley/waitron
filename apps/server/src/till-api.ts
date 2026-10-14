@@ -2852,10 +2852,20 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         await checkZones(tx, deps.cfg, session, [{ partyId }]);
         const held = [...(await memberTables(tx, partyId)), tableId.toLowerCase()];
         return movingRooms(tx, deps.cfg, held, undefined, () =>
-          splitTable(tx, sendCfg, partyId, tableId.toLowerCase(), billId, {
-            expectedPartyRevision,
-            operatorId: personId,
-          }),
+          splitTable(
+            tx,
+            sendCfg,
+            partyId,
+            tableId.toLowerCase(),
+            billId,
+            {
+              expectedPartyRevision,
+              operatorId: personId,
+            },
+            deps.attendance === undefined
+              ? undefined
+              : { recorder: deps.attendance, clock: deps.clock },
+          ),
         );
       });
       return c.json(result);
@@ -3697,7 +3707,16 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
             "counter" in to && to.counter.zoneId !== null && { zoneId: to.counter.zoneId },
           ),
         ]);
-        const moved = await moveBill(tx, sendCfg, billId, to, command);
+        const moved = await moveBill(
+          tx,
+          sendCfg,
+          billId,
+          to,
+          command,
+          deps.attendance === undefined
+            ? undefined
+            : { recorder: deps.attendance, clock: deps.clock },
+        );
         if ("tableId" in to) await refuseTakenOff(tx, [to.tableId]);
         return moved;
       });

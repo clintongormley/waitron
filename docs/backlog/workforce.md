@@ -81,8 +81,11 @@ trusted command instant. The route tests check that these events retain their or
 after bills move and that a refused second snapshot rolls back the whole command. Group events
 created by draft submission, basket edits and held-line cancellations now retain their own snapshots
 too. The command tests check their original location after the bill's stored location changes, rollback on snapshot refusal,
-and one instant shared with the basket edit or adjustment. Group events from arriving bills,
-draft-event snapshots, the remaining source-command classifications, restore-path qualification and
+and one instant shared with the basket edit or adjustment. Move a bill and Split a table now snapshot
+their arriving-group events under the admitted mover at the trusted command instant. The tests check
+that a refused snapshot rolls back the move and that a later location change preserves the original
+activity. Held and fired arrivals share the supplied instant. Draft-event snapshots,
+the remaining source-command classifications, restore-path qualification and
 final branch checks remain open; part 3 is unfinished.
 
 My hours stays with part 5; no placeholder is offered in part 2. Parts 3–6 remain open: automatic

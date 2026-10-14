@@ -36,6 +36,7 @@ import {
 } from "./parties.js";
 import type { OriginConfig, TillConfig } from "./till-config.js";
 import { serviceModesMatch } from "./working-order.js";
+import type { OrderAttendance } from "./working-order.js";
 import "./errors.js";
 
 /**
@@ -289,6 +290,7 @@ export async function splitTable(
   tableId: string,
   billId: string | null,
   options: { expectedPartyRevision: number; operatorId: string },
+  attendance?: OrderAttendance,
 ): Promise<{ partyId: string; mainBillId: string | null }> {
   await checkAndBumpParty(tx, partyId, options.expectedPartyRevision, "open");
   const held = await memberTables(tx, partyId);
@@ -317,7 +319,19 @@ export async function splitTable(
     mainBillId = await partyMainBill(tx, cfg, newParty, "moved");
   } else {
     const { status } = await takeIntoParty(tx, cfg, billId, newParty, table!.zoneId);
-    const { held } = await groupArrivingDishes(tx, newParty, billId, options.operatorId, firers);
+    const { held } = await groupArrivingDishes(
+      tx,
+      newParty,
+      billId,
+      options.operatorId,
+      firers,
+      attendance === undefined
+        ? undefined
+        : {
+            recorder: attendance.recorder,
+            at: attendance.clock.now().instant.toISOString(),
+          },
+    );
     await printHoldTickets(tx, cfg, held);
     if (status === "open") {
       await setMainBill(tx, newParty, billId);
