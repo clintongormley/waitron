@@ -260,6 +260,14 @@ it("asks for the fourth service and keeps it when a renewal or report answers th
     expect((await f.client.status()).installation!.services.map((s) => s.service)).toContain(
       "content_translation",
     );
+    f.fail("invalid_proof"); // drops the lease, so the next refresh renews
+    await expect(f.client.refresh()).rejects.toMatchObject({ code: "cloud.unavailable" });
+    f.fail("");
+    await f.client.refresh();
+    expect(f.requests.at(-1)![2]).toBe("renew");
+    expect((await f.client.status()).installation!.services.map((s) => s.service)).toContain(
+      "content_translation",
+    );
     const restarted = createCloudConnection(f.options);
     expect((await restarted.status()).installation!.services).toHaveLength(4);
   } finally {
@@ -302,6 +310,38 @@ it.each([
     expect(four).toHaveLength(4);
     f.patch({ services: change(four) });
     await expect(f.client.refresh()).rejects.toMatchObject({ code: "cloud.unavailable" });
+  } finally {
+    await f.close();
+  }
+});
+
+it("drops the fourth service when a configuration reply answers three", async () => {
+  const f = await installationFixture();
+  try {
+    await f.client.refresh(); // renew
+    await f.client.refresh(); // configuration, four services
+    const four = (f.replies.get(String(f.requests.at(-1)![4])) as { services: unknown[] }).services;
+    f.patch({ services: four.slice(0, 3) });
+    const status = await f.client.refresh();
+    expect(f.requests.at(-1)![2]).toBe("configuration");
+    expect(status.installation!.services.map((s) => s.service)).not.toContain(
+      "content_translation",
+    );
+  } finally {
+    await f.close();
+  }
+});
+
+it("does not repeat the fourth service when a report reply carries it", async () => {
+  const f = await installationFixture();
+  try {
+    await f.client.refresh(); // renew
+    await f.client.refresh(); // configuration, four services
+    const four = (f.replies.get(String(f.requests.at(-1)![4])) as { services: unknown[] }).services;
+    f.patch({ services: four });
+    await f.client.report([{ service: "remote_access", health: "healthy", failure: null }]);
+    expect(f.requests.at(-1)![2]).toBe("report");
+    expect((await f.client.status()).installation!.services).toHaveLength(4);
   } finally {
     await f.close();
   }
