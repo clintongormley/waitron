@@ -1418,6 +1418,10 @@ From **Variants as products (#511–#556) — what is left open.** How the model
 
 ## Decisions and deliberate limits
 
+- **The "needs clearing" window names the one table it clears (A581 part 3, coordinator decision,
+  2026-10-14).** A table renamed for today reads "Window needs clearing"; a table in a group, named
+  or not, keeps "Table Counter 4 needs clearing", never the group's name, because Mark cleared
+  clears only that table (one `tableId`, one row on the server). Owner may overturn it.
 - **A joined table replaces a saved join (A503, owner 2026-10-11).** A table made of other tables
   is set up in the floor plan editor and starts each day as one table; the till splits it and joins
   it again, and the reset puts it back whole once its tables are free
