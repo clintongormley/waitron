@@ -88,6 +88,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That table is joined to another. Split it first",
     es: "Esa mesa está unida a otra. Sepárala primero",
   },
+  "table.label_taken": {
+    en: "Another table already has that name",
+    es: "Otra mesa ya tiene ese nombre",
+  },
   "table.taken_off": {
     en: "That table is off today's plan. Put it back first",
     es: "Esa mesa está quitada hoy. Vuelve a ponerla primero",

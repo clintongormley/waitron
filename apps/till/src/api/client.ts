@@ -3808,6 +3808,11 @@ export class TillApi {
     return this.#todayChange(tableId, "seats", { seats }, zoneRevision);
   }
 
+  /** A table's or its group's name for today; null clears it → `POST /api/tables/:id/today/name`. */
+  nameToday(tableId: string, name: string | null, zoneRevision: number): Promise<FloorAnswer> {
+    return this.#todayChange(tableId, "name", { name }, zoneRevision);
+  }
+
   /** Put a table back as the last reset left it → `POST /api/tables/:id/today/back`. */
   backToSavedToday(tableId: string, zoneRevision: number): Promise<FloorAnswer> {
     return this.#todayChange(tableId, "back", {}, zoneRevision);

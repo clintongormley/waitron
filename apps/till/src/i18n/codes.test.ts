@@ -536,6 +536,11 @@ it("says a part of a joined table cannot be used, in English and Spanish", () =>
   expect(codeMessage("table.in_joined_table", "es")).toBe("Esa mesa forma parte de una mesa unida");
 });
 
+it("says a name another table already has, in English and Spanish", () => {
+  expect(codeMessage("table.label_taken", "en")).toBe("Another table already has that name");
+  expect(codeMessage("table.label_taken", "es")).toBe("Otra mesa ya tiene ese nombre");
+});
+
 it("says each joined-table refusal in English and Spanish", () => {
   const words: [string, string, string][] = [
     ["joined_table.not_found", "That table is not a joined table", "Esa mesa no es una mesa unida"],

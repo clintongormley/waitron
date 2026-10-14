@@ -51,6 +51,7 @@ const ACTION_LABELS = {
   "reset-table": "floor.reset_table",
   rotate: "floor.rotate",
   seats: "floor.change_seats",
+  rename: "floor.rename",
   back: "floor.back_to_saved",
   "take-off": "floor.take_off",
 } as const satisfies Record<SheetAction, string>;
