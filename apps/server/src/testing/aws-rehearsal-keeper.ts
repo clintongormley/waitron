@@ -1,12 +1,10 @@
 // The keeper: run in its own process beside an Amazon S3 rehearsal, it cleans up after a run that
 // was killed, from the journal the run left.
 import { appendFileSync } from "node:fs";
-import { readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
-import { setTimeout as delay } from "node:timers/promises";
 import { GetObjectCommand, type GetObjectCommandOutput } from "@aws-sdk/client-s3";
-import { createBucketClient, nameOf } from "@waitron/stream";
+import { nameOf } from "@waitron/stream";
 import {
   type AdminClient,
   assertCleanupCommandFits,
@@ -20,6 +18,7 @@ import {
   receiptFailureCause,
   removeScratch,
   runScope,
+  SHARED_DEFAULT_DEPS,
   stopChildren,
   teardownOwnedBucket,
   unplannedFailure,
@@ -33,7 +32,7 @@ import {
   type TeardownEntry,
   writeReceipt,
 } from "./aws-rehearsal-receipt.js";
-import { processStartTime, type RehearsalJournal, readJournal } from "./aws-rehearsal-journal.js";
+import { type RehearsalJournal, readJournal } from "./aws-rehearsal-journal.js";
 import { AwsRehearsalRefused } from "./aws-rehearsal-refused.js";
 import { AWS_REHEARSAL_NONCE_KEY, createRequestPlan } from "./aws-request-plan.js";
 import { installSendGate, markRunnerClient, setSendGateStrict } from "./aws-send-gate.js";
@@ -100,38 +99,13 @@ export function keeperLogPath(journalPath: string): string {
     : `${journalPath}.keeper.log`;
 }
 
-function processAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 function defaultDeps(journalPath: string): Omit<KeeperDeps, "waitForRunnerEnd"> {
   const logPath = keeperLogPath(journalPath);
   return {
+    ...SHARED_DEFAULT_DEPS,
     env: process.env,
-    readFile: (path) => readFile(path, "utf8"),
     tmpdir: tmpdir(),
-    sleep: (ms) => delay(ms),
-    now: Date.now,
-    createAdminClient: (profile, endpoint) =>
-      createBucketClient({
-        region: profile.region,
-        bucket: "",
-        prefix: "",
-        accessKeyId: profile.accessKeyId,
-        secretAccessKey: profile.secretAccessKey,
-        ...(endpoint === undefined ? {} : { endpoint }),
-      }),
-    print: (line) => process.stdout.write(`${line}\n`),
     log: (line) => appendFileSync(logPath, `${line}\n`, { mode: 0o600 }),
-    processStartTime,
-    isAlive: processAlive,
-    kill: (pid, signal) => process.kill(pid, signal),
-    removeDir: (path) => rm(path, { recursive: true, force: true }),
     graceMs: KEEPER_GRACE_MS,
   };
 }
@@ -218,11 +192,11 @@ export async function runKeeper(
       lines.say(
         `gave up waiting: the run did not end within ${first.keeperCeilingMs} ms; nothing done`,
       );
-      const left = [
+      const left = leftLines({
         ...journalLeft(latest),
-        ...liveTracked(latest, deps).map((pid) => `process ${pid}`),
-        ...(latest.scratchRoot === null ? [] : [`folder ${latest.scratchRoot}`]),
-      ];
+        pids: liveTracked(latest, deps),
+        folder: latest.scratchRoot,
+      });
       if (left.length > 0) {
         lines.say("may be left:");
         for (const line of left) lines.say(line);
@@ -251,14 +225,34 @@ function sayLeft(lines: Lines, left: readonly string[]): void {
   }
 }
 
-/** The bucket and uploads the journal says may still exist when the keeper sends nothing. */
-function journalLeft(journal: RehearsalJournal): string[] {
-  const { state, bucket } = journal;
-  if (state !== "owned" && state !== "creating") return [];
+interface Left {
+  bucket?: string | null;
+  /** A bucket nothing proves this run made. */
+  unknownBucket?: string | null;
+  uploadIds?: readonly string[];
+  pids?: readonly number[];
+  folder?: string | null;
+}
+
+/** One line per thing left, in the order the keeper prints them. */
+function leftLines(left: Left): string[] {
+  const { bucket, unknownBucket, uploadIds = [], pids = [], folder } = left;
   return [
-    state === "owned" ? `bucket ${bucket}` : `bucket ${bucket} (ownership unknown)`,
-    ...(state === "owned" ? journal.uploads.map(({ uploadId }) => `upload ${uploadId}`) : []),
+    ...(bucket == null ? [] : [`bucket ${bucket}`]),
+    ...(unknownBucket == null ? [] : [`bucket ${unknownBucket} (ownership unknown)`]),
+    ...uploadIds.map((id) => `upload ${id}`),
+    ...pids.map((pid) => `process ${pid}`),
+    ...(folder == null ? [] : [`folder ${folder}`]),
   ];
+}
+
+/** The bucket and uploads the journal says may still exist when the keeper sends nothing. */
+function journalLeft(journal: RehearsalJournal): Left {
+  const { state, bucket } = journal;
+  if (state === "owned") {
+    return { bucket, uploadIds: journal.uploads.map(({ uploadId }) => uploadId) };
+  }
+  return state === "creating" ? { unknownBucket: bucket } : {};
 }
 
 function liveTracked(journal: RehearsalJournal, deps: KeeperDeps): number[] {
@@ -327,11 +321,10 @@ async function act(journal: RehearsalJournal, deps: KeeperDeps, lines: Lines): P
     const stopped = await stopTracked(journal, deps, lines);
     for (const pid of stopped.stopped) lines.note(`stopped process ${pid}`);
     const scratch = await removeJournalScratch(journal, deps);
-    sayLeft(lines, [
-      ...journalLeft(journal),
-      ...stopped.left.map((pid) => `process ${pid}`),
-      ...(scratch.left === null ? [] : [`folder ${scratch.left}`]),
-    ]);
+    sayLeft(
+      lines,
+      leftLines({ ...journalLeft(journal), pids: stopped.left, folder: scratch.left }),
+    );
     return 1;
   }
   const receiptPath = join(receiptDir, receiptFileName(runId, "interrupted"));
@@ -474,13 +467,13 @@ async function act(journal: RehearsalJournal, deps: KeeperDeps, lines: Lines): P
       }
     }
 
-    const left = [
-      ...(remaining.bucket === null ? [] : [`bucket ${remaining.bucket}`]),
-      ...(outcome.unknown === null ? [] : [`bucket ${outcome.unknown} (ownership unknown)`]),
-      ...remaining.uploadIds.map((id) => `upload ${id}`),
-      ...stopped.left.map((pid) => `process ${pid}`),
-      ...(folderLeft === null ? [] : [`folder ${folderLeft}`]),
-    ];
+    const left = leftLines({
+      bucket: remaining.bucket,
+      unknownBucket: outcome.unknown,
+      uploadIds: remaining.uploadIds,
+      pids: stopped.left,
+      folder: folderLeft,
+    });
     sayLeft(lines, left);
     const unplanned = unplannedFailure(requests.close());
     if (unplanned !== undefined) lines.say(unplanned.message);

@@ -70,6 +70,7 @@ import { AwsRehearsalRefused } from "./aws-rehearsal-refused.js";
 import {
   isJournalChildPid,
   isJournalUploadKey,
+  JOURNAL_VERSION,
   journalFileName,
   type JournalPid,
   type JournalState,
@@ -810,37 +811,42 @@ function processAlive(pid: number): boolean {
   }
 }
 
+/** The defaults the runner and the keeper both use. */
+export const SHARED_DEFAULT_DEPS = {
+  readFile: (path) => readFile(path, "utf8"),
+  createAdminClient: (profile, endpoint) =>
+    createBucketClient({
+      region: profile.region,
+      bucket: "",
+      prefix: "",
+      accessKeyId: profile.accessKeyId,
+      secretAccessKey: profile.secretAccessKey,
+      ...(endpoint === undefined ? {} : { endpoint }),
+    }),
+  now: Date.now,
+  isAlive: processAlive,
+  kill: (pid, signal) => process.kill(pid, signal),
+  sleep: (ms) => delay(ms),
+  print: (line) => process.stdout.write(`${line}\n`),
+  removeDir: (path) => rm(path, { recursive: true, force: true }),
+  processStartTime,
+} satisfies Partial<AwsRehearsalDeps>;
+
 function defaultDeps(env: Env): AwsRehearsalDeps {
   return {
+    ...SHARED_DEFAULT_DEPS,
     env,
-    readFile: (path) => readFile(path, "utf8"),
-    createAdminClient: (profile, endpoint) =>
-      createBucketClient({
-        region: profile.region,
-        bucket: "",
-        prefix: "",
-        accessKeyId: profile.accessKeyId,
-        secretAccessKey: profile.secretAccessKey,
-        ...(endpoint === undefined ? {} : { endpoint }),
-      }),
     randomSuffix: randomBucketSuffix,
     runId: randomUUID,
-    now: Date.now,
     commit: gitCommit,
     receiptDir: isUnset(env.WAITRON_AWS_REHEARSAL_RECEIPT_DIR)
       ? join(tmpdir(), "waitron-aws-rehearsal")
       : env.WAITRON_AWS_REHEARSAL_RECEIPT_DIR,
-    isAlive: processAlive,
-    kill: (pid, signal) => process.kill(pid, signal),
-    sleep: (ms) => delay(ms),
     deadlineMs: AWS_REHEARSAL_SCENARIO_DEADLINE_MS,
     settleMs: AWS_REHEARSAL_SETTLE_MS,
     teardownMs: AWS_REHEARSAL_LIMITS.teardownMs,
-    print: (line) => process.stdout.write(`${line}\n`),
     scratchBase: tmpdir(),
-    removeDir: (path) => rm(path, { recursive: true, force: true }),
     journal: writeJournal,
-    processStartTime,
     startKeeper,
   };
 }
@@ -1268,7 +1274,7 @@ async function runOwned<T>(
   let journalFailures = 0;
   let keeperPid: number | null = null;
   const journalNow = (): RehearsalJournal => ({
-    version: 1,
+    version: JOURNAL_VERSION,
     runId,
     region,
     bucket,
