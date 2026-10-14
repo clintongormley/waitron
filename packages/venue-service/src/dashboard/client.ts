@@ -109,6 +109,7 @@ export interface VenueServiceModel {
   settings: VenueServiceSettings;
   kitchenTicketGrouping: KitchenTicketGrouping;
   printHeldWork: boolean;
+  printMovedSlips: boolean;
   /** Minutes after the work fired before it is served that staff are reminded to fire the next
    * held group; null when reminders are off. */
   releaseReminderMinutes: number | null;
@@ -122,6 +123,7 @@ export type VenueServiceSettingsView = Pick<
   | "settings"
   | "kitchenTicketGrouping"
   | "printHeldWork"
+  | "printMovedSlips"
   | "releaseReminderMinutes"
   | "clearingWorkflow"
 >;
@@ -259,6 +261,7 @@ export class VenueServiceApi {
       settings: model.settings,
       kitchenTicketGrouping: model.kitchenTicketGrouping,
       printHeldWork: model.printHeldWork,
+      printMovedSlips: model.printMovedSlips,
       releaseReminderMinutes: model.releaseReminderMinutes,
       clearingWorkflow: model.clearingWorkflow,
     };

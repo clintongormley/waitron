@@ -124,6 +124,7 @@ describe("VenueServiceApi", () => {
       settings: { editSentLines: true },
       kitchenTicketGrouping: "combined",
       printHeldWork: false,
+      printMovedSlips: true,
       releaseReminderMinutes: 10,
       clearingWorkflow: false,
     };
@@ -161,6 +162,7 @@ describe("VenueServiceApi", () => {
       settings: { editSentLines: false },
       kitchenTicketGrouping: "separate",
       printHeldWork: true,
+      printMovedSlips: false,
       releaseReminderMinutes: null,
       clearingWorkflow: true,
     };
@@ -170,6 +172,7 @@ describe("VenueServiceApi", () => {
       settings: { editSentLines: false },
       kitchenTicketGrouping: "separate",
       printHeldWork: true,
+      printMovedSlips: false,
       releaseReminderMinutes: null,
       clearingWorkflow: true,
     });
