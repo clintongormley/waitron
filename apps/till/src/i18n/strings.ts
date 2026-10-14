@@ -2065,7 +2065,7 @@ export const es: Record<StringKey, string> = {
   "table.split_no_bill": "Sin cuenta, empezar una vacía",
   "table.name_title": "Poner nombre a los clientes de {tables}",
   "table.name_label": "Nombre",
-  "table.name_hint": "Déjalo vacío para llamarlos por sus mesas",
+  "table.name_hint": "Déjalo vacío para usar sus mesas",
   "table.name_too_long": "Usa como máximo 40 caracteres",
   "table.name_save": "Guardar",
   "table.no_other_bills": "No hay otra cuenta de estos clientes para elegir",
