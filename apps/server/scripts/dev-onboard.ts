@@ -5,9 +5,12 @@
 // It refuses a directory that already holds a venue: provisioning a second one would start a second
 // SIF and a second hash chain (CLAUDE.md §5). It never deletes data itself.
 import { realpathSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { resolveConfigDir } from "../src/config.js";
+import { initCustodianDir } from "./dev-custodian/files.js";
+import { assertDevelopmentEnvironment } from "./dev-custodian/sign.js";
 import {
   defaultDevVenueDir,
   inspectVenues,
@@ -24,12 +27,18 @@ export interface SetupEnv {
   WAITRON_VENUE_DIR: string;
   WAITRON_ENV: string;
   WAITRON_HTTP_PORT: string;
+  WAITRON_FISCAL_CUSTODIAN_FILE: string;
+  WAITRON_FISCAL_CONFIRMATION_FILE: string;
+  WAITRON_FISCAL_CUSTODIAN_FINGERPRINT: string;
 }
 
 const SETUP_ENV_KEYS: readonly (keyof SetupEnv)[] = [
   "WAITRON_VENUE_DIR",
   "WAITRON_ENV",
   "WAITRON_HTTP_PORT",
+  "WAITRON_FISCAL_CUSTODIAN_FILE",
+  "WAITRON_FISCAL_CONFIRMATION_FILE",
+  "WAITRON_FISCAL_CUSTODIAN_FINGERPRINT",
 ];
 
 export function renderSetupEnvFile(env: SetupEnv): string {
@@ -38,8 +47,9 @@ export function renderSetupEnvFile(env: SetupEnv): string {
   return renderEnvFileLines(header, SETUP_ENV_KEYS, env);
 }
 
-/** No `stateDir`: a setup-mode box never resolves the fiscal slot, so no `modules.json` is written. */
-export type DevOnboardOptions = Omit<DevSetupOptions, "stateDir">;
+export interface DevOnboardOptions extends DevSetupOptions {
+  environment?: NodeJS.ProcessEnv;
+}
 
 export interface DevOnboardResult {
   env: SetupEnv;
@@ -47,8 +57,9 @@ export interface DevOnboardResult {
 
 /** Provisions nothing, and refuses a directory that already holds a venue (CLAUDE.md §5). */
 export async function devOnboard(opts: DevOnboardOptions): Promise<DevOnboardResult> {
-  const { venueDir, envPath, log = () => {} } = opts;
+  const { venueDir, envPath, stateDir, environment = process.env, log = () => {} } = opts;
 
+  assertDevelopmentEnvironment(environment);
   const { hasAny } = await inspectVenues(venueDir, null);
   if (hasAny) {
     throw new Error(
@@ -62,10 +73,17 @@ export async function devOnboard(opts: DevOnboardOptions): Promise<DevOnboardRes
   log("dev-onboard: migrating…");
   await applyMigrations(venueDir, migrationOptionsFor(manifestSets(), null));
 
+  const custodianDir = join(stateDir, "dev-custodian");
+  const custodian = await initCustodianDir(custodianDir, environment);
+  log(`dev-onboard: the box trusts the throwaway custodian in ${custodianDir}`);
+
   const env: SetupEnv = {
     WAITRON_VENUE_DIR: venueDir,
     WAITRON_ENV: "dev",
     WAITRON_HTTP_PORT: opts.httpPort || "8080",
+    WAITRON_FISCAL_CUSTODIAN_FILE: custodian.custodianFile,
+    WAITRON_FISCAL_CONFIRMATION_FILE: custodian.confirmationFile,
+    WAITRON_FISCAL_CUSTODIAN_FINGERPRINT: custodian.fingerprint,
   };
   writeFileSync(envPath, renderSetupEnvFile(env));
   log(`dev-onboard: wrote ${envPath} (setup mode — no venue bound)`);
@@ -89,6 +107,7 @@ async function main(): Promise<void> {
   const result = await devOnboard({
     venueDir,
     envPath,
+    stateDir,
     httpPort: process.env.WAITRON_HTTP_PORT,
     log: (line) => void console.log(line),
   });
