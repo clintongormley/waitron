@@ -8,12 +8,6 @@ export interface LocalPlan {
   prefixes: readonly string[];
 }
 
-/**
- * Runs a scenario's local version under the plan its Amazon S3 rehearsal declares, so a request the
- * rehearsal would refuse fails here too. Servers the body starts carry the scope into their timers.
- * Requests outside the body pass, because the gate is not strict here. A suite that calls this
- * calls `endLocalPlans` in its `afterAll`.
- */
 const lateRefusals: string[] = [];
 
 /**
@@ -30,6 +24,12 @@ export function endLocalPlans(): void {
   }
 }
 
+/**
+ * Runs a scenario's local version under the plan its Amazon S3 rehearsal declares, so a request the
+ * rehearsal would refuse fails here too. Servers the body starts carry the scope into their timers.
+ * Requests outside the body pass, because the gate is not strict here. A suite that calls this
+ * calls `endLocalPlans` in its `afterAll`.
+ */
 export async function runUnderPlan<T>(plan: LocalPlan, body: () => Promise<T>): Promise<T> {
   installSendGate();
   const prefixes = new Set(plan.prefixes);

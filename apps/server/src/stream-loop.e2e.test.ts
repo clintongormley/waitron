@@ -7,7 +7,9 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { afterAll, describe, expect, it } from "vitest";
+import { processStartTime } from "./testing/aws-rehearsal-journal.js";
 import { LOOP_APIS } from "./testing/aws-rehearsal-plans.js";
 import { endLocalPlans, runUnderPlan } from "./testing/local-request-plan.js";
 import {
@@ -35,13 +37,20 @@ const LOOP_TIMEOUT_MS = S3_READY_MS + STREAM_LOOP_SCENARIO_MS;
 // After an abort the scenario may still be inside one restore, which its abort cannot cut short.
 const ABORT_SETTLE_MS = 60_000;
 
-/** Signal 0 checks the process exists without sending it anything. */
-function isRunning(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
+// A Litestream stopped with SIGKILL is listed by `ps` until this process reaps it.
+const REAP_MS = 5_000;
+
+/** The reported children still listed as the process each was when reported, after up to REAP_MS. */
+async function stillRunning<T extends { pid: number; startTime: string | null }>(
+  children: readonly T[],
+): Promise<T[]> {
+  const until = Date.now() + REAP_MS;
+  for (;;) {
+    const left = children.filter(
+      ({ pid, startTime }) => startTime !== null && processStartTime(pid) === startTime,
+    );
+    if (left.length === 0 || Date.now() > until) return left;
+    await delay(100);
   }
 }
 
@@ -102,7 +111,7 @@ describe("the stream loop: stream, rebuild from the bucket, sell under a fresh c
       s3 = server;
       const events: StreamLoopEvent[] = [];
       // Which box's `replicate` children the seam was told of.
-      const replicating: Array<{ box: string; pid: number }> = [];
+      const replicating: Array<{ box: string; pid: number; startTime: string | null }> = [];
       running = runUnderPlan({ bucket: server.bucket, apis: LOOP_APIS, prefixes: ["loop/"] }, () =>
         runStreamLoopScenario({
           bucket: {
@@ -123,7 +132,7 @@ describe("the stream loop: stream, rebuild from the bucket, sell under a fresh c
             spawn: trackedSpawn((pid, args) => {
               if (args[0] !== "replicate") return;
               const box = /[/\\](box-[ab])[/\\]/.exec(args.at(-1) ?? "")?.[1] ?? "unknown";
-              replicating.push({ box, pid });
+              replicating.push({ box, pid, startTime: processStartTime(pid) });
             }),
           },
         }),
@@ -134,7 +143,8 @@ describe("the stream loop: stream, rebuild from the bucket, sell under a fresh c
       );
       expect([...new Set(replicating.map(({ box }) => box))].sort()).toEqual(["box-a", "box-b"]);
       // The scenario's closes stopped every Litestream it started.
-      expect(replicating.filter(({ pid }) => isRunning(pid))).toEqual([]);
+      expect(replicating.every(({ startTime }) => startTime !== null)).toBe(true);
+      expect(await stillRunning(replicating)).toEqual([]);
     },
     LOOP_TIMEOUT_MS,
   );

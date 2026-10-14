@@ -168,11 +168,14 @@ function stopPid(pid: number | undefined, group = false): void {
   }
 }
 
-/** Empties and deletes every bucket on the server; a step that fails is left for the case to report. */
-async function removeAllBuckets(admin: S3Client): Promise<void> {
+/** The prefixes of the buckets this file's cases make: each run's own, and the unplanned case's other one. */
+const CASE_BUCKET_PREFIXES = ["waitron-rehearsal-", "waitron-interrupt-other-"];
+
+/** Empties and deletes the cases' buckets; a step that fails is left for the next case to report. */
+async function removeCaseBuckets(admin: S3Client): Promise<void> {
   const listed = await admin.send(new ListBucketsCommand({})).catch(() => undefined);
   for (const { Name: bucket } of listed?.Buckets ?? []) {
-    if (bucket === undefined) continue;
+    if (bucket === undefined || !CASE_BUCKET_PREFIXES.some((p) => bucket.startsWith(p))) continue;
     try {
       const uploads = await admin.send(new ListMultipartUploadsCommand({ Bucket: bucket }));
       for (const { Key, UploadId } of uploads.Uploads ?? []) {
@@ -198,7 +201,7 @@ describe("a rehearsal run killed part-way, against versitygw", () => {
     driver?: ChildProcess;
     receiptDir?: string;
     keeperPid?: number;
-    /** Read while the keeper was known to be running, so afterEach can tell it from a reused pid. */
+    /** Read when the case first saw the keeper's pid; afterEach signals it only while this matches. */
     keeperStartTime?: string | null;
     sleepPid?: number;
     proxy?: PausingProxy;
@@ -230,9 +233,8 @@ describe("a rehearsal run killed part-way, against versitygw", () => {
     }
     await started.proxy?.close();
     if (started.driver?.pid !== undefined) stopPid(started.driver.pid, true);
-    // Each only while it is still the process the run started. A keeper whose start time was never
-    // read (its case failed before the driver's RUN line) is left to end itself: the driver's death
-    // above is end-of-file on its stdin.
+    // Each only while it is still the process the run started. A keeper whose start time this case
+    // never read is not signalled.
     const pids = new Set([started.sleepPid]);
     const { keeperPid, keeperStartTime } = started;
     if (keeperPid !== undefined && keeperStartTime !== undefined && keeperStartTime !== null) {
@@ -246,9 +248,8 @@ describe("a rehearsal run killed part-way, against versitygw", () => {
     }
     for (const pid of pids) stopPid(pid);
     started = {};
-    // Every bucket on this file's own server was made by one of its cases; a failed case's leftovers
-    // would fail each later case's bucket count.
-    if (client !== undefined) await removeAllBuckets(client);
+    // A failed case's leftover buckets would fail each later case's bucket count.
+    if (client !== undefined) await removeCaseBuckets(client);
   });
 
   afterAll(async () => {
@@ -626,7 +627,7 @@ describe("a rehearsal run killed part-way, against versitygw", () => {
     async (ctx) => {
       const { server, client, dir } = requireServer(ctx);
       const caseDir = await mkdtemp(join(dir, "unplanned-"));
-      const other = `waitron-interrupt-other-${caseDir.slice(-6).toLowerCase()}`;
+      const other = `${CASE_BUCKET_PREFIXES[1]}${caseDir.slice(-6).toLowerCase()}`;
       await client.send(new CreateBucketCommand({ Bucket: other }));
       try {
         const { driver, receiptDir, output } = await startDriver(server, caseDir, "unplanned", {
