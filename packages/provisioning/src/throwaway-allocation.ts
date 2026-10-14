@@ -13,15 +13,20 @@ export interface ThrowawayApplyInput {
 }
 
 /** The apply inputs for a venue whose one enabled module offering a throwaway allocation makes its
- * own; `undefined` when no enabled module offers one. The module list returned is a copy in which
+ * own; `undefined` when no enabled module offers one, a refusal when more than one does. The module list returned is a copy in which
  * only that module's `operations` differs. */
 export function throwawayApplyInput(
   plan: readonly VenueAction[],
   modules: readonly WaitronModule[],
   environments: readonly ("production" | "preproduction")[],
 ): ThrowawayApplyInput | undefined {
-  const offering = modules.find((module) => module.provisioning?.throwawayAllocation);
-  if (offering === undefined) return undefined;
+  const offering = modules.filter((module) => module.provisioning?.throwawayAllocation);
+  if (offering.length === 0) return undefined;
+  if (offering.length > 1)
+    throw new AppError("module.throwaway_allocation_ambiguous", {
+      candidates: offering.map((module) => module.name),
+    });
+  const [seat] = offering as [WaitronModule];
   const taxpayer = plan.find((action) => action.kind === "ensure-tenant");
   if (taxpayer === undefined) throw new AppError("setup.request_invalid", { field: "taxId" });
   const bases = plan.flatMap((action) =>
@@ -29,18 +34,17 @@ export function throwawayApplyInput(
   );
   const initialNodeId = randomUUID();
   const initialAdministratorId = randomUUID();
-  const { eventId, sourceId, input, operations } =
-    offering.provisioning!.throwawayAllocation!.prepare({
-      environments,
-      taxpayerNif: taxpayer.taxId,
-      bases,
-      nodeId: initialNodeId,
-      administratorId: initialAdministratorId,
-    });
+  const { eventId, sourceId, input, operations } = seat.provisioning!.throwawayAllocation!.prepare({
+    environments,
+    taxpayerNif: taxpayer.taxId,
+    bases,
+    nodeId: initialNodeId,
+    administratorId: initialAdministratorId,
+  });
   return {
     initialNodeId,
     initialAdministratorId,
-    moduleInputs: new Map([[offering.name, { eventId, sourceId, input }]]),
-    modules: modules.map((module) => (module === offering ? { ...module, operations } : module)),
+    moduleInputs: new Map([[seat.name, { eventId, sourceId, input }]]),
+    modules: modules.map((module) => (module === seat ? { ...module, operations } : module)),
   };
 }

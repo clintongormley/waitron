@@ -4,6 +4,7 @@ import { ALL_MODULES } from "@waitron/composition";
 import { getCountryPack } from "@waitron/country-packs";
 import { stampDeployment } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { throwawayApplyInput } from "./throwaway-allocation.js";
 import { applyVenue } from "./venue-apply.js";
@@ -126,6 +127,24 @@ describe("throwawayApplyInput", () => {
     expect(
       throwawayApplyInput(planVenue(request(real), ALL_MODULES), withoutSeat, ["preproduction"]),
     ).toBeUndefined();
+  });
+
+  it("refuses when more than one enabled module offers the seat", () => {
+    const second = fakeModule("second-regime", {
+      provisioning: { throwawayAllocation: fiscal().provisioning!.throwawayAllocation! },
+    });
+    expect(() =>
+      throwawayApplyInput(
+        planVenue(request(real), ALL_MODULES),
+        [...ALL_MODULES, second],
+        ["preproduction"],
+      ),
+    ).toThrow(
+      expect.objectContaining({
+        code: "module.throwaway_allocation_ambiguous",
+        params: { candidates: ["fiscal-verifactu", "second-regime"] },
+      }),
+    );
   });
 
   it("passes the seat's production refusal through", () => {

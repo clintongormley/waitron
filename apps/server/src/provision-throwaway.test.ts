@@ -109,25 +109,21 @@ describe("provisionVenue with a throwaway allocation", () => {
     },
   );
 
-  // provisionVenue cannot tell Demo from Preparation: both reach it as a preproduction request.
-  it.each(["demo", "prepare"])(
-    "refuses a %s setup on a production box before writing anything",
-    async () => {
-      const before = facts();
-      await expect(
-        provision({
-          environment: "preproduction",
-          venue: venue(real),
-          initialAllocation: throwaway("production"),
-        }),
-      ).rejects.toMatchObject({
-        code: "sif.throwaway_allocation_refused",
-        params: { environment: "production" },
-      });
-      expect(facts()).toEqual(before);
-      expect(before.deployment).toEqual([]);
-    },
-  );
+  it("refuses a preproduction request on a production box before writing anything (provisionVenue has no mode; Demo and Preparation are told apart at the route)", async () => {
+    const before = facts();
+    await expect(
+      provision({
+        environment: "preproduction",
+        venue: venue(real),
+        initialAllocation: throwaway("production"),
+      }),
+    ).rejects.toMatchObject({
+      code: "sif.throwaway_allocation_refused",
+      params: { environment: "production" },
+    });
+    expect(facts()).toEqual(before);
+    expect(before.deployment).toEqual([]);
+  });
 
   it("refuses a production request before writing anything", async () => {
     const before = facts();
@@ -164,8 +160,8 @@ describe("provisionVenue with a throwaway allocation", () => {
     expect(facts()).toEqual(before);
   });
 
-  // No country pack offers a territory whose fiscal slot is fiscal-none today; GB-vat is the one
-  // venueModuleConfig resolves to it, as provision.test.ts's no-regime case uses.
+  // GB-vat resolves to fiscal-none through venueModuleConfig, as provision.test.ts's no-regime
+  // case uses.
   it("provisions a venue whose territory has no throwaway allocation, with no allocation", async () => {
     const result = await provision(
       {
