@@ -117,10 +117,18 @@ export async function applyVenue(
   if (ensure === undefined || ensure.kind !== "ensure-tenant") {
     throw new Error("applyVenue: plan is missing ensure-tenant");
   }
-  await assertActionOrder(actions, deps.db);
   const inputs = new Map(
     [...(deps.moduleInputs ?? [])].map(([name, input]) => [name, { ...input }]),
   );
+  const collecting = modules.filter(
+    (module) =>
+      module.operations !== undefined &&
+      inputs.has(module.name) &&
+      actions.some((action) => action.kind === "seed-module" && action.module === module.name),
+  );
+  if (collecting.length > 0 && !actions.some((action) => action.kind === "seed-admin"))
+    throw new AppError("provisioning.initial_operator_required", {});
+  await assertActionOrder(actions, deps.db);
   const initialNodeId = brandNodeId(deps.initialNodeId ?? randomUUID());
   const initialAdministratorId = normaliseUuid(
     deps.initialAdministratorId ?? randomUUID(),
@@ -483,12 +491,7 @@ export async function applyVenue(
   };
   const transact = (prepared: ModuleOperations) =>
     withTransaction(deps.db, (tx) => run(tx, prepared));
-  const collecting = modules.filter(
-    (module) =>
-      module.operations !== undefined &&
-      inputs.has(module.name) &&
-      actions.some((action) => action.kind === "seed-module" && action.module === module.name),
-  );
+
   if (collecting.length === 0) return transact(new Map());
   const [existingVenue] = await deps.db.select({ id: locations.id }).from(locations).limit(1);
   if (existingVenue !== undefined) return transact(new Map());
@@ -497,10 +500,7 @@ export async function applyVenue(
     .from(persons)
     .where(eq(persons.role, "admin"))
     .limit(1);
-  if (
-    existingAdministrator !== undefined ||
-    !actions.some((action) => action.kind === "seed-admin")
-  )
+  if (existingAdministrator !== undefined)
     throw new AppError("provisioning.initial_operator_required", {});
   // The seed checks that this planned operator is the newly inserted active administrator.
   const authorise = (index: number, operations: ModuleOperations): Promise<VenueResult> => {

@@ -29,7 +29,6 @@ import type {
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { startServer } from "./boot.js";
 import { establishNodeIdentity } from "./node-identity.js";
-import { ALL_MODULES } from "./modules.js";
 import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./reserved-identity.js";
 import { freePort } from "./testing/free-ports.js";
 
@@ -188,7 +187,7 @@ async function seedMirrorIdentity(db: Database): Promise<{ nodeId: string }> {
       nodeName: "cloud",
       filingModule: "verifactu",
       taxModule: "vat",
-      modules: ALL_MODULES,
+      modules: [],
       reserved: {
         modules: {
           "fiscal-verifactu": {

@@ -9,7 +9,8 @@ import { loadKeyRing, type KeyRing } from "@waitron/credentials";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { canonicalize, generateNodeKeyPair, verifyBytes } from "@waitron/membership";
 import { parseModuleConfig, type WaitronModule } from "@waitron/module";
-import { applyVenue, planVenue, type AdoptResult } from "@waitron/provisioning";
+import { applyAllocatedTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
+import { planVenue, type AdoptResult } from "@waitron/provisioning";
 import { ALL_MODULES } from "./modules.js";
 import { writeModuleConfig } from "./module-config.js";
 import { establishNodeIdentity } from "./node-identity.js";
@@ -141,7 +142,7 @@ describe("assembleMirrorBundle (primary side)", () => {
   it("carries no cached invoice series in the designated trading identity", async () => {
     const standby = { nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB };
     const stale = { ...designated, seriesId: "cached" };
-    const bundle = await assembleMirrorBundle({ ...baseDeps(), designated: stale, standby });
+    const { bundle } = await allocatedBundle(standby, { designated: stale });
     expect(bundle.designated).not.toHaveProperty("seriesId");
     expect(bundle.designated.nodeId).toBe(designated.nodeId);
     expect(bundle.designated.locationId).toBe(designated.locationId);
@@ -203,10 +204,9 @@ describe("assembleMirrorBundle (primary side)", () => {
       parseModuleConfig({ modules: { [toggleable]: false } }, ALL_MODULES),
     );
     try {
-      const bundle = await assembleMirrorBundle({
-        ...baseDeps(),
-        designated,
-        standby: { nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB },
+      const { bundle } = await allocatedBundle({
+        nodeId: crypto.randomUUID(),
+        publicKey: STANDBY_PUB,
       });
       expect(bundle.moduleOverrides).toEqual({ [toggleable]: false });
     } finally {
@@ -215,27 +215,23 @@ describe("assembleMirrorBundle (primary side)", () => {
   });
 
   it("carries {} when the primary has no modules.json", async () => {
-    const bundle = await assembleMirrorBundle({
-      ...baseDeps(),
-      designated,
-      standby: { nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB },
+    const { bundle } = await allocatedBundle({
+      nodeId: crypto.randomUUID(),
+      publicKey: STANDBY_PUB,
     });
     expect(bundle.moduleOverrides).toEqual({});
   });
 
   it("carries a WireGuard public key when one is provided, and omits it otherwise (swap S2)", async () => {
-    const withKey = await assembleMirrorBundle({
-      ...baseDeps(),
-      designated,
-      standby: { nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB },
-      wireguardPublicKey: "PUBKEY==",
-    });
+    const { bundle: withKey } = await allocatedBundle(
+      { nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB },
+      { wireguardPublicKey: "PUBKEY==" },
+    );
     expect(withKey.wireguardPublicKey).toBe("PUBKEY==");
 
-    const withoutKey = await assembleMirrorBundle({
-      ...baseDeps(),
-      designated,
-      standby: { nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB },
+    const { bundle: withoutKey } = await allocatedBundle({
+      nodeId: crypto.randomUUID(),
+      publicKey: STANDBY_PUB,
     });
     expect(withoutKey.wireguardPublicKey).toBeUndefined();
   });
@@ -291,7 +287,10 @@ describe("assembleMirrorBundle (primary side)", () => {
 function primaryNode() {
   return { nodeId: nodeId(designated.nodeId), locationId: locationId(designated.locationId) };
 }
-async function allocatedBundle(standby: { nodeId: string; publicKey: string }) {
+async function allocatedBundle(
+  standby: { nodeId: string; publicKey: string },
+  extra: Partial<Parameters<typeof assembleMirrorBundle>[0]> = {},
+) {
   const fixture = await standbyContract(db, primaryNode(), standby.nodeId, [
     { code: "FA", purpose: "standard" },
     { code: "FF", purpose: "full" },
@@ -309,6 +308,7 @@ async function allocatedBundle(standby: { nodeId: string; publicKey: string }) {
         ...baseDeps(),
         designated,
         standby,
+        ...extra,
         moduleOperations: new Map([["fiscal-verifactu", operation]]),
       }),
     );

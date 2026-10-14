@@ -4,6 +4,7 @@ import {
   withOperationAuthority,
   type ModuleOperationInput,
   type ProvisionedNode,
+  type OperationOperator,
 } from "@waitron/module";
 import { createAllocationPreparation } from "../src/allocation-preparation.js";
 import { createStandbyAllocationPreparation } from "../src/allocated-standby.js";
@@ -32,6 +33,8 @@ export function allocationFixture(options: {
   softwareId?: string;
   primary?: ProvisionedNode;
   operatorId?: string;
+  recoveryKey?: boolean;
+  environment?: "preproduction" | "production";
 }) {
   const { node, bases, identity, primary } = options;
   const allocation = {
@@ -39,7 +42,7 @@ export function allocationFixture(options: {
     allocationId: `contract-${identity}`,
     taxpayerNif: options.taxpayerNif ?? "89890001K",
     softwareId: options.softwareId ?? "W1",
-    environment: "preproduction" as const,
+    environment: options.environment ?? "preproduction",
     installationIdentity: identity,
     series: bases.map(({ code, purpose }) => ({ code: `${code}-${identity}`, purpose })),
     source: identity.startsWith("S") ? ("initial-paper" as const) : ("paper" as const),
@@ -87,6 +90,9 @@ export function allocationFixture(options: {
       sourceId: primary?.nodeId ?? (action === "setup" ? "initial-venue" : "archive-contract"),
       targetNodeId: node.nodeId,
     };
+    const authenticatedOperator: OperationOperator = options.recoveryKey
+      ? { kind: "recovery-key", nodeId: node.nodeId, eventId: binding.eventId }
+      : operatorId;
     const common = {
       trust,
       allocationId: allocation.allocationId,
@@ -101,14 +107,32 @@ export function allocationFixture(options: {
         ...scope,
         evidence: { ...common, reservationConfirmed: true, currentEntryState: "reserved" },
       }));
-      return { binding, operatorId, preparation, input: state.evidence };
+      return {
+        binding,
+        operatorId,
+        preparation,
+        input: state.evidence,
+        confirmation: {
+          version: 1,
+          allocationId: allocation.allocationId,
+          binding,
+          operatorId,
+          recipientVenueId: common.recipientVenueId,
+          generationId: common.generationId,
+          blockId: common.blockId,
+          incidentEvidence,
+          currentRegisterConfirmed: true,
+          reservationConfirmed: true,
+          currentEntryState: "reserved",
+        },
+      };
     }
     const approval = {
       version: 1 as const,
       eventId: binding.eventId,
       sourceId: binding.sourceId,
       targetNodeId: node.nodeId,
-      operatorId,
+      operatorId: authenticatedOperator,
       oldMachineOffline: action !== "setup",
       oldMachineAbsent: action === "setup",
       noParallelRecovery: true,
@@ -122,7 +146,7 @@ export function allocationFixture(options: {
         eventId: binding.eventId,
         sourceId: binding.sourceId,
         targetNodeId: binding.targetNodeId,
-        operatorId,
+        operatorId: authenticatedOperator,
         incidentEvidence,
         consumedAt: approval.confirmedAt,
       },
@@ -148,7 +172,27 @@ export function allocationFixture(options: {
       approval,
       ...(action === "promote" ? { reservationEventId: joinEvent } : {}),
     };
-    return { binding, operatorId, preparation, input };
+    return {
+      binding,
+      operatorId: authenticatedOperator,
+      preparation,
+      input,
+      confirmation: {
+        version: 1,
+        allocationId: allocation.allocationId,
+        binding,
+        operatorId: authenticatedOperator,
+        priorActivation,
+        incidentEvidence,
+        requiredBases: bases,
+        recipientVenueId: common.recipientVenueId,
+        generationId: common.generationId,
+        blockId: common.blockId,
+        currentRegisterConfirmed: true,
+        consumptionConfirmed: true,
+        currentEntryState: "consumed-for-event",
+      },
+    };
   }
   async function prepared<T>(
     action: string,
@@ -164,6 +208,11 @@ export function allocationFixture(options: {
   return {
     allocation,
     state,
+    custodian: {
+      custodianId: "contract-custodian",
+      publicKey,
+      fingerprint: trust.fingerprint,
+    },
     request,
     authorised<T>(action: string, run: (operation: ModuleOperationInput) => Promise<T>) {
       const held = request(action);

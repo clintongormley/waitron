@@ -26,6 +26,16 @@ import type { MirrorBundle, ReservedIdentity } from "./mirror-bundle.js";
 import type { PendingAdoption } from "./finish-adoption.js";
 import { verifyBreakGlass } from "./break-glass.js";
 
+vi.mock("./modules.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./modules.js")>();
+  return {
+    ...actual,
+    ALL_MODULES: actual.ALL_MODULES.map((module) =>
+      module.name === "fiscal-verifactu" ? { ...module, operations: undefined } : module,
+    ),
+  };
+});
+
 // Cases depend on `useVenueDb`'s default `resetPerTest`: each starts from an unstamped `deployment`
 // and an empty `tenants`.
 

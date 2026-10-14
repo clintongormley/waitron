@@ -1,4 +1,4 @@
-import { applyAllocatedTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
+import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { sql } from "drizzle-orm";
 import { withTransaction, type Database } from "@waitron/db";
 import {

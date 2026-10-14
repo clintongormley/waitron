@@ -346,7 +346,7 @@ async function liveTarget(target: string) {
 
 it("reserves and adopts without an active SIF or series, then opens all purposes with the real node key at takeover", async () => {
   const primaryBefore = await primary.db.select().from(registroSif);
-  const countersBefore = (await primary.db.execute(sql`select * from contadores_instalacion`)).rows;
+  const allocationsBefore = await primary.db.select().from(fiscalAllocations);
   const held = await reserve();
   expect(held.reserved.series).toEqual([]);
   expect(JSON.stringify(held.reserved)).not.toContain("authority");
@@ -354,9 +354,7 @@ it("reserves and adopts without an active SIF or series, then opens all purposes
   expect(await liveTarget(held.standby.nodeId)).toEqual({ sif: [], series: [], allocations: [] });
   expect(await spare.db.select().from(fiscalReservations)).toHaveLength(1);
   expect(await primary.db.select().from(registroSif)).toEqual(primaryBefore);
-  expect((await primary.db.execute(sql`select * from contadores_instalacion`)).rows).toEqual(
-    countersBefore,
-  );
+  expect(await primary.db.select().from(fiscalAllocations)).toEqual(allocationsBefore);
   await setDeploymentMode(spare.db, held.standby.nodeId, "mirror");
   const key = await mintBreakGlassSecret(spare.db, held.standby.nodeId);
   const result = await promote(held, key);

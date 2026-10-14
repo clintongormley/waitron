@@ -83,7 +83,8 @@ import {
   readProfilePrinterLists,
   setProfilePrinterLists,
 } from "@waitron/layouts";
-import { applyVenue, planVenue, type VenueRequest } from "@waitron/provisioning";
+import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
+import { planVenue, type VenueRequest } from "@waitron/provisioning";
 import {
   deviceProfileAdmissionPersons,
   deviceProfileAdmissionRoles,

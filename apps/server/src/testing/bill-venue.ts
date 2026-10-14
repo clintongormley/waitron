@@ -1,4 +1,4 @@
-import { applyAllocatedTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
+import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { departments, departmentReceipts } from "@waitron/venue-service";
 import { issueOrderInvoice } from "./issue-order.js";
 import { randomUUID } from "node:crypto";

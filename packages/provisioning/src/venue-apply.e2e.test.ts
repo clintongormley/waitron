@@ -17,7 +17,7 @@ import {
 } from "@waitron/shared";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import { planVenue, type VenueRequest } from "./venue-plan.js";
-import { applyVenue } from "./venue-apply.js";
+import { applyAllocatedTestVenue as applyVenue } from "../test/allocated-venue.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 
 const TOTP_KEY_RING: TotpKeyRing = { current: { version: 1, key: Buffer.alloc(32, 0x5) } };

@@ -1,17 +1,19 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { enabledModules } from "@waitron/module";
 import { drain } from "@waitron/fiscal-verifactu";
 import { venueFiscalSelection, type VenueRequest } from "@waitron/provisioning";
 import type { RegistroAlta, RegistroAnulacion, VerifactuClient } from "@waitron/verifactu";
 import { createFakeAeat, keyOf } from "@waitron/verifactu/testing";
 import { ALL_MODULES } from "./modules.js";
+import { initialSetupInput } from "./testing/allocated-provision.js";
 import { submitFiscalReadiness } from "./fiscal-readiness-runner.js";
 
 const dirs: string[] = [];
 afterEach(async () => {
+  vi.unstubAllEnvs();
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
@@ -63,7 +65,9 @@ it("reports a sample the real Veri*Factu drain files as rejected as rejected, wi
     consultar: (...args) => real.consultar(...args),
   };
 
+  const initialOperations = await initialSetupInput(stateDir, venue);
   const result = await submitFiscalReadiness({
+    initialOperations,
     stateDir,
     modules,
     venue,

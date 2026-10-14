@@ -15,6 +15,7 @@ import {
   openVenueDatabase,
   readStandardSeriesId,
   sales,
+  stampDeployment,
   tenants,
   withTransaction,
   type Database,
@@ -22,8 +23,6 @@ import {
 import {
   FISCAL_RESTORE,
   cadenas,
-  contadoresInstalacion,
-  installationFloor,
   registroSif,
   registrosFacturacion,
 } from "@waitron/fiscal-verifactu";
@@ -34,6 +33,11 @@ import {
   migrationOptionsFor,
 } from "@waitron/migrations";
 import type { WaitronModule } from "@waitron/module";
+import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
+import { locationId, nodeId } from "@waitron/shared";
+import { mintBreakGlassSecret } from "./break-glass.js";
+import { createRecoveryRestoreRunner } from "./recovery-module-operation.js";
+import { fiscalAllocations } from "@waitron/fiscal-verifactu";
 import { ALL_MODULES } from "./modules.js";
 import { buildManifest, schemaVersionsByModule } from "./backup-manifest.js";
 import { packArchive, type ArchiveEntry } from "./backup-archive.js";
@@ -85,11 +89,7 @@ async function seedFiscalRegistro(db: Database): Promise<void> {
     .values({ id: F.seriesId, nodeId: F.nodeId, code: "FA", purpose: "standard", nextNumber: 5 });
   await db.insert(invoiceSeries).values({ nodeId: F.nodeId, code: "RE", purpose: "rectificative" });
   await db.insert(invoiceSeries).values({ nodeId: F.nodeId, code: "FF", purpose: "full" });
-  await db.insert(contadoresInstalacion).values({
-    nif: "89890001K",
-    idSistemaInformatico: "W1",
-    proximoNumero: 2,
-  });
+  await stampDeployment(db, "preproduction");
   await db.insert(registroSif).values({
     id: F.sifId,
     nodeId: F.nodeId,
@@ -169,6 +169,7 @@ let migrationsRoot: string;
 let olderMigrationsRoot: string;
 let artifactPath: string;
 let olderArtifactPath: string;
+const artifactSecrets = new Map<string, string>();
 
 /** A brand-new empty venue directory: this engine's "create a fresh database". */
 async function arrangeDirs(): Promise<{ stateDir: string; venueDir: string }> {
@@ -182,14 +183,33 @@ async function restoreDepsFor(
   dirs: { stateDir: string; venueDir: string },
   artifact = artifactPath,
 ): Promise<RestoreDeps> {
+  const fixture = allocationFixture({
+    node: { nodeId: nodeId(F.nodeId), locationId: locationId(F.locationId) },
+    bases: [
+      { code: "FA", purpose: "standard" },
+      { code: "FF", purpose: "full" },
+      { code: "RE", purpose: "rectificative" },
+    ],
+    identity: "P000042",
+    recoveryKey: true,
+  });
+  const held = fixture.request("restore");
+  const modules = ALL_MODULES.map((module) =>
+    module.name === "fiscal-verifactu" ? { ...module, operations: held.preparation } : module,
+  );
   return {
+    withModuleOperations: createRecoveryRestoreRunner(
+      modules,
+      { binding: held.binding, input: held.input },
+      artifactSecrets.get(artifact),
+    ),
     artifact: await readFile(artifact),
     recoveryKey: RECOVERY_KEY,
     ...dirs,
     stagingDir: join(dirs.stateDir, "restore-staging"),
     // The OLDER artifact is one migration behind ITS root, not behind the shipped one.
     migrationsRoot: artifact === olderArtifactPath ? olderMigrationsRoot : migrationsRoot,
-    modules: ALL_MODULES,
+    modules,
     environment: "preproduction",
     log: noopLog,
   };
@@ -231,6 +251,7 @@ async function buildArtifact(older: boolean, artifact: string): Promise<void> {
   const store = await openVenueDatabase(baselineDir);
   try {
     await seedFiscalRegistro(store.venue);
+    artifactSecrets.set(artifact, await mintBreakGlassSecret(store.venue, F.nodeId));
     await seedImage(store.venue);
     const head = await store.venue
       .select({ secuencia: cadenas.secuencia, ultimaHuella: cadenas.ultimaHuella })
@@ -342,12 +363,11 @@ describe("fiscal restore, end to end", () => {
         .where(eq(registroSif.nodeId, F.nodeId))
         .orderBy(registroSif.numeroInstalacion);
       expect(sifs).toHaveLength(2);
-      expect(sifs[0]).toMatchObject({ numeroInstalacion: 1 });
+      expect(sifs[0]).toMatchObject({ numeroInstalacion: "1" });
       expect(sifs[0]?.revocadoEn).not.toBeNull();
       expect(sifs[1]?.revocadoEn).toBeNull();
-      expect(sifs[1]!.numeroInstalacion).toBeGreaterThanOrEqual(
-        installationFloor(new Date(Date.now() - 60_000)),
-      );
+      expect(sifs[1]!.numeroInstalacion).toBe("P000042");
+      expect(sifs[1]!.numeroInstalacion).not.toBe(sifs[0]!.numeroInstalacion);
       const n = sifs[1]!.numeroInstalacion;
       const head = await db
         .select({ ultimaHuella: cadenas.ultimaHuella, secuencia: cadenas.secuencia })
@@ -464,7 +484,7 @@ describe("fiscal restore, end to end", () => {
         .select({ numeroInstalacion: registroSif.numeroInstalacion })
         .from(registroSif)
         .where(isNull(registroSif.revocadoEn));
-      expect(live).toEqual([{ numeroInstalacion: 1 }]);
+      expect(live).toEqual([{ numeroInstalacion: "1" }]);
       expect(await retiredSeriesCount(store.venue)).toBe(0);
     } finally {
       await store.close();
@@ -483,8 +503,8 @@ describe("fiscal restore, end to end", () => {
             ...m,
             backup: {
               ...m.backup,
-              restore: async (tx, node) => ({
-                ...(await FISCAL_RESTORE(tx, node)),
+              restore: async (tx, node, operation) => ({
+                ...(await FISCAL_RESTORE(tx, node, operation)),
                 series: [{ code: "FA", purpose: "standard" }],
               }),
             },
@@ -493,9 +513,19 @@ describe("fiscal restore, end to end", () => {
     );
     const dirs = await arrangeDirs();
     const rd = await restoreDepsFor(dirs);
+    const preparedSabotage = rd.modules.map((module) =>
+      module.name === "fiscal-verifactu"
+        ? {
+            ...module,
+            backup: sabotaged.find((candidate) => candidate.name === module.name)!.backup,
+          }
+        : module,
+    );
     const validated = await validateArtifact(rd);
     try {
-      await expect(writeValidated(validated, { ...rd, modules: sabotaged })).rejects.toMatchObject({
+      await expect(
+        writeValidated(validated, { ...rd, modules: preparedSabotage }),
+      ).rejects.toMatchObject({
         code: "restore.hook_failed",
         params: { module: "fiscal-verifactu", code: "series.code_collision" },
       });
@@ -508,10 +538,8 @@ describe("fiscal restore, end to end", () => {
         .select({ numeroInstalacion: registroSif.numeroInstalacion })
         .from(registroSif);
       expect(sifs).toHaveLength(1); // the hook's new row rolled back
-      const counter = await store.venue
-        .select({ proximoNumero: contadoresInstalacion.proximoNumero })
-        .from(contadoresInstalacion);
-      expect(counter[0]?.proximoNumero).toBe(2); // the floor rolled back with it
+      expect(sifs).toEqual([{ numeroInstalacion: "1" }]);
+      expect(await store.venue.select().from(fiscalAllocations)).toEqual([]);
       expect(await retiredSeriesCount(store.venue)).toBe(0);
     } finally {
       await store.close();

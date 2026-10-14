@@ -26,11 +26,16 @@ import {
   invoiceSeries,
   locations,
   nodes,
+  stampDeployment,
   openVenueDatabase,
   tenants,
   withTransaction,
 } from "@waitron/db";
 import { nodeId as brandNodeId } from "@waitron/shared";
+import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
+import { mintBreakGlassSecret } from "./break-glass.js";
+import { createRecoveryRestoreRunner } from "./recovery-module-operation.js";
+import { locationId } from "@waitron/shared";
 import { FISCAL_RESTORE, currentSif } from "@waitron/fiscal-verifactu";
 import { AppError, isAppError } from "@waitron/shared";
 import { enabledModules, fiscalSlot } from "@waitron/module";
@@ -844,14 +849,39 @@ describe("restore hooks (identity phase)", () => {
         nodeId: brandNodeId(T.nodeId),
         nif: "89890001K",
         idSistemaInformatico: "WT",
+        numeroInstalacion: "S000001",
       });
-      expect(sif.numeroInstalacion).toBe(1);
+      expect(sif.numeroInstalacion).toBe("S000001");
       await tx
         .insert(invoiceSeries)
         .values({ nodeId: T.nodeId, code: "FA-1", purpose: "rectificative" });
     });
+    await stampDeployment(suite.db, "preproduction");
+    const secret = await mintBreakGlassSecret(suite.db, T.nodeId);
+    const fixture = allocationFixture({
+      node: { nodeId: brandNodeId(T.nodeId), locationId: locationId(T.locationId) },
+      identity: "P000042",
+      softwareId: "WT",
+      recoveryKey: true,
+      bases: [
+        { code: "FA", purpose: "standard" },
+        { code: "FF", purpose: "full" },
+        { code: "FA-1", purpose: "rectificative" },
+      ],
+    });
+    const held = fixture.request("restore");
+    const modules = withHooks({ "fiscal-verifactu": FISCAL_RESTORE }).map((module) =>
+      module.name === "fiscal-verifactu" ? { ...module, operations: held.preparation } : module,
+    );
     await restoreFromArtifact(
-      makeRestoreDeps({ modules: withHooks({ "fiscal-verifactu": FISCAL_RESTORE }) }),
+      makeRestoreDeps({
+        modules,
+        withModuleOperations: createRecoveryRestoreRunner(
+          modules,
+          { binding: held.binding, input: held.input },
+          secret,
+        ),
+      }),
     );
     const sif = await withTransaction(suite.db, (tx) => currentSif(tx, brandNodeId(T.nodeId)));
     const { rows } = await suite.db.execute<{ id: string; code: string; purpose: string }>(sql`

@@ -12,7 +12,8 @@ import {
   webauthnCredentials,
 } from "@waitron/identity";
 import { shifts } from "@waitron/workforce";
-import { applyVenue, planVenue } from "@waitron/provisioning";
+import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
+import { planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
 import { mountMeApi } from "./me-api.js";

@@ -270,7 +270,10 @@ export interface StartedServer {
    * Promote a read-only mirror to the venue's primary in-process, then restart into `mode=primary`.
    * Present only in mirror mode. Refuses without a fence attestation (`promotion.fence_not_attested`).
    */
-  promoteMirrorToPrimary?: (attestation: FenceAttestation) => Promise<MirrorPromotionResult>;
+  promoteMirrorToPrimary?: (
+    attestation: FenceAttestation,
+    withModuleOperations?: PromotionOperationRunner,
+  ) => Promise<MirrorPromotionResult>;
   /**
    * Resolves once background work has stopped, the listeners are closed, every password reset the
    * management API answered has written its token and read the mail settings for its email (the send

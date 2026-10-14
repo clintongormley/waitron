@@ -56,7 +56,8 @@ import {
   departmentSalePolicies,
   departments,
 } from "@waitron/venue-service";
-import { applyVenue, planVenue } from "@waitron/provisioning";
+import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
+import { planVenue } from "@waitron/provisioning";
 import {
   basisPointsToDecimal,
   centsToDecimal,

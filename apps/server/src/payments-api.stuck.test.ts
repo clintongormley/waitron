@@ -28,7 +28,8 @@ import {
   PIN_THROTTLE_FREE_ATTEMPTS,
   startManagementSession,
 } from "@waitron/identity";
-import { applyVenue, planVenue } from "@waitron/provisioning";
+import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
+import { planVenue } from "@waitron/provisioning";
 import { deleteCredential, loadKeyRing, putCredential, type KeyRing } from "@waitron/credentials";
 import {
   decimal,

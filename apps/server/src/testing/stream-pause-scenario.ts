@@ -35,7 +35,8 @@ import {
 } from "@waitron/db";
 import { hashPassword, hashPin, hashSecret, persons } from "@waitron/identity";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { applyVenue, planVenue } from "@waitron/provisioning";
+import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
+import { planVenue } from "@waitron/provisioning";
 import { locationId as brandLocationId } from "@waitron/shared";
 import {
   bucketKey,

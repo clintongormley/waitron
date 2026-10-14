@@ -7,7 +7,7 @@ import { cp, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { eq, sql } from "drizzle-orm";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import {
   deviceProfiles,
   openVenueDatabase,
@@ -36,7 +36,11 @@ import { schemaVersionsByModule } from "./backup-manifest.js";
 import { packArchive } from "./backup-archive.js";
 import { encryptArtifact } from "./artifact-cipher.js";
 import { buildConfigurationBundle, encodeConfigurationBundle } from "./configuration-transfer.js";
-import { provisionVenue, venueModuleConfig } from "./provision.js";
+import {
+  provisionAllocatedTestVenue as provisionVenue,
+  initialSetupInput,
+} from "./testing/allocated-provision.js";
+import { venueModuleConfig } from "./provision.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { STREAM_PURPOSE, streamSettingsPayload } from "./stream-host.js";
 import { generateNodeKeyPair } from "@waitron/membership";
@@ -376,6 +380,9 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
   /** A setup-mode boot over a venue directory, with the restart intercepted and the minted CA
    * trusted; `use` runs while it serves. `extraPortCount` more ports are drawn beside the server's own, so none of
    * them is the server's port. */
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
   async function withSetupBoot(
     directory: string,
     env: Record<string, string>,
@@ -403,8 +410,28 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         const { via, close } = httpsVia(await readFile(join(stateDir, "tls", "ca.crt")));
         try {
           await use({
-            post: (path, init) =>
-              fetch(`https://127.0.0.1:${port}${path}`, { ...via, method: "POST", ...init }),
+            post: async (path, init) => {
+              if (path === "/setup-api/provision" && typeof init.body === "string") {
+                const body = JSON.parse(init.body);
+                const opened = await openVenueDatabase(directory);
+                let committed: boolean;
+                try {
+                  committed = opened.venue.all(sql`select id from locations`).length > 0;
+                } finally {
+                  await opened.close();
+                }
+                if (!committed)
+                  body.initialOperations = await initialSetupInput(
+                    stateDir,
+                    body.venue,
+                    body.mode === "live" && env.WAITRON_ENV !== "dev"
+                      ? "production"
+                      : "preproduction",
+                  );
+                init = { ...init, body: JSON.stringify(body) };
+              }
+              return fetch(`https://127.0.0.1:${port}${path}`, { ...via, method: "POST", ...init });
+            },
             kills,
             stateDir,
             extraPorts: drawn,

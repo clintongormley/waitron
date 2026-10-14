@@ -920,3 +920,20 @@ consumer ports and final qualification remain incomplete. This branch is not for
 venue-application suite passes 43 cases. The dormant-split assessment is in Lane E's local
 questions ledger; it proposes a shape and does not claim that split candidates have been qualified.
 Host consumer ports and final qualification remain; the split question is not a work blocker.
+
+
+### 2026-10-14 host qualification checkpoint: W41s-4
+
+The prepared default now has real host fixtures for setup, re-registration,
+standby reservation, account and node-key promotion, archive restore and bucket
+rebuild. The unedited golden hash and immutability pair passed 20 cases; the real
+pinned-binary stream loop passed with skipping forbidden. Unrelated existing-sale
+fixtures retain their original identities and series, and their behavioral checks.
+
+The developer command still supplies no allocation. Two history captures still
+name the retired counter, and a configuration-import check still expects the
+unsuffixed initial series. The concrete proposals and experiments are in
+[the host checks and demo decision](../superpowers/plans/2026-10-14-w41s4-host-check-and-demo-decision.md).
+They are not enabled by this checkpoint. Task 4 still owes their decisions and
+implementation, current-main regeneration/populated upgrade, the Cloud operator
+contract, both FULL reviews, the push hook and current-head CI.

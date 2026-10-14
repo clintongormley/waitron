@@ -18,7 +18,8 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { insertCapturedPayment } from "@waitron/payments";
 import type { PaymentProvider, PaymentResult } from "@waitron/payments";
-import { applyVenue, planVenue } from "@waitron/provisioning";
+import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
+import { planVenue } from "@waitron/provisioning";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,

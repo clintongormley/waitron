@@ -28,7 +28,8 @@ import { VerifactuBackend, registrosFacturacion } from "@waitron/fiscal-verifact
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { applyVenue, planVenue } from "@waitron/provisioning";
+import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
+import { planVenue } from "@waitron/provisioning";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,

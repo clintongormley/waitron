@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
 import {
   readDeploymentEnvironment,
@@ -30,7 +30,11 @@ import {
   setRoutingCell,
 } from "@waitron/venue-service";
 import { locationId as brandLocationId } from "@waitron/shared";
-import { provisionVenue, recoverProvisionedVenue, venueModuleConfig } from "./provision.js";
+import { provisionAllocatedTestVenue as provisionVenue } from "./testing/allocated-provision.js";
+import { applyHistoricalTestVenue } from "@waitron/provisioning/testing/allocated-venue";
+import { planVenue } from "@waitron/provisioning";
+import { enabledModules } from "@waitron/module";
+import { recoverProvisionedVenue, venueModuleConfig } from "./provision.js";
 import { readModuleConfig } from "./module-config.js";
 import { ALL_MODULES } from "./modules.js";
 
@@ -105,7 +109,9 @@ async function fiscalCounts(db: Database): Promise<FiscalCounts> {
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 
-afterEach(() => clearProvisionFixture(suite.db));
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 let stateDir: string;
 
 beforeEach(async () => {
@@ -426,9 +432,9 @@ describe("provisionVenue", () => {
 describe("clearProvisionFixture", () => {
   it("clears today's zone extension before deleting its zone service policy", async () => {
     const db = ownerDb();
-    const result = await provisionVenue(
-      { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir },
-      { environment: "preproduction", venue: venueRequest(nextNif()) },
+    const result = await applyHistoricalTestVenue(
+      planVenue(venueRequest(nextNif()), enabledModules(ALL_MODULES, ES_CONFIG)),
+      { db, modules: enabledModules(ALL_MODULES, ES_CONFIG) },
     );
     const zoneId = randomUUID();
     await withTransaction(db, async (tx) => {
@@ -463,9 +469,9 @@ describe("clearProvisionFixture", () => {
     const request = venueRequest(nextNif());
     request.location.city = "Vielha e Mijaran";
     request.location.province = "Lleida";
-    const result = await provisionVenue(
-      { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir },
-      { environment: "preproduction", venue: request },
+    const result = await applyHistoricalTestVenue(
+      planVenue(request, enabledModules(ALL_MODULES, ES_CONFIG)),
+      { db, modules: enabledModules(ALL_MODULES, ES_CONFIG) },
     );
     const cfg = { locationId: brandLocationId(result.locationId) };
     await withTransaction(db, async (tx) => {
@@ -484,9 +490,9 @@ describe("clearProvisionFixture", () => {
 
   it("clears a venue holding special days before their owners", async () => {
     const db = ownerDb();
-    const result = await provisionVenue(
-      { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir },
-      { environment: "preproduction", venue: venueRequest(nextNif()) },
+    const result = await applyHistoricalTestVenue(
+      planVenue(venueRequest(nextNif()), enabledModules(ALL_MODULES, ES_CONFIG)),
+      { db, modules: enabledModules(ALL_MODULES, ES_CONFIG) },
     );
     await withTransaction(db, async (tx) => {
       await tx
@@ -557,9 +563,9 @@ describe("clearProvisionFixture", () => {
 
   it("clears a venue's routing cells before its stations", async () => {
     const db = ownerDb();
-    const result = await provisionVenue(
-      { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir },
-      { environment: "preproduction", venue: venueRequest(nextNif()) },
+    const result = await applyHistoricalTestVenue(
+      planVenue(venueRequest(nextNif()), enabledModules(ALL_MODULES, ES_CONFIG)),
+      { db, modules: enabledModules(ALL_MODULES, ES_CONFIG) },
     );
     const cfg = { locationId: brandLocationId(result.locationId) };
     await withTransaction(db, async (tx) => {

@@ -77,6 +77,24 @@ function deps(value = bundle()) {
   };
 }
 const request = { primaryUrl: "https://primary.test", credential };
+
+it("keeps the stamped-environment refusal before allocation-dependent adoption", async () => {
+  await suite.db.insert(deployment).values({ id: 1, environment: "production" });
+  const before = await state();
+  let reachedFirstWrite = false;
+  await expect(
+    adoptFromPrimary(deps(), request, {
+      beforeFirstWrite: async () => {
+        reachedFirstWrite = true;
+      },
+    }),
+  ).rejects.toMatchObject({
+    code: "deployment.already_stamped",
+    params: { stamped: "production", requested: "preproduction" },
+  });
+  expect(reachedFirstWrite).toBe(false);
+  expect(await state()).toEqual(before);
+});
 async function state() {
   const rows = await suite.db.execute<{ name: string }>(
     sql`select name from sqlite_master where type = 'table' and name not like '__drizzle%' order by name`,

@@ -25,7 +25,8 @@ import {
 import { VerifactuBackend, registrosFacturacion } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin } from "@waitron/identity";
-import { applyVenue, planVenue } from "@waitron/provisioning";
+import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
+import { planVenue } from "@waitron/provisioning";
 import type { VenueRequest, VenueResult } from "@waitron/provisioning";
 
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";

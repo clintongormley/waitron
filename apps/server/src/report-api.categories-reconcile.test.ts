@@ -14,7 +14,8 @@ import {
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin, persons, startManagementSession } from "@waitron/identity";
-import { applyVenue, planVenue } from "@waitron/provisioning";
+import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
+import { planVenue } from "@waitron/provisioning";
 import {
   computeVatSummaryForPeriod,
   currentBusinessDay,

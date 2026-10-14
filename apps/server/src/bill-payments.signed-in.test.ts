@@ -25,7 +25,8 @@ import { hashPassword, hashPin, sessions } from "@waitron/identity";
 import { payments } from "@waitron/payments";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { createPrinter } from "@waitron/printing";
-import { applyVenue, planVenue } from "@waitron/provisioning";
+import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
+import { planVenue } from "@waitron/provisioning";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,

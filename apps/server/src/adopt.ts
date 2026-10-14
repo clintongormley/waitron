@@ -93,7 +93,6 @@ export async function adoptFromPrimary(
   // Validated against THIS node's modules, so a skewed or hostile primary is refused before any
   // write to this node.
   const moduleConfig = parseModuleOverrides(bundle.moduleOverrides, ALL_MODULES);
-  assertAdoptionModules(enabledModules(ALL_MODULES, moduleConfig));
 
   // One database serves one environment (CLAUDE.md §5).
   if (bundle.environment !== deps.environment) {
@@ -120,6 +119,7 @@ export async function adoptFromPrimary(
     });
   }
 
+  assertAdoptionModules(enabledModules(ALL_MODULES, moduleConfig));
   await hooks.beforeFirstWrite();
   await stampDeployment(deps.ownerDb, bundle.environment);
   await setDeploymentMode(deps.ownerDb, standby.nodeId, "mirror");

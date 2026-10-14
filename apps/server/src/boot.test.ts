@@ -1,3 +1,4 @@
+import { initialSetupInput } from "./testing/allocated-provision.js";
 import { departments, departmentReceipts, departmentSalePolicies } from "@waitron/venue-service";
 import { uploadImage } from "@waitron/media";
 import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
@@ -28,7 +29,7 @@ import { tmpdir } from "node:os";
 import { basename, isAbsolute, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { eq, sql } from "drizzle-orm";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { Agent } from "undici";
 import {
   captureError,
@@ -442,6 +443,10 @@ async function assertPassiveManagementReads(port: number): Promise<void> {
     });
   }
 }
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 describe("startServer, against a migrated venue directory", () => {
   it("keeps a live fixture behind the server's open transaction", async () => {
@@ -1449,7 +1454,11 @@ describe("startServer, against a migrated venue directory", () => {
         const { via, close } = httpsVia(ca);
         try {
           // A valid DEMO venue, no `aeatCert` (a plain demo box files nothing to AEAT).
-          const body = { mode: "demo", venue: provisionVenueBody("60000009R") };
+          const body = {
+            mode: "demo",
+            venue: provisionVenueBody("60000009R"),
+            initialOperations: await initialSetupInput(stateDir, provisionVenueBody("60000009R")),
+          };
           const response = await fetch(`https://127.0.0.1:${port}/setup-api/provision`, {
             ...via,
             method: "POST",
@@ -1609,6 +1618,11 @@ describe("startServer, against a migrated venue directory", () => {
           const body = {
             mode: "live",
             venue: provisionVenueBody("60000013M"),
+            initialOperations: await initialSetupInput(
+              stateDir,
+              provisionVenueBody("60000013M"),
+              "preproduction",
+            ),
             aeatCert: {
               pfxBase64: material.clientPfx.toString("base64"),
               passphrase: material.clientPassphrase,
@@ -1623,6 +1637,7 @@ describe("startServer, against a migrated venue directory", () => {
           });
           expect(tested.status).toBe(200);
           expect(await tested.json()).toMatchObject({ status: "accepted" });
+          body.initialOperations = await initialSetupInput(stateDir, body.venue, "production");
           const response = await fetch(`https://127.0.0.1:${port}/setup-api/provision`, {
             ...via,
             method: "POST",

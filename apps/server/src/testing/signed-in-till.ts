@@ -1,4 +1,4 @@
-import { applyAllocatedTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
+import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";

@@ -13,7 +13,8 @@ import { kitchenStations, products, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { expectedSchemaVersion, manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { applyVenue, planVenue, type VenueRequest } from "@waitron/provisioning";
+import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
+import { planVenue, type VenueRequest } from "@waitron/provisioning";
 import { locationId } from "@waitron/shared";
 import {
   createDepartment,

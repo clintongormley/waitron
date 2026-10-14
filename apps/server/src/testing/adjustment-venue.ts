@@ -1,4 +1,4 @@
-import { applyAllocatedTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
+import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { setRoutingCell } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";

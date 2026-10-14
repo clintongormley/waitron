@@ -128,19 +128,22 @@ describe("establishReservedStandbyIdentity", () => {
       taxModule: null,
       modules: ALL_MODULES,
     };
-    await establishReservedStandbyIdentity(
-      { ownerDb: suite.db, ring: RING },
-      {
-        ...base,
-        standby: first,
-        reserved: {
-          modules: {
-            "fiscal-verifactu": { nif: NIF, idSistemaInformatico: "W1", numeroInstalacion: 1 },
+    const fixture = await preparedReservation(first);
+    await fixture.authorised("establish", (operation) =>
+      establishReservedStandbyIdentity(
+        { ownerDb: suite.db, ring: RING },
+        {
+          ...base,
+          modules: allocatedStandbyModules(ALL_MODULES, fixture),
+          standby: first,
+          reserved: {
+            modules: { "fiscal-verifactu": fixture.state },
+            series: [],
+            endorsement: { ...ENDORSEMENT },
           },
-          series: [],
-          endorsement: { ...ENDORSEMENT },
+          moduleOperations: new Map([["fiscal-verifactu", operation]]),
         },
-      },
+      ),
     );
     const second = generateStandbyIdentity();
     await establishReservedStandbyIdentity(
