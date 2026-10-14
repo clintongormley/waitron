@@ -503,6 +503,44 @@ describe("till-floor-screen: dragging on today's plan — joins and seating", ()
       expect(refusal(el)).toBe(noSeating);
     });
 
+    function lines(el: TillFloorScreen): string[] {
+      return [
+        ...el.shadowRoot!.querySelectorAll("[data-zone-no-seating], [data-floor-refusal]"),
+      ].map((line) => line.textContent!.trim());
+    }
+
+    it("a tap and then a drop say why once", async () => {
+      const api = stubApi();
+      const el = await mount(
+        [planned("F1", 2, { fixed: true }, "Bar 1"), planned("F2", 20, { fixed: true }, "Bar 2")],
+        api,
+        prepay,
+      );
+      send(mapOf(el), "wt-table-tap", { tableId: "F1" });
+      await el.updateComplete;
+      expect(lines(el)).toEqual([noSeating]);
+
+      await drop(el, { tableId: "F1", x: 17, y: 3, targetId: "F2" });
+
+      expect(lines(el)).toEqual([noSeating]);
+    });
+
+    it("a drop and then a tap say why once", async () => {
+      const api = stubApi();
+      const el = await mount(
+        [planned("F1", 2, { fixed: true }, "Bar 1"), planned("F2", 20, { fixed: true }, "Bar 2")],
+        api,
+        prepay,
+      );
+      await drop(el, { tableId: "F1", x: 17, y: 3, targetId: "F2" });
+      expect(lines(el)).toEqual([noSeating]);
+
+      send(mapOf(el), "wt-table-tap", { tableId: "F1" });
+      await el.updateComplete;
+
+      expect(lines(el)).toEqual([noSeating]);
+    });
+
     it("two seated tables still ask which bills to keep", async () => {
       const api = stubApi();
       const el = await mount(

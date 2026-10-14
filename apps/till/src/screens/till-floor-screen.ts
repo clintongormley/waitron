@@ -727,6 +727,7 @@ export class TillFloorScreen extends LitElement {
     if (table.party === null && !table.hasOpenTab) {
       const zone = this.zones.find((candidate) => candidate.id === table.zoneId);
       if (zone !== undefined && (zone.closed || !seatsGuests(zone))) {
+        this.refusal = null;
         this.refusedZoneId = zone.id;
         return;
       }
@@ -931,6 +932,7 @@ export class TillFloorScreen extends LitElement {
 
   #onDrop(drop: FloorMapDrop): void {
     this.refusal = null;
+    this.refusedZoneId = null;
     const action = dropAction(this.#zone.visible, drop);
     if (seatsAtFreeTable(action) && !seatsGuests(this.#dropZone(drop.tableId))) {
       this.refusal = codeMessage("service_zone.mode_incompatible");
