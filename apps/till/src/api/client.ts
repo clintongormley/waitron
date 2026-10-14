@@ -80,6 +80,17 @@ export interface ReadOptions {
   signal?: AbortSignal;
 }
 
+export type TillClockStatus = "out" | "working" | "on_break";
+export interface TillClockState {
+  personId: string;
+  locationId: string;
+  businessDay: string;
+  state: TillClockStatus;
+  activeLocationId: string | null;
+  lastEntryId: string | null;
+  firstClockIn: boolean;
+}
+
 /**
  * `GET /api/till` — the public boot info the app reads before login. `cardProvider`/`tipsEnabled` decide whether the
  * integrated-card pay control renders at all and whether it prompts for a tip (`cardProvider: "none"`
@@ -87,6 +98,7 @@ export interface ReadOptions {
  */
 export interface TillInfo {
   locale: string;
+  clockingAvailable: boolean;
   onboardingIntent?: "demo" | "prepare" | "live";
   /**
    * The RECEIPT (fiscal document) locale, DELIBERATELY DISTINCT from the UI {@link locale}: the venue
@@ -2352,6 +2364,26 @@ export class TillApi {
 
   async logout(): Promise<void> {
     await this.#request<{ ok: boolean }>("/api/session", "DELETE");
+  }
+
+  getClockState(options: ReadOptions = {}): Promise<TillClockState> {
+    return this.#request("/api/clock/state", "GET", undefined, options.signal);
+  }
+
+  clockIn(expectedEntryId: string | null, options: ReadOptions = {}): Promise<TillClockState> {
+    return this.#request("/api/clock/in", "POST", { expectedEntryId }, options.signal);
+  }
+
+  clockOut(expectedEntryId: string | null, options: ReadOptions = {}): Promise<TillClockState> {
+    return this.#request("/api/clock/out", "POST", { expectedEntryId }, options.signal);
+  }
+
+  startBreak(expectedEntryId: string | null, options: ReadOptions = {}): Promise<TillClockState> {
+    return this.#request("/api/clock/break-start", "POST", { expectedEntryId }, options.signal);
+  }
+
+  endBreak(expectedEntryId: string | null, options: ReadOptions = {}): Promise<TillClockState> {
+    return this.#request("/api/clock/break-end", "POST", { expectedEntryId }, options.signal);
   }
 
   /**

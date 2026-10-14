@@ -2,6 +2,25 @@
 // keys, and `es` is typed `Record<StringKey, string>`, so a key added without its Spanish sibling
 // fails typecheck.
 export const en = {
+  "clock.in": "Clock in",
+  "clock.out": "Clock out",
+  "clock.break_start": "Start break",
+  "clock.break_end": "End break",
+  "clock.working": "Working",
+  "clock.on_break": "On a break",
+  "clock.clocked_out": "Clocked out",
+  "clock.unknown": "Clock state unknown",
+  "clock.cancel": "Cancel",
+  "clock.reading": "Reading your clock…",
+  "clock.read_error": "Your clock could not be read. Try again, or cancel to work.",
+  "clock.write_error": "Your time could not be recorded. Try again.",
+  "clock.uncertain": "The answer was lost. Check your clock before trying again.",
+  "clock.retry": "Retry read",
+  "clock.other_location":
+    "Your open shift belongs to another location. Use that location to change it.",
+  "clock.recorded_out": "Clocked out",
+  "clock.logout_failed": "Your finish was recorded. This device is locked.",
+
   "keep_open.line_until": "{period} · until {time}",
   "keep_open.line_extended": "{period} · kept open until {time}",
   "keep_open.zone_button": "Keep {zone} open later",
@@ -1291,6 +1310,24 @@ export type StringKey = keyof typeof en;
 
 // Typed `Record<StringKey, string>`, not Partial, so an untranslated key fails typecheck.
 export const es: Record<StringKey, string> = {
+  "clock.in": "Fichar entrada",
+  "clock.out": "Fichar salida",
+  "clock.break_start": "Iniciar descanso",
+  "clock.break_end": "Terminar descanso",
+  "clock.working": "Trabajando",
+  "clock.on_break": "En descanso",
+  "clock.clocked_out": "Fuera de turno",
+  "clock.unknown": "Estado de fichaje desconocido",
+  "clock.cancel": "Cancelar",
+  "clock.reading": "Consultando tu fichaje…",
+  "clock.read_error": "No se ha podido consultar tu fichaje. Reinténtalo o cancela para trabajar.",
+  "clock.write_error": "No se ha podido registrar la hora. Reinténtalo.",
+  "clock.uncertain": "Se ha perdido la respuesta. Consulta tu fichaje antes de reintentarlo.",
+  "clock.retry": "Volver a consultar",
+  "clock.other_location": "Tu turno abierto pertenece a otro local. Cámbialo desde ese local.",
+  "clock.recorded_out": "Salida registrada",
+  "clock.logout_failed": "Tu salida está registrada. Este dispositivo está bloqueado.",
+
   "keep_open.line_until": "{period} · hasta las {time}",
   "keep_open.line_extended": "{period} · horario ampliado hasta las {time}",
   "keep_open.zone_button": "Ampliar el horario de {zone}",

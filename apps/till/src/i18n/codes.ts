@@ -3,6 +3,27 @@ import { currentLocale, pickLocale } from "./t.js";
 // An operator must never see a raw wire code: a code missing from this table degrades to the GENERIC
 // sentence. Add new codes with BOTH columns.
 const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
+  "attendance.state_changed": {
+    en: "Your clock changed. Check its latest state and try again.",
+    es: "Tu fichaje ha cambiado. Consulta el estado actual y reinténtalo.",
+  },
+  "attendance.not_permitted": {
+    en: "You cannot change your clock from this device.",
+    es: "No puedes cambiar tu fichaje desde este dispositivo.",
+  },
+  "attendance.already_open": {
+    en: "Your shift or break is already open. Check your clock.",
+    es: "Tu turno o descanso ya está abierto. Consulta tu fichaje.",
+  },
+  "attendance.no_open_entry": {
+    en: "There is no matching open shift or break. Check your clock.",
+    es: "No hay un turno o descanso abierto que corresponda. Consulta tu fichaje.",
+  },
+  "attendance.invalid": {
+    en: "This clock request could not be accepted. Check your clock.",
+    es: "No se ha podido aceptar este fichaje. Consulta tu estado.",
+  },
+
   "ticket.extra_not_movable": {
     en: "Extras cannot be moved separately",
     es: "Los extras no se pueden pasar por separado",

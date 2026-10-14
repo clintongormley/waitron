@@ -49,7 +49,8 @@ export type CapabilityFlag =
   | "hand-keyed-card-payment"
   | "prepare-orders"
   | "hand-over-orders"
-  | "run-the-pass";
+  | "run-the-pass"
+  | "clock-in";
 
 /** A screen a profile may start on (`NAVIGATION_SCREENS` in `packages/layouts/src/canvas.ts`). */
 export type NavigationScreen = "show-station" | "show-expo" | "show-schedule";

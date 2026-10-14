@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
-import type { CanvasDef } from "./layout.js";
+import type { CanvasDef, CapabilityFlag } from "./layout.js";
 import { CARD_REQUIRED_CAPABILITY, kindOfFormFactor } from "./layout.js";
 
 describe("CanvasDef mirror", () => {
+  it("carries clock-in as a profile capability", () => {
+    const action: CapabilityFlag = "clock-in";
+    expect(action).toBe("clock-in");
+  });
   it("accepts a canvas literal shaped like the layouts package", () => {
     const canvas: CanvasDef = {
       formFactor: "till",
