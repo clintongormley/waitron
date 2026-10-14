@@ -41,7 +41,7 @@ export {
 export type * from "./holiday-types.js";
 export { venueLocalMoment, type VenueLocalMoment } from "./hours-clock.js";
 export { localTimeOccurrences, offsetMinutes } from "./hours-occurrences.js";
-export { isLocalDate } from "./hours-rules.js";
+export { addDays, isLocalDate, weekdayOf } from "./hours-rules.js";
 export type * from "./hours-types.js";
 export { CALENDAR_COLOURS, HOURS_RANGE_MAX_DAYS, WEEK_DISPLAY_ORDER } from "./hours-types.js";
 export * from "./department-transfers.js";
@@ -50,7 +50,7 @@ export { withdrawPendingDepartmentTransfers } from "./department-transfer-lifecy
 export { readSpecialDaysModel } from "./named-days.js";
 
 export { replaceZoneClosedWeek } from "./zone-closed-times.js";
-export { saveSpecialDay } from "./special-days.js";
+export { saveSpecialDay, type SpecialDayOccurrence } from "./special-days.js";
 
 export {
   stationServiceTimes,
@@ -79,3 +79,8 @@ export {
 } from "./business-day-schedule.js";
 
 export { serviceDayContext } from "./service-day-context.js";
+
+export { readDayPlan, type DayPlan } from "./day-resolver.js";
+export { readSeasons } from "./seasons.js";
+export type { Season } from "./season-rules.js";
+export { readDepartmentSeasonWeeks } from "./season-weeks.js";
