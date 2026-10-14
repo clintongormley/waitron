@@ -51,6 +51,13 @@ import {
 } from "@waitron/payments";
 import { SCHEDULER_CLASSIFICATION } from "@waitron/scheduler";
 import {
+  STAFFING_CHANGE_SOURCES,
+  STAFFING_CLASSIFICATION,
+  STAFFING_CONFIGURATION_TRANSFER,
+  STAFFING_PERMISSIONS,
+  STAFFING_ROUTES,
+} from "@waitron/staffing";
+import {
   WORKFORCE_CLASSIFICATION,
   WORKFORCE_CONFIGURATION_TRANSFER,
   WORKFORCE_CHANGE_SOURCES,
@@ -283,5 +290,21 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     permissions: ADJUSTMENTS_PERMISSIONS,
     provisioning: ADJUSTMENTS_PROVISIONING,
     configurationTransfer: ADJUSTMENTS_CONFIGURATION_TRANSFER,
+  },
+  {
+    name: "staffing",
+    version: "0.0.0",
+    tier: "toggleable",
+    requires: { core: "*", modules: { identity: "*", "venue-service": "*", workforce: "*" } },
+    migrations: {
+      name: "staffing",
+      table: "__drizzle_migrations_staffing",
+      from: "../staffing/drizzle",
+    },
+    classification: STAFFING_CLASSIFICATION,
+    changes: STAFFING_CHANGE_SOURCES,
+    routes: STAFFING_ROUTES,
+    permissions: STAFFING_PERMISSIONS,
+    configurationTransfer: STAFFING_CONFIGURATION_TRANSFER,
   },
 ];

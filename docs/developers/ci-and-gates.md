@@ -510,7 +510,7 @@ blob joins the same merge. `test-dashboard` and `test-venue-service` are four-wa
 two-way file shards in the same pattern, each with its own `-merge` job, so those three packages'
 coverage bars are enforced in the merge job, not in a shard. Then `test-fiscal-verifactu`,
 dedicated mixed database/browser jobs (`test-bookings`, `test-media`, `test-payments-stripe`,
-`test-payments-sumup`, `test-adjustments`), the unsharded browser jobs (`test-ui`, `test-setup`) and
+`test-payments-sumup`, `test-adjustments`, `test-staffing`), the unsharded browser jobs (`test-ui`, `test-setup`) and
 `test-light-a` / `test-light-b` for everything else (bins in `scripts/changed-scope.mjs`). Vitest
 `--shard` splits by FILE COUNT, so shard imbalance is the real limit, and `N` must never exceed a
 package's test-file count (guard: "run no more shards than the package has test files" in

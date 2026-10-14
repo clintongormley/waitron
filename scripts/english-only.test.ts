@@ -116,6 +116,7 @@ describe("configuration", () => {
       "stream",
       "store",
       "adjustments",
+      "staffing",
       "composition",
       "fiscal-none",
       "provisioning",

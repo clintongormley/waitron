@@ -195,6 +195,9 @@ export const PAYMENTS_SUMUP_PACKAGE = "@waitron/payments-sumup";
 /** Of its two Vitest projects, `node` and `browser`, it is the Chromium one that earns it a shard. */
 export const ADJUSTMENTS_PACKAGE = "@waitron/adjustments";
 
+/** Its two Vitest projects mirror adjustments': `node` and a Chromium `browser` one. */
+export const STAFFING_PACKAGE = "@waitron/staffing";
+
 /**
  * The `test-server` shard's package. A measured PERFORMANCE split, not a hang mitigation: apps/server
  * alone set `test-light`'s floor. Why it may run several workers there is on
@@ -232,6 +235,7 @@ export const OWN_SHARD_PACKAGES = [
   PAYMENTS_STRIPE_PACKAGE,
   PAYMENTS_SUMUP_PACKAGE,
   ADJUSTMENTS_PACKAGE,
+  STAFFING_PACKAGE,
 ];
 
 /**
@@ -335,6 +339,7 @@ export const SCOPE_GATES = [
   { output: "payments_stripe", covers: membership(PAYMENTS_STRIPE_PACKAGE) },
   { output: "payments_sumup", covers: membership(PAYMENTS_SUMUP_PACKAGE) },
   { output: "adjustments", covers: membership(ADJUSTMENTS_PACKAGE) },
+  { output: "staffing", covers: membership(STAFFING_PACKAGE) },
   { output: "light_a", covers: lightGate(LIGHT_A_PACKAGES) },
   { output: "light_b", covers: lightGate(LIGHT_B_PACKAGES) },
   { output: "shared", covers: membership("@waitron/shared") },

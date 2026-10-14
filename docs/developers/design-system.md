@@ -2131,6 +2131,8 @@ and nothing guards it across screens:
   invoice printer choice and Rename (`apps/dashboard/src/widgets/page-printers-panel.ts`); and the
   till's invoice email form (`apps/till/src/widgets/invoice-email-dialog.ts`). Each has a sibling
   `*.unsaved.test.ts`;
+- A585-1: the Staff roles page's staff-role dialog (`packages/staffing/src/dashboard/staff-role-dialog.ts`).
+  Its leave cases are in `packages/staffing/src/dashboard/staff-role-dialog.unsaved.test.ts`;
 - batch 4c: the venue-service local holiday Add and Edit (its Remove and Forget stay `danger`
   confirmations, and the holiday area saves on choice); and the
   till's profile dialog, whose Switch waits until another profile is chosen. The profile dialog is

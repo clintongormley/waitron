@@ -1,0 +1,156 @@
+{
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "52a56e69-887f-4e33-98ab-7d0478bbe4b3",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "tables": {
+    "person_staff_roles": {
+      "name": "person_staff_roles",
+      "columns": {
+        "person_id": {
+          "name": "person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "staff_role_id": {
+          "name": "staff_role_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "person_staff_roles_person_fk": {
+          "name": "person_staff_roles_person_fk",
+          "tableFrom": "person_staff_roles",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "person_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "person_staff_roles_role_fk": {
+          "name": "person_staff_roles_role_fk",
+          "tableFrom": "person_staff_roles",
+          "tableTo": "staff_roles",
+          "columnsFrom": [
+            "staff_role_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "person_staff_roles_pk": {
+          "columns": [
+            "person_id",
+            "staff_role_id"
+          ],
+          "name": "person_staff_roles_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "staff_roles": {
+      "name": "staff_roles",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "location_id": {
+          "name": "location_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "colour": {
+          "name": "colour",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'grey'"
+        },
+        "position": {
+          "name": "position",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        }
+      },
+      "indexes": {
+        "staff_roles_location_name_key": {
+          "name": "staff_roles_location_name_key",
+          "columns": [
+            "location_id",
+            "name"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "staff_roles_location_fk": {
+          "name": "staff_roles_location_fk",
+          "tableFrom": "staff_roles",
+          "tableTo": "locations",
+          "columnsFrom": [
+            "location_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "staff_roles_name_ck": {
+          "name": "staff_roles_name_ck",
+          "value": "trim(\"staff_roles\".\"name\") <> ''"
+        },
+        "staff_roles_colour_ck": {
+          "name": "staff_roles_colour_ck",
+          "value": "\"staff_roles\".\"colour\" in ('red', 'amber', 'grey', 'blue', 'green', 'purple')"
+        }
+      }
+    }
+  },
+  "views": {},
+  "enums": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "indexes": {}
+  }
+}

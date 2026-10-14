@@ -34,6 +34,17 @@ describe("DASHBOARD_MODULES honesty", () => {
       requiresPermission: "report.view",
     });
   });
+
+  it("registers the Staff roles page in the Team group for managers of staffing", () => {
+    const staffing = DASHBOARD_MODULES.find((c) => c.module === "staffing");
+    expect(staffing?.screen).toEqual({
+      id: "staff-roles",
+      navLabelKey: "nav.staff_roles",
+      group: "team",
+      requiresPermission: "staffing.manage",
+      readPermission: "venue.view",
+    });
+  });
 });
 
 describe("CARD_PROVIDER_PANELS honesty", () => {

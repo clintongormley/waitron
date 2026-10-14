@@ -27,6 +27,14 @@ import { manifestSets } from "@waitron/migrations";
 import { orderedMigrationSets } from "@waitron/module";
 import { PAYMENTS_ALERTS, PAYMENTS_MIGRATIONS } from "@waitron/payments";
 import { SCHEDULER_MIGRATIONS } from "@waitron/scheduler";
+import {
+  STAFFING_CHANGE_SOURCES,
+  STAFFING_CLASSIFICATION,
+  STAFFING_CONFIGURATION_TRANSFER,
+  STAFFING_MIGRATIONS,
+  STAFFING_PERMISSIONS,
+  STAFFING_ROUTES,
+} from "@waitron/staffing";
 import { WORKFORCE_MIGRATIONS } from "@waitron/workforce";
 import { WORKFORCE_ES_MIGRATIONS, WORKFORCE_ES_VOCABULARY } from "@waitron/workforce-es";
 import {
@@ -71,6 +79,7 @@ describe("the migration manifest", () => {
       credentials: CREDENTIALS_MIGRATIONS.migrationsTable,
       bookings: BOOKINGS_MIGRATIONS.migrationsTable,
       adjustments: ADJUSTMENTS_MIGRATIONS.migrationsTable,
+      staffing: STAFFING_MIGRATIONS.migrationsTable,
     });
   });
 });
@@ -188,6 +197,25 @@ describe("ALL_MODULES provisioning and fiscal seats", () => {
   it("adjustments declares its provisioning seat, by reference", () => {
     const adjustments = ALL_MODULES.find((module) => module.name === "adjustments");
     expect(adjustments?.provisioning).toBe(ADJUSTMENTS_PROVISIONING);
+  });
+
+  it("staffing is toggleable, needs identity, venue-service and workforce, and declares its seats", () => {
+    const staffing = ALL_MODULES.find((module) => module.name === "staffing");
+    expect(staffing?.tier).toBe("toggleable");
+    expect(staffing?.requires).toEqual({
+      core: "*",
+      modules: { identity: "*", "venue-service": "*", workforce: "*" },
+    });
+    expect(staffing?.migrations).toEqual({
+      name: "staffing",
+      table: "__drizzle_migrations_staffing",
+      from: "../staffing/drizzle",
+    });
+    expect(staffing?.classification).toBe(STAFFING_CLASSIFICATION);
+    expect(staffing?.changes).toBe(STAFFING_CHANGE_SOURCES);
+    expect(staffing?.routes).toBe(STAFFING_ROUTES);
+    expect(staffing?.permissions).toBe(STAFFING_PERMISSIONS);
+    expect(staffing?.configurationTransfer).toBe(STAFFING_CONFIGURATION_TRANSFER);
   });
 
   it("fiscal declares its provisioning contribution and fills the fiscal slot, by reference", () => {

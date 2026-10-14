@@ -40,6 +40,7 @@ export const GENERIC_PACKAGES = [
   "stream",
   "store",
   "adjustments",
+  "staffing",
   "composition",
   "fiscal-none",
   "provisioning",

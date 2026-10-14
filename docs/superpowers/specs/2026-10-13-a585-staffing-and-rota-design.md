@@ -207,7 +207,7 @@ the unsaved-changes guard (`draftScopeFor`) and, on each column, "Copy to…" an
 Staffing selected:
 
 - the picker lists departments and prep stations, grouped;
-- the chips are staff roles plus "+ New staff role", with a "How many" stepper;
+- the chips are staff roles plus "Add staff role", with a "How many" stepper;
 - dragging down a column adds a block of the chosen staff role and number; dragging an edge resizes
   it; clicking it lets you change its staff role or number, or delete it;
 - overlapping blocks sit side by side in the column;
