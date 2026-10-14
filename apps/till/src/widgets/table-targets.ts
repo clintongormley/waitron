@@ -48,7 +48,7 @@ export function otherPartyRead(
 }
 
 /** The shown names of the party's tables that `tables` lists, "Mesa 4, 5", a named group's once
- * (the server's `partyTableLabels`). */
+ * (`partyTableLabels`, `packages/db/src/party-table-labels.ts`). */
 export function partyTablesLabel(party: TableParty, tables: readonly TableState[]): string {
   const listedGroups = new Set<string>();
   return partyTablesName(

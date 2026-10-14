@@ -56,8 +56,8 @@ export function shownName(table: TableState): string {
   return table.today?.name ?? table.label;
 }
 
-/** D10: its group's name for today, else its own name for today, else its saved label (the
- * server's `shown()`). */
+/** Its group's name for today, else its own name for today, else its saved label, as `shown()` in
+ * `packages/db/src/party-table-labels.ts`. */
 export function shownUnder(table: TableState): string {
   return table.today?.joinName ?? shownName(table);
 }

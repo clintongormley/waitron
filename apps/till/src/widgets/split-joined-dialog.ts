@@ -58,7 +58,7 @@ export class TillSplitJoinedDialog extends LitElement {
 
   @property({ attribute: false }) joined!: TableState;
   @property({ attribute: false }) parts: TableState[] = [];
-  /** The window's heading names this: the joined table's label, or the group's name. */
+  /** The window's heading names this: the joined table's shown name, or the group's name. */
   @property() name = "";
   /** Whether the tables left would need their seats, given their ids. */
   @property({ attribute: false }) asksSeats: (staying: readonly string[]) => boolean = (staying) =>
