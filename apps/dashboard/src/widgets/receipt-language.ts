@@ -1,6 +1,6 @@
 import { html, nothing, type TemplateResult } from "lit";
 import { contentLanguageCode, languageDisplayName, type ContentLanguages } from "@waitron/shared";
-import { currentLocale, t } from "../i18n/t.js";
+import { currentLocale, fill } from "../i18n/t.js";
 
 function languageCode(tag: string): string | null {
   try {
@@ -21,8 +21,9 @@ export function receiptLanguageWarning(
 ): TemplateResult | typeof nothing {
   const code = languageCode(receiptLanguage);
   if (code === null || content.languages.includes(code)) return nothing;
-  const text = t("receipt_language.warning")
-    .replace("{receipt}", receiptLanguageName(receiptLanguage, false))
-    .replace("{default}", receiptLanguageName(content.defaultLanguage, false));
+  const text = fill("receipt_language.warning", {
+    receipt: receiptLanguageName(receiptLanguage, false),
+    default: receiptLanguageName(content.defaultLanguage, false),
+  });
   return html`<p class="warning" role="note" data-test="receipt-language-warning">${text}</p>`;
 }
