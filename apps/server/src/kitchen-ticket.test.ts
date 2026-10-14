@@ -1560,7 +1560,7 @@ describe("a kitchen ticket for a named party", () => {
     ).toEqual(["*** FIRE ***", "Grill", "Mesa 4", "Order 5 · Ana"]);
   });
 
-  it("prints a ticket with no party name as before: the bare order number", () => {
+  it("prints a ticket with no party name with the bare order number", () => {
     const bytes = formatKitchenTicket(unnamed, KITCHEN_80);
     expect(printedLines(bytes)).toEqual(["Grill", "Mesa 4", "5", "13:24", "1 x BURG", ""]);
     expect(formatKitchenTicket({ ...unnamed, party: undefined }, KITCHEN_80)).toEqual(bytes);

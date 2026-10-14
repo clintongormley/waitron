@@ -32,8 +32,7 @@ export interface PlacedOrder {
 }
 
 /**
- * The party name a kitchen paper gives an order: that of the party at the end of its party's merges
- * when there is one, else its own party's; null for none.
+ * The name of the party at the end of the order's party's merges, else its own party's; null for none.
  */
 export function partyNameOnPaper(
   ownName: string | null,

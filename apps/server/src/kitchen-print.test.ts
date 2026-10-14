@@ -2307,7 +2307,7 @@ describe("the party's name on a kitchen ticket", () => {
     ]);
   });
 
-  it("prints the bare order number for an unnamed party's order and a counter order, as before", async () => {
+  it("prints the bare order number for an unnamed party's order and a counter order", async () => {
     const v = await setupPartyVenue(db);
     const printer = await kitchenPrinter(v);
     const { tabId } = await seat(v, await v.table("Mesa 74"));

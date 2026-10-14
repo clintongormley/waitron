@@ -192,9 +192,9 @@ function emitGrouped(
 /** `order`, then ` · ` and the party's name, wrapping the name under itself. */
 function emitOrderLine(
   b: ReturnType<typeof esc>,
-  columns: number,
   order: string,
   partyName: string | undefined,
+  columns: number,
 ): void {
   const label = `${order} · `;
   const [line, indent] =
@@ -236,7 +236,7 @@ export function formatKitchenTicket(ticket: KitchenTicket, layout: EscSetting): 
   if (ticket.party === undefined) text(ticket.orderNumber);
   else {
     const { order } = MOVED_WORDS[ticketLanguage(ticket.party.locale)];
-    emitOrderLine(b, columns, `${order} ${ticket.orderNumber}`, ticket.party.name);
+    emitOrderLine(b, `${order} ${ticket.orderNumber}`, ticket.party.name, columns);
   }
   b.line(hhmm(ticket.firedAt));
   if (ticket.from !== undefined)
@@ -438,7 +438,7 @@ export function formatMovedSlip(slip: MovedSlip, layout: EscSetting): Uint8Array
   text(slip.stationName);
   const numbers =
     slip.toNumber === undefined ? slip.fromNumber : `${slip.fromNumber} -> ${slip.toNumber}`;
-  emitOrderLine(b, columns, `${words.order} ${numbers}`, slip.partyName);
+  emitOrderLine(b, `${words.order} ${numbers}`, slip.partyName, columns);
   labelled(words.from, slip.fromText);
   labelled(words.to, slip.toText);
   b.line(hhmm(new Date(slip.at)));
