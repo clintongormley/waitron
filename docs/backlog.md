@@ -323,6 +323,9 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   corrective-record resolution, filing investigation, outside evidence and fencing, the complete
   old-backup/new-hardware operational exercise, and the Cloud registry adapter remain queued.
   The Cloud service has its own workstream; paper allocation does not require a subscription.
+  W41s-C3 is building the Waitron adapter. Cloud's landed binding parser still refuses the
+  approved recovery-key operator object; its correction and the separately scheduled joint
+  client test remain dependencies. Local recovery must retain that key's node/event identity.
   [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04).
 
 - **Allocated standby adoption still needs the primary's venue copy and fresh establishment

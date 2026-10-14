@@ -216,6 +216,18 @@ approval; W41s-6 no longer holds that dependency.
 
 ## W41s. Fiscal prevention and offline recovery — DESIGN AND REVISED PLAN APPROVED (2026-10-04)
 
+**2026-10-15 W41s-C3 contract check:** Cloud D62 and local W41s-4/6 have landed. On Cloud
+`04cb54637d2fd714e959f749f3d800b5444ee4c8`, Node v26.11.1, calling
+`validateReserve` from `packages/fiscal-allocation/src/validation.ts` with the same recovery
+request accepts `operatorId: "local-administrator"` but refuses
+`operatorId: {kind: "recovery-key", nodeId: "replacement-node", eventId: "restore-event"}`
+with `invalid_input`. Cloud's `ClaimBinding` still declares a string, and its parser calls
+`text(o.operatorId)`. The approved Cloud plan already requires the tagged key operator.
+Keep the local key-only authority model; neither a made-up person nor a Cloud account can replace
+it. The Cloud owner must correct its own contract and run Task 7's scheduled joint test against
+the pinned Waitron candidate. The Waitron receipt verifier and HTTP client are in progress;
+this check does not qualify a complete restore or enable Cloud production custody.
+
 **2026-10-14, Task 4 review checkpoint:** the supplied-identity/default/text transition,
 regenerated migrations, host/demo inputs and person-or-key-event Cloud handoff are implemented.
 The owner approved the exact archive changes; the original archive/target suites pass 36 cases.
