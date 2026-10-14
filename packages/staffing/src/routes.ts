@@ -8,10 +8,9 @@ import {
   requireBodyUuid,
   requireManagementSession,
   requireString,
-  requireUuidParam,
 } from "@waitron/server-kit";
 import type { Logger } from "@waitron/server-kit";
-import { AppError } from "@waitron/shared";
+import { AppError, normaliseUuid } from "@waitron/shared";
 import { STAFFING_PERMISSIONS } from "./permissions.js";
 import {
   createStaffRole,
@@ -53,7 +52,7 @@ function onlyKeys(body: object, allowed: readonly string[]): void {
 }
 
 /** The colour is checked against the palette by the domain, which refuses it as `staffing.invalid`. */
-function roleInput(body: Record<string, unknown>): StaffRoleInput {
+function staffRoleInput(body: Record<string, unknown>): StaffRoleInput {
   onlyKeys(body, ["name", "colour"]);
   return {
     name: requireString(body.name, "name"),
@@ -65,7 +64,7 @@ function uuidList(body: Record<string, unknown>, field: string): string[] {
   onlyKeys(body, [field]);
   const value = body[field];
   if (!Array.isArray(value)) throw new AppError("management.request_invalid", { field });
-  return value.map((item) => requireBodyUuid(item, field));
+  return value.map((item) => normaliseUuid(requireBodyUuid(item, field), field));
 }
 
 export const STAFFING_ROUTES: ModuleRoutes = {
@@ -81,7 +80,7 @@ export const STAFFING_ROUTES: ModuleRoutes = {
       });
     const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
       gatedBy(MANAGE_STAFFING, sessionId, fn);
-    const roleId = (raw: string) => requireUuidParam(raw, "StaffRoleId");
+    const staffRoleIdParam = (raw: string) => normaliseUuid(raw, "StaffRoleId");
 
     app.get(BASE, (c) =>
       run(c, log, async () => {
@@ -96,9 +95,11 @@ export const STAFFING_ROUTES: ModuleRoutes = {
     app.post(BASE, (c) =>
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
-        const input = roleInput(await readJsonBody<Record<string, unknown>>(c));
-        const role = await gated(sessionId, (tx) => createStaffRole(tx, ctx.cfg, input));
-        return c.json(role, 201);
+        const body = await readJsonBody<Record<string, unknown>>(c);
+        const staffRole = await gated(sessionId, (tx) =>
+          createStaffRole(tx, ctx.cfg, staffRoleInput(body)),
+        );
+        return c.json(staffRole, 201);
       }),
     );
 
@@ -106,8 +107,10 @@ export const STAFFING_ROUTES: ModuleRoutes = {
     app.put(`${BASE}/order`, (c) =>
       runReorder(c, log, async () => {
         const sessionId = requireManagementSession(c);
-        const ids = uuidList(await readJsonBody<Record<string, unknown>>(c), "staffRoleIds");
-        await gated(sessionId, (tx) => reorderStaffRoles(tx, ctx.cfg, ids));
+        const body = await readJsonBody<Record<string, unknown>>(c);
+        await gated(sessionId, (tx) =>
+          reorderStaffRoles(tx, ctx.cfg, uuidList(body, "staffRoleIds")),
+        );
         return c.body(null, 204);
       }),
     );
@@ -115,19 +118,23 @@ export const STAFFING_ROUTES: ModuleRoutes = {
     app.put(`${BASE}/:staffRoleId`, (c) =>
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
-        const id = roleId(c.req.param("staffRoleId"));
-        const input = roleInput(await readJsonBody<Record<string, unknown>>(c));
-        return c.json(await gated(sessionId, (tx) => updateStaffRole(tx, ctx.cfg, id, input)));
+        const id = staffRoleIdParam(c.req.param("staffRoleId"));
+        const body = await readJsonBody<Record<string, unknown>>(c);
+        return c.json(
+          await gated(sessionId, (tx) => updateStaffRole(tx, ctx.cfg, id, staffRoleInput(body))),
+        );
       }),
     );
 
     app.put(`${BASE}/:staffRoleId/holders`, (c) =>
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
-        const id = roleId(c.req.param("staffRoleId"));
-        const personIds = uuidList(await readJsonBody<Record<string, unknown>>(c), "personIds");
+        const id = staffRoleIdParam(c.req.param("staffRoleId"));
+        const body = await readJsonBody<Record<string, unknown>>(c);
         return c.json(
-          await gated(sessionId, (tx) => setStaffRoleHolders(tx, ctx.cfg, id, personIds)),
+          await gated(sessionId, (tx) =>
+            setStaffRoleHolders(tx, ctx.cfg, id, uuidList(body, "personIds")),
+          ),
         );
       }),
     );
@@ -135,7 +142,7 @@ export const STAFFING_ROUTES: ModuleRoutes = {
     app.delete(`${BASE}/:staffRoleId`, (c) =>
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
-        const id = roleId(c.req.param("staffRoleId"));
+        const id = staffRoleIdParam(c.req.param("staffRoleId"));
         await gated(sessionId, (tx) => deleteStaffRole(tx, ctx.cfg, id));
         return c.body(null, 204);
       }),

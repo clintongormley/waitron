@@ -98,9 +98,9 @@ describe("staff roles", () => {
     expect(sous).toMatchObject({ name: "Sous chef", position: 1 });
     const held = await inTx((tx) => setStaffRoleHolders(tx, v.cfg, sous.id, [v.ana, v.marc]));
     expect(held.holderIds).toEqual([v.ana, v.marc].sort());
-    const roles = await inTx((tx) => listStaffRoles(tx, v.cfg));
-    expect(roles.map((r) => r.name)).toEqual(["Head chef", "Sous chef"]);
-    expect(roles[1]).toMatchObject({
+    const listed = await inTx((tx) => listStaffRoles(tx, v.cfg));
+    expect(listed.map((r) => r.name)).toEqual(["Head chef", "Sous chef"]);
+    expect(listed[1]).toMatchObject({
       holderIds: [v.ana, v.marc].sort(),
       blockCount: 0,
       shiftCount: 0,
@@ -139,9 +139,11 @@ describe("staff roles", () => {
     await expect(
       inTx((tx) => createStaffRole(tx, v.cfg, { name: "Waiter", colour: "teal" as "blue" })),
     ).rejects.toMatchObject({ code: "staffing.invalid", params: { field: "colour" } });
-    const role = await inTx((tx) => createStaffRole(tx, v.cfg, { name: "Waiter", colour: "blue" }));
+    const staffRole = await inTx((tx) =>
+      createStaffRole(tx, v.cfg, { name: "Waiter", colour: "blue" }),
+    );
     await expect(
-      inTx((tx) => updateStaffRole(tx, v.cfg, role.id, { name: "", colour: "blue" })),
+      inTx((tx) => updateStaffRole(tx, v.cfg, staffRole.id, { name: "", colour: "blue" })),
     ).rejects.toMatchObject({ code: "staffing.invalid", params: { field: "name" } });
   });
 
@@ -193,20 +195,26 @@ describe("staff roles", () => {
 
   it("replaces the holder set, de-duplicating repeated ids", async () => {
     const v = await seedVenue(suite.db);
-    const role = await inTx((tx) => createStaffRole(tx, v.cfg, { name: "Waiter", colour: "blue" }));
-    await inTx((tx) => setStaffRoleHolders(tx, v.cfg, role.id, [v.ana, v.marc]));
-    const replaced = await inTx((tx) => setStaffRoleHolders(tx, v.cfg, role.id, [v.marc, v.marc]));
+    const staffRole = await inTx((tx) =>
+      createStaffRole(tx, v.cfg, { name: "Waiter", colour: "blue" }),
+    );
+    await inTx((tx) => setStaffRoleHolders(tx, v.cfg, staffRole.id, [v.ana, v.marc]));
+    const replaced = await inTx((tx) =>
+      setStaffRoleHolders(tx, v.cfg, staffRole.id, [v.marc, v.marc]),
+    );
     expect(replaced.holderIds).toEqual([v.marc]);
-    const emptied = await inTx((tx) => setStaffRoleHolders(tx, v.cfg, role.id, []));
+    const emptied = await inTx((tx) => setStaffRoleHolders(tx, v.cfg, staffRole.id, []));
     expect(emptied.holderIds).toEqual([]);
   });
 
   it("refuses holders that are not persons as staffing.invalid {field: personIds}", async () => {
     const v = await seedVenue(suite.db);
-    const role = await inTx((tx) => createStaffRole(tx, v.cfg, { name: "Waiter", colour: "blue" }));
-    await inTx((tx) => setStaffRoleHolders(tx, v.cfg, role.id, [v.ana]));
+    const staffRole = await inTx((tx) =>
+      createStaffRole(tx, v.cfg, { name: "Waiter", colour: "blue" }),
+    );
+    await inTx((tx) => setStaffRoleHolders(tx, v.cfg, staffRole.id, [v.ana]));
     await expect(
-      inTx((tx) => setStaffRoleHolders(tx, v.cfg, role.id, [v.marc, randomUUID()])),
+      inTx((tx) => setStaffRoleHolders(tx, v.cfg, staffRole.id, [v.marc, randomUUID()])),
     ).rejects.toMatchObject({ code: "staffing.invalid", params: { field: "personIds" } });
     const [kept] = await inTx((tx) => listStaffRoles(tx, v.cfg));
     expect(kept!.holderIds).toEqual([v.ana]);
@@ -214,39 +222,46 @@ describe("staff roles", () => {
 
   it("deleting a staff role deletes its blocks and holders", async () => {
     const v = await seedVenue(suite.db);
-    const role = await inTx((tx) => createStaffRole(tx, v.cfg, { name: "Waiter", colour: "blue" }));
+    const staffRole = await inTx((tx) =>
+      createStaffRole(tx, v.cfg, { name: "Waiter", colour: "blue" }),
+    );
     const kept = await inTx((tx) => createStaffRole(tx, v.cfg, { name: "Cook", colour: "red" }));
-    await inTx((tx) => setStaffRoleHolders(tx, v.cfg, role.id, [v.ana]));
+    await inTx((tx) => setStaffRoleHolders(tx, v.cfg, staffRole.id, [v.ana]));
     await inTx((tx) => setStaffRoleHolders(tx, v.cfg, kept.id, [v.ana]));
-    await paintBlock(v, role.id);
-    await inTx((tx) => deleteStaffRole(tx, v.cfg, role.id));
+    await paintBlock(v, staffRole.id);
+    await inTx((tx) => deleteStaffRole(tx, v.cfg, staffRole.id));
     expect((await inTx((tx) => listStaffRoles(tx, v.cfg))).map((r) => r.id)).toEqual([kept.id]);
     expect(
-      await suite.db.select().from(staffingBlocks).where(eq(staffingBlocks.staffRoleId, role.id)),
+      await suite.db
+        .select()
+        .from(staffingBlocks)
+        .where(eq(staffingBlocks.staffRoleId, staffRole.id)),
     ).toEqual([]);
     expect(
       await suite.db
         .select()
         .from(personStaffRoles)
-        .where(eq(personStaffRoles.staffRoleId, role.id)),
+        .where(eq(personStaffRoles.staffRoleId, staffRole.id)),
     ).toEqual([]);
   });
 
   it("refuses to delete a staff role a shift uses as staff_role.in_use with the shift count", async () => {
     const v = await seedVenue(suite.db);
-    const role = await inTx((tx) => createStaffRole(tx, v.cfg, { name: "Waiter", colour: "blue" }));
-    await assignShift(v, v.ana, role.id);
-    await assignShift(v, v.marc, role.id);
-    await expect(inTx((tx) => deleteStaffRole(tx, v.cfg, role.id))).rejects.toMatchObject({
+    const staffRole = await inTx((tx) =>
+      createStaffRole(tx, v.cfg, { name: "Waiter", colour: "blue" }),
+    );
+    await assignShift(v, v.ana, staffRole.id);
+    await assignShift(v, v.marc, staffRole.id);
+    await expect(inTx((tx) => deleteStaffRole(tx, v.cfg, staffRole.id))).rejects.toMatchObject({
       code: "staff_role.in_use",
-      params: { staffRoleId: role.id, shiftCount: 2 },
+      params: { staffRoleId: staffRole.id, shiftCount: 2 },
     });
     expect(
       await suite.db
         .select({ id: staffRoles.id })
         .from(staffRoles)
-        .where(eq(staffRoles.id, role.id)),
-    ).toEqual([{ id: role.id }]);
+        .where(eq(staffRoles.id, staffRole.id)),
+    ).toEqual([{ id: staffRole.id }]);
   });
 
   it("reorders by the given ids and refuses a list that is not exactly the venue's roles", async () => {

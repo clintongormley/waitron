@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, ne, sql, type SQL } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
@@ -22,7 +22,7 @@ const invalid = (field: string) => new AppError("staffing.invalid", { field });
 const notFound = (staffRoleId: string) => new AppError("staff_role.not_found", { staffRoleId });
 const tally = sql<number>`count(*)`.mapWith(Number);
 
-function roleValues(input: StaffRoleInput): StaffRoleInput {
+function staffRoleValues(input: StaffRoleInput): StaffRoleInput {
   const name = input.name.trim();
   if (name === "") throw invalid("name");
   if (!(CALENDAR_COLOURS as readonly string[]).includes(input.colour)) throw invalid("colour");
@@ -44,7 +44,7 @@ async function assertNameFree(tx: Transaction, cfg: Cfg, name: string, except: s
   if (clash) throw new AppError("staff_role.name_taken", { name });
 }
 
-async function assertRoleHere(tx: Transaction, cfg: Cfg, staffRoleId: string): Promise<void> {
+async function assertStaffRoleHere(tx: Transaction, cfg: Cfg, staffRoleId: string): Promise<void> {
   const [row] = await tx
     .select({ id: staffRoles.id })
     .from(staffRoles)
@@ -54,26 +54,20 @@ async function assertRoleHere(tx: Transaction, cfg: Cfg, staffRoleId: string): P
 
 /** Only after the caller has checked or written the row in this transaction. */
 async function readStaffRole(tx: Transaction, cfg: Cfg, staffRoleId: string): Promise<StaffRole> {
-  return (await listStaffRoles(tx, cfg)).find(({ id }) => id === staffRoleId)!;
+  return (await readStaffRoles(tx, cfg, staffRoleId))[0]!;
 }
 
-async function countsByRole(
+/** Every query is narrowed to `only` when it is given, so a write's answer reads one staff role. */
+async function readStaffRoles(
   tx: Transaction,
   cfg: Cfg,
-  table: typeof staffingBlocks | typeof shiftAssignments,
-): Promise<Map<string, number>> {
+  only: string | null,
+): Promise<StaffRole[]> {
+  const scope = and(
+    eq(staffRoles.locationId, cfg.locationId),
+    only === null ? undefined : eq(staffRoles.id, only),
+  );
   const rows = await tx
-    .select({ staffRoleId: table.staffRoleId, n: tally })
-    .from(table)
-    .innerJoin(staffRoles, eq(staffRoles.id, table.staffRoleId))
-    .where(eq(staffRoles.locationId, cfg.locationId))
-    .groupBy(table.staffRoleId);
-  return new Map(rows.map((row) => [row.staffRoleId, row.n]));
-}
-
-/** The location's staff roles in position order, with who holds each and how much uses it. */
-export async function listStaffRoles(tx: Transaction, cfg: Cfg): Promise<StaffRole[]> {
-  const roles = await tx
     .select({
       id: staffRoles.id,
       name: staffRoles.name,
@@ -81,22 +75,41 @@ export async function listStaffRoles(tx: Transaction, cfg: Cfg): Promise<StaffRo
       position: staffRoles.position,
     })
     .from(staffRoles)
-    .where(eq(staffRoles.locationId, cfg.locationId))
+    .where(scope)
     .orderBy(asc(staffRoles.position), asc(staffRoles.name));
   const holders = await tx
     .select({ staffRoleId: personStaffRoles.staffRoleId, personId: personStaffRoles.personId })
     .from(personStaffRoles)
     .innerJoin(staffRoles, eq(staffRoles.id, personStaffRoles.staffRoleId))
-    .where(eq(staffRoles.locationId, cfg.locationId))
+    .where(scope)
     .orderBy(asc(personStaffRoles.personId));
-  const blocks = await countsByRole(tx, cfg, staffingBlocks);
-  const shiftsUsing = await countsByRole(tx, cfg, shiftAssignments);
-  return roles.map((role) => ({
-    ...role,
-    holderIds: holders.filter((h) => h.staffRoleId === role.id).map((h) => h.personId),
-    blockCount: blocks.get(role.id) ?? 0,
-    shiftCount: shiftsUsing.get(role.id) ?? 0,
+  const blocks = await countsByStaffRole(tx, scope, staffingBlocks);
+  const shiftsUsing = await countsByStaffRole(tx, scope, shiftAssignments);
+  return rows.map((staffRole) => ({
+    ...staffRole,
+    holderIds: holders.filter((h) => h.staffRoleId === staffRole.id).map((h) => h.personId),
+    blockCount: blocks.get(staffRole.id) ?? 0,
+    shiftCount: shiftsUsing.get(staffRole.id) ?? 0,
   }));
+}
+
+async function countsByStaffRole(
+  tx: Transaction,
+  scope: SQL | undefined,
+  table: typeof staffingBlocks | typeof shiftAssignments,
+): Promise<Map<string, number>> {
+  const rows = await tx
+    .select({ staffRoleId: table.staffRoleId, n: tally })
+    .from(table)
+    .innerJoin(staffRoles, eq(staffRoles.id, table.staffRoleId))
+    .where(scope)
+    .groupBy(table.staffRoleId);
+  return new Map(rows.map((row) => [row.staffRoleId, row.n]));
+}
+
+/** The location's staff roles in position order, with who holds each and how much uses it. */
+export function listStaffRoles(tx: Transaction, cfg: Cfg): Promise<StaffRole[]> {
+  return readStaffRoles(tx, cfg, null);
 }
 
 /** Adds a staff role after the location's last one. */
@@ -105,7 +118,7 @@ export async function createStaffRole(
   cfg: Cfg,
   input: StaffRoleInput,
 ): Promise<StaffRole> {
-  const values = roleValues(input);
+  const values = staffRoleValues(input);
   await assertNameFree(tx, cfg, values.name, null);
   const [next] = await tx
     .select({ position: sql<number>`coalesce(max(${staffRoles.position}) + 1, 0)`.mapWith(Number) })
@@ -124,8 +137,8 @@ export async function updateStaffRole(
   staffRoleId: string,
   input: StaffRoleInput,
 ): Promise<StaffRole> {
-  const values = roleValues(input);
-  await assertRoleHere(tx, cfg, staffRoleId);
+  const values = staffRoleValues(input);
+  await assertStaffRoleHere(tx, cfg, staffRoleId);
   await assertNameFree(tx, cfg, values.name, staffRoleId);
   await tx.update(staffRoles).set(values).where(eq(staffRoles.id, staffRoleId));
   return readStaffRole(tx, cfg, staffRoleId);
@@ -138,7 +151,7 @@ export async function setStaffRoleHolders(
   staffRoleId: string,
   personIds: readonly string[],
 ): Promise<StaffRole> {
-  await assertRoleHere(tx, cfg, staffRoleId);
+  await assertStaffRoleHere(tx, cfg, staffRoleId);
   const unique = [...new Set(personIds)];
   if (unique.length > 0) {
     const found = await tx
@@ -180,7 +193,7 @@ export async function deleteStaffRole(
   cfg: Cfg,
   staffRoleId: string,
 ): Promise<void> {
-  await assertRoleHere(tx, cfg, staffRoleId);
+  await assertStaffRoleHere(tx, cfg, staffRoleId);
   const [used] = await tx
     .select({ n: tally })
     .from(shiftAssignments)
