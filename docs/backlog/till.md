@@ -324,7 +324,7 @@ whole group, as seating at one of its tables does.
 
 Such a party can also lose a group's today's name with no MOVED slip (A581 part 2's review, both
 reproduced with a throwaway test): Move guests onto a table another party holds in the same named
-group ends the group after `combineAt` has compared names (`moveGuests`,
+group can end the group after `combineAt` has compared names (`moveGuests`,
 `apps/server/src/table-actions.ts`), and Split tables… ticking only a table no party holds ends a
 named group under a party at its other table with no comparison at all (`splitGroup`,
 `apps/server/src/floor-today-split-group.ts`). Both need a party holding part of a group, so taking
