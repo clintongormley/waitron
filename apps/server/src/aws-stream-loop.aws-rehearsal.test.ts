@@ -17,7 +17,7 @@ describe("AWS rehearsal: the stream loop against Amazon S3", () => {
   // before its working folder goes.
   afterAll(async () => {
     try {
-      await rehearsal.stop();
+      await rehearsal?.stop();
     } finally {
       if (scratch !== undefined) await rm(scratch, { recursive: true, force: true });
     }
