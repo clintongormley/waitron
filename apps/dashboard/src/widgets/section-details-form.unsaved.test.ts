@@ -27,12 +27,14 @@ class SectionLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
   open = true;
   value: SectionDetails | null = section;
+  startColor: string | null = null;
   cancelled = 0;
   submissions: SectionInput[] = [];
   override render() {
     return html`<dashboard-section-details-form
         .open=${this.open}
         .value=${this.value}
+        .startColor=${this.startColor}
         .languages=${{ defaultLanguage: "en", languages: ["en", "es"] }}
         heading="Edit Starters"
         @wt-cancel=${() => {
@@ -50,8 +52,11 @@ afterEach(() => {
   cleanupWidgets();
   setLocale("en-GB");
 });
-async function mount(value: SectionDetails | null = section) {
-  const { el: app } = await mountWidget<SectionLeaveApp>("section-leave-test-app", { value });
+async function mount(value: SectionDetails | null = section, startColor: string | null = null) {
+  const { el: app } = await mountWidget<SectionLeaveApp>("section-leave-test-app", {
+    value,
+    startColor,
+  });
   const form = app.shadowRoot!.querySelector("dashboard-section-details-form")!;
   await form.updateComplete;
   await form.shadowRoot!.querySelector("wt-modal")!.updateComplete;
@@ -137,6 +142,18 @@ it("Section Add starts clean and a refused save retains the authored draft", asy
   cancel(form);
   expect((await question(app)).open).toBe(true);
   expect(app.cancelled).toBe(0);
+});
+it("Section Add opened on a start colour and left untouched closes without asking", async () => {
+  const { app, form } = await mount(null, "#ededab");
+  expect(
+    form.shadowRoot!.querySelector<HTMLElement>('button[role="radio"][aria-checked="true"]')!
+      .dataset.color,
+  ).toBe("#ededab");
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+  expect(unload()).toBe(false);
+  cancel(form);
+  await expect.poll(() => app.cancelled).toBe(1);
+  expect((await question(app)).open).toBe(false);
 });
 it("a replacement Section invalidates its pending answer and uses the new baseline", async () => {
   const { app, form } = await mount();

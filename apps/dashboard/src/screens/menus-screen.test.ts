@@ -2325,6 +2325,8 @@ const includedWineNode: MenuStructureNode = {
   ref: { kind: "section", sectionId: "wine-root" },
   internalName: "Wine menu",
   includedMenuId: "wine",
+  ownerMenuId: "wine",
+  folder: { showAsFolder: true, overrides: {} },
   children: [],
 };
 
