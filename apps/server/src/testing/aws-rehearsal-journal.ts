@@ -30,7 +30,7 @@ export interface JournalUpload {
 
 export interface JournalPid {
   pid: number;
-  /** As `ps -o lstart= -p <pid>` printed it when tracked; null when it could not be read. */
+  /** As `processStartTime` read it when tracked; null when it could not be read. */
   startTime: string | null;
 }
 

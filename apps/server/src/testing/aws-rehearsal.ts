@@ -332,7 +332,7 @@ export interface AwsRehearsalDeps extends TeardownDeps, RehearsalProfileDeps {
   removeDir(path: string): Promise<void>;
   /** Writes the journal synchronously; it is in the file when this returns. */
   journal(receiptDir: string, journal: RehearsalJournal): void;
-  /** A pid's start time as `ps -o lstart=` prints it, or null when it cannot be read. */
+  /** A pid's start time as `processStartTime` reads it, or null when it cannot be read. */
   processStartTime(pid: number): string | null;
   /** A local S3 endpoint, for proofs only; never read from the environment. With one, the preflight is skipped. */
   endpoint?: string;
@@ -1501,7 +1501,7 @@ async function runOwned<T>(
     if (deps.endpoint === undefined) {
       await preflight(client, bucket, callDeps, signal);
     } else {
-      // A local S3 server: versitygw answers GetBucketEncryption 501 NotImplemented (design D12).
+      // A local S3 server: versitygw answers GetBucketEncryption 501 NotImplemented.
       for (const api of ["GetBucketEncryption", "GetBucketVersioning"]) {
         record({ scenario: "lifecycle", phase: "preflight", api, outcome: "skipped" });
       }

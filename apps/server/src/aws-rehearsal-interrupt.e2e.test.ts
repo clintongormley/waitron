@@ -1,5 +1,5 @@
-// A rehearsal run killed part-way, against versitygw: the keeper the run started cleans up after it
-// (design D8–D10), and a request off the run's plan never reaches the server (D3–D4). The run is
+// A rehearsal run killed part-way, against versitygw: the keeper the run started cleans up after it,
+// and a request off the run's plan never reaches the server. The run is
 // `./testing/aws-rehearsal-interrupt-driver.ts`, or Vitest running
 // `./testing/aws-rehearsal-interrupt.vitest-case.ts`, in a process group of its own. Install the
 // server with `node scripts/setup-s3-test-server.mjs`. Without it each case is reported SKIPPED;
@@ -448,7 +448,7 @@ describe("a rehearsal run killed part-way, against versitygw", () => {
     POINT_MS + KEEPER_MS + 10_000,
   );
 
-  /** Task 7a's end state, for a run whose scratch and tracked process may never have been made. */
+  /** The end state for a run whose scratch and tracked process may never have been made. */
   async function expectNothingLeft(
     admin: S3Client,
     caseDir: string,
@@ -675,7 +675,7 @@ describe("a rehearsal run killed part-way, against versitygw", () => {
         expect(lines).toContain("the run finished; nothing to do");
         expect(lines.at(-1)).toBe("exit 0");
         expect(await rehearsalBuckets(client)).toEqual([]);
-        // A bucket outside the rehearsal's pattern is never named (design D3).
+        // A bucket outside the rehearsal's pattern is never named.
         expect(text).toContain("DeleteBucket was sent to a bucket this run did not create");
         expect(text).not.toContain(other);
         expect(

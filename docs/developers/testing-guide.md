@@ -753,7 +753,8 @@ own suite with `TMPDIR=/dev/shm`, pinned by
 tests each make their scratch directory under `tmpdir()`, and that directory holds the server's
 database, Litestream's files and versitygw's bucket, so all of them move; the S3 test server's suite
 keeps its scratch and its stub programs under `tmpdir()` too, and the scenarios their versitygw
-bucket. Main run 36559470238 (2026-09-29)
+bucket, and the send gate and interrupt suites their versitygw bucket and, for the interrupt suite,
+each run's receipts and scratch. Main run 36559470238 (2026-09-29)
 failed with the slowest frozen sale at 1,228 ms. A probe with per-sale timing reproduced it on one
 runner of 20 (run 36574315468, a sale of 1,262 ms, in the fill stage): that sale's commit took 1,017
 ms. The next write waited 1,029 ms to begin, which A130 inferred was Litestream's

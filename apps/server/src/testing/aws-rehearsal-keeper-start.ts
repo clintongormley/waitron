@@ -1,4 +1,4 @@
-// Starts the keeper (`scripts/aws-rehearsal-keeper.ts`) beside a rehearsal run (design D8, D9).
+// Starts the keeper (`scripts/aws-rehearsal-keeper.ts`) beside a rehearsal run.
 import { spawn } from "node:child_process";
 import { closeSync, openSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -64,8 +64,8 @@ function keeperReady(journalPath: string): number | null {
 }
 
 /**
- * Spawns the launcher, which starts the keeper in a session of its own and exits, so the keeper's
- * parent is pid 1. The keeper's stdin is a pipe whose writing end only this process holds, so this
+ * Spawns the launcher, which starts the keeper in a session of its own and exits, so the keeper is
+ * outside the runner's process tree and group. The keeper's stdin is a pipe whose writing end only this process holds, so this
  * process ending, however it ends, is end-of-file there. Resolves once the journal shows the keeper
  * ready and the launcher has exited 0; refuses `keeper-unavailable` otherwise.
  */

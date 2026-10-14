@@ -1,5 +1,5 @@
 // The keeper: run in its own process beside an Amazon S3 rehearsal, it cleans up after a run that
-// was killed, from the journal the run left (design D8–D10).
+// was killed, from the journal the run left.
 import { appendFileSync } from "node:fs";
 import { readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -52,7 +52,7 @@ const BUCKET_STEPS = [
 export interface KeeperDeps {
   env: Readonly<Record<string, string | undefined>>;
   readFile(path: string): Promise<string>;
-  /** The folder the run's scratch root must sit in (design D8a). */
+  /** The folder the run's scratch root must sit in. */
   tmpdir: string;
   /** Settles when the runner has ended: on its pipe's end-of-file in the keeper process. */
   waitForRunnerEnd(): Promise<void>;

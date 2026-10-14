@@ -124,7 +124,7 @@ export async function interruptScenario(
         await client.send(new DeleteBucketCommand({ Bucket: otherBucket }));
         say("SENT DeleteBucket");
       } catch (error) {
-        // Swallowed: the run must fail from the gate's own count of refusals (design D4).
+        // Swallowed: the run must fail from the gate's own count of refusals.
         say(`REFUSED ${nameOf(error)}`);
       }
       say(`POINT ${point}`);

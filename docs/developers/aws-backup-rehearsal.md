@@ -99,7 +99,7 @@ The variables the rehearsal's own code reads:
 | `AWS_PROFILE`                        | Must be `waitron-rehearsal`.                                                                                                                                                                                                       |
 | `AWS_ENDPOINT_URL`, `AWS_ENDPOINT_URL_S3` | Must be unset or empty. Either one set refuses the run (`endpoint-unsupported`), and so does an `endpoint_url` or `services` setting in the profile's section of either file: a rehearsal sends only to Amazon S3. |
 | `AWS_REGION`                         | Must match the profile's region. The bucket is created there. `us-east-1` is refused (`region-unsupported`) before any request, because there, AWS's CreateBucket reference says, "if you re-create an existing bucket that you already own in the North Virginia Region, Amazon S3 returns 200 OK", so the run could not tell a fresh bucket from one the account already owns, such as another run's (read 2026-10-14). |
-| `WAITRON_AWS_REHEARSAL_RECEIPT_DIR`  | Where receipts are written. Unset or empty, they go to `waitron-aws-rehearsal` under your temporary folder. The full path may hold only letters, digits and `. _ @ -` between its slashes and must be at most 40 folders deep. The cleanup command naming a receipt in it must fit in 512 characters, which the run checks before any AWS call; with the default run id that allows a folder path of about 150 characters, depending on the region (155 for `eu-north-1`). |
+| `WAITRON_AWS_REHEARSAL_RECEIPT_DIR`  | Where receipts are written. Unset or empty, they go to `waitron-aws-rehearsal` under your temporary folder. The full path may hold only letters, digits and `. _ @ -` between its slashes and must be at most 40 folders deep. The cleanup command naming a receipt in it must fit in 512 characters, which the run checks before any AWS call; with the default run id that allows a folder path of about 150 characters, depending on the region (151 for `eu-north-1`). |
 | `WAITRON_AWS_REHEARSAL_BUCKET`       | Must be unset or empty. Any other value refuses the run (`supplied-bucket`).                                                                                                                                                       |
 | `WAITRON_LITESTREAM_BIN`             | The Litestream binary the scenarios run. Unset or empty, it is `.bin/litestream` at the repository root, where `node scripts/setup-litestream.mjs` puts it. It must report the pinned version, or the loop and pause scenarios fail.                   |
 
@@ -186,7 +186,7 @@ What is not checked:
   bucket policies, so that step's listings are first checked against the plan on Amazon S3.
 
 **Proving it without Amazon.** The rehearsal's own tests run the runner against versitygw by giving
-it a local endpoint, which only a test can set; nothing reads one from the environment. With one
+it a local endpoint, which only a test can set. With one
 set, the encryption and versioning check is skipped and recorded as two `skipped` rows (versitygw
 answers the encryption read with 501 `NotImplemented`), and the host check lets any host through.
 The four AWS test files never set one. `apps/server/src/aws-send-gate.e2e.test.ts` shows a request
@@ -410,7 +410,7 @@ separate Node process (`apps/server/scripts/aws-rehearsal-keeper.ts`) that outli
 person never starts the keeper.
 
 **How it stays alive.** The keeper is started through a short-lived launcher in a session of its
-own, so its parent is process 1: a Ctrl-C to the terminal's process group, or a watchdog stopping
+own, so it is not the run's child and is outside its process group: a Ctrl-C to the terminal's process group, or a watchdog stopping
 the run's process tree, does not reach it. It ignores the hang-up signal a closing terminal sends,
 and stops on a SIGTERM sent to it directly. It learns that the run has ended from a pipe whose other
 end only the run holds, so the run ending in any way, a kill included, ends the pipe. The run
