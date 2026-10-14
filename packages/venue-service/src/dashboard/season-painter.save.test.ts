@@ -131,6 +131,21 @@ it("sends the clock revision the draft was seeded with, followed only while noth
   expect((writes[0]!.body as { expectedClockRevision: number }).expectedClockRevision).toBe(9);
 });
 
+it("a refresh that stores what the draft painted leaves it clean on the model's clock revision", async () => {
+  const { painter, writes } = await mount();
+  await drag(painter, "3", 7 * 60, 9 * 60);
+  const painted = grid(painter).days.get("3")!;
+  expect(painted).not.toEqual([]);
+  const next = withBar();
+  (next.departments[0]!.seasonWeeks[1]!.week[3]!.slots as unknown[]).push(...painted);
+  painter.model = { ...next, clockRevision: 11 };
+  await settle(painter);
+  expect(frame(painter).dirty).toBe(false);
+  await drag(painter, "4", 7 * 60, 9 * 60);
+  await save(painter, writes);
+  expect((writes[0]!.body as { expectedClockRevision: number }).expectedClockRevision).toBe(11);
+});
+
 it("a refusal naming no field shows beside Save only, keeps the draft, and a retry saves", async () => {
   const { painter, writes, reread } = await mount(withBar(), [
     { code: "season.not_found", params: { seasonId: "winter" } },
@@ -839,7 +854,7 @@ it("stepping to another season before the model after a save forgets that save",
   expect(frame(painter).dirty).toBe(false);
 });
 
-it("an edited week the save did not send still stays whole", async () => {
+it("an edited week the save did not send takes the read after the save on the days it did not change", async () => {
   const { painter, writes } = await mount();
   const { after } = readNumbers(painter);
   await drag(painter, "3", 60, 180);
@@ -852,7 +867,7 @@ it("an edited week the save did not send still stays whole", async () => {
     }),
   );
   await settle(painter);
-  expect(grid(painter).days.get("2")).toEqual([]);
+  expect(grid(painter).days.get("2")).toEqual([slot("q1", "10:00", "12:00")]);
   expect(painter.edited()).toEqual({ departments: ["d3"], zones: [] });
 });
 
@@ -1069,8 +1084,9 @@ it("a saved department missing from the draft when the read after the save bring
 });
 
 it("closing the painter before the model after a save forgets that save", async () => {
-  const { painter, writes } = await mount();
-  const { after } = readNumbers(painter);
+  const { painter, writes, reread } = await mount();
+  const { at } = readNumbers(painter);
+  reread.mockReturnValue(10);
   await drag(painter, "3", 60, 180);
   await save(painter, writes);
   frame(painter).shadowRoot!.querySelector<HTMLElement>("[data-test=dismiss]")!.click();
@@ -1078,9 +1094,9 @@ it("closing the painter before the model after a save forgets that save", async 
   painter.open = true;
   await settle(painter);
   await drag(painter, "4", 60, 180);
-  painter.model = after(withDays(withBar(), "d1", { 1: [] }));
+  painter.model = at(withDays(withBar(), "d1", { 1: mondayDinner, 3: earlyWednesday }), 5);
   await settle(painter);
-  expect(grid(painter).days.get("1")).toEqual(mondayLunch);
+  expect(grid(painter).days.get("1")).toEqual(mondayDinner);
   expect(grid(painter).days.get("3")).toEqual(earlyWednesday);
   expect(grid(painter).days.get("4")).toEqual(earlyThursday);
   expect(painter.edited()).toEqual({ departments: ["d1"], zones: [] });

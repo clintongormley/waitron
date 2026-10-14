@@ -153,7 +153,7 @@ export class SeasonPainter extends LitElement {
   ];
 
   @property({ attribute: false }) api!: OpeningHoursApi;
-  /** Refreshed by the host from its live watch; a refresh keeps every edited week. */
+  /** Refreshed by the host from its live watch; `refresh` says what an edited week keeps. */
   @property({ attribute: false }) model!: Model;
   @property({ type: Boolean }) open = false;
   @property() seasonId = "";
@@ -174,7 +174,6 @@ export class SeasonPainter extends LitElement {
   });
   private baseline: Draft = new Map();
   private seededSeason?: string;
-  /** The model every week of the baseline was last taken from; a clean draft catches up to a newer one. */
   private followed?: Model;
   /** The weeks a save sent, taken in only from a model read after `barrier` (`ModelWatches.reread`)
    *  and while no save is in flight. */
@@ -214,7 +213,9 @@ export class SeasonPainter extends LitElement {
     if (this.seededSeason !== this.seasonId) this.reseed();
     else if (
       changes.has("model") ||
-      (this.followed !== this.model && !this.anyEdited()) ||
+      ((this.followed !== this.model || this.revision !== this.model.clockRevision) &&
+        !this.anyEdited()) ||
+      (this.followed !== this.model && this.mayFollow()) ||
       this.confirmable()
     ) {
       const before = shownIn(previous, this.departmentId, this.zoneId);
@@ -270,6 +271,13 @@ export class SeasonPainter extends LitElement {
     this.saving = false;
     this.confirming = undefined;
   }
+  /** A save in flight already holds the draft's copy of every day of the weeks it sends, and after
+   *  a successful save those weeks keep what was sent as their baseline until a read that started
+   *  after the latest successful save answered arrives while no save is in flight; until then no
+   *  edited week may take in another day. */
+  private mayFollow(): boolean {
+    return !this.saving && this.confirming === undefined;
+  }
   private confirmable(): boolean {
     return !this.saving && this.readAfterSave();
   }
@@ -287,11 +295,10 @@ export class SeasonPainter extends LitElement {
     this.draft = copyDraft(fresh);
     this.commitBaseline(fresh);
   }
-  /** Weeks not edited follow the fresh model; an edited week `confirmed` did not send, and its
-   *  baseline, stay — unless its department or zone is gone or inactive, when its edits are
-   *  dropped with a notice. */
+  /** Weeks not edited follow the fresh model; an edited week takes it on every day the draft did
+   *  not change, unless the painter may not follow yet, when the week and its baseline stay. A
+   *  week whose department or zone is gone or inactive has its edits dropped with a notice. */
   private refresh(previous: Model, confirmed?: Draft) {
-    if (!this.anyEdited()) this.revision = this.model.clockRevision;
     const fresh = seed(this.model, this.seasonId);
     if (confirmed) {
       this.draft = new Map(this.draft);
@@ -308,6 +315,7 @@ export class SeasonPainter extends LitElement {
     const baseline: Draft = new Map();
     const gone: string[] = [];
     const inactive = new Set<string>();
+    const follow = this.mayFollow();
     for (const [key, week] of this.draft) {
       if (sameWeek(week, this.baseline.get(key))) continue;
       if (!fresh.has(key)) {
@@ -316,8 +324,13 @@ export class SeasonPainter extends LitElement {
         else gone.push(ownerName(previous, key));
         continue;
       }
-      draft.set(key, week);
-      baseline.set(key, this.baseline.get(key)!);
+      if (follow) {
+        draft.set(key, rebaseDays(fresh.get(key)!, this.baseline.get(key)!, week));
+        baseline.set(key, fresh.get(key)!);
+      } else {
+        draft.set(key, week);
+        baseline.set(key, this.baseline.get(key)!);
+      }
     }
     const readAfterSave = this.readAfterSave();
     for (const [key, week] of fresh) {
@@ -330,6 +343,7 @@ export class SeasonPainter extends LitElement {
     if ([...baseline].every(([key, week]) => week === fresh.get(key))) this.followed = this.model;
     this.draft = draft;
     this.commitBaseline(baseline);
+    if (!this.anyEdited()) this.revision = this.model.clockRevision;
     const notice = droppedNotice(gone, inactive);
     if (notice) this.notice = notice;
   }

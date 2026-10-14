@@ -210,7 +210,7 @@ it.each(["before", "after"])(
   },
 );
 
-it("keeps an edited week when a fresh model arrives before the painter, put back on the page, has updated", async () => {
+it("keeps an edited day when a fresh model arrives before the painter, put back on the page, has updated", async () => {
   const painter = await mount();
   await paintWednesday(painter);
   const parent = painter.parentNode!;

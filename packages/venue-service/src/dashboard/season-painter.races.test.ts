@@ -18,7 +18,12 @@ type HeldRead = {
   answer: (model?: OpeningHoursModel) => void;
   refuse: (error: unknown) => void;
 };
-type HeldPut = { body: WeeksBody; store: () => void; answer: () => void };
+type HeldPut = {
+  body: WeeksBody;
+  store: () => void;
+  answer: () => void;
+  refuse: (error: unknown) => void;
+};
 
 let host: SeasonPainter | undefined;
 let detach: (() => void) | undefined;
@@ -52,7 +57,7 @@ async function racingPainter(live: boolean, { timer = false } = {}) {
       );
     }
     const weeks = structuredClone(body) as WeeksBody;
-    return new Promise<void>((resolve) =>
+    return new Promise<void>((resolve, reject) =>
       puts.push({
         body: weeks,
         store: () => {
@@ -64,6 +69,7 @@ async function racingPainter(live: boolean, { timer = false } = {}) {
           }
         },
         answer: () => resolve(),
+        refuse: reject,
       }),
     );
   }) as DashboardRequest;
@@ -235,5 +241,65 @@ it.each([
     expect(grid(painter).days.get("4")).toEqual(wednesday);
     const second = await save();
     expect(slotsOn(second.body, 1)).toEqual(mondayDinner);
+  },
+);
+
+const thursdayDinner = [{ periodId: "p2", startsAt: "18:00", endsAt: "23:00" }];
+const mondayPainted = [{ periodId: "p1", startsAt: "07:00", endsAt: "09:00" }, ...mondayLunch];
+
+it.each([
+  ["live data", true],
+  ["no live data", false],
+])(
+  "another manager's Thursday arrives on a draft that painted only Monday, and Save sends both (%s)",
+  async (_, live) => {
+    const { painter, server, save, liveData } = await racingPainter(live, { timer: !live });
+    await drag(painter, "1", 60, 180);
+    expect(grid(painter).days.get("1")).toEqual(mondayPainted);
+    server.stored.departments[0]!.seasonWeeks.find(
+      ({ seasonId }) => seasonId === "winter",
+    )!.week.find(({ weekday }) => weekday === 4)!.slots = thursdayDinner;
+    const before = painter.model;
+    server.hold = false;
+    if (liveData) liveData.invalidate([{ type: QUERY_DEPENDENCIES["opening-hours"][0]! }]);
+    else vi.advanceTimersByTime(60_000);
+    await expect.poll(() => painter.model !== before).toBe(true);
+    await settle(painter);
+    expect(grid(painter).days.get("4")).toEqual(thursdayDinner);
+    expect(grid(painter).days.get("1")).toEqual(mondayPainted);
+    expect(frame(painter).dirty).toBe(true);
+
+    const sent = await save();
+    expect(slotsOn(sent.body, 4)).toEqual(thursdayDinner);
+    expect(slotsOn(sent.body, 1)).toEqual(mondayPainted);
+  },
+);
+
+it.each([
+  ["live data", true],
+  ["no live data", false],
+])(
+  "another manager's Thursday that arrives during a refused save shows after the refusal, and the retry sends it (%s)",
+  async (_, live) => {
+    const { painter, server, save, liveData } = await racingPainter(live, { timer: !live });
+    await drag(painter, "3", 60, 180);
+    const first = await save();
+    server.stored.departments[0]!.seasonWeeks.find(
+      ({ seasonId }) => seasonId === "winter",
+    )!.week.find(({ weekday }) => weekday === 4)!.slots = thursdayDinner;
+    const before = painter.model;
+    server.hold = false;
+    if (liveData) liveData.invalidate([{ type: QUERY_DEPENDENCIES["opening-hours"][0]! }]);
+    else vi.advanceTimersByTime(60_000);
+    await expect.poll(() => painter.model !== before).toBe(true);
+    first.refuse(new Error("down"));
+    await expect.poll(() => frame(painter).busy).toBe(false);
+    await settle(painter);
+    expect(grid(painter).days.get("4")).toEqual(thursdayDinner);
+    expect(grid(painter).days.get("3")).toEqual(wednesday);
+
+    const retry = await save();
+    expect(slotsOn(retry.body, 4)).toEqual(thursdayDinner);
+    expect(slotsOn(retry.body, 3)).toEqual(wednesday);
   },
 );
