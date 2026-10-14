@@ -113,7 +113,7 @@ switch, and the dashboard's dated week views went.
 A506-8 landed in #1634: a full-screen season painter edits one season's week for every department
 and zone, saving the edited weeks in one request; it replaced the Week tab's editors, and opens
 from a season chip, an ordinary date and a zone's Opening hours link.
-A506-9 (#1651): the special-day painter replaces the special-day dialog and the per-date editor; it
+A506-9 landed in #1651: the special-day painter replaces the special-day dialog and the per-date editor; it
 edits one special day's name, dates, Every year and each date's department and zone paint in a
 full-screen painter with its own address, opens from the Year, the month and an ordinary date, and
 saves only the paint the draft changed. An old `/view/date` address opens the month instead.
@@ -218,6 +218,14 @@ saves only the paint the draft changed. An old `/view/date` address opens the mo
   compares a cutoff only with the start of the next period (`findEndOffsetClash`,
   `period-end-offset.ts`, reached from the "runs into what follows it" checks in
   `menu-timetable.ts`). Decide whether a cutoff past the changeover is refused.
+- A date another manager removed stays in the draft when this draft changed its paint or its Closed
+  tick (`merge`, `special-day-painter.ts`). If only the Closed tick changed, Save puts the date back
+  with no paint, though it had paint before the removal. The painter shows the date before Save, so
+  nothing is lost unseen. Found by reading, not run; decide whether that date should be dropped too.
+- A draft's clock revision is chosen before the edits a new model makes impossible are dropped
+  (`willUpdate`, then `dropUnpaintable`, `special-day-painter.ts`), so a draft whose only edits were
+  dropped keeps the revision it had. A new public-holiday day, which can be saved as it opened, could
+  then be refused with `hours.clock_changed`. Found by reading, not run.
 
 **Left open by A506-8, for the later parts.**
 - The painter cannot resize a block by dragging its edge (ruling R1 of A506-8); mockup 3's hint
