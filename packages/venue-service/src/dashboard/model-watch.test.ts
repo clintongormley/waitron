@@ -118,3 +118,49 @@ it("a held-back read after a failure does not count as the recovery", async () =
   await expect.poll(() => apply.mock.calls).toEqual([["after the write"]]);
   expect(recovered).toHaveBeenCalledTimes(1);
 });
+
+it("with live data, a watch attached after a write is held back from a read that started before it", async () => {
+  const watches = new ModelWatches(new LiveData());
+  const { reads, load } = heldLoad<string>();
+  detaches.push(watches.watch("k", ["t"], load, vi.fn(), vi.fn(), vi.fn()));
+  await expect.poll(() => reads.length).toBe(1);
+  watches.reread(["t", "v"]);
+  const apply = vi.fn();
+  detaches.push(watches.watch("k", ["t"], load, apply, vi.fn(), vi.fn()));
+  reads[0]!.resolve("before the write");
+  await expect.poll(() => reads.length).toBe(2);
+  reads[1]!.resolve("after the write");
+  await expect.poll(() => apply.mock.calls.length).toBeGreaterThan(0);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  expect(apply.mock.calls).toEqual([["after the write"]]);
+});
+
+it("with live data, a watch attached after a write on types it does not depend on takes its read", async () => {
+  const watches = new ModelWatches(new LiveData());
+  const { reads, load } = heldLoad<string>();
+  detaches.push(watches.watch("k", ["u"], load, vi.fn(), vi.fn(), vi.fn()));
+  await expect.poll(() => reads.length).toBe(1);
+  watches.reread(["t"]);
+  const apply = vi.fn();
+  detaches.push(watches.watch("k", ["u"], load, apply, vi.fn(), vi.fn()));
+  reads[0]!.resolve("before the write");
+  await expect.poll(() => apply.mock.calls).toEqual([["before the write"]]);
+  expect(reads).toHaveLength(1);
+});
+
+it("with live data, a watch attached straight after a write is not handed the model read before it", async () => {
+  const watches = new ModelWatches(new LiveData());
+  const { reads, load } = heldLoad<string>();
+  const first = vi.fn();
+  detaches.push(watches.watch("k", ["t"], load, first, vi.fn(), vi.fn()));
+  await expect.poll(() => reads.length).toBe(1);
+  reads[0]!.resolve("before the write");
+  await expect.poll(() => first.mock.calls.length).toBe(1);
+  watches.reread(["t"]);
+  const apply = vi.fn();
+  detaches.push(watches.watch("k", ["t"], load, apply, vi.fn(), vi.fn()));
+  await expect.poll(() => reads.length).toBe(2);
+  reads[1]!.resolve("after the write");
+  await expect.poll(() => apply.mock.calls.length).toBeGreaterThan(0);
+  expect(apply.mock.calls).toEqual([["after the write"]]);
+});

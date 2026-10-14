@@ -1024,3 +1024,64 @@ it("once a save is taken in, a day painted back to what it sent is kept by the n
   expect(grid(painter).days.get("4")).toEqual(earlyThursday);
   expect(painter.edited()).toEqual({ departments: ["d1"], zones: [] });
 });
+
+it.each([
+  ["removed", "Bar was removed; its changes were dropped."],
+  ["made inactive", "Bar is no longer active; its changes were dropped."],
+])(
+  "a saved department %s by the read after the save drops the paint added since, and says so",
+  async (cause, notice) => {
+    const { painter, writes } = await mount();
+    const { after } = readNumbers(painter);
+    await pick(painter, "d3");
+    await drag(painter, "1", 60, 180);
+    await save(painter, writes);
+    await drag(painter, "4", 60, 180);
+    const model = withBar();
+    if (cause === "removed") model.departments = model.departments.filter(({ id }) => id !== "d3");
+    else model.departments.find(({ id }) => id === "d3")!.active = false;
+    painter.model = after(model);
+    await settle(painter);
+    expect(painter.edited()).toEqual({ departments: [], zones: [] });
+    expect(frame(painter).dirty).toBe(false);
+    expect(frame(painter).refusal).toBe(notice);
+    expect(grid(painter).days.get("1")).toEqual(mondayLunch);
+  },
+);
+
+it("a saved department missing from the draft when the read after the save brings it back is shown as stored", async () => {
+  const { painter, writes, reread } = await mount();
+  const { at } = readNumbers(painter);
+  reread.mockReturnValue(10);
+  await pick(painter, "d3");
+  await drag(painter, "1", 60, 180);
+  await save(painter, writes);
+  const removed = withBar();
+  removed.departments = removed.departments.filter(({ id }) => id !== "d3");
+  painter.model = at(removed, 5);
+  await settle(painter);
+  painter.model = at(withDays(withBar(), "d3", { 1: [slot("q1", "18:00", "21:00")] }), 15);
+  await settle(painter);
+  await pick(painter, "d3");
+  expect(grid(painter).days.get("1")).toEqual([slot("q1", "18:00", "21:00")]);
+  expect(painter.edited()).toEqual({ departments: [], zones: [] });
+  expect(frame(painter).dirty).toBe(false);
+});
+
+it("closing the painter before the model after a save forgets that save", async () => {
+  const { painter, writes } = await mount();
+  const { after } = readNumbers(painter);
+  await drag(painter, "3", 60, 180);
+  await save(painter, writes);
+  frame(painter).shadowRoot!.querySelector<HTMLElement>("[data-test=dismiss]")!.click();
+  await expect.poll(() => painter.open).toBe(false);
+  painter.open = true;
+  await settle(painter);
+  await drag(painter, "4", 60, 180);
+  painter.model = after(withDays(withBar(), "d1", { 1: [] }));
+  await settle(painter);
+  expect(grid(painter).days.get("1")).toEqual(mondayLunch);
+  expect(grid(painter).days.get("3")).toEqual(earlyWednesday);
+  expect(grid(painter).days.get("4")).toEqual(earlyThursday);
+  expect(painter.edited()).toEqual({ departments: ["d1"], zones: [] });
+});

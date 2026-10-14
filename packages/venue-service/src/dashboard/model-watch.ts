@@ -22,6 +22,7 @@ interface Attached {
 export class ModelWatches {
   readonly #attached = new Set<Attached>();
   readonly #readAt = new WeakMap<object, number>();
+  readonly #heldBack = new Map<string, number>();
 
   constructor(readonly liveData?: LiveData) {}
 
@@ -40,7 +41,12 @@ export class ModelWatches {
   ): () => void {
     let failing = false;
     let attached = true;
-    const own: Attached = { dependencies, barrier: 0 };
+    const own: Attached = {
+      dependencies,
+      // A live query's read from before a write can reach a watch attached after it: answering
+      // late, or handed over below as the query's current model.
+      barrier: Math.max(0, ...dependencies.map((type) => this.#heldBack.get(type) ?? 0)),
+    };
     const stamped = async (): Promise<Stamped<T>> => {
       const startedAt = ++ticks;
       return { startedAt, value: await load() };
@@ -108,8 +114,7 @@ export class ModelWatches {
       changed,
     );
     this.#attached.add(own);
-    // Observing never calls back by itself: a query another watcher has already read is current
-    // and starts no read, so its model is handed over here.
+    // Observing hands over no model it has already read, so the current one is handed over here.
     changed();
     return () => {
       attached = false;
@@ -122,9 +127,9 @@ export class ModelWatches {
    * After a write, has every attached watch read again, so the write shows even when the change
    * feed delivers nothing. With live data it invalidates `dependencies`, and so also rereads every
    * other live query depending on them. Returns the write's hold-back point: no watch it asks to
-   * read again applies a successful read that started before it. Weaker than that sounds: it holds
-   * back only this object's own watches, and another client object on the same live data still
-   * applies them.
+   * read again applies a successful read that started before it, nor, with live data, does a watch
+   * on any of `dependencies` attached later. Weaker than that sounds: it holds back only this
+   * object's own watches, and another client object on the same live data still applies them.
    */
   reread(dependencies: readonly string[]): number {
     const at = ++ticks;
@@ -136,7 +141,10 @@ export class ModelWatches {
         watch.barrier = at;
     }
     if (this.liveData === undefined) for (const watch of this.#attached) watch.read?.();
-    else this.liveData.invalidate(dependencies.map((type) => ({ type })));
+    else {
+      for (const type of dependencies) this.#heldBack.set(type, at);
+      this.liveData.invalidate(dependencies.map((type) => ({ type })));
+    }
     return at;
   }
 

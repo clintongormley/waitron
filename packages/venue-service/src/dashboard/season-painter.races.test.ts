@@ -13,7 +13,11 @@ type WeeksBody = {
   zones: unknown[];
   expectedClockRevision: number;
 };
-type HeldRead = { snapshot: OpeningHoursModel; answer: (model?: OpeningHoursModel) => void };
+type HeldRead = {
+  snapshot: OpeningHoursModel;
+  answer: (model?: OpeningHoursModel) => void;
+  refuse: (error: unknown) => void;
+};
 type HeldPut = { body: WeeksBody; store: () => void; answer: () => void };
 
 let host: SeasonPainter | undefined;
@@ -32,7 +36,7 @@ afterEach(() => {
  * model, every GET is held until answered, and a PUT is stored and answered in separate steps so
  * another manager's write can land between them. A held GET answers with the store as it was
  * when the read started, unless the test hands it another model. `server.hold = false` answers
- * GETs at once. Without live data, `timer` fakes the watch's interval so the test can fire it.
+ * GETs at once. `timer` fakes the watch's interval so the test can fire it.
  */
 async function racingPainter(live: boolean, { timer = false } = {}) {
   setLocale("en");
@@ -43,8 +47,8 @@ async function racingPainter(live: boolean, { timer = false } = {}) {
     if (method === "GET") {
       const snapshot = structuredClone(server.stored);
       if (!host?.model || !server.hold) return snapshot;
-      return new Promise<OpeningHoursModel>((resolve) =>
-        reads.push({ snapshot, answer: (model = snapshot) => resolve(model) }),
+      return new Promise<OpeningHoursModel>((resolve, reject) =>
+        reads.push({ snapshot, answer: (model = snapshot) => resolve(model), refuse: reject }),
       );
     }
     const weeks = structuredClone(body) as WeeksBody;
@@ -73,12 +77,14 @@ async function racingPainter(live: boolean, { timer = false } = {}) {
   document.body.append(host);
   const painter = host;
   if (timer) vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  const failed = vi.fn();
+  const recovered = vi.fn();
   detach = painter.api.watchOpeningHours(
     (model) => {
       painter.model = model;
     },
-    () => {},
-    () => {},
+    failed,
+    recovered,
   );
   await expect.poll(() => !!painter.model).toBe(true);
   await settle(painter);
@@ -88,7 +94,7 @@ async function racingPainter(live: boolean, { timer = false } = {}) {
     await expect.poll(() => puts.length).toBe(before + 1);
     return puts[before]!;
   };
-  return { painter, server, reads, puts, save, liveData };
+  return { painter, server, reads, puts, save, liveData, failed, recovered };
 }
 
 const slotsOn = (body: WeeksBody, weekday: number) =>
@@ -192,5 +198,42 @@ it.each([
     expect(mondayOf().slots).toEqual(mondayLunch);
     expect(grid(painter).days.get("1")).toEqual(mondayLunch);
     expect(frame(painter).dirty).toBe(false);
+  },
+);
+
+it.each([
+  ["live data", true],
+  ["no live data", false],
+])(
+  "a failed read after a save keeps the paint, and the next good read is taken in (%s)",
+  async (_, live) => {
+    const { painter, reads, save, failed, recovered } = await racingPainter(live, { timer: true });
+    await drag(painter, "3", 60, 180);
+    const first = await save();
+    first.store();
+    first.answer();
+    await expect.poll(() => reads.length).toBe(1);
+    await expect.poll(() => frame(painter).busy).toBe(false);
+    await drag(painter, "4", 60, 180);
+    reads[0]!.refuse(new Error("down"));
+    await expect.poll(() => failed.mock.calls.length).toBe(1);
+    await settle(painter);
+    expect(grid(painter).days.get("3")).toEqual(wednesday);
+    expect(grid(painter).days.get("4")).toEqual(wednesday);
+    expect(recovered).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(60_000);
+    await expect.poll(() => reads.length).toBe(2);
+    const next = structuredClone(reads[1]!.snapshot);
+    next.departments[0]!.seasonWeeks.find(({ seasonId }) => seasonId === "winter")!.week.find(
+      ({ weekday }) => weekday === 1,
+    )!.slots = mondayDinner;
+    reads[1]!.answer(next);
+    await expect.poll(() => recovered.mock.calls.length).toBe(1);
+    await settle(painter);
+    expect(grid(painter).days.get("1")).toEqual(mondayDinner);
+    expect(grid(painter).days.get("4")).toEqual(wednesday);
+    const second = await save();
+    expect(slotsOn(second.body, 1)).toEqual(mondayDinner);
   },
 );
