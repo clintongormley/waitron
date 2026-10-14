@@ -363,18 +363,21 @@ body then stalls is not bounded by that limit, only by its caller cancelling the
 settings screen's Test and Save are one, listed in [docs/backlog.md](../backlog.md)); the idle limit
 is per request, not per call, so a listing of many pages, or a bucket
 answering each request just inside the limit, can take longer; a bucket that takes more than 30
-seconds to answer a request whose body is already sent, such as a delete of 1,000 keys, is cut off,
-and how long real providers take for one was not measured; and the idle limit's tests run the
+seconds to answer a request whose body is already sent, such as a delete of 1,000 keys, is cut off;
+Amazon S3 answered one delete of 1,000 tiny keys in 1,040 ms on 2026-10-14 (A538-10), and other
+providers, and larger or busier buckets, were not measured; and the idle limit's tests run the
 handler's below-6,000 ms path, while its production path was measured by hand, not by a test.
 
-## That a real bucket's 403 to the pause's listing reads that code, and the status and `errorName` on each line, were shown by reading
+## The status and `errorName` on the stream's log lines other than the pause check's 403 were shown by reading
 
 **The pause test and the bucket's error reports — what is still open (left by #668, #686, A57, A60
 and #723).**
 
-- That a real bucket's 403 to the pause's listing reads that code, and the status and `errorName` on
-  each line, were shown by reading, by the store's scripted HTTP answers and by the supervisor's
-  injected errors, not against a real bucket; A60's `errorName` list
+- On 2026-10-14 Amazon S3's 403 to the paused supervisor's listing was logged as
+  `stream.pause_check_failed` with `errorCode` `backup.stream_request_failed`, `status` 403 and
+  `errorName` `AccessDenied` (A538-10, [receipts](../receipts/a538/README.md)). The status and
+  `errorName` on the stream's other log lines were shown by reading, by the store's scripted HTTP
+  answers and by the supervisor's injected errors, not against a real bucket; A60's `errorName` list
   (`packages/stream/src/bucket-error-names.ts`) was checked against Amazon's reference only, not
   against the names versitygw gives its errors.
 

@@ -1,0 +1,276 @@
+{
+  "header": {
+    "limits": {
+      "archiveBytes": 33554432,
+      "deleteObjects": 1005,
+      "uploadedBytes": 134217728,
+      "denialControlMs": 60000,
+      "teardownMs": 120000,
+      "deadlineMs": 900000
+    },
+    "runId": "efe76461-7c7f-467e-9f55-1354a2b143fc",
+    "commit": "aa702de4cae53b2aec633155759c33cbda552e95",
+    "node": "v26.7.0",
+    "sdkVersion": "3.1140.0",
+    "litestreamVersion": "0.5.17",
+    "region": "eu-north-1",
+    "startedAt": "2026-10-14T05:48:30.544Z",
+    "finishedAt": "2026-10-14T05:48:56.211Z"
+  },
+  "ownership": {
+    "state": "owned",
+    "bucket": "waitron-rehearsal-waitron-hy4zk0kzvdo9"
+  },
+  "events": [
+    {
+      "scenario": "lifecycle",
+      "phase": "create",
+      "outcome": "ok",
+      "api": "CreateBucket",
+      "httpStatus": 200,
+      "attempts": 1,
+      "elapsedMs": 719
+    },
+    {
+      "scenario": "lifecycle",
+      "phase": "ownership",
+      "outcome": "ok",
+      "api": "PutObject",
+      "objectRole": "ownership-nonce",
+      "bytes": 48,
+      "httpStatus": 200,
+      "attempts": 1,
+      "elapsedMs": 73
+    },
+    {
+      "scenario": "lifecycle",
+      "phase": "preflight",
+      "outcome": "ok",
+      "api": "GetBucketEncryption",
+      "httpStatus": 200,
+      "attempts": 1,
+      "elapsedMs": 59
+    },
+    {
+      "scenario": "lifecycle",
+      "phase": "preflight",
+      "outcome": "ok",
+      "api": "GetBucketVersioning",
+      "httpStatus": 200,
+      "attempts": 1,
+      "elapsedMs": 53
+    },
+    {
+      "scenario": "loop",
+      "phase": "probe",
+      "outcome": "ok",
+      "elapsedMs": 1003.5520419999998
+    },
+    {
+      "scenario": "loop",
+      "phase": "pointer-a",
+      "outcome": "ok",
+      "elapsedMs": 4545.445916
+    },
+    {
+      "scenario": "loop",
+      "phase": "sale-a",
+      "outcome": "ok",
+      "elapsedMs": 2476.295959
+    },
+    {
+      "scenario": "loop",
+      "phase": "rebuild",
+      "outcome": "ok",
+      "elapsedMs": 2913.3014589999984
+    },
+    {
+      "scenario": "loop",
+      "phase": "pointer-b",
+      "outcome": "ok",
+      "elapsedMs": 4340.140749999999
+    },
+    {
+      "scenario": "loop",
+      "phase": "sale-b",
+      "outcome": "ok",
+      "elapsedMs": 2399.1881250000006
+    },
+    {
+      "scenario": "loop",
+      "phase": "frozen-transport",
+      "outcome": "skipped",
+      "elapsedMs": 2974.9702080000025
+    },
+    {
+      "scenario": "loop",
+      "phase": "restore-compare",
+      "outcome": "ok",
+      "elapsedMs": 2885.7919580000016
+    },
+    {
+      "scenario": "lifecycle",
+      "phase": "teardown",
+      "outcome": "ok",
+      "api": "ListMultipartUploads",
+      "httpStatus": 200,
+      "attempts": 1,
+      "elapsedMs": 177
+    },
+    {
+      "scenario": "lifecycle",
+      "phase": "teardown",
+      "outcome": "ok",
+      "api": "DeleteBucketPolicy",
+      "httpStatus": 204,
+      "attempts": 1,
+      "elapsedMs": 115
+    },
+    {
+      "scenario": "lifecycle",
+      "phase": "teardown",
+      "outcome": "ok",
+      "api": "ListObjectsV2",
+      "httpStatus": 200,
+      "attempts": 1,
+      "elapsedMs": 77
+    },
+    {
+      "scenario": "lifecycle",
+      "phase": "teardown",
+      "outcome": "ok",
+      "api": "DeleteObjects",
+      "count": 13,
+      "httpStatus": 200,
+      "attempts": 1,
+      "elapsedMs": 271
+    },
+    {
+      "scenario": "lifecycle",
+      "phase": "teardown",
+      "outcome": "ok",
+      "api": "DeleteObject",
+      "objectRole": "ownership-nonce",
+      "httpStatus": 204,
+      "attempts": 1,
+      "elapsedMs": 176
+    },
+    {
+      "scenario": "lifecycle",
+      "phase": "teardown",
+      "outcome": "ok",
+      "api": "DeleteBucket",
+      "httpStatus": 204,
+      "attempts": 1,
+      "elapsedMs": 405
+    }
+  ],
+  "teardown": [
+    {
+      "step": "stop-child",
+      "outcome": "skipped",
+      "count": 0
+    },
+    {
+      "step": "abort-upload",
+      "outcome": "ok",
+      "count": 0
+    },
+    {
+      "step": "remove-policy",
+      "outcome": "ok"
+    },
+    {
+      "step": "delete-objects",
+      "outcome": "ok",
+      "count": 13
+    },
+    {
+      "step": "delete-bucket",
+      "outcome": "ok"
+    }
+  ],
+  "actions": [
+    {
+      "api": "GetObject",
+      "status": "not-exercised"
+    },
+    {
+      "api": "PutObject",
+      "status": "observed"
+    },
+    {
+      "api": "ListObjectsV2",
+      "status": "observed"
+    },
+    {
+      "api": "DeleteObject",
+      "status": "observed"
+    },
+    {
+      "api": "DeleteObjects",
+      "status": "observed"
+    },
+    {
+      "api": "HeadObject",
+      "status": "source-only"
+    },
+    {
+      "api": "GetBucketLocation",
+      "status": "source-only"
+    },
+    {
+      "api": "CreateMultipartUpload",
+      "status": "source-only"
+    },
+    {
+      "api": "UploadPart",
+      "status": "source-only"
+    },
+    {
+      "api": "CompleteMultipartUpload",
+      "status": "source-only"
+    },
+    {
+      "api": "AbortMultipartUpload",
+      "status": "not-exercised"
+    },
+    {
+      "api": "CreateBucket",
+      "status": "observed"
+    },
+    {
+      "api": "DeleteBucket",
+      "status": "observed"
+    },
+    {
+      "api": "GetBucketPolicy",
+      "status": "not-exercised"
+    },
+    {
+      "api": "PutBucketPolicy",
+      "status": "not-exercised"
+    },
+    {
+      "api": "DeleteBucketPolicy",
+      "status": "observed"
+    },
+    {
+      "api": "ListMultipartUploads",
+      "status": "observed"
+    },
+    {
+      "api": "GetBucketEncryption",
+      "status": "observed"
+    },
+    {
+      "api": "GetBucketVersioning",
+      "status": "observed"
+    }
+  ],
+  "remaining": {
+    "bucket": null,
+    "uploadIds": []
+  },
+  "cleanupCommand": null
+}

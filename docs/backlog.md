@@ -4198,40 +4198,21 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   `deploy/waitron.sh`'s call order, not reproduced. Pin file downloads to the resolved commit
   in a separate deployment change. A490 pins both image builds only.
 
-- **S3-compatible bucket, then Google Drive.** The bucket stream of `venue.db` is built (slice 2).
-  The archive's bucket destination (`S3Backend` over `S3FileStore`) is built, and the
-  environment, the authenticated backup routes or the Backups screen can name one.
-  A538's [draft design](superpowers/specs/2026-10-12-a538-archive-s3-design.md) and
-  [implementation plan](superpowers/plans/2026-10-12-a538-archive-s3.md): the owner approved the
-  proposed defaults on 2026-10-12. Plan Task 1, which makes the bucket stream's calls cancellable,
-  is built (A538-1), and so is Task 2, which moves archive files to and from a bucket without
-  holding them in memory (A538-2), and Task 3, which gives each destination's calls their own time
-  limit, stops them with the sweep and reports what each destination did (A538-3), and Task 4,
-  which stores the archive choice sealed in the vault, lets the environment or the backup routes
-  name a bucket, and keeps every destination across a key rotation (A538-4), and Task 5, which
-  restores one archive from the bucket with an archive recovery pack and no stream settings
-  (`waitron-restore restore --from-archive`, `GET /api/backup/archive-recovery-pack`; A538-5), and
-  Task 6, which lets the Backups screen choose a folder, the bucket copy's bucket or another bucket,
-  show the archive recovery pack, and turn scheduled backups off and back on (A538-6).
-  Task 7 built the opt-in Amazon S3 rehearsal runner and runs the stream loop through it (A538-7;
-  runbook `docs/developers/aws-backup-rehearsal.md`). Task 8 added the pause scenario: local proxies
-  hold the rehearsal's own bucket calls, and a bucket rule refuses the paused supervisor's check
-  (A538-8; same runbook). Task 9 added the delete-many, archive round trip and archive abort
-  scenarios, each with an opt-in Amazon S3 file and a versitygw run in CI's `test-server-stream` job
-  (A538-9; same runbook). No scenario has yet run against Amazon S3. Task 10 and the real-AWS
-  evidence are open.
-  `S3FileStore`'s listing and batch delete repeat `S3ObjectStore`'s (`packages/stream/src/s3-store.ts`)
-  with different error codes, and only the file store's refuses a repeated key or bad size and
-  counts `NoSuchKey` as deleted; share them, deciding whether the bucket stream takes those checks
-  too.
+- **Google Drive as an archive destination.** Not built. Left open by A538.
+
+- **`S3FileStore`'s listing and batch delete repeat `S3ObjectStore`'s**
+  (`packages/stream/src/s3-store.ts`) with different error codes, and only the file store's refuses
+  a repeated key or bad size and counts `NoSuchKey` as deleted; share them, deciding whether the
+  bucket stream takes those checks too. Left open by A538.
 
 - **The Amazon S3 delete and archive rehearsal's open edges (A538-9).** Left open by #1668, in
   `apps/server/src/testing/` (`aws-request-recorder.ts`, `s3-delete-scenario.ts`,
   `s3-archive-scenario.ts`) and the runbook `docs/developers/aws-backup-rehearsal.md`:
   (1) a request to an S3 API outside the receipt's list is caught only once Amazon S3 has answered
   it (the observer runs after the call, and the store may retry it), so it is detected, not
-  prevented; the simplify review proposed refusing it before it is sent — decide before Task 10's
-  live run; (2) the archive round trip proves download and decryption from the pack alone
+  prevented; the simplify review proposed refusing it before it is sent. Open owner question,
+  asked 2026-10-14 (default: leave as is);
+  (2) the archive round trip proves download and decryption from the pack alone
   (`downloadArchive`, `decryptArtifactFile`), not a full `waitron-restore restore --from-archive`
   placement against Amazon S3; (3) the delete scenario's "a failing listing is recorded" case uses
   a stand-in backend, so that failure no longer runs through the real S3 storage code; (4) the
@@ -4260,7 +4241,7 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   (2) after the 60-second settle wait, teardown can still race a scenario stuck in a call that takes
   no stop signal (a restore); (3) running the cleanup command again overwrites the previous cleanup
   receipt, losing the earlier attempt's teardown ledger; (4) the receipt reader the cleanup uses is
-  more lenient than the writer. Decide (1) before Task 10's live run.
+  more lenient than the writer. (1) is an open owner question, asked 2026-10-14.
 
 - **`backup.archive_settings_unusable` is worded only as an alert** (`alert-messages.ts`), not on
   the Backups screen. Left open by A538-4.
@@ -4510,15 +4491,17 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   and the test helper that holds the lock from another process is copied into several test files.
   Left open by SQLite slice 2 Task 3a (#566, one process per venue folder; #573; #608).
 
-- **Which real providers lack S3's multi-object delete, and what each answers, is not established;**
-  a provider that refuses it with a status other than 501 fails the day's prune
-  (`stream.prune_failed`). `probeBucket` deletes one object at a time, so it cannot reveal such a
-  provider; having it delete its test object through `deleteMany` would. Left open by SQLite slice 2
-  Task 5 (#569, `@waitron/stream`).
+- **Which real providers other than Amazon S3 lack S3's multi-object delete, and what each answers,
+  is not established;** Amazon S3 answered batches of 1,000 and 5 keys with 200 and no per-key
+  errors on 2026-10-14 ([receipts](receipts/a538/README.md), A538-10). A provider that refuses it
+  with a status other than 501 fails the day's prune (`stream.prune_failed`). `probeBucket` deletes
+  one object at a time, so it cannot reveal such a provider; having it delete its test object
+  through `deleteMany` would. Left open by SQLite slice 2 Task 5 (#569, `@waitron/stream`).
 
-- **Nothing in the package has been run against a real provider's bucket:** the unit tests drive the
-  real S3 client over a scripted network, and the loop test drives it against versitygw. Left open
-  by SQLite slice 2 Task 5 (#569, `@waitron/stream`).
+- **Amazon S3 is the only real provider's bucket the package has run against** (the 2026-10-14
+  rehearsal, [receipts](receipts/a538/README.md), A538-10); the unit tests drive the real S3 client
+  over a scripted network, and the loop test drives it against versitygw. Left open by SQLite slice
+  2 Task 5 (#569, `@waitron/stream`).
 
 - **Every synchronous `deriveKey` caller still blocks the event loop while it derives.** Left open
   by SQLite slice 2 Task 5 (#569, `@waitron/stream`).
@@ -4635,11 +4618,12 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   prune logger drops it is a review seat's reading and one run, not a guard. Left open by #668,
   #686, A57, A60 and #723 (the pause test and the bucket's error reports).
 
-- **That a real bucket's 403 to the pause's listing reads that code, and the status and `errorName`
-  on each line, were shown by reading**, by the store's scripted HTTP answers and by the
-  supervisor's injected errors, not against a real bucket. Left open by #668, #686, A57, A60 and
-  #723 (the pause test and the bucket's error reports).
-  [Detail](backlog/box.md#that-a-real-buckets-403-to-the-pauses-listing-reads-that-code-and-the-status-and-errorname-on-each-line-were-shown-by-reading)
+- **The status and `errorName` on the stream's log lines other than the pause check's 403 were
+  shown by reading**, by the store's scripted HTTP answers and by the supervisor's injected errors, not
+  against a real bucket. Amazon S3's 403 to the pause check was logged with
+  `backup.stream_request_failed`, 403 and `AccessDenied` (A538-10). Left open by #668, #686, A57,
+  A60 and #723 (the pause test and the bucket's error reports).
+  [Detail](backlog/box.md#the-status-and-errorname-on-the-streams-log-lines-other-than-the-pause-checks-403-were-shown-by-reading)
 
 - **A venue preparing to go live sends real email through SMTP (owner 2026-10-03) — OPEN.** "Later
   prepare should use a real SMTP server": a prepare venue would send invitations and password resets

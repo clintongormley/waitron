@@ -11,9 +11,9 @@ under the limits below. If the deadline passes before AWS answers the create, th
 whether the bucket exists: the receipt records it as `unowned-candidate` with no cleanup command,
 and a person checks it.
 
-As of 2026-10-14 the loop, pause, delete-many, archive round trip and archive abort scenarios exist
-and none has run against Amazon S3; task 10 of the A538 plan
-(`docs/superpowers/plans/2026-10-12-a538-archive-s3.md`) is the first live run.
+The loop, pause, delete-many, archive round trip and archive abort scenarios first ran against
+Amazon S3 on 2026-10-14 (A538 plan Task 10, `eu-north-1`), and all passed. Their receipts, and what
+they do and do not show, are in [docs/receipts/a538/](../receipts/a538/README.md).
 
 ## What it is, and what it is not
 
@@ -57,8 +57,9 @@ Two limits matter if something goes wrong:
   left, the run fails and the receipt gives the cleanup command.
 - **Ctrl-C is not handled.** Interrupting the run from the terminal skips teardown and writes no
   receipt. The bucket is left behind, and nothing printed names it. Find it in the S3 console by its
-  `waitron-rehearsal-waitron-` prefix and delete it by hand, after checking that its
-  `.waitron-rehearsal-owner` object is from your run. The loop scenario's working folder,
+  `waitron-rehearsal-waitron-` prefix, or list the account's buckets with `aws s3api list-buckets`
+  under the same profile variables (which worked with the rehearsal profile on 2026-10-14), and
+  delete it by hand, after checking that its `.waitron-rehearsal-owner` object is from your run. The loop scenario's working folder,
   `waitron-aws-stream-loop-<random>` under your temporary folder (`$TMPDIR` on a Mac), is left
   behind too. It holds a box's `secrets.env` (box A's until the loop removes it, then the rebuilt
   box's) and, once written, `recovery-kit.txt`, which carries the rehearsal's key pair encoded as
@@ -274,14 +275,15 @@ fails the request and the scenario fails.
 `observed` when some recorded step names it with an HTTP status; otherwise it is `source-only`
 when the runner lists it as known only from reading the code (GetBucketLocation, HeadObject,
 CreateMultipartUpload, UploadPart, CompleteMultipartUpload), and `not-exercised` otherwise. So a
-live run of the archive scenarios is what can move the multipart APIs to `observed`.
+live run of the archive scenarios is what can move the multipart APIs to `observed`, as the
+2026-10-14 run did.
 
 **Unfinished uploads.** Each archive scenario tells the runner the id of every multipart upload it
 starts, which teardown cancels. The abort scenario's "no unfinished upload" check asks the runner
 (`ownedUploads`), which lists the bucket's unfinished uploads under a prefix this run issued, or a
 path below one, and refuses any other prefix.
 
-**Local evidence only.** The same scenarios run against versitygw in
+**Against versitygw.** The same scenarios run against versitygw in
 `apps/server/src/s3-rehearsal-scenarios.e2e.test.ts` (CI's `test-server-stream` job). Run on
 2026-10-14 on a Mac with versitygw 1.8.0
 (`WAITRON_REQUIRE_STREAM_BINARIES=1 pnpm --filter @waitron/server exec vitest run src/s3-rehearsal-scenarios.e2e.test.ts`),

@@ -4,6 +4,8 @@
 
 _2026-10-13: the owner approved the four proposed defaults as written on 2026-10-12, and plan Task 1 is built as A538-1._
 
+_2026-10-14: the rehearsal ran against Amazon S3 as A538-10; its receipts, and what they do not show, are in [docs/receipts/a538/](../../receipts/a538/README.md)._
+
 Your database already streams to a bucket, but your scheduled recovery archives still have only a local destination. A lost box needs both an off-box archive and recovery instructions you saved elsewhere. Add an S3 archive destination, keep local archives available, and run a small rehearsal against Amazon S3 to replace specific untested claims with recorded answers.
 
 ## 1. Scope and evidence boundary
