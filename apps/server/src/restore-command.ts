@@ -470,7 +470,7 @@ async function runPackRestore(
     );
     return 1;
   }
-  const target = resolveRestoreTarget(deps);
+  const target = await resolveRestoreTarget(deps);
   if (typeof target === "number") return target;
   deps.out(COLD_RESTORE_NOTICE);
   let downloaded: DownloadedArchive;

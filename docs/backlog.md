@@ -314,6 +314,14 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   Detail: [backlog/fiscal.md](backlog/fiscal.md#a-venue-without-cloud-needs-a-usable-paper-custodian-route).
 
 - **W41s. Fiscal prevention and offline recovery** — DESIGN AND REVISED PLAN APPROVED (2026-10-04).
+  **2026-10-14, remaining archive-check approval:** the host/demo pass is qualified and both
+  migration sets were regenerated on current main. Populated upgrade and pinned-binary stream
+  checks pass. Main added an archive-from-bucket suite whose old counter/floor checks were absent
+  from the earlier approvals; [the exact two-row request](superpowers/plans/2026-10-14-w41s4-archive-check-approval.md)
+  is awaiting the owner. The Cloud handoff now carries person or recovery-key-event attribution.
+  Both FULL reviews, the hook and current-head CI still precede publication. This update
+  supersedes earlier Task 4 notes below about remaining host wiring and regeneration.
+
   **2026-10-13, Task 4 decisions settled:** cold restore checks the selected backup's
   node key, and you must keep its older paper key until no older backup remains. The owner
   approved the [nine remaining test ports](superpowers/plans/2026-10-13-w41s4-current-key-and-remaining-checks.md).

@@ -196,6 +196,16 @@ requested this follow-up on 2026-10-14; no design or product work belongs in W41
 
 ## W41s. Fiscal prevention and offline recovery — DESIGN AND REVISED PLAN APPROVED (2026-10-04)
 
+**2026-10-14, current Task 4 checkpoint:** remaining host/demo checks passed, current-main core
+and fiscal migrations were regenerated, the populated upgrade and real stream loop/pause passed,
+and the Cloud handoff now carries the approved person-or-key-event binding. The newly landed
+archive-from-bucket suite still imports the old counter/floor and needs the owner's exact approval
+of [two proposed rows](../superpowers/plans/2026-10-14-w41s4-archive-check-approval.md).
+Its proposed independently installed candidate passes; the feature retains the original checks.
+Both FULL reviews, the push hook and current-head CI remain. Earlier dated Task 4 notes below
+about unfinished defaults, host wiring and final regeneration describe preceding checkpoints.
+
+
 **2026-10-12, a conflict no longer holds its chain (owner).** A record AEAT refuses as a duplicate
 (3000) while holding a different or cancelled record under that key is now `rechazado` with code
 3000, with its incident and filing case, and the chain's later records are still sent

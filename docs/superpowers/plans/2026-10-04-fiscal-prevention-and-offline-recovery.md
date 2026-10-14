@@ -1007,3 +1007,28 @@ extra-field consumption object; both were corrected before the behavioral guard 
 The owner-requested usable paper-custodian follow-up is recorded without design work.
 Current-main rebase and regeneration, populated upgrade, the incoming Cloud operator contract,
 both FULL reviews and the hook/current-head CI remain before publication. Task 4 is incomplete.
+
+
+**2026-10-14 current-main rebase and regeneration:** rebase onto
+7145b0e56b55f5cba99c96b89e9b7988ec0800cf retained main's archive input route and the extracted
+stream scenarios. Approved fixture/assertion ports now live in those scenario helpers; their
+stage timing, abort handling and original behavioral checks remain. The loop supplies an explicit
+prepared recovery runner rather than changing process-wide configuration in a reusable scenario.
+Both pinned-binary scenarios and three related suites passed 337 cases with skipping forbidden.
+The noninteractive fiscal generator printed an interactive-prompt error despite exit 0;
+a real terminal generation created both allocation tables instead of renaming the old counter.
+After resetting both migration directories to main, the generated core migration is
+0151_naive_johnny_blaze and the fiscal migration is 0006_numerous_roughhouse. Earlier migration
+names in dated checkpoints are superseded. The fiscal parent rebuild failed with a retained record
+before the explicit deferred-key integrity assertion was restored; all four migration controls now
+pass, including one checked orphan rollback and one unchecked orphan violation. The old-step test
+fixture limits append-only installation to tables that its cut actually creates. Six schema,
+trigger, monotonic and populated-upgrade suites passed 409 cases. The full fiscal suite passed
+1502 cases and the protected pair remains unchanged. The Cloud handoff's local operator now carries
+the owner-approved person-or-recovery-key-event union, without changing Cloud code.
+The new archive caller needed a missing await, qualified by a new observed RED then GREEN case.
+Main's original archive suite introduced two fiscal checks absent from the previous approval lists;
+[their concrete proposal](2026-10-14-w41s4-archive-check-approval.md) passed 36 cases and server types
+in an independently installed candidate, while the feature leaves those original checks unchanged.
+Owner approval of that exact port, both FULL reviews and the normal hook/current-head CI remain.
+Task 4 is still unpublished.

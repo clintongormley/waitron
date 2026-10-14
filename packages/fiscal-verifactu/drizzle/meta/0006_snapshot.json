@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "4fd1cb43-ce53-45ab-a9e4-7b679ad9cbcc",
-  "prevId": "a655bd91-b921-4017-b967-f2937d9b3456",
+  "id": "9ab6721b-e9f1-42bd-b8d8-5f033a80317b",
+  "prevId": "c5e974f4-445a-4cdc-845e-f73cbed167b4",
   "tables": {
     "acks": {
       "name": "acks",
@@ -145,46 +145,6 @@
           "value": "(\"cadenas\".\"ultimo_registro_id\" is null) = (\"cadenas\".\"ultima_huella\" is null)"
         }
       }
-    },
-    "contadores_instalacion": {
-      "name": "contadores_instalacion",
-      "columns": {
-        "nif": {
-          "name": "nif",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "id_sistema_informatico": {
-          "name": "id_sistema_informatico",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "proximo_numero": {
-          "name": "proximo_numero",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 1
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {
-        "contadores_instalacion_nif_id_sistema_informatico_pk": {
-          "columns": [
-            "nif",
-            "id_sistema_informatico"
-          ],
-          "name": "contadores_instalacion_nif_id_sistema_informatico_pk"
-        }
-      },
-      "uniqueConstraints": {},
-      "checkConstraints": {}
     },
     "envio_flujo": {
       "name": "envio_flujo",
@@ -337,7 +297,7 @@
       "checkConstraints": {
         "envios_estado_ck": {
           "name": "envios_estado_ck",
-          "value": "\"envios\".\"estado\" in ('pendiente', 'enviando', 'aceptado', 'aceptado_con_errores', 'rechazado', 'detenido')"
+          "value": "\"envios\".\"estado\" in ('pendiente', 'enviando', 'aceptado', 'aceptado_con_errores', 'rechazado', 'detenido', 'retenido')"
         }
       }
     },
@@ -845,7 +805,7 @@
         },
         "numero_instalacion": {
           "name": "numero_instalacion",
-          "type": "integer",
+          "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -904,7 +864,7 @@
       "checkConstraints": {
         "registro_sif_numero_ck": {
           "name": "registro_sif_numero_ck",
-          "value": "\"registro_sif\".\"numero_instalacion\" > 0"
+          "value": "length(\"registro_sif\".\"numero_instalacion\") between 1 and 30"
         }
       }
     },

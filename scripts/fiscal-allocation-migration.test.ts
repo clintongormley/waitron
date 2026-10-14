@@ -38,8 +38,23 @@ for (const kind of ["empty", "populated", "orphan", "unchecked-orphan"] as const
       entries: journal.entries.slice(0, -1),
     }),
   );
+  const created = new Set(
+    journal.entries
+      .slice(0, -1)
+      .flatMap(({ tag }) =>
+        [...readFileSync(join(old, `${tag}.sql`), "utf8").matchAll(/CREATE TABLE `(\w+)`/g)].map(
+          (match) => match[1]!,
+        ),
+      ),
+  );
   const sets = options.map((set) =>
-    set.migrationsTable === "__drizzle_migrations_fiscal" ? { ...set, migrationsFolder: old } : set,
+    set.migrationsTable === "__drizzle_migrations_fiscal"
+      ? {
+          ...set,
+          migrationsFolder: old,
+          appendOnlyTables: (set.appendOnlyTables ?? []).filter((table) => created.has(table)),
+        }
+      : set,
   );
   const suite = useVenueDb({ migrations: sets, resetPerTest: false });
   afterAll(() => rmSync(scratch, { recursive: true, force: true }));

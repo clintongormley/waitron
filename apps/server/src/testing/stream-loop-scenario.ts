@@ -20,7 +20,11 @@ import {
   stampDeployment,
   withTransaction,
 } from "@waitron/db";
-import { createPaperAllocationPreparation, registroSif, registrosFacturacion } from "@waitron/fiscal-verifactu";
+import {
+  createPaperAllocationPreparation,
+  registroSif,
+  registrosFacturacion,
+} from "@waitron/fiscal-verifactu";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { applyAllocatedTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
@@ -28,7 +32,10 @@ import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fix
 import { locationId, nodeId } from "@waitron/shared";
 import { planVenue, quoteIdent } from "@waitron/provisioning";
 import { mintBreakGlassSecret } from "../break-glass.js";
-import { createRecoveryRestoreRunner, readRecoveryOperationFile } from "../recovery-module-operation.js";
+import {
+  createRecoveryRestoreRunner,
+  readRecoveryOperationFile,
+} from "../recovery-module-operation.js";
 import { writeAllocationInput } from "./allocation-input.js";
 import {
   createS3ObjectStore,
@@ -463,10 +470,11 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
         : module,
     );
     const said: string[] = [];
+    const { WAITRON_RECOVERY_OPERATION_FILE: operationPath, ...paperEnv } = allocationEnv;
     const code = await runRestore({
       withModuleOperations: createRecoveryRestoreRunner(
         recoveryModules,
-        await readRecoveryOperationFile(allocationEnv.WAITRON_RECOVERY_OPERATION_FILE),
+        await readRecoveryOperationFile(operationPath),
         nodeSecret!,
       ),
       argv: [
@@ -478,7 +486,7 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
         "74000001P",
       ],
       env: {
-        ...allocationEnv,
+        ...paperEnv,
         WAITRON_NODE_RECOVERY_KEY: nodeSecret!,
         WAITRON_STATE_DIR: dirsB.state,
         WAITRON_VENUE_DIR: dirsB.venue,
