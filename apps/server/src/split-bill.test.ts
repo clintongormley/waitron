@@ -578,8 +578,7 @@ async function splitToT2(
 /**
  * The owner's decision of 2026-09-26, overturning plan D10 where they conflict: a partial split gives
  * the moved row its own ticket item, copied from the original, whose own quantity drops by the part
- * moved; a line the kitchen has started may be split; and a split onto a check, at the same table,
- * tells the kitchen nothing.
+ * moved; and a line the kitchen has started may be split.
  */
 describe("splitting a line the kitchen has", () => {
   it("gives the split row a ticket of its own, copied from the original, and takes the part moved off the original's", async () => {
@@ -988,8 +987,7 @@ function movedSlip(from: string, to: string, orderNumber: string, item: string):
 
 /**
  * The owner's decision of 2026-09-26 (lane C questions, menus Task 7b item 4): moving sent work to
- * another table is allowed, and the kitchen is told. The table compared is the one a correction slip
- * names for the order (`readOrderHeader`), read before the move and after it.
+ * another table is allowed, and the kitchen is told.
  */
 describe("moving sent work to another table tells the kitchen", () => {
   it("tells the kitchen, when a check merges back into the tab it was split from, that its dishes are on another order", async () => {
