@@ -700,7 +700,8 @@ its painted ranges are deleted, a special-day date left with no paint loses its 
 row so the season shows through, and its extensions go with the period through their cascading
 foreign key. Its routing-cell lines go with the period through their cascading foreign key whether
 or not there is a replacement; none is moved to the replacement (owner, 2026-10-13, A578). It all
-runs in the caller's transaction, and ends with an end-offset check over the period's department that refuses `menu_timetable.invalid` (`reason: "end_offset"`).
+runs in the caller's transaction, and ends with an end-offset check over the period's department
+that refuses `menu_timetable.invalid` (`reason: "end_offset"`).
 
 A configuration transfer carries both tables under the importing venue's location
 (`VENUE_SERVICE_CONFIGURATION_TRANSFER`). The import refuses, as `setup.request_invalid` naming
