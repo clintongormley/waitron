@@ -144,12 +144,11 @@ export class OpeningHoursApi {
     stationId: string,
     from: string,
     to: string,
-    normal: boolean,
     apply: (times: StationServiceTimes) => void,
     failed: (error: unknown) => void,
     recovered: () => void,
   ): () => void {
-    const query = new URLSearchParams({ from, to, ...(normal ? { week: "normal" } : {}) });
+    const query = new URLSearchParams({ from, to });
     return this.#watches.watch(
       `opening-hours:station:${stationId}:${query}`,
       [

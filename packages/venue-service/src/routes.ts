@@ -420,20 +420,10 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const stationId = requireUuidParam(c.req.param("stationId"), "stationId");
         const from = c.req.query("from") ?? "";
         const to = c.req.query("to") ?? "";
-        const week = c.req.query("week");
-        if (week !== undefined && week !== "normal")
+        if (c.req.query("week") !== undefined)
           throw new AppError("management.request_invalid", { field: "week" });
         return c.json(
-          await viewed(sessionId, (tx) =>
-            stationServiceTimes(
-              tx,
-              ctx.cfg,
-              stationId,
-              from,
-              to,
-              week === "normal" ? "normal" : "dated",
-            ),
-          ),
+          await viewed(sessionId, (tx) => stationServiceTimes(tx, ctx.cfg, stationId, from, to)),
         );
       }),
     );

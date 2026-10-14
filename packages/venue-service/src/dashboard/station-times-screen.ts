@@ -140,7 +140,6 @@ export class PrepStationTimes extends LitElement {
         station.id,
         from,
         to,
-        false,
         (value) => {
           if (!current()) return;
           this.times = { key, value };

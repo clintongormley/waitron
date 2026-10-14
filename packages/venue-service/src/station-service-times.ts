@@ -6,13 +6,7 @@ import { AppError } from "@waitron/shared";
 import type { VenueScope } from "./operations.js";
 import type { LocalDate } from "./hours-types.js";
 import { addDays, isLocalDate } from "./hours-rules.js";
-import {
-  readDayPlan,
-  resolveDepartmentsDays,
-  resolveZoneClosedDays,
-  type DayPlan,
-} from "./day-resolver.js";
-import { seasonOn } from "./season-rules.js";
+import { readDayPlan, resolveDepartmentsDays, resolveZoneClosedDays } from "./day-resolver.js";
 import { readActiveDepartments, readActivePeriods } from "./menu-timetable.js";
 import { readSeasons } from "./seasons.js";
 import { readServiceZones } from "./zone-closed-times.js";
@@ -28,7 +22,7 @@ export interface StationServiceDay {
   readonly departments: readonly { departmentId: string; ranges: readonly ServiceRange[] }[];
 }
 export interface StationServiceTimes {
-  readonly always: "default" | "switched_off" | null;
+  readonly always: "default" | null;
   readonly days: readonly StationServiceDay[];
 }
 
@@ -79,7 +73,6 @@ export async function stationServiceTimes(
   stationId: string,
   from: LocalDate,
   to: LocalDate,
-  week: "normal" | "dated" = "dated",
 ): Promise<StationServiceTimes> {
   if (!isLocalDate(from)) throw new AppError("management.request_invalid", { field: "from" });
   if (!isLocalDate(to) || to < from)
@@ -153,14 +146,7 @@ export async function stationServiceTimes(
     }
   }
   const dates = Array.from({ length: dayCount }, (_, index) => addDays(from, index));
-  const normalSeasonId = seasonOn(seasons, from)?.id ?? null;
-  const plan: DayPlan =
-    week === "normal"
-      ? {
-          seasonIdOn: new Map(dates.map((date) => [date, normalSeasonId])),
-          special: new Map(dates.map((date) => [date, null])),
-        }
-      : await readDayPlan(tx, cfg, dates, seasons);
+  const plan = await readDayPlan(tx, cfg, dates, seasons);
   const departmentDays = await resolveDepartmentsDays(
     tx,
     cfg,
