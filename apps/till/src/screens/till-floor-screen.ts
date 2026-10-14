@@ -44,6 +44,12 @@ import type { SplitJoinedDetail, TillSplitJoinedDialog } from "../widgets/split-
 import "../widgets/reset-table-dialog.js";
 import type { ResetTableDetail, TillResetTableDialog } from "../widgets/reset-table-dialog.js";
 import "../widgets/floor-zone-menu.js";
+import "../widgets/today-name-dialog.js";
+import type {
+  TillTodayNameDialog,
+  TodayNameDetail,
+  TodayNameRefusal,
+} from "../widgets/today-name-dialog.js";
 import type { JoinWithPickDetail } from "../widgets/join-with-dialog.js";
 import type { BillChoiceDetail } from "../widgets/bill-choice-dialog.js";
 import { otherPartyRead, partyScope } from "../widgets/table-targets.js";
@@ -57,6 +63,7 @@ import {
   groupName,
   groupSplitOf,
   nextFloorMoment,
+  normalGroupName,
   onTodaysPlan,
   pendingPlaces,
   resetTableOf,
@@ -130,6 +137,17 @@ interface SplittingJoined {
   refusal: { code: string; field?: string } | null;
   /** The server refused for want of seats, which the till's own `asksSeats` did not foresee. */
   seatsRequired: boolean;
+}
+
+interface Renaming {
+  tableId: string;
+  /** What the window opened with: its `value` is also the waiter's draft, so a floor read never
+   * replaces it. */
+  heading: string;
+  value: string;
+  normalName: string;
+  sent: boolean;
+  refusal: TodayNameRefusal | null;
 }
 
 interface ResettingTable {
@@ -569,6 +587,7 @@ export class TillFloorScreen extends LitElement {
   /** Reset table's joined table, while its window is open; `#resetShown` says when a floor read
    * closes it. */
   @state() private resettingTable: ResettingTable | null = null;
+  @state() private renaming: Renaming | null = null;
   /** A drop joining two seated parties, waiting for which bills to keep. */
   @state() private askingBills: { api: TillApi; action: JoinAction; room: Room } | null = null;
 
@@ -640,6 +659,10 @@ export class TillFloorScreen extends LitElement {
         this.refusal =
           this.resettingTable.refusal.message ?? codeMessage(this.resettingTable.refusal.code);
       this.resettingTable = null;
+    }
+    if (this.renaming !== null && !this.#renameShown(this.renaming)) {
+      if (this.renaming.refusal !== null) this.refusal = codeMessage(this.renaming.refusal.code);
+      this.renaming = null;
     }
   }
 
@@ -971,6 +994,9 @@ export class TillFloorScreen extends LitElement {
           action: "save",
           resend: (seats) => send((sent) => api.setSeatsToday(table.id, seats, sent)),
         };
+        return;
+      case "rename":
+        this.renaming = this.#renameOpening(table);
         return;
       case "back":
         send((sent) => api.backToSavedToday(table.id, sent));
@@ -1321,6 +1347,87 @@ export class TillFloorScreen extends LitElement {
     this.#requestFloorRefresh();
   }
 
+  /** A table in a group renames the group. */
+  #renameOpening(table: TableState): Renaming {
+    const members = this.#mergeOf(table);
+    return {
+      tableId: table.id,
+      heading: t("floor.rename_title").replace("{table}", () => this.#shownAs(table)),
+      value: (members === null ? table.today?.name : table.today?.joinName) ?? "",
+      normalName: members === null ? table.label : normalGroupName(members),
+      sent: false,
+      refusal: null,
+    };
+  }
+
+  /** The table Rename was opened on, while it still offers Rename. */
+  #renamable(tableId: string): TableState | undefined {
+    return this.tables.find((each) => each.id === tableId && sheetActions(each).includes("rename"));
+  }
+
+  /** While its name is out, the window stays until its table leaves the floor read. */
+  #renameShown(renaming: Renaming): boolean {
+    return renaming.sent
+      ? this.tables.some((each) => each.id === renaming.tableId)
+      : this.#renamable(renaming.tableId) !== undefined;
+  }
+
+  #renameWindow(): TemplateResult | typeof nothing {
+    const renaming = this.renaming;
+    if (renaming === null) return nothing;
+    return html`<till-today-name-dialog
+      .heading=${renaming.heading}
+      .value=${renaming.value}
+      .normalName=${renaming.normalName}
+      .busy=${renaming.sent}
+      .refusal=${renaming.refusal}
+      @today-name-confirm=${(event: CustomEvent<TodayNameDetail>) => {
+        event.stopPropagation();
+        void this.#rename(event.currentTarget as TillTodayNameDialog, event.detail.name);
+      }}
+      @today-name-cancel=${(event: Event) => {
+        event.stopPropagation();
+        this.renaming = null;
+      }}
+    ></till-today-name-dialog>`;
+  }
+
+  /** As `#splitOff`: a refusal naming the field stays in the window while the table still offers
+   * Rename; any other shows on the floor. */
+  async #rename(dialog: TillTodayNameDialog, name: string | null): Promise<void> {
+    const renaming = this.renaming;
+    const table = renaming === null ? undefined : this.#renamable(renaming.tableId);
+    const api = this.api;
+    if (renaming === null || renaming.sent || table === undefined || api === undefined) return;
+    const sending = { ...renaming, sent: true, refusal: null };
+    this.renaming = sending;
+    try {
+      this.#carry(
+        await this.#send(this.#revision(table.zoneId), (sent) =>
+          api.nameToday(renaming.tableId, name, sent),
+        ),
+      );
+      if (this.renaming === sending) {
+        dialog.commit();
+        this.renaming = null;
+      }
+    } catch (cause) {
+      const refused = (cause ?? {}) as { code?: string; field?: unknown };
+      const code = refused.code ?? "server.internal";
+      if (
+        this.renaming === sending &&
+        refused.field === "name" &&
+        this.#renamable(renaming.tableId) !== undefined
+      )
+        this.renaming = { ...renaming, refusal: { code, field: "name" } };
+      else if (this.renaming === sending || this.renaming === null) {
+        this.renaming = null;
+        this.refusal = codeMessage(code);
+      }
+    }
+    this.#requestFloorRefresh();
+  }
+
   /** Reset table's plan for the joined table it was opened for, while some of its tables stay apart. */
   #resetPlan(tableId: string): ResetTablePlan | undefined {
     const joined = this.tables.find((each) => each.id === tableId);
@@ -1617,7 +1724,8 @@ export class TillFloorScreen extends LitElement {
             : this.#plannedMap(onMap, unplaced, activeKey)
         }
         ${this.#seatDialog()} ${this.#clearDialog()} ${this.#detailsSheet()} ${this.#seatsPrompt()}
-        ${this.#splitJoined()} ${this.#resetTable()} ${this.#billChoice()} ${this.#joinWith()}
+        ${this.#splitJoined()} ${this.#resetTable()} ${this.#renameWindow()} ${this.#billChoice()}
+        ${this.#joinWith()}
       </section>
     `;
   }

@@ -66,6 +66,24 @@ describe.each(["light", "dark"] as const)("till-today-name-dialog a11y (%s theme
     await expectNoA11yViolations(host);
   });
 
+  it("has no violations with a name over 40 characters refused beside the field", async () => {
+    setLocale("es-ES");
+    const { el, host } = await mountWidget<TillTodayNameDialog>(
+      "till-today-name-dialog",
+      props,
+      theme,
+    );
+    const input = el.shadowRoot!.querySelector("wt-input")!.shadowRoot!.querySelector("input")!;
+    input.value = "x".repeat(41);
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-rename-save]")!.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("wt-input")!.error).toBe("Usa como máximo 40 caracteres");
+    expect(saveButton(el).disabled).toBe(true);
+    await expectNoA11yViolations(host);
+  });
+
   it("has no violations with a refusal shown in the form's line", async () => {
     setLocale("es-ES");
     const { host } = await mountWidget<TillTodayNameDialog>(

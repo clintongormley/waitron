@@ -359,7 +359,7 @@ function apartReason(table: TableState, zoneTables: readonly TableState[]): Apar
 }
 
 export type SheetAction =
-  "join-with" | "split-off" | "reset-table" | "rotate" | "seats" | "back" | "take-off";
+  "join-with" | "split-off" | "reset-table" | "rotate" | "seats" | "rename" | "back" | "take-off";
 
 /** Slice 4 decisions 12 and 16: the details sheet's changes for today that apply to `table`, in
  * order. Reset table is offered only when `zoneTables` holds the joined table and its split-off tables. */
@@ -381,6 +381,7 @@ export function sheetActions(
     ["reset-table", resetTableOf(table, zoneTables) !== null],
     ["rotate", !today.fixed && !merged],
     ["seats", true],
+    ["rename", true],
     ["back", !splitOff && (joined === null || joined.splitOff.length === 0)],
     ["take-off", free && !merged && !splitOff],
   ];

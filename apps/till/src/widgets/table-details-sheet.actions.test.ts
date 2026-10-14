@@ -102,14 +102,15 @@ describe("till-table-details-sheet's actions for today", () => {
 
   it("offers a free single table every action but Split", async () => {
     const el = await mount();
-    expect(offered(el)).toEqual(["join-with", "rotate", "seats", "back", "take-off"]);
+    expect(offered(el)).toEqual(["join-with", "rotate", "seats", "rename", "back", "take-off"]);
     expect(buttons(el).map((each) => each.getAttribute("variant"))).toEqual(
-      Array(5).fill("secondary"),
+      Array(6).fill("secondary"),
     );
     expect(buttons(el).map((each) => each.textContent!.trim())).toEqual([
       "Join with…",
       "Rotate",
       "Change seats",
+      "Rename",
       "Back to saved place",
       "Take off for today",
     ]);
@@ -118,29 +119,29 @@ describe("till-table-details-sheet's actions for today", () => {
 
   it("offers a merge Split tables…, seats and back, and no Join with…, Rotate or Take off", async () => {
     const el = await mount({ table: table({ today: merged }) });
-    expect(offered(el)).toEqual(["split-off", "seats", "back"]);
+    expect(offered(el)).toEqual(["split-off", "seats", "rename", "back"]);
   });
 
   it("does not offer Rotate for a fixed table, nor Take off for a seated one or one needing clearing, nor Join with… for one needing clearing", async () => {
     const fixed = await mount({ table: table({ today: today({ fixed: true }) }) });
-    expect(offered(fixed)).toEqual(["join-with", "seats", "back", "take-off"]);
+    expect(offered(fixed)).toEqual(["join-with", "seats", "rename", "back", "take-off"]);
     cleanupWidgets();
 
     const seated = await mount({
       table: table({ state: "open-tab", condition: "held", hasOpenTab: true, party }),
     });
-    expect(offered(seated)).toEqual(["join-with", "rotate", "seats", "back"]);
+    expect(offered(seated)).toEqual(["join-with", "rotate", "seats", "rename", "back"]);
     cleanupWidgets();
 
     const clearing = await mount({ table: table({ condition: "needs_clearing" }) });
-    expect(offered(clearing)).toEqual(["rotate", "seats", "back"]);
+    expect(offered(clearing)).toEqual(["rotate", "seats", "rename", "back"]);
     expect(clearing.shadowRoot!.querySelector("[data-mark-cleared]")!.getAttribute("slot")).toBe(
       "footer",
     );
     cleanupWidgets();
 
     const delivery = await mount({ table: table({ pendingDeliveries: 1 }) });
-    expect(offered(delivery)).toEqual(["join-with", "rotate", "seats", "back"]);
+    expect(offered(delivery)).toEqual(["join-with", "rotate", "seats", "rename", "back"]);
   });
 
   it("offers nothing for a table with no today's row", async () => {
@@ -181,6 +182,7 @@ describe("till-table-details-sheet's actions for today", () => {
       "Unir con…",
       "Girar",
       "Cambiar plazas",
+      "Renombrar",
       "Volver a su sitio",
       "Quitar por hoy",
       "Separar mesas…",
