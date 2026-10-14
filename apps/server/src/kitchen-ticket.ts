@@ -164,6 +164,26 @@ function emitItem(
   }
 }
 
+/** The group every item in `items` shares, else undefined. */
+function onlyGroupOf(items: readonly KitchenTicketItem[]): number | undefined {
+  const groups = new Set(items.map((item) => item.group));
+  return groups.size === 1 ? [...groups][0] : undefined;
+}
+
+/** Emit `items`, heading each with `GROUP n` where its group differs from the item before, `current` before the first. */
+function emitGrouped(
+  b: ReturnType<typeof esc>,
+  items: readonly KitchenTicketItem[],
+  columns: number,
+  current: number | undefined,
+): void {
+  for (const item of items) {
+    if (item.group !== undefined && item.group !== current) b.line(`GROUP ${item.group}`);
+    current = item.group;
+    emitItem(b, item, columns);
+  }
+}
+
 function hhmm(at: Date): string {
   const h = String(at.getHours()).padStart(2, "0");
   const m = String(at.getMinutes()).padStart(2, "0");
@@ -183,16 +203,9 @@ export function formatKitchenTicket(ticket: KitchenTicket, layout: EscSetting): 
   };
   const lists =
     ticket.scope === "station" ? [ticket.items] : ticket.stations.map((station) => station.items);
-  const groups = new Set(lists.flat().map((item) => item.group));
-  const [onlyGroup] = groups.size === 1 ? groups : [undefined];
-  const emitList = (items: readonly KitchenTicketItem[]): void => {
-    let current: number | undefined = onlyGroup;
-    for (const item of items) {
-      if (item.group !== undefined && item.group !== current) b.line(`GROUP ${item.group}`);
-      current = item.group;
-      emitItem(b, item, columns);
-    }
-  };
+  const onlyGroup = onlyGroupOf(lists.flat());
+  const emitList = (items: readonly KitchenTicketItem[]): void =>
+    emitGrouped(b, items, columns, onlyGroup);
 
   if (ticket.reprint === true) b.line("*** REPRINT ***");
   if (ticket.mark !== undefined) b.line(`*** ${ticket.mark} ***`);
@@ -407,13 +420,7 @@ export function formatMovedSlip(slip: MovedSlip, layout: EscSetting): Uint8Array
   labelled(words.from, slip.fromText);
   labelled(words.to, slip.toText);
   b.line(hhmm(new Date(slip.at)));
-  const groups = new Set(slip.items.map((item) => item.group));
-  let current = groups.size === 1 ? [...groups][0] : undefined;
-  for (const item of slip.items) {
-    if (item.group !== undefined && item.group !== current) b.line(`GROUP ${item.group}`);
-    current = item.group;
-    emitItem(b, item, columns);
-  }
+  emitGrouped(b, slip.items, columns, onlyGroupOf(slip.items));
   if (slip.held.length > 0) b.line("HOLD");
   for (const { group, items } of slip.held) {
     b.line(`GROUP ${group}`);
