@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { framesUnderHeader, readSideFile as read } from "./stream-pause-diagnostics.js";
+import { framesUnderHeader, holdProven, readSideFile as read } from "./stream-pause-diagnostics.js";
 
 describe("stream pause side-file diagnostics", () => {
   it("reports restart identity even when a reused file keeps the same size", async () => {
@@ -107,5 +107,35 @@ describe("stream pause side-file diagnostics", () => {
     } finally {
       await rm(root, { recursive: true, force: true });
     }
+  });
+
+  describe("holdProven", () => {
+    it("is proven when two probes in turn stop short of the side file's end at the same mark", () => {
+      expect(
+        holdProven({ busy: 0, log: 60, checkpointed: 12 }, { busy: 0, log: 118, checkpointed: 12 }),
+      ).toBe(true);
+    });
+
+    it("is not proven when a probe copied the whole side file back", () => {
+      expect(
+        holdProven(
+          { busy: 0, log: 60, checkpointed: 12 },
+          { busy: 0, log: 118, checkpointed: 118 },
+        ),
+      ).toBe(false);
+      expect(
+        holdProven({ busy: 0, log: 60, checkpointed: 60 }, { busy: 0, log: 118, checkpointed: 60 }),
+      ).toBe(false);
+    });
+
+    it("is not proven when the mark moved between the probes", () => {
+      expect(
+        holdProven({ busy: 0, log: 60, checkpointed: 12 }, { busy: 0, log: 118, checkpointed: 70 }),
+      ).toBe(false);
+    });
+
+    it("is not proven on the first probe alone", () => {
+      expect(holdProven(undefined, { busy: 0, log: 118, checkpointed: 12 })).toBe(false);
+    });
   });
 });
