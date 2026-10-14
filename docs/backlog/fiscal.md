@@ -209,6 +209,11 @@ intended joint contract requiring validation, not a claim of landed A680 behavio
 counters are never promoted. Cloud fetching remains W41sC3; use paper before then. The driver's
 main `641665e` reproduction remains a development-preproduction observation, not production.
 
+**2026-10-15 landing update:** W41s-6 landed in [#1717](https://github.com/clintongormley/waitron/pull/1717).
+The owner approved current local-network ownership at 22:35 on 2026-10-14, without a
+physical-code step. Build A679 after A680 and the remaining retention decisions and full-design
+approval; W41s-6 no longer holds that dependency.
+
 ## W41s. Fiscal prevention and offline recovery — DESIGN AND REVISED PLAN APPROVED (2026-10-04)
 
 **2026-10-14, Task 4 review checkpoint:** the supplied-identity/default/text transition,
@@ -1159,3 +1164,13 @@ assertion or protected writer changed. A separate pinned Litestream0.5.17/versit
 experiment restored one stopped generation twice through the normal database opener: row
 values, database bytes and source hashes matched. That checks this synthetic stable generation,
 not all bucket providers or a moving source. Required current-head CI still gates publication.
+
+
+**2026-10-15 Task 6 landed:** [#1717](https://github.com/clintongormley/waitron/pull/1717)
+merged as `13cbf8387b62c9d6684e38bd25874ad1bdda6eb0`. The candidate checkpoints above
+record earlier stages. Both full reviews were completed and their accepted findings fixed;
+required CI passed on final branch head `efcf71c9e6333a6d6bef01da80a52ae14d46460d`
+([run 38643161929](https://github.com/clintongormley/waitron/actions/runs/38643161929)).
+Follow the [offline restore procedure](../developers/offline-fiscal-restore.md) for the outside
+mounts and operator steps. Task 11 still owns the complete operational exercise; these checks
+did not test physical power loss, a physical printer or remote incident storage.
