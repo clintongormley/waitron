@@ -143,6 +143,9 @@ const windowOf = (el: TillFloorScreen) =>
 const fieldOf = (opened: HTMLElementTagNameMap["till-today-name-dialog"]) =>
   opened.shadowRoot!.querySelector("wt-input")!;
 
+const footOf = (opened: HTMLElementTagNameMap["till-today-name-dialog"]) =>
+  opened.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-form-actions")!.error;
+
 const shown = (opened: HTMLElementTagNameMap["till-today-name-dialog"]) => ({
   heading: opened.shadowRoot!.querySelector("wt-dialog")!.heading,
   value: fieldOf(opened).value,
@@ -304,19 +307,104 @@ describe("till-floor-screen: Rename", () => {
     expect(windowOf(el)).toBeNull();
   });
 
-  it("an out-of-date refusal closes the window, says so on the floor and re-reads", async () => {
+  it("keeps the window open with an out-of-date refusal at its foot and what the waiter typed, and Save can be pressed again", async () => {
     const api = stubApi();
     api.nameToday.mockRejectedValueOnce({ code: "floor_today.out_of_date", status: 409 });
     const el = await mount(bar(), api);
     const refreshes = countRefreshes(el);
     const opened = await pressRename(el, "bar");
+    const commit = vi.spyOn(opened, "commit");
+    await typeName(opened, "García birthday");
+
+    send(opened, "today-name-confirm", { name: "García birthday" });
+    await settle(el);
+    await opened.updateComplete;
+
+    expect(windowOf(el)).toBe(opened);
+    expect(opened.busy).toBe(false);
+    expect(opened.refusal).toEqual({ code: "floor_today.out_of_date" });
+    expect(footOf(opened)).toBe("The floor has changed. Check and try again");
+    expect(fieldOf(opened).error).toBe("");
+    expect(fieldOf(opened).value).toBe("García birthday");
+    expect(commit).not.toHaveBeenCalled();
+    expect(floorRefusal(el)).toBeNull();
+    expect(refreshes.count).toBe(1);
+
+    send(opened, "today-name-confirm", { name: "García birthday" });
+    await settle(el);
+
+    expect(api.nameToday).toHaveBeenCalledTimes(2);
+    expect(windowOf(el)).toBeNull();
+    expect(commit).toHaveBeenCalledOnce();
+  });
+
+  it("says the floor has changed at the window's foot in Spanish", async () => {
+    setLocale("es");
+    const api = stubApi();
+    api.nameToday.mockRejectedValueOnce({ code: "floor_today.out_of_date", status: 409 });
+    const el = await mount(bar(), api);
+    const opened = await pressRename(el, "bar");
 
     send(opened, "today-name-confirm", { name: "Window" });
+    await settle(el);
+    await opened.updateComplete;
+
+    expect(windowOf(el)).toBe(opened);
+    expect(footOf(opened)).toBe("La sala ha cambiado. Revísala y vuelve a intentarlo");
+  });
+
+  it("keeps a refusal naming another field in the window, at its foot", async () => {
+    const api = stubApi();
+    api.nameToday.mockRejectedValueOnce({
+      code: "floor_today.out_of_date",
+      status: 409,
+      field: "zoneRevision",
+    });
+    const el = await mount(bar(), api);
+    const opened = await pressRename(el, "bar");
+
+    send(opened, "today-name-confirm", { name: "Window" });
+    await settle(el);
+    await opened.updateComplete;
+
+    expect(windowOf(el)).toBe(opened);
+    expect(opened.refusal).toEqual({ code: "floor_today.out_of_date", field: "zoneRevision" });
+    expect(footOf(opened)).toBe("The floor has changed. Check and try again");
+    expect(fieldOf(opened).error).toBe("");
+    expect(floorRefusal(el)).toBeNull();
+  });
+
+  it("moves an out-of-date refusal in the window to the floor when the table stops offering Rename", async () => {
+    const api = stubApi();
+    api.nameToday.mockRejectedValueOnce({ code: "floor_today.out_of_date", status: 409 });
+    const el = await mount(bar(), api);
+    const opened = await pressRename(el, "bar");
+    send(opened, "today-name-confirm", { name: "Window" });
+    await settle(el);
+    expect(windowOf(el)).toBe(opened);
+
+    el.tables = [table("bar", "Bar", 40, { takenOff: true }), table("c3", "Counter 3", 10)];
     await settle(el);
 
     expect(windowOf(el)).toBeNull();
     expect(floorRefusal(el)).toBe("The floor has changed. Check and try again");
-    expect(refreshes.count).toBe(1);
+  });
+
+  it("an out-of-date refusal whose table joined a group during the request shows on the floor", async () => {
+    const api = stubApi();
+    const answer = holdAnswer(api);
+    const el = await mount(bar(), api);
+    const opened = await pressRename(el, "bar");
+    send(opened, "today-name-confirm", { name: "Window" });
+    await settle(el);
+    el.tables = barJoined();
+    await settle(el);
+
+    answer.refuse({ code: "floor_today.out_of_date", status: 409 });
+    await settle(el);
+
+    expect(windowOf(el)).toBeNull();
+    expect(floorRefusal(el)).toBe("The floor has changed. Check and try again");
   });
 
   it("sends the name with the revision of the read current at Save, not at the window's opening", async () => {

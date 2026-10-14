@@ -1430,8 +1430,8 @@ export class TillFloorScreen extends LitElement {
     ></till-today-name-dialog>`;
   }
 
-  /** A refusal naming the name field stays under it while the window would still be shown before
-   * Save; any other closes the window and shows on the floor. */
+  /** A refusal shows in the window, keeping what was typed, while the window would still be shown
+   * before Save; otherwise the window closes and the refusal shows on the floor. */
   async #rename(dialog: TillTodayNameDialog, name: string | null): Promise<void> {
     const renaming = this.renaming;
     const shown = renaming === null ? undefined : this.#renameShown(renaming);
@@ -1453,12 +1453,11 @@ export class TillFloorScreen extends LitElement {
     } catch (cause) {
       const refused = (cause ?? {}) as { code?: string; field?: unknown };
       const code = refused.code ?? "server.internal";
-      if (
-        this.renaming === sending &&
-        refused.field === "name" &&
-        this.#renameShown(renaming) !== undefined
-      )
-        this.renaming = { ...renaming, refusal: { code, field: "name" } };
+      if (this.renaming === sending && this.#renameShown(renaming) !== undefined)
+        this.renaming = {
+          ...renaming,
+          refusal: typeof refused.field === "string" ? { code, field: refused.field } : { code },
+        };
       else if (this.renaming === sending || this.renaming === null) {
         this.renaming = null;
         this.refusal = codeMessage(code);
