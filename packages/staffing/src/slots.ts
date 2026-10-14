@@ -114,8 +114,12 @@ export function placeShift(
   cutoverFor: (businessDay: string) => string,
 ): PlacedShift {
   const { date, time } = wall(shift.startsAt, shift.startsOffsetMinutes);
-  const businessDay = time < cutoverFor(date) ? previousDay(date) : date;
-  const start = minuteOfServiceDay(time, cutoverFor(businessDay));
+  const businessDay =
+    clockMinutes(time) < clockMinutes(cutoverFor(date)) ? previousDay(date) : date;
+  // Not modulo 1440: when the changeover moves later overnight, the business day runs past
+  // 24 hours, and a shift after its own day's changeover hour on the next date belongs past 1440.
+  const dayGap = date === businessDay ? 0 : 1440;
+  const start = dayGap + clockMinutes(time) - clockMinutes(cutoverFor(businessDay));
   // Wall-clock length, not elapsed time: slots are wall-clock, and on a clock-change night a
   // 22:00–04:00 shift lasts five or seven elapsed hours but still ends at 04:00 on the wall.
   const minutes =

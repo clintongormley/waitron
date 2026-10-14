@@ -138,9 +138,9 @@ describe("placeShift", () => {
     );
     expect(placedShift).toMatchObject({ businessDay: "2026-12-04", start: 960, end: 1560 });
   });
-  it("uses the cutover of the shift's own business day when the clock changed", () => {
-    // Saturday 03:00 on the wall: before Saturday's 04:00 changeover, so it belongs to Friday,
-    // whose changeover is 02:00.
+  it("counts from Friday's changeover when Saturday's changeover is later", () => {
+    // Saturday 03:00 on the wall, before Saturday's 04:00 changeover, so it belongs to Friday,
+    // whose business day began at 02:00 on Friday: 25 hours earlier.
     const cutoverFor = (day: string) => (day === "2026-12-05" ? "04:00" : "02:00");
     const placedShift = placeShift(
       {
@@ -155,7 +155,24 @@ describe("placeShift", () => {
       },
       cutoverFor,
     );
-    expect(placedShift).toMatchObject({ businessDay: "2026-12-04", start: 60, end: 180 });
+    expect(placedShift).toMatchObject({ businessDay: "2026-12-04", start: 1500, end: 1620 });
+  });
+  it("counts from Friday's changeover when Saturday's changeover is earlier", () => {
+    const cutoverFor = (day: string) => (day === "2026-12-05" ? "04:00" : "06:00");
+    const placedShift = placeShift(
+      {
+        shiftId: "z",
+        personId: "p",
+        startsAt: "2026-12-05T02:00:00Z",
+        startsOffsetMinutes: 60,
+        endsAt: "2026-12-05T04:00:00Z",
+        endsOffsetMinutes: 60,
+        area: KITCHEN,
+        staffRoleId: "sous",
+      },
+      cutoverFor,
+    );
+    expect(placedShift).toMatchObject({ businessDay: "2026-12-04", start: 1260, end: 1380 });
   });
   it("measures length on the wall clock across the spring-forward night", () => {
     // Europe/Madrid, 2027-03-28: 22:00 (+60) to 04:00 (+120) is 5 elapsed hours, 6 on the wall.
