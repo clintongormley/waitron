@@ -110,6 +110,37 @@ const sameDraft = (a: Draft, b: Draft) =>
   sameDates(a.dates, b.dates) &&
   samePaintMap(a.paint, b.paint);
 
+/** `stored`'s dates, with `current`'s own changes from `sent` laid over them, as `rebaseDays` does
+ *  for paint: see `merge`. */
+function rebaseDates(stored: Draft, sent: Draft, current: Draft): DateFacts[] {
+  const was = new Map(sent.dates.map((entry) => [entry.date, entry]));
+  const now = new Map(current.dates.map((entry) => [entry.date, entry]));
+  const owners = [...new Set([...sent.paint.keys(), ...current.paint.keys()])];
+  /** True too for a date `current` added. */
+  const ticked = ({ date, closedAllDay }: DateFacts) =>
+    was.get(date)?.closedAllDay !== closedAllDay;
+  const repainted = (date: LocalDate) =>
+    owners.some(
+      (owner) =>
+        !samePaint(
+          current.paint.get(owner)?.get(date) ?? [],
+          sent.paint.get(owner)?.get(date) ?? [],
+        ),
+    );
+  const held = new Set(stored.dates.map(({ date }) => date));
+  return [
+    ...stored.dates
+      .filter(({ date }) => now.has(date) || !was.has(date))
+      .map((entry) => {
+        const own = now.get(entry.date);
+        return { ...(own && ticked(own) ? own : entry) };
+      }),
+    ...current.dates.filter(
+      (entry) => !held.has(entry.date) && (ticked(entry) || repainted(entry.date)),
+    ),
+  ].sort(byDate);
+}
+
 function blank(dates: readonly LocalDate[], name = ""): Draft {
   return {
     name,
@@ -605,9 +636,12 @@ export class SpecialDayPainter extends LitElement {
       },
     );
   }
-  /** Name, Every year and the dates each follow `detail`, in the draft and the saved state alike,
-   *  where the draft has not changed them; a changed one keeps both. Each owner's saved paint
-   *  follows `detail`, and its draft too on every date the draft has not changed. */
+  /** Name and Every year each follow `detail`, in the draft and the saved state alike, where the
+   *  draft has not changed them; a changed one keeps both. The saved dates follow `detail`, and so
+   *  do the draft's, except that it keeps the dates it added and the Closed ticks it changed,
+   *  leaves out the dates it removed, and keeps a date `detail` no longer holds when it changed
+   *  that date's tick or paint. Each owner's saved paint follows `detail`, and its draft too on
+   *  every date the draft has not changed. */
   private merge(detail: SpecialDayDetail) {
     const fresh = fromDetail(detail);
     const draft = copyDraft(this.draft);
@@ -615,10 +649,8 @@ export class SpecialDayPainter extends LitElement {
     if (draft.name === baseline.name) draft.name = baseline.name = fresh.name;
     if (draft.repeatsYearly === baseline.repeatsYearly)
       draft.repeatsYearly = baseline.repeatsYearly = fresh.repeatsYearly;
-    if (sameDates(draft.dates, baseline.dates)) {
-      draft.dates = fresh.dates.map((entry) => ({ ...entry }));
-      baseline.dates = fresh.dates;
-    }
+    draft.dates = rebaseDates(fresh, baseline, draft);
+    baseline.dates = fresh.dates;
     const owners = [...draft.paint.keys(), ...baseline.paint.keys(), ...fresh.paint.keys()];
     const none = new Map<LocalDate, Paint[]>();
     for (const owner of new Set(owners)) {

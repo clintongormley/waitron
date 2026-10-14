@@ -772,15 +772,91 @@ describe("a live update while the day is open", () => {
     });
     await deliver(painter);
     await expect.poll(() => frame(painter).heading).toBe("Renamed");
-    expect(dates(painter)).toEqual([DEC_14, DEC_15]);
+    expect(dates(painter)).toEqual([DEC_14, DEC_15, "2026-12-31"]);
     expect(repeats(painter, "yes").checked).toBe(true);
     await save(painter, writes);
     expect(body(writes[0]!)).toEqual({
       ...FACTS,
       name: "Renamed",
       repeatsYearly: true,
-      dates: FACTS.dates.slice(0, 2),
+      dates: [...FACTS.dates.slice(0, 2), { date: "2026-12-31", closedAllDay: false }],
     });
+  });
+
+  it("a date another manager removed stays while the draft has changed its paint, and Save puts it back with that paint", async () => {
+    const days = { sd1: storedDay() };
+    const { painter, writes } = await mount({ days });
+    await paintDinner(painter, DEC_15);
+    days.sd1 = storedDay({
+      name: "Renamed",
+      dates: storedDay().dates.filter(({ date }) => date !== DEC_15),
+    });
+    await deliver(painter);
+    await expect.poll(() => frame(painter).heading).toBe("Renamed");
+    expect(dates(painter)).toEqual([DEC_14, DEC_15, DEC_25]);
+    expect(grid(painter).days.get(DEC_15)).toEqual([dinner("19:00", "22:00")]);
+    expect(frame(painter).dirty).toBe(true);
+    await save(painter, writes);
+    expect(body(writes[0]!)).toEqual({
+      ...FACTS,
+      name: "Renamed",
+      paint: [{ departmentId: "d1", date: DEC_15, ranges: [dinner("19:00", "22:00")] }],
+    });
+  });
+
+  it("a date another manager removed stays while the draft has changed its Closed tick, beside a removal it follows", async () => {
+    const days = { sd1: storedDay() };
+    const { painter, writes } = await mount({ days });
+    painter.shadowRoot!.querySelector<HTMLInputElement>(`input[name="closed.${DEC_14}"]`)!.click();
+    await settle(painter);
+    days.sd1 = storedDay({ dates: storedDay().dates.slice(2) });
+    await deliver(painter);
+    await expect.poll(() => dates(painter)).toEqual([DEC_14, DEC_25]);
+    await save(painter, writes);
+    expect(body(writes[0]!).dates).toEqual([{ date: DEC_14, closedAllDay: true }, FACTS.dates[2]]);
+  });
+
+  it("a date the draft repainted follows another manager's Closed tick on it", async () => {
+    const days = { sd1: storedDay() };
+    const { painter, writes } = await mount({ days });
+    await paintDinner(painter, DEC_15);
+    days.sd1 = storedDay({
+      dates: storedDay().dates.map((entry) =>
+        entry.date === DEC_15 ? { ...entry, closedAllDay: true } : entry,
+      ),
+    });
+    await deliver(painter);
+    await expect.poll(() => grid(painter).closedAllDay.has(DEC_15)).toBe(true);
+    await save(painter, writes);
+    expect(body(writes[0]!).dates).toEqual([
+      FACTS.dates[0],
+      { date: DEC_15, closedAllDay: true },
+      FACTS.dates[2],
+    ]);
+  });
+
+  it("a draft that added a date still follows another manager's removal of a date it did not change", async () => {
+    const days = { sd1: storedDay() };
+    const { painter, writes } = await mount({ days });
+    part(painter, "add-dates")!.click();
+    await settle(painter);
+    painter.shadowRoot!.querySelector("add-dates-calendar")!.dispatchEvent(
+      new CustomEvent("add-dates", {
+        detail: { dates: ["2026-12-20"] },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await settle(painter);
+    days.sd1 = storedDay({ dates: storedDay().dates.filter(({ date }) => date !== DEC_15) });
+    await deliver(painter);
+    await expect.poll(() => dates(painter)).toEqual([DEC_14, "2026-12-20", DEC_25]);
+    await save(painter, writes);
+    expect(body(writes[0]!).dates).toEqual([
+      FACTS.dates[0],
+      { date: "2026-12-20", closedAllDay: false },
+      FACTS.dates[2],
+    ]);
   });
 
   it("drops a read that lands after a newer one", async () => {
