@@ -66,8 +66,13 @@ and workforce-disabled boots start neither duty. Failure unwind and normal close
 the duties before closing their database handle. Place/cancel till routes forward the amendment
 recorder. Invoice choice, receipt language and cancellation/comp/discount commands also capture the
 admitted worker and trusted instant in their write transaction. The route tests check capture refusal
-rolls back those commands and that repeated submissions create no later activity. Remaining service
-command capture, restore-path qualification and final branch checks remain open; part 3 is unfinished.
+rolls back those commands and that repeated submissions create no later activity. Direct line
+course/send/recall and make-at changes, preparation and pass transitions, serving, station moves and
+handover also capture the admitted worker. Their route tests check rollback on capture refusal,
+replays and unchanged commands, while device-only work records no worker activity. A group spanning
+two bills records each affected bill at one trusted instant. Bill and party command scopes keep
+separate activity identities even when their submission ids match. The retained group-command audit,
+restore-path qualification and final branch checks remain open; part 3 is unfinished.
 
 My hours stays with part 5; no placeholder is offered in part 2. Parts 3–6 remain open: automatic
 closure/questions, corrections, hours and the export/access screens. The period-read cost and the

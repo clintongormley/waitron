@@ -102,6 +102,7 @@ import {
   advanceTicketItem,
   bumpCourseReady,
   cancelPlacedOrder,
+  captureOrderService,
   fireCourse,
   getHeldOrder,
   getPlacedCounterOrder,
@@ -134,7 +135,7 @@ import {
   paysAfterSending,
   unsentDishLines,
 } from "./working-order.js";
-import type { LineExtras, OrderLinePatch, TicketState } from "./working-order.js";
+import type { LineExtras, OrderLinePatch, TicketState, OrderAttendance } from "./working-order.js";
 import { listCourses, listStationsToday } from "./kitchen.js";
 import {
   finishTable,
@@ -1068,6 +1069,7 @@ function mountCourseVerb(
     orderId: string,
     courseId: string,
     firer: Firer,
+    attendance?: OrderAttendance,
   ) => Promise<void>,
 ): void {
   app.post(`/api/orders/:id/courses/:courseId/${suffix}`, (c) =>
@@ -1080,7 +1082,16 @@ function mountCourseVerb(
       if (!isUuid(courseId)) throw new AppError("course.not_found", { courseId });
       await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ orderId }]);
-        await verb(tx, cfg, orderId, courseId, { personId });
+        await verb(
+          tx,
+          cfg,
+          orderId,
+          courseId,
+          { personId },
+          deps.attendance === undefined
+            ? undefined
+            : { recorder: deps.attendance, clock: deps.clock },
+        );
       });
       return c.body(null, 200);
     }),
@@ -2111,7 +2122,15 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         if (item !== undefined && item.stationId !== stationId) {
           throw new AppError("device.forbidden_station", { stationId: item.stationId });
         }
-        await advanceTicketItem(tx, cfg, id, to);
+        await advanceTicketItem(
+          tx,
+          cfg,
+          id,
+          to,
+          deps.attendance === undefined
+            ? undefined
+            : { recorder: deps.attendance, clock: deps.clock, personId: session.personId },
+        );
       });
       return c.body(null, 200);
     }),
@@ -2133,7 +2152,16 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const to = body.to;
       if (!isUuid(orderId) || !isUuid(stationId)) return c.body(null, 200);
       await withTransaction(deps.db, async (tx) => {
-        await advanceTicket(tx, cfg, orderId, stationId, to);
+        await advanceTicket(
+          tx,
+          cfg,
+          orderId,
+          stationId,
+          to,
+          deps.attendance === undefined
+            ? undefined
+            : { recorder: deps.attendance, clock: deps.clock, personId: session.personId },
+        );
       });
       return c.body(null, 200);
     }),
@@ -2175,7 +2203,15 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const submissionId = body.submissionId === undefined ? undefined : submissionIdOf(body);
       await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
-        return handOverOrder(tx, cfg, id, submissionId);
+        return handOverOrder(
+          tx,
+          cfg,
+          id,
+          submissionId,
+          deps.attendance === undefined
+            ? undefined
+            : { recorder: deps.attendance, clock: deps.clock, personId: session.personId },
+        );
       });
       return c.body(null, 200);
     }),
@@ -2921,7 +2957,17 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         const args = groupCommand(personId, asObject(await readRawJsonBody<unknown>(c)));
         const answer = await withTransaction(deps.db, async (tx) => {
           await checkZones(tx, deps.cfg, session, [{ partyId }]);
-          return command(tx, cfg, partyId, groupId, args);
+          return command(
+            tx,
+            cfg,
+            partyId,
+            groupId,
+            args,
+            { personId },
+            deps.attendance === undefined
+              ? undefined
+              : { recorder: deps.attendance, clock: deps.clock },
+          );
         });
         return c.json(answer);
       }),
@@ -2944,7 +2990,16 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         const items = parseLineQuantities(body.items, "items");
         const answer = await withTransaction(deps.db, async (tx) => {
           await checkZones(tx, deps.cfg, session, [{ partyId }]);
-          return command(tx, cfg, partyId, items, args);
+          return command(
+            tx,
+            cfg,
+            partyId,
+            items,
+            args,
+            deps.attendance === undefined
+              ? undefined
+              : { recorder: deps.attendance, clock: deps.clock },
+          );
         });
         return c.json(answer);
       }),
@@ -2962,7 +3017,16 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const args = groupCommand(personId, asObject(await readRawJsonBody<unknown>(c)));
       const answer = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ partyId }]);
-        return markGroupServed(tx, cfg, partyId, groupId, args);
+        return markGroupServed(
+          tx,
+          cfg,
+          partyId,
+          groupId,
+          args,
+          deps.attendance === undefined
+            ? undefined
+            : { recorder: deps.attendance, clock: deps.clock },
+        );
       });
       return c.json(answer);
     }),
@@ -3304,6 +3368,13 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
             await requireMakeAtStation(tx, cfg, stationId);
           }
         }
+        const previousChoices =
+          deps.attendance === undefined
+            ? []
+            : await tx
+                .select({ id: workingOrderLines.id, stationId: workingOrderLines.makeAtStationId })
+                .from(workingOrderLines)
+                .where(eq(workingOrderLines.workingOrderId, id));
         for (const [lineId, stationId] of entries)
           await tx
             .update(workingOrderLines)
@@ -3311,6 +3382,19 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
             .where(eq(workingOrderLines.id, lineId));
         if (entries.length > 0) await bumpRevision(tx, [id]);
         else await refusePaymentInFlight(tx, [id]);
+        if (
+          entries.some(([lineId, stationId]) =>
+            previousChoices.some((line) => line.id === lineId && line.stationId !== stationId),
+          )
+        )
+          await captureOrderService(
+            tx,
+            deps.attendance === undefined
+              ? undefined
+              : { recorder: deps.attendance, clock: deps.clock, personId: session.personId },
+            id,
+            "make-at",
+          );
         return copy + (entries.length > 0 ? 1 : 0);
       });
       return c.json({ revision });
@@ -3341,10 +3425,22 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const request = stationMoveRequest(id, await readJsonBody<Record<string, unknown>>(c));
       const result = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
-        return moveDishesToStation(tx, cfg, id, request, {
-          deviceId: session.deviceId,
-          personId: session.personId,
-        });
+        return moveDishesToStation(
+          tx,
+          cfg,
+          id,
+          request,
+          {
+            deviceId: session.deviceId,
+            personId: session.personId,
+          },
+          {
+            attendance:
+              deps.attendance === undefined
+                ? undefined
+                : { recorder: deps.attendance, clock: deps.clock },
+          },
+        );
       });
       return c.json(result);
     }),
@@ -3395,7 +3491,16 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       }
       await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
-        await setLineCourse(tx, cfg, id, lineNo, courseId);
+        await setLineCourse(
+          tx,
+          cfg,
+          id,
+          lineNo,
+          courseId,
+          deps.attendance === undefined
+            ? undefined
+            : { recorder: deps.attendance, clock: deps.clock, personId: session.personId },
+        );
       });
       return c.body(null, 200);
     }),
@@ -3410,7 +3515,15 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const body = await readJsonBody<{ lineNos?: number[] }>(c);
       await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
-        await sendLines(tx, cfg, id, body.lineNos ?? []);
+        await sendLines(
+          tx,
+          cfg,
+          id,
+          body.lineNos ?? [],
+          deps.attendance === undefined
+            ? undefined
+            : { recorder: deps.attendance, clock: deps.clock, personId: session.personId },
+        );
       });
       return c.body(null, 200);
     }),
@@ -3424,7 +3537,15 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const body = await readJsonBody<{ lineNos?: number[] }>(c);
       await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
-        await recallLines(tx, cfg, id, body.lineNos ?? []);
+        await recallLines(
+          tx,
+          cfg,
+          id,
+          body.lineNos ?? [],
+          deps.attendance === undefined
+            ? undefined
+            : { recorder: deps.attendance, clock: deps.clock, personId: session.personId },
+        );
       });
       return c.body(null, 200);
     }),

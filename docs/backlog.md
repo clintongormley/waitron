@@ -4568,7 +4568,11 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   The reminder helper rechecks current clock and rota evidence, claims before SMTP, suppresses
   uncertain sends and retries explicit rejection after fifteen minutes. Writable workforce primaries
   now start both duties, with a fresh discovery generation on each open and abort-and-await cleanup.
-  Remaining work includes the rest of command capture, restore-path qualification and final branch checks.
+  Direct line course/send/recall and make-at changes, preparation and pass transitions, serving,
+  station moves and handover now capture the admitted worker on that branch. Their route tests
+  retain rollback, replay, unchanged-command and device-only controls; a group spanning two bills
+  records each affected bill at one trusted instant. Remaining work includes the retained group-command
+  audit, restore-path qualification and final branch checks.
   Left: end-of-day discovery and questions (part 3), correction screens (part 4), hours screens
   (part 5), and PDF/CSV plus representatives' access (part 6). The
   [design](superpowers/specs/2026-10-12-a10-clocking-in-and-out-design.md) records the legal

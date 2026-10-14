@@ -1,3 +1,5 @@
+import { captureKitchenActivity } from "./attendance-capture.js";
+import type { OrderAttendance } from "./working-order.js";
 import { and, asc, eq, inArray, isNotNull, isNull, ne, notExists, or, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { staffPresentationName } from "@waitron/catalogue";
@@ -290,20 +292,32 @@ export async function bumpGroupReady(
   partyId: string,
   groupId: string,
   args: PartyCommandArgs,
+  firer: Firer = { personId: args.operatorId },
+  attendance?: OrderAttendance,
 ): Promise<{ revision: number }> {
   void cfg;
-  return passStep(tx, partyId, groupId, args, "group.ready", async () => {
-    await tx
-      .update(ticketItems)
-      .set(advanceSet("ready"))
-      .where(
-        and(
-          inArray(ticketItems.workingOrderLineId, groupLinesOf(tx, groupId)),
-          ne(ticketItems.state, "ready"),
-          isNotNull(ticketItems.firedAt),
-        ),
-      );
-  });
+  return passStep(
+    tx,
+    partyId,
+    groupId,
+    args,
+    "group.ready",
+    async () => {
+      return tx
+        .update(ticketItems)
+        .set(advanceSet("ready"))
+        .where(
+          and(
+            inArray(ticketItems.workingOrderLineId, groupLinesOf(tx, groupId)),
+            ne(ticketItems.state, "ready"),
+            isNotNull(ticketItems.firedAt),
+          ),
+        )
+        .returning({ orderId: ticketItems.workingOrderId });
+    },
+    attendance,
+    "personId" in firer ? firer.personId : undefined,
+  );
 }
 
 /** The pass's Away for a group: stamps `away_at` on its ready items not yet away, on every bill. */
@@ -313,20 +327,32 @@ export async function markGroupAway(
   partyId: string,
   groupId: string,
   args: PartyCommandArgs,
+  firer: Firer = { personId: args.operatorId },
+  attendance?: OrderAttendance,
 ): Promise<{ revision: number }> {
   void cfg;
-  return passStep(tx, partyId, groupId, args, "group.away", async () => {
-    await tx
-      .update(ticketItems)
-      .set({ awayAt: nowIso() })
-      .where(
-        and(
-          inArray(ticketItems.workingOrderLineId, groupLinesOf(tx, groupId)),
-          eq(ticketItems.state, "ready"),
-          isNull(ticketItems.awayAt),
-        ),
-      );
-  });
+  return passStep(
+    tx,
+    partyId,
+    groupId,
+    args,
+    "group.away",
+    async () => {
+      return tx
+        .update(ticketItems)
+        .set({ awayAt: nowIso() })
+        .where(
+          and(
+            inArray(ticketItems.workingOrderLineId, groupLinesOf(tx, groupId)),
+            eq(ticketItems.state, "ready"),
+            isNull(ticketItems.awayAt),
+          ),
+        )
+        .returning({ orderId: ticketItems.workingOrderId });
+    },
+    attendance,
+    "personId" in firer ? firer.personId : undefined,
+  );
 }
 
 async function passStep(
@@ -335,7 +361,9 @@ async function passStep(
   groupId: string,
   args: PartyCommandArgs,
   kind: "group.ready" | "group.away",
-  apply: () => Promise<void>,
+  apply: () => Promise<{ orderId: string }[]>,
+  attendance: OrderAttendance | undefined,
+  personId: string | undefined,
 ): Promise<{ revision: number }> {
   return runServiceCommand(
     tx,
@@ -346,7 +374,14 @@ async function passStep(
     async () => {
       const revision = await checkAndBumpParty(tx, partyId, args.expectedPartyRevision, "open");
       await requireGroup(tx, partyId, groupId);
-      await apply();
+      const changed = await apply();
+      await captureKitchenActivity(
+        tx,
+        attendance,
+        personId,
+        changed.map((row) => row.orderId),
+        `party:${partyId}:${args.submissionId}`,
+      );
       return { revision };
     },
   );

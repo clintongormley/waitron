@@ -159,7 +159,7 @@ import type {
   ZoneOffers,
 } from "@waitron/module";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import type { AttendanceRecorder } from "./attendance-capture.js";
+import { captureKitchenActivity, type AttendanceRecorder } from "./attendance-capture.js";
 import { authorize, type Override, type PinAttempts } from "@waitron/identity";
 import { issuancePass } from "./issuance-pass.js";
 import { issueMoment, type IssueMoment } from "./issue-moment.js";
@@ -252,7 +252,11 @@ export async function captureOrderEdit(
     | "discard"
     | "invoice-choice"
     | "receipt-language"
-    | "adjustment",
+    | "adjustment"
+    | "course"
+    | "send"
+    | "recall"
+    | "make-at",
 ): Promise<void> {
   if (attendance === undefined || personId === undefined) return;
   await attendance.recorder(tx, {
@@ -265,6 +269,28 @@ export async function captureOrderEdit(
     offsetMinutes: 0,
     outcome: "qualified",
   });
+}
+
+export async function captureOrderService(
+  tx: Transaction,
+  attendance: (OrderAttendance & { personId: string }) | undefined,
+  orderId: string,
+  action: "course" | "send" | "recall" | "make-at",
+): Promise<void> {
+  if (attendance === undefined) return;
+  const [order] = await tx
+    .select({ locationId: workingOrders.locationId, revision: workingOrders.revision })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, orderId));
+  await captureOrderEdit(
+    tx,
+    attendance,
+    orderId,
+    attendance.personId,
+    order!.locationId,
+    order!.revision,
+    action,
+  );
 }
 
 /** `db` plus the fiscal backend and trusted clock that a path filing a sale needs. */
@@ -1983,11 +2009,12 @@ export async function fireCourse(
   orderId: string,
   courseId: string,
   firer: Firer,
+  attendance?: OrderAttendance,
 ): Promise<void> {
   const routing = routingOnce(tx, cfg, new Date());
   await requireCourse(tx, cfg, courseId);
   await fireHeldGroupsOfCourse(tx, cfg, orderId, courseId, firer, routing);
-  await releaseHeld(
+  const released = await releaseHeld(
     tx,
     cfg,
     orderId,
@@ -1999,6 +2026,10 @@ export async function fireCourse(
     undefined,
     routing,
   );
+  if (released > 0)
+    await captureKitchenActivity(tx, attendance, "personId" in firer ? firer.personId : undefined, [
+      orderId,
+    ]);
 }
 
 /**
@@ -2032,7 +2063,7 @@ async function releaseHeld(
   noRouteScope: { courseIds: readonly (string | null)[]; lineIds: readonly string[] },
   mark?: "FIRE",
   routing = routingOnce(tx, cfg, new Date()),
-): Promise<void> {
+): Promise<number> {
   const firedNow = routing.at.toISOString();
   const rerouted = await rerouteHeldAtRelease(tx, cfg, orderId, ticketScope, routing);
   const firedItems = await tx
@@ -2059,6 +2090,7 @@ async function releaseHeld(
     routing,
     rerouted,
   );
+  return firedItems.length + noRoute.lines.length;
 }
 
 /**
@@ -2126,6 +2158,7 @@ export async function sendLines(
   cfg: OriginConfig,
   tabId: string,
   lineNos: number[],
+  attendance?: OrderAttendance & { personId: string },
 ): Promise<void> {
   const routing = routingOnce(tx, cfg, new Date());
   await assertPartyBillOpen(tx, cfg, tabId);
@@ -2207,6 +2240,8 @@ export async function sendLines(
     routing,
     rerouted,
   );
+  if (firedItems.length > 0 || noRoute.lines.length > 0)
+    await captureOrderService(tx, attendance, tabId, "send");
 }
 
 /** Of `courseIds` (`null` standing for no course), the ones with no held item left on the order. */
@@ -2241,6 +2276,7 @@ export async function recallLines(
   cfg: TillConfig,
   tabId: string,
   lineNos: number[],
+  attendance?: OrderAttendance & { personId: string },
 ): Promise<void> {
   await assertPartyBillOpen(tx, cfg, tabId);
   if (lineNos.length === 0) {
@@ -2308,6 +2344,7 @@ export async function recallLines(
     );
   await enqueueCorrectionSlips(tx, cfg, tabId, recalled, "RECALLED");
   await bumpRevision(tx, [tabId]);
+  if (recalled.length > 0) await captureOrderService(tx, attendance, tabId, "recall");
 }
 
 /**
@@ -2319,9 +2356,11 @@ export async function bumpCourseReady(
   cfg: TillConfig,
   orderId: string,
   courseId: string,
+  firer?: Firer,
+  attendance?: OrderAttendance,
 ): Promise<void> {
   void cfg;
-  await tx
+  const changed = await tx
     .update(ticketItems)
     .set(advanceSet("ready"))
     .where(
@@ -2331,7 +2370,14 @@ export async function bumpCourseReady(
         ne(ticketItems.state, "ready"),
         isNotNull(ticketItems.firedAt),
       ),
-    );
+    )
+    .returning({ orderId: ticketItems.workingOrderId });
+  await captureKitchenActivity(
+    tx,
+    attendance,
+    firer && "personId" in firer ? firer.personId : undefined,
+    changed.map((row) => row.orderId),
+  );
 }
 
 /**
@@ -2344,9 +2390,11 @@ export async function markCourseAway(
   cfg: TillConfig,
   orderId: string,
   courseId: string,
+  firer?: Firer,
+  attendance?: OrderAttendance,
 ): Promise<void> {
   await requireCourse(tx, cfg, courseId);
-  await tx
+  const changed = await tx
     .update(ticketItems)
     .set({ awayAt: nowIso() })
     .where(
@@ -2356,7 +2404,14 @@ export async function markCourseAway(
         eq(ticketItems.state, "ready"),
         isNull(ticketItems.awayAt),
       ),
-    );
+    )
+    .returning({ orderId: ticketItems.workingOrderId });
+  await captureKitchenActivity(
+    tx,
+    attendance,
+    firer && "personId" in firer ? firer.personId : undefined,
+    changed.map((row) => row.orderId),
+  );
 }
 
 /**
@@ -2817,13 +2872,18 @@ export async function setLineCourse(
   tabId: string,
   lineNo: number,
   courseId: string | null,
+  attendance?: OrderAttendance & { personId: string },
 ): Promise<void> {
   await assertPartyBillOpen(tx, cfg, tabId);
   if (courseId !== null) {
     await requireLiveCourse(tx, cfg, courseId);
   }
   const [line] = await tx
-    .select({ id: workingOrderLines.id, parentLineId: workingOrderLines.parentLineId })
+    .select({
+      id: workingOrderLines.id,
+      parentLineId: workingOrderLines.parentLineId,
+      courseId: workingOrderLines.courseId,
+    })
     .from(workingOrderLines)
     .where(and(eq(workingOrderLines.workingOrderId, tabId), eq(workingOrderLines.lineNo, lineNo)));
   if (line === undefined) {
@@ -2846,6 +2906,7 @@ export async function setLineCourse(
     .set({ courseId })
     .where(onDishesOrTheirExtras(tx, [line.id]));
   await bumpRevision(tx, [tabId]);
+  if (line.courseId !== courseId) await captureOrderService(tx, attendance, tabId, "course");
 }
 
 /** A dish line on a bill of a party, as a served command reads it. */
@@ -3054,8 +3115,9 @@ export async function markServed(
   partyId: string,
   items: { lineId: string; quantity: string }[],
   args: PartyCommandArgs,
+  attendance?: OrderAttendance,
 ): Promise<{ revision: number }> {
-  return changeServed(tx, cfg, partyId, items, args, "line.served");
+  return changeServed(tx, cfg, partyId, items, args, "line.served", attendance);
 }
 
 /** Take back part or all of what was marked served on each named dish line, for a mis-tap. */
@@ -3065,8 +3127,9 @@ export async function unmarkServed(
   partyId: string,
   items: { lineId: string; quantity: string }[],
   args: PartyCommandArgs,
+  attendance?: OrderAttendance,
 ): Promise<{ revision: number }> {
-  return changeServed(tx, cfg, partyId, items, args, "line.unserved");
+  return changeServed(tx, cfg, partyId, items, args, "line.unserved", attendance);
 }
 
 async function changeServed(
@@ -3076,6 +3139,7 @@ async function changeServed(
   items: { lineId: string; quantity: string }[],
   args: PartyCommandArgs,
   kind: "line.served" | "line.unserved",
+  attendance?: OrderAttendance,
 ): Promise<{ revision: number }> {
   return runServiceCommand(
     tx,
@@ -3114,6 +3178,13 @@ async function changeServed(
         return { line, served: line.servedQuantity + (serving ? amount : -amount) };
       });
       await writeServed(tx, changes);
+      await captureKitchenActivity(
+        tx,
+        attendance,
+        args.operatorId,
+        changes.map((change) => change.line.workingOrderId),
+        `party:${partyId}:${args.submissionId}`,
+      );
       return { revision };
     },
     cfg.madeHereSink,
@@ -3131,6 +3202,7 @@ export async function markGroupServed(
   partyId: string,
   groupId: string,
   args: PartyCommandArgs,
+  attendance?: OrderAttendance,
 ): Promise<{ revision: number }> {
   return runServiceCommand(
     tx,
@@ -3147,11 +3219,16 @@ export async function markGroupServed(
         throw new AppError("group.not_found", { groupId });
       }
       lines.forEach(refuseUnreleased);
-      await writeServed(
+      const changes = lines
+        .filter((line) => line.servedQuantity < line.quantity)
+        .map((line) => ({ line, served: line.quantity }));
+      await writeServed(tx, changes);
+      await captureKitchenActivity(
         tx,
-        lines
-          .filter((line) => line.servedQuantity < line.quantity)
-          .map((line) => ({ line, served: line.quantity })),
+        attendance,
+        args.operatorId,
+        changes.map((change) => change.line.workingOrderId),
+        `party:${partyId}:${args.submissionId}`,
       );
       return { revision };
     },
@@ -6228,20 +6305,26 @@ export function handOverOrder(
   cfg: TillConfig,
   id: string,
   submissionId?: string,
+  attendance?: OrderAttendance & { personId: string },
 ): Promise<void> {
-  if (submissionId === undefined) return handOver(tx, cfg, id);
+  if (submissionId === undefined) return handOver(tx, cfg, id, attendance);
   return runServiceCommand(
     tx,
     { kind: "bill", workingOrderId: id },
     submissionId,
     "order.collect",
     { workingOrderId: id },
-    () => handOver(tx, cfg, id),
+    () => handOver(tx, cfg, id, attendance),
     cfg.madeHereSink,
   );
 }
 
-async function handOver(tx: Transaction, cfg: TillConfig, id: string): Promise<void> {
+async function handOver(
+  tx: Transaction,
+  cfg: TillConfig,
+  id: string,
+  attendance?: OrderAttendance & { personId: string },
+): Promise<void> {
   const [order] = await tx
     .select({
       status: workingOrders.status,
@@ -6275,6 +6358,7 @@ async function handOver(tx: Transaction, cfg: TillConfig, id: string): Promise<v
     .update(workingOrders)
     .set({ collectedAt: nowIso() })
     .where(and(eq(workingOrders.id, id), isNull(workingOrders.collectedAt)));
+  await captureKitchenActivity(tx, attendance, attendance?.personId, [id]);
 }
 
 /** The service modes in which a counter order is sent to the kitchen before it is paid. */
@@ -6491,6 +6575,7 @@ export async function advanceTicketItem(
   cfg: TillConfig,
   itemId: string,
   to: TicketState,
+  attendance?: OrderAttendance & { personId: string },
 ): Promise<void> {
   void cfg;
   // Own string keys only: `hasOwn` converts its key, so ["preparing"] would otherwise match, and an
@@ -6511,7 +6596,7 @@ export async function advanceTicketItem(
         isNotNull(ticketItems.firedAt),
       ),
     )
-    .returning({ id: ticketItems.id });
+    .returning({ id: ticketItems.id, orderId: ticketItems.workingOrderId });
   if (updated.length === 0) {
     const [item] = await tx
       .select({ firedAt: ticketItems.firedAt })
@@ -6522,6 +6607,12 @@ export async function advanceTicketItem(
     }
     throw new AppError("ticket.invalid_transition", { ticketItemId: itemId });
   }
+  await captureKitchenActivity(
+    tx,
+    attendance,
+    attendance?.personId,
+    updated.map((row) => row.orderId),
+  );
 }
 
 /** Advance the fired items of one order at one station; held items are skipped. */
@@ -6531,9 +6622,10 @@ export async function advanceTicket(
   orderId: string,
   stationId: string,
   to: Exclude<TicketState, "queued">,
+  attendance?: OrderAttendance & { personId: string },
 ): Promise<void> {
   void cfg;
-  await tx
+  const changed = await tx
     .update(ticketItems)
     .set(advanceSet(to))
     .where(
@@ -6543,7 +6635,14 @@ export async function advanceTicket(
         eq(ticketItems.state, TICKET_TRANSITIONS[to].from),
         isNotNull(ticketItems.firedAt),
       ),
-    );
+    )
+    .returning({ orderId: ticketItems.workingOrderId });
+  await captureKitchenActivity(
+    tx,
+    attendance,
+    attendance?.personId,
+    changed.map((row) => row.orderId),
+  );
 }
 
 /** The LIVE course row an item's snapshotted `course_id` names. Not filtered by `active`, so a course

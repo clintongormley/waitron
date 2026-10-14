@@ -1,6 +1,8 @@
 import "./errors.js";
 import { and, eq, sql } from "drizzle-orm";
+import { newId, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
+import type { TrustedClock } from "@waitron/fiscal";
 import { readLocationClock } from "@waitron/reporting";
 import { AppError, businessDayAt, businessDayBounds } from "@waitron/shared";
 import { offsetMinutes } from "@waitron/venue-service";
@@ -15,6 +17,33 @@ export type AttendanceRecorder = (
   tx: Transaction,
   fact: AttendanceFact & { outcome: "pending" | "qualified" | "refused" },
 ) => Promise<void>;
+
+export async function captureKitchenActivity(
+  tx: Transaction,
+  attendance: { recorder: AttendanceRecorder; clock: TrustedClock } | undefined,
+  personId: string | null | undefined,
+  orderIds: readonly string[],
+  commandKey: string = newId(),
+): Promise<void> {
+  if (attendance === undefined || !personId || orderIds.length === 0) return;
+  const at = attendance.clock.now().instant.toISOString();
+  for (const id of new Set(orderIds)) {
+    const [order] = await tx
+      .select({ locationId: workingOrders.locationId })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, id));
+    await attendance.recorder(tx, {
+      source: "order",
+      key: `service:${id}:${commandKey}`,
+      personId,
+      locationId: order!.locationId,
+      kind: "order",
+      at,
+      offsetMinutes: 0,
+      outcome: "qualified",
+    });
+  }
+}
 const sourceKinds: Record<AttendanceSource, ActivityKind> = {
   session: "sign-in",
   draft: "order",
