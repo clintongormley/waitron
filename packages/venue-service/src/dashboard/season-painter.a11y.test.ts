@@ -1,4 +1,4 @@
-import { afterEach, describe, test } from "vitest";
+import { afterEach, describe, expect, test } from "vitest";
 import { setLocale } from "@waitron/dashboard-kit";
 import { registerIcons } from "@waitron/ui";
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
@@ -15,7 +15,7 @@ afterEach(() => {
 });
 
 describe.each(["light", "dark"] as const)("season painter (%s)", (theme) => {
-  test.each(["department", "zone", "period editor", "read-only", "read-only zone"])(
+  test.each(["department", "zone", "period dialog", "read-only", "read-only zone"])(
     "%s",
     async (state) => {
       await mountThemed(`<season-painter></season-painter>`, theme);
@@ -28,10 +28,13 @@ describe.each(["light", "dark"] as const)("season painter (%s)", (theme) => {
       painter.readOnly = state.startsWith("read-only");
       await settle(painter);
       if (state === "zone" || state === "read-only zone") await pick(painter, "zone:z2");
-      if (state === "period editor") {
+      if (state === "period dialog") {
         painter.shadowRoot!.querySelector<HTMLElement>('[data-test="edit-p1"]')!.click();
         await painter.updateComplete;
-        await painter.shadowRoot!.querySelector("period-editor")!.updateComplete;
+        const dialog = painter.shadowRoot!.querySelector("period-dialog");
+        expect(dialog, "period dialog drawn").not.toBeNull();
+        await dialog!.updateComplete;
+        expect(dialog!.shadowRoot!.querySelector("wt-modal")).not.toBeNull();
       }
       await expectNoA11yViolations(host);
     },
