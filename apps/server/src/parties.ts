@@ -204,7 +204,7 @@ export async function partyZone(
     .from(partyTables)
     .innerJoin(diningTables, eq(diningTables.id, partyTables.tableId))
     .where(and(eq(partyTables.partyId, partyId), isNull(partyTables.leftAt)))
-    .orderBy(partyTables.joinedAt, partyTables.id)
+    .orderBy(partyTables.joinedAt, sql`${partyTables}.rowid`)
     .limit(1);
   return table?.zoneId ?? null;
 }
@@ -293,7 +293,7 @@ export async function memberTables(tx: Transaction, partyId: string): Promise<st
     .select({ tableId: partyTables.tableId })
     .from(partyTables)
     .where(and(eq(partyTables.partyId, partyId), isNull(partyTables.leftAt)))
-    .orderBy(partyTables.joinedAt, partyTables.id);
+    .orderBy(partyTables.joinedAt, sql`${partyTables}.rowid`);
   return rows.map((row) => row.tableId);
 }
 

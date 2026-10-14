@@ -1924,8 +1924,8 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   [Detail](backlog/till.md#a591-a-split-down-to-one-loses-a-table-that-had-guests-when-its-joined-table-went-live)
 
 - **A592. A party that joins a group's table names the group's other tables in random order
-  (2026-10-13).** Same-millisecond joins tie on a random id; seating a party at a group ties too. Seen
-  in A579 part 3a's tests.
+  (2026-10-13).** Group members are written in table-id order; number order remains open. A618
+  makes same-time reads follow writing order. Seen in A579 part 3a's tests.
   [Detail](backlog/till.md#a592-a-party-that-joins-a-groups-table-names-the-groups-other-tables-in-random-order)
 
 - **A593. A table the reset turns into a joined table inside a waiting group keeps its old outline
@@ -2361,15 +2361,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   `menuItemId`, so the missing-`menuItemId` check gives the same refusal. Read, not run: deleting
   the `productId` check may leave them green. **Next action:** delete it and see; if they stay
   green, give the line a real `menuItemId` too.
-
-- **Five reads of a party's tables still break a `joined_at` tie by the membership's random id**:
-  `partyTableLabels` (`packages/db/src/party-table-labels.ts`), `partyZone` and `memberTables`
-  (`apps/server/src/parties.ts`), and one read each in `apps/server/src/watch-zones.ts` and
-  `apps/server/src/working-order.ts`. Tables that join a party in one millisecond — merge members
-  joined in a loop by `seatMergeMembers` or `joinMergeMembers` (`apps/server/src/floor-today-merges.ts`)
-  can — are listed in a random order, while the Orders screen's
-  `readPartyTables` breaks the same tie by `rowid`. **Next action:** the same `rowid` tie-break, with
-  a test whose ids sort against the writing order. Left open by A533.
 
 - **A collect straight after Place order does not re-read the kitchen queue.** Left open by service
   Task 16 (#981). [Detail](backlog/till.md#task-16-981-counter-handover-with-b25-b26-b29-b30)

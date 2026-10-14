@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { diningTables, partySurvivors, partyTables } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { VENUE_SERVICE } from "./modules.js";
@@ -94,7 +94,7 @@ async function activePartyZones(
         isNull(partyTables.leftAt),
       ),
     )
-    .orderBy(partyTables.joinedAt, partyTables.id);
+    .orderBy(partyTables.joinedAt, sql`${partyTables}.rowid`);
   const zones = new Map<string, string | null>();
   for (const row of rows) if (!zones.has(row.partyId)) zones.set(row.partyId, row.zoneId);
   return zones;

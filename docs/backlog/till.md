@@ -299,6 +299,12 @@ placed). Next: do the same in the split down to one.
 
 ## A592. A party that joins a group's table names the group's other tables in random order
 
+**2026-10-14 — A618:** The five reads now break same-time ties by writing order. Number order is
+still open: the disposable `a618-writer-probe.test.ts` case called `seatMergeMembers` with table ids
+ordered against the labels and read Counter 4 before Counter 3 (one case passed). Both writers
+consume `mergeMembers`, whose query orders by table id (`apps/server/src/floor-today-merges.ts:96`).
+The original measurement below describes the reads before A618; no writer changed here.
+
 **A592 (2026-10-13).** A party's tables are listed by `joined_at`, then by membership id
 (`apps/server/src/parties.ts:207`, `:296`), and `joined_at` defaults to the current millisecond
 (`packages/db/src/schema/parties.ts:82`). When a party joins one table of a group,
