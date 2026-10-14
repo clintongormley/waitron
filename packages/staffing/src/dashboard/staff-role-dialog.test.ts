@@ -94,7 +94,7 @@ function closed() {
 describe("staff-role dialog", () => {
   it("offers a required name, the six calendar colours and the venue's people", async () => {
     await mount();
-    expect(el.shadowRoot!.querySelector("wt-modal")!.heading).toBe("New staff role");
+    expect(el.shadowRoot!.querySelector("wt-modal")!.heading).toBe("Add staff role");
     expect(field("wt-input", "name").required).toBe(true);
     expect(field("wt-input", "name").label).toBe("Name");
     const colour = field("wt-combobox", "colour");
@@ -135,7 +135,7 @@ describe("staff-role dialog", () => {
   it("speaks Spanish when the screen does", async () => {
     setLocale("es");
     await mount();
-    expect(el.shadowRoot!.querySelector("wt-modal")!.heading).toBe("Nuevo rol de personal");
+    expect(el.shadowRoot!.querySelector("wt-modal")!.heading).toBe("Añadir rol de personal");
     expect(field("wt-combobox", "colour").options[4]!.label).toBe("Verde");
   });
 

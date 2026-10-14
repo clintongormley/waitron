@@ -264,10 +264,10 @@ describe("the staff roles page", () => {
     liveData.clear();
   });
 
-  it("opens the dialog for a new staff role from + New staff role", async () => {
+  it("opens the dialog for a new staff role from Add staff role", async () => {
     await mount(fakeRequest(() => [waiter]));
     const add = el.shadowRoot!.querySelector<HTMLElement>("[data-test=new-staff-role]")!;
-    expect(add.textContent!.trim()).toBe("+ New staff role");
+    expect(add.textContent!.trim()).toBe("Add staff role");
     expect(dialog().open).toBe(false);
     await userEvent.click(add);
     await settle();
@@ -411,7 +411,7 @@ describe("the staff roles page", () => {
   });
 
   it.each([
-    ["+ New staff role", "new"],
+    ["Add staff role", "new"],
     ["Delete", "delete"],
   ] as const)("clears a move's refusal when %s starts another action", async (_, action) => {
     await mount(
@@ -630,7 +630,7 @@ describe("the staff roles page", () => {
     expect(el.shadowRoot!.querySelector("h1")!.textContent).toBe("Roles de personal");
     expect(cells("role-w").slice(0, 2)).toEqual(["Waiter", "2 personas"]);
     expect(el.shadowRoot!.querySelector("[data-test=new-staff-role]")!.textContent!.trim()).toBe(
-      "+ Nuevo rol de personal",
+      "Añadir rol de personal",
     );
   });
 
