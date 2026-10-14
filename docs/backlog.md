@@ -3526,9 +3526,9 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   highlights while another control in it, such as its Actions menu, has focus. Left open by W79
   (#1186, the Menus list).
 
-- **A link marked `aria-disabled="true"` in a ⋮ menu (`wt-row-actions`) looks greyed out but still
-  opens its page when clicked** (no screen marks one disabled yet; W88's busy-tree point would be
-  the first). Left open by A380 (#1385).
+- **A link marked `aria-disabled="true"` in a ⋮ menu (`wt-row-actions`) no longer opens on a click or
+  Enter, but a middle-click and the browser's "Open link in new tab" were not tried.** No screen
+  marks one disabled yet. Left open by A629.
 
 - **`wt-data-table`'s opt-in `stickyHeader` is set only by the Products screen.** Other long tables
   (Orders, Staff, Payments and the rest) keep scrolling with the content column until someone
