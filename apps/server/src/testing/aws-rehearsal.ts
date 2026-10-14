@@ -55,6 +55,7 @@ import {
   isReceiptToken,
   isReceiptUploadId,
   receiptErrorName,
+  RECEIPT_APIS,
   receiptFileName,
   REHEARSAL_BUCKET_PATTERN,
   type ReceiptLog,
@@ -65,7 +66,14 @@ import { fixtureBudget } from "./fixture-budget.js";
 import { listPages, listUploads, type Outcome, type TrackedUpload } from "./s3-listing.js";
 import { settleWithin } from "./settle-within.js";
 import { AwsRehearsalRefused } from "./aws-rehearsal-refused.js";
-import { AWS_REHEARSAL_NONCE_KEY } from "./aws-request-plan.js";
+import { AWS_REHEARSAL_NONCE_KEY, createRequestPlan } from "./aws-request-plan.js";
+import {
+  currentRequestScope,
+  installSendGate,
+  markRunnerClient,
+  openRequestScope,
+  type RequestScope,
+} from "./aws-send-gate.js";
 
 export { AwsRehearsalRefused, type AwsRehearsalRefusalReason } from "./aws-rehearsal-refused.js";
 
@@ -281,6 +289,8 @@ export interface AwsRehearsalDeps extends TeardownDeps, RehearsalProfileDeps {
   /** Aborting it ends the run as its deadline does: the scenario is told to stop, then teardown runs. */
   signal?: AbortSignal;
   print(line: string): void;
+  /** The S3 APIs the scenario's own clients send; a run without this list is refused. */
+  apis?: readonly string[];
 }
 
 export interface TeardownTarget {
@@ -320,8 +330,11 @@ function attemptsOf(value: unknown): number | undefined {
   return typeof attempts === "number" && attempts >= 1 ? attempts : undefined;
 }
 
-/** Sends one command and records it as a vetted event; never throws the SDK's error. */
-async function call<T>(
+/**
+ * Sends one command and records it as a vetted event; never throws the SDK's error. Inside a run's
+ * request scope a command the plan refuses is answered with the refusal and never sent.
+ */
+export async function call<T>(
   client: AdminClient,
   command: object & { input: object },
   api: string,
@@ -330,6 +343,18 @@ async function call<T>(
   extra: CallExtra = {},
   abortSignal?: AbortSignal,
 ): Promise<Outcome<T>> {
+  const scope = currentRequestScope();
+  if (scope !== undefined) {
+    try {
+      scope.check(
+        "runner",
+        command.constructor.name.replace(/Command$/, ""),
+        command.input as Record<string, unknown>,
+      );
+    } catch (refusal) {
+      return { error: refusal };
+    }
+  }
   const started = deps.now();
   let outcome: Outcome<T>;
   try {
@@ -878,6 +903,12 @@ export async function withAwsRehearsal<T>(
   const env = overrides.env ?? process.env;
   const deps: AwsRehearsalDeps = { ...defaultDeps(env), ...overrides };
   assertRehearsalOptIn(env);
+  if (deps.apis === undefined) {
+    throw new AwsRehearsalRefused(
+      "plan-refused",
+      "a rehearsal declares the S3 APIs its scenario sends",
+    );
+  }
   if (!isUnset(env.WAITRON_AWS_REHEARSAL_BUCKET)) {
     throw new AwsRehearsalRefused(
       "supplied-bucket",
@@ -901,9 +932,11 @@ export async function withAwsRehearsal<T>(
   if (deps.signal?.aborted === true) {
     throw new AwsRehearsalFailed("the rehearsal was stopped before it started");
   }
+  installSendGate();
   const client = deps.createAdminClient(profile);
+  markRunnerClient(client);
   try {
-    return await runOwned(scenario, deps, profile, client, receiptDir);
+    return await runOwned(scenario, deps, deps.apis, profile, client, receiptDir);
   } finally {
     client.destroy?.();
   }
@@ -978,6 +1011,58 @@ function carriedRemaining(
     return carried;
   });
   return { bucket: remaining.bucket, uploadIds };
+}
+
+function unplannedFailure(refusals: {
+  count: number;
+  first: string | undefined;
+}): AwsRehearsalFailed | undefined {
+  return refusals.count === 0
+    ? undefined
+    : new AwsRehearsalFailed(
+        `${refusals.count} unplanned request(s) refused before sending; the first: ${refusals.first}`,
+      );
+}
+
+/**
+ * A scope for `plan` that records each refusal in the receipt while the run is open, and prints it
+ * once `closed()` says the receipt has been written.
+ */
+function runScope(
+  plan: Parameters<typeof openRequestScope>[0]["plan"],
+  record: (event: unknown) => void,
+  print: (line: string) => void,
+): { scope: RequestScope; close(): { count: number; first: string | undefined } } {
+  let closed = false;
+  const scope = openRequestScope({
+    plan,
+    mode: "enforce",
+    onRefused(detail, api) {
+      if (closed) {
+        try {
+          print(`refused after the run ended: ${detail}`);
+        } catch {
+          // The refusal still rejects the send.
+        }
+        return;
+      }
+      record({
+        scenario: "lifecycle",
+        phase: "request-refused",
+        ...((RECEIPT_APIS as readonly string[]).includes(api) ? { api } : {}),
+        outcome: "refused",
+      });
+    },
+  });
+  return {
+    scope,
+    close() {
+      const refusals = scope.refusals();
+      closed = true;
+      scope.close();
+      return refusals;
+    },
+  };
 }
 
 function refusedEntriesFailure(refused: number): AwsRehearsalFailed | undefined {
@@ -1055,6 +1140,7 @@ async function runWithDeadline<T>(body: () => Promise<T>, options: DeadlineOptio
 async function runOwned<T>(
   scenario: (ctx: AwsRehearsal) => Promise<T>,
   deps: AwsRehearsalDeps,
+  apis: readonly string[],
   profile: RehearsalProfile,
   client: AdminClient,
   receiptDir: string,
@@ -1098,6 +1184,11 @@ async function runOwned<T>(
   );
   const issued = new Set<string>();
   const labels = new Set<string>();
+  const requests = runScope(
+    createRequestPlan({ bucket, apis, prefixes: () => issued }),
+    record,
+    deps.print,
+  );
   const ctx: AwsRehearsal = {
     runId,
     bucket,
@@ -1256,37 +1347,38 @@ async function runOwned<T>(
 
   let failure: unknown;
   let result: T | undefined;
-  try {
-    result = await runWithDeadline(setUpAndRun, {
-      controller,
-      deadlineMs: deps.deadlineMs,
-      settleMs: deps.settleMs,
-      outside: deps.signal,
-      now: deps.now,
-      record,
-    });
-  } catch (error) {
-    failure = error;
-  }
+  let teardown: TeardownResult | undefined;
+  await requests.scope.run(async () => {
+    try {
+      result = await runWithDeadline(setUpAndRun, {
+        controller,
+        deadlineMs: deps.deadlineMs,
+        settleMs: deps.settleMs,
+        outside: deps.signal,
+        now: deps.now,
+        record,
+      });
+    } catch (error) {
+      failure = error;
+    }
+    if (created?.state === "owned") {
+      tearingDown = true;
+      teardown = await teardownOwnedBucket(
+        client,
+        { bucket, runId, uploads, pids },
+        {
+          ...deps,
+          record,
+        },
+      );
+      for (const entry of teardown.entries) contained.teardown(entry);
+    }
+  });
   const ownership: CreateOutcome = created ?? {
     state: "unowned-candidate",
     bucket: null,
     candidate: bucket,
   };
-
-  let teardown: TeardownResult | undefined;
-  if (ownership.state === "owned") {
-    tearingDown = true;
-    teardown = await teardownOwnedBucket(
-      client,
-      { bucket, runId, uploads, pids },
-      {
-        ...deps,
-        record,
-      },
-    );
-    for (const entry of teardown.entries) contained.teardown(entry);
-  }
 
   const remaining = carriedRemaining(
     teardown?.remaining ?? { bucket: null, uploadIds: [] },
@@ -1309,6 +1401,7 @@ async function runOwned<T>(
       `the receipt was not written (${receiptFailureCause(error)})`,
     );
   }
+  const refusals = requests.close();
   let printFailure: unknown;
   if (receiptFailure === undefined) {
     try {
@@ -1325,9 +1418,12 @@ async function runOwned<T>(
           `teardown failed at ${failed}` +
             (receiptFailure === undefined ? `; receipt: ${receiptPath}` : ""),
         );
-  const problems = [failure, refusedEntriesFailure(contained.refused()), teardownFailure].filter(
-    (error) => error !== undefined,
-  );
+  const problems = [
+    failure,
+    unplannedFailure(refusals),
+    refusedEntriesFailure(contained.refused()),
+    teardownFailure,
+  ].filter((error) => error !== undefined);
   if (receiptFailure !== undefined) {
     const left =
       remaining.bucket ??
@@ -1512,48 +1608,58 @@ export async function cleanupFromReceipt(
   assertCleanupCommandFits(region, runId, dirname(path));
   const cleanupPath = join(dirname(path), receiptFileName(runId, "cleanup"));
 
+  const log = createReceiptLog(
+    receiptHeader(deps, runId, region, { teardownMs: deps.teardownMs }),
+    profile,
+  );
+  const contained = containedLog(log);
+  const { record } = contained;
+  installSendGate();
   const client = deps.createAdminClient(profile);
+  markRunnerClient(client);
+  const requests = runScope(
+    createRequestPlan({ bucket, apis: [], prefixes: () => new Set() }),
+    record,
+    deps.print,
+  );
   try {
-    const log = createReceiptLog(
-      receiptHeader(deps, runId, region, { teardownMs: deps.teardownMs }),
-      profile,
-    );
-    const contained = containedLog(log);
-    const { record } = contained;
-    const marker = await call<GetObjectCommandOutput>(
-      client,
-      new GetObjectCommand({ Bucket: bucket, Key: AWS_REHEARSAL_NONCE_KEY }),
-      "GetObject",
-      "ownership",
-      { now: deps.now, record },
-      { objectRole: "ownership-nonce" },
-      AbortSignal.timeout(deps.teardownMs),
-    );
-    if (marker.error !== undefined && nameOf(marker.error) === "NoSuchBucket") {
+    const removed = await requests.scope.run(async () => {
+      const marker = await call<GetObjectCommandOutput>(
+        client,
+        new GetObjectCommand({ Bucket: bucket, Key: AWS_REHEARSAL_NONCE_KEY }),
+        "GetObject",
+        "ownership",
+        { now: deps.now, record },
+        { objectRole: "ownership-nonce" },
+        AbortSignal.timeout(deps.teardownMs),
+      );
+      if (marker.error !== undefined && nameOf(marker.error) === "NoSuchBucket") return null;
+      let markerText: string | undefined;
+      try {
+        markerText = await marker.output?.Body?.transformToString();
+      } catch {
+        markerText = undefined;
+      }
+      if (markerText === undefined || !namesRun(markerText, runId)) {
+        throw new AwsRehearsalRefused(
+          "ownership-unproven",
+          `${bucket}'s ownership marker is missing, unreadable or names another run; nothing deleted — ` +
+            "a person must check who owns it before deleting it",
+        );
+      }
+      const teardown = await teardownOwnedBucket(
+        client,
+        { bucket, runId, uploads: [], pids: [] },
+        { ...deps, record },
+      );
+      for (const entry of teardown.entries) contained.teardown(entry);
+      return teardown;
+    });
+    if (removed === null) {
       deps.print("bucket not found; nothing deleted");
       return { ok: true, receiptPath: null };
     }
-    let markerText: string | undefined;
-    try {
-      markerText = await marker.output?.Body?.transformToString();
-    } catch {
-      markerText = undefined;
-    }
-    if (markerText === undefined || !namesRun(markerText, runId)) {
-      throw new AwsRehearsalRefused(
-        "ownership-unproven",
-        `${bucket}'s ownership marker is missing, unreadable or names another run; nothing deleted — ` +
-          "a person must check who owns it before deleting it",
-      );
-    }
-
-    const teardown = await teardownOwnedBucket(
-      client,
-      { bucket, runId, uploads: [], pids: [] },
-      { ...deps, record },
-    );
-    for (const entry of teardown.entries) contained.teardown(entry);
-    const remaining = carriedRemaining(teardown.remaining, profile, contained);
+    const remaining = carriedRemaining(removed.remaining, profile, contained);
     const receipt = log.finish({
       finishedAt: new Date(deps.now()).toISOString(),
       ownership: { state: "owned", bucket },
@@ -1567,15 +1673,18 @@ export async function cleanupFromReceipt(
       throw new AwsRehearsalFailed(
         `cleanup receipt not written (${receiptFailureCause(error)}); ` +
           `bucket left: ${remaining.bucket ?? "none"}; ` +
-          `failed teardown steps: ${failedSteps(teardown.entries)}`,
+          `failed teardown steps: ${failedSteps(removed.entries)}`,
       );
     }
+    const unplanned = unplannedFailure(requests.close());
     deps.print(written);
+    if (unplanned !== undefined) throw unplanned;
     return {
       ok: remaining.bucket === null && contained.refused() === 0,
       receiptPath: written,
     };
   } finally {
+    requests.close();
     client.destroy?.();
   }
 }

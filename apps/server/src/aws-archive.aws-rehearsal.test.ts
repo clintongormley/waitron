@@ -6,11 +6,12 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { rehearsalLifecycle } from "./testing/aws-rehearsal.js";
+import { ARCHIVE_APIS } from "./testing/aws-rehearsal-plans.js";
 import { awsScenarioFixture } from "./testing/aws-s3-scenario-fixture.js";
 import { runArchiveAbort, runArchiveRoundTrip } from "./testing/s3-archive-scenario.js";
 
 describe("AWS rehearsal: archives in Amazon S3", () => {
-  const rehearsal = rehearsalLifecycle();
+  const rehearsal = rehearsalLifecycle({ apis: ARCHIVE_APIS });
   let scratch: string | undefined;
 
   // A test that hit its time limit is still running: stop it and wait for its teardown and receipt

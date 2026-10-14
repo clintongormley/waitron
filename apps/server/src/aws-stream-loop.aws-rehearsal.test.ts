@@ -6,11 +6,12 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { rehearsalLifecycle } from "./testing/aws-rehearsal.js";
+import { LOOP_APIS } from "./testing/aws-rehearsal-plans.js";
 import { resolveLitestream } from "./testing/s3-test-server.js";
 import { runStreamLoopScenario } from "./testing/stream-loop-scenario.js";
 
 describe("AWS rehearsal: the stream loop against Amazon S3", () => {
-  const rehearsal = rehearsalLifecycle();
+  const rehearsal = rehearsalLifecycle({ apis: LOOP_APIS });
   let scratch: string | undefined;
 
   // A test that hit its time limit is still running: stop it and wait for its teardown and receipt

@@ -218,6 +218,8 @@ export function fakeHarness(
       commit: () => "0123456789abcdef",
       sleep: async () => {},
       print: (line) => printed.push(line),
+      // These suites' scenarios send only through the runner's own admin client.
+      apis: [],
     },
   };
 }

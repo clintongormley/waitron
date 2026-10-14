@@ -31,6 +31,11 @@ export function markRunnerClient(client: object): void {
   runnerClients.add(client);
 }
 
+/** The scope the caller runs inside, if any. */
+export function currentRequestScope(): RequestScope | undefined {
+  return storage.getStore();
+}
+
 export function setSendGateStrict(on: boolean): void {
   strict = on;
 }

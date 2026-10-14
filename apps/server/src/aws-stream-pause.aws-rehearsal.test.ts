@@ -18,6 +18,7 @@ import {
 } from "./testing/aws-pause-gate.js";
 import { withListingDenied } from "./testing/aws-listing-denial.js";
 import { rehearsalLifecycle } from "./testing/aws-rehearsal.js";
+import { PAUSE_APIS } from "./testing/aws-rehearsal-plans.js";
 import { resolveLitestream } from "./testing/s3-test-server.js";
 import { runStreamPauseScenario } from "./testing/stream-pause-scenario.js";
 import {
@@ -42,7 +43,7 @@ const SOCKET_TIMEOUT_MS = 120_000;
 const RESTART_CONNECT_WAIT_MS = 60_000;
 
 describe("AWS rehearsal: the stream pause against Amazon S3", () => {
-  const rehearsal = rehearsalLifecycle();
+  const rehearsal = rehearsalLifecycle({ apis: PAUSE_APIS });
   let scratch: string | undefined;
 
   // A test that hit its time limit is still running: stop it and wait for its teardown and receipt

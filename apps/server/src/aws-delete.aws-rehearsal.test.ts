@@ -5,11 +5,12 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { rehearsalLifecycle } from "./testing/aws-rehearsal.js";
+import { DELETE_APIS } from "./testing/aws-rehearsal-plans.js";
 import { awsScenarioFixture } from "./testing/aws-s3-scenario-fixture.js";
 import { runDeleteManyScenario } from "./testing/s3-delete-scenario.js";
 
 describe("AWS rehearsal: deleting many objects in Amazon S3", () => {
-  const rehearsal = rehearsalLifecycle();
+  const rehearsal = rehearsalLifecycle({ apis: DELETE_APIS });
   let scratch: string | undefined;
 
   // A test that hit its time limit is still running: stop it and wait for its teardown and receipt
