@@ -113,7 +113,6 @@ export class StaffRolesScreen extends LitElement {
     (error) => {
       const deletion = this.deleting!;
       if (codeOf(error) === "staff_role.not_found") {
-        // While this screen's own delete is in flight, its answer closes the question.
         if (!deletion.busy) this.#staffRoleGone();
         return;
       }
@@ -191,9 +190,10 @@ export class StaffRolesScreen extends LitElement {
     this.deleting = undefined;
   }
 
-  /** The role was deleted elsewhere: the question closes and the list is read again. */
+  /** The role was deleted elsewhere: the question closes, the page says so and the list is read again. */
   #staffRoleGone(): void {
     this.#closeDelete();
+    this.actionError = codeMessage("staff_role.not_found");
     void this.#load();
   }
 

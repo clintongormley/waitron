@@ -23,7 +23,7 @@ function removed(item: DeleteImpactItem): string {
       item.count,
       namesOf(item.targets),
     );
-  return tf("staffing.role.delete_other", {
+  return tf("staffing.role.delete_unknown", {
     names: namesOf(item.targets),
     count: String(item.count),
   }).trim();

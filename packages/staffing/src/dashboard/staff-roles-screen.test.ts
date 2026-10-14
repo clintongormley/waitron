@@ -173,6 +173,7 @@ const dialogLines = () =>
   [...deleteDialog()!.shadowRoot!.querySelectorAll("li")].map((line) => line.textContent!.trim());
 const alertText = (test: string) =>
   el.shadowRoot!.querySelector(`[data-test=${test}]`)?.textContent?.trim() ?? "";
+const GONE = "That staff role could not be found. It may have been deleted";
 
 async function choose(test: string) {
   const item = menuItem(test);
@@ -669,7 +670,7 @@ describe("the staff roles page", () => {
     expect(request.mock.calls.filter(([, method]) => method === "DELETE")).toHaveLength(1);
   });
 
-  it("closes the delete question and reads the list again when the impact read finds the staff role gone", async () => {
+  it("closes the delete question, says why and reads the list again when the impact read finds the staff role gone", async () => {
     let roles = [waiter, runner];
     const request = await mount(
       fakeRequest(() => roles, {
@@ -687,6 +688,7 @@ describe("the staff roles page", () => {
     expect(deleteDialog()).toBeNull();
     expect(reads()).toBe(before + 1);
     expect(rowKeys()).toEqual(["role-w"]);
+    expect(alertText("action-alert")).toBe(GONE);
   });
 
   it("ignores the impact read finding the staff role gone while its own delete is in flight", async () => {
@@ -719,10 +721,11 @@ describe("the staff roles page", () => {
     answer(impactOf(waiter));
     await settle();
     expect(deleteDialog()).toBeNull();
+    expect(alertText("action-alert")).toBe("");
     liveData.clear();
   });
 
-  it("closes the delete question and reads the list again when the delete finds the staff role gone", async () => {
+  it("closes the delete question, says why and reads the list again when the delete finds the staff role gone", async () => {
     let roles = [waiter, runner];
     const request = await mount(
       fakeRequest(() => roles, {
@@ -743,6 +746,7 @@ describe("the staff roles page", () => {
     expect(deleteDialog()).toBeNull();
     expect(reads()).toBe(before + 1);
     expect(rowKeys()).toEqual(["role-w"]);
+    expect(alertText("action-alert")).toBe(GONE);
   });
 
   it("keeps the delete question open when asked to close while its delete is in flight, then closes it on success", async () => {
