@@ -2978,7 +2978,7 @@ it.each(
       );
       await page.screenshot({
         element: el,
-        path: `.superpowers/a461-task9/till-${locale}-${theme}-${width}-${state}.png`,
+        path: `__screenshots__/a461-task9/till-${locale}-${theme}-${width}-${state}.png`,
       });
     };
     await search(el, locale.startsWith("es") ? "cafe" : "coffee");

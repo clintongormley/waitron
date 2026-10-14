@@ -4720,7 +4720,7 @@ it.each(
     );
     await page.screenshot({
       element: el,
-      path: `.superpowers/a461-task9/products-${locale}-${theme}-${width}-${state}.png`,
+      path: `__screenshots__/a461-task9/products-${locale}-${theme}-${width}-${state}.png`,
     });
   };
   await press(el, "select");
