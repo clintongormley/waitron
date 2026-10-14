@@ -57,6 +57,7 @@ describe("the AWS rehearsal's strict setup", () => {
         prefixes: () => new Set([PREFIX]),
       }),
       mode: "enforce",
+      hosts: { s3Region: "eu-north-1" },
     });
     await scope.run(() =>
       outside.client.send(new PutObjectCommand({ Bucket: BUCKET, Key: `${PREFIX}a`, Body: "x" })),

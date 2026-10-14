@@ -325,6 +325,7 @@ async function act(journal: RehearsalJournal, deps: KeeperDeps, lines: Lines): P
     record,
     lines.say,
     journal.endpoint,
+    region,
   );
   try {
     const marker = (): Promise<{ error?: unknown; output?: GetObjectCommandOutput }> =>

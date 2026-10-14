@@ -193,8 +193,8 @@ function section(text: string, name: string, variable: string): Map<string, stri
       );
   }
   // The SDK sends to these instead of Amazon. This parser does not read every header spelling the
-  // SDK does, so the send gate also refuses any resolved host outside Amazon S3 unless
-  // `deps.endpoint` is set (`hosts` in `aws-send-gate.ts`).
+  // SDK does, so unless `deps.endpoint` is set the send gate also refuses any resolved host other
+  // than S3's own hosts for the run's bucket and region (`hosts` in `aws-send-gate.ts`).
   for (const key of ENDPOINT_KEYS) {
     if (found.has(key)) {
       throw new AwsRehearsalRefused(
@@ -1090,6 +1090,7 @@ export function runScope(
   record: (event: unknown) => void,
   print: (line: string) => void,
   endpoint: string | undefined,
+  region: string,
 ): {
   scope: RequestScope;
   finished(): void;
@@ -1099,7 +1100,7 @@ export function runScope(
   const scope = openRequestScope({
     plan,
     mode: "enforce",
-    hosts: endpoint === undefined ? "amazon" : "any",
+    hosts: endpoint === undefined ? { s3Region: region } : "any",
     onRefused(detail, api) {
       if (state !== "open") {
         try {
@@ -1312,6 +1313,7 @@ async function runOwned<T>(
     record,
     deps.print,
     deps.endpoint,
+    region,
   );
   const ctx: AwsRehearsal = {
     runId,
@@ -1891,6 +1893,7 @@ export async function cleanupFromReceipt(
     record,
     deps.print,
     deps.endpoint,
+    region,
   );
   try {
     const removed = await requests.scope.run(async () => {

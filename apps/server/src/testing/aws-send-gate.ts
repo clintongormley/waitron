@@ -8,8 +8,11 @@ type Send = (this: object, command: unknown, optionsOrCb?: unknown, cb?: unknown
 export interface RequestScopeOptions {
   plan: RequestPlan;
   mode: "enforce" | "record";
-  /** `"amazon"` (the default) refuses a request whose resolved host is not Amazon S3's; `"any"` is for a local endpoint. */
-  hosts?: "amazon" | "any";
+  /**
+   * `{ s3Region }` refuses a request whose resolved host is not one of S3's own hosts for the plan's
+   * bucket in that region; `"any"` is for a local endpoint.
+   */
+  hosts: "any" | { s3Region: string };
   onRefused?: (detail: string, api: string) => void;
 }
 
@@ -17,7 +20,7 @@ export interface RequestScope {
   run<T>(body: () => T): T;
   /** Throws `AwsRehearsalRefused` when the request may not be sent; counts and reports the refusal first. */
   check(sender: RequestSender, api: string, input: Record<string, unknown>): void;
-  /** As `check`, for the hostname the SDK resolved; checked in every mode. */
+  /** As `check`, for the hostname the SDK resolved; record mode lets every host through too. */
   checkHost(api: string, hostname: string): void;
   close(): void;
   refusals(): { count: number; first: string | undefined };
@@ -29,7 +32,6 @@ const GATED = Symbol("waitron.sendGate");
 const storage = new AsyncLocalStorage<RequestScope>();
 const runnerClients = new WeakSet<object>();
 const hostChecked = new WeakSet<object>();
-const AMAZON_HOST = /^[a-z0-9.-]+\.amazonaws\.com$/;
 let original: Send | undefined;
 let strict = false;
 
@@ -46,8 +48,25 @@ export function setSendGateStrict(on: boolean): void {
   strict = on;
 }
 
+const escaped = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * The hosts the SDK builds for `bucket` in `region`: virtual-hosted or path-style, each with or
+ * without FIPS and dual-stack. Measured 2026-10-14 on @aws-sdk/client-s3 3.1140.0, one client per
+ * switch combination (the probe is described in the commit message).
+ */
+function s3HostPattern(bucket: string, region: string): RegExp {
+  return new RegExp(
+    `^(?:${escaped(bucket)}\\.)?s3(?:-fips)?(?:\\.dualstack)?\\.${escaped(region)}\\.amazonaws\\.com$`,
+  );
+}
+
 export function openRequestScope(options: RequestScopeOptions): RequestScope {
   let closed = false;
+  const s3Host =
+    options.hosts === "any" || options.mode === "record"
+      ? null
+      : s3HostPattern(options.plan.bucket, options.hosts.s3Region);
   let count = 0;
   let first: string | undefined;
   const seen: { sender: RequestSender; api: string }[] = [];
@@ -75,7 +94,7 @@ export function openRequestScope(options: RequestScopeOptions): RequestScope {
       if (detail !== null) refuse(detail, api);
     },
     checkHost(api, hostname) {
-      if ((options.hosts ?? "amazon") === "amazon" && !AMAZON_HOST.test(hostname)) {
+      if (s3Host !== null && !s3Host.test(hostname)) {
         refuse(`${api} was sent to a host that is not Amazon S3`, api);
       }
     },
@@ -104,7 +123,7 @@ interface MiddlewareStack {
 
 /**
  * `send` runs before the SDK resolves the endpoint, so the host is checked from the client's stack.
- * Measured 2026-10-14 on @aws-sdk/client-s3 3.1140.0 (the probe is in the commit that added this):
+ * Measured 2026-10-14 on @aws-sdk/client-s3 3.1140.0 (the probe is described in the commit message):
  * at `initialize` there is no request yet; at `finalizeRequest`, priority low, the hostname equals
  * the one the request handler receives, for plain, FIPS, dual-stack and custom endpoints.
  */

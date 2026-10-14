@@ -23,6 +23,7 @@ import {
 const BUCKET = "waitron-rehearsal-waitron-abcdefghijkl";
 const PREFIX = "rehearsal-run1/loop/";
 const OUTSIDE_KEY = "unissued-outside-key";
+const S3_HOSTS = { s3Region: "eu-north-1" } as const;
 
 function recording(config: ConstructorParameters<typeof S3Client>[0] = {}) {
   let handled = 0;
@@ -77,7 +78,7 @@ afterAll(() => {
 describe("the send gate", () => {
   it("lets a planned request reach the handler", async () => {
     const { client, handled } = recording();
-    const scope = openRequestScope({ plan: plan(), mode: "enforce" });
+    const scope = openRequestScope({ plan: plan(), mode: "enforce", hosts: S3_HOSTS });
     await scope.run(() => client.send(planned()));
     expect(handled()).toBe(1);
     expect(scope.refusals()).toEqual({ count: 0, first: undefined });
@@ -89,6 +90,7 @@ describe("the send gate", () => {
     const scope = openRequestScope({
       plan: plan(),
       mode: "enforce",
+      hosts: S3_HOSTS,
       onRefused: (detail, api) => refused.push([detail, api]),
     });
     const error = await scope.run(() => client.send(unplanned())).catch((e: unknown) => e);
@@ -113,6 +115,7 @@ describe("the send gate", () => {
     const scope = openRequestScope({
       plan: plan(),
       mode: "enforce",
+      hosts: S3_HOSTS,
       onRefused: () => {
         throw new Error("hook failed");
       },
@@ -127,7 +130,7 @@ describe("the send gate", () => {
   it("checks a runner-marked client against the runner's rules", async () => {
     const { client, handled } = recording();
     markRunnerClient(client);
-    const scope = openRequestScope({ plan: plan(), mode: "enforce" });
+    const scope = openRequestScope({ plan: plan(), mode: "enforce", hosts: S3_HOSTS });
     await scope.run(() => client.send(new CreateBucketCommand({ Bucket: BUCKET })));
     expect(handled()).toBe(1);
     const error = await scope
@@ -157,7 +160,7 @@ describe("the send gate", () => {
 
   it("hands a refusal to the callback form without calling the real send", async () => {
     const { client, handled } = recording();
-    const scope = openRequestScope({ plan: plan(), mode: "enforce" });
+    const scope = openRequestScope({ plan: plan(), mode: "enforce", hosts: S3_HOSTS });
     const viaCallback = (command: PutObjectCommand, withOptions: boolean) =>
       new Promise<unknown>((resolve) => {
         const cb = (err: unknown) => resolve(err);
@@ -181,6 +184,7 @@ describe("the send gate", () => {
     const scope = openRequestScope({
       plan: plan(),
       mode: "enforce",
+      hosts: S3_HOSTS,
       onRefused: () => {
         calls += 1;
       },
@@ -198,6 +202,7 @@ describe("the send gate", () => {
     const scope = openRequestScope({
       plan: plan(),
       mode: "enforce",
+      hosts: S3_HOSTS,
       onRefused: (detail) => refused.push(detail),
     });
     const late = scope.run(async () => {
@@ -216,13 +221,13 @@ describe("the send gate", () => {
 
   it("checks a client created before the scope was opened", async () => {
     const { client, handled } = recording();
-    const scope = openRequestScope({ plan: plan(), mode: "enforce" });
+    const scope = openRequestScope({ plan: plan(), mode: "enforce", hosts: S3_HOSTS });
     await scope.run(() => client.send(unplanned())).catch(() => undefined);
     expect(handled()).toBe(0);
   });
 
   it("exposes the same check send makes", () => {
-    const scope = openRequestScope({ plan: plan(), mode: "enforce" });
+    const scope = openRequestScope({ plan: plan(), mode: "enforce", hosts: S3_HOSTS });
     expect(() =>
       scope.check("scenario", "PutObject", { Bucket: BUCKET, Key: `${PREFIX}a` }),
     ).not.toThrow();
@@ -236,7 +241,7 @@ describe("the send gate", () => {
     const { client, handled } = recording();
     const runner = recording();
     markRunnerClient(runner.client);
-    const scope = openRequestScope({ plan: plan(), mode: "record" });
+    const scope = openRequestScope({ plan: plan(), mode: "record", hosts: S3_HOSTS });
     await scope.run(async () => {
       await client.send(unplanned());
       await client.send(unplanned());
@@ -264,6 +269,7 @@ describe("the send gate's host check", () => {
     const scope = openRequestScope({
       plan: plan(),
       mode: "enforce",
+      hosts: S3_HOSTS,
       onRefused: (detail, api) => refused.push([detail, api]),
     });
     const error = await scope.run(() => client.send(planned())).catch((e: unknown) => e);
@@ -288,7 +294,7 @@ describe("the send gate's host check", () => {
       vi.stubEnv("AWS_CONFIG_FILE", config);
       vi.stubEnv("AWS_PROFILE", "waitron-rehearsal");
       const { client, handled } = recording({ forcePathStyle: true });
-      const scope = openRequestScope({ plan: plan(), mode: "enforce" });
+      const scope = openRequestScope({ plan: plan(), mode: "enforce", hosts: S3_HOSTS });
       const error = await scope.run(() => client.send(planned())).catch((e: unknown) => e);
       expect(handled()).toBe(0);
       expect((error as Error).message).toContain(HOST_REFUSAL);
@@ -306,12 +312,64 @@ describe("the send gate's host check", () => {
   it("lets a FIPS or dual-stack Amazon S3 host through", async () => {
     const fips = recording({ useFipsEndpoint: true });
     const dual = recording({ useDualstackEndpoint: true });
-    const scope = openRequestScope({ plan: plan(), mode: "enforce" });
+    const scope = openRequestScope({ plan: plan(), mode: "enforce", hosts: S3_HOSTS });
     await scope.run(() => fips.client.send(planned()));
     await scope.run(() => dual.client.send(planned()));
     expect([...fips.hosts(), ...dual.hosts()]).toEqual([
       `${BUCKET}.s3-fips.eu-north-1.amazonaws.com`,
       `${BUCKET}.s3.dualstack.eu-north-1.amazonaws.com`,
+    ]);
+    expect(scope.refusals().count).toBe(0);
+  });
+
+  it.each([
+    ["an EC2 instance's public name", "http://ec2-203-0-113-1.eu-north-1.compute.amazonaws.com"],
+    ["an API Gateway host", "https://abc123.execute-api.eu-north-1.amazonaws.com"],
+    ["a load balancer's host", "http://my-lb-1.eu-north-1.elb.amazonaws.com"],
+    ["another bucket's S3 host", "https://someone-elses.s3.eu-north-1.amazonaws.com"],
+    ["another region's S3 host", "https://s3.eu-west-1.amazonaws.com"],
+  ])("refuses %s, which is under amazonaws.com but not this run's S3", async (_, endpoint) => {
+    const { client, handled } = recording({ endpoint, forcePathStyle: true });
+    const scope = openRequestScope({ plan: plan(), mode: "enforce", hosts: S3_HOSTS });
+    const error = await scope.run(() => client.send(planned())).catch((e: unknown) => e);
+    expect(handled()).toBe(0);
+    expect((error as Error).message).toContain(HOST_REFUSAL);
+  });
+
+  it("refuses the accelerate host, which no rehearsal client is built to use", async () => {
+    const { client, handled } = recording({ useAccelerateEndpoint: true });
+    const scope = openRequestScope({ plan: plan(), mode: "enforce", hosts: S3_HOSTS });
+    await scope.run(() => client.send(planned())).catch(() => undefined);
+    expect(handled()).toBe(0);
+  });
+
+  it("lets through every S3 host the SDK builds for the run's bucket and region", async () => {
+    const switches = [
+      {},
+      { forcePathStyle: true },
+      { useFipsEndpoint: true },
+      { useFipsEndpoint: true, forcePathStyle: true },
+      { useDualstackEndpoint: true },
+      { useDualstackEndpoint: true, forcePathStyle: true },
+      { useFipsEndpoint: true, useDualstackEndpoint: true },
+      { useFipsEndpoint: true, useDualstackEndpoint: true, forcePathStyle: true },
+    ];
+    const scope = openRequestScope({ plan: plan(), mode: "enforce", hosts: S3_HOSTS });
+    const seen: string[] = [];
+    for (const config of switches) {
+      const { client, hosts } = recording(config);
+      await scope.run(() => client.send(planned()));
+      seen.push(...hosts());
+    }
+    expect(seen).toEqual([
+      `${BUCKET}.s3.eu-north-1.amazonaws.com`,
+      "s3.eu-north-1.amazonaws.com",
+      `${BUCKET}.s3-fips.eu-north-1.amazonaws.com`,
+      "s3-fips.eu-north-1.amazonaws.com",
+      `${BUCKET}.s3.dualstack.eu-north-1.amazonaws.com`,
+      "s3.dualstack.eu-north-1.amazonaws.com",
+      `${BUCKET}.s3-fips.dualstack.eu-north-1.amazonaws.com`,
+      "s3-fips.dualstack.eu-north-1.amazonaws.com",
     ]);
     expect(scope.refusals().count).toBe(0);
   });
