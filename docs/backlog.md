@@ -1433,10 +1433,6 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   delete removes them — left open by A506-5, #1603.
   [Detail](backlog/service-periods.md#a-department-or-zone-deletes-preview-never-counts-a-special-days-painted-hours)
 
-- **Two special days can come to share a date** after both were saved, and the readiness list says
-  nothing — left open by A506-5, #1603.
-  [Detail](backlog/service-periods.md#two-special-days-can-come-to-share-a-date)
-
 - **The readiness line for a repeating holiday date names the official holiday**, not the special
   day's own name, and the Year's missing-holiday warning does the same — left open by A506-5,
   #1603. [Detail](backlog/service-periods.md#the-readiness-line-for-a-repeating-holiday-date-names-the-official-holiday)

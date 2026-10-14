@@ -366,8 +366,9 @@ export async function specialDayReadiness(
 }
 
 /** Each repeating date following a holiday's name that the list for one of `years`, ascending,
- *  places nowhere, that year having no holiday of the name or no list, each naming its special day. `known`, when
- *  given, holds the official holidays of every one of `years` and is read instead. */
+ *  places nowhere, that year having no holiday of the name or no list, each naming its special
+ *  day. `known`, when given, holds the official holidays of every one of `years` and is read
+ *  instead. */
 export async function missingHolidaysIn(
   tx: Transaction,
   cfg: VenueScope,
