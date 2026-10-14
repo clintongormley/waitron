@@ -127,7 +127,8 @@ const CA_COMMON_NAME = "waitron-setup-ca";
  */
 function randomSerial(): string {
   const bytes = randomBytes(16);
-  bytes[0] &= 0x7f; // keeps the ASN.1 INTEGER positive
+  // Top byte 0x40–0x7f: positive and minimally encoded, because OpenSSL refuses a padded INTEGER.
+  bytes[0] = (bytes[0]! & 0x3f) | 0x40;
   return bytes.toString("hex");
 }
 
