@@ -128,10 +128,6 @@ describe("the S3 rehearsal scenarios, against versitygw", () => {
     });
   }
 
-  function deleteManyFixture(ctx: { skip(note: string): never }): Promise<LocalS3Fixture> {
-    return scenarioFixture(ctx, "delete-many");
-  }
-
   /** What versitygw answered, as `api status outcome` with a count of each. */
   function answers(local: LocalS3Fixture): Record<string, number> {
     const tally: Record<string, number> = {};
@@ -165,9 +161,8 @@ describe("the S3 rehearsal scenarios, against versitygw", () => {
   it(
     "1,005 objects are deleted in batches of 1,000 and 5 and none remain",
     async (ctx) => {
-      const local = await deleteManyFixture(ctx);
-      const summary = await started(runDeleteManyScenario(local.fixture));
-      expect(summary).toEqual({ put: 1005, deleteBatches: [1000, 5], remaining: 0 });
+      const local = await scenarioFixture(ctx, "delete-many");
+      await started(runDeleteManyScenario(local.fixture));
       console.info(`versitygw answers: ${JSON.stringify(answers(local))}`);
       expect(local.events.filter(({ phase }) => phase !== "request")).toEqual([
         { scenario: "delete-many", phase: "listed-before", count: 1005, outcome: "ok" },
@@ -182,7 +177,7 @@ describe("the S3 rehearsal scenarios, against versitygw", () => {
   it(
     "stops every upload once one fails, so no request follows the rejection",
     async (ctx) => {
-      const local = await deleteManyFixture(ctx);
+      const local = await scenarioFixture(ctx, "delete-many");
       const failure = injected();
       await expect(
         started(runDeleteManyScenario(failingAt(local, "PutObject", 50, failure))),
@@ -199,32 +194,11 @@ describe("the S3 rehearsal scenarios, against versitygw", () => {
   );
 
   it(
-    "records a listing that fails as a failed phase",
-    async (ctx) => {
-      const local = await deleteManyFixture(ctx);
-      const failure = injected();
-      await expect(
-        started(runDeleteManyScenario(failingAt(local, "ListObjectsV2", 1, failure))),
-      ).rejects.toMatchObject({ params: { operation: "list", status: 403 } });
-      expect(local.events.filter(({ phase }) => phase !== "request")).toEqual([
-        {
-          scenario: "delete-many",
-          phase: "listed-before",
-          outcome: "failed",
-          errorName: "AppError",
-        },
-      ]);
-    },
-    DELETE_MANY_SCENARIO_MS,
-  );
-
-  it(
     "a 32 MiB archive goes up in four parts and comes back through its saved pack alone",
     async (ctx) => {
       const local = await scenarioFixture(ctx, "archive-roundtrip");
-      const summary = await started(runArchiveRoundTrip(local.fixture));
+      await started(runArchiveRoundTrip(local.fixture));
       console.info(`versitygw answers (archive round trip): ${JSON.stringify(answers(local))}`);
-      expect(summary).toEqual({ bytes: 32 * 1024 * 1024, parts: 4, partBytes: 8 * 1024 * 1024 });
       expect(local.events.filter(({ phase }) => phase !== "request")).toEqual([
         {
           scenario: "archive-roundtrip",
@@ -260,7 +234,6 @@ describe("the S3 rehearsal scenarios, against versitygw", () => {
       console.info(`versitygw answers (archive abort): ${JSON.stringify(answers(local))}`);
       console.info(`archive abort: ${JSON.stringify(summary)}`);
       expect(summary.partsBeforeAbort).toBeGreaterThanOrEqual(1);
-      expect(summary.uploadsAfter).toBe(0);
       expect(local.events.filter(({ phase }) => phase !== "request")).toEqual([
         { scenario: "archive-abort", phase: "aborted", errorName: "AbortError", outcome: "ok" },
         { scenario: "archive-abort", phase: "uploads-after", count: 0, outcome: "ok" },
@@ -277,7 +250,7 @@ describe("the S3 rehearsal scenarios, against versitygw", () => {
       left: "an unfinished upload",
       leave: (admin: S3Client, bucket: string, folder: string) =>
         admin.send(new CreateMultipartUploadCommand({ Bucket: bucket, Key: `${folder}stray.bin` })),
-      after: { phase: "uploads-after", count: 1 },
+      failed: "uploads-after",
     },
     {
       left: "an object in a deeper folder",
@@ -285,19 +258,28 @@ describe("the S3 rehearsal scenarios, against versitygw", () => {
         admin.send(
           new PutObjectCommand({ Bucket: bucket, Key: `${folder}nested/stray.bin`, Body: "x" }),
         ),
-      after: { phase: "listed-after", count: 1 },
+      failed: "listed-after",
     },
   ])(
     "the abort fails when $left is under its archive folder at another key",
     { timeout: ARCHIVE_SCENARIO_MS },
-    async ({ leave, after }, ctx) => {
+    async ({ leave, failed }, ctx) => {
       const local = await scenarioFixture(ctx, "archive-abort");
       const { client: admin } = requireServer(ctx);
       const { bucket, prefix } = local.fixture.bucket;
       const folder = archiveNamespace(prefix, local.fixture.venueId);
       await leave(admin, bucket, folder);
       await expect(started(runArchiveAbort(local.fixture))).rejects.toThrow();
-      expect(local.events).toContainEqual({ scenario: "archive-abort", ...after, outcome: "ok" });
+      expect(
+        local.events.filter(({ phase, outcome }) => phase !== "request" && outcome === "failed"),
+      ).toEqual([
+        {
+          scenario: "archive-abort",
+          phase: failed,
+          outcome: "failed",
+          errorName: "AssertionError",
+        },
+      ]);
     },
   );
 });

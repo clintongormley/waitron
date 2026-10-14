@@ -1,15 +1,9 @@
 import { createCipheriv, createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { access, copyFile, mkdtemp, open, rm, stat } from "node:fs/promises";
+import { access, copyFile, open, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { hasCode, isAppError } from "@waitron/shared";
-import {
-  createS3FileStore,
-  nameOf,
-  statusOf,
-  type CommandObservation,
-  type S3FileStoreOptions,
-} from "@waitron/stream";
+import { createS3FileStore, statusOf, type CommandObservation } from "@waitron/stream";
 import { expect } from "vitest";
 import {
   decodeArchiveRecoveryPack,
@@ -19,14 +13,12 @@ import {
 import { downloadArchive } from "../archive-download.js";
 import { archiveNamespace } from "../archive-settings.js";
 import { decryptArtifactFile, encryptArtifactFile } from "../artifact-cipher-file.js";
-import { buildBackupBackend } from "../backup-backends.js";
 import { checkedRecoveryKey } from "../backup-config.js";
 import { backupArchiveKey, parseBackupArchiveKey } from "../backup-keys.js";
-import type { StorageBackend } from "../storage-backend.js";
 import { AWS_REHEARSAL_LIMITS } from "./aws-rehearsal-limits.js";
 import { receiptErrorName } from "./aws-rehearsal-receipt.js";
-import { requestRecorder } from "./aws-request-recorder.js";
 import type { S3ScenarioFixture } from "./s3-scenario-fixture.js";
+import { answered2xx, is2xx, scenarioSteps } from "./s3-scenario-steps.js";
 
 const MiB = 1024 * 1024;
 /**
@@ -43,28 +35,11 @@ const WRONG_KEY = "rehearsal-synthetic-wrong-key-not-a-secret";
 /** A Vitest time limit for each scenario; nothing inside it enforces this. */
 export const ARCHIVE_SCENARIO_MS = 180_000;
 
-export interface ArchiveRoundTripSummary {
-  bytes: number;
-  parts: number;
-  partBytes: number;
-}
-
 export interface ArchiveAbortSummary {
+  /** UploadPart requests answered 2xx before the AbortMultipartUpload was sent. */
   partsBeforeAbort: number;
-  abortStatus: number | null;
-  uploadsAfter: number;
+  abortStatus: number;
 }
-
-type Recorded = {
-  phase?: unknown;
-  api?: unknown;
-  bytes?: unknown;
-  httpStatus?: unknown;
-  outcome?: unknown;
-};
-
-const is2xx = (status: unknown): boolean =>
-  typeof status === "number" && status >= 200 && status < 300;
 
 /**
  * Writes `bytes` of deterministic pseudo-random bytes, AES-CTR's keystream under a key derived from
@@ -117,31 +92,6 @@ async function syntheticArchive(
   return { plainHash, path };
 }
 
-function scenarioSteps(fixture: S3ScenarioFixture, scenario: string) {
-  const failed = (name: string, error: unknown): void => {
-    fixture.record({
-      scenario,
-      phase: name,
-      outcome: "failed",
-      errorName: receiptErrorName(nameOf(error)),
-    });
-  };
-  return {
-    failed,
-    phase(name: string, fields: object = {}): void {
-      fixture.record({ scenario, phase: name, ...fields, outcome: "ok" });
-    },
-    async step<T>(name: string, run: () => Promise<T>): Promise<T> {
-      try {
-        return await run();
-      } catch (error) {
-        failed(name, error);
-        throw error;
-      }
-    },
-  };
-}
-
 /** Tracks the upload a CreateMultipartUpload answer names, by the bucket key it was sent for. */
 function trackCreated(fixture: S3ScenarioFixture, observation: CommandObservation): void {
   if (observation.command !== "CreateMultipartUploadCommand") return;
@@ -150,81 +100,47 @@ function trackCreated(fixture: S3ScenarioFixture, observation: CommandObservatio
   if (typeof key === "string" && typeof uploadId === "string") fixture.trackUpload(key, uploadId);
 }
 
-/** Runs `body` with a new work folder and a backend over the fixture's bucket; removes and closes both. */
-async function withBackend<T>(
-  fixture: S3ScenarioFixture,
-  scenario: string,
-  observe: S3FileStoreOptions["observe"],
-  body: (backend: StorageBackend, work: string) => Promise<T>,
-): Promise<T> {
-  const work = await mkdtemp(join(fixture.scratch, `${scenario}-`));
-  try {
-    const backend = buildBackupBackend(
-      { kind: "s3", id: "rehearsal", bucket: fixture.bucket, venueId: fixture.venueId },
-      { observe },
-    );
-    try {
-      return await body(backend, work);
-    } finally {
-      backend.close();
-    }
-  } finally {
-    await rm(work, { recursive: true, force: true });
-  }
-}
-
-function requestsTo(requests: Recorded[], api: string): Recorded[] {
-  return requests.filter((event) => event.phase === "request" && event.api === api);
-}
-
 /**
  * Uploads a 32 MiB encrypted synthetic archive through the backend, then downloads it again using
  * only a recovery pack that has been encoded and decoded, and checks its decrypted bytes match.
  * A wrong key and a flipped byte must each be refused, leaving no output file.
  */
-export async function runArchiveRoundTrip(
-  fixture: S3ScenarioFixture,
-): Promise<ArchiveRoundTripSummary> {
+export async function runArchiveRoundTrip(fixture: S3ScenarioFixture): Promise<void> {
   const SCENARIO = "archive-roundtrip";
   const bytes = AWS_REHEARSAL_LIMITS.archiveBytes;
   fixture.reserveUpload(bytes, "archive");
   const { signal } = fixture;
-  const { phase, step, failed } = scenarioSteps(fixture, SCENARIO);
-  const requests: Recorded[] = [];
-  const observe = requestRecorder(
+  const { phase, step, observe, requestsTo, withBackend } = scenarioSteps(
+    fixture,
     SCENARIO,
-    (event) => {
-      requests.push(event as Recorded);
-      fixture.record(event);
-    },
     (observation) => trackCreated(fixture, observation),
   );
-  return withBackend(fixture, SCENARIO, observe, async (backend, work) => {
+  await withBackend(async (backend, work) => {
     const recoveryKey = checkedRecoveryKey(RECOVERY_KEY)!;
-    const archive = await syntheticArchive(work, bytes, SCENARIO, signal);
     const key = backupArchiveKey(new Date());
-    expect(parseBackupArchiveKey(key)).not.toBeNull();
+    const plainHash = await step("uploaded", async () => {
+      const archive = await syntheticArchive(work, bytes, SCENARIO, signal);
+      expect(parseBackupArchiveKey(key)).not.toBeNull();
+      await backend.putFile(key, archive.path, { signal });
+      await rm(archive.path);
+      const parts = requestsTo("UploadPart");
+      expect(requestsTo("CreateMultipartUpload").map(answered2xx)).toEqual([true]);
+      expect(parts.map(answered2xx).every(Boolean)).toBe(true);
+      expect(parts.map(({ bytes: sent }) => sent)).toEqual(
+        Array(bytes / PART_BYTES).fill(PART_BYTES),
+      );
+      expect(requestsTo("CompleteMultipartUpload").map(answered2xx)).toEqual([true]);
+      const sent = parts.reduce((sum, { bytes: part }) => sum + (part as number), 0);
+      phase("uploaded", { count: parts.length, bytes: sent });
+      return archive.plainHash;
+    });
 
-    await step("uploaded", () => backend.putFile(key, archive.path, { signal }));
-    await rm(archive.path);
-    const partBytes = PART_BYTES;
-    const parts = bytes / PART_BYTES;
-    const uploads = requestsTo(requests, "UploadPart");
-    const uploadShape = [
-      requestsTo(requests, "CreateMultipartUpload"),
-      uploads,
-      requestsTo(requests, "CompleteMultipartUpload"),
-    ].map((events) =>
-      events.map(({ outcome, httpStatus }) => outcome === "ok" && is2xx(httpStatus)),
-    );
-    expect(uploadShape).toEqual([[true], Array(parts).fill(true), [true]]);
-    expect(uploads.map(({ bytes: sent }) => sent)).toEqual(Array(parts).fill(partBytes));
-    phase("uploaded", { count: uploads.length, bytes });
-
-    const listed = await step("listed", () => backend.list("waitron-", { signal }));
-    const found = listed.filter((object) => object.key === key);
-    expect(found.map(({ size }) => size)).toEqual([bytes]);
-    phase("listed", { count: found.length, bytes: found[0]!.size });
+    await step("listed", async () => {
+      const listed = await backend.list("waitron-", { signal });
+      const found = listed.filter((object) => object.key === key);
+      expect(found.map(({ size }) => size)).toEqual([bytes]);
+      phase("listed", { count: found.length, bytes: found[0]!.size });
+    });
 
     const saved = encodeArchiveRecoveryPack({
       version: 1,
@@ -246,54 +162,55 @@ export async function runArchiveRoundTrip(
       }),
     );
     try {
-      const gets = requestsTo(requests, "GetObject");
-      expect(gets.map(({ outcome, httpStatus }) => outcome === "ok" && is2xx(httpStatus))).toEqual([
-        true,
-      ]);
-      const got = (await stat(downloaded.path)).size;
-      expect(got).toBe(bytes);
-      phase("downloaded", { bytes: got });
+      await step("downloaded", async () => {
+        expect(requestsTo("GetObject").map(answered2xx)).toEqual([true]);
+        const got = (await stat(downloaded.path)).size;
+        expect(got).toBe(bytes);
+        phase("downloaded", { bytes: got });
+      });
 
-      const out = join(work, "decrypted.bin");
-      await step("decrypted-match", () =>
-        decryptArtifactFile(downloaded.path, out, pack.recoveryKey),
-      );
-      const match = (await sha256Of(out)) === archive.plainHash;
-      await rm(out);
-      if (!match) failed("decrypted-match", new Error("mismatch"));
-      expect(match).toBe(true);
-      phase("decrypted-match");
+      await step("decrypted-match", async () => {
+        const out = join(work, "decrypted.bin");
+        await decryptArtifactFile(downloaded.path, out, pack.recoveryKey);
+        const decrypted = await sha256Of(out);
+        await rm(out);
+        expect(decrypted).toBe(plainHash);
+        phase("decrypted-match");
+      });
 
-      await refusedDecrypt(join(work, "wrong-key.bin"), () =>
-        decryptArtifactFile(downloaded.path, join(work, "wrong-key.bin"), WRONG_KEY),
-      );
-      phase("wrong-key-refused");
+      await step("wrong-key-refused", async () => {
+        await refusedDecrypt(join(work, "wrong-key.bin"), (out) =>
+          decryptArtifactFile(downloaded.path, out, WRONG_KEY),
+        );
+        phase("wrong-key-refused");
+      });
 
-      const tampered = join(work, "tampered.backup.enc");
-      await copyFile(downloaded.path, tampered);
-      const handle = await open(tampered, "r+");
-      try {
-        const middle = Math.floor(bytes / 2);
-        const { buffer } = await handle.read(Buffer.alloc(1), 0, 1, middle);
-        await handle.write(Buffer.from([buffer[0]! ^ 0xff]), 0, 1, middle);
-      } finally {
-        await handle.close();
-      }
-      await refusedDecrypt(join(work, "tampered.bin"), () =>
-        decryptArtifactFile(tampered, join(work, "tampered.bin"), pack.recoveryKey),
-      );
-      await rm(tampered);
-      phase("tamper-refused");
+      await step("tamper-refused", async () => {
+        const tampered = join(work, "tampered.backup.enc");
+        await copyFile(downloaded.path, tampered);
+        const handle = await open(tampered, "r+");
+        try {
+          const middle = Math.floor(bytes / 2);
+          const { buffer } = await handle.read(Buffer.alloc(1), 0, 1, middle);
+          await handle.write(Buffer.from([buffer[0]! ^ 0xff]), 0, 1, middle);
+        } finally {
+          await handle.close();
+        }
+        await refusedDecrypt(join(work, "tampered.bin"), (out) =>
+          decryptArtifactFile(tampered, out, pack.recoveryKey),
+        );
+        await rm(tampered);
+        phase("tamper-refused");
+      });
     } finally {
       await downloaded.dispose();
     }
-    return { bytes, parts, partBytes };
   });
 }
 
 /** A decryption that must be refused as a wrong passphrase, leaving nothing at `out`. */
-async function refusedDecrypt(out: string, decrypt: () => Promise<void>): Promise<void> {
-  const error = await decrypt().then(
+async function refusedDecrypt(out: string, decrypt: (out: string) => Promise<void>): Promise<void> {
+  const error = await decrypt(out).then(
     () => undefined,
     (thrown: unknown) => thrown,
   );
@@ -309,16 +226,11 @@ async function refusedDecrypt(out: string, decrypt: () => Promise<void>): Promis
 export async function runArchiveAbort(fixture: S3ScenarioFixture): Promise<ArchiveAbortSummary> {
   const SCENARIO = "archive-abort";
   fixture.reserveUpload(ABORT_ARCHIVE_BYTES, "archive");
-  const { phase, step, failed } = scenarioSteps(fixture, SCENARIO);
   const cancel = new AbortController();
   const signal = AbortSignal.any([fixture.signal, cancel.signal]);
-  const requests: Recorded[] = [];
-  const observe = requestRecorder(
+  const { phase, step, observe, requests, requestsTo, withBackend } = scenarioSteps(
+    fixture,
     SCENARIO,
-    (event) => {
-      requests.push(event as Recorded);
-      fixture.record(event);
-    },
     (observation) => {
       trackCreated(fixture, observation);
       if (
@@ -330,74 +242,61 @@ export async function runArchiveAbort(fixture: S3ScenarioFixture): Promise<Archi
       }
     },
   );
-  return withBackend(fixture, SCENARIO, observe, async (backend, work) => {
-    const archive = await syntheticArchive(work, ABORT_ARCHIVE_BYTES, SCENARIO, fixture.signal);
-    const key = backupArchiveKey(new Date());
-    expect(parseBackupArchiveKey(key)).not.toBeNull();
-
-    const error = await backend.putFile(key, archive.path, { signal }).then(
-      () => undefined,
-      (thrown: unknown) => thrown,
-    );
-    await rm(archive.path);
-    if (error === undefined) {
-      failed("aborted", new Error("upload completed"));
-      throw new Error("the cancelled upload completed");
-    }
-    if (isAppError(error) && hasCode(error, "backup.destination_cleanup_failed")) {
-      failed("abort-cleanup", error);
-      throw error;
-    }
-    if (
-      fixture.signal.aborted ||
-      !cancel.signal.aborted ||
-      !isAppError(error) ||
-      !hasCode(error, "backup.destination_request_failed") ||
-      error.params.name !== "AbortError"
-    ) {
-      failed("aborted", error);
-      throw error;
-    }
-    fixture.record({
-      scenario: SCENARIO,
-      phase: "aborted",
-      errorName: receiptErrorName(error.params.name),
-      outcome: "ok",
+  return withBackend(async (backend, work) => {
+    const error = await step("aborted", async () => {
+      const archive = await syntheticArchive(work, ABORT_ARCHIVE_BYTES, SCENARIO, fixture.signal);
+      const key = backupArchiveKey(new Date());
+      expect(parseBackupArchiveKey(key)).not.toBeNull();
+      const thrown = await backend.putFile(key, archive.path, { signal }).then(
+        () => undefined,
+        (failure: unknown) => failure,
+      );
+      await rm(archive.path);
+      return thrown;
+    });
+    await step("abort-cleanup", () => {
+      if (isAppError(error) && hasCode(error, "backup.destination_cleanup_failed")) throw error;
+    });
+    const summary = await step("aborted", () => {
+      if (error === undefined) throw new Error("the cancelled upload completed");
+      if (
+        fixture.signal.aborted ||
+        !cancel.signal.aborted ||
+        !isAppError(error) ||
+        !hasCode(error, "backup.destination_request_failed") ||
+        error.params.name !== "AbortError"
+      ) {
+        throw error;
+      }
+      const sent = requests.filter(({ phase: name }) => name === "request");
+      const abortAt = sent.findIndex(({ api }) => api === "AbortMultipartUpload");
+      expect(abortAt).toBeGreaterThan(-1);
+      const partsBeforeAbort = sent
+        .slice(0, abortAt)
+        .filter((event) => event.api === "UploadPart" && answered2xx(event)).length;
+      expect(partsBeforeAbort).toBeGreaterThanOrEqual(1);
+      const aborts = requestsTo("AbortMultipartUpload");
+      expect(aborts.map(answered2xx)).toEqual([true]);
+      expect(requestsTo("CompleteMultipartUpload")).toEqual([]);
+      phase("aborted", { errorName: receiptErrorName(error.params.name) });
+      return { partsBeforeAbort, abortStatus: aborts[0]!.httpStatus as number };
     });
 
-    const sent = requests.filter(({ phase: name }) => name === "request");
-    const abortAt = sent.findIndex(({ api }) => api === "AbortMultipartUpload");
-    const partsBeforeAbort = sent
-      .slice(0, Math.max(abortAt, 0))
-      .filter(
-        ({ api, outcome, httpStatus }) =>
-          api === "UploadPart" && outcome === "ok" && is2xx(httpStatus),
-      ).length;
-    const aborts = requestsTo(requests, "AbortMultipartUpload");
-    expect(abortAt).toBeGreaterThan(-1);
-    expect(partsBeforeAbort).toBeGreaterThanOrEqual(1);
-    expect(aborts.map(({ outcome, httpStatus }) => outcome === "ok" && is2xx(httpStatus))).toEqual([
-      true,
-    ]);
-    expect(requestsTo(requests, "CompleteMultipartUpload")).toEqual([]);
-
     const folder = archiveNamespace(fixture.bucket.prefix, fixture.venueId);
-    const left = await step("uploads-after", () => fixture.ownedUploads(folder));
-    phase("uploads-after", { count: left.length });
-    expect(left).toEqual([]);
+    await step("uploads-after", async () => {
+      const left = await fixture.ownedUploads(folder);
+      expect(left).toEqual([]);
+      phase("uploads-after", { count: left.length });
+    });
 
     // The backend lists only names directly inside the folder; this store sees deeper keys too.
     const files = createS3FileStore({ ...fixture.bucket, prefix: folder }, { observe });
-    const objects = await step("listed-after", () =>
-      files.list("", { signal: fixture.signal }).finally(() => files.close()),
-    );
-    phase("listed-after", { count: objects.length });
-    expect(objects).toEqual([]);
+    await step("listed-after", async () => {
+      const objects = await files.list("", { signal: fixture.signal }).finally(() => files.close());
+      expect(objects).toEqual([]);
+      phase("listed-after", { count: objects.length });
+    });
 
-    return {
-      partsBeforeAbort,
-      abortStatus: typeof aborts[0]!.httpStatus === "number" ? aborts[0]!.httpStatus : null,
-      uploadsAfter: left.length,
-    };
+    return summary;
   });
 }
