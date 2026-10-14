@@ -1,13 +1,17 @@
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { setRoutingCell } from "@waitron/venue-service";
-import { workingOrderLines } from "@waitron/db";
+import { createAdjustmentReason } from "@waitron/adjustments";
+import { workingOrderLines, workingOrders } from "@waitron/db";
+import { persons } from "@waitron/identity";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { applyAdjustment } from "./adjustments-apply.js";
 import { mergeBills, splitBill, transferItems } from "./bill-actions.js";
 import { readFormerNumbers } from "./former-numbers.js";
 import { createStation } from "./kitchen.js";
+import { setMadeHereStations } from "./made-here.js";
 import { placeGroups } from "./order-groups.js";
 import { listPassMonitor, listPassScreen } from "./pass-board.js";
 import {
@@ -27,12 +31,13 @@ import {
   listHeldOrders,
   listStationQueues,
   placeOrder,
+  updateHeldOrder,
 } from "./working-order.js";
 import "./errors.js";
 
 let v: PartyVenue;
-/** Burger is cooked at the Plancha, Paella at the Arroces. */
-const stations = { plancha: "", arroces: "" };
+/** Burger is cooked at the Plancha, Paella at the Arroces; the Vino is poured at the Barra. */
+const stations = { plancha: "", arroces: "", barra: "" };
 useVenueDb({
   resetPerTest: false,
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -43,6 +48,7 @@ useVenueDb({
       for (const [key, name, dish] of [
         ["plancha", "Plancha", "Burger"],
         ["arroces", "Arroces", "Paella"],
+        ["barra", "Barra", "Vino"],
       ] as const) {
         const { id } = await createStation(tx, v.cfg, { name });
         stations[key] = id;
@@ -53,14 +59,15 @@ useVenueDb({
           { kind: "station", stationId: id },
         );
       }
+      await setMadeHereStations(tx, v.cfg, v.cfg.origin.deviceId, [stations.barra]);
     });
   },
 });
 
-/** Sends the dishes to `billId` as one fired group. */
+/** Sends the dishes to `billId` as one fired group, from a device that makes the Vino on the spot. */
 async function send(partyId: string, billId: string, ...names: string[]) {
   await inTx(v, (tx) =>
-    placeGroups(tx, v.cfg, partyId, {
+    placeGroups(tx, { ...v.cfg, sendingDeviceId: v.cfg.origin.deviceId }, partyId, {
       groups: [
         {
           lines: names.map((name) => ({ menuItemId: v.item(name), quantity: "1" })),
@@ -73,12 +80,16 @@ async function send(partyId: string, billId: string, ...names: string[]) {
   );
 }
 
-/** A party at a fresh table with `count` bills, each made by splitting off an Agua. */
+/** A party at a fresh table with `count` bills, each made by splitting off an unsent Agua. */
 async function party(label: string, count: number): Promise<{ partyId: string; bills: string[] }> {
   const { partyId, tabId } = await seat(v, await v.table(label));
   const bills = [tabId];
   for (let i = 1; i < count; i++) {
-    await send(partyId, tabId, "Agua");
+    await updateHeldOrder({ db: v.db }, v.cfg, tabId, {
+      revision: (await billRow(v, tabId)).revision,
+      lines: [{ menuItemId: v.item("Agua"), quantity: "1" }],
+      operatorId: OPERATOR,
+    });
     const command = await commandFor(v, partyId);
     const { billId } = await inTx(v, async (tx) =>
       splitBill(tx, v.cfg, tabId, [{ lineNo: await lastLine(tabId) }], command),
@@ -116,6 +127,49 @@ async function transfer(partyId: string, fromBillId: string, toBillId: string, n
   await inTx(v, (tx) =>
     transferItems(tx, v.cfg, fromBillId, toBillId, [{ lineNo: lineOf(fromBillId, name) }], command),
   );
+}
+
+/** Cancels the whole of the bill's line of `name`, as the till's cancel does. */
+async function cancelLine(billId: string, name: string) {
+  await inTx(v, async (tx) => {
+    const [operator] = await tx
+      .insert(persons)
+      .values({ displayName: `Cancels ${randomUUID()}`, role: "manager" })
+      .returning({ id: persons.id });
+    const reason = await createAdjustmentReason(tx, {
+      name: `Mistake ${randomUUID()}`,
+      names: { en: "Mistake", es: "Error" },
+      actions: ["cancel"],
+      maxPercentBp: null,
+      maxAmount: null,
+      applyRole: "staff",
+      approverRole: "staff",
+      noteRequired: false,
+    });
+    const [line] = await tx
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(and(eq(workingOrderLines.workingOrderId, billId), eq(workingOrderLines.name, name)));
+    const [bill] = await tx
+      .select({ revision: workingOrders.revision })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, billId));
+    await applyAdjustment(
+      tx,
+      v.cfg,
+      {
+        orderId: billId,
+        submissionId: randomUUID(),
+        expectedRevision: bill!.revision,
+        lineId: line!.id,
+        reasonId: reason.id,
+        action: "cancel",
+        note: null,
+        operatorId: operator!.id,
+      },
+      v.cfg.locale,
+    );
+  });
 }
 
 async function expoOrder(billId: string) {
@@ -170,8 +224,7 @@ describe("the numbers an order's sent dishes were sent under, on the kitchen rea
     const n28 = await numberOf(b28);
     expect(await expoOrder(b27)).not.toHaveProperty("formerNumbers");
     expect(await stationGroup("arroces", b27)).not.toHaveProperty("formerNumbers");
-    // 28 was made by splitting a sent Agua off 27.
-    expect(await expoOrder(b28)).toMatchObject({ formerNumbers: [n27] });
+    expect(await expoOrder(b28)).not.toHaveProperty("formerNumbers");
 
     await transfer(partyId, b28, b27, "Burger");
     expect(await expoOrder(b27)).toMatchObject({ formerNumbers: [n28] });
@@ -179,8 +232,38 @@ describe("the numbers an order's sent dishes were sent under, on the kitchen rea
     await transfer(partyId, b27, b28, "Burger");
 
     expect(await expoOrder(b27)).not.toHaveProperty("formerNumbers");
+    expect(await expoOrder(b28)).not.toHaveProperty("formerNumbers");
+
+    await transfer(partyId, b27, b28, "Paella");
     expect(await expoOrder(b28)).toMatchObject({ formerNumbers: [n27] });
     expect(await stationGroup("plancha", b28)).toMatchObject({ formerNumbers: [n27] });
+  });
+
+  it("leaves out a made-here drink, which no kitchen paper or screen showed", async () => {
+    const { partyId, bills } = await party("Mesa 96", 2);
+    const [b27, b28] = bills as [string, string];
+    await send(partyId, b27, "Paella");
+    await send(partyId, b28, "Vino");
+
+    await merge(partyId, b27, b28);
+
+    expect(await expoOrder(b27)).not.toHaveProperty("formerNumbers");
+    expect(await stationGroup("arroces", b27)).not.toHaveProperty("formerNumbers");
+  });
+
+  it("drops a moved dish's number once the dish is cancelled", async () => {
+    const { partyId, bills } = await party("Mesa 97", 2);
+    const [b27, b28] = bills as [string, string];
+    await send(partyId, b27, "Paella");
+    await send(partyId, b28, "Burger");
+    const n28 = await numberOf(b28);
+    await merge(partyId, b27, b28);
+    expect(await expoOrder(b27)).toMatchObject({ formerNumbers: [n28] });
+
+    await cancelLine(b27, "Burger");
+
+    expect(await expoOrder(b27)).not.toHaveProperty("formerNumbers");
+    expect(await stationGroup("arroces", b27)).not.toHaveProperty("formerNumbers");
   });
 
   it("is carried by a device's pass screen and pass monitor", async () => {
@@ -245,10 +328,10 @@ describe("the numbers an order's sent dishes were sent under, on the counter rea
     const id = await counterOrder(v, "Burger");
     await fireAll(id);
 
-    const held = await listHeldOrders({ db: v.db }, v.cfg);
+    const held = (await listHeldOrders({ db: v.db }, v.cfg)).find((o) => o.id === id);
 
-    expect(held.find((o) => o.id === id)).toBeDefined();
-    expect(held.find((o) => o.id === id)).not.toHaveProperty("formerNumbers");
+    expect(held).toBeDefined();
+    expect(held).not.toHaveProperty("formerNumbers");
   });
 });
 
@@ -257,6 +340,7 @@ describe("readFormerNumbers", () => {
     const { partyId, bills } = await party("Mesa 95", 2);
     const [b27, b28] = bills as [string, string];
     await send(partyId, b27, "Paella");
+    await transfer(partyId, b27, b28, "Paella");
 
     expect(await inTx(v, (tx) => readFormerNumbers(tx, []))).toEqual(new Map());
     expect(await inTx(v, (tx) => readFormerNumbers(tx, [b27, b28, b28]))).toEqual(

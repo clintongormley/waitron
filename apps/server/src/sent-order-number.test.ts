@@ -6,6 +6,7 @@ import { products, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { mergeBills, splitBill, transferItems } from "./bill-actions.js";
 import { createStation } from "./kitchen.js";
+import { setMadeHereStations } from "./made-here.js";
 import { moveBill } from "./move-bill.js";
 import { placeGroups } from "./order-groups.js";
 import {
@@ -29,6 +30,8 @@ let v: PartyVenue;
 let cheese: { listId: string; productId: string };
 /** The tables zone's offers, made again once the Caña offers a Cheese extra. */
 let offers: ZoneOffers;
+/** The venue's device makes the Vino on the spot when it sends it with this configuration. */
+let madeHereCfg: PartyVenue["cfg"];
 useVenueDb({
   resetPerTest: false,
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -56,6 +59,17 @@ useVenueDb({
         { kind: "station", stationId },
       );
     });
+    await inTx(v, async (tx) => {
+      const { id: barra } = await createStation(tx, v.cfg, { name: "Barra" });
+      await setRoutingCell(
+        tx,
+        v.cfg,
+        { row: { kind: "product", productId: v.productId("Vino") }, zoneId: null },
+        { kind: "station", stationId: barra },
+      );
+      await setMadeHereStations(tx, v.cfg, v.cfg.origin.deviceId, [barra]);
+    });
+    madeHereCfg = { ...v.cfg, sendingDeviceId: v.cfg.origin.deviceId };
     offers = await inTx(v, (tx) => offerProducts(tx, v.cfg, { zone: "tables" }));
   },
 });
@@ -63,9 +77,15 @@ useVenueDb({
 type Dish = { name: string; quantity?: string; cheese?: number };
 
 /** Sends the dishes to `billId` as one group, fired or held; held groups print no HOLD ticket. */
-async function send(partyId: string, billId: string, dishes: Dish[], release: "fire" | "hold") {
+async function send(
+  partyId: string,
+  billId: string,
+  dishes: Dish[],
+  release: "fire" | "hold",
+  cfg = v.cfg,
+) {
   await inTx(v, (tx) =>
-    placeGroups(tx, v.cfg, partyId, {
+    placeGroups(tx, cfg, partyId, {
       groups: [
         {
           lines: dishes.map((d) => ({
@@ -123,6 +143,18 @@ function kitchenItems(billId: string) {
     from ticket_items t join working_order_lines l on l.id = t.working_order_line_id
     where t.working_order_id = ${billId} and l.name <> 'Agua'
     order by l.line_no`);
+}
+
+/** Whether the bill's kitchen items of `name` are made here. */
+function madeHereOf(billId: string, name: string): boolean[] {
+  return v.db
+    .all<{ madeHere: number }>(
+      sql`
+      select t.made_here as madeHere
+      from ticket_items t join working_order_lines l on l.id = t.working_order_line_id
+      where t.working_order_id = ${billId} and l.name = ${name}`,
+    )
+    .map((row) => row.madeHere === 1);
 }
 
 /** The line number of the bill's line of `name`. */
@@ -293,6 +325,35 @@ describe("the order number a moved dish was sent under", () => {
       { name: "Caña", quantity: 2000, sent: n28 },
       { name: "Cheese", quantity: 2000, sent: n28 },
     ]);
+  });
+
+  // A made-here item is never printed and no kitchen screen shows it, so it has no kitchen paper.
+  it("is not recorded on a made-here item when its bill merges", async () => {
+    const { partyId, bills } = await party("Mesa sent 10", 2);
+    const [b27, b28] = bills as [string, string];
+    await send(partyId, b28, [{ name: "Burger" }], "fire");
+    await send(partyId, b28, [{ name: "Vino" }], "fire", madeHereCfg);
+    const n28 = await numberOf(b28);
+    expect(madeHereOf(b28, "Vino")).toEqual([true]);
+
+    await merge(partyId, b27, b28);
+
+    expect(kitchenItems(b27)).toEqual([
+      { name: "Burger", quantity: 1000, sent: n28 },
+      { name: "Vino", quantity: 1000, sent: null },
+    ]);
+  });
+
+  it("is not recorded on the part of a made-here line transferred", async () => {
+    const { partyId, bills } = await party("Mesa sent 11", 2);
+    const [b27, b28] = bills as [string, string];
+    await send(partyId, b28, [{ name: "Vino", quantity: "2" }], "fire", madeHereCfg);
+
+    await transfer(partyId, b28, b27, [{ lineNo: lineOf(b28, "Vino"), quantity: "1" }]);
+
+    expect(madeHereOf(b27, "Vino")).toEqual([true]);
+    expect(kitchenItems(b27)).toEqual([{ name: "Vino", quantity: 1000, sent: null }]);
+    expect(kitchenItems(b28)).toEqual([{ name: "Vino", quantity: 1000, sent: null }]);
   });
 
   it("is recorded as the counter order's number when a sent counter order merges into a table's bill", async () => {

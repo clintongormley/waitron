@@ -3267,6 +3267,7 @@ export async function moveOrderLines(
         and(
           inArray(ticketItems.workingOrderLineId, lineIds),
           isNull(ticketItems.sentOrderNumber),
+          eq(ticketItems.madeHere, false),
           seenByKitchen(tx, lineIds),
         ),
       );
@@ -4069,7 +4070,8 @@ export async function splitUnitsWithinOrder(
 /**
  * Give a split row its own copy of the source line's ticket item, asking for the part moved, and take
  * that part off the source's; returns the copy's id. The total the kitchen makes is unchanged. The
- * copy keeps the item's sent order number, else takes `leavingNumber`.
+ * copy keeps the item's sent order number, else takes `leavingNumber` unless it is made here, which
+ * no kitchen paper ever carried.
  */
 async function splitTicketItem(
   tx: Transaction,
@@ -4094,7 +4096,7 @@ async function splitTicketItem(
     workingOrderId: toOrderId,
     workingOrderLineId: splitLineId,
     quantity: movedThousandths,
-    sentOrderNumber: ticket!.sentOrderNumber ?? leavingNumber,
+    sentOrderNumber: ticket!.sentOrderNumber ?? (ticket!.madeHere ? null : leavingNumber),
   });
   const passMarks = await tx
     .select()
