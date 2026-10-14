@@ -324,6 +324,62 @@ describe("till-station-queue", () => {
     expect(cell.textContent).toContain("5");
   });
 
+  describe("the numbers an order's dishes were sent to the kitchen under", () => {
+    const moved = (formerNumbers?: number[]): StationQueueGroup => ({
+      ...groupA,
+      orderNumber: 27,
+      label: null,
+      ...(formerNumbers ? { formerNumbers } : {}),
+    });
+    const flat = (el: Element) => el.textContent!.replace(/\s+/g, " ").trim();
+
+    it.each([
+      ["en-GB", [28], "#27 (was 28)"],
+      ["es-ES", [28], "#27 (antes 28)"],
+      ["en-GB", [28, 30], "#27 (was 28, 30)"],
+    ])(
+      "follow the number on the ticket head and on each kanban cell (%s, %j)",
+      async (locale, formerNumbers, text) => {
+        const previousLocale = currentLocale();
+        setLocale(locale);
+        try {
+          const rail = await mountWidget<TillStationQueue>("till-station-queue", {
+            groups: [moved(formerNumbers)],
+            view: "rail",
+            stationId: "st-1",
+          });
+          expect(flat(rail.el.shadowRoot!.querySelector(".ticket-head .number")!)).toBe(text);
+          const kanban = await mountWidget<TillStationQueue>("till-station-queue", {
+            groups: [moved(formerNumbers)],
+            view: "kanban",
+            stationId: "st-1",
+          });
+          for (const id of ["ti-1", "ti-2"])
+            expect(flat(kanban.el.shadowRoot!.querySelector(`[data-item="${id}"] .number`)!)).toBe(
+              text,
+            );
+        } finally {
+          setLocale(previousLocale);
+        }
+      },
+    );
+
+    it("leave a plain number on an order that never moved", async () => {
+      const rail = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups: [moved()],
+        view: "rail",
+        stationId: "st-1",
+      });
+      expect(flat(rail.el.shadowRoot!.querySelector(".ticket-head .number")!)).toBe("#27");
+      const kanban = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups: [moved()],
+        view: "kanban",
+        stationId: "st-1",
+      });
+      expect(flat(kanban.el.shadowRoot!.querySelector('[data-item="ti-1"] .number')!)).toBe("#27");
+    });
+  });
+
   it("renders the dish name verbatim, with no locale resolution left to fall back from", async () => {
     const group: StationQueueGroup = {
       orderId: "wo-9",

@@ -16,6 +16,7 @@ import { paidInPart } from "../state/bill-state.js";
 import { outOfServiceJoined, shownName } from "../state/floor-today.js";
 import { signalChipStyles, signalChips } from "./signal-chips.js";
 import "./bill-choice-dialog.js";
+import { orderNumber, orderNumberStyles } from "./order-number.js";
 import type { BillChoiceDetail } from "./bill-choice-dialog.js";
 import type { HeldOrderSummary, TableState } from "../api/client.js";
 
@@ -40,6 +41,7 @@ export class TillHeldOrders extends LitElement {
     baseStyles,
     tableTargetStyles,
     signalChipStyles,
+    orderNumberStyles,
     css`
       :host {
         display: block;
@@ -194,7 +196,7 @@ export class TillHeldOrders extends LitElement {
     return html`
       <div class="order">
         <div class="summary">
-          <span class="number">#${order.orderNumber}</span>
+          <span class="number">${orderNumber(order.orderNumber, order.formerNumbers)}</span>
           ${order.label ? html`<span class="label">${order.label}</span>` : nothing}
           <span class="meta">${this.#meta(order)}</span>
           ${this.#signals(order)}

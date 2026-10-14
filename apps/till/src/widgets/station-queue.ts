@@ -8,6 +8,7 @@ import { BAND_RANK, type TimingBand, classifyBand } from "@waitron/shared";
 import { clockTime, currentLocale, t } from "../i18n/t.js";
 import { allergenName } from "../i18n/allergen-names.js";
 import { dietBadgeStyles, dietBadges, extraNutrition } from "./diet-badges.js";
+import { orderNumber, orderNumberStyles } from "./order-number.js";
 import { dishLine, snapshotDescriptionFor } from "./dish-format.js";
 import type {
   KitchenNotice,
@@ -103,6 +104,7 @@ export class TillStationQueue extends LitElement {
   static override styles = [
     baseStyles,
     dietBadgeStyles,
+    orderNumberStyles,
     css`
       :host {
         display: block;
@@ -881,7 +883,7 @@ export class TillStationQueue extends LitElement {
           data-order=${group.orderNumber}
         >
           <div class="ticket-head">
-            <span class="number">#${group.orderNumber}</span>
+            <span class="number">${orderNumber(group.orderNumber, group.formerNumbers)}</span>
             ${group.label ? html`<span class="label">${group.label}</span>` : nothing}
             <span class="age">${this.#elapsedMinutes(group.queuedAt)} ${t("station.min")}</span>
           </div>
@@ -1057,7 +1059,7 @@ export class TillStationQueue extends LitElement {
   /** The columns cut across orders, so a cell keeps the order number beside the dish. */
   #cell(group: StationQueueGroup, item: StationQueueItem): TemplateResult {
     const tag = html`<span class="number"
-      >#${group.orderNumber}${group.label ? html` · ${group.label}` : nothing}</span
+      >${orderNumber(group.orderNumber, group.formerNumbers)}${group.label ? html` · ${group.label}` : nothing}</span
     >`;
     return this.#renderLine(group, item, tag);
   }

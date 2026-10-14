@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { formatMoney } from "@waitron/shared";
-import { currentLocale, t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { TillCounterWaiting } from "./counter-waiting.js";
 import type { CounterWaitingOrder } from "../api/client.js";
@@ -49,6 +49,34 @@ const buttons = (row: HTMLElement) =>
   [...row.querySelectorAll<HTMLElement>("wt-button")].map((b) => b.textContent!.trim());
 
 describe("till-counter-waiting", () => {
+  describe("the numbers an order's dishes were sent to the kitchen under", () => {
+    const number = (el: TillCounterWaiting) =>
+      el.shadowRoot!.querySelector(".summary .number")!.textContent!.replace(/\s+/g, " ").trim();
+
+    it.each([
+      ["en-GB", "#41 (was 40)"],
+      ["es-ES", "#41 (antes 40)"],
+    ])("follow the order's number (%s)", async (locale, text) => {
+      const previousLocale = currentLocale();
+      setLocale(locale);
+      try {
+        const { el } = await mountWidget<TillCounterWaiting>("till-counter-waiting", {
+          orders: [{ ...sent, orderNumber: 41, formerNumbers: [40] }],
+        });
+        expect(number(el)).toBe(text);
+      } finally {
+        setLocale(previousLocale);
+      }
+    });
+
+    it("leave a plain number on an order that never moved", async () => {
+      const { el } = await mountWidget<TillCounterWaiting>("till-counter-waiting", {
+        orders: [{ ...sent, orderNumber: 41 }],
+      });
+      expect(number(el)).toBe("#41");
+    });
+  });
+
   it("registers as a custom element", () => {
     expect(customElements.get("till-counter-waiting")).toBe(TillCounterWaiting);
   });

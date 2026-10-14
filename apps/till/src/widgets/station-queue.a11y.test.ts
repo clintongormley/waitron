@@ -1,4 +1,4 @@
-import { afterEach, describe, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import type { StationThresholds } from "@waitron/shared";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import "./station-queue.js";
@@ -379,6 +379,23 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
     );
     await expectNoA11yViolations(host);
   });
+
+  it.each(["kanban", "rail"] as const)(
+    "the %s view with orders whose dishes were sent under other numbers has no violations",
+    async (view) => {
+      const { el, host } = await mountWidget<TillStationQueue>(
+        "till-station-queue",
+        {
+          groups: groups.map((group) => ({ ...group, formerNumbers: [28, 30] })),
+          stationId: "st-1",
+          view,
+        },
+        theme,
+      );
+      expect(el.shadowRoot!.querySelector(".number .was")).not.toBeNull();
+      await expectNoA11yViolations(host);
+    },
+  );
 
   it("a rail card listing another station's dishes has no violations", async () => {
     const { host, el } = await mountWidget<TillStationQueue>(
