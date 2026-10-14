@@ -107,6 +107,39 @@ describe("AwsRehearsal.scratch", () => {
     expect((await receipt()).teardown.at(-1)).toEqual({ step: "remove-scratch", outcome: "ok" });
   });
 
+  it("makes no folder, and fails the scenario, when the journal naming it cannot be written", async () => {
+    const written: (string | null)[] = [];
+    let madeDuringRun: boolean | undefined;
+    let scratchError: unknown;
+    const error = await rejection(
+      withAwsRehearsal(
+        async (ctx) => {
+          try {
+            await ctx.scratch("loop");
+          } catch (thrown) {
+            scratchError = thrown;
+            throw thrown;
+          } finally {
+            madeDuringRun = await exists(root());
+          }
+        },
+        deps(
+          {},
+          {
+            journal: (_dir, journal) => {
+              if (journal.scratchRoot !== null) throw new Error("disk full");
+              written.push(journal.scratchRoot);
+            },
+          },
+        ),
+      ),
+    );
+    expect(madeDuringRun).toBe(false);
+    expect((scratchError as Error).name).toBe("AwsRehearsalFailed");
+    expect((error as AggregateError).errors).toContain(scratchError);
+    expect(written.at(-1)).toBeNull();
+  });
+
   it("records a skipped step on an owned run that made no scratch, and removes nothing", async () => {
     const removeDir = vi.fn(async () => {});
     await withAwsRehearsal(async () => undefined, deps({}, { removeDir }));

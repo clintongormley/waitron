@@ -1299,13 +1299,15 @@ async function runOwned<T>(
     }
     deps.journal(receiptDir, body);
   };
-  const journal = (state: JournalState = journalState): void => {
+  const journal = (state: JournalState = journalState): boolean => {
     journalState = state;
     try {
       writeChecked();
+      return true;
     } catch {
       journalFailures += 1;
       record({ scenario: "lifecycle", phase: "journal", outcome: "failed" });
+      return false;
     }
   };
   const requests = runScope(
@@ -1337,7 +1339,13 @@ async function runOwned<T>(
       scratchLabels.add(label);
       if (journalScratch === null) {
         journalScratch = scratchRoot;
-        journal();
+        // A folder the journal does not name is one a keeper would never remove.
+        if (!journal()) {
+          journalScratch = null;
+          throw new AwsRehearsalFailed(
+            "the journal naming the scratch folder could not be written, so no folder was made",
+          );
+        }
       }
       scratchMade = true;
       const folder = join(scratchRoot, label);
