@@ -1,3 +1,4 @@
+import type { AttendanceRecorder } from "./attendance-capture.js";
 import { captureKitchenActivity } from "./attendance-capture.js";
 import type { OrderAttendance } from "./working-order.js";
 import { and, asc, eq, inArray, isNotNull, isNull, ne, notExists, or, sql } from "drizzle-orm";
@@ -113,6 +114,7 @@ export async function submitGroups(
   cfg: OriginConfig,
   partyId: string,
   input: SubmitGroupsInput,
+  attendance?: OrderAttendance,
 ): Promise<SubmittedGroups> {
   const { submissionId, expectedPartyRevision, operatorId, ...body } = input;
   return runServiceCommand(
@@ -123,7 +125,15 @@ export async function submitGroups(
     { partyId, operatorId, ...body },
     async () => {
       await checkAndBumpParty(tx, partyId, expectedPartyRevision, "open");
-      return placeGroups(tx, cfg, partyId, { ...input, revisionMoved: true });
+      return placeGroups(
+        tx,
+        cfg,
+        partyId,
+        { ...input, revisionMoved: true },
+        attendance === undefined
+          ? undefined
+          : { recorder: attendance.recorder, at: attendance.clock.now().instant.toISOString() },
+      );
     },
     cfg.madeHereSink,
   );
@@ -146,6 +156,7 @@ export async function placeGroups(
   cfg: OriginConfig,
   partyId: string,
   input: PlaceGroupsInput,
+  attendance?: { recorder: AttendanceRecorder; at: string },
 ): Promise<SubmittedGroups> {
   const { operatorId } = input;
   if (input.groups.length === 0) {
@@ -218,13 +229,17 @@ export async function placeGroups(
       await printHoldTickets(tx, cfg, [groupId]);
     }
     await bumpRevision(tx, [tabId]);
-    await recordGroupEvent(tx, {
-      partyId,
-      groupId,
-      kind: input.joinGroupId === undefined ? "submitted" : "joined",
-      actorId: operatorId,
-      detail: { workingOrderId: tabId, release: group.release },
-    });
+    await recordGroupEvent(
+      tx,
+      {
+        partyId,
+        groupId,
+        kind: input.joinGroupId === undefined ? "submitted" : "joined",
+        actorId: operatorId,
+        detail: { workingOrderId: tabId, release: group.release },
+      },
+      attendance,
+    );
   }
   const listed = new Map(
     (await readGroups(tx, partyId, groupIds)).map((group) => [group.id, group]),
@@ -263,6 +278,7 @@ export async function fireGroup(
   groupId: string,
   args: PartyCommandArgs,
   firer: Firer = { personId: args.operatorId },
+  attendance?: OrderAttendance,
 ): Promise<{ revision: number }> {
   const routing = routingOnce(tx, cfg, new Date());
   return runServiceCommand(
@@ -274,7 +290,7 @@ export async function fireGroup(
     async () => {
       const revision = await checkAndBumpParty(tx, partyId, args.expectedPartyRevision, "open");
       await requireHeldGroup(tx, partyId, groupId);
-      await releaseGroup(tx, cfg, partyId, groupId, firer, {}, routing);
+      await releaseGroup(tx, cfg, partyId, groupId, firer, {}, routing, attendance);
       return { revision };
     },
     cfg.madeHereSink,
@@ -483,6 +499,7 @@ async function releaseGroup(
   firer: Firer,
   detail: Record<string, unknown>,
   routing = routingOnce(tx, cfg, new Date()),
+  attendance?: OrderAttendance,
 ): Promise<void> {
   const lines = await tx
     .select({ id: workingOrderLines.id, workingOrderId: workingOrderLines.workingOrderId })
@@ -516,13 +533,19 @@ async function releaseGroup(
         : { firedBy: firer.personId, firedByDeviceId: null }),
     })
     .where(eq(orderGroups.id, groupId));
-  await recordGroupEvent(tx, {
-    partyId,
-    groupId,
-    kind: "fired",
-    detail,
-    ...("deviceId" in firer ? { actorDeviceId: firer.deviceId } : { actorId: firer.personId }),
-  });
+  await recordGroupEvent(
+    tx,
+    {
+      partyId,
+      groupId,
+      kind: "fired",
+      detail,
+      ...("deviceId" in firer ? { actorDeviceId: firer.deviceId } : { actorId: firer.personId }),
+    },
+    attendance === undefined || "deviceId" in firer
+      ? undefined
+      : { recorder: attendance.recorder, at: attendance.clock.now().instant.toISOString() },
+  );
 }
 
 /**
@@ -534,6 +557,7 @@ export async function reorderHeldGroups(
   partyId: string,
   heldGroupIds: string[],
   args: PartyCommandArgs,
+  attendance?: OrderAttendance,
 ): Promise<{ revision: number }> {
   return runServiceCommand(
     tx,
@@ -571,13 +595,19 @@ export async function reorderHeldGroups(
             .where(eq(orderGroups.id, id));
         }
       }
-      await recordGroupEvent(tx, {
-        partyId,
-        groupId: null,
-        kind: "reordered",
-        actorId: args.operatorId,
-        detail: { heldGroupIds },
-      });
+      await recordGroupEvent(
+        tx,
+        {
+          partyId,
+          groupId: null,
+          kind: "reordered",
+          actorId: args.operatorId,
+          detail: { heldGroupIds },
+        },
+        attendance === undefined
+          ? undefined
+          : { recorder: attendance.recorder, at: attendance.clock.now().instant.toISOString() },
+      );
       return { revision };
     },
   );
@@ -661,6 +691,7 @@ export async function moveLinesToGroup(
   moves: { lineId: string; quantity: string }[],
   target: { groupId: string } | "new",
   args: PartyCommandArgs,
+  attendance?: OrderAttendance,
 ): Promise<{ revision: number }> {
   return runServiceCommand(
     tx,
@@ -786,13 +817,19 @@ export async function moveLinesToGroup(
       await correctHoldTickets(tx, cfg, given, { kind: "HOLD CHANGED", direction: "added" });
       if (target === "new") await printHoldTickets(tx, cfg, [targetId]);
       await bumpRevision(tx, [...splitsByBill.keys()]);
-      await recordGroupEvent(tx, {
-        partyId,
-        groupId: targetId,
-        kind: "lines_moved",
-        actorId: args.operatorId,
-        detail: { moves, from: [...sources] },
-      });
+      await recordGroupEvent(
+        tx,
+        {
+          partyId,
+          groupId: targetId,
+          kind: "lines_moved",
+          actorId: args.operatorId,
+          detail: { moves, from: [...sources] },
+        },
+        attendance === undefined
+          ? undefined
+          : { recorder: attendance.recorder, at: attendance.clock.now().instant.toISOString() },
+      );
       await removeEmptiedHeldGroups(tx, partyId, [...sources], args.operatorId);
       return { revision };
     },
@@ -806,6 +843,7 @@ export async function splitHeldLineIntoUnits(
   partyId: string,
   lineId: string,
   args: PartyCommandArgs,
+  attendance?: OrderAttendance,
 ): Promise<{ revision: number }> {
   return runServiceCommand(
     tx,
@@ -842,13 +880,19 @@ export async function splitHeldLineIntoUnits(
       await refusePaymentInFlight(tx, [line.workingOrderId]);
       await splitUnitsWithinOrder(tx, cfg, line.workingOrderId, line.lineNo);
       await bumpRevision(tx, [line.workingOrderId]);
-      await recordGroupEvent(tx, {
-        partyId,
-        groupId: line.groupId!,
-        kind: "lines_moved",
-        actorId: args.operatorId,
-        detail: { splitLineId: lineId },
-      });
+      await recordGroupEvent(
+        tx,
+        {
+          partyId,
+          groupId: line.groupId!,
+          kind: "lines_moved",
+          actorId: args.operatorId,
+          detail: { splitLineId: lineId },
+        },
+        attendance === undefined
+          ? undefined
+          : { recorder: attendance.recorder, at: attendance.clock.now().instant.toISOString() },
+      );
       return { revision };
     },
     cfg.madeHereSink,
@@ -1545,8 +1589,28 @@ async function currentRevision(tx: Transaction, partyId: string): Promise<number
 export async function recordGroupEvent(
   tx: Transaction,
   values: typeof orderGroupEvents.$inferInsert,
+  attendance?: { recorder: AttendanceRecorder; at: string },
 ): Promise<void> {
-  await tx.insert(orderGroupEvents).values(values);
+  const [event] = await tx
+    .insert(orderGroupEvents)
+    .values(values)
+    .returning({ id: orderGroupEvents.id });
+  if (attendance === undefined || !values.actorId) return;
+  const orders = await tx
+    .selectDistinct({ locationId: workingOrders.locationId })
+    .from(workingOrders)
+    .where(eq(workingOrders.partyId, values.partyId));
+  if (orders.length !== 1) return;
+  await attendance.recorder(tx, {
+    source: "draft",
+    key: `group:${event!.id}`,
+    personId: values.actorId,
+    locationId: orders[0]!.locationId,
+    kind: "order",
+    at: attendance.at,
+    offsetMinutes: 0,
+    outcome: "qualified",
+  });
 }
 
 /**

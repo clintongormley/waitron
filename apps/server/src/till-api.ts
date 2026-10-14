@@ -2060,7 +2060,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const cfg = requestCfg(deps.cfg, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_settled");
       await gateZones(deps, session, [{ orderId: id }]);
-      await sendToPrep({ db: deps.db }, cfg, id);
+      await sendToPrep(
+        { db: deps.db },
+        cfg,
+        id,
+        deps.attendance === undefined
+          ? undefined
+          : { recorder: deps.attendance, clock: deps.clock, personId: session.personId },
+      );
       return c.body(null, 200);
     }),
   );
@@ -2919,7 +2926,15 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const sendCfg = sendingCfg(cfg, c, session.device);
       const submitted = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ partyId }]);
-        return submitGroups(tx, sendCfg, partyId, input);
+        return submitGroups(
+          tx,
+          sendCfg,
+          partyId,
+          input,
+          deps.attendance === undefined
+            ? undefined
+            : { recorder: deps.attendance, clock: deps.clock },
+        );
       });
       return c.json(submitted);
     }),
@@ -2936,7 +2951,17 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const command = groupCommand(personId, asObject(await readRawJsonBody<unknown>(c)));
       const fired = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ partyId }]);
-        return fireGroup(tx, cfg, partyId, groupId, command);
+        return fireGroup(
+          tx,
+          cfg,
+          partyId,
+          groupId,
+          command,
+          undefined,
+          deps.attendance === undefined
+            ? undefined
+            : { recorder: deps.attendance, clock: deps.clock },
+        );
       });
       return c.json(fired);
     }),
@@ -3082,7 +3107,15 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       }
       const reordered = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ partyId }]);
-        return reorderHeldGroups(tx, partyId, heldGroupIds as string[], command);
+        return reorderHeldGroups(
+          tx,
+          partyId,
+          heldGroupIds as string[],
+          command,
+          deps.attendance === undefined
+            ? undefined
+            : { recorder: deps.attendance, clock: deps.clock },
+        );
       });
       return c.json(reordered);
     }),
@@ -3099,7 +3132,16 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const lineId = body.lineId.toLowerCase();
       const answer = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ partyId }]);
-        return splitHeldLineIntoUnits(tx, cfg, partyId, lineId, command);
+        return splitHeldLineIntoUnits(
+          tx,
+          cfg,
+          partyId,
+          lineId,
+          command,
+          deps.attendance === undefined
+            ? undefined
+            : { recorder: deps.attendance, clock: deps.clock },
+        );
       });
       return c.json(answer);
     }),
@@ -3117,7 +3159,17 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const target = parseMoveTarget(body.target);
       const moved = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ partyId }]);
-        return moveLinesToGroup(tx, cfg, partyId, moves, target, command);
+        return moveLinesToGroup(
+          tx,
+          cfg,
+          partyId,
+          moves,
+          target,
+          command,
+          deps.attendance === undefined
+            ? undefined
+            : { recorder: deps.attendance, clock: deps.clock },
+        );
       });
       return c.json(moved);
     }),

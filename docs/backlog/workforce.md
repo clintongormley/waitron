@@ -71,7 +71,12 @@ course/send/recall and make-at changes, preparation and pass transitions, servin
 handover also capture the admitted worker. Their route tests check rollback on capture refusal,
 replays and unchanged commands, while device-only work records no worker activity. A group spanning
 two bills records each affected bill at one trusted instant. Bill and party command scopes keep
-separate activity identities even when their submission ids match. The retained group-command audit,
+separate activity identities even when their submission ids match. Direct group submissions, joins,
+releases, reordering, line moves and splits now snapshot their event's worker, location and trusted
+instant. The captured event replaces the retained event in attendance reads and survives a later
+change to the party's bill locations. Legacy prep of a paid order and an unpaid departure from an
+already placed bill also capture the acting worker; their tests check rollback on capture refusal.
+Derived group events, draft-event snapshots, the remaining source-command classifications,
 restore-path qualification and final branch checks remain open; part 3 is unfinished.
 
 My hours stays with part 5; no placeholder is offered in part 2. Parts 3–6 remain open: automatic

@@ -6263,6 +6263,7 @@ export async function sendToPrep(
   deps: WorkingOrderDeps,
   cfg: TillConfig,
   id: string,
+  attendance?: OrderAttendance & { personId: string },
 ): Promise<void> {
   return withTransaction(deps.db, async (tx) => {
     const [order] = await tx
@@ -6280,6 +6281,8 @@ export async function sendToPrep(
       .orderBy(workingOrderLines.lineNo);
     // No sold-out check: a settled order's lines cannot be removed, so refusing would strand paid work.
     await fireLines(tx, cfg, id, firedLines);
+    if (firedLines.length > 0)
+      await captureKitchenActivity(tx, attendance, attendance?.personId, [id]);
   });
 }
 

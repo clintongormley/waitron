@@ -1,4 +1,5 @@
 import type { AttendanceRecorder } from "./attendance-capture.js";
+import { captureKitchenActivity } from "./attendance-capture.js";
 import { nowIso, unpaidDepartures } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { TrustedClock, FiscalBackend } from "@waitron/fiscal";
@@ -145,6 +146,14 @@ export async function recordUnpaidDeparture(
           source: cfg.origin.source,
           deviceId: cfg.origin.deviceId,
         });
+
+  await captureKitchenActivity(
+    tx,
+    deps.attendance === undefined ? undefined : { recorder: deps.attendance, clock: deps.clock },
+    operator.personId,
+    departing.filter((id) => !openIds.has(id)),
+    `unpaid-departure:${partyId}:${req.expectedPartyRevision}`,
+  );
 
   const empty = bills
     .filter((bill) => bill.status === "open" && bill.lines === 0)
