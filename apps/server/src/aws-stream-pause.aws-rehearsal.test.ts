@@ -10,7 +10,8 @@ import { createS3ObjectStore } from "@waitron/stream";
 import {
   allowOwnedBucket,
   awaitDeniedPauseCheck,
-  watchHeldConnect,
+  gateRefusedEvents,
+  restartWatch,
 } from "./testing/aws-pause-gate.js";
 import { withListingDenied } from "./testing/aws-listing-denial.js";
 import { rehearsalLifecycle } from "./testing/aws-rehearsal.js";
@@ -28,13 +29,15 @@ import {
   type TransportGate,
 } from "./testing/transport-gate.js";
 
-// The supervisor logs a refused pause check once per pause (`stream.pause_check_failed`,
-// packages/stream/src/supervisor.ts), so its held listing must not give up before the bucket rule
-// refuses it. It is held from the pause through the paused sales, the wait for it at the gate
-// (5 s at most), the rule's put and its negative control (60 s at most), so 120 s of inactivity
-// exceeds the expected hold; a held request has been measured to be given up later than the
-// setting, never earlier (transport-gate.ts). Should the hold pass the supervisor's 5-minute
-// READ_DEADLINE_MS, it logs a timeout without using that once-only slot.
+// The supervisor logs a REFUSED pause check once per pause (`stream.pause_check_failed`,
+// packages/stream/src/supervisor.ts; a timeout is logged every time), so its held listing must not
+// give up before the bucket rule refuses it. It is held from the pause through the paused sales,
+// the wait for it at the gate (5 s at most), the rule's put and its negative control. That control
+// starts no listing after 60 s, but a listing already started can run on past that, the store
+// making up to three attempts, each with a 30 s silence limit (packages/stream/src/s3-client.ts).
+// 120 s of inactivity exceeds the planned hold; a held request has been measured to be given up
+// later than the setting, never earlier (transport-gate.ts). Should the hold pass the supervisor's
+// 5-minute READ_DEADLINE_MS, it logs a timeout without using that once-only slot.
 const SOCKET_TIMEOUT_MS = 120_000;
 
 /** Slice 8a saw Litestream's first CONNECT one second after it started. */
@@ -67,15 +70,18 @@ describe("AWS rehearsal: the stream pause against Amazon S3", () => {
       const record = (event: object) => ctx.record({ scenario: "pause", ...event });
       const bucket = ctx.bucketConfig(ctx.prefix("pause"));
       const allow = allowOwnedBucket(ctx.bucket, ctx.region);
-      const gates: TransportGate[] = [];
+      const named: [string, TransportGate][] = [];
+      const start = async (name: string): Promise<TransportGate> => {
+        const gate = await startTransportGate({ allow });
+        named.push([name, gate]);
+        return gate;
+      };
+      let refused: string[] | undefined;
       try {
         // One gate per client, so a CONNECT a gate sees can only be its own client's.
-        const serverGate = await startTransportGate({ allow });
-        gates.push(serverGate);
-        const scenarioGate = await startTransportGate({ allow });
-        gates.push(scenarioGate);
-        const litestreamGate = await startTransportGate({ allow });
-        gates.push(litestreamGate);
+        const serverGate = await start("server");
+        const scenarioGate = await start("scenario");
+        const litestreamGate = await start("litestream");
         const scenarioStore = createS3ObjectStore(bucket, {
           requestHandler: gatedRequestHandler(scenarioGate, {
             socketTimeoutMs: SOCKET_TIMEOUT_MS,
@@ -89,30 +95,18 @@ describe("AWS rehearsal: the stream pause against Amazon S3", () => {
             keepAlive: false,
           }),
         });
-        const spawned: number[] = [];
-
         // Started as step 7 kills Litestream: the one the supervisor starts in its place must reach
         // the held gate.
+        const restart = restartWatch(litestreamGate);
         let restartCheck:
           Promise<{ ok: true; elapsedMs: number } | { ok: false; error: unknown }> | undefined;
         const watchRestart = (): void => {
-          const last = litestreamGate.seen().at(-1)?.sequence ?? 0;
-          const spawnedBefore = spawned.length;
-          restartCheck = watchHeldConnect(litestreamGate, last, {
-            timeoutMs: RESTART_CONNECT_WAIT_MS,
-            signal: ctx.signal,
-          }).then(
-            ({ elapsedMs }) => {
-              if (spawned.length > spawnedBefore) return { ok: true as const, elapsedMs };
-              return {
-                ok: false as const,
-                error: new Error(
-                  "a CONNECT arrived at the held gate, but no new Litestream started",
-                ),
-              };
-            },
-            (error: unknown) => ({ ok: false as const, error }),
-          );
+          restartCheck = restart
+            .watch({ timeoutMs: RESTART_CONNECT_WAIT_MS, signal: ctx.signal })
+            .then(
+              ({ elapsedMs }) => ({ ok: true as const, elapsedMs }),
+              (error: unknown) => ({ ok: false as const, error }),
+            );
         };
 
         await runStreamPauseScenario({
@@ -128,18 +122,18 @@ describe("AWS rehearsal: the stream pause against Amazon S3", () => {
           },
           freeze: {
             pause: async () => {
-              for (const gate of gates) gate.hold();
+              for (const [, gate] of named) gate.hold();
             },
             resume: () => {
-              for (const gate of gates) gate.release();
+              for (const [, gate] of named) gate.release();
             },
           },
           store: scenarioStore,
           serverSeams: {
             store: serverStore,
             spawn: gatedSpawn(litestreamGate, (pid) => {
-              spawned.push(pid);
               ctx.trackChild(pid);
+              restart.childStarted();
             }),
           },
           resumeWaitMs: STREAM_PAUSE_AWS_RESUME_WAIT_MS,
@@ -191,17 +185,16 @@ describe("AWS rehearsal: the stream pause against Amazon S3", () => {
             });
           },
         });
-
-        const refused = gates.flatMap((gate) => gate.refused());
-        record({
-          phase: "gate-refused",
-          count: refused.length,
-          outcome: refused.length === 0 ? "ok" : "failed",
-        });
-        expect(refused, "a client asked the gate for a host outside the owned bucket").toEqual([]);
       } finally {
-        await Promise.allSettled(gates.map((gate) => gate.close()));
+        try {
+          // Whether the scenario passed or threw, so a refused host is on the receipt either way.
+          refused = named.flatMap(([, gate]) => gate.refused());
+          for (const event of gateRefusedEvents(named)) record(event);
+        } finally {
+          await Promise.allSettled(named.map(([, gate]) => gate.close()));
+        }
       }
+      expect(refused, "a client asked the gate for a host outside the owned bucket").toEqual([]);
     });
   });
 });

@@ -87,7 +87,7 @@ The variables the rehearsal's own code reads:
 | `AWS_REGION`                         | Must match the profile's region. The bucket is created there. `us-east-1` is refused (`region-unsupported`) before any request, because there, AWS's CreateBucket reference says, "if you re-create an existing bucket that you already own in the North Virginia Region, Amazon S3 returns 200 OK", so the run could not tell a fresh bucket from one the account already owns, such as another run's (read 2026-10-14). |
 | `WAITRON_AWS_REHEARSAL_RECEIPT_DIR`  | Where receipts are written. Unset or empty, they go to `waitron-aws-rehearsal` under your temporary folder. The full path may hold only letters, digits and `. _ @ -` between its slashes and must be at most 40 folders deep. The cleanup command naming a receipt in it must fit in 512 characters, which the run checks before any AWS call; with the default run id that allows a folder path of about 150 characters, depending on the region (155 for `eu-north-1`). |
 | `WAITRON_AWS_REHEARSAL_BUCKET`       | Must be unset or empty. Any other value refuses the run (`supplied-bucket`).                                                                                                                                                       |
-| `WAITRON_LITESTREAM_BIN`             | The Litestream binary the scenarios run.      Unset or empty, it is `.bin/litestream` at the repository root, where `node scripts/setup-litestream.mjs` puts it. It must report the pinned version, or the loop fails.             |
+| `WAITRON_LITESTREAM_BIN`             | The Litestream binary the scenarios run. Unset or empty, it is `.bin/litestream` at the repository root, where `node scripts/setup-litestream.mjs` puts it. It must report the pinned version, or the loop and pause scenarios fail.                   |
 
 A scenario sees the key pair only inside the bucket settings the runner builds for it. The key pair
 never reaches a receipt: every string in a receipt is checked against both halves of it before the
@@ -139,7 +139,7 @@ never passed on to AWS, and an open one moves no bytes; releasing passes the wai
 order. Each proxy lets through only port 443 of the owned bucket's own name in the run's region,
 `<bucket>.s3.<region>.amazonaws.com`, and refuses every other host, including the shared
 `s3.<region>.amazonaws.com`; the run fails if anything asked for a refused host (the `gate-refused`
-step). Not everything goes through a proxy: the runner's own calls, the rule's control listings
+steps, one per proxy, recorded whether the scenario passed or failed). Not everything goes through a proxy: the runner's own calls, the rule's control listings
 and the final restore check reach AWS directly, with the same key pair. Unlike the loop scenario's,
 this test hands the server the function that starts Litestream, so it learns each process id and
 the runner stops those processes at teardown.
@@ -147,7 +147,7 @@ the runner stops those processes at teardown.
 On 2026-10-14, slice 8a held a real Litestream 0.5.17 this way on a Mac, against a made-up bucket
 name with dummy keys and no AWS packet sent: for 240 seconds Litestream stayed alive and kept
 opening new connections to replace held ones it gave up (the one timed closely was given up between
-59 and 65 seconds after it arrived), none was passed on, and its side file grew from 7 MB to 50 MB
+58.7 and 64.7 seconds after it arrived), none was passed on, and its side file grew from 7 MB to 50 MB
 without being restarted.
 
 **The bucket rule.** While the stream is paused, the scenario puts this bucket policy, with
@@ -175,12 +175,15 @@ lists that prefix every two seconds until AWS answers 403, for 60 seconds at mos
 scenario release the server's held connections, so the supervisor's held question reaches AWS under
 the rule, and it waits up to 60 seconds more for the server to log `stream.pause_check_failed` with
 status 403 and `AccessDenied` (the `pause-check-denied` step, its status and name taken from that
-log line). The supervisor logs that event once per pause, so the first one decides: any other
-status or name fails the run at once. Then the rule is removed and a positive control lists the
+log line). The supervisor logs a refused check once per pause, and a check that hit its five-minute
+read deadline each time; either way the first one decides: any other status or name fails the run at
+once. Then the rule is removed and a positive control lists the
 prefix until it is answered, again for 60 seconds at most. If the negative control never sees a 403,
-the refusal is **unmeasured**: the receipt records `deny-unmeasured` as failed, the scenario's held
-question is never released under the rule, and the run fails. Teardown removes the bucket's policy
-again whatever happened.
+the refusal is **unmeasured**: the receipt records `deny-unmeasured` as failed and the run fails. The
+rule is then removed before the scenario's own cleanup releases the proxies, so the held question
+goes out without it; but if removing the rule fails, that cleanup still releases the proxies, and
+the held question goes out with the rule in place. Teardown removes the bucket's policy again
+whatever happened.
 
 A successful control listing records no HTTP status, because the store's success carries none, so
 the receipt sees `ListObjectsV2` answered only through a refusal or the runner's own listings. The
@@ -194,18 +197,23 @@ to last, so its question is still waiting when the rule is in place. The
 its release. After the refusal, the stream is given the supervisor's one-minute interval, plus 60
 seconds for the rule's removal to reach AWS, plus 30 seconds, to resume.
 
-Compared with the local test, the AWS run adds, while paused, the wait for the held question (5 seconds
-at most), the two controls and the wait for the logged refusal (60 seconds each at most), and,
-after it, 120 seconds more of resume wait: 305 seconds in all
-(`STREAM_PAUSE_AWS_EXTRA_MS`, `apps/server/src/testing/stream-pause-scenario.ts`, the module the
-test reads these waits from). A unit test holds the local test's waits plus these within the
-rehearsal's 15-minute scenario deadline: 526 + 305 = 831 seconds, leaving 69 seconds, which also
-has to cover creating and checking the bucket.
+Compared with the local test, the AWS run plans to add, while paused, the wait for the held question
+(5 seconds at most), the two controls (each starts no new listing after 60 seconds) and the wait for
+the logged refusal (up to 60 seconds), and, after it, 120 seconds more of resume wait: 305 seconds in
+all (`STREAM_PAUSE_AWS_EXTRA_MS`, `apps/server/src/testing/stream-pause-scenario.ts`, the module the
+test reads these waits from). That is a planned budget, not an upper bound. It leaves out how long a
+control's last listing runs once started (the store makes up to three attempts, each with a
+30-second silence limit, `packages/stream/src/s3-client.ts`), the calls that put and remove the
+rule, and, in a failing run, the wait of up to 60 seconds from the kill for the restarted Litestream
+to reach its proxy. A unit test holds the local test's waits plus the planned 305 within the
+rehearsal's 15-minute scenario deadline: 526 + 305 = 831 seconds, leaving a planned 69 seconds,
+which also has to cover creating and checking the bucket.
 
 Its other recorded steps are the scenario's stages (`probe`, `boot`, `baseline`, `freeze-control`,
 `restart-held`, `fill`, `fold-back`, `paused-sales`, `while-paused`, `resume`, `restore-sale`),
-`restart-through-gate` (a connection reached the held Litestream proxy after the kill, so the
-replacement Litestream really went through it), `pause-check-held`, and the rule's
+`restart-through-gate` (a held connection reached the Litestream proxy after the replacement
+Litestream started, so the replacement really went through it; one the killed Litestream opens
+before then does not count, and a failure names any host that proxy refused), `pause-check-held`, and the rule's
 `listing-denial` steps. `pause-check-held` waits, after the server has logged `stream.paused`, up to
 5 seconds for the server's proxy to hold at least one connection, and records how many it holds
 and how long the wait took; no held connection fails the run. It shows that a server bucket call was

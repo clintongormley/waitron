@@ -145,8 +145,13 @@ export const STREAM_PAUSE_AWS_RESUME_WAIT_MS =
   TICK_MS + AWS_REHEARSAL_LIMITS.denialControlMs + STREAM_PAUSE_RESUME_WAIT_MS;
 
 /**
- * What the AWS run adds: inside the pause, the wait for the held check, the listing denial's two
- * controls and the wait for the refused check; after it, the longer resume wait.
+ * What the AWS run plans to add: inside the pause, the wait for the held check, the listing
+ * denial's two controls and the wait for the refused check; after it, the longer resume wait. This
+ * is a budget, not an upper bound. A control's limit stops it STARTING a listing; a listing
+ * already started can run on past it, the store making up to three attempts, each with a 30 s
+ * silence limit (packages/stream/src/s3-client.ts). Also left out: the bucket policy's put and
+ * delete calls, and in a failing run the AWS test's wait for the restarted Litestream to reach its
+ * gate.
  */
 export const STREAM_PAUSE_AWS_EXTRA_MS =
   STREAM_PAUSE_AWS_HELD_CHECK_WAIT_MS +

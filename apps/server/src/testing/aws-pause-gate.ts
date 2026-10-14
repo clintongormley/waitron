@@ -43,9 +43,10 @@ export interface PauseCheckEvent {
 }
 
 /**
- * Waits for the supervisor's logged `stream.pause_check_failed` and records it. The supervisor
- * logs that event once per pause, so the first one decides: a 403 named `AccessDenied` passes,
- * anything else fails at once.
+ * Waits for the supervisor's logged `stream.pause_check_failed` and records it. The supervisor logs
+ * a refused check once per pause, and a check that hit its read deadline each time
+ * (packages/stream/src/supervisor.ts); either way the first one decides: a 403 named
+ * `AccessDenied` passes, anything else fails at once.
  */
 export async function awaitDeniedPauseCheck(
   options: {
@@ -94,27 +95,81 @@ export async function awaitDeniedPauseCheck(
 }
 
 /**
- * Resolves once the gate has seen a CONNECT arrive while holding, numbered after
- * `afterSequence`; rejects after `timeoutMs`.
+ * Watches for the Litestream the supervisor starts after a kill to reach the held gate. Give
+ * `childStarted` to the spawn seam; call `watch` just before the kill. Only a held CONNECT numbered
+ * after the gate's last one when the first child after `watch` started counts, so one the killed
+ * Litestream opens in the meantime does not. A failure names any CONNECT the gate refused.
  */
-export async function watchHeldConnect(
-  gate: { seen(): readonly SeenConnect[] },
-  afterSequence: number,
-  options: { timeoutMs: number; signal?: AbortSignal } & Clock,
-): Promise<{ sequence: number; elapsedMs: number }> {
-  const now = options.now ?? Date.now;
-  const sleep = options.sleep ?? realSleep;
-  const started = now();
-  for (;;) {
-    options.signal?.throwIfAborted();
-    const hit = gate.seen().find((entry) => entry.sequence > afterSequence && entry.held);
-    const elapsedMs = now() - started;
-    if (hit !== undefined) return { sequence: hit.sequence, elapsedMs };
-    if (elapsedMs >= options.timeoutMs) {
-      throw new Error(
-        `no CONNECT arrived at the gate while it held after sequence ${afterSequence} within ${options.timeoutMs} ms`,
-      );
-    }
-    await sleep(POLL_MS, options.signal);
-  }
+export function restartWatch(gate: {
+  seen(): readonly SeenConnect[];
+  refused(): readonly string[];
+}): {
+  childStarted(): void;
+  watch(
+    options: { timeoutMs: number; signal?: AbortSignal } & Clock,
+  ): Promise<{ elapsedMs: number }>;
+} {
+  let watching = false;
+  let replacementAfter: number | undefined;
+  return {
+    childStarted() {
+      if (watching && replacementAfter === undefined) {
+        replacementAfter = gate.seen().at(-1)?.sequence ?? 0;
+      }
+    },
+    async watch(options) {
+      watching = true;
+      const now = options.now ?? Date.now;
+      const sleep = options.sleep ?? realSleep;
+      const started = now();
+      for (;;) {
+        options.signal?.throwIfAborted();
+        const seen = gate.seen();
+        const after = replacementAfter;
+        const hit =
+          after === undefined
+            ? undefined
+            : seen.find((entry) => entry.sequence > after && entry.held);
+        const elapsedMs = now() - started;
+        if (hit !== undefined) return { elapsedMs };
+        if (elapsedMs >= options.timeoutMs) {
+          const within = `within ${options.timeoutMs} ms of the watch's start`;
+          const what =
+            replacementAfter === undefined
+              ? `no new Litestream started ${within}`
+              : `a new Litestream started, but no CONNECT reached the held gate after it ${within}`;
+          const refused = gate.refused();
+          throw new Error(
+            refused.length === 0
+              ? what
+              : `${what}; the gate refused a CONNECT to ${refused.join(", ")}`,
+          );
+        }
+        await sleep(POLL_MS, options.signal);
+      }
+    },
+  };
+}
+
+export interface GateRefusedEvent {
+  phase: "gate-refused";
+  /** Whose gate: each client has its own. */
+  objectRole: string;
+  count: number;
+  outcome: "ok" | "failed";
+}
+
+/** One receipt event per gate: how many CONNECTs it refused. The hosts stay out of the receipt. */
+export function gateRefusedEvents(
+  gates: readonly (readonly [name: string, gate: { refused(): readonly string[] }])[],
+): GateRefusedEvent[] {
+  return gates.map(([name, gate]) => {
+    const count = gate.refused().length;
+    return {
+      phase: "gate-refused",
+      objectRole: name,
+      count,
+      outcome: count === 0 ? "ok" : "failed",
+    };
+  });
 }
