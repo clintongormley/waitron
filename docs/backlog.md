@@ -706,13 +706,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   row until the list is scrolled again (`apps/dashboard/src/widgets/section-add-products.ts`).
   **Next action:** keep the list's end in view when the block grows, test-first in real Chromium.
 
-- **The menus screen still duplicates the count wording choice** — found during A609's review.
-  `apps/dashboard/src/screens/menus-screen.ts:2584` (`folders.selected`) and `:3333`
-  (`folders.move_heading`) choose singular/plural and replace `{count}` inline. Both keys are
-  accepted by `widgets/count-text.ts`'s `countOf` now. **Next action:** use `countOf` at both
-  sites and keep the existing English/Spanish wording checks. The catalogue browser's copy
-  was removed by A609; the menus screen is outside that item's scope.
-
 - **On a phone, sections nested more than four deep read flat in the Structure tab** — left open
   by A453. At narrow width `wt-data-table` stops indenting after four levels
   (`min(var(--tree-depth, 0), 4)`, `packages/ui/src/components/wt-data-table.ts`), and the menu's
