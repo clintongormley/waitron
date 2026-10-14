@@ -2042,6 +2042,13 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   `apps/server/src/move-bill.ts`). Left open by A667, which fixed the floor only; the till's zones
   now carry each area's service mode, which the list could check.
 
+- **A691 — the floor still offers joining two seated parties where the server can refuse it
+  (2026-10-15; open, rare).** A party stands in an area that does not seat guests only if the area's
+  service mode changed after it sat. Joining such a party to one whose table is merged with a free
+  table reaches `refuseUnseatable` on the server (`joinMergeMembers`,
+  `apps/server/src/floor-today-merges.ts`). A667 (#1719) left the floor offering every two-party join;
+  the server's refusal is the backstop.
+
 - **A660 — Moving an open counter order with nothing sent into a party printed a kitchen ticket
   (2026-10-14; check).** Found by A650's probe (Move this bill, an open counter order holding a
   Burger nobody had sent, into Mesa 43's party): the move queued an ordinary kitchen ticket and the
