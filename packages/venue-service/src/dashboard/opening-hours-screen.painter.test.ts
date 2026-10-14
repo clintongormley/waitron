@@ -395,7 +395,7 @@ describe("links into the painter", () => {
       .toBe(`/manage/opening-hours/view/season/season/${painted}`);
     expect(pushed()).toEqual([]);
     await shownPainter(el);
-    expect(tabs(el).items.map(({ key }) => key)).toEqual(["year", "periods"]);
+    expect(tabs(el).items.map(({ key }) => key)).toEqual(["year"]);
   });
 
   it("a station's link still draws that station's read-only week", async () => {

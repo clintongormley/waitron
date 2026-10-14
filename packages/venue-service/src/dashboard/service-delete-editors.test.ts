@@ -170,6 +170,28 @@ async function hours(
   const writes: unknown[][] = [];
   const api = new OpeningHoursApi(
     withOpeningStations((async (path, method, body) => {
+      if (method === "GET" && path.includes("/opening-hours/year?"))
+        return {
+          businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
+          clockRevision: 0,
+          currentBusinessDay: "2026-10-07",
+          pending: null,
+          year: Number(new URL(path, location.href).searchParams.get("year")),
+          timeZone: "Europe/Madrid",
+          today: "2026-10-07",
+          seasons: [],
+          days: [],
+          publicHolidaysAvailable: true,
+          missingHolidays: [],
+          holidayCoverage: [],
+          area: {
+            addressKey: "fixture",
+            readiness: "ready",
+            options: [],
+            required: false,
+            chosen: null,
+          },
+        };
       if (method === "GET") return path.includes("/named-days?") ? namedWeekModel() : model;
       writes.push([path, method, body]);
       return write();
@@ -217,7 +239,7 @@ it("zone service deletion invalidates pending discard on the same retained compo
 it.each(["week", "zone-week"])(
   "deletion drops the dirty painted %s and its Save writes nothing",
   async (kind) => {
-    const { screen, model, replace, writes } = await hours("periods");
+    const { screen, model, replace, writes } = await hours("year");
     history.pushState(
       null,
       "",

@@ -155,7 +155,7 @@ class OpeningLeaveApp extends LitElement {
 customElements.define("opening-leave-test-app", OpeningLeaveApp);
 let app: OpeningLeaveApp;
 const originalUrl = location.href;
-beforeEach(() => history.replaceState(null, "", "/manage/opening-hours/view/periods"));
+beforeEach(() => history.replaceState(null, "", "/manage/opening-hours/view/year"));
 afterEach(() => {
   app?.remove();
   setLocale("en");

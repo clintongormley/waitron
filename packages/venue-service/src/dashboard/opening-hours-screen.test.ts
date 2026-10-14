@@ -19,7 +19,7 @@ const hosts: HTMLElement[] = [];
 const originalUrl = location.href;
 beforeEach(() => {
   setLocale("en");
-  history.replaceState(null, "", "/manage/opening-hours/view/periods");
+  history.replaceState(null, "", "/manage/opening-hours/view/year");
 });
 afterEach(() => {
   vi.useRealTimers();
@@ -171,11 +171,14 @@ it("ignores another screen's department link while Opening hours is mounted", as
 });
 
 it("recovers a failed initial load and ignores model reads that settle after removal", async () => {
+  // Madrid's business day is still 31 December; Kiritimati's is already 1 January.
+  vi.setSystemTime(new Date("2026-12-31T23:30:00Z"));
   let reads = 0;
   let resolve!: (data: OpeningHoursModel) => void;
   const el = document.createElement("dashboard-opening-hours-screen");
   el.api = new OpeningHoursApi(
-    withOpeningStations((async () => {
+    withOpeningStations((async (path: string) => {
+      if (path.includes("/opening-hours/year?")) return yearRead(2026);
       if (++reads === 1) throw new Error("offline");
       if (reads === 2) return model();
       return new Promise<OpeningHoursModel>((done) => {
@@ -187,15 +190,17 @@ it("recovers a failed initial load and ignores model reads that settle after rem
   document.body.append(el);
   await expect.poll(() => el.shadowRoot!.querySelector("[data-test=read-error]")).not.toBeNull();
   el.api.rereadWatches();
-  await expect.poll(() => el.shadowRoot!.querySelector("[data-test=periods]")).not.toBeNull();
+  await expect.poll(() => el.shadowRoot!.querySelector("opening-hours-year")).not.toBeNull();
   expect(el.shadowRoot!.querySelector("[data-test=read-error]")).toBeNull();
+  expect(el.shadowRoot!.querySelector("opening-hours-year")!.year).toBe(2026);
   el.api.rereadWatches();
   el.remove();
   const data = model();
-  data.departments = [];
+  data.businessDayClock = { ...data.businessDayClock, timeZone: "Pacific/Kiritimati" };
   resolve(data);
+  await new Promise((settled) => setTimeout(settled, 0));
   await el.updateComplete;
-  expect(el.shadowRoot!.querySelector("wt-combobox")).not.toBeNull();
+  expect(el.shadowRoot!.querySelector("opening-hours-year")!.year).toBe(2026);
 });
 
 function pickerModel(): OpeningHoursModel {
@@ -230,19 +235,6 @@ it("lists All departments then active departments with their zones on Week only"
     { value: "all", label: "All departments" },
     { value: "restaurant", label: "Restaurant" },
     { value: "zone:terrace", label: "Restaurant › Terrace" },
-    { value: "bar", label: "Bar" },
-  ]);
-  const tabs = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-tabs"]>("wt-tabs")!;
-  tabs.dispatchEvent(
-    new CustomEvent("wt-tab-change", {
-      detail: { value: "periods" },
-      bubbles: true,
-      composed: true,
-    }),
-  );
-  await el.updateComplete;
-  expect(picker(el).options).toEqual([
-    { value: "restaurant", label: "Restaurant" },
     { value: "bar", label: "Bar" },
   ]);
 });
@@ -781,16 +773,14 @@ describe("Year special-day actions", () => {
     expect(frame(form).refusal).toBe(t("special.load_error"));
     expect(el.shadowRoot!.querySelector("[data-test=special-read-error]")).toBeNull();
   });
-  it("says when the special day to delete cannot be read, and clears it on another tab", async () => {
+  it("says when the special day to delete cannot be read, and clears it on another view", async () => {
     const { el, cal } = await yearMount({ readFails: true });
     await action(cal, "2026-10-13", "delete");
     await expect
       .poll(() => el.shadowRoot!.querySelector("[data-test=special-read-error]")?.textContent)
       .toContain("Opening hours could not be loaded.");
     expect(el.shadowRoot!.querySelector("[data-test=delete-special-day]")).toBeNull();
-    el.shadowRoot!.querySelector("wt-tabs")!.dispatchEvent(
-      new CustomEvent("wt-tab-change", { detail: { value: "periods" } }),
-    );
+    cal.dispatchEvent(new CustomEvent("year-month-open", { detail: { date: "2026-12-01" } }));
     await expect
       .poll(() => el.shadowRoot!.querySelector("[data-test=special-read-error]"))
       .toBeNull();
@@ -1060,7 +1050,7 @@ describe("Year view", () => {
   it("opens on the venue's current year when the address names no view and no week parameter", async () => {
     const { el, view, years } = await yearMount("/manage/opening-hours");
     expect(tabs(el).value).toBe("year");
-    expect(tabs(el).items.map((item) => item.key)).toEqual(["year", "periods"]);
+    expect(tabs(el).items.map((item) => item.key)).toEqual(["year"]);
     expect(tabs(el).items[0]!.label).toBe("Year");
     await expect.poll(() => view()?.model?.year).toBe(2026);
     expect(years).toEqual(["2026"]);
@@ -1220,14 +1210,12 @@ describe("Year view", () => {
     expect(view().specialDays).toEqual([{ id: "new", name: "New fair" }]);
   });
 
-  it("drops the year from the address when another tab is chosen, as a month's name does", async () => {
+  it("drops the year from the address when a tab is chosen, as a month's name does", async () => {
     const { el, view } = await yearMount("/manage/opening-hours/view/year/year/2027?keep=yes");
     await expect.poll(() => view()?.model?.year).toBe(2027);
-    tabs(el).dispatchEvent(new CustomEvent("wt-tab-change", { detail: { value: "periods" } }));
-    await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/periods");
-    expect(location.search).toBe("?keep=yes");
     tabs(el).dispatchEvent(new CustomEvent("wt-tab-change", { detail: { value: "year" } }));
     await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/year");
+    expect(location.search).toBe("?keep=yes");
     await expect.poll(() => view()?.model?.year).toBe(2026);
   });
 
@@ -1432,7 +1420,7 @@ describe("Month view", () => {
     expect(month.readOnly).toBe(false);
     expect(month.api).toBe(el.api);
     expect(tabs(el).value).toBe("year");
-    expect(tabs(el).items.map((item) => item.key)).toEqual(["year", "periods"]);
+    expect(tabs(el).items.map((item) => item.key)).toEqual(["year"]);
     expect(el.shadowRoot!.querySelector("[slot=year] opening-hours-month")).toBe(month);
     expect(el.shadowRoot!.querySelector("opening-hours-year")).toBeNull();
     expect(el.shadowRoot!.querySelector("[name=departmentId]")).toBeNull();
@@ -1490,7 +1478,7 @@ describe("Month view", () => {
 
   it("says when the month cannot be read, and clears it once a reread succeeds", async () => {
     vi.setSystemTime(new Date("2026-10-12T12:00:00Z"));
-    const { el, view, failNext } = await monthMount("/manage/opening-hours/view/periods");
+    const { el, view, failNext } = await monthMount("/manage/opening-hours/view/year");
     failNext(1);
     tabs(el).dispatchEvent(new CustomEvent("wt-tab-change", { detail: { value: "year" } }));
     history.replaceState(null, "", "/manage/opening-hours/view/month/month/2026-12");
@@ -1794,7 +1782,7 @@ describe("no Day tab and no real week", () => {
       el
         .shadowRoot!.querySelector<HTMLElementTagNameMap["wt-tabs"]>("wt-tabs")!
         .items.map((item) => item.key),
-    ).toEqual(["year", "periods"]);
+    ).toEqual(["year"]);
   });
 });
 
