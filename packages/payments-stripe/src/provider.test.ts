@@ -347,7 +347,9 @@ describe("StripeTerminalProvider reversals", () => {
   it("throws payment.not_found for an unknown paymentRef", async () => {
     const fake = new FakeStripe();
     const provider = providerFor(fake);
-    await expect(provider.refund("no-such-ref")).rejects.toThrow();
+    await expect(provider.refund("no-such-ref")).rejects.toMatchObject({
+      code: "payment.not_found",
+    });
   });
 
   it("throws payment.not_found for a payment with no external_ref (e.g. a declined collect)", async () => {
@@ -357,7 +359,9 @@ describe("StripeTerminalProvider reversals", () => {
     const provider = providerFor(fake);
     const failed = await provider.collect(p);
     expect(failed.state).toBe("failed");
-    await expect(provider.refund(failed.paymentRef)).rejects.toThrow();
+    await expect(provider.refund(failed.paymentRef)).rejects.toMatchObject({
+      code: "payment.not_found",
+    });
   });
 });
 
