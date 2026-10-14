@@ -195,7 +195,6 @@ export class StaffRolesScreen extends LitElement {
       .catch(() => undefined);
   }
 
-  /** The dialog draws `submitting` a render late, so a second press in the same turn stops here. */
   async #delete(staffRoleId: string): Promise<void> {
     const deletion = this.deleting!;
     if (deletion.busy) return;

@@ -1228,7 +1228,7 @@ their a11y suites (`packages/adjustments/src/dashboard/reasons-screen.a11y.test.
 `packages/media/src/dashboard/image-library.a11y.test.ts`,
 `packages/staffing/src/dashboard/staff-roles-screen.a11y.test.ts` and
 `packages/venue-service/src/dashboard/departments-list.a11y.test.ts`) import
-`packages/ui/src/a11y-helpers.ts`, whose line 22 is `beforeEach(() => commands.parkPointer())`.
+`packages/ui/src/a11y-helpers.ts`, whose top-level `beforeEach` runs `commands.parkPointer()`.
 Each of those packages' vitest configs says so in a comment beside the registration.
 
 ## Dispatch events when testing a `composedPath()` guard.
