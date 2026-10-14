@@ -89,8 +89,8 @@ day: a day repainted since the save was sent keeps its new paint (`rebaseDays`,
 2026-10-14, A637: every other live update reaching the season painter is taken in day by day too:
 a day the draft has not changed takes the stored paint, and a day it changed keeps the draft
 (`refresh` and `mayFollow`, `packages/venue-service/src/dashboard/season-painter.ts`). A save in
-flight, and the time until the first read that started after a successful save answered, still hold
-the edited weeks whole.
+flight, and the time until the first read that started after the latest successful save answered,
+still hold the edited weeks whole.
 2026-10-14, A506-11: the Periods page reads `/menu-periods/painted-in` through
 `OpeningHoursApi.watchPaintedIn` on the `menu-periods-painted-in` dependencies. Its delete dialog
 reads `…/delete-impact` again, passively, when a page read (the hours model or Painted in) that

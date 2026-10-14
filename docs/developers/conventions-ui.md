@@ -948,7 +948,7 @@ that release before the check made both pass, and each installed-candidate delet
 **2026-10-13, A506-7:** the real week is gone, and `opening-hours-date.unsaved.test.ts` with it.
 
 **2026-10-13, A506-8:** the zone week editor is gone too, and `opening-hours-zone-week.unsaved.test.ts`
-with it. The season painter judges a refresh by its saved baseline, not its draft scope; its case is "keeps an edited week when a fresh
+with it. The season painter judges a refresh by its saved baseline, not its draft scope; its case is "keeps an edited day when a fresh
 model arrives before the painter, put back on the page, has updated" in `season-painter.unsaved.test.ts`.
 
 **2026-10-14, A506-9:** the day editor (`opening-hours-day`) and the special day dialog are gone, and
