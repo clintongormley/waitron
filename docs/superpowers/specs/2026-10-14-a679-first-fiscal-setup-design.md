@@ -1,13 +1,13 @@
 # A679: first Live fiscal setup
 
-**Proposal for owner review, updated 2026-10-14 at 22:05. No full-design or build approval.**
+**Proposal for owner review, decision update 2026-10-15. No full-design or build approval.**
 You must be able to finish Live fiscal setup without a repository checkout, shell commands or
 Cloud subscription. An allocation is a signed assignment of an installation identity and its
 invoice series. Your custodian keeps the signing key and current master register outside the box.
 
 ## Settled scope and order
 
-The owner's Lane E decisions supersede the earlier scope and order:
+The owner's 2026-10-14 Lane E decisions supersede the earlier scope and order:
 
 - **21:50, option A approved:** offer BOTH a guided first outside paper kit and import from an
   existing custodian. Both routes converge on the same public import and authority checks.
@@ -17,6 +17,17 @@ The owner's Lane E decisions supersede the earlier scope and order:
 - **22:05:** only Demo is urgent before morning, handled by B/A680. Finish and publish these Live
   design docs now. Un-park and finish W41s6; build A679 after W41s6 lands, before W41s7, on A680.
   This order does not approve the full A679 design or its build. The driver owns queue changes.
+- **2026-10-14 at 22:35, option A approved:** keep current local-network ownership for first Live
+  setup. Claim the attempt through the existing local wizard, durably bind its owner/event, refuse
+  competing tabs/devices for that attempt, and reconfirm before using the number block and before
+  activation. No physical-code step; adoption/restore authentication stays outside this change.
+
+**2026-10-15 decision update:** per the owner's handoff, W41s6 has landed in PR #1717; A680 has
+not landed. A680 owns kit-free Demo/Preparation and the separate readiness work described below.
+Build A679 after both land, before W41s7, subject to remaining retention choices and full-design
+approval. These are design requirements, not claims of implemented behavior. All first-publication
+reproduction and source-read receipts below remain historical evidence from 2026-10-14; this update
+does not rerun or replace them.
 
 ## Evidence and source reads
 
@@ -87,10 +98,12 @@ A second venue consults the same master and takes the next free entry.
 
 1. Choose Live and finish venue/admin details. Show **Live / Production**. Keep the existing
    certificate, email and readiness steps, with the separate test contract above.
-2. Confirm first-setup ownership using the still-undecided method below. Freeze a server-owned
-   unpredictable setup event, planned node UUID, administrator UUID and module event/source IDs.
+2. Claim first-setup ownership through the existing local wizard, without a physical code. Durably
+   bind the owner to a frozen server-owned unpredictable setup event, planned node UUID,
+   administrator UUID and module event/source IDs. Refuse competing tabs/devices for this attempt.
    Download a public request bound to those IDs and the taxpayer/environment/complete series.
-   Signing and seeding use those exact IDs; neither silently replaces them.
+   Signing and seeding must use those exact IDs; neither may silently replace them. Reconfirm
+   ownership before using the number block and again before activation.
 3. Ask whether this taxpayer/software/production scope already has a current master. Existing:
    use its custodian and import signed public files. None: name a custodian and guide creation of
    the outside kit. BOTH routes are approved. Never silently start another master or reset names.
@@ -105,19 +118,25 @@ A second venue consults the same master and takes the next free entry.
    receipts. Keep them with the master. Once consumed, the entry stays consumed.
 6. At the box, import only public files. Separately compare the complete fingerprint from the
    current master, confirm fresh consultation/consumption for this event and identify its incident
-   record. Dedicated authenticated host steps collect these claims, not `initialOperations`.
+   record. Dedicated host steps bound to the claimed owner collect these claims, not
+   `initialOperations`.
 7. Review all identities and reconfirm ownership before activation. That confirmation cannot replace
    step 2. Use existing allocation checks and one venue transaction. Retain public trust and the
    local committed result durably before publishing trading mode; accepted readiness is also required.
 
 ## Ownership, interruption and secret boundaries
 
-**NEXT OWNER choice: first-setup ownership.** Setup routes currently have no login
+First-publication source read (2026-10-14): Setup routes currently have no login
 (`apps/server/src/setup-api.ts`, `mountSetup`); the future administrator's password is no existing
-login. Choose the current trusted-local model with a bound owner/event, or a physical one-use code
-and short-lived session. Neither is approved. Code delivery would also need a decision. Keep adoption
-and restore outside A679's authentication change, but coordinate their existing mutual exclusion.
-Bind planned administrator credentials without storing plaintext or claiming existing account authority.
+login.
+
+**Approved ownership design, 2026-10-14 at 22:35; recorded here 2026-10-15:** keep current
+local-network ownership. A679 must let you claim the attempt through the existing local wizard,
+durably bind its owner/event, refuse competing tabs/devices for that attempt, and reconfirm ownership
+before the number block is used and before activation. No physical-code step. Do not extend adoption
+or restore authentication; coordinate their existing mutual exclusion. Bind planned administrator
+credentials without storing plaintext or treating that future administrator as an existing account
+with authority. These are requirements for the design, not implemented behavior claims.
 
 One durable owner/event covers preparation, readiness, public import, trust confirmation and activation.
 Reject competing tabs/devices and provision/adoption/restore events before outside consumption.
@@ -133,7 +152,8 @@ abandoned event require explicit resolution. After consumption, use new evidence
 unless the committed replay above agrees; never reuse an uncertain assignment.
 Report a committed write separately from a failed refresh. Offer no blind restart or activation retry.
 
-Private keys/passphrases stay in the outside tool's memory and explicit encrypted download only.
+Under the proposed encrypted-file retention route, private keys/passphrases stay in the outside
+tool's memory and explicit encrypted download only. The private-key retention format remains open.
 No uploads, analytics, network calls, browser storage, request/error logs or venue backups carry them.
 Use cryptographic randomness and no remote assets. No box endpoint generates a real custody key.
 Bound public imports and reject secret-bearing files without echoing contents; audit references stay public.
@@ -163,10 +183,13 @@ ownership/trust representation would need a migration; do not edit shipped SQL o
 
 ## Remaining decisions and driver handoff
 
-Recommend asking ownership first: “Elena opens Olivo's new box on its local network. May she claim
-setup there with a bound owner/event, or must she enter a one-use code obtained physically from the
-box? I recommend the physical code, subject to deciding how you obtain it.” Then settle who retains
-the master, paper versus digital retention, and encrypted key file versus additional secret paper.
+**Next owner question, one at a time:** “Should the current writable master register be PAPER or
+DIGITAL? I recommend one current paper original so you can record offline consumption on paper.”
+This is a proposal, not approval; digital custody remains an option. W41s already requires one named
+custodian and one writable current master outside venue backups. Paper blocks and uploaded snapshots
+confer no current authority. After choosing the master format, ask separately about private-key
+retention (encrypted key file versus additional secret paper), then name the custodian. None of
+those choices is settled here. Ownership is settled and must not be asked again.
 Cloud fetching/reconciliation remains W41sC3. Use the paper route for subscribers until then;
 that default creates no new owner question.
 

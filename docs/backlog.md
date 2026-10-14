@@ -311,7 +311,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   outside paper kit and import from an existing custodian on 2026-10-14. The
   [Live proposal](superpowers/specs/2026-10-14-a679-first-fiscal-setup-design.md) has EN/ES
   phone and desktop drawings. The owner approved current local-network ownership at 22:35;
-  kit retention remains undecided. W41s-6 landed in [#1717](https://github.com/clintongormley/waitron/pull/1717).
+  the current master register's paper/digital format is the next decision, followed by signing-key
+  retention. W41s-6 landed in [#1717](https://github.com/clintongormley/waitron/pull/1717).
   Build A679 on A680 before W41s-7. A680 owns kit-free Demo/Preparation and the intended
   throwaway allocation for Live's separate preproduction readiness test. Joint validation and
   full-design approval remain open; Live activation needs real production custody. Detail:
