@@ -1937,8 +1937,9 @@ A form's submit button says Save whether the form creates or edits. "Add …" be
 title and to the button that opens a create dialog. The owner kept Add on a discovered printer's
 Add, the home shortcut picker and the till's Add bill (owner, 2026-10-12, A546). A546 also kept it,
 without an owner decision, on a discovered card reader's Add, the Add products and Add to menus
-pickers, the till's modifier picker when adding a dish, and a weighed item's Add. The period dialog opened from a painter's + New period says "Add and
-paint with it" (the opening-hours seasons spec, mockup 9). Nothing guards it across screens.
+pickers, the till's modifier picker when adding a dish, and a weighed item's Add. The period dialog (`period-dialog`) opened from a painter's + New period says "Add
+and paint with it" (the opening-hours seasons spec, mockup 9); opened from the Periods page's
+"+ Add period" it says Save. Nothing guards it across screens.
 
 The season painter (`season-painter.ts`, under `packages/venue-service/src/dashboard/`) edits one
 season's week for every active department and zone, in a full-screen frame (`painter-frame.ts`, a
@@ -2112,7 +2113,7 @@ and nothing guards it across screens:
   canvas editor;
 - batch 4a: adjustment reason create/edit and the bill-discount limit; booking create/edit; image
   upload and names edit;
-- Opening hours: the season painter, the special-day painter, the period editor and the season dialog.
+- Opening hours: the season painter, the special-day painter, the period dialog and the season dialog.
   A366 slice 4 retires the separate Station hours page and its draft editors;
 - Departments: Add and Rename department, Add and Rename zone, Move and Add to department,
   the Settings form (including transfers) and the selected zone's settings. Their sibling
@@ -3605,14 +3606,13 @@ an active station's drag grip stays before its name. The Routes tab's All catego
 also sets the default station, for someone with `venue.configure`. The page is offered only to
 someone with `venue_service.manage`; a supervisor is not offered it.
 
-Department opening hours belong to `/manage/opening-hours`, with Year and Periods tabs; the month
+Department opening hours belong to `/manage/opening-hours`, with a Year tab; the month
 (`/view/month`) shows under the Year tab, and a Standard
 week tab shows only a station's or All departments' read-only week (`?station=<id>`,
 `/view/week/department/all`). The page opens on Year when its address names no view and no
 department, zone, station or season, and on an old `/view/calendar` address
 (`opening-hours-screen.ts`). A `week=` in the address is ignored. `/view/year/year/<yyyy>` picks a
-year, and choosing another tab drops it; `/department/<id>` selects the department and
-`/view/periods` selects its periods; on All departments `/season/<id>` picks the season shown.
+year, and choosing another tab drops it; `/department/<id>` selects the department; on All departments `/season/<id>` picks the season shown.
 The season painter (Forms above) has its own address,
 `/view/season/season/<id>/department/<id>`, with `/zone/<id>` for a zone; it opens over the view
 it was opened from, or the Year on a direct load, and closing it returns there. An unknown season
@@ -4105,6 +4105,32 @@ Behavioral cases live in `packages/venue-service/src/dashboard/departments-zones
 `packages/venue-service/src/dashboard/service-edit-dialog.legacy.test.ts` and the
 `department-edit-dialog` and `zone-edit-dialog` suites beside them. Permanent Delete keeps its
 separate `service-delete-dialog` and `service-delete-editors` suites.
+
+### Periods page
+
+The Periods page, `/manage/periods` (`periods-screen.ts`, under
+`packages/venue-service/src/dashboard/`), lists every active department as a heading row followed
+by its periods. Its columns are Period (the colour swatch and name; a period painted nowhere has a
+dashed swatch and a muted name), Customer menu, Staff-only menus ("—" when none), Floor plan ("—"
+until floor plans exist), Painted in, and the row menu pinned to the end. Painted in shows a chip
+per season, opening that season's painter on the period's department, and a chip per special day,
+opening its painter, or "Not painted anywhere". The row menu offers Edit, Open in Opening hours
+(the season painter on the period's department) and Delete. Someone with only `venue.view` sees
+the list with no "+ Add period" and no row menu.
+
+"+ Add period" and Edit open the period dialog. Adding from this page, it starts with a required
+Department field. It holds Name, Colour (six swatches), Customer menu with the menus it includes,
+Staff-only menus, End offset with its explanation, a disabled Floor plan field, and, for a stored
+period, Painted in and a Delete… button in its body. Delete… asks first when the dialog has
+unsaved changes, then closes it and opens the delete dialog. Opened from a painter, the dialog's
+Painted in chips are plain text and it has no Delete….
+
+The delete dialog (`period-delete-dialog.ts`) asks "Delete {name}?" and reads what the delete
+changes: how many seasons and special days paint the period, the routing cells that name it, and
+whether today's later opening of it ends. When the period is painted or kept open today and the
+department has another period, a Replace with choice offers them, with None first. The delete button names the period.
+Cases: the `periods-screen*.test.ts`, `period-dialog*.test.ts` and `period-delete-dialog*.test.ts`
+files.
 
 ### Permanent department and zone Delete
 
