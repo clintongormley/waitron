@@ -79,35 +79,34 @@ const zoneKey = (id: string) => `z:${id}`;
 const ignore = () => {};
 
 const byDate = (a: DateFacts, b: DateFacts) => a.date.localeCompare(b.date);
+const copyDays = (days: ReadonlyMap<LocalDate, Paint[]>) =>
+  new Map([...days].map(([date, day]) => [date, day.map((entry) => ({ ...entry }))]));
 const copyPaint = (paint: OwnerPaint): OwnerPaint =>
-  new Map(
-    [...paint].map(([owner, days]) => [
-      owner,
-      new Map([...days].map(([date, day]) => [date, day.map((entry) => ({ ...entry }))])),
-    ]),
-  );
+  new Map([...paint].map(([owner, days]) => [owner, copyDays(days)]));
 const copyDraft = (draft: Draft): Draft => ({
   ...draft,
   dates: draft.dates.map((entry) => ({ ...entry })),
   paint: copyPaint(draft.paint),
 });
-function samePaintMap(a: OwnerPaint, b: OwnerPaint): boolean {
-  const owners = new Set([...a.keys(), ...b.keys()]);
-  return [...owners].every((owner) => {
-    const left = a.get(owner) ?? new Map<LocalDate, Paint[]>();
-    const right = b.get(owner) ?? new Map<LocalDate, Paint[]>();
-    const dates = new Set([...left.keys(), ...right.keys()]);
-    return [...dates].every((date) => samePaint(left.get(date) ?? [], right.get(date) ?? []));
-  });
+function sameDays(
+  a: ReadonlyMap<LocalDate, Paint[]> = new Map(),
+  b: ReadonlyMap<LocalDate, Paint[]> = new Map(),
+): boolean {
+  const dates = new Set([...a.keys(), ...b.keys()]);
+  return [...dates].every((date) => samePaint(a.get(date) ?? [], b.get(date) ?? []));
 }
+const samePaintMap = (a: OwnerPaint, b: OwnerPaint) =>
+  [...new Set([...a.keys(), ...b.keys()])].every((owner) => sameDays(a.get(owner), b.get(owner)));
+const sameDates = (a: readonly DateFacts[], b: readonly DateFacts[]) =>
+  a.length === b.length &&
+  a.every(
+    (entry, index) =>
+      entry.date === b[index]!.date && entry.closedAllDay === b[index]!.closedAllDay,
+  );
 const sameDraft = (a: Draft, b: Draft) =>
   a.name === b.name &&
   a.repeatsYearly === b.repeatsYearly &&
-  a.dates.length === b.dates.length &&
-  a.dates.every(
-    (entry, index) =>
-      entry.date === b.dates[index]!.date && entry.closedAllDay === b.dates[index]!.closedAllDay,
-  ) &&
+  sameDates(a.dates, b.dates) &&
   samePaintMap(a.paint, b.paint);
 
 function blank(dates: readonly LocalDate[], name = ""): Draft {
@@ -366,7 +365,7 @@ export class SpecialDayPainter extends LitElement {
   @property({ attribute: false }) specialDayId: string | null = null;
   /** A new special day's first date. */
   @property({ attribute: false }) date: LocalDate | null = null;
-  /** A date added to the stored day's draft, as an unsaved change, when it is first read. */
+  /** A date added to the stored day's draft, as an unsaved change; a change starts again from it. */
   @property({ attribute: false }) addDate: LocalDate | null = null;
   /** The public holidays the host knows of on the dates in view, for the Every year note. */
   @property({ attribute: false }) holidays: readonly HolidayFact[] = [];
@@ -406,7 +405,7 @@ export class SpecialDayPainter extends LitElement {
   /** A new day pre-filled from a public holiday can be saved as it opened. */
   private savableAtOpen = false;
   private baseline: Draft = blank([]);
-  /** What the draft was seeded from: a special day's id, or `new:<date>`. */
+  /** What the draft was seeded from, as {@link seedKey} names it. */
   private seeded?: string;
   /** The stored dates, each with the public holiday it was saved on, if any. */
   private stored = new Map<LocalDate, string | undefined>();
@@ -414,6 +413,11 @@ export class SpecialDayPainter extends LitElement {
   private revision = 0;
   /** Replaced whenever a read's or a write's answer would land on a draft it no longer belongs to. */
   private generation = {};
+  /** Replaced by each re-read of the stored day and by each save, so only the newest re-read that
+   *  no save has overtaken lands. */
+  private followToken = {};
+  /** A fresh model arrived while the stored day was first being read. */
+  private followAfterRead = false;
   private stopMonth?: () => void;
   private scope?: DraftScope<Draft>;
   private coordinator?: LeaveCoordinator;
@@ -430,10 +434,12 @@ export class SpecialDayPainter extends LitElement {
 
   protected override willUpdate(changes: PropertyValues<this>) {
     if (!this.model) return;
-    const key = this.specialDayId ?? `new:${this.date ?? ""}`;
+    const key = this.seedKey();
     if (this.open && this.seeded !== key) this.reseed(key);
-    else if (changes.has("model") && !this.scope?.isDirty())
-      this.revision = this.model.clockRevision;
+    else if (changes.has("model")) {
+      if (!this.scope?.isDirty()) this.revision = this.model.clockRevision;
+      if (this.open) this.follow();
+    }
     if (this.isConnected && !this.scope) {
       const { scope, coordinator } = draftScopeFor(this, {
         id: {},
@@ -453,6 +459,12 @@ export class SpecialDayPainter extends LitElement {
     if (this.open) this.readSeason();
   }
 
+  /** A stored day's id with its date to add, or `new:<date>`; a change starts the draft again. */
+  private seedKey(): string {
+    return this.specialDayId === null
+      ? `new:${this.date ?? ""}`
+      : `${this.specialDayId}+${this.addDate ?? ""}`;
+  }
   /** Reads the season of the draft's dates when they, or the model's seasons, change. */
   private readSeason() {
     const dates = this.draft.dates.map(({ date }) => date);
@@ -488,6 +500,7 @@ export class SpecialDayPainter extends LitElement {
 
   private reseed(key: string) {
     this.generation = {};
+    this.followAfterRead = false;
     this.seeded = key;
     this.saving = false;
     this.attempted = false;
@@ -518,12 +531,13 @@ export class SpecialDayPainter extends LitElement {
         if (generation !== this.generation) return;
         this.loading = false;
         this.adopt(detail, []);
-        if (addDate === undefined) return;
-        if (!this.draft.dates.some(({ date }) => date === addDate))
+        if (addDate !== undefined && !this.draft.dates.some(({ date }) => date === addDate))
           this.change({
             ...this.draft,
             dates: [...this.draft.dates, { date: addDate, closedAllDay: false }].sort(byDate),
           });
+        if (this.followAfterRead) this.follow();
+        if (addDate === undefined) return;
         if (announce)
           this.dispatchEvent(
             new CustomEvent("special-day-navigate", {
@@ -540,6 +554,44 @@ export class SpecialDayPainter extends LitElement {
       },
     );
   }
+  /** Re-reads the stored day the painter shows, passively, for {@link merge}. While a save is in
+   *  flight it reads nothing, and a save drops a re-read already asked for: the save's answer
+   *  becomes the saved state. */
+  private follow() {
+    const id = this.specialDayId;
+    this.followAfterRead = this.loading;
+    if (id === null || this.loading || this.loadFailed || this.saving) return;
+    const generation = this.generation;
+    const token = (this.followToken = {});
+    this.api.specialDays.readSpecialDay(id, { passive: true }).then((detail) => {
+      if (generation === this.generation && token === this.followToken) this.merge(detail);
+    }, ignore);
+  }
+  /** Name, Every year, the dates and each owner's paint each follow `detail`, in the draft and the
+   *  saved state alike, where the draft has not changed them; a changed one keeps both. */
+  private merge(detail: SpecialDayDetail) {
+    const fresh = fromDetail(detail);
+    const draft = copyDraft(this.draft);
+    const baseline = copyDraft(this.baseline);
+    if (draft.name === baseline.name) draft.name = baseline.name = fresh.name;
+    if (draft.repeatsYearly === baseline.repeatsYearly)
+      draft.repeatsYearly = baseline.repeatsYearly = fresh.repeatsYearly;
+    if (sameDates(draft.dates, baseline.dates)) {
+      draft.dates = fresh.dates.map((entry) => ({ ...entry }));
+      baseline.dates = fresh.dates;
+    }
+    const owners = [...draft.paint.keys(), ...baseline.paint.keys(), ...fresh.paint.keys()];
+    for (const owner of new Set(owners)) {
+      if (!sameDays(draft.paint.get(owner), baseline.paint.get(owner))) continue;
+      const days = fresh.paint.get(owner) ?? new Map<LocalDate, Paint[]>();
+      draft.paint.set(owner, copyDays(days));
+      baseline.paint.set(owner, days);
+    }
+    this.stored = new Map(detail.dates.map(({ date, holidayName }) => [date, holidayName]));
+    this.draft = draft;
+    this.baseline = baseline;
+    this.scope?.commit(copyDraft(baseline));
+  }
   /** A list that fails or lands late offers nothing: the pre-filled new day stands. */
   private offerExisting(name: string) {
     const generation = this.generation;
@@ -552,7 +604,7 @@ export class SpecialDayPainter extends LitElement {
     this.generation = {};
     this.offered = undefined;
     this.specialDayId = id;
-    this.seeded = id;
+    this.seeded = this.seedKey();
     this.read(id, date, true);
   }
   /** `kept` is paint made since the save that answered `detail` was sent; it stays unsaved. */
@@ -657,6 +709,7 @@ export class SpecialDayPainter extends LitElement {
     };
     const sent = copyPaint(this.draft.paint);
     const generation = this.generation;
+    this.followToken = {};
     this.saving = true;
     this.refused = undefined;
     let detail: SpecialDayDetail;
@@ -670,7 +723,7 @@ export class SpecialDayPainter extends LitElement {
     }
     if (generation !== this.generation) return;
     this.specialDayId = detail.id;
-    this.seeded = detail.id;
+    this.seeded = this.seedKey();
     this.attempted = false;
     this.adopt(detail, [], "", this.paintedSince(sent));
     this.dispatchEvent(

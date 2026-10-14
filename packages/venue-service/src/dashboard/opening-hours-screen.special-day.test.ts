@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { LitElement, html } from "lit";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
-import { applyTokens } from "@waitron/ui";
+import { applyTokens, LeaveController, NavigationGuard } from "@waitron/ui";
 import type { HolidayFact } from "../hours-types.js";
 import type { OpeningHoursYear, SeasonDays } from "../opening-hours-calendar.js";
 import type { SpecialDayDetail, SpecialDayInput } from "../special-days.js";
@@ -318,6 +319,80 @@ describe("the special-day painter's address", () => {
     await expect.poll(() => location.pathname).toBe(to);
     await expect.poll(() => el.shadowRoot!.querySelector("opening-hours-month")).not.toBeNull();
     expect(tabs(el).value).toBe("year");
+  });
+});
+
+class GuardedApp extends LitElement {
+  readonly leave = new LeaveController(this);
+  readonly recorded: Recorded = { writes: [], months: [], failing: [] };
+  readonly api = new OpeningHoursApi(request(this.recorded));
+  override render() {
+    return html`<dashboard-opening-hours-screen .api=${this.api}></dashboard-opening-hours-screen
+      >${this.leave.render({ heading: "Unsaved changes", message: "Discard unsaved changes?", keepLabel: "Keep editing", discardLabel: "Discard changes" })}`;
+  }
+}
+customElements.define("special-day-guarded-test-app", GuardedApp);
+
+describe("Back and Forward under the app's leave guard", () => {
+  const at = (date: string) =>
+    `/manage/opening-hours/view/special-day/special-day/sd1/date/${date}`;
+  async function choose(app: GuardedApp, decision: "keep" | "discard") {
+    await app.updateComplete;
+    const question =
+      app.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-unsaved-changes"]>(
+        "wt-unsaved-changes",
+      )!;
+    await expect.poll(() => question.open).toBe(true);
+    question.shadowRoot!.querySelector<HTMLElement>(`[data-choice=${decision}]`)!.click();
+    await expect.poll(() => question.open).toBe(false);
+  }
+
+  it("to the same day with another date to add asks first: Keep stays, Discard opens it with that date alone, and Save sends that date", async () => {
+    history.replaceState(null, "", "/manage/before");
+    let app: GuardedApp | undefined;
+    const guard = new NavigationGuard(window, {
+      isDirty: () => app?.leave.coordinator.isDirty() ?? false,
+      request: (proceed, signal) =>
+        app!.leave.coordinator.request({ scopes: "all", reason: "navigation", proceed, signal }),
+    });
+    try {
+      await guard.write(at("2026-12-16"));
+      await guard.write(at("2026-12-20"));
+      app = document.createElement("special-day-guarded-test-app") as GuardedApp;
+      applyTokens(app);
+      hosts.push(app);
+      document.body.append(app);
+      await app.updateComplete;
+      const el = app.shadowRoot!.querySelector("dashboard-opening-hours-screen")!;
+      const painter = await shownPainter(el);
+      await expect
+        .poll(() => chips(painter))
+        .toEqual(["2026-12-14", "2026-12-15", "2026-12-20", "2026-12-25"]);
+      history.back();
+      await choose(app, "keep");
+      await expect.poll(() => location.pathname).toBe(at("2026-12-20"));
+      expect(painter.addDate).toBe("2026-12-20");
+      expect(chips(painter)).toEqual(["2026-12-14", "2026-12-15", "2026-12-20", "2026-12-25"]);
+      history.back();
+      await choose(app, "discard");
+      await expect.poll(() => location.pathname).toBe(at("2026-12-16"));
+      await expect.poll(() => painter.addDate).toBe("2026-12-16");
+      await expect
+        .poll(() => chips(painter))
+        .toEqual(["2026-12-14", "2026-12-15", "2026-12-16", "2026-12-25"]);
+      frame(painter).shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+      await expect.poll(() => app!.recorded.writes.length).toBe(1);
+      const [path, method, body] = app.recorded.writes[0]!;
+      expect([path, method]).toEqual(["/management-api/venue-service/special-days/sd1", "PUT"]);
+      expect((body as SpecialDayInput).dates.map(({ date }) => date)).toEqual([
+        "2026-12-14",
+        "2026-12-15",
+        "2026-12-16",
+        "2026-12-25",
+      ]);
+    } finally {
+      guard.dispose();
+    }
   });
 });
 

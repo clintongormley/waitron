@@ -221,18 +221,34 @@ describe("a stored special day opened with a date to add", () => {
     });
   });
 
-  it("adds nothing for a date the day already holds, and a later change of the date does not reseed", async () => {
+  it("adds nothing for a date the day already holds, and a change of the date to add starts again from the stored day with that date", async () => {
     const { painter } = await mount({ addDate: "2026-12-15" });
     expect(chips(painter)).toEqual(["2026-12-14", "2026-12-15", "2026-12-25"]);
     expect(saveButton(painter).disabled).toBe(true);
     await typeName(painter, "Edited");
     painter.addDate = "2026-12-20";
-    await settle(painter);
-    expect(chips(painter)).toEqual(["2026-12-14", "2026-12-15", "2026-12-25"]);
+    await loaded(painter);
+    expect(chips(painter)).toEqual(["2026-12-14", "2026-12-15", "2026-12-20", "2026-12-25"]);
     expect(
       painter.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=name]")!
         .value,
-    ).toBe("Edited");
+    ).toBe("Christmas dinners");
+  });
+
+  it("once saved, keeps the saved state while the address still names the date, reading nothing again", async () => {
+    const { painter, writes } = await mount({ addDate: "2026-12-20" });
+    let reads = 0;
+    const api = painter.api.specialDays;
+    const read = api.readSpecialDay.bind(api);
+    api.readSpecialDay = (...args) => {
+      reads++;
+      return read(...args);
+    };
+    await save(painter, writes);
+    await loaded(painter);
+    expect(reads).toBe(0);
+    expect(chips(painter)).toEqual(["2026-12-14", "2026-12-15", "2026-12-20", "2026-12-25"]);
+    expect(saveButton(painter).disabled).toBe(true);
   });
 });
 

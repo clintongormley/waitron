@@ -28,6 +28,8 @@ export function storedDay(over: Partial<SpecialDayDetail> = {}): SpecialDayDetai
 export interface SpecialDayAnswers {
   /** The stored special days a read can find, by id. */
   days?: Record<string, SpecialDayDetail>;
+  /** Awaited before a special day read answers with the day as it was when asked. */
+  dayAfter?: () => Promise<unknown> | undefined;
   /** What the list of special days answers; defaults to the stored days above. */
   list?: readonly SpecialDaySummary[];
   /** Awaited before the list answers. */
@@ -92,7 +94,9 @@ export function specialDayApi(writes: Write[] = [], answers: SpecialDayAnswers =
       if (day) {
         const found = answers.days?.[decodeURIComponent(day[1]!)];
         if (!found) throw { code: "special_day.not_found" };
-        return structuredClone(found);
+        const detail = structuredClone(found);
+        await answers.dayAfter?.();
+        return detail;
       }
       if (url.includes("/opening-hours/season-days?")) {
         await answers.seasonAfter?.();

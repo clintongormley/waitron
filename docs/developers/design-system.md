@@ -1979,7 +1979,9 @@ first offers Add to <name>, which opens the one with the latest date with this d
 unsaved change, or New special day. Save stays quiet until the draft changes and sends the name,
 Every year, the dates and their Closed ticks, and paint only for each department or zone and date
 whose paint differs from what is saved; the painter stays open and the answer becomes the saved
-state. A refusal is told beside Save and keeps the draft; one that names a department's or zone's
+state. A live refresh reads a stored day again: its name, Every year, its dates, and each
+department's or zone's paint each follow what is now stored unless the draft has changed them, when
+the draft and what it is compared against both stay. A refusal is told beside Save and keeps the draft; one that names a department's or zone's
 paint switches the picker to it and marks that date's heading, and a date another special day
 holds says "<name> already holds <date>." and marks that date's column when it is one. Delete asks first, saying
 so when the day repeats every year, and closes the painter. A venue viewer gets the painter
@@ -3603,7 +3605,8 @@ address with no view naming a season, a department or a zone, and an unknown vie
 special-day painter (Forms above) has its own address too: `/view/special-day` for a new day,
 with `/date/<yyyy-mm-dd>` for a new day holding that date, and
 `/view/special-day/special-day/<id>` for a stored one, where `/date/<yyyy-mm-dd>` adds that date to
-its draft as an unsaved change. It opens over the view it was opened from, or the Year on a direct
+its draft as an unsaved change; Back or Forward to the same day with another date asks first when
+the draft has changes, and then opens the stored day again with that date. It opens over the view it was opened from, or the Year on a direct
 load, and closing it returns there; a new day saved takes its own day's address without a new
 history entry. An old `/view/date/date/<yyyy-mm-dd>` address is replaced by the month of that date,
 and `/view/date` with no date or a bad one by the month view. After provisioning, setup's completion screen shows

@@ -1509,14 +1509,20 @@ describe("Year special-day actions", () => {
     } = options;
     history.replaceState(null, "", "/manage/opening-hours/view/year/year/2026");
     const writes: unknown[][] = [];
+    const created = new Map<string, SpecialDayDetail>();
     let reads = 0;
     let stationReads = 0;
     const el = await mount((async (path, method, body) => {
       if (method !== "GET") {
         writes.push([path, method, body]);
         if (refuse) throw refuse;
-        return method === "DELETE" ? undefined : savedDay(path, method, body);
+        if (method === "DELETE") return undefined;
+        const saved = savedDay(path, method, body);
+        if (method === "POST") created.set(saved.id, saved);
+        return saved;
       }
+      const createdDay = created.get(decodeURIComponent(path.split("/").pop()!));
+      if (path.includes("/special-days/") && createdDay) return structuredClone(createdDay);
       if (path.includes("/hours?")) stationReads++;
       if (path.includes("/opening-hours/month?")) return { days: [] };
       if (path.endsWith("/special-days") && listFails) throw { code: "connection.failed" };
@@ -2695,7 +2701,7 @@ describe("Month view", () => {
     ["names no date", "/manage/opening-hours/view/date"],
     ["names a date that is not one", "/manage/opening-hours/view/date/date/2026-02-30"],
   ])("opens the Month of the venue's business day when an old date view %s", async (_, address) => {
-    const { el, view, months } = await monthMount(address);
+    const { view, months } = await monthMount(address);
     await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/month");
     await expect.poll(() => view()?.month).toBe("2026-10");
     expect(months).toEqual(["2026-10"]);
