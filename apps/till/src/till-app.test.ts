@@ -16849,8 +16849,9 @@ describe("the device's equipment, chosen from the header", () => {
         getDeviceEquipment: vi.fn().mockResolvedValue(NFC_EQUIPMENT),
         setDeviceEquipment,
       });
-      await vi.waitFor(() => expect(FakeNdefReader.instances.at(-1)?.signal).toBeDefined());
-      FakeNdefReader.instances.at(-1)!.read(`waitron-equipment:printer:${PRINTER_ID}`);
+      await vi.waitFor(() => expect(FakeNdefReader.instances.at(-1)?.signal?.aborted).toBe(false));
+      const dialogReader = FakeNdefReader.instances.at(-1)!;
+      dialogReader.read(`waitron-equipment:printer:${PRINTER_ID}`);
       await flush(el);
       expect(setDeviceEquipment.mock.calls).toEqual([
         [
@@ -16861,7 +16862,9 @@ describe("the device's equipment, chosen from the header", () => {
       expect(equipmentDialog(el)!.equipment).toEqual(stored);
       emit(equipmentDialog(el)!, "close");
       await flush(el);
-      expect(FakeNdefReader.instances.at(-1)!.signal!.aborted).toBe(true);
+      expect(dialogReader.signal!.aborted).toBe(true);
+      await vi.waitFor(() => expect(FakeNdefReader.instances.at(-1)).not.toBe(dialogReader));
+      expect(FakeNdefReader.instances.at(-1)!.signal!.aborted).toBe(false);
     } finally {
       vi.unstubAllGlobals();
     }
