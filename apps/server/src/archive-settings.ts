@@ -402,8 +402,8 @@ function customBucket(
 }
 
 /**
- * The one destination a dashboard Save asks for, resolved server-side. `stream-bucket` copies the
- * stream's settings as they are now, so a later stream edit or removal does not move archives.
+ * One destination of a dashboard Save, resolved server-side. `stream-bucket` copies the stream's
+ * settings as they are now, so a later stream edit or removal does not move archives.
  */
 export function resolveArchiveChoice(
   destination: unknown,
@@ -435,4 +435,24 @@ export function resolveArchiveChoice(
     default:
       throw requestInvalid("destination");
   }
+}
+
+/** A Save's destinations: at most one folder and one bucket, returned folder first. */
+export function resolveArchiveChoices(
+  choices: unknown,
+  ctx: { venueId: string; stream: StreamSettings | null; held: ArchiveSettings | null },
+): BackupDestination[] {
+  if (
+    !Array.isArray(choices) ||
+    choices.length === 0 ||
+    choices.length > 2 ||
+    !choices.every(isRecord)
+  ) {
+    throw requestInvalid("destinations");
+  }
+  const resolved = choices.map((choice) => resolveArchiveChoice(choice, ctx));
+  const folders = resolved.filter((d) => d.kind === "local-fs");
+  const buckets = resolved.filter((d) => d.kind === "s3");
+  if (folders.length > 1 || buckets.length > 1) throw requestInvalid("destinations");
+  return [...folders, ...buckets];
 }
