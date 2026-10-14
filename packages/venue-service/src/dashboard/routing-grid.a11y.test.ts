@@ -458,7 +458,10 @@ describe.each(["light", "dark"] as const)("a hovered routing cell (%s)", (theme)
     expect(contrastRatio(getComputedStyle(refusal).color, behind)).toBeGreaterThanOrEqual(4.5);
   });
 
-  test("outlines a hovered cell on a station's fill at 3:1 against that fill", async () => {
+  // Hover swaps the fill for the tint, so this ring sits on the tint; under keyboard focus the same
+  // ring sits on the fill. Its colour against the twelve fills and the tint is held in
+  // `packages/ui-core/src/tokens/colors.test.ts`; here, that a station cell draws it in that colour.
+  test("outlines a hovered station cell in the focus colour, which stands 3:1 on its fill", async () => {
     await mountThemed("<div></div>", theme);
     const el = document.createElement("venue-routing-grid");
     Object.assign(el, { model: routing() });

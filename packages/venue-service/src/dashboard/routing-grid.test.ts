@@ -1869,6 +1869,75 @@ describe("station colours", () => {
     const empty = await mount(routing({ defaultStationId: null, cells: [] }));
     expect(root(empty.el).querySelector(".key")).toBeNull();
   });
+
+  /** Drinks go to the Bar, with a Lunch line on Food sending to the Bar too. */
+  const withBarLine = (stations: RoutingView["stations"]) =>
+    routing({
+      stations,
+      periods: [
+        {
+          id: "lunch",
+          departmentId: "dining",
+          departmentName: "Dining",
+          colour: "blue",
+          name: "Lunch",
+          productIds: ["burger"],
+        },
+      ],
+      cells: [
+        { row: { kind: "category", categoryId: "drinks" }, zoneId: null, target: station("bar") },
+        {
+          row: { kind: "category", categoryId: "food" },
+          zoneId: null,
+          target: station("kitchen"),
+          periods: [{ periodId: "lunch", target: station("bar") }],
+        } as RoutingCell,
+      ],
+    });
+  const barDot = (el: RoutingGrid) =>
+    combo(el, "c:food", "every")!.querySelector<HTMLElement>(".line .dot");
+  const keyColours = (el: RoutingGrid) =>
+    [...root(el).querySelectorAll<HTMLElement>(".key li")].map(
+      (item) =>
+        `${item.textContent!.trim()}:${item.querySelector<HTMLElement>(".swatch")!.dataset.stationColour}`,
+    );
+
+  it("repaints the cell, the line's dot and the key when a refresh changes one station's colour", async () => {
+    const { el } = await mount(withBarLine(routing().stations));
+    expect(colourOf(el, "c:drinks", "every")).toBe("blue");
+    expect(barDot(el)!.dataset.stationColour).toBe("blue");
+    expect(keyColours(el)).toEqual(["Kitchen:orange", "Bar:blue"]);
+    el.model = withBarLine(
+      routing().stations.map((s) => (s.id === "bar" ? { ...s, colour: "pink" as const } : s)),
+    );
+    await el.updateComplete;
+    expect(colourOf(el, "c:drinks", "every")).toBe("pink");
+    expect(getComputedStyle(cell(el, "c:drinks", "every")).backgroundColor).toBe(
+      fill(el, "--wt-color-station-pink"),
+    );
+    expect(barDot(el)!.dataset.stationColour).toBe("pink");
+    expect(keyColours(el)).toEqual(["Kitchen:orange", "Bar:pink"]);
+  });
+
+  it("draws a station whose stored colour is not one of the twelve unpainted, with no dot and no key entry", async () => {
+    const { el } = await mount(
+      withBarLine(
+        routing().stations.map((s) =>
+          s.id === "bar" ? { ...s, colour: "magenta" as unknown as typeof s.colour } : s,
+        ),
+      ),
+    );
+    expect(shown(combo(el, "c:drinks", "every")!).text).toBe("Bar");
+    expect(colourOf(el, "c:drinks", "every")).toBeUndefined();
+    expect(getComputedStyle(cell(el, "c:drinks", "every")).backgroundColor).toBe(
+      fill(el, "--wt-color-surface"),
+    );
+    expect(combo(el, "c:food", "every")!.querySelector(".line")!.textContent!.trim()).toBe(
+      "Lunch: Bar",
+    );
+    expect(barDot(el)).toBeNull();
+    expect(keyColours(el)).toEqual(["Kitchen:orange"]);
+  });
 });
 
 describe("one period", () => {

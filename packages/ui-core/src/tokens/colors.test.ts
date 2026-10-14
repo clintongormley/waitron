@@ -578,6 +578,16 @@ describe.each(["light", "dark"] as const)("station colours (%s)", (theme) => {
         ).toBeGreaterThanOrEqual(3);
   });
 
+  // A focused cell keeps its fill, so its ring is drawn on it; a hovered one swaps it for the tint.
+  test("the focus colour stands 3:1 or more on every station fill and on the hover tint", () => {
+    const el = mount(theme);
+    for (const ground of [...STATION_FILLS, "--wt-color-surface-lifted"])
+      expect(
+        ratio(token(el, "--wt-color-focus"), token(el, ground)),
+        `--wt-color-focus on ${ground}`,
+      ).toBeGreaterThanOrEqual(3);
+  });
+
   test("the twelve fills are different colours, and so are the twelve dots", () => {
     const el = mount(theme);
     expect(new Set(STATION_FILLS.map((fill) => token(el, fill))).size).toBe(STATION_FILLS.length);
