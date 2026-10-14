@@ -56,7 +56,8 @@ export function shownName(table: TableState): string {
   return table.today?.name ?? table.label;
 }
 
-/** The name the table is shown under: its group's name for today, else its own, else its saved one. */
+/** D10: its group's name for today, else its own name for today, else its saved label (the
+ * server's `shown()`). */
 export function shownUnder(table: TableState): string {
   return table.today?.joinName ?? shownName(table);
 }
