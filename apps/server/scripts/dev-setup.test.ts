@@ -318,6 +318,7 @@ describe("devSetup against a real venue directory", () => {
           "prepare-orders",
           "hand-over-orders",
           "run-the-pass",
+          "clock-in",
         ],
       },
       {
@@ -328,6 +329,7 @@ describe("devSetup against a real venue directory", () => {
           "hand-keyed-card-payment",
           "prepare-orders",
           "hand-over-orders",
+          "clock-in",
         ],
       },
       {
