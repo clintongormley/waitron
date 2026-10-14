@@ -309,8 +309,9 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 - **A venue without Cloud needs a usable paper-custodian route.** If you do not subscribe to
   Cloud, your custodian currently needs a repository checkout to create a signing key and sign
-  allocations, plus a separate master register. Design a route a restaurant owner can use after
-  W41s-4 lands, such as a dashboard page or a printed setup kit. Owner request, 2026-10-14.
+  allocations, plus a separate master register. A679 reproduced the fresh Prepare wizard's
+  missing allocation on 2026-10-14 and has a [first-setup proposal](superpowers/specs/2026-10-14-a679-first-fiscal-setup-design.md)
+  with EN/ES phone/desktop drawings. Owner choices remain open; no product fix has landed.
   Detail: [backlog/fiscal.md](backlog/fiscal.md#a-venue-without-cloud-needs-a-usable-paper-custodian-route).
 
 - **W41s. Fiscal prevention and offline recovery** — remaining recovery and resolution work.
