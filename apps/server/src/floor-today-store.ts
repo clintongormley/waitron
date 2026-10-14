@@ -720,8 +720,9 @@ export async function seatsToday(
 
 /**
  * Sets the table's today's row from what the last reset copied for it, after it leaves any merge.
- * Its label and its today's name are left alone. The kitchen is told of each party whose tables
- * now read differently, as when a group named for today ends.
+ * Its label and its today's name are left alone. The kitchen is told of each bill of a party at the
+ * table's group whose tables now read differently, for example when the table leaves a group named
+ * for today.
  */
 export async function backToSaved(
   tx: Transaction,
