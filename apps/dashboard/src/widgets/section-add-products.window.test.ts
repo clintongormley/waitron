@@ -174,6 +174,16 @@ describe.each([
     },
   );
 
+  it("opens a just-overflowing list at the top without treating its first footer measurement as growth", async () => {
+    await at(width, height);
+    const { body } = await openWindow(many(width === 390 ? 9 : 12));
+    await frame();
+    await frame();
+    await frame();
+    expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
+    expect(body.scrollTop).toBe(0);
+  });
+
   describe.each([
     ["en", "light"],
     ["en", "dark"],

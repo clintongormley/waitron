@@ -95,8 +95,7 @@ export class SectionAddProducts extends LitElement {
         margin: 0;
         accent-color: var(--wt-color-primary);
       }
-      /* A checkbox reached by Tab scrolls clear of the bottom block, whose height is measured into
-         --bottom-height because its messages come and go. */
+      /* Whole-row scrolling and keyboard focus need clearance for the footer's current height. */
       li,
       li input[type="checkbox"] {
         scroll-margin-block-end: calc(var(--bottom-height, 0px) + var(--wt-space-2));
