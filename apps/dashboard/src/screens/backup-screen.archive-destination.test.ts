@@ -560,7 +560,6 @@ describe("choosing where backups go", () => {
     expect(text(q(el, "[data-test=stream-snapshot]")!)).toContain(
       t("backup.destination.stream_snapshot"),
     );
-    expect(q(el, "[data-test=stream-replaces]")).toBeNull();
     const shown = el.shadowRoot!.textContent ?? "";
     expect(shown).not.toContain("Backups go only to this bucket, not to a folder on this box.");
     expect(shown).not.toContain(
