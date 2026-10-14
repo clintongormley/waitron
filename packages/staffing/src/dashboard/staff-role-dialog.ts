@@ -166,7 +166,8 @@ export class StaffRoleDialog extends LitElement {
       messages.push(tf("staffing.role.people_not_saved", { reason: this.holdersRefused }));
     if (this.refusal && this.refusedName === "") messages.push(codeMessage(this.refusal.code));
     if (this.nameError) messages.push(t("staffing.role.fix_fields"));
-    return messages.join(" ");
+    if (messages.length < 2) return messages.join("");
+    return messages.map((message) => (/[.!?]$/.test(message) ? message : `${message}.`)).join(" ");
   }
   private change(next: Draft, field: "name" | "other") {
     if (field === "name" && this.refusedName) this.refusal = undefined;
@@ -203,9 +204,10 @@ export class StaffRoleDialog extends LitElement {
       this.refusal = { code: codeOf(error), params };
       return;
     }
+    // The id describes the server, so it is kept even when the answer is otherwise stale.
+    if (saved) this.savedId = saved.id;
     if (generation !== this.generation) return;
     if (saved) {
-      this.savedId = saved.id;
       this.baseline = { ...baseline, name: saved.name, colour: saved.colour };
       this.scope?.commit(this.baseline);
     }

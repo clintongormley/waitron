@@ -45,7 +45,7 @@ const en = {
   "staffing.role.people_placeholder": "Choose people",
   "staffing.role.people_error": "Could not load the venue's people: {reason}",
   "staffing.role.people_not_saved":
-    "The staff role is saved, but not its people: {reason} Save again to retry.",
+    "The staff role is saved, but not its people. Save again to retry: {reason}",
   "staffing.role.search": "Search",
   "staffing.role.no_results": "No results",
   "staffing.role.fix_fields": "Correct the highlighted fields to continue.",
@@ -90,7 +90,7 @@ const es: Record<keyof typeof en, string> = {
   "staffing.role.people_placeholder": "Elige personas",
   "staffing.role.people_error": "No se pudieron cargar las personas del local: {reason}",
   "staffing.role.people_not_saved":
-    "El rol de personal está guardado, pero no sus personas: {reason} Guarda de nuevo para reintentarlo.",
+    "El rol de personal está guardado, pero no sus personas. Guarda de nuevo para reintentarlo: {reason}",
   "staffing.role.search": "Buscar",
   "staffing.role.no_results": "Sin resultados",
   "staffing.role.fix_fields": "Corrige los campos marcados para continuar.",

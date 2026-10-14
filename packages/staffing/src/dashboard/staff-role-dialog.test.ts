@@ -197,7 +197,7 @@ describe("staff-role dialog", () => {
     await press();
     await vi.waitFor(async () =>
       expect(await bottom()).toBe(
-        `The staff role is saved, but not its people: ${codeMessage("connection.failed")} Save again to retry.`,
+        `The staff role is saved, but not its people. Save again to retry: ${codeMessage("connection.failed")}`,
       ),
     );
     expect(el.open).toBe(true);
@@ -287,6 +287,55 @@ describe("staff-role dialog", () => {
       expect(await bottom()).toBe("That staff role could not be found. It may have been deleted"),
     );
     expect(save().disabled).toBe(false);
+  });
+
+  it("ends each message with a full stop when it shows more than one above the buttons", async () => {
+    const api = await mount(undefined, fakeApi(Promise.reject({ code: "connection.failed" })));
+    api.createStaffRole.mockRejectedValueOnce({ code: "staff_role.not_found" });
+    await typeName("Runner");
+    await press();
+    await vi.waitFor(async () =>
+      expect(await bottom()).toBe(
+        `Could not load the venue's people: ${codeMessage("connection.failed")}. That staff role could not be found. It may have been deleted.`,
+      ),
+    );
+  });
+
+  it("says in Spanish that the people were not saved, with the reason last", async () => {
+    setLocale("es");
+    const api = await mount();
+    api.setHolders.mockRejectedValueOnce({ code: "connection.failed" });
+    await typeName("Runner");
+    await chooseOptions(field("wt-combobox", "people"), ["p-ana"]);
+    await press();
+    await vi.waitFor(async () =>
+      expect(await bottom()).toBe(
+        `El rol de personal está guardado, pero no sus personas. Guarda de nuevo para reintentarlo: ${codeMessage("connection.failed", "es")}`,
+      ),
+    );
+  });
+
+  it("keeps the id of a staff role created after the dialog was taken out, so Save does not create a second", async () => {
+    const api = await mount();
+    let settle!: (value: StaffRole) => void;
+    api.createStaffRole.mockImplementationOnce(
+      () => new Promise<StaffRole>((resolve) => (settle = resolve)),
+    );
+    await typeName("Runner");
+    await chooseOptions(field("wt-combobox", "people"), ["p-ana"]);
+    await press();
+    await vi.waitFor(() => expect(api.createStaffRole).toHaveBeenCalled());
+    el.remove();
+    settle({ ...waiter, id: "role-new", name: "Runner", holderIds: [] });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    document.body.append(el);
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("wt-modal")!.heading).toBe("Edit staff role");
+    const close = closed();
+    await press();
+    await close;
+    expect(api.createStaffRole).toHaveBeenCalledTimes(1);
+    expect(api.setHolders).toHaveBeenLastCalledWith("role-new", ["p-ana"]);
   });
 
   it("says when the people cannot be loaded, and still saves the details", async () => {
