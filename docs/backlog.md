@@ -3527,6 +3527,13 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 - Bound the HTTP body read as well as the header wait in `sumup-client.ts` (move `clearTimeout` after
   `res.text()`); lift `reverseViaStripe` and `reverseViaSumUp` into one neutral reversal primitive.
 
+- **SumUp's older `refund` call still parses a 2xx or 4xx body as JSON**
+  (`packages/payments-sumup/src/sumup-client.ts`, `refund` through `call`), so a 404 answered with an
+  HTML page throws `SyntaxError` there, as `sendRefund` did before A632. It is reached only through
+  `reverseViaSumUp` (the provider's `void`, `refund` and `partialRefund`); a grep of `apps` and
+  `packages` on 2026-10-14 found no caller of those outside tests. Fold it into the neutral reversal
+  primitive above.
+
 - Pre-existing `forward` retry backoff.
 
 - **Product decision to take before production:** The orphan drift gate holds a customer's money

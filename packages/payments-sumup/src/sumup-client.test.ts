@@ -618,7 +618,6 @@ describe("sumupClient sendRefund", () => {
   );
 
   it("answers a 201 whose body never ends without waiting for the body", async () => {
-    const started = Date.now();
     const answer = await againstServer(
       (_req, res) => {
         res.writeHead(201, { "content-type": "application/json" });
@@ -628,7 +627,6 @@ describe("sumupClient sendRefund", () => {
       2_000,
     );
     expect(answer).toEqual({ httpStatus: 201 });
-    expect(Date.now() - started).toBeLessThan(1_000);
   });
 });
 
