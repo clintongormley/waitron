@@ -4844,14 +4844,6 @@ the tree. What remains, largest first:
   date (a change to how the guard walks, so the owner decides), then a set like staffing could keep
   one baseline.
 
-- **Two row-reorder cursor tests leave "help" as the page's cursor when they fail mid-drag (found
-  by A580's review).** `reorder-table.test.ts`'s "sets a grabbing cursor on the page body…" and
-  "puts the page's cursor back only when the last of two overlapping drags ends" reset the cursor in
-  their own `finally`, and the shared `cleanup` then removes the dragging table, whose release puts
-  back the "help" it saved — so the next test starts with it. Found by reading; the same shape in
-  A580's new floor-plan cases failed that way under a forced failure. Next: reset through
-  `onTestFinished`, as `wt-floor-plan-canvas.test.ts`'s cursor cases now do.
-
 - **The step-watch case's one pre-push failure (A544) is fixed at a likely cause, not a confirmed
   one.** The failure's message was not kept. A worker that starts late could report
   `Stalled between phases` with no finished phases although phases had already been sent, which

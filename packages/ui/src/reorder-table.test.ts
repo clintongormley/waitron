@@ -2,7 +2,7 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import { commands, userEvent } from "vitest/browser";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, expect, it, onTestFinished, vi } from "vitest";
 import { cleanup, middleWithin, mount as mountHtml, textLines } from "./test-helpers.js";
 import {
   ReorderController,
@@ -634,14 +634,13 @@ it("marks no row for a busy handle or a second pointer", async () => {
 it("sets a grabbing cursor on the page body while dragging, and puts the page's back on release", async () => {
   const el = await mount();
   document.body.style.cursor = "help";
-  try {
-    pointer(handle(el, "a"), "pointerdown", 1);
-    expect(document.body.style.cursor).toBe("grabbing");
-    pointer(document, "pointerup", 1);
-    expect(document.body.style.cursor).toBe("help");
-  } finally {
+  onTestFinished(() => {
     document.body.style.cursor = "";
-  }
+  });
+  pointer(handle(el, "a"), "pointerdown", 1);
+  expect(document.body.style.cursor).toBe("grabbing");
+  pointer(document, "pointerup", 1);
+  expect(document.body.style.cursor).toBe("help");
 });
 
 it("puts the page's cursor back when the system cancels the pointer", async () => {
@@ -723,18 +722,17 @@ for (const [first, second] of [
   it(`puts the page's cursor back only when the last of two overlapping drags ends (pointer ${first} released first)`, async () => {
     const tables = [await mount(), await mount()];
     document.body.style.cursor = "help";
-    try {
-      pointer(handle(tables[0]!, "a"), "pointerdown", 1);
-      pointer(handle(tables[1]!, "a"), "pointerdown", 2);
-      pointer(document, "pointerup", first);
-      expect(document.body.style.cursor).toBe("grabbing");
-      expect(getComputedStyle(handle(tables[0]!, "b")).cursor).toBe("grabbing");
-      pointer(document, "pointerup", second);
-      expect(document.body.style.cursor).toBe("help");
-      expect(getComputedStyle(handle(tables[0]!, "b")).cursor).toBe("grab");
-    } finally {
+    onTestFinished(() => {
       document.body.style.cursor = "";
-    }
+    });
+    pointer(handle(tables[0]!, "a"), "pointerdown", 1);
+    pointer(handle(tables[1]!, "a"), "pointerdown", 2);
+    pointer(document, "pointerup", first);
+    expect(document.body.style.cursor).toBe("grabbing");
+    expect(getComputedStyle(handle(tables[0]!, "b")).cursor).toBe("grabbing");
+    pointer(document, "pointerup", second);
+    expect(document.body.style.cursor).toBe("help");
+    expect(getComputedStyle(handle(tables[0]!, "b")).cursor).toBe("grab");
   });
 }
 
