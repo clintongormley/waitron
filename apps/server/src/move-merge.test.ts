@@ -7,6 +7,7 @@ import {
   kitchenStations,
   locations,
   printJobs,
+  ticketItems,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -37,6 +38,7 @@ import {
   setRoutingCell,
   writeKitchenTicketGrouping,
   writePrintHeldWork,
+  writePrintMovedSlips,
 } from "@waitron/venue-service";
 import { createStation } from "./kitchen.js";
 import { placeGroups } from "./order-groups.js";
@@ -64,7 +66,7 @@ import { openPartyTab } from "./testing/serve-line.js";
 import { joinTables, moveGuests, splitTable } from "./table-actions.js";
 import { moveBill } from "./move-bill.js";
 import { mergeBills, splitBill, transferItems } from "./bill-actions.js";
-import { reprintOrderTickets } from "./kitchen-print.js";
+import { enqueueCorrectionSlips, reprintOrderTickets } from "./kitchen-print.js";
 
 const LOCALE = "es-ES";
 const suite = useVenueDb({
@@ -1356,5 +1358,75 @@ describe("a MOVED slip lays out each line by the ticket grouping and never adds 
     expect((await slipsSince(cocina, 0)).map(dishLines)).toEqual([
       ["1.000 x BURG", "1.000 x BURG"],
     ]);
+  });
+});
+
+describe("the venue's print-MOVED-slips setting", () => {
+  afterEach(() => withTransaction(db, (tx) => writePrintMovedSlips(tx, true)));
+
+  /** A party at Mesa 21 with a fired Burger at the Grill; Move guests takes it to Mesa 22. */
+  async function moveGuestsWithBurger(on: boolean) {
+    const v = await setupPartyVenue(db);
+    const grill = await stationWithPrinter(v, "Grill", ["Burger"]);
+    await inTx(v, (tx) => writePrintMovedSlips(tx, on));
+    const mesa21 = await v.table("Mesa 21");
+    const mesa22 = await v.table("Mesa 22");
+    const { partyId, tabId } = await seat(v, mesa21);
+    await orderForParty(v, partyId, ["Burger"], tabId);
+    const printed = (await printedBy(grill)).length;
+    const command = await commandFor(v, partyId);
+
+    await inTx(v, (tx) =>
+      moveGuests(tx, v.cfg, partyId, mesa22, { ...command, bills: "merge", otherPartyId: null }),
+    );
+
+    return { v, grill, tabId, slips: (await printedBy(grill)).slice(printed) };
+  }
+
+  it("off, Move guests prints no MOVED slip and still records the moved notice", async () => {
+    const { tabId, slips } = await moveGuestsWithBurger(false);
+
+    expect(slips).toEqual([]);
+    expect(await noticesOf([tabId])).toEqual([
+      { workingOrderId: tabId, kind: "moved", lineName: "BURG", movedTo: "Mesa 22" },
+    ]);
+  });
+
+  it("on, Move guests prints the MOVED slip", async () => {
+    const { tabId, slips } = await moveGuestsWithBurger(true);
+
+    expect(slips).toHaveLength(1);
+    expect(slips[0]).toContain("*** MOVIDO ***");
+    expect(slips[0]).toContain("De: Mesa 21\nA:  Mesa 22\n");
+    expect(await noticesOf([tabId])).toEqual([
+      { workingOrderId: tabId, kind: "moved", lineName: "BURG", movedTo: "Mesa 22" },
+    ]);
+  });
+
+  it("off, a VOID still prints its correction slip", async () => {
+    const { v, grill, tabId } = await moveGuestsWithBurger(false);
+    const printed = (await printedBy(grill)).length;
+
+    await inTx(v, async (tx) => {
+      const fired = await tx
+        .select({
+          workingOrderLineId: ticketItems.workingOrderLineId,
+          stationId: ticketItems.stationId,
+        })
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderId, tabId));
+      await enqueueCorrectionSlips(
+        tx,
+        v.cfg,
+        tabId,
+        fired.map((item) => ({ ...item, quantity: 1000, wasStarted: false })),
+        "VOID",
+      );
+    });
+
+    const slips = (await printedBy(grill)).slice(printed);
+    expect(slips).toHaveLength(1);
+    expect(slips[0]).not.toContain("*** MOVIDO ***");
+    expect(slips[0]).toContain("BURG");
   });
 });

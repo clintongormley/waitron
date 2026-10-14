@@ -1274,7 +1274,10 @@ interface MovedSlipPrinting {
   grouping: Parameters<typeof arrangeTicketItems>[1];
 }
 
-/** {@link MovedSlipPrinting} for every slip of `items`, read once; null when no station prints. */
+/**
+ * {@link MovedSlipPrinting} for every slip of `items`, read once; null when no station prints or
+ * the venue does not print MOVED slips.
+ */
 async function readMovedSlipPrinting(
   tx: Transaction,
   cfg: TillConfig,
@@ -1282,7 +1285,7 @@ async function readMovedSlipPrinting(
 ): Promise<MovedSlipPrinting | null> {
   const stationIds = [...new Set(items.map((item) => item.stationId))];
   const byStation = mappingsByStation(await printerMappings(tx, stationIds));
-  if (byStation.size === 0) return null;
+  if (byStation.size === 0 || !(await VENUE_SERVICE.readPrintMovedSlips(tx))) return null;
   const itemsByLine = await buildTicketItems(tx, cfg, [
     ...new Set(items.map((item) => item.workingOrderLineId)),
   ]);
