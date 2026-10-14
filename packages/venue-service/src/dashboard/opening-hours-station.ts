@@ -5,7 +5,7 @@ import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import type { StationServiceTimes } from "../station-service-times.js";
 import type { OpeningHoursApi } from "./opening-hours-client.js";
 import { addDays, weekdayOf } from "../hours-rules.js";
-import { businessDateToday } from "./opening-hours-day.js";
+import { businessDateToday } from "./business-date.js";
 import { weekdayLabel } from "./season-week-view.js";
 import { t } from "./strings.js";
 import "./service-grid.js";

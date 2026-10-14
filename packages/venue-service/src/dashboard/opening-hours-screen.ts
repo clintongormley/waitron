@@ -19,7 +19,6 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "./period-editor.js";
 import "./season-painter.js";
 import type { PainterNavigation } from "./season-painter.js";
-import "./opening-hours-day.js";
 import "./opening-hours-all.js";
 import "./opening-hours-station.js";
 import "./opening-hours-year.js";
@@ -27,10 +26,10 @@ import "./opening-hours-month.js";
 import "./ordinary-date-dialog.js";
 import type { OrdinaryDateOpen } from "./opening-hours-month.js";
 import { seasonTints } from "./season-tint.js";
-import "./special-day-dialog.js";
-import type { SpecialDayAction, SpecialDayRef } from "./special-day-action.js";
+import "./special-day-painter.js";
+import type { SpecialDayAction } from "./special-day-action.js";
 import type { OpeningHoursMonth, OpeningHoursYear } from "../opening-hours-calendar.js";
-import type { SpecialDayDialog, SpecialDayFacts } from "./special-day-dialog.js";
+import type { HolidayFact, LocalDate } from "../hours-types.js";
 import type { SpecialDayDetail } from "../special-days.js";
 import type { PeriodEditor } from "./period-editor.js";
 import type {
@@ -40,30 +39,26 @@ import type {
   PeriodRoutingUse,
 } from "../menu-timetable-types.js";
 import type { OpeningHoursApi, OpeningStation } from "./opening-hours-client.js";
-import { businessDateToday } from "./opening-hours-day.js";
+import { businessDateToday } from "./business-date.js";
 import { isLocalDate, parseCalendarMonth, parseCalendarYear } from "../hours-rules.js";
-import { browserToday, format, formatDate, formatMonthName } from "./hours-view.js";
+import { browserToday, format, formatDate } from "./hours-view.js";
 import { t } from "./strings.js";
 import { chosenSeasonId, seasonOptions } from "./season-choice.js";
 
 type Department = OpeningHoursModel["departments"][number];
 type Period = Department["periods"][number];
-type View = "year" | "month" | "week" | "periods" | "date";
+type View = "year" | "month" | "week" | "periods";
 type Editor = { department: Department; period?: Period; clockRevision: number };
+/** The Year panel's Delete of a special day, asked in the screen's own confirmation. */
 type OpenSpecialDay = Omit<SpecialDayAction, "specialDay"> & {
   clockRevision: number;
-  /** The stored special day holding the date, read when the action opened. */
   detail?: SpecialDayDetail;
-  /** The venue's special days, read when the action opened on a public holiday. */
-  existing?: { id: string; name: string; latest?: string }[];
-  /** A date to add to `detail` as an unsaved change. */
-  addDate?: string;
-  /** Whether the dialog offers the per-date editor for `date`. */
-  offerEditDate?: boolean;
 };
 type Deletion = { period: Period };
 /** What a painter address names, as written; `painterTarget` resolves it against the model. */
 type PainterAddress = { seasonId: string; departmentId: string; zoneId: string };
+/** A special-day painter address: a stored day, with a date to add to it, or a new day on `date`. */
+type SpecialAddress = { specialDayId: string | null; date: LocalDate | null };
 const painterEntryKey = "openingHoursPainter";
 
 @customElement("dashboard-opening-hours-screen")
@@ -141,7 +136,6 @@ export class OpeningHoursScreen extends LitElement {
   private monthDetach?: () => void;
   private watchedMonth = "";
   @state() private ordinary?: OrdinaryDateOpen;
-  @state() private dayDate = "";
   @state() private readError = "";
   @state() private editor?: Editor;
   @state() private deleting?: Deletion;
@@ -154,6 +148,14 @@ export class OpeningHoursScreen extends LitElement {
   private generation = {};
   /** Set while the address is the season painter's; the view underneath stays as it was. */
   @state() private painter?: PainterAddress;
+  /** Set while the address is the special-day painter's, over the view underneath as above. */
+  @state() private special?: SpecialAddress;
+  /** The public holidays the view that opened the special-day painter sent with its date. */
+  private sentHolidays?: { date: LocalDate; holidays: readonly HolidayFact[] };
+  /** The month read for a new special day's date when no other read covers it. */
+  @state() private holidayRead?: { month: string; holidays: readonly HolidayFact[] };
+  private holidayDetach?: () => void;
+  private watchedHolidayMonth = "";
   /** The address of the view the painter opened over, or none on a direct load. */
   private baseHref?: string;
   /** The history entry this screen pushed the painter into over `base`: only from that entry
@@ -169,6 +171,7 @@ export class OpeningHoursScreen extends LitElement {
         department: "department",
         zone: "zone",
         station: "station",
+        "special-day": "special-day",
         date: "date",
         year: "year",
         month: "month",
@@ -183,18 +186,39 @@ export class OpeningHoursScreen extends LitElement {
       departmentId: this.url.read("department") ?? "",
       zoneId: this.url.read("zone") ?? "",
     };
+    const date = this.url.read("date") ?? "";
     if (view === "season") {
+      this.special = undefined;
       this.painter = named;
       if (this.baseHref === undefined) this.view = "year";
       this.namePainterTarget();
       return;
     }
+    if (view === "special-day") {
+      this.painter = undefined;
+      this.special = {
+        specialDayId: this.url.read("special-day") || null,
+        date: isLocalDate(date) ? date : null,
+      };
+      if (this.baseHref === undefined) this.view = "year";
+      return;
+    }
+    if (view === "date") {
+      void Promise.resolve(
+        this.url.write(
+          {
+            dashboard: "opening-hours",
+            view: "month",
+            month: isLocalDate(date) ? date.slice(0, 7) : null,
+            date: null,
+          },
+          true,
+        ),
+      ).then(() => this.followUrl());
+      return;
+    }
     const shown: View =
-      view === "year" ||
-      view === "month" ||
-      view === "periods" ||
-      view === "date" ||
-      view === "week"
+      view === "year" || view === "month" || view === "periods" || view === "week"
         ? view
         : view === "calendar"
           ? "year"
@@ -209,6 +233,7 @@ export class OpeningHoursScreen extends LitElement {
       return;
     }
     this.painter = undefined;
+    this.special = undefined;
     this.baseHref = href;
     if (shown !== this.view) this.specialReadError = "";
     this.view = shown;
@@ -218,8 +243,6 @@ export class OpeningHoursScreen extends LitElement {
     this.stationId = stationId;
     this.requestedYear = parseCalendarYear(this.url.read("year")) ?? 0;
     this.requestedMonth = parseCalendarMonth(this.url.read("month")) ?? "";
-    const date = this.url.read("date") ?? "";
-    this.dayDate = isLocalDate(date) ? date : "";
     this.resolveSeason();
   }
   /** Whether an address with no view names a week (the painter's, a station's or All departments')
@@ -272,6 +295,8 @@ export class OpeningHoursScreen extends LitElement {
     this.watchedMonth = "";
     this.yearDetach?.();
     this.watchedYear = 0;
+    this.holidayDetach?.();
+    this.watchedHolidayMonth = "";
     this.generation = {};
     this.busy = false;
     super.disconnectedCallback();
@@ -317,7 +342,7 @@ export class OpeningHoursScreen extends LitElement {
   }
   private async chooseDepartment(value: string) {
     if (!this.isConnected) return;
-    const wasOpen = this.painter !== undefined;
+    const wasOpen = this.overlaid();
     if (value.startsWith("station:") && this.view === "week") {
       const stationId = value.slice(8);
       if (!this.stations.some((station) => station.active && station.id === stationId)) return;
@@ -387,6 +412,7 @@ export class OpeningHoursScreen extends LitElement {
     if (!this.model) return;
     this.watchYear();
     this.watchMonth();
+    this.watchHolidays();
     if (this.editor) {
       const department = this.model.departments.find(
         (row) => row.active && row.id === this.editor!.department.id,
@@ -481,6 +507,48 @@ export class OpeningHoursScreen extends LitElement {
       },
     );
   }
+  /** The public holidays this screen already holds for `date`'s month, or none when it holds no
+   *  read covering it. */
+  private heldHolidays(date: LocalDate): readonly HolidayFact[] | undefined {
+    const month = date.slice(0, 7);
+    if (this.sentHolidays?.date === date) return this.sentHolidays.holidays;
+    if (this.monthModel?.month === month)
+      return this.monthModel.days.flatMap((day) => day.holidays);
+    if (this.yearModel?.year === Number(date.slice(0, 4)))
+      return this.yearModel.days.flatMap((day) => day.holidays);
+    if (this.holidayRead?.month === month) return this.holidayRead.holidays;
+    return undefined;
+  }
+  /** A new special day on a date opens pre-filled only if its holidays are known as it opens, so
+   *  on an address alone (a reload, Back or Forward) the date's month is read for them. */
+  private holidayMonthNeeded() {
+    const date = this.special?.specialDayId === null ? this.special.date : null;
+    if (!date || this.sentHolidays?.date === date) return "";
+    const month = date.slice(0, 7);
+    if (this.watchedMonth === month && !this.monthReadError) return "";
+    if (this.watchedYear === Number(date.slice(0, 4)) && !this.yearReadError) return "";
+    return month;
+  }
+  private watchHolidays() {
+    const month = this.holidayMonthNeeded();
+    if (month === this.watchedHolidayMonth) return;
+    this.holidayDetach?.();
+    this.holidayDetach = undefined;
+    this.watchedHolidayMonth = month;
+    if (!month) return;
+    const settled = (holidays: readonly HolidayFact[]) => {
+      if (this.watchedHolidayMonth === month) this.holidayRead = { month, holidays };
+    };
+    this.holidayDetach = this.api.watchMonth(
+      month,
+      (model) => settled(model.days.flatMap((day) => day.holidays)),
+      // A failed read opens the day unfilled rather than not at all.
+      () => {
+        if (this.holidayRead?.month !== month) settled([]);
+      },
+      () => {},
+    );
+  }
   /** Feeds only the season dialog's naming of a refusal, so a failed read keeps the last list. */
   private readKnownSpecialDays() {
     const read = (this.knownSpecialDaysRead = {});
@@ -511,6 +579,7 @@ export class OpeningHoursScreen extends LitElement {
     const generation = this.generation;
     const view = this.view;
     const painter = this.painter;
+    const special = this.special;
     const guard = navigationGuardFor(window);
     if (guard) {
       await guard.write(url, replace);
@@ -522,7 +591,8 @@ export class OpeningHoursScreen extends LitElement {
         !this.isConnected ||
         generation !== this.generation ||
         this.view !== view ||
-        this.painter !== painter
+        this.painter !== painter ||
+        this.special !== special
       )
         return;
       if (replace) history.replaceState(history.state, "", url);
@@ -560,7 +630,7 @@ export class OpeningHoursScreen extends LitElement {
   /** Opens the painter on `seasonId` for the department the screen shows, over the current view. */
   private async openPainter(seasonId: string) {
     const department = this.department();
-    const wasOpen = this.painter !== undefined;
+    const wasOpen = this.overlaid();
     await this.writeAddress(
       this.painterUrl({
         seasonId,
@@ -570,8 +640,40 @@ export class OpeningHoursScreen extends LitElement {
     );
     this.markPushedPainter(wasOpen);
   }
+  /** Whether a painter, of a season or of a special day, is drawn over the view. */
+  private overlaid() {
+    return this.painter !== undefined || this.special !== undefined;
+  }
+  private specialUrl({ specialDayId, date }: SpecialAddress) {
+    const url = new URL(navigationGuardFor(window)?.href ?? location.href);
+    const parts = [
+      ["view", "special-day"],
+      ["special-day", specialDayId],
+      ["date", date],
+    ].filter(([, value]) => value);
+    url.pathname = `/manage/opening-hours/${parts.map(([key, value]) => `${key}/${encodeURIComponent(value!)}`).join("/")}`;
+    url.searchParams.delete("station");
+    return url;
+  }
+  /** Opens the special-day painter over the current view; `holidays` are the ones the view sent. */
+  private async openSpecialPainter(address: SpecialAddress, holidays: readonly HolidayFact[] = []) {
+    if (
+      !this.isConnected ||
+      this.readOnly ||
+      this.busy ||
+      this.editor ||
+      this.deleting ||
+      this.namedAction ||
+      this.overlaid()
+    )
+      return;
+    this.specialReadError = "";
+    this.sentHolidays = address.date ? { date: address.date, holidays } : undefined;
+    await this.writeAddress(this.specialUrl(address));
+    this.markPushedPainter(false);
+  }
   private markPushedPainter(wasOpen: boolean) {
-    if (wasOpen || !this.isConnected || this.painter === undefined) return;
+    if (wasOpen || !this.isConnected || !this.overlaid()) return;
     const guard = navigationGuardFor(window);
     let entry: string;
     if (guard) {
@@ -621,9 +723,20 @@ export class OpeningHoursScreen extends LitElement {
   private currentPainter(event: Event) {
     return (
       this.isConnected &&
-      this.painter !== undefined &&
-      event.currentTarget === this.shadowRoot?.querySelector("season-painter")
+      this.overlaid() &&
+      event.currentTarget ===
+        this.shadowRoot?.querySelector(this.painter ? "season-painter" : "special-day-painter")
     );
+  }
+  /** Closes either painter: back to the entry it was pushed over, else to the view it drew over. */
+  private closePainter() {
+    const pushed = this.atPushedPainter();
+    this.pushedPainter = undefined;
+    if (pushed) history.back();
+    else
+      this.replaceAddress(
+        new URL(this.baseHref ?? "/manage/opening-hours/view/year", location.href),
+      );
   }
   /** The painter is given what the address names, not what that resolves to, so that when a
    *  refresh removes it the painter sees it go and tells (ruling R11). */
@@ -646,14 +759,7 @@ export class OpeningHoursScreen extends LitElement {
       }}
       @painter-close=${(event: Event) => {
         event.stopPropagation();
-        if (!this.currentPainter(event)) return;
-        const pushed = this.atPushedPainter();
-        this.pushedPainter = undefined;
-        if (pushed) history.back();
-        else
-          this.replaceAddress(
-            new URL(this.baseHref ?? "/manage/opening-hours/view/year", location.href),
-          );
+        if (this.currentPainter(event)) this.closePainter();
       }}
       @click=${(event: MouseEvent) => {
         const link = event
@@ -676,6 +782,51 @@ export class OpeningHoursScreen extends LitElement {
         void this.writeAddress(new URL(link.href));
       }}
     ></season-painter>`;
+  }
+  private specialPainter() {
+    const address = this.special;
+    if (!address || !this.model) return nothing;
+    const { specialDayId, date } = address;
+    const held = date ? this.heldHolidays(date) : [];
+    // Only a new day's opening depends on them: they decide its pre-filled name.
+    if (held === undefined && specialDayId === null) return nothing;
+    const holidays = [
+      ...(held ?? []),
+      ...(this.monthModel?.days.flatMap((day) => day.holidays) ?? []),
+      ...(this.yearModel?.days.flatMap((day) => day.holidays) ?? []),
+    ];
+    return html`<special-day-painter
+      .open=${true}
+      .api=${this.api}
+      .model=${this.model}
+      .specialDayId=${specialDayId}
+      .date=${specialDayId === null ? date : null}
+      .addDate=${specialDayId === null ? null : date}
+      .holidays=${holidays}
+      .readOnly=${this.readOnly}
+      @special-day-saved=${(event: CustomEvent<{ detail: SpecialDayDetail }>) => {
+        event.stopPropagation();
+        if (this.currentPainter(event) && this.special?.specialDayId === null)
+          this.replaceAddress(
+            this.specialUrl({ specialDayId: event.detail.detail.id, date: null }),
+          );
+      }}
+      @special-day-navigate=${(event: CustomEvent<{ specialDayId: string }>) => {
+        event.stopPropagation();
+        if (this.currentPainter(event))
+          this.replaceAddress(
+            this.specialUrl({ specialDayId: event.detail.specialDayId, date: null }),
+          );
+      }}
+      @special-day-deleted=${(event: Event) => {
+        // The painter closes itself next, and its painter-close closes the address.
+        event.stopPropagation();
+      }}
+      @painter-close=${(event: Event) => {
+        event.stopPropagation();
+        if (this.currentPainter(event)) this.closePainter();
+      }}
+    ></special-day-painter>`;
   }
   private menuLabel(id: string) {
     const menu = this.model!.menus.find((m) => m.id === id);
@@ -799,66 +950,50 @@ export class OpeningHoursScreen extends LitElement {
     if (this.deleting === deletion) this.deleting = undefined;
     this.api.rereadWatches();
   }
-  private async openNamedDay(event: CustomEvent<SpecialDayAction>) {
+  private openNamedDay(event: CustomEvent<SpecialDayAction>) {
     event.stopPropagation();
-    const day = this.shadowRoot?.querySelector("opening-hours-day");
     if (
       ![
         this.shadowRoot?.querySelector("opening-hours-year"),
         this.shadowRoot?.querySelector("opening-hours-month"),
-        day,
       ].some((component) => component === event.currentTarget)
     )
       return;
-    await this.openSpecial(event.detail, { offerEditDate: event.currentTarget !== day });
+    const action = event.detail;
+    if (action.kind === "delete") {
+      void this.askDeleteSpecial(action);
+      return;
+    }
+    const date = isLocalDate(action.date) ? action.date : null;
+    void this.openSpecialPainter(
+      action.specialDay
+        ? { specialDayId: action.specialDay.id, date: null }
+        : { specialDayId: null, date },
+      action.visibleHolidays ?? action.holidays,
+    );
   }
-  private async openSpecial(
-    sentAction: SpecialDayAction,
-    extra: Pick<OpenSpecialDay, "addDate" | "offerEditDate">,
-  ) {
+  /** The Year panel's Delete: reads the special day, then asks in the screen's own confirmation. */
+  private async askDeleteSpecial(sentAction: SpecialDayAction) {
     if (
       !this.isConnected ||
       this.readOnly ||
       this.busy ||
       this.editor ||
       this.deleting ||
-      this.namedAction
+      this.namedAction ||
+      this.overlaid()
     )
       return;
-    const { specialDay: sent, ...detail } = sentAction;
-    const specialDay: SpecialDayRef | null = sent ?? null;
-    if (detail.kind === "delete" && !specialDay) return;
-    const action: OpenSpecialDay = {
-      ...detail,
-      ...extra,
-      clockRevision: this.model!.clockRevision,
-    };
+    const { specialDay, ...detail } = sentAction;
+    if (!specialDay) return;
+    const action: OpenSpecialDay = { ...detail, clockRevision: this.model!.clockRevision };
     this.namedDeleteError = "";
     this.specialReadError = "";
-    const onHoliday = action.holidays.some((holiday) => holiday.date === action.date);
-    if (!specialDay && !onHoliday) {
-      this.namedAction = action;
-      return;
-    }
     const generation = this.generation;
     this.busy = true;
     let opened: OpenSpecialDay;
     try {
-      opened = specialDay
-        ? { ...action, detail: await this.api.specialDays.readSpecialDay(specialDay.id) }
-        : {
-            ...action,
-            existing: await this.api.specialDays.listSpecialDays().then(
-              (days) =>
-                days.map((day) => ({
-                  id: day.id,
-                  name: day.name,
-                  latest: day.dates.at(-1)?.date,
-                })),
-              // The list only feeds the optional "Add to <name>" offer.
-              () => [],
-            ),
-          };
+      opened = { ...action, detail: await this.api.specialDays.readSpecialDay(specialDay.id) };
     } catch {
       if (this.isConnected && generation === this.generation)
         this.specialReadError = t("opening.load_error");
@@ -873,84 +1008,6 @@ export class OpeningHoursScreen extends LitElement {
     if (!this.isConnected || this.namedAction !== action || this.busy) return;
     this.namedAction = undefined;
     void this.updateComplete.then(() => action.returnTo()?.focus());
-  }
-  /** Runs one special-day write for `action`, putting a refusal on its dialog; true once saved. */
-  private async writeSpecialDay(
-    action: OpenSpecialDay,
-    component: SpecialDayDialog,
-    write: (current: () => boolean) => Promise<unknown>,
-  ): Promise<boolean> {
-    const generation = this.generation;
-    const current = () =>
-      this.isConnected && generation === this.generation && this.namedAction === action;
-    this.busy = true;
-    component.refusal = undefined;
-    try {
-      await write(current);
-    } catch (error) {
-      if (current())
-        component.refusal = {
-          code: codeOf(error),
-          params:
-            typeof error === "object" && error !== null
-              ? (error as { params?: Record<string, unknown> }).params
-              : undefined,
-        };
-      return false;
-    } finally {
-      if (generation === this.generation) this.busy = false;
-    }
-    return current();
-  }
-  private dialogFor(event: Event): { action: OpenSpecialDay; component: SpecialDayDialog } | null {
-    event.stopPropagation();
-    const action = this.namedAction;
-    const component = event.currentTarget as SpecialDayDialog;
-    if (
-      !action ||
-      !this.isConnected ||
-      this.readOnly ||
-      this.busy ||
-      component !== this.shadowRoot?.querySelector("special-day-dialog")
-    )
-      return null;
-    return { action, component };
-  }
-  private async saveNamedDay(event: CustomEvent<{ id: string | null; input: SpecialDayFacts }>) {
-    const opened = this.dialogFor(event);
-    if (!opened) return;
-    const { action, component } = opened;
-    const { id, input } = event.detail;
-    const saved = await this.writeSpecialDay(action, component, (current) =>
-      this.api.specialDays.saveSpecialDay(id, input, current, action.clockRevision),
-    );
-    if (!saved) return;
-    if (component.commitSubmitted(input)) this.closeNamedDay(action);
-    this.api.rereadWithSpecialDays();
-  }
-  private async addToSpecialDay(event: CustomEvent<{ id: string; date: string }>) {
-    const opened = this.dialogFor(event);
-    if (!opened) return;
-    const { action, component } = opened;
-    const { id, date } = event.detail;
-    const saved = await this.writeSpecialDay(action, component, async (current) => {
-      const stored = await this.api.specialDays.readSpecialDay(id);
-      const dates = [
-        ...stored.dates
-          .filter((entry) => entry.date !== date)
-          .map((entry) => ({ date: entry.date, closedAllDay: entry.closedAllDay })),
-        { date, closedAllDay: false },
-      ].sort((a, b) => (a.date < b.date ? -1 : 1));
-      return this.api.specialDays.saveSpecialDay(
-        id,
-        { name: stored.name, repeatsYearly: stored.repeatsYearly, dates },
-        current,
-        action.clockRevision,
-      );
-    });
-    if (!saved) return;
-    this.closeNamedDay(action);
-    this.api.rereadWithSpecialDays();
   }
   private async deleteNamedDay(action: OpenSpecialDay) {
     if (
@@ -981,90 +1038,42 @@ export class OpeningHoursScreen extends LitElement {
     const action = this.namedAction;
     if (!action) return nothing;
     const current = () => this.isConnected && this.namedAction === action && !this.busy;
-    if (action.kind === "delete")
-      return keyed(
-        action,
-        html`<wt-dialog
-          open
-          data-test="delete-special-day"
-          heading=${t("hours.delete")}
-          .dismissible=${!this.busy}
-          @wt-close=${(event: Event) => {
-            event.stopPropagation();
-            if (current()) this.closeNamedDay(action);
-          }}
-        >
-          <p>
-            ${format(action.detail!.repeatsYearly ? "special.delete_repeat" : "special.delete", { name: action.detail!.name })}
-          </p>
-          ${this.namedDeleteError ? html`<p role="alert">${this.namedDeleteError}</p>` : nothing}
-          <wt-form-actions slot="footer"
-            ><wt-button
-              slot="cancel"
-              variant="secondary"
-              ?disabled=${this.busy}
-              @click=${() => {
-                if (current()) this.closeNamedDay(action);
-              }}
-              >${t("hours.cancel")}</wt-button
-            ><wt-button
-              data-test="confirm-special-delete"
-              variant="danger"
-              ?disabled=${this.busy}
-              ?loading=${this.busy}
-              @click=${() => this.deleteNamedDay(action)}
-              >${t("hours.delete")}</wt-button
-            ></wt-form-actions
-          >
-        </wt-dialog>`,
-      );
     return keyed(
       action,
-      html`<special-day-dialog
-        .open=${true}
-        .specialDay=${action.detail}
-        .date=${action.date}
-        .addDate=${action.addDate ?? ""}
-        .offerEditDate=${action.offerEditDate ?? false}
-        .holidays=${action.visibleHolidays ?? action.holidays}
-        .existing=${action.existing ?? []}
-        .busy=${this.busy}
-        @special-day-save=${this.saveNamedDay}
-        @special-day-edit-date=${this.editDate}
-        @special-day-add-to=${this.addToSpecialDay}
-        @special-day-close=${(event: Event) => {
+      html`<wt-dialog
+        open
+        data-test="delete-special-day"
+        heading=${t("hours.delete")}
+        .dismissible=${!this.busy}
+        @wt-close=${(event: Event) => {
           event.stopPropagation();
           if (current()) this.closeNamedDay(action);
         }}
-      ></special-day-dialog>`,
+      >
+        <p>
+          ${format(action.detail!.repeatsYearly ? "special.delete_repeat" : "special.delete", { name: action.detail!.name })}
+        </p>
+        ${this.namedDeleteError ? html`<p role="alert">${this.namedDeleteError}</p>` : nothing}
+        <wt-form-actions slot="footer"
+          ><wt-button
+            slot="cancel"
+            variant="secondary"
+            ?disabled=${this.busy}
+            @click=${() => {
+              if (current()) this.closeNamedDay(action);
+            }}
+            >${t("hours.cancel")}</wt-button
+          ><wt-button
+            data-test="confirm-special-delete"
+            variant="danger"
+            ?disabled=${this.busy}
+            ?loading=${this.busy}
+            @click=${() => this.deleteNamedDay(action)}
+            >${t("hours.delete")}</wt-button
+          ></wt-form-actions
+        >
+      </wt-dialog>`,
     );
-  }
-  /** Goes to the per-date editor through the leave question, closing the dialog once it has gone. */
-  private async editDate(event: CustomEvent<{ date: string }>) {
-    const opened = this.dialogFor(event);
-    if (!opened || !isLocalDate(event.detail.date)) return;
-    const { action } = opened;
-    const write = () =>
-      this.url.write({
-        dashboard: "opening-hours",
-        view: "date",
-        date: event.detail.date,
-        month: null,
-        year: null,
-      });
-    const coordinator = leaveCoordinatorFor(this);
-    const outcome = navigationGuardFor(window)
-      ? await write()
-      : coordinator
-        ? await coordinator.request({
-            scopes: "all",
-            reason: "navigation",
-            proceed: () => void write(),
-          })
-        : (write(), "proceeded");
-    if (outcome !== "proceeded" || !this.isConnected || this.namedAction !== action) return;
-    this.namedAction = undefined;
-    this.followUrl();
   }
   private openSeasonWeek(event: CustomEvent<{ seasonId: string }>) {
     event.stopPropagation();
@@ -1114,56 +1123,17 @@ export class OpeningHoursScreen extends LitElement {
         }}
         @ordinary-date-make-special=${(event: CustomEvent<{ date: string }>) => {
           if (!leave(event)) return;
-          void this.openSpecial(
-            {
-              kind: "open",
-              date: event.detail.date,
-              specialDay: null,
-              holidays: [],
-              returnTo: open.returnTo,
-            },
-            {},
-          );
+          void this.openSpecialPainter({ specialDayId: null, date: event.detail.date });
         }}
         @ordinary-date-add-to-special=${(
           event: CustomEvent<{ date: string; specialDayId: string }>,
         ) => {
           if (!leave(event)) return;
           const { date, specialDayId } = event.detail;
-          void this.openSpecial(
-            {
-              kind: "open",
-              date: "",
-              specialDay: {
-                id: specialDayId,
-                name: this.knownSpecialDays.find((day) => day.id === specialDayId)?.name ?? "",
-              },
-              holidays: [],
-              returnTo: open.returnTo,
-            },
-            { addDate: date },
-          );
+          void this.openSpecialPainter({ specialDayId, date });
         }}
       ></ordinary-date-dialog>`,
     );
-  }
-  /** "‹ December 2026" above the per-date editor, back to the shown date's month. */
-  private monthBack() {
-    const month = (this.dayDate || businessDateToday(this.model!)).slice(0, 7);
-    if (!month) return nothing;
-    const name = `${formatMonthName(Number(month.slice(5, 7)))} ${Number(month.slice(0, 4))}`;
-    return html`<button
-      type="button"
-      class="month-back"
-      data-test="month-back"
-      aria-label=${format("month.back", { month: name })}
-      @click=${() =>
-        void Promise.resolve(
-          this.url.write({ dashboard: "opening-hours", view: "month", month, date: null }),
-        ).then(() => this.followUrl())}
-    >
-      ‹ ${name}
-    </button>`;
   }
   private month() {
     const write = (changes: Record<string, string | null>) =>
@@ -1338,7 +1308,7 @@ export class OpeningHoursScreen extends LitElement {
               }
               <wt-tabs
                 label=${t("opening.title")}
-                .value=${this.view === "month" || this.view === "date" ? "year" : this.view}
+                .value=${this.view === "month" ? "year" : this.view}
                 .items=${[
                   { key: "year", label: t("opening.tab.year") },
                   ...(this.view === "week" ? [{ key: "week", label: t("hours.tab.week") }] : []),
@@ -1347,7 +1317,7 @@ export class OpeningHoursScreen extends LitElement {
                 @wt-tab-change=${(event: CustomEvent<{ value: View }>) => {
                   if (event.target !== event.currentTarget) return;
                   (event.currentTarget as HTMLElementTagNameMap["wt-tabs"]).value =
-                    this.view === "month" || this.view === "date" ? "year" : this.view;
+                    this.view === "month" ? "year" : this.view;
                   void this.url.write({
                     dashboard: "opening-hours",
                     view: event.detail.value,
@@ -1388,23 +1358,9 @@ export class OpeningHoursScreen extends LitElement {
                             }}
                             @year-month-open=${this.openMonth}
                           ></opening-hours-year>`
-                      : this.view === "date"
-                        ? html`${this.monthBack()}<opening-hours-day
-                              .api=${this.api}
-                              .model=${this.model}
-                              .date=${this.dayDate}
-                              .readOnly=${this.readOnly}
-                              @special-day-action=${this.openNamedDay}
-                              @day-date-change=${(event: CustomEvent<{ date: string }>) => {
-                                event.stopPropagation();
-                                this.dayDate = event.detail.date;
-                                // Replaced, not pushed: Back leaves the per-date editor rather than retracing its steps.
-                                void this.url.write({ date: event.detail.date }, true);
-                              }}
-                            ></opening-hours-day>`
-                        : this.shownMonth()
-                          ? this.month()
-                          : nothing
+                      : this.shownMonth()
+                        ? this.month()
+                        : nothing
                   }
                 </div>
                 <div slot="week">
@@ -1437,6 +1393,7 @@ export class OpeningHoursScreen extends LitElement {
       }
       ${this.specialReadError ? html`<p role="alert" data-test="special-read-error">${this.specialReadError}</p>` : nothing}
       ${this.namedDialog()} ${this.ordinaryDialog()} ${this.seasonPainter()}
+      ${this.specialPainter()}
       ${
         this.editor
           ? keyed(

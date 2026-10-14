@@ -12,7 +12,6 @@ import "./venue-departments-shell.js";
 import "./zone-edit-dialog.js";
 import "./opening-hours-screen.js";
 import { namedWeekModel } from "../testing/hours-models.js";
-import { everyDateSpecial } from "../testing/special-day-fixture.js";
 import { drag, frame, settle } from "../testing/season-painter-fixture.js";
 
 const originalUrl = location.href;
@@ -171,11 +170,7 @@ async function hours(
   const writes: unknown[][] = [];
   const api = new OpeningHoursApi(
     withOpeningStations((async (path, method, body) => {
-      if (method === "GET")
-        return (
-          (view === "date" && everyDateSpecial(path)) ||
-          (path.includes("/named-days?") ? namedWeekModel() : model)
-        );
+      if (method === "GET") return path.includes("/named-days?") ? namedWeekModel() : model;
       writes.push([path, method, body]);
       return write();
     }) as DashboardRequest),
@@ -193,12 +188,6 @@ async function hours(
   }
   return { screen, writes, model, replace };
 }
-const DAY_WRITE = "/management-api/venue-service/special-days/day-2026-10-12";
-/** A write's path and the departments its paint names. */
-const painted = ([path, , body]: unknown[]) => [
-  path,
-  (body as { paint: { departmentId: string }[] }).paint.map((entry) => entry.departmentId),
-];
 it.each(["department", "period"])(
   "remote %s deletion retires the dirty retained menu-period editor",
   async (kind) => {
@@ -228,29 +217,6 @@ it.each(["department", "period"])(
     expect(writes).toEqual([]);
   },
 );
-it("day deletion removes only the deleted department and preserves the surviving staged hours", async () => {
-  vi.useFakeTimers({ toFake: ["Date"] });
-  vi.setSystemTime(new Date("2026-10-12T12:00:00Z"));
-  const { screen, model, replace } = await hours("date");
-  const day = screen.shadowRoot!.querySelector("opening-hours-day")!;
-  await day.updateComplete;
-  const grid = day.shadowRoot!.querySelector("service-grid")!;
-  await grid.updateComplete;
-  for (const id of ["d1", "d2"])
-    emit(grid, "grid-block-change", {
-      columnKey: id,
-      index: 0,
-      startsAt: "10:00",
-      endsAt: "16:00",
-    });
-  await day.updateComplete;
-  await replace({ ...model, departments: model.departments.slice(1) });
-  await day.updateComplete;
-  await grid.updateComplete;
-  expect(grid.columns.map((c) => c.key)).toEqual(["d2", "zone:z2"]);
-  expect(grid.columns[0]!.slots).toEqual([{ periodId: "p2", startsAt: "10:00", endsAt: "16:00" }]);
-  expect(app.leave.coordinator.isDirty()).toBe(true);
-});
 it("zone service deletion invalidates pending discard on the same retained component", async () => {
   await mount();
   const el = document.createElement("zone-edit-dialog");
@@ -365,47 +331,6 @@ it("voluntary period close waits for the native close event after discarding its
   expect(screen.shadowRoot!.querySelector("period-editor")).toBeNull();
   expect(app.leave.coordinator.isDirty()).toBe(false);
 });
-it.each(["keep", "discard"] as const)(
-  "day deletion invalidates pending %s on the same day owner and keeps surviving staged hours",
-  async (decision) => {
-    vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date("2026-10-12T12:00:00Z"));
-    const { screen, model, replace } = await hours("date");
-    const day = screen.shadowRoot!.querySelector("opening-hours-day")!;
-    await day.updateComplete;
-    const grid = day.shadowRoot!.querySelector("service-grid")!;
-    await grid.updateComplete;
-    for (const id of ["d1", "d2"])
-      emit(grid, "grid-block-change", {
-        columnKey: id,
-        index: 0,
-        startsAt: "10:00",
-        endsAt: "16:00",
-      });
-    await day.updateComplete;
-    const outcome = app.leave.coordinator.request({
-      scopes: [day],
-      reason: "navigation",
-      proceed: () => {},
-    });
-    await app.updateComplete;
-    const question = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
-    await question.updateComplete;
-    expect(question.open).toBe(true);
-    const stale = question.shadowRoot!.querySelector<HTMLElement>(`[data-choice=${decision}]`)!;
-    await replace({ ...model, departments: model.departments.slice(1) });
-    stale.click();
-    expect(await outcome).toBe("stale");
-    await day.updateComplete;
-    await grid.updateComplete;
-    expect(screen.shadowRoot!.querySelector("opening-hours-day")).toBe(day);
-    expect(grid.columns.map((c) => c.key)).toEqual(["d2", "zone:z2"]);
-    expect(grid.columns[0]!.slots).toEqual([
-      { periodId: "p2", startsAt: "10:00", endsAt: "16:00" },
-    ]);
-    expect(app.leave.coordinator.isDirty([day])).toBe(true);
-  },
-);
 it("a late period save cannot revive the removed department's retained dialog", async () => {
   let finish!: () => void;
   const { screen, model, replace, writes } = await hours(
@@ -434,137 +359,6 @@ it("a late period save cannot revive the removed department's retained dialog", 
   expect(screen.shadowRoot!.querySelector("period-editor")).toBeNull();
   expect(app.leave.coordinator.isDirty()).toBe(false);
 });
-it.each(["success", "refusal"] as const)(
-  "a retired day save's late %s cannot release the same owner's surviving save",
-  async (result) => {
-    vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date("2026-10-12T12:00:00Z"));
-    const pending: { resolve(): void; reject(reason: unknown): void }[] = [];
-    const { screen, model, replace, writes } = await hours(
-      "date",
-      hoursFixture(),
-      () => new Promise<void>((resolve, reject) => pending.push({ resolve, reject })),
-    );
-    const day = screen.shadowRoot!.querySelector("opening-hours-day")!;
-    await day.updateComplete;
-    const grid = day.shadowRoot!.querySelector("service-grid")!;
-    await grid.updateComplete;
-    for (const id of ["d1", "d2"])
-      emit(grid, "grid-block-change", {
-        columnKey: id,
-        index: 0,
-        startsAt: "10:00",
-        endsAt: "16:00",
-      });
-    await day.updateComplete;
-    const save =
-      day.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save-day]")!;
-    save.click();
-    await expect.poll(() => pending.length).toBe(1);
-    expect(writes.map(painted)).toEqual([[DAY_WRITE, ["d1", "d2"]]]);
-    await replace({ ...model, departments: model.departments.slice(1) });
-    await day.updateComplete;
-    expect(screen.shadowRoot!.querySelector("opening-hours-day")).toBe(day);
-    await grid.updateComplete;
-    expect(grid.columns[0]!.slots).toEqual([
-      { periodId: "p2", startsAt: "10:00", endsAt: "16:00" },
-    ]);
-    expect(save.disabled).toBe(false);
-    save.click();
-    await expect.poll(() => pending.length).toBe(2);
-    expect(save.disabled).toBe(true);
-    if (result === "success") pending[0]!.resolve();
-    else
-      pending[0]!.reject({
-        code: "special_day.invalid",
-        params: { field: "paint.0.ranges.0.endsAt" },
-      });
-    await new Promise((done) => setTimeout(done, 0));
-    await day.updateComplete;
-    expect(save.disabled).toBe(true);
-    save.click();
-    await day.updateComplete;
-    expect(writes.map(painted)).toEqual([
-      [DAY_WRITE, ["d1", "d2"]],
-      [DAY_WRITE, ["d2"]],
-    ]);
-    pending[1]!.resolve();
-    await new Promise((done) => setTimeout(done, 0));
-    await day.updateComplete;
-    emit(grid, "grid-block-change", {
-      columnKey: "d2",
-      index: 0,
-      startsAt: "10:00",
-      endsAt: "17:00",
-    });
-    await day.updateComplete;
-    expect(save.disabled).toBe(false);
-    save.click();
-    await expect.poll(() => pending.length).toBe(3);
-    expect(writes.map(painted)).toEqual([
-      [DAY_WRITE, ["d1", "d2"]],
-      [DAY_WRITE, ["d2"]],
-      [DAY_WRITE, ["d2"]],
-    ]);
-    pending[2]!.resolve();
-    await new Promise((done) => setTimeout(done, 0));
-  },
-);
-it("a reconnected day owner can save its retained draft after an old pending write is retired", async () => {
-  vi.useFakeTimers({ toFake: ["Date"] });
-  vi.setSystemTime(new Date("2026-10-12T12:00:00Z"));
-  const pending: (() => void)[] = [];
-  const { screen, writes } = await hours(
-    "date",
-    hoursFixture(),
-    () => new Promise<void>((done) => pending.push(done)),
-  );
-  const day = screen.shadowRoot!.querySelector("opening-hours-day")!;
-  await day.updateComplete;
-  const grid = day.shadowRoot!.querySelector("service-grid")!;
-  await grid.updateComplete;
-  emit(grid, "grid-block-change", {
-    columnKey: "d1",
-    index: 0,
-    startsAt: "10:00",
-    endsAt: "16:00",
-  });
-  await day.updateComplete;
-  const save =
-    day.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save-day]")!;
-  save.click();
-  await expect.poll(() => pending.length).toBe(1);
-  const parent = day.parentNode!;
-  day.remove();
-  parent.append(day);
-  await day.updateComplete;
-  expect(screen.shadowRoot!.querySelector("opening-hours-day")).toBe(day);
-  expect(save.disabled).toBe(false);
-  save.click();
-  await expect.poll(() => pending.length).toBe(2);
-  pending[0]!();
-  await new Promise((done) => setTimeout(done, 0));
-  await day.updateComplete;
-  expect(save.disabled).toBe(true);
-  save.click();
-  await day.updateComplete;
-  expect(writes.map(painted)).toEqual([
-    [DAY_WRITE, ["d1"]],
-    [DAY_WRITE, ["d1"]],
-  ]);
-  pending[1]!();
-  await new Promise((done) => setTimeout(done, 0));
-  await day.updateComplete;
-  emit(grid, "grid-block-change", {
-    columnKey: "d1",
-    index: 0,
-    startsAt: "10:00",
-    endsAt: "17:00",
-  });
-  await day.updateComplete;
-  expect(save.disabled).toBe(false);
-});
-
 it("department deletion removes its contributed receipt panel while another department draft survives", async () => {
   await mount();
   const survivor = await settings("d2");

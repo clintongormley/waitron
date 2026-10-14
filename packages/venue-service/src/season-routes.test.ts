@@ -254,6 +254,77 @@ describe("the month read route", () => {
   });
 });
 
+describe("the season days read route", () => {
+  it("answers each asked date's season hours to a viewer, in order and once each", async () => {
+    const r = await routed();
+    await answers(
+      await r.send(
+        "GET",
+        "/opening-hours/season-days?dates=2030-12-24,2030-11-30,2030-12-24",
+        r.supervisor,
+      ),
+      200,
+      {
+        days: [
+          { date: "2030-12-24", seasonId: r.seasons.Winter },
+          { date: "2030-11-30", seasonId: r.seasons.Autumn },
+        ].map((day) => ({
+          ...day,
+          dayCutover: "06:00",
+          departments: [
+            {
+              departmentId: r.restaurant,
+              ranges: [{ periodId: expect.any(String), startsAt: "19:00", endsAt: "23:00" }],
+              zones: [],
+            },
+          ],
+        })),
+      },
+    );
+  });
+
+  it("serves 62 dates at both ends of the calendar", async () => {
+    const r = await routed();
+    const dates = [
+      ...Array.from({ length: 31 }, (_, i) => `0100-01-${String(i + 1).padStart(2, "0")}`),
+      ...Array.from({ length: 31 }, (_, i) => `9998-12-${String(i + 1).padStart(2, "0")}`),
+    ];
+    const response = await r.send(
+      "GET",
+      `/opening-hours/season-days?dates=${dates.join(",")}`,
+      r.manager,
+    );
+    expect(response.status).toBe(200);
+    const read = (await response.json()) as { days: { date: string }[] };
+    expect(read.days.map(({ date }) => date)).toEqual(dates);
+  });
+
+  it("refuses a missing, empty or malformed list, a date outside 0100 to 9998, 63 dates, and an anonymous read", async () => {
+    const r = await routed();
+    const sixtyThree = Array.from({ length: 63 }, (_, i) =>
+      new Date(Date.UTC(2030, 0, i + 1)).toISOString().slice(0, 10),
+    ).join(",");
+    for (const query of [
+      "",
+      "?dates=",
+      "?dates=2030-12-24,",
+      "?dates=2030-12-24,,2030-12-25",
+      "?dates=2030-02-30",
+      "?dates=2030-12-24,tomorrow",
+      "?dates=2030-12-24%20",
+      "?dates=0099-12-31",
+      "?dates=9999-01-01",
+      `?dates=${sixtyThree}`,
+    ])
+      await answers(await r.send("GET", `/opening-hours/season-days${query}`, r.manager), 400, {
+        error: { code: "management.request_invalid", params: { field: "dates" } },
+      });
+    expect((await r.send("GET", "/opening-hours/season-days?dates=2030-12-24", "")).status).toBe(
+      401,
+    );
+  });
+});
+
 describe("the season routes", () => {
   it("PUT renames and moves a season, answering it", async () => {
     const r = await routed();

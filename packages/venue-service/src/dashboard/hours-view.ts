@@ -41,6 +41,14 @@ export function formatMonthDay(monthDay: string): string {
   return dateFormat({ day: "numeric", month: "short" }).format(asUtc(`2000-${monthDay}`));
 }
 
+/** A date's day and short month, "14 Dec", or with its year, "14 Dec 2026", in the dashboard's
+ *  language. */
+export function formatShortDate(date: LocalDate, year: boolean): string {
+  return dateFormat(
+    year ? { day: "numeric", month: "short", year: "numeric" } : { day: "numeric", month: "short" },
+  ).format(asUtc(date));
+}
+
 /** A month's name from its number, 1 to 12, "December", in the dashboard's language. */
 export function formatMonthName(month: number): string {
   return dateFormat({ month: "long" }).format(asUtc(`2001-${String(month).padStart(2, "0")}-01`));

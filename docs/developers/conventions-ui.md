@@ -951,6 +951,15 @@ that release before the check made both pass, and each installed-candidate delet
 with it. The season painter judges a refresh by its saved baseline, not its draft scope; its case is "keeps an edited week when a fresh
 model arrives before the painter, put back on the page, has updated" in `season-painter.unsaved.test.ts`.
 
+**2026-10-14, A506-9:** the day editor (`opening-hours-day`) and the special day dialog are gone, and
+`opening-hours-day.unsaved.test.ts` and `special-day-dialog.unsaved.test.ts` with them. The
+special-day painter that replaces both judges a refresh, and the clock revision a save sends, by its
+saved baseline, not its draft scope; its cases are "keeps an edited day when a fresh model arrives
+before the painter, put back on the page, has updated", "keeps an edited day when another manager's
+change to the stored day lands while the painter is off the page" and "an edited day keeps the clock
+revision it was painted under when a fresh model arrives while the painter is off the page" in
+`special-day-painter.unsaved.test.ts`.
+
 On A366 slice 2 Task 22 (2026-10-09), both real-week editors disposed their per-date scopes on
 removal. A fresh department or zone object supplied before reconnect's first update then looked
 clean, because the scopes had not been registered again. Reconciliation replaced the staged

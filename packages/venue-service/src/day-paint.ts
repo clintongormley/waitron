@@ -124,32 +124,3 @@ export function layerZonePaint(
   );
   return toClosedRanges(steps, cutover);
 }
-
-/** The smallest paint that turns `season` into `edited`. */
-export function paintFromEdit(
-  season: readonly ServiceRange[],
-  edited: readonly ServiceRange[],
-  cutover: string,
-): PaintRange[] {
-  const before = serviceSteps(season, cutover);
-  const after = serviceSteps(edited, cutover);
-  const changed = after.map((value, step) => (value === before[step] ? undefined : value));
-  return runs(changed, (value) => value !== undefined, cutover).map(
-    ({ value, startsAt, endsAt }) => ({ periodId: value ?? null, startsAt, endsAt }),
-  );
-}
-
-/** The same for a zone: "closed" where the edit closes time the season left open, "open" where it
- *  opens time the season closed. */
-export function zonePaintFromEdit(
-  season: readonly ClosedRange[],
-  edited: readonly ClosedRange[],
-  cutover: string,
-): ZonePaint[] {
-  const before = closedSteps(season, cutover);
-  const after = closedSteps(edited, cutover);
-  const changed = after.map((closed, step) => (closed === before[step] ? undefined : closed));
-  return runs(changed, (value) => value !== undefined, cutover).map(
-    ({ value, startsAt, endsAt }) => ({ kind: value ? "closed" : "open", startsAt, endsAt }),
-  );
-}

@@ -23,7 +23,7 @@ function luminance(colour: string): number {
 }
 /** axe does not judge the faded blocks' names, so the zone state measures them itself. */
 function expectReadableUnderlay(el: PaintGrid) {
-  const names = [...el.shadowRoot!.querySelectorAll<HTMLElement>(".underlay span")];
+  const names = [...el.shadowRoot!.querySelectorAll<HTMLElement>(".underlay > span")];
   expect(names).toHaveLength(CALENDAR_COLOURS.length);
   for (const name of names) {
     const style = getComputedStyle(name);
@@ -46,6 +46,7 @@ describe.each(["light", "dark"] as const)("paint grid (%s)", (theme) => {
     "chooser",
     "refused",
     "read-only",
+    "column-head",
   ])("%s", async (state) => {
     const el = (await mountThemed("<paint-grid></paint-grid>", theme)) as PaintGrid;
     const painted = state !== "empty";
@@ -87,7 +88,14 @@ describe.each(["light", "dark"] as const)("paint grid (%s)", (theme) => {
       ]);
     if (state === "refused")
       el.columnErrors = new Map([["tue", "Check this day's time ranges and periods."]]);
+    if (state === "column-head")
+      el.insertAdjacentHTML(
+        "beforeend",
+        `<label slot="column-head-tue"><input type="checkbox" name="closed-tue" checked /> Closed</label>`,
+      );
     await el.updateComplete;
+    if (state === "column-head")
+      expect(el.querySelector("label")!.getBoundingClientRect().height).toBeGreaterThan(0);
     if (state === "refused")
       expect(
         el.shadowRoot!.querySelector('.heading[data-column="tue"][data-error]'),

@@ -32,8 +32,8 @@ it("sends the retained calendar revision on save and removal", async () => {
     repeatsYearly: false,
     dates: [{ date: "2026-11-04", closedAllDay: false }],
   };
-  await api.saveSpecialDay(null, input, () => true, 9);
-  await api.saveSpecialDay("day", input, () => true, 9);
+  await api.writeSpecialDay(null, input, 9);
+  await api.writeSpecialDay("day", input, 9);
   await api.deleteSpecialDay("day", 9);
   expect(bodies).toEqual([
     { ...input, expectedClockRevision: 9 },

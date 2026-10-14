@@ -618,6 +618,23 @@ it("at 1280×900 the grid fills the space under the paint row, still showing the
   }
 });
 
+it("at 1280×900 the week's seven days fit side by side, with no edge faded", async () => {
+  const old = [window.innerWidth, window.innerHeight];
+  try {
+    await page.viewport(1280, 900);
+    const { painter } = await mount();
+    const scroll = grid(painter).shadowRoot!.querySelector<HTMLElement>(".scroll")!;
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    expect(grid(painter).columns).toHaveLength(7);
+    expect(scroll.scrollWidth).toBeLessThanOrEqual(scroll.clientWidth);
+    expect(grid(painter).hasAttribute("data-overflow")).toBe(false);
+    expect(getComputedStyle(scroll).maskImage).toBe("none");
+  } finally {
+    await page.viewport(old[0]!, old[1]!);
+  }
+});
+
 it("a refresh that removes two edited zones names both in one notice", async () => {
   const { painter } = await mount();
   await pick(painter, "zone:z1");

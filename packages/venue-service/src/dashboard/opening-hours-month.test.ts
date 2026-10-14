@@ -363,7 +363,7 @@ describe("Opening hours month", () => {
     expect(sent[0]!.returnTo()).toBe(dayButton(el, "2026-12-14"));
   });
 
-  it("opens the special-day dialog on a public holiday with no special day, with the holiday", async () => {
+  it("asks to open a new special day on a public holiday with no special day, with the holiday", async () => {
     const el = await mount();
     const sent = events<SpecialDayAction>(el, "special-day-action");
     dayButton(el, "2026-12-08").click();

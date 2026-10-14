@@ -113,15 +113,15 @@ switch, and the dashboard's dated week views went.
 A506-8 landed in #1634: a full-screen season painter edits one season's week for every department
 and zone, saving the edited weeks in one request; it replaced the Week tab's editors, and opens
 from a season chip, an ordinary date and a zone's Opening hours link.
+A506-9 (#1651): the special-day painter replaces the special-day dialog and the per-date editor; it
+edits one special day's name, dates, Every year and each date's department and zone paint in a
+full-screen painter with its own address, opens from the Year, the month and an ordinary date, and
+saves only the paint the draft changed. An old `/view/date` address opens the month instead.
 
 **Left open by A506-1, for the later parts.**
 - No test yet gives a second department its own paint on the same special day.
 
 **Left open by A506-3, for the later parts.**
-- Still open after A506-6, whose season writes check but never bump the clock revision: a per-date
-  editor's draft takes its season when Save is pressed; once a season's start can move, a draft built for one
-  season could be saved under the next. Season edits should bump the clock
-  revision or refuse a draft built before them.
 - With no season in the address, the All departments week left open across a season change keeps
   showing the old season (the picker names it) until the address changes. The season painter always
   writes its season into the address. Read in the code (`resolveSeason`, `opening-hours-screen.ts`),
@@ -201,13 +201,23 @@ from a season chip, an ordinary date and a zone's Opening hours link.
   also reads the tenant, location and holiday area to find that year's holiday: about 100 µs of
   roughly 860 µs per call, measured over 2000 calls on a Madrid test venue during the A506-5
   finish-branch review. One way to remove it is a cache that outlives the transaction.
-- The dashboard's day models (`CalendarDay` in `packages/venue-service/src/hours-types.ts`, which the
-  per-date editor reads, and the Year's `OpeningHoursYearDay` in
-  `packages/venue-service/src/opening-hours-calendar.ts`) drop each date's stored special-day date,
-  so the dashboard re-derives which stored date applies (`specialOn`,
-  `packages/venue-service/src/dashboard/special-date.ts`) and the per-date editor fetches the special day's detail separately; returning the stored date in the model
-  would leave one copy of the rule. The "Add to" offer reads every special day with every date
-  (`GET …/special-days`) to show a name and a latest date.
+- The "Add to" offer reads every special day with every date (`GET …/special-days`) to show a name
+  and a latest date.
+
+**Left open by A506-9, for the later parts.**
+- A special day whose dates start their business day at different times is painted on one grid
+  drawn from the first date's changeover, with a notice saying so (ruling R1 of A506-9), so the
+  other dates' columns start their day at the first date's changeover rather than their own
+  (`cutover`, `special-day-painter.ts`).
+- `GET …/named-days` (`readSpecialDaysModel`, `named-days.ts`) has no dashboard caller since the
+  per-date editor went; server suites still pin it. Remove it, or keep it with a stated reason.
+- `range-dialog.ts` (`<range-dialog>`, with its repeated-time note) has no caller since the
+  per-date editor went; only its own tests and `dated-clock-grid.test.ts` load it.
+- The end-offset check accepts a period whose cutoff runs past the changeover: A506-9's LOOK saved
+  Late 00:30–03:00 with a 180-minute offset, a cutoff of 06:00 past a 05:00 changeover. The check
+  compares a cutoff only with the start of the next period (`findEndOffsetClash`,
+  `period-end-offset.ts`, reached from the "runs into what follows it" checks in
+  `menu-timetable.ts`). Decide whether a cutoff past the changeover is refused.
 
 **Left open by A506-8, for the later parts.**
 - The painter cannot resize a block by dragging its edge (ruling R1 of A506-8); mockup 3's hint
@@ -228,9 +238,9 @@ from a season chip, an ordinary date and a zone's Opening hours link.
   a save of that week answered, with no other save in flight: it takes in the stored days not
   repainted since (`rebaseDays`). This is A506-8's rule, asserted by "a live model refresh keeps an
   edited week and reseeds the ones not edited" in `season-painter.test.ts`. Following unedited days
-  one by one would reverse that assertion, so it is an owner decision. PR #1651 (A506-9) leaves the
-  same question open for special days: a live update merges paint per department or zone, not per
-  date.
+  one by one would reverse that assertion, so it is an owner decision. Special days (PR #1651,
+  A506-9) already follow per date: a live update takes the stored paint on every date the draft did
+  not change, asserted in `special-day-painter.races.test.ts`.
 - `ModelWatches.reread` (`model-watch.ts`) holds back reads that started before a save only for its
   own client's watches. Another `OpeningHoursApi` on the same live data still applies them. Read in
   the code, not run.
@@ -253,7 +263,7 @@ from a season chip, an ordinary date and a zone's Opening hours link.
   the year view's history.
 - At 390 px a long name in a month cell breaks mid-word ("Christ|mas"): the dashboard page declares
   no language, so the browser cannot hyphenate.
-- The special-day dialog's note under "Every year" (`special.holiday_note`, from #1603) says "each
+- The special-day painter's note under "Every year" (`special.holiday_note`, from #1603) says "each
   year" twice in English and reads as awkwardly in Spanish.
 - The stations service-times route's dated week (`stationServiceTimes(..., "dated")`), and
   `watchStationTimes`'s `normal` flag, have no dashboard caller since A506-7.

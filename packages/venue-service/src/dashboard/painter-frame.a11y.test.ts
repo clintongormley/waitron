@@ -5,6 +5,7 @@ import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helpers.js";
 import type { PainterFrame } from "./painter-frame.js";
 import "./painter-frame.js";
+import "@waitron/ui/src/components/wt-button.js";
 
 registerIcons({ close: "M3 3l10 10M13 3L3 13" });
 
@@ -20,6 +21,7 @@ describe.each(["light", "dark"] as const)("painter frame (%s)", (theme) => {
         <span slot="picker">Winter · 1 Dec – 28 Feb</span>
         <a slot="link" href="#periods">Periods</a>
         <div slot="row">Paint</div>
+        <wt-button slot="actions" variant="danger">Delete</wt-button>
         <div>Grid</div>
       </painter-frame>`,
       theme,

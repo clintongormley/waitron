@@ -277,6 +277,83 @@ describe.each(["en", "es"] as const)("the bar's width (%s)", (locale) => {
   });
 });
 
+/** The words of an element's text that its lines break inside. */
+function brokenWords(el: Element): string[] {
+  const text = [...el.childNodes].find(
+    (node) => node.nodeType === Node.TEXT_NODE && node.textContent!.trim(),
+  )!;
+  const broken: string[] = [];
+  for (const match of text.textContent!.matchAll(/\S+/g)) {
+    const range = document.createRange();
+    range.setStart(text, match.index);
+    range.setEnd(text, match.index + match[0].length);
+    const tops = new Set([...range.getClientRects()].map((box) => Math.round(box.top)));
+    if (tops.size > 1) broken.push(match[0]);
+  }
+  return broken;
+}
+describe.each([
+  ["en", "Delete"],
+  ["es", "Eliminar"],
+] as const)("a heading beside an action in the bar (%s)", (locale, action) => {
+  test.each([390, 1280])(
+    "at %i px breaks between words only, and keeps every button on screen",
+    async (width) => {
+      const old = [window.innerWidth, window.innerHeight];
+      try {
+        await page.viewport(width, 800);
+        setLocale(locale);
+        const { frame } = await open();
+        const remove = document.createElement("wt-button");
+        remove.slot = "actions";
+        remove.setAttribute("variant", "secondary");
+        remove.textContent = action;
+        frame.append(remove);
+        frame.heading = "Christmas company dinners";
+        await frame.updateComplete;
+        await remove.updateComplete;
+        const title = part(frame, "h2");
+        expect(brokenWords(title)).toEqual([]);
+        for (const each of [dismiss(frame), remove, cancel(frame), save(frame), title]) {
+          const box = each.getBoundingClientRect();
+          expect(box.width).toBeGreaterThan(0);
+          expect(box.left).toBeGreaterThanOrEqual(0);
+          expect(box.right).toBeLessThanOrEqual(width + 1);
+        }
+        const quit = cancel(frame).getBoundingClientRect();
+        const at = remove.getBoundingClientRect();
+        expect(at.top, "Delete sits on Cancel's line").toBeLessThan(quit.bottom);
+        expect(at.bottom).toBeGreaterThan(quit.top);
+        const sameLine = (a: Element, b: Element) => {
+          const [x, y] = [a.getBoundingClientRect(), b.getBoundingClientRect()];
+          return x.top < y.bottom && y.top < x.bottom;
+        };
+        expect(sameLine(title, cancel(frame))).toBe(width === 1280);
+        for (const readOnly of [true, false]) {
+          frame.readOnly = readOnly;
+          if (!readOnly) remove.remove();
+          await frame.updateComplete;
+          expect(sameLine(title, dismiss(frame)), "the heading is back on the first line").toBe(
+            true,
+          );
+        }
+      } finally {
+        await page.viewport(old[0]!, old[1]!);
+      }
+    },
+  );
+});
+
+test("a link in the link slot is drawn in the primary text colour", async () => {
+  const { frame } = await open();
+  const probe = document.createElement("span");
+  probe.style.color = "var(--wt-color-primary-text)";
+  frame.append(probe);
+  const link = frame.querySelector<HTMLElement>("[data-test=link]")!;
+  expect(getComputedStyle(probe).color).not.toBe(getComputedStyle(document.body).color);
+  expect(getComputedStyle(link).color).toBe(getComputedStyle(probe).color);
+});
+
 test("read-only: only ✕ is offered, and it closes without asking", async () => {
   const { frame } = await open();
   frame.readOnly = true;
@@ -290,4 +367,50 @@ test("read-only: only ✕ is offered, and it closes without asking", async () =>
   dismiss(frame).click();
   await done;
   expect(saves).toEqual([]);
+});
+
+test("an actions slot sits in the bar between the link and Cancel, and stays put while the grid scrolls", async () => {
+  const old = [window.innerWidth, window.innerHeight];
+  try {
+    await page.viewport(1280, 500);
+    const { frame } = await open();
+    const remove = document.createElement("wt-button");
+    remove.slot = "actions";
+    remove.textContent = "Delete";
+    frame.append(remove);
+    await frame.updateComplete;
+    expect(remove.assignedSlot?.name).toBe("actions");
+    const bar = part(frame, ".bar");
+    expect(bar.contains(remove.assignedSlot)).toBe(true);
+    const at = remove.getBoundingClientRect();
+    const link = frame.querySelector("[data-test=link]")!.getBoundingClientRect();
+    const quit = cancel(frame).getBoundingClientRect();
+    expect(at.width).toBeGreaterThan(0);
+    expect(at.left).toBeGreaterThanOrEqual(link.right);
+    expect(at.right).toBeLessThanOrEqual(quit.left);
+    expect(at.top).toBeLessThan(quit.bottom);
+    expect(at.bottom).toBeGreaterThan(quit.top);
+    const content = frame
+      .querySelector<PaintGrid>("paint-grid")!
+      .shadowRoot!.querySelector<HTMLElement>(".scroll")!;
+    content.scrollTop = 150;
+    expect(content.scrollTop).toBe(150);
+    expect(remove.getBoundingClientRect().top).toBe(at.top);
+  } finally {
+    await page.viewport(old[0]!, old[1]!);
+  }
+});
+
+test("read-only: the actions slot is not shown", async () => {
+  const { frame } = await open();
+  const remove = document.createElement("button");
+  remove.slot = "actions";
+  remove.textContent = "Delete";
+  frame.append(remove);
+  await frame.updateComplete;
+  expect(remove.assignedSlot?.name).toBe("actions");
+  frame.readOnly = true;
+  await frame.updateComplete;
+  expect(remove.assignedSlot).toBeNull();
+  expect(remove.getBoundingClientRect().width).toBe(0);
 });

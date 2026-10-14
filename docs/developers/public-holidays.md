@@ -8,12 +8,14 @@ special day belongs to the venue, not to a saved town address, and the country's
 number does not cap special days.
 
 A public holiday is information: reading one does not write a special day or change opening hours.
-On a public date, Make this a special day… opens the special-day dialog with the holiday's name
-filled in; you choose its dates, whether it repeats every year, and whether each date is Closed all
-day. The Year's and the month's readers are `readOpeningHoursYear` and `readOpeningHoursMonth` in
-`packages/venue-service/src/opening-hours-calendar.ts`, and the per-date editor reads
-`readSpecialDaysModel` in `packages/venue-service/src/named-days.ts`; the dialog, the Year and the
-month are `special-day-dialog.ts`, `opening-hours-year.ts` and `opening-hours-month.ts` in
+On a public date, Make this a special day… opens the special-day painter on a new day with the
+holiday's name and date filled in; you choose its dates, whether it repeats every year, and whether
+each date is Closed all day. When a special day of that name already exists, the painter first
+offers Add to <name>, which opens that day with this date added, unsaved. The Year's and the
+month's readers are `readOpeningHoursYear` and `readOpeningHoursMonth` in
+`packages/venue-service/src/opening-hours-calendar.ts`, and the painter draws each date's season
+hours from `readSeasonDays` in the same file; the painter, the Year and the month are
+`special-day-painter.ts`, `opening-hours-year.ts` and `opening-hours-month.ts` in
 `packages/venue-service/src/dashboard/`.
 
 A special-day date saved on a public holiday records that holiday's official name

@@ -53,8 +53,13 @@ import {
   saveMenuPeriod,
   updateMenuPeriod,
 } from "./menu-timetable.js";
-import { parseCalendarMonth, parseCalendarYear } from "./hours-rules.js";
-import { CALENDAR_COLOURS, type CalendarColour } from "./hours-types.js";
+import { isLocalDate, parseCalendarMonth, parseCalendarYear } from "./hours-rules.js";
+import {
+  CALENDAR_COLOURS,
+  SEASON_DAYS_MAX_DATES,
+  type CalendarColour,
+  type LocalDate,
+} from "./hours-types.js";
 import type { MenuWeekDay } from "./menu-timetable-types.js";
 import { KITCHEN_TICKET_GROUPINGS, type KitchenTicketGrouping } from "./schema/settings.js";
 import { MANAGE_VENUE_SERVICE } from "./permissions.js";
@@ -336,10 +341,24 @@ function requirePreviewChange(body: Record<string, unknown>): RoutingChange {
 
 import { stationServiceTimes } from "./station-service-times.js";
 import { readSpecialDaysModel } from "./named-days.js";
-import { readOpeningHoursMonth, readOpeningHoursYear } from "./opening-hours-calendar.js";
+import {
+  readOpeningHoursMonth,
+  readOpeningHoursYear,
+  readSeasonDays,
+} from "./opening-hours-calendar.js";
 import { addSeason, deleteSeason, saveSeason, seasonDeleteImpact } from "./seasons.js";
 import { saveSeasonWeeks } from "./season-weeks.js";
 import type { ClosedRange } from "./service-day.js";
+
+/** A comma list of one to `SEASON_DAYS_MAX_DATES` dates whose years `parseCalendarYear` accepts,
+ *  or null. */
+function parseSeasonDates(value: string | undefined): LocalDate[] | null {
+  const dates = (value ?? "").split(",");
+  if (dates.length > SEASON_DAYS_MAX_DATES) return null;
+  return dates.every((date) => isLocalDate(date) && parseCalendarYear(date.slice(0, 4)) !== null)
+    ? dates
+    : null;
+}
 
 /** Refused as a stale clock, as a missing revision is on every other time-affecting write; a
  *  season rename changes no times, so its writer never checks the revision itself. */
@@ -452,6 +471,15 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         return c.json(
           await viewed(sessionId, (tx) => readOpeningHoursMonth(tx, ctx.cfg, month, at)),
         );
+      }),
+    );
+
+    app.get("/management-api/venue-service/opening-hours/season-days", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const dates = parseSeasonDates(c.req.query("dates"));
+        if (dates === null) throw new AppError("management.request_invalid", { field: "dates" });
+        return c.json(await viewed(sessionId, (tx) => readSeasonDays(tx, ctx.cfg, dates)));
       }),
     );
 

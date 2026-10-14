@@ -58,6 +58,31 @@ describe("OpeningHoursApi", () => {
     ]);
   });
 
+  it("reads season days passively in lists of at most 62 dates, answering them in the order asked", async () => {
+    const request = vi.fn(async (path: string) => ({
+      days: new URL(path, "http://x").searchParams
+        .get("dates")!
+        .split(",")
+        .map((date) => ({ date })),
+    }));
+    const api = new OpeningHoursApi(request as unknown as DashboardRequest);
+    const dates = Array.from({ length: 130 }, (_, i) =>
+      new Date(Date.UTC(2030, 0, i + 1)).toISOString().slice(0, 10),
+    );
+    expect((await api.readSeasonDays(dates)).days.map(({ date }) => date)).toEqual(dates);
+    expect(request.mock.calls).toEqual(
+      [dates.slice(0, 62), dates.slice(62, 124), dates.slice(124)].map((chunk) => [
+        `${base}/opening-hours/season-days?dates=${chunk.join("%2C")}`,
+        "GET",
+        undefined,
+        { passive: true },
+      ]),
+    );
+    request.mockClear();
+    expect(await api.readSeasonDays([])).toEqual({ days: [] });
+    expect(request).not.toHaveBeenCalled();
+  });
+
   it("reads a year passively on the special-day calendar's dependencies, and re-reads it with the special days", async () => {
     const live = new LiveData();
     const year = { year: 2027, days: [] };
@@ -174,21 +199,15 @@ describe("OpeningHoursApi", () => {
     ]);
   });
 
-  it("re-reads both the opening hours and the special-day calendar after a special-day write", async () => {
+  it("re-reads both the opening hours and the year after a special-day write", async () => {
     const request = vi.fn(async (path: string) =>
-      path.includes("named-days") ? { days: [] } : model,
+      path.includes("/year?") ? { year: 2026, days: [] } : model,
     );
     const api = new OpeningHoursApi(request as DashboardRequest);
     const hours = vi.fn();
     const calendar = vi.fn();
     const stopHours = api.watchOpeningHours(hours, vi.fn(), vi.fn());
-    const stopCalendar = api.specialDays.watchSpecialDays(
-      "2026-10-01",
-      "2026-10-31",
-      calendar,
-      vi.fn(),
-      vi.fn(),
-    );
+    const stopCalendar = api.watchYear(2026, calendar, vi.fn(), vi.fn());
     try {
       await vi.waitFor(() =>
         expect([hours.mock.calls.length, calendar.mock.calls.length]).toEqual([1, 1]),
