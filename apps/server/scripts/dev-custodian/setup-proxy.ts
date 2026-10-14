@@ -61,8 +61,10 @@ export function cliSigner(
       let stderr = "";
       let timedOut = false;
       const killGroup = (): void => {
+        // No pid: the spawn failed and its error event has not arrived yet.
+        if (child.pid === undefined) return;
         try {
-          process.kill(-child.pid!, "SIGKILL");
+          process.kill(-child.pid, "SIGKILL");
         } catch (error) {
           // The group can be gone before Node reports the close.
           if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;

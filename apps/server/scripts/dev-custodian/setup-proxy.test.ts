@@ -402,6 +402,20 @@ describe("cliSigner", () => {
     expect(process.listenerCount("exit")).toBe(before);
   });
 
+  it("kills nothing when this process exits before a command that never started reports its error", async () => {
+    const kill = vi.spyOn(process, "kill");
+    try {
+      const sign = cliSigner(stateDir, { command: ["/nonexistent/waitron-dev-signer"] });
+      const signed = sign("{}");
+      const onExit = process.listeners("exit").at(-1)!;
+      expect(() => onExit(0)).not.toThrow();
+      await expect(signed).rejects.toThrow(/ENOENT/);
+      expect(kill).not.toHaveBeenCalled();
+    } finally {
+      kill.mockRestore();
+    }
+  });
+
   it("stops listening for this process's exit once a command finishes", async () => {
     const before = process.listenerCount("exit");
     const sign = cliSigner(stateDir, {

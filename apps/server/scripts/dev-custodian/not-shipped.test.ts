@@ -1,6 +1,8 @@
-// Weaker than its name in two ways: it reads deploy/Dockerfile's copy list as text, so a bundle
-// copied by any other spelling is not bundled here; and it covers only apps/server's bundles — the
-// browser bundles are not checked (they never include a Vite config, where the setup proxy lives).
+// Weaker than its name in three ways: it reads deploy/Dockerfile's copy list as text, so a bundle
+// copied by any other spelling is not bundled here; it covers only apps/server's bundles, so the
+// print-agent bundle (/src/apps/print-agent/dist/print-agent.js, deploy/Dockerfile:100) is not
+// checked; and the browser bundles are not checked (they never include a Vite config, where the
+// setup proxy lives).
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
