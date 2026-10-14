@@ -2999,6 +2999,12 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 - **The virtual PDF printer**, and a `print_jobs` retention sweep — nothing deletes a job today.
   [Detail](backlog/printers.md#the-virtual-pdf-printer)
 
+- **A576. Each shared office-printer queue needs its own discovery row.** The identity map and
+  test-first steps are in [the plan](superpowers/plans/2026-10-14-a576-ipp-queue-identity.md).
+  Implementation is pending. Saved page printers already carry their queue paths; the planned
+  behavior checks must verify two queues independently and preserve a saved single-queue printer.
+  Physical discovery and printing from the shipped container remain unchecked.
+
 - **Office-printer detection is proven on one office printer only.** The owner's HP Color LaserJet
   MFP M181fw's real reply is a test fixture, and the live query marked it from a Mac on the owner's
   network. It has not run from the box's container, and no receipt printer that answers IPP has
