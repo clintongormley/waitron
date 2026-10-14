@@ -109,7 +109,6 @@ export function sumupClient(opts: SumUpClientOptions): SumUpClient {
     method: "GET" | "POST",
     path: string,
     body?: unknown,
-    { answerServerErrors = false }: { answerServerErrors?: boolean } = {},
   ): Promise<{ status: number; json: unknown }> => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -120,7 +119,6 @@ export function sumupClient(opts: SumUpClientOptions): SumUpClient {
       const res = await send(method, path, controller.signal, body);
       if ((res.status >= 300 && res.status < 400) || res.status >= 500) {
         res.body?.cancel().catch(() => undefined);
-        if (answerServerErrors) return { status: res.status, json: null };
         throw new Error(`sumup ${method} ${path}: HTTP ${res.status}`);
       }
       const text = await res.text();
@@ -129,11 +127,15 @@ export function sumupClient(opts: SumUpClientOptions): SumUpClient {
       clearTimeout(timer);
     }
   };
-  const callForStatus = async (method: "DELETE", path: string): Promise<number> => {
+  const callForStatus = async (
+    method: "POST" | "DELETE",
+    path: string,
+    body?: unknown,
+  ): Promise<number> => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const res = await send(method, path, controller.signal);
+      const res = await send(method, path, controller.signal, body);
       res.body?.cancel().catch(() => undefined);
       return res.status;
     } finally {
@@ -229,14 +231,13 @@ export function sumupClient(opts: SumUpClientOptions): SumUpClient {
       return { status: r.status >= 400 ? "refused" : "accepted" } as const;
     },
     async sendRefund(p: { transactionId: string; amount: Decimal }) {
-      const r = await call(
+      const httpStatus = await callForStatus(
         "POST",
         `/v1.0/merchants/${mc}/payments/${encodeURIComponent(p.transactionId)}/refunds`,
         // In minor units, as `refund` above sends it.
         { amount: toMinorUnits(p.amount) },
-        { answerServerErrors: true },
       );
-      return { httpStatus: r.status };
+      return { httpStatus };
     },
     async listReaders() {
       const r = await call("GET", `/v0.1/merchants/${mc}/readers`);
