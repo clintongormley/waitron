@@ -2622,7 +2622,50 @@ async function atPhoneWidth(
     host.append(el);
   }
   await vi.waitFor(() => expect(el.style.getPropertyValue("--actions-width")).not.toBe(""));
-  await vi.waitFor(() => expect(table(el).hasAttribute("narrow")).toBe(true));
+  try {
+    await vi.waitFor(() => expect(table(el).hasAttribute("narrow")).toBe(true));
+  } catch (error) {
+    const grid = table(el);
+    const box = (node: Element | null) => {
+      if (!node) return null;
+      const rect = node.getBoundingClientRect();
+      const style = getComputedStyle(node);
+      return {
+        width: rect.width,
+        height: rect.height,
+        clientWidth: node.clientWidth,
+        scrollWidth: node.scrollWidth,
+        display: style.display,
+        overflowX: style.overflowX,
+        font: style.font,
+      };
+    };
+    if (error instanceof Error) {
+      error.message += `\nMenu prices narrow-layout snapshot: ${JSON.stringify({
+        requested: { locale, viewport, font },
+        viewport: { width: window.innerWidth, height: window.innerHeight },
+        visibility: document.visibilityState,
+        fonts: {
+          status: document.fonts.status,
+          faces: Array.from(document.fonts, (face) => ({
+            family: face.family,
+            status: face.status,
+          })),
+        },
+        connected: grid.isConnected,
+        narrow: grid.hasAttribute("narrow"),
+        treeCell: grid.shadowRoot.querySelector(".tree-cell") !== null,
+        host: box(el.parentElement),
+        widget: box(el),
+        table: box(grid),
+        scroll: box(grid.shadowRoot.querySelector(".scroll")),
+        actionsWidth: el.style.getPropertyValue("--actions-width"),
+        nameHeadingWidth: el.style.getPropertyValue("--name-heading-width"),
+        rangeTextWidth: el.style.getPropertyValue("--range-text-width"),
+      })}`;
+    }
+    throw error;
+  }
   await frame();
   await frame();
   return el;
