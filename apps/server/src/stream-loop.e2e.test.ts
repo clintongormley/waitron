@@ -8,6 +8,9 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
+import { LOOP_APIS } from "./testing/aws-rehearsal-plans.js";
+import { uninstallSendGate } from "./testing/aws-send-gate.js";
+import { runUnderPlan } from "./testing/local-request-plan.js";
 import {
   READY_TIMEOUT_MS as S3_READY_MS,
   VERSITYGW_VERSION,
@@ -60,6 +63,7 @@ describe("the stream loop: stream, rebuild from the bucket, sell under a fresh c
       async () => {
         if (scratch !== undefined) await rm(scratch, { recursive: true, force: true });
       },
+      uninstallSendGate,
     ]) {
       try {
         await cleanup();
@@ -82,26 +86,29 @@ describe("the stream loop: stream, rebuild from the bucket, sell under a fresh c
         // `return` so TypeScript narrows both lookups below; `ctx.skip` throws either way.
         return ctx.skip(`${missing.join("; ")} — install with: ${INSTALL}`);
       }
-      scratch = await mkdtemp(join(tmpdir(), "waitron-stream-loop-"));
-      const server = await startS3TestServer({ bin: versitygw.bin, root: join(scratch, "s3") });
+      const folder = await mkdtemp(join(tmpdir(), "waitron-stream-loop-"));
+      scratch = folder;
+      const server = await startS3TestServer({ bin: versitygw.bin, root: join(folder, "s3") });
       s3 = server;
       const events: StreamLoopEvent[] = [];
-      running = runStreamLoopScenario({
-        bucket: {
-          endpoint: server.endpoint,
-          region: server.region,
-          bucket: server.bucket,
-          prefix: "loop/",
-          accessKeyId: server.accessKeyId,
-          secretAccessKey: server.secretAccessKey,
-        },
-        scratch,
-        litestreamBin: litestream.bin,
-        describeTransport: () => `versitygw ${VERSITYGW_VERSION}. Server log: ${server.log()}`,
-        freeze: { pause: () => server.pause(), resume: () => server.resume() },
-        signal: stop.signal,
-        record: (event) => events.push(event),
-      });
+      running = runUnderPlan({ bucket: server.bucket, apis: LOOP_APIS, prefixes: ["loop/"] }, () =>
+        runStreamLoopScenario({
+          bucket: {
+            endpoint: server.endpoint,
+            region: server.region,
+            bucket: server.bucket,
+            prefix: "loop/",
+            accessKeyId: server.accessKeyId,
+            secretAccessKey: server.secretAccessKey,
+          },
+          scratch: folder,
+          litestreamBin: litestream.bin,
+          describeTransport: () => `versitygw ${VERSITYGW_VERSION}. Server log: ${server.log()}`,
+          freeze: { pause: () => server.pause(), resume: () => server.resume() },
+          signal: stop.signal,
+          record: (event) => events.push(event),
+        }),
+      );
       await running;
       expect(events.map(({ phase, outcome }) => [phase, outcome])).toEqual(
         STREAM_LOOP_PHASES.map((phase) => [phase, "ok"]),

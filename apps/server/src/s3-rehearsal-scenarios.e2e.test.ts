@@ -10,6 +10,9 @@ import { setTimeout as delay } from "node:timers/promises";
 import { CreateMultipartUploadCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { archiveNamespace } from "./archive-settings.js";
+import { ARCHIVE_APIS, DELETE_APIS } from "./testing/aws-rehearsal-plans.js";
+import { markRunnerClient, uninstallSendGate } from "./testing/aws-send-gate.js";
+import { runUnderPlan, type LocalPlan } from "./testing/local-request-plan.js";
 import { localS3Fixture, type LocalS3Fixture } from "./testing/local-s3-fixture.js";
 import {
   ARCHIVE_SCENARIO_MS,
@@ -48,6 +51,16 @@ describe("the S3 rehearsal scenarios, against versitygw", () => {
     return scenario;
   }
 
+  /** Starts `scenario` under the plan its AWS rehearsal declares, on this fixture's own prefix. */
+  function planned<T>(
+    local: LocalS3Fixture,
+    apis: LocalPlan["apis"],
+    scenario: () => Promise<T>,
+  ): Promise<T> {
+    const { bucket, prefix } = local.fixture.bucket;
+    return started(runUnderPlan({ bucket, apis, prefixes: [prefix] }, scenario));
+  }
+
   beforeAll(async () => {
     if (!versitygw.ok) return;
     scratch = await mkdtemp(join(tmpdir(), "waitron-s3-scenarios-"));
@@ -58,6 +71,8 @@ describe("the S3 rehearsal scenarios, against versitygw", () => {
       forcePathStyle: true,
       credentials: { accessKeyId: s3.accessKeyId, secretAccessKey: s3.secretAccessKey },
     });
+    // In the AWS run this client's requests (`ownedUploads`) are the runner's lifecycle requests.
+    markRunnerClient(client);
   }, S3_READY_MS + 10_000);
 
   afterAll(async () => {
@@ -74,6 +89,7 @@ describe("the S3 rehearsal scenarios, against versitygw", () => {
       async () => {
         if (scratch !== undefined) await rm(scratch, { recursive: true, force: true });
       },
+      uninstallSendGate,
     ]) {
       try {
         await cleanup();
@@ -162,7 +178,7 @@ describe("the S3 rehearsal scenarios, against versitygw", () => {
     "1,005 objects are deleted in batches of 1,000 and 5 and none remain",
     async (ctx) => {
       const local = await scenarioFixture(ctx, "delete-many");
-      await started(runDeleteManyScenario(local.fixture));
+      await planned(local, DELETE_APIS, () => runDeleteManyScenario(local.fixture));
       console.info(`versitygw answers: ${JSON.stringify(answers(local))}`);
       expect(local.events.filter(({ phase }) => phase !== "request")).toEqual([
         { scenario: "delete-many", phase: "listed-before", count: 1005, outcome: "ok" },
@@ -180,7 +196,9 @@ describe("the S3 rehearsal scenarios, against versitygw", () => {
       const local = await scenarioFixture(ctx, "delete-many");
       const failure = injected();
       await expect(
-        started(runDeleteManyScenario(failingAt(local, "PutObject", 50, failure))),
+        planned(local, DELETE_APIS, () =>
+          runDeleteManyScenario(failingAt(local, "PutObject", 50, failure)),
+        ),
       ).rejects.toMatchObject({ params: { operation: "put", status: 403 } });
       const atRejection = local.events.length;
       await delay(1000);
@@ -197,7 +215,7 @@ describe("the S3 rehearsal scenarios, against versitygw", () => {
     "a 32 MiB archive goes up in four parts and comes back through its saved pack alone",
     async (ctx) => {
       const local = await scenarioFixture(ctx, "archive-roundtrip");
-      await started(runArchiveRoundTrip(local.fixture));
+      await planned(local, ARCHIVE_APIS, () => runArchiveRoundTrip(local.fixture));
       console.info(`versitygw answers (archive round trip): ${JSON.stringify(answers(local))}`);
       expect(local.events.filter(({ phase }) => phase !== "request")).toEqual([
         {
@@ -230,7 +248,7 @@ describe("the S3 rehearsal scenarios, against versitygw", () => {
     "an upload cancelled after its first part is abandoned, leaving no upload and no object",
     async (ctx) => {
       const local = await scenarioFixture(ctx, "archive-abort");
-      const summary = await started(runArchiveAbort(local.fixture));
+      const summary = await planned(local, ARCHIVE_APIS, () => runArchiveAbort(local.fixture));
       console.info(`versitygw answers (archive abort): ${JSON.stringify(answers(local))}`);
       console.info(`archive abort: ${JSON.stringify(summary)}`);
       expect(summary.partsBeforeAbort).toBeGreaterThanOrEqual(1);
@@ -269,7 +287,9 @@ describe("the S3 rehearsal scenarios, against versitygw", () => {
       const { bucket, prefix } = local.fixture.bucket;
       const folder = archiveNamespace(prefix, local.fixture.venueId);
       await leave(admin, bucket, folder);
-      await expect(started(runArchiveAbort(local.fixture))).rejects.toThrow();
+      await expect(
+        planned(local, ARCHIVE_APIS, () => runArchiveAbort(local.fixture)),
+      ).rejects.toThrow();
       expect(
         local.events.filter(({ phase, outcome }) => phase !== "request" && outcome === "failed"),
       ).toEqual([
