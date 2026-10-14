@@ -671,7 +671,124 @@ it("creates a station from the modal with the chosen thresholds", async () => {
     warmAfterMinutes: 5,
     overdueAfterMinutes: 10,
     forgottenAfterMinutes: 15,
+    colour: "red",
   });
+});
+const addPicker = (el: PrepStationsScreen) =>
+  el.shadowRoot!.querySelector<HTMLElementTagNameMap["station-colour-picker"]>(
+    "wt-modal station-colour-picker",
+  )!;
+const colourTile = (picker: HTMLElementTagNameMap["station-colour-picker"], colour: string) =>
+  picker.shadowRoot!.querySelector<HTMLElement>(`[role=radio][data-station-colour="${colour}"]`)!;
+const colouredView = (colours: readonly (string | [string, boolean])[]): PrepStationsView => ({
+  ...view,
+  stations: colours.map((entry, index) => {
+    const [colour, active] = typeof entry === "string" ? [entry, true] : entry;
+    return {
+      ...view.stations[0]!,
+      id: index === 0 ? "bar" : `s${index}`,
+      name: index === 0 ? "Bar" : `Station ${index}`,
+      isDefault: index === 0,
+      active,
+      colour: colour as PrepStationsView["stations"][number]["colour"],
+    };
+  }),
+});
+it("a new station starts on the first colour no station has, and is created with the colour chosen", async () => {
+  const a = api({
+    load: vi.fn().mockResolvedValue(colouredView(["red", "orange", ["amber", false]])),
+  });
+  const el = await mount(a);
+  q(el, '[data-test="new-station"]')!.click();
+  await settle(el);
+  const picker = addPicker(el);
+  await picker.updateComplete;
+  expect(picker.value).toBe("amber");
+  expect(
+    el.shadowRoot!.querySelector(
+      "wt-modal .form > div:has(wt-input[name=name]) + station-colour-picker",
+    ),
+  ).toBe(picker);
+  expect(colourTile(picker, "orange").getAttribute("aria-label")).toBe("Orange, used by Station 1");
+  expect(colourTile(picker, "amber").getAttribute("aria-label")).toBe("Amber");
+  colourTile(picker, "cyan").click();
+  await settle(el);
+  q(el, '[data-test="name"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "Terrace" } }),
+  );
+  await settle(el);
+  q(el, '[data-test="save-station"]')!.click();
+  await settle(el);
+  expect(a.createStation).toHaveBeenCalledExactlyOnceWith({
+    name: "Terrace",
+    displayOrder: 0,
+    warmAfterMinutes: 5,
+    overdueAfterMinutes: 10,
+    forgottenAfterMinutes: 15,
+    colour: "cyan",
+  });
+});
+it("a new station starts on Red when all twelve are taken", async () => {
+  const a = api({
+    load: vi
+      .fn()
+      .mockResolvedValue(
+        colouredView([
+          "brown",
+          "orange",
+          "amber",
+          "lime",
+          "green",
+          "teal",
+          "cyan",
+          "blue",
+          "indigo",
+          "purple",
+          "pink",
+          "red",
+        ]),
+      ),
+  });
+  const el = await mount(a);
+  q(el, '[data-test="new-station"]')!.click();
+  await settle(el);
+  expect(addPicker(el).value).toBe("red");
+});
+it("puts a colour refusal from Add station under Colour", async () => {
+  const a = api({
+    createStation: vi
+      .fn()
+      .mockRejectedValue({ code: "management.request_invalid", params: { field: "colour" } }),
+  });
+  const el = await mount(a);
+  q(el, '[data-test="new-station"]')!.click();
+  await settle(el);
+  q(el, '[data-test="name"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "Terrace" } }),
+  );
+  await settle(el);
+  q(el, '[data-test="save-station"]')!.click();
+  await settle(el);
+  expect(addPicker(el).error).toBe("Choose one of these colours.");
+  expect(el.shadowRoot!.querySelector("wt-modal .form > p.error")!.textContent).toBe(
+    "Correct the highlighted fields to continue.",
+  );
+  colourTile(addPicker(el), "teal").click();
+  await settle(el);
+  expect(addPicker(el).error).toBe("");
+});
+it("the station editor opens on the station's colour and names the other active stations", async () => {
+  const a = api({
+    load: vi.fn().mockResolvedValue(colouredView(["blue", "orange", ["teal", false]])),
+  });
+  const el = await mount(a);
+  q(el, '[data-test="edit-bar"]')!.click();
+  await settle(el);
+  const editor = el.shadowRoot!.querySelector("prep-station-editor")!;
+  const picker = editor.shadowRoot!.querySelector("station-colour-picker")!;
+  await picker.updateComplete;
+  expect(picker.value).toBe("blue");
+  expect(picker.stations.map(({ id, colour }) => [id, colour])).toEqual([["s1", "orange"]]);
 });
 it("makes a nondefault station the default", async () => {
   const changed = {
@@ -1000,6 +1117,7 @@ it("creates a station with its name, order and thresholds when Enter is pressed 
     warmAfterMinutes: 5,
     overdueAfterMinutes: 10,
     forgottenAfterMinutes: 15,
+    colour: "red",
   });
   expect(a.updateStation).not.toHaveBeenCalled();
 });
@@ -4999,6 +5117,7 @@ describe("The station editor", () => {
       warmAfterMinutes: 5,
       overdueAfterMinutes: 10,
       forgottenAfterMinutes: 15,
+      colour: "red",
       printerIds: ["next"],
     });
   });

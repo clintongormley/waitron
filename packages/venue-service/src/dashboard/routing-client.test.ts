@@ -139,6 +139,7 @@ it("sends a station's printers in the station's own create and edit", async () =
     warmAfterMinutes: 5,
     overdueAfterMinutes: 10,
     forgottenAfterMinutes: 15,
+    colour: "orange" as const,
   };
   await api.createStation({ ...station, printerIds: ["epson"] });
   await api.updateStation("grill", { name: "Hot grill", printerIds: ["epson", "star"] });
@@ -163,6 +164,7 @@ it("writes station changes to core and cells to venue-service", async () => {
     warmAfterMinutes: 5,
     overdueAfterMinutes: 10,
     forgottenAfterMinutes: 15,
+    colour: "blue",
   });
   await api.updateStation("bar", {
     name: "Terrace bar",
@@ -194,6 +196,7 @@ it("writes station changes to core and cells to venue-service", async () => {
         warmAfterMinutes: 5,
         overdueAfterMinutes: 10,
         forgottenAfterMinutes: 15,
+        colour: "blue",
       },
     ],
     [
@@ -298,6 +301,7 @@ it("creates station and its timing thresholds with one POST", async () => {
       warmAfterMinutes: 3,
       overdueAfterMinutes: 8,
       forgottenAfterMinutes: 12,
+      colour: "blue",
     }),
   ).resolves.toEqual({ id: "new-bar" });
   expect(request.mock.calls).toEqual([
@@ -310,6 +314,7 @@ it("creates station and its timing thresholds with one POST", async () => {
         warmAfterMinutes: 3,
         overdueAfterMinutes: 8,
         forgottenAfterMinutes: 12,
+        colour: "blue",
       },
     ],
   ]);
