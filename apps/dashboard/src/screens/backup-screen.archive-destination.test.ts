@@ -307,7 +307,7 @@ describe("a write whose reload failed", () => {
     q(el, "[data-test=apply]")!.click();
     await vi.waitFor(() => expect(q(el, "[data-test=reload-failed]")).not.toBeNull());
     expect(api.applyBackup).toHaveBeenCalledWith(
-      expect.objectContaining({ destination: { kind: "local-fs", dir: "/mnt/usb/waitron" } }),
+      expect.objectContaining({ destinations: [{ kind: "local-fs", dir: "/mnt/usb/waitron" }] }),
     );
     expect(q(el, "[data-test=apply]")).toBeNull();
     expect(q(el, "[role=alert]:not([data-test])")).toBeNull();
@@ -549,7 +549,7 @@ describe("choosing where backups go", () => {
     q(el, "[data-test=apply]")!.click();
     await vi.waitFor(() => expect(api.applyBackup).toHaveBeenCalledOnce());
     const body = vi.mocked(api.applyBackup).mock.calls[0]![0];
-    expect(body.destination).toEqual({ kind: "stream-bucket" });
+    expect(body.destinations).toEqual([{ kind: "stream-bucket" }]);
     expect(JSON.stringify(body)).not.toContain("stream-bucket/");
   });
 
@@ -866,15 +866,17 @@ describe("another S3-compatible bucket", () => {
     await typeCustom(el, "prefix", " /shop/ ");
     q(el, "[data-test=apply]")!.click();
     await vi.waitFor(() => expect(api.applyBackup).toHaveBeenCalledOnce());
-    expect(vi.mocked(api.applyBackup).mock.calls[0]![0].destination).toEqual({
-      kind: "custom-s3",
-      endpoint: "https://s3.example.test",
-      region: "eu-west-3",
-      bucket: "my-bucket",
-      prefix: "/shop/",
-      accessKeyId: "AKIAMINE",
-      secretAccessKey: "SECRET-1",
-    });
+    expect(vi.mocked(api.applyBackup).mock.calls[0]![0].destinations).toEqual([
+      {
+        kind: "custom-s3",
+        endpoint: "https://s3.example.test",
+        region: "eu-west-3",
+        bucket: "my-bucket",
+        prefix: "/shop/",
+        accessKeyId: "AKIAMINE",
+        secretAccessKey: "SECRET-1",
+      },
+    ]);
   });
 
   it("bucket fields typed and then left for a folder are not sent", async () => {
@@ -885,10 +887,12 @@ describe("another S3-compatible bucket", () => {
     await typeFolder(el, "/mnt/usb/waitron");
     q(el, "[data-test=apply]")!.click();
     await vi.waitFor(() => expect(api.applyBackup).toHaveBeenCalledOnce());
-    expect(vi.mocked(api.applyBackup).mock.calls[0]![0].destination).toEqual({
-      kind: "local-fs",
-      dir: "/mnt/usb/waitron",
-    });
+    expect(vi.mocked(api.applyBackup).mock.calls[0]![0].destinations).toEqual([
+      {
+        kind: "local-fs",
+        dir: "/mnt/usb/waitron",
+      },
+    ]);
   });
 
   it("switching to another choice and back keeps the typed bucket fields", async () => {
@@ -922,14 +926,16 @@ describe("another S3-compatible bucket", () => {
     await setRetainCount(el, "9");
     q(el, "[data-test=save-settings]")!.click();
     await vi.waitFor(() => expect(api.applyBackup).toHaveBeenCalledOnce());
-    const destination = vi.mocked(api.applyBackup).mock.calls[0]![0].destination;
-    expect(destination).toEqual({
-      kind: "custom-s3",
-      region: "eu-north-1",
-      bucket: "owner-bucket",
-      prefix: "waitron",
-      accessKeyId: "AKIAOWNER",
-    });
+    const destinations = vi.mocked(api.applyBackup).mock.calls[0]![0].destinations;
+    expect(destinations).toEqual([
+      {
+        kind: "custom-s3",
+        region: "eu-north-1",
+        bucket: "owner-bucket",
+        prefix: "waitron",
+        accessKeyId: "AKIAOWNER",
+      },
+    ]);
   });
 
   it("a folder spelled with extra slashes is still the stored bucket's folder, so the secret is kept", async () => {
@@ -1029,9 +1035,11 @@ describe("another S3-compatible bucket", () => {
     expect(await buttonState(el, "save-settings")).toEqual(["primary", false]);
     q(el, "[data-test=save-settings]")!.click();
     await vi.waitFor(() => expect(q(el, "[data-test=save-settings]")).toBeNull());
-    expect(vi.mocked(api.applyBackup).mock.calls[0]![0].destination).toMatchObject({
-      secretAccessKey: "SECRET-NEW",
-    });
+    expect(vi.mocked(api.applyBackup).mock.calls[0]![0].destinations).toMatchObject([
+      {
+        secretAccessKey: "SECRET-NEW",
+      },
+    ]);
     q(el, "[data-test=edit-settings]")!.click();
     await vi.waitFor(() => expect(q(el, "[data-test=save-settings]")).not.toBeNull());
     expect(customField(el, "secret-access-key").value).toBe("");
@@ -1096,9 +1104,11 @@ describe("another S3-compatible bucket", () => {
         t("backup.destination.secret_characters"),
       ),
     );
-    expect(vi.mocked(api.applyBackup).mock.calls[0]![0].destination).toMatchObject({
-      secretAccessKey: "SECRET-1 ",
-    });
+    expect(vi.mocked(api.applyBackup).mock.calls[0]![0].destinations).toMatchObject([
+      {
+        secretAccessKey: "SECRET-1 ",
+      },
+    ]);
     expect(customField(el, "secret-access-key").hint).toBe("");
     expect(await bottomOf(el, "settings-actions")).toBe(t("form.fix_fields"));
   });
@@ -1118,9 +1128,11 @@ describe("another S3-compatible bucket", () => {
         t("backup.destination.secret_characters"),
       ),
     );
-    expect(vi.mocked(api.applyBackup).mock.calls[0]![0].destination).toMatchObject({
-      secretAccessKey: "SECRET-1 ",
-    });
+    expect(vi.mocked(api.applyBackup).mock.calls[0]![0].destinations).toMatchObject([
+      {
+        secretAccessKey: "SECRET-1 ",
+      },
+    ]);
   });
 
   it("after the server refuses to keep the saved secret, the secret stays required until the bucket's place changes", async () => {
@@ -1174,9 +1186,11 @@ describe("another S3-compatible bucket", () => {
     await fillCustom(el, "SECRET-1");
     q(el, "[data-test=apply]")!.click();
     await vi.waitFor(() => expect(q(el, "[data-test=apply]")).toBeNull());
-    expect(vi.mocked(api.applyBackup).mock.calls[0]![0].destination).toMatchObject({
-      secretAccessKey: "SECRET-1",
-    });
+    expect(vi.mocked(api.applyBackup).mock.calls[0]![0].destinations).toMatchObject([
+      {
+        secretAccessKey: "SECRET-1",
+      },
+    ]);
     vi.mocked(api.getBackupStatus).mockResolvedValue(OFF_WITH_KEY);
     api.liveData.invalidate([{ type: "backup_status" }]);
     await vi.waitFor(() => expect(q(el, "[data-test=apply]")).not.toBeNull());
@@ -1872,7 +1886,7 @@ describe("turning stored settings back on", () => {
     q(el, "[data-test=apply]")!.click();
     await vi.waitFor(() => expect(api.applyBackup).toHaveBeenCalledOnce());
     const body = vi.mocked(api.applyBackup).mock.calls[0]![0];
-    expect(body.destination).toEqual({ kind: "local-fs", dir: "/mnt/usb/waitron" });
+    expect(body.destinations).toEqual([{ kind: "local-fs", dir: "/mnt/usb/waitron" }]);
     expect(body.schedule).toEqual({
       kind: "wall-clock",
       days: [1, 3],
@@ -1887,9 +1901,11 @@ describe("turning stored settings back on", () => {
     expect(choice(el)!.value).toBe("stream-bucket");
     q(el, "[data-test=apply]")!.click();
     await vi.waitFor(() => expect(api.applyBackup).toHaveBeenCalledOnce());
-    expect(vi.mocked(api.applyBackup).mock.calls[0]![0].destination).toEqual({
-      kind: "stream-bucket",
-    });
+    expect(vi.mocked(api.applyBackup).mock.calls[0]![0].destinations).toEqual([
+      {
+        kind: "stream-bucket",
+      },
+    ]);
   });
 
   it("another stored bucket opens filled in with an empty secret that is kept, and is sent without one", async () => {
@@ -1903,13 +1919,15 @@ describe("turning stored settings back on", () => {
     expect(secret.hint).toBe(t("backup.destination.secret_keep"));
     q(el, "[data-test=apply]")!.click();
     await vi.waitFor(() => expect(api.applyBackup).toHaveBeenCalledOnce());
-    expect(vi.mocked(api.applyBackup).mock.calls[0]![0].destination).toEqual({
-      kind: "custom-s3",
-      region: "eu-north-1",
-      bucket: "owner-bucket",
-      prefix: "waitron",
-      accessKeyId: "AKIAOWNER",
-    });
+    expect(vi.mocked(api.applyBackup).mock.calls[0]![0].destinations).toEqual([
+      {
+        kind: "custom-s3",
+        region: "eu-north-1",
+        bucket: "owner-bucket",
+        prefix: "waitron",
+        accessKeyId: "AKIAOWNER",
+      },
+    ]);
   });
 
   it("after a turn-off, the form opens with the stored folder", async () => {
@@ -2026,13 +2044,15 @@ describe("the bucket copy turned off on the same page", () => {
     expect(await buttonState(el, "apply")).toEqual(["primary", false]);
     q(el, "[data-test=apply]")!.click();
     await vi.waitFor(() => expect(api.applyBackup).toHaveBeenCalledOnce());
-    expect(vi.mocked(api.applyBackup).mock.calls[0]![0].destination).toEqual({
-      kind: "custom-s3",
-      region: "eu-north-1",
-      bucket: "stream-bucket",
-      prefix: "venues",
-      accessKeyId: "AKIASTREAM",
-    });
+    expect(vi.mocked(api.applyBackup).mock.calls[0]![0].destinations).toEqual([
+      {
+        kind: "custom-s3",
+        region: "eu-north-1",
+        bucket: "stream-bucket",
+        prefix: "venues",
+        accessKeyId: "AKIASTREAM",
+      },
+    ]);
   });
 
   it("stored settings on the bucket copy's bucket open again on another bucket when only the bucket copy's read has answered", async () => {

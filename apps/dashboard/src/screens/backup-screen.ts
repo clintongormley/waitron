@@ -23,6 +23,7 @@ import { currentLocale, fill, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import "./stream-settings-panel.js";
 import type {
+  ArchiveChoice,
   ArchiveRecoveryPackAnswer,
   BackupApplyBody,
   BackupDestinationStatus,
@@ -35,16 +36,26 @@ import type {
 } from "../api/client.js";
 import {
   EMPTY_CUSTOM,
-  destinationBody,
+  destinationsBody,
   hasUnusableFolder,
   heldBucket,
   keepsHeldSecret,
-  openingDestination,
+  openingDestinations,
   sameStreamBucket,
   streamLocation,
+  type BucketChoice,
   type CustomBucket,
   type DestinationChoice,
 } from "./backup-destination-model.js";
+
+function choiceDestinations(
+  choice: DestinationChoice,
+  folder: string,
+  custom: CustomBucket,
+): ArchiveChoice[] {
+  const bucket: BucketChoice = choice === "local-fs" ? "none" : choice;
+  return destinationsBody(choice === "local-fs", folder, bucket, custom);
+}
 
 /** Mirrors the server's `MIN_PASSPHRASE_LENGTH` (`apps/server/src/recovery-bundle.ts`) for fast
  * feedback on a PASTED key; the server stays the authority. */
@@ -74,7 +85,7 @@ function archivePayload(value: ArchiveDraft): unknown {
   const pastedKey = value.advancedPaste ? value.pastedKey : "";
   if (value.mode === "rotate") return { pastedKey };
   return {
-    destination: destinationBody(value.choice, value.folder, value.custom),
+    destinations: choiceDestinations(value.choice, value.folder, value.custom),
     days: value.daysMode === "daily" ? "daily" : [...value.weekdays].sort((a, b) => a - b),
     at: value.timeMode === "auto" ? "auto" : value.atTime,
     count: parseRetention(value.retainCount) ?? value.retainCount,
@@ -720,24 +731,25 @@ export class BackupScreen extends LitElement {
     return { count: parseRetention(this.retainCount)!, days: parseRetention(this.retainDays)! };
   }
 
-  #onApplyRefused(error: unknown, sent: BackupApplyBody["destination"]): void {
+  #onApplyRefused(error: unknown, sent: BackupApplyBody["destinations"]): void {
     const code = codeOf(error);
+    const custom = sent.find((d) => d.kind === "custom-s3");
     const field = (error as { params?: { field?: unknown } } | null)?.params?.field;
     if (code === "backup.request_invalid") {
       if (field === "retention") {
         this.retentionRefused = true;
         this.#focusFirstInvalidBox();
-      } else if (sent.kind === "custom-s3" && isCustomField(field)) {
+      } else if (custom !== undefined && isCustomField(field)) {
         this.customRefused = field;
         if (field === "secretAccessKey") {
-          this.secretSentRefused = sent.secretAccessKey !== undefined;
+          this.secretSentRefused = custom.secretAccessKey !== undefined;
           if (!this.secretSentRefused) this.secretDemanded = true;
         }
         this.#focusFirstInvalidBox();
       } else if (field === "dir") {
         this.folderRefused = true;
         this.#focusFirstInvalidBox();
-      } else if (field === "prefix" && sent.kind === "stream-bucket") {
+      } else if (field === "prefix" && sent.some((d) => d.kind === "stream-bucket")) {
         this.formRefusal = {
           code,
           reason: null,
@@ -772,7 +784,7 @@ export class BackupScreen extends LitElement {
 
   #applyBody(recoveryKey?: string): BackupApplyBody {
     return {
-      destination: destinationBody(this.choice, this.folder, this.custom),
+      destinations: choiceDestinations(this.choice, this.folder, this.custom),
       ...(recoveryKey === undefined ? {} : { recoveryKey }),
       schedule: this.#buildSchedule(),
       retention: this.#retention(),
@@ -815,7 +827,7 @@ export class BackupScreen extends LitElement {
         await this.#mint();
       }
     } catch (error) {
-      if (generation === this.#generation) this.#onApplyRefused(error, body.destination);
+      if (generation === this.#generation) this.#onApplyRefused(error, body.destinations);
     } finally {
       if (generation === this.#generation) this.submitting = false;
     }
@@ -1088,7 +1100,7 @@ export class BackupScreen extends LitElement {
         this.#reuseKey = null;
       }
     } catch (error) {
-      if (generation === this.#generation) this.#onApplyRefused(error, body.destination);
+      if (generation === this.#generation) this.#onApplyRefused(error, body.destinations);
     } finally {
       if (generation === this.#generation) this.submitting = false;
     }
@@ -1124,9 +1136,12 @@ export class BackupScreen extends LitElement {
   /** What the form holds once filled from `s`. A non-`wall-clock` running schedule (the box-image
    * `interval` form the UI cannot author) leaves the schedule controls as they are. */
   #fieldsFrom(s: BackupStatusView): FormFields {
+    const opened = openingDestinations(s, this.stream?.bucket ?? null);
     const fields: FormFields = {
       ...this.#fields(),
-      ...openingDestination(s, this.stream?.bucket ?? null),
+      choice: opened.folderOn || opened.bucket === "none" ? "local-fs" : opened.bucket,
+      folder: opened.folder,
+      custom: opened.custom,
     };
     if (s.schedule?.kind === "wall-clock") {
       fields.daysMode = s.schedule.days === "daily" ? "daily" : "weekdays";

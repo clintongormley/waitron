@@ -400,7 +400,7 @@ it("archive setup commits an accepted write while a refused write still warns", 
   const { app, screen } = await mount(off, {
     applyBackup: async (body) => {
       expect(body).toEqual({
-        destination: { kind: "local-fs", dir: "/mnt/new" },
+        destinations: [{ kind: "local-fs", dir: "/mnt/new" }],
         schedule: { kind: "wall-clock", days: "daily", at: "auto" },
         retention: { count: 7, days: 30 },
       });

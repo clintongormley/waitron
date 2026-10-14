@@ -180,7 +180,7 @@ describe("backup-screen", () => {
     await flush(el);
     // No `recoveryKey` at all: the server uses the one it holds.
     expect(api.applyBackup).toHaveBeenCalledWith({
-      destination: { kind: "local-fs", dir: "/mnt/usb/waitron" },
+      destinations: [{ kind: "local-fs", dir: "/mnt/usb/waitron" }],
       schedule: { kind: "wall-clock", days: "daily", at: "auto" },
       retention: { count: 7, days: 30 },
     });
@@ -207,7 +207,7 @@ describe("backup-screen", () => {
     apply().click();
     await flush(el);
     expect(api.applyBackup).toHaveBeenCalledWith({
-      destination: { kind: "local-fs", dir: "/mnt/usb/waitron" },
+      destinations: [{ kind: "local-fs", dir: "/mnt/usb/waitron" }],
       recoveryKey: "MINTED-KEY-abcdef012345",
       schedule: { kind: "wall-clock", days: "daily", at: "auto" },
       retention: { count: 7, days: 30 },
@@ -632,7 +632,7 @@ describe("backup-screen", () => {
     q(el, "[data-test=apply]")!.click();
     await flush(el);
     expect(api.applyBackup).toHaveBeenCalledWith({
-      destination: { kind: "local-fs", dir: "/mnt/usb/waitron" },
+      destinations: [{ kind: "local-fs", dir: "/mnt/usb/waitron" }],
       recoveryKey: "MINTED-KEY-abcdef012345",
       schedule: { kind: "wall-clock", days: "daily", at: "auto" },
       retention: { count: 7, days: 30 },
@@ -706,7 +706,7 @@ describe("backup-screen", () => {
     q(el, "[data-test=apply]")!.click();
     await flush(el);
     expect(api.applyBackup).toHaveBeenCalledWith({
-      destination: { kind: "local-fs", dir: "/mnt/disk/waitron" },
+      destinations: [{ kind: "local-fs", dir: "/mnt/disk/waitron" }],
       recoveryKey: "correct-horse-battery-staple",
       schedule: { kind: "wall-clock", days: [2, 3, 4, 5, 6], at: { hour: 2, minute: 30 } },
       retention: { count: 5, days: 14 },
@@ -843,7 +843,7 @@ describe("backup-screen", () => {
     await flush(el);
     // Re-applied under the SAME (current) key — the running schedule/retention are preserved.
     expect(api.applyBackup).toHaveBeenCalledWith({
-      destination: { kind: "local-fs", dir: "/mnt/usb/waitron-2" },
+      destinations: [{ kind: "local-fs", dir: "/mnt/usb/waitron-2" }],
       recoveryKey: "OLD-KEY-xyz789012345",
       schedule: { kind: "wall-clock", days: "daily", at: "auto" },
       retention: { count: 7, days: 30 },
@@ -1493,7 +1493,7 @@ describe("backup-screen failures and edit-mode prefill", () => {
 
     await vi.waitFor(() =>
       expect(api.applyBackup).toHaveBeenCalledExactlyOnceWith({
-        destination: { kind: "local-fs", dir: "/mnt/usb/waitron" },
+        destinations: [{ kind: "local-fs", dir: "/mnt/usb/waitron" }],
         recoveryKey: "OLD-KEY-xyz789012345",
         schedule: { kind: "wall-clock", days: [0, 3], at: { hour: 2, minute: 5 } },
         retention: { count: 8, days: 30 },
@@ -1516,7 +1516,7 @@ describe("backup-screen failures and edit-mode prefill", () => {
 
     await vi.waitFor(() =>
       expect(api.applyBackup).toHaveBeenCalledWith({
-        destination: { kind: "local-fs", dir: "/mnt/usb/new" },
+        destinations: [{ kind: "local-fs", dir: "/mnt/usb/new" }],
         recoveryKey: "OLD-KEY-xyz789012345",
         schedule: { kind: "wall-clock", days: "daily", at: "auto" },
         retention: { count: 7, days: 30 },
