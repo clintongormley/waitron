@@ -55,7 +55,11 @@ export function openRequestScope(options: RequestScopeOptions): RequestScope {
   const refuse = (detail: string, api: string): never => {
     count += 1;
     first ??= detail;
-    options.onRefused?.(detail, api);
+    try {
+      options.onRefused?.(detail, api);
+    } catch {
+      // The refusal, not the hook's error, is what the sender sees.
+    }
     throw new AwsRehearsalRefused("request-unplanned", detail);
   };
 

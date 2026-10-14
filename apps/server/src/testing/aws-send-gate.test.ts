@@ -108,6 +108,22 @@ describe("the send gate", () => {
     });
   });
 
+  it("rejects with the refusal, not the error, when the refusal hook throws", async () => {
+    const { client, handled } = recording();
+    const scope = openRequestScope({
+      plan: plan(),
+      mode: "enforce",
+      onRefused: () => {
+        throw new Error("hook failed");
+      },
+    });
+    const error = await scope.run(() => client.send(unplanned())).catch((e: unknown) => e);
+    expect(handled()).toBe(0);
+    expect(error).toBeInstanceOf(AwsRehearsalRefused);
+    expect((error as AwsRehearsalRefused).reason).toBe("request-unplanned");
+    expect(scope.refusals().count).toBe(1);
+  });
+
   it("checks a runner-marked client against the runner's rules", async () => {
     const { client, handled } = recording();
     markRunnerClient(client);
