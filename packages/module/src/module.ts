@@ -1139,7 +1139,8 @@ export interface VenueServiceContribution {
    *  it was sold in Each as they stand now, so a caller removing a line records its notices first.
    *  `direction` and `cancelledExtra` (the extra taken off the dish) are for a `changed` notice
    *  only. `reroutedTo` names the new station on a `rerouted` notice only. `fromNumber`, the
-   *  number of the order the dishes came from, labels the notice `#28 → #27` when it differs. */
+   *  number of the order the dishes came from, is for a `moved` notice only and labels the notice
+   *  `#28 → #27` when it differs. */
   recordKitchenNotices(
     tx: Transaction,
     cfg: { locationId: LocationId },

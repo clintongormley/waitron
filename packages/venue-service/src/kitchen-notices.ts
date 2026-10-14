@@ -65,8 +65,9 @@ const INSERTION_ORDER = sql`"kitchen_notices"."rowid"`;
  * one only (`kitchen_notice.invalid` otherwise, or for a value outside the two), and so is
  * `cancelledExtra`, the extra taken off the dish (`kitchen_notice.invalid` otherwise).
  * `reroutedTo` names the new station on a `rerouted` notice and is refused on every other kind
- * (`kitchen_notice.invalid`). `fromNumber`, the number of the order the dishes came from, labels
- * the notice `#28 → #27` when it is not the order's own number.
+ * (`kitchen_notice.invalid`). `fromNumber`, the number of the order the dishes came from, is for a
+ * `moved` notice only (`kitchen_notice.invalid` otherwise) and labels the notice `#28 → #27` when
+ * it is not the order's own number.
  */
 export async function recordKitchenNotices(
   tx: Transaction,
@@ -91,6 +92,9 @@ export async function recordKitchenNotices(
   }
   if ((kind === "rerouted") !== (reroutedTo !== null)) {
     throw new AppError("kitchen_notice.invalid", { field: "reroutedTo" });
+  }
+  if (fromNumber !== null && kind !== "moved") {
+    throw new AppError("kitchen_notice.invalid", { field: "fromNumber" });
   }
   if (items.length === 0) return;
   const [order] = await tx
@@ -141,7 +145,6 @@ export async function recordKitchenNotices(
     tx,
     lines.map((line) => line.id),
   );
-  // The label the station screen shows for an order: its number, then its label when it has one.
   const number =
     fromNumber === null || fromNumber === order.orderNumber
       ? `#${order.orderNumber}`

@@ -149,7 +149,9 @@ declare module "@waitron/shared" {
     // `route.dish_not_sent` is declared in apps/server's errors.ts, which raises it.
     "order.service_context_missing": { workingOrderId: string };
     "kitchen_notice.not_found": { noticeId: string };
-    "kitchen_notice.invalid": { field: "direction" | "cancelledExtra" | "reroutedTo" };
+    "kitchen_notice.invalid": {
+      field: "direction" | "cancelledExtra" | "reroutedTo" | "fromNumber";
+    };
     /** `field` is the request path of the refused value, such as `days.2.cell.periods.0.opensAt`. */
     "hours.invalid": { field: string };
     "season.not_found": { seasonId: string };

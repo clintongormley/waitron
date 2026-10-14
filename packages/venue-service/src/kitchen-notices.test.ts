@@ -576,6 +576,56 @@ describe("recordKitchenNotices", () => {
       expect(await db.select().from(kitchenNotices)).toEqual([]);
     });
 
+    it.each(["recalled", "void", "changed"] as const)(
+      "a came-from order number on a %s notice, which only a moved notice carries",
+      async (kind) => {
+        const v = await venue();
+        const order = await seedOrder(v.locationId, 1, null);
+        await expect(
+          inTx((tx) =>
+            recordKitchenNotices(
+              tx,
+              v.cfg,
+              order.orderId,
+              [item(order.burgerLineId, v.grill)],
+              kind,
+              null,
+              null,
+              null,
+              null,
+              28,
+            ),
+          ),
+        ).rejects.toMatchObject({
+          code: "kitchen_notice.invalid",
+          params: { field: "fromNumber" },
+        });
+        expect(await db.select().from(kitchenNotices)).toEqual([]);
+      },
+    );
+
+    it("a came-from order number on a rerouted notice", async () => {
+      const v = await venue();
+      const order = await seedOrder(v.locationId, 1, null);
+      await expect(
+        inTx((tx) =>
+          recordKitchenNotices(
+            tx,
+            v.cfg,
+            order.orderId,
+            [item(order.burgerLineId, v.grill)],
+            "rerouted",
+            null,
+            null,
+            null,
+            "Grill",
+            28,
+          ),
+        ),
+      ).rejects.toMatchObject({ code: "kitchen_notice.invalid", params: { field: "fromNumber" } });
+      expect(await db.select().from(kitchenNotices)).toEqual([]);
+    });
+
     it("a direction other than added or removed", async () => {
       const v = await venue();
       const order = await seedOrder(v.locationId, 1, null);
