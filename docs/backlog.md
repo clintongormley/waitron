@@ -3524,15 +3524,12 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   before any card payment is taken through a Stripe webhook.
   [Detail](backlog/payments.md#the-stripe-webhook-endpoint-still-has-to-be-repointed-by-hand-at-stripe)
 
-- Bound the HTTP body read as well as the header wait in `sumup-client.ts` (move `clearTimeout` after
-  `res.text()`); lift `reverseViaStripe` and `reverseViaSumUp` into one neutral reversal primitive.
+- Lift `reverseViaStripe` and `reverseViaSumUp` into one neutral reversal primitive.
 
 - **SumUp's older `refund` call still parses a 2xx or 4xx body as JSON**
-  (`packages/payments-sumup/src/sumup-client.ts`, `refund` through `call`), so a 404 answered with an
-  HTML page throws `SyntaxError` there, as `sendRefund` did before A632. It is reached only through
-  `reverseViaSumUp` (the provider's `void`, `refund` and `partialRefund`); a grep of `apps` and
-  `packages` on 2026-10-14 found no caller of those outside tests. Fold it into the neutral reversal
-  primitive above.
+  (`packages/payments-sumup/src/sumup-client.ts`, `refund` through `call`), so a 404 answered with
+  an HTML page throws `SyntaxError`. Its one caller is `reverseViaSumUp`; fold it into the neutral
+  reversal primitive above. Left open by A632.
 
 - Pre-existing `forward` retry backoff.
 
