@@ -456,8 +456,8 @@ it("a new revision arriving after an impact read began is not taken from that re
   slowPage = 30;
   data.clockRevision = 4;
   el.api.rereadWatches();
-  await expect.poll(() => answers.length, "Painted in answers first").toBeGreaterThanOrEqual(2);
-  await expect.poll(() => answers.length, "the new model starts its own read").toBe(3);
+  // Painted in answers first and starts a read; the late page read's new revision starts another.
+  await expect.poll(() => answers.length).toBe(3);
   answers[1]!(impactOf({ seasons: 1 }));
   await expect.poll(() => body(dialog)).toBe("Not painted anywhere. No hours change.");
   confirm(dialog).click();

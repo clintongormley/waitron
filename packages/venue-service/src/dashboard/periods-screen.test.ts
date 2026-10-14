@@ -148,14 +148,10 @@ it("groups each active department's periods under it in one table, and leaves ou
 
 it("M3: department rows are group headings, bold on a shaded band across every cell, and an empty department says No periods", async () => {
   const data = model();
-  data.departments.push({
-    id: "kiosk",
-    name: "Terrace kiosk",
-    active: true,
-    zones: [],
-    periods: [],
-    seasonWeeks: [],
-  });
+  data.departments = [
+    ...data.departments,
+    { id: "kiosk", name: "Terrace kiosk", active: true, zones: [], periods: [], seasonWeeks: [] },
+  ];
   const el = await mount(answering(() => data));
   const grid = await loaded(el);
   const cells = (key: string) => [
