@@ -356,7 +356,8 @@ export class PeriodsScreen extends LitElement {
       ${model && !this.readOnly ? this.renderDeletion() : nothing}`;
   }
 
-  /** Closes the delete dialog once its period is gone, else reads what deleting it changes again. */
+  /** Closes the delete dialog once its period is gone, else reads what deleting it changes again
+   *  through `rereadImpact`. */
   private followDeletion() {
     const deletion = this.deleting;
     if (!deletion) return;
