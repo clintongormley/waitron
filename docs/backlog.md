@@ -5342,10 +5342,11 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   step 4 (#1519).
 - **A Stripe reader's delete confirmation does not say the reader stays registered at Stripe**,
   which a SumUp reader's does while SumUp is not connected. Left open by A435 step 3b.
-- **SumUp's other calls still follow redirects** (`packages/payments-sumup/src/sumup-client.ts`;
-  only `deleteReader` passes `redirect: "manual"` since A518, #1562). Unchecked: a redirected refund
-  POST is re-sent as a GET, and if its target answers 200 with an empty body the refund might read as
-  accepted. Next: a real local server answering a refund with a 302, as A518's `deleteReader` test does.
+- **SumUp's refund status call parses 2xx and 4xx bodies before returning their status**
+  (`packages/payments-sumup/src/sumup-client.ts`, `call` and `sendRefund`). A621's real local-server
+  probe answered 404 with `<html>nope</html>`: `sendRefund` threw `SyntaxError`, and the provider
+  returned `{ kind: "uncertain", reason: "network" }`. Next: keep the HTTP status when that body's
+  format is irrelevant to the refund answer; retain the existing pending-outcome rules.
 - **The Disable dialog's failed-unpair message says the reader is "still enabled"** (A518, #1562),
   which is untrue if another session disables it while the dialog is open, because the Unpair route
   checks only that the reader exists. Left as it is: right whenever nobody else acts at the same moment.
