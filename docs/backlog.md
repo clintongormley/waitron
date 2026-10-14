@@ -4119,9 +4119,14 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   and a rota of slots to fill, in a Calendar with Opening hours, Staffing and Rota views. **Designed
   2026-10-13** ([spec](superpowers/specs/2026-10-13-a585-staffing-and-rota-design.md),
   [mockups](backlog/mockups/a585-staffing/)); after the A506 chain, `workforce` changes planned with A10.
-  Part 1 (the `staffing` package, staff roles and who holds them, the Staff roles page) is built;
-  parts 2–8 are open, in the order of the
+  Part 1 (the `staffing` package, staff roles and who holds them, the Staff roles page) landed
+  (#1681); parts 2–8 are open, in the order of the
   [plan](superpowers/plans/2026-10-13-a585-staffing-and-rota.md).
+- **A636. The Staff roles list re-reads when any person changes.** Its live query `staff-roles`
+  (`packages/staffing/src/dashboard/live-queries.ts`) depends on `persons`, but the list read
+  (`listStaffRoles`) reads holder ids from `person_staff_roles` alone, so every person write
+  re-reads the list for nothing (found by reading, #1681's review). Next: drop `persons` from that
+  query's list, keeping it on `staff-role-delete-impact`, which joins it for holders' names.
 - **A586. Labour rules and hours balance per person** — named agreements, one per person's contract
   (today one `convenio_config` per location); a running total of hours clocked and rostered against
   hours due, annual leave counted, with the yearly overtime cap. After A585; plan with A10

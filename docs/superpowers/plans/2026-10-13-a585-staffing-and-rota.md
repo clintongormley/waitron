@@ -203,6 +203,11 @@ Core routes this plan adds in `apps/server/src/workforce-api.ts` (part 5, `sched
 
 ## Part A585-1 — the staffing package, staff roles and who holds them
 
+> **Landed 2026-10-14 as #1681, with three changes later parts should know.** `StaffRole` carries no
+> `blockCount`/`shiftCount`; a new `GET /staff-roles/:staffRoleId/delete-impact` (`staffing.manage`)
+> answers the delete question, and `DELETE` answers 200 with that result. Staffing's tables are in two
+> migrations (`0000`, `0001`) to fit `scripts/migration-upgrade.test.ts` (backlog A624).
+
 Branch `feat/a585-1-staffing-package`. Template for every file: `packages/adjustments` (added in
 37ab95ace, the newest module package with its own migration set and dashboard).
 
