@@ -402,8 +402,8 @@ function customBucket(
 }
 
 /**
- * The one destination a dashboard Save asks for, resolved server-side. `stream-bucket` copies the
- * stream's settings as they are now, so a later stream edit or removal does not move archives.
+ * One destination of a dashboard Save, resolved server-side. `stream-bucket` copies the stream's
+ * settings as they are now, so a later stream edit or removal does not move archives.
  */
 export function resolveArchiveChoice(
   destination: unknown,
@@ -435,4 +435,35 @@ export function resolveArchiveChoice(
     default:
       throw requestInvalid("destination");
   }
+}
+
+/** The destination choices resolved against the bucket copy's settings; a Save lists one at most. */
+export const BUCKET_CHOICES = new Set<unknown>(["stream-bucket", "custom-s3"]);
+
+/** Counts the raw kinds before any entry resolves, so an entry's own refusal never answers for a
+ * list that is wrong as a whole. */
+export function checkArchiveChoiceList(raw: unknown): Record<string, unknown>[] {
+  if (
+    !Array.isArray(raw) ||
+    raw.length === 0 ||
+    raw.length > 2 ||
+    !raw.every(isRecord) ||
+    raw.filter((c) => c.kind === "local-fs").length > 1 ||
+    raw.filter((c) => BUCKET_CHOICES.has(c.kind)).length > 1
+  ) {
+    throw requestInvalid("destinations");
+  }
+  return raw;
+}
+
+/** A Save's destinations: at most one folder and one bucket, returned folder first. */
+export function resolveArchiveChoices(
+  choices: unknown,
+  ctx: { venueId: string; stream: StreamSettings | null; held: ArchiveSettings | null },
+): BackupDestination[] {
+  const resolved = checkArchiveChoiceList(choices).map((c) => resolveArchiveChoice(c, ctx));
+  return [
+    ...resolved.filter((d) => d.kind === "local-fs"),
+    ...resolved.filter((d) => d.kind === "s3"),
+  ];
 }

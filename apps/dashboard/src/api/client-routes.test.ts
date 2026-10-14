@@ -15,7 +15,7 @@ function refusal(code: string, status: number): Response {
 }
 
 const BACKUP_BODY: BackupApplyBody = {
-  destination: { kind: "local-fs", dir: "/mnt/usb" },
+  destinations: [{ kind: "local-fs", dir: "/mnt/usb" }],
   recoveryKey: "correct horse battery staple",
   schedule: { kind: "wall-clock", days: "daily", at: { hour: 3, minute: 0 } },
   retention: { count: 7, days: 30 },
@@ -504,7 +504,7 @@ describe("DashboardApi routes", () => {
         "/api/backup/apply",
         "POST",
         {
-          destination: { kind: "local-fs", dir: "/mnt/usb" },
+          destinations: [{ kind: "local-fs", dir: "/mnt/usb" }],
           recoveryKey: body.recoveryKey,
           schedule: body.schedule,
           retention: body.retention,
@@ -516,7 +516,7 @@ describe("DashboardApi routes", () => {
   });
 
   it("sends each archive destination choice to apply as it was given", async () => {
-    const choices: BackupApplyBody["destination"][] = [
+    const choices: BackupApplyBody["destinations"][number][] = [
       { kind: "local-fs", dir: "/mnt/usb" },
       { kind: "stream-bucket" },
       {
@@ -531,9 +531,14 @@ describe("DashboardApi routes", () => {
     ];
     const fetchImpl = vi.fn().mockImplementation(async () => jsonResponse({ enabled: true }));
     const api = new DashboardApi("", fetchImpl);
-    for (const destination of choices) await api.applyBackup({ ...BACKUP_BODY, destination });
+    for (const destination of choices)
+      await api.applyBackup({ ...BACKUP_BODY, destinations: [destination] });
     expect(callsOf(fetchImpl)).toEqual(
-      choices.map((destination) => ["/api/backup/apply", "POST", { ...BACKUP_BODY, destination }]),
+      choices.map((destination) => [
+        "/api/backup/apply",
+        "POST",
+        { ...BACKUP_BODY, destinations: [destination] },
+      ]),
     );
   });
 

@@ -1698,7 +1698,7 @@ export type ArchiveChoice =
 export type BackupWriteAnswer = BackupStatusView & { reloadErrorCode?: string };
 
 export interface BackupApplyBody {
-  destination: ArchiveChoice;
+  destinations: ArchiveChoice[];
   /** Omitted when the box already holds a key: the server uses that one. */
   recoveryKey?: string;
   schedule: BackupSchedule;

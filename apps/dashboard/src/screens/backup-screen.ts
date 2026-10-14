@@ -17,6 +17,7 @@ import { sameValue } from "../widgets/product-editor-model.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-combobox.js";
+import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-number-stepper.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
@@ -35,15 +36,15 @@ import type {
 } from "../api/client.js";
 import {
   EMPTY_CUSTOM,
-  destinationBody,
+  destinationsBody,
   hasUnusableFolder,
   heldBucket,
   keepsHeldSecret,
-  openingDestination,
+  openingDestinations,
   sameStreamBucket,
   streamLocation,
+  type BucketChoice,
   type CustomBucket,
-  type DestinationChoice,
 } from "./backup-destination-model.js";
 
 /** Mirrors the server's `MIN_PASSPHRASE_LENGTH` (`apps/server/src/recovery-bundle.ts`) for fast
@@ -52,7 +53,8 @@ const MIN_KEY_LENGTH = 12;
 
 interface ArchiveDraft {
   mode: "configure" | "settings" | "rotate";
-  choice: DestinationChoice;
+  folderOn: boolean;
+  bucket: BucketChoice;
   folder: string;
   custom: CustomBucket;
   daysMode: "daily" | "weekdays";
@@ -74,7 +76,7 @@ function archivePayload(value: ArchiveDraft): unknown {
   const pastedKey = value.advancedPaste ? value.pastedKey : "";
   if (value.mode === "rotate") return { pastedKey };
   return {
-    destination: destinationBody(value.choice, value.folder, value.custom),
+    destinations: destinationsBody(value.folderOn, value.folder, value.bucket, value.custom),
     days: value.daysMode === "daily" ? "daily" : [...value.weekdays].sort((a, b) => a - b),
     at: value.timeMode === "auto" ? "auto" : value.atTime,
     count: parseRetention(value.retainCount) ?? value.retainCount,
@@ -321,7 +323,8 @@ export class BackupScreen extends LitElement {
   @state() private refreshErrorKey: string | null = null;
 
   // The configure and rotate forms share this draft: only ONE of them renders at a time.
-  @state() private choice: DestinationChoice = "local-fs";
+  @state() private folderOn = true;
+  @state() private bucket: BucketChoice = "none";
   @state() private folder = "";
   /** The server refused the folder, and it has not changed since. */
   @state() private folderRefused = false;
@@ -422,7 +425,8 @@ export class BackupScreen extends LitElement {
 
   #fields(): FormFields {
     return {
-      choice: this.choice,
+      folderOn: this.folderOn,
+      bucket: this.bucket,
       folder: this.folder,
       custom: { ...this.custom },
       daysMode: this.daysMode,
@@ -461,7 +465,8 @@ export class BackupScreen extends LitElement {
       }),
       equal: (a, b) => sameValue(archivePayload(a), archivePayload(b)),
       restore: (value) => {
-        this.choice = value.choice;
+        this.folderOn = value.folderOn;
+        this.bucket = value.bucket;
         this.folder = value.folder;
         this.custom = { ...value.custom };
         this.daysMode = value.daysMode;
@@ -480,7 +485,8 @@ export class BackupScreen extends LitElement {
     this.#trackArchive();
     if (
       [
-        "choice",
+        "folderOn",
+        "bucket",
         "folder",
         "custom",
         "daysMode",
@@ -641,7 +647,7 @@ export class BackupScreen extends LitElement {
   }
 
   get #folderMissing(): boolean {
-    return this.choice === "local-fs" && this.folder.trim() === "";
+    return this.folderOn && this.folder.trim() === "";
   }
 
   get #secretRequired(): boolean {
@@ -654,17 +660,24 @@ export class BackupScreen extends LitElement {
 
   #customMissing(f: CustomFieldRow): boolean {
     return (
-      this.choice === "custom-s3" && this.#customRequired(f) && this.custom[f.field].trim() === ""
+      this.bucket === "custom-s3" && this.#customRequired(f) && this.custom[f.field].trim() === ""
     );
   }
 
   get #streamGone(): boolean {
-    return this.choice === "stream-bucket" && (this.stream?.bucket ?? null) === null;
+    return this.bucket === "stream-bucket" && (this.stream?.bucket ?? null) === null;
+  }
+
+  get #nothingChosen(): boolean {
+    return !this.folderOn && this.bucket === "none";
   }
 
   get #destinationMissing(): boolean {
     return (
-      this.#folderMissing || this.#streamGone || CUSTOM_FIELDS.some((f) => this.#customMissing(f))
+      this.#nothingChosen ||
+      this.#folderMissing ||
+      this.#streamGone ||
+      CUSTOM_FIELDS.some((f) => this.#customMissing(f))
     );
   }
 
@@ -720,24 +733,27 @@ export class BackupScreen extends LitElement {
     return { count: parseRetention(this.retainCount)!, days: parseRetention(this.retainDays)! };
   }
 
-  #onApplyRefused(error: unknown, sent: BackupApplyBody["destination"]): void {
+  #onApplyRefused(error: unknown, sent: BackupApplyBody["destinations"]): void {
     const code = codeOf(error);
+    const custom = sent.find((d) => d.kind === "custom-s3");
     const field = (error as { params?: { field?: unknown } } | null)?.params?.field;
     if (code === "backup.request_invalid") {
+      // A refusal naming the folder or a custom-bucket field not shown when it answers goes to
+      // the bottom message.
       if (field === "retention") {
         this.retentionRefused = true;
         this.#focusFirstInvalidBox();
-      } else if (sent.kind === "custom-s3" && isCustomField(field)) {
+      } else if (custom !== undefined && this.bucket === "custom-s3" && isCustomField(field)) {
         this.customRefused = field;
         if (field === "secretAccessKey") {
-          this.secretSentRefused = sent.secretAccessKey !== undefined;
+          this.secretSentRefused = custom.secretAccessKey !== undefined;
           if (!this.secretSentRefused) this.secretDemanded = true;
         }
         this.#focusFirstInvalidBox();
-      } else if (field === "dir") {
+      } else if (field === "dir" && this.folderOn) {
         this.folderRefused = true;
         this.#focusFirstInvalidBox();
-      } else if (field === "prefix" && sent.kind === "stream-bucket") {
+      } else if (field === "prefix" && sent.some((d) => d.kind === "stream-bucket")) {
         this.formRefusal = {
           code,
           reason: null,
@@ -772,7 +788,7 @@ export class BackupScreen extends LitElement {
 
   #applyBody(recoveryKey?: string): BackupApplyBody {
     return {
-      destination: destinationBody(this.choice, this.folder, this.custom),
+      destinations: destinationsBody(this.folderOn, this.folder, this.bucket, this.custom),
       ...(recoveryKey === undefined ? {} : { recoveryKey }),
       schedule: this.#buildSchedule(),
       retention: this.#retention(),
@@ -815,7 +831,7 @@ export class BackupScreen extends LitElement {
         await this.#mint();
       }
     } catch (error) {
-      if (generation === this.#generation) this.#onApplyRefused(error, body.destination);
+      if (generation === this.#generation) this.#onApplyRefused(error, body.destinations);
     } finally {
       if (generation === this.#generation) this.submitting = false;
     }
@@ -907,9 +923,13 @@ export class BackupScreen extends LitElement {
     if (!s.storedDisabled || s.enabled || !s.isPrimary || s.managedByEnvironment) return;
     if (!afterTurnOff) {
       if (this.#archiveScope?.isDirty()) return;
-      if (sameValue(this.#fieldsFrom(s), this.#fields())) return;
+      const current = this.#archiveValue();
+      if (
+        sameValue(archivePayload({ ...current, ...this.#fieldsFrom(s) }), archivePayload(current))
+      )
+        return;
     }
-    this.#prefillAndCommit(s);
+    this.#prefillAndCommit(s, !afterTurnOff);
   }
 
   /** The stream's bucket changed under a prefilled form nobody has changed: open it again as a fresh
@@ -921,12 +941,17 @@ export class BackupScreen extends LitElement {
       void this.#openStoredOff(false);
       return;
     }
-    this.#prefillAndCommit(s);
+    this.#prefillAndCommit(s, true);
   }
 
-  #prefillAndCommit(s: BackupStatusView): void {
+  /** An automatic refill keeps a switched-off folder's text when the refilled folder is off too:
+   * that text never makes the draft differ, so the unchanged-draft check before a refill cannot
+   * protect it. */
+  #prefillAndCommit(s: BackupStatusView, automatic: boolean): void {
+    const hidden = this.folderOn ? null : this.folder;
     this.#prefillFromStatus(s);
     this.#archiveScope?.commit(this.#archiveValue());
+    if (automatic && hidden !== null && !this.folderOn) this.folder = hidden;
   }
 
   /** A write's answer is the box's state after it; a status read begun before it is taken may be
@@ -1088,7 +1113,7 @@ export class BackupScreen extends LitElement {
         this.#reuseKey = null;
       }
     } catch (error) {
-      if (generation === this.#generation) this.#onApplyRefused(error, body.destination);
+      if (generation === this.#generation) this.#onApplyRefused(error, body.destinations);
     } finally {
       if (generation === this.#generation) this.submitting = false;
     }
@@ -1110,7 +1135,8 @@ export class BackupScreen extends LitElement {
     this.#policyReplaced = s.schedule?.kind !== "wall-clock" || !s.retention;
     this.secretDemanded = false;
     const f = this.#fieldsFrom(s);
-    this.choice = f.choice;
+    this.folderOn = f.folderOn;
+    this.bucket = f.bucket;
     this.folder = f.folder;
     this.custom = f.custom;
     this.daysMode = f.daysMode;
@@ -1124,9 +1150,13 @@ export class BackupScreen extends LitElement {
   /** What the form holds once filled from `s`. A non-`wall-clock` running schedule (the box-image
    * `interval` form the UI cannot author) leaves the schedule controls as they are. */
   #fieldsFrom(s: BackupStatusView): FormFields {
+    const opened = openingDestinations(s, this.stream?.bucket ?? null);
     const fields: FormFields = {
       ...this.#fields(),
-      ...openingDestination(s, this.stream?.bucket ?? null),
+      folderOn: opened.folderOn,
+      bucket: opened.bucket,
+      folder: opened.folder,
+      custom: opened.custom,
     };
     if (s.schedule?.kind === "wall-clock") {
       fields.daysMode = s.schedule.days === "daily" ? "daily" : "weekdays";
@@ -1511,47 +1541,24 @@ export class BackupScreen extends LitElement {
     const streamMarked = this.attempted && this.#streamGone;
     const folderMessage = this.folderRefused
       ? t("backup.destination.folder_refused")
-      : this.#destinationHeld
+      : this.attempted && this.#folderMissing
         ? t("backup.destination.folder_required")
         : "";
     return html`
       <h2>${t("backup.destination.title")}</h2>
-      <wt-combobox
-        data-test="archive-destination"
-        name="archive-destination"
-        search="never"
-        label=${t("backup.destination.choice")}
-        .options=${[
-          { value: "local-fs", label: t("backup.destination.choice_local") },
-          {
-            value: "stream-bucket",
-            label: t("backup.destination.choice_stream"),
-            disabled: bucket === null,
-            ...(unavailable === null ? {} : { description: unavailable }),
-          },
-          { value: "custom-s3", label: t("backup.destination.choice_custom") },
-        ]}
-        .value=${this.choice}
-        .error=${streamMarked ? (unavailable ?? t("backup.destination.stream_unavailable")) : ""}
-        @wt-change=${(e: CustomEvent<{ value: string }>) => {
+      <wt-switch
+        data-test="archive-folder-on"
+        name="archive-folder"
+        label=${t("backup.destination.choice_local")}
+        .checked=${this.folderOn}
+        @wt-change=${(e: CustomEvent<{ checked: boolean }>) => {
           e.stopPropagation();
-          this.choice = e.detail.value as DestinationChoice;
+          this.folderOn = e.detail.checked;
           this.folderRefused = false;
-          this.customRefused = null;
         }}
-      ></wt-combobox>
+      ></wt-switch>
       ${
-        unavailable === null || this.choice !== "stream-bucket" || streamMarked
-          ? nothing
-          : html`<p
-              class="hint"
-              data-test=${this.streamUnread ? "stream-unread" : "stream-unavailable"}
-            >
-              ${unavailable}
-            </p>`
-      }
-      ${
-        this.choice === "local-fs"
+        this.folderOn
           ? html`<wt-input
               data-test="destination"
               name="backup-folder"
@@ -1563,16 +1570,59 @@ export class BackupScreen extends LitElement {
               @keydown=${(e: KeyboardEvent) => this.#submitOnEnter(e)}
               @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onDestination(e)}
             ></wt-input>`
-          : this.choice === "stream-bucket"
-            ? this.#renderStreamChoice(bucket)
-            : this.#renderCustomChoice()
+          : nothing
+      }
+      <wt-combobox
+        data-test="archive-destination"
+        name="archive-destination"
+        search="never"
+        label=${t("backup.destination.bucket")}
+        .options=${[
+          { value: "none", label: t("backup.destination.bucket_none") },
+          {
+            value: "stream-bucket",
+            label: t("backup.destination.choice_stream"),
+            disabled: bucket === null,
+            ...(unavailable === null ? {} : { description: unavailable }),
+          },
+          { value: "custom-s3", label: t("backup.destination.choice_custom") },
+        ]}
+        .value=${this.bucket}
+        .error=${
+          streamMarked
+            ? (unavailable ?? t("backup.destination.stream_unavailable"))
+            : this.attempted && this.#nothingChosen
+              ? t("backup.destination.nothing_chosen")
+              : ""
+        }
+        @wt-change=${(e: CustomEvent<{ value: string }>) => {
+          e.stopPropagation();
+          this.bucket = e.detail.value as BucketChoice;
+          this.customRefused = null;
+        }}
+      ></wt-combobox>
+      ${
+        unavailable === null || this.bucket !== "stream-bucket" || streamMarked
+          ? nothing
+          : html`<p
+              class="hint"
+              data-test=${this.streamUnread ? "stream-unread" : "stream-unavailable"}
+            >
+              ${unavailable}
+            </p>`
+      }
+      ${
+        this.bucket === "stream-bucket"
+          ? this.#renderStreamChoice(bucket)
+          : this.bucket === "custom-s3"
+            ? this.#renderCustomChoice()
+            : nothing
       }
     `;
   }
 
   #renderStreamChoice(bucket: NonNullable<StreamSettingsView["bucket"]> | null): TemplateResult {
     return html`
-      <p class="hint" data-test="stream-replaces">${t("backup.destination.stream_replaces")}</p>
       <p class="hint" data-test="stream-snapshot">${t("backup.destination.stream_snapshot")}</p>
       ${
         bucket === null || this.status === undefined

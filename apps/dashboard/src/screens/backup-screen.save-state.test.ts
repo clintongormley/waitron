@@ -47,7 +47,7 @@ const ENABLED: BackupStatusView = {
 };
 
 const STORED_BODY = {
-  destination: { kind: "local-fs", dir: "/mnt/usb/waitron" },
+  destinations: [{ kind: "local-fs", dir: "/mnt/usb/waitron" }],
   recoveryKey: "OLD-KEY-xyz789012345",
   schedule: { kind: "wall-clock", days: [3, 0], at: { hour: 2, minute: 5 } },
   retention: { count: 5, days: 14 },

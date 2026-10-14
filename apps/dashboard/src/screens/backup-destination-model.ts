@@ -5,7 +5,7 @@ import type {
   StreamSettingsView,
 } from "../api/client.js";
 
-export type DestinationChoice = "local-fs" | "stream-bucket" | "custom-s3";
+export type BucketChoice = "none" | "stream-bucket" | "custom-s3";
 
 type StreamBucket = NonNullable<StreamSettingsView["bucket"]>;
 type HeldBucket = Extract<BackupDestinationView, { kind: "s3" }>;
@@ -102,37 +102,46 @@ export function sameStreamBucket(a: StreamBucket | null, b: StreamBucket | null)
   return samePlace(a, b);
 }
 
-export function openingDestination(
+export function openingDestinations(
   status: BackupStatusView,
   stream: StreamBucket | null,
-): { choice: DestinationChoice; folder: string; custom: CustomBucket } {
-  const first = status.destinations[0];
-  if (first?.kind === "local-fs")
-    return { choice: "local-fs", folder: first.dir, custom: { ...EMPTY_CUSTOM } };
-  if (first === undefined) return { choice: "local-fs", folder: "", custom: { ...EMPTY_CUSTOM } };
-  if (matchesStream(first, stream))
-    return { choice: "stream-bucket", folder: "", custom: { ...EMPTY_CUSTOM } };
+): { folderOn: boolean; folder: string; bucket: BucketChoice; custom: CustomBucket } {
+  const stored = status.destinations.find((d) => d.kind === "local-fs");
+  const held = heldBucket(status);
+  const folderOn = stored !== undefined || held === null;
+  const folder = stored?.dir ?? "";
+  if (held === null) return { folderOn, folder, bucket: "none", custom: { ...EMPTY_CUSTOM } };
+  if (matchesStream(held, stream))
+    return { folderOn, folder, bucket: "stream-bucket", custom: { ...EMPTY_CUSTOM } };
   return {
-    choice: "custom-s3",
-    folder: "",
+    folderOn,
+    folder,
+    bucket: "custom-s3",
     custom: {
-      endpoint: first.endpoint ?? "",
-      region: first.region,
-      bucket: first.bucket,
-      prefix: first.prefix,
-      accessKeyId: first.accessKeyId,
+      endpoint: held.endpoint ?? "",
+      region: held.region,
+      bucket: held.bucket,
+      prefix: held.prefix,
+      accessKeyId: held.accessKeyId,
       secretAccessKey: "",
     },
   };
 }
 
-export function destinationBody(
-  choice: DestinationChoice,
+/** The folder, when on, is listed before the bucket. */
+export function destinationsBody(
+  folderOn: boolean,
   folder: string,
+  bucket: BucketChoice,
   custom: CustomBucket,
-): ArchiveChoice {
-  if (choice === "stream-bucket") return { kind: "stream-bucket" };
-  if (choice === "local-fs") return { kind: "local-fs", dir: folder.trim() };
+): ArchiveChoice[] {
+  const list: ArchiveChoice[] = folderOn ? [{ kind: "local-fs", dir: folder.trim() }] : [];
+  if (bucket === "stream-bucket") list.push({ kind: "stream-bucket" });
+  if (bucket === "custom-s3") list.push(customBody(custom));
+  return list;
+}
+
+function customBody(custom: CustomBucket): ArchiveChoice {
   const endpoint = custom.endpoint.trim();
   const prefix = custom.prefix.trim();
   return {

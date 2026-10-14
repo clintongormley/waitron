@@ -13,6 +13,7 @@ import {
   requireManagementSession,
 } from "@waitron/server-kit";
 import {
+  BUCKET_CHOICES,
   archiveNamespace,
   hasExactKeys,
   isRecord,
@@ -20,7 +21,8 @@ import {
   parseSchedule,
   readHeldArchiveSettings,
   requestInvalid,
-  resolveArchiveChoice,
+  resolveArchiveChoices,
+  checkArchiveChoiceList,
   writeArchiveSettings,
   type ArchiveSettings,
 } from "./archive-settings.js";
@@ -106,9 +108,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "backup.stream_settings_unreadable": 409,
 };
 
-/** The destination choices `resolveArchiveChoice` resolves against the bucket copy's settings. */
-const BUCKET_CHOICES = new Set<unknown>(["stream-bucket", "custom-s3"]);
-
 const ARCHIVE_PROBE_TIMEOUT_MS = 30 * 1000;
 const PROBE_CLEANUP_TIMEOUT_MS = 10 * 1000;
 const PROBE_BYTES = Buffer.from("waitron archive test\n");
@@ -172,7 +171,7 @@ function readRetention(raw: unknown): { count: number; days: number } {
 
 interface ApplyBody {
   /** Resolved inside the write's turn, against the settings held then. */
-  destination: Record<string, unknown>;
+  destinations: Record<string, unknown>[];
   /** `undefined` when absent, because a box that already holds a key reuses it. */
   recoveryKey: string | undefined;
   schedule: BackupSchedule;
@@ -181,7 +180,7 @@ interface ApplyBody {
 }
 
 const APPLY_FIELDS = [
-  "destination",
+  "destinations",
   "recoveryKey",
   "schedule",
   "retention",
@@ -205,7 +204,7 @@ async function readApplyBody(c: Context): Promise<ApplyBody> {
   const body = await readJsonBody<unknown>(c);
   if (!isRecord(body)) throw requestInvalid("body");
   onlyKeys(body, APPLY_FIELDS, "body");
-  if (!isRecord(body.destination)) throw requestInvalid("destination");
+  const destinations = checkArchiveChoiceList(body.destinations);
   const { recoveryKey, destinationTimeoutMs } = body;
   if ("recoveryKey" in body && (typeof recoveryKey !== "string" || recoveryKey === "")) {
     throw requestInvalid("recoveryKey");
@@ -219,7 +218,7 @@ async function readApplyBody(c: Context): Promise<ApplyBody> {
     throw requestInvalid("destinationTimeoutMs");
   }
   return {
-    destination: body.destination,
+    destinations,
     recoveryKey: recoveryKey as string | undefined,
     schedule: readSchedule(body.schedule),
     retention: readRetention(body.retention),
@@ -411,19 +410,19 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
           log("warn", "backup.archive_settings_unreadable", { reason: read.unreadable });
         }
         const heldSettings = "unreadable" in read ? null : read.settings;
-        // Only a bucket choice reads the bucket copy's settings: an unreadable one refuses it, but
-        // never a local folder.
-        const stream = BUCKET_CHOICES.has(body.destination.kind)
+        // Only a bucket choice reads the bucket copy's settings, and an unreadable one refuses the
+        // whole Save, a folder listed beside it included: one Save is one decision.
+        const stream = body.destinations.some((d) => BUCKET_CHOICES.has(d.kind))
           ? await readBucketCopySettings(deps.db, deps.ring)
           : null;
-        const destination = resolveArchiveChoice(body.destination, {
+        const destinations = resolveArchiveChoices(body.destinations, {
           venueId: deps.venueId,
           stream,
           held: heldSettings,
         });
         const settings: Omit<ArchiveSettings, "revision"> = {
           enabled: true,
-          destinations: [destination],
+          destinations,
           schedule: body.schedule,
           retention: body.retention,
           destinationTimeoutMs:
@@ -438,9 +437,10 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
           sealed: archiveRecord(settings).stored,
           venueId: deps.venueId,
         });
-        if (destination.kind === "s3") {
+        const bucketDestination = destinations.find((d) => d.kind === "s3");
+        if (bucketDestination !== undefined) {
           await probeArchive(
-            buildBackend(destination),
+            buildBackend(bucketDestination),
             deps.archiveProbeTimeoutMs ?? ARCHIVE_PROBE_TIMEOUT_MS,
             PROBE_CLEANUP_TIMEOUT_MS,
           );

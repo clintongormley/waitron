@@ -1497,7 +1497,9 @@ export const en = {
   "backup.destination.label": "Backup folder",
   "backup.destination.hint":
     "A full path on this box — for example an attached USB drive or a mounted disk.",
-  "backup.destination.choice": "Save backups to",
+  "backup.destination.bucket": "Bucket",
+  "backup.destination.bucket_none": "No bucket",
+  "backup.destination.nothing_chosen": "Choose a folder on this box, a bucket, or both.",
   "backup.destination.choice_local": "A folder on this box",
   "backup.destination.choice_stream": "The bucket copy's bucket",
   "backup.destination.choice_custom": "Another S3-compatible bucket",
@@ -1511,8 +1513,6 @@ export const en = {
     "The bucket copy's settings could not be read, so its bucket cannot be chosen now.",
   "backup.destination.stream_snapshot":
     "Saving copies the bucket copy's current bucket settings. Changing or removing the bucket copy later does not move these backups; save this choice again to follow a change.",
-  "backup.destination.stream_replaces":
-    "Backups go only to this bucket, not to a folder on this box.",
   "backup.destination.stream_location": "Backups will be stored in",
   "backup.destination.folder_required": "Enter the folder to save backups in.",
   "backup.destination.folder_refused":
@@ -4369,7 +4369,9 @@ export const es: Record<StringKey, string> = {
   "backup.destination.label": "Carpeta de copias",
   "backup.destination.hint":
     "Una ruta completa en esta caja; por ejemplo, una memoria USB conectada o un disco montado.",
-  "backup.destination.choice": "Guardar las copias en",
+  "backup.destination.bucket": "Bucket",
+  "backup.destination.bucket_none": "Sin bucket",
+  "backup.destination.nothing_chosen": "Elige una carpeta de esta caja, un bucket o los dos.",
   "backup.destination.choice_local": "Una carpeta de esta caja",
   "backup.destination.choice_stream": "El bucket de la copia continua",
   "backup.destination.choice_custom": "Otro bucket compatible con S3",
@@ -4384,8 +4386,6 @@ export const es: Record<StringKey, string> = {
     "No se han podido leer los ajustes de la copia en el bucket, así que ahora no se puede elegir su bucket.",
   "backup.destination.stream_snapshot":
     "Al guardar se copian los ajustes actuales del bucket de la copia en el bucket. Si después cambias o quitas la copia en el bucket, estas copias no se mueven; vuelve a guardar esta opción para seguir el cambio.",
-  "backup.destination.stream_replaces":
-    "Las copias van solo a este bucket, no a una carpeta de esta caja.",
   "backup.destination.stream_location": "Las copias se guardarán en",
   "backup.destination.folder_required": "Escribe la carpeta donde guardar las copias.",
   "backup.destination.folder_refused":

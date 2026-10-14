@@ -194,7 +194,7 @@ it("a changed destination choice warns, and Discard restores the opening choice"
   await choose(app, "discard");
   expect(await discarded).toBe("proceeded");
   await screen.updateComplete;
-  expect(field(screen, "archive-destination").value).toBe("local-fs");
+  expect(field(screen, "archive-destination").value).toBe("none");
   expect(field(screen, "destination")).not.toBeNull();
   expect(unload()).toBe(false);
 });
@@ -237,7 +237,7 @@ it("a secret typed before the form's draft is taken again is not restored by Dis
   });
   await change(screen, "archive-destination", "custom-s3");
   await change(screen, "archive-bucket-secret-access-key", "SECRET-1");
-  await change(screen, "archive-destination", "local-fs");
+  await change(screen, "archive-destination", "none");
   status = { ...off, isPrimary: false };
   api.liveData.invalidate([{ type: "backup_status" }]);
   await expect
@@ -400,7 +400,7 @@ it("archive setup commits an accepted write while a refused write still warns", 
   const { app, screen } = await mount(off, {
     applyBackup: async (body) => {
       expect(body).toEqual({
-        destination: { kind: "local-fs", dir: "/mnt/new" },
+        destinations: [{ kind: "local-fs", dir: "/mnt/new" }],
         schedule: { kind: "wall-clock", days: "daily", at: "auto" },
         retention: { count: 7, days: 30 },
       });
@@ -743,4 +743,86 @@ it("a settings-key read cannot replace rotation input entered while that read wa
   const pending = leave(app);
   await choose(app, "keep");
   expect(await pending).toBe("kept");
+});
+const STREAM_BUCKET = {
+  endpoint: null,
+  region: "eu-north-1",
+  bucket: "stream-bucket",
+  prefix: "venues",
+  accessKeyId: "AKIASTREAM",
+};
+const streamOn = (async () => ({
+  isPrimary: true,
+  configured: true,
+  bucket: STREAM_BUCKET,
+  status: { state: "streaming" },
+  recoveryKeySet: true,
+  keyFingerprint: null,
+  revision: "11111111-2222-4333-8444-555555555555",
+})) as unknown as DashboardApi["getStreamSettings"];
+const streamDestination = {
+  id: "bucket",
+  kind: "s3",
+  ...STREAM_BUCKET,
+  namespace: `venues/archives/${off.venueId}/`,
+  credentialPresent: true,
+} as const;
+const folderAndBucket: BackupStatusView = {
+  ...on,
+  destinations: [on.destinations[0]!, streamDestination],
+};
+async function setFolderOn(screen: Screen, checked: boolean) {
+  field(screen, "archive-folder-on").dispatchEvent(
+    new CustomEvent("wt-change", { detail: { checked }, bubbles: true, composed: true }),
+  );
+  await screen.updateComplete;
+}
+const folderOn = (screen: Screen) =>
+  (field(screen, "archive-folder-on") as unknown as { checked: boolean }).checked;
+
+it("a stored folder and bucket open without warning; the folder switch warns, and Discard restores the switch and the bucket", async () => {
+  const { app, screen } = await mount(folderAndBucket, { getStreamSettings: streamOn });
+  await expect.poll(() => field(screen, "edit-settings")).not.toBeNull();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await edit(screen);
+  expect(field(screen, "archive-destination").value).toBe("stream-bucket");
+  expect(unload()).toBe(false);
+  await setFolderOn(screen, false);
+  expect(unload()).toBe(true);
+  await change(screen, "archive-destination", "custom-s3");
+  const discarded = leave(app);
+  await choose(app, "discard");
+  expect(await discarded).toBe("proceeded");
+  await screen.updateComplete;
+  expect(folderOn(screen)).toBe(true);
+  expect(field(screen, "destination").value).toBe("/mnt/usb/waitron");
+  expect(field(screen, "archive-destination").value).toBe("stream-bucket");
+  expect(unload()).toBe(false);
+});
+it("a folder typed and then switched off is no change, and a status read keeps it for the switch", async () => {
+  const stored: BackupStatusView = {
+    ...on,
+    enabled: false,
+    storedDisabled: true,
+    destinations: [streamDestination],
+  };
+  const getBackupStatus = vi.fn(async () => stored);
+  const { screen, api } = await mount(stored, {
+    getBackupStatus,
+    getStreamSettings: streamOn,
+  });
+  await expect.poll(() => field(screen, "archive-destination")?.value).toBe("stream-bucket");
+  expect(folderOn(screen)).toBe(false);
+  await setFolderOn(screen, true);
+  await change(screen, "destination", "/mnt/kept");
+  expect(unload()).toBe(true);
+  await setFolderOn(screen, false);
+  expect(unload()).toBe(false);
+  const reads = getBackupStatus.mock.calls.length;
+  api.liveData.invalidate([{ type: "backup_status" }]);
+  await expect.poll(() => getBackupStatus.mock.calls.length).toBeGreaterThan(reads);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await screen.updateComplete;
+  await setFolderOn(screen, true);
+  expect(field(screen, "destination").value).toBe("/mnt/kept");
 });
