@@ -220,7 +220,7 @@ export function projectCloudInstallation(
 }
 export function machinePayload(
   state: Pick<SavedCloudState, "origin" | "view">,
-  pending: Pending,
+  pending: { action: string; operationId: string; lease: string; body: string },
   now = Date.now(),
 ): Buffer {
   return Buffer.from(
