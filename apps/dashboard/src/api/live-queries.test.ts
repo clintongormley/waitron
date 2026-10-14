@@ -97,6 +97,11 @@ it.each([
   ["getOrder", ["bill-1"], "invoice_pdf_downloads"],
   ["getOrder", ["bill-1"], "page_printers"],
   ["getOverdueOrders", [], "ticket_items"],
+  ["getOverdueOrders", [], "party_tables"],
+  ["getOverdueOrders", [], "parties"],
+  ["getOverdueOrders", [], "floor_today_tables"],
+  ["getOverdueOrders", [], "floor_today_join_tables"],
+  ["getOverdueOrders", [], "floor_today_joins"],
   ["getDailyClose", ["2026-09-11"], "sale_substitutions"],
   ["getDailyClose", ["2026-09-11"], "sale_lines"],
   ["getSalesPeriod", ["2026-09-01", "2026-09-11"], "sale_substitutions"],
@@ -916,6 +921,9 @@ const stationDeleteReads = [
   "station_day_states",
   "kitchen_station_timing",
   "floor_zones",
+  "floor_today_tables",
+  "floor_today_join_tables",
+  "floor_today_joins",
 ] as const;
 it("kitchen delete impact subscribes to every refusal, setting and naming source", () => {
   const api = new DashboardApi("", vi.fn());

@@ -7,23 +7,42 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { printJobs } from "@waitron/db";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { createPrinter, prepareText } from "@waitron/printing";
+import { kitchenNotices } from "@waitron/venue-service";
 import { createStation } from "./kitchen.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
+import { moveBill } from "./move-bill.js";
+import { listOrders } from "./orders-list.js";
+import { finishTable } from "./parties.js";
+import { readReceiptOrder } from "./receipt-order.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import type { ExpoOrder } from "./working-order.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import {
+  billRow,
+  commandFor,
+  floorRow,
   inTx,
+  nameParty,
+  OPERATOR,
+  order,
   orderForParty,
+  partyRow,
+  pay,
   revisionOf,
   seat,
   setupPartyVenue,
+  split,
   tableRow,
   type PartyVenue,
 } from "./testing/party-venue.js";
-import { giveKeptSize, plannedZone, withRevision } from "./testing/floor-today-venue.js";
+import {
+  giveKeptSize,
+  plannedZone,
+  withRevision,
+  withZoneRevision,
+} from "./testing/floor-today-venue.js";
 import { seedSessionDevice } from "./testing/session-device.js";
 import { routeProductTo } from "./testing/zone-offers.js";
 import "./errors.js";
@@ -166,6 +185,10 @@ async function allJobCount(): Promise<number> {
   return (await inTx(v, (tx) => tx.select({ id: printJobs.id }).from(printJobs))).length;
 }
 
+async function noticeCount(): Promise<number> {
+  return (await inTx(v, (tx) => tx.select({ id: kitchenNotices.id }).from(kitchenNotices))).length;
+}
+
 /** The kitchen jobs `act` queues. */
 async function jobsFrom(act: () => Promise<unknown>): Promise<string[][]> {
   const before = (await kitchenJobs()).length;
@@ -184,17 +207,19 @@ describe("a group renamed for today, as the kitchen sees it", () => {
     const { table, guests } = await seatedGroup();
     const name = suffixed("García birthday");
     const jobsBefore = await allJobCount();
+    const noticesBefore = await noticeCount();
 
     await rename(table.c3!, name);
 
     expect(await allJobCount()).toBe(jobsBefore);
+    expect(await noticeCount()).toBe(noticesBefore);
     const tickets = await jobsFrom(() =>
       orderForParty(v, guests.partyId, ["Burger"], guests.tabId),
     );
     expect(tickets).toHaveLength(1);
     expect(tickets[0]).toContain(prepareText(name));
     const counter3 = prepareText(await labelOf(table.c3!));
-    expect(tickets[0]!.filter((line) => line.includes(counter3))).toEqual([]);
+    expect(tickets[0]!.join(" ")).not.toContain(counter3);
   });
 
   it("a free Counter 6 pushed onto the renamed, seated group prints no MOVED slip", async () => {
@@ -232,7 +257,7 @@ describe("a group renamed for today, as the kitchen sees it", () => {
 
     const slips = printed.filter(isMovedSlip);
     expect(slips).toHaveLength(1);
-    expect(slips[0]).toContain(prepareText(`${name} -> ${await labelOf(table.t9!)}`));
+    expect(slips[0]!.join(" ")).toContain(prepareText(`${name} -> ${await labelOf(table.t9!)}`));
   });
 
   it("the expo board names the order by the group's name", async () => {
@@ -246,5 +271,125 @@ describe("a group renamed for today, as the kitchen sees it", () => {
     const board = (await answer.json()) as ExpoOrder[];
 
     expect(board.find((order) => order.orderId === guests.tabId)?.tableLabel).toBe(name);
+  });
+});
+
+async function receiptLabel(billId: string): Promise<string | null> {
+  return (await inTx(v, (tx) => readReceiptOrder(tx, v.cfg, billId))).orderLabel;
+}
+
+async function finish(partyId: string): Promise<void> {
+  const sent = await commandFor(v, partyId);
+  await inTx(v, (tx) => finishTable(tx, { partyId, ...sent }));
+}
+
+describe("a group renamed for today, on its bills and receipts", () => {
+  it("the receipt names the group", async () => {
+    const { table, guests } = await seatedGroup();
+    const name = suffixed("García birthday");
+    await rename(table.c4!, name);
+
+    expect(await receiptLabel(guests.tabId)).toBe(name);
+  });
+
+  it("the receipt of a party named Ana reads Ana · the group's name", async () => {
+    const { table, guests } = await seatedGroup();
+    const name = suffixed("García birthday");
+    await rename(table.c4!, name);
+    await nameParty(v, guests.partyId, "Ana");
+
+    expect(await receiptLabel(guests.tabId)).toBe(`Ana · ${name}`);
+  });
+
+  it("a bill paid under the name keeps it on its receipt when the group is renamed again", async () => {
+    const { table, guests } = await seatedGroup();
+    const name = suffixed("García birthday");
+    const later = suffixed("Smith party");
+    await rename(table.c4!, name);
+    await order(v, guests.tabId, "Burger");
+    await pay(v, guests.tabId, "12.00");
+
+    await rename(table.c4!, later);
+
+    expect((await floorRow(v, table.c4!)).party?.displayName).toBe(later);
+    expect(await receiptLabel(guests.tabId)).toBe(name);
+  });
+
+  it("the floor names the unnamed party by the group's name", async () => {
+    const { table } = await seatedGroup();
+    const name = suffixed("García birthday");
+    await rename(table.c5!, name);
+
+    expect((await floorRow(v, table.bar!)).party?.displayName).toBe(name);
+  });
+});
+
+describe("a group renamed for today, where saved names stay", () => {
+  it("the finished party keeps every saved label it held, and the orders list finds its bill by Counter 4", async () => {
+    const { table, guests } = await seatedGroup();
+    await rename(table.c3!, suffixed("García birthday"));
+    await order(v, guests.tabId, "Burger");
+    await pay(v, guests.tabId, "12.00");
+
+    await finish(guests.partyId);
+
+    const saved = [
+      await labelOf(table.long!),
+      await labelOf(table.bar!),
+      await labelOf(table.c3!),
+      await labelOf(table.c4!),
+      await labelOf(table.c5!),
+    ];
+    expect((await partyRow(v, guests.partyId)).tableNames).toEqual(saved);
+    const page = await inTx(v, (tx) =>
+      listOrders(tx, {
+        status: "all",
+        dates: "any",
+        credited: false,
+        limit: 200,
+        scope: "all",
+        table: saved[3]!,
+      }),
+    );
+    expect(page.rows.map((row) => row.id)).toContain(guests.tabId);
+  });
+});
+
+describe("a group renamed for today, in the copies bills store", () => {
+  it("a bill taken to the counter is labelled by the name, and keeps it after Reset to saved plan", async () => {
+    const { zoneId, table, guests } = await seatedGroup();
+    const name = suffixed("García birthday");
+    await rename(table.c3!, name);
+    await order(v, guests.tabId, "Burger", "Vino");
+    const second = await split(v, guests.partyId, guests.tabId, [2]);
+    const expectedPartyRevision = await revisionOf(v, guests.partyId);
+    await inTx(v, (tx) =>
+      moveBill(
+        tx,
+        v.cfg,
+        second,
+        { counter: { zoneId: null } },
+        { bills: "merge", operatorId: OPERATOR, expectedPartyRevision },
+      ),
+    );
+    expect((await billRow(v, second)).label).toBe(name);
+
+    await pay(v, guests.tabId, "12.00");
+    await finish(guests.partyId);
+    await post(`/api/zones/${zoneId}/today/reset`, await withZoneRevision(v, zoneId, {}));
+
+    expect((await floorRow(v, table.bar!)).today?.joinName).toBeNull();
+    expect((await billRow(v, second)).label).toBe(name);
+  });
+
+  it("a bill split off the party bill stores the name as its label", async () => {
+    const { table, guests } = await seatedGroup();
+    const name = suffixed("García birthday");
+    await rename(table.c4!, name);
+    await order(v, guests.tabId, "Burger", "Vino");
+
+    const second = await split(v, guests.partyId, guests.tabId, [2]);
+
+    expect((await billRow(v, second)).label).toBe(name);
   });
 });
