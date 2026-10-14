@@ -70,6 +70,8 @@ function fake(options: {
   write?: (path: string, method: string, body: unknown) => unknown;
   /** Answers Painted in this many milliseconds late, in a later turn than the page's own read. */
   paintedInDelay?: number;
+  /** Answers the page's own read this many milliseconds late, after Painted in. */
+  dataDelay?: () => number;
 }): DashboardRequest {
   return (async (path, method, body) => {
     if (method === "GET" && path === PAINTED_IN) {
@@ -79,7 +81,11 @@ function fake(options: {
     }
     if (isImpactRead(path, method))
       return structuredClone(await (options.impact ?? impactOf)(path));
-    if (method === "GET") return structuredClone((options.data ?? model)());
+    if (method === "GET") {
+      const delay = options.dataDelay?.();
+      if (delay) await new Promise((done) => setTimeout(done, delay));
+      return structuredClone((options.data ?? model)());
+    }
     return options.write?.(path, method, body);
   }) as DashboardRequest;
 }
@@ -371,6 +377,96 @@ it("a failed then recovered page read leaves the delete dialog's refusal in plac
   expect(deleteDialog(el)).toBe(dialog);
   expect(heading(dialog)).toBe("Delete Renamed lunch?");
   expect(bottom(dialog)).toBe("The business-day start changed. Reload hours.");
+});
+
+it("after a delete refused for a changed clock, Confirm sends the new revision once an impact read started after the new model has answered, and the old one before", async () => {
+  const data = model();
+  data.clockRevision = 3;
+  let server = 3;
+  const sent: unknown[] = [];
+  const answers: ((impact: PeriodDeleteImpact) => void)[] = [];
+  const el = await mount(
+    fake({
+      data: () => data,
+      impact: () =>
+        answers.length === 0
+          ? (answers.push(() => {}), impactOf())
+          : new Promise<PeriodDeleteImpact>((done) => {
+              answers.push(done);
+            }),
+      write: (_path, _method, body) => {
+        const revision = (body as { expectedClockRevision: number }).expectedClockRevision;
+        sent.push(revision);
+        if (revision !== server) throw { code: "hours.clock_changed" };
+      },
+      paintedInDelay: 20,
+    }),
+  );
+  const dialog = await removePeriod(el);
+  await impactShown(dialog);
+  server = 4;
+  confirm(dialog).click();
+  await expect.poll(() => bottom(dialog)).toBe("The business-day start changed. Reload hours.");
+  expect(sent).toEqual([3]);
+
+  data.clockRevision = 4;
+  el.api.rereadWatches();
+  await expect.poll(() => answers.length).toBe(2);
+  await new Promise((done) => setTimeout(done, 50));
+  expect(answers.length, "one page re-read, one impact read").toBe(2);
+  await dialog.updateComplete;
+  confirm(dialog).click();
+  await expect.poll(() => sent).toEqual([3, 3]);
+  await expect.poll(() => confirm(dialog).loading).toBe(false);
+  expect(deleteDialog(el)).toBe(dialog);
+  expect(bottom(dialog)).toBe("The business-day start changed. Reload hours.");
+
+  answers[1]!(impactOf());
+  await new Promise((done) => setTimeout(done, 0));
+  await dialog.updateComplete;
+  confirm(dialog).click();
+  await expect.poll(() => sent).toEqual([3, 3, 4]);
+  await expect.poll(() => deleteDialog(el)).toBeNull();
+});
+
+it("a new revision arriving after an impact read began is not taken from that read; a fresh impact read starts and its revision is taken when it answers", async () => {
+  const data = model();
+  data.clockRevision = 3;
+  let slowPage = 0;
+  const sent: unknown[] = [];
+  const answers: ((impact: PeriodDeleteImpact) => void)[] = [];
+  const el = await mount(
+    fake({
+      data: () => data,
+      dataDelay: () => slowPage,
+      impact: () =>
+        answers.length === 0
+          ? (answers.push(() => {}), impactOf())
+          : new Promise<PeriodDeleteImpact>((done) => {
+              answers.push(done);
+            }),
+      write: (_path, _method, body) => {
+        sent.push((body as { expectedClockRevision: number }).expectedClockRevision);
+        throw { code: "hours.clock_changed" };
+      },
+    }),
+  );
+  const dialog = await removePeriod(el);
+  await impactShown(dialog);
+  slowPage = 30;
+  data.clockRevision = 4;
+  el.api.rereadWatches();
+  await expect.poll(() => answers.length, "Painted in answers first").toBeGreaterThanOrEqual(2);
+  await expect.poll(() => answers.length, "the new model starts its own read").toBe(3);
+  answers[1]!(impactOf({ seasons: 1 }));
+  await expect.poll(() => body(dialog)).toBe("Not painted anywhere. No hours change.");
+  confirm(dialog).click();
+  await expect.poll(() => sent).toEqual([3]);
+  await expect.poll(() => confirm(dialog).loading).toBe(false);
+  answers[2]!(impactOf({ seasons: 2 }));
+  await expect.poll(() => body(dialog)).toContain("Painted in 2 seasons.");
+  confirm(dialog).click();
+  await expect.poll(() => sent).toEqual([3, 4]);
 });
 
 it("ignores a departed delete confirmation after another period's dialog opened", async () => {

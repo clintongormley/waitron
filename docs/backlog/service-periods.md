@@ -209,10 +209,6 @@ refusing delete (`DELETE …/menu-periods/:periodId`, `menu_period.in_use`) are 
   and a latest date.
 
 **Left open by A506-11, for the later parts.**
-- After an `hours.clock_changed` refusal, the period delete dialog keeps the clock revision it
-  captured when it opened, so every later Delete is refused the same way until Cancel and reopen
-  (`askDelete` and `confirmDelete`, `packages/venue-service/src/dashboard/periods-screen.ts`; read in
-  the code, not run).
 - The period dialog keeps the End offset field although mockup 7 leaves it out, because nothing
   else edits a period's end offset (open question Q1). Owner to confirm; removing it is one field.
 - The period dialog draws Delete… last in its body, not at the footer's left as mockup 7 does,

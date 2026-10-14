@@ -27,7 +27,11 @@ const at = encodeURIComponent;
 
 type Deletion = {
   period: Period;
+  /** Sent with the delete: the revision of the model applied when the shown impact's read began,
+   *  so a new revision never travels with an impact read before it. */
   clockRevision: number;
+  /** The revision of the model applied when the latest impact read began. */
+  readRevision: number;
   /** The latest impact read; an answer to an earlier one is ignored. */
   generation: number;
   /** The latest impact read started after every watch read numbered below this. */
@@ -351,7 +355,8 @@ export class PeriodsScreen extends LitElement {
       return;
     }
     deletion.period = period;
-    this.rereadImpact(this.model!);
+    if (this.model!.clockRevision !== deletion.readRevision) void this.readImpact(deletion);
+    else this.rereadImpact(this.model!);
   }
   /** Reads the impact again unless the latest impact read started after the watch read that
    *  produced `read`, so both watches answering one page re-read cost one impact read. */
@@ -369,6 +374,7 @@ export class PeriodsScreen extends LitElement {
     const deletion: Deletion = {
       period,
       clockRevision: this.model.clockRevision,
+      readRevision: this.model.clockRevision,
       generation: 0,
       readAfter: 0,
       readError: "",
@@ -380,6 +386,8 @@ export class PeriodsScreen extends LitElement {
 
   private async readImpact(deletion: Deletion) {
     const generation = ++deletion.generation;
+    const revision = this.model!.clockRevision;
+    deletion.readRevision = revision;
     deletion.readAfter = this.api.nextReadNumber();
     let impact: PeriodDeleteImpact;
     try {
@@ -393,6 +401,7 @@ export class PeriodsScreen extends LitElement {
     }
     if (!this.current(deletion, generation)) return;
     deletion.impact = impact;
+    deletion.clockRevision = revision;
     deletion.readError = "";
     this.requestUpdate();
   }
