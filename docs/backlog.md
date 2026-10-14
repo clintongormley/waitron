@@ -3515,12 +3515,11 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   rows the first resolved. The comment at `listAttempting` now says so. Found by #558 while pruning
   comments.
 
-- **The two `provider.test.ts` cases named "throws payment.not_found" assert only
-  `rejects.toThrow()`, not the code** — found by #570 while pruning comments
-  (`packages/payments-stripe`). Reversal retry-safety (one persisted id per reversal) is still
-  deferred: #570's review showed two identical `reverseViaStripe` calls get different idempotency
-  keys, so a retried reversal sends a second real refund; the comment at `reverse.ts` says so.
-  [Detail](backlog/payments.md#the-two-providertestts-cases-named-throws-paymentnot_found-assert-only-rejectstothrow-not-the-code)
+- **`packages/payments-stripe`'s `tenant-scoping.test.ts` is named for tenant scoping but guards
+  that no source file opens a bare `.transaction(`.** Left open by A633.
+
+- **`packages/payments-stripe`'s `vitest.config.ts` leaves `src/stripe-client.ts` out of coverage
+  although the normal suite reaches it** (CLAUDE.md §2). Left open by A633.
 
 - **The Stripe webhook endpoint still has to be repointed by hand, at Stripe** — left behind by the
   tenant-column removal (#378, 2026-09-16). **Next action:** change it in the Stripe dashboard
