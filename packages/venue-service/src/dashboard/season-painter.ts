@@ -330,7 +330,11 @@ export class SeasonPainter extends LitElement {
       }
     }
     if (this.seededSeason !== this.seasonId) this.reseed();
-    else if (changes.has("model") || (this.followed !== this.model && !this.anyEdited())) {
+    else if (
+      changes.has("model") ||
+      (this.followed !== this.model && !this.anyEdited()) ||
+      this.confirmable()
+    ) {
       const before = shownIn(previous, this.departmentId, this.zoneId);
       const confirmed = this.confirmable() ? this.confirming!.sent : undefined;
       if (confirmed) this.confirming = undefined;
@@ -398,8 +402,9 @@ export class SeasonPainter extends LitElement {
     this.confirming = undefined;
   }
   private confirmable(): boolean {
-    const read = this.confirming && this.api.readNumberOf(this.model);
-    return read !== undefined && read > this.confirming!.barrier;
+    if (!this.confirming || this.saving) return false;
+    const read = this.api.readNumberOf(this.model);
+    return read !== undefined && read > this.confirming.barrier;
   }
   private reseed() {
     this.forget();
@@ -588,7 +593,10 @@ export class SeasonPainter extends LitElement {
     for (const [key, week] of sent) if (baseline.has(key)) baseline.set(key, week);
     this.commitBaseline(baseline);
     this.followed = this.model;
-    this.confirming = { sent, barrier: this.api.rereadWatches() };
+    this.confirming = {
+      sent: new Map([...(this.confirming?.sent ?? []), ...sent]),
+      barrier: this.api.rereadWatches(),
+    };
   }
   /** A refusal naming `departments.<i>` or `zones.<i>` shows that week, marking the day it names. */
   private refuse(error: unknown, departments: string[], zones: string[]) {

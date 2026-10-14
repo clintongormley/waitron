@@ -95,6 +95,7 @@ const slotsOn = (body: WeeksBody, weekday: number) =>
   body.departments[0]!.days.find((day) => day.weekday === weekday)!.slots;
 const wednesday = [{ periodId: "p1", startsAt: "07:00", endsAt: "09:00" }];
 const mondayDinner = [{ periodId: "p2", startsAt: "18:00", endsAt: "21:00" }];
+const mondayLunch = [{ periodId: "p1", startsAt: "13:00", endsAt: "16:00" }];
 
 it.each([
   ["live data", true],
@@ -157,5 +158,39 @@ it.each([
     const second = await save();
     expect(slotsOn(second.body, 1)).toEqual(mondayDinner);
     expect(slotsOn(second.body, 3)).toEqual(wednesday);
+  },
+);
+
+it.each([
+  ["live data", true],
+  ["no live data", false],
+])(
+  "a read after save 1 that lands during save 2 shows no unstored hours as an edit (%s)",
+  async (_, live) => {
+    const { painter, server, reads, save } = await racingPainter(live);
+    await drag(painter, "3", 60, 180);
+    const held = reads.length;
+    const first = await save();
+    first.store();
+    first.answer();
+    await expect.poll(() => reads.length).toBe(held + 1);
+    await expect.poll(() => frame(painter).busy).toBe(false);
+    await drag(painter, "4", 60, 180);
+    const mondayOf = () =>
+      server.stored.departments[0]!.seasonWeeks.find(
+        ({ seasonId }) => seasonId === "winter",
+      )!.week.find(({ weekday }) => weekday === 1)!;
+    mondayOf().slots = mondayDinner;
+    const second = await save();
+    reads[held]!.answer(structuredClone(server.stored));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await settle(painter);
+    second.store();
+    second.answer();
+    await expect.poll(() => frame(painter).busy).toBe(false);
+    await settle(painter);
+    expect(mondayOf().slots).toEqual(mondayLunch);
+    expect(grid(painter).days.get("1")).toEqual(mondayLunch);
+    expect(frame(painter).dirty).toBe(false);
   },
 );
