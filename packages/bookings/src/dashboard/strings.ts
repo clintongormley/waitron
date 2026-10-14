@@ -33,6 +33,9 @@ const en = {
   "booking.no_show": "No-show",
   "booking.cancel": "Cancel",
   "booking.fix_fields": "Correct the highlighted fields to continue.",
+  "booking.date_required": "Enter a date",
+  "booking.time_required": "Enter a time",
+  "booking.name_required": "Enter a name",
   "action.save": "Save",
   "action.edit": "Edit",
 } as const;
@@ -60,6 +63,9 @@ const es: Record<keyof typeof en, string> = {
   "booking.no_show": "No presentada",
   "booking.cancel": "Cancelar",
   "booking.fix_fields": "Corrige los campos marcados para continuar.",
+  "booking.date_required": "Introduce una fecha",
+  "booking.time_required": "Introduce una hora",
+  "booking.name_required": "Introduce un nombre",
   "action.save": "Guardar",
   "action.edit": "Editar",
 };
@@ -86,10 +92,6 @@ export const BOOKINGS_CODE_MESSAGES: Record<string, { en: string; es: string }> 
   "booking.table_required": {
     en: "Choose a table to seat this booking",
     es: "Elige una mesa para sentar esta reserva",
-  },
-  "booking.fields_required": {
-    en: "Fill in the date, time, party size and name",
-    es: "Rellena la fecha, la hora, los comensales y el nombre",
   },
   "booking.party_invalid": {
     en: "Party size must be a whole number of 1 or more",

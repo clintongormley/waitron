@@ -2007,12 +2007,13 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   must move it by hand. Left open by A503 part 2 (#1601, design gap 2). Next: decide whether the save
   refuses it, as a delete is refused, or only warns.
 
-- **A551. The booking form shows two sentences at its foot when a Table refusal meets its own
-  checks (2026-10-12).** Its own checks (for example a blank Name) mark no field and print their
-  own sentence at the bottom instead of the shared "Correct the highlighted fields to continue.";
-  since #1601 a refused Table is marked under Table with that shared sentence, so a Save with Name
-  blank while the Table refusal shows prints both. The own-checks behaviour predates #1601. Next:
-  make the form's own checks mark their fields and use the shared sentence (CLAUDE.md §3, forms).
+- **The booking form draws its bottom alert and Save slot without the shared actions primitive
+  (2026-10-14, A551 review).** `packages/bookings/src/dashboard/booking-form.ts` keeps a
+  `p.error[role=alert]` and its footer button where the Forms contract in
+  `docs/developers/design-system.md` names `wt-form-actions`. The base at
+  `9e40be28237ebdd9eac90a92da9e96b977d8f590` has that same arrangement. Next: use the shared
+  actions primitive while retaining the single correction sentence, keyboard submission and
+  draft/save behavior. A551's focused validation and axe cases pass with the retained arrangement.
 
 - **A545. Deleting a zone: two of its deletes are not what any test checks (2026-10-12).**
   `clear` in `apps/server/src/floor-delete.ts` deletes today's merges, but `removeLiveTables`
