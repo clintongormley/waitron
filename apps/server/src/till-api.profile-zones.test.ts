@@ -66,6 +66,12 @@ import { offerProducts } from "./testing/zone-offers.js";
  *
  * | Route                                                   | Zone from              | Case that fails without the gate                     |
  * | ------------------------------------------------------- | ---------------------- | ---------------------------------------------------- |
+ * | GET /api/clock/state | none: own attendance at configured device location | till-clock-api.test.ts "rejects a profile without clock-in on state" |
+ * | POST /api/clock/in | none: own attendance at configured device location | till-clock-api.test.ts "rejects a profile without clock-in on in" |
+ * | POST /api/clock/out | none: own attendance at configured device location | till-clock-api.test.ts "rejects a profile without clock-in on out" |
+ * | POST /api/clock/break-start | none: own attendance at configured device location | till-clock-api.test.ts "rejects a profile without clock-in on break-start" |
+ * | POST /api/clock/break-end | none: own attendance at configured device location | till-clock-api.test.ts "rejects a profile without clock-in on break-end" |
+ * Clock-route allowed control: till-clock-api.test.ts "allows admitted staff with only clock-in and no service-zone access".
  * | GET  /api/default-service-zone/offers                   | profile start; list    | "starts at the profile's starting zone and lists..." |
  * | GET  /api/service-zones/:zoneId/offers                  | path zone              | refuses GET /api/service-zones/:zoneId/offers        |
  * | GET  /api/service-zones/:zoneId/keep-open               | path zone              | till-api.keep-open.test.ts: refuses GET for a zone outside the profile department |

@@ -219,6 +219,7 @@ describe("DEFAULT_PROFILE_CAPABILITIES", () => {
       "prepare-orders",
       "hand-over-orders",
       "run-the-pass",
+      "clock-in",
     ]);
     expect(DEFAULT_PROFILE_CAPABILITIES.kds).toEqual([
       "act-as-kds",
@@ -231,9 +232,38 @@ describe("DEFAULT_PROFILE_CAPABILITIES", () => {
       "hand-keyed-card-payment",
       "prepare-orders",
       "hand-over-orders",
+      "clock-in",
     ]);
     expect(DEFAULT_PROFILE_CAPABILITIES["tablet-landscape"]).toEqual([]);
     expect(validateCapabilities(["take-cash"])).toEqual(["take-cash"]);
+  });
+});
+
+describe("clock-in profile action", () => {
+  it.each(["till", "phone-portrait", "tablet-landscape"] as const)(
+    "accepts clock-in on %s without making it a starting screen",
+    (formFactor) => {
+      expect(validateCapabilities(["clock-in"], formFactor)).toEqual(["clock-in"]);
+      expect(profileAllows({ formFactor, capabilities: ["clock-in"] }, "clock-in")).toBe(true);
+      expect(() => validateStartingScreen("clock-in", ["clock-in"])).toThrowError(
+        expect.objectContaining({
+          code: "device_profile.invalid",
+          params: { reason: "bad_starting_screen" },
+        }),
+      );
+    },
+  );
+
+  it("refuses clock-in on a shared display even when stored directly", () => {
+    expect(() => validateCapabilities(["clock-in"], "kds")).toThrowError(
+      expect.objectContaining({
+        code: "device_profile.invalid",
+        params: { reason: "shared_display_action" },
+      }),
+    );
+    expect(profileAllows({ formFactor: "kds", capabilities: ["clock-in"] }, "clock-in")).toBe(
+      false,
+    );
   });
 });
 

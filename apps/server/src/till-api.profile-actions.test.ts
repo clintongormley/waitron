@@ -44,6 +44,12 @@ import {
  *
  * | Route                                                     | Action                     | `action` param        |
  * | --------------------------------------------------------- | -------------------------- | --------------------- |
+ * | GET /api/clock/state                                    | clock-in | clock-in; till-clock-api.test.ts "rejects a profile without clock-in on state" |
+ * | POST /api/clock/in                                      | clock-in | clock-in; till-clock-api.test.ts "rejects a profile without clock-in on in" |
+ * | POST /api/clock/out                                     | clock-in | clock-in; till-clock-api.test.ts "rejects a profile without clock-in on out" |
+ * | POST /api/clock/break-start                             | clock-in | clock-in; till-clock-api.test.ts "rejects a profile without clock-in on break-start" |
+ * | POST /api/clock/break-end                               | clock-in | clock-in; till-clock-api.test.ts "rejects a profile without clock-in on break-end" |
+ * Clock-route allowed control: till-clock-api.test.ts "allows admitted staff with only clock-in and no service-zone access".
  * | POST /api/sales (tender checked first)                    | take-cash / hand-keyed-card-payment, then take-orders | (cash code) / hand-keyed-card-payment, take-orders |
  * | POST /api/pay                                             | integrated-card-payment, then take-orders | pay, take-orders |
  * | POST /api/working-orders                                  | take-orders                | take-orders           |

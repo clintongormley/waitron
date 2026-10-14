@@ -1467,6 +1467,8 @@ async function bootServer(
       onboardingIntent: config.onboardingIntent,
       devMode: config.devMode,
       invoiceEmailAvailable,
+      workforceEnabled:
+        !fencedOrMirror && setsToMigrate.some((module) => module.name === "workforce"),
     },
     log,
   );
