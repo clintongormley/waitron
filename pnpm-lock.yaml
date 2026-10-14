@@ -927,6 +927,9 @@ importers:
       '@waitron/payments-sumup':
         specifier: workspace:*
         version: link:../payments-sumup
+      '@waitron/staffing':
+        specifier: workspace:*
+        version: link:../staffing
       '@waitron/venue-service':
         specifier: workspace:*
         version: link:../venue-service
